@@ -87,6 +87,21 @@ public final class HomeModel {
         hub.state == .unreachable || (fleet.fleetRead && fleet.liveRead && fleet.runsRead && fleet.catalogsRead)
     }
 
+    /// What Caw says with nothing to count (NeedsCaw.svelte `quiet`): "All
+    /// caught up" only once the fleet is read over a live hub, since an empty
+    /// answer is only given when it is known (PRODUCT.md); before that, what
+    /// he is waiting on.
+    public var quiet: String {
+        switch hub.state {
+        case .connected:
+            fleet.fleetRead && fleet.liveRead && fleet.runsRead && fleet.catalogsRead ? "All caught up" : "Reading the fleet"
+        case .connecting:
+            "Connecting…"
+        case .unreachable:
+            "Hub unreachable"
+        }
+    }
+
     /// Machines that have not answered yet; until none, an empty list proves nothing.
     public var waitingOn: [MachineRow] {
         fleet.machines.filter { machine in
@@ -132,6 +147,9 @@ public final class HomeModel {
         public let place: String
         /// When the hub parked it, ms epoch.
         public let raisedAt: Double?
+        /// Its session's machine is offline (the row reads `unknown`): the ask
+        /// still stands, and answering it waits for the machine.
+        public var stale = false
 
         /// The session whose ask it is, for a session's.
         public var instanceId: String? {
@@ -147,20 +165,25 @@ public final class HomeModel {
         var items: [NeedsItem] = []
         for (instanceId, asks) in needsStore.parked {
             let row = fleet.byId[instanceId]
-            // A session the hub holds as not live has nothing left to answer to.
-            if let row, !row.isLive {
+            // A session the hub says has ended has nothing left to answer to.
+            // One whose machine it cannot reach (`unknown`) may still be
+            // waiting: its asks stay, marked stale, so Needs you is never a
+            // false negative (PRODUCT.md).
+            if let row, !(row.isLive || row.isStale) {
                 continue
             }
             for ask in asks where ask.routedTo != "parent" {
                 let machineId = row?.machineId ?? ""
-                items.append(NeedsItem(
+                var item = NeedsItem(
                     id: "\(ask.instanceId):\(ask.requestId)",
                     kind: .ask(ask),
                     machineId: machineId,
                     title: row.map(fleet.title) ?? fleet.machineName(machineId),
                     place: fleet.placeOf(machineId, row?.cwd),
                     raisedAt: ask.raisedAt
-                ))
+                )
+                item.stale = row?.isStale == true
+                items.append(item)
             }
         }
         for run in fleet.runs.values where run.status == .waiting {

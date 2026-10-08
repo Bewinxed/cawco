@@ -1467,8 +1467,9 @@
   }
   /* The bar's badge: a count chip inside the glass, in a status pair, a
      circle for one digit and a short capsule for more, ringed in the
-     glass's surface: the machines down or in trouble, on the glyph's
-     corner. (What needs you is the arcs on Caw's rim, NeedsCaw.) */
+     glass's surface: the machines down or in trouble, at the glyph's
+     corner (MachinesButton places it). (What needs you is the arcs on
+     Caw's rim, NeedsCaw.) */
   .tools :global(.bar-badge) {
     position: absolute;
     display: grid;

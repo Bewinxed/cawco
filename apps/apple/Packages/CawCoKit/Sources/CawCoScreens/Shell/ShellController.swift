@@ -733,9 +733,9 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         let online = fleet.machines.filter { $0.status == "online" }.count
         let tone = MachineHealth.tone(fleet.machines, hubBuild: fleet.hubBuild)
         for cluster in [mainCluster, compactCluster, sessionCluster] {
-            cluster.configure(needs: needs.count, online: online, tone: tone, drawerOpen: needsDrawer.open)
+            cluster.configure(needs: needs.count, quiet: home.quiet, online: online, tone: tone, drawerOpen: needsDrawer.open)
         }
-        needsDrawer.configure(needs, now: Date.now.timeIntervalSince1970 * 1000)
+        needsDrawer.configure(needs, quiet: home.quiet, now: Date.now.timeIntervalSince1970 * 1000)
         // Something new needs the operator: Caw beats once, on the bar in front.
         let ids = Set(needs.map(\.id))
         if home.ready {

@@ -259,6 +259,7 @@ import {
   answerWorkflow,
   onPermissionAnswer,
   onWorkflowAnswer,
+  workflowRunOf,
 } from "./pending";
 import { type PlacementInput, place as placeAccount } from "./placement";
 import { createPlans, planRoutes } from "./plans";
@@ -12872,9 +12873,13 @@ export const createServer = (
               }
               // Catalog reconciliation can also retire an already failed row,
               // and stopped rows are deliberately outside the orphan list.
+              // A workflow's question names its run's machine but no session
+              // (its instance id is its step's): it is the run's, answered or
+              // ended with the run, and a daemon coming back has no say in it.
               for (const parked of pending.list()) {
                 const [owner] = db.getInstancesByIds([parked.instanceId ?? ""]);
                 if (
+                  !workflowRunOf(parked) &&
                   parked.machineId === message.machineId &&
                   custody.state === "available" &&
                   !(

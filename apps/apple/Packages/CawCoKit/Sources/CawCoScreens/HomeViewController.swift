@@ -633,7 +633,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             }
             let stage = NeedsCardCell.stageWords(sent)
             let waited = need.raisedAt.map { Naming.span(ms: home.now - $0) } ?? ""
-            return AnyHashable([need.title, need.place, asks, waited, stage?.text ?? "", "\(stage?.failed ?? false)", "\(sent.map { $0.stage != .failed } ?? false)", "\(home.live)"])
+            return AnyHashable([need.title, need.place, asks, waited, stage?.text ?? "", "\(stage?.failed ?? false)", "\(sent.map { $0.stage != .failed } ?? false)", "\(home.live)", "\(need.stale)"])
         case .caw:
             return AnyHashable([cawLine, cawStatus.rawValue])
         default:

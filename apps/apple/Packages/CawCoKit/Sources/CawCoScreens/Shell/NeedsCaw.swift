@@ -90,7 +90,8 @@ final class NeedsCawButton: UIControl {
         inkRing()
         isAccessibilityElement = true
         accessibilityTraits = .button
-        accessibilityLabel = "All caught up"
+        // Nothing is known until the hub's first word (`configure`).
+        accessibilityLabel = "Reading the fleet"
         addTarget(self, action: #selector(tapped), for: .touchUpInside)
         let pan = UIPanGestureRecognizer(target: self, action: #selector(panned(_:)))
         addGestureRecognizer(pan)
@@ -105,12 +106,13 @@ final class NeedsCawButton: UIControl {
     @objc private func tapped() { onTap() }
     @objc private func panned(_ pan: UIPanGestureRecognizer) { onPan(pan) }
 
-    /// The arcs on his circle's rim: inside the glass's 1 pt edge, half the
-    /// stroke in; arc k from k × (arc + arcGap)° clockwise from 12 o'clock.
+    /// The arcs on his circle's rim: `space1` of clear glass in from his
+    /// circle's edge, so the ring never reads as the capsule's border, half
+    /// the stroke in; arc k from k × (arc + arcGap)° clockwise from 12 o'clock.
     override func layoutSubviews() {
         super.layoutSubviews()
         let centre = CGPoint(x: bounds.midX, y: bounds.midY)
-        let rim = CGFloat(Self.side) / 2 - 1 - Size.cCawRing / 2
+        let rim = CGFloat(Self.side) / 2 - Space.space1 - Size.cCawRing / 2
         let top = -CGFloat.pi / 2
         let degree = CGFloat.pi / 180
         // A round cap reaches half the stroke past the path's end: taken off
@@ -160,10 +162,11 @@ final class NeedsCawButton: UIControl {
         }
     }
 
-    /// The Needs you count, and the drawer's state for VoiceOver.
-    func configure(count next: Int, open: Bool) {
+    /// The Needs you count, what he says with none (`HomeModel.quiet`), and
+    /// the drawer's state for VoiceOver.
+    func configure(count next: Int, quiet: String, open: Bool) {
         count = next
-        accessibilityLabel = next > 0 ? "Needs you, \(next)" : "All caught up"
+        accessibilityLabel = next > 0 ? "Needs you, \(next)" : quiet
         accessibilityValue = open ? "Open" : nil
         let animated = window != nil
         for (k, ring) in arcLayers.enumerated() {
@@ -248,6 +251,10 @@ final class NeedsDrawer: UIView {
     private let countLabel = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
     private let empty = UIStackView()
     private let handle = UIView()
+    /// With nothing listed: Caw at rest and what is known (`HomeModel.quiet`);
+    /// he rests there only once "All caught up" is a known answer.
+    private let resting = CawMark(status: .ready, side: 48)
+    private let emptyLabel = KitLabel(TypeScale.typeLabel, ink: Palette.inkMuted)
     /// The rows' scroller is as tall as its rows, up to what the screen leaves (`measure`).
     private var scrollHeight: NSLayoutConstraint!
     private var items: [HomeModel.NeedsItem] = []
@@ -323,9 +330,7 @@ final class NeedsDrawer: UIView {
             rows.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor),
             rows.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor, constant: -2 * Space.space2),
         ])
-        let resting = CawMark(status: .ready, side: 48)
-        let emptyLabel = KitLabel(TypeScale.typeLabel, ink: Palette.inkMuted)
-        emptyLabel.text = "All caught up"
+        emptyLabel.text = "Reading the fleet"
         empty.axis = .vertical
         empty.alignment = .center
         empty.spacing = Space.space2
@@ -334,7 +339,7 @@ final class NeedsDrawer: UIView {
         empty.isLayoutMarginsRelativeArrangement = true
         empty.directionalLayoutMargins = NSDirectionalEdgeInsets(top: Space.space6, leading: 0, bottom: Space.space2, trailing: 0)
         empty.isAccessibilityElement = true
-        empty.accessibilityLabel = "All caught up"
+        empty.accessibilityLabel = "Reading the fleet"
         empty.addGestureRecognizer(UIPanGestureRecognizer(target: self, action: #selector(drawerPanned(_:))))
         // The grabber at the drawer's foot: pulled up, the drawer goes back.
         let bar = UIView()
@@ -357,9 +362,12 @@ final class NeedsDrawer: UIView {
     private var drawn = ""
 
     /// The rows, as Home's Needs you lists them.
-    func configure(_ next: [HomeModel.NeedsItem], now: Double) {
-        let words = next.map { item in "\(item.id) \(item.title) \(item.raisedAt.map { Naming.span(ms: now - $0) } ?? "")" }.joined(separator: "\n")
+    func configure(_ next: [HomeModel.NeedsItem], quiet: String, now: Double) {
+        let words = next.map { item in "\(item.id) \(item.title) \(item.raisedAt.map { Naming.span(ms: now - $0) } ?? "") \(item.stale)" }.joined(separator: "\n") + "\n\(quiet)"
         guard words != drawn else { return }
+        emptyLabel.text = quiet
+        empty.accessibilityLabel = quiet
+        resting.isHidden = quiet != "All caught up"
         drawn = words
         items = next
         self.now = now
@@ -380,7 +388,8 @@ final class NeedsDrawer: UIView {
 
     private func row(for item: HomeModel.NeedsItem) -> UIView {
         let kind = if case let .ask(ask) = item.kind, !ask.isQuestion { "Permission" } else { "Question" }
-        let meta = item.raisedAt.map { "\(kind) · waiting \(Naming.span(ms: now - $0))" } ?? kind
+        let waited = item.raisedAt.map { "\(kind) · waiting \(Naming.span(ms: now - $0))" } ?? kind
+        let meta = item.stale ? "\(waited) · machine offline" : waited
         let button = UIButton(type: .custom)
         var config = UIButton.Configuration.plain()
         config.title = item.title
@@ -404,6 +413,8 @@ final class NeedsDrawer: UIView {
         button.configuration = config
         button.contentHorizontalAlignment = .leading
         button.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
+        // Its machine is offline: it stands, dimmed as every stale row is.
+        button.alpha = item.stale ? 0.55 : 1
         button.accessibilityLabel = "\(item.title), \(meta)"
         button.addAction(UIAction { [weak self] _ in
             guard let self else { return }

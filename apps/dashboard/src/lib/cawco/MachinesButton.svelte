@@ -12,8 +12,8 @@
    * always on screen: an item of the group (Shell's `.bar-item`), its glyph
    * and the number online in the bar's one ink (Apple HIG, Toolbars: "Reduce
    * the use of toolbar backgrounds and tinted controls"). A machine down, or
-   * one that needs a hand (behind the hub, a stuck sync), is a badge on the
-   * glyph's corner, the bar's badge in the fail or attention pair, saying
+   * one that needs a hand (behind the hub, a stuck sync), is a badge at the
+   * glyph's top-trailing corner, the bar's badge in the fail or attention pair, saying
    * how many, so it is still seen without the list and never by hue alone.
    * The popover is the machines' list (MachinesList). The home's Check
    * machines opens it too (join `machinesPopover`). A phone has no room for
@@ -129,20 +129,30 @@
 </Popover.Root>
 
 <style>
-  /* The number reads beside its glyph; the badge rides the glyph's corner. */
+  /* The number reads beside its glyph, --space-2 apart; the group's next
+     item (Caw's circle, his ring on its edge) stands the same --space-2 past
+     the number, the group's gap and this trailing pad together, so the
+     group reads at one spacing. */
   .machines {
     gap: var(--space-2);
-    padding-inline: var(--space-2) var(--space-3);
+    padding-inline: var(--space-2) calc(var(--space-2) - var(--c-bar-group-pad));
   }
   .glyph {
-    position: relative;
-    display: grid;
+    display: flex;
+    align-items: flex-start;
   }
-  /* Over the glyph's top-trailing corner, its ring inside the glass and
-     clear of the number beside it. */
-  .glyph > .bar-badge {
-    inset-block-start: calc(var(--c-bar-chip-ring) - var(--c-bar-chip) / 2);
-    inset-inline-end: calc(-1 * var(--c-bar-chip-ring));
+  /* At the glyph's top-trailing corner, beside its ink, never on it: in
+     the glyph's row after the symbol's box, its top on the item's own top
+     less its ring, so the chip and its ring stay inside the item and the
+     number moves over to make room. (Named under `.machines` to outrank
+     Shell's `.tools .bar-badge`, which places a badge absolutely.) */
+  .machines .glyph > .bar-badge {
+    position: relative;
+    margin-block-start: calc(
+      var(--c-bar-chip-ring) -
+      (var(--c-bar-item) - var(--c-bar-symbol)) /
+      2
+    );
   }
   .num {
     font: var(--type-label);

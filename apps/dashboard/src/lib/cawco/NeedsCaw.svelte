@@ -104,7 +104,24 @@
 
   const needs = $derived(home.needs);
   const count = $derived(needs.length);
-  const label = $derived(count > 0 ? `Needs you, ${count}` : "All caught up");
+  /**
+   * What he says with nothing to count: "All caught up" only once the fleet
+   * is read over a live hub (PRODUCT.md: an empty answer is only given when
+   * it is known); before that, what he is waiting on, in StatusLine's words.
+   */
+  const quiet = $derived.by(() => {
+    switch (home.status) {
+      case "connected":
+        return "All caught up";
+      case "reading":
+        return "Reading the fleet";
+      case "connecting":
+        return "Connecting…";
+      default:
+        return "Hub unreachable";
+    }
+  });
+  const label = $derived(count > 0 ? `Needs you, ${count}` : quiet);
 
   /* ── The count ─────────────────────────────────────────────────────── */
   /**
@@ -123,13 +140,18 @@
   const ARCS = 9;
   /** The ring's box: his circle, in px (`--c-btn-h`). */
   const RING_BOX = 36;
-  /** The rim's radius: inside the glass's 1px edge, half the stroke in. */
-  const RIM = RING_BOX / 2 - 1 - 1;
+  /**
+   * Clear glass between the arcs and his circle's edge, px (`--space-1`),
+   * so the ring reads as his count and never as the capsule's border.
+   */
+  const RIM_INSET = 4;
+  /** The arcs' stroke, px (`--c-caw-ring`). */
+  const RIM_STROKE = 2;
+  /** The rim's radius: the inset in from his circle's edge, half the stroke in. */
+  const RIM = RING_BOX / 2 - RIM_INSET - RIM_STROKE / 2;
   const arcCount = $derived(Math.min(count, ARCS));
   const ringClosed = $derived(count > ARCS);
-  const tipText = $derived(
-    count > 0 ? `${count} need you` : "All caught up"
-  );
+  const tipText = $derived(count > 0 ? `${count} need you` : quiet);
 
   /** A point on the rim, `deg` clockwise from 12 o'clock. */
   const onRim = (deg: number) => {
@@ -142,7 +164,7 @@
    * degrees of the rim, taken off each end so the arc as seen, caps and
    * all, is ARC° long and the gaps are ARC_GAP°.
    */
-  const CAP = ((1 / RIM) * 180) / Math.PI;
+  const CAP = ((RIM_STROKE / 2 / RIM) * 180) / Math.PI;
   /** Arc `k`, seen from k × (ARC + GAP)° clockwise for ARC°. */
   const arcPath = (k: number) => {
     const from = k * (ARC + ARC_GAP) + CAP;
@@ -587,7 +609,7 @@
   function metaOf(item: NeedsItem): string {
     switch (item.kind) {
       case "ask":
-        return `${item.isQuestion ? "Question" : "Permission"} · ${item.place}`;
+        return `${item.isQuestion ? "Question" : "Permission"} · ${item.place}${item.stale ? " · machine offline" : ""}`;
       case "run":
         return `Workflow · ${item.place}`;
       default:
@@ -791,11 +813,14 @@
           <span class="title">Needs you</span>
           <span class="count">{needs.length}</span>
         </div>
-        <ul class="rows">
+        <!-- More rows than the drawer holds: the house edge fade at the foot
+             while more is below, and at the head once scrolled. -->
+        <ul class="rows kit-edge-fade-block">
           {#each needs as item (item.key)}
             <li>
               <button
                 class="row press-tint focus-inset"
+                data-stale={(item.kind === "ask" && item.stale) || undefined}
                 onclick={() => choose(item)}
                 type="button"
               >
@@ -831,8 +856,10 @@
           role="status"
           tabindex="-1"
         >
-          <CawFace size={48} status="ready" />
-          <span>All caught up</span>
+          {#if home.status === "connected"}
+            <CawFace size={48} status="ready" />
+          {/if}
+          <span>{quiet}</span>
         </div>
       {/if}
       <div aria-hidden="true" class="handle" onpointerdown={grab(true)}>
@@ -1102,6 +1129,10 @@
     background: none;
     text-align: start;
     cursor: pointer;
+  }
+  /* Its machine is offline: it stands, dimmed as every stale row is. */
+  .row[data-stale] {
+    opacity: 0.55;
   }
   .lead {
     grid-row: 1;

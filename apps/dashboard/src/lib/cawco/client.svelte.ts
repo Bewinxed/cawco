@@ -351,6 +351,11 @@ export interface BlockedRequest {
   instanceId: string;
   machineId: string;
   request: PendingPermission;
+  /**
+   * The hub cannot reach the session's machine (its row reads `unknown`):
+   * the ask still stands, but answering it waits for the machine.
+   */
+  stale: boolean;
 }
 
 /** Everything one session view needs — live or browsed from storage. */
@@ -6139,13 +6144,23 @@ export function permissionAnswer(
  * themselves rather than tracked separately.
  */
 function blockedRequests(): BlockedRequest[] {
-  const stopped = new Set(
-    instances.filter((row) => !isLive(row)).map((row) => row.id)
+  // A session the hub says has ended (stopped, discarded, asleep, failed)
+  // answers to nobody; its asks are not the operator's. One whose machine
+  // the hub cannot reach (`unknown`) may still be running and waiting: its
+  // asks stay, marked stale, so "needs you" is never a false negative
+  // (PRODUCT.md) while a machine or the hub is away. Across a reconnect the
+  // asks themselves hold as last read until the hub's snapshot replaces
+  // them (`adoptPending`).
+  const ended = new Set(
+    instances
+      .filter((row) => !(isLive(row) || isStale(row)))
+      .map((row) => row.id)
   );
+  const away = new Set(instances.filter(isStale).map((row) => row.id));
 
   const rows: BlockedRequest[] = [];
   for (const target of Object.values(state.sessions)) {
-    if (target.pending.length === 0 || stopped.has(target.instanceId)) {
+    if (target.pending.length === 0 || ended.has(target.instanceId)) {
       continue;
     }
     const machine = state.machines.find(
@@ -6163,6 +6178,7 @@ function blockedRequests(): BlockedRequest[] {
         hostname: machine?.hostname ?? target.machineId,
         cwd: target.cwd,
         request,
+        stale: away.has(target.instanceId),
       });
     }
   }

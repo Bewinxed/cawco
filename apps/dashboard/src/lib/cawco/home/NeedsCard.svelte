@@ -49,13 +49,25 @@
       ? "waiting"
       : `waiting ${span(clock.now - item.raisedAt)}`;
   });
+  /**
+   * The card stands but cannot be answered yet: the hub is not live, or its
+   * session's machine is offline. It keeps its place, dimmed, and its
+   * answer waits; nothing is sent until it can land.
+   */
+  const held = $derived(stale || (item.kind === "ask" && item.stale));
+  /** Where it is, and why it waits when its machine is offline. */
+  const placeLine = $derived(
+    item.kind === "ask" && item.stale
+      ? `${item.place} · machine offline`
+      : item.place
+  );
   /** A permission answered on the card, under the `answer` choice. */
   const answerable = $derived(
     item.kind === "ask" && !item.isQuestion && choices.answer === "a"
   );
 
   function answer(kind: PermissionAnswer): void {
-    if (item.kind !== "ask" || stale) {
+    if (item.kind !== "ask" || held) {
       return;
     }
     submitCommand(item.instanceId, item.machineId, "permission.answer", {
@@ -90,7 +102,7 @@
   class="card"
   data-flip
   data-share="pane:{item.kind === "ask" ? item.instanceId : item.key}"
-  data-stale={stale || undefined}
+  data-stale={held || undefined}
 >
   <!-- The whole card opens the session, at the request. -->
   <a aria-label="Open {item.title}" class="cover focus-inset" {href} {onkeydown}
@@ -121,7 +133,7 @@
       </Tip>
     {/if}
   </div>
-  <span class="place">{item.place}</span>
+  <span class="place">{placeLine}</span>
   <p class="ask">
     {#if item.kind === "cap"}
       {capLine(item.cap)}
@@ -145,7 +157,7 @@
     <div class="actions peers">
       <Button
         aria-label="Deny {item.ask} on {item.title}"
-        disabled={stale}
+        disabled={held}
         onclick={() => answer("deny")}
         {onkeydown}
         size="sm"
@@ -156,7 +168,7 @@
       </Button>
       <Button
         aria-label="Approve {item.ask} on {item.title}"
-        disabled={stale}
+        disabled={held}
         onclick={() => answer("allow")}
         {onkeydown}
         size="sm"

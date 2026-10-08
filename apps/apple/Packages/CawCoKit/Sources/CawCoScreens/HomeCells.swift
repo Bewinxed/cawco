@@ -235,10 +235,13 @@ final class NeedsCardCell: HomeCell {
         pin(tile)
     }
 
-    func configure(_ item: HomeModel.NeedsItem, now: Double, sent: Ledger.Command?, stale: Bool) {
+    func configure(_ item: HomeModel.NeedsItem, now: Double, sent: Ledger.Command?, stale pageStale: Bool) {
+        // Held while the hub is not live or its machine is offline: it keeps
+        // its place, dimmed, and its answer waits until it can land.
+        let stale = pageStale || item.stale
         title.text = item.title
         waited.text = item.raisedAt.map { "waiting \(Naming.span(ms: now - $0))" } ?? "waiting"
-        place.text = item.place
+        place.text = item.stale ? "\(item.place) · machine offline" : item.place
         let peeks = if case .ask = item.kind { true } else { false }
         peek.isHidden = !peeks
         peekRoom.isHidden = !peeks

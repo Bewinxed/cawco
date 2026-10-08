@@ -113,6 +113,16 @@ export const answerPermission = (
   return handler(instanceId, requestId, result);
 };
 
+/**
+ * The run a workflow's question belongs to (runtime.ts `parkAsk`), or
+ * undefined for any other ask: a session's own, or an admin write's.
+ */
+export const workflowRunOf = (envelope: Envelope): string | undefined => {
+  const runId = (envelope.payload as { workflowRunId?: unknown } | undefined)
+    ?.workflowRunId;
+  return typeof runId === "string" ? runId : undefined;
+};
+
 /** The payload field the hub stamps; see `raisedAt` on `permission_request`. */
 const raisedAtOf = (envelope: Envelope | undefined): number | undefined => {
   const at = (envelope?.payload as { raisedAt?: unknown } | undefined)
@@ -162,7 +172,8 @@ const make = (kept: DbShape["parkedAsks"]): PendingShape => {
      * payload, before the payload is relayed or replayed from `/api/pending`.
      * A daemon replay of the same request keeps the first stamp, so the wait
      * every device shows is the same wait, a replay after this hub restarted
-     * included.
+     * included. An ask the hub raises itself may carry its own first stamp
+     * (a workflow's question, re-parked off its step on boot), which stands.
      */
     remember: (requestId, envelope, outlivesHub = false) => {
       if (settledIds.has(requestId)) {
@@ -177,7 +188,10 @@ const make = (kept: DbShape["parkedAsks"]): PendingShape => {
         present(envelope);
       }
       const payload = envelope.payload as Record<string, unknown>;
-      payload.raisedAt = raisedAtOf(requests.get(requestId)) ?? Date.now();
+      payload.raisedAt =
+        raisedAtOf(requests.get(requestId)) ??
+        raisedAtOf(envelope) ??
+        Date.now();
       requests.set(requestId, envelope);
       if (outlivesHub) {
         kept.save(requestId, envelope);

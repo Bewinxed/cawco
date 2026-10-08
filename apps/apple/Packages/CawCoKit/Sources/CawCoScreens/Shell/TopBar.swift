@@ -503,8 +503,8 @@ final class TopBarCluster: UIView {
     }
 
     /// The hub's word on the bar: what needs the operator, which machines are up.
-    func configure(needs: Int, online: Int, tone: MachineHealth.Tone?, drawerOpen: Bool) {
-        for head in [phoneCaw, groupCaw] { head.configure(count: needs, open: drawerOpen) }
+    func configure(needs: Int, quiet: String, online: Int, tone: MachineHealth.Tone?, drawerOpen: Bool) {
+        for head in [phoneCaw, groupCaw] { head.configure(count: needs, quiet: quiet, open: drawerOpen) }
         machines.count.text = "\(online)"
         // The glyph alone carries a machine in trouble; it crosses over `durFade`, never pulses.
         let ink: UIColor = switch tone {

@@ -668,6 +668,9 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
         requestId: step.id,
         workflowRunId: run.id,
         workflowStepId: step.id,
+        // When the question was first asked, kept on its step: a hub that
+        // re-parks it after a restart says the same wait (`askOf`'s parkedAt).
+        raisedAt: (step.startedAt ?? run.startedAt ?? new Date()).getTime(),
         requestKind: "question",
         toolName: "AskUserQuestion",
         input: {

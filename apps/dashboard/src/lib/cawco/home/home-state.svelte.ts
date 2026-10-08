@@ -201,6 +201,8 @@ export interface AskItem {
   /** When the hub parked it, ms epoch. */
   raisedAt: number | undefined;
   request: BlockedRequest["request"];
+  /** Its machine is offline: it still stands, and answering waits for it. */
+  stale: boolean;
   /**
    * Where it opens: the thread a project's Caw asked in (thread-tabs.ts), so
    * his lead session is never a card's place; null opens the session.
@@ -693,6 +695,7 @@ class Home {
         ask: item.request.presentation.summary,
         raisedAt: item.request.raisedAt,
         request: item.request,
+        stale: item.stale,
       };
     });
     const runs: NeedsItem[] = Object.values(workflowState.runs)
