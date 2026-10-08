@@ -7,7 +7,7 @@
 import {
   type FileChange as CoreChange,
   describeTool as describeCore,
-  faviconReachable,
+  faviconUrl,
   fileChanges,
   type Renderer,
   type ToolKindId,
@@ -139,15 +139,6 @@ export function toolFamily(toolName: string | undefined): ToolFamily {
     many: kind.many,
   };
 }
-
-/**
- * The site's icon as the user's own hub serves it (same origin as the
- * dashboard), for a public host. No third party is ever asked.
- */
-const faviconUrl = (host: string): string | undefined =>
-  faviconReachable(host)
-    ? `/api/favicon?host=${encodeURIComponent(host)}`
-    : undefined;
 
 /** The sentence a row reads as (@cawco/core `describeTool`). */
 export function describeTool(

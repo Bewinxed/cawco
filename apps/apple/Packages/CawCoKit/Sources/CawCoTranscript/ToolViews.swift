@@ -185,7 +185,7 @@ final class ToolLineView: RailRow, RowContent, Disclosing {
             Motion.easeOut.animator(Motion.durControl) { self.glyph.alpha = 1; self.glyph.transform = .identity }.startAnimation()
         }
         favicon.isHidden = true
-        if let url = d.favicon {
+        if let url = d.favicon.flatMap(env.url) {
             ImageStore.shared.load(url) { [weak self] image in
                 guard let self, let image else { return }
                 favicon.image = image

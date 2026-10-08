@@ -1108,7 +1108,7 @@ function factOf(
   }
 }
 
-/** Names only this network resolves get no favicon: the service cannot fetch them. */
+/** Names only this network resolves get no favicon: the hub never fetches inside the network. */
 const LOCAL_ZONES = [
   "localhost",
   "local",
@@ -1121,7 +1121,7 @@ const LOCAL_ZONES = [
   "invalid",
 ];
 
-/** Whether a public favicon service can answer for `host`. */
+/** Whether `host` is a public name the hub's `/api/favicon` reads an icon for. */
 export function faviconReachable(host: string): boolean {
   return (
     host.includes(".") &&
@@ -1133,10 +1133,13 @@ export function faviconReachable(host: string): boolean {
   );
 }
 
-/** The site's icon at chip scale, for a host the service can reach. */
+/**
+ * The site's icon as the user's own hub serves it: a path on the hub
+ * (`/api/favicon`), for a public host. No third party is ever asked.
+ */
 export const faviconUrl = (host: string): string | undefined =>
   faviconReachable(host)
-    ? `https://www.google.com/s2/favicons?domain=${host}&sz=32`
+    ? `/api/favicon?host=${encodeURIComponent(host)}`
     : undefined;
 
 const TLD_LABELS = new Set(["ai", "com", "io", "org", "net"]);

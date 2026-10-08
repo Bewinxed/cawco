@@ -21,7 +21,8 @@ nonisolated struct ToolDescriptor {
     var fact: String?
     /// The fact reads as a diff: its `+` green, its `−` red.
     var factDiff: Bool
-    var favicon: URL?
+    /// The site's icon as a path on the connected hub (`/api/favicon?host=`), resolved by the row against its hub.
+    var favicon: String?
     /// The first line the call printed.
     var secondLine: String?
 
@@ -251,13 +252,16 @@ nonisolated struct ToolDescriptor {
 
     private static let localZones = ["localhost", "local", "internal", "lan", "home.arpa", "ts.net", "test", "example", "invalid"]
 
-    /// The site's icon at chip scale, for a host the service can reach.
-    static func favicon(_ host: String) -> URL? {
+    private static let hostQuery = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: ".-"))
+
+    /// The site's icon as the user's own hub serves it, for a public host; no third party is ever asked.
+    static func favicon(_ host: String) -> String? {
         let reachable = host.contains(".") && !host.contains(":")
             && host.wholeMatch(of: /\d{1,3}(?:\.\d{1,3}){3}/) == nil
             && host.firstMatch(of: /\.\d+$/) == nil
             && !localZones.contains { host == $0 || host.hasSuffix(".\($0)") }
-        return reachable ? URL(string: "https://www.google.com/s2/favicons?domain=\(host)&sz=32") : nil
+        guard reachable, let query = host.addingPercentEncoding(withAllowedCharacters: hostQuery) else { return nil }
+        return "/api/favicon?host=\(query)"
     }
 
     private static let tldLabels: Set<String> = ["ai", "com", "io", "org", "net"]
