@@ -343,7 +343,9 @@ export interface HeartbeatPayload {
    * moment the daemon's probes finish, and never the 15s cadence: the probes
    * spawn processes (claude's starts a real Claude Code), and a register that
    * waited for them kept the machine out of the hub's registry for seconds
-   * after every hub restart. Absent from every other beat.
+   * after every hub restart. Sent again only when a sign-in it reports
+   * changed (pi's default provider, a Claude Code dir's login); absent from
+   * every other beat.
    */
   harnesses?: HarnessReport[];
   instances: string[];

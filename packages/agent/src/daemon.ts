@@ -32,6 +32,7 @@ import { machineId } from "@cawco/core/machine-id";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
 import { fetchOpenCodeGoLimits } from "@cawco/core/usage/opencode-go";
 import { Data, Duration, Effect, Fiber, Schedule } from "effect";
+import { accountReports } from "./accounts";
 import {
   BinaryUpdater,
   latestBinaryUpdate,
@@ -69,6 +70,8 @@ const DEFAULT_HUB_URL = `ws://localhost:${CAWCO_HUB_PORT}/ws`;
 const HEARTBEAT_INTERVAL = Duration.seconds(15);
 const USAGE_INTERVAL = Duration.seconds(60);
 const USAGE_FULL_REBUILD_MS = 30 * 60 * 1000;
+/** How often every Claude Code config dir's `auth status` is read again. */
+const CLAUDE_LOGIN_CHECK_INTERVAL_MS = 60_000;
 
 /** How the hub identifies this machine in its registry. */
 interface MachineIdentity {
@@ -740,6 +743,43 @@ const attach = (
           }
         }),
         Schedule.spaced(Duration.millis(PI_AUTH_CHECK_INTERVAL_MS))
+      )
+    );
+
+    // Who each Claude Code config dir is signed in as, read again on a
+    // cadence: a login switched under a connected machine (`claude auth
+    // login` in a terminal, nightly 2132's obelisk at 21:38) moves its
+    // sign-ins at the hub within a minute, and the readings of the sessions
+    // running on it with them, not at the machine's next connect.
+    yield* Effect.forkScoped(
+      Effect.repeat(
+        Effect.promise(async () => {
+          const old = reportedHarnesses.find(
+            (report) => report.harness === "claude"
+          );
+          if (!old) {
+            return;
+          }
+          const accounts = await accountReports();
+          if (Bun.deepEquals(accounts, old.accounts ?? [])) {
+            return;
+          }
+          reportedHarnesses = reportedHarnesses.map((report) =>
+            report.harness === "claude" ? { ...report, accounts } : report
+          );
+          if (socket.readyState === WebSocket.OPEN) {
+            send(socket, {
+              verb: "heartbeat",
+              machineId: identity.machineId,
+              payload: {
+                at: Date.now(),
+                instances: supervisor.instanceIds,
+                harnesses: reportedHarnesses,
+              } satisfies HeartbeatPayload,
+            });
+          }
+        }),
+        Schedule.spaced(Duration.millis(CLAUDE_LOGIN_CHECK_INTERVAL_MS))
       )
     );
 

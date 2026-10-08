@@ -138,12 +138,20 @@ export interface ProviderRouting {
 
 /**
  * What `claude auth status` said about one config dir on a machine: whether
- * it is signed in, and how. Who it is signed in as is the hub's to ask
- * ({@link CONTROL_PROBE_ACCOUNT}), once, where it knows nothing yet.
+ * it is signed in, how, and as whom. Read on every connect and again every
+ * minute, so a dir signed in as someone else since is seen within a minute.
+ * The models it offers are the hub's to ask ({@link CONTROL_PROBE_ACCOUNT}),
+ * once per account.
  */
 export interface ClaudeAccountReport {
   /** The account id for `~/.cawco/accounts/<id>/claude`; null for `~/.claude`. */
   account: string | null;
+  /**
+   * Who the dir is signed in as: `auth status`'s email and organization name,
+   * the same fields its initialize response reports. Absent when it names
+   * nobody (signed out, an API key, a third-party provider).
+   */
+  identity?: AccountIdentity;
   /** `console` when `authMethod` says the dir signed in with a Console account. */
   kind?: AccountKind;
   loggedIn: boolean;

@@ -77,6 +77,7 @@ import {
   ACCOUNT_MOVE,
   ACCOUNT_READ,
   type Account,
+  type AccountIdentity,
   type AccountMove,
   type AccountProbe,
   type AccountSigninResult,
@@ -187,6 +188,7 @@ import { Elysia, t, ValidationError } from "elysia";
 import { websocket } from "elysia/websocket";
 import {
   type AccountProber,
+  homeIs,
   keepProbe,
   machineAccount,
   machineReadings,
@@ -2140,6 +2142,21 @@ export const createServer = (
         }
       })
       .catch(console.error);
+  };
+  /**
+   * A session just heard `~/.claude` on the machine answer as `identity`:
+   * the machine's last report says so from now on, so a retry of its
+   * reconcile squares the home with who it is now, not who it was at connect.
+   */
+  const heardHome = (machineId: string, identity: AccountIdentity): void => {
+    const sync = accountSyncs.get(machineId);
+    if (sync) {
+      sync.reports = sync.reports.map((report) =>
+        report.account === null
+          ? { ...report, loggedIn: true, identity }
+          : report
+      );
+    }
   };
 
   /** Every screen's limits and spend, said again after a reading or a sign-in moved. */
@@ -14388,15 +14405,54 @@ export const createServer = (
                 // What the session's Claude Code reported about its account:
                 // its limits, from each `rate_limit_event`, and its plan, once
                 // per start. The account's reading, and no screen's line. A
-                // session from before accounts runs on its machine's own login.
+                // session runs in its account's own dir on the machine, which
+                // the machine reports as that account's sign-in there, or in
+                // the machine's `~/.claude`: one from before accounts, one on
+                // the account that is that login, and one launched on that
+                // login's account before the login switched to someone else.
                 if (
                   frame.message.type === "system" &&
                   (frame.message.subtype === RATE_LIMIT_READ ||
                     frame.message.subtype === ACCOUNT_READ)
                 ) {
                   const [row] = db.getInstancesByIds([message.instanceId]);
+                  const ownDir =
+                    row?.accountId &&
+                    db.accounts
+                      .signins()
+                      .some(
+                        (one) =>
+                          one.accountId === row.accountId &&
+                          one.machineId === message.machineId &&
+                          !one.home
+                      )
+                      ? row.accountId
+                      : undefined;
+                  const read = frame.message.account;
+                  if (!ownDir && read?.identity) {
+                    // `~/.claude` answers as whoever it is signed in as now:
+                    // that identity's account is the machine's own login,
+                    // even when it signed in as someone else since the
+                    // machine last connected.
+                    const homed = homeIs(
+                      db,
+                      message.machineId,
+                      read.identity,
+                      read.subscriptionType ? "subscription" : "console"
+                    );
+                    if (homed.changed) {
+                      heardHome(message.machineId, read.identity);
+                    }
+                  }
                   const accountId =
-                    row?.accountId ?? machineAccount(db, message.machineId);
+                    ownDir ??
+                    db.accounts
+                      .signins()
+                      .find(
+                        (one) => one.machineId === message.machineId && one.home
+                      )?.accountId ??
+                    row?.accountId ??
+                    machineAccount(db, message.machineId);
                   if (accountId) {
                     const info = frame.message.rate_limit_info;
                     if (info) {
@@ -14405,16 +14461,17 @@ export const createServer = (
                         limitRefused.add(message.instanceId);
                       }
                     }
-                    const read = frame.message.account;
                     if (read) {
                       const account = db.accounts.get(accountId);
                       if (
+                        ownDir &&
                         account?.identity &&
                         read.identity &&
                         !sameIdentity(account.identity, read.identity)
                       ) {
-                        // The dir answers as someone else: not this account's
-                        // catalog, and not this account signed in there.
+                        // The account's own dir answers as someone else: not
+                        // this account's catalog, and not this account signed
+                        // in there.
                         console.warn(
                           `[hub] ${message.instanceId} runs on ${accountName(account)} but its Claude Code is signed in as someone else on ${machineName(message.machineId)}`
                         );
@@ -14422,15 +14479,7 @@ export const createServer = (
                           accountId,
                           machineId: message.machineId,
                           state: "mismatch",
-                          home: row?.accountId
-                            ? (db.accounts
-                                .signins()
-                                .find(
-                                  (one) =>
-                                    one.accountId === accountId &&
-                                    one.machineId === message.machineId
-                                )?.home ?? false)
-                            : true,
+                          home: false,
                         });
                       } else {
                         keepProbe(db, accountId, read);

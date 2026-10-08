@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import {
+  type AccountIdentity,
   type AccountKind,
   type AccountProbe,
   type ClaudeAccountReport,
@@ -30,10 +31,14 @@ const envFor = (account: string | null): Record<string, string | undefined> => {
   return { ...rest, ...accountEnv(account) };
 };
 
-/** What `claude auth status --json` says of one dir: signed in, and how. */
+/** What `claude auth status --json` says of one dir: signed in, how, and as whom. */
 const authStatus = async (
   account: string | null
-): Promise<{ loggedIn: boolean; authMethod?: string }> => {
+): Promise<{
+  loggedIn: boolean;
+  authMethod?: string;
+  identity?: AccountIdentity;
+}> => {
   const executable = resolveClaudeExecutable();
   if (!executable) {
     return { loggedIn: false };
@@ -53,12 +58,27 @@ const authStatus = async (
     const status = JSON.parse(output) as {
       loggedIn?: unknown;
       authMethod?: unknown;
+      email?: unknown;
+      orgName?: unknown;
     };
+    // `email` and `orgName` are the login's `emailAddress` and
+    // `organizationName`, which its initialize response reports as `email`
+    // and `organization`: one identity, whichever of the two read it.
+    const identity =
+      status.loggedIn === true && typeof status.email === "string"
+        ? identityOf({
+            email: status.email,
+            ...(typeof status.orgName === "string"
+              ? { organization: status.orgName }
+              : {}),
+          })
+        : undefined;
     return {
       loggedIn: status.loggedIn === true,
       ...(typeof status.authMethod === "string"
         ? { authMethod: status.authMethod }
         : {}),
+      ...(identity ? { identity } : {}),
     };
   } catch {
     return { loggedIn: false };
@@ -83,6 +103,7 @@ export const accountReports = (): Promise<ClaudeAccountReport[]> =>
         account,
         loggedIn: status.loggedIn,
         ...(kind ? { kind } : {}),
+        ...(status.identity ? { identity: status.identity } : {}),
       };
     })
   );

@@ -1,5 +1,7 @@
 import {
   type Account,
+  type AccountIdentity,
+  type AccountKind,
   type AccountOverage,
   type AccountProbe,
   type AccountReading,
@@ -46,19 +48,6 @@ export const keepProbe = (
   }
 };
 
-/**
- * Squares the account sign-ins on `machineId` with what its agent just read
- * from every Claude Code config dir there. True when anything changed; false
- * also when a probe it needed failed, which the caller retries.
- *
- * Who a dir is signed in as is asked only where the hub knows nothing yet: a
- * `~/.claude` login with no account, an account with no identity or no
- * catalog. The machine's own `~/.claude` login becomes an account the first
- * time it is seen, matched by identity: machines signed in as the same email
- * and organization share one account, a different identity is another. That
- * account lives in `~/.claude` on that machine (`home`); no credential moves.
- * The limit history read from that login before accounts moves to it then.
- */
 /** What one step of a reconcile did. */
 interface Squared {
   changed: boolean;
@@ -66,56 +55,37 @@ interface Squared {
 }
 
 /**
- * The machine's own `~/.claude` login: known, it stays as it is; new, the
- * probe says who it is, and it joins (or makes) the account of that identity.
+ * The machine's own `~/.claude` login is `identity`, as its `auth status` or a
+ * session's initialize response just said: it is the account of that
+ * identity, made now when the hub has none, and it is the only account home
+ * on the machine. Machines signed in as the same email and organization share
+ * one account; a different identity is another, whichever machine registers
+ * first. The account lives in `~/.claude` on that machine (`home`); no
+ * credential moves. The limit history read from that login before accounts
+ * moves to it, the account of the identity the login answers as.
  */
-const squareHome = async (
+export const homeIs = (
   db: DbShape,
   machineId: string,
-  home: ClaudeAccountReport,
-  probe: AccountProber
-): Promise<Squared> => {
+  identity: AccountIdentity,
+  kind: AccountKind
+): { account: Account; changed: boolean } => {
   const store = db.accounts;
-  const mine = store.signins().filter((one) => one.machineId === machineId);
-  const homeSignin = mine.find((one) => one.home);
-  if (!home.loggedIn) {
-    return {
-      changed: homeSignin
-        ? store.putSignin({ ...homeSignin, state: "signed-out" })
-        : false,
-      failed: false,
-    };
-  }
-  const cataloged = store
-    .catalogs()
-    .some((one) => one.accountId === homeSignin?.accountId);
-  if (homeSignin && cataloged) {
-    return {
-      changed: store.putSignin({ ...homeSignin, state: "signed-in" }),
-      failed: false,
-    };
-  }
-  const read = await probe(machineId, null);
-  const identity = read?.identity;
-  if (!(read && identity)) {
-    return { changed: false, failed: !read };
-  }
   let changed = false;
   let account = store
     .list()
     .find((one) => one.identity && sameIdentity(one.identity, identity));
   if (!account) {
     // No nickname: it goes by the email it is signed in as.
-    account = store.create({
-      provider: "anthropic",
-      kind: home.kind ?? "subscription",
-      identity,
-    });
+    account = store.create({ provider: "anthropic", kind, identity });
     changed = true;
   }
-  keepProbe(db, account.id, read);
-  for (const signin of mine.filter((one) => one.home)) {
-    if (signin.accountId !== account.id) {
+  for (const signin of store.signins()) {
+    if (
+      signin.machineId === machineId &&
+      signin.home &&
+      signin.accountId !== account.id
+    ) {
       // `~/.claude` is someone else now: the account it held is not signed
       // in on this machine any more.
       changed = store.removeSignin(signin.accountId, machineId) || changed;
@@ -128,55 +98,101 @@ const squareHome = async (
       state: "signed-in",
       home: true,
     }) || changed;
-  // What the hub read from this `~/.claude` before accounts was this
-  // account's use all along.
   changed = store.adoptMachineHistory(machineId, account.id) > 0 || changed;
-  return { changed, failed: false };
+  return { account, changed };
 };
 
 /**
- * Where one account dir stands: signed out, signed in as its account (the
- * first sign-in names the account), or signed in as someone else. Undefined
- * when the probe it needed could not be read.
+ * The account's models, read through a probe of its dir on the machine when
+ * the hub has none yet; kept only when the dir still answers as the account.
+ * False when the probe could not be read, which the caller retries.
  */
-const dirState = async (
+const catalogFor = async (
   db: DbShape,
   machineId: string,
+  dir: string | null,
   account: Account,
-  loggedIn: boolean,
   probe: AccountProber
-): Promise<SigninState | undefined> => {
-  if (!loggedIn) {
-    return "signed-out";
+): Promise<boolean> => {
+  if (db.accounts.catalogs().some((one) => one.accountId === account.id)) {
+    return true;
   }
-  const store = db.accounts;
-  const known = store.catalogs().some((one) => one.accountId === account.id);
-  if (account.identity && known) {
-    const was = store
-      .signins()
-      .find(
-        (one) => one.accountId === account.id && one.machineId === machineId
-      );
-    return was?.state === "mismatch" ? "mismatch" : "signed-in";
-  }
-  const read = await probe(machineId, account.id);
+  const read = await probe(machineId, dir);
   if (!read) {
-    return undefined;
+    return false;
   }
-  const { identity } = read;
-  if (!identity) {
-    return "signed-out";
+  if (
+    read.identity &&
+    account.identity &&
+    sameIdentity(read.identity, account.identity)
+  ) {
+    keepProbe(db, account.id, read);
   }
-  if (account.identity && !sameIdentity(account.identity, identity)) {
-    return "mismatch";
-  }
-  if (!account.identity) {
-    store.setIdentity(account.id, identity);
-  }
-  keepProbe(db, account.id, read);
-  return "signed-in";
+  return true;
 };
 
+/**
+ * The machine's own `~/.claude` login, as its `auth status` read it for the
+ * machine's latest report: signed in as someone, it is that identity's account
+ * ({@link homeIs}); signed out, the account it held is signed out there.
+ * Signed in as nobody the hub can name (an API key, a third-party provider),
+ * it is no account.
+ */
+const squareHome = async (
+  db: DbShape,
+  machineId: string,
+  home: ClaudeAccountReport,
+  probe: AccountProber
+): Promise<Squared> => {
+  const store = db.accounts;
+  if (!(home.loggedIn && home.identity)) {
+    let changed = false;
+    for (const signin of store.signins()) {
+      if (signin.machineId === machineId && signin.home) {
+        changed =
+          store.putSignin({ ...signin, state: "signed-out" }) || changed;
+      }
+    }
+    return { changed, failed: false };
+  }
+  const { account, changed } = homeIs(
+    db,
+    machineId,
+    home.identity,
+    home.kind ?? "subscription"
+  );
+  const read = await catalogFor(db, machineId, null, account, probe);
+  return { changed, failed: !read };
+};
+
+/**
+ * Where one account dir stands, as its `auth status` read it for the
+ * machine's latest report: signed out, signed in as its account (the first sign-in names the
+ * account), or signed in as someone else (`mismatch`).
+ */
+const dirState = (
+  db: DbShape,
+  account: Account,
+  report: ClaudeAccountReport
+): SigninState => {
+  if (!(report.loggedIn && report.identity)) {
+    return "signed-out";
+  }
+  if (!account.identity) {
+    db.accounts.setIdentity(account.id, report.identity);
+    return "signed-in";
+  }
+  return sameIdentity(account.identity, report.identity)
+    ? "signed-in"
+    : "mismatch";
+};
+
+/**
+ * Squares the account sign-ins on `machineId` with what its agent just read
+ * from every Claude Code config dir there: who each dir is signed in as
+ * decides its sign-in, every time. True when anything changed; `failed` when
+ * a catalog probe it needed could not be read, which the caller retries.
+ */
 export const reconcileAccounts = async (
   db: DbShape,
   machineId: string,
@@ -192,22 +208,12 @@ export const reconcileAccounts = async (
   let { changed, failed } = squared;
 
   for (const report of reports) {
-    const account = report.account ? store.get(report.account) : undefined;
-    if (!account) {
+    const found = report.account ? store.get(report.account) : undefined;
+    if (!found) {
       continue;
     }
-    // biome-ignore lint/performance/noAwaitInLoops: one dir's Claude Code at a time on the machine
-    const state = await dirState(
-      db,
-      machineId,
-      account,
-      report.loggedIn,
-      probe
-    );
-    if (!state) {
-      failed = true;
-      continue;
-    }
+    const state = dirState(db, found, report);
+    const account = store.get(found.id) ?? found;
     changed =
       store.putSignin({
         accountId: account.id,
@@ -215,6 +221,11 @@ export const reconcileAccounts = async (
         state,
         home: false,
       }) || changed;
+    if (state === "signed-in") {
+      // biome-ignore lint/performance/noAwaitInLoops: one dir's Claude Code at a time on the machine
+      const read = await catalogFor(db, machineId, account.id, account, probe);
+      failed = failed || !read;
+    }
   }
 
   // An account dir the machine no longer has is an account it is not signed in to.

@@ -24231,7 +24231,7 @@
         ]
       },
       "ClaudeAccountReport": {
-        "description": "What `claude auth status` said about one config dir on a machine: whether\nit is signed in, and how. Who it is signed in as is the hub's to ask\n({@link CONTROL_PROBE_ACCOUNT}), once, where it knows nothing yet.",
+        "description": "What `claude auth status` said about one config dir on a machine: whether\nit is signed in, how, and as whom. Read on every connect and again every\nminute, so a dir signed in as someone else since is seen within a minute.\nThe models it offers are the hub's to ask ({@link CONTROL_PROBE_ACCOUNT}),\nonce per account.",
         "type": "object",
         "properties": {
           "account": {
@@ -24240,6 +24240,10 @@
               "null",
               "string"
             ]
+          },
+          "identity": {
+            "$ref": "#/components/schemas/AccountIdentity",
+            "description": "Who the dir is signed in as: `auth status`'s email and organization name,\nthe same fields its initialize response reports. Absent when it names\nnobody (signed out, an API key, a third-party provider)."
           },
           "kind": {
             "description": "`console` when `authMethod` says the dir signed in with a Console account.",
@@ -24256,6 +24260,22 @@
         "required": [
           "account",
           "loggedIn"
+        ]
+      },
+      "AccountIdentity": {
+        "description": "Who an account is, as Claude Code's initialize response reports it\n(`account.email`, `account.organization` — the organization's name).",
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "organization": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "organization"
         ]
       },
       "HarnessCapabilities": {
@@ -27647,22 +27667,6 @@
           "order",
           "provider",
           "reservePct"
-        ]
-      },
-      "AccountIdentity": {
-        "description": "Who an account is, as Claude Code's initialize response reports it\n(`account.email`, `account.organization` — the organization's name).",
-        "type": "object",
-        "properties": {
-          "email": {
-            "type": "string"
-          },
-          "organization": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "email",
-          "organization"
         ]
       },
       "AccountKind": {
