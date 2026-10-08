@@ -25,6 +25,10 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     /// toggle and Caw float over the strip's ends (WorkspaceController `barOverlay`).
     private let sessionCluster = TopBarCluster()
     private let sessionBurger = BurgerButton(bare: true)
+    #if DEBUG
+    /// `-open-session` has been honoured once.
+    private var probeOpened = false
+    #endif
     /// What needs the operator, pulled down from Caw's head on any bar.
     private let needsDrawer = NeedsDrawer()
     /// The asks already seen, by id: one that is not is new, and Caw beats once. Nil until the fleet is read.
@@ -219,6 +223,12 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("-sidebar-probe") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 15) { [weak self] in self?.showRailSheet() }
+        }
+        // A simulator pass opens a conversation at once: `-open-session <id>`.
+        let arguments = ProcessInfo.processInfo.arguments
+        if !probeOpened, let at = arguments.firstIndex(of: "-open-session"), arguments.indices.contains(at + 1) {
+            probeOpened = true
+            openSession(arguments[at + 1])
         }
         #endif
     }

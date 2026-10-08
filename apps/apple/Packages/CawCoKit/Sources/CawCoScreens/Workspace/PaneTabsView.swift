@@ -401,8 +401,18 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
         // 620pt or narrower; the bar row's ends are its scroll view's own.
         leadingInset = hosted || barRow ? 0 : (bounds.width <= 620 ? Space.space4 : Space.space7)
         layoutTrack()
+        // The chosen tab is revealed as the strip fills, often before it has
+        // a width: a reveal into no width scrolls the tab out past the
+        // leading edge. A new width shows it again where it now fits.
+        if abs(scroll.bounds.width - revealedWidth) > 0.5 {
+            revealedWidth = scroll.bounds.width
+            reveal(active, animated: false)
+        }
         edges()
     }
+
+    /// The strip's width when the chosen tab was last revealed for it.
+    private var revealedWidth = 0.0
 
     private func layoutTrack() {
         var x = flare
@@ -684,12 +694,18 @@ final class TabView: UIView {
         isAccessibilityElement = false
         hit.isAccessibilityElement = true
         hit.accessibilityTraits = .button
-        accessibilityElements = [hit, details, close]
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: TabView, _: UITraitCollection) in view.paint() }
         for name in [UIAccessibility.reduceTransparencyStatusDidChangeNotification, UIAccessibility.darkerSystemColorsStatusDidChangeNotification] {
             NotificationCenter.default.addObserver(self, selector: #selector(contrastChanged), name: name, object: nil)
         }
         paint()
+    }
+
+    /// The tab, then the controls it draws: a hidden chevron or close (a
+    /// phone's row, a finger) is not offered to VoiceOver.
+    override var accessibilityElements: [Any]? {
+        get { row.arrangedSubviews.filter { !$0.isHidden } }
+        set { _ = newValue }
     }
 
     /// Increase Contrast or Reduce Transparency: the rim is drawn solid.
