@@ -162,7 +162,11 @@ import { websocket } from "elysia/websocket";
 import { createAdminAsks } from "./admin-asks";
 import { isAdminWrite } from "./admin-tools";
 import { appleDiagnosticsRoutes } from "./apple-diagnostics";
-import { createAskPresenter } from "./ask-presentation";
+import {
+  answeredWithOriginal,
+  clientCopy,
+  createAskPresenter,
+} from "./ask-presentation";
 import { createBinaryUpdates } from "./binary-updates";
 import { type Caw, cawRoutes, createCaw, withCawDenials } from "./caw";
 import { DB_PATH, HUB_VERSION, SPAWN_START_TIMEOUT_MS } from "./config";
@@ -2148,7 +2152,7 @@ export const createServer = (
       }
       // biome-ignore lint/performance/noDelete: an undefined assignment would leave the key present on `payload`, which is broadcast verbatim — the field must be genuinely absent, not present-but-undefined.
       delete payload.routedTo;
-      registry.broadcast(parked);
+      registry.broadcast(clientCopy(parked));
       telegram?.onAsk(parked);
       push.onAsk(parked);
     }
@@ -7084,13 +7088,15 @@ export const createServer = (
   const answerPendingPermission = async (
     instanceId: string,
     requestId: string,
-    result: PermissionResult
+    answer: PermissionResult
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one transaction validates ownership, workflow answers, delivery receipts and concurrent process death before reporting success.
   ): Promise<void> => {
     const parked = pending.get(requestId);
     if (!parked || parked.instanceId !== instanceId) {
       throw new Error("That request is no longer pending.");
     }
+    // Clients held the ask with its secrets hidden; the call runs as asked.
+    const result = answeredWithOriginal(parked, answer);
     if (answeringPermissions.has(requestId)) {
       throw new Error("That request is already being answered.");
     }
@@ -7120,8 +7126,11 @@ export const createServer = (
         undefined,
         instanceId
       );
-      if (delivered === "offline" || delivered === "timeout") {
-        throw new Error(`Permission answer ${delivered}.`);
+      if (delivered === "offline") {
+        throw new Error(`machine ${parked.machineId} is not connected`);
+      }
+      if (delivered === "timeout") {
+        throw new Error("Permission answer timeout.");
       }
       if (!delivered.ok) {
         throw new Error(delivered.error ?? "The session refused the answer.");
@@ -7968,7 +7977,7 @@ export const createServer = (
     if (!pending.remember(envelope.requestId, envelope)) {
       return;
     }
-    registry.broadcast(envelope);
+    registry.broadcast(clientCopy(envelope));
     if (
       !existed &&
       (envelope.payload as { routedTo?: string }).routedTo !== "parent"
@@ -9930,7 +9939,7 @@ export const createServer = (
       // after a hand-off went out would otherwise show nothing until the next
       // time anything else moved.
       .get("/api/handoffs", () => Object.fromEntries(handoffs))
-      .get("/api/pending", () => pending.list())
+      .get("/api/pending", () => pending.list().map(clientCopy))
       .get(
         "/api/search",
         {
@@ -12845,7 +12854,7 @@ export const createServer = (
                 if (routed) {
                   (message.payload as Record<string, unknown>).routedTo =
                     "parent";
-                  deliverDelegateAsk(sender, parent, message);
+                  deliverDelegateAsk(sender, parent, clientCopy(message));
                 } else if (!internal) {
                   telegram?.onAsk(message);
                   push.onAsk(message);
@@ -13329,7 +13338,9 @@ export const createServer = (
                   message.payload as TranscriptPayload
                 );
               } else {
-                registry.broadcast(message);
+                // A parked ask goes out with its secrets hidden; the ledger
+                // keeps the call as it was asked.
+                registry.broadcast(clientCopy(message));
               }
               break;
             }

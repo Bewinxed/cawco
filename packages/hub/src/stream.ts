@@ -502,7 +502,11 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
       return;
     }
 
-    if (!ports.isMachineConnected(machineId)) {
+    // An answer is the hub's own transaction (server.ts
+    // `answerPendingPermission`): an ask the hub raised (an admin write, a
+    // workflow's question) is settled here with no machine involved, and one
+    // a machine raised says its machine is not connected from there.
+    if (kind !== "permission.answer" && !ports.isMachineConnected(machineId)) {
       fail(socket, commandId, `machine ${machineId} is not connected`);
       return;
     }

@@ -37,14 +37,16 @@ enum DiffModel {
                     table[i][j] = a[i] == b[j] ? table[i + 1][j + 1] + 1 : max(table[i + 1][j], table[i][j + 1])
                 }
             }
+            // On a tie the old line goes first, as @pierre/diffs orders a
+            // replacement: what was there, then what replaces it.
             var i = 0, j = 0
             while i < n || j < m {
                 if i < n, j < m, a[i] == b[j] {
                     script.append(DiffLine(kind: .context, text: a[i], old: i + 1, new: j + 1)); i += 1; j += 1
-                } else if j < m, i == n || table[i][j + 1] >= table[i + 1][j] {
-                    script.append(DiffLine(kind: .addition, text: b[j], old: nil, new: j + 1)); j += 1
-                } else {
+                } else if i < n, j == m || table[i + 1][j] >= table[i][j + 1] {
                     script.append(DiffLine(kind: .deletion, text: a[i], old: i + 1, new: nil)); i += 1
+                } else {
+                    script.append(DiffLine(kind: .addition, text: b[j], old: nil, new: j + 1)); j += 1
                 }
             }
         }

@@ -511,7 +511,6 @@ export function adminTools() {
             "For action 'llm': the supervisor's standing instructions."
           ),
       },
-      // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: dispatches all five rule actions (list, templates, create, update, remove) with their validation in one handler; splitting would scatter the action enum's contract across several functions.
       async (args) => {
         const { action } = args;
         if (action === "list") {
@@ -532,34 +531,59 @@ export function adminTools() {
           );
         }
 
-        // Build the rule draft from the args
-        const draft = {
-          name: args.name ?? "",
-          enabled: args.enabled ?? true,
-          pattern: args.pattern ?? "",
-          matchKind: args.matchKind ?? "phrase",
-          caseSensitive: args.caseSensitive ?? false,
-          wholeWord: args.wholeWord ?? false,
-          watch: args.watch ?? "text",
-          reply: args.reply ?? "",
-          timing: args.timing ?? "turn",
-          interrupt: args.interrupt ?? false,
-          repeat: args.repeat ?? false,
-          scope: args.scope ?? {},
-          trigger: args.trigger ?? "pattern",
-          action: args.ruleAction ?? "reply",
-          prompt: args.prompt ?? null,
-        };
+        // Only the fields the call names: `ruleAction` is the rule's `action`.
+        const { action: _verb, id, ruleAction, ...named } = args;
+        const given = Object.fromEntries(
+          Object.entries({ ...named, action: ruleAction }).filter(
+            ([, value]) => value !== undefined
+          )
+        );
 
         if (action === "create") {
-          return ok(await api("POST", "/api/rules", draft));
+          return ok(
+            await api("POST", "/api/rules", {
+              name: "",
+              enabled: true,
+              pattern: "",
+              matchKind: "phrase",
+              caseSensitive: false,
+              wholeWord: false,
+              watch: "text",
+              reply: "",
+              timing: "turn",
+              interrupt: false,
+              repeat: false,
+              scope: {},
+              trigger: "pattern",
+              action: "reply",
+              prompt: null,
+              ...given,
+            })
+          );
         }
-        // update
-        if (!args.id) {
+        // update: the route replaces the whole rule, so the given fields are
+        // laid over the rule as it is stored; every other field stays.
+        if (!id) {
           throw new Error("id is required to update a rule");
         }
+        const { rules } = (await api("GET", "/api/rules")) as {
+          rules: (Record<string, unknown> & { id: string })[];
+        };
+        const stored = rules.find((rule) => rule.id === id);
+        if (!stored) {
+          throw new Error(`there is no rule ${id} to update`);
+        }
+        const {
+          id: _id,
+          createdAt: _createdAt,
+          stats: _stats,
+          ...current
+        } = stored;
         return ok(
-          await api("PUT", `/api/rules/${encodeURIComponent(args.id)}`, draft)
+          await api("PUT", `/api/rules/${encodeURIComponent(id)}`, {
+            ...current,
+            ...given,
+          })
         );
       }
     ),

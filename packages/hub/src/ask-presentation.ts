@@ -10,10 +10,65 @@ import {
   type AdminGroup,
   type Envelope,
   type PermissionRequestFrame,
+  type PermissionResult,
   presentPermission,
+  questionsOf,
+  redact,
 } from "@cawco/core";
 import type { DbShape } from "./db";
 import type { DelegateTypesShape } from "./delegate-types";
+
+/** A permission (not a question) parked on this envelope, else undefined. */
+const permissionOf = (
+  envelope: Envelope
+): PermissionRequestFrame | undefined => {
+  const payload = envelope.payload as PermissionRequestFrame | undefined;
+  return payload?.kind === "permission_request" &&
+    !questionsOf(payload.toolName, payload.input)
+    ? payload
+    : undefined;
+};
+
+/**
+ * The copy of a parked ask that leaves the hub for a client (a dashboard, the
+ * apps, `/api/pending`): its tool input with every secret hidden, as the card
+ * shows it. The ledger keeps the original, and {@link answeredWithOriginal}
+ * puts it back on the way in, so an Approve runs the call as it was asked. A
+ * question is left whole: its answer is written into its input.
+ */
+export const clientCopy = (envelope: Envelope): Envelope => {
+  const payload = permissionOf(envelope);
+  if (!payload) {
+    return envelope;
+  }
+  return {
+    ...envelope,
+    payload: {
+      ...payload,
+      input: Object.fromEntries(
+        Object.entries(payload.input).map(([key, value]) => [
+          key,
+          redact(key, value),
+        ])
+      ),
+    },
+  };
+};
+
+/**
+ * An answer to a parked permission, carrying the call's own input: clients
+ * only ever held the redacted copy ({@link clientCopy}), so the input they
+ * echo back is replaced by the ledger's.
+ */
+export const answeredWithOriginal = (
+  parked: Envelope,
+  result: PermissionResult
+): PermissionResult => {
+  const payload = permissionOf(parked);
+  return payload && result.behavior === "allow"
+    ? { ...result, updatedInput: payload.input }
+    : result;
+};
 
 const leaf = (cwd: string): string | undefined =>
   cwd.split("/").filter(Boolean).at(-1);
