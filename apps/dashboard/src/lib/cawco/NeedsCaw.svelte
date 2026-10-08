@@ -130,8 +130,10 @@
    * second ink, which says "a lot". Nothing of it leaves his circle, so nothing of it
    * leaves the screen. The number itself is in his label, his tooltip and
    * the drawer's head. His circle is the bar's control height across,
-   * round his item's centre: the narrow bar's glass circle, and the wide
-   * group's trailing end. Apple's NeedsCawButton draws the same arcs.
+   * round his item's centre: the wide group's trailing end. On the phone
+   * his glass stands on the bar's floor with its bottom-right corner square
+   * (Shell), and the arcs run along that outline instead (`outlinePath`).
+   * Apple's NeedsCawButton draws the same arcs.
    */
   const ARC = 30;
   const ARC_GAP = 8;
@@ -180,6 +182,65 @@
     const from = k * (ARC + ARC_GAP) + CAP;
     return `M ${onRim(from)} A ${RIM} ${RIM} 0 0 1 ${onRim(from + ARC - 2 * CAP)}`;
   };
+
+  /*
+   * The phone's glass: round at three corners, square at the bottom right.
+   * The arcs' path is that outline drawn the same inset in as the circle's
+   * rim: clockwise from 12 o'clock round the top-right quarter, down the
+   * square corner's right edge, along its bottom edge, then round the
+   * bottom-left and top-left quarters back to 12. Each arc is ARC/360 of the
+   * outline's length and ARC_GAP/360 from the next, as on the circle.
+   */
+  const MID = RING_BOX / 2;
+  /** The square corner's point on the path. */
+  const CORNER = MID + RIM;
+  const QUARTER = (Math.PI * RIM) / 2;
+  const OUTLINE_LENGTH = 3 * QUARTER + 2 * RIM;
+  /** The point `s` px along the outline from 12 o'clock. */
+  function onOutline(s: number): [number, number] {
+    const arcPoint = (rad: number): [number, number] => [
+      MID + RIM * Math.sin(rad),
+      MID - RIM * Math.cos(rad),
+    ];
+    if (s < QUARTER) {
+      return arcPoint(s / RIM);
+    }
+    if (s < QUARTER + RIM) {
+      return [CORNER, MID + (s - QUARTER)];
+    }
+    if (s < QUARTER + 2 * RIM) {
+      return [CORNER - (s - QUARTER - RIM), CORNER];
+    }
+    return arcPoint(Math.PI + (s - QUARTER - 2 * RIM) / RIM);
+  }
+  /** Arc `k` on the outline: caps and all, ARC/360 of it long. */
+  const outlinePath = (k: number) => {
+    const from = (k * (ARC + ARC_GAP) * OUTLINE_LENGTH) / 360 + RIM_STROKE / 2;
+    const to = from + (ARC * OUTLINE_LENGTH) / 360 - RIM_STROKE;
+    const points: string[] = [];
+    for (let s = from; s < to; s += 0.5) {
+      points.push(
+        onOutline(s)
+          .map((n) => n.toFixed(2))
+          .join(" ")
+      );
+    }
+    points.push(
+      onOutline(to)
+        .map((n) => n.toFixed(2))
+        .join(" ")
+    );
+    return `M ${points.join(" L ")}`;
+  };
+  /** The whole outline, from 12 o'clock: the ring closed past two laps. */
+  const OUTLINE = [
+    `M ${MID} ${MID - RIM}`,
+    `A ${RIM} ${RIM} 0 0 1 ${CORNER} ${MID}`,
+    `L ${CORNER} ${CORNER}`,
+    `L ${MID} ${CORNER}`,
+    `A ${RIM} ${RIM} 0 0 1 ${MID - RIM} ${MID}`,
+    `A ${RIM} ${RIM} 0 0 1 ${MID} ${MID - RIM}`,
+  ].join(" ");
 
   /**
    * An arc drawing itself in along its own length, and retracting the same
@@ -942,28 +1003,63 @@
           data-count={count}
           viewBox="0 0 {RING_BOX} {RING_BOX}"
         >
-          {#each arcSlots as k (k)}
-            <path class="arc" d={arcPath(k)} pathLength="1" transition:drawn />
-          {/each}
-          {#each lapSlots as k (k)}
-            <path
-              class="arc lap"
-              d={arcPath(k)}
-              pathLength="1"
-              transition:drawn
-            />
-          {/each}
-          {#if ringClosed}
-            <circle
-              class="arc lap whole"
-              cx={RING_BOX / 2}
-              cy={RING_BOX / 2}
-              pathLength="1"
-              r={RIM}
-              transform="rotate(-90 {RING_BOX / 2} {RING_BOX / 2})"
-              transition:drawn
-            />
-          {/if}
+          <!-- The wide bar's circle, and the phone's standing outline: the
+               one the width draws is shown (styles below). -->
+          <g class="round">
+            {#each arcSlots as k (k)}
+              <path
+                class="arc"
+                d={arcPath(k)}
+                pathLength="1"
+                transition:drawn
+              />
+            {/each}
+            {#each lapSlots as k (k)}
+              <path
+                class="arc lap"
+                d={arcPath(k)}
+                pathLength="1"
+                transition:drawn
+              />
+            {/each}
+            {#if ringClosed}
+              <circle
+                class="arc lap whole"
+                cx={MID}
+                cy={MID}
+                pathLength="1"
+                r={RIM}
+                transform="rotate(-90 {MID} {MID})"
+                transition:drawn
+              />
+            {/if}
+          </g>
+          <g class="standing">
+            {#each arcSlots as k (k)}
+              <path
+                class="arc"
+                d={outlinePath(k)}
+                pathLength="1"
+                transition:drawn
+              />
+            {/each}
+            {#each lapSlots as k (k)}
+              <path
+                class="arc lap"
+                d={outlinePath(k)}
+                pathLength="1"
+                transition:drawn
+              />
+            {/each}
+            {#if ringClosed}
+              <path
+                class="arc lap whole"
+                d={OUTLINE}
+                pathLength="1"
+                transition:drawn
+              />
+            {/if}
+          </g>
         </svg>
       </button>
     {/snippet}
@@ -1016,6 +1112,19 @@
   /* The second lap, and the closed ring past it: the fail glyph's ink. */
   .arc.lap {
     stroke: var(--status-fail-glyph);
+  }
+  /* The phone's glass is the standing outline (Shell), the wide bar's the
+     group's round end. */
+  .standing {
+    display: none;
+  }
+  @media (max-width: 899px) {
+    .round {
+      display: none;
+    }
+    .standing {
+      display: inline;
+    }
   }
   /* His head: the face, the beat and the smile in one cell, squashed once
      under a press (DESIGN.md, The Press Rule) with motion allowed. */

@@ -113,6 +113,12 @@ public enum Palette {
     public static let surfaceWell = Palette.named("surface-well")
     /// The bar folder tabs stand on, a step below recess-deep.
     public static let surfaceShelf = Palette.named("surface-shelf")
+    /// An unchosen folder tab on the phone's row, one tab from the chosen one. Each tab further recedes a step toward the shelf, to three.
+    public static let tabRecede1 = Palette.named("tab-recede-1")
+    /// An unchosen folder tab on the phone's row, two tabs from the chosen one.
+    public static let tabRecede2 = Palette.named("tab-recede-2")
+    /// An unchosen folder tab on the phone's row, three or more tabs from the chosen one.
+    public static let tabRecede3 = Palette.named("tab-recede-3")
     public static let surfaceLift = Palette.named("surface-lift")
     /// An icon tile's ground (DESIGN.md: the duotone glyph on a raised 26px tile): the raised surface by day; at night two steps past it, raised meeting the recess it stands on.
     public static let surfaceTile = Palette.named("surface-tile")
@@ -472,6 +478,12 @@ public enum Size {
     public static let cToolbarCtl: Double = 32
     /// The shell's top bar at every width: 43px and its 1px hairline, the compact bar's height (Apple HIG, Toolbars). Hosted tabs stand on its floor, a tab row's height below its top.
     public static let cTopBarH: Double = 44
+    /// The phone bar's sidebar toggle: a bare glyph, its leading edge c-bar-phone-edge from the screen's and its centre on the tabs' centre line, in a 44px touch area.
+    public static let cBarToggleGlyph: Double = 18
+    /// The phone bar's two ends: the toggle glyph's leading edge and Caw's glass stand this far in from the screen's edges.
+    public static let cBarPhoneEdge: Double = 12
+    /// On the phone bar, the first tab starts this far after the toggle glyph, and the strip stops this far short of Caw's glass.
+    public static let cBarPhoneGap: Double = 8
     /// A session tab row: its list's 4px pad over 32px tabs (PaneTabs).
     public static let cTabRowH: Double = 36
     /// The widest a session tab grows: its title, padding and close control. Below it a tab is as wide as its title; only a title past it ends in an ellipsis, and a row of tabs that will not fit scrolls (PaneTabs).
@@ -614,6 +626,12 @@ public enum Effect {
     /// Relative tints for rows inside any surface: hover +6%, selected +10% ink.
     public static let surfaceHoverMix: Double = 0.06
     public static let surfaceSelectedMix: Double = 0.1
+    /// How much of its session's status colour an unchosen tab's rim on the phone's row carries; its glow carries half of it.
+    public static let tabRimMix: Double = 0.51
+    /// The chosen tab's rim on the phone's row.
+    public static let tabRimMixChosen: Double = 0.65
+    /// An idle session's rim, chosen or not, in the muted ink.
+    public static let tabRimMixIdle: Double = 0.32
 }
 
 public enum Motion {

@@ -243,7 +243,8 @@
       inset: 0;
       z-index: 0;
       border-radius: var(--radius) var(--radius) 0 0;
-      background: var(--surface-recess-deep);
+      /* A host may recede a tab further from the chosen one (PaneTabs). */
+      background: var(--tab-fill, var(--surface-recess-deep));
 
       @media (prefers-reduced-motion: no-preference) {
         transition:

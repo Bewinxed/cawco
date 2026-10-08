@@ -541,10 +541,15 @@
 
   /* Each folder tab, or the host's box round it, steps back over its
      leading neighbour by the overlap and stands in its own stack, ranked
-     from the chosen tab by the script. */
+     from the chosen tab by the script. The track's own layers are not tabs:
+     the highlight's ghost and pills (absolutely placed, app.css
+     .kit-highlight) taken into the flow with the overlap's margin pulled
+     every tab 16px back past the track's leading flare room. */
   :global([data-variant="folder"])
     .ff-tabs-list
-    > :global(:not(.segment, .ring, .kit-ghost, .end-room)) {
+    > :global(
+      :not(.segment, .ring, .kit-ghost, .kit-pill, .kit-pill-trail, .end-room)
+    ) {
     position: relative;
     margin-inline-start: calc(-1 * var(--overlap));
   }

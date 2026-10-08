@@ -138,6 +138,20 @@
     --surface-well: light-dark(var(--surface-recess), var(--neutral-1));
     /* The bar folder tabs stand on, a step below recess-deep. */
     --surface-shelf: light-dark(var(--neutral-5), oklch(15.6% 0.004 70));
+    /* An unchosen folder tab on the phone's row, one tab from the chosen one. Each tab further recedes a step toward the shelf, to three. */
+    --tab-recede-1: var(--surface-recess-deep);
+    /* An unchosen folder tab on the phone's row, two tabs from the chosen one. */
+    --tab-recede-2: color-mix(
+      in oklab,
+      var(--surface-recess-deep) 50%,
+      var(--surface-shelf)
+    );
+    /* An unchosen folder tab on the phone's row, three or more tabs from the chosen one. */
+    --tab-recede-3: color-mix(
+      in oklab,
+      var(--surface-recess-deep) 30%,
+      var(--surface-shelf)
+    );
     --surface-lift: light-dark(var(--neutral-1), var(--neutral-6));
     /* An icon tile's ground (DESIGN.md: the duotone glyph on a raised 26px tile): the raised surface by day; at night two steps past it, raised meeting the recess it stands on. */
     --surface-tile: light-dark(var(--neutral-1), var(--neutral-5));
@@ -606,6 +620,12 @@
     --c-toolbar-ctl: 32px;
     /* The shell's top bar at every width: 43px and its 1px hairline, the compact bar's height (Apple HIG, Toolbars). Hosted tabs stand on its floor, a tab row's height below its top. */
     --c-top-bar-h: 44px;
+    /* The phone bar's sidebar toggle: a bare glyph, its leading edge c-bar-phone-edge from the screen's and its centre on the tabs' centre line, in a 44px touch area. */
+    --c-bar-toggle-glyph: 18px;
+    /* The phone bar's two ends: the toggle glyph's leading edge and Caw's glass stand this far in from the screen's edges. */
+    --c-bar-phone-edge: 12px;
+    /* On the phone bar, the first tab starts this far after the toggle glyph, and the strip stops this far short of Caw's glass. */
+    --c-bar-phone-gap: 8px;
     /* A session tab row: its list's 4px pad over 32px tabs (PaneTabs). */
     --c-tab-row-h: 36px;
     /* The widest a session tab grows: its title, padding and close control. Below it a tab is as wide as its title; only a title past it ends in an ellipsis, and a row of tabs that will not fit scrolls (PaneTabs). */
@@ -750,6 +770,12 @@
     /* Relative tints for rows inside any surface: hover +6%, selected +10% ink. */
     --surface-hover-mix: 6%;
     --surface-selected-mix: 10%;
+    /* How much of its session's status colour an unchosen tab's rim on the phone's row carries; its glow carries half of it. */
+    --tab-rim-mix: 51%;
+    /* The chosen tab's rim on the phone's row. */
+    --tab-rim-mix-chosen: 65%;
+    /* An idle session's rim, chosen or not, in the muted ink. */
+    --tab-rim-mix-idle: 32%;
     /* Entrances and exits ease out; on-screen movement eases in-out; drawers, popovers and page swaps use the drawer curve. No ease-in. */
     --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
     --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);

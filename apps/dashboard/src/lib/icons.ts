@@ -153,7 +153,7 @@ export { default as IconShield } from "~icons/solar/shield-bold-duotone";
 /** Rules: a standing guard over what sessions say, distinct from bare `shield`. */
 export { default as IconRules } from "~icons/solar/shield-check-bold-duotone";
 export { default as IconShop } from "~icons/solar/shop-bold-duotone";
-export { default as IconSidebar } from "~icons/solar/sidebar-minimalistic-bold-duotone";
+export { default as IconSidebar } from "~icons/solar/sidebar-minimalistic-line-duotone";
 export { default as IconToolGeneric } from "~icons/solar/sledgehammer-bold-duotone";
 export { default as IconPhone } from "~icons/solar/smartphone-bold-duotone";
 export { default as IconSort } from "~icons/solar/sort-bold-duotone";

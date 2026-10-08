@@ -791,6 +791,21 @@
         }
       }
     },
+    "tab-recede-1": {
+      "$type": "color",
+      "$value": "{color.surface-recess-deep}",
+      "$description": "An unchosen folder tab on the phone's row, one tab from the chosen one. Each tab further recedes a step toward the shelf, to three."
+    },
+    "tab-recede-2": {
+      "$type": "color",
+      "$value": "color-mix(in oklab, {color.surface-recess-deep} 50%, {color.surface-shelf})",
+      "$description": "An unchosen folder tab on the phone's row, two tabs from the chosen one."
+    },
+    "tab-recede-3": {
+      "$type": "color",
+      "$value": "color-mix(in oklab, {color.surface-recess-deep} 30%, {color.surface-shelf})",
+      "$description": "An unchosen folder tab on the phone's row, three or more tabs from the chosen one."
+    },
     "surface-lift": {
       "$type": "color",
       "$value": "{color.neutral-1}",
@@ -2250,6 +2265,21 @@
       "$value": "44px",
       "$description": "The shell's top bar at every width: 43px and its 1px hairline, the compact bar's height (Apple HIG, Toolbars). Hosted tabs stand on its floor, a tab row's height below its top."
     },
+    "c-bar-toggle-glyph": {
+      "$type": "dimension",
+      "$value": "18px",
+      "$description": "The phone bar's sidebar toggle: a bare glyph, its leading edge c-bar-phone-edge from the screen's and its centre on the tabs' centre line, in a 44px touch area."
+    },
+    "c-bar-phone-edge": {
+      "$type": "dimension",
+      "$value": "12px",
+      "$description": "The phone bar's two ends: the toggle glyph's leading edge and Caw's glass stand this far in from the screen's edges."
+    },
+    "c-bar-phone-gap": {
+      "$type": "dimension",
+      "$value": "8px",
+      "$description": "On the phone bar, the first tab starts this far after the toggle glyph, and the strip stops this far short of Caw's glass."
+    },
     "c-tab-row-h": {
       "$type": "dimension",
       "$value": "36px",
@@ -2641,6 +2671,21 @@
     "surface-selected-mix": {
       "$type": "number",
       "$value": "10%"
+    },
+    "tab-rim-mix": {
+      "$type": "number",
+      "$value": "51%",
+      "$description": "How much of its session's status colour an unchosen tab's rim on the phone's row carries; its glow carries half of it."
+    },
+    "tab-rim-mix-chosen": {
+      "$type": "number",
+      "$value": "65%",
+      "$description": "The chosen tab's rim on the phone's row."
+    },
+    "tab-rim-mix-idle": {
+      "$type": "number",
+      "$value": "32%",
+      "$description": "An idle session's rim, chosen or not, in the muted ink."
     }
   },
   "motion": {

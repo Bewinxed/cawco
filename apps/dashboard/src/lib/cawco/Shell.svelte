@@ -1523,10 +1523,43 @@
      own; only its two controls take a touch. */
   @media (max-width: 899px) {
     .top {
-      padding-inline: var(--space-1) var(--space-2);
+      padding-inline: 0 var(--c-bar-phone-edge);
     }
+    /* The toggle is a bare glyph (owner, variant B): its leading edge
+       c-bar-phone-edge from the screen's, its centre on the tabs' centre
+       line, which stand on the bar's floor, in a 44px touch area that
+       reaches into the screen's edge. */
     .burger {
-      margin-left: 0;
+      --glyph: var(--c-bar-toggle-glyph);
+      align-self: flex-start;
+      margin-inline-start: calc(
+        var(--c-bar-phone-edge) +
+        var(--glyph) /
+        2 -
+        22px
+      );
+      margin-block-start: calc(
+        var(--c-top-bar-h) -
+        var(--c-tab-row-h) /
+        2 -
+        22px
+      );
+      color: var(--ink-muted);
+    }
+    .burger :global(svg) {
+      width: var(--glyph);
+      height: var(--glyph);
+    }
+    /* Caw stands on the bar's floor, in line with the tabs, his glass
+       round but for its bottom-right corner, which meets the floor square
+       (owner: "caw just remove the bottom right roundness"). His rim's
+       arcs follow it (NeedsCaw). */
+    .right {
+      align-self: stretch;
+    }
+    .tools {
+      align-self: flex-end;
+      border-radius: 50% 50% 0 50%;
     }
     .top.floating {
       position: absolute;

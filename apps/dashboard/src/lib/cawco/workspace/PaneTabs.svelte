@@ -69,6 +69,7 @@
   import CawFace from "../home/CawFace.svelte";
   import type { HubRead } from "../hub-read";
   import { conversationHref } from "../links";
+  import { integrate, type Sample, sampleAt } from "../motion/spring";
   import { sessionName } from "../session-name";
   import { isThreadTab } from "../thread-tabs";
   import { runIdOf } from "../workflow-runs";
@@ -77,6 +78,7 @@
   import SessionDetails from "./SessionDetails.svelte";
   import SessionStatus from "./SessionStatus.svelte";
   import { rebuildScheduler } from "./scheduler.svelte";
+  import { type StatusTone, sessionStatus } from "./session-status";
   import { contextOf, type LeafNode, workspace } from "./workspace.svelte";
 
   let {
@@ -107,7 +109,16 @@
     stale: boolean;
     /** What the badge says, or '' for a tab with nothing to say. */
     status: string;
+    /** The session's status on the rail's scale: the phone tab's rim wears it. */
+    tone: StatusTone;
   }
+
+  /** A thread's status on the session's scale. */
+  const THREAD_TONE = {
+    working: "working",
+    "needs-you": "attention",
+    ready: "quiet",
+  } as const satisfies Record<string, StatusTone>;
 
   function resolve(id: string): Tab {
     const row = cawco.instanceIndex.byId.get(id);
@@ -146,6 +157,9 @@
       failed,
       stale,
       status,
+      tone: isThreadTab(id)
+        ? THREAD_TONE[threadFace(id)]
+        : sessionStatus(id).tone,
     };
   }
 
@@ -190,6 +204,16 @@
     });
   });
 
+  /** Where the chosen tab stands, -1 with the board showing. */
+  const chosenAt = $derived(tabs.findIndex((tab) => tab.id === leaf.active));
+  /**
+   * How far a tab stands from the chosen one, 0 for the chosen tab and at
+   * most 3: on the phone's row each step recedes its fill one more toward
+   * the shelf. With none chosen every tab is one step back.
+   */
+  const distanceOf = (i: number) =>
+    chosenAt < 0 ? 1 : Math.min(Math.abs(i - chosenAt), 3);
+
   const otherLeaves = $derived(
     workspace.leaves.filter((other) => other.id !== leaf.id)
   );
@@ -207,8 +231,12 @@
   let detailsHeight = $state(0);
   let restoreFocus = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
-  /** A tab's context menu is open; hovering must not open the card under it. */
-  let menuOpen = false;
+  /**
+   * The tab whose options menu is open, if one's is. Hovering must not open
+   * the card under an open menu.
+   */
+  let menuFor = $state<string | null>(null);
+  const menuOpen = $derived(menuFor !== null);
   const detailTab = $derived(tabs.find((tab) => tab.id === detailId));
   /** An open card's move to another tab, waiting for the frame in hand to paint. */
   let moveFrame = 0;
@@ -281,13 +309,17 @@
     }
     timer = setTimeout(() => showDetails(id, anchor, false), 350);
   }
-  function menuOpenChange(open: boolean) {
-    menuOpen = open;
-    if (open) {
-      clearTimeout(timer);
-      if (detailsOpen && !pinned) {
-        closeDetails();
+  function setMenu(id: string, open: boolean) {
+    if (!open) {
+      if (menuFor === id) {
+        menuFor = null;
       }
+      return;
+    }
+    menuFor = id;
+    clearTimeout(timer);
+    if (detailsOpen && !pinned) {
+      closeDetails();
     }
   }
   function leaveDetails() {
@@ -572,6 +604,230 @@
     };
   }
 
+  /* ── A tab's options, held or pulled down ─────────────────────────
+     One menu per tab, its context menu, with Close in it: on a phone the
+     only way to close a tab. A long press opens it (utils/longpress), and
+     so does a finger dragged down off the tab: mostly vertical past
+     PULL_SLOP takes hold, and the menu hangs from the tab's foot and comes
+     down under the finger 1:1. Let go past PULL_OPEN (carried along its
+     speed) and it settles open on the house spring (motion/spring), the
+     one the Caw drawer lands on; short of it, it goes back up and closes.
+     A sideways drag is the strip's scroll (`touch-action: pan-x`). With
+     less motion the menu simply opens once the drag passes PULL_OPEN. */
+  /** Past a held finger's slop (utils/longpress, 10px), so a pull is never also a hold. */
+  const PULL_SLOP = 12;
+  const PULL_OPEN = 24;
+  /** Release speed is read over this last stretch, ms. */
+  const PULL_WINDOW = 80;
+  /** How far a release is carried along its speed, ms (as the Caw drawer's). */
+  const PULL_PROJECT = 99;
+  /** Past fully out, a third of the finger's travel shows, and no more than a fifth. */
+  const PULL_RESIST = 0.35;
+  const PULL_RESIST_MAX = 0.2;
+
+  /** Opens tab's menu hanging from its foot, as a held finger or a right click would. */
+  function openMenu(tabNode: HTMLElement) {
+    const hit = tabNode.querySelector("[data-session-tab]") ?? tabNode;
+    const box = tabNode.getBoundingClientRect();
+    hit.dispatchEvent(
+      new MouseEvent("contextmenu", {
+        bubbles: true,
+        cancelable: true,
+        clientX: box.left,
+        clientY: box.bottom,
+      })
+    );
+  }
+
+  /** The open menu's surface, once bits-ui has mounted it. */
+  const openMenuEl = () =>
+    document.querySelector<HTMLElement>(
+      '[data-slot="context-menu-content"][data-state="open"]'
+    );
+
+  /** Draws the menu `at` of the way out of the tab's foot: 0 tucked under it, 1 out. */
+  function drawPull(el: HTMLElement, at: number) {
+    const h = el.offsetHeight;
+    const over = Math.max(0, at - 1);
+    const hidden = (1 - Math.min(Math.max(at, 0), 1)) * h;
+    const stretch = Math.min(over * h * PULL_RESIST, h * PULL_RESIST_MAX);
+    el.style.transition = "none";
+    el.style.opacity = "1";
+    el.style.scale = "1";
+    el.style.translate = `0 ${stretch - hidden}px`;
+    // Cut at the tab's foot; its shadow still falls past the other edges.
+    el.style.clipPath = `inset(${hidden}px -32px -32px -32px)`;
+  }
+
+  /** Hands the menu back to its own rules, at rest. */
+  function releasePull(el: HTMLElement) {
+    for (const prop of [
+      "transition",
+      "opacity",
+      "scale",
+      "translate",
+      "clip-path",
+    ]) {
+      el.style.removeProperty(prop);
+    }
+  }
+
+  let pullFrame = 0;
+  onMount(() => () => cancelAnimationFrame(pullFrame));
+
+  /**
+   * Settles the menu from `from` of the way out to open (1) or shut (0) on
+   * the house spring, leaving at `speed` px/ms.
+   */
+  function settlePull(
+    id: string,
+    el: HTMLElement,
+    from: number,
+    target: 0 | 1,
+    speed: number
+  ) {
+    cancelAnimationFrame(pullFrame);
+    const h = el.offsetHeight || 1;
+    const path: Sample[] = integrate((from - target) * h, speed * 1000);
+    const start = performance.now();
+    // biome-ignore lint/style/useAtIndex: integrate() always returns at least two points
+    const end = path[path.length - 1].t;
+    const step = (now: number) => {
+      const seconds = (now - start) / 1000;
+      drawPull(el, target + sampleAt(path, seconds).x / h);
+      if (seconds < end) {
+        pullFrame = requestAnimationFrame(step);
+        return;
+      }
+      if (target === 1) {
+        releasePull(el);
+      } else {
+        setMenu(id, false);
+      }
+    };
+    pullFrame = requestAnimationFrame(step);
+  }
+
+  /** The press that follows a pull lands on the tab as a click: it is not one. */
+  function swallowClick(node: HTMLElement) {
+    const swallow = (event: MouseEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    node.addEventListener("click", swallow, { capture: true, once: true });
+    setTimeout(() => node.removeEventListener("click", swallow, true), 400);
+  }
+
+  /** Where a pull's finger was, px down from where it pressed, and when. */
+  interface PullSample {
+    t: number;
+    y: number;
+  }
+
+  /** A press's travel so far: too short to say, a pull down, or not one. */
+  function pullVerdict(dx: number, dy: number): "wait" | "pull" | "not" {
+    if (Math.hypot(dx, dy) < PULL_SLOP) {
+      return "wait";
+    }
+    return dy > 0 && dy > Math.abs(dx) ? "pull" : "not";
+  }
+
+  /** Keeps the samples of the last PULL_WINDOW, and at least two. */
+  function track(samples: PullSample[], y: number, t: number) {
+    samples.push({ y, t });
+    while (samples.length > 2 && t - (samples.at(0)?.t ?? t) > PULL_WINDOW) {
+      samples.shift();
+    }
+  }
+
+  /** The finger's speed down over the samples, px/ms. */
+  function pullSpeed(samples: PullSample[]): number {
+    const [first] = samples;
+    const last = samples.at(-1);
+    return first && last && last.t > first.t
+      ? (last.y - first.y) / (last.t - first.t)
+      : 0;
+  }
+
+  function pullMenu(id: string, event: PointerEvent) {
+    if (event.pointerType === "mouse" || !event.isPrimary) {
+      return;
+    }
+    const node = event.currentTarget as HTMLElement;
+    const x0 = event.clientX;
+    const y0 = event.clientY;
+    let pulling = false;
+    let el: HTMLElement | null = null;
+    let dy = 0;
+    const samples: PullSample[] = [];
+    const move = (e: PointerEvent) => {
+      dy = e.clientY - y0;
+      if (!pulling) {
+        const verdict = pullVerdict(e.clientX - x0, dy);
+        if (verdict === "wait") {
+          return;
+        }
+        if (verdict === "not") {
+          stop();
+          return;
+        }
+        pulling = true;
+        node.setPointerCapture(e.pointerId);
+        swallowClick(node);
+        if (motionOk.current) {
+          openMenu(node);
+        }
+      }
+      if (!motionOk.current) {
+        if (dy >= PULL_OPEN) {
+          stop();
+          openMenu(node);
+        }
+        return;
+      }
+      cancelAnimationFrame(pullFrame);
+      track(samples, dy, e.timeStamp);
+      el ??= openMenuEl();
+      if (el) {
+        drawPull(el, dy / (el.offsetHeight || 1));
+      }
+    };
+    const up = () => {
+      stop();
+      if (!(pulling && motionOk.current)) {
+        return;
+      }
+      const shown = el ?? openMenuEl();
+      if (!shown) {
+        return;
+      }
+      const speed = pullSpeed(samples);
+      const h = shown.offsetHeight || 1;
+      settlePull(
+        id,
+        shown,
+        dy / h,
+        dy + speed * PULL_PROJECT >= PULL_OPEN ? 1 : 0,
+        speed
+      );
+    };
+    /** The press was taken away mid-pull: the menu goes back up. */
+    const cancel = () => {
+      stop();
+      if (pulling && el) {
+        settlePull(id, el, dy / (el.offsetHeight || 1), 0, 0);
+      }
+    };
+    const stop = () => {
+      node.removeEventListener("pointermove", move);
+      node.removeEventListener("pointerup", up);
+      node.removeEventListener("pointercancel", cancel);
+    };
+    node.addEventListener("pointermove", move);
+    node.addEventListener("pointerup", up);
+    node.addEventListener("pointercancel", cancel);
+  }
+
   /**
    * The drawer drags from anywhere in it. A finger pulling down over content
    * that is scrolled to its top would otherwise start the browser's own
@@ -627,6 +883,9 @@
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
         class="tab"
+        data-d={distanceOf(i)}
+        data-tone={tab.tone}
+        onpointerdown={(event) => pullMenu(tab.id, event)}
         onpointerenter={(event) => {
           rebuildScheduler.prepare(tab.id);
           hoverTab(tab.id, event);
@@ -642,7 +901,9 @@
         {@attach attachmentsOf(tab.id).enter}
         {@attach attachmentsOf(tab.id).land}
       >
-        <ContextMenu.Root onOpenChange={menuOpenChange}>
+        <ContextMenu.Root
+          bind:open={() => menuFor === tab.id, (open) => setMenu(tab.id, open)}
+        >
           <ContextMenu.Trigger class="contents">
             <TabItem
               aria-expanded={detailsOpen && detailId === tab.id}
@@ -700,6 +961,9 @@
                     <IconChevronDown />
                   </button>
                 {/if}
+                <!-- A mouse's close. A finger's is in the tab's options,
+                     held or pulled down from the tab, and the phone's row
+                     draws none. -->
                 <button
                   aria-label="Close {tab.label}"
                   class="tclose touch-hit pointer-hit pressable"
@@ -711,6 +975,25 @@
                 >
                   <IconClose />
                 </button>
+                <!-- The options as an action a screen reader reaches
+                     (VoiceOver, TalkBack): the same menu a held or pulled
+                     finger opens. Out of the tab order, which the strip's
+                     arrows own; a keyboard has the menu key. -->
+                <button
+                  aria-haspopup="menu"
+                  aria-label="Options for {tab.label}"
+                  class="sr-only"
+                  onclick={(event) => {
+                    const node = (event.currentTarget as HTMLElement).closest(
+                      ".tab"
+                    );
+                    if (node instanceof HTMLElement) {
+                      openMenu(node);
+                    }
+                  }}
+                  tabindex={-1}
+                  type="button"
+                ></button>
               {/snippet}
             </TabItem>
           </ContextMenu.Trigger>
@@ -783,6 +1066,8 @@
             </ContextMenu.CopyItem>
           </ContextMenu.Content>
         </ContextMenu.Root>
+        <!-- The phone's status rim, drawn on the tab's own outline. -->
+        <span aria-hidden="true" class="rim"></span>
       </div>
     {/each}
   </TabsList>
@@ -947,17 +1232,10 @@
   }
   /* The trailing controls sit 4px after the title and 4px apart, on every
      pointer (owner: "a lot of wasted space until the x button"); where the
-     chevron stands beside the close, their hit areas meet between them. A
-     phone's tab has no chevron, so its close takes the whole 44px, its
-     leading half over the title's end, which chooses the same tab. */
+     chevron stands beside the close, their hit areas meet between them. */
   .tdetails,
   .tclose {
     --hit-gap-x: 4px;
-  }
-  .tclose {
-    @media (max-width: 899px) {
-      --hit-gap-x: initial;
-    }
   }
   /* The session track scrolls sideways, and a scroll container clips on both
      axes; its transparent padding grows into an equal negative margin on a
@@ -1075,17 +1353,24 @@
     }
   }
   /* On a phone this row is the app's only bar (Shell, `.top.floating`): the
-     bar's height, the tabs standing on its floor (the tab row's height under
-     the row's top pad), and its two ends left to the sidebar toggle (its
-     44px from the bar's 4px inset) and to Caw's glass (the bar's control
-     height from its 7px inset), each with a 7px gap, so the tabs scroll
-     between them and never under. */
+     bar's height, and its two ends left to the sidebar toggle and to Caw's
+     glass (Shell). The toggle's glyph stands c-bar-phone-edge in, and the
+     first tab starts c-bar-phone-gap after it: the strip starts a flare
+     short of that, its own room for the chosen sheet's foot. Caw's 36px
+     glass stands c-bar-phone-edge from the other edge, and the strip stops
+     c-bar-phone-gap short of it, so the tabs scroll between them and never
+     under. */
   @media (max-width: 899px) {
     :global(.session-tabs:not(.hosted)) {
       min-block-size: var(--c-top-bar-h);
-      padding-block-start: calc(var(--c-top-bar-h) - var(--c-tab-row-h));
-      padding-inline: calc(var(--space-1) + 44px + var(--space-2))
-        calc(var(--space-2) + var(--c-btn-h) + var(--space-2));
+      padding-block-start: 0;
+      padding-inline: calc(
+          var(--c-bar-phone-edge) +
+          var(--c-bar-toggle-glyph) +
+          var(--c-bar-phone-gap) -
+          var(--radius-lg)
+        )
+        calc(var(--c-bar-phone-gap) + var(--c-btn-h) + var(--c-bar-phone-edge));
     }
   }
 
@@ -1104,13 +1389,24 @@
     --tab-hover: light-dark(var(--surface-recess), var(--surface-hover));
   }
   /* The phone's row: tabs a row's height tall, standing on the bar's
-     floor with no pad above them, and the strip's ends fading over a short
-     run so a tab slides under the toggle and Caw rather than being cut. */
+     floor, and the strip's ends fading over a short run so a tab slides
+     under the toggle and Caw rather than being cut. The strip runs up to
+     the bar's top, so the pad above the tabs is inside its clip and their
+     rims' glow is not cut off. Its tabs take a rounder top than the
+     desktop's, the next radius up (owner: "round the tabs more on
+     mobile"), and their flared foot follows it; they still overlap by the
+     desktop's 8px. */
   @media (max-width: 899px) {
-    :global(.session-tabs:not(.hosted)[data-slot="tabs"] .ff-tabs-list) {
+    :global(
+      .session-tabs:not(.hosted)[data-slot="tabs"] .ff-tabs-list.scrollable
+    ) {
       --item: var(--c-tab-row-h);
       --pad: 0px;
       --fade-len: 16px;
+      --radius: var(--radius-lg);
+      --overlap: var(--radius-sm);
+      padding-block-start: calc(var(--c-top-bar-h) - var(--c-tab-row-h));
+      margin-block-start: 0;
     }
   }
 
@@ -1157,6 +1453,94 @@
   :global(.tab[data-dragging]) {
     opacity: 0.4;
   }
+  /* A finger's sideways drag is the strip's scroll; a downward one is the
+     tab's (`pullMenu`), never the page's. */
+  .tab {
+    touch-action: pan-x;
+  }
+
+  /* ── The phone's row: receding tabs and the status rim ─────────────
+     The chosen tab is the page it opens; every other tab recedes one step
+     toward the shelf per tab of distance from it, to three (`data-d`). Each
+     tab's rim wears its session's status (`data-tone`, the rail's scale):
+     the tab's own outline, a 1.5px stroke across the top tapering to 0.5px
+     down the sides, gone by 90% of its height, with a soft glow outside at
+     half its strength. A status change cross-fades it. Increase Contrast
+     and Reduce Transparency draw it a solid 1px rim. */
+  .rim {
+    display: none;
+  }
+  @media (max-width: 899px) {
+    .tab {
+      --tab-fill: var(--tab-recede-1);
+      --tone: var(--ink-muted);
+      --rim-mix: var(--tab-rim-mix);
+    }
+    .tab[data-d="0"] {
+      --rim-mix: var(--tab-rim-mix-chosen);
+    }
+    .tab[data-d="2"] {
+      --tab-fill: var(--tab-recede-2);
+    }
+    .tab[data-d="3"] {
+      --tab-fill: var(--tab-recede-3);
+    }
+    .tab[data-tone="working"] {
+      --tone: var(--status-live-glyph);
+    }
+    .tab[data-tone="attention"] {
+      --tone: var(--status-attn-glyph);
+    }
+    .tab[data-tone="failed"] {
+      --tone: var(--status-fail-glyph);
+    }
+    .tab:is([data-tone="quiet"], [data-tone="done"]) {
+      --rim-mix: var(--tab-rim-mix-idle);
+    }
+    .rim {
+      /* 6px of room round the outline for the glow, inside the mask. */
+      --spill: 6px;
+      display: block;
+      position: absolute;
+      inset: calc(-1 * var(--spill)) calc(-1 * var(--spill)) 0;
+      z-index: 2;
+      pointer-events: none;
+      mask-image: linear-gradient(
+        #000 var(--spill),
+        transparent calc(var(--spill) + 0.9 * var(--item))
+      );
+
+      &::before {
+        --rim: color-mix(in oklab, var(--tone) var(--rim-mix), transparent);
+        --glow: color-mix(
+          in oklab,
+          var(--tone) calc(var(--rim-mix) / 2),
+          transparent
+        );
+        content: "";
+        position: absolute;
+        inset: var(--spill) var(--spill) 0;
+        border-radius: var(--radius) var(--radius) 0 0;
+        box-shadow:
+          inset 0 1.5px 0 var(--rim),
+          inset 0.5px 0 0 var(--rim),
+          inset -0.5px 0 0 var(--rim),
+          0 0 6px var(--glow);
+        transition: box-shadow var(--dur-panel) var(--ease-out);
+      }
+
+      @media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
+        mask-image: none;
+
+        &::before {
+          box-shadow:
+            inset 0 1px 0 var(--tone),
+            inset 1px 0 0 var(--tone),
+            inset -1px 0 0 var(--tone);
+        }
+      }
+    }
+  }
 
   .tclose {
     display: grid;
@@ -1173,6 +1557,12 @@
     /* 4px from the title's end to the glyph: the 16px glyph stands 2px
        inside its 20px box. */
     margin-inline-start: 2px;
+
+    /* A finger closes a tab from its options (owner: "remove the x make
+       it close on hold menu then close"). */
+    @media (max-width: 899px), (pointer: coarse) {
+      display: none;
+    }
 
     & :global(svg) {
       display: block;
