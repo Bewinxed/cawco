@@ -43,6 +43,7 @@
     | "dismissed"
     | "offline"
     | "done"
+    | "no-xcode"
     | "reopened";
 
   const SCENES: { scene: Scene; label: string }[] = [
@@ -57,6 +58,7 @@
     { scene: "dismissed", label: "Dialog closed" },
     { scene: "offline", label: "Offline" },
     { scene: "done", label: "Done" },
+    { scene: "no-xcode", label: "No Xcode" },
     { scene: "reopened", label: "Reopened" },
   ];
 
@@ -69,19 +71,25 @@
   /** The readiness written last, so a press changes one step of it. */
   let current: MacReadiness | null = null;
 
+  /** One state per step, in order; fewer states than steps is a Mac whose checks carry only those (no Xcode: `system` alone). */
   function write(
     states: MacReadinessState[],
-    { locked = false, offline = false, since = Date.now() } = {}
+    {
+      locked = false,
+      offline = false,
+      since = Date.now(),
+      system = SYSTEM,
+    } = {}
   ) {
     current = {
       checkedAt: Date.now(),
       locked,
       offline,
-      steps: MAC_READINESS_STEPS.map((id, i) => ({
+      steps: MAC_READINESS_STEPS.slice(0, states.length).map((id, i) => ({
         id,
         state: states[i],
         since,
-        ...(id === "system" && states[i] === "ok" ? { result: SYSTEM } : {}),
+        ...(id === "system" && states[i] === "ok" ? { result: system } : {}),
       })),
     };
     macReady.set(MAC, current);
@@ -220,6 +228,11 @@
         break;
       case "done":
         write(["ok", "ok", "ok", "ok"]);
+        break;
+      case "no-xcode":
+        // Its checks carry `system` alone: it reads, ticks, and the act ends.
+        write(["checking"]);
+        later(1100, () => write(["ok"], { system: "macOS 27.0 · no Xcode" }));
         break;
       default:
         break;

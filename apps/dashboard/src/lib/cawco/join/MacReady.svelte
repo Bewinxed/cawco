@@ -148,6 +148,13 @@
   const done = $derived(
     held === null && readiness.steps.every((step) => step.state === "ok")
   );
+  /**
+   * The Mac has Xcode: its checks carry the Xcode steps. Without it they
+   * carry `system` alone, which ticks with "no Xcode" and ends the act.
+   */
+  const hasXcode = $derived(
+    readiness.steps.some((step) => step.id !== "system")
+  );
 
   /** Pressed, and the Mac has not answered yet: the button is pending at once. */
   let asked = $state<{ id: MacReadinessStepId; state: string } | null>(null);
@@ -303,8 +310,12 @@
         <div class="said" in:crossIn out:crossOut>
           <p class="title">{machineName} is ready for agents.</p>
           <p class="body">
-            Xcode and the simulator answer to them now. If a session ever needs
-            more, it asks you then.
+            {#if hasXcode}
+              Xcode and the simulator answer to them now. If a session ever
+              needs more, it asks you then.
+            {:else}
+              Install Xcode when you want agents to build Apple apps here.
+            {/if}
           </p>
         </div>
       {:else}
