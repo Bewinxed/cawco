@@ -16,6 +16,7 @@ import {
   ruleMatches,
 } from "@cawco/core";
 import type { DbShape } from "./db";
+import { type LabelledRow, leafOf, sessionLabel } from "./labels";
 import { type RuleVerdict, verdictFor, verdictStream } from "./llm";
 import type { MeaningJudge } from "./meaning";
 
@@ -994,7 +995,7 @@ export class SupervisorEngine {
     // Session metadata.
     const cwd =
       typeof row.cwd === "string"
-        ? row.cwd.split("/").pop() || row.cwd
+        ? leafOf(sessionLabel(row as unknown as LabelledRow).dir)
         : "(unknown)";
     const machine = facts.machineId;
     const harness = facts.harness || "(unknown)";

@@ -64,6 +64,7 @@ import type {
   WorkItemCheck,
   WorkItemSubmission,
 } from "./db/schema";
+import { leafOf, sessionLabel } from "./labels";
 import {
   type BranchOutcome,
   land,
@@ -531,9 +532,6 @@ const planOf = (stdout: string): PlanItem[] =>
   });
 
 /** The last path segment — how the rail names a session. */
-const leaf = (path: string): string =>
-  path.split("/").filter(Boolean).pop() ?? path;
-
 /**
  * How an item's session runs: the request's word, then its type's, then a
  * leaf on claude. A fork runs on its parent's harness and model instead, and
@@ -628,7 +626,7 @@ const messageOf = (
       origin: {
         kind: "peer",
         from: parent.id,
-        name: leaf(parent.cwd),
+        name: sessionLabel(parent).name,
         fromSession: parent.id,
       },
     },
@@ -1754,7 +1752,7 @@ export const createWorkItems = ({
       parentInstanceId: parent.id,
     });
     published(item);
-    const brief = `${handoffMarker(leaf(parent.cwd))}${request.prompt}`;
+    const brief = `${handoffMarker(sessionLabel(parent).name)}${request.prompt}`;
     // The session read how its last item landed; this one is told when it
     // lands otherwise or hands in outputs.
     const told =
@@ -1770,7 +1768,7 @@ export const createWorkItems = ({
       });
       throw new Error(sent.reason ?? `could not reach ${session.id}`);
     }
-    const label = `${leaf(workspace.path)}#${session.id.slice(0, 8)}`;
+    const label = sessionLabel(session).tag;
     return {
       item,
       workspace,
@@ -2039,7 +2037,8 @@ export const createWorkItems = ({
   ): WorkItemStart => {
     const { harness, canDelegate } = settings;
     const instanceId = crypto.randomUUID();
-    const label = `${leaf(workspace.path)}#${instanceId.slice(0, 8)}`;
+    // Not a row yet: it is launched in the workspace's root.
+    const label = `${leafOf(workspace.path)}#${instanceId.slice(0, 8)}`;
     const item = db.createWorkItem({
       id: crypto.randomUUID(),
       workspaceId: workspace.id,
@@ -2076,7 +2075,7 @@ export const createWorkItems = ({
           workspace.machineId,
           parent,
           withWorkspaceLine(
-            `${handoffMarker(leaf(parent.cwd))}${fork}${request.prompt}`,
+            `${handoffMarker(sessionLabel(parent).name)}${fork}${request.prompt}`,
             workspace.repoRoot,
             workspace.base,
             landingOf(item)
@@ -2956,7 +2955,7 @@ export const createWorkItems = ({
         !row.workflowStepId &&
         !reopens(row.parentInstanceId, origin)
       ) {
-        return `${leaf(row.cwd)}#${row.id.slice(0, 8)} predates work items; only the reader or its parent can message it.`;
+        return `${sessionLabel(row).tag} predates work items; only the reader or its parent can message it.`;
       }
       return undefined;
     },

@@ -40,6 +40,7 @@ import type {
 } from "./db/schema";
 import type { DelegateListInclude, DelegateNode } from "./delegation-tree";
 import { type KeepAliveRow, promptCacheExpiresAt } from "./keep-alive";
+import { leafOf, sessionLabel } from "./labels";
 import { neverStarted, resolveSpawnType } from "./work-items";
 
 const WS_SCHEME = /^ws/;
@@ -121,19 +122,14 @@ const namedTypeSettings = (
   ...(type?.role ? { role: type.role } : {}),
 });
 
-/** The last path segment — how the rail names a session, and how the model will. */
-const leafOf = (path: string): string =>
-  path.split("/").filter(Boolean).pop() ?? path;
-
 interface Peer {
+  /** Its launch directory, as a listing shows it (`sessionLabel`). */
+  dir: string;
   host: string;
   label: string;
   name: string;
   row: InstanceRow;
 }
-
-/** Enough of a UUID to name one session among a fleet's worth. */
-const shortId = (id: string): string => id.slice(0, 8);
 
 /** How long ago the row moved, for a reader choosing between identical names. */
 const ageOf = (at: InstanceRow["updatedAt"]): string => {
@@ -252,12 +248,17 @@ const callerMode = (
     | PermissionMode
     | undefined;
 
+/** The calling session as its handoff marker names it: its row's label, or its folder before it has one. */
+const senderName = (own: InstanceRow | undefined, cwd: string): string =>
+  own ? sessionLabel(own).name : leafOf(cwd);
+
 const toPeer = (row: InstanceRow, hosts: Map<string, string>): Peer => {
-  const name = leafOf(row.cwd);
+  const { dir, name, tag } = sessionLabel(row);
   return {
     row,
+    dir,
     name,
-    label: `${name}#${shortId(row.id)}`,
+    label: tag,
     host: hosts.get(row.machineId) ?? row.machineId,
   };
 };
@@ -832,7 +833,7 @@ export function coldRefusalText(
   hasTurns: boolean,
   now = Date.now()
 ): string {
-  const title = row.title ?? row.derivedTitle ?? row.cwd;
+  const title = row.title ?? row.derivedTitle ?? sessionLabel(row).dir;
   const measured = !!(row.cacheTtl && row.lastRequestAt);
   const idle = Math.floor(
     (now -
@@ -1130,7 +1131,7 @@ export const handoffActions = ({
             ? ["your parent session"]
             : []),
         ];
-        return `- ${peer.label} — ${peer.row.cwd} · ${facts.join(" · ")}`;
+        return `- ${peer.label} — ${peer.dir} · ${facts.join(" · ")}`;
       })
       .join("\n");
     return `${listed}\n\n${where}`;
@@ -1146,7 +1147,7 @@ export const handoffActions = ({
     const stillborn = instanceById(needleOf(target));
     if (stillborn && neverStarted(stillborn)) {
       throw new Error(
-        `${leafOf(stillborn.cwd)}#${stillborn.id.slice(0, 8)} never started, so nothing can read a message${
+        `${sessionLabel(stillborn).tag} never started, so nothing can read a message${
           stillborn.lastError ? `: ${stillborn.lastError}` : "."
         }`
       );
@@ -1161,7 +1162,7 @@ export const handoffActions = ({
     const woken = asleep.includes(peer);
     const whose =
       peer.row.id === own?.parentInstanceId ? ", your parent session" : "";
-    const from = leafOf(cwd);
+    const from = senderName(own, cwd);
     const body = `${handoffMarker(from)}${message}`;
     const payload: SendPayload = {
       instanceId: peer.row.id,
@@ -1193,16 +1194,16 @@ export const handoffActions = ({
       );
     }
     if (woken) {
-      return `Handed to ${peer.label} (${peer.row.cwd} on ${peer.host}${whose}). It was asleep; it is being woken to read it.`;
+      return `Handed to ${peer.label} (${peer.dir} on ${peer.host}${whose}). It was asleep; it is being woken to read it.`;
     }
     if (peer.row.status === "unknown") {
       return (
-        `Handed to ${peer.label} (${peer.row.cwd} on ${peer.host}${whose}). Its machine is not connected ` +
+        `Handed to ${peer.label} (${peer.dir} on ${peer.host}${whose}). Its machine is not connected ` +
         "right now; the message goes to it when the machine registers again, and fails if it is not back within a minute."
       );
     }
     return (
-      `Handed to ${peer.label} (${peer.row.cwd} on ${peer.host}${whose}). It is queued there and will be ` +
+      `Handed to ${peer.label} (${peer.dir} on ${peer.host}${whose}). It is queued there and will be ` +
       "picked up when that session finishes its current turn — it was not interrupted."
     );
   },
@@ -1233,7 +1234,10 @@ export const handoffActions = ({
       model: modelName,
     });
     const id = crypto.randomUUID();
-    const from = leafOf(cwd);
+    const from = senderName(
+      rows.find((row) => row.id === instanceId),
+      cwd
+    );
     // The mode asked for, if any, and the caller's own to fall back on; the
     // hub settles them by the harness's modes (none at all for pi).
     const payload: SpawnPayload & { fallbackPermissionMode?: PermissionMode } =

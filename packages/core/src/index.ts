@@ -693,6 +693,7 @@ export interface InstanceRow {
    * session nobody delegated, which may.
    */
   canDelegate?: boolean | null;
+  /** The directory the session was launched in; see `launchDir`. */
   cwd: string;
   /** The delegate type its spawn named; null: none. */
   delegateType?: string | null;
@@ -722,6 +723,13 @@ export interface InstanceRow {
   /** What killed the session, on a row the agent reported as `error`. */
   lastError?: string | null;
   lastRequestAt?: string | number | Date | null;
+  /**
+   * Whether `cwd` is the launch directory: `known`; `unread`, still to be read
+   * from its machine; `unknown`, its machine has no record of its conversation,
+   * so `cwd` may be a folder its CLI wandered into and the session is named by
+   * its title (hub `sessionLabel`) and cannot be resumed.
+   */
+  launchDir: "known" | "unread" | "unknown";
   machineId: string;
   model?: string | null;
   /** The instance this one is a delegate of; absent for a mainline session. */

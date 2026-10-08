@@ -62,6 +62,7 @@ export const measureRoles = (): RoleSize[] => {
       id: role,
       machineId: "machine",
       cwd: "/",
+      launchDir: "known",
       sessionId: null,
       status: "running",
       ...SAMPLES[role],

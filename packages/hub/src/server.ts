@@ -258,6 +258,7 @@ import {
   keepAliveUsage,
   promptCacheExpiresAt,
 } from "./keep-alive";
+import { type LabelledRow, leafOf, sessionLabel } from "./labels";
 import { probe } from "./llm";
 import { MeaningJudge } from "./meaning";
 import {
@@ -734,10 +735,6 @@ const peekSessionSettings = (
   }
   return undefined;
 };
-
-/** The last path segment — how the rail names a session. */
-const leaf = (path: string): string =>
-  path.split("/").filter(Boolean).pop() ?? path;
 
 /**
  * Renders a parked ask readably for the parent session that has to answer it:
@@ -2100,28 +2097,6 @@ export const createServer = (
     id: string;
     title?: string | null;
   }): string => row.title || row.derivedTitle || row.id.slice(0, 8);
-  /**
-   * A session as peers read it: `name` is its launch folder's leaf and `tag`
-   * is `folder#id8`. When its launch directory is unknown (its machine has no
-   * record of its conversation) `cwd` may be a folder its CLI wandered into,
-   * so it is named by its title, else its harness (`harness#id8`).
-   */
-  const sessionLabel = (row: {
-    cwd: string;
-    harness?: string | null;
-    id: string;
-    title?: string | null;
-  }): { name: string; tag: string } => {
-    const id8 = row.id.slice(0, 8);
-    const launch = db.launchDirOf(row.id);
-    if (launch && "unknown" in launch) {
-      const harness = row.harness || "session";
-      return row.title
-        ? { name: row.title, tag: row.title }
-        : { name: harness, tag: `${harness}#${id8}` };
-    }
-    return { name: leaf(row.cwd), tag: `${leaf(row.cwd)}#${id8}` };
-  };
   /** A session a send wakes: its process is gone, its conversation on record. */
   const wakesForSend = (row: {
     sessionId: string | null;
@@ -5528,7 +5503,7 @@ export const createServer = (
     machineId: string,
     instanceId: string,
     content: string,
-    from: { id: string; cwd: string },
+    from: LabelledRow,
     uuid: string
   ): void => {
     deliverSend({
@@ -6057,7 +6032,8 @@ export const createServer = (
         source.machineId,
         id,
         prompt,
-        { id: source.instanceId, cwd: source.cwd },
+        // Its transcript was just read on its machine, in this directory.
+        { id: source.instanceId, cwd: source.cwd, launchDir: "known" },
         crypto.randomUUID()
       );
       await answered;
@@ -6292,7 +6268,7 @@ export const createServer = (
         row?.title ||
         row?.derivedTitle ||
         (first ? deriveTitleFromFirstMessage(first) : "") ||
-        leaf(where.cwd),
+        (row ? sessionLabel(row).name : leafOf(where.cwd)),
     };
     const extracted = extractTranscript(scope, whole);
     extracted.artifacts = `${extracted.artifacts}\n\n${gitSection(git, since)}`;
@@ -6932,7 +6908,12 @@ export const createServer = (
       targetMachineOf(row),
       row.targetInstanceId,
       openingOf(row),
-      { id: row.prepared.source.instanceId, cwd: row.prepared.source.cwd },
+      // Its transcript was read on its machine, in this directory.
+      {
+        id: row.prepared.source.instanceId,
+        cwd: row.prepared.source.cwd,
+        launchDir: "known",
+      },
       row.openingUuid
     );
   };

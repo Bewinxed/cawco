@@ -304,6 +304,7 @@ public final class FleetStore {
             cwd: run.workspace,
             id: run.rowId,
             lastError: run.failure,
+            launchDir: .known,
             machineId: run.machineId,
             parentInstanceId: run.parentRunId.map { BoardRun.prefix + $0 } ?? run.supervisorInstanceId,
             seenAt: run.seenAt > 0 ? .init(value1: Date(timeIntervalSince1970: run.seenAt / 1000)) : nil,

@@ -14904,6 +14904,14 @@
               "cwd": {
                 "type": "string"
               },
+              "launchDir": {
+                "enum": [
+                  "known",
+                  "unknown",
+                  "unread"
+                ],
+                "type": "string"
+              },
               "titleSource": {
                 "enum": [
                   "agent",
@@ -14995,6 +15003,7 @@
               "id",
               "kind",
               "lastError",
+              "launchDir",
               "machineId",
               "model",
               "parentInstanceId",
@@ -15185,6 +15194,14 @@
                 "cwd": {
                   "type": "string"
                 },
+                "launchDir": {
+                  "enum": [
+                    "known",
+                    "unknown",
+                    "unread"
+                  ],
+                  "type": "string"
+                },
                 "titleSource": {
                   "enum": [
                     "agent",
@@ -15276,6 +15293,7 @@
                 "id",
                 "kind",
                 "lastError",
+                "launchDir",
                 "machineId",
                 "model",
                 "parentInstanceId",
@@ -30909,6 +30927,7 @@
             ]
           },
           "cwd": {
+            "description": "The directory the session was launched in; see `launchDir`.",
             "type": "string"
           },
           "delegateType": {
@@ -31000,6 +31019,15 @@
                 "type": "number"
               }
             ]
+          },
+          "launchDir": {
+            "description": "Whether `cwd` is the launch directory: `known`; `unread`, still to be read\nfrom its machine; `unknown`, its machine has no record of its conversation,\nso `cwd` may be a folder its CLI wandered into and the session is named by\nits title (hub `sessionLabel`) and cannot be resumed.",
+            "enum": [
+              "known",
+              "unknown",
+              "unread"
+            ],
+            "type": "string"
           },
           "machineId": {
             "type": "string"
@@ -31144,6 +31172,7 @@
         "required": [
           "cwd",
           "id",
+          "launchDir",
           "machineId",
           "sessionId",
           "status"

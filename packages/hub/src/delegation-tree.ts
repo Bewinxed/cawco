@@ -9,6 +9,7 @@
 import type { InstanceRow } from "@cawco/core";
 import type { DbShape, WorkItemRow } from "./db";
 import type { KeepAliveRow } from "./keep-alive";
+import { sessionLabel } from "./labels";
 import { roleOf } from "./roles";
 
 /** `live`: items not ended, and ended in the last hour; `all`: every one. */
@@ -57,9 +58,6 @@ export interface DelegationTreeDeps {
     instanceId: string
   ) => Promise<{ done: number; total: number } | undefined>;
 }
-
-const leafOf = (path: string): string =>
-  path.split("/").filter(Boolean).pop() ?? path;
 
 const firstLine = (text: string | null): string | undefined =>
   (text ?? "")
@@ -111,7 +109,7 @@ export const createDelegationTree = (deps: DelegationTreeDeps) => {
       : { lastActivityAt: item.endedAt ?? item.createdAt, cacheWarm: false };
     return {
       instanceId: item.instanceId,
-      name: row ? leafOf(row.cwd) : item.instanceId.slice(0, 8),
+      name: row ? sessionLabel(row).name : item.instanceId.slice(0, 8),
       title: item.title,
       state: waiting ? "waiting" : item.state,
       machine: row ? deps.machineName(row.machineId) : "",

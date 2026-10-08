@@ -15,6 +15,7 @@ import {
   readEnv,
 } from "@cawco/core";
 import type { DbShape } from "./db";
+import { sessionLabel } from "./labels";
 import type { PendingShape } from "./pending";
 import { answerPermission } from "./pending";
 import type { RegistryShape } from "./registry";
@@ -189,10 +190,6 @@ const fit = (lines: string[]): string => {
   }
   return `${body.slice(0, MESSAGE_LIMIT - note.length)}${note}`;
 };
-
-/** The directory a session is in, as the reader would name it. */
-const leaf = (cwd: string): string =>
-  cwd.split("/").filter(Boolean).at(-1) ?? cwd;
 
 /** What a parked tool call is asking the reader, when it is asking rather than requesting permission (core's reading). */
 const questionsOf = (request: PermissionRequest): UserQuestion[] | null =>
@@ -431,7 +428,7 @@ export const createTelegramBridge = ({
       ? db.listProjects().find((candidate) => candidate.id === row.projectId)
           ?.name
       : undefined;
-    const parts = [`<b>${esc(leaf(row.cwd))}</b>`, esc(machineLabel)];
+    const parts = [`<b>${esc(sessionLabel(row).name)}</b>`, esc(machineLabel)];
     if (project) {
       parts.push(esc(project));
     }

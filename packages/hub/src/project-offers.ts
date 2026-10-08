@@ -32,6 +32,7 @@ import { z } from "zod";
 import { tool } from "./admin-tools";
 import type { DbShape, ProjectOfferRow, ProjectRow } from "./db";
 import { readClaudeLedger } from "./harness-plans";
+import { leafOf, sessionLabel } from "./labels";
 import { FolderRefusal, refused } from "./project-folder";
 import { normaliseRemote, placePath } from "./projects";
 import type { TaskActor, Tasks } from "./tasks";
@@ -107,9 +108,6 @@ const summaryOf = (row: ProjectOfferRow): ProjectOfferSummary => ({
 
 const plural = (n: number, one: string, many: string): string =>
   `${n} ${n === 1 ? one : many}`;
-
-const leaf = (path: string): string =>
-  path.split("/").filter(Boolean).at(-1) ?? path;
 
 /** A plan item's subject as a task title: one line, within the limit. */
 const titleOf = (subject: string): string => {
@@ -446,8 +444,15 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
           "A delegate or a workflow step belongs to the session that started it. Make that session the project."
         );
       }
+      // Its `cwd` may be a folder its CLI wandered into, not its checkout.
+      if (row.launchDir === "unknown") {
+        throw new FolderRefusal(
+          409,
+          `${sessionLabel(row).name}'s conversation is no longer on its machine, so its folder is unknown and it can't be made a project.`
+        );
+      }
       const { project, joined } = await deps.createProject({
-        name: leaf(placePath(row.cwd)),
+        name: leafOf(placePath(row.cwd)),
         checkout: { machineId: row.machineId, cwd: row.cwd },
         caw: true,
       });
@@ -470,7 +475,7 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
       const setupThread = joined
         ? undefined
         : deps.setup(project.id, {
-            title: `Project · made from ${row.title || leaf(row.cwd)}`,
+            title: `Project · made from ${row.title || sessionLabel(row).name}`,
             body: filed.length
               ? `Its plan is on the board as ${plural(filed.length, "proposed task", "proposed tasks")}: ${filed.map((task) => task.id).join(", ")}.`
               : "",

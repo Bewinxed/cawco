@@ -17,6 +17,7 @@ import {
 } from "@cawco/core";
 import type { DbShape } from "./db";
 import type { DelegateTypesShape } from "./delegate-types";
+import { sessionLabel } from "./labels";
 
 /** A permission (not a question) parked on this envelope, else undefined. */
 const permissionOf = (
@@ -70,9 +71,6 @@ export const answeredWithOriginal = (
     : result;
 };
 
-const leaf = (cwd: string): string | undefined =>
-  cwd.split("/").filter(Boolean).at(-1);
-
 export const createAskPresenter = (
   db: DbShape,
   delegateTypes: DelegateTypesShape
@@ -89,10 +87,7 @@ export const createAskPresenter = (
     const [row] = instanceId ? db.getInstancesByIds([instanceId]) : [];
     if (row) {
       return (
-        row.title?.trim() ||
-        row.derivedTitle?.trim() ||
-        leaf(row.cwd) ||
-        row.id.slice(0, 8)
+        row.title?.trim() || row.derivedTitle?.trim() || sessionLabel(row).name
       );
     }
     if (typeof payload.workflowRunId === "string") {

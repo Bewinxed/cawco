@@ -72,6 +72,7 @@ import type { AnySQLiteColumn, AnySQLiteTable } from "drizzle-orm/sqlite-core";
 import { Context, Effect, Layer } from "effect";
 import { bundledSkills } from "../bundled-skills";
 import { DB_PATH } from "../config";
+import { sessionLabel } from "../labels";
 import { workflowSkill } from "../workflows/skills";
 import { type AccountsDb, accountsDb } from "./accounts";
 import { type AtLimitDb, atLimitDb } from "./at-limit";
@@ -179,7 +180,6 @@ export type PublicInstanceRow = Omit<
   | "endAttempts"
   | "owedSpawn"
   | "owedAt"
-  | "launchDir"
 >;
 export type BoardInstanceRow = Omit<PublicInstanceRow, "tooling">;
 export type PlaceRow = typeof projectPlaces.$inferSelect;
@@ -1720,7 +1720,6 @@ const make = async (path: string): Promise<DbShape> => {
     endConfirmedAt: _endConfirmedAt,
     owedSpawn: _owedSpawn,
     owedAt: _owedAt,
-    launchDir: _launchDir,
     ...publicColumns
   } = getTableColumns(instances);
   const { tooling: _tooling, ...boardColumns } = publicColumns;
@@ -1966,7 +1965,7 @@ const make = async (path: string): Promise<DbShape> => {
   const usageSessions = (wanted: boolean) => {
     const sessions = new Map<
       string,
-      { id: string; name: string | null; cwd: string; at: number }
+      { id: string; name: string; at: number }
     >();
     if (!wanted) {
       return sessions;
@@ -1978,6 +1977,8 @@ const make = async (path: string): Promise<DbShape> => {
         title: instances.title,
         derivedTitle: instances.derivedTitle,
         cwd: instances.cwd,
+        harness: instances.harness,
+        launchDir: instances.launchDir,
         updatedAt: instances.updatedAt,
       })
       .from(instances)
@@ -1989,8 +1990,7 @@ const make = async (path: string): Promise<DbShape> => {
       if (!held || at > held.at) {
         sessions.set(sessionId, {
           id: row.id,
-          name: row.title ?? row.derivedTitle,
-          cwd: row.cwd,
+          name: row.title ?? row.derivedTitle ?? sessionLabel(row).name,
           at,
         });
       }
@@ -5370,10 +5370,7 @@ const make = async (path: string): Promise<DbShape> => {
           label = machineOf(String(group.key)).hostname;
         } else if (groupBy === "session") {
           label =
-            instance?.name ??
-            folderOf(instance?.cwd) ??
-            folderOf(group.projectPath) ??
-            group.project;
+            instance?.name ?? folderOf(group.projectPath) ?? group.project;
         }
         return {
           key: group.key,

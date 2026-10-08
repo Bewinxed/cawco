@@ -52,6 +52,7 @@ export function threadRowOf(
     id: threadTabId(thread.id),
     machineId: place?.machineId ?? "hub",
     cwd: place?.path ?? `projects/${project.id}`,
+    launchDir: "known",
     projectId: thread.projectId,
     sessionId: null,
     status: thread.status === "ready" ? "sleeping" : "running",
