@@ -56,25 +56,56 @@ function homeOf(owner: ProjectRow, row: Location): Spot {
   return home;
 }
 
-/** Each folder on `machineId` that is a place, and the oldest project there. */
-function oldestOn(
-  projects: ProjectRow[],
-  machineId: string
-): Map<string, ProjectRow> {
-  const oldest = new Map<string, ProjectRow>();
+/** Each machine's folders that are places, and the oldest project at each. */
+type PlaceIndex = Map<string, Map<string, ProjectRow>>;
+
+/**
+ * The place index of each projects list, built the first time a list is
+ * asked about. The store replaces its list whole whenever a project or a
+ * place changes (`reconcileRows`), so a list's index never goes stale.
+ * Every row label asks for its projects, and the Recent list labels every
+ * row each time the board changes: rebuilt per ask, the index was a pass
+ * over every place of every project per row, which held the page for
+ * hundreds of milliseconds at a time on a fleet with many sessions.
+ */
+const indexes = new WeakMap<ProjectRow[], PlaceIndex>();
+
+function placeIndex(projects: ProjectRow[]): PlaceIndex {
+  const held = indexes.get(projects);
+  if (held) {
+    return held;
+  }
+  const index: PlaceIndex = new Map();
   for (const project of projects) {
     for (const place of project.places) {
+      let oldest = index.get(place.machineId);
+      if (!oldest) {
+        oldest = new Map();
+        index.set(place.machineId, oldest);
+      }
       const path = folder(place.path);
       const previous = oldest.get(path);
-      if (
-        place.machineId === machineId &&
-        (!previous || older(project, previous))
-      ) {
+      if (!previous || older(project, previous)) {
         oldest.set(path, project);
       }
     }
   }
-  return oldest;
+  indexes.set(projects, index);
+  return index;
+}
+
+/** Every folder that holds `path` (`contains`), the folder itself first, then outward. */
+function holders(path: string): string[] {
+  const out = [path];
+  for (let i = path.length - 1; i > 0; i -= 1) {
+    if (path[i] === "/") {
+      out.push(path.slice(0, i));
+    }
+  }
+  if (path.startsWith("/") && !out.includes("/")) {
+    out.push("/");
+  }
+  return out;
 }
 
 /**
@@ -90,13 +121,15 @@ export function projectsFor(
   const at: Spot = owner
     ? homeOf(owner, row)
     : { machineId: row.machineId, path: folder(row.cwd) };
+  const oldest = placeIndex(projects).get(at.machineId);
+  if (!oldest) {
+    return owner ? [owner] : [];
+  }
   // Each project once, at the deepest of its places that holds the folder.
   const depth = new Map<string, { project: ProjectRow; depth: number }>();
-  for (const [path, project] of oldestOn(projects, at.machineId)) {
-    if (
-      !contains(path, at.path) ||
-      (owner && (path === at.path || project.id === owner.id))
-    ) {
+  for (const path of holders(at.path)) {
+    const project = oldest.get(path);
+    if (!project || (owner && (path === at.path || project.id === owner.id))) {
       continue;
     }
     const held = depth.get(project.id);
