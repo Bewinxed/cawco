@@ -111,6 +111,17 @@ final class NeedsCawButton: UIControl {
     @objc private func tapped() { onTap() }
     @objc private func panned(_ pan: UIPanGestureRecognizer) { onPan(pan) }
 
+    /// On the phone his glass stands on the bar's floor, round but for its
+    /// bottom-right corner (NeedsCaw.svelte, variant B), and the arcs run
+    /// along that outline instead of his circle.
+    var standing = false {
+        didSet {
+            guard standing != oldValue else { return }
+            capsule?.squaredCorner = standing
+            setNeedsLayout()
+        }
+    }
+
     /// The arcs on his circle's rim: `space1` of clear glass in from his
     /// circle's edge, so the ring never reads as the capsule's border, half
     /// the stroke in; arc k from k × (arc + arcGap)° clockwise from 12 o'clock.
@@ -118,6 +129,10 @@ final class NeedsCawButton: UIControl {
         super.layoutSubviews()
         let centre = CGPoint(x: bounds.midX, y: bounds.midY)
         let rim = CGFloat(Self.side) / 2 - Space.space1 - Size.cCawRing / 2
+        if standing {
+            layoutOutline(centre: centre, rim: rim)
+            return
+        }
         let top = -CGFloat.pi / 2
         let degree = CGFloat.pi / 180
         // A round cap reaches half the stroke past the path's end: taken off
@@ -130,6 +145,48 @@ final class NeedsCawButton: UIControl {
             lap.path = path
         }
         wholeRing.path = UIBezierPath(arcCenter: centre, radius: rim, startAngle: top, endAngle: top + 2 * .pi, clockwise: true).cgPath
+    }
+
+    /// The standing glass's arcs: the outline drawn the circle's rim's inset
+    /// in, clockwise from 12 o'clock round the top-right quarter, down the
+    /// square corner's right edge, along its bottom edge, then round the
+    /// bottom-left and top-left quarters. Each arc is `arc`/360 of its
+    /// length and `arcGap`/360 from the next, caps and all.
+    private func layoutOutline(centre: CGPoint, rim: CGFloat) {
+        let quarter = CGFloat.pi * rim / 2
+        let length = 3 * quarter + 2 * rim
+        let corner = CGPoint(x: centre.x + rim, y: centre.y + rim)
+        func point(_ s: CGFloat) -> CGPoint {
+            func onArc(_ angle: CGFloat) -> CGPoint {
+                CGPoint(x: centre.x + rim * sin(angle), y: centre.y - rim * cos(angle))
+            }
+            if s < quarter { return onArc(s / rim) }
+            if s < quarter + rim { return CGPoint(x: corner.x, y: centre.y + (s - quarter)) }
+            if s < quarter + 2 * rim { return CGPoint(x: corner.x - (s - quarter - rim), y: corner.y) }
+            return onArc(.pi + (s - quarter - 2 * rim) / rim)
+        }
+        let cap = Size.cCawRing / 2
+        for (k, (ring, lap)) in zip(arcLayers, lapLayers).enumerated() {
+            let from = CGFloat(k) * CGFloat(Self.arc + Self.arcGap) / 360 * length + cap
+            let to = from + CGFloat(Self.arc) / 360 * length - 2 * cap
+            let path = UIBezierPath()
+            path.move(to: point(from))
+            var s = from + 0.5
+            while s < to {
+                path.addLine(to: point(s))
+                s += 0.5
+            }
+            path.addLine(to: point(to))
+            ring.path = path.cgPath
+            lap.path = path.cgPath
+        }
+        let whole = UIBezierPath()
+        whole.move(to: CGPoint(x: centre.x, y: centre.y - rim))
+        whole.addArc(withCenter: centre, radius: rim, startAngle: -.pi / 2, endAngle: 0, clockwise: true)
+        whole.addLine(to: corner)
+        whole.addLine(to: CGPoint(x: centre.x, y: corner.y))
+        whole.addArc(withCenter: centre, radius: rim, startAngle: .pi / 2, endAngle: -.pi / 2, clockwise: true)
+        wholeRing.path = whole.cgPath
     }
 
     /// The first lap takes the scheme's attention ink; the second lap and

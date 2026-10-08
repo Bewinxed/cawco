@@ -13,6 +13,33 @@ struct PaneTab: Equatable {
     let status: String
 }
 
+/// One thing a tab's options offer (PaneTabs.svelte's context menu). The
+/// group returns one list of sections; the long press's context menu, the
+/// sheet a finger pulls down from the tab, and VoiceOver's custom actions on
+/// the tab are all drawn from it, so they never drift apart.
+struct TabAction {
+    let title: String
+    var glyph: Glyph?
+    var disabled = false
+    let run: () -> Void
+
+    init(title: String, glyph: Glyph? = nil, disabled: Bool = false, run: @escaping () -> Void) {
+        self.title = title
+        self.glyph = glyph
+        self.disabled = disabled
+        self.run = run
+    }
+
+    /// The sections as the context menu shows them: each inline, in order.
+    static func menu(_ sections: [[TabAction]]) -> UIMenu {
+        UIMenu(children: sections.map { section in
+            UIMenu(options: .displayInline, children: section.map { action in
+                UIAction(title: action.title, image: action.glyph?.image, attributes: action.disabled ? .disabled : []) { _ in action.run() }
+            })
+        })
+    }
+}
+
 /// One group's tabs (workspace/PaneTabs.svelte on fluid-tabs' folder
 /// variant): a row on the shelf, the open conversations as folder tabs (32pt,
 /// 10pt in, label type, at most 200 wide). An unchosen tab stands on its own
@@ -25,11 +52,14 @@ struct PaneTab: Equatable {
 /// that closes narrows and fades (`durExit`) while the rest close the gap
 /// (`durFade`); a reorder slides on the drawer curve (`durPanel`). The track
 /// scrolls sideways when it overflows, its edges fading over 40pt.
+///
+/// A tab's options (`TabAction`) open on a long press, as its context menu,
+/// and under a finger by a pull down off the tab, as a sheet that follows
+/// the finger (`TabOptionsSheet`); a sideways drag is the strip's scroll.
 final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteractionDelegate {
     static let item = 32.0
     static let px = 10.0
     static let maxTab = 200.0
-    static let flare = Radius.radiusSm
     static let gap = 2.0
 
     var onSelect: (String) -> Void = { _ in }
@@ -37,9 +67,17 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
     var onDetails: (String, UIView) -> Void = { _, _ in }
     /// A pointer rests on a tab (its id and view), or left one (nil).
     var onHover: (String?, UIView?) -> Void = { _, _ in }
-    /// A tab's context menu opened or closed.
+    /// A tab's options (its context menu, or the pulled sheet) opened or closed.
     var onMenu: (Bool) -> Void = { _ in }
-    var menu: (String) -> UIMenu? = { _ in nil }
+    /// A tab's options, by section; set by the group.
+    var actions: (String) -> [[TabAction]] = { _ in [] }
+
+    /// The phone's row: tabs a row's height tall on its floor, rounder by a
+    /// radius step (owner: "round the tabs more on mobile"), their foot's
+    /// flare following, with room above them for their rims' glow.
+    private var item: Double { barRow ? Size.cTabRowH : Self.item }
+    var flare: Double { barRow ? Radius.radiusLg : Radius.radiusSm }
+    private var headroom: Double { barRow ? 44 - Size.cTabRowH : 0 }
     /// Supplies a tab's drag; set by the group.
     var dragFor: ((String, TabView) -> UIDragItem?)?
 
@@ -52,33 +90,35 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
     }
 
     /// On a phone the strip is the app's only bar (ShellController's floating
-    /// row): the compact bar's 44pt, its ends left to the sidebar toggle (44pt
-    /// on the screen's layout margin, where the board's bar stands it) and to
-    /// Caw's capsule (36pt on the other margin), each with a 7pt gap, so the
-    /// tabs scroll between them and never under; and no chevrons, a tab's
-    /// menu being its long press.
+    /// row, variant B): the compact bar's 44pt with the tabs standing on its
+    /// floor, its ends left to the sidebar toggle's glyph and to Caw's glass,
+    /// each `cBarPhoneEdge` from the screen's edge, the first tab starting
+    /// `cBarPhoneGap` after the glyph and the strip stopping that short of
+    /// Caw, so the tabs scroll between them and never under. Its tabs have no
+    /// chevrons and no close: their options are a long press or a pull down.
+    /// They recede toward the shelf with distance from the chosen one and
+    /// wear their session's status on a rim (`TabView.phoneRow`).
     var barRow = false {
         didSet {
             guard barRow != oldValue else { return }
             dress()
-            for view in views.values { view.chevron = !barRow }
+            for view in views.values {
+                view.chevron = !barRow
+                view.phoneRow = barRow
+            }
             layoutTrack()
         }
     }
 
-    /// The screen's layout margin the bar row's ends stand on (16pt, 20 on the largest phones).
-    var barMargin = 16.0 {
-        didSet { if barMargin != oldValue { dress() } }
-    }
-
-    /// The bar row's ends, pt: what floats over each.
-    private var barLead: Double { barMargin + 44 + Space.space2 }
-    private var barTrail: Double { barMargin + NeedsCawButton.side + Space.space2 }
+    /// The bar row's ends, pt: the toggle's glyph and Caw's glass float over them.
+    private var barLead: Double { Size.cBarPhoneEdge + Size.cBarToggleGlyph + Size.cBarPhoneGap - flare }
+    private var barTrail: Double { Size.cBarPhoneGap + NeedsCawButton.side + Size.cBarPhoneEdge }
 
     /// `padding-block: 4px 0` over the 32pt tabs, in a group; hosted, the bar sizes it.
     private lazy var ownHeight = heightAnchor.constraint(equalToConstant: Self.item + 4)
     private var scrollLead: NSLayoutConstraint!
     private var scrollTrail: NSLayoutConstraint!
+    private var scrollHeight: NSLayoutConstraint!
 
     private func dress() {
         backgroundColor = hosted ? .clear : Palette.surfaceShelf
@@ -87,10 +127,11 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
         ownHeight.isActive = !hosted
         scrollLead?.constant = barRow ? barLead : 0
         scrollTrail?.constant = barRow ? -barTrail : 0
+        scrollHeight?.constant = item + headroom
         setNeedsLayout()
     }
 
-    private let scroll = UIScrollView()
+    private let scroll = StripScroll()
     private let track = UIView()
     private let fade = CAGradientLayer()
     private let hairline = UIView()
@@ -121,11 +162,12 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
         track.addSubview(caret)
         scrollLead = scroll.leadingAnchor.constraint(equalTo: leadingAnchor)
         scrollTrail = scroll.trailingAnchor.constraint(equalTo: trailingAnchor)
+        scrollHeight = scroll.heightAnchor.constraint(equalToConstant: Self.item)
         NSLayoutConstraint.activate([
             scrollLead,
             scrollTrail,
+            scrollHeight,
             scroll.bottomAnchor.constraint(equalTo: bottomAnchor),
-            scroll.heightAnchor.constraint(equalToConstant: Self.item),
             hairline.leadingAnchor.constraint(equalTo: leadingAnchor),
             hairline.trailingAnchor.constraint(equalTo: trailingAnchor),
             hairline.bottomAnchor.constraint(equalTo: bottomAnchor),
@@ -184,7 +226,7 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
     /// The one way a tab is brought into the strip: all of it, with the strip's edge room, scrolled only as far as it takes.
     private func reveal(_ id: String?, animated: Bool) {
         guard let id, let view = views[id] else { return }
-        scroll.scrollRectToVisible(view.frame.insetBy(dx: -Self.flare, dy: 0), animated: animated)
+        scroll.scrollRectToVisible(view.frame.insetBy(dx: -flare, dy: 0), animated: animated)
     }
 
     /// The tab a swipe is approaching, once the strip has gone to meet it.
@@ -193,6 +235,14 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
     private func makeTab(_ id: String) -> TabView {
         let view = TabView(id: id)
         view.chevron = !barRow
+        view.phoneRow = barRow
+        view.actions = { [weak self] in self?.actions(id) ?? [] }
+        // A finger's pull down off the tab: its options, under the finger.
+        if traitCollection.userInterfaceIdiom != .mac {
+            let pull = UIPanGestureRecognizer(target: self, action: #selector(pulled(_:)))
+            pull.delegate = PullGate.shared
+            view.addGestureRecognizer(pull)
+        }
         view.onSelect = { [weak self] in self?.onSelect(id) }
         view.onClose = { [weak self] in self?.onClose(id) }
         view.onDetails = { [weak self, weak view] in
@@ -307,6 +357,7 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
         }
         active = id
         for (tab, view) in views { view.setChosen(tab == id, wipe: nil) }
+        recede()
         accessibilityValue = views[id]?.accessibilityLabel
     }
 
@@ -324,9 +375,9 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
         } else if let last = order.last.flatMap({ views[$0] }) {
             x = last.frame.maxX
         } else {
-            x = Self.flare
+            x = flare
         }
-        caret.frame = CGRect(x: x - 1, y: 2, width: 2, height: Self.item - 4)
+        caret.frame = CGRect(x: x - 1, y: headroom + 2, width: 2, height: item - 4)
         caret.isHidden = false
     }
 
@@ -354,18 +405,29 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
     }
 
     private func layoutTrack() {
-        var x = Self.flare
+        var x = flare
         for id in order {
             guard let view = views[id] else { continue }
             let width = min(Self.maxTab, view.fittingWidth)
-            view.bounds = CGRect(x: 0, y: 0, width: width, height: Self.item)
-            view.center = CGPoint(x: x + width / 2, y: Self.item / 2)
+            view.bounds = CGRect(x: 0, y: 0, width: width, height: item)
+            view.center = CGPoint(x: x + width / 2, y: headroom + item / 2)
             x += width + Self.gap
         }
-        let content = x - Self.gap + Self.flare
-        track.frame = CGRect(x: 0, y: 0, width: max(content, 1), height: Self.item)
+        let content = x - Self.gap + flare
+        track.frame = CGRect(x: 0, y: 0, width: max(content, 1), height: headroom + item)
         scroll.contentSize = track.frame.size
         scroll.contentInset = UIEdgeInsets(top: 0, left: leadingInset, bottom: 0, right: hosted || barRow ? 0 : Space.space4)
+        recede()
+    }
+
+    /// Each tab's distance from the chosen one, to three: on the phone's row
+    /// an unchosen tab recedes a step toward the shelf for each. With none
+    /// chosen every tab is one step back.
+    private func recede() {
+        let chosen = active.flatMap { order.firstIndex(of: $0) }
+        for (index, id) in order.enumerated() {
+            views[id]?.distance = chosen.map { min(abs(index - $0), 3) } ?? 1
+        }
     }
 
     func scrollViewDidScroll(_: UIScrollView) { edges() }
@@ -410,8 +472,10 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
     // MARK: Context menu
 
     func contextMenuInteraction(_ interaction: UIContextMenuInteraction, configurationForMenuAtLocation _: CGPoint) -> UIContextMenuConfiguration? {
-        guard let id = (interaction.view as? TabView)?.id else { return nil }
-        return UIContextMenuConfiguration(identifier: id as NSString, previewProvider: nil) { [weak self] _ in self?.menu(id) }
+        guard let id = (interaction.view as? TabView)?.id, sheet == nil else { return nil }
+        return UIContextMenuConfiguration(identifier: id as NSString, previewProvider: nil) { [weak self] _ in
+            self.map { TabAction.menu($0.actions(id)) }
+        }
     }
 
     func contextMenuInteraction(_: UIContextMenuInteraction, willDisplayMenuFor _: UIContextMenuConfiguration, animator _: (any UIContextMenuInteractionAnimating)?) {
@@ -420,6 +484,60 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
 
     func contextMenuInteraction(_: UIContextMenuInteraction, willEndFor _: UIContextMenuConfiguration, animator _: (any UIContextMenuInteractionAnimating)?) {
         onMenu(false)
+    }
+
+    // MARK: Pulled down
+
+    /// The sheet a finger is pulling, or has pulled, down off a tab.
+    private var sheet: TabOptionsSheet?
+
+    @objc private func pulled(_ pan: UIPanGestureRecognizer) {
+        let dy = pan.translation(in: self).y
+        switch pan.state {
+        case .began:
+            guard let tab = pan.view as? TabView, let host = window else { return }
+            sheet?.dismiss()
+            let made = TabOptionsSheet(sections: actions(tab.id), under: tab, in: host)
+            made.onGone = { [weak self, weak made] in
+                guard let self, sheet === made else { return }
+                sheet = nil
+                onMenu(false)
+            }
+            sheet = made
+            onMenu(true)
+            made.pull(dy)
+        case .changed:
+            sheet?.pull(dy)
+        case .ended:
+            sheet?.release(dy, velocity: pan.velocity(in: self).y)
+        case .cancelled, .failed:
+            sheet?.release(0, velocity: 0)
+        default:
+            break
+        }
+    }
+}
+
+/// The strip's scroll leaves a mostly vertical drag alone: it has no
+/// vertical travel, and a pull down off a tab is that tab's options.
+private final class StripScroll: UIScrollView {
+    override func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
+        if gesture === panGestureRecognizer {
+            let v = panGestureRecognizer.velocity(in: self)
+            if abs(v.y) > abs(v.x) { return false }
+        }
+        return super.gestureRecognizerShouldBegin(gesture)
+    }
+}
+
+/// A tab's pull begins only mostly downward (|dy| > |dx|); sideways is the strip's.
+private final class PullGate: NSObject, UIGestureRecognizerDelegate {
+    @MainActor static let shared = PullGate()
+
+    func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
+        guard let pan = gesture as? UIPanGestureRecognizer else { return true }
+        let v = pan.velocity(in: pan.view)
+        return v.y > 0 && v.y > abs(v.x)
     }
 }
 
@@ -459,9 +577,38 @@ final class TabView: UIView {
         didSet { details.isHidden = (tab?.isRun ?? false) || !chevron }
     }
 
+    /// The tab's options, by section (`TabAction`): VoiceOver's custom actions.
+    var actions: () -> [[TabAction]] = { [] }
+
+    /// On the phone's row: a rounder top (`radiusLg`) and its flare, the
+    /// receding fill, and the status rim.
+    var phoneRow = false {
+        didSet {
+            guard phoneRow != oldValue else { return }
+            rimHost.isHidden = !phoneRow
+            setNeedsLayout()
+            paint()
+        }
+    }
+
+    /// How far from the chosen tab, 0 for the chosen one, at most 3.
+    var distance = 1 {
+        didSet { if distance != oldValue { paint() } }
+    }
+
+    private var radius: Double { phoneRow ? Radius.radiusLg : Radius.radiusSm }
+
     private let tint = CAShapeLayer()
     private let sheet = CAShapeLayer()
     private let sheetMask = CALayer()
+    /// The status rim (PaneTabs.svelte `.rim`): the tab's outline, 1.5pt
+    /// across the top tapering to 0.5pt down the sides, with a soft glow at
+    /// half its strength, gone by 90% of the tab's height (`rimFade`).
+    private let rimHost = CALayer()
+    private let rim = CAShapeLayer()
+    private let rimFade = CAGradientLayer()
+    /// Room round the outline for the glow, inside the fade.
+    private static let spill = 6.0
     private let status = SessionStatusView(.idle, compact: true)
     private let label = KitLabel(TypeScale.typeLabel, ink: Palette.inkMuted)
     private let details = UIButton(type: .custom)
@@ -479,6 +626,13 @@ final class TabView: UIView {
         sheetMask.backgroundColor = UIColor.black.cgColor
         sheet.mask = sheetMask
         layer.addSublayer(sheet)
+        rim.fillRule = .evenOdd
+        rim.shadowOffset = .zero
+        rim.shadowRadius = 3
+        rimHost.addSublayer(rim)
+        rimFade.colors = [UIColor.black.cgColor, UIColor.black.cgColor, UIColor.clear.cgColor]
+        rimHost.isHidden = true
+        layer.addSublayer(rimHost)
         label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         label.isUserInteractionEnabled = false
         status.isUserInteractionEnabled = false
@@ -490,7 +644,8 @@ final class TabView: UIView {
         }, for: .primaryActionTriggered)
         Self.dress(close, glyph: .close, side: Size.iconMd, size: CGSize(width: 20, height: 20))
         close.addAction(UIAction { [weak self] _ in self?.onClose() }, for: .primaryActionTriggered)
-        let hit = UIStackView(arrangedSubviews: [status, label])
+        let hit = TabHit(arrangedSubviews: [status, label])
+        hit.actions = { [weak self] in self?.actions() ?? [] }
         hit.spacing = PaneTabsView.gap + 4
         hit.alignment = .center
         hit.isUserInteractionEnabled = false
@@ -498,11 +653,14 @@ final class TabView: UIView {
         row.addArrangedSubview(details)
         row.addArrangedSubview(close)
         row.alignment = .center
-        // The close stands 4pt off the chevron under a pointer, 24pt (and 8 off the end) under a finger.
+        // A pointer's close stands 4pt off the chevron. A finger has none
+        // (owner: "remove the x make it close on hold menu then close"): it
+        // closes a tab from its options, held or pulled down.
         let coarse = traitCollection.userInterfaceIdiom != .mac
-        row.setCustomSpacing(coarse ? 24 : 4, after: details)
+        close.isHidden = coarse
+        row.setCustomSpacing(4, after: details)
         row.isLayoutMarginsRelativeArrangement = true
-        row.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: PaneTabsView.px, bottom: 0, trailing: (PaneTabsView.px - 6) + (coarse ? 8 : 0))
+        row.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: PaneTabsView.px, bottom: 0, trailing: coarse ? PaneTabsView.px : PaneTabsView.px - 6)
         row.translatesAutoresizingMaskIntoConstraints = false
         addSubview(row)
         // The row stays inside the tab by truncating its label, so this gives
@@ -528,6 +686,19 @@ final class TabView: UIView {
         hit.accessibilityTraits = .button
         accessibilityElements = [hit, details, close]
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: TabView, _: UITraitCollection) in view.paint() }
+        for name in [UIAccessibility.reduceTransparencyStatusDidChangeNotification, UIAccessibility.darkerSystemColorsStatusDidChangeNotification] {
+            NotificationCenter.default.addObserver(self, selector: #selector(contrastChanged), name: name, object: nil)
+        }
+        paint()
+    }
+
+    /// Increase Contrast or Reduce Transparency: the rim is drawn solid.
+    private var solidRim: Bool {
+        UIAccessibility.isReduceTransparencyEnabled || UIAccessibility.isDarkerSystemColorsEnabled
+    }
+
+    @objc private func contrastChanged() {
+        setNeedsLayout()
         paint()
     }
 
@@ -679,12 +850,50 @@ final class TabView: UIView {
         }
     }
 
+    /// An unchosen tab's card: on the phone's row a step further toward the
+    /// shelf for each tab of distance from the chosen one.
+    private var card: UIColor {
+        guard phoneRow else { return Palette.surfaceRecessDeep }
+        return switch distance {
+        case ...1: Palette.tabRecede1
+        case 2: Palette.tabRecede2
+        default: Palette.tabRecede3
+        }
+    }
+
     private func paint() {
         let traits = traitCollection
-        let fill: UIColor = pressed ? Palette.surfaceFill : (hovering && !chosen ? Palette.surfaceHover : Palette.surfaceRecessDeep)
+        let fill: UIColor = pressed ? Palette.surfaceFill : (hovering && !chosen ? Palette.surfaceHover : card)
         tint.fillColor = fill.resolvedColor(with: traits).cgColor
         sheet.fillColor = (pressed ? Palette.surfaceFill : Palette.surfaceRecess).resolvedColor(with: traits).cgColor
         label.ink = chosen || hovering || tab?.needs == true ? Palette.inkStrong : Palette.inkMuted
+        paintRim()
+    }
+
+    /// The rim in its session's status colour, on the rail's scale (working
+    /// the live ink, needs you the attention ink, failed the fail ink, the
+    /// rest the muted ink at the idle strength). A change cross-fades over
+    /// `durPanel`.
+    private func paintRim() {
+        guard phoneRow, let tone = tab?.face.tone else { return }
+        let ink: UIColor = switch tone {
+        case .working: Palette.statusLiveGlyph
+        case .attention: Palette.statusAttnGlyph
+        case .failed: Palette.statusFailGlyph
+        case .quiet, .done: Palette.inkMuted
+        }
+        let quiet = tone == .quiet || tone == .done
+        let mix = quiet ? Effect.tabRimMixIdle : (chosen ? Effect.tabRimMixChosen : Effect.tabRimMix)
+        let solid = solidRim
+        let resolved = ink.resolvedColor(with: traitCollection)
+        CATransaction.begin()
+        CATransaction.setAnimationDuration(Motion.durPanel)
+        CATransaction.setAnimationTimingFunction(Motion.easeOut.function)
+        rim.fillColor = (solid ? resolved : resolved.withAlphaComponent(mix)).cgColor
+        // The glow's strength is the rim's alpha times this: half of it.
+        rim.shadowColor = resolved.cgColor
+        rim.shadowOpacity = solid ? 0 : 0.5
+        CATransaction.commit()
     }
 
     /// The close, which the strip lets a finger reach from 44pt about it.
@@ -694,14 +903,37 @@ final class TabView: UIView {
         super.layoutSubviews()
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        let flare = PaneTabsView.flare
-        let radius = Radius.radiusSm
+        let flare = phoneRow ? Radius.radiusLg : Radius.radiusSm
+        let radius = radius
         tint.frame = bounds
         tint.path = UIBezierPath(roundedRect: bounds, byRoundingCorners: [.topLeft, .topRight], cornerRadii: CGSize(width: radius, height: radius)).cgPath
         sheet.frame = bounds.insetBy(dx: -flare, dy: 0)
         sheet.path = Self.sheetPath(in: sheet.bounds, radius: radius, flare: flare)
         anchorMask(right: sheetMask.anchorPoint.x > 0.5)
+        if phoneRow { layoutRim() }
         CATransaction.commit()
+    }
+
+    /// The rim's ring: the tab's outline less the same outline brought in
+    /// 1.5pt at the top and 0.5pt at the sides (1pt all round, solid), open
+    /// at the foot; faded out by 90% of the tab's height unless solid.
+    private func layoutRim() {
+        let spill = Self.spill
+        rimHost.frame = CGRect(x: -spill, y: -spill, width: bounds.width + 2 * spill, height: bounds.height + spill)
+        rim.frame = rimHost.bounds
+        let outline = CGRect(x: spill, y: spill, width: bounds.width, height: bounds.height)
+        let solid = solidRim
+        let top = solid ? 1.0 : 1.5
+        let side = solid ? 1.0 : 0.5
+        let path = UIBezierPath(roundedRect: outline, byRoundingCorners: [.topLeft, .topRight], cornerRadii: CGSize(width: radius, height: radius))
+        let inner = CGRect(x: outline.minX + side, y: outline.minY + top, width: outline.width - 2 * side, height: outline.height - top + 1)
+        let innerRadius = max(0, radius - side)
+        path.append(UIBezierPath(roundedRect: inner, byRoundingCorners: [.topLeft, .topRight], cornerRadii: CGSize(width: innerRadius, height: innerRadius)))
+        rim.path = path.cgPath
+        let height = rimHost.bounds.height
+        rimFade.frame = rimHost.bounds
+        rimFade.locations = [0, NSNumber(value: spill / height), NSNumber(value: (spill + 0.9 * bounds.height) / height)]
+        rimHost.mask = solid ? nil : rimFade
     }
 
     /// Rounded shoulders, and a foot that curves outward by `flare` each side (fluid-tabs' sheet).
@@ -719,6 +951,24 @@ final class TabView: UIView {
         path.addArc(withCenter: CGPoint(x: rect.maxX, y: rect.maxY - flare), radius: flare, startAngle: .pi, endAngle: .pi / 2, clockwise: false)
         path.close()
         return path.cgPath
+    }
+}
+
+/// The tab's VoiceOver element: its options as custom actions, read when
+/// asked so they are the ones the menu would show now.
+private final class TabHit: UIStackView {
+    var actions: () -> [[TabAction]] = { [] }
+
+    override var accessibilityCustomActions: [UIAccessibilityCustomAction]? {
+        get {
+            actions().joined().filter { !$0.disabled }.map { action in
+                UIAccessibilityCustomAction(name: action.title) { _ in
+                    action.run()
+                    return true
+                }
+            }
+        }
+        set { _ = newValue }
     }
 }
 

@@ -160,7 +160,7 @@ final class PaneGroupController: UIViewController, UIDropInteractionDelegate {
         }
         strip.onMenu = { [weak self] open in self?.tabDetails.menuOpen = open }
         tabDetails.order = { [weak self] in self?.leaf?.tabs ?? [] }
-        strip.menu = { [weak self] id in self?.menu(for: id) }
+        strip.actions = { [weak self] id in self?.actions(for: id) ?? [] }
         strip.dragFor = { [weak self] id, _ in self?.dragItem(id) }
         view.addInteraction(UIDropInteraction(delegate: self))
         stack.addInteraction(UIDropInteraction(delegate: self))
@@ -424,44 +424,39 @@ final class PaneGroupController: UIViewController, UIDropInteractionDelegate {
 
     // MARK: Menu
 
-    /// PaneTabs.svelte's context menu, every gesture's command.
-    private func menu(for id: String) -> UIMenu {
-        var first: [UIMenuElement] = []
+    /// PaneTabs.svelte's context menu, every gesture's command: the one list
+    /// a tab's long press, its pull down and VoiceOver all offer (`TabAction`).
+    private func actions(for id: String) -> [[TabAction]] {
+        var first: [TabAction] = []
         if BoardRun.runId(of: id) == nil {
-            first.append(UIAction(title: "Session details") { [weak self] _ in
+            first.append(TabAction(title: "Session details") { [weak self] in
                 guard let self else { return }
                 tabDetails.pin(id, tab: strip.tabView(id))
             })
             if panes.continueHandler != nil {
-                first.append(UIAction(title: "Continue in new session…", image: Glyph.arrowRight.image) { [weak self] _ in self?.panes.continueInNewSession(id) })
+                first.append(TabAction(title: "Continue in new session…", glyph: .arrowRight) { [weak self] in self?.panes.continueInNewSession(id) })
             }
         }
-        let splits: [UIMenuElement] = [
-            UIAction(title: "Split right") { [weak self] _ in self?.split(id, .right) },
-            UIAction(title: "Split down") { [weak self] _ in self?.split(id, .bottom) },
+        let splits = [
+            TabAction(title: "Split right") { [weak self] in self?.split(id, .right) },
+            TabAction(title: "Split down") { [weak self] in self?.split(id, .bottom) },
         ]
         let others = workspace.leaves.filter { $0.id != leafId }
-        let moves: [UIMenuElement] = others.enumerated().map { index, other in
-            UIAction(title: "Move to group \(index + 2)") { [weak self] _ in self?.workspace.move(id, to: other.id) }
+        let moves = others.enumerated().map { index, other in
+            TabAction(title: "Move to group \(index + 2)") { [weak self] in self?.workspace.move(id, to: other.id) }
         }
-        let closing: [UIMenuElement] = [
-            UIAction(title: "Close") { [weak self] _ in self?.workspace.close(id) },
-            UIAction(title: "Close others", attributes: (leaf?.tabs.count ?? 0) < 2 ? .disabled : []) { [weak self] _ in
+        let closing = [
+            TabAction(title: "Close") { [weak self] in self?.workspace.close(id) },
+            TabAction(title: "Close others", disabled: (leaf?.tabs.count ?? 0) < 2) { [weak self] in
                 guard let self, let tabs = leaf?.tabs else { return }
                 for other in tabs where other != id { workspace.close(other) }
             },
         ]
-        let copy = UIAction(title: "Copy link", image: Glyph.copy.image) { [weak self] _ in
+        let copy = TabAction(title: "Copy link", glyph: .copy) { [weak self] in
             guard let link = self?.panes.link(id) else { return }
             UIPasteboard.general.url = link
         }
-        var sections: [UIMenuElement] = []
-        if !first.isEmpty { sections.append(UIMenu(options: .displayInline, children: first)) }
-        sections.append(UIMenu(options: .displayInline, children: splits))
-        if !moves.isEmpty { sections.append(UIMenu(options: .displayInline, children: moves)) }
-        sections.append(UIMenu(options: .displayInline, children: closing))
-        sections.append(UIMenu(options: .displayInline, children: [copy]))
-        return UIMenu(children: sections)
+        return [first, splits, moves, closing, [copy]].filter { !$0.isEmpty }
     }
 
     private func split(_ id: String, _ edge: Workspace.Edge) {

@@ -52,15 +52,6 @@ final class WorkspaceController: ObservedViewController, BackSwipeGate {
         if phoneRow { navigationController?.setNavigationBarHidden(true, animated: animated) }
     }
 
-    /// The row's ends stand on the screen's own margins, as the board's bar does.
-    override func viewLayoutMarginsDidChange() {
-        super.viewLayoutMarginsDidChange()
-        let margins = view.directionalLayoutMargins
-        barOverlay.insetsLayoutMarginsFromSafeArea = false
-        barOverlay.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: margins.leading, bottom: 0, trailing: margins.trailing)
-        for group in groups.values { group.strip.barMargin = margins.leading }
-    }
-
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
         if phoneRow { navigationController?.setNavigationBarHidden(false, animated: animated) }
@@ -167,7 +158,6 @@ final class WorkspaceController: ObservedViewController, BackSwipeGate {
             guard let group = groups[leaf.id] else { continue }
             group.swipeable = coarse && leaf.id == focused
             group.strip.barRow = phoneRow
-            group.strip.barMargin = view.directionalLayoutMargins.leading
             group.refresh(animated: animated)
         }
         barOverlay.isHidden = !phoneRow
@@ -261,6 +251,14 @@ final class WorkspaceController: ObservedViewController, BackSwipeGate {
 
 /// A layer that takes no touch of its own: only what stands on it does.
 final class PassThroughView: UIView {
+    /// A control may reach past the layer's box (the row's toggle hangs its
+    /// 44pt touch area 4pt below the row): a touch on it is still its.
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        subviews.contains { part in
+            !part.isHidden && part.isUserInteractionEnabled && part.point(inside: convert(point, to: part), with: event)
+        }
+    }
+
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
         let hit = super.hitTest(point, with: event)
         return hit === self ? nil : hit

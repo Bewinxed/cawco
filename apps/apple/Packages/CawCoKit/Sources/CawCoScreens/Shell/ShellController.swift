@@ -24,7 +24,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     /// The phone's session page has no bar: its strip is the one row, and its
     /// toggle and Caw float over the strip's ends (WorkspaceController `barOverlay`).
     private let sessionCluster = TopBarCluster()
-    private let sessionBurger = BurgerButton()
+    private let sessionBurger = BurgerButton(bare: true)
     /// What needs the operator, pulled down from Caw's head on any bar.
     private let needsDrawer = NeedsDrawer()
     /// The asks already seen, by id: one that is not is new, and Caw beats once. Nil until the fleet is read.
@@ -186,17 +186,19 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         view.addSubview(needsDrawer)
     }
 
-    /// The phone's session row: its toggle and Caw's capsule on the screen's
-    /// layout margins, where the board's bar stands them, over the strip's ends.
+    /// The phone's session row (variant B), over the strip's ends: the bare
+    /// toggle glyph's leading edge `cBarPhoneEdge` from the screen's, its
+    /// centre on the tabs' centre line (they stand on the row's floor), in a
+    /// 44pt touch area reaching into the screen's edge; Caw's glass standing
+    /// on the floor `cBarPhoneEdge` from the other edge.
     private func placeSessionRow() {
         let row = workspaceController.barOverlay
         for part in [sessionBurger, sessionCluster] as [UIView] { row.addSubview(part) }
         NSLayoutConstraint.activate([
-            sessionBurger.leadingAnchor.constraint(equalTo: row.layoutMarginsGuide.leadingAnchor),
-            sessionBurger.centerYAnchor.constraint(equalTo: row.centerYAnchor),
-            // The cluster stands its capsule `space6 − 16` inside its own end.
-            sessionCluster.trailingAnchor.constraint(equalTo: row.layoutMarginsGuide.trailingAnchor, constant: Space.space6 - 16),
-            sessionCluster.centerYAnchor.constraint(equalTo: row.centerYAnchor),
+            sessionBurger.centerXAnchor.constraint(equalTo: row.leadingAnchor, constant: Size.cBarPhoneEdge + Size.cBarToggleGlyph / 2),
+            sessionBurger.centerYAnchor.constraint(equalTo: row.bottomAnchor, constant: -Size.cTabRowH / 2),
+            sessionCluster.trailingAnchor.constraint(equalTo: row.trailingAnchor, constant: -Size.cBarPhoneEdge),
+            sessionCluster.bottomAnchor.constraint(equalTo: row.bottomAnchor),
         ])
     }
 

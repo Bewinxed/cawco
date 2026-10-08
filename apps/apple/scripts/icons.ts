@@ -108,7 +108,7 @@ const SOLAR_ICONS = [
   "refresh-bold-duotone", // IconRefresh
   "settings-bold-duotone", // IconSettings
   "shield-bold-duotone", // IconShield
-  "sidebar-minimalistic-bold-duotone", // IconSidebar
+  "sidebar-minimalistic-line-duotone", // IconSidebar
   "sort-bold-duotone", // IconSort
   "sort-vertical-bold-duotone", // IconUnfold
   "trash-bin-minimalistic-bold-duotone", // IconTrash

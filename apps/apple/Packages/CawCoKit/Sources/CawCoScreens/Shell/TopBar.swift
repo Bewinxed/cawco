@@ -475,6 +475,7 @@ final class TopBarCluster: UIView {
                 onCawPan(pan, head)
             }
         }
+        phoneCaw.standing = true
         groupRow.axis = .horizontal
         groupRow.alignment = .center
         groupRow.spacing = 0
@@ -500,6 +501,8 @@ final class TopBarCluster: UIView {
     private func arrange() {
         for view in stack.arrangedSubviews { stack.removeArrangedSubview(view); view.removeFromSuperview() }
         stack.addArrangedSubview(compact ? phoneCaw : group)
+        // A phone's Caw stands on the bar's floor, in line with the tabs.
+        stack.alignment = compact ? .bottom : .center
     }
 
     private var lastWidth = 0.0
@@ -519,10 +522,14 @@ final class TopBarCluster: UIView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        guard let bar = hostingBar else { return }
+        // Out of a bar (the phone's session row) its place is its own end.
+        guard let bar = hostingBar else {
+            if end.constant != 0 { end.constant = 0 }
+            return
+        }
         let own = bar.bounds.width - bar.safeAreaInsets.right - convert(bounds, to: bar).maxX
-        // A phone's capsule stands 8pt in, as the web's; a desk's group at `space6`.
-        let next = -max(0, (compact ? Space.space2 : Space.space6) - own)
+        // A phone's glass stands `cBarPhoneEdge` in, as the web's; a desk's group at `space6`.
+        let next = -max(0, (compact ? Size.cBarPhoneEdge : Space.space6) - own)
         if abs(end.constant - next) > 0.25 { end.constant = next }
         if abs(bounds.width - lastWidth) > 0.25 {
             lastWidth = bounds.width
@@ -554,18 +561,22 @@ final class TopBarCluster: UIView {
 
 /// The sidebar toggle (Shell.svelte `.burger`): 44pt, the sidebar glyph at
 /// 20. On a phone it opens the rail's sheet; on a wide screen it shows and
-/// hides the rail's column (`label` says which).
+/// hides the rail's column (`label` says which). `bare` is the phone's
+/// session row's (variant B): the glyph alone at `cBarToggleGlyph` in the
+/// muted ink, its 44pt touch area round it.
 final class BurgerButton: TapControl {
     var label: String {
         get { accessibilityLabel ?? "" }
         set { accessibilityLabel = newValue }
     }
 
-    init() {
+    init(bare: Bool = false) {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         layer.cornerRadius = Radius.radiusSm
-        let glyph = GlyphView(.sidebar, size: Size.iconLg, tint: Palette.inkStrong)
+        let glyph = bare
+            ? GlyphView(.sidebar, size: Size.cBarToggleGlyph, tint: Palette.inkMuted)
+            : GlyphView(.sidebar, size: Size.iconLg, tint: Palette.inkStrong)
         glyph.isUserInteractionEnabled = false
         addSubview(glyph)
         NSLayoutConstraint.activate([
