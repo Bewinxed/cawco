@@ -1,19 +1,15 @@
 import CawCoDesign
 import UIKit
 
-/// The workflows pages' form controls (workflows.css `.wf input`, `select`,
-/// `textarea`): the raised surface inside the 1pt control border at
-/// `--radius-sm`, 7pt by 11pt in, strong ink in the face of the label that
-/// holds them; 36pt under a pointer, and 44pt at 16pt type under a finger.
+/// The workflows pages' form controls (workflows.css `.wf input`, `select`):
+/// the raised surface inside the 1pt control border at `--radius-sm`, 7pt by
+/// 11pt in, strong ink in the face of the label that holds them; 36pt under a
+/// pointer, and 44pt at 16pt type under a finger on the pages. A dialog's
+/// controls stand on the input token (`cInputH`) at every pointer.
 @MainActor
 enum WorkflowForm {
     static var coarse: Bool { UITraitCollection.current.userInterfaceIdiom != .mac }
     static var height: Double { coarse ? Size.cBtnHLg : Size.cBtnH }
-    /// One line of the control's text at the page's line height.
-    static var line: Double { text(role()).lineHeight }
-    /// A text area is its two rows inside its padding and border under a
-    /// finger (the 44pt floor replaces the 90pt one there), 90pt under a pointer.
-    static var areaHeight: Double { coarse ? line * 2 + (Space.space2 + 1) * 2 : 90 }
 
     static func role(mono: Bool = false) -> TypeRole {
         let role = TypeScale.typeLabel.with(points: coarse ? 16 : TypeScale.typeLabel.points)
@@ -52,7 +48,7 @@ final class WorkflowInput: UITextField, UITextFieldDelegate {
     var missing = false { didSet { paint() } }
     var ringed = false { didSet { paint() } }
 
-    init(mono: Bool = false) {
+    init(mono: Bool = false, height: Double = WorkflowForm.height) {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         font = WorkflowForm.role(mono: mono).font
@@ -65,7 +61,7 @@ final class WorkflowInput: UITextField, UITextFieldDelegate {
         spellCheckingType = .no
         returnKeyType = .done
         delegate = self
-        heightAnchor.constraint(equalToConstant: WorkflowForm.height).isActive = true
+        heightAnchor.constraint(equalToConstant: height).isActive = true
         addAction(UIAction { [weak self] _ in self?.missing = false }, for: .editingChanged)
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (field: WorkflowInput, _: UITraitCollection) in field.paint() }
         paint()
@@ -110,61 +106,7 @@ protocol WorkflowRinged: UIView {
 }
 
 extension WorkflowInput: WorkflowRinged {}
-extension WorkflowTextArea: WorkflowRinged {}
 extension WorkflowSelect: WorkflowRinged {}
-
-/// `.wf textarea`: two rows tall at the least, growing with what is written.
-final class WorkflowTextArea: UITextView, UITextViewDelegate {
-    var missing = false { didSet { paint() } }
-    var ringed = false { didSet { paint() } }
-    /// The control's face at the page's line height, wrapping by word.
-    private let attributes: [NSAttributedString.Key: Any] = {
-        var attributes = WorkflowForm.text(WorkflowForm.role()).attributes(color: Palette.inkStrong)
-        if let paragraph = (attributes[.paragraphStyle] as? NSParagraphStyle)?.mutableCopy() as? NSMutableParagraphStyle {
-            paragraph.lineBreakMode = .byWordWrapping
-            attributes[.paragraphStyle] = paragraph
-        }
-        return attributes
-    }()
-
-    /// What it holds, set in its own face.
-    func set(_ value: String) {
-        attributedText = NSAttributedString(string: value, attributes: attributes)
-        typingAttributes = attributes
-    }
-
-    init() {
-        super.init(frame: .zero, textContainer: nil)
-        translatesAutoresizingMaskIntoConstraints = false
-        typingAttributes = attributes
-        backgroundColor = Palette.surfaceRaised
-        layer.cornerRadius = Radius.radiusSm
-        layer.cornerCurve = .continuous
-        isScrollEnabled = false
-        autocorrectionType = .no
-        autocapitalizationType = .none
-        spellCheckingType = .no
-        textContainer.lineFragmentPadding = 0
-        textContainerInset = UIEdgeInsets(top: Space.space2 + 1, left: Space.space3 + 1, bottom: Space.space2 + 1, right: Space.space3 + 1)
-        delegate = self
-        heightAnchor.constraint(greaterThanOrEqualToConstant: WorkflowForm.areaHeight).isActive = true
-        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (area: WorkflowTextArea, _: UITraitCollection) in area.paint() }
-        paint()
-    }
-
-    @available(*, unavailable)
-    required init?(coder _: NSCoder) {
-        fatalError("WorkflowTextArea is built in code")
-    }
-
-    func textViewDidChange(_: UITextView) { missing = false }
-    func textViewDidBeginEditing(_: UITextView) { paint() }
-    func textViewDidEndEditing(_: UITextView) { paint() }
-
-    private func paint() {
-        WorkflowForm.edge(layer, focused: isFirstResponder || ringed, missing: missing, traits: traitCollection)
-    }
-}
 
 /// `.wf select`: the chosen option's name in the control's box, the options a menu.
 final class WorkflowSelect: UIButton {
@@ -180,7 +122,7 @@ final class WorkflowSelect: UIButton {
     private(set) var value = ""
     private var options: [Option] = []
 
-    init() {
+    init(height: Double = WorkflowForm.height) {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         var config = UIButton.Configuration.plain()
@@ -197,7 +139,7 @@ final class WorkflowSelect: UIButton {
         houseStyle()
         layer.cornerRadius = Radius.radiusSm
         layer.cornerCurve = .continuous
-        heightAnchor.constraint(equalToConstant: WorkflowForm.height).isActive = true
+        heightAnchor.constraint(equalToConstant: height).isActive = true
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (select: WorkflowSelect, _: UITraitCollection) in select.paint() }
         paint()
     }

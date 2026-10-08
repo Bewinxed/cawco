@@ -39,7 +39,7 @@ open class KitDialogController: UIViewController, UIViewControllerTransitioningD
     private let width: Width
     private let closable: Bool
     private let frameView = UIView()
-    private let card = ReachCard()
+    private let card = UIView()
     private let scroll = UIScrollView()
 
     public init(width: Width = .md, closable: Bool = true) {

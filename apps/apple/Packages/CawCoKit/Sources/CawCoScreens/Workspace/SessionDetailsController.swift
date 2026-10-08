@@ -102,7 +102,7 @@ public final class SessionDetailsController: ObservedViewController {
     private let hostDot = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
     private let host = MorphLabel(TypeScale.typeMeta.with(leading: TypeScale.leadingBody), ink: Palette.inkMuted)
     private let cwdDot = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
-    private let cwdButton = ReachControl()
+    private let cwdButton = UIControl()
     private let cwdLabel = MorphLabel(TypeScale.typeLabel.with(weight: .regular, leading: TypeScale.leadingBody, family: FontFamily.fontMono), ink: Palette.inkMuted)
     private let configuration = UIStackView()
     private let modelChip: NsChip
@@ -119,7 +119,7 @@ public final class SessionDetailsController: ObservedViewController {
     private let limitLabel = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
     private let limitBar = LimitBar(height: 4)
     private let limitFigure = KitLabel(TypeScale.typeMeta, ink: Palette.inkStrong)
-    private let mcpButton = ReachControl()
+    private let mcpButton = UIControl()
     private let mcpFigure = MorphLabel(TypeScale.typeMeta)
     private let costFigure = MorphLabel(TypeScale.typeMeta)
     private var continueButton: NsButton!

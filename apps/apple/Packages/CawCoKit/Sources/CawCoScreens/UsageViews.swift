@@ -31,6 +31,16 @@ final class UsageCell: HomeCell {
     var onOpen: () -> Void = {}
     /// The Usage page: reached from the foot of the list the strip opens.
     var onPage: (() -> Void)?
+    /// How far in from the cell's edge its words start: none under the phone
+    /// home's status line, whose text they line up with; the rail's rows'
+    /// own inset in the rail, so they stand on the rail's content edge.
+    var textInset: Double = 0 {
+        didSet {
+            for edge in textEdges { edge.constant = edge.constant < 0 ? -(8 + textInset) : 8 + textInset }
+        }
+    }
+
+    private var textEdges: [NSLayoutConstraint] = []
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -49,12 +59,14 @@ final class UsageCell: HomeCell {
         strip.accessibilityTraits = .button
         // The strip's edges line up with the status line's text.
         pin(strip, insets: NSDirectionalEdgeInsets(top: 0, leading: -8, bottom: 0, trailing: -8))
-        NSLayoutConstraint.activate([
+        textEdges = [
             cells.leadingAnchor.constraint(equalTo: strip.leadingAnchor, constant: 8),
             cells.trailingAnchor.constraint(equalTo: strip.trailingAnchor, constant: -8),
-            cells.centerYAnchor.constraint(equalTo: strip.centerYAnchor),
             noline.leadingAnchor.constraint(equalTo: strip.leadingAnchor, constant: 8),
             noline.trailingAnchor.constraint(lessThanOrEqualTo: strip.trailingAnchor, constant: -8),
+        ]
+        NSLayoutConstraint.activate(textEdges + [
+            cells.centerYAnchor.constraint(equalTo: strip.centerYAnchor),
             noline.centerYAnchor.constraint(equalTo: strip.centerYAnchor),
             strip.heightAnchor.constraint(equalToConstant: 44),
         ])
@@ -301,7 +313,9 @@ final class UsageSheetController: ObservedViewController {
         ])
     }
 
-    /// A line of muted meta text (`.pop-empty`, `.pop-note`): 10pt and 12pt in, led by its provider's mark where it has one.
+    /// A line of muted meta text (`.pop-empty`, `.pop-note`): 10pt above and
+    /// below, led by its provider's mark where it has one. The drawer pads
+    /// the list, so every part of it starts on the title's edge.
     private static func line(_ text: String, mark: String?, ruled: Bool) -> UIView {
         let label = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
         label.text = text
@@ -313,8 +327,8 @@ final class UsageSheetController: ObservedViewController {
         let box = UIView()
         box.addSubview(row)
         NSLayoutConstraint.activate([
-            row.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: 12),
-            row.trailingAnchor.constraint(equalTo: box.trailingAnchor, constant: -12),
+            row.leadingAnchor.constraint(equalTo: box.leadingAnchor),
+            row.trailingAnchor.constraint(equalTo: box.trailingAnchor),
             row.topAnchor.constraint(equalTo: box.topAnchor, constant: 10 + (ruled ? 1 : 0)),
             row.bottomAnchor.constraint(equalTo: box.bottomAnchor, constant: -10),
         ])
@@ -322,8 +336,8 @@ final class UsageSheetController: ObservedViewController {
         return box
     }
 
-    /// One provider (`.pop-group`): 12pt in, its rows 10pt apart, a
-    /// hairline above every group after the first.
+    /// One provider (`.pop-group`): 12pt above and below, on the title's
+    /// edge, its rows 10pt apart, a hairline above every group after the first.
     private static func group(_ cell: Usage.Cell, now: Double, ruled: Bool) -> UIView {
         let column = UIStackView()
         column.axis = .vertical
@@ -343,8 +357,8 @@ final class UsageSheetController: ObservedViewController {
         let box = UIView()
         box.addSubview(column)
         NSLayoutConstraint.activate([
-            column.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: 12),
-            column.trailingAnchor.constraint(equalTo: box.trailingAnchor, constant: -12),
+            column.leadingAnchor.constraint(equalTo: box.leadingAnchor),
+            column.trailingAnchor.constraint(equalTo: box.trailingAnchor),
             column.topAnchor.constraint(equalTo: box.topAnchor, constant: 12 + (ruled ? 1 : 0)),
             column.bottomAnchor.constraint(equalTo: box.bottomAnchor, constant: -12),
         ])
@@ -403,9 +417,12 @@ final class UsageSheetController: ObservedViewController {
     }
 }
 
-/// The way to the page (`.pop-foot`): plain meta text on a hairline, coral while pressed.
+/// The way to the page (`.pop-foot`): plain meta text on a hairline, on the
+/// list's edge, a chevron at the row's end saying it goes somewhere; the
+/// row is the kit's 44pt reach tall, coral while pressed.
 private final class UsageFoot: UIControl {
     private let label = KitLabel(TypeScale.typeMeta, ink: Palette.inkStrong)
+    private let chevron = GlyphView(.chevronRight, size: Size.iconMd, tint: Palette.inkMuted)
 
     init() {
         super.init(frame: .zero)
@@ -413,6 +430,9 @@ private final class UsageFoot: UIControl {
         label.isUserInteractionEnabled = false
         label.translatesAutoresizingMaskIntoConstraints = false
         addSubview(label)
+        chevron.isUserInteractionEnabled = false
+        chevron.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(chevron)
         let rule = UIView()
         rule.backgroundColor = Palette.borderHairline
         rule.translatesAutoresizingMaskIntoConstraints = false
@@ -422,10 +442,12 @@ private final class UsageFoot: UIControl {
             rule.leadingAnchor.constraint(equalTo: leadingAnchor),
             rule.trailingAnchor.constraint(equalTo: trailingAnchor),
             rule.heightAnchor.constraint(equalToConstant: 1),
-            label.topAnchor.constraint(equalTo: topAnchor, constant: 11),
-            label.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -10),
-            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
-            label.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -12),
+            heightAnchor.constraint(equalToConstant: Size.cBtnHLg),
+            label.centerYAnchor.constraint(equalTo: centerYAnchor),
+            label.leadingAnchor.constraint(equalTo: leadingAnchor),
+            label.trailingAnchor.constraint(lessThanOrEqualTo: chevron.leadingAnchor, constant: -Space.space2),
+            chevron.centerYAnchor.constraint(equalTo: centerYAnchor),
+            chevron.trailingAnchor.constraint(equalTo: trailingAnchor),
         ])
         isAccessibilityElement = true
         accessibilityTraits = .link
@@ -439,10 +461,5 @@ private final class UsageFoot: UIControl {
 
     override var isHighlighted: Bool {
         didSet { label.ink = isHighlighted ? Palette.meterCalm : Palette.inkStrong }
-    }
-
-    /// A finger reaches the 37pt row from 44pt about it.
-    override func point(inside point: CGPoint, with _: UIEvent?) -> Bool {
-        TouchReach.contains(self, point)
     }
 }

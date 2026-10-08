@@ -193,10 +193,8 @@ final class MachineLoginController: MachineAuthDialog, UITextFieldDelegate {
             guard let url = self?.url else { return }
             UIApplication.shared.open(url)
         }
-        // The web's link (`px-3 py-2 rounded-[var(--radius-sm)]`, no border):
-        // 8pt above and below the label line, the fill to the edge.
-        openLink.configuration?.contentInsets.top = 8
-        openLink.configuration?.contentInsets.bottom = 8
+        // The web's link (`rounded-[var(--radius-sm)]`, no border), standing
+        // on the small button token (`cBtnHSm`) like the kit's other buttons.
         openLink.configuration?.background.backgroundInsets = .zero
         openLink.configuration?.background.cornerRadius = Radius.radiusSm
         openLink.isHidden = true

@@ -255,7 +255,6 @@ final class ProjectDocsView: UIStackView {
             select.setValue(open?.name ?? "Select a document")
             select.configuration?.attributedTitle = AttributedString(open?.name ?? "Select a document",
                                                                      attributes: AttributeContainer(TypeScale.typeCode.with(points: TypeScale.typeLabel.points).attributes(color: Palette.foreground)))
-            select.heightAnchor.constraint(equalToConstant: 36).isActive = true
             select.menu = UIMenu(options: .singleSelection, children: docs.map { doc in
                 UIAction(title: doc.name, state: doc == open ? .on : .off) { [weak self] _ in self?.choose(doc) }
             })

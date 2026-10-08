@@ -139,8 +139,13 @@ final class SessionRailRow: RailRow, HoverSessionRow {
         name.setContentHuggingPriority(.defaultLow, for: .horizontal)
         age.tabular = true
         age.textAlignment = .right
-        // `kit-age-col`: as wide as its longest word, "59m".
-        age.widthAnchor.constraint(equalToConstant: 24).isActive = true
+        // `kit-age-col`: as wide as its longest word, "59m", measured in its
+        // own face, and never narrower than what it says: the title gives way.
+        age.text = "59m"
+        age.widthAnchor.constraint(greaterThanOrEqualToConstant: age.intrinsicContentSize.width.rounded(.up)).isActive = true
+        age.text = nil
+        age.setContentCompressionResistancePriority(.required, for: .horizontal)
+        age.setContentHuggingPriority(.required, for: .horizontal)
         mark.showsNestingChevron = false
         mark.onToggle = { [weak self] in
             guard let self else { return }

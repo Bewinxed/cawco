@@ -518,7 +518,8 @@ final class GrabArea: UIControl {
 
     override func endTracking(_ touch: UITouch?, with event: UIEvent?) {
         super.endTracking(touch, with: event)
-        guard let touch, bounds.contains(touch.location(in: self)) else { return }
+        // Where UIKit's touch-up-inside would fire: a touch the window's reach handed over counts.
+        guard touch != nil, isTouchInside else { return }
         sendActions(for: .primaryActionTriggered)
     }
 

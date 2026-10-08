@@ -94,7 +94,7 @@ final class AssistantPanelView: UIView {
     // MARK: Header
 
     /// 47pt: the brand tile with the assistant glyph, "CawCo Assistant", the
-    /// ASSISTANT role pill, and on a desk the close button (⌘J).
+    /// Assistant role pill in sentence case, and on a desk the close button (⌘J).
     private func header() -> UIView {
         let logo = UIView()
         logo.backgroundColor = Palette.brandSolid
@@ -113,8 +113,9 @@ final class AssistantPanelView: UIView {
         let words = NSMutableAttributedString(string: "CawCo", attributes: TypeScale.typeBody.withWeight(TypeScale.weightStrong).attributes(color: Palette.inkStrong))
         words.append(NSAttributedString(string: " Assistant", attributes: TypeScale.typeBody.attributes(color: Palette.inkStrong)))
         title.attributedText = words
-        let role = KitLabel(TypeScale.typeLabel, ink: Palette.inkMuted, tracking: TypeScale.trackCaps)
-        role.text = "ASSISTANT"
+        // DESIGN.md keeps uppercase for a ledger's column head alone.
+        let role = KitLabel(TypeScale.typeLabel, ink: Palette.inkMuted)
+        role.text = "Assistant"
         let pill = UIStackView(arrangedSubviews: [role])
         pill.isLayoutMarginsRelativeArrangement = true
         pill.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8)
@@ -151,9 +152,8 @@ final class AssistantPanelView: UIView {
     }
 
     private func section(_ title: String, _ parts: [UIView]) -> UIStackView {
-        let heading = KitLabel(labelRole, ink: Palette.inkStrong, tracking: TypeScale.trackCaps)
-        heading.text = title.uppercased()
-        heading.accessibilityLabel = title
+        let heading = KitLabel(labelRole, ink: Palette.inkStrong)
+        heading.text = title
         heading.accessibilityTraits = .header
         let stack = UIStackView(arrangedSubviews: [heading] + parts)
         stack.axis = .vertical
@@ -277,9 +277,8 @@ final class AssistantPanelView: UIView {
             return
         }
         autopilotSection.isHidden = false
-        let heading = KitLabel(labelRole, ink: Palette.inkStrong, tracking: TypeScale.trackCaps)
-        heading.text = "AUTOPILOT"
-        heading.accessibilityLabel = "Autopilot"
+        let heading = KitLabel(labelRole, ink: Palette.inkStrong)
+        heading.text = "Autopilot"
         autopilotSection.addArrangedSubview(heading)
         // `.sect-hint`: meta size on the body's leading.
         let hint = { (text: String) in self.note(text, role: TypeScale.typeBody.with(points: TypeScale.typeMeta.points)) }
@@ -416,9 +415,9 @@ final class AssistantHolder: UIViewController {
         fatalError("AssistantHolder is built in code")
     }
 
-    /// The drawer's own header stands between the grabber and the panel's
-    /// head: `Drawer.Header` is `p-4` around a title only a screen reader
-    /// meets, 32pt of clear card.
+    /// The panel's head starts at the grabber's foot, as every drawer's
+    /// content does (HouseSheet): the drawer's title is only a screen
+    /// reader's (the panel's own label), so it takes no room.
     override func loadView() {
         let box = UIView()
         panel.backgroundColor = .clear
@@ -427,7 +426,7 @@ final class AssistantHolder: UIViewController {
         let tall = box.heightAnchor.constraint(equalToConstant: UIScreen.main.bounds.height * 0.85)
         tall.priority = .defaultHigh
         NSLayoutConstraint.activate([
-            panel.topAnchor.constraint(equalTo: box.topAnchor, constant: 32),
+            panel.topAnchor.constraint(equalTo: box.topAnchor),
             panel.bottomAnchor.constraint(equalTo: box.bottomAnchor),
             panel.leadingAnchor.constraint(equalTo: box.leadingAnchor),
             panel.trailingAnchor.constraint(equalTo: box.trailingAnchor),

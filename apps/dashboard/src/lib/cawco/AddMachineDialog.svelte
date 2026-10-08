@@ -306,7 +306,7 @@
                 autocapitalize="off"
                 autocomplete="off"
                 id="join-target"
-                placeholder="user@host, or a Host from ~/.ssh/config"
+                placeholder="user@host or SSH alias"
                 spellcheck="false"
                 bind:value={target}
               />

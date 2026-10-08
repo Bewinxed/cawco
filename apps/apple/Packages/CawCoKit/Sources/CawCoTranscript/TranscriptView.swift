@@ -1378,18 +1378,6 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         animator.startAnimation()
     }
 
-    /// A compaction divider's 44pt reach under a finger runs past its own row
-    /// into the margin above the next (`.touch-hit`): a touch there that
-    /// lands on no row's content is the divider's.
-    override public func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-        guard let hit = super.hitTest(point, with: event) else { return nil }
-        guard hit === collection || hit is UICollectionViewCell || hit.superview is UICollectionViewCell else { return hit }
-        for case let cell as HostCell<CompactionDividerView> in collection.visibleCells {
-            if let row = cell.row, let control = row.control, row.reach(in: self).contains(point) { return control }
-        }
-        return hit
-    }
-
     // MARK: Following and position
 
     private var bottomOffset: CGFloat {

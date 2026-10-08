@@ -88,12 +88,6 @@ final class CompactionDividerView: UIView, RowContent, Disclosing {
 
     /// The transcript has come on screen: Caw, loaded while it was not, is drawn now.
     func cameOnScreen() { button.redrawCaw() }
-
-    /// The button's reach under a finger (`.touch-hit`), in `view`'s space.
-    func reach(in view: UIView) -> CGRect { button.convert(button.reach, to: view) }
-
-    /// The button, for a touch its reach takes outside this row.
-    var control: UIControl? { button.isEnabled ? button : nil }
 }
 
 /// One line of words drawn at a point of its own choosing inside a box of
@@ -257,13 +251,6 @@ final class CompactionButton: UIControl {
         let press = isHighlighted && isEnabled && !UIAccessibility.isReduceMotionEnabled ? Motion.pressScale : 1
         return CGAffineTransform(translationX: -chev * Self.room, y: 0).scaledBy(x: press, y: press)
     }
-
-    /// 44pt under a finger, centred on the 30pt line (`.touch-hit`).
-    var reach: CGRect {
-        Self.coarse ? bounds.insetBy(dx: 0, dy: min(0, (bounds.height - Size.cBtnHLg) / 2)) : bounds
-    }
-
-    override func point(inside point: CGPoint, with _: UIEvent?) -> Bool { reach.contains(point) }
 
     // MARK: Drawing
 

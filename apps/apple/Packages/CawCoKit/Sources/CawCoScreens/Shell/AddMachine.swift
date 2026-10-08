@@ -102,7 +102,8 @@ final class JoinState {
 final class AddMachineController: KitDialogController {
     private let hub: HubConnection
     private let join = JoinState.shared
-    private let tabs = SegmentedTabs([.init("SSH", glyph: .server), .init("Command", glyph: .terminal)])
+    /// JOIN_WAYS' names (join.svelte.ts): the strip hugs them, as the web's does.
+    private let tabs = SegmentedTabs([.init("Over SSH", glyph: .server), .init("With one command", glyph: .terminal)])
     private let infoAlert = KitAlert(tone: .destructive)
     private let pane = CrossView()
     private let footer = UIStackView()
@@ -114,7 +115,7 @@ final class AddMachineController: KitDialogController {
     private var watching = false
 
     // The SSH form, kept across redraws so what was typed stays.
-    private let target = KitField(placeholder: "user@host, or a Host from ~/.ssh/config")
+    private let target = KitField(placeholder: "user@host or SSH alias")
     private let port = KitField(placeholder: "22")
     private var keyOpen = false
     private var starting = false
@@ -319,7 +320,14 @@ final class AddMachineController: KitDialogController {
         return column
     }
 
-    private func disclosureButton(_ title: String, open: Bool, action: @escaping () -> Void) -> UIButton {
+    /// Where the chevron's ink starts in its 16pt box: alt-arrow-right-linear
+    /// strokes from x 9 less half its 1.5 width, of 24.
+    private static let chevronInk = 16 * (9 - 0.75) / 24
+
+    /// A `summary`: the chevron, then its name. The chevron's ink stands on
+    /// the column's edge, where the labels' first letters stand, so the
+    /// button stands out by the glyph's own margin.
+    private func disclosureButton(_ title: String, open: Bool, action: @escaping () -> Void) -> UIView {
         var config = UIButton.Configuration.plain()
         config.image = Glyph.chevronRight.image.resized(to: 16)
         config.imagePadding = 6
@@ -332,7 +340,16 @@ final class AddMachineController: KitDialogController {
         button.contentHorizontalAlignment = .leading
         button.imageView?.transform = open ? CGAffineTransform(rotationAngle: .pi / 2) : .identity
         button.accessibilityTraits.insert(open ? .selected : [])
-        return button
+        button.translatesAutoresizingMaskIntoConstraints = false
+        let holder = UIView()
+        holder.addSubview(button)
+        NSLayoutConstraint.activate([
+            button.leadingAnchor.constraint(equalTo: holder.leadingAnchor, constant: -Self.chevronInk),
+            button.trailingAnchor.constraint(equalTo: holder.trailingAnchor),
+            button.topAnchor.constraint(equalTo: holder.topAnchor),
+            button.bottomAnchor.constraint(equalTo: holder.bottomAnchor),
+        ])
+        return holder
     }
 
     /// The run, step by step: each finished step ticked, the current one spinning, and its output folded under.

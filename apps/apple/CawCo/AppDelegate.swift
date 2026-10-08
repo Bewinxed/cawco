@@ -250,7 +250,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             return
         }
         Logger(subsystem: "dev.cawco.app", category: "Scene").info("window scene connected")
-        let window = UIWindow(windowScene: scene)
+        let window = ReachWindow(windowScene: scene)
         window.tintColor = Palette.inkStrong
         window.rootViewController = RootViewController(sessionId: sessionId, boardTab: boardTab)
         window.makeKeyAndVisible()

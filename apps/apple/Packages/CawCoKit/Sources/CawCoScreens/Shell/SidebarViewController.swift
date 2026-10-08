@@ -358,7 +358,8 @@ final class SidebarViewController: ObservedViewController {
         fleetRow.addSubview(fleetBadgeBox)
         NSLayoutConstraint.activate([
             fleetBadgeBox.trailingAnchor.constraint(equalTo: fleetRow.trailingAnchor, constant: -4),
-            fleetBadgeBox.topAnchor.constraint(equalTo: fleetRow.topAnchor, constant: 6),
+            // On the row's centre line, whatever height the row stands at (a finger's is taller).
+            fleetBadgeBox.centerYAnchor.constraint(equalTo: fleetRow.centerYAnchor),
             fleetBadgeBox.heightAnchor.constraint(equalToConstant: 20),
             fleetBadgeBox.widthAnchor.constraint(greaterThanOrEqualToConstant: 20),
             fleetBadge.leadingAnchor.constraint(equalTo: fleetBadgeBox.leadingAnchor, constant: 4),
@@ -540,6 +541,8 @@ final class SidebarViewController: ObservedViewController {
         usage.onPage = { [weak self] in self?.host?.go(.usage) }
         usage.heightAnchor.constraint(equalToConstant: 44).isActive = true
 
+        // The strip's words start on the rail's content edge, where the rows' do.
+        usage.textInset = 10
         navConstraint(user)
         // No picture of the reader yet: Caw stands in.
         let avatar = BrandMark(round: true)

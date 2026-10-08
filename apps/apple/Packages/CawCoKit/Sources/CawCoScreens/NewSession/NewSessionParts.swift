@@ -190,12 +190,6 @@ final class NsChip: UIControl {
         didSet { if isHighlighted != oldValue { nsPress(self, isHighlighted) } }
     }
 
-    /// Under a finger the chip answers 7pt beyond itself above and below, to
-    /// 44pt (`--hit-gap-y`); a pointer takes it as drawn.
-    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
-        let reach: Double = traitCollection.userInterfaceIdiom == .mac ? 0 : (44 - bounds.height) / 2
-        return bounds.insetBy(dx: 0, dy: -max(0, reach)).contains(point)
-    }
 
     private func paint() {
         let traits = traitCollection
@@ -250,7 +244,8 @@ final class NsButton: UIControl {
         row.isUserInteractionEnabled = false
         row.translatesAutoresizingMaskIntoConstraints = false
         addSubview(row)
-        let side: Double = size == .md ? 14 : size == .sm ? 11 : 8
+        // The padding starts inside the web button's 1px border (transparent on the primary).
+        let side: Double = (size == .md ? 14 : size == .sm ? 11 : 8) + 1
         NSLayoutConstraint.activate([
             heightAnchor.constraint(equalToConstant: height ?? (size == .md ? 36 : size == .sm ? 30 : 28)),
             row.centerXAnchor.constraint(equalTo: centerXAnchor),

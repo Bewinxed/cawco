@@ -21,10 +21,10 @@ final class WorkflowLaunchController: KitDialogController {
     private var busy = false
     /// Each input's control, in the order the workflow declares them.
     private var inputs: [(field: WorkflowField, control: UIView)] = []
-    private let projectSelect = WorkflowSelect()
-    private let machineSelect = WorkflowSelect()
-    private let directory = WorkflowInput(mono: true)
-    private let supervisorSelect = WorkflowSelect()
+    private let projectSelect = WorkflowSelect(height: Size.cInputH)
+    private let machineSelect = WorkflowSelect(height: Size.cInputH)
+    private let directory = WorkflowInput(mono: true, height: Size.cInputH)
+    private let supervisorSelect = WorkflowSelect(height: Size.cInputH)
     private let failure = WorkflowError()
     private var picker: DirectoryPickerView!
     private var cancel: UIButton!
@@ -45,15 +45,12 @@ final class WorkflowLaunchController: KitDialogController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        // The form's parts are 14pt apart (`.wf-stack`); the header stands
-        // directly on the form, with no gap of its own.
-        body.spacing = Space.space4
+        // The form's parts stand the dialog's 24pt apart, as every dialog's do.
         let header = KitDialogController.header(
             title: "Run \(workflow.name)",
             description: "Choose the inputs and workspace for this workflow run."
         )
         body.addArrangedSubview(header)
-        body.setCustomSpacing(0, after: header)
 
         let defaults = workflow.graph?.settings
         let project = defaults?.defaultProject.flatMap { id in hub.fleet.projects.first { $0.id == id } }
@@ -105,12 +102,8 @@ final class WorkflowLaunchController: KitDialogController {
         failure.isHidden = true
         body.addArrangedSubview(failure)
 
-        cancel = KitButton.workflow("Cancel") { [weak self] in self?.requestClose() }
-        start = KitButton.workflow("Start run", primary: true) { [weak self] in self?.submit() }
-        // `.wf-launch button { min-height: 44px }`.
-        for button in [cancel, start] as [UIButton] {
-            button.heightAnchor.constraint(greaterThanOrEqualToConstant: Size.cBtnHLg).isActive = true
-        }
+        cancel = KitButton.workflow("Cancel", inDialog: true) { [weak self] in self?.requestClose() }
+        start = KitButton.workflow("Start run", primary: true, inDialog: true) { [weak self] in self?.submit() }
         let foot = UIStackView(arrangedSubviews: [cancel, UIView(), start])
         foot.spacing = Space.space2
         foot.alignment = .center
@@ -157,24 +150,20 @@ final class WorkflowLaunchController: KitDialogController {
         if !WorkflowForm.coarse, let field = ring, !(field is WorkflowSelect) { field.becomeFirstResponder() }
     }
 
-    /// An input's control by its type: a menu of its options, one line for a
-    /// path, and a text area for anything else; each starts at its default.
+    /// An input's control by its type: a menu of its options, and one line
+    /// for anything else (a path in mono); each starts at its default.
     private func control(for field: WorkflowField) -> UIView {
         let preset = field.preset ?? ""
         switch field.type {
         case .select:
-            let select = WorkflowSelect()
+            let select = WorkflowSelect(height: Size.cInputH)
             let options = [WorkflowSelect.Option(value: "", label: "Choose")] + (field.options ?? []).map { WorkflowSelect.Option(value: $0, label: $0) }
             select.set(options, value: options.contains { $0.value == preset } ? preset : "")
             return select
-        case .path:
-            let input = WorkflowInput()
+        case .path, .text:
+            let input = WorkflowInput(mono: field.type == .path, height: Size.cInputH)
             input.text = preset
             return input
-        case .text:
-            let area = WorkflowTextArea()
-            area.set(preset)
-            return area
         }
     }
 
@@ -182,7 +171,6 @@ final class WorkflowLaunchController: KitDialogController {
         switch control {
         case let select as WorkflowSelect: select.value
         case let input as WorkflowInput: input.text ?? ""
-        case let area as WorkflowTextArea: area.text ?? ""
         default: ""
         }
     }
@@ -245,7 +233,6 @@ final class WorkflowLaunchController: KitDialogController {
             switch empty.control {
             case let select as WorkflowSelect: select.missing = true
             case let input as WorkflowInput: input.missing = true; input.becomeFirstResponder()
-            case let area as WorkflowTextArea: area.missing = true; area.becomeFirstResponder()
             default: break
             }
             UIAccessibility.post(notification: .announcement, argument: "\(empty.field.label) is required")

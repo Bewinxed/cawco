@@ -61,22 +61,6 @@ enum TopBar {
         item.hidesBackButton = true
     }
 
-    /// The shell's navigation bar (UINavigationController's `navigationBarClass`).
-    /// iOS 26 holds a bar item's custom view in a system container its own
-    /// size, which never passes on a touch outside it: the bar takes the
-    /// margin about Caw's 36pt head and hands it to him, so he answers from
-    /// 44pt as the web capsule's `touch-hit` does.
-    final class Bar: UINavigationBar {
-        override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-            TouchReach.redirect(super.hitTest(point, with: event), at: point, in: self, to: heads(in: self))
-        }
-
-        private func heads(in view: UIView) -> [UIView] {
-            if let cluster = view as? TopBarCluster { return [cluster.caw] }
-            return view.subviews.flatMap { heads(in: $0) }
-        }
-    }
-
     /// No Liquid Glass capsule behind a house control (iOS 26's shared background).
     static func unshared(_ item: UIBarButtonItem) {
         if #available(iOS 26.0, macCatalyst 26.0, *) {
@@ -507,18 +491,6 @@ final class TopBarCluster: UIView {
 
     private var lastWidth = 0.0
     private var end: NSLayoutConstraint!
-
-    /// Caw's head is drawn 36pt but answers a finger from 44pt about it (the
-    /// web capsule's `touch-hit`), past the cluster's own edge: the stack that
-    /// holds him and the strip beside him would otherwise take that margin.
-    /// A control hit directly (Search, Machines) keeps its touch.
-    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
-        super.point(inside: point, with: event) || TouchReach.reaches(point, in: self, [caw])
-    }
-
-    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-        TouchReach.redirect(super.hitTest(point, with: event), at: point, in: self, to: [caw])
-    }
 
     override func layoutSubviews() {
         super.layoutSubviews()

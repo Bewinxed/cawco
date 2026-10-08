@@ -39,14 +39,14 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     // Regular width.
     private let rail: SidebarViewController
     private let railHome: HomeViewController
-    private let mainNav = UINavigationController(navigationBarClass: TopBar.Bar.self, toolbarClass: nil)
+    private let mainNav = UINavigationController()
     private let mainMotion = ShellNavigationMotion()
     private let detail: FleetDetailController
     private let mainCrumb = CrumbView("Fleet")
     private let mainCluster = TopBarCluster()
     // Compact width.
     private let board: HomeViewController
-    private let compactNav = UINavigationController(navigationBarClass: TopBar.Bar.self, toolbarClass: nil)
+    private let compactNav = UINavigationController()
     private let compactMotion = ShellNavigationMotion()
     private let compactCrumb = CrumbView("Fleet")
     private let compactCluster = TopBarCluster()
@@ -646,7 +646,10 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         }
         // The house bottom sheet, as the home's usage bar presents it.
         limits.loadViewIfNeeded()
-        (railSheet ?? self).present(HouseSheetController(limits, title: "Usage limits", scroller: limits.scroll), animated: true)
+        let sheet = HouseSheetController(limits, title: "Usage limits", scroller: limits.scroll)
+        // The list ends on its 44pt way to the page: it stands on the home indicator's edge, no padding under it.
+        sheet.footAtSafeArea = true
+        (railSheet ?? self).present(sheet, animated: true)
     }
 
     /// Native only: point this window at another hub (ConnectViewController's

@@ -39,6 +39,8 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
         } else {
             sheet.modalPresentationStyle = .formSheet
         }
+        // The dialog tray's corner (`--radius-modal`), not the system sheet's.
+        sheet.sheetPresentationController?.preferredCornerRadius = Radius.radiusModal
         presenter.present(sheet, animated: true)
     }
 
@@ -67,7 +69,7 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
     // The header: the id and the stage, the title, what refused, the flags.
     private let head = UIStackView()
     private let idLabel = KitLabel(TaskSheetController.mono, ink: Palette.inkSubtle)
-    private let stagePicker = KitSelect()
+    private let stagePicker = KitSelect(small: true)
     private let stageSkeleton = SkeletonView(height: Size.cBtnHSm)
     private let titleButton = UIControl()
     private let titleLabel = KitLabel(TypeScale.typeTitle, ink: Palette.inkStrong, lines: 0)
@@ -303,7 +305,9 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
         titleButton.accessibilityLabel = shown?.title
         show(titleProblem, in: titleProblemLabel)
         show(stageProblem, in: stageProblemLabel)
-        stageSkeleton.isHidden = shown != nil
+        // The shape of a stage still coming; once the read has answered, with
+        // the task or with why it could not be read, no shape is left waiting.
+        stageSkeleton.isHidden = shown != nil || readProblem != nil
         stagePicker.isHidden = shown == nil
         if let shown {
             stagePicker.setValue(TaskWords.stage(shown.stage))
@@ -670,7 +674,7 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
     /// The picker of tasks an edge can point at (Select `size="sm"`, muted).
     private func pick(_ label: String, edge: ProjectTasks.Edge, others: [TaskSummary]) -> UIView? {
         guard !others.isEmpty else { return nil }
-        let select = KitSelect()
+        let select = KitSelect(small: true)
         select.configuration?.attributedTitle = AttributedString(label, attributes: AttributeContainer(TypeScale.typeLabel.withWeight(.regular).attributes(color: Palette.mutedForeground)))
         select.accessibilityLabel = label
         select.menu = UIMenu(children: others.map { other in
@@ -892,10 +896,12 @@ final class TaskCheckbox: UIControl {
         box.layer.borderColor = (checked ? Palette.actionSolid : Palette.input).resolvedColor(with: traitCollection).cgColor
     }
 
-    /// A tap that ends on the box is the action (RailViews' rows do the same).
+    /// A tap that ends inside, as UIKit's touch-up-inside reads it, is the
+    /// action (RailViews' rows do the same): a touch the window's reach
+    /// handed over counts.
     override func endTracking(_ touch: UITouch?, with event: UIEvent?) {
         super.endTracking(touch, with: event)
-        guard let touch, bounds.contains(touch.location(in: self)) else { return }
+        guard touch != nil, isTouchInside else { return }
         sendActions(for: .primaryActionTriggered)
     }
 }
@@ -932,7 +938,7 @@ final class TaskPressRow: UIControl {
 
     override func endTracking(_ touch: UITouch?, with event: UIEvent?) {
         super.endTracking(touch, with: event)
-        guard let touch, bounds.contains(touch.location(in: self)) else { return }
+        guard touch != nil, isTouchInside else { return }
         sendActions(for: .primaryActionTriggered)
     }
 

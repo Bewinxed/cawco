@@ -1006,7 +1006,10 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             }
         }
         limits.loadViewIfNeeded()
-        present(HouseSheetController(limits, title: "Usage limits", scroller: limits.scroll), animated: true)
+        let sheet = HouseSheetController(limits, title: "Usage limits", scroller: limits.scroll)
+        // A list that ends on its 44pt way to the page stands on the home indicator's edge.
+        sheet.footAtSafeArea = limits.onPage != nil
+        present(sheet, animated: true)
     }
 
     // The finger on the list holds its order (holdWhileInside): no row moves from under it.

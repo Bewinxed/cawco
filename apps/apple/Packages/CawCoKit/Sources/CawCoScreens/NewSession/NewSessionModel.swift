@@ -329,11 +329,6 @@ private final class RailButton: UIControl {
     override var isHighlighted: Bool {
         didSet { backgroundColor = isHighlighted && !chosen ? Palette.surfaceHover : .clear }
     }
-
-    /// Under a finger the 36pt square answers out to 44.
-    override func point(inside point: CGPoint, with _: UIEvent?) -> Bool {
-        bounds.insetBy(dx: -4, dy: -4).contains(point)
-    }
 }
 
 final class ModelSectionView: UIView, UITextFieldDelegate {
@@ -566,7 +561,7 @@ final class ModelSectionView: UIView, UITextFieldDelegate {
             return HarnessRail.Item(id: tab.id, name: tab.name, soon: tab.soon, disabled: tab.soon || missing,
                                     why: tab.soon ? "Coming soon" : (missing ? "Not installed on \(state.machineName)" : nil))
         }, value: state.harness)
-        search.attributedPlaceholder = NSAttributedString(string: "Search \(name) models or paste a model id…",
+        search.attributedPlaceholder = NSAttributedString(string: "Search or paste a model id…",
                                                           attributes: [.font: search.font as Any, .foregroundColor: Palette.inkSubtle])
         clear.isHidden = query.isEmpty
 

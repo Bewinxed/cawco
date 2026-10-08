@@ -238,9 +238,7 @@
   <!-- MOBILE-FIRST: vaul-svelte drawer -->
   <Drawer.Root direction="bottom" shouldScaleBackground={false} bind:open>
     <Drawer.Content class="assistant-drawer" bind:ref={drawer}>
-      <Drawer.Header>
-        <Drawer.Title class="sr-only">CawCo Assistant</Drawer.Title>
-      </Drawer.Header>
+      <Drawer.Title class="sr-only">CawCo Assistant</Drawer.Title>
       <div class="panel-inner">
         <header class="panel-head">
           <span class="a-logo">
@@ -512,8 +510,6 @@
     border-radius: var(--radius-pill);
     font-size: var(--text-label);
     font-weight: var(--weight-strong);
-    letter-spacing: var(--track-caps);
-    text-transform: uppercase;
     background: var(--surface-recess);
     color: var(--ink-muted);
   }
@@ -563,8 +559,6 @@
     font-size: var(--text-label);
     font-weight: var(--weight-strong);
     color: var(--ink-strong);
-    text-transform: uppercase;
-    letter-spacing: var(--track-caps);
   }
   .sect-note {
     font-size: var(--text-body);

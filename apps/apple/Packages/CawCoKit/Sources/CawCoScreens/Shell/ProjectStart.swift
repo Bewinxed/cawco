@@ -3,7 +3,7 @@ import UIKit
 
 /// The project page's "New session" popover (project/[id]/+page.svelte):
 /// an optional first prompt, then Start, or Start empty without one. 320pt
-/// wide, 16pt in, its rows 12pt apart; Return in the field starts.
+/// wide, the kit popover's 6pt in, its rows 12pt apart; Return in the field starts.
 final class ProjectStartController: KitPopoverController, UITextFieldDelegate {
     private let field = KitField(placeholder: "What should this session do?")
     private let onStart: (String?) -> Void
@@ -42,11 +42,11 @@ final class ProjectStartController: KitPopoverController, UITextFieldDelegate {
         stack.addArrangedSubview(prompt)
         stack.addArrangedSubview(actions)
         stack.axis = .vertical
-        // `flex-col gap-3 p-4`, inside the card's 1pt border.
+        // `flex-col gap-3` in the kit popover's 6pt padding (`kit-pop`), inside the card's 1pt border.
         stack.spacing = 12
         stack.translatesAutoresizingMaskIntoConstraints = false
         card.addSubview(stack)
-        let inset = 16 + 1.0
+        let inset = 6 + 1.0
         NSLayoutConstraint.activate([
             stack.topAnchor.constraint(equalTo: card.topAnchor, constant: inset),
             stack.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: inset),

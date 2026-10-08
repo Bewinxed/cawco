@@ -1304,11 +1304,6 @@ final class PressBox: UIButton {
             }.startAnimation()
         }
     }
-
-    /// The touch area reaches 44pt round the 34pt box.
-    override func point(inside point: CGPoint, with _: UIEvent?) -> Bool {
-        bounds.insetBy(dx: -5, dy: -5).contains(point)
-    }
 }
 
 /// The action box's face, swapped in and out (`icon-swap`): fading, scaling

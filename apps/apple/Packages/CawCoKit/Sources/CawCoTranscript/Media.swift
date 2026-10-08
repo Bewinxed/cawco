@@ -253,6 +253,7 @@ final class Lightbox: UIViewController, UIScrollViewDelegate {
     private let env: RowEnv
     private let pager = UIScrollView()
     private let counter = UILabel()
+    private let counterChip = UIView()
     private var index = 0
     private var zooms: [UIScrollView] = []
     private let lines = UIStackView()
@@ -342,10 +343,19 @@ final class Lightbox: UIViewController, UIScrollViewDelegate {
         // from the bar's padding (PhotoSwipe's `--close` margin).
         let close = button(.close, label: "Close image") { [weak self] in self?.dismiss(animated: true) }
         let zoom = button(.zoomIn, label: "Zoom") { [weak self] in self?.toggleZoom() }
+        // The counter is chrome like the buttons: their 44pt chip on the raised
+        // surface inside a hairline, so the page under the scrim never reads through it.
         counter.translatesAutoresizingMaskIntoConstraints = false
+        counterChip.translatesAutoresizingMaskIntoConstraints = false
+        counterChip.backgroundColor = Palette.surfaceRaised
+        counterChip.layer.cornerRadius = Radius.radiusSm
+        counterChip.layer.cornerCurve = .continuous
+        counterChip.layer.borderWidth = 1
+        counterChip.layer.borderColor = Palette.borderHairline.resolvedColor(with: traitCollection).cgColor
+        counterChip.addSubview(counter)
         view.addSubview(close)
         view.addSubview(zoom)
-        view.addSubview(counter)
+        view.addSubview(counterChip)
         let bar = describeBar()
         view.addSubview(bar)
         let safe = view.safeAreaLayoutGuide
@@ -354,8 +364,12 @@ final class Lightbox: UIViewController, UIScrollViewDelegate {
             close.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -(Space.space2 + 6)),
             zoom.topAnchor.constraint(equalTo: close.topAnchor),
             zoom.trailingAnchor.constraint(equalTo: close.leadingAnchor, constant: -Space.space2),
-            counter.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: Space.space2 * 2),
-            counter.centerYAnchor.constraint(equalTo: close.centerYAnchor),
+            counterChip.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: Space.space2),
+            counterChip.topAnchor.constraint(equalTo: close.topAnchor),
+            counterChip.heightAnchor.constraint(equalToConstant: Size.cBtnHLg),
+            counter.leadingAnchor.constraint(equalTo: counterChip.leadingAnchor, constant: Space.space3),
+            counter.trailingAnchor.constraint(equalTo: counterChip.trailingAnchor, constant: -Space.space3),
+            counter.centerYAnchor.constraint(equalTo: counterChip.centerYAnchor),
             // `.pswp__description`: `space-3` in from the sides and the foot.
             bar.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: Space.space3),
             bar.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -Space.space3),
@@ -395,8 +409,8 @@ final class Lightbox: UIViewController, UIScrollViewDelegate {
 
     /// The counter and the bar, for the picture on screen.
     private func show(_ pictures: [Picture]) {
-        counter.isHidden = pictures.count < 2
-        counter.attributedText = Styled.string("\(index + 1) / \(pictures.count)", TypeScale.typeMeta, color: Palette.inkMuted, tabular: true)
+        counterChip.isHidden = pictures.count < 2
+        counter.attributedText = Styled.string("\(index + 1) / \(pictures.count)", TypeScale.typeMeta, color: Palette.inkStrong, tabular: true)
         guard pictures.indices.contains(index) else { return }
         let shown = pictures[index]
         lines.arrangedSubviews.forEach { $0.removeFromSuperview() }

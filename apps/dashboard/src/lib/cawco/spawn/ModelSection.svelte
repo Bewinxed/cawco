@@ -253,7 +253,7 @@
               query = "";
             }
           }}
-          placeholder={`Search ${harnessName(listHarness)} models or paste a model id…`}
+          placeholder="Search or paste a model id…"
           spellcheck="false"
           value={query}
           {@attach autowidth(() => query)}

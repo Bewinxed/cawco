@@ -230,9 +230,10 @@
             <Button {...props} class="pressable">New session</Button>
           {/snippet}
         </Popover.Trigger>
-        <Popover.Content align="end" class="w-80 p-0">
+        <!-- The kit popover's own 6px padding (DESIGN.md, `kit-pop`). -->
+        <Popover.Content align="end" class="w-80">
           <form
-            class="flex flex-col gap-3 p-4"
+            class="flex flex-col gap-3"
             onsubmit={(e) => {
               e.preventDefault();
               startSession(false);

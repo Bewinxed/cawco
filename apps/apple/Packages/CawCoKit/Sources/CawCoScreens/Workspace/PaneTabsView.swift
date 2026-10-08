@@ -499,19 +499,6 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
         scroll.layer.mask = fade
     }
 
-    /// The tab controls' touch areas reach past the 32pt tabs.
-    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
-        bounds.insetBy(dx: 0, dy: -6).contains(point)
-    }
-
-    /// A tab's close answers a finger from 44pt about it (the web's `.tclose`
-    /// `touch-hit`), past the 24pt row, the 32pt tab and the scroll content
-    /// that hold it. The chevron keeps its drawn box: its reach would take
-    /// the label's end.
-    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-        TouchReach.redirect(super.hitTest(point, with: event), at: point, in: self, to: views.values.map(\.closeButton))
-    }
-
     // MARK: Context menu
 
     func contextMenuInteraction(_ interaction: UIContextMenuInteraction, configurationForMenuAtLocation _: CGPoint) -> UIContextMenuConfiguration? {
@@ -689,7 +676,7 @@ final class TabView: UIView {
     private static let spill = 6.0
     private let status = SessionStatusView(.idle, compact: true)
     private let label = KitLabel(TypeScale.typeLabel, ink: Palette.inkMuted)
-    private let details = UIButton(type: .custom)
+    private let details = ChevronButton()
     private let close = UIButton(type: .custom)
     private let row = UIStackView()
     private var tab: PaneTab?
@@ -995,9 +982,6 @@ final class TabView: UIView {
         CATransaction.commit()
     }
 
-    /// The close, which the strip lets a finger reach from 44pt about it.
-    var closeButton: UIView { close }
-
     override func layoutSubviews() {
         super.layoutSubviews()
         CATransaction.begin()
@@ -1088,3 +1072,7 @@ private final class PressPassThrough: NSObject, UIGestureRecognizerDelegate {
         true
     }
 }
+
+/// A tab's details chevron keeps its drawn box: its reach would take the end
+/// of the tab's own title, which selects the tab.
+private final class ChevronButton: UIButton, KeepsDrawnBox {}

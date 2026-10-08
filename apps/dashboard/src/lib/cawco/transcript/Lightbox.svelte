@@ -386,14 +386,21 @@
     .cawco-pswp .pswp__button--arrow--next {
       inset-inline-end: var(--space-3);
     }
+    /* The counter is chrome like the buttons: their 44px chip on the raised
+       surface inside a hairline, so the page under the scrim never reads
+       through it. */
     .cawco-pswp .pswp__counter {
-      block-size: auto;
-      margin-inline-start: var(--space-2);
+      block-size: 44px;
+      margin: 0;
+      padding-inline: var(--space-3);
+      border: 1px solid var(--border-hairline);
+      border-radius: var(--radius-sm);
+      background: var(--surface-raised);
       font-size: var(--text-meta);
       font-weight: var(--weight-body);
       font-variant-numeric: tabular-nums;
-      line-height: 44px;
-      color: var(--ink-muted);
+      line-height: 42px;
+      color: var(--ink-strong);
       text-shadow: none;
       opacity: 1;
     }

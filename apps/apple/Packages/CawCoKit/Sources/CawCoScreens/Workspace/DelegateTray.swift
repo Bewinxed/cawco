@@ -1108,12 +1108,6 @@ final class TrayChipView: UIControl {
         surface.frame = bounds
     }
 
-    /// `.touch-hit`: a finger's 44pt down the chip, and to the midpoint of the gap beside it.
-    override func point(inside point: CGPoint, with _: UIEvent?) -> Bool {
-        guard traitCollection.userInterfaceIdiom != .mac else { return bounds.contains(point) }
-        return bounds.insetBy(dx: -Space.space2 / 2, dy: min(0, (bounds.height - 44) / 2)).contains(point)
-    }
-
     func configure(_ next: DelegateTrayView.Chip, watched: Bool, words stateWords: String) {
         let was = chip
         chip = next

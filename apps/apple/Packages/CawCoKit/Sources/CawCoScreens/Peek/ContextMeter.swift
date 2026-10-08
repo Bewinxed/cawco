@@ -71,11 +71,6 @@ final class ContextMeterView: UIControl {
         fatalError("ContextMeterView is built in code")
     }
 
-    /// A finger's 44pt around the 28pt pill (`.touch-hit`).
-    override func point(inside point: CGPoint, with _: UIEvent?) -> Bool {
-        bounds.insetBy(dx: min(0, (bounds.width - 44) / 2), dy: min(0, (bounds.height - 44) / 2)).contains(point)
-    }
-
     override var isHighlighted: Bool {
         didSet { backgroundColor = isHighlighted ? Palette.muted : .clear }
     }

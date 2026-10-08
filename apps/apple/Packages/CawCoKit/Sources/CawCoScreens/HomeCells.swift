@@ -531,12 +531,6 @@ final class RowActionButton: UIControl {
         fatalError("RowActionButton is built in code")
     }
 
-    /// `.touch-hit`: a 44pt target centred on the 28pt box.
-    override func point(inside point: CGPoint, with _: UIEvent?) -> Bool {
-        let reach = traitCollection.userInterfaceIdiom == .mac ? 0 : (44 - Self.side) / 2
-        return bounds.insetBy(dx: -reach, dy: -reach).contains(point)
-    }
-
     override var isHighlighted: Bool {
         didSet { paint() }
     }

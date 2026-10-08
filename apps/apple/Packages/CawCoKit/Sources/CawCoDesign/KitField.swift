@@ -52,11 +52,12 @@ public final class KitField: UITextField {
     }
 }
 
-/// The kit's Select trigger at `sm` (ui/select): the field's surface and
-/// border at 30pt, its value in label type, the unfold mark at the end; its
+/// The kit's Select trigger (ui/select): the input's look, the field's
+/// surface and border at the input's 36pt (`h-9`), or 30pt when `small`
+/// (`size="sm"`), its value in label type, the unfold mark at the end; its
 /// options are a menu.
 public final class KitSelect: UIButton {
-    public init() {
+    public init(small: Bool = false) {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         var config = UIButton.Configuration.plain()
@@ -74,7 +75,7 @@ public final class KitSelect: UIButton {
         showsMenuAsPrimaryAction = true
         changesSelectionAsPrimaryAction = false
         houseStyle()
-        heightAnchor.constraint(equalToConstant: Size.cBtnHSm).isActive = true
+        heightAnchor.constraint(equalToConstant: small ? Size.cBtnHSm : Size.cInputH).isActive = true
     }
 
     @available(*, unavailable)

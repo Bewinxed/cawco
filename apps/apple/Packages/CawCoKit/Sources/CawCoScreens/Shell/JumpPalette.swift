@@ -767,7 +767,10 @@ final class JumpPaletteController: UIViewController, UIViewControllerTransitioni
         return box
     }
 
-    /// One row: the mark in muted ink, the name, and the trailing fact at most 45% wide.
+    /// One row: the mark in muted ink, the name, and the trailing fact. The
+    /// fact's last part (a session's status, a machine's offer, a line's
+    /// role) is said whole; what stands before it (a path, a host) gives way
+    /// from its middle, at most 45% of the row, and the name gives way first.
     private func item(glyph: Glyph, name: NSAttributedString, trail: NSAttributedString) -> UIView {
         let nameLabel = UILabel()
         nameLabel.attributedText = name
@@ -775,19 +778,29 @@ final class JumpPaletteController: UIViewController, UIViewControllerTransitioni
         nameLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         // `.jump-name` is `flex: 1`: it takes the room, so every trail ends on one edge.
         nameLabel.setContentHuggingPriority(.defaultLow - 1, for: .horizontal)
-        let trailLabel = UILabel()
-        trailLabel.attributedText = trail
-        trailLabel.lineBreakMode = .byTruncatingTail
-        trailLabel.setContentCompressionResistancePriority(.defaultLow + 1, for: .horizontal)
-        trailLabel.setContentHuggingPriority(.required, for: .horizontal)
+        let split = (trail.string as NSString).range(of: " · ", options: .backwards)
+        let headText = split.location == NSNotFound ? trail : trail.attributedSubstring(from: NSRange(location: 0, length: split.location))
+        let tailText = split.location == NSNotFound ? nil : trail.attributedSubstring(from: NSRange(location: split.location, length: trail.length - split.location))
+        let headLabel = UILabel()
+        headLabel.attributedText = headText
+        headLabel.lineBreakMode = .byTruncatingMiddle
+        headLabel.setContentCompressionResistancePriority(.defaultLow + 1, for: .horizontal)
+        headLabel.setContentHuggingPriority(.required, for: .horizontal)
+        let tailLabel = UILabel()
+        tailLabel.attributedText = tailText
+        tailLabel.isHidden = tailText == nil
+        tailLabel.setContentCompressionResistancePriority(.required - 1, for: .horizontal)
+        tailLabel.setContentHuggingPriority(.required, for: .horizontal)
+        let trailRow = UIStackView(arrangedSubviews: [headLabel, tailLabel])
+        trailRow.alignment = .firstBaseline
         // The command item's check slot (`cn-command-item-indicator`): 16pt at
         // the row's end, drawn only on a checked item, its room always kept.
         let tick = UIView()
         tick.widthAnchor.constraint(equalToConstant: 16).isActive = true
-        let row = UIStackView(arrangedSubviews: [GlyphView(glyph, size: 16, tint: Palette.inkMuted), nameLabel, trailLabel, tick])
+        let row = UIStackView(arrangedSubviews: [GlyphView(glyph, size: 16, tint: Palette.inkMuted), nameLabel, trailRow, tick])
         row.spacing = 8
         row.alignment = .center
-        trailLabel.widthAnchor.constraint(lessThanOrEqualTo: row.widthAnchor, multiplier: 0.45).isActive = true
+        headLabel.widthAnchor.constraint(lessThanOrEqualTo: row.widthAnchor, multiplier: 0.45).isActive = true
         row.accessibilityLabel = "\(name.string), \(trail.string)"
         return row
     }
