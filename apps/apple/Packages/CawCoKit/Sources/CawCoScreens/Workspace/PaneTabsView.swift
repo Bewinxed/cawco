@@ -51,13 +51,42 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
         }
     }
 
+    /// On a phone the strip is the app's only bar (ShellController's floating
+    /// row): the compact bar's 44pt, its ends left to the sidebar toggle (44pt
+    /// on the screen's layout margin, where the board's bar stands it) and to
+    /// Caw's capsule (36pt on the other margin), each with a 7pt gap, so the
+    /// tabs scroll between them and never under; and no chevrons, a tab's
+    /// menu being its long press.
+    var barRow = false {
+        didSet {
+            guard barRow != oldValue else { return }
+            dress()
+            for view in views.values { view.chevron = !barRow }
+            layoutTrack()
+        }
+    }
+
+    /// The screen's layout margin the bar row's ends stand on (16pt, 20 on the largest phones).
+    var barMargin = 16.0 {
+        didSet { if barMargin != oldValue { dress() } }
+    }
+
+    /// The bar row's ends, pt: what floats over each.
+    private var barLead: Double { barMargin + 44 + Space.space2 }
+    private var barTrail: Double { barMargin + NeedsCawButton.side + Space.space2 }
+
     /// `padding-block: 4px 0` over the 32pt tabs, in a group; hosted, the bar sizes it.
     private lazy var ownHeight = heightAnchor.constraint(equalToConstant: Self.item + 4)
+    private var scrollLead: NSLayoutConstraint!
+    private var scrollTrail: NSLayoutConstraint!
 
     private func dress() {
         backgroundColor = hosted ? .clear : Palette.surfaceShelf
         hairline.isHidden = hosted
+        ownHeight.constant = barRow ? 44 : Self.item + 4
         ownHeight.isActive = !hosted
+        scrollLead?.constant = barRow ? barLead : 0
+        scrollTrail?.constant = barRow ? -barTrail : 0
         setNeedsLayout()
     }
 
@@ -90,9 +119,11 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
         caret.layer.cornerRadius = 1
         caret.isHidden = true
         track.addSubview(caret)
+        scrollLead = scroll.leadingAnchor.constraint(equalTo: leadingAnchor)
+        scrollTrail = scroll.trailingAnchor.constraint(equalTo: trailingAnchor)
         NSLayoutConstraint.activate([
-            scroll.leadingAnchor.constraint(equalTo: leadingAnchor),
-            scroll.trailingAnchor.constraint(equalTo: trailingAnchor),
+            scrollLead,
+            scrollTrail,
             scroll.bottomAnchor.constraint(equalTo: bottomAnchor),
             scroll.heightAnchor.constraint(equalToConstant: Self.item),
             hairline.leadingAnchor.constraint(equalTo: leadingAnchor),
@@ -161,6 +192,7 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
 
     private func makeTab(_ id: String) -> TabView {
         let view = TabView(id: id)
+        view.chevron = !barRow
         view.onSelect = { [weak self] in self?.onSelect(id) }
         view.onClose = { [weak self] in self?.onClose(id) }
         view.onDetails = { [weak self, weak view] in
@@ -314,8 +346,9 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        // `padding-inline: space7 space4`, `space4` at the start in a group 620pt or narrower.
-        leadingInset = hosted ? 0 : (bounds.width <= 620 ? Space.space4 : Space.space7)
+        // `padding-inline: space7 space4`, `space4` at the start in a group
+        // 620pt or narrower; the bar row's ends are its scroll view's own.
+        leadingInset = hosted || barRow ? 0 : (bounds.width <= 620 ? Space.space4 : Space.space7)
         layoutTrack()
         edges()
     }
@@ -332,7 +365,7 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
         let content = x - Self.gap + Self.flare
         track.frame = CGRect(x: 0, y: 0, width: max(content, 1), height: Self.item)
         scroll.contentSize = track.frame.size
-        scroll.contentInset = UIEdgeInsets(top: 0, left: leadingInset, bottom: 0, right: hosted ? 0 : Space.space4)
+        scroll.contentInset = UIEdgeInsets(top: 0, left: leadingInset, bottom: 0, right: hosted || barRow ? 0 : Space.space4)
     }
 
     func scrollViewDidScroll(_: UIScrollView) { edges() }
@@ -413,6 +446,10 @@ final class TabView: UIView {
     /// A pointer came to rest on the tab, or left it.
     var onHover: (Bool) -> Void = { _ in }
     var dragItem: () -> UIDragItem? = { nil }
+    /// The details chevron's slot: none in a phone's bar row, whose tab menu is its long press.
+    var chevron = true {
+        didSet { details.isHidden = (tab?.isRun ?? false) || !chevron }
+    }
 
     private let tint = CAShapeLayer()
     private let sheet = CAShapeLayer()
@@ -515,7 +552,7 @@ final class TabView: UIView {
         guard changed else { return }
         label.text = tab.label
         status.configure(tab.face)
-        details.isHidden = tab.isRun
+        details.isHidden = tab.isRun || !chevron
         close.accessibilityLabel = "Close \(tab.label)"
         details.accessibilityLabel = "Session details for \(tab.label)"
         let hit = row.arrangedSubviews.first

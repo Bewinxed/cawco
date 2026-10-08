@@ -232,28 +232,24 @@ protocol MachinesHost: AnyObject {
     var hub: HubConnection { get }
     func startSession(machineId: String?, cwd: String?, projectId: String?)
     func addMachine()
+    /// Native only: point this window at another hub.
+    func changeHub()
     /// What the machine dialogs present over.
     var dialogPresenter: UIViewController { get }
 }
 
-/// The machines popover (MachinesButton.svelte): each machine, its menu on a
-/// long-press or a right-click, then Add machine under a seam. 320pt wide at
-/// most, hung from the button's end; it opens from 0.97 with no rise over
-/// `durMenu` on the out curve (`.machines-pop`).
+/// The machines popover (MachinesButton.svelte): the machines' list
+/// (`MachinesListView`). 320pt wide at most, hung from the button's end; it
+/// opens from 0.97 with no rise over `durMenu` on the out curve (`.machines-pop`).
 final class MachinesPopoverController: KitPopoverController {
     private weak var host: MachinesHost?
-    private let hub: HubConnection
-    private let list = UIStackView()
-    private let stack = UIStackView()
-    private var rows: [String: MachinesListRow] = [:]
-    private var menus: [String: MachineMenu] = [:]
+    private var listView: MachinesListView?
 
     static let entrance = KitPopover.Entrance(scale: 0.97, rise: 0, duration: Motion.durMenu, curve: Motion.easeOut)
     private static let inset = 7.0
 
     init(host: MachinesHost) {
         self.host = host
-        hub = host.hub
         super.init()
     }
 
@@ -265,26 +261,82 @@ final class MachinesPopoverController: KitPopoverController {
     override func viewDidLoad() {
         super.viewDidLoad()
         view.accessibilityLabel = "Machines"
-        list.axis = .vertical
-        list.spacing = 2
-        let add = AddMachineRow()
-        add.addAction(UIAction { [weak self] _ in
-            guard let host = self?.host else { return }
-            self?.dismiss(animated: true) { host.addMachine() }
-        }, for: .primaryActionTriggered)
-        stack.axis = .vertical
-        stack.addArrangedSubview(list)
-        stack.addArrangedSubview(add)
-        stack.setCustomSpacing(Space.space1, after: list)
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        card.addSubview(stack)
+        guard let host else { return }
+        let made = MachinesListView(host: host)
+        // A row's dialog opens once the popover has gone.
+        made.leave = { [weak self] then in self?.dismiss(animated: true, completion: then) }
+        made.onChange = { [weak self] in self?.resize() }
+        made.translatesAutoresizingMaskIntoConstraints = false
+        card.addSubview(made)
         // `padding: 6px` inside the popover's 1px border.
         NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: card.topAnchor, constant: Self.inset),
-            stack.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: Self.inset),
-            stack.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -Self.inset),
+            made.topAnchor.constraint(equalTo: card.topAnchor, constant: Self.inset),
+            made.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: Self.inset),
+            made.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -Self.inset),
+        ])
+        listView = made
+        resize()
+    }
+
+    /// `w-[min(20rem,calc(100vw-16px))]`, as tall as the list.
+    private func resize() {
+        guard let listView else { return }
+        let width = min(320, (view.window?.bounds.width ?? UIScreen.main.bounds.width) - 16)
+        listView.layoutIfNeeded()
+        let height = listView.systemLayoutSizeFitting(CGSize(width: width - Self.inset * 2, height: 0), withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height + Self.inset * 2
+        preferredContentSize = CGSize(width: width, height: height)
+    }
+}
+
+/// The machines as a list: each machine (its menu on a long-press or a
+/// right-click), then Add machine under a seam and Change hub. Shown in the
+/// wide bar's Machines popover and in the phone sidebar's Machines section;
+/// `leave` runs before a foot row's dialog, so the place it stands in can go first.
+final class MachinesListView: UIView {
+    private weak var host: MachinesHost?
+    private let hub: HubConnection
+    private let list = UIStackView()
+    private let stack = UIStackView()
+    private var rows: [String: MachinesListRow] = [:]
+    private var menus: [String: MachineMenu] = [:]
+    /// Whatever stands the list on screen steps aside, then `then` runs.
+    var leave: (@escaping () -> Void) -> Void = { then in then() }
+    /// The list's rows changed: a popover sizes itself again.
+    var onChange: () -> Void = {}
+
+    init(host: MachinesHost) {
+        self.host = host
+        hub = host.hub
+        super.init(frame: .zero)
+        list.axis = .vertical
+        list.spacing = 2
+        let add = MachinesFootRow(glyph: .plus, title: "Add machine", seam: true)
+        add.addAction(UIAction { [weak self] _ in
+            guard let self, let host = self.host else { return }
+            leave { host.addMachine() }
+        }, for: .primaryActionTriggered)
+        let changeHub = MachinesFootRow(glyph: .globe, title: "Change hub", seam: false)
+        changeHub.addAction(UIAction { [weak self] _ in
+            guard let self, let host = self.host else { return }
+            leave { host.changeHub() }
+        }, for: .primaryActionTriggered)
+        stack.axis = .vertical
+        for part in [list, add, changeHub] { stack.addArrangedSubview(part) }
+        stack.setCustomSpacing(Space.space1, after: list)
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.topAnchor.constraint(equalTo: topAnchor),
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: trailingAnchor),
+            stack.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
         follow()
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        fatalError("MachinesListView is built in code")
     }
 
     /// Re-reads the fleet whenever what it shows changes.
@@ -318,7 +370,7 @@ final class MachinesPopoverController: KitPopoverController {
             row.accessibilityValue = ["\(live) live", fault].compactMap(\.self).joined(separator: ", ")
             list.insertArrangedSubview(row, at: index)
         }
-        resize()
+        onChange()
     }
 
     private func makeRow(_ machineId: String) -> MachinesListRow {
@@ -331,32 +383,25 @@ final class MachinesPopoverController: KitPopoverController {
         }
         return row
     }
-
-    /// `w-[min(20rem,calc(100vw-16px))]`, as tall as the list.
-    private func resize() {
-        let width = min(320, (view.window?.bounds.width ?? UIScreen.main.bounds.width) - 16)
-        stack.layoutIfNeeded()
-        let height = stack.systemLayoutSizeFitting(CGSize(width: width - Self.inset * 2, height: 0), withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height + Self.inset * 2
-        preferredContentSize = CGSize(width: width, height: height)
-    }
 }
 
-/// "Add machine" (`.row.add`): the row's shape under a seam, its plus and
-/// label in muted label type.
-private final class AddMachineRow: TapControl {
+/// A row at the list's foot (`.row.add`): "Add machine" under a seam, and
+/// "Change hub" under it, each its glyph and label in muted label type.
+private final class MachinesFootRow: TapControl {
     private let seam = UIView()
 
-    override init(frame: CGRect) {
-        super.init(frame: frame)
+    init(glyph: Glyph, title: String, seam showsSeam: Bool) {
+        super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         layer.cornerRadius = Radius.radiusSm
-        layer.maskedCorners = [.layerMinXMaxYCorner, .layerMaxXMaxYCorner]
+        if showsSeam { layer.maskedCorners = [.layerMinXMaxYCorner, .layerMaxXMaxYCorner] }
         seam.backgroundColor = Palette.seam
+        seam.isHidden = !showsSeam
         seam.translatesAutoresizingMaskIntoConstraints = false
         addSubview(seam)
         let label = KitLabel(TypeScale.typeLabel, ink: Palette.inkMuted)
-        label.text = "Add machine"
-        let row = UIStackView(arrangedSubviews: [GlyphView(.plus, size: 16, tint: Palette.inkMuted), label])
+        label.text = title
+        let row = UIStackView(arrangedSubviews: [GlyphView(glyph, size: 16, tint: Palette.inkMuted), label])
         row.spacing = Space.space2
         row.alignment = .center
         row.isUserInteractionEnabled = false
@@ -373,9 +418,14 @@ private final class AddMachineRow: TapControl {
             row.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
         isAccessibilityElement = true
-        accessibilityLabel = "Add machine"
+        accessibilityLabel = title
         accessibilityTraits = .button
         addGestureRecognizer(UIHoverGestureRecognizer(target: self, action: #selector(hovered(_:))))
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        fatalError("MachinesFootRow is built in code")
     }
 
     override var isHighlighted: Bool {

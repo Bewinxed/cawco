@@ -21,10 +21,16 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     let workspace = Workspace()
     private let panes: PaneHost
     private lazy var workspaceController = WorkspaceController(workspace: workspace, panes: panes, context: context)
-    /// The phone's session page wears the same bar as the board: its own copy.
-    private let sessionCrumb = CrumbView("Fleet")
+    /// The phone's session page has no bar: its strip is the one row, and its
+    /// toggle and Caw float over the strip's ends (WorkspaceController `barOverlay`).
     private let sessionCluster = TopBarCluster()
     private let sessionBurger = BurgerButton()
+    /// What needs the operator, pulled down from Caw's head on any bar.
+    private let needsDrawer = NeedsDrawer()
+    /// The asks already seen, by id: one that is not is new, and Caw beats once. Nil until the fleet is read.
+    private var seenNeeds: Set<String>?
+    /// The wide screen's sidebar toggle: the rail's column shown or hidden.
+    private let railToggle = BurgerButton()
 
     // Regular width.
     private let rail: SidebarViewController
@@ -122,20 +128,22 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         for button in [burger, sessionBurger] {
             button.addAction(UIAction { [weak self] _ in self?.showRailSheet() }, for: .primaryActionTriggered)
         }
+        railToggle.label = "Hide sidebar"
+        railToggle.addAction(UIAction { [weak self] _ in self?.toggleRail() }, for: .primaryActionTriggered)
         for cluster in [mainCluster, compactCluster, sessionCluster] {
-            cluster.onAttention = { [weak self] in
-                guard let self, let only = home.needs.first, home.needs.count == 1 else { return }
-                openWaiting(only)
-            }
-            cluster.waitingMenu = { [weak self] in self?.waitingMenu() }
-            cluster.onAssistant = { [weak self] in self?.toggleAssistant() }
             cluster.onJump = { [weak self] source in self?.openJump(.view(source)) }
             cluster.onMachines = { [weak self] source in self?.openMachines(from: source) }
-            cluster.onHub = { [weak self] in self?.changeHub() }
+            cluster.onCaw = { [weak self] head in
+                guard let self else { return }
+                if needsDrawer.open { needsDrawer.close() } else { needsDrawer.show(from: head) }
+            }
+            cluster.onCawPan = { [weak self] pan, head in self?.needsDrawer.drag(pan, from: head) }
         }
-        TopBar.install(on: detail.navigationItem, crumb: mainCrumb, cluster: mainCluster, burger: nil)
-        TopBar.install(on: board.navigationItem, crumb: compactCrumb, cluster: compactCluster, burger: burger)
-        TopBar.install(on: workspaceController.navigationItem, crumb: sessionCrumb, cluster: sessionCluster, burger: sessionBurger)
+        needsDrawer.onChoose = { [weak self] item in self?.openWaiting(item) }
+        needsDrawer.onOpenChange = { [weak self] _ in self?.refreshBars() }
+        TopBar.install(on: detail.navigationItem, crumb: mainCrumb, cluster: mainCluster, burger: railToggle)
+        TopBar.install(on: board.navigationItem, crumb: compactCrumb, cluster: compactCluster, burger: burger, showsCrumb: false)
+        placeSessionRow()
         // One group on a wide screen: its strip is the bar's, in the crumb's place.
         workspaceController.onHost = { [weak self] strip in self?.barTabs.host(strip) }
         // Back on the board (a back swipe), the focused group shows nothing; its tabs stay.
@@ -172,6 +180,33 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         super.viewDidLoad()
         view.backgroundColor = Palette.surfaceRecess
         installGrip()
+        // Over every column and the grip: the drawer comes down over the page.
+        needsDrawer.frame = view.bounds
+        needsDrawer.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        view.addSubview(needsDrawer)
+    }
+
+    /// The phone's session row: its toggle and Caw's capsule on the screen's
+    /// layout margins, where the board's bar stands them, over the strip's ends.
+    private func placeSessionRow() {
+        let row = workspaceController.barOverlay
+        for part in [sessionBurger, sessionCluster] as [UIView] { row.addSubview(part) }
+        NSLayoutConstraint.activate([
+            sessionBurger.leadingAnchor.constraint(equalTo: row.layoutMarginsGuide.leadingAnchor),
+            sessionBurger.centerYAnchor.constraint(equalTo: row.centerYAnchor),
+            // The cluster stands its capsule `space6 − 16` inside its own end.
+            sessionCluster.trailingAnchor.constraint(equalTo: row.layoutMarginsGuide.trailingAnchor, constant: Space.space6 - 16),
+            sessionCluster.centerYAnchor.constraint(equalTo: row.centerYAnchor),
+        ])
+    }
+
+    /// The wide screen's toggle: the rail's column steps aside, or back, as
+    /// the split view moves its columns.
+    private func toggleRail() {
+        let hidden = displayMode == .secondaryOnly
+        preferredDisplayMode = hidden ? .oneBesideSecondary : .secondaryOnly
+        railToggle.label = hidden ? "Hide sidebar" : "Show sidebar"
+        UIView.animate(withDuration: UIAccessibility.isReduceMotionEnabled ? 0 : Motion.durPanel) { self.view.layoutIfNeeded() }
     }
 
     /// The watcher's first read ran before there was a view: the workspace kept
@@ -190,6 +225,10 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         super.viewDidLayoutSubviews()
         barTabs.relayout()
         placeGrip()
+        // The split view lays its columns over what else is in its view on
+        // every pass (the grip brings itself back the same way): the drawer
+        // stays over all of them.
+        view.bringSubviewToFront(needsDrawer)
     }
 
     static func clamp(_ width: Double) -> Double { min(railMax, max(railMin, width.rounded())) }
@@ -218,7 +257,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
                 // Fleet asked for while another place is under the conversations: the board takes its place.
                 compactUnder = nil
                 compactCrumb.set(next.crumb, animated: true)
-                TopBar.install(on: board.navigationItem, crumb: compactCrumb, cluster: compactCluster, burger: burger)
+                TopBar.install(on: board.navigationItem, crumb: compactCrumb, cluster: compactCluster, burger: burger, showsCrumb: false)
                 compactNav.setViewControllers([board], animated: true)
             } else {
                 compactNav.popToRootViewController(animated: true)
@@ -232,8 +271,8 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         destination = next
         mainCrumb.set(next.crumb, animated: true)
         let regularPage = next == .fleet ? detail : page(for: next)
-        // The bar's crumb and cluster move with the place, so they stay one bar.
-        TopBar.install(on: regularPage.navigationItem, crumb: mainCrumb, cluster: mainCluster, burger: nil)
+        // The bar's toggle, crumb and cluster move with the place, so they stay one bar.
+        TopBar.install(on: regularPage.navigationItem, crumb: mainCrumb, cluster: mainCluster, burger: railToggle)
         mainMotion.route = travel
         mainNav.setViewControllers([regularPage], animated: !compact)
         compactMotion.route = travel
@@ -246,7 +285,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             compactUnder = nil
             let compactPage = next == .fleet ? board : page(for: next, compact: true)
             compactCrumb.set(next.crumb, animated: true)
-            TopBar.install(on: compactPage.navigationItem, crumb: compactCrumb, cluster: compactCluster, burger: burger)
+            TopBar.install(on: compactPage.navigationItem, crumb: compactCrumb, cluster: compactCluster, burger: burger, showsCrumb: next != .fleet)
             compactNav.setViewControllers([compactPage], animated: compact)
         }
         hostTabs()
@@ -266,7 +305,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         destination = under
         mainCrumb.set(under.crumb, animated: false)
         let regularPage = under == .fleet ? detail : page(for: under)
-        TopBar.install(on: regularPage.navigationItem, crumb: mainCrumb, cluster: mainCluster, burger: nil)
+        TopBar.install(on: regularPage.navigationItem, crumb: mainCrumb, cluster: mainCluster, burger: railToggle)
         mainNav.setViewControllers([regularPage], animated: false)
         hostTabs()
         rail.requestRefresh()
@@ -335,7 +374,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
 
     // MARK: What waits
 
-    /// The attention control goes to what is waiting, never to a place: its
+    /// A Needs you row goes to what is waiting, never to a place: its
     /// session's tab comes to the front, the composer already holding the
     /// parked ask, the transcript where it was left. A run is answered in its run.
     private func openWaiting(_ item: HomeModel.NeedsItem) {
@@ -343,18 +382,6 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         case let .ask(ask): openSession(ask.instanceId)
         case let .run(run): openSession(run.rowId)
         }
-    }
-
-    /// Several asks: one row each, longest wait first, its session's name over
-    /// what it asks and how long it has waited. A row opens its ask.
-    private func waitingMenu() -> UIMenu {
-        let now = Date.now.timeIntervalSince1970 * 1000
-        let rows = home.needs.map { item in
-            let kind = if case let .ask(ask) = item.kind, !ask.isQuestion { "Permission" } else { "Question" }
-            let waited = item.raisedAt.map { "waiting \(Naming.span(ms: now - $0))" } ?? "waiting"
-            return UIAction(title: item.title, subtitle: "\(kind) · \(waited)") { [weak self] _ in self?.openWaiting(item) }
-        }
-        return UIMenu(title: "Waiting on you", children: rows)
     }
 
     /// A conversation's own way back (its back or close): its tab closes; on a
@@ -384,7 +411,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         }
     }
 
-    private lazy var barTabs = BarTabs(bar: mainNav.navigationBar, crumb: mainCrumb, cluster: mainCluster)
+    private lazy var barTabs = BarTabs(bar: mainNav.navigationBar, crumb: mainCrumb, cluster: mainCluster, toggle: railToggle)
 
     /// The bar carries the tabs only where the conversations are the page in
     /// front on a wide screen (Shell.svelte `hostedLeaf`: on a session page).
@@ -430,7 +457,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
                     // The wide screen is on Fleet with the conversations: the compact stack rests on the board.
                     compactUnder = nil
                     compactCrumb.set(destination.crumb, animated: false)
-                    TopBar.install(on: board.navigationItem, crumb: compactCrumb, cluster: compactCluster, burger: burger)
+                    TopBar.install(on: board.navigationItem, crumb: compactCrumb, cluster: compactCluster, burger: burger, showsCrumb: false)
                     compactNav.setViewControllers([board], animated: false)
                 } else {
                     compactNav.setViewControllers([compactNav.viewControllers.first ?? board], animated: false)
@@ -473,9 +500,11 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     /// AssistantPanel.svelte's `(max-width: 899px)`: a drawer there, a pane wider.
     private var assistantDrawer: Bool { view.bounds.width < 900 }
 
-    /// Where the assistant comes from: the rail's row on a desk, the bar's More on a phone.
+    /// Where the assistant comes from: the rail's row on a desk; on a phone the
+    /// sidebar toggle, since the sheet it opened from has gone.
     private var assistantOrigin: CGPoint? {
-        let source: UIView = assistantDrawer ? (compact ? (compactNav.topViewController === workspaceController ? sessionCluster : compactCluster) : mainCluster).assistantSource : rail.assistantSource
+        let phoneToggle: UIView = compactNav.topViewController === workspaceController ? sessionBurger : burger
+        let source: UIView = assistantDrawer ? (compact ? phoneToggle : railToggle) : rail.assistantSource
         guard source.window != nil else { return nil }
         return source.convert(CGPoint(x: source.bounds.midX, y: source.bounds.midY), to: view)
     }
@@ -593,8 +622,18 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         (railSheet ?? self).present(HouseSheetController(limits, title: "Usage limits", scroller: limits.scroll), animated: true)
     }
 
-    /// Native only: point this window at another hub (ConnectViewController's change mode).
-    private func changeHub() {
+    /// Native only: point this window at another hub (ConnectViewController's
+    /// change mode), from the Machines popover and the phone sidebar's Machines.
+    func changeHub() {
+        // The phone's sheet steps aside first: the hub's sheet opens over the page.
+        if let sheet = railSheet {
+            sheet.dismiss(animated: true) { [weak self] in self?.presentHub() }
+        } else {
+            presentHub()
+        }
+    }
+
+    private func presentHub() {
         let connect = ConnectViewController(hub: hub, mode: .change) { [weak self] in
             self?.dismiss(animated: true)
         }
@@ -605,7 +644,16 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         })
         NavigationItems.configure(connect.navigationItem, leading: [close])
         sheet.sheetPresentationController?.detents = [.medium(), .large()]
-        present(sheet, animated: true)
+        dialogPresenter.present(sheet, animated: true)
+    }
+
+    /// The phone sheet's Search: the sheet steps aside, and Jump opens over the page.
+    func search() {
+        if let sheet = railSheet {
+            sheet.dismiss(animated: true) { [weak self] in self?.openJump(.key) }
+        } else {
+            openJump(.key)
+        }
     }
 
     /// Jump to (JumpPalette): ⌘K toggles it; the Jump button grows it out of itself.
@@ -680,12 +728,23 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     private func refreshBars() {
         defer { barTabs.relayout() }
         let fleet = hub.fleet
-        // The count is the asks the control's menu lists, as the web's is.
-        let blocked = home.needs.count
+        // The count is the rows the drawer lists, as the web's is.
+        let needs = home.needs
         let online = fleet.machines.filter { $0.status == "online" }.count
         let tone = MachineHealth.tone(fleet.machines, hubBuild: fleet.hubBuild)
         for cluster in [mainCluster, compactCluster, sessionCluster] {
-            cluster.configure(blocked: blocked, online: online, tone: tone, assistantOpen: assistantOpen)
+            cluster.configure(needs: needs.count, online: online, tone: tone, drawerOpen: needsDrawer.open)
+        }
+        needsDrawer.configure(needs, now: Date.now.timeIntervalSince1970 * 1000)
+        // Something new needs the operator: Caw beats once, on the bar in front.
+        let ids = Set(needs.map(\.id))
+        if home.ready {
+            if let seen = seenNeeds, !ids.subtracting(seen).isEmpty {
+                for cluster in [mainCluster, compactCluster, sessionCluster] where cluster.caw.window != nil {
+                    cluster.beat()
+                }
+            }
+            seenNeeds = ids
         }
     }
 

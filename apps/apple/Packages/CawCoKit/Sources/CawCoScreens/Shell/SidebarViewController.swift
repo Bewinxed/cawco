@@ -18,6 +18,8 @@ protocol SidebarHost: AnyObject {
     func newProject(from source: UIView)
     func forgetProject(_ project: ProjectRow)
     func showLimits()
+    /// The phone sheet's Search: Jump, once the sheet has stepped aside.
+    func search()
 }
 
 /// The management rail (Sidebar.svelte): the wordmark with the assistant
@@ -209,10 +211,14 @@ final class SidebarViewController: ObservedViewController {
             // The content is as wide as the rail: it scrolls one way only.
             scroll.contentLayoutGuide.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor),
         ])
+        // A phone's bar holds only the toggle, the tabs and Caw: Search leads
+        // its sheet, and the machines have a section of their own in it.
+        if inSheet { column.addArrangedSubview(group(buildSearch())) }
         column.addArrangedSubview(group(buildPlaces()))
         homeSlot.translatesAutoresizingMaskIntoConstraints = false
         column.addArrangedSubview(homeSlot)
         column.addArrangedSubview(buildProjects())
+        if inSheet, let machines = host as? MachinesHost { column.addArrangedSubview(buildMachines(machines)) }
         mountHome(nil)
         // The session card, beside the rail a pointer rests in; the sheet is a finger's.
         if !inSheet {
@@ -416,6 +422,59 @@ final class SidebarViewController: ObservedViewController {
             seam.bottomAnchor.constraint(equalTo: homeSlot.bottomAnchor),
         ])
         homeController.didMove(toParent: self)
+    }
+
+    // MARK: The phone's Search and Machines
+
+    /// Jump's field at the sheet's head: a press opens the palette.
+    private func buildSearch() -> UIView {
+        let field = TapControl()
+        field.translatesAutoresizingMaskIntoConstraints = false
+        field.backgroundColor = Palette.surfaceRaised
+        field.layer.cornerRadius = Radius.radiusSm
+        field.layer.cornerCurve = .continuous
+        field.layer.borderWidth = 1
+        field.layer.borderColor = Palette.borderControl.resolvedColor(with: traitCollection).cgColor
+        let words = KitLabel(TypeScale.typeBody, ink: Palette.inkMuted)
+        words.text = "Search sessions, projects, machines"
+        let row = UIStackView(arrangedSubviews: [GlyphView(.search, tint: Palette.inkMuted), words])
+        row.spacing = Space.space2
+        row.alignment = .center
+        row.isUserInteractionEnabled = false
+        row.translatesAutoresizingMaskIntoConstraints = false
+        field.addSubview(row)
+        NSLayoutConstraint.activate([
+            field.heightAnchor.constraint(equalToConstant: 44),
+            row.leadingAnchor.constraint(equalTo: field.leadingAnchor, constant: Space.space3),
+            row.trailingAnchor.constraint(lessThanOrEqualTo: field.trailingAnchor, constant: -Space.space3),
+            row.centerYAnchor.constraint(equalTo: field.centerYAnchor),
+        ])
+        field.isAccessibilityElement = true
+        field.accessibilityLabel = "Search"
+        field.accessibilityHint = "Jump to a session, project or machine"
+        field.accessibilityTraits = [.button, .searchField]
+        field.addAction(UIAction { [weak self] _ in self?.host?.search() }, for: .primaryActionTriggered)
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (rail: SidebarViewController, _: UITraitCollection) in
+            field.layer.borderColor = Palette.borderControl.resolvedColor(with: rail.traitCollection).cgColor
+        }
+        return field
+    }
+
+    /// The machines, where a phone keeps them: each with its status and its
+    /// menu (a long press), then Add machine and Change hub.
+    private func buildMachines(_ machinesHost: MachinesHost) -> UIView {
+        let label = KitLabel(TypeScale.typeLabel.withWeight(.regular), ink: Palette.sidebarForeground.withAlphaComponent(0.7))
+        label.text = "Machines"
+        let head = UIStackView(arrangedSubviews: [label, UIView()])
+        head.alignment = .center
+        head.isLayoutMarginsRelativeArrangement = true
+        head.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: 10, bottom: 0, trailing: 0)
+        head.heightAnchor.constraint(equalToConstant: 44).isActive = true
+        let list = MachinesListView(host: machinesHost)
+        let section = UIStackView(arrangedSubviews: [head, list])
+        section.axis = .vertical
+        section.accessibilityLabel = "Machines"
+        return group(section)
     }
 
     // MARK: Projects

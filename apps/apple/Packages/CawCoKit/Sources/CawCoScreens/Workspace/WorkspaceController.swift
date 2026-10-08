@@ -36,11 +36,49 @@ final class WorkspaceController: ObservedViewController, BackSwipeGate {
         fatalError("WorkspaceController is built in code")
     }
 
+    // MARK: The phone's one row
+
+    /// On a phone the conversations have no bar of their own: the focused
+    /// group's strip is the app's one row (`PaneTabsView.barRow`), and this
+    /// layer floats the bar's two ends over it, the sidebar toggle and Caw's
+    /// head (ShellController puts them here). Only they take touches.
+    let barOverlay = PassThroughView()
+
+    /// A phone's width: one row, no bar.
+    var phoneRow: Bool { traitCollection.horizontalSizeClass == .compact }
+
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        if phoneRow { navigationController?.setNavigationBarHidden(true, animated: animated) }
+    }
+
+    /// The row's ends stand on the screen's own margins, as the board's bar does.
+    override func viewLayoutMarginsDidChange() {
+        super.viewLayoutMarginsDidChange()
+        let margins = view.directionalLayoutMargins
+        barOverlay.insetsLayoutMarginsFromSafeArea = false
+        barOverlay.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: margins.leading, bottom: 0, trailing: margins.trailing)
+        for group in groups.values { group.strip.barMargin = margins.leading }
+    }
+
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        if phoneRow { navigationController?.setNavigationBarHidden(false, animated: animated) }
+    }
+
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = Palette.surfaceRecess
         surface.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(surface)
+        barOverlay.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(barOverlay)
+        NSLayoutConstraint.activate([
+            barOverlay.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+            barOverlay.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor),
+            barOverlay.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor),
+            barOverlay.heightAnchor.constraint(equalToConstant: 44),
+        ])
         // The groups start where the sidebar ends: the detail column runs
         // under the sidebar, and a group laid out from the view's own edge
         // puts its first tabs behind it.
@@ -128,8 +166,12 @@ final class WorkspaceController: ObservedViewController, BackSwipeGate {
         for leaf in leaves {
             guard let group = groups[leaf.id] else { continue }
             group.swipeable = coarse && leaf.id == focused
+            group.strip.barRow = phoneRow
+            group.strip.barMargin = view.directionalLayoutMargins.leading
             group.refresh(animated: animated)
         }
+        barOverlay.isHidden = !phoneRow
+        view.bringSubviewToFront(barOverlay)
         deck?.focus(leaves.firstIndex { $0.id == focused } ?? 0, animated: animated)
         panes.keep(Set(workspace.openIds))
     }
@@ -214,6 +256,14 @@ final class WorkspaceController: ObservedViewController, BackSwipeGate {
         // The whole pane gesture belongs to its tab strip, including its
         // first/last edge. Back remains the navigation bar's explicit action.
         !coarse || workspace.focused.active == nil
+    }
+}
+
+/// A layer that takes no touch of its own: only what stands on it does.
+final class PassThroughView: UIView {
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        let hit = super.hitTest(point, with: event)
+        return hit === self ? nil : hit
     }
 }
 

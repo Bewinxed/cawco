@@ -60,7 +60,8 @@ let package = Package(
         .target(
             name: "CawCoMascot",
             dependencies: ["CawCoDesign", .product(name: "RiveRuntime", package: "rive-ios")],
-            resources: [.copy("Resources/caw")],
+            // `beat`: the bar's needs-you beat, drawn ahead by the dashboard's `bun run tab-icon`.
+            resources: [.copy("Resources/caw"), .copy("Resources/beat")],
             swiftSettings: concurrency
         ),
         // The screens, each one view that adapts by size class: Connect, the

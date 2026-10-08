@@ -3,11 +3,13 @@ import CawCoDesign
 import UIKit
 
 /// The slim bar across the top of every page (Shell.svelte `header.top`):
-/// on a phone the burger that opens the rail, then the crumb naming the
-/// place, cut at its tail at least 16pt short of the controls; at the far end
-/// one cluster of 28pt outline controls (TopBarCluster). It is
-/// the system bar, dressed as the web's: the raised surface with the seam
-/// under it and no glass, so the Duo still lays it out along its side.
+/// the sidebar toggle, then the crumb naming the place (or, on a wide screen
+/// of one group, its tabs), cut at its tail at least 16pt short of the
+/// controls; at the far end the cluster (TopBarCluster): Caw's head on a
+/// phone, the glass group of Search, Machines and Caw on a wide screen. It
+/// is the system bar, dressed as the web's: the raised surface with the seam
+/// under it, so the Duo still lays it out along its side. On a phone the
+/// conversations have no bar: their strip is the one row (WorkspaceController).
 @MainActor
 enum TopBar {
     /// The bar's own look: `--surface-raised` with a 1pt `--seam` under it.
@@ -32,15 +34,17 @@ enum TopBar {
         bar.tintColor = Palette.inkStrong
     }
 
-    /// Puts the burger (compact only), the crumb and the cluster on `item`.
-    static func install(on item: UINavigationItem, crumb: CrumbView, cluster: TopBarCluster, burger: UIView?) {
-        // The web's burger stands 18pt in (`space7` less its own −`space2`) and
-        // a desk's crumb at `space7`; the bar's own inset differs by device, so
-        // the lead measures it.
+    /// Puts the sidebar toggle, the crumb and the cluster on `item`. A phone's
+    /// board shows no crumb (`showsCrumb` off): the tabs and the page say
+    /// where you are, and "Fleet" told the reader nothing.
+    static func install(on item: UINavigationItem, crumb: CrumbView, cluster: TopBarCluster, burger: UIView?, showsCrumb: Bool = true) {
+        // The phone's toggle stands 4pt in, as the web's one row; a desk's
+        // crumb at `space7`; the bar's own inset differs by device, so the
+        // lead measures it.
         let inset = UIView()
-        let lead = BarLead(inset: inset, target: burger == nil ? Space.space7 : 18, crumb: crumb, cluster: cluster)
+        let lead = BarLead(inset: inset, target: burger == nil ? Space.space7 : Space.space1, crumb: crumb, cluster: cluster)
         cluster.onResize = { [weak lead] in lead?.setNeedsLayout() }
-        for part in [inset, burger, crumb].compactMap(\.self) { lead.addArrangedSubview(part) }
+        for part in [inset, burger, showsCrumb ? crumb : nil].compactMap(\.self) { lead.addArrangedSubview(part) }
         lead.axis = .horizontal
         lead.alignment = .center
         lead.spacing = Space.space2
@@ -131,10 +135,13 @@ final class BarTabs {
     private let hairline = UIView()
     private weak var strip: PaneTabsView?
 
-    init(bar: UINavigationBar, crumb: CrumbView, cluster: TopBarCluster) {
+    private weak var toggle: UIView?
+
+    init(bar: UINavigationBar, crumb: CrumbView, cluster: TopBarCluster, toggle: UIView) {
         self.bar = bar
         self.crumb = crumb
         self.cluster = cluster
+        self.toggle = toggle
         hairline.backgroundColor = Palette.borderHairline
         hairline.isUserInteractionEnabled = false
         hairline.translatesAutoresizingMaskIntoConstraints = false
@@ -148,18 +155,22 @@ final class BarTabs {
         slot.setNeedsLayout()
     }
 
-    /// The strip's room in the bar: from the bar's leading edge to a `space2`
-    /// short of the cluster, on the bar's floor. Laid out by frame, because
-    /// the bar re-homes the cluster's item on every page change and a
-    /// constraint to it would not survive that. Only the strip takes touches.
+    /// The strip's room in the bar: from a `space2` past the sidebar toggle
+    /// to a `space2` short of the cluster, on the bar's floor. Laid out by
+    /// frame, because the bar re-homes its items on every page change and a
+    /// constraint to them would not survive that. Only the strip takes touches.
     private final class Slot: UIView {
         weak var strip: PaneTabsView?
         weak var cluster: UIView?
+        weak var toggle: UIView?
 
         override func layoutSubviews() {
             super.layoutSubviews()
             guard let strip else { return }
-            let lead = safeAreaInsets.left
+            var lead = safeAreaInsets.left
+            if let toggle, toggle.window != nil, toggle.window === window {
+                lead = toggle.convert(toggle.bounds, to: self).maxX + Space.space2
+            }
             var end = bounds.width - Space.space6
             if let cluster, cluster.window != nil, cluster.window === window {
                 end = cluster.convert(cluster.bounds, to: self).minX - Space.space2
@@ -212,6 +223,7 @@ final class BarTabs {
         next.translatesAutoresizingMaskIntoConstraints = true
         slot.strip = next
         slot.cluster = cluster
+        slot.toggle = toggle
         if slot.superview !== bar {
             slot.frame = bar.bounds
             slot.autoresizingMask = [.flexibleWidth, .flexibleHeight]
@@ -303,52 +315,44 @@ final class CrumbView: UIView {
 
 // MARK: Controls
 
-/// One control of the bar's family (Shell.svelte `.right > .jump`, `.icobtn`,
-/// AssistantOrb): 28pt tall, `--radius-sm`, a hairline, the raised surface,
-/// label type at the strong weight, 16pt glyphs. It dips to `pressScale`
-/// under the finger and takes the hover surface under a pointer.
-final class ChromeButton: TapControl {
-    let row = UIStackView()
-    var expanded = false { didSet { paint() } }
+/// One control on the wide bar's glass group (Apple HIG, Toolbars: "Prefer
+/// system-provided symbols without borders… the section provides a visible
+/// container"): a 16pt glyph and, for Machines, its count, with no border or
+/// tile of its own; the capsule is the container. It takes the fill under a
+/// finger and the hover surface under a pointer, and dips to `pressScale`.
+final class GlassItem: TapControl {
+    let glyph: GlyphView
+    let count = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong)
     private var hovering = false
 
-    init(square: Bool) {
+    init(_ symbol: Glyph, counted: Bool) {
+        glyph = GlyphView(symbol, tint: Palette.inkMuted)
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
-        layer.cornerRadius = Radius.radiusSm
         layer.cornerCurve = .continuous
-        layer.borderWidth = 1
-        row.axis = .horizontal
+        let row = UIStackView(arrangedSubviews: counted ? [glyph, count] : [glyph])
+        row.spacing = Space.space1
         row.alignment = .center
-        row.spacing = Space.space2
         row.isUserInteractionEnabled = false
         row.translatesAutoresizingMaskIntoConstraints = false
+        count.tabular = true
         addSubview(row)
-        // `padding: 0 11px` inside the control's 1px border.
-        let inset = square ? 0 : Space.space3 + 1
         NSLayoutConstraint.activate([
-            heightAnchor.constraint(equalToConstant: 28),
-            widthAnchor.constraint(greaterThanOrEqualToConstant: 28),
-            row.centerYAnchor.constraint(equalTo: centerYAnchor),
-            row.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: inset),
-            row.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -inset),
+            heightAnchor.constraint(equalToConstant: NeedsCawButton.side),
+            widthAnchor.constraint(greaterThanOrEqualToConstant: NeedsCawButton.side),
             row.centerXAnchor.constraint(equalTo: centerXAnchor),
+            row.centerYAnchor.constraint(equalTo: centerYAnchor),
+            row.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: Space.space2),
         ])
-        if !square {
-            let lead = row.leadingAnchor.constraint(equalTo: leadingAnchor, constant: inset)
-            lead.priority = .defaultHigh
-            lead.isActive = true
-        }
         addInteraction(UIPointerInteraction(delegate: self))
-        let hover = UIHoverGestureRecognizer(target: self, action: #selector(hovered(_:)))
-        addGestureRecognizer(hover)
-        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (button: ChromeButton, _: UITraitCollection) in button.paint() }
-        paint()
+        addGestureRecognizer(UIHoverGestureRecognizer(target: self, action: #selector(hovered(_:))))
+        isAccessibilityElement = true
+        accessibilityTraits = .button
     }
 
     @available(*, unavailable)
     required init?(coder _: NSCoder) {
-        fatalError("ChromeButton is built in code")
+        fatalError("GlassItem is built in code")
     }
 
     override var isHighlighted: Bool {
@@ -357,6 +361,7 @@ final class ChromeButton: TapControl {
             let scale = isHighlighted && !UIAccessibility.isReduceMotionEnabled ? Motion.pressScale : 1
             Motion.easeOut.animator(Motion.durControl) {
                 self.transform = CGAffineTransform(scaleX: scale, y: scale)
+                self.paint()
             }.startAnimation()
         }
     }
@@ -367,89 +372,54 @@ final class ChromeButton: TapControl {
     }
 
     private func paint() {
-        backgroundColor = expanded || hovering ? Palette.surfaceHover : Palette.surfaceRaised
-        layer.borderColor = Palette.borderHairline.resolvedColor(with: traitCollection).cgColor
+        backgroundColor = isHighlighted ? Palette.surfaceFill : (hovering ? Palette.surfaceHover : .clear)
     }
 
-    /// A control whose press opens a menu anchored on it, made when it opens
-    /// so its rows are the state of that moment; nil, the press is its action.
-    var menuProvider: (() -> UIMenu?)? {
-        didSet {
-            isContextMenuInteractionEnabled = menuProvider != nil
-            showsMenuAsPrimaryAction = menuProvider != nil
-        }
-    }
-
-    override func contextMenuInteraction(_: UIContextMenuInteraction, configurationForMenuAtLocation _: CGPoint) -> UIContextMenuConfiguration? {
-        guard let menuProvider else { return nil }
-        return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { _ in menuProvider() }
-    }
-
-    override func contextMenuInteraction(_: UIContextMenuInteraction, previewForHighlightingMenuWithConfiguration _: UIContextMenuConfiguration) -> UITargetedPreview? {
-        let parameters = UIPreviewParameters()
-        parameters.visiblePath = UIBezierPath(roundedRect: bounds, cornerRadius: Radius.radiusSm)
-        parameters.backgroundColor = Palette.surfaceRaised
-        return UITargetedPreview(view: self, parameters: parameters)
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        layer.cornerRadius = bounds.height / 2
     }
 }
 
-extension ChromeButton: UIPointerInteractionDelegate {
+extension GlassItem: UIPointerInteractionDelegate {
     func pointerInteraction(_: UIPointerInteraction, styleFor _: UIPointerRegion) -> UIPointerStyle? {
-        UIPointerStyle(shape: .roundedRect(bounds, radius: Radius.radiusSm))
+        UIPointerStyle(shape: .roundedRect(bounds, radius: bounds.height / 2))
     }
 }
 
-/// The trailing cluster (Shell.svelte `.right`), `space2` apart at a desk and
-/// 16pt apart under a finger so each 28pt control's touch area reaches 44.
-/// A wide bar holds the attention control, Machines, Jump and the hub. A
-/// phone's holds three at most: the attention control while something
-/// waits, Jump, and More, whose menu holds Machines, the assistant and the
-/// hub as rows that do what those buttons do.
+/// The trailing cluster (Shell.svelte `.right`). A phone's holds only Caw's
+/// head on his own glass capsule: Search and the machines are in its
+/// sidebar. A wide bar's is one glass group (Apple HIG, Toolbars: a toolbar
+/// and the tabs share the row on iPad; "aim for a maximum of three" groups):
+/// Search (Jump), Machines with its count, and Caw's head, borderless on
+/// the group's glass. The hub is changed from the Machines popover.
 final class TopBarCluster: UIView {
-    /// A press on the attention control with one ask waiting (more open its menu).
-    var onAttention: () -> Void = {}
-    /// The attention control's menu: one row per ask, longest wait first.
-    var waitingMenu: () -> UIMenu? = { nil }
     var onMachines: (UIView) -> Void = { _ in }
     var onJump: (UIView) -> Void = { _ in }
-    var onAssistant: () -> Void = {}
-    var onHub: () -> Void = {}
+    /// Caw's head pressed, and dragged.
+    var onCaw: (NeedsCawButton) -> Void = { _ in }
+    var onCawPan: (UIPanGestureRecognizer, NeedsCawButton) -> Void = { _, _ in }
     /// The cluster's width changed: the crumb beside it is measured again.
     var onResize: () -> Void = {}
 
-    let machines = ChromeButton(square: false)
-    /// Native only: the hub this app talks to (the web is served by it).
-    let hub = ChromeButton(square: true)
-    let jump = ChromeButton(square: false)
-    /// The phone's More (Shell.svelte `.more`): the third control, and the last.
-    let more = ChromeButton(square: true)
-    private let attention = ChromeButton(square: true)
-    private let badge = UILabel()
-    private let badgeBox = UIView()
-    private let machinesGlyph = GlyphView(.server, tint: Palette.inkMuted)
-    private let moreGlyph = GlyphView(.more, tint: Palette.inkMuted)
-    private let machinesCount = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong)
-    private let jumpWord = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong)
-    private let jumpKeys = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
+    private let phoneCaw = NeedsCawButton(ownGlass: true)
+    private let groupCaw = NeedsCawButton(ownGlass: false)
+    private let group = GlassCapsule()
+    private let groupRow = UIStackView()
+    private let jump = GlassItem(.search, counted: false)
+    private let machines = GlassItem(.server, counted: true)
     private let stack = UIStackView()
-    private var shownCount = 0
-    private var online = 0
-    private var machinesInk = Palette.inkMuted
-    private var assistantOpen = false
 
-    /// A phone's bar (attention, Jump, More); a desk's is the wide one, its rail carrying the assistant.
+    /// A phone's bar (Caw alone); a desk's is the glass group.
     var compact = true {
         didSet { arrange() }
     }
 
-    /// What the phone's assistant drawer grows from: More, whose menu opens it.
-    var assistantSource: UIView { more }
+    /// Caw's head as this bar shows it.
+    var caw: NeedsCawButton { compact ? phoneCaw : groupCaw }
 
-    /// Where the first drawn control starts, in the cluster's own space: the
-    /// attention control stands left of it on a narrow desk bar.
-    var leadingEdge: Double {
-        attention.superview === self && !attention.isHidden ? attention.frame.minX : 0
-    }
+    /// Where the first drawn control starts, in the cluster's own space.
+    let leadingEdge = 0.0
 
     init() {
         super.init(frame: .zero)
@@ -467,70 +437,43 @@ final class TopBarCluster: UIView {
             stack.bottomAnchor.constraint(equalTo: bottomAnchor),
             heightAnchor.constraint(equalToConstant: 44),
         ])
-
-        machinesCount.tabular = true
-        machines.row.addArrangedSubview(machinesGlyph)
-        machines.row.addArrangedSubview(machinesCount)
         machines.accessibilityLabel = "Machines"
-        machines.isAccessibilityElement = true
         machines.addAction(UIAction { [weak self] _ in
             guard let self else { return }
             onMachines(machines)
         }, for: .primaryActionTriggered)
-
-        jump.row.addArrangedSubview(GlyphView(.search, tint: Palette.inkMuted))
-        jumpWord.text = "Jump"
-        jumpKeys.text = "⌘K"
-        jump.row.addArrangedSubview(jumpWord)
-        jump.row.addArrangedSubview(jumpKeys)
-        jump.isAccessibilityElement = true
-        jump.accessibilityLabel = "Jump to session"
+        jump.accessibilityLabel = "Search"
         jump.addAction(UIAction { [weak self] _ in
             guard let self else { return }
             onJump(jump)
         }, for: .primaryActionTriggered)
-
-        more.row.addArrangedSubview(moreGlyph)
-        more.isAccessibilityElement = true
-        more.accessibilityLabel = "More"
-        more.menuProvider = { [weak self] in self?.moreMenu() }
-
-        hub.row.addArrangedSubview(GlyphView(.globe, tint: Palette.inkMuted))
-        hub.isAccessibilityElement = true
-        hub.accessibilityLabel = "Change hub"
-        hub.addAction(UIAction { [weak self] _ in self?.onHub() }, for: .primaryActionTriggered)
-        hub.widthAnchor.constraint(equalToConstant: 28).isActive = true
         KitTip.attach(to: machines, label: "Machines")
         KitTip.attach(to: jump, label: "Jump to session", keys: "⌘K")
-        KitTip.attach(to: hub, label: "Change hub")
-
-        attention.row.addArrangedSubview(GlyphView(.shield, tint: Palette.inkStrong))
-        attention.isAccessibilityElement = true
-        attention.addAction(UIAction { [weak self] _ in self?.onAttention() }, for: .primaryActionTriggered)
-        // The count rides the control's corner: 16pt, the attention pill.
-        badgeBox.backgroundColor = Palette.statusAttnBg
-        badgeBox.layer.cornerRadius = 8
-        badgeBox.isUserInteractionEnabled = false
-        badgeBox.translatesAutoresizingMaskIntoConstraints = false
-        badge.font = TypeScale.typeMeta.font
-        badge.textColor = Palette.statusAttnInk
-        badge.translatesAutoresizingMaskIntoConstraints = false
-        badgeBox.addSubview(badge)
-        attention.addSubview(badgeBox)
+        for head in [phoneCaw, groupCaw] {
+            head.onTap = { [weak self, weak head] in
+                guard let self, let head else { return }
+                onCaw(head)
+            }
+            head.onPan = { [weak self, weak head] pan in
+                guard let self, let head else { return }
+                onCawPan(pan, head)
+            }
+        }
+        groupRow.axis = .horizontal
+        groupRow.alignment = .center
+        groupRow.spacing = 0
+        groupRow.isLayoutMarginsRelativeArrangement = true
+        groupRow.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: 2, bottom: 0, trailing: 2)
+        groupRow.translatesAutoresizingMaskIntoConstraints = false
+        for item in [jump, machines, groupCaw] as [UIView] { groupRow.addArrangedSubview(item) }
+        group.content.addSubview(groupRow)
         NSLayoutConstraint.activate([
-            badgeBox.heightAnchor.constraint(equalToConstant: 16),
-            badgeBox.widthAnchor.constraint(greaterThanOrEqualToConstant: 16),
-            badgeBox.topAnchor.constraint(equalTo: attention.topAnchor, constant: -5),
-            badgeBox.trailingAnchor.constraint(equalTo: attention.trailingAnchor, constant: 5),
-            badge.leadingAnchor.constraint(equalTo: badgeBox.leadingAnchor, constant: 4),
-            badge.trailingAnchor.constraint(equalTo: badgeBox.trailingAnchor, constant: -4),
-            badge.centerYAnchor.constraint(equalTo: badgeBox.centerYAnchor),
-            attention.widthAnchor.constraint(equalToConstant: 28),
-            more.widthAnchor.constraint(equalToConstant: 28),
+            groupRow.leadingAnchor.constraint(equalTo: group.content.leadingAnchor),
+            groupRow.trailingAnchor.constraint(equalTo: group.content.trailingAnchor),
+            groupRow.topAnchor.constraint(equalTo: group.content.topAnchor),
+            groupRow.bottomAnchor.constraint(equalTo: group.content.bottomAnchor),
         ])
-        attention.isHidden = true
         arrange()
-        registerForTraitChanges([UITraitHorizontalSizeClass.self]) { (cluster: TopBarCluster, _: UITraitCollection) in cluster.arrange() }
     }
 
     @available(*, unavailable)
@@ -538,69 +481,20 @@ final class TopBarCluster: UIView {
         fatalError("TopBarCluster is built in code")
     }
 
-    /// A phone's bar: the attention control in the row's flow, so the crumb is
-    /// measured against it and, the cluster standing at the bar's end, arriving
-    /// it widens the cluster to its left and moves nothing already drawn. A
-    /// desk's below 900pt: the attention control stands left of the cluster,
-    /// out of its flow; wider, it is the first control.
     private func arrange() {
-        let coarse = traitCollection.userInterfaceIdiom != .mac
-        stack.spacing = coarse ? 16 : Space.space2
         for view in stack.arrangedSubviews { stack.removeArrangedSubview(view); view.removeFromSuperview() }
-        // Out of the flow it was pinned to the cluster; those pins go with it.
-        attention.removeFromSuperview()
-        let width = window?.bounds.width ?? UIScreen.main.bounds.width
-        jumpWord.isHidden = width < 640
-        jumpKeys.isHidden = width < 900
-        if compact {
-            [attention, jump, more].forEach(stack.addArrangedSubview)
-        } else if width < 900 {
-            addSubview(attention)
-            attention.translatesAutoresizingMaskIntoConstraints = false
-            NSLayoutConstraint.activate([
-                attention.centerYAnchor.constraint(equalTo: centerYAnchor),
-                attention.trailingAnchor.constraint(equalTo: leadingAnchor, constant: -stack.spacing),
-                attention.heightAnchor.constraint(equalToConstant: 28),
-            ])
-            [machines, jump, hub].forEach(stack.addArrangedSubview)
-        } else {
-            [attention, machines, jump, hub].forEach(stack.addArrangedSubview)
-        }
-    }
-
-    /// More's rows: what the wide bar shows as buttons, and the phone's
-    /// assistant. Machines wears the glyph's tone, as More itself does.
-    private func moreMenu() -> UIMenu {
-        let machinesRow = UIAction(title: "Machines", subtitle: "\(online) online",
-                                   image: Glyph.server.image.withTintColor(machinesInk, renderingMode: .alwaysOriginal)) { [weak self] _ in
-            guard let self else { return }
-            onMachines(more)
-        }
-        let assistantRow = UIAction(title: assistantOpen ? "Close assistant" : "Open assistant",
-                                    image: Glyph.assistant.image.withTintColor(Palette.coral11, renderingMode: .alwaysOriginal)) { [weak self] _ in
-            self?.onAssistant()
-        }
-        let hubRow = UIAction(title: "Change hub",
-                              image: Glyph.globe.image.withTintColor(Palette.inkMuted, renderingMode: .alwaysOriginal)) { [weak self] _ in
-            self?.onHub()
-        }
-        return UIMenu(children: [machinesRow, assistantRow, hubRow])
+        stack.addArrangedSubview(compact ? phoneCaw : group)
     }
 
     private var lastWidth = 0.0
-
-    override func didMoveToWindow() {
-        super.didMoveToWindow()
-        arrange()
-    }
-
     private var end: NSLayoutConstraint!
 
     override func layoutSubviews() {
         super.layoutSubviews()
         guard let bar = hostingBar else { return }
         let own = bar.bounds.width - bar.safeAreaInsets.right - convert(bounds, to: bar).maxX
-        let next = -max(0, Space.space6 - own)
+        // A phone's capsule stands 8pt in, as the web's; a desk's group at `space6`.
+        let next = -max(0, (compact ? Space.space2 : Space.space6) - own)
         if abs(end.constant - next) > 0.25 { end.constant = next }
         if abs(bounds.width - lastWidth) > 0.25 {
             lastWidth = bounds.width
@@ -608,64 +502,37 @@ final class TopBarCluster: UIView {
         }
     }
 
-    /// The hub's word on the bar: what waits on the operator, which machines are up.
-    func configure(blocked: Int, online: Int, tone: MachineHealth.Tone?, assistantOpen: Bool) {
-        self.online = online
-        self.assistantOpen = assistantOpen
-        machinesCount.text = "\(online)"
+    /// The hub's word on the bar: what needs the operator, which machines are up.
+    func configure(needs: Int, online: Int, tone: MachineHealth.Tone?, drawerOpen: Bool) {
+        for head in [phoneCaw, groupCaw] { head.configure(count: needs, open: drawerOpen) }
+        machines.count.text = "\(online)"
         // The glyph alone carries a machine in trouble; it crosses over `durFade`, never pulses.
         let ink: UIColor = switch tone {
         case .fail: Palette.statusFailGlyph
         case .attn: Palette.statusAttnGlyph
         case nil: Palette.inkMuted
         }
-        machinesInk = ink
-        // More wears the Machines tone, so a dropped machine is still seen with the list behind it.
-        if machinesGlyph.tintColor != ink {
-            Motion.easeOut.animator(Motion.durFade) {
-                self.machinesGlyph.tintColor = ink
-                self.moreGlyph.tintColor = ink
-            }.startAnimation()
+        if machines.glyph.tintColor != ink {
+            Motion.easeOut.animator(Motion.durFade) { self.machines.glyph.tintColor = ink }.startAnimation()
         }
         machines.accessibilityValue = "\(online) online"
-        // One ask: the press opens it. More: the press opens the list of them, on the control.
-        if (blocked > 1) != (attention.menuProvider != nil) {
-            attention.menuProvider = blocked > 1 ? { [weak self] in self?.waitingMenu() } : nil
-        }
-        attention.accessibilityLabel = "\(blocked) waiting on you"
-        attention.toolTip = "\(blocked) waiting on you"
-        badge.text = "\(blocked)"
-        let showing = blocked > 0
-        guard showing != (shownCount > 0) else { shownCount = blocked; return }
-        shownCount = blocked
-        // It grows out of the bar's top edge from the pop scale over
-        // `durMenu`, and shrinks back into it over `durExit`.
-        let still = UIAccessibility.isReduceMotionEnabled || window == nil
-        let top = CGAffineTransform(translationX: 0, y: -14 * (1 - Motion.popScale)).scaledBy(x: Motion.popScale, y: Motion.popScale)
-        if showing {
-            attention.isHidden = false
-            attention.alpha = 0
-            attention.transform = still ? .identity : top
-            Motion.easeOut.animator(Motion.durMenu) {
-                self.attention.alpha = 1
-                self.attention.transform = .identity
-            }.startAnimation()
-        } else {
-            let out = Motion.easeOut.animator(Motion.durExit) {
-                self.attention.alpha = 0
-                if !still { self.attention.transform = top }
-            }
-            out.addCompletion { _ in
-                if self.shownCount == 0 { self.attention.isHidden = true }
-                self.attention.transform = .identity
-            }
-            out.startAnimation()
-        }
+    }
+
+    /// Something new needs the operator: Caw's beat, where he is drawn.
+    func beat() {
+        caw.beat()
     }
 }
 
-/// The phone's menu button (Shell.svelte `.burger`): 44pt, the sidebar glyph at 20.
+/// The sidebar toggle (Shell.svelte `.burger`): 44pt, the sidebar glyph at
+/// 20. On a phone it opens the rail's sheet; on a wide screen it shows and
+/// hides the rail's column (`label` says which).
 final class BurgerButton: TapControl {
+    var label: String {
+        get { accessibilityLabel ?? "" }
+        set { accessibilityLabel = newValue }
+    }
+
     init() {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
