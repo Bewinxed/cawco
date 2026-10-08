@@ -35,12 +35,14 @@ import { PacedWriter } from "@cawco/core/paced-write";
 // to derive the endpoint, and the core barrel is imported by the browser bundle.
 import {
   type ProcSpec,
+  SESSIOND_PROCESS_LIMIT,
   SESSIOND_V1,
   type SessiondAck,
   type SessiondLine,
   type SessiondProcInfo,
   type SessiondServerMessage,
 } from "@cawco/core/sessiond";
+import { capChildTasks, START_ROOM, TASK_RESERVE, taskHeadroom } from "./tasks";
 
 /**
  * The idempotency window, from the hub's own discipline
@@ -268,6 +270,8 @@ export class SessiondServer {
   readonly #running = new Map<string, Promise<SessiondAck>>();
   /** A survey's reading is still out: the clock does not start a second. */
   #surveyInFlight = false;
+  /** The spawn in progress; the next waits for it ({@link #queueSpawn}). */
+  #spawning: Promise<unknown> = Promise.resolve();
   /** The sweeps still giving an ended child's tree its grace ({@link #sweep}). */
   readonly #sweeps = new Set<ReturnType<typeof setTimeout>>();
   /** The clock every live child's tree is read on ({@link #survey}). */
@@ -467,7 +471,7 @@ export class SessiondServer {
     let settlement: SessiondAck | Promise<SessiondAck>;
     switch (type) {
       case "spawn":
-        settlement = this.#spawn(
+        settlement = this.#queueSpawn(
           commandId,
           String(msg.procId ?? ""),
           msg.spec as ProcSpec
@@ -556,16 +560,51 @@ export class SessiondServer {
 
   // -------------------------------------------------------------------- verbs
 
-  #spawn(
+  /**
+   * Spawns run one at a time, each after the one before has started or been
+   * refused: a burst of starts (an update's held starts all released at once)
+   * is weighed against the room left after the child before it, never all
+   * against the same reading.
+   */
+  #queueSpawn(
     commandId: string,
     procId: string,
     spec: ProcSpec | undefined
-  ): SessiondAck {
+  ): Promise<SessiondAck> {
+    const next = this.#spawning.then(() =>
+      this.#spawn(commandId, procId, spec)
+    );
+    this.#spawning = next.catch(() => undefined);
+    return next;
+  }
+
+  /**
+   * THE KEEPER OUTLIVES WHAT IT CANNOT START. A child is started only with
+   * room for it to come up ({@link START_ROOM}) above what the keeper keeps
+   * for itself ({@link TASK_RESERVE}); one without is refused, with the limit
+   * in the reason ({@link SESSIOND_PROCESS_LIMIT}), and so is one whose fork
+   * the kernel refuses. The ack comes when the child has started or failed to,
+   * never before: a refused fork is a refusal, not an applied spawn followed
+   * by a death nobody can explain.
+   */
+  async #spawn(
+    commandId: string,
+    procId: string,
+    spec: ProcSpec | undefined
+  ): Promise<SessiondAck> {
     if (!(procId && spec?.command)) {
       return ack(
         commandId,
         "failed",
         "spawn: procId and spec.command required"
+      );
+    }
+    const room = await taskHeadroom();
+    if (room && room.free < TASK_RESERVE + START_ROOM) {
+      return ack(
+        commandId,
+        "failed",
+        `${SESSIOND_PROCESS_LIMIT}: ${room.what}; a child starts with ${START_ROOM} free above the ${TASK_RESERVE} kept for the keeper`
       );
     }
     const existing = this.#procs.get(procId);
@@ -582,17 +621,22 @@ export class SessiondServer {
       });
     }
 
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: spec is agent-side and opaque (§3.2) — the ProcSpec type promises args, the wire does not
-    const child = spawn(spec.command, spec.args ?? [], {
-      cwd: spec.cwd,
-      // The spec is built entirely agent-side and handed over opaque (§3.2):
-      // sessiond does not read, validate or enrich a single entry of it.
-      env: spec.env ? { ...process.env, ...spec.env } : process.env,
-      stdio: ["pipe", "pipe", "pipe"],
-      // Its own process group, which it leads: what it starts stays findable
-      // under its pid after it has exited ({@link #survey}).
-      detached: true,
-    }) as ChildProcessWithoutNullStreams;
+    let child: ChildProcessWithoutNullStreams;
+    try {
+      // biome-ignore lint/suspicious/noUnnecessaryConditions: spec is agent-side and opaque (§3.2) — the ProcSpec type promises args, the wire does not
+      child = spawn(spec.command, spec.args ?? [], {
+        cwd: spec.cwd,
+        // The spec is built entirely agent-side and handed over opaque (§3.2):
+        // sessiond does not read, validate or enrich a single entry of it.
+        env: spec.env ? { ...process.env, ...spec.env } : process.env,
+        stdio: ["pipe", "pipe", "pipe"],
+        // Its own process group, which it leads: what it starts stays findable
+        // under its pid after it has exited ({@link #survey}).
+        detached: true,
+      }) as ChildProcessWithoutNullStreams;
+    } catch (error) {
+      return refusedSpawn(commandId, error);
+    }
 
     const proc: Proc = {
       procId,
@@ -618,8 +662,23 @@ export class SessiondServer {
     child.stdin.on("error", () => {
       /* a write to a stdin whose child already died is not an event */
     });
+    const started = await new Promise<Error | undefined>((resolve) => {
+      child.once("spawn", () => resolve(undefined));
+      child.once("error", (error) => resolve(error));
+    });
+    if (started) {
+      // It never ran: nobody's session, and no exit to announce.
+      proc.alive = false;
+      if (this.#procs.get(procId) === proc) {
+        this.#procs.delete(procId);
+      }
+      return refusedSpawn(commandId, started);
+    }
     child.on("error", () => this.#reap(proc, null, null));
     child.on("exit", (code, signal) => this.#reap(proc, code, signal));
+    if (child.pid !== undefined) {
+      await capChildTasks(child.pid);
+    }
     return ack(commandId, "applied");
   }
 
@@ -988,6 +1047,22 @@ const ack = (
   stage,
   ...(reason ? { reason } : {}),
 });
+
+/**
+ * A spawn the operating system refused. A fork refused for want of a task
+ * (`EAGAIN`: the user's or the cgroup's limit) is a process-limit refusal;
+ * anything else (a missing program, a bad cwd) says what it was.
+ */
+const refusedSpawn = (commandId: string, error: unknown): SessiondAck => {
+  const { code } = error as NodeJS.ErrnoException;
+  return code === "EAGAIN"
+    ? ack(
+        commandId,
+        "failed",
+        `${SESSIOND_PROCESS_LIMIT}: the kernel refused the fork (EAGAIN)`
+      )
+    : ack(commandId, "failed", `spawn: ${reasonOf(error)}`);
+};
 
 const toLine = (event: {
   seq: number;

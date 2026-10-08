@@ -8,7 +8,7 @@
  */
 
 import { mkdir, rm, stat } from "node:fs/promises";
-import { homedir } from "node:os";
+import { homedir, hostname } from "node:os";
 import { basename, dirname, join } from "node:path";
 import type {
   AgentBusyReport,
@@ -53,6 +53,7 @@ import {
   GENERATE_IMAGE,
   INSTALL_SESSION_CREDENTIAL,
   MESSAGES_READ,
+  machineLabel,
   PREVIEW_START,
   PREVIEW_STOP,
   promptCacheUsage,
@@ -73,7 +74,11 @@ import {
   mergeHolds,
   type RestartHold,
 } from "@cawco/core/binary-updates";
-import { sessiondEndpoint } from "@cawco/core/sessiond";
+import {
+  processLimitSentence,
+  SESSIOND_PROCESS_LIMIT,
+  sessiondEndpoint,
+} from "@cawco/core/sessiond";
 import { Effect } from "effect";
 import { withFiles } from "./attachments";
 import { type Boundary, boundaryFor } from "./boundary";
@@ -571,6 +576,8 @@ export class SessionSupervisor {
   >();
   readonly #addressCancelled = new Set<string>();
   readonly #failures = new Map<string, string>();
+  /** Each spawned session's title, as its spawn named it: what a failure that names the session calls it. */
+  readonly #titles = new Map<string, string>();
   /** Spawn failures the sink could not send, until a connection takes them. */
   readonly #unsentFailures = new Map<string, Parameters<FrameSink>[0]>();
   /** Reattaches in flight, by instance id: see {@link reattach}. */
@@ -1606,6 +1613,9 @@ export class SessionSupervisor {
     if (payload.processGeneration) {
       this.#generations.set(instanceId, payload.processGeneration);
     }
+    if (payload.title) {
+      this.#titles.set(instanceId, payload.title);
+    }
     const adapter = this.#adapter(kind);
     if (payload.resume && !payload.resume.fork) {
       this.#resumable.set(instanceId, {
@@ -2501,9 +2511,24 @@ export class SessionSupervisor {
     }
   }
 
-  /** A session that never started, or stopped without being asked to. */
+  /**
+   * A session that never started, or stopped without being asked to. One the
+   * session keeper refused at the machine's process limit is said in the
+   * sentence a person reads, naming the machine and the session; the keeper's
+   * own words about which limit stay in the agent's log.
+   */
   #fail(instanceId: string, error: unknown, processGeneration?: string): void {
-    const message = error instanceof Error ? error.message : String(error);
+    const said = error instanceof Error ? error.message : String(error);
+    const title = this.#titles.get(instanceId);
+    const message = said.includes(`${SESSIOND_PROCESS_LIMIT}:`)
+      ? processLimitSentence(
+          machineLabel(hostname()),
+          title ? `"${title}"` : "this session"
+        )
+      : said;
+    if (message !== said) {
+      warn(`${instanceId}: ${said}`);
+    }
     this.#failures.set(instanceId, message);
     const frame = {
       kind: "error" as const,

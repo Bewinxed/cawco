@@ -186,6 +186,21 @@ export interface SessiondAck {
   type: "ack";
 }
 
+/**
+ * How a `spawn` refused at the machine's process limit starts its `reason`:
+ * `process-limit: <which limit, and how full>`. The keeper refuses rather than
+ * start a child that would leave it no room for its own threads (a Bun process
+ * that cannot create one aborts, and takes every child it holds with it).
+ */
+export const SESSIOND_PROCESS_LIMIT = "process-limit";
+
+/** What a person reads for a session the keeper refused at the process limit. */
+export const processLimitSentence = (
+  machine: string,
+  session: string
+): string =>
+  `${machine} can't start another process right now (its process limit is reached), so ${session} didn't start.`;
+
 export type SessiondClientMessage =
   | SessiondSpawn
   | SessiondWrite
