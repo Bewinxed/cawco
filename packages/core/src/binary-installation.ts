@@ -103,6 +103,10 @@ export interface TrialMarker {
    * the one already begun rather than deciding again.
    */
   decision?: "confirm" | "roll-back";
+  /** The keeper's build when the trial began: a rollback puts a keeper that moved back on it. */
+  keeper?: string;
+  /** The keeper step is done and the state says installed: a resumed helper does not move the keeper again. */
+  keeperDone?: boolean;
   previous: string;
   /** Why a rollback was decided: the problem that stood at the deadline. */
   reason?: string;

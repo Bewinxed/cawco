@@ -633,8 +633,9 @@ export class BinaryUpdater {
         error: "The update helper did not report back",
       });
     }
-    if (this.#state.phase === "installing") {
-      // A helper is applying a build: nothing else stages, applies or counts anything now.
+    // A helper is applying a build, or deciding one whose state already says
+    // installed: nothing else stages, applies, moves the keeper or counts anything now.
+    if (this.#state.phase === "installing" || (await readTrial())) {
       return;
     }
     const newer = release.manifest.sequence > running.sequence;

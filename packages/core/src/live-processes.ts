@@ -133,14 +133,18 @@ export const liveProcesses = (): Promise<LiveProcess[]> =>
 /**
  * The builds under `<root>/versions/` that a live process runs or names: its
  * executable, its command line, and the settings file its command line names.
- * Read from what is running, never from a count of builds to keep.
+ * Read from what is running, never from a count of builds to keep. The asking
+ * process is not counted: the update helper that prunes runs from the build
+ * it has just replaced, ends with the prune, and needs nothing on disk to do
+ * so (a running executable outlives its file).
  */
 export async function versionsInUse(root: string): Promise<Set<string>> {
   const prefixes = [
     ...new Set([root, readOr(() => realpathSync(root)) ?? root]),
   ].map((path) => `${join(path, "versions")}/`);
   const used = new Set<string>();
-  for (const one of await liveProcesses()) {
+  const others = (await liveProcesses()).filter((p) => p.pid !== process.pid);
+  for (const one of others) {
     const texts = [
       one.command,
       ...one.images,

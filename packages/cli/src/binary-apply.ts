@@ -4,22 +4,24 @@
  * restarts it performs; only one runs at a time (an exclusive lock file).
  *
  * An apply: copy the hub's database when the schema changes, write the trial
- * (`trial.json`), swap `current`, restart every unit that runs from it, then
- * decide. Healthy, unbroken, for a minute (the hub, the dashboard and this
- * machine's agent on the new build, started after the swap, the agent holding
- * its session keeper connection) confirms it; not healthy by the trial's
- * deadline, minutes after the swap and moved only by a running migration,
- * rolls it back. A rollback moves every link the apply moved, restores the
- * database copy, and restarts every unit, so the machine runs one build when
- * it ends. A confirmed build is never rolled back by anything.
+ * (`trial.json`), swap `current`, restart every unit that runs from it; once
+ * the new build answers, move the session keeper to it if it holds nothing,
+ * and say installed (the hub keeps this machine's new session starts only
+ * while it says installing); then decide. Healthy, unbroken, for a minute (the
+ * hub, the dashboard and this machine's agent on the new build, started after
+ * the swap, the agent holding its session keeper connection) confirms it; not
+ * healthy by the trial's deadline, minutes after the swap and moved only by a
+ * running migration, rolls it back. A rollback moves every link the apply
+ * moved, restores the database copy, and restarts every unit, so the machine
+ * runs one build when it ends. A confirmed build is never rolled back by
+ * anything.
  *
  * The decision is written into the trial before it is carried out, and the
  * trial is removed only once it has been. A helper that dies leaves the trial
  * with no live lock; the next helper, `--resume`, finishes a decision already
  * written or decides again from now (the agent launches one within seconds,
- * the service wrapper at any unit's start). The session keeper moves to the
- * build only after it is confirmed, never while it holds a child, and never in
- * a rollback.
+ * the service wrapper at any unit's start). The session keeper is never
+ * restarted while it holds a child.
  */
 
 import { Database } from "bun:sqlite";
@@ -532,6 +534,7 @@ async function applyBuild(version: string): Promise<void> {
     role: installed.role,
     swappedAt,
     decideBy: swappedAt + TRIAL_WINDOW_S,
+    keeper: await readKeeperVersion(),
     ...(backup && db ? { dbBackup: backup, dbPath: db } : {}),
   };
   // From here the trial is open, and only a decision closes it.
@@ -544,7 +547,7 @@ async function applyBuild(version: string): Promise<void> {
     });
     await say(`swap ${previous} -> ${version}; restarting ${units.join(", ")}`);
     // The keeper is left alone: it is the one piece that holds sessions, so it
-    // moves only once the new build is confirmed.
+    // moves only once the new build has answered.
     await svc("restart", units);
   } catch (error) {
     // What did not happen shows in the verification: the build is not healthy.
@@ -571,7 +574,8 @@ async function decide(start: TrialMarker, resumed: boolean): Promise<void> {
       };
       await writeJsonAtomic(trialPath(), trial);
     }
-    const problem = await verify(trial);
+    const problem = await settle(trial);
+    trial = (await readTrial()) ?? trial;
     trial = problem
       ? { ...trial, decision: "roll-back", reason: problem }
       : { ...trial, decision: "confirm" };
@@ -586,10 +590,58 @@ async function decide(start: TrialMarker, resumed: boolean): Promise<void> {
 }
 
 /**
+ * The trial from the restart to its verdict, in the order the machine needs it.
+ * The update is installing (the hub keeps this machine's new session starts)
+ * only until the new build answers and the keeper has followed it or kept its
+ * children; then the state says installed, with what became of the keeper, and
+ * starts go through while the build is watched for the rest of its trial. The
+ * verdict is the problem that decides a rollback, or `undefined` to confirm.
+ * A build whose agent can hold sessions with neither keeper is rolled back.
+ */
+async function settle(start: TrialMarker): Promise<string | undefined> {
+  const up = await verify(start, 0);
+  if (up) {
+    return up;
+  }
+  let trial = (await readTrial()) ?? start;
+  if (!trial.keeperDone) {
+    const move = await moveKeeper(trial.version).catch(
+      (error): KeeperMove => ({
+        outcome: "failed",
+        error: message(error),
+        custodyOnPrevious: false,
+      })
+    );
+    await say(`keeper ${trial.version}: ${move.outcome}`);
+    if (move.outcome === "failed" && !move.custodyOnPrevious) {
+      return `The new build cannot hold sessions with either session keeper: ${move.error}`;
+    }
+    trial = { ...trial, keeperDone: true };
+    await writeJsonAtomic(trialPath(), trial);
+    const manifest = await readStaged(trial.version);
+    await writeState({
+      ...(await keeperState(move, trial.version)),
+      installedVersion: trial.version,
+      availableVersion: trial.version,
+      channel: manifest.channel,
+      notes: manifest.notes,
+      landed: {
+        at: Date.now(),
+        outcome: "installed",
+        version: trial.version,
+        notes: manifest.notes,
+      },
+    });
+    await say(`installed ${trial.version}; the trial goes on to its verdict`);
+  }
+  return verify(trial, CONFIRM_MS);
+}
+
+/**
  * Whether the trial build is healthy (see probeHealth, with the agent holding
- * its keeper connection), unbroken for {@link CONFIRM_MS}: `undefined` when it
- * is, the problem that stood at the deadline when it is not. A running
- * migration moves the deadline, up to {@link MIGRATION_CAP_MS}.
+ * its keeper connection), unbroken for `holdMs` (0: the first time it answers):
+ * `undefined` when it is, the problem that stood at the deadline when it is
+ * not. A running migration moves the deadline, up to {@link MIGRATION_CAP_MS}.
  *
  * Every verification says what it waits on and how it ends, in the journal
  * and in `apply.log`: each new answer as it changes (and again every 10s while
@@ -597,15 +649,18 @@ async function decide(start: TrialMarker, resumed: boolean): Promise<void> {
  * its time and attempt count. A rollback's reason is then in the log of the
  * unit that decided it, not only in the update state.
  */
-async function verify(start: TrialMarker): Promise<string | undefined> {
+async function verify(
+  start: TrialMarker,
+  holdMs: number
+): Promise<string | undefined> {
   const installation = await readInstallation();
   if (!installation) {
     return "This machine has no binary installation";
   }
   const id = await machineId();
-  const watch = new TrialWatch(start);
+  const watch = new TrialWatch(start, holdMs);
   await say(
-    `verify ${start.version}: probing ${installation.hubUrl} every 1s; healthy for ${CONFIRM_MS / 1000}s confirms, not healthy at ${new Date((start.decideBy ?? 0) * 1000).toISOString()} rolls back`
+    `verify ${start.version}: probing ${installation.hubUrl} every 1s; ${holdMs ? `healthy for ${holdMs / 1000}s confirms` : "waiting for it to answer"}, not healthy at ${new Date((start.decideBy ?? 0) * 1000).toISOString()} rolls back`
   );
   for (;;) {
     // biome-ignore lint/performance/noAwaitInLoops: a poll; each read must see the services after the previous one
@@ -635,14 +690,16 @@ const TIMING = / (?:after|in) \d+ms/g;
 /** One verification's running account: the trial as it stands, the streak, and what was last said. */
 class TrialWatch {
   trial: TrialMarker;
+  readonly #holdMs: number;
   readonly #started = Date.now();
   #attempts = 0;
   #healthySince: number | undefined;
   #lastSaid: { at: number; problem: string } | undefined;
   #migrating = false;
 
-  constructor(trial: TrialMarker) {
+  constructor(trial: TrialMarker, holdMs: number) {
     this.trial = trial;
+    this.#holdMs = holdMs;
   }
 
   #elapsed(): string {
@@ -714,41 +771,26 @@ class TrialWatch {
       this.#healthySince = Date.now();
       this.#lastSaid = undefined;
       await say(
-        `verify ${version}: healthy at ${this.#elapsed()}, attempt ${this.#attempts}; confirming once it has held for ${CONFIRM_MS / 1000}s`
+        `verify ${version}: healthy at ${this.#elapsed()}, attempt ${this.#attempts}${this.#holdMs ? `; confirming once it has held for ${this.#holdMs / 1000}s` : ""}`
       );
     }
-    if (Date.now() - this.#healthySince < CONFIRM_MS) {
+    if (Date.now() - this.#healthySince < this.#holdMs) {
       return { done: false };
     }
-    await say(
-      `verify ${version}: healthy for ${CONFIRM_MS / 1000}s at ${this.#elapsed()}, attempt ${this.#attempts}`
-    );
+    if (this.#holdMs) {
+      await say(
+        `verify ${version}: healthy for ${this.#holdMs / 1000}s at ${this.#elapsed()}, attempt ${this.#attempts}`
+      );
+    }
     return { done: true };
   }
 }
 
 /**
- * The build stays. Its state is written before the trial is removed, so a
- * helper that dies between the two finishes the same confirmation; then the
- * keeper follows the build if it holds nothing, and what nothing needs is
- * pruned.
+ * The build stays: its landing and its keeper's outcome were written when it
+ * answered ({@link settle}); the trial ends, and what nothing needs is pruned.
  */
 async function confirm(trial: TrialMarker): Promise<void> {
-  const manifest = await readStaged(trial.version);
-  await writeState({
-    phase: "installed",
-    installedVersion: trial.version,
-    availableVersion: trial.version,
-    channel: manifest.channel,
-    notes: manifest.notes,
-    error: undefined,
-    landed: {
-      at: Date.now(),
-      outcome: "installed",
-      version: trial.version,
-      notes: manifest.notes,
-    },
-  });
   await rm(trialPath(), { force: true });
   await say(`confirmed ${trial.version}`);
   if (trial.dbPath && trial.dbBackup) {
@@ -762,24 +804,17 @@ async function confirm(trial: TrialMarker): Promise<void> {
       old.map((name) => rm(join(folder, name), { force: true }))
     );
   }
-  const move = await moveKeeper(trial.version).catch(
-    (error): KeeperMove => ({
-      outcome: "failed",
-      error: message(error),
-      custodyOnPrevious: true,
-    })
-  );
-  await say(`keeper ${trial.version}: ${move.outcome}`);
-  await writeState(await keeperState(move, trial.version));
   await prune();
 }
 
 /**
- * The previous build back, on every unit: `current` and the installation point
- * at it, the database copy replaces the migrated file (which is kept beside
- * it, with its WAL, never deleted), and every unit that runs from `current` is
- * restarted, so none is left on the build that failed. The keeper never moved
- * during the trial and is not touched.
+ * The previous build back, on every unit: the update says installing again
+ * while it restarts them (the hub keeps this machine's new starts), `current`
+ * and the installation point at the previous build, the database copy replaces
+ * the migrated file (which is kept beside it, with its WAL, never deleted),
+ * and every unit that runs from `current` is restarted, so none is left on the
+ * build that failed. A keeper that moved in the trial goes back with it unless
+ * it holds a child, as a keeper holding a child is never restarted.
  */
 async function rollBack(start: TrialMarker): Promise<void> {
   let trial = start;
@@ -788,6 +823,7 @@ async function rollBack(start: TrialMarker): Promise<void> {
     throw new Error("This machine has no binary installation");
   }
   const units = trialUnits(trial.role);
+  await writeState({ phase: "installing" });
   await pointCurrentAt(trial.previous);
   await writeJsonAtomic(installationPath(), {
     ...installed,
@@ -804,6 +840,18 @@ async function rollBack(start: TrialMarker): Promise<void> {
     await say(`roll back ${trial.version}: restarted ${units.join(", ")}`);
   } catch (error) {
     await say(`roll back ${trial.version}: restart: ${message(error)}`);
+  }
+  if (trial.keeper && (await readKeeperVersion()) !== trial.keeper) {
+    const back = await moveKeeper(trial.keeper).catch(
+      (error): KeeperMove => ({
+        outcome: "failed",
+        error: message(error),
+        custodyOnPrevious: false,
+      })
+    );
+    await say(
+      `roll back ${trial.version}: keeper to ${trial.keeper}: ${back.outcome}`
+    );
   }
   const manifest = await readStaged(trial.version).catch(() => undefined);
   await writeState({
