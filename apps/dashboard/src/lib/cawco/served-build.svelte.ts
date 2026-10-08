@@ -29,7 +29,7 @@ let newer = $state<string | null>(null);
 /** The build the dashboard serves, when it is not this tab's; otherwise null. */
 export const newerBuild = (): string | null => newer;
 
-/** The build a reload loads now, or null when the server does not say (`vite dev`). */
+/** The build a reload loads now, or null when the server can't be reached. */
 export async function runningBuild(): Promise<string | null> {
   const response = await fetch("/_app/running-version.json", {
     cache: "no-store",

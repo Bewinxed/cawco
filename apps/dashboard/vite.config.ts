@@ -200,6 +200,35 @@ const hubProxy = (): Plugin => ({
   },
 });
 
+/* The commit this build was made from. The build bakes it into the page and
+   writes it to `_app/version.json`, which the running server answers as
+   `_app/running-version.json` (serve.js); a tab compares the two to learn it
+   is older than the dashboard now serving it (served-build.svelte.ts). It must
+   be deterministic, or two builds of one commit would each tell open tabs to
+   reload. */
+const BUILD_VERSION = execFileSync("git", ["rev-parse", "--short", "HEAD"], {
+  encoding: "utf8",
+}).trim();
+
+/**
+ * `vite dev` answers `_app/running-version.json` as serve.js does, with the
+ * body SvelteKit writes to `_app/version.json`, so a dev page runs the same
+ * served-build check as production instead of logging a 404 on every load.
+ */
+const runningVersion = (): Plugin => ({
+  name: "cawco:running-version",
+  configureServer(server) {
+    const body = JSON.stringify({ version: BUILD_VERSION });
+    server.middlewares.use("/_app/running-version.json", (_req, res) => {
+      res.writeHead(200, {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store",
+      });
+      res.end(body);
+    });
+  },
+});
+
 // `/ws` is left to `server.proxy`, and HMR's upgrade to Vite.
 /**
  * Event Calendar's own palette (`src/styles/theme.css`) is not loaded: the
@@ -268,23 +297,14 @@ export default defineConfig({
     calendarThemeOff(),
     streamdownOverlayOwn(),
     hubProxy(),
+    runningVersion(),
     tailwindcss(),
     sveltekit({
       preprocess: vitePreprocess(),
       compilerOptions: { experimental: { async: true } },
       adapter: adapter({ out: ".build-next" }),
       experimental: { remoteFunctions: true },
-      /* The commit this build was made from. The build bakes it into the
-         page and writes it to `_app/version.json`, which the running server
-         answers as `_app/running-version.json` (serve.js); a tab compares the
-         two to learn it is older than the dashboard now serving it
-         (served-build.svelte.ts). It must be deterministic, or two builds of
-         one commit would each tell open tabs to reload. */
-      version: {
-        name: execFileSync("git", ["rev-parse", "--short", "HEAD"], {
-          encoding: "utf8",
-        }).trim(),
-      },
+      version: { name: BUILD_VERSION },
     }),
     Icons({ compiler: "svelte" }),
   ],
