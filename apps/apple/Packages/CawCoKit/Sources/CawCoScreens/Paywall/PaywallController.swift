@@ -258,7 +258,8 @@ final class PaywallController: ObservedViewController {
         switch Pro.shared.access {
         case .ended: .ended
         case .trial, .owned: .keep
-        case .none, nil: entry == .keep ? .keep : .trial
+        // `.some(.none)`: a bare `.none` here would be the Optional's.
+        case .some(.none), nil: entry == .keep ? .keep : .trial
         }
     }
 

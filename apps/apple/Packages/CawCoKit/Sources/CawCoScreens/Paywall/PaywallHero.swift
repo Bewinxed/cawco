@@ -29,12 +29,12 @@ struct HeroBanner: Equatable {
         }
         var cards: [HeroBanner] = asks.prefix(count).map { ask in
             let row = fleet.byId[ask.instanceId]
-            let machine = row.map { fleet.machineName($0.machineId) } ?? fleet.machines.first?.name ?? "your machine"
+            let machine = row.map { fleet.machineName($0.machineId) } ?? fleet.machines.first.map { fleet.machineName($0.machineId) } ?? "your machine"
             let line = ask.summary.split(separator: "\n").first.map(String.init) ?? ask.summary
             return HeroBanner(title: PaywallCopy.bannerTitle(harness: ModelCatalog.harnessName(row?.harness ?? "claude"), machine: machine), body: line)
         }
-        var pairs: [(harness: String, machine: String)] = home.working.map { ($0.harness, fleet.machineName($0.machineId)) }
-        let first = fleet.machines.first?.name ?? "your machine"
+        var pairs: [(harness: String, machine: String)] = home.working.map { ($0.harness ?? "claude", fleet.machineName($0.machineId)) }
+        let first = fleet.machines.first.map { fleet.machineName($0.machineId) } ?? "your machine"
         pairs += ["claude", "opencode", "pi"].map { ($0, first) }
         let examples = pairs.map { HeroBanner(title: PaywallCopy.bannerTitle(harness: ModelCatalog.harnessName($0.harness), machine: $0.machine),
                                               body: PaywallCopy.bannerExample) }
