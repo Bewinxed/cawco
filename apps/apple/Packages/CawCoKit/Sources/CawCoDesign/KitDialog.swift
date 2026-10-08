@@ -39,7 +39,7 @@ open class KitDialogController: UIViewController, UIViewControllerTransitioningD
     private let width: Width
     private let closable: Bool
     private let frameView = UIView()
-    private let card = TouchTargetCard()
+    private let card = ReachCard()
     private let scroll = UIScrollView()
 
     public init(width: Width = .md, closable: Bool = true) {
@@ -108,10 +108,10 @@ open class KitDialogController: UIViewController, UIViewControllerTransitioningD
             scroll.leadingAnchor.constraint(equalTo: card.leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: card.trailingAnchor),
             fits,
-            body.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor, constant: 18),
-            body.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor, constant: -18),
-            body.leadingAnchor.constraint(equalTo: scroll.frameLayoutGuide.leadingAnchor, constant: 18),
-            body.trailingAnchor.constraint(equalTo: scroll.frameLayoutGuide.trailingAnchor, constant: -18),
+            body.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor, constant: Space.space5),
+            body.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor, constant: -Space.space5),
+            body.leadingAnchor.constraint(equalTo: scroll.frameLayoutGuide.leadingAnchor, constant: Space.space5),
+            body.trailingAnchor.constraint(equalTo: scroll.frameLayoutGuide.trailingAnchor, constant: -Space.space5),
         ])
         view.keyboardLayoutGuide.followsUndockedKeyboard = true
         // The field being typed in stays in view: when one takes the keyboard,
@@ -252,40 +252,6 @@ open class KitDialogController: UIViewController, UIViewControllerTransitioningD
         stack.spacing = 8
         stack.alignment = .center
         return stack
-    }
-}
-
-/// The dialog's raised body, where every button answers a touch over at
-/// least 44×44pt (`touch-hit`, `--c-btn-h-lg`) centred on its drawn box:
-/// the drawn size stays its token, only the touch area grows. A touch on a
-/// control itself always goes to it; one in the grown margin goes to the
-/// nearest button whose area holds it, so two neighbours split the gap
-/// between them at its midpoint. A Mac's pointer takes the drawn boxes alone.
-private final class TouchTargetCard: UIView {
-    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-        let direct = super.hitTest(point, with: event)
-        guard traitCollection.userInterfaceIdiom != .mac, isUserInteractionEnabled, !isHidden, alpha > 0.01,
-              self.point(inside: point, with: event) else { return direct }
-        var view = direct
-        while let current = view, current !== self {
-            if current is UIControl { return direct }
-            view = current.superview
-        }
-        var best: (button: UIButton, distance: Double)?
-        func visit(_ view: UIView) {
-            guard !view.isHidden, view.alpha > 0.01, view.isUserInteractionEnabled else { return }
-            if let button = view as? UIButton {
-                let box = button.convert(button.bounds, to: self)
-                let grown = box.insetBy(dx: -max(0, (Size.cBtnHLg - box.width) / 2), dy: -max(0, (Size.cBtnHLg - box.height) / 2))
-                guard grown.contains(point) else { return }
-                let distance = hypot(max(box.minX - point.x, 0, point.x - box.maxX), max(box.minY - point.y, 0, point.y - box.maxY))
-                if best.map({ distance < $0.distance }) ?? true { best = (button, distance) }
-                return
-            }
-            view.subviews.forEach(visit)
-        }
-        visit(self)
-        return best?.button ?? direct
     }
 }
 
