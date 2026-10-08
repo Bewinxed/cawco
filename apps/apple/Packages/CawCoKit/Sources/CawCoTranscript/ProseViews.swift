@@ -728,8 +728,15 @@ final class MessageBody: UIView {
             default: false
             }
         }
+        // The block views are this view's own list, one per block, and this
+        // pass reads only its own copy of it: never the stack's
+        // `arrangedSubviews`, which a pass re-entered from a layout or trait
+        // change shrank under the loop counting blocks (TestFlight
+        // 20261007.6, MessageBody.configure: index 1 beyond bounds [0 .. 0]).
+        let drawn: [UIView]
         if same {
-            for (view, block) in zip(views, blocks) {
+            drawn = views
+            for (view, block) in zip(drawn, blocks) {
                 switch block.kind {
                 case let .text(text): (view as? ProseView)?.show(text, fading: fading)
                 case let .code(language, text): (view as? CodeWell)?.configure(language: language, text: text)
@@ -737,16 +744,14 @@ final class MessageBody: UIView {
                 }
             }
         } else {
-            // The block views are this view's own list, replaced whole: never
-            // the stack's live `arrangedSubviews`, which shrank under the loop
-            // that took them out (TestFlight 20261007.6: index 1 beyond bounds).
             let old = views
-            views = blocks.map(blockView)
+            drawn = blocks.map(blockView)
+            views = drawn
             for view in old { view.removeFromSuperview() }
-            for view in views { stack.addArrangedSubview(view) }
+            for view in drawn { stack.addArrangedSubview(view) }
         }
         for i in blocks.indices.dropFirst() {
-            stack.setCustomSpacing(MarkdownRender.gap(after: blocks[i - 1], before: blocks[i]), after: views[i - 1])
+            stack.setCustomSpacing(MarkdownRender.gap(after: blocks[i - 1], before: blocks[i]), after: drawn[i - 1])
         }
         (views.first as? ProseView)?.floatSize = floatSize
         for case let text as ProseView in views { text.fitWidth = fitWidth }

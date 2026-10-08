@@ -76,8 +76,8 @@ nonisolated extension Item {
         return clockFormat.string(from: date)
     }
 
-    /// DateFormatter is thread safe; this one is set up once and only read.
-    private nonisolated(unsafe) static let clockFormat: DateFormatter = {
+    /// Set up once and only read (DateFormatter is Sendable).
+    private static let clockFormat: DateFormatter = {
         let format = DateFormatter()
         format.locale = .current
         format.setLocalizedDateFormatFromTemplate("HHmm")

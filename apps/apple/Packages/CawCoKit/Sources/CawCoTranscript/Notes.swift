@@ -467,7 +467,8 @@ final class OptionChip: UIView {
     }
 }
 
-/// What a `manage_memory` call read or wrote (MemoryBody.svelte): a write is
+/// What a fleet memory call (`admin_memory_read`/`admin_memory_write`, the
+/// `memory` kind's renderer) read or wrote (MemoryBody.svelte): a write is
 /// a diff from the version it replaced, a removal the removed document
 /// diffed to nothing, a read the document in its well, a listing its
 /// documents, each opening into its well.

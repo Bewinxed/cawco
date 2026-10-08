@@ -371,7 +371,9 @@ final class FieldsView: UIView {
     required init?(coder _: NSCoder) { fatalError("built in code") }
 }
 
-/// Mono text that wraps anywhere and scrolls past `--tx-field-cap`.
+/// Mono text that wraps as ToolGroup's `.v` does (`pre-wrap`,
+/// `word-break: break-word`: at word breaks, a word longer than the line
+/// broken where it must) and scrolls past `--tx-field-cap`.
 ///
 /// Its height is its own: the text's at its width, at most the cap, as an
 /// intrinsic size nothing compresses. It was the scroll view's frame held to
@@ -389,7 +391,7 @@ final class CappedText: UIView {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         text.attributedText = Styled.string(value, TypeScale.typeCode, color: Palette.inkStrong, size: TypeScale.textLabel,
-                                            leading: TypeScale.leadingBody, mono: true, lineBreak: .byCharWrapping, textKit2: true)
+                                            leading: TypeScale.leadingBody, mono: true, lineBreak: .byWordWrapping, textKit2: true)
         text.translatesAutoresizingMaskIntoConstraints = false
         scroll.translatesAutoresizingMaskIntoConstraints = false
         pin(scroll)

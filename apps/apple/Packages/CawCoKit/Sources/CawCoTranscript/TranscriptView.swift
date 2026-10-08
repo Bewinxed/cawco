@@ -1319,7 +1319,13 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     /// --ease-out, its row's height on the same clock; at once under Reduce Motion.
     private func animate(_ row: Disclosing, open: Bool, in cell: UICollectionViewCell?) {
         // Main-actor closures from a main-actor view, run on the main actor by the animator.
-        nonisolated(unsafe) let (layout, done) = row.toggled(open: open)
+        nonisolated(unsafe) let (layout, shown) = row.toggled(open: open)
+        // The body's elements joined or left the row: VoiceOver reads the
+        // row's elements again (until told, it kept the closed row's).
+        let done: @MainActor () -> Void = {
+            shown()
+            UIAccessibility.post(notification: .layoutChanged, argument: nil)
+        }
         (cell as? ItemCell)?.forget()
         let change: @MainActor () -> Void = {
             layout()
