@@ -401,6 +401,11 @@ public final class HubConnection {
         switch response {
         case .ok:
             break
+        case let .conflict(conflict):
+            // Its sessions still run: the hub says how many ("2 sessions
+            // still run in cockpit; stop them first.").
+            let body = try conflict.body.plainText
+            throw ControlError(message: try await String(collecting: body, upTo: 64_000))
         case let .undocumented(statusCode, _):
             throw ControlError(message: "Could not forget this project — the hub answered \(statusCode). Try again.")
         }
