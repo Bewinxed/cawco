@@ -620,7 +620,7 @@ final class SidebarViewController: ObservedViewController {
         trialLine.isHidden = line == nil
         proTag.isHidden = access != .owned
         user.isEnabled = line != nil
-        user.accessibilityLabel = ["bewinxed", line, access == .owned ? PaywallCopy.Trial.owned : nil].compactMap(\.self).joined(separator: ", ")
+        user.accessibilityLabel = ["bewinxed", line, access == .owned ? PaywallCopy.Trial.owned : nil].compactMap { $0 }.joined(separator: ", ")
         user.accessibilityTraits = line != nil ? .button : .staticText
     }
 

@@ -324,8 +324,8 @@ final class ConnectViewController: ObservedViewController, UITextFieldDelegate {
             notifySpinner.isHidden = state != .pending
             notifyReason.text = reason
             notifyReason.isHidden = reason == nil
-            if let (title, run) = action {
-                notifyAction.addArrangedSubview(KitButton.make(title, variant: .outline, height: .lg, stretch: true, action: run))
+            if let action {
+                notifyAction.addArrangedSubview(KitButton.make(action.0, variant: .outline, height: .lg, stretch: true, action: action.1))
             }
             notifyAction.isHidden = action == nil
             quietRow.isHidden = state != .on

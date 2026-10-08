@@ -102,7 +102,7 @@ final class PaywallHeroView: UIView {
     init(variant: PaywallExperiment.Variant, banners: [HeroBanner]) {
         self.variant = variant
         let story = variant == .story
-        cards = banners.prefix(3).enumerated().map { NotificationCard($1, compact: story, front: $0 == 0) }
+        cards = banners.prefix(3).enumerated().map { NotificationCard($0.element, compact: story, front: $0.offset == 0) }
         climber = story ? nil : CawView(status: .ready, ledge: .climb)
         stageCaw = CawView(status: .loading)
         super.init(frame: .zero)

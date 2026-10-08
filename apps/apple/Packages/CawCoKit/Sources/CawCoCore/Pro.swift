@@ -168,6 +168,8 @@ public final class Pro {
         case let .success(verification):
             guard case let .verified(transaction) = verification else {
                 log.error("purchase \(product.rawValue, privacy: .public): the transaction isn't verified")
+                // Nothing is granted on it, and it leaves the queue so it isn't delivered again.
+                await verification.unsafePayloadValue.finish()
                 return .unverified
             }
             await transaction.finish()
