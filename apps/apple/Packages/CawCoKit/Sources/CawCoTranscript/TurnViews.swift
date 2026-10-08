@@ -297,7 +297,11 @@ final class UserTurnView: UIView, RowContent, UIGestureRecognizerDelegate {
     func configure(_ item: Item) {
         guard case let .user(turn) = item.kind else { return }
         let block = turn.block
-        if self.block?.id != block.id { retried = nil }
+        if self.block?.id != block.id {
+            retried = nil
+            retrying?.cancel()
+            retrying = nil
+        }
         self.block = block
         let failed = block.state == "failed"
         let waiting = block.state == "pending" || block.queued
@@ -327,7 +331,7 @@ final class UserTurnView: UIView, RowContent, UIGestureRecognizerDelegate {
         let reasonText = block.string("sendFailed")
         reason.attributedText = Styled.string("Couldn't send that message." + (reasonText.map { " \($0)" } ?? ""), TypeScale.typeMeta,
                                               color: Palette.statusFailInk, lineBreak: .byWordWrapping)
-        let sending = retried != nil
+        let sending = retried != nil || retrying != nil
         retry.setAttributedTitle(Styled.string(sending ? "Sending…" : "Try again", TypeScale.typeLabel, color: Palette.inkStrong), for: .normal)
         retry.isEnabled = !sending
         failure.isHidden = !failed
@@ -435,13 +439,39 @@ final class UserTurnView: UIView, RowContent, UIGestureRecognizerDelegate {
         chips.isHidden = views.isEmpty
     }
 
-    /// A failed send, sent again (MessageRow `tryAgain`): its own words, as a
-    /// new send; the hub retires this row as the retry is taken.
+    /// A failed send, sent again (client.svelte.ts `retryFailed`): its own
+    /// words, texts, files and pictures, as a new send that `replaces` this
+    /// one, so the hub retires this row as the retry is taken.
     private func tryAgain() {
-        guard let block, let hub = env.hub, hub.state == .connected, let row = hub.fleet.byId[env.sessionId], row.isListed else { return }
-        retried = hub.sessions.steer(row, text: block.content)
+        guard retrying == nil, let block, let hub = env.hub, hub.state == .connected, let row = hub.fleet.byId[env.sessionId], row.isListed else { return }
+        let extras = SentMessages.extras(of: block)
         retry.setAttributedTitle(Styled.string("Sending…", TypeScale.typeLabel, color: Palette.inkStrong), for: .normal)
         retry.isEnabled = false
+        retrying = Task { [weak self] in
+            var images: [(mediaType: String, data: Data)] = []
+            for image in extras.images {
+                guard let url = self?.env.url(image.src), let fetched = try? await URLSession.shared.data(from: url) else {
+                    self?.retryRefused("A picture it carries couldn't be read.")
+                    return
+                }
+                images.append((image.mediaType, fetched.0))
+            }
+            guard let self, self.block?.id == block.id else { return }
+            retrying = nil
+            retried = hub.sessions.steer(row, text: block.content, images: images, texts: extras.texts, files: extras.files, replaces: block.id)
+        }
+    }
+
+    /// The pictures being read for a retry.
+    private var retrying: Task<Void, Never>?
+
+    /// The retry could not be put together: the row says why, and Try again stands again.
+    private func retryRefused(_ why: String) {
+        retrying = nil
+        reason.attributedText = Styled.string("Couldn't send that message. \(why)", TypeScale.typeMeta,
+                                              color: Palette.statusFailInk, lineBreak: .byWordWrapping)
+        retry.setAttributedTitle(Styled.string("Try again", TypeScale.typeLabel, color: Palette.inkStrong), for: .normal)
+        retry.isEnabled = true
     }
 }
 

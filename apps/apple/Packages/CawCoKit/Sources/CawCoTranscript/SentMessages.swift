@@ -44,6 +44,12 @@ public enum SentMessages {
     public static func extras(of id: String, in transcript: SessionTranscript)
         -> (texts: [(name: String, content: String)], files: [SentFile], images: [(src: String, mediaType: String)]) {
         guard let raw = (transcript.queued + transcript.blocks).first(where: { $0.id == id }), let block = Block(raw) else { return ([], [], []) }
+        return extras(of: block)
+    }
+
+    /// What a sent message carried beside its words, read off its own block.
+    static func extras(of block: Block)
+        -> (texts: [(name: String, content: String)], files: [SentFile], images: [(src: String, mediaType: String)]) {
         let attachments = block.meta["attachments"] as? [[String: Any]] ?? []
         let texts = attachments.compactMap { attachment -> (name: String, content: String)? in
             guard let content = attachment["content"] as? String else { return nil }
