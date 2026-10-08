@@ -6,7 +6,9 @@ import { join } from "node:path";
  *
  * An update's trial is decided by one process, the update helper (`cawco
  * binary-apply`), and nothing here decides it. What this script does is see
- * that a decider is running: a unit that starts while `trial.json` is open and
+ * that a decider is running: a unit (hub, dashboard, agent, keeper; not the
+ * boundary hook, which runs through here on every shell call of a bounded
+ * session) that starts while `trial.json` is open and
  * no helper holds the lock (the helper died, or the machine rebooted mid-trial)
  * launches one, `binary-apply --resume`, from the build the trial would put
  * back. That build ran before the swap, so the decider does not depend on the
@@ -81,7 +83,10 @@ EOF
       --unit="cawco-binary-apply-resume-$stamp" --property=Type=exec "$@" "$decider" binary-apply --resume
   fi
 }
-if [ -f "$TRIAL" ] && ! helper_live; then
+# Only a unit's start looks for an orphaned trial: every other verb (a session's boundary hook runs through this
+# script on every shell call) goes straight to the build, and says nothing.
+case "$1" in hub | dashboard | up | sessiond) unit_start=1 ;; *) unit_start=0 ;; esac
+if [ "$unit_start" = 1 ] && [ -f "$TRIAL" ] && ! helper_live; then
   previous="$(sed -n 's/.*"previous":"\\([^"]*\\)".*/\\1/p' "$TRIAL")"
   version="$(sed -n 's/.*"version":"\\([^"]*\\)".*/\\1/p' "$TRIAL")"
   if [ -n "$previous" ] && [ -x "$ROOT/versions/$previous/cawco" ]; then
