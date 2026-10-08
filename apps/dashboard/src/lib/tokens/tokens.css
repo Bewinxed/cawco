@@ -582,6 +582,8 @@
     --c-input-h: 36px;
     /* A nav row; touch screens and narrow windows take the 44px row. */
     --c-nav-h: 40px;
+    /* A Configure rail row; touch screens and narrow windows take the 44px row. */
+    --c-rail-row-h: 38px;
     --c-mark: 26px;
     --c-mark-glyph: 16px;
     --c-row-mark: 18px;
@@ -806,6 +808,7 @@
   @media (pointer: coarse), (width < 640px) {
     :root {
       --c-nav-h: 44px;
+      --c-rail-row-h: 44px;
     }
   }
 }

@@ -71,9 +71,13 @@
     min-height: 0;
     background: var(--surface-recess);
   }
+  /* The rail's panel is inset from the page's edges by the pages' own
+     gutter (SectionFrame's .ground: space-2 above and below, space-5 at the
+     side), so its top lines up with the section's card beside it. */
   .side {
     display: flex;
     min-height: 0;
+    padding: var(--space-2) 0 var(--space-2) var(--space-5);
   }
   /* The two pages of a swap stand in one cell; a phone's push slides the
      new one in from off the pane's edge, so the pane clips it. */

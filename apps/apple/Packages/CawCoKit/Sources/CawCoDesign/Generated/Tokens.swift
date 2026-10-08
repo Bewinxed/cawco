@@ -446,6 +446,10 @@ public enum Size {
     public static let cNavH: Double = 40
     /// `cNavH` under a coarse pointer or a window under 640pt wide.
     public static let cNavHCompact: Double = 44
+    /// A Configure rail row; touch screens and narrow windows take the 44px row.
+    public static let cRailRowH: Double = 38
+    /// `cRailRowH` under a coarse pointer or a window under 640pt wide.
+    public static let cRailRowHCompact: Double = 44
     public static let cMark: Double = 26
     public static let cMarkGlyph: Double = 16
     public static let cRowMark: Double = 18

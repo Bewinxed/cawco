@@ -124,36 +124,37 @@
   .rail {
     display: flex;
     flex-direction: column;
-    gap: 14px;
-    padding: 14px 8px 14px 12px;
+    padding: 0 var(--space-2) var(--space-5);
   }
-  /* Raised, not recessed: in light the fill a chosen row takes is the recess's
-     own step (n-3), so on the recess the selection would not show at all. */
+  /* A panel standing in the Configure page's gutter, in the page card's own
+     recipe (raised, radius-lg, tile shadow), so it needs no divider: the
+     recess around it is the seam. Raised, not recessed: in light the fill a
+     chosen row takes is the recess's own step (n-3), so on the recess the
+     selection would not show at all. */
   .rail[data-variant="rail"] {
     position: relative;
     width: 232px;
     flex: none;
     overflow-y: auto;
-    border-right: 1px solid var(--border-hairline);
+    border-radius: var(--radius-lg);
     background: var(--surface-raised);
+    box-shadow: var(--shadow-tile);
   }
   .rail[data-variant="list"] {
-    padding: 7px;
+    padding: 0 var(--space-2) var(--space-2);
   }
   .group {
     display: flex;
     flex-direction: column;
-    gap: 2px;
   }
   .label {
-    padding: 0 8px 4px;
-    font: var(--type-meta);
+    padding: var(--space-4) var(--space-3) var(--space-2);
+    font: var(--type-body);
     color: var(--ink-muted);
   }
   .list {
     display: flex;
     flex-direction: column;
-    gap: 2px;
     margin: 0;
     padding: 0;
     list-style: none;
@@ -162,24 +163,20 @@
     position: relative;
     display: flex;
     align-items: center;
-    gap: 9px;
-    height: 36px;
-    padding: 0 8px;
+    gap: var(--space-3);
+    height: var(--c-rail-row-h);
+    padding: 0 var(--space-3) 0 var(--space-2);
     border-radius: var(--radius-sm);
-    color: var(--ink-strong);
+    color: var(--ink-row);
     text-decoration: none;
     transition: var(--transition-control);
   }
+  /* The chosen row's ink; the apricot wash under it is the highlight's pill. */
+  .row[aria-current="page"] {
+    color: var(--selected-ink);
+  }
   [data-variant="list"] .row {
     height: 48px;
-  }
-  @media (pointer: coarse) {
-    .row {
-      height: 44px;
-    }
-    [data-variant="list"] .row {
-      height: 48px;
-    }
   }
   .tile {
     display: inline-flex;
@@ -189,19 +186,18 @@
     width: 22px;
     height: 22px;
     border-radius: var(--radius-xs);
-    background: var(--surface-raised);
+    background: var(--surface-tile);
     box-shadow: var(--shadow-tile);
   }
   .tile :global(svg) {
-    width: 16px;
-    height: 16px;
+    width: 14px;
+    height: 14px;
   }
   .name {
     flex: 1 1 auto;
     min-width: 0;
     overflow: hidden;
     font: var(--type-label);
-    font-weight: var(--weight-strong);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -215,6 +211,9 @@
     font: var(--type-meta);
     font-variant-numeric: tabular-nums;
     color: var(--ink-muted);
+  }
+  [aria-current="page"] .count {
+    color: var(--selected-ink);
   }
   /* An editor in this section holds edits not saved yet. */
   .unsaved {

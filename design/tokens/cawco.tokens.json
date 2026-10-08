@@ -2162,6 +2162,16 @@
         }
       }
     },
+    "c-rail-row-h": {
+      "$type": "dimension",
+      "$value": "38px",
+      "$description": "A Configure rail row; touch screens and narrow windows take the 44px row.",
+      "$extensions": {
+        "dev.cawco": {
+          "compact": "44px"
+        }
+      }
+    },
     "c-mark": {
       "$type": "dimension",
       "$value": "26px"
