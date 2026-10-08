@@ -14,6 +14,15 @@ export const COMPACTION_MARK = {
 } as const;
 
 /**
+ * Caw at work in the same place while the compaction runs: his looping
+ * `working` file, in the `--tx-compacting-caw` box he settles from.
+ */
+export const COMPACTING_MARK = {
+  status: "working",
+  size: 32,
+} as const;
+
+/**
  * His picture on its way for a transcript that is waiting to show him: over
  * when it is drawn, or when `--dur-mark-hold` has passed, whichever is first.
  * Null when nothing is on its way.

@@ -514,6 +514,8 @@ public enum Size {
     public static let txLineTouch: Double = 44
     /// Caw's head before the word on a compaction's divider (CompactionDivider.svelte `.caw`).
     public static let txCompactCaw: Double = 18
+    /// Caw at work before "Compacting…" while a compaction runs in its divider's place (CompactionDivider.svelte `.live .caw`); he settles to tx-compact-caw as it ends.
+    public static let txCompactingCaw: Double = 32
     /// The box a compaction divider's wave is drawn in (CompactionDivider.svelte `.wave`): its line runs along the middle, 1.5px either side.
     public static let txCompactWave: Double = 6
     /// A code well's padding (OutputBlock).

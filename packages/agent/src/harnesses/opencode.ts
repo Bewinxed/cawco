@@ -2191,6 +2191,19 @@ export class OpencodeSession implements HarnessSession {
           return;
         }
         const error = p.error as { name?: string; data?: { message?: string } };
+        // A compaction the turn died in did not compact: say so, the way
+        // Claude Code does, so its divider never reads "Compacted".
+        if (this.#compacting) {
+          this.#compacting = false;
+          this.#ctx.frame({
+            type: "system",
+            subtype: "status",
+            status: null,
+            compact_result: "failed",
+            compact_error: errorText(error),
+            session_id: this.sessionId ?? undefined,
+          });
+        }
         this.#ctx.busy(false);
         // biome-ignore lint/suspicious/noUnnecessaryConditions: `as` is an unchecked cast; p.error can still be undefined at runtime even though the cast type says otherwise
         if (error?.name === "MessageAbortedError") {
@@ -2216,23 +2229,26 @@ export class OpencodeSession implements HarnessSession {
   #part(part: Part): void {
     const role = this.#roles.get(part.messageID);
     switch (part.type) {
-      // A compaction has begun: its boundary, once, so the divider stands in
-      // the transcript from here and the summary that follows opens it.
+      // A compaction has begun: the word that it is compacting, then its
+      // boundary, once, so the divider stands in the transcript from here
+      // and the summary that follows opens it. The word comes first: the
+      // transcript reads the boundary that lands while it compacts as that
+      // compaction's row, live, never as one already done.
       case "compaction": {
         if (this.#boundaries.has(part.id)) {
           return;
         }
         this.#boundaries.add(part.id);
         this.#compacting = true;
-        this.#ctx.frame(
-          compactBoundary(part, this.#createdOf(part.messageID).timestamp)
-        );
         this.#ctx.frame({
           type: "system",
           subtype: "status",
           status: "compacting",
           session_id: this.sessionId ?? undefined,
         });
+        this.#ctx.frame(
+          compactBoundary(part, this.#createdOf(part.messageID).timestamp)
+        );
         break;
       }
       case "text": {

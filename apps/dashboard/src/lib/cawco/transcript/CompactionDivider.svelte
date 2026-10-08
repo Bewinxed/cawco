@@ -20,13 +20,27 @@
    * drawn from his `compacted` file: he is decoration and he rests — a
    * compaction is nothing to attend to — but for coming in once, by that
    * file's own clip, with the line when one lands live.
+   *
+   * A compaction this transcript watched begin is the same row from its
+   * first moment (rows.ts `Told`). While the harness compacts, Caw works
+   * in its middle, a size up, beside "Compacting…", with no line and
+   * nothing to open. When it is done the row settles into the divider at
+   * rest, in place: Caw at work leaves by his own leave as the slot he
+   * stands in closes to his mark's box, and his `compacted` file plays its
+   * enter there; the word morphs to "Compacted" and the line draws out
+   * from it. One that failed says so in one line where the divider would
+   * be, with no line and no Caw: he is never in an error.
    */
+  import { untrack } from "svelte";
+  import { fade } from "svelte/transition";
+  import { TextMorph } from "torph/svelte";
   import IconChevron from "~icons/solar/alt-arrow-right-bold-duotone";
+  import Caw from "../home/Caw.svelte";
   import CawMark from "../home/CawMark.svelte";
-  import { dur } from "../motion/curves.svelte";
+  import { dur, morphMs } from "../motion/curves.svelte";
   import { unfold } from "../motion/fold.svelte";
   import { morph } from "../motion/morph.svelte";
-  import { COMPACTION_MARK } from "./compaction-mark";
+  import { COMPACTING_MARK, COMPACTION_MARK } from "./compaction-mark";
   import { disclosureAt } from "./disclosure.svelte";
   import MessageBody from "./MessageBody.svelte";
   import type { Row } from "./rows";
@@ -44,8 +58,60 @@
     lead?: number | null;
   } = $props();
 
+  /**
+   * This mount saw it compacting: it settles here, Caw at work is this
+   * mount's, and it says how it went. A row mounted after that — scrolled
+   * back to, read from history — is simply at rest.
+   */
+  const watched = untrack(() => row.state === "compacting");
+  const live = $derived(row.state === "compacting");
+  const failed = $derived(row.state === "failed");
+  /** Caw at work is on the page: until his leave has played out. */
+  let working = $state(watched);
+
+  /** What happened, why when the harness said, and what to do now (WORDS.md, Error formula). */
+  const failure = $derived(
+    `Couldn't compact the conversation${
+      row.error ? `: ${row.error.trim().replace(/[.\s]+$/, "")}` : ""
+    }. It stays as it was; send /compact to try again.`
+  );
+
+  /**
+   * What the row says to a screen reader, as it changes: that the
+   * compaction began, then how it ended. Written a frame after the region
+   * is on the page, so its first words are an announcement and not part
+   * of a region being born.
+   */
+  let spoken = $state("");
+  $effect(() => {
+    if (!watched) {
+      return;
+    }
+    let said = "Compacted";
+    if (live) {
+      said = "Compacting…";
+    } else if (failed) {
+      said = failure;
+    }
+    const frame = requestAnimationFrame(() => {
+      spoken = said;
+    });
+    return () => cancelAnimationFrame(frame);
+  });
+
+  /**
+   * When his mark's coming in starts: once Caw at work has left, when he
+   * settles here; behind the row's own entrance, when it landed live.
+   */
+  function markDelay(): number {
+    if (watched) {
+      return dur("--dur-fade");
+    }
+    return lead === null ? 0 : dur("--dur-rail") + lead;
+  }
+
   const disclosed = $derived(disclosureAt(row.session, row.key));
-  const open = $derived(row.brief !== null && disclosed.get());
+  const open = $derived(row.brief !== null && !failed && disclosed.get());
 
   /** "Automatic · 182k tokens before": only the facts the harness reported. */
   const facts = $derived(
@@ -70,34 +136,76 @@
 </script>
 
 <button
-  aria-expanded={row.brief === null ? undefined : open}
-  aria-label={row.brief === null
+  aria-expanded={row.brief === null || failed ? undefined : open}
+  aria-label={row.brief === null || failed
     ? undefined
     : `Compacted, ${open ? "hide" : "show"} the summary`}
   class="divider focus-inset touch-hit"
-  disabled={row.brief === null}
+  disabled={row.brief === null || failed}
   onclick={() => disclosed.set(!open)}
   type="button"
   style:--lead={lead === null ? undefined : `${lead}ms`}
-  class:arriving={lead !== null}
+  class:arriving={lead !== null && !watched}
+  class:failed
+  class:live
+  class:settling={watched && row.state === "done"}
+  {@attach watched && morph()}
 >
   <span class="arm start">
     <svg aria-hidden="true" class="wave"><path d={WAVE} /></svg>
   </span>
   <span class="mid"
-    ><span class="caw"
-      ><CawMark
-        arrival={lead === null ? null : `${row.session}:${row.key}`}
-        delay={lead === null ? 0 : dur("--dur-rail") + lead}
-        size={COMPACTION_MARK.size}
-        status={COMPACTION_MARK.status}
-      /></span
-    >Compacted<span class="chev"><IconChevron aria-hidden="true" /></span></span
+    ><span class="caw" data-caw
+      >{#if working}
+        <span class="stand"
+          ><Caw
+            next={[COMPACTION_MARK.status]}
+            ongone={() => {
+              working = false;
+            }}
+            present={live}
+            size={COMPACTING_MARK.size}
+            status={COMPACTING_MARK.status}
+          /></span
+        >
+      {/if}
+      {#if !(live || failed)}
+        <span
+          class="stand"
+          in:fade={{ duration: watched ? dur("--dur-fade") : 0 }}
+          ><CawMark
+            arrival={watched || lead !== null
+              ? `${row.session}:${row.key}`
+              : null}
+            delay={markDelay()}
+            size={COMPACTION_MARK.size}
+            status={COMPACTION_MARK.status}
+          /></span
+        >
+      {/if}</span
+    >
+    {#if failed}
+      <span class="fail" in:fade={{ duration: dur("--dur-fade") }}
+        >{failure}</span
+      >
+    {:else if watched}
+      <TextMorph
+        as="span"
+        duration={morphMs()}
+        text={live ? "Compacting…" : "Compacted"}
+      />
+    {:else}
+      Compacted
+    {/if}
+    <span class="chev"><IconChevron aria-hidden="true" /></span></span
   >
   <span class="arm">
     <svg aria-hidden="true" class="wave"><path d={WAVE} /></svg>
   </span>
 </button>
+{#if watched}
+  <span class="sr-only" role="status">{spoken}</span>
+{/if}
 {#if open && row.brief !== null}
   <div class="brief" data-state="open" onintrostart={opening} transition:unfold>
     <div class="body" {@attach morph()}>
@@ -176,13 +284,48 @@
     translate: calc(var(--chev) * var(--room) * -1) 0;
   }
   /* Caw's slot: his still's 18px box, its middle on the word's x-height.
-     His rim and his coming in draw a little past it and take no room. */
+     His rim and his coming in draw a little past it and take no room. One
+     slot from the compaction's first moment to its end: while it runs it
+     is as wide as Caw at work (he stands taller than the line and takes no
+     height, so the row never changes height), and as it ends it closes to
+     his mark's box, the word riding in with it. */
   .caw {
+    position: relative;
     display: inline-block;
     vertical-align: middle;
-    inline-size: 18px;
-    block-size: 18px;
+    inline-size: var(--tx-compact-caw);
+    block-size: var(--tx-compact-caw);
     margin-inline-end: var(--c-pill-gap);
+
+    .live & {
+      inline-size: var(--tx-compacting-caw);
+    }
+    /* No Caw in an error. */
+    .failed & {
+      inline-size: 0;
+      margin-inline-end: 0;
+    }
+  }
+  /* Whoever stands in the slot, centred on it whatever its width: Caw at
+     work leaving where he worked as his mark comes in where it rests. */
+  .stand {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    display: block;
+    line-height: 0;
+    translate: -50% -50%;
+  }
+  /* Failed: one line in the divider's place, as wide as the column. */
+  .failed {
+    grid-template-columns: 0 minmax(0, 1fr) 0;
+    column-gap: 0;
+    color: var(--status-fail-ink);
+
+    .mid {
+      white-space: normal;
+      text-wrap: pretty;
+    }
   }
   /* A zero-width box on the word's line, `middle` setting its mark on the
      word's x-height; the mark hangs out of it after the gap. */
@@ -216,6 +359,10 @@
     &.start {
       clip-path: inset(0 calc(var(--chev) * var(--room)) 0 0);
     }
+    /* While it runs, and when it failed, there is no line. */
+    :is(.live, .failed) & {
+      opacity: 0;
+    }
   }
   @media (prefers-reduced-motion: no-preference) {
     .mid {
@@ -225,6 +372,13 @@
     }
     .arm {
       transition: clip-path var(--chev-dur) var(--chev-ease);
+    }
+    /* The slot closes from Caw at work's width to his mark's as the
+       compaction ends, on the same clock as the line drawing out. */
+    .caw {
+      transition:
+        inline-size var(--dur-panel) var(--ease-out),
+        margin-inline-end var(--dur-panel) var(--ease-out);
     }
     /* The mark turns on the spot: on-screen movement, not an entrance. */
     .chev :global(svg) {
@@ -271,6 +425,17 @@
     .arriving .wave path {
       animation: wave-draw var(--dur-pop) var(--ease-out)
         calc(var(--dur-rail) + var(--lead)) backwards;
+    }
+    /* A compaction watched to its end: the line draws out from the word
+       as the row settles. */
+    .settling .wave path {
+      animation: wave-draw var(--dur-pop) var(--ease-out) backwards;
+    }
+  }
+  /* With less motion the line is not drawn: it fades in where it stands. */
+  @media (prefers-reduced-motion: reduce) {
+    .settling .arm {
+      transition: opacity var(--dur-fade) var(--ease-out);
     }
   }
   @keyframes wave-draw {

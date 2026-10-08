@@ -79,7 +79,10 @@ export type Row =
    * as one divider. `brief` is null until the summary has arrived (live, it
    * comes a moment after the boundary), and the divider opens onto nothing
    * until then. Keyed by the boundary where there is one, so the summary
-   * landing is the same row gaining its brief.
+   * landing is the same row gaining its brief. A compaction this view saw
+   * begin is one row from its first moment (see {@link Told}): it stands
+   * `compacting` while the harness compacts, before or after its boundary
+   * has come, and becomes `done` or `failed` in place.
    */
   | {
       kind: "compaction";
@@ -90,6 +93,10 @@ export type Row =
       preTokens?: number;
       trigger?: "auto" | "manual";
       timestamp?: string;
+      /** Every compaction read back from history is `done`. */
+      state: "compacting" | "done" | "failed";
+      /** Why it failed, in the harness's words, when it said. */
+      error?: string;
     };
 
 /**
@@ -478,7 +485,8 @@ export function newestCompaction(messages: Message[]): number {
  */
 function compactionAt(
   messages: Message[],
-  i: number
+  i: number,
+  said: ReadonlyMap<string, string>
 ): { row: Row; span: number } | null {
   const m = messages[i];
   const boundary = isCompactBoundary(m) ? m : null;
@@ -488,10 +496,13 @@ function compactionAt(
   if (!first) {
     return null;
   }
+  const own = `c:${keyOf(first, i)}`;
   return {
     row: {
       kind: "compaction",
-      key: `c:${keyOf(first, i)}`,
+      // The row this view drew while it compacted, when it saw it begin.
+      key: said.get(own) ?? own,
+      state: "done",
       session: first.instanceId,
       // A summary the harness stored with no words in it (a compaction that
       // was cut short) is no brief: the divider has nothing to open.
@@ -648,7 +659,7 @@ function foldRange(
     }
     starts.push(i);
 
-    const compaction = compactionAt(messages, i);
+    const compaction = compactionAt(messages, i, said);
     if (compaction) {
       rows.push(compaction.row);
       i += compaction.span;
@@ -765,13 +776,323 @@ export interface FoldMemo {
   live: LiveMemo;
   /** The settled rows — everything before the live tail — and where each begins. */
   rows: Row[];
-  /** The answers this view streamed, by message key: the live row's key each keeps. */
+  /**
+   * The keys this view's own rows gave to what they became: an answer it
+   * streamed, by message key, keeps the live row's key; a compaction it saw
+   * begin, by its boundary row's own key, keeps the row it stood as.
+   */
   said: ReadonlyMap<string, string>;
   starts: number[];
+  /** The compactions this view saw begin that are not yet a plain row. */
+  told: readonly Told[];
   /** Where the speakers stand after the settled rows. */
   voices: Voices;
   /** The waiting sends this fold drew, by key. */
   waited: string[];
+}
+
+/**
+ * A COMPACTION HAS ONE ROW, FROM ITS FIRST MOMENT TO ITS LAST.
+ *
+ * The harnesses report a compaction in two orders. opencode sends its
+ * boundary as the compaction begins, Claude Code once it is over (and its
+ * word that it succeeded a frame before that). Either way the session says
+ * `compacting` for as long as it lasts, and that is when the row begins:
+ * under a key of its own, standing at the tail where no boundary tells it
+ * yet. The boundary that comes after the message it began after is this
+ * compaction's, whenever it comes: its row takes the key the row already
+ * has (`said`), so to the list it is the same row throughout, gaining its
+ * facts. When the session stops compacting, the session's record of the
+ * last compaction says how it went: a record newer than the one it began
+ * with that failed is a failure, one that succeeded, or a boundary of its
+ * own, is done, and with neither it never happened and its row folds away.
+ */
+export interface Told {
+  /** The drawn message it began after; null before the first. */
+  after: string | null;
+  /** The drawn message its row stands after while no boundary tells it. */
+  anchor: string | null;
+  /** `lastCompaction.at` as it began: a record with another is its outcome. */
+  at: number | null;
+  /** Its boundary row's own key, once that has come. */
+  boundary: string | null;
+  error?: string;
+  /** Its row's key from its first moment. */
+  key: string;
+  state: "compacting" | "done" | "failed";
+}
+
+/** The keys of rows that stood for a compaction before its boundary came. */
+const TOLD_KEY = "c:at:";
+
+/** A row that paints nothing: a result, a frame that only carried a call. */
+const unpainted = (row: Row): boolean =>
+  row.kind === "single" && voiceOfMessage(row.message) === "none";
+
+/** Where the drawn message `id` is, from the end; -1 when it is not. */
+function indexOfId(messages: Message[], id: string): number {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    if (messages[i].id === id) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+/**
+ * The message a compaction beginning now began after: the last one drawn,
+ * or, when the last row on screen is a compaction whose brief has not come,
+ * the one before that row — a boundary sent as the compaction began, a
+ * frame ahead of the word that it is compacting.
+ */
+function beganAfter(
+  messages: Message[],
+  rows: Row[],
+  starts: number[]
+): string | null {
+  let r = rows.length - 1;
+  while (r >= 0 && unpainted(rows[r])) {
+    r -= 1;
+  }
+  const last = rows[r];
+  if (
+    last?.kind === "compaction" &&
+    last.brief === null &&
+    !last.key.startsWith(TOLD_KEY)
+  ) {
+    return messages[starts[r] - 1]?.id ?? null;
+  }
+  return messages.at(-1)?.id ?? null;
+}
+
+/**
+ * The compactions this view has seen begin, after this fold: one begun,
+ * its boundary tied to its row, its outcome read. `rows` is patched where a
+ * boundary is tied (a copy, never the memo's), and `said` carries the tie
+ * to every later fold.
+ */
+function tell(
+  session: SessionState,
+  messages: Message[],
+  settled: { rows: Row[]; starts: number[] },
+  memo: FoldMemo | null,
+  said: ReadonlyMap<string, string>
+): { rows: Row[]; said: ReadonlyMap<string, string>; told: Told[] } {
+  const compacting = session.sdkStatus === "compacting";
+  const record = session.lastCompaction;
+  const { rows, starts } = settled;
+  const told = [...(memo?.told ?? [])];
+  if (!(compacting || told.length > 0)) {
+    return { rows, said, told };
+  }
+  if (compacting && !told.some((each) => each.state === "compacting")) {
+    const after = beganAfter(messages, rows, starts);
+    const taken = new Set([...said.values(), ...told.map((each) => each.key)]);
+    let key = `${TOLD_KEY}${after ?? "start"}`;
+    for (let n = 2; taken.has(key); n += 1) {
+      key = `${TOLD_KEY}${after ?? "start"}:${n}`;
+    }
+    told.push({
+      key,
+      after,
+      anchor: messages.at(-1)?.id ?? null,
+      at: record?.at ?? null,
+      boundary: null,
+      state: "compacting",
+    });
+  }
+  const tie: Tie = { rows, said, copied: false };
+  const seen = told.map((each) => {
+    const next = tieBoundary(each, messages, starts, tie);
+    return next.state === "compacting" && !compacting
+      ? outcome(next, record)
+      : next;
+  });
+  return {
+    rows: tie.rows,
+    said: tie.said,
+    // A compaction done and told by its boundary is a plain row from here.
+    told: seen.filter(
+      (each): each is Told =>
+        each !== null && !(each.state === "done" && each.boundary !== null)
+    ),
+  };
+}
+
+/** The rows and keys a fold's ties write to: copied before the first. */
+interface Tie {
+  copied: boolean;
+  rows: Row[];
+  said: ReadonlyMap<string, string>;
+}
+
+/**
+ * `each` with its boundary tied to it, when this fold holds one: the first
+ * compaction row past the message it began after takes its key. Untold
+ * still, a compaction that is running rides the tail.
+ */
+function tieBoundary(
+  each: Told,
+  messages: Message[],
+  starts: number[],
+  tie: Tie
+): Told {
+  if (each.boundary !== null || each.state === "failed") {
+    return each;
+  }
+  const r = boundaryOf(each, messages, tie.rows, starts);
+  if (r < 0) {
+    const anchor = messages.at(-1)?.id ?? null;
+    return each.state === "compacting" && anchor !== each.anchor
+      ? { ...each, anchor }
+      : each;
+  }
+  if (!tie.copied) {
+    tie.rows = tie.rows.slice();
+    tie.said = new Map(tie.said);
+    tie.copied = true;
+  }
+  const own = tie.rows[r].key;
+  tie.rows[r] = { ...tie.rows[r], key: each.key } as Row;
+  (tie.said as Map<string, string>).set(own, each.key);
+  return { ...each, boundary: own };
+}
+
+/** Where the boundary `each` is told by stands among `rows`, or -1. */
+function boundaryOf(
+  each: Told,
+  messages: Message[],
+  rows: Row[],
+  starts: number[]
+): number {
+  let from = 0;
+  if (each.after !== null) {
+    const at = indexOfId(messages, each.after);
+    // The message it began after is not drawn any more: nothing is known
+    // to come after it.
+    if (at < 0) {
+      return -1;
+    }
+    from = at + 1;
+  }
+  return rows.findIndex(
+    (row, at) =>
+      row.kind === "compaction" &&
+      starts[at] >= from &&
+      !row.key.startsWith(TOLD_KEY)
+  );
+}
+
+/**
+ * How a compaction that has stopped went, by the session's record of the
+ * last one: a newer record that failed, one that succeeded or that its
+ * boundary made — or null, with none of them: it was skipped, or stopped,
+ * and its row folds away.
+ */
+function outcome(
+  told: Told,
+  record: SessionState["lastCompaction"]
+): Told | null {
+  const newer = (record?.at ?? null) !== told.at;
+  if (newer && record?.result === "failed") {
+    return { ...told, state: "failed", error: record.error };
+  }
+  if (told.boundary !== null || (newer && record?.result === "success")) {
+    return { ...told, state: "done" };
+  }
+  return null;
+}
+
+/** Each compaction's drawn row by the row it is drawn from, for as long as it stands so. */
+const drawnAs = new WeakMap<object, Row>();
+
+/**
+ * The settled rows as drawn: a told compaction's row in the state it is
+ * in, and each one no boundary tells yet standing after the message it is
+ * anchored to. Rows put in among them regroup the voices after them.
+ */
+function presentTold(
+  rows: Row[],
+  starts: number[],
+  told: readonly Told[],
+  messages: Message[],
+  session: string,
+  voices: Voices
+): { rows: Row[]; voices: Voices } {
+  if (told.length === 0) {
+    return { rows, voices };
+  }
+  const byKey = new Map(told.map((each) => [each.key, each]));
+  const drawn = rows.map((row) => {
+    if (row.kind !== "compaction") {
+      return row;
+    }
+    const each = byKey.get(row.key);
+    return each
+      ? drawnFrom(row, { ...row, state: each.state, error: each.error })
+      : row;
+  });
+  const untold = told
+    .filter((each) => each.boundary === null)
+    .map((each) => {
+      const at = each.anchor === null ? -1 : indexOfId(messages, each.anchor);
+      let place = rows.length;
+      if (each.anchor === null) {
+        place = 0;
+      } else if (at >= 0) {
+        place = starts.findLastIndex((start) => start <= at) + 1;
+      }
+      return { each, place };
+    })
+    .sort((a, b) => b.place - a.place);
+  if (untold.length === 0) {
+    return { rows: drawn, voices };
+  }
+  for (const { each, place } of untold) {
+    drawn.splice(
+      place,
+      0,
+      drawnFrom(each, {
+        kind: "compaction",
+        key: each.key,
+        session,
+        brief: null,
+        state: each.state,
+        error: each.error,
+      })
+    );
+  }
+  const v = { ...NO_VOICE };
+  for (let i = 0; i < drawn.length; i += 1) {
+    const row = drawn[i];
+    const grouped = voice(v, row);
+    if (row.kind === "single" && row.grouped !== grouped) {
+      drawn[i] = { ...row, grouped };
+    }
+  }
+  return { rows: drawn, voices: v };
+}
+
+/**
+ * The row `source` is drawn as, the same object for as long as what it
+ * says stays the same: a row whose object changes on every fold draws its
+ * component again on every streamed frame.
+ */
+function drawnFrom(
+  source: object,
+  row: Extract<Row, { kind: "compaction" }>
+): Row {
+  const was = drawnAs.get(source);
+  if (
+    was?.kind === "compaction" &&
+    was.key === row.key &&
+    was.state === row.state &&
+    was.error === row.error
+  ) {
+    return was;
+  }
+  drawnAs.set(source, row);
+  return row;
 }
 
 /**
@@ -869,17 +1190,32 @@ export function buildRowsFrom(
   const branches = Object.keys(session.subagents).length;
   const cut = memo ? cutFor(messages, memo, branches) : -1;
   const appended = memo !== null && cut >= 0;
-  const { rows, starts, voices } =
+  const folded =
     memo && appended
       ? foldOnto(messages, session.subagents, memo, cut)
       : foldAll(messages, session.subagents, memo?.said ?? NO_SAID);
+  const { starts, voices } = folded;
 
   const prior = memo?.live ?? NO_LIVE;
-  const content = liveContent(session) ?? answerLanding(prior, rows);
+  const content = liveContent(session) ?? answerLanding(prior, folded.rows);
   const same = prior.on && content !== null && continues(prior, content);
   const gen = same ? prior.gen : prior.gen + 1;
-  const ended = prior.on && !same ? endOf(prior, rows, memo) : null;
-  const said = keepLive(ended, rows, memo?.said ?? NO_SAID);
+  const ended = prior.on && !same ? endOf(prior, folded.rows, memo) : null;
+  const { rows, said, told } = tell(
+    session,
+    messages,
+    folded,
+    memo,
+    keepLive(ended, folded.rows, memo?.said ?? NO_SAID)
+  );
+  const drawn = presentTold(
+    rows,
+    starts,
+    told,
+    messages,
+    session.instanceId,
+    voices
+  );
   const tool =
     session.currentTool && !called(session, session.currentTool.toolId)
       ? session.currentTool
@@ -891,15 +1227,16 @@ export function buildRowsFrom(
   const ahead = aheadOf(memo, waited, content !== null || tool !== null);
   return {
     rows: [
-      ...rows,
+      ...drawn.rows,
       ...tailRows(session, content, tool, gen, new Set(ahead), {
-        ...voices,
+        ...drawn.voices,
       }),
     ],
     memo: {
       rows,
       starts,
       said,
+      told,
       count: messages.length,
       first: messages[0],
       last: messages.at(-1),

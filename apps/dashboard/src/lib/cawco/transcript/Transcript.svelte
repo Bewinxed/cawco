@@ -39,13 +39,7 @@
   import { IconChat } from "#lib/icons.js";
   import { browser } from "$app/env";
   import { cawco, readOlderPage, type SessionState } from "../client.svelte";
-  import {
-    crossIn,
-    dur,
-    ease,
-    easeOut,
-    motionOk,
-  } from "../motion/curves.svelte";
+  import { crossIn, dur, ease, motionOk } from "../motion/curves.svelte";
   import { BLEED } from "../motion/rows.svelte";
   import { carry, waiting } from "../motion/share.svelte";
   import { rebuildScheduler } from "../workspace/scheduler.svelte";
@@ -365,7 +359,7 @@
     return (
       `${arrayOf(session.messages)}:${session.messages.length}:${settled}:${last?.id ?? ""}:${session.streaming.length}:` +
       `${session.thinkingStream.length}:${session.busy ? 1 : 0}:${session.pending.map((ask) => `${ask.requestId}${ask.routedTo ?? ""}`).join(",")}:` +
-      `${session.openBlock}:${session.thinkingClosing}:${session.currentTool?.toolId ?? ""}:${session.sdkStatus}:` +
+      `${session.openBlock}:${session.thinkingClosing}:${session.currentTool?.toolId ?? ""}:${session.sdkStatus}:${session.lastCompaction?.at ?? ""}:` +
       `${last?.metadata?.sendFailed ?? ""}`
     );
   };
@@ -956,10 +950,15 @@
     replaces: boolean;
   }
 
-  /** Whether `row` can leave the list: a tail row, or a failed send its retry replaces. */
+  /**
+   * Whether `row` can leave the list: a tail row, a failed send its retry
+   * replaces, or a compaction still running, which goes when it turns out
+   * never to have happened (skipped, or stopped: rows.ts `outcome`).
+   */
   const canLeave = (row: Row): boolean =>
     TAIL_KINDS.has(row.kind) ||
-    (row.kind === "single" && row.message.state === "failed");
+    (row.kind === "single" && row.message.state === "failed") ||
+    (row.kind === "compaction" && row.state === "compacting");
 
   /**
    * Whether the row `key` has left the list, rather than become something
@@ -1303,32 +1302,6 @@
    * never seen.
    */
   const ssrCount = $derived(browser ? undefined : built.rows.length);
-
-  /**
-   * Compaction is a genuinely live process — the model is rewriting its own
-   * context — and it says so with one sticky pill and a beating dot. It used to
-   * warp the entire transcript through an SVG displacement filter; distorting
-   * text the operator may be mid-sentence in, and repainting the whole scroll
-   * surface every frame, is not a state indicator. The pill alone carries it.
-   */
-  const compacting = $derived(session.sdkStatus === "compacting");
-  /** The pill rises into place as it fades up, and fades as it goes. */
-  function pillIn(_node: Element) {
-    const rise = motionOk.current;
-    return {
-      duration: dur("--dur-menu"),
-      easing: easeOut,
-      css: (t: number, u: number) =>
-        `opacity: ${t}${rise ? `; translate: 0 ${(u * 4).toFixed(2)}px` : ""}`,
-    };
-  }
-  function pillOut(_node: Element) {
-    return {
-      duration: dur("--dur-exit"),
-      easing: easeOut,
-      css: (t: number) => `opacity: ${t}`,
-    };
-  }
 
   let scroller = $state<HTMLElement | undefined>();
   /** virtua's imperative handle — `scrollToIndex` reaches the true last row even
@@ -2819,18 +2792,6 @@
   role="log"
   bind:this={scroller}
 >
-  <!-- Pinned to the top of the transcript viewport (the foot is the composer's),
-       first child so `position: sticky` actually holds. A strip at no height
-       in the flow, the pill hanging from it over the rows, so its coming and
-       going moves nothing. -->
-  <div class="top-dock">
-    {#if compacting}
-      <div class="compacting-note" role="status" in:pillIn out:pillOut>
-        <span aria-hidden="true" class="beat"></span>
-        Compacting context…
-      </div>
-    {/if}
-  </div>
   <!-- Empty is what is drawn: a conversation whose one row is folding away
        as its retry comes in is not empty for the frame between the two, and
        the empty state shown there pushed the fold 53px down. -->
@@ -3064,53 +3025,6 @@
      block padding. */
   .older:has(> :global(button)) {
     padding-block-end: var(--space-5);
-  }
-
-  .top-dock {
-    position: sticky;
-    inset-block-start: var(--space-3);
-    z-index: 3;
-    block-size: 0;
-    display: flex;
-    justify-content: center;
-    align-items: start;
-    pointer-events: none;
-  }
-  .compacting-note {
-    inline-size: fit-content;
-    max-inline-size: 100%;
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    padding-block: var(--space-2);
-    padding-inline: var(--space-4);
-    border: 1px solid var(--border-hairline);
-    border-radius: var(--radius-pill);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-    color: var(--ink-strong);
-
-    /* Motion is opt-in: the dot only beats when the reader hasn't asked for
-       reduced motion. Without the query the pill's presence alone carries
-       the state — the dot is still. */
-    & .beat {
-      inline-size: 6px;
-      block-size: 6px;
-      flex: 0 0 auto;
-      border-radius: 50%;
-      background: var(--status-live-ink);
-
-      @media (prefers-reduced-motion: no-preference) {
-        animation: beat var(--breath) var(--ease-in-out) infinite;
-      }
-    }
-  }
-  @keyframes beat {
-    50% {
-      opacity: 0.3;
-    }
   }
 
   /* The live region is read, never seen: off-screen rather than
