@@ -9,7 +9,7 @@
     "skipLibCheck": true,
     "noEmit": true,
     "isolatedModules": true,
-    "types": ["./worker-configuration.d.ts", "node"]
+    "types": ["@cloudflare/workers-types", "node"]
   },
-  "include": ["src/**/*", "worker-configuration.d.ts"]
+  "include": ["src/**/*"]
 }
