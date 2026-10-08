@@ -157,6 +157,14 @@ final class RowStore {
         guard !isReady(item, width: width), entries[item.id]?.view.superview == nil else { return false }
         func build<V: RowContent>(_ type: V.Type) -> UIView { row(type, for: item, width: width) }
         let view = build(type)
+        // A row with no superview takes no width from its frame: layout gave
+        // it the width its content asked for. A grouped turn's clock alone
+        // made one 39pt wide, and its list, its tab stop past the line's end
+        // at that width, was laid out for good (the main thread held, the
+        // screen frozen mid-scroll). Here, as in a cell, it stands at its width.
+        let standing = view.widthAnchor.constraint(equalToConstant: width)
+        standing.isActive = true
+        defer { standing.isActive = false }
         // Two passes, as a cell measures (HostCell): laid out at its width so
         // every text learns it, then measured.
         view.frame = CGRect(x: 0, y: 0, width: width, height: max(view.bounds.height, 1))
