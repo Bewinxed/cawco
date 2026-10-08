@@ -203,7 +203,7 @@ final class PaywallGate {
         guard key != reminderKey else { return }
         reminderKey = key
         Task {
-            await TrialReminder.schedule(endsAt: endsAt, title: PaywallCopy.Trial.pushTitle, body: PaywallCopy.Trial.pushBody(price))
+            await TrialReminder.schedule(endsAt: endsAt, title: PaywallCopy.Trial.pushTitle, body: PaywallCopy.Trial.pushBody)
         }
     }
 }

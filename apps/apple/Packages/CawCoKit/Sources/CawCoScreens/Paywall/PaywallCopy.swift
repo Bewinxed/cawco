@@ -18,32 +18,34 @@ enum PaywallCopy {
             switch variant {
             case .story:
                 Pitch(eyebrow: "CawCo Pro",
-                      headline: "Know the moment an agent needs you.",
-                      subline: "Five minutes in, the agent asks. Answer from the lock screen, not an hour later.",
+                      headline: "Never leave an agent waiting.",
+                      subline: "Your whole fleet on one live board. When an agent stops to ask, approve or answer it from your phone, not an hour later.",
                       ticks: ["Every machine and agent, one live board",
                               "Approve or deny from the lock screen",
-                              "One purchase for iPhone, iPad and Mac"])
+                              "One purchase for iPhone and iPad"])
             case .poster:
                 Pitch(eyebrow: "CawCo Pro",
                       headline: "Keep every agent moving.",
                       subline: "Every session on every machine, live on your phone. Approve from the lock screen.",
                       ticks: ["See every agent, every machine, live",
                               "Answer, steer and start sessions from anywhere",
-                              "Buy once for iPhone, iPad and Mac"])
+                              "Buy once for iPhone and iPad"])
             }
         }
 
         static let timelineTitle = "The free week, day by day"
 
-        /// The three rows: their day, and their words once the price is known.
-        static func timeline(price: String?) -> [(day: String, text: String?)] {
-            [("Today", "Everything on, notifications included. Nothing to pay."),
-             ("Day 6", "One reminder that tomorrow is the last free day."),
-             ("Day 7", price.map { "The trial ends and the app locks. Pay \($0) once to keep it; nothing is charged on its own. The hub and web dashboard stay free." })]
+        /// The three rows: their day and their words. Before the price arrives,
+        /// Day 7 says "Pay once" (P1a.price), so the charge is always disclosed.
+        static func timeline(price: String?) -> [(day: String, text: String)] {
+            [("Today", "Everything on. Nothing to pay."),
+             ("Day 6", "One notification from CawCo: tomorrow is the last free day. Turn it off any time under Notifications."),
+             ("Day 7", "The trial ends and the app locks. Pay \(price.map { "\($0) " } ?? "")once to keep it; nothing is charged on its own. The hub and web dashboard stay free.")]
         }
 
-        static func price(_ price: String?) -> String? {
-            price.map { "Pay \($0) once. No subscription, no auto-charge." }
+        /// P1.price, or P1a.price while `displayPrice` hasn't arrived.
+        static func price(_ price: String?) -> String {
+            "Pay \(price.map { "\($0) " } ?? "")once. No subscription, no auto-charge."
         }
 
         static let primary = "Start 7 days free"
@@ -112,7 +114,7 @@ enum PaywallCopy {
         }
 
         static let boughtHeadline = "Pro is yours."
-        static let boughtBody = "Paid once, on every device signed into this Apple Account. One more step: notifications, so an agent's question reaches you wherever you are."
+        static let boughtBody = "Paid once, on every iPhone and iPad signed into this Apple Account. One more step: notifications, so an agent's question reaches you wherever you are."
         static let restoredProHeadline = "Pro is back."
         static let restoredTrialHeadline = "Your free 7 days are back."
         static let notifyLine = "Without notifications, you only find out when you open the app."
@@ -182,13 +184,12 @@ enum PaywallCopy {
         static let owned = "Pro"
         static let cardTitle = "Your free 7 days end tomorrow."
         static func cardBody(_ price: String?) -> String? {
-            price.map { "After that the app locks. Pay \($0) once to keep it; nothing is charged on its own." }
+            price.map { "Tomorrow the app locks; your hub, machines and sessions stay as they are. To keep the app, pay \($0) once. Nothing is charged on its own." }
         }
 
         static let pushTitle = "Free trial ends tomorrow"
-        static func pushBody(_ price: String?) -> String {
-            "CawCo locks tomorrow unless you pay \(price ?? "for Pro") once. Nothing is charged automatically."
-        }
+        /// Informational, no price (App Review R14).
+        static let pushBody = "Tomorrow the app locks. To keep it, get Pro once in the app; nothing is charged on its own."
     }
 
     /// H: the hub sheet's Notifications section.
@@ -203,9 +204,17 @@ enum PaywallCopy {
         static let relayFailed = "Couldn't reach the relay."
         static let tryAgain = "Try again"
         static let quiet = "Quiet"
+        /// Quiet on sends nothing; off, it sends what needs you (ruling 2, §2 H4).
         static let quietOn = "Sends nothing."
         static let quietOff = "Sends what needs you."
         static let test = "Send a test notification"
+        /// H5: the day-6 reminder's switch.
+        static let reminder = "Trial reminder"
+        static let reminderOn = "One notification on day 6, the day before the free trial ends."
+        static let reminderOff = "No reminder. The trial still ends on day 7."
+        /// H7: this device leaves the relay.
+        static let remove = "Remove this device from the relay"
+        static let removeHint = "Deletes this device's registration from the relay. Notifications stop until you turn them on again; your purchase is untouched."
     }
 
     /// The banner the hero draws when no ask is waiting: the machine is real, the ask an example.

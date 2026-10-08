@@ -20,7 +20,7 @@
       "internalID" : "6753000001",
       "localizations" : [
         {
-          "description" : "Every machine, project and agent on one board, and notifications that reach you on the lock screen. One purchase for iPhone, iPad and Mac.",
+          "description" : "Unlocks the app for good: every machine and agent on one live board, approvals and answers from your phone. Paid once; no subscription.",
           "displayName" : "CawCo Pro",
           "locale" : "en_US"
         }
@@ -35,7 +35,7 @@
       "internalID" : "6753000002",
       "localizations" : [
         {
-          "description" : "Seven days of CawCo with everything on. On day 7 the app locks; CawCo Pro is a separate one-time purchase.",
+          "description" : "7 days of CawCo Pro, free. On day 7 the app locks unless you buy Pro once.",
           "displayName" : "7-Day Trial",
           "locale" : "en_US"
         }

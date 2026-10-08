@@ -353,7 +353,7 @@ final class PaywallController: ObservedViewController {
         if form == .trial {
             parts.append(timeline(price: price))
         }
-        parts.append(tick(PaywallCopy.P1.price(price) ?? " ", ink: Palette.inkStrong))
+        parts.append(tick(PaywallCopy.P1.price(price), ink: Palette.inkStrong))
         parts.append(storeBlock(price: price))
         let fail = KitLabel(TypeScale.typeMeta, ink: Palette.statusFailInk, lines: 0)
         failLabel = fail
@@ -694,13 +694,13 @@ final class PaywallController: ObservedViewController {
             day.text = step.day
             day.widthAnchor.constraint(equalToConstant: 48).isActive = true
             let text = KitLabel(TypeScale.typeBody, ink: Palette.inkMuted, lines: 0)
-            text.text = step.text ?? " "
+            text.text = step.text
             text.wrap = .pretty
             let row = UIStackView(arrangedSubviews: [TimelineMarker(), day, text])
             row.spacing = Space.space2
             row.alignment = .firstBaseline
             row.isAccessibilityElement = true
-            row.accessibilityLabel = "\(step.day): \(step.text ?? "")"
+            row.accessibilityLabel = "\(step.day): \(step.text)"
             return row
         }
         let list = column(rows, spacing: Space.space3)
