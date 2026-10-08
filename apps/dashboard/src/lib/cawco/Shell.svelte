@@ -56,8 +56,8 @@
   import {
     clock,
     home,
-    instanceTitle,
     type NeedsItem,
+    sessionName,
     span,
   } from "./home/home-state.svelte";
   import JumpPalette, { type JumpOpener } from "./JumpPalette.svelte";
@@ -748,20 +748,17 @@
     if (page.error) {
       return page.status === 404 ? "Not found" : "Error";
     }
-    const [section, id] = page.url.pathname
+    // The URL shown: a shallow move between conversations (workspace
+    // `project`) leaves `page.url` where the route was entered.
+    const [section, id] = (page.shallow?.url ?? page.url).pathname
       .split("/")
       .filter(Boolean)
       .map(decodeURIComponent);
     switch (section) {
       case undefined:
         return "Fleet";
-      case "session": {
-        const row = id ? cawco.instanceIndex.byId.get(id) : undefined;
-        return (
-          (id ? cawco.threadOf(id)?.title : undefined) ??
-          (row ? instanceTitle(row) : "Fleet")
-        );
-      }
+      case "session":
+        return sessionName(id);
       case "project":
         if (id === "new") {
           return "New project";

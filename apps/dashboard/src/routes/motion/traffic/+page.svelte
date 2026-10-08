@@ -246,6 +246,8 @@
   });
 </script>
 
+<svelte:head><title>Traffic bench · CawCo</title></svelte:head>
+
 <div class="bench">
   <header>
     <h1>Arrival traffic</h1>

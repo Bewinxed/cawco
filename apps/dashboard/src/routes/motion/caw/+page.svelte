@@ -58,6 +58,8 @@
   Object.assign(globalThis, { __caw: bench });
 </script>
 
+<svelte:head><title>Caw bench · CawCo</title></svelte:head>
+
 <main>
   <div class="stage">
     {#if mounted}

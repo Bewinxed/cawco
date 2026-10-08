@@ -256,6 +256,19 @@ interface StoredEntry {
 export const instanceTitle = (row: InstanceRow): string =>
   resolveSessionTitle({ title: row.title, cwd: row.cwd, id: row.id });
 
+/**
+ * What `/session/<id>` is called, in the bar and the document title alike:
+ * the thread's title where Caw asked in one, else the session's; the board
+ * (no id, or one the fleet does not hold yet) is Fleet.
+ */
+export function sessionName(id: string | undefined): string {
+  if (!id) {
+    return "Fleet";
+  }
+  const row = cawco.instanceIndex.byId.get(id);
+  return cawco.threadOf(id)?.title ?? (row ? instanceTitle(row) : "Fleet");
+}
+
 export const machineName = (machineId: string): string => {
   const machine = cawco.machines.find((m) => m.machineId === machineId);
   return machine ? machineLabel(machine.hostname) : machineId;

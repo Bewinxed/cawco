@@ -262,6 +262,8 @@
   const noop = () => undefined;
 </script>
 
+<svelte:head><title>Update states · CawCo</title></svelte:head>
+
 <main>
   <h1>Channel cards</h1>
   <section class="card" data-states="cards-stable">
