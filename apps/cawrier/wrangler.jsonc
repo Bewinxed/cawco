@@ -1,0 +1,31 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "cawrier",
+  // bewinxed@gmail.com's account, which holds the cawco.dev zone.
+  "account_id": "7119532fe266e2a0493f558807a85bab",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "routes": [{ "pattern": "cawrier.cawco.dev", "custom_domain": true }],
+  "durable_objects": {
+    "bindings": [{ "name": "PAIRING", "class_name": "Pairing" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Pairing"] }],
+  "ratelimits": [
+    {
+      "name": "ENROLL_LIMIT",
+      "namespace_id": "1001",
+      "simple": { "limit": 10, "period": 60 }
+    }
+  ],
+  "vars": {
+    "APNS_TOPIC": "dev.cawco.app",
+    "PRO_PRODUCT_IDS": "dev.cawco.app.pro",
+    // The App Store app record; Apple's verifier requires it for Production.
+    "APP_APPLE_ID": "6819139448"
+  },
+  // Secrets, set by hand: APNS_TEAM_ID, APNS_KEY_ID, APNS_P8.
+  // No request logs: only the status codes and APNs reasons the code logs.
+  "observability": { "enabled": true, "logs": { "invocation_logs": false } }
+}

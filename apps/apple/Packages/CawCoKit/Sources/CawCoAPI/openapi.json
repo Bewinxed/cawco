@@ -3129,95 +3129,6 @@
         }
       }
     },
-    "/api/push/credentials": {
-      "put": {
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "teamId": {
-                    "type": "string"
-                  },
-                  "keyId": {
-                    "type": "string"
-                  },
-                  "privateKey": {
-                    "type": "string"
-                  },
-                  "bundleId": {
-                    "type": "string"
-                  },
-                  "environment": {
-                    "type": "string",
-                    "enum": [
-                      "sandbox",
-                      "production"
-                    ]
-                  }
-                },
-                "required": [
-                  "teamId",
-                  "keyId",
-                  "bundleId",
-                  "environment"
-                ]
-              }
-            }
-          }
-        },
-        "operationId": "putApiPushCredentials",
-        "responses": {
-          "200": {
-            "description": "putApiPushCredentials 200",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/putApiPushCredentials200"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "putApiPushCredentials 400",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "putApiPushCredentials 422",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ValidationErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "operationId": "deleteApiPushCredentials",
-        "responses": {
-          "200": {
-            "description": "deleteApiPushCredentials 200",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/deleteApiPushCredentials200"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/push/test": {
       "post": {
         "operationId": "postApiPushTest",
@@ -3245,11 +3156,11 @@
         }
       }
     },
-    "/api/push/devices/{token}": {
+    "/api/push/devices/{id}": {
       "put": {
         "parameters": [
           {
-            "name": "token",
+            "name": "id",
             "in": "path",
             "required": true,
             "schema": {
@@ -3275,20 +3186,20 @@
             }
           }
         },
-        "operationId": "putApiPushDevicesByToken",
+        "operationId": "putApiPushDevicesById",
         "responses": {
           "200": {
-            "description": "putApiPushDevicesByToken 200",
+            "description": "putApiPushDevicesById 200",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/putApiPushDevicesByToken200"
+                  "$ref": "#/components/schemas/putApiPushDevicesById200"
                 }
               }
             }
           },
           "404": {
-            "description": "putApiPushDevicesByToken 404",
+            "description": "putApiPushDevicesById 404",
             "content": {
               "text/plain": {
                 "schema": {
@@ -3298,7 +3209,7 @@
             }
           },
           "422": {
-            "description": "putApiPushDevicesByToken 422",
+            "description": "putApiPushDevicesById 422",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3312,7 +3223,7 @@
       "delete": {
         "parameters": [
           {
-            "name": "token",
+            "name": "id",
             "in": "path",
             "required": true,
             "schema": {
@@ -3320,20 +3231,20 @@
             }
           }
         ],
-        "operationId": "deleteApiPushDevicesByToken",
+        "operationId": "deleteApiPushDevicesById",
         "responses": {
           "200": {
-            "description": "deleteApiPushDevicesByToken 200",
+            "description": "deleteApiPushDevicesById 200",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/deleteApiPushDevicesByToken200"
+                  "$ref": "#/components/schemas/deleteApiPushDevicesById200"
                 }
               }
             }
           },
           "404": {
-            "description": "deleteApiPushDevicesByToken 404",
+            "description": "deleteApiPushDevicesById 404",
             "content": {
               "text/plain": {
                 "schema": {
@@ -12884,39 +12795,12 @@
       "getApiPush200": {
         "type": "object",
         "properties": {
-          "credentials": {
-            "type": "object",
-            "properties": {
-              "teamId": {
-                "type": "string"
-              },
-              "keyId": {
-                "type": "string"
-              },
-              "bundleId": {
-                "type": "string"
-              },
-              "environment": {
-                "$ref": "#/components/schemas/ApnsEnvironment"
-              },
-              "savedAt": {
-                "type": "number"
-              }
-            },
-            "required": [
-              "bundleId",
-              "environment",
-              "keyId",
-              "savedAt",
-              "teamId"
-            ]
-          },
           "devices": {
             "type": "array",
             "items": {
               "type": "object",
               "properties": {
-                "token": {
+                "id": {
                   "type": "string"
                 },
                 "name": {
@@ -12924,9 +12808,6 @@
                 },
                 "platform": {
                   "type": "string"
-                },
-                "environment": {
-                  "$ref": "#/components/schemas/ApnsEnvironment"
                 },
                 "quiet": {
                   "type": "boolean"
@@ -12948,14 +12829,13 @@
                 }
               },
               "required": [
-                "environment",
+                "id",
                 "lastError",
                 "lastSentAt",
                 "name",
                 "platform",
                 "quiet",
-                "registeredAt",
-                "token"
+                "registeredAt"
               ]
             }
           }
@@ -12964,83 +12844,21 @@
           "devices"
         ]
       },
-      "putApiPushCredentials200": {
-        "type": "object",
-        "properties": {
-          "ok": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "ok"
-        ]
-      },
-      "deleteApiPushCredentials200": {
-        "type": "object",
-        "properties": {
-          "ok": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "ok"
-        ]
-      },
       "postApiPushTest200": {
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "kind": {
-                "type": "string",
-                "enum": [
-                  "devices"
-                ]
-              },
-              "outcomes": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/PushOutcome"
-                }
-              }
-            },
-            "required": [
-              "kind",
-              "outcomes"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "kind": {
-                "type": "string",
-                "enum": [
-                  "probe"
-                ]
-              },
-              "ok": {
-                "type": "boolean"
-              },
-              "status": {
-                "type": "number"
-              },
-              "reason": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              }
-            },
-            "required": [
-              "kind",
-              "ok",
-              "reason",
-              "status"
-            ]
+        "type": "object",
+        "properties": {
+          "outcomes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PushOutcome"
+            }
           }
+        },
+        "required": [
+          "outcomes"
         ]
       },
-      "putApiPushDevicesByToken200": {
+      "putApiPushDevicesById200": {
         "type": "object",
         "properties": {
           "ok": {
@@ -13051,7 +12869,7 @@
           "ok"
         ]
       },
-      "deleteApiPushDevicesByToken200": {
+      "deleteApiPushDevicesById200": {
         "type": "object",
         "properties": {
           "ok": {
@@ -19718,27 +19536,15 @@
           "sentAt"
         ]
       },
-      "ApnsEnvironment": {
-        "description": "Which APNs host a push goes to: Xcode builds are `sandbox`, TestFlight and the App Store `production`.",
-        "enum": [
-          "production",
-          "sandbox"
-        ],
-        "type": "string"
-      },
       "PushOutcome": {
-        "description": "One device's answer from APNs.",
+        "description": "One device's answer from Cawrier.",
         "type": "object",
         "properties": {
-          "device": {
-            "description": "Last six characters of the device token.",
-            "type": "string"
-          },
           "name": {
             "type": "string"
           },
           "pruned": {
-            "description": "The device was unregistered (410) and is gone.",
+            "description": "The pairing is gone (401 or 410) and the device with it.",
             "type": "boolean"
           },
           "reason": {
@@ -19748,12 +19554,11 @@
             ]
           },
           "status": {
-            "description": "HTTP status, or 0 when APNs could not be reached.",
+            "description": "HTTP status, or 0 when Cawrier could not be reached.",
             "type": "number"
           }
         },
         "required": [
-          "device",
           "name",
           "pruned",
           "reason",

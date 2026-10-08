@@ -75,7 +75,6 @@ import { type AccountsDb, accountsDb } from "./accounts";
 import {
   accountSignins,
   agents,
-  apnsCredentials,
   canvasChoices,
   canvases,
   capabilityUsageDaily,
@@ -183,9 +182,7 @@ export type PlaceRow = typeof projectPlaces.$inferSelect;
 export type ProjectRow = typeof projects.$inferSelect & { places: PlaceRow[] };
 /** One task file as a project's task index holds it (tasks.ts). */
 export type TaskIndexRow = typeof projectTasks.$inferSelect;
-/** The stored APNs credentials (push.ts); the private key never leaves the hub. */
-export type ApnsCredentialsRow = typeof apnsCredentials.$inferSelect;
-/** A device the iOS app registered for pushes. */
+/** A device the iOS app registered for pushes, by its Cawrier pairing. */
 export type PushDeviceRow = typeof pushDevices.$inferSelect;
 export type ProjectOfferRow = typeof projectOffers.$inferSelect;
 export type SessionPlanRow = typeof sessionPlans.$inferSelect;
@@ -853,26 +850,23 @@ export interface DbShape {
   ) => { projectId: string; path: string }[];
   /** A project's threads, newest first, each with its newest message. */
   readonly projectThreads: (projectId: string) => ThreadListRow[];
-  /** The iOS app's pushes (push.ts): credentials, one row, and the devices that registered. */
+  /** The iOS app's pushes (push.ts): the devices that registered, by their Cawrier pairing. */
   readonly push: {
-    readonly credentials: () => ApnsCredentialsRow | undefined;
-    readonly setCredentials: (
-      row: Omit<ApnsCredentialsRow, "id" | "savedAt">
-    ) => void;
-    readonly clearCredentials: () => void;
     readonly devices: () => PushDeviceRow[];
     /** Registers or refreshes a device; a refresh keeps its quiet setting unless one is given. */
     readonly putDevice: (
       device: Pick<
         PushDeviceRow,
-        "environment" | "name" | "platform" | "token"
-      > & { quiet?: boolean }
+        "name" | "pairingId" | "platform" | "secret"
+      > & {
+        quiet?: boolean;
+      }
     ) => PushDeviceRow;
-    /** False when no device has that token. */
-    readonly dropDevice: (token: string) => boolean;
-    readonly setQuiet: (token: string, quiet: boolean) => boolean;
-    /** What APNs said to the last push for a device: taken (no error) or refused with a reason. */
-    readonly noteResult: (token: string, error: string | null) => void;
+    /** False when no device has that pairing. */
+    readonly dropDevice: (pairingId: string) => boolean;
+    readonly setQuiet: (pairingId: string, quiet: boolean) => boolean;
+    /** What Cawrier said to the last push for a device: taken (no error) or refused with a reason. */
+    readonly noteResult: (pairingId: string, error: string | null) => void;
   };
   /** Writes one id's entry whole, and the canvas's page hash with it, in one transaction. */
   readonly putCanvasChoice: (row: CanvasChoiceRow) => void;
@@ -1610,7 +1604,6 @@ const MEMORY_ID = "memory";
 /** The one row the supervisor config ever takes — same precedent as `MEMORY_ID`. */
 const SUPERVISOR_CONFIG_ID = "supervisor";
 const OPENROUTER_CONNECTION_ID = "openrouter";
-const APNS_CREDENTIALS_ID = "apns";
 
 /** How many supervisor event rows to keep — bounded without a scheduler (plan: our choice). */
 const SUPERVISOR_EVENTS_RETENTION = 5000;
@@ -5507,24 +5500,6 @@ const make = (path: string): DbShape => {
         .run();
     },
     push: {
-      credentials: () =>
-        db
-          .select()
-          .from(apnsCredentials)
-          .where(eq(apnsCredentials.id, APNS_CREDENTIALS_ID))
-          .get(),
-      setCredentials: (row) => {
-        const values = { ...row, savedAt: new Date() };
-        db.insert(apnsCredentials)
-          .values({ id: APNS_CREDENTIALS_ID, ...values })
-          .onConflictDoUpdate({ target: apnsCredentials.id, set: values })
-          .run();
-      },
-      clearCredentials: () => {
-        db.delete(apnsCredentials)
-          .where(eq(apnsCredentials.id, APNS_CREDENTIALS_ID))
-          .run();
-      },
       devices: () =>
         db.select().from(pushDevices).orderBy(pushDevices.createdAt).all(),
       putDevice: ({ quiet, ...device }) => {
@@ -5538,7 +5513,7 @@ const make = (path: string): DbShape => {
             updatedAt: now,
           })
           .onConflictDoUpdate({
-            target: pushDevices.token,
+            target: pushDevices.pairingId,
             set: {
               ...device,
               ...(quiet === undefined ? {} : { quiet }),
@@ -5548,27 +5523,27 @@ const make = (path: string): DbShape => {
           .returning()
           .get();
       },
-      dropDevice: (token) =>
+      dropDevice: (pairingId) =>
         db
           .delete(pushDevices)
-          .where(eq(pushDevices.token, token))
-          .returning({ token: pushDevices.token })
+          .where(eq(pushDevices.pairingId, pairingId))
+          .returning({ pairingId: pushDevices.pairingId })
           .all().length > 0,
-      setQuiet: (token, quiet) =>
+      setQuiet: (pairingId, quiet) =>
         db
           .update(pushDevices)
           .set({ quiet, updatedAt: new Date() })
-          .where(eq(pushDevices.token, token))
-          .returning({ token: pushDevices.token })
+          .where(eq(pushDevices.pairingId, pairingId))
+          .returning({ pairingId: pushDevices.pairingId })
           .all().length > 0,
-      noteResult: (token, error) => {
+      noteResult: (pairingId, error) => {
         db.update(pushDevices)
           .set(
             error === null
               ? { lastSentAt: new Date(), lastError: null }
               : { lastError: error }
           )
-          .where(eq(pushDevices.token, token))
+          .where(eq(pushDevices.pairingId, pairingId))
           .run();
       },
     },

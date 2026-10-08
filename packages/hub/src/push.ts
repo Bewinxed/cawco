@@ -1,16 +1,15 @@
 /**
- * Pushes to the iOS app (Projects spec §5.5, P2): content-free APNs alerts
- * from the hub when something newly needs you. A push names the session,
- * task or project and nothing else; its `cawco` data carries the ids the app
- * reads the details by, over the tailnet, once opened.
+ * Pushes to the iOS app (Projects spec §5.5, P2): content-free alerts from
+ * the hub when something newly needs you. A push names the session, task or
+ * project and nothing else; its `cawco` data carries the ids the app reads
+ * the details by, over the tailnet, once opened.
  *
- * - **Credentials** (team id, key id, the `.p8` key, bundle id, default
- *   environment) are one hub row, entered in Settings; the key is never
- *   answered by any route. The provider token is an ES256 JWT over that key,
- *   signed once and reused for 50 minutes (APNs refuses one older than 60).
- * - **Devices** are registered by the app on a hidden route; a token APNs
- *   answers 410 (Unregistered) for is deleted. A quiet device stays
- *   registered and is sent nothing.
+ * - **Cawrier** (apps/cawrier) holds the app's APNs key; no hub does. A phone
+ *   that bought Pro enrolls a pairing there and registers the pairing's id
+ *   and secret here, on a hidden route. Each push is one `POST /v1/push` to
+ *   Cawrier with that secret. A pairing Cawrier no longer knows (401) or
+ *   whose device is gone (410) is deleted; the app registers again on its
+ *   next launch. A quiet device stays registered and is sent nothing.
  * - **Moments**: a session asks for permission or asks a question
  *   ({@link Push.onAsk}), a task enters a stage of kind `you`
  *   ({@link Push.taskChanged}), an attempt at a task fails
@@ -18,43 +17,23 @@
  *   an ask once per request, and one collapse id per task, so a failed attempt
  *   that moves its task into a `you` stage is one push, not two.
  *
- * Sent over HTTP/2 (node:http2), one connection per APNs host, kept while
- * used. `CAWCO_APNS_ORIGIN` points every push at a stand-in (an `http://`
- * origin speaks h2c) — the Telegram bridge's `CAWCO_TELEGRAM_API` precedent.
+ * `CAWCO_CAWRIER_ORIGIN` points every push at a stand-in for a local run —
+ * the Telegram bridge's `CAWCO_TELEGRAM_API` precedent.
  */
-import {
-  createHash,
-  createPrivateKey,
-  type KeyObject,
-  sign,
-} from "node:crypto";
-import { type ClientHttp2Session, connect } from "node:http2";
+import { createHash } from "node:crypto";
 import type { Envelope, PermissionRequestFrame } from "@cawco/core";
 import { Elysia, t } from "elysia";
 import type { DbShape, PushDeviceRow, WorkItemRow } from "./db";
-import type { ApnsEnvironment } from "./db/schema";
 import { hidden } from "./hidden";
 import type { TaskEvent } from "./tasks";
 
-const HOSTS: Record<ApnsEnvironment, string> = {
-  production: "https://api.push.apple.com",
-  sandbox: "https://api.sandbox.push.apple.com",
-};
+const CAWRIER = Bun.env.CAWCO_CAWRIER_ORIGIN ?? "https://cawrier.cawco.dev";
 
-/** A stand-in for both hosts, for a local run. */
-const ORIGIN_OVERRIDE = Bun.env.CAWCO_APNS_ORIGIN;
-
-/** APNs takes a provider token for up to an hour; a new one every 50 minutes stays clear of it. */
-const TOKEN_LIFE_MS = 50 * 60 * 1000;
 /** One push per collapse id inside this window: a task's move and its failed attempt are one moment. */
 const SAME_MOMENT_MS = 10_000;
 /** An undelivered push is worth nothing after a day. */
 const EXPIRY_S = 24 * 60 * 60;
-/** A connection with nothing to send for this long is closed. */
-const IDLE_MS = 5 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 10_000;
-/** A token no device has: APNs checks the provider token before the device token. */
-const PROBE_TOKEN = "0".repeat(64);
 
 /**
  * The app's notification categories (the spec in the Projects plan, §5.5,
@@ -112,15 +91,13 @@ interface Notification {
   readonly threadId: string;
 }
 
-/** One device's answer from APNs. */
+/** One device's answer from Cawrier. */
 export interface PushOutcome {
-  /** Last six characters of the device token. */
-  readonly device: string;
   readonly name: string;
-  /** The device was unregistered (410) and is gone. */
+  /** The pairing is gone (401 or 410) and the device with it. */
   readonly pruned: boolean;
   readonly reason: string | null;
-  /** HTTP status, or 0 when APNs could not be reached. */
+  /** HTTP status, or 0 when Cawrier could not be reached. */
   readonly status: number;
 }
 
@@ -132,9 +109,6 @@ export interface PushServices {
     taskId: string
   ) => Promise<{ kind: string | null; title: string } | undefined>;
 }
-
-const base64url = (input: string | Buffer): string =>
-  Buffer.from(input).toString("base64url");
 
 /** A collapse id fits APNs' 64 bytes: long ids go as their hash. */
 const collapse = (prefix: string, id: string): string =>
@@ -168,204 +142,87 @@ const askCategory = (
     : PUSH_CATEGORIES.permission;
 };
 
-/** Apple's Team ID and Key ID: ten capitals and digits. */
-const APPLE_ID = /^[A-Z0-9]{10}$/;
+const payloadOf = (notification: Notification) => ({
+  aps: {
+    alert: {
+      title: notification.name,
+      ...(notification.project && notification.project !== notification.name
+        ? { subtitle: notification.project }
+        : {}),
+      body: notification.body ?? "Needs you",
+    },
+    sound: "default",
+    category: notification.category,
+    "thread-id": notification.threadId,
+    "mutable-content": 0,
+  },
+  cawco: notification.data,
+});
 
-/** Reads a `.p8` key; throws a sentence when it is not an EC P-256 private key. */
-export const readApnsKey = (pem: string): KeyObject => {
-  let key: KeyObject;
+/** One POST to Cawrier; never throws. `reason` is Cawrier's sentence, or APNs' reason it passed on. */
+const post = async (
+  device: PushDeviceRow,
+  notification: Notification
+): Promise<{ status: number; reason: string | null }> => {
   try {
-    key = createPrivateKey(pem.trim());
-  } catch (cause) {
-    throw new Error(
-      "The key does not read as a private key. Paste the whole .p8 file, BEGIN and END lines included.",
-      { cause }
-    );
+    const response = await fetch(`${CAWRIER}/v1/push`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${device.secret}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        pairingId: device.pairingId,
+        collapseId: notification.collapseId,
+        expiration: Math.floor(Date.now() / 1000) + EXPIRY_S,
+        payload: payloadOf(notification),
+      }),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+    if (response.ok) {
+      return { status: response.status, reason: null };
+    }
+    const answer = (await response.json().catch(() => ({}))) as {
+      error?: string;
+      reason?: string;
+    };
+    return {
+      status: response.status,
+      reason: answer.reason ?? answer.error ?? null,
+    };
+  } catch {
+    return { status: 0, reason: null };
   }
-  if (key.asymmetricKeyType !== "ec") {
-    throw new Error(
-      "The key is not an elliptic-curve key. APNs keys are EC P-256 (.p8)."
-    );
-  }
-  return key;
 };
 
 export const createPush = ({ db, task }: PushServices) => {
-  let token: { at: number; fingerprint: string; jwt: string } | undefined;
-  const sessions = new Map<string, ClientHttp2Session>();
-  const idle = new Map<string, ReturnType<typeof setTimeout>>();
   /** Asks already pushed, by request id: a replayed or re-escalated ask is not a new moment. */
   const asked = new Set<string>();
   /** When each collapse id last went out. */
   const recent = new Map<string, number>();
 
-  /** The provider token for the stored credentials, signed again after 50 minutes or a change. */
-  const providerToken = (
-    credentials: NonNullable<ReturnType<DbShape["push"]["credentials"]>>
-  ): string => {
-    const fingerprint = createHash("sha256")
-      .update(
-        `${credentials.teamId}\n${credentials.keyId}\n${credentials.privateKey}`
-      )
-      .digest("hex");
-    const now = Date.now();
-    if (
-      token &&
-      token.fingerprint === fingerprint &&
-      now - token.at < TOKEN_LIFE_MS
-    ) {
-      return token.jwt;
-    }
-    const header = base64url(
-      JSON.stringify({ alg: "ES256", kid: credentials.keyId })
-    );
-    const claims = base64url(
-      JSON.stringify({ iss: credentials.teamId, iat: Math.floor(now / 1000) })
-    );
-    const signature = sign("sha256", Buffer.from(`${header}.${claims}`), {
-      key: readApnsKey(credentials.privateKey),
-      dsaEncoding: "ieee-p1363",
-    });
-    token = {
-      at: now,
-      fingerprint,
-      jwt: `${header}.${claims}.${base64url(signature)}`,
-    };
-    return token.jwt;
-  };
-
-  const session = (origin: string): ClientHttp2Session => {
-    const open = sessions.get(origin);
-    if (open && !open.closed && !open.destroyed) {
-      return open;
-    }
-    const opened = connect(origin);
-    const forget = () => {
-      if (sessions.get(origin) === opened) {
-        sessions.delete(origin);
-      }
-    };
-    opened.on("error", (error) => {
-      console.warn(`[push] ${origin}: ${error.message}`);
-      forget();
-    });
-    opened.on("goaway", forget);
-    opened.on("close", forget);
-    sessions.set(origin, opened);
-    return opened;
-  };
-
-  /** Closes a host's connection once nothing has gone over it for a while. */
-  const touch = (origin: string): void => {
-    clearTimeout(idle.get(origin));
-    const timer = setTimeout(() => {
-      sessions.get(origin)?.close();
-      sessions.delete(origin);
-      idle.delete(origin);
-    }, IDLE_MS);
-    timer.unref?.();
-    idle.set(origin, timer);
-  };
-
-  /** One POST to APNs; never throws. */
-  const post = (
-    environment: ApnsEnvironment,
-    deviceToken: string,
-    headers: Record<string, string>,
-    body: string
-  ): Promise<{ status: number; reason: string | null }> => {
-    const origin = ORIGIN_OVERRIDE ?? HOSTS[environment];
-    return new Promise((resolve) => {
-      let settled = false;
-      const done = (status: number, reason: string | null) => {
-        if (!settled) {
-          settled = true;
-          resolve({ status, reason });
-        }
-      };
-      try {
-        const request = session(origin).request({
-          ":method": "POST",
-          ":path": `/3/device/${deviceToken}`,
-          "content-type": "application/json",
-          ...headers,
-        });
-        touch(origin);
-        let status = 0;
-        let text = "";
-        request.setEncoding("utf8");
-        request.setTimeout(REQUEST_TIMEOUT_MS, () => {
-          request.close();
-          done(0, "APNs did not answer in 10 seconds");
-        });
-        request.on("response", (response) => {
-          status = Number(response[":status"] ?? 0);
-        });
-        request.on("data", (chunk: string) => {
-          text += chunk;
-        });
-        request.on("end", () => {
-          let reason: string | null = null;
-          if (text) {
-            try {
-              reason = (JSON.parse(text) as { reason?: string }).reason ?? null;
-            } catch {
-              reason = text.slice(0, 200);
-            }
-          }
-          done(status, reason);
-        });
-        request.on("error", (error) => done(0, error.message));
-        request.end(body);
-      } catch (error) {
-        done(0, error instanceof Error ? error.message : String(error));
-      }
-    });
-  };
-
-  const payloadOf = (notification: Notification): string =>
-    JSON.stringify({
-      aps: {
-        alert: {
-          title: notification.name,
-          ...(notification.project && notification.project !== notification.name
-            ? { subtitle: notification.project }
-            : {}),
-          body: notification.body ?? "Needs you",
-        },
-        sound: "default",
-        category: notification.category,
-        "thread-id": notification.threadId,
-        "mutable-content": 0,
-      },
-      cawco: notification.data,
-    });
-
-  /** Records what APNs said for a device: taken, unregistered (the device goes) or refused. */
+  /** Records what Cawrier said for a device: taken, pairing gone (the device goes) or refused. */
   const settle = (
     device: PushDeviceRow,
     status: number,
     reason: string | null
   ): boolean => {
     if (status === 200) {
-      db.push.noteResult(device.token, null);
+      db.push.noteResult(device.pairingId, null);
       return false;
     }
-    const pruned = status === 410 && db.push.dropDevice(device.token);
+    const pruned =
+      (status === 401 || status === 410) &&
+      db.push.dropDevice(device.pairingId);
     if (!pruned) {
-      if (
-        reason === "ExpiredProviderToken" ||
-        reason === "InvalidProviderToken"
-      ) {
-        token = undefined;
-      }
       db.push.noteResult(
-        device.token,
-        reason ?? (status ? `APNs answered ${status}` : "APNs not reached")
+        device.pairingId,
+        reason ??
+          (status ? `Cawrier answered ${status}` : "Cawrier not reached")
       );
     }
     console.warn(
-      `[push] ${device.name} (…${device.token.slice(-6)}): ${status} ${reason ?? ""}${pruned ? " — unregistered, removed" : ""}`
+      `[push] ${device.name}: ${status} ${reason ?? ""}${pruned ? " — pairing gone, removed" : ""}`
     );
     return pruned;
   };
@@ -375,48 +232,12 @@ export const createPush = ({ db, task }: PushServices) => {
     notification: Notification,
     to?: PushDeviceRow[]
   ): Promise<PushOutcome[]> => {
-    const credentials = db.push.credentials();
-    if (!credentials) {
-      return [];
-    }
     const devices = to ?? db.push.devices().filter((device) => !device.quiet);
-    if (devices.length === 0) {
-      return [];
-    }
-    let jwt: string;
-    try {
-      jwt = providerToken(credentials);
-    } catch (error) {
-      console.warn(
-        `[push] cannot sign: ${error instanceof Error ? error.message : String(error)}`
-      );
-      return [];
-    }
-    const body = payloadOf(notification);
-    const expiration = String(Math.floor(Date.now() / 1000) + EXPIRY_S);
     return await Promise.all(
       devices.map(async (device): Promise<PushOutcome> => {
-        const { status, reason } = await post(
-          device.environment,
-          device.token,
-          {
-            authorization: `bearer ${jwt}`,
-            "apns-topic": credentials.bundleId,
-            "apns-push-type": "alert",
-            "apns-priority": "10",
-            "apns-expiration": expiration,
-            "apns-collapse-id": notification.collapseId,
-          },
-          body
-        );
+        const { status, reason } = await post(device, notification);
         const pruned = settle(device, status, reason);
-        return {
-          device: device.token.slice(-6),
-          name: device.name,
-          status,
-          reason,
-          pruned,
-        };
+        return { name: device.name, status, reason, pruned };
       })
     );
   };
@@ -547,168 +368,55 @@ export const createPush = ({ db, task }: PushServices) => {
       });
     },
 
-    /**
-     * A test from Settings: a push to every registered device, quiet ones too.
-     * With none registered, a probe to a token no device has: APNs checks the
-     * provider token first, so `BadDeviceToken` means the credentials hold.
-     */
-    async test(): Promise<
-      | { kind: "devices"; outcomes: PushOutcome[] }
-      | { kind: "probe"; ok: boolean; status: number; reason: string | null }
-    > {
-      const credentials = db.push.credentials();
-      if (!credentials) {
-        throw new Error("No APNs credentials are saved.");
-      }
+    /** A test from Settings: a push to every registered device, quiet ones too. */
+    async test(): Promise<{ outcomes: PushOutcome[] }> {
       const devices = db.push.devices();
-      if (devices.length > 0) {
-        return {
-          kind: "devices",
-          outcomes: await deliver(
-            {
-              name: "CawCo",
-              project: null,
-              body: "Test push. This device gets what needs you.",
-              category: PUSH_CATEGORIES.test,
-              collapseId: "test",
-              threadId: "test",
-              data: { kind: "test" },
-            },
-            devices
-          ),
-        };
-      }
-      const { status, reason } = await post(
-        credentials.environment,
-        PROBE_TOKEN,
-        {
-          authorization: `bearer ${providerToken(credentials)}`,
-          "apns-topic": credentials.bundleId,
-          "apns-push-type": "alert",
-          "apns-priority": "10",
-        },
-        payloadOf({
-          name: "CawCo",
-          project: null,
-          body: "Test push. This device gets what needs you.",
-          category: PUSH_CATEGORIES.test,
-          collapseId: "test",
-          threadId: "test",
-          data: { kind: "test" },
-        })
-      );
-      if (
-        reason === "ExpiredProviderToken" ||
-        reason === "InvalidProviderToken"
-      ) {
-        token = undefined;
+      if (devices.length === 0) {
+        throw new Error(
+          "No phone is registered yet. Open CawCo on your phone and allow notifications."
+        );
       }
       return {
-        kind: "probe",
-        ok: status === 400 && reason === "BadDeviceToken",
-        status,
-        reason,
+        outcomes: await deliver(
+          {
+            name: "CawCo",
+            project: null,
+            body: "Test push. This device gets what needs you.",
+            category: PUSH_CATEGORIES.test,
+            collapseId: "test",
+            threadId: "test",
+            data: { kind: "test" },
+          },
+          devices
+        ),
       };
-    },
-
-    /** Credentials changed: the next push signs a new token. */
-    forgetToken(): void {
-      token = undefined;
     },
   };
 };
 
 export type Push = ReturnType<typeof createPush>;
 
-const ENVIRONMENT = t.Union([t.Literal("sandbox"), t.Literal("production")]);
-
-/** What Settings shows of a device. */
+/** What Settings shows of a device; the secret never leaves the hub but for Cawrier. */
 const deviceView = (device: PushDeviceRow) => ({
-  token: device.token,
+  id: device.pairingId,
   name: device.name,
   platform: device.platform,
-  environment: device.environment,
   quiet: device.quiet,
   registeredAt: device.createdAt.getTime(),
   lastSentAt: device.lastSentAt?.getTime() ?? null,
   lastError: device.lastError,
 });
 
-/** A device token as APNs issues it: hex, at least 32 bytes. */
-const TOKEN_PATTERN = /^[0-9a-f]{64,200}$/;
+/** A pairing id as the app mints it: a lowercase v4 uuid. */
+const PAIRING_ID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+/** A pairing secret: 32 random bytes, base64url without padding. */
+const SECRET = /^[A-Za-z0-9_-]{43}$/;
 
 export const pushRoutes = (db: DbShape, push: Push) =>
   new Elysia()
-    // ── Settings: credentials and devices (the key is never answered) ─────
-    .get("/api/push", () => {
-      const credentials = db.push.credentials();
-      return {
-        credentials: credentials
-          ? {
-              teamId: credentials.teamId,
-              keyId: credentials.keyId,
-              bundleId: credentials.bundleId,
-              environment: credentials.environment,
-              savedAt: credentials.savedAt.getTime(),
-            }
-          : null,
-        devices: db.push.devices().map(deviceView),
-      };
-    })
-    .put(
-      "/api/push/credentials",
-      {
-        body: t.Object({
-          teamId: t.String(),
-          keyId: t.String(),
-          /** Omitted to keep the stored key. */
-          privateKey: t.Optional(t.String()),
-          bundleId: t.String(),
-          environment: ENVIRONMENT,
-        }),
-      },
-      ({ body, status }) => {
-        const teamId = body.teamId.trim();
-        const keyId = body.keyId.trim();
-        const bundleId = body.bundleId.trim();
-        if (!(APPLE_ID.test(teamId) && APPLE_ID.test(keyId))) {
-          return status(
-            400,
-            "Team ID and Key ID are 10 letters and digits each. Copy them from the Apple Developer account's Keys page."
-          );
-        }
-        if (!bundleId) {
-          return status(
-            400,
-            "Name the app's bundle ID, such as dev.cawco.app."
-          );
-        }
-        const privateKey =
-          body.privateKey?.trim() || db.push.credentials()?.privateKey;
-        if (!privateKey) {
-          return status(400, "Paste the .p8 key to save the credentials.");
-        }
-        try {
-          readApnsKey(privateKey);
-        } catch (error) {
-          return status(400, (error as Error).message);
-        }
-        db.push.setCredentials({
-          teamId,
-          keyId,
-          privateKey,
-          bundleId,
-          environment: body.environment,
-        });
-        push.forgetToken();
-        return { ok: true };
-      }
-    )
-    .delete("/api/push/credentials", () => {
-      db.push.clearCredentials();
-      push.forgetToken();
-      return { ok: true };
-    })
+    // ── Settings: the devices and the test ───────────────────────────────
+    .get("/api/push", () => ({ devices: db.push.devices().map(deviceView) }))
     .post("/api/push/test", async ({ status }) => {
       try {
         return await push.test();
@@ -717,26 +425,26 @@ export const pushRoutes = (db: DbShape, push: Push) =>
       }
     })
     .put(
-      "/api/push/devices/:token",
+      "/api/push/devices/:id",
       { body: t.Object({ quiet: t.Boolean() }) },
       ({ params, body, status }) =>
-        db.push.setQuiet(params.token, body.quiet)
+        db.push.setQuiet(params.id, body.quiet)
           ? { ok: true }
           : status(404, "That device is no longer registered.")
     )
-    .delete("/api/push/devices/:token", ({ params, status }) =>
-      db.push.dropDevice(params.token)
+    .delete("/api/push/devices/:id", ({ params, status }) =>
+      db.push.dropDevice(params.id)
         ? { ok: true }
         : status(404, "That device is no longer registered.")
     )
-    // ── The app: register and unregister a device (hidden) ────────────────
+    // ── The app: register and unregister its pairing (hidden) ────────────
     .post(
       "/api/push/register",
       {
         ...hidden,
         body: t.Object({
-          token: t.String(),
-          environment: ENVIRONMENT,
+          pairingId: t.String(),
+          secret: t.String(),
           name: t.String(),
           platform: t.Union([
             t.Literal("ios"),
@@ -747,13 +455,18 @@ export const pushRoutes = (db: DbShape, push: Push) =>
         }),
       },
       ({ body, status }) => {
-        const token = body.token.trim().toLowerCase();
-        if (!TOKEN_PATTERN.test(token)) {
-          return status(400, "The device token is not an APNs token in hex.");
+        if (!PAIRING_ID.test(body.pairingId)) {
+          return status(400, "The pairing id is not a lowercase v4 uuid.");
+        }
+        if (!SECRET.test(body.secret)) {
+          return status(
+            400,
+            "The pairing secret is not 32 bytes in base64url (43 characters)."
+          );
         }
         const device = db.push.putDevice({
-          token,
-          environment: body.environment,
+          pairingId: body.pairingId,
+          secret: body.secret,
           name: body.name.trim().slice(0, 120) || "iPhone",
           platform: body.platform,
           quiet: body.quiet,
@@ -763,9 +476,6 @@ export const pushRoutes = (db: DbShape, push: Push) =>
     )
     .post(
       "/api/push/unregister",
-      { ...hidden, body: t.Object({ token: t.String() }) },
-      ({ body }) => ({
-        ok: true,
-        removed: db.push.dropDevice(body.token.trim().toLowerCase()),
-      })
+      { ...hidden, body: t.Object({ pairingId: t.String() }) },
+      ({ body }) => ({ ok: true, removed: db.push.dropDevice(body.pairingId) })
     );
