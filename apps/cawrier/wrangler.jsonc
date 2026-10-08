@@ -11,18 +11,25 @@
   "durable_objects": {
     "bindings": [
       { "name": "PAIRING", "class_name": "Pairing" },
-      { "name": "SEATS", "class_name": "Seats" }
+      { "name": "SEATS", "class_name": "Seats" },
+      { "name": "EXPERIMENT", "class_name": "Experiment" }
     ]
   },
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["Pairing"] },
-    { "tag": "v2", "new_sqlite_classes": ["Seats"] }
+    { "tag": "v2", "new_sqlite_classes": ["Seats"] },
+    { "tag": "v3", "new_sqlite_classes": ["Experiment"] }
   ],
   "ratelimits": [
     {
       "name": "ENROLL_LIMIT",
       "namespace_id": "1001",
       "simple": { "limit": 10, "period": 60 }
+    },
+    {
+      "name": "EVENT_LIMIT",
+      "namespace_id": "1002",
+      "simple": { "limit": 30, "period": 60 }
     }
   ],
   "vars": {
@@ -32,9 +39,11 @@
     "TRIAL_PRODUCT_ID": "dev.cawco.app.trial7",
     "TRIAL_DAYS": "7",
     // The App Store app record; Apple's verifier requires it for Production.
-    "APP_APPLE_ID": "6819139448"
+    "APP_APPLE_ID": "6819139448",
+    // The experiments counted, "name:variant,variant;name:…".
+    "EXPERIMENTS": "paywall-1:story,poster"
   },
-  // Secrets, set by hand: APNS_TEAM_ID, APNS_KEY_ID, APNS_P8.
+  // Secrets, set by hand: APNS_TEAM_ID, APNS_KEY_ID, APNS_P8, EXPERIMENT_READ_TOKEN.
   // No request logs: only the status codes and APNs reasons the code logs.
   "observability": { "enabled": true, "logs": { "invocation_logs": false } }
 }

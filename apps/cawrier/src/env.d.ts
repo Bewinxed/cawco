@@ -8,6 +8,14 @@ interface Env {
   /** The App Store app record; Apple's verifier requires it for Production. */
   readonly APP_APPLE_ID: string;
   readonly ENROLL_LIMIT: RateLimit;
+  readonly EVENT_LIMIT: RateLimit;
+  readonly EXPERIMENT: DurableObjectNamespace<
+    import("./experiment").Experiment
+  >;
+  /** Secret: reads an experiment's counts; absent, nobody can. */
+  readonly EXPERIMENT_READ_TOKEN?: string;
+  /** "name:variant,variant;name:…": the experiments and variants counted. */
+  readonly EXPERIMENTS: string;
   readonly PAIRING: DurableObjectNamespace<import("./pairing").Pairing>;
   /** Comma-separated product ids that grant Pro. */
   readonly PRO_PRODUCT_IDS: string;

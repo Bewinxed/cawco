@@ -3,7 +3,8 @@
  * secret to. A SQLite-backed Durable Object named by the pairing id, holding
  * one row; it takes a seat under its purchase ({@link Seats}). Each enroll
  * keeps it 30 more days, or to the free week's end when that is sooner; then
- * its alarm wipes it and gives the seat back. So a refunded purchase stops
+ * its alarm wipes it and gives the seat back (as does removing the device in
+ * CawCo, through `/v1/unenroll`). So a refunded purchase stops
  * within 30 days, a free week stops when it ends, and an active buyer,
  * re-enrolling on every launch, never lapses.
  */
@@ -159,6 +160,18 @@ export class Pairing extends DurableObject<Env> {
       if (this.held()?.device_token === deviceToken) {
         await this.wipe();
       }
+    });
+  }
+
+  /** The device was removed in CawCo: the pairing goes and its seat with it. False when the secret is not this pairing's. */
+  async unenroll(secretHash: string): Promise<boolean> {
+    return await this.ctx.blockConcurrencyWhile(async () => {
+      const held = this.held();
+      if (!(held && same(held.secret_hash, secretHash))) {
+        return false;
+      }
+      await this.wipe();
+      return true;
     });
   }
 

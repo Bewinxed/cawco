@@ -6,7 +6,10 @@
  *
  * POST /v1/enroll  { pairingId, secret, deviceToken, apnsEnvironment, proof }
  * POST /v1/push    Authorization: Bearer <secret>; { pairingId, collapseId?, expiration?, payload }
+ * POST /v1/unenroll Authorization: Bearer <secret>; { pairingId }: the pairing and its seat go
  * GET  /v1/health  one APNs probe: proves outbound HTTP/2 to Apple and the key
+ * POST /v1/experiment/event  { experiment, variant, event }: one anonymous count
+ * GET  /v1/experiment/<name> Authorization: Bearer <EXPERIMENT_READ_TOKEN>: the counts
  */
 import {
   type ApnsAnswer,
@@ -14,10 +17,12 @@ import {
   hasKey,
   sendApns,
 } from "./apns";
+import { EVENTS, type ExperimentEvent } from "./experiment";
 import { SEATS_PER_PURCHASE } from "./seats";
 import { verifyPurchase } from "./storekit";
 
 // biome-ignore lint/performance/noBarrelFile: Workers find a Durable Object class among the entry module's exports.
+export { Experiment } from "./experiment";
 export { Pairing } from "./pairing";
 export { Seats } from "./seats";
 
@@ -175,7 +180,7 @@ const enroll = async (request: Request, env: Env): Promise<Response> => {
 const DEAD_TOKEN = new Set(["BadDeviceToken", "DeviceTokenNotForTopic"]);
 
 const relay = async (request: Request, env: Env): Promise<Response> => {
-  const secret = BEARER.exec(request.headers.get("authorization") ?? "")?.[1];
+  const secret = bearerOf(request);
   if (!matches(secret, SECRET)) {
     return refuse(401, "The pairing's secret is missing.");
   }
@@ -221,6 +226,118 @@ const relay = async (request: Request, env: Env): Promise<Response> => {
   });
 };
 
+const bearerOf = (request: Request): string | undefined =>
+  BEARER.exec(request.headers.get("authorization") ?? "")?.[1];
+
+/** The device was removed in CawCo: its pairing is wiped and its seat freed. */
+const unenroll = async (request: Request, env: Env): Promise<Response> => {
+  const secret = bearerOf(request);
+  if (!matches(secret, SECRET)) {
+    return refuse(401, "The pairing's secret is missing.");
+  }
+  const body = await bodyOf(request);
+  if (!(body && matches(body.pairingId, UUID))) {
+    return refuse(400, "The unenrollment is not in the shape Cawrier reads.");
+  }
+  return (await pairing(env, body.pairingId).unenroll(await sha256(secret)))
+    ? new Response(null, { status: 204 })
+    : refuse(401, "No pairing holds this id and secret.");
+};
+
+/** `EXPERIMENTS`: "name:variant,variant;name:variant,…" as a map from name to its variants. */
+const experimentsOf = (env: Env): Map<string, string[]> =>
+  new Map(
+    env.EXPERIMENTS.split(";").map((entry) => {
+      const [name = "", variants = ""] = entry.split(":");
+      return [
+        name.trim(),
+        variants
+          .split(",")
+          .map((variant) => variant.trim())
+          .filter(Boolean),
+      ];
+    })
+  );
+
+const experiment = (env: Env, name: string) =>
+  env.EXPERIMENT.get(env.EXPERIMENT.idFromName(name));
+
+/** One anonymous count. The address is the rate limit's key only; nothing stores it. */
+const experimentEvent = async (
+  request: Request,
+  env: Env
+): Promise<Response> => {
+  const ip = request.headers.get("cf-connecting-ip") ?? "unknown";
+  if (!(await env.EVENT_LIMIT.limit({ key: ip })).success) {
+    return refuse(
+      429,
+      "Too many events from this address. Try again in a minute."
+    );
+  }
+  const body = await bodyOf(request);
+  const variants =
+    typeof body?.experiment === "string"
+      ? experimentsOf(env).get(body.experiment)
+      : undefined;
+  if (
+    !(
+      body &&
+      variants &&
+      typeof body.variant === "string" &&
+      variants.includes(body.variant) &&
+      (EVENTS as readonly unknown[]).includes(body.event)
+    )
+  ) {
+    return refuse(400, "The event is not one this experiment counts.");
+  }
+  await experiment(env, body.experiment as string).count(
+    body.variant,
+    body.event as ExperimentEvent
+  );
+  return new Response(null, { status: 204 });
+};
+
+/** Constant-time over equal-length digests, so the token's length does not show either. */
+const sameToken = async (given: string, held: string): Promise<boolean> => {
+  const encoder = new TextEncoder();
+  const [left, right] = await Promise.all(
+    [given, held].map((text) =>
+      crypto.subtle.digest("SHA-256", encoder.encode(text))
+    )
+  );
+  return crypto.subtle.timingSafeEqual(
+    left as ArrayBuffer,
+    right as ArrayBuffer
+  );
+};
+
+const experimentReport = async (
+  request: Request,
+  env: Env,
+  name: string
+): Promise<Response> => {
+  const token = bearerOf(request);
+  if (
+    !(
+      env.EXPERIMENT_READ_TOKEN &&
+      token &&
+      (await sameToken(token, env.EXPERIMENT_READ_TOKEN))
+    )
+  ) {
+    return refuse(401, "The experiment's read token is missing or wrong.");
+  }
+  const variants = experimentsOf(env).get(name);
+  if (!variants) {
+    return refuse(404, "No experiment has that name.");
+  }
+  return json(200, {
+    experiment: name,
+    ...(await experiment(env, name).report(variants)),
+  });
+};
+
+const EXPERIMENT_PATH = "/v1/experiment/";
+
 let health:
   | { at: number; body: { apns: ApnsAnswer; key: boolean } }
   | undefined;
@@ -247,8 +364,21 @@ export default {
     if (request.method === "POST" && pathname === "/v1/push") {
       return await relay(request, env);
     }
+    if (request.method === "POST" && pathname === "/v1/unenroll") {
+      return await unenroll(request, env);
+    }
     if (request.method === "GET" && pathname === "/v1/health") {
       return await healthCheck(env);
+    }
+    if (request.method === "POST" && pathname === `${EXPERIMENT_PATH}event`) {
+      return await experimentEvent(request, env);
+    }
+    if (request.method === "GET" && pathname.startsWith(EXPERIMENT_PATH)) {
+      return await experimentReport(
+        request,
+        env,
+        pathname.slice(EXPERIMENT_PATH.length)
+      );
     }
     return refuse(404, "Nothing is here.");
   },

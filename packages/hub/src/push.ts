@@ -195,6 +195,48 @@ const post = async (
   }
 };
 
+/**
+ * Removes a device: Cawrier wipes its pairing first, which frees the
+ * purchase's seat, then the hub forgets it. When Cawrier does not take it,
+ * the hub still forgets the device and logs why; the seat then frees itself
+ * at the pairing's alarm. False when no device has that pairing.
+ */
+const removeDevice = async (
+  db: DbShape,
+  pairingId: string
+): Promise<boolean> => {
+  const device = db.push.devices().find((row) => row.pairingId === pairingId);
+  if (!device) {
+    return false;
+  }
+  let refusal: string | undefined;
+  try {
+    const response = await fetch(`${CAWRIER}/v1/unenroll`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${device.secret}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ pairingId }),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+    if (response.status !== 204) {
+      const answer = (await response.json().catch(() => ({}))) as {
+        error?: string;
+      };
+      refusal = `Cawrier answered ${response.status} ${answer.error ?? ""}`;
+    }
+  } catch (error) {
+    refusal = `Cawrier not reached: ${error instanceof Error ? error.message : String(error)}`;
+  }
+  if (refusal) {
+    console.warn(
+      `[push] ${device.name}: unenroll — ${refusal}; removed here, its seat frees at the pairing's alarm`
+    );
+  }
+  return db.push.dropDevice(pairingId);
+};
+
 export const createPush = ({ db, task }: PushServices) => {
   /** Asks already pushed, by request id: a replayed or re-escalated ask is not a new moment. */
   const asked = new Set<string>();
@@ -373,9 +415,9 @@ export const createPush = ({ db, task }: PushServices) => {
       return {
         outcomes: await deliver(
           {
-            name: "Caw here.",
+            name: "Test from Caw",
             project: null,
-            body: "This is how I'll let you know when an agent needs you.",
+            body: "Notifications work. When an agent needs you, it arrives like this.",
             category: PUSH_CATEGORIES.test,
             collapseId: "test",
             threadId: "test",
@@ -441,8 +483,8 @@ export const pushRoutes = (db: DbShape, push: Push) =>
           ? { ok: true }
           : status(404, "That device is no longer registered.")
     )
-    .delete("/api/push/devices/:id", ({ params, status }) =>
-      db.push.dropDevice(params.id)
+    .delete("/api/push/devices/:id", async ({ params, status }) =>
+      (await removeDevice(db, params.id))
         ? { ok: true }
         : status(404, "That device is no longer registered.")
     )
@@ -486,5 +528,8 @@ export const pushRoutes = (db: DbShape, push: Push) =>
     .post(
       "/api/push/unregister",
       { ...hidden, body: t.Object({ pairingId: t.String() }) },
-      ({ body }) => ({ ok: true, removed: db.push.dropDevice(body.pairingId) })
+      async ({ body }) => ({
+        ok: true,
+        removed: await removeDevice(db, body.pairingId),
+      })
     );

@@ -99,7 +99,7 @@ const { createServer } = await import("../src/server");
 type Schema = Record<string, unknown>;
 interface Operation {
   operationId: string;
-  requestBody?: { content: Record<string, unknown> };
+  requestBody?: { content: Record<string, unknown>; required?: boolean };
   responses?: Record<string, unknown>;
 }
 
@@ -145,6 +145,27 @@ for (const [path, item] of Object.entries(paths)) {
     operations.push({ path, method, op: operation });
   }
 }
+
+/**
+ * `@elysia/openapi` writes every request body as required. A route whose body
+ * is `t.Optional(...)` (the schema carries `~optional`) can be called without
+ * one, so its operation says so; keyed as `method path`, the path in
+ * OpenAPI's `{param}` form.
+ */
+const optionalBodies = new Set(
+  (
+    hub.routes as {
+      hooks?: { body?: Record<string, unknown> };
+      method: string;
+      path: string;
+    }[]
+  )
+    .filter((route) => route.hooks?.body?.["~optional"] === true)
+    .map(
+      (route) =>
+        `${route.method.toLowerCase()} ${route.path.replace(/:([^/]+)/g, "{$1}")}`
+    )
+);
 
 const ids = operations.map(({ op }) => op.operationId);
 const repeated = ids.filter((id, i) => ids.indexOf(id) !== i);
@@ -385,7 +406,7 @@ const binary = {
 
 const components: Record<string, unknown> = {};
 const untyped: string[] = [];
-for (const { op } of operations) {
+for (const { op, method, path } of operations) {
   const statuses = (definitions[op.operationId]?.properties ?? {}) as Record<
     string,
     Schema
@@ -450,6 +471,9 @@ for (const { op } of operations) {
   const json = op.requestBody?.content["application/json"];
   if (op.requestBody && json) {
     op.requestBody.content = { "application/json": clean(json) };
+  }
+  if (op.requestBody && optionalBodies.has(`${method} ${path}`)) {
+    op.requestBody.required = false;
   }
   for (const parameter of (op as { parameters?: Schema[] }).parameters ?? []) {
     parameter.schema = clean(parameter.schema);
