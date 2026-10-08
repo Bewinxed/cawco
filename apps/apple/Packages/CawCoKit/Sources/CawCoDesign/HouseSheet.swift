@@ -32,6 +32,14 @@ public final class HouseSheetController: UIViewController, UIViewControllerTrans
     /// own padding under it (the peek sheet's `padding-bottom: env(safe-area-inset-bottom)`).
     public var footAtSafeArea = false
 
+    /// On a regular width the `.card` stands as a form this wide, centred in
+    /// the window and sized to its content (the paywall's 540pt); a compact
+    /// width keeps the drawer. Set before the sheet is presented.
+    public var formWidth: Double?
+    private var drawerPlace: [NSLayoutConstraint] = []
+    private var formPlace: [NSLayoutConstraint] = []
+    private var isForm: Bool { formWidth != nil && traitCollection.horizontalSizeClass == .regular }
+
     private let content: UIViewController
     private let style: Style
     private let titleText: String?
@@ -114,8 +122,9 @@ public final class HouseSheetController: UIViewController, UIViewControllerTrans
         // The edge sheet's 1pt border is part of its box on the web: its
         // content stands inside it at the sides (the foot's is open).
         let side = style == .edge ? 1 : pad
+        let trailing = card.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -inset)
+        drawerPlace.append(trailing)
         NSLayoutConstraint.activate([
-            card.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -inset),
             column.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: side),
             column.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -side),
             footPad,
@@ -126,6 +135,7 @@ public final class HouseSheetController: UIViewController, UIViewControllerTrans
             let wide = card.widthAnchor.constraint(equalTo: view.widthAnchor, multiplier: 0.75, constant: -inset * 2)
             wide.priority = .defaultHigh
             NSLayoutConstraint.activate([
+                trailing,
                 card.topAnchor.constraint(equalTo: view.topAnchor, constant: inset),
                 card.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -inset),
                 card.widthAnchor.constraint(lessThanOrEqualToConstant: 384 - inset * 2),
@@ -133,9 +143,21 @@ public final class HouseSheetController: UIViewController, UIViewControllerTrans
                 column.topAnchor.constraint(equalTo: card.topAnchor, constant: pad),
             ])
         } else {
-            NSLayoutConstraint.activate([
+            drawerPlace += [
                 card.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: inset),
                 card.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor, constant: -inset),
+            ]
+            if let formWidth {
+                let wide = card.widthAnchor.constraint(equalToConstant: formWidth)
+                wide.priority = .defaultHigh
+                formPlace = [
+                    card.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+                    card.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+                    card.widthAnchor.constraint(lessThanOrEqualTo: view.widthAnchor, constant: -inset * 2),
+                    wide,
+                ]
+            }
+            NSLayoutConstraint.activate([
                 card.heightAnchor.constraint(lessThanOrEqualTo: view.heightAnchor, multiplier: cap ?? (style == .card ? 0.8 : 0.88), constant: -inset * 2),
                 // The grabber's `mt-4`, under the content box's `p-4` on the
                 // drawer, and inside the edge sheet's 1pt border on it.
@@ -149,6 +171,10 @@ public final class HouseSheetController: UIViewController, UIViewControllerTrans
         }
         self.pad = pad
         self.inset = inset
+        place()
+        registerForTraitChanges([UITraitHorizontalSizeClass.self]) { (sheet: HouseSheetController, _: UITraitCollection) in
+            sheet.place()
+        }
         view.keyboardLayoutGuide.followsUndockedKeyboard = true
         view.keyboardLayoutGuide.usesBottomSafeArea = false
 
@@ -157,6 +183,14 @@ public final class HouseSheetController: UIViewController, UIViewControllerTrans
         pan.delegate = self
         card.addGestureRecognizer(pan)
         accessibilityViewIsModal = true
+    }
+
+    /// The drawer's place, or on a regular width the centred form's; the form has no grabber.
+    private func place() {
+        let form = isForm
+        NSLayoutConstraint.deactivate(form ? drawerPlace : formPlace)
+        NSLayoutConstraint.activate(form ? formPlace : drawerPlace)
+        handle.isHidden = style == .side || form
     }
 
     private var footPad: NSLayoutConstraint!
@@ -197,7 +231,12 @@ public final class HouseSheetController: UIViewController, UIViewControllerTrans
 
     /// The way the card leaves: down, or to the right for the side drawer.
     var away: CGAffineTransform { offset(travel + Space.space2) }
-    private var travel: Double { max(1, style == .side ? card.bounds.width : card.bounds.height) }
+    /// How far the card goes to leave the screen: its own size, or for a
+    /// centred form the distance from its top to the screen's foot.
+    private var travel: Double {
+        if style == .side { return max(1, card.bounds.width) }
+        return max(1, isForm ? view.bounds.maxY - card.frame.minY : card.bounds.height)
+    }
 
     private func offset(_ by: Double) -> CGAffineTransform {
         style == .side ? CGAffineTransform(translationX: by, y: 0) : CGAffineTransform(translationX: 0, y: by)

@@ -11,8 +11,8 @@
 // A status may also carry its enter, the clip that brings him from an empty page to his still
 // (assets/mascot/clips/<status>-enter, listed in clips/takes.json), drawn like a loop. A status
 // with no drawn enter is simply there, and the apps fade it in. There is no drawn way out: the
-// apps fade him away (README, Contract). The peek (PEEK, not a status) is built the same way: a
-// rest whose enter is the ledge clip peer-over.
+// apps fade him away (README, Contract). The ledge files (LEDGES, not statuses) are built the
+// same way: each a rest whose enter is a ledge clip (peer-over, climb-peer).
 // A drawing's first shape is its black silhouette, which also carries the cream rim as a stroke
 // drawn under the fill; the colour scheme keys that stroke's colour, and the `Caw` view model's
 // `pixel` its width (build.mjs binds it).
@@ -49,11 +49,14 @@ export const STATUS = [
   "compacted",
 ];
 /**
- * Caw's ledge peek, a file that is not a status: in a Caw thread he peeks over the composer's
- * top-leading corner. His enter is the traced ledge clip `peer-over` and he rests on its last
- * drawing. Apps put its ledge line (rests.json `ledgeLine`) on the edge he peeks over.
+ * Caw's ledge files, which are not statuses: each is a traced ledge clip as his enter, resting
+ * on its last drawing. Apps put its ledge line (rests.json `ledgeLine`) on the edge he peeks
+ * over.
+ *   - `peek`: in a Caw thread he peeks over the composer's top-leading corner (`peer-over`).
+ *   - `climb`: on the paywall's poster hero he climbs up and peeks over the notification cards
+ *     (`climb-peer`, DESIGN.md ruling 6 in the paywall design).
  */
-export const PEEK = "peek";
+export const LEDGES = ["peek", "climb"];
 /**
  * Caw's template poses, files that are not statuses: each New project template card shows its
  * own, Caw with the template's prop. Each is a rest (rests.json), the end hold of the owner's
@@ -68,8 +71,8 @@ export const TEMPLATES = [
   "template-design",
   "template-social",
 ];
-/** Every file build.mjs writes: one per status, the peek, then the template poses. */
-export const FILES = [...STATUS, PEEK, ...TEMPLATES];
+/** Every file build.mjs writes: one per status, the ledge files, then the template poses. */
+export const FILES = [...STATUS, ...LEDGES, ...TEMPLATES];
 /** Each file's name: assets/mascot/caw/<name>.riv. */
 export const fileName = (status) => status.replace("_", "-");
 
@@ -84,21 +87,21 @@ export const RESTS = JSON.parse(readFileSync(`${LOOPS}rests.json`, "utf8"));
 /** A rest's drawing on disk: in its loop's folder, or in its clip's. */
 const restSvg = (rest) =>
   `${rest.clip ? `${CLIPS}${rest.clip}` : `${LOOPS}${rest.loop}`}/body-${pad(rest.drawing)}.svg`;
-{
-  // The peek rests on its clip's landing, and the ledge line apps read is the one the clip was
-  // traced with (trace_ledge.py's probe.ledgeLine).
-  const peek = RESTS[PEEK];
+// Each ledge file rests on its clip's landing, and the ledge line apps read is the one the clip
+// was traced with (trace_ledge.py's probe.ledgeLine).
+for (const name of LEDGES) {
+  const ledge = RESTS[name];
   const timing = JSON.parse(
-    readFileSync(`${CLIPS}${peek.clip}/timing.json`, "utf8")
+    readFileSync(`${CLIPS}${ledge.clip}/timing.json`, "utf8")
   );
-  if (timing.drawings.at(-1).drawing !== peek.drawing) {
+  if (timing.drawings.at(-1).drawing !== ledge.drawing) {
     throw new Error(
-      `rests.json peek rests on drawing ${peek.drawing}; ${peek.clip} lands on ${timing.drawings.at(-1).drawing}`
+      `rests.json ${name} rests on drawing ${ledge.drawing}; ${ledge.clip} lands on ${timing.drawings.at(-1).drawing}`
     );
   }
-  if (timing.probe.ledgeLine !== peek.ledgeLine) {
+  if (timing.probe.ledgeLine !== ledge.ledgeLine) {
     throw new Error(
-      `rests.json peek ledgeLine ${peek.ledgeLine}; ${peek.clip} was traced with ${timing.probe.ledgeLine}`
+      `rests.json ${name} ledgeLine ${ledge.ledgeLine}; ${ledge.clip} was traced with ${timing.probe.ledgeLine}`
     );
   }
 }
@@ -122,10 +125,10 @@ export const VARIANTS = (() => {
 
 /** The enters that have been shot and passed their gates (clips/takes.json, by trace_clip.py). */
 const SHOT = JSON.parse(readFileSync(`${CLIPS}takes.json`, "utf8"));
-/** A file's drawn enter: the peek's ledge clip, a status's `<status>-enter`, or null where none was shot. */
+/** A file's drawn enter: a ledge file's clip, a status's `<status>-enter`, or null where none was shot. */
 export function enterOf(status) {
-  if (status === PEEK) {
-    return RESTS[PEEK].clip;
+  if (LEDGES.includes(status)) {
+    return RESTS[status].clip;
   }
   const clip = `${fileName(status)}-enter`;
   return clip in SHOT ? clip : null;

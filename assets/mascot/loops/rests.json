@@ -46,5 +46,10 @@
     "loop": "template-social",
     "drawing": 0,
     "inks": ["cream", "tan"]
+  },
+  "climb": {
+    "clip": "climb-peer",
+    "drawing": 18,
+    "ledgeLine": 0.5684
   }
 }

@@ -27,6 +27,8 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         UNUserNotificationCenter.current().delegate = self
         // Hangs, crashes and CPU exceptions MetricKit reports, to the hub.
         DiagnosticsReporter.shared.start()
+        // CawCo Pro: the listener and the entitlements before any window can gate on them.
+        Pro.shared.start()
         #if DEBUG
         PushRegistry.shared.launch(environment: .sandbox)
         #else
@@ -161,6 +163,18 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
 /// (the `async` form of this method called it off it, and every tap crashed
 /// in `_performBlockAfterCATransactionCommitSynchronizes:`).
 extension AppDelegate: UNUserNotificationCenterDelegate {
+    /// A push that lands while the app is in front shows as a banner with its
+    /// sound, as it would on the lock screen: notification setup's test is
+    /// one, and it must be seen and heard.
+    nonisolated func userNotificationCenter(_: UNUserNotificationCenter, willPresent notification: UNNotification,
+                                            withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        let note = PushNote(notification, action: UNNotificationDefaultActionIdentifier)
+        if note.kind == "test" {
+            Task { @MainActor in PushRegistry.shared.heardTest() }
+        }
+        completionHandler([.banner, .list, .sound])
+    }
+
     nonisolated func userNotificationCenter(_: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
                                             withCompletionHandler completionHandler: @escaping () -> Void) {
         let note = PushNote(response)

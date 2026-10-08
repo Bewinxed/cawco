@@ -3,6 +3,7 @@ public import Foundation
 import Observation
 import OpenAPIRuntime
 import OSLog
+import Security
 public import UIKit
 public import UserNotifications
 
@@ -20,6 +21,8 @@ public enum PushRoute: Sendable, Equatable {
     case task(projectId: String, taskId: String, attempt: String?)
     /// The board.
     case board
+    /// The free week's day-6 reminder: the paywall in its Get Pro form.
+    case keepPro
 }
 
 /// What a push said, read off its notification: the alert's title and the
@@ -73,6 +76,8 @@ public struct PushNote: Sendable {
             guard let projectId = fields["projectId"], !projectId.isEmpty else { return .board }
             guard let taskId = fields["taskId"], !taskId.isEmpty else { return .project(projectId) }
             return .task(projectId: projectId, taskId: taskId, attempt: kind == "attempt" ? fields["workItemId"] : nil)
+        case TrialReminder.kind:
+            return .keepPro
         default:
             return .board
         }
@@ -103,8 +108,14 @@ public enum PushCategories {
     }
 }
 
-/// This device's registration with the hub: the APNs token, whether iOS
-/// lets the app notify, and Quiet as the hub last answered it.
+/// This device's pushes: iOS's word on notifications, the APNs token, the
+/// pairing Cawrier enrols on the purchase, and its registration with the hub.
+///
+/// A pairing is an id and a secret this device makes once and keeps in the
+/// Keychain. Cawrier holds the device token under it (on proof of Pro or a
+/// live free week); the hub holds the id and secret and pushes through
+/// Cawrier with them. The pairing enrols again on every launch and on every
+/// new token; Cawrier skips the write when nothing changed.
 @MainActor
 @Observable
 public final class PushRegistry {
@@ -114,18 +125,40 @@ public final class PushRegistry {
         case sandbox, production
     }
 
+    /// One step of the setup: enrolling with Cawrier, then registering with the hub.
+    public enum Step: Equatable, Sendable {
+        case idle
+        case working
+        case done
+        /// Cawrier's or the hub's own reason sentence.
+        case failed(String)
+    }
+
     /// Which APNs the build's `aps-environment` names; the app sets it at launch.
     @ObservationIgnored public var environment: Environment = .production
     public private(set) var authorization: UNAuthorizationStatus = .notDetermined
     /// The token, hex in lowercase, once APNs gave one on this launch.
     public private(set) var token: String?
+    /// When this launch last asked APNs for a token.
+    public private(set) var tokenAsked: Date?
+    /// APNs refused this launch's registration (`didFailToRegister`).
+    public private(set) var tokenFailed = false
+    /// Cawrier's enrolment, then the hub's registration, of this device's pairing.
+    public private(set) var relay: Step = .idle
     /// Quiet as the hub's last answer had it; nil until the hub answered.
     public private(set) var quiet: Bool?
     /// A Quiet change is on its way to the hub.
     public private(set) var quietSending = false
-    /// Why the last call to the hub failed, said as the hub said it.
-    public private(set) var problem: String?
+    /// The last test asked of the hub: when it went, and when it showed here.
+    public private(set) var testSent: Date?
+    public private(set) var testArrived: Date?
+    /// The hub's or Cawrier's word on the last test, when it didn't go.
+    public private(set) var testProblem: String?
+    public private(set) var testSending = false
+
     @ObservationIgnored private var registeredWith: URL?
+    @ObservationIgnored private var enrolling: Task<Void, Never>?
+    @ObservationIgnored private var enrolAgain = false
     private let log = Logger(subsystem: "dev.cawco.app", category: "Push")
 
     private init() {}
@@ -134,70 +167,175 @@ public final class PushRegistry {
         authorization == .authorized || authorization == .provisional || authorization == .ephemeral
     }
 
+    /// Every step is done: the hub can push to this device.
+    public var ready: Bool { relay == .done }
+
     /// At launch: the categories, and a fresh token when the app may notify.
-    /// The token comes back through `adopt(deviceToken:)`, which registers it.
+    /// The token comes back through `adopt(deviceToken:)`, which enrols it.
     public func launch(environment: Environment) {
         self.environment = environment
         PushCategories.register()
         Task {
             await readAuthorization()
-            if allowed { UIApplication.shared.registerForRemoteNotifications() }
+            if allowed { requestToken() }
         }
     }
 
-    /// A hub answered: the first time, iOS asks the operator; granted, the
-    /// device registers. Denied, nothing happens, and the hub sheet says so.
+    /// S1's "Turn on notifications": iOS asks once; allowed, the device
+    /// registers, enrols and registers with the hub. Denied, nothing more
+    /// happens, and the sheet says so.
+    public func turnOn() async {
+        await readAuthorization()
+        if authorization == .notDetermined {
+            do {
+                _ = try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
+            } catch {
+                log.error("authorization request failed: \(String(describing: error), privacy: .public)")
+            }
+            await readAuthorization()
+        }
+        guard allowed else { return }
+        if token == nil { requestToken() } else { enrol() }
+    }
+
+    /// Asks APNs for this launch's token again (S6's and H3b's Try again).
+    public func requestToken() {
+        tokenAsked = .now
+        tokenFailed = false
+        UIApplication.shared.registerForRemoteNotifications()
+    }
+
+    /// The next step again after a failure: the token, else the enrolment.
+    public func retry() {
+        if token == nil || tokenFailed { requestToken() } else { enrol() }
+    }
+
+    /// APNs' token for this launch, enrolled at once. Tokens change, and Cawrier upserts.
+    public func adopt(deviceToken: Data) {
+        token = deviceToken.map { String(format: "%02x", $0) }.joined()
+        tokenFailed = false
+        log.notice("registered for remote notifications, token …\(String(self.token?.suffix(6) ?? ""), privacy: .public)")
+        enrol()
+    }
+
+    public func failedToRegister(_ error: any Error) {
+        tokenFailed = true
+        log.error("remote notification registration failed: \(String(describing: error), privacy: .public)")
+    }
+
+    /// The purchase changed: a device that has its token enrols on it now.
+    func entitlementChanged() {
+        if token != nil, Pro.shared.proof != nil { enrol() }
+    }
+
+    /// A hub answered: a device already set up registers with it.
     func connected(to hub: URL) {
         Task {
             await readAuthorization()
             log.notice("hub answered; notifications \(self.authorization.rawValue, privacy: .public)")
-            if authorization == .notDetermined {
-                do {
-                    _ = try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
-                } catch {
-                    log.error("authorization request failed: \(String(describing: error), privacy: .public)")
-                }
-                await readAuthorization()
-            }
-            guard allowed else { return }
-            if token == nil {
-                UIApplication.shared.registerForRemoteNotifications()
-            } else if registeredWith != hub {
-                await register(hub: hub, quiet: nil)
-            }
+            guard allowed, token != nil, registeredWith != hub else { return }
+            enrol()
         }
     }
 
-    /// APNs' token for this launch, posted to the hub. Tokens change, and the hub upserts.
-    public func adopt(deviceToken: Data) {
-        token = deviceToken.map { String(format: "%02x", $0) }.joined()
-        log.notice("registered for remote notifications, token …\(String(self.token?.suffix(6) ?? ""), privacy: .public)")
-        guard let hub = HubConnection.keptAddress else { return }
-        Task { await register(hub: hub, quiet: nil) }
+    /// Enrols the pairing with Cawrier on the purchase's signed transaction,
+    /// then registers it with the kept hub. One run at a time; a call during a
+    /// run runs it once more after.
+    public func enrol() {
+        guard enrolling == nil else {
+            enrolAgain = true
+            return
+        }
+        enrolling = Task {
+            repeat {
+                enrolAgain = false
+                await enrolOnce()
+            } while enrolAgain
+            enrolling = nil
+        }
     }
 
-    public func failedToRegister(_ error: any Error) {
-        log.error("remote notification registration failed: \(String(describing: error), privacy: .public)")
+    private func enrolOnce() async {
+        guard let token, let proof = Pro.shared.proof else {
+            relay = .idle
+            return
+        }
+        relay = .working
+        let pairing: Pairing
+        do {
+            pairing = try Pairing.kept()
+        } catch {
+            log.error("pairing keychain failed: \(String(describing: error), privacy: .public)")
+            relay = .failed("This device couldn't keep its pairing key.")
+            return
+        }
+        let enrolment = Enrolment(pairingId: pairing.id, secret: pairing.secret, deviceToken: token,
+                                  apnsEnvironment: environment.rawValue, proof: .init(transaction: proof))
+        do {
+            let _: Enrolled = try await Self.post(Cawrier.origin.appending(path: "v1/enroll"), enrolment, refused: "Caw's relay")
+            log.notice("enrolled with Cawrier (\(self.environment.rawValue, privacy: .public))")
+        } catch {
+            relay = .failed(Self.reason(error, from: "Caw's relay"))
+            log.error("Cawrier enrolment failed: \(String(describing: error), privacy: .public)")
+            return
+        }
+        guard let hub = HubConnection.keptAddress else {
+            relay = .failed("No hub is kept on this device. Connect to your hub first.")
+            return
+        }
+        if let problem = await register(hub: hub, pairing: pairing, quiet: nil) {
+            relay = .failed(problem)
+            return
+        }
+        relay = .done
     }
 
     /// Quiet: registered, and sent nothing. The hub's answer is what shows.
     public func setQuiet(_ next: Bool) {
-        guard let hub = HubConnection.keptAddress, token != nil, !quietSending else { return }
+        guard let hub = HubConnection.keptAddress, relay == .done, !quietSending, let pairing = try? Pairing.kept() else { return }
         quietSending = true
         Task {
-            await register(hub: hub, quiet: next)
+            if let problem = await register(hub: hub, pairing: pairing, quiet: next) {
+                relay = .failed(problem)
+            }
             quietSending = false
         }
+    }
+
+    /// A real push to this device, sent by the hub through Cawrier.
+    public func sendTest() async {
+        guard let hub = HubConnection.keptAddress, let pairing = try? Pairing.kept() else { return }
+        testSending = true
+        testProblem = nil
+        testArrived = nil
+        testSent = .now
+        defer { testSending = false }
+        do {
+            let answer: Tested = try await Self.post(hub.appending(path: "api/push/test"), TestRequest(pairingId: pairing.id), refused: "The hub")
+            if let outcome = answer.outcomes.first(where: { $0.status != 200 }) {
+                testProblem = outcome.reason ?? (outcome.status == 0 ? "The hub couldn't reach Caw's relay." : "Caw's relay answered \(outcome.status).")
+            }
+            log.notice("test sent: \(answer.outcomes.map { "\($0.status)" }.joined(separator: ","), privacy: .public)")
+        } catch {
+            testProblem = Self.reason(error, from: "The hub")
+            log.error("test failed: \(String(describing: error), privacy: .public)")
+        }
+    }
+
+    /// The notification centre showed the hub's test while the app was in front.
+    public func heardTest() {
+        testArrived = .now
     }
 
     /// The app forgets `hub`: it stops pushing to this device.
     func leave(_ hub: URL) {
         registeredWith = nil
         quiet = nil
-        guard let token else { return }
+        if relay == .done { relay = .idle }
+        guard let pairing = try? Pairing.kept(existing: true) else { return }
         Task {
             do {
-                let answer: Unregistered = try await Self.post("api/push/unregister", Unregistration(token: token), to: hub)
+                let answer: Unregistered = try await Self.post(hub.appending(path: "api/push/unregister"), Unregistration(pairingId: pairing.id), refused: "The hub")
                 log.notice("unregistered from \(hub.absoluteString, privacy: .public): removed \(answer.removed)")
             } catch {
                 log.error("unregister from \(hub.absoluteString, privacy: .public) failed: \(String(describing: error), privacy: .public)")
@@ -229,25 +367,24 @@ public final class PushRegistry {
         }
     }
 
-    private func readAuthorization() async {
-        authorization = await withCheckedContinuation { done in
-            UNUserNotificationCenter.current().getNotificationSettings { done.resume(returning: $0.authorizationStatus) }
-        }
+    /// iOS's word on notifications, read again.
+    public func readAuthorization() async {
+        authorization = await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
     }
 
-    /// `quiet` is sent only from the toggle; a launch's registration keeps what the operator set.
-    private func register(hub: URL, quiet next: Bool?) async {
-        guard let token else { return }
-        let body = Registration(token: token, environment: environment.rawValue, name: UIDevice.current.name, platform: Self.platform, quiet: next)
+    /// Registers the pairing with `hub`; `quiet` is sent only from the toggle,
+    /// so a launch's registration keeps what the operator set. Nil, or the hub's reason.
+    private func register(hub: URL, pairing: Pairing, quiet next: Bool?) async -> String? {
+        let body = Registration(pairingId: pairing.id, secret: pairing.secret, name: UIDevice.current.name, platform: Self.platform, quiet: next)
         do {
-            let answer: Registered = try await Self.post("api/push/register", body, to: hub)
+            let answer: Registered = try await Self.post(hub.appending(path: "api/push/register"), body, refused: "The hub")
             registeredWith = hub
             quiet = answer.quiet
-            problem = nil
-            log.notice("registered with \(hub.absoluteString, privacy: .public) (\(body.environment, privacy: .public), \(body.platform, privacy: .public)), quiet \(answer.quiet)")
+            log.notice("registered with \(hub.absoluteString, privacy: .public) (\(body.platform, privacy: .public)), quiet \(answer.quiet)")
+            return nil
         } catch {
-            problem = (error as? HubRefusal)?.message ?? "The hub could not be reached. Try again."
             log.error("register with \(hub.absoluteString, privacy: .public) failed: \(String(describing: error), privacy: .public)")
+            return Self.reason(error, from: "The hub")
         }
     }
 
@@ -259,10 +396,27 @@ public final class PushRegistry {
         #endif
     }
 
-    // The routes are hidden from openapi.json, so they are called with URLSession.
+    // The hub's routes are hidden from openapi.json, and Cawrier has none, so they are called with URLSession.
+    private struct Enrolment: Encodable, Sendable {
+        struct Proof: Encodable, Sendable {
+            var kind = "appStore"
+            let transaction: String
+        }
+
+        let pairingId: String
+        let secret: String
+        let deviceToken: String
+        let apnsEnvironment: String
+        let proof: Proof
+    }
+
+    private struct Enrolled: Decodable, Sendable {
+        let ok: Bool
+    }
+
     private struct Registration: Encodable, Sendable {
-        let token: String
-        let environment: String
+        let pairingId: String
+        let secret: String
         let name: String
         let platform: String
         let quiet: Bool?
@@ -273,29 +427,146 @@ public final class PushRegistry {
     }
 
     private struct Unregistration: Encodable, Sendable {
-        let token: String
+        let pairingId: String
     }
 
     private struct Unregistered: Decodable, Sendable {
         let removed: Bool
     }
 
-    struct HubRefusal: Error {
+    private struct TestRequest: Encodable, Sendable {
+        let pairingId: String
+    }
+
+    private struct Tested: Decodable, Sendable {
+        struct Outcome: Decodable, Sendable {
+            let status: Int
+            let reason: String?
+        }
+
+        let outcomes: [Outcome]
+    }
+
+    /// A refusal, said as the server said it.
+    struct Refusal: Error {
         let message: String
     }
 
-    private static func post<Body: Encodable & Sendable, Answer: Decodable & Sendable>(_ path: String, _ body: Body, to hub: URL) async throws -> Answer {
-        var request = URLRequest(url: hub.appending(path: path))
+    /// The sentence to show for `error`: the server's own, else that `who` couldn't be reached.
+    private static func reason(_ error: any Error, from who: String) -> String {
+        (error as? Refusal)?.message ?? "\(who) couldn't be reached. Check this device's connection, then try again."
+    }
+
+    /// POSTs `body` as JSON. A refusal carries the server's sentence: the
+    /// hub's plain text, or Cawrier's `{ error }`.
+    private static func post<Body: Encodable & Sendable, Answer: Decodable & Sendable>(_ url: URL, _ body: Body, refused who: String) async throws -> Answer {
+        var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(body)
+        request.timeoutInterval = 20
         let (data, response) = try await URLSession.shared.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard status == 200 else {
             let text = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
-            throw HubRefusal(message: text.isEmpty || text.hasPrefix("{") ? "The hub answered \(status)." : text)
+            if let said = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["error"] as? String {
+                throw Refusal(message: said)
+            }
+            throw Refusal(message: text.isEmpty || text.hasPrefix("{") ? "\(who) answered \(status)." : text)
         }
         return try JSONDecoder().decode(Answer.self, from: data)
+    }
+}
+
+/// This device's pairing: a lowercase v4 uuid and 32 random bytes in
+/// base64url, made once and kept in the Keychain (service `dev.cawco.app.cawrier`).
+struct Pairing: Codable, Sendable {
+    let id: String
+    let secret: String
+
+    private static let service = "dev.cawco.app.cawrier"
+    private static let account = "pairing"
+
+    enum Failure: Error {
+        case missing
+        case random(OSStatus)
+        case keychain(OSStatus)
+    }
+
+    /// The kept pairing; made and kept now when there is none, unless `existing`.
+    static func kept(existing: Bool = false) throws -> Pairing {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+        ]
+        var found: CFTypeRef?
+        let read = SecItemCopyMatching(query as CFDictionary, &found)
+        if read == errSecSuccess, let data = found as? Data, let pairing = try? JSONDecoder().decode(Pairing.self, from: data) {
+            return pairing
+        }
+        guard read == errSecItemNotFound else { throw Failure.keychain(read) }
+        guard !existing else { throw Failure.missing }
+        var bytes = [UInt8](repeating: 0, count: 32)
+        let drawn = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        guard drawn == errSecSuccess else { throw Failure.random(drawn) }
+        let secret = Data(bytes).base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+        let pairing = Pairing(id: UUID().uuidString.lowercased(), secret: secret)
+        let add: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+            kSecValueData as String: try JSONEncoder().encode(pairing),
+        ]
+        let wrote = SecItemAdd(add as CFDictionary, nil)
+        guard wrote == errSecSuccess else { throw Failure.keychain(wrote) }
+        return pairing
+    }
+}
+
+/// The free week's one reminder (DESIGN.md T6): a local notification at
+/// 10:00 local time on the day before it ends, sent only while notifications
+/// are allowed and the week is live.
+@MainActor
+public enum TrialReminder {
+    static let kind = "trial-ending"
+    private static let identifier = "cawco-trial-ending"
+
+    /// Schedules the reminder for a live week, or takes it down for anything else.
+    /// One identifier, so scheduling again replaces it; a time already past schedules nothing.
+    public static func schedule(endsAt: Date?, title: String, body: String) async {
+        let center = UNUserNotificationCenter.current()
+        guard let endsAt, PushRegistry.shared.allowed, let fire = fireDate(endsAt: endsAt), fire > .now else {
+            center.removePendingNotificationRequests(withIdentifiers: [identifier])
+            return
+        }
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        content.userInfo = ["cawco": ["kind": kind]]
+        let parts = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: fire)
+        let request = UNNotificationRequest(identifier: identifier, content: content, trigger: UNCalendarNotificationTrigger(dateMatching: parts, repeats: false))
+        do {
+            try await center.add(request)
+        } catch {
+            Logger(subsystem: "dev.cawco.app", category: "Push").error("trial reminder not scheduled: \(String(describing: error), privacy: .public)")
+        }
+    }
+
+    /// The first 10:00 local at or after 48 h before the end: inside the week's
+    /// second-to-last day, so "tomorrow" is the last.
+    static func fireDate(endsAt: Date) -> Date? {
+        let from = endsAt.addingTimeInterval(-2 * 24 * 60 * 60)
+        let calendar = Calendar.current
+        guard let ten = calendar.date(bySettingHour: 10, minute: 0, second: 0, of: from) else { return nil }
+        return ten >= from ? ten : calendar.date(byAdding: .day, value: 1, to: ten)
     }
 }
 
