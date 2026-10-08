@@ -1,5 +1,5 @@
 import type { FleetSkillPayload, Workflow, WorkflowInput } from "@cawco/core";
-import { hashFiles } from "../skills";
+import { hashFiles } from "@cawco/core/file-hash";
 
 export function workflowSkill(
   workflow: Pick<Workflow, "id" | "name" | "slug">,

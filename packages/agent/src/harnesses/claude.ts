@@ -92,6 +92,7 @@ import {
 } from "../delegation";
 import { sessionFleetDenials } from "../denied-tools";
 import {
+  fleetHoldings,
   fleetStatus,
   inspectConfig,
   marketplaceCatalog,
@@ -2307,6 +2308,10 @@ export class ClaudeHarness implements Harness {
 
   fleetStatus() {
     return fleetStatus();
+  }
+
+  fleetHoldings() {
+    return fleetHoldings();
   }
 }
 

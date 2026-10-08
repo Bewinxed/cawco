@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type {
   AuthState,
   FleetConfig,
+  FleetHoldings,
   FleetSyncReport,
   HarnessCapabilities,
   HarnessReport,
@@ -25,6 +26,7 @@ import {
   ModelRuntime,
   SessionManager,
 } from "@earendil-works/pi-coding-agent";
+import { heldSkills } from "../fleet";
 import { resolveBin } from "../tools";
 import {
   hashText,
@@ -565,8 +567,15 @@ export class PiProfile {
       mcp: config.mcp.filter((row) => row.enabled).map((row) => row.name),
       ...(memory ? { memory } : {}),
     });
-    report.have = { skills };
     return report;
+  }
+
+  /** The skills cawco wrote into pi's directory, as they are on disk now. */
+  async fleetHoldings(): Promise<FleetHoldings> {
+    const sidecar = await readSidecar(PI_SIDECAR);
+    return {
+      skills: await heldSkills(PI_SKILLS, Object.keys(sidecar.skills)),
+    };
   }
 
   async fleetStatus(): Promise<FleetSyncReport> {
@@ -604,7 +613,6 @@ export class PiProfile {
               detail: hash === null ? "not on disk" : "edited on this machine",
             };
     }
-    report.have = { skills: sidecar.skills };
     return report;
   }
 }

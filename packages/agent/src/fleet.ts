@@ -25,6 +25,7 @@ import type {
   DiscoveredMcp,
   DiscoveredSkill,
   FleetConfig,
+  FleetHoldings,
   FleetHook,
   FleetItemState,
   FleetMcpConfig,
@@ -45,6 +46,7 @@ import type {
   SkillFile,
 } from "@cawco/core";
 import { hookProblem, memoryDocProblem } from "@cawco/core";
+import { hashFiles } from "@cawco/core/file-hash";
 import { accountIds } from "@cawco/core/paths";
 import { accountClaudeJsons, linkUserLayer } from "./accounts";
 import { excludeFromCheckout } from "./checkout-exclude";
@@ -1064,6 +1066,78 @@ export const writeVendoredMarketplace = async (
 };
 
 /**
+ * The hash of a directory's files as they are on this disk, computed as the
+ * hub computes a resolved skill's or plugin's (`hashFiles`), so equal means
+ * the same bytes. Undefined for a directory that is missing or empty.
+ */
+const treeHash = async (dir: string): Promise<string | undefined> => {
+  const files: SkillFile[] = [];
+  for (const path of await filesUnder(dir)) {
+    const file = join(dir, path);
+    files.push({
+      path,
+      // biome-ignore lint/performance/noAwaitInLoops: one file read at a time keeps the disk reads bounded
+      contentBase64: Buffer.from(await Bun.file(file).bytes()).toString(
+        "base64"
+      ),
+      // biome-ignore lint/suspicious/noBitwiseOperators: the execute bits of a stat mode are a mask, and the mask is the question
+      executable: ((await stat(file)).mode & 0o111) !== 0,
+    });
+  }
+  return files.length > 0 ? hashFiles(files) : undefined;
+};
+
+/**
+ * What a skills directory holds of the skills cawco wrote there: name → hash
+ * of that skill's directory on disk now. Only the names the sidecar owns are
+ * read; a skill nobody wrote is not one the fleet holds.
+ */
+export const heldSkills = async (
+  dir: string,
+  names: readonly string[]
+): Promise<Record<string, string>> => {
+  const held: Record<string, string> = {};
+  for (const name of names) {
+    // biome-ignore lint/performance/noAwaitInLoops: one skill directory read at a time keeps the disk reads bounded
+    const hash = await treeHash(join(dir, name));
+    if (hash) {
+      held[name] = hash;
+    }
+  }
+  return held;
+};
+
+/** What the vendored marketplace holds on this disk now: plugin name → hash. */
+const readVendoredPlugins = async (): Promise<Record<string, string>> => {
+  const root = join(VENDOR_DIR, "plugins");
+  const names = await readdir(root).catch(() => [] as string[]);
+  const held: Record<string, string> = {};
+  for (const name of names) {
+    // biome-ignore lint/performance/noAwaitInLoops: one plugin directory read at a time keeps the disk reads bounded
+    const hash = await treeHash(join(root, name));
+    if (hash) {
+      held[name] = hash;
+    }
+  }
+  return held;
+};
+
+/**
+ * What claude's copy of the fleet holds on this disk now: the skills cawco
+ * wrote under `~/.claude/skills`, and the plugins in the vendored marketplace.
+ * Read, never remembered: the hub asks just before every sync and leaves out
+ * the bytes of exactly this, so a wiped or edited copy is carried again in
+ * that same sync.
+ */
+export const fleetHoldings = async (): Promise<FleetHoldings> => ({
+  skills: await heldSkills(
+    SKILLS_DIR,
+    Object.keys((await readSidecar()).skills)
+  ),
+  plugins: await readVendoredPlugins(),
+});
+
+/**
  * Installs the vendored plugins, and answers with what each one came to.
  *
  * Keyed by the FLEET's id — `name@marketplace`, the id the hub's config used —
@@ -1077,18 +1151,23 @@ const syncVendoredPlugins = async (
   wanted: readonly { id: string }[],
   managed: Record<string, string>,
   report: Record<string, FleetItemState>
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: writes, links and installs every vendored plugin and reports each one's outcome, missing bytes included
 ): Promise<Record<string, string>> => {
   const written: Record<string, string> = {};
   const byName = new Map(payloads.map((plugin) => [plugin.name, plugin]));
 
+  // The hub read this disk just before it built this sync (READ_FLEET_HOLDINGS)
+  // and left out the bytes of exactly what it held; whatever came with files
+  // is what the disk lacked.
   const changed =
-    payloads.some((plugin) => managed[plugin.name] !== plugin.hash) ||
+    payloads.some((plugin) => plugin.files !== undefined) ||
     Object.keys(managed).some((name) => !byName.has(name)) ||
     !(await dirExists(VENDOR_DIR));
 
   if (changed) {
     await writeVendoredMarketplace(payloads);
   }
+  const held = await readVendoredPlugins();
 
   // Linked once, then refreshed in place: `add` on an already-linked path is an
   // error, and `update` is what re-reads a directory whose contents moved.
@@ -1106,6 +1185,16 @@ const syncVendoredPlugins = async (
       continue;
     }
     const vendoredId = `${name}@${VENDOR_NAME}`;
+    if (held[name] !== plugin.hash) {
+      // Neither on this disk nor in this sync: the disk changed between the
+      // hub's read and this write. The report claims nothing for it, so the
+      // next sync's read finds it missing and carries the bytes.
+      report[id] = {
+        state: "failed",
+        detail: "the hub sent no files for this hash",
+      };
+      continue;
+    }
 
     const already =
       // biome-ignore lint/performance/noAwaitInLoops: the install this loop runs mutates the CLI's shared installed_plugins.json; concurrent plugins would race
@@ -1179,6 +1268,9 @@ const syncSkillFiles = async (
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: converge each skill while preserving ownership and reporting write and removal errors individually.
 ): Promise<Sidecar["skills"]> => {
   const written: Sidecar["skills"] = {};
+  // What is on this disk now, not what the sidecar says was written: the
+  // sidecar is who owns a directory, the disk is what is in it.
+  const held = await heldSkills(SKILLS_DIR, Object.keys(managed));
   for (const skill of desired) {
     try {
       // biome-ignore lint/performance/noAwaitInLoops: ownership is checked before this skill is written or claimed.
@@ -1191,24 +1283,19 @@ const syncSkillFiles = async (
       report[skill.name] = { state: "failed", detail: said(error) };
       continue;
     }
-    if (
-      managed[skill.name] === skill.hash &&
-      (!skill.workflowId ||
-        (await Bun.file(join(SKILLS_DIR, skill.name, "SKILL.md")).exists()))
-    ) {
+    if (held[skill.name] === skill.hash) {
       written[skill.name] = skill.hash;
       report[skill.name] = { state: "applied" };
       continue;
     }
 
-    // The hub leaves out the bytes of anything this machine's last report said
-    // it already held. Reaching here means it did not hold this hash after all —
-    // a sidecar that was cleared, or a report that never landed. Nothing is
-    // written, and the next sync carries the content, because the claim that
-    // suppressed it is exactly what this failure retracts.
+    // The hub read this disk just before it built this sync and left out the
+    // bytes of exactly what it held. Reaching here without files means the
+    // disk changed in between; nothing is written, and the next sync's read
+    // finds the skill missing and carries it.
     if (!skill.files) {
       if (managed[skill.name] !== undefined) {
-        written[skill.name] = skill.workflowId ? "" : managed[skill.name];
+        written[skill.name] = managed[skill.name];
       }
       report[skill.name] = {
         state: "failed",
@@ -2154,14 +2241,9 @@ const converge = async (config: FleetConfig): Promise<FleetSyncReport> => {
     )
   );
 
-  // What this machine now holds, so the next config can leave those bytes out.
-  // Read from what was just written rather than from the desired set: a row
-  // that failed is a row this machine does NOT have, and claiming it would
-  // suppress the very content the next sync needs to send.
   const toolchain = await machineToolchain(true);
   return {
     ...report,
-    have: { skills, plugins: installed.vendoredPlugins ?? {} },
     ...(toolchain.claude ? { toolchain } : {}),
     at: Date.now(),
   };
@@ -2210,10 +2292,6 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
     skills,
     memoryDocs,
     hooks,
-    // The same claim the sync makes, and it has to be made here too: a status
-    // overwrites the stored report, so a status without it would retract what
-    // the machine holds and have the hub resend every byte on the next change.
-    have: { skills: managed.skills, plugins: managed.vendoredPlugins ?? {} },
     at: Date.now(),
   };
 

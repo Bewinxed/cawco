@@ -11,8 +11,8 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { FleetSkillPayload, SkillFile } from "@cawco/core";
+import { hashFiles } from "@cawco/core/file-hash";
 import { materializeTree, standalone } from "@cawco/core/runtime";
-import { hashFiles } from "./skills";
 
 export const BUNDLED_SKILLS = ["decision-page"] as const;
 

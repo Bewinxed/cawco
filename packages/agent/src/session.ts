@@ -16,6 +16,7 @@ import type {
   DaemonPermissionRequestFrame,
   Envelope,
   FleetConfig,
+  FleetHoldings,
   FleetSyncReport,
   FramePayload,
   FrameProvenance,
@@ -54,6 +55,7 @@ import {
   PREVIEW_START,
   PREVIEW_STOP,
   promptCacheUsage,
+  READ_FLEET_HOLDINGS,
   REPEATED_FAILURE,
   REPEATED_FAILURE_LIMIT,
   RESOLVE_PERMISSION,
@@ -456,8 +458,7 @@ export const resumableSessions = async (): Promise<
  * and the cost of being wrong is a harness stranded without files it needs.
  *
  * No claimants agree on nothing, which is the honest answer for a daemon whose
- * harnesses do not report what they hold: it is then sent everything, exactly
- * as it was before any of them could say.
+ * harnesses keep no copy: it is then sent everything.
  */
 export const agreedHashes = (
   claims: Record<string, string>[]
@@ -3141,16 +3142,6 @@ export class SessionSupervisor {
     // reported them and a hub that had nowhere to read them from.
     const memoryDocs: Record<string, State> = {};
     const hooks: Record<string, State> = {};
-    // One set per harness that converges the thing, INTERSECTED below — never
-    // unioned. Skills are written by more than one harness into more than one
-    // directory (claude's `~/.claude/skills`, pi's own), so a hash one of them
-    // holds is not a hash the machine holds: leaving those bytes out would
-    // strand every harness that still needs them. A harness that converges none
-    // reports no set and is not counted, which is why opencode — which reads
-    // claude's directory rather than keeping its own — does not veto every
-    // skill on the machine.
-    const skillClaims: Record<string, string>[] = [];
-    const pluginClaims: Record<string, string>[] = [];
     let memory: FleetSyncReport["memory"];
     let memoryHook: FleetSyncReport["memoryHook"];
     // Merged the same way, and it has to be: the toolchain is what attributes a
@@ -3181,12 +3172,6 @@ export class SessionSupervisor {
         Object.assign(skills, report.skills ?? {});
         Object.assign(memoryDocs, report.memoryDocs ?? {});
         Object.assign(hooks, report.hooks ?? {});
-        if (report.have?.skills) {
-          skillClaims.push(report.have.skills);
-        }
-        if (report.have?.plugins) {
-          pluginClaims.push(report.have.plugins);
-        }
         if (report.memory) {
           ({ memory } = report);
         }
@@ -3254,11 +3239,47 @@ export class SessionSupervisor {
       ...(memory ? { memory } : {}),
       ...(memoryHook ? { memoryHook } : {}),
       ...(toolchain ? { toolchain } : {}),
-      have: {
-        skills: agreedHashes(skillClaims),
-        plugins: agreedHashes(pluginClaims),
-      },
+      have: await this.#fleetHoldings(),
       at: Date.now(),
+    };
+  }
+
+  /**
+   * What this machine holds of the fleet's content on its disk now, read from
+   * every harness that keeps a copy. One set per harness, INTERSECTED — never
+   * unioned. Skills are written by more than one harness into more than one
+   * directory (claude's `~/.claude/skills`, pi's own), so a hash one of them
+   * holds is not a hash the machine holds: leaving those bytes out would
+   * strand every harness that still needs them. A harness that converges none
+   * reads no set and is not counted, which is why opencode — which reads
+   * claude's directory rather than keeping its own — does not veto every
+   * skill on the machine. A harness whose read fails holds nothing, so the
+   * hub sends everything rather than trust a copy nobody could read.
+   */
+  async #fleetHoldings(): Promise<FleetHoldings> {
+    const skillClaims: Record<string, string>[] = [];
+    const pluginClaims: Record<string, string>[] = [];
+    for (const adapter of harnesses()) {
+      if (!adapter.fleetHoldings) {
+        continue;
+      }
+      try {
+        // biome-ignore lint/performance/noAwaitInLoops: one harness's disk read at a time keeps the reads bounded
+        const held = await adapter.fleetHoldings();
+        if (held.skills) {
+          skillClaims.push(held.skills);
+        }
+        if (held.plugins) {
+          pluginClaims.push(held.plugins);
+        }
+      } catch (error) {
+        warn(`reading ${adapter.kind}'s fleet holdings failed: ${error}`);
+        return { skills: {}, plugins: {} };
+      }
+    }
+    return {
+      skills: agreedHashes(skillClaims),
+      plugins: agreedHashes(pluginClaims),
     };
   }
 
@@ -3306,6 +3327,9 @@ export class SessionSupervisor {
       }
       if (method === FLEET_STATUS) {
         return await this.#syncFleet(undefined, "fleetStatus");
+      }
+      if (method === READ_FLEET_HOLDINGS) {
+        return await this.#fleetHoldings();
       }
 
       if (method === "listSessions") {

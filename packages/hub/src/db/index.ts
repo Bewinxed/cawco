@@ -440,12 +440,11 @@ export interface DbShape {
   readonly finishWorkspaceCreate: (id: string) => void;
   /** The whole desired fleet state (NEW.md §11) — what a machine is sent to converge on. */
   /**
-   * The fleet's desired state. Given a machine, the content-carrying rows it
-   * already reported holding are sent WITHOUT their files: the config goes to
-   * every machine on every fleet change, and those bytes are megabytes the
-   * machine would compare to what it has and then not write.
+   * The fleet's desired state, every content-carrying row with its files.
+   * What a given machine already holds is left out at the push, from a read
+   * of that machine's disk (server.ts pushFleetConfig).
    */
-  readonly fleetConfig: (machineId?: string) => FleetConfig;
+  readonly fleetConfig: () => FleetConfig;
   readonly fleetHookVersion: (
     id: number
   ) => (HookVersion & HookVersionMaterial) | undefined;
@@ -3209,22 +3208,7 @@ const make = (path: string): DbShape => {
         [status.id]: status,
       });
     },
-    fleetConfig: (machineId?: string) => {
-      // What that machine's last sync said it holds. Absent for an older daemon
-      // that does not report it, and absent for a machine nobody named — both
-      // of which are then sent everything, exactly as before.
-      const have = machineId
-        ? db
-            .select({ fleet: agents.fleet })
-            .from(agents)
-            .where(eq(agents.machineId, machineId))
-            .get()?.fleet?.have
-        : undefined;
-      const held = (
-        kind: "skills" | "plugins",
-        name: string,
-        hash: string
-      ): boolean => have?.[kind]?.[name] === hash;
+    fleetConfig: () => {
       return {
         mcp: db
           .select()
@@ -3280,27 +3264,13 @@ const make = (path: string): DbShape => {
             .where(eq(skills.enabled, true))
             .all()
             .flatMap(({ name, hash, files }) =>
-              hash && files
-                ? [
-                    {
-                      name,
-                      hash,
-                      ...(held("skills", name, hash) ? {} : { files }),
-                    },
-                  ]
-                : []
+              hash && files ? [{ name, hash, files }] : []
             ),
           ...db
             .select()
             .from(workflows)
             .all()
-            .map((workflow) => {
-              const skill = workflowSkill(workflow, workflow.inputs);
-              if (held("skills", skill.name, skill.hash)) {
-                skill.files = undefined;
-              }
-              return skill;
-            }),
+            .map((workflow) => workflowSkill(workflow, workflow.inputs)),
           // CawCo's own; a fleet skill of the same name, on or off, is the operator's word on it.
           ...(() => {
             const named = new Set(
@@ -3310,13 +3280,7 @@ const make = (path: string): DbShape => {
                 .all()
                 .map(({ name }) => name)
             );
-            return bundledSkills()
-              .filter((skill) => !named.has(skill.name))
-              .map((skill) =>
-                held("skills", skill.name, skill.hash)
-                  ? { name: skill.name, hash: skill.hash }
-                  : skill
-              );
+            return bundledSkills().filter((skill) => !named.has(skill.name));
           })(),
         ],
         // Only the rows a resolve filled in. A plugin the hub could not fetch is
@@ -3343,7 +3307,7 @@ const make = (path: string): DbShape => {
                 marketplace: id.split("@")[1] ?? "",
                 hash,
                 bytes: bytes ?? 0,
-                ...(held("plugins", name, hash) ? {} : { files }),
+                files,
               },
             ];
           }),
@@ -3833,27 +3797,8 @@ const make = (path: string): DbShape => {
         : undefined;
     },
     setAgentFleet: (machineId, report) => {
-      // A report that says nothing about what the machine holds does not
-      // RETRACT what it last claimed. Several paths write this column — a sync
-      // and a status among them — and only some of them are in a position to
-      // know; a silent one dropping the claim would have the hub resend every
-      // byte of every skill and plugin on the next fleet change. Only a report
-      // that carries `have` replaces it, because that one has counted.
-      const kept = report.have
-        ? report
-        : {
-            ...report,
-            ...(() => {
-              const previous = db
-                .select({ fleet: agents.fleet })
-                .from(agents)
-                .where(eq(agents.machineId, machineId))
-                .get()?.fleet?.have;
-              return previous ? { have: previous } : {};
-            })(),
-          };
       db.update(agents)
-        .set({ fleet: kept })
+        .set({ fleet: report })
         .where(eq(agents.machineId, machineId))
         .run();
     },

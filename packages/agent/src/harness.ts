@@ -191,6 +191,12 @@ export interface Harness {
     instanceId?: string,
     claimed?: readonly string[]
   ): Promise<void>;
+  /**
+   * The fleet content this harness's own copy holds on disk now, hashed as the
+   * hub hashes it. Absent from a harness that converges no content.
+   */
+  // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers keep contravariant parameter checking, like the other adapter methods
+  fleetHoldings?(): Promise<import("@cawco/core").FleetHoldings>;
   /** What the harness has of what cawco last put on it, without changing it. */
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
   fleetStatus?(): Promise<FleetSyncReport>;

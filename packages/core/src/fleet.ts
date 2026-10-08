@@ -619,11 +619,11 @@ export interface FleetSyncReport {
   /** When the sync ran, ms epoch. */
   at: number;
   /**
-   * What this machine now holds, by hash — the content-carrying rows only.
-   *
-   * It is what lets the next config leave those bytes out. A machine that
-   * cannot answer (an older daemon) simply claims nothing, and is sent
-   * everything, which is exactly the behaviour it had before.
+   * What this machine holds on its disk once the sync is done, by hash — the
+   * content-carrying rows only, hashed as the hub hashes them. It tells the
+   * hub whose content moved, so running sessions reload. Which bytes a sync
+   * leaves out is never decided from it: the hub reads the disk again
+   * ({@link READ_FLEET_HOLDINGS}) just before every sync.
    */
   have?: {
     skills?: Record<string, string>;
@@ -817,6 +817,17 @@ export const INSPECT_CONFIG = "inspectConfig";
 export const READ_SKILL_FILES = "readSkillFiles";
 export const READ_MEMORY_FILE = "readMemoryFile";
 export const READ_HOOK_SCRIPT = "readHookScript";
+/**
+ * `readFleetHoldings() => FleetHoldings` — the skills and plugins this machine
+ * holds now, read off its disk and hashed as the hub hashes them: each
+ * harness's own copy, and only a hash every harness that converges that kind
+ * holds. The hub asks just before every sync and leaves out the bytes of
+ * exactly that, so a wiped or edited copy is carried again in that same sync.
+ */
+export const READ_FLEET_HOLDINGS = "readFleetHoldings";
+
+/** What a machine holds, by kind: name → hash of the files on its disk. */
+export type FleetHoldings = NonNullable<FleetSyncReport["have"]>;
 
 /** What the composer's `/` menu renders. Derived from the SDK's `SlashCommand`. */
 export interface AvailableCommand {

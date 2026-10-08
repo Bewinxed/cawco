@@ -12,6 +12,7 @@ import type {
   DelegateEvent,
   Envelope,
   FleetConfig,
+  FleetHoldings,
   FleetHook,
   FleetMcpConfig,
   FleetSkillMeta,
@@ -143,6 +144,7 @@ import {
   QUESTION_DISMISSED,
   questionsOf,
   RATE_LIMIT_READ,
+  READ_FLEET_HOLDINGS,
   READ_HOOK_SCRIPT,
   READ_MEMORY_FILE,
   READ_SKILL_FILES,
@@ -172,6 +174,7 @@ import {
   type BinaryUpdatePolicy,
   type BinaryUpdateState,
 } from "@cawco/core/binary-updates";
+import { hashFiles } from "@cawco/core/file-hash";
 import { machineId as hostMachineId } from "@cawco/core/machine-id";
 import { Elysia, t, ValidationError } from "elysia";
 import { websocket } from "elysia/websocket";
@@ -299,7 +302,7 @@ import { type HubSocket, type RegistryShape, toDashboard } from "./registry";
 import { RuleEngine } from "./rules";
 import { createSessionIdentities } from "./session-identity";
 import { createSessionLifecycle } from "./session-lifecycle";
-import { hashFiles, resolveSkill } from "./skills";
+import { resolveSkill } from "./skills";
 import { type StagesTemplate, TEMPLATES, templateText } from "./stages";
 import { createStreamHub } from "./stream";
 import { suggest } from "./suggest";
@@ -6867,6 +6870,25 @@ export const createServer = (
   const isHubMachine = async (id: string): Promise<boolean> =>
     id === (await ownMachineId);
 
+  /** The fleet content a machine holds on its disk now; nothing when it cannot say. */
+  const readHoldings = async (machineId: string): Promise<FleetHoldings> => {
+    const answer = await callAgent(
+      machineId,
+      READ_FLEET_HOLDINGS,
+      [],
+      READ_TIMEOUT_MS
+    );
+    if (
+      typeof answer === "object" &&
+      answer.ok &&
+      typeof answer.result === "object" &&
+      answer.result !== null
+    ) {
+      return answer.result as FleetHoldings;
+    }
+    return {};
+  };
+
   /**
    * Sends the machine what the fleet's Claude Code is supposed to be able to
    * reach (NEW.md §11): every MCP server, marketplace and plugin, for the
@@ -6909,9 +6931,24 @@ export const createServer = (
               .flatMap(({ id, error }) => (error ? [[id, error] as const] : []))
           : []
       );
+      // What the machine holds is read off its disk now, and only those bytes
+      // are left out: a copy that was wiped or edited since its last report is
+      // carried in this same sync. A read that fails or does not answer holds
+      // nothing, so every byte goes — heavier, never wrong.
+      const held = await readHoldings(machineId);
       const outbound = fleetMcp.syncConfig(
         {
           ...config,
+          skills: config.skills?.map((skill) =>
+            held.skills?.[skill.name] === skill.hash
+              ? { ...skill, files: undefined }
+              : skill
+          ),
+          pluginPayloads: config.pluginPayloads?.map((plugin) =>
+            held.plugins?.[plugin.name] === plugin.hash
+              ? { ...plugin, files: undefined }
+              : plugin
+          ),
           hubOnlyMarketplaces: [...hubOnly],
           // What the hub could not carry of a hub-only marketplace reaches that
           // machine no other way, so the hub's reason goes with the row.
@@ -7023,8 +7060,7 @@ export const createServer = (
       return;
     }
 
-    // Per machine: what this one already holds is sent as a hash and no bytes.
-    const config = db.fleetConfig(machineId);
+    const config = db.fleetConfig();
     const empty = !(
       config.mcp.length ||
       config.marketplaces.length ||

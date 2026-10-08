@@ -9,6 +9,7 @@ import { lstat, mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import type { SkillFile } from "@cawco/core";
+import { hashFiles } from "@cawco/core/file-hash";
 import { $ } from "bun";
 
 /** What a `source` string names, once its scheme has been read off it. */
@@ -474,19 +475,6 @@ const walk = async (dir: string, prefix = ""): Promise<Found[]> => {
     }
   }
   return found;
-};
-
-/**
- * Sorted `path\0mode\0content` triples, so the same skill hashes the same
- * everywhere and a file that gains or loses its execute bit re-syncs.
- */
-export const hashFiles = (files: SkillFile[]): string => {
-  const hasher = new Bun.CryptoHasher("sha256");
-  for (const file of [...files].sort((a, b) => a.path.localeCompare(b.path))) {
-    hasher.update(`${file.path}\0${file.executable ? "x" : "-"}\0`);
-    hasher.update(file.contentBase64);
-  }
-  return hasher.digest("hex");
 };
 
 /**

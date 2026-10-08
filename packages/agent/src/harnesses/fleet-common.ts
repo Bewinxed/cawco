@@ -17,7 +17,7 @@ import type {
   FleetMemory,
   FleetSkillPayload,
 } from "@cawco/core";
-import { memoryPlan, writeSkillFile } from "../fleet";
+import { heldSkills, memoryPlan, writeSkillFile } from "../fleet";
 import {
   guardWorkflowSkillRemoval,
   workflowSkillCollision,
@@ -106,6 +106,9 @@ export const syncSkillFiles = async (
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: writes every skill this machine doesn't have yet and removes what the fleet no longer carries, reporting each one
 ): Promise<Record<string, string>> => {
   const written: Record<string, string> = {};
+  // What is on this disk now, not what the sidecar says was written: the
+  // sidecar is who owns a directory, the disk is what is in it.
+  const held = await heldSkills(dir, Object.keys(managed));
   for (const skill of desired) {
     try {
       // biome-ignore lint/performance/noAwaitInLoops: ownership is checked before this skill is written or claimed.
@@ -118,24 +121,19 @@ export const syncSkillFiles = async (
       report[skill.name] = { state: "failed", detail: String(error) };
       continue;
     }
-    if (
-      managed[skill.name] === skill.hash &&
-      (!skill.workflowId ||
-        (await Bun.file(join(dir, skill.name, "SKILL.md")).exists()))
-    ) {
+    if (held[skill.name] === skill.hash) {
       written[skill.name] = skill.hash;
       report[skill.name] = { state: "applied" };
       continue;
     }
 
-    // The hub leaves out the bytes of anything this machine's last report said
-    // it already held. Reaching here means it did not hold this hash after all —
-    // a sidecar that was cleared, or a report that never landed. Nothing is
-    // written, and the next sync carries the content, because the claim that
-    // suppressed it is exactly what this failure retracts.
+    // The hub read this disk just before it built this sync and left out the
+    // bytes of exactly what it held. Reaching here without files means the
+    // disk changed in between; nothing is written, and the next sync's read
+    // finds the skill missing and carries it.
     if (!skill.files) {
       if (managed[skill.name] !== undefined) {
-        written[skill.name] = skill.workflowId ? "" : managed[skill.name];
+        written[skill.name] = managed[skill.name];
       }
       report[skill.name] = {
         state: "failed",

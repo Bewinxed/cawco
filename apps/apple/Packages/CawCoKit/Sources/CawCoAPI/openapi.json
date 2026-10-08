@@ -23490,7 +23490,7 @@
             "type": "number"
           },
           "have": {
-            "description": "What this machine now holds, by hash — the content-carrying rows only.\n\nIt is what lets the next config leave those bytes out. A machine that\ncannot answer (an older daemon) simply claims nothing, and is sent\neverything, which is exactly the behaviour it had before.",
+            "description": "What this machine holds on its disk once the sync is done, by hash — the\ncontent-carrying rows only, hashed as the hub hashes them. It tells the\nhub whose content moved, so running sessions reload. Which bytes a sync\nleaves out is never decided from it: the hub reads the disk again\n({@link READ_FLEET_HOLDINGS}) just before every sync.",
             "type": "object",
             "properties": {
               "skills": {
