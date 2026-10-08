@@ -1,7 +1,8 @@
 /**
- * Cawrier: the one holder of CawCo's APNs key. A phone that bought Pro
- * enrolls a pairing (its device token, under a secret it gives its hub);
- * the hub pushes through the pairing with that secret. No hub holds the key.
+ * Cawrier: the one holder of CawCo's APNs key. A phone with Pro or a live
+ * free week enrolls a pairing (its device token, under a secret it gives its
+ * hub); the hub pushes through the pairing with that secret. No hub holds the
+ * key. One purchase holds at most {@link SEATS_PER_PURCHASE} live pairings.
  *
  * POST /v1/enroll  { pairingId, secret, deviceToken, apnsEnvironment, proof }
  * POST /v1/push    Authorization: Bearer <secret>; { pairingId, collapseId?, expiration?, payload }
@@ -13,10 +14,12 @@ import {
   hasKey,
   sendApns,
 } from "./apns";
+import { SEATS_PER_PURCHASE } from "./seats";
 import { verifyPurchase } from "./storekit";
 
 // biome-ignore lint/performance/noBarrelFile: Workers find a Durable Object class among the entry module's exports.
 export { Pairing } from "./pairing";
+export { Seats } from "./seats";
 
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -147,14 +150,23 @@ const enroll = async (request: Request, env: Env): Promise<Response> => {
     console.log(`enroll 403: ${purchase.error}`);
     return refuse(403, purchase.error);
   }
-  const held = await pairing(env, enrollment.pairingId).enroll({
+  const enrolled = await pairing(env, enrollment.pairingId).enroll({
     secretHash: await sha256(enrollment.secret),
     deviceToken: enrollment.deviceToken,
     apnsEnvironment: enrollment.apnsEnvironment,
     transactionEnvironment: purchase.environment,
+    seat: purchase.seat,
+    endsAt: purchase.endsAt,
   });
-  if (!held) {
+  if (enrolled === "held") {
     return refuse(409, "This pairing is held under another secret.");
+  }
+  if (enrolled === "full") {
+    console.log("enroll 409: every seat on the purchase is taken");
+    return refuse(
+      409,
+      `This purchase is already on ${SEATS_PER_PURCHASE} devices. Remove one in CawCo on another device, or contact support.`
+    );
   }
   return json(200, { ok: true });
 };

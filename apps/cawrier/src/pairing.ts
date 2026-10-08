@@ -1,9 +1,11 @@
 /**
- * One pairing: a phone that bought Pro and the hub it gave its secret to.
- * A SQLite-backed Durable Object named by the pairing id, holding one row;
- * nothing else stores anything. Each enroll keeps it 30 more days, then its
- * alarm wipes it, so a refunded purchase stops within 30 days and an active
- * buyer, re-enrolling on every launch, never lapses.
+ * One pairing: a phone with Pro or the free week and the hub it gave its
+ * secret to. A SQLite-backed Durable Object named by the pairing id, holding
+ * one row; it takes a seat under its purchase ({@link Seats}). Each enroll
+ * keeps it 30 more days, or to the free week's end when that is sooner; then
+ * its alarm wipes it and gives the seat back. So a refunded purchase stops
+ * within 30 days, a free week stops when it ends, and an active buyer,
+ * re-enrolling on every launch, never lapses.
  */
 import { DurableObject } from "cloudflare:workers";
 import type { ApnsEnvironment } from "./apns";
@@ -14,12 +16,13 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 /** Home Assistant's companion relay allows the same per day. */
 const PUSHES_PER_DAY = 500;
 
-/** The one row; `day` and `pushes` count today's pushes. */
-const TABLE = `CREATE TABLE IF NOT EXISTS pairing (
+/** The one row; `day` and `pushes` count today's pushes; `seat` names the purchase's {@link Seats}. */
+const TABLE = `CREATE TABLE IF NOT EXISTS enrolment (
   secret_hash TEXT NOT NULL,
   device_token TEXT NOT NULL,
   apns_environment TEXT NOT NULL,
   transaction_environment TEXT NOT NULL,
+  seat TEXT NOT NULL,
   enrolled_at INTEGER NOT NULL,
   day INTEGER NOT NULL DEFAULT 0,
   pushes INTEGER NOT NULL DEFAULT 0
@@ -31,6 +34,7 @@ interface Row extends Record<string, SqlStorageValue> {
   device_token: string;
   enrolled_at: number;
   pushes: number;
+  seat: string;
   /** sha256 of the secret, hex. */
   secret_hash: string;
   transaction_environment: TransactionEnvironment;
@@ -39,9 +43,15 @@ interface Row extends Record<string, SqlStorageValue> {
 export interface Enrollment {
   readonly apnsEnvironment: ApnsEnvironment;
   readonly deviceToken: string;
+  /** When the free week ends; null for Pro. */
+  readonly endsAt: number | null;
+  readonly seat: string;
   readonly secretHash: string;
   readonly transactionEnvironment: TransactionEnvironment;
 }
+
+/** `held`: under another secret; `full`: the purchase has no seat left. */
+export type Enrolled = "enrolled" | "held" | "full";
 
 export type Claim =
   | {
@@ -70,38 +80,58 @@ export class Pairing extends DurableObject<Env> {
   }
 
   private held(): Row | undefined {
-    return this.sql.exec<Row>("SELECT * FROM pairing LIMIT 1").toArray()[0];
+    return this.sql.exec<Row>("SELECT * FROM enrolment LIMIT 1").toArray()[0];
   }
 
-  /** False when the pairing is held under another secret. */
-  async enroll(next: Enrollment): Promise<boolean> {
-    const held = this.held();
-    if (held && !same(held.secret_hash, next.secretHash)) {
-      return false;
-    }
-    if (!held) {
-      this.sql.exec(
-        "INSERT INTO pairing (secret_hash, device_token, apns_environment, transaction_environment, enrolled_at) VALUES (?, ?, ?, ?, ?)",
-        next.secretHash,
-        next.deviceToken,
-        next.apnsEnvironment,
-        next.transactionEnvironment,
-        Date.now()
+  /** This pairing as a seat holder: its object id, which names it uniquely. */
+  private get me(): string {
+    return this.ctx.id.toString();
+  }
+
+  private seats(seat: string) {
+    return this.env.SEATS.get(this.env.SEATS.idFromName(seat));
+  }
+
+  /** Serialized against the alarm and other enrolls: the seat and the row change together. */
+  async enroll(next: Enrollment): Promise<Enrolled> {
+    return await this.ctx.blockConcurrencyWhile(async () => {
+      const held = this.held();
+      if (held && !same(held.secret_hash, next.secretHash)) {
+        return "held";
+      }
+      if (held?.seat !== next.seat) {
+        if (!(await this.seats(next.seat).take(this.me))) {
+          return "full";
+        }
+        if (held) {
+          await this.seats(held.seat).release(this.me);
+        }
+      }
+      const now = Date.now();
+      if (held) {
+        this.sql.exec(
+          "UPDATE enrolment SET device_token = ?, apns_environment = ?, transaction_environment = ?, seat = ?",
+          next.deviceToken,
+          next.apnsEnvironment,
+          next.transactionEnvironment,
+          next.seat
+        );
+      } else {
+        this.sql.exec(
+          "INSERT INTO enrolment (secret_hash, device_token, apns_environment, transaction_environment, seat, enrolled_at) VALUES (?, ?, ?, ?, ?, ?)",
+          next.secretHash,
+          next.deviceToken,
+          next.apnsEnvironment,
+          next.transactionEnvironment,
+          next.seat,
+          now
+        );
+      }
+      await this.ctx.storage.setAlarm(
+        Math.min(now + LIFE_MS, next.endsAt ?? Number.POSITIVE_INFINITY)
       );
-    } else if (
-      held.device_token !== next.deviceToken ||
-      held.apns_environment !== next.apnsEnvironment ||
-      held.transaction_environment !== next.transactionEnvironment
-    ) {
-      this.sql.exec(
-        "UPDATE pairing SET device_token = ?, apns_environment = ?, transaction_environment = ?",
-        next.deviceToken,
-        next.apnsEnvironment,
-        next.transactionEnvironment
-      );
-    }
-    await this.ctx.storage.setAlarm(Date.now() + LIFE_MS);
-    return true;
+      return "enrolled";
+    });
   }
 
   /** The device a push goes to, once the secret is right and today's pushes are under the cap. */
@@ -115,7 +145,7 @@ export class Pairing extends DurableObject<Env> {
     if (count >= PUSHES_PER_DAY) {
       return { ok: false, status: 429, resetsAt: (today + 1) * DAY_MS };
     }
-    this.sql.exec("UPDATE pairing SET day = ?, pushes = ?", today, count + 1);
+    this.sql.exec("UPDATE enrolment SET day = ?, pushes = ?", today, count + 1);
     return {
       ok: true,
       deviceToken: held.device_token,
@@ -125,16 +155,23 @@ export class Pairing extends DurableObject<Env> {
 
   /** APNs says the token is dead: the pairing goes, unless it was enrolled again with another token meanwhile. */
   async forget(deviceToken: string): Promise<void> {
-    if (this.held()?.device_token === deviceToken) {
-      await this.wipe();
-    }
+    await this.ctx.blockConcurrencyWhile(async () => {
+      if (this.held()?.device_token === deviceToken) {
+        await this.wipe();
+      }
+    });
   }
 
   override async alarm(): Promise<void> {
-    await this.wipe();
+    await this.ctx.blockConcurrencyWhile(() => this.wipe());
   }
 
+  /** The seat goes back first: when that call fails, the pairing and its alarm stay and the alarm retries. */
   private async wipe(): Promise<void> {
+    const held = this.held();
+    if (held) {
+      await this.seats(held.seat).release(this.me);
+    }
     await this.ctx.storage.deleteAlarm();
     await this.ctx.storage.deleteAll();
   }

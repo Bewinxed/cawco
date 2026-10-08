@@ -368,20 +368,14 @@ export const createPush = ({ db, task }: PushServices) => {
       });
     },
 
-    /** A test from Settings: a push to every registered device, quiet ones too. */
-    async test(): Promise<{ outcomes: PushOutcome[] }> {
-      const devices = db.push.devices();
-      if (devices.length === 0) {
-        throw new Error(
-          "No phone is registered yet. Open CawCo on your phone and allow notifications."
-        );
-      }
+    /** A test: a push to the devices given, quiet ones too. */
+    async test(devices: PushDeviceRow[]): Promise<{ outcomes: PushOutcome[] }> {
       return {
         outcomes: await deliver(
           {
-            name: "CawCo",
+            name: "Caw here.",
             project: null,
-            body: "Test push. This device gets what needs you.",
+            body: "This is how I'll let you know when an agent needs you.",
             category: PUSH_CATEGORIES.test,
             collapseId: "test",
             threadId: "test",
@@ -417,13 +411,28 @@ export const pushRoutes = (db: DbShape, push: Push) =>
   new Elysia()
     // ── Settings: the devices and the test ───────────────────────────────
     .get("/api/push", () => ({ devices: db.push.devices().map(deviceView) }))
-    .post("/api/push/test", async ({ status }) => {
-      try {
-        return await push.test();
-      } catch (error) {
-        return status(409, (error as Error).message);
+    // A test to one device, or with no body to every registered device.
+    .post(
+      "/api/push/test",
+      { body: t.Optional(t.Object({ pairingId: t.String() })) },
+      async ({ body, status }) => {
+        const devices = db.push.devices();
+        if (body) {
+          const device = devices.find(
+            (row) => row.pairingId === body.pairingId
+          );
+          return device
+            ? await push.test([device])
+            : status(404, "That device is no longer registered.");
+        }
+        return devices.length > 0
+          ? await push.test(devices)
+          : status(
+              409,
+              "No phone is registered yet. Open CawCo on your phone and allow notifications."
+            );
       }
-    })
+    )
     .put(
       "/api/push/devices/:id",
       { body: t.Object({ quiet: t.Boolean() }) },

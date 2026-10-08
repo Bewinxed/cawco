@@ -1,8 +1,9 @@
 /**
- * A StoreKit 2 transaction (`Transaction.jwsRepresentation`) proves Pro.
- * Apple's own verifier checks it offline: the x5c chain to the pinned Apple
- * Root CA G3, the ES256 signature, the bundle id and the environment. Here:
- * which environment to check against, and what the transaction must grant.
+ * A StoreKit 2 transaction (`Transaction.jwsRepresentation`) proves Pro or
+ * the free week. Apple's own verifier checks it offline: the x5c chain to the
+ * pinned Apple Root CA G3, the ES256 signature, the bundle id and the
+ * environment. Here: which environment to check against, and what the
+ * transaction must grant.
  */
 import { Buffer } from "node:buffer";
 import type { SignedDataVerifier } from "@apple/app-store-server-library";
@@ -18,8 +19,17 @@ const MAX_JWS_CHARS = 16_384;
 
 export type TransactionEnvironment = "Production" | "Sandbox";
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 export type Purchase =
-  | { readonly ok: true; readonly environment: TransactionEnvironment }
+  | {
+      readonly ok: true;
+      /** When the free week ends; null for Pro. */
+      readonly endsAt: number | null;
+      readonly environment: TransactionEnvironment;
+      /** The purchase's devices are counted under this: environment and original transaction id. */
+      readonly seat: string;
+    }
   | { readonly ok: false; readonly error: string };
 
 /** The environment the transaction claims, read before its signature is checked against that environment. */
@@ -72,7 +82,13 @@ export const verifyPurchase = async (
     };
   }
   const products = env.PRO_PRODUCT_IDS.split(",").map((id) => id.trim());
-  if (!(transaction.productId && products.includes(transaction.productId))) {
+  const trial = transaction.productId === env.TRIAL_PRODUCT_ID;
+  if (
+    !(
+      trial ||
+      (transaction.productId && products.includes(transaction.productId))
+    )
+  ) {
     return { ok: false, error: "The purchase is not CawCo Pro." };
   }
   if (transaction.revocationDate !== undefined) {
@@ -84,5 +100,27 @@ export const verifyPurchase = async (
   ) {
     return { ok: false, error: "The subscription has expired." };
   }
-  return { ok: true, environment };
+  if (!transaction.originalTransactionId) {
+    return {
+      ok: false,
+      error: "The purchase carries no original transaction id.",
+    };
+  }
+  const seat = `${environment}:${transaction.originalTransactionId}`;
+  if (!trial) {
+    return { ok: true, environment, seat, endsAt: null };
+  }
+  if (typeof transaction.purchaseDate !== "number") {
+    return { ok: false, error: "The purchase carries no purchase date." };
+  }
+  // A restore gets a new purchaseDate; the week runs from the first purchase.
+  const startedAt = Math.min(
+    transaction.purchaseDate,
+    transaction.originalPurchaseDate ?? transaction.purchaseDate
+  );
+  const endsAt = startedAt + Number(env.TRIAL_DAYS) * DAY_MS;
+  if (!(endsAt > Date.now())) {
+    return { ok: false, error: "The free week on this purchase has ended." };
+  }
+  return { ok: true, environment, seat, endsAt };
 };

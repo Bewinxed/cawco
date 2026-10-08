@@ -9,9 +9,15 @@
   "workers_dev": false,
   "routes": [{ "pattern": "cawrier.cawco.dev", "custom_domain": true }],
   "durable_objects": {
-    "bindings": [{ "name": "PAIRING", "class_name": "Pairing" }]
+    "bindings": [
+      { "name": "PAIRING", "class_name": "Pairing" },
+      { "name": "SEATS", "class_name": "Seats" }
+    ]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Pairing"] }],
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["Pairing"] },
+    { "tag": "v2", "new_sqlite_classes": ["Seats"] }
+  ],
   "ratelimits": [
     {
       "name": "ENROLL_LIMIT",
@@ -22,6 +28,9 @@
   "vars": {
     "APNS_TOPIC": "dev.cawco.app",
     "PRO_PRODUCT_IDS": "dev.cawco.app.pro",
+    // The free week: valid until its purchase date plus TRIAL_DAYS.
+    "TRIAL_PRODUCT_ID": "dev.cawco.app.trial7",
+    "TRIAL_DAYS": "7",
     // The App Store app record; Apple's verifier requires it for Production.
     "APP_APPLE_ID": "6819139448"
   },

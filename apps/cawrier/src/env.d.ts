@@ -11,4 +11,9 @@ interface Env {
   readonly PAIRING: DurableObjectNamespace<import("./pairing").Pairing>;
   /** Comma-separated product ids that grant Pro. */
   readonly PRO_PRODUCT_IDS: string;
+  readonly SEATS: DurableObjectNamespace<import("./seats").Seats>;
+  /** Days the free week's purchase grants from its purchase date. */
+  readonly TRIAL_DAYS: string;
+  /** The product id of the free week. */
+  readonly TRIAL_PRODUCT_ID: string;
 }

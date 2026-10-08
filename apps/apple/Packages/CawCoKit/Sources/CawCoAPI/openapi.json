@@ -3131,6 +3131,24 @@
     },
     "/api/push/test": {
       "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "pairingId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "pairingId"
+                ]
+              }
+            }
+          }
+        },
         "operationId": "postApiPushTest",
         "responses": {
           "200": {
@@ -3143,12 +3161,32 @@
               }
             }
           },
+          "404": {
+            "description": "postApiPushTest 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
           "409": {
             "description": "postApiPushTest 409",
             "content": {
               "text/plain": {
                 "schema": {
                   "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiPushTest 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
