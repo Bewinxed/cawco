@@ -22,7 +22,7 @@
    * is shown after, so what the acknowledgement changes upstream never
    * reaches the box.
    */
-  import { tick } from "svelte";
+  import { tick, untrack } from "svelte";
   import { fade } from "svelte/transition";
   import { dur, ease, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import { ListSwap } from "#lib/cawco/motion/list-swap.svelte.js";
@@ -36,6 +36,7 @@
   import { arrive, GOODBYE, leaveInPlace } from "./goodbye";
   import type { Notice } from "./model";
   import ReleaseNotes from "./ReleaseNotes.svelte";
+  import { updates } from "./updates.svelte";
 
   let {
     view,
@@ -91,6 +92,13 @@
     leftKind = notice.kind;
     leaving = true;
   }
+
+  // The tab reloading by itself, idle, says the same goodbye.
+  $effect(() => {
+    if (updates.goodbye && !leaving) {
+      untrack(sayGoodbye);
+    }
+  });
   const status = $derived(notice.caw.status as CawStatus);
   /** The first busy line takes the one spinner; the rest are plain words. */
   const spinnerAt = $derived(notice.lines.findIndex((l) => l.state === "busy"));

@@ -599,12 +599,14 @@ export function updatedNotice(machines: UpdateMachine[]): Notice | null {
 }
 
 /** 7. This tab is older than the dashboard serving it, and nothing landed to say why. */
-const reloadNotice = (build: string): Notice => ({
+export const reloadNotice = (build: string): Notice => ({
   acks: [reloadId(build)],
   kind: 7,
   title: "CawCo updated",
   failed: false,
-  lines: [{ state: "plain", text: "Reload to get the new version." }],
+  // No "reload" line: the tab reloads by itself once it is idle
+  // (reload.svelte.ts); the button is there to go now.
+  lines: [],
   configure: false,
   action: "reload",
   caw: { status: "sleeping", moves: false },

@@ -48,7 +48,7 @@
   import { delegateHandle } from "./links";
   import { planProgress, planShows } from "./plan/PlanPane.svelte";
   import PlanRing from "./plan/PlanRing.svelte";
-  import { keepsDrafts } from "./protocol-reload";
+  import { keepsDrafts } from "./reload.svelte";
   import SideSplit from "./side/SideSplit.svelte";
   import { clip, type SuggestCandidate, suggestions } from "./suggest.svelte";
   import { inLists, threadIdOf } from "./thread-tabs";

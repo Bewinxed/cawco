@@ -595,7 +595,7 @@
       }
     };
   });
-  // The first prompt outlives a reload of this tab (`protocol-reload.ts`):
+  // The first prompt outlives a reload of this tab (`reload.svelte.ts`):
   // kept as it is typed, read back as the dialog opens, gone once it closes.
   $effect(() => {
     if (!open) {

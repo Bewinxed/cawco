@@ -18,6 +18,16 @@ import { IN_MS, ListSwap, OUT_MS } from "../motion/list-swap.svelte";
 
 export const GOODBYE = "See you in a bit";
 
+/**
+ * How long a goodbye takes to be seen: the line arrives (after the first
+ * old row is out, or by a fade with reduced motion), then stands for
+ * --dur-wait-grace before the tab goes.
+ */
+export const goodbyeSeenMs = (): number =>
+  (motionOk.current
+    ? ListSwap.enterAt(0, ListSwap.leaveEnd(0)) + IN_MS
+    : dur("--dur-fade")) + dur("--dur-wait-grace");
+
 /** The rows of what leaves: a heading, a bullet or a paragraph of the notes. */
 const ROWS = "h1, h2, h3, h4, h5, h6, li, p";
 

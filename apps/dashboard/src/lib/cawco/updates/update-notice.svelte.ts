@@ -13,9 +13,11 @@ import { untrack } from "svelte";
 import { page } from "$app/state";
 import { cawco } from "../client.svelte";
 import { notices } from "../notices.svelte";
+import { bidFarewell, reloadWhenIdle } from "../reload.svelte";
 import { newerBuild } from "../served-build.svelte";
 import { toast } from "../toasts";
-import { type Notice, noticeFor } from "./model";
+import { goodbyeSeenMs } from "./goodbye";
+import { type Notice, noticeFor, reloadId, reloadNotice } from "./model";
 import UpdateNotice from "./UpdateNotice.svelte";
 import { updates } from "./updates.svelte";
 
@@ -62,6 +64,8 @@ export function startUpdateNotice(): () => void {
     let ours = false;
     /** Reload was chosen: the box says its goodbye, and nothing replaces or closes it, until the tab goes. */
     let leaving = false;
+    /** What the notice would say now, Home's card or not: what a reload acknowledges. */
+    let found: Notice | null = null;
 
     /** The person closed the notice (its ✕). */
     const dismiss = () => {
@@ -129,7 +133,7 @@ export function startUpdateNotice(): () => void {
               seen: new Set(notices.seen),
             }
           : null;
-      const found = input
+      found = input
         ? noticeFor(input, (hostname) => machineLabel(hostname))
         : null;
       // A Home card on screen says the landing: one surface, never the toast and the card together.
@@ -148,25 +152,56 @@ export function startUpdateNotice(): () => void {
         }
         view.notice = notice;
         view.onPage = onPage;
-        if (!shown) {
-          shown = true;
-          toast.custom(UpdateNotice, {
-            id: ID,
-            duration: Number.POSITIVE_INFINITY,
-            // Closing it acknowledges it for every tab and device, so only its
-            // own ✕ closes it: never a stray swipe.
-            dismissible: false,
-            onDismiss: dismiss,
-            componentProps: {
-              view,
-              onaction: act,
-              ondismiss: dismiss,
-              onsettle: remeasure(ID),
-            },
-          });
-        }
+        show();
       });
     });
+
+    function show(): void {
+      if (shown) {
+        return;
+      }
+      shown = true;
+      toast.custom(UpdateNotice, {
+        id: ID,
+        duration: Number.POSITIVE_INFINITY,
+        // Closing it acknowledges it for every tab and device, so only its
+        // own ✕ closes it: never a stray swipe.
+        dismissible: false,
+        onDismiss: dismiss,
+        componentProps: {
+          view,
+          onaction: act,
+          ondismiss: dismiss,
+          onsettle: remeasure(ID),
+        },
+      });
+    }
+
+    // A tab older than the dashboard reloads itself once it is idle
+    // (reload.svelte.ts). In view it says its goodbye first, in the toast
+    // (or Home's card, while that is up); the reload acknowledges what the
+    // notice said, as Reload does.
+    const unbid = bidFarewell({
+      acks: (build) => [...(found?.acks ?? []), reloadId(build)],
+      goodbye: async (build) => {
+        leaving = true;
+        if (updates.cards === 0) {
+          // Nothing said in this tab (acknowledged elsewhere first): the
+          // reload's own notice is the box that says goodbye.
+          view.notice ??= reloadNotice(build);
+          show();
+        }
+        updates.goodbye = true;
+        await new Promise((done) => setTimeout(done, goodbyeSeenMs()));
+      },
+    });
+    $effect(() => {
+      if (newerBuild() !== null) {
+        // biome-ignore lint/complexity/noVoid: a reload ends this page
+        void reloadWhenIdle();
+      }
+    });
+    $effect(() => unbid);
 
     // "Running on N machines" leaves by itself, unless it is also this tab's reload.
     $effect(() => {

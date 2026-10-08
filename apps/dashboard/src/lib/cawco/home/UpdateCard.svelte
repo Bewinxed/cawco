@@ -10,11 +10,13 @@
    * nothing else, until the tab goes. The card is a `reflow` box, so its
    * edge travels to the goodbye's height and what is under it follows.
    */
+  import { untrack } from "svelte";
   import { motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { arrive, GOODBYE, leaveInPlace } from "../updates/goodbye";
   import type { Notice } from "../updates/model";
   import ReleaseNotes from "../updates/ReleaseNotes.svelte";
+  import { updates } from "../updates/updates.svelte";
   import Caw from "./Caw.svelte";
   import CawMark from "./CawMark.svelte";
 
@@ -35,7 +37,8 @@
   let card = $state<HTMLElement>();
   let layer = $state<HTMLElement>();
 
-  function reload(reloadNow: () => void): void {
+  /** What the card showed leaves where it stood, and the card turns into its goodbye. */
+  function sayGoodbye(): void {
     if (card && layer) {
       const away = layer;
       leaveInPlace(
@@ -47,8 +50,19 @@
       );
     }
     leaving = true;
+  }
+
+  function reload(reloadNow: () => void): void {
+    sayGoodbye();
     reloadNow();
   }
+
+  // The tab reloading by itself, idle, says the same goodbye.
+  $effect(() => {
+    if (updates.goodbye && !leaving) {
+      untrack(sayGoodbye);
+    }
+  });
 </script>
 
 <article

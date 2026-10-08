@@ -53,10 +53,16 @@
       : null
   );
   /**
-   * Reload was chosen: the card says its goodbye until the tab goes, also
-   * once acknowledging has dropped the landing from `updated`.
+   * Reload was chosen, or the tab is reloading by itself (idle) while the
+   * card is up: the card says its goodbye until the tab goes, also once
+   * acknowledging has dropped the landing from `updated`.
    */
   let reloading = $state(false);
+  $effect(() => {
+    if (updates.goodbye && updated !== null) {
+      reloading = true;
+    }
+  });
   const card = $derived(updated !== null || reloading);
   // While the card is on screen it is the landing's one surface: the toast stands aside.
   $effect(() => {

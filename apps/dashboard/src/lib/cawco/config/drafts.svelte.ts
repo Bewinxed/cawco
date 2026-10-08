@@ -17,7 +17,7 @@
 import { untrack } from "svelte";
 import { SvelteSet } from "svelte/reactivity";
 import { browser } from "$app/env";
-import { keepsDrafts } from "../protocol-reload";
+import { keepsDrafts } from "../reload.svelte";
 import { MAIN } from "./memory";
 import type { SectionSlug } from "./sections";
 import type { ConfigStore } from "./store.svelte";

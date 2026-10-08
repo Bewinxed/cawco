@@ -993,9 +993,9 @@
              it waits on instead of leaving a board that quietly stopped. -->
           <div class="banner warn" data-flip role="status">
             <span>
-              {#if cawco.reloadHold === "field"}
-                CawCo updated — this page has stopped updating. It reloads when
-                you leave the field you're typing in.
+              {#if cawco.reloadHold === "busy"}
+                CawCo updated — this page has stopped updating. It reloads once
+                you're not using it.
               {:else}
                 CawCo updated — this page has stopped updating. It reloads when
                 the dashboard serves the new build.

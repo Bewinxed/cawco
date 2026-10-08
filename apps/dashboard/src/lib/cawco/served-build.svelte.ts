@@ -2,7 +2,8 @@
  * Whether the dashboard now serving this tab is a newer build than the tab
  * itself. Nothing here shows anything: the one update notice
  * (updates/update-notice.svelte.ts) says it, as the landing that replaced
- * the dashboard or, with no landing to announce, as the reload alone.
+ * the dashboard or, with no landing to announce, as the reload alone, and
+ * the tab reloads itself once the operator isn't using it (reload.svelte.ts).
  *
  * The build bakes its version (the commit, `kit.version.name` in
  * vite.config.ts) into the page. The comparison is with the build the
@@ -17,9 +18,9 @@
  * own server (serve.js), so a dashboard restart always drops it and the
  * reconnect is the moment to ask.
  *
- * A build that also raises the wire (`WIRE_PROTOCOL`) does not ask: a tab
- * built for the older wire misreads the hub, so it reloads itself with its
- * drafts kept (protocol-reload.ts).
+ * A build that also raises the wire (`WIRE_PROTOCOL`) reloads the same way
+ * (reload.svelte.ts): a tab built for the older wire misreads the hub, so
+ * it also stops reading it while it waits.
  */
 import { version } from "$app/env";
 

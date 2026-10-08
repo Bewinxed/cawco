@@ -113,7 +113,7 @@ import { type PendingSelection, selectionExtras } from "./preview/selection";
 import type { PreviewAsk } from "./preview/source";
 import { send as askHub, json } from "./project-tasks";
 import { placedOn } from "./projects";
-import { type ReloadHold, reloadForProtocol } from "./protocol-reload";
+import { type ReloadHold, reloadWhenIdle } from "./reload.svelte";
 import { checkServedBuild } from "./served-build.svelte";
 import { spawnDefaults } from "./spawnPrefs.svelte";
 import type {
@@ -4032,7 +4032,7 @@ function olderThanHub(message: unknown): boolean {
   }
   state.older ??= "reloading";
   // biome-ignore lint/complexity/noVoid: fire-and-forget — a reload ends this page, and one that is held says what holds it
-  void reloadForProtocol((hold) => {
+  void reloadWhenIdle((hold) => {
     state.older = hold;
   });
   return true;
