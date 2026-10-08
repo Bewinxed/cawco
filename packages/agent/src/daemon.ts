@@ -47,7 +47,7 @@ import { harnesses } from "./harnesses";
 import type { PiHarness } from "./harnesses/pi";
 import { PI_AUTH_CHECK_INTERVAL_MS } from "./harnesses/pi-auth";
 import { cache as transcriptCache } from "./harnesses/transcript-cache";
-import { endSignIns } from "./login";
+import { endOrphanedSignIns, endSignIns } from "./login";
 import { startMcpGateway } from "./mcp-oauth";
 import { servingPreviews } from "./preview";
 import { parseProcId, SESSION_PROC_KINDS } from "./proc-id";
@@ -1378,6 +1378,9 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
 export const runDaemon = (auth?: AuthState, rediscover = false): void => {
   // No log line prints a session credential.
   redactConsole();
+  // A daemon before this one that was killed or crashed left its logins
+  // waiting; nothing else could ever end them.
+  endOrphanedSignIns();
   const daemon = Effect.runFork(
     startDaemon(auth, rediscover).pipe(
       Effect.catchDefect((error) =>

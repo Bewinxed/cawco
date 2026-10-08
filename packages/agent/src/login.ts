@@ -1,3 +1,5 @@
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   type AccountIdentity,
   type AccountKind,
@@ -5,6 +7,12 @@ import {
   type AuthState,
   sameIdentity,
 } from "@cawco/core";
+import { accountIds, accountsRoot } from "@cawco/core/paths";
+import {
+  bootId,
+  markerIsLive,
+  processStart,
+} from "@cawco/core/process-identity";
 import type { Subprocess } from "bun";
 import {
   accountEnv,
@@ -76,10 +84,76 @@ const end = (signIn: SignIn) => {
  * daemon started again knows nothing of it, so nothing could ever end it.
  */
 export const endSignIns = (): void => {
-  for (const signIn of inFlight.values()) {
+  for (const [key, signIn] of inFlight) {
     end(signIn);
+    if (key !== HOME) {
+      rmSync(markerFile(key), { force: true });
+    }
   }
   inFlight.clear();
+};
+
+/**
+ * An account's waiting `claude auth login`, named on disk beside its config
+ * dir (`~/.cawco/accounts/<id>/login.pid`): its pid, start time and boot. A
+ * daemon that was killed or crashed ends no login; the next one to start
+ * reads these and ends each that is still the same process.
+ */
+interface LoginMarker {
+  bootId?: string;
+  pid: number;
+  procStart?: string;
+}
+
+const markerFile = (account: string): string =>
+  join(accountsRoot(), account, "login.pid");
+
+const readMarker = (account: string): LoginMarker | undefined =>
+  existsSync(markerFile(account))
+    ? (JSON.parse(readFileSync(markerFile(account), "utf8")) as LoginMarker)
+    : undefined;
+
+const markLogin = (account: string, pid: number): void => {
+  const procStart = processStart(pid);
+  const boot = bootId();
+  const marker: LoginMarker = {
+    pid,
+    ...(procStart ? { procStart } : {}),
+    ...(boot ? { bootId: boot } : {}),
+  };
+  writeFileSync(markerFile(account), JSON.stringify(marker));
+};
+
+/** Drops the marker while it still names `pid`: a newer login's stays. */
+const unmarkLogin = (account: string, pid: number): void => {
+  if (readMarker(account)?.pid === pid) {
+    rmSync(markerFile(account), { force: true });
+  }
+};
+
+/**
+ * At daemon start: ends every account login an earlier daemon left waiting
+ * (its marker names a live process with the same start time), and drops
+ * every marker.
+ */
+export const endOrphanedSignIns = (): void => {
+  for (const account of accountIds()) {
+    const marker = readMarker(account);
+    if (!marker) {
+      continue;
+    }
+    if (markerIsLive(marker)) {
+      try {
+        process.kill(marker.pid, "SIGTERM");
+      } catch (error) {
+        // Gone between the check and the signal: nothing left to end.
+        if ((error as NodeJS.ErrnoException).code !== "ESRCH") {
+          throw error;
+        }
+      }
+    }
+    rmSync(markerFile(account), { force: true });
+  }
 };
 
 /** What the CLI printed since `from`, as the text a terminal would show. */
@@ -162,6 +236,12 @@ const beginSignIn = async (
   };
   inFlight.set(key, signIn);
   const current = signIn;
+  if (account !== null) {
+    const { pid } = current.child;
+    markLogin(account, pid);
+    // biome-ignore lint/complexity/noVoid: the marker goes however the login ends; nothing waits on it
+    void current.child.exited.then(() => unmarkLogin(account, pid));
+  }
 
   const prompted = await until(
     current,
