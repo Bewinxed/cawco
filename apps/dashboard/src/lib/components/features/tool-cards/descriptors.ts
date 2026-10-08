@@ -7,7 +7,7 @@
 import {
   type FileChange as CoreChange,
   describeTool as describeCore,
-  faviconUrl,
+  faviconReachable,
   fileChanges,
   type Renderer,
   type ToolKindId,
@@ -140,6 +140,15 @@ export function toolFamily(toolName: string | undefined): ToolFamily {
   };
 }
 
+/**
+ * The site's icon as the user's own hub serves it (same origin as the
+ * dashboard), for a public host. No third party is ever asked.
+ */
+const faviconUrl = (host: string): string | undefined =>
+  faviconReachable(host)
+    ? `/api/favicon?host=${encodeURIComponent(host)}`
+    : undefined;
+
 /** The sentence a row reads as (@cawco/core `describeTool`). */
 export function describeTool(
   toolName: string | undefined,
@@ -150,8 +159,8 @@ export function describeTool(
   serverHost?: (server: string) => string | undefined,
   patch?: string
 ): ToolDescriptor {
-  // An MCP endpoint sits on a subdomain (`mcp.exa.ai`) that the favicon
-  // service only has its placeholder for; the site's icon lives at its root.
+  // An MCP endpoint sits on a subdomain (`mcp.exa.ai`) with no home page or
+  // icon of its own; the site's icon lives at its root.
   const configured = (server: string) => {
     const host = serverHost?.(server);
     return host ? rootDomain(host) : undefined;

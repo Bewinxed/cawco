@@ -238,6 +238,7 @@ import { hubHttpUrl } from "./delegation-actions";
 import { createDelegationMcp } from "./delegation-mcp";
 import { createDelegationTree } from "./delegation-tree";
 import { createDispatcher, dispatchRoutes } from "./dispatch";
+import { faviconRoutes } from "./favicon";
 import { fleetChoicesRoutes } from "./fleet-choices";
 import { FleetMcp } from "./fleet-mcp";
 import { accountForecasts, carrySequence } from "./forecast";
@@ -10021,6 +10022,7 @@ export const createServer = (
         })
       )
       .use(pushRoutes(db, push))
+      .use(faviconRoutes())
       .use(appleDiagnosticsRoutes())
       .use(projectOfferRoutes(projectOffers, YOU_ACTOR))
       .use(planRoutes(plans))
