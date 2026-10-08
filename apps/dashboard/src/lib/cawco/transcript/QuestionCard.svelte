@@ -20,7 +20,7 @@
    * An answered (or dismissed) `AskUserQuestion` as it settled in the transcript
    * history — the same `.hitl` anatomy as the live prompt, but read-only: the
    * chosen option carries `.sel`, and any freeform reply shows under the options.
-   * Ported from the mock's `#q-card` (.hitl / .lede / .qopts / .kc).
+   * Ported from the mock's `#q-card` (.hitl / .lede / .qopts; chips are the kit option chip).
    */
   import { CLI_REJECTED } from "../question";
   import type { Message } from "../types";
@@ -125,7 +125,7 @@
   function measure(root: HTMLElement): void {
     for (const row of root.querySelectorAll<HTMLElement>(".qopts")) {
       rowHeights.set(row.dataset.question ?? "", row.offsetHeight);
-      for (const option of row.querySelectorAll<HTMLElement>(".opt")) {
+      for (const option of row.querySelectorAll<HTMLElement>(".kit-chip")) {
         stood.set(option, {
           top: option.offsetTop,
           left: option.offsetLeft,
@@ -139,7 +139,7 @@
     for (const q of questions) {
       for (const label of chosen(q.question)) {
         const option = root.querySelector<HTMLElement>(
-          `.opt[data-key="${CSS.escape(shareKey(q.question, label))}"]`
+          `.kit-chip[data-key="${CSS.escape(shareKey(q.question, label))}"]`
         );
         if (option) {
           option.dataset.share = shareKey(q.question, label);
@@ -244,10 +244,14 @@
 
   {#each questions as q (q.question)}
     <p class="lede rail-hang">{q.question}</p>
-    <div class="qopts rail-hang" data-question={q.question}>
+    <div class="qopts kit-chips rail-hang" data-question={q.question}>
       {#each settled ? [] : q.options as opt, i (opt.label)}
-        <span class="opt" data-key={shareKey(q.question, opt.label)} out:leave>
-          <span class="kc">{i + 1}</span><span>{opt.label}</span>
+        <span
+          class="kit-chip"
+          data-key={shareKey(q.question, opt.label)}
+          out:leave
+        >
+          <span class="kit-keycap">{i + 1}</span><span>{opt.label}</span>
         </span>
       {/each}
       {#if answered}
@@ -255,12 +259,12 @@
           isSelected(q.question, opt.label)
         ) as opt (opt.label)}
           <span
-            class="opt sel"
+            class="kit-chip sel"
             {@attach land(() => shareKey(q.question, opt.label), {
               ms: dur("--dur-pop"),
             })}
           >
-            <span class="kc">{q.options.indexOf(opt) + 1}</span
+            <span class="kit-keycap">{q.options.indexOf(opt) + 1}</span
             ><span>{opt.label}</span>
           </span>
         {/each}
@@ -360,72 +364,11 @@
     max-inline-size: 72ch;
   }
   .qopts {
+    /* The settled record is the live card's anatomy, inert: the same kit
+       option chips (.kit-chips / .kit-chip / .kit-keycap in app.css), so a
+       pick looks picked, not flagged, and the card settles without a jump. */
     position: relative;
-    display: flex;
-    gap: var(--space-2);
-    flex-wrap: wrap;
     margin-block: 2px var(--space-2);
-  }
-  .kc {
-    display: inline-grid;
-    place-items: center;
-    min-inline-size: 17px;
-    block-size: 17px;
-    padding-block: 0;
-    padding-inline: 4px;
-    border-radius: var(--radius-xs);
-    background: var(--surface-recess);
-    font-family: var(--font-mono);
-    font-size: var(--text-meta);
-    color: var(--ink-strong);
-    line-height: 1;
-    flex: 0 0 auto;
-
-    @media (prefers-reduced-motion: no-preference) {
-      transition:
-        background-color var(--dur-control) var(--ease-out),
-        color var(--dur-control) var(--ease-out);
-    }
-  }
-  .opt {
-    min-block-size: 30px;
-    padding-block: var(--space-2);
-    padding-inline: var(--space-3);
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-sm);
-    background: var(--surface-raised);
-    color: var(--ink-strong);
-    font-family: var(--font-body);
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    text-align: start;
-    max-inline-size: 100%;
-
-    @media (pointer: coarse) {
-      min-block-size: 44px;
-    }
-    @media (prefers-reduced-motion: no-preference) {
-      transition:
-        border-color var(--dur-control) var(--ease-out),
-        background-color var(--dur-control) var(--ease-out);
-    }
-    /* Identical to the live card's `.qopts button.sel` — the settled record
-       is the same anatomy as the prompt that produced it, just inert, so what
-       the reader picked must look picked and not flagged. --status-attn-*
-       stays reserved for "a person is holding this up". */
-    &.sel {
-      border-color: var(--brand-solid);
-      background: var(--surface-recess);
-      color: var(--ink-strong);
-
-      & .kc {
-        background: var(--chip-chosen-bg);
-        color: var(--chip-chosen-ink);
-      }
-    }
   }
   .answer-free {
     font-size: var(--text-body);

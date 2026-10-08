@@ -148,10 +148,10 @@
         bind:text={words}
       />
     </div>
-    <div class="chips">
+    <div class="chips kit-chips">
       {#each STARTERS as text (text)}
         <button
-          class="chip"
+          class="kit-chip touch-hit"
           data-share="starter:{flights + 1}"
           onclick={() => starter(text)}
           type="button"
@@ -223,38 +223,11 @@
     inline-size: 100%;
     max-inline-size: 520px;
   }
-  /* Prompt's option chips (.qopts): 30px, 8px radius, label type. */
+  /* The starters are the kit option chip (.kit-chips / .kit-chip in
+     app.css), centred under the field. */
   .chips {
-    --hit-gap-x: var(--space-2);
-    --hit-gap-y: var(--space-2);
-    display: flex;
-    flex-wrap: wrap;
     justify-content: center;
-    gap: var(--space-2);
     max-inline-size: 40rem;
-  }
-  .chip {
-    min-block-size: 30px;
-    padding-block: var(--space-2);
-    padding-inline: var(--space-3);
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-sm);
-    background: var(--surface-raised);
-    color: var(--ink-strong);
-    font-family: var(--font-body);
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-    cursor: pointer;
-    transition: var(--transition-control);
-  }
-  @media (hover: hover) {
-    .chip:hover {
-      background: var(--surface-hover);
-    }
-  }
-  .chip:focus-visible {
-    outline: var(--focus-ring-width) solid var(--focus-ring);
-    outline-offset: 2px;
   }
   .cards {
     inline-size: 100%;

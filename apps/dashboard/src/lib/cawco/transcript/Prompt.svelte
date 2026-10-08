@@ -436,18 +436,18 @@
       {#each questions as q, qi (q.question)}
         {@const own = q.options.length}
         <p class="lede" bind:this={ledes[qi]}>{q.question}</p>
-        <div class="qopts">
+        <div class="qopts kit-chips">
           {#each q.options as opt, i (opt.label)}
             {@const live = ownsKeys && qi === current && i < 9}
             <button
               aria-keyshortcuts={live ? String(i + 1) : undefined}
               aria-pressed={isSelected(q.question, opt.label)}
-              class="touch-hit"
+              class="kit-chip touch-hit"
               onclick={() => toggle(qi, opt.label)}
               type="button"
               class:sel={isSelected(q.question, opt.label)}
             >
-              <span class="kc">{i + 1}</span><span>{opt.label}</span>
+              <span class="kit-keycap">{i + 1}</span><span>{opt.label}</span>
             </button>
           {/each}
           <!-- The reader's own answer, written in the field it opens. -->
@@ -456,12 +456,12 @@
             <button
               aria-keyshortcuts={live ? String(own + 1) : undefined}
               aria-pressed={otherPicked(q) || otherAt === qi}
-              class="touch-hit"
+              class="kit-chip touch-hit"
               onclick={() => openOther(qi)}
               type="button"
               class:sel={otherPicked(q) || otherAt === qi}
             >
-              <span class="kc">{own + 1}</span><span>Other</span>
+              <span class="kit-keycap">{own + 1}</span><span>Other</span>
             </button>
           {/if}
         </div>
@@ -814,69 +814,10 @@
     font-family: var(--font-mono);
     font-size: var(--text-label);
   }
+  /* The chip row is the kit's option-chip recipe (.kit-chips / .kit-chip in
+     app.css); the card only sets where it sits. */
   .qopts {
-    --hit-gap-x: var(--space-2);
-    --hit-gap-y: var(--space-2);
-    display: flex;
-    gap: var(--space-2);
-    flex-wrap: wrap;
     margin-block: 2px var(--space-2);
-  }
-  /* Each chip is as wide as its words at every width (DESIGN.md option
-     chip), and they wrap as whole chips onto the next line. Only an option
-     too long for the card's row wraps its words inside its chip. */
-  .qopts button {
-    min-block-size: 30px;
-    padding-block: var(--space-2);
-    padding-inline: var(--space-3);
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-sm);
-    background: var(--surface-raised);
-    color: var(--ink-strong);
-    font-family: var(--font-body);
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    cursor: pointer;
-    text-align: start;
-    max-inline-size: 100%;
-  }
-  .qopts button:not(.sel):hover {
-    background: var(--surface-hover);
-  }
-  /* A picked option is a state, not a warning. --status-attn-* is the fleet's
-     one hue for "a person is holding this up" (the needs-you pill above, the
-     standing grant below); spending it on selection says the reader chose
-     wrong. Selection takes the brand instead — brand edge, sunken fill,
-     promoted ink, and a keycap that inverts. The brand is monochrome in this
-     palette, so those three differences survive greyscale by construction, and
-     none of them is a weight or size change: the chip never reflows on pick. */
-  .qopts button.sel {
-    border-color: var(--brand-solid);
-    background: var(--surface-recess);
-    color: var(--ink-strong);
-  }
-  .qopts button.sel .kc {
-    background: var(--chip-chosen-bg);
-    color: var(--chip-chosen-ink);
-  }
-  /* biome-ignore lint/style/noDescendingSpecificity: cascade order is load-bearing — .kc's own base rules must lose to .qopts button.sel .kc above them. */
-  .kc {
-    display: inline-grid;
-    place-items: center;
-    min-inline-size: 17px;
-    block-size: 17px;
-    padding-block: 0;
-    padding-inline: 4px;
-    border-radius: var(--radius-xs);
-    background: var(--surface-recess);
-    font-family: var(--font-mono);
-    font-size: var(--text-meta);
-    color: var(--ink-strong);
-    line-height: 1;
-    flex: 0 0 auto;
   }
   .qact {
     display: flex;

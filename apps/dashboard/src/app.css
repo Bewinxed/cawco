@@ -369,7 +369,11 @@
      closer than that sets --hit-gap-x / --hit-gap-y to the gap between
      them, and each extension stops at the midpoint, so neighbours never
      overlap. `position: relative` has zero specificity: a positioned host
-     keeps its own position and is already the ::after's containing block. */
+     keeps its own position and is already the ::after's containing block.
+     That block is the host's padding box, so the 50% term already measures
+     from inside the border; a bordered host sets --hit-edge to its border
+     width so the gap stop does too, and the midpoint stays the midpoint
+     between the drawn edges. */
   @media (pointer: coarse) {
     :where(.touch-hit) {
       position: relative;
@@ -380,11 +384,11 @@
       position: absolute;
       inset-inline: max(
         min(0px, calc(50% - 22px)),
-        calc(var(--hit-gap-x, 44px) / -2)
+        calc(var(--hit-gap-x, 44px) / -2 - var(--hit-edge, 0px))
       );
       inset-block: max(
         min(0px, calc(50% - 22px)),
-        calc(var(--hit-gap-y, 44px) / -2)
+        calc(var(--hit-gap-y, 44px) / -2 - var(--hit-edge, 0px))
       );
     }
   }
@@ -393,7 +397,7 @@
      smaller than 24×24 (WCAG 2.5.8) gets a transparent ::after centred on
      it that reaches 24px; the drawn box and the layout do not change.
      --hit-gap-x / --hit-gap-y stop it at the midpoint to a closer
-     neighbour, as on touch. --hit-scale is the zoom of a scaled canvas
+     neighbour, and --hit-edge counts a border, as on touch. --hit-scale is the zoom of a scaled canvas
      (the workflow graph), so the area stays 24px on screen. */
   @media (pointer: fine) {
     :where(.pointer-hit) {
@@ -405,12 +409,108 @@
       position: absolute;
       inset-inline: max(
         min(0px, calc(50% - 12px / var(--hit-scale, 1))),
-        calc(var(--hit-gap-x, 24px / var(--hit-scale, 1)) / -2)
+        calc(
+          var(--hit-gap-x, 24px / var(--hit-scale, 1)) /
+          -2 -
+          var(--hit-edge, 0px)
+        )
       );
       inset-block: max(
         min(0px, calc(50% - 12px / var(--hit-scale, 1))),
-        calc(var(--hit-gap-y, 24px / var(--hit-scale, 1)) / -2)
+        calc(
+          var(--hit-gap-y, 24px / var(--hit-scale, 1)) /
+          -2 -
+          var(--hit-edge, 0px)
+        )
       );
+    }
+  }
+
+  /* The option chip (DESIGN.md "Option chip"): a 30px box including its
+     border, 8px radius, label type, an optional keycap digit. The box is
+     the same 30px under every pointer; a finger's 44px comes from
+     .touch-hit on the chip, never a taller chip. min-block-size sets the
+     30px; the block padding is only the floor a wrapped label keeps from
+     the border, small enough that one line (the 17px keycap or the label
+     line) never pushes past 30, so a label that wraps inside the chip grows
+     it line by line. `.sel` is a pick: brand edge, recessed fill, inverted
+     keycap — never a size or weight change, so a pick never reflows the
+     row, and never the attn hue, because selection is not a warning. */
+  .kit-chip {
+    --hit-edge: 1px;
+    box-sizing: border-box;
+    min-block-size: 30px;
+    padding-block: var(--space-1);
+    padding-inline: var(--space-3);
+    border: 1px solid var(--border-control);
+    border-radius: var(--radius-sm);
+    background: var(--surface-raised);
+    color: var(--ink-strong);
+    font-family: var(--font-body);
+    font-size: var(--text-label);
+    font-weight: var(--weight-strong);
+    line-height: var(--leading-label);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    text-align: start;
+    max-inline-size: 100%;
+
+    @media (prefers-reduced-motion: no-preference) {
+      transition:
+        border-color var(--dur-control) var(--ease-out),
+        background-color var(--dur-control) var(--ease-out);
+    }
+    &:is(button) {
+      cursor: pointer;
+    }
+    &:is(button):not(.sel):hover {
+      background: var(--surface-hover);
+    }
+    &.sel {
+      border-color: var(--brand-solid);
+      background: var(--surface-recess);
+    }
+  }
+  .kit-keycap {
+    display: inline-grid;
+    place-items: center;
+    min-inline-size: 17px;
+    block-size: 17px;
+    padding-block: 0;
+    padding-inline: 4px;
+    border-radius: var(--radius-xs);
+    background: var(--surface-recess);
+    font-family: var(--font-mono);
+    font-size: var(--text-meta);
+    color: var(--ink-strong);
+    line-height: 1;
+    flex: 0 0 auto;
+
+    @media (prefers-reduced-motion: no-preference) {
+      transition:
+        background-color var(--dur-control) var(--ease-out),
+        color var(--dur-control) var(--ease-out);
+    }
+    .kit-chip.sel & {
+      background: var(--chip-chosen-bg);
+      color: var(--chip-chosen-ink);
+    }
+  }
+  /* A row of option chips, wrapping whole chips onto the next line. Under a
+     finger the rows stand 14px apart, so each chip's 44px .touch-hit area
+     (30 drawn + 7 above + 7 below) meets its neighbour's at the midpoint
+     instead of overlapping it. */
+  .kit-chips {
+    --hit-gap-x: var(--space-2);
+    --hit-gap-y: var(--space-2);
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+
+    @media (pointer: coarse) {
+      --hit-gap-y: calc(var(--space-2) * 2);
+      row-gap: calc(var(--space-2) * 2);
     }
   }
 
