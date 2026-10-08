@@ -43,18 +43,24 @@ struct HubSocket: Sendable {
         let delegate = Delegate(continuation)
         let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
         let task = session.webSocketTask(with: parts.url ?? hub)
-        // A dashboard socket carries the whole board in one frame.
-        task.maximumMessageSize = 64 << 20
+        // No frame on the hub's sockets is larger (`WIRE_FRAME_LIMIT_BYTES`):
+        // a longer message, a large board, comes as parts (`Wire.Assembler`).
+        task.maximumMessageSize = Wire.frameLimitBytes
         let reader = Task {
+            var assembler = Wire.Assembler()
             do {
                 while true {
+                    let frame: Data
                     switch try await task.receive() {
                     case let .data(data):
-                        continuation.yield(.message(Message(data)))
+                        frame = data
                     case let .string(text):
-                        continuation.yield(.message(Message(Data(text.utf8))))
+                        frame = Data(text.utf8)
                     @unknown default:
-                        break
+                        continue
+                    }
+                    if let message = try assembler.take(frame) {
+                        continuation.yield(.message(Message(message)))
                     }
                 }
             } catch {
@@ -71,13 +77,16 @@ struct HubSocket: Sendable {
         self.task = task
     }
 
-    /// Puts one message on the socket. A write that fails takes the socket
-    /// down with it, and the close is what every waiter hears.
+    /// Puts one message on the socket, as one frame or, past one frame, as
+    /// its parts in order (`Wire.frames`). A write that fails takes the
+    /// socket down with it, and the close is what every waiter hears.
     func post(_ data: Data) {
         let task = task
-        task.send(.string(String(decoding: data, as: UTF8.self))) { error in
-            if error != nil {
-                task.cancel(with: .abnormalClosure, reason: nil)
+        for frame in Wire.frames(String(decoding: data, as: UTF8.self)) {
+            task.send(.string(frame)) { error in
+                if error != nil {
+                    task.cancel(with: .abnormalClosure, reason: nil)
+                }
             }
         }
     }

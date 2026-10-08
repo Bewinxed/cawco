@@ -32,6 +32,7 @@ import {
 import { machineId } from "@cawco/core/machine-id";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
 import { fetchOpenCodeGoLimits } from "@cawco/core/usage/opencode-go";
+import { clientLine, WIRE_PENDING } from "@cawco/core/wire";
 import { Data, Duration, Effect, Fiber, Schedule } from "effect";
 import { accountReports } from "./accounts";
 import {
@@ -343,10 +344,19 @@ export const reconnecting = <E extends { readonly reason: string }, R>(
 const closeReason = (event: CloseEvent): string =>
   event.reason || `close code ${event.code}`;
 
-/** The one way anything leaves for the hub: no session credential does ({@link outbound}). */
+/**
+ * The one way anything leaves for the hub: no session credential does
+ * ({@link outbound}), and nothing holds this loop. The hub's server offers
+ * permessage-deflate to every socket, so this client deflates each `send()`
+ * synchronously, ~15 ms per MB: a 45 MB transcript reply held the loop for
+ * ~0.7 s, with every keeper dial, heartbeat and timer behind it. Through the
+ * socket's line (`@cawco/core/wire`) a long message goes as parts, one per
+ * turn of the loop, in order, never dropped.
+ */
 const send = (socket: WebSocket, envelope: Envelope): void => {
+  const line = clientLine(socket);
   for (const message of outbound(envelope)) {
-    socket.send(message);
+    line.send(message);
   }
 };
 
@@ -1102,8 +1112,7 @@ const attach = (
       return false;
     };
 
-    socket.addEventListener("message", (event) => {
-      const envelope = JSON.parse(String(event.data)) as Envelope;
+    const onEnvelope = (envelope: Envelope): void => {
       if (refusedByHub(envelope)) {
         return;
       }
@@ -1135,6 +1144,13 @@ const attach = (
         return;
       }
       supervisor.dispatch(envelope);
+    };
+    socket.addEventListener("message", (event) => {
+      // A message too long for one frame arrives as parts.
+      const received = clientLine(socket).receive(String(event.data));
+      if (received !== WIRE_PENDING) {
+        onEnvelope(received as Envelope);
+      }
     });
 
     yield* Effect.forkScoped(

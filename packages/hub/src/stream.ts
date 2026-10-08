@@ -48,7 +48,8 @@ import {
   type StreamReset,
   type StreamSubscribe,
 } from "@cawco/core";
-import { type HubSocket, refusalFrame, toDashboard } from "./registry";
+import { refusalFrame } from "./registry";
+import { type HubSocket, sendFrame } from "./wire-socket";
 
 export { RING_SIZE };
 
@@ -283,17 +284,9 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
     return ring;
   };
 
-  /**
-   * One write to one socket. A socket that throws is one that closed without
-   * its handler having run yet: it is dropped here rather than left to throw
-   * again on the next event and take the rest of the fan-out with it.
-   */
+  /** One write to one socket, through its outbox (wire-socket.ts). */
   const deliver = (socket: HubSocket, message: unknown): void => {
-    try {
-      toDashboard(socket, message);
-    } catch {
-      dropSocket(socket.id);
-    }
+    sendFrame(socket, message);
   };
 
   const dropSocket = (socketId: string): void => {

@@ -189,6 +189,7 @@ import {
 } from "@cawco/core/binary-updates";
 import { hashFiles } from "@cawco/core/file-hash";
 import { machineId as hostMachineId } from "@cawco/core/machine-id";
+import { WIRE_FRAME_LIMIT_BYTES, WIRE_PENDING } from "@cawco/core/wire";
 import { Elysia, t, ValidationError } from "elysia";
 import { websocket } from "elysia/websocket";
 import {
@@ -321,13 +322,7 @@ import {
 import { createProjectStops } from "./project-stops";
 import { placePath, readRemote } from "./projects";
 import { createPush, pushRoutes } from "./push";
-import {
-  envelopeFault,
-  type HubSocket,
-  type RegistryShape,
-  refusalFrame,
-  toDashboard,
-} from "./registry";
+import { envelopeFault, type RegistryShape, refusalFrame } from "./registry";
 import { RuleEngine } from "./rules";
 import { createSessionIdentities } from "./session-identity";
 import { createSessionLifecycle } from "./session-lifecycle";
@@ -355,6 +350,14 @@ import {
 import { unwatchedMode } from "./unwatched-mode";
 import { UsageCounter } from "./usage-count";
 import { createViews, viewRoutes } from "./views";
+import {
+  closeLine,
+  drainLine,
+  type HubSocket,
+  openLine,
+  receiveFrame,
+  sendFrame,
+} from "./wire-socket";
 import {
   createWorkItems,
   LEAF_DELEGATE_REFUSAL,
@@ -491,9 +494,6 @@ class MachineAway extends Error {
     this.name = "MachineAway";
   }
 }
-/** The largest frame a machine may send the hub (see the agent socket). */
-const AGENT_FRAME_LIMIT_BYTES = 512 * 1024 * 1024;
-
 interface ContinueOutcome {
   /** Whether the source had been compacted: its live context starts at a summary. */
   compacted: boolean;
@@ -1949,7 +1949,7 @@ export const createServer = (
         lifecycle.deliveryFailed(row.id);
       }
     }
-    agent.send({
+    sendFrame(agent, {
       verb: "control",
       machineId,
       instanceId: claim.instanceId,
@@ -2015,7 +2015,7 @@ export const createServer = (
       db.oweSpawn(envelope.instanceId, JSON.stringify(envelope), Date.now());
       return;
     }
-    agent.send(envelope);
+    sendFrame(agent, envelope);
   };
 
   /**
@@ -2052,7 +2052,7 @@ export const createServer = (
         publishInstances(machineId);
         continue;
       }
-      agent.send(JSON.parse(owed.envelope) as Envelope<SpawnPayload>);
+      sendFrame(agent, JSON.parse(owed.envelope) as Envelope<SpawnPayload>);
     }
   };
 
@@ -4151,7 +4151,7 @@ export const createServer = (
       } else {
         wakeForSend(agent, envelope.machineId, instanceId);
       }
-      agent.send(envelope);
+      sendFrame(agent, envelope);
     }
     // Built after the send has gone: the machine is handed the image bytes,
     // the record a reference to them.
@@ -4321,7 +4321,7 @@ export const createServer = (
         waitingMachines.delete(requestId);
         resolve(frame);
       });
-      agent.send({
+      sendFrame(agent, {
         verb: "control",
         machineId,
         ...(instanceId && { instanceId }),
@@ -5437,7 +5437,7 @@ export const createServer = (
       requestId,
       SPAWN_START_TIMEOUT_MS,
       () =>
-        agent.send({
+        sendFrame(agent, {
           verb: "spawn",
           machineId,
           instanceId: payload.instanceId,
@@ -5538,12 +5538,17 @@ export const createServer = (
     >(
       handle: (ws: S, message: unknown) => void
     ) =>
-    (ws: S, message: unknown): void => {
+    (ws: S, incoming: unknown): void => {
+      // A message too long for one frame arrives as parts (`@cawco/core/wire`).
+      const message = receiveFrame(ws, incoming);
+      if (message === WIRE_PENDING) {
+        return;
+      }
       try {
         handle(ws, message);
       } catch (error) {
         if (isEnvelope(message)) {
-          toDashboard(
+          sendFrame(
             ws,
             failure(
               message,
@@ -5562,8 +5567,13 @@ export const createServer = (
     >(
       handle: (ws: S, message: unknown) => Promise<void>
     ) =>
-    (ws: S, message: unknown): Promise<void> =>
-      handle(ws, message).catch(
+    (ws: S, incoming: unknown): Promise<void> => {
+      // A transcript read, tens of MB, arrives as parts (`@cawco/core/wire`).
+      const message = receiveFrame(ws, incoming);
+      if (message === WIRE_PENDING) {
+        return Promise.resolve();
+      }
+      return handle(ws, message).catch(
         // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: acknowledgement failures and correlated request failures share one socket error policy with explicit traces
         (error: unknown) => {
           const reason = error instanceof Error ? error.message : String(error);
@@ -5607,7 +5617,7 @@ export const createServer = (
             const commandAnswered = streams.settleCommand(requestId, frame);
             const requester = registry.takeRequester(requestId);
             if (requester) {
-              toDashboard(requester, {
+              sendFrame(requester, {
                 ...message,
                 verb: "frames",
                 requestId,
@@ -5619,6 +5629,7 @@ export const createServer = (
           }
         }
       );
+    };
   const recoveringRemoved = new Set<string>();
   const stopDispatches = new Map<
     string,
@@ -5741,7 +5752,7 @@ export const createServer = (
       if (!(agent && addressProtocolMachines.has(machineId))) {
         return false;
       }
-      agent.send({
+      sendFrame(agent, {
         verb: "stop",
         machineId,
         instanceId: payload.instanceId,
@@ -5896,7 +5907,7 @@ export const createServer = (
   const stopFromDashboard = (dashboard: HubSocket, message: Envelope): void => {
     const { instanceId } = message;
     if (!instanceId) {
-      toDashboard(
+      sendFrame(
         dashboard,
         failure(message, "No session was named. Refresh, then retry.")
       );
@@ -5921,7 +5932,7 @@ export const createServer = (
           );
         }
       }
-      toDashboard(dashboard, {
+      sendFrame(dashboard, {
         ...message,
         verb: "frames",
         requestId,
@@ -6120,19 +6131,23 @@ export const createServer = (
       row.machineId,
       requestId,
       READ_TIMEOUT_MS,
-      () =>
-        registry.agent(row.machineId)?.send({
-          verb: "control",
-          machineId: row.machineId,
-          instanceId: row.id,
-          requestId,
-          payload: {
+      () => {
+        const agent = registry.agent(row.machineId);
+        if (agent) {
+          sendFrame(agent, {
+            verb: "control",
+            machineId: row.machineId,
             instanceId: row.id,
             requestId,
-            method: CONTROL_CONTEXT_USAGE,
-            args: [],
-          },
-        } satisfies Envelope<ControlPayload>)
+            payload: {
+              instanceId: row.id,
+              requestId,
+              method: CONTROL_CONTEXT_USAGE,
+              args: [],
+            },
+          } satisfies Envelope<ControlPayload>);
+        }
+      }
     );
     if (answer === "timeout") {
       throw new Error(`session ${row.id} did not report its context in time`);
@@ -7024,7 +7039,7 @@ export const createServer = (
     let outgoing = envelope;
     const agent = registry.agent(envelope.machineId);
     if (!agent) {
-      toDashboard(
+      sendFrame(
         dashboard,
         failure(envelope, `machine ${envelope.machineId} is not connected`)
       );
@@ -7049,7 +7064,7 @@ export const createServer = (
         registry.rememberRequester(requestId, dashboard);
       }
     }
-    agent.send(outgoing);
+    sendFrame(agent, outgoing);
     return true;
   };
 
@@ -7139,7 +7154,7 @@ export const createServer = (
       ) {
         publishInstances(row.machineId);
       }
-      agent.send({
+      sendFrame(agent, {
         verb: "spawn",
         machineId: row.machineId,
         instanceId: row.id,
@@ -7184,7 +7199,7 @@ export const createServer = (
       model: row.model ?? undefined,
       canDelegate: row.canDelegate ?? undefined,
     });
-    agent.send({
+    sendFrame(agent, {
       verb: "spawn",
       machineId: row.machineId,
       instanceId: row.id,
@@ -7770,7 +7785,7 @@ export const createServer = (
         args: [policy.id, policy.pinnedVersion ?? undefined],
       };
       pendingInstalls.set(requestId, { machineId, toolId: policy.id });
-      agent.send({
+      sendFrame(agent, {
         verb: "control",
         machineId,
         payload,
@@ -7908,7 +7923,7 @@ export const createServer = (
         args: [outbound],
       };
       pendingFleet.set(requestId, machineId);
-      agent.send({
+      sendFrame(agent, {
         verb: "control",
         machineId,
         payload,
@@ -7964,7 +7979,7 @@ export const createServer = (
           method,
           args: [],
         };
-        agent.send({
+        sendFrame(agent, {
           verb: "control",
           machineId,
           instanceId: row.id,
@@ -8192,7 +8207,7 @@ export const createServer = (
     const requestId = crypto.randomUUID();
     const payload: FsPayload = { requestId, ...op };
     return awaitReply(machineId, requestId, READ_TIMEOUT_MS, () =>
-      agent.send({
+      sendFrame(agent, {
         verb: "fs",
         machineId,
         requestId,
@@ -8626,7 +8641,7 @@ export const createServer = (
     const correlationId = message.requestId ?? message.payload.requestId;
     const reply = (frame: ControlResult): void => {
       if (legacy) {
-        toDashboard(dashboard, { ...message, verb: "frames", payload: frame });
+        sendFrame(dashboard, { ...message, verb: "frames", payload: frame });
       } else {
         streams.settleCommand(correlationId, frame);
       }
@@ -8651,7 +8666,7 @@ export const createServer = (
         error: "Skills reload when synced fleet content changes.",
       };
       if (remember) {
-        toDashboard(dashboard, { ...message, verb: "frames", payload: frame });
+        sendFrame(dashboard, { ...message, verb: "frames", payload: frame });
       } else {
         streams.settleCommand(requestId, frame);
       }
@@ -8676,7 +8691,7 @@ export const createServer = (
           ok: true,
         };
         if (remember) {
-          toDashboard(dashboard, {
+          sendFrame(dashboard, {
             ...message,
             verb: "frames",
             payload: frame,
@@ -9390,7 +9405,7 @@ export const createServer = (
       if (envelope.verb === "send") {
         deliverSend(envelope as Envelope<SendPayload>);
       } else {
-        agent.send(envelope);
+        sendFrame(agent, envelope);
       }
     },
     spawn: spawnSession,
@@ -9747,7 +9762,7 @@ export const createServer = (
       const requestId = crypto.randomUUID();
       // biome-ignore lint/complexity/noVoid: the host's refresh is the session's; the hub only logs how it went
       void awaitReply(row.machineId, requestId, 60_000, () =>
-        agent.send({
+        sendFrame(agent, {
           verb: "control",
           machineId: row.machineId,
           instanceId: row.id,
@@ -9880,7 +9895,7 @@ export const createServer = (
           `machine ${row.machineId} is not connected`
         );
       }
-      agent.send({
+      sendFrame(agent, {
         ...envelope,
         machineId: row.machineId,
         payload: { ...control, from: requester.id },
@@ -9967,7 +9982,7 @@ export const createServer = (
       const credential = identities.mint(instanceId);
       const requestId = crypto.randomUUID();
       const reply = await awaitReply(row.machineId, requestId, 120_000, () =>
-        agent.send({
+        sendFrame(agent, {
           verb: "control",
           machineId: row.machineId,
           instanceId,
@@ -14062,16 +14077,23 @@ export const createServer = (
           })
       )
       .ws("/ws", {
-        // A machine answers a full transcript read in one frame, and a long
-        // session's is tens of MB (a 45MB claude transcript). Past Bun's 16MB
-        // default the socket is closed under the reply and the machine drops.
-        maxPayloadLength: AGENT_FRAME_LIMIT_BYTES,
+        // One frame is at most a part of a message (`@cawco/core/wire`): a
+        // full transcript read (tens of MB) arrives as parts and is joined in
+        // `guardedAgentMessage`. Bun has one WebSocket config per server, so
+        // both routes name the same limit.
+        maxPayloadLength: WIRE_FRAME_LIMIT_BYTES,
+        open(ws) {
+          openLine(ws, false);
+        },
+        drain(ws) {
+          drainLine(ws);
+        },
         // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: dispatches every agent socket verb (register, frames, pulse, control_result, etc.) through one handler; splitting it would scatter the ordering guarantees across several functions.
         message: guardedAgentMessage(async (ws, message) => {
           if (!isEnvelope(message)) {
             const fault = envelopeFault(message);
             console.warn(`[hub] agent ${fault}`, message);
-            ws.send(refusalFrame(message, fault));
+            sendFrame(ws, refusalFrame(message, fault));
             return;
           }
           // Only the machine's registered connection speaks for it: a
@@ -14082,7 +14104,7 @@ export const createServer = (
           ) {
             const fault = `${message.verb} refused: this connection is not machine ${message.machineId}'s registered one; register first`;
             console.warn(`[hub] ${fault}`);
-            ws.send(refusalFrame(message, fault));
+            sendFrame(ws, refusalFrame(message, fault));
             return;
           }
 
@@ -14435,7 +14457,10 @@ export const createServer = (
                 peekInstances(message.payload),
                 revivable.map((orphan) => orphan.row.id)
               );
-              ws.send(registerAck(message, streams.ingestedFor(reattaching)));
+              sendFrame(
+                ws,
+                registerAck(message, streams.ingestedFor(reattaching))
+              );
               for (const row of toEnd) {
                 if (addressProtocolMachines.has(message.machineId)) {
                   endSession(row.id, "stop");
@@ -14582,7 +14607,7 @@ export const createServer = (
               ) {
                 publishInstances(message.machineId);
               }
-              ws.send({
+              sendFrame(ws, {
                 ...ack(message),
                 payload: {
                   ok: true,
@@ -15166,21 +15191,24 @@ export const createServer = (
                   (message.payload as { requestKind?: string }).requestKind ===
                     "question"
                 ) {
-                  registry.agent(message.machineId)?.send({
-                    verb: "control",
-                    machineId: message.machineId,
-                    instanceId: sender.id,
-                    requestId: message.requestId,
-                    payload: {
+                  const askerAgent = registry.agent(message.machineId);
+                  if (askerAgent) {
+                    sendFrame(askerAgent, {
+                      verb: "control",
+                      machineId: message.machineId,
                       instanceId: sender.id,
                       requestId: message.requestId,
-                      method: RESOLVE_PERMISSION,
-                      args: [
-                        message.requestId,
-                        { behavior: "deny", message: QUESTION_DISMISSED },
-                      ],
-                    },
-                  });
+                      payload: {
+                        instanceId: sender.id,
+                        requestId: message.requestId,
+                        method: RESOLVE_PERMISSION,
+                        args: [
+                          message.requestId,
+                          { behavior: "deny", message: QUESTION_DISMISSED },
+                        ],
+                      },
+                    });
+                  }
                   pending.resolve(message.requestId);
                   break;
                 }
@@ -15685,7 +15713,7 @@ export const createServer = (
                   ? registry.takeRequester(message.requestId)
                   : undefined;
               if (requester) {
-                toDashboard(requester, message);
+                sendFrame(requester, message);
               }
               // An acknowledged command's reply is that command's news and nobody
               // else's — the same rule as the line above, in the newer dialect.
@@ -15723,12 +15751,13 @@ export const createServer = (
             default: {
               const fault = `unknown verb "${message.verb}": a machine sends register, heartbeat, frames or usage`;
               console.warn(`[hub] ${fault}, from ${message.machineId}`);
-              ws.send(refusalFrame(message, fault));
+              sendFrame(ws, refusalFrame(message, fault));
             }
           }
         }),
         // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: releases each kind of machine-owned state when its socket goes away.
         close(ws) {
+          closeLine(ws);
           const machineId = registry.dropAgent(ws.id);
           if (!machineId) {
             return;
@@ -15802,10 +15831,16 @@ export const createServer = (
         },
       })
       .ws("/ws/dashboard", {
-        // Offered to the browser; every frame then goes out with `toDashboard`,
-        // which sets the flag Bun compresses on.
+        // Offered to the browser; every frame to a dashboard then goes out
+        // with the flag Bun compresses on (`openLine(ws, true)`).
         perMessageDeflate: true,
+        maxPayloadLength: WIRE_FRAME_LIMIT_BYTES,
+        drain(ws) {
+          drainLine(ws);
+        },
         open(ws) {
+          // Before anything is sent to it: every frame goes through its line.
+          openLine(ws, true);
           // A page names the wire it was built for (WIRE_PROTOCOL, 6). One
           // that names none was built before pages did: a browser sends
           // `Origin` on every socket it opens, and the clients that are not
@@ -15826,7 +15861,7 @@ export const createServer = (
           // The board, before it is asked for: the FIRST message every
           // dashboard receives, unconditionally, so the rail fills before the
           // REST snapshot lands.
-          toDashboard(ws, instancesFrame(""));
+          sendFrame(ws, instancesFrame(""));
           // A reconnected dashboard earns the current sign-in state again.
           // biome-ignore lint/complexity/noVoid: snapshot follows startup discovery on this socket
           void mcpReady.then(async () => {
@@ -15834,7 +15869,7 @@ export const createServer = (
             if (ws.readyState !== 1) {
               return;
             }
-            toDashboard(ws, {
+            sendFrame(ws, {
               verb: "frames",
               machineId: "",
               payload: { kind: "fleet_mcp", servers: db.fleetConfig().mcp },
@@ -15851,7 +15886,7 @@ export const createServer = (
           if (!isEnvelope(message)) {
             const fault = envelopeFault(message);
             console.warn(`[hub] dashboard ${fault}`, message);
-            toDashboard(ws, refusalFrame(message, fault));
+            sendFrame(ws, refusalFrame(message, fault));
             return;
           }
 
@@ -15866,7 +15901,7 @@ export const createServer = (
               );
               if (refusal) {
                 console.warn(`[hub] refused spawn: ${refusal}`);
-                toDashboard(ws, failure(message, refusal));
+                sendFrame(ws, failure(message, refusal));
                 break;
               }
               // A spawn that names no model runs on its harness's own default
@@ -15881,7 +15916,7 @@ export const createServer = (
               });
               if ("refusal" in settled) {
                 console.warn(`[hub] refused spawn: ${settled.refusal}`);
-                toDashboard(ws, failure(message, settled.refusal));
+                sendFrame(ws, failure(message, settled.refusal));
                 break;
               }
               const launched = atLaunchDir(message.instanceId, settled.payload);
@@ -15899,7 +15934,7 @@ export const createServer = (
                 : {};
               if ("refusal" in placed) {
                 console.warn(`[hub] refused spawn: ${placed.refusal}`);
-                toDashboard(ws, failure(message, placed.refusal));
+                sendFrame(ws, failure(message, placed.refusal));
                 break;
               }
               if (registry.agent(message.machineId) && message.instanceId) {
@@ -15948,7 +15983,7 @@ export const createServer = (
                 }
                 publishInstances(message.machineId);
               } else {
-                toDashboard(
+                sendFrame(
                   ws,
                   failure(
                     message,
@@ -15991,11 +16026,12 @@ export const createServer = (
               console.warn(
                 `[hub] ${fault}, from ${ws.headers["user-agent"] ?? "a client with no user agent"} at ${ws.headers.origin ?? ws.remoteAddress}`
               );
-              toDashboard(ws, refusalFrame(message, fault));
+              sendFrame(ws, refusalFrame(message, fault));
             }
           }
         }),
         close(ws) {
+          closeLine(ws);
           registry.dropDashboard(ws);
           // Follows nothing, awaits nothing: a stream subscription and a command
           // ack both die with the socket that asked for them.

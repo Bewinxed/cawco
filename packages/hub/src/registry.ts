@@ -1,27 +1,6 @@
 import type { Envelope, ErrorFrame, Verb } from "@cawco/core";
 import { Context, Effect, Layer } from "effect";
-
-/**
- * The slice of Elysia's WebSocket handle the registry needs — structural so the
- * registry stays free of Elysia's route generics. Elysia builds a fresh handle
- * per lifecycle callback, so sockets are only ever compared by `id`.
- */
-export interface HubSocket {
-  readonly id: string;
-  // biome-ignore lint/style/useConsistentMethodSignatures: HubSocket is implemented by Elysia's ws handle across server.ts and stream.ts; a property signature would narrow the callback's variance against those real implementations.
-  send(data: unknown, compress?: boolean): unknown;
-}
-
-/**
- * Every frame to a dashboard goes out deflated. The dashboard route negotiates
- * permessage-deflate, but Bun compresses only a message sent with the flag
- * set: negotiated alone, a 1.8MB board went out as 1.8MB, and with it as 58KB.
- * The board's first read is a couple of MB of JSON (every machine's whole
- * session catalogue), which on a phone's link was half a minute of an empty
- * board. JSON that repetitive deflates about thirtyfold.
- */
-export const toDashboard = (socket: HubSocket, frame: unknown): unknown =>
-  socket.send(frame, true);
+import { type HubSocket, sendFrame } from "./wire-socket";
 
 /**
  * The hub's answer to a frame it will not act on, on every socket: an `error`
@@ -209,7 +188,7 @@ const make = (): RegistryShape => {
     },
     broadcast: (envelope) => {
       for (const socket of dashboards.values()) {
-        toDashboard(socket, envelope);
+        sendFrame(socket, envelope);
       }
     },
     broadcastBoard: (delta, snapshot) => {
@@ -217,9 +196,9 @@ const make = (): RegistryShape => {
       for (const socket of dashboards.values()) {
         if (older.has(socket.id)) {
           whole ??= snapshot();
-          toDashboard(socket, whole);
+          sendFrame(socket, whole);
         } else {
-          toDashboard(socket, delta);
+          sendFrame(socket, delta);
         }
       }
     },

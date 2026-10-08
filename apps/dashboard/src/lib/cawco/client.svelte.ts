@@ -91,6 +91,7 @@ import {
   runDoing,
   WIRE_PROTOCOL,
 } from "@cawco/core";
+import { clientLine, WIRE_PENDING } from "@cawco/core/wire";
 import {
   CONTROL_TIMEOUT_MS,
   DISCARD_TIMEOUT_MS,
@@ -2869,7 +2870,7 @@ const streamHost: StreamHost = {
     if (!socket || socket.readyState !== WebSocket.OPEN) {
       return false;
     }
-    socket.send(JSON.stringify(message));
+    clientLine(socket).send(JSON.stringify(message));
     return true;
   },
   now: () => Date.now(),
@@ -4022,7 +4023,7 @@ function send(envelope: Envelope): void {
       "Not connected to the hub. Check that it is running, then try again."
     );
   }
-  socket.send(JSON.stringify(envelope));
+  clientLine(socket).send(JSON.stringify(envelope));
 }
 
 /**
@@ -4170,7 +4171,12 @@ function olderThanHub(message: unknown): boolean {
  */
 function bind(socket: WebSocket): void {
   socket.onmessage = (event) => {
-    const message = JSON.parse(String(event.data)) as unknown;
+    // A message too long for one frame (a large board) arrives as parts
+    // (`@cawco/core/wire`): nothing is read until its last one is in.
+    const message = clientLine(socket).receive(String(event.data));
+    if (message === WIRE_PENDING) {
+      return;
+    }
     if (olderThanHub(message)) {
       return;
     }

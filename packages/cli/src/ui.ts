@@ -1,3 +1,9 @@
+import {
+  clientTransport,
+  Outbox,
+  serverTransport,
+  WIRE_FRAME_LIMIT_BYTES,
+} from "@cawco/core/wire";
 import { spawn } from "bun";
 
 const HTTP_PREFIX = /^http/;
@@ -28,13 +34,22 @@ export interface UiOptions {
 const isHubPath = (path: string): boolean =>
   path.startsWith("/api/") || path === "/health" || path.startsWith("/ws");
 
+/**
+ * One browser's relay to the hub. Frames pass through as they are (a message
+ * too long for one frame is already parts, `@cawco/core/wire`), each way
+ * through an outbox, so a slow side holds frames rather than losing them.
+ */
 interface Relay {
-  /** The socket this process opened to the hub, once it is ready. */
+  /** The socket this process opened to the hub. */
   hub: WebSocket | null;
   /** Frames the browser sent before the hub socket opened. */
   queued: string[];
   /** The page's own query: it names the wire the page was built for. */
   search: string;
+  /** Frames to the browser. */
+  toBrowser: Outbox | null;
+  /** Frames to the hub, once its socket is open. */
+  toHub: Outbox | null;
 }
 
 export async function serveUi({
@@ -86,7 +101,13 @@ export async function serveUi({
       if (url.pathname.startsWith("/ws")) {
         if (
           self.upgrade(request, {
-            data: { hub: null, queued: [], search: url.search },
+            data: {
+              hub: null,
+              queued: [],
+              search: url.search,
+              toBrowser: null,
+              toHub: null,
+            },
           })
         ) {
           return;
@@ -148,7 +169,11 @@ export async function serveUi({
     },
 
     websocket: {
+      maxPayloadLength: WIRE_FRAME_LIMIT_BYTES,
       open(browser) {
+        // The hub compresses every frame to a dashboard; so does the relay.
+        const toBrowser = new Outbox(serverTransport(browser, true));
+        browser.data.toBrowser = toBrowser;
         const wsOrigin = hub.origin.replace(HTTP_PREFIX, "ws");
         const upstream = new WebSocket(
           `${wsOrigin}/ws/dashboard${browser.data.search}`
@@ -156,27 +181,33 @@ export async function serveUi({
         browser.data.hub = upstream;
 
         upstream.onopen = () => {
+          const toHub = new Outbox(clientTransport(upstream));
+          browser.data.toHub = toHub;
           for (const frame of browser.data.queued) {
-            upstream.send(frame);
+            toHub.forward(frame);
           }
           browser.data.queued = [];
         };
-        upstream.onmessage = (event) => browser.send(String(event.data));
+        upstream.onmessage = (event) => toBrowser.forward(String(event.data));
         // The browser retries on close, so a hub that went away is reported by
         // closing rather than by holding a socket open that answers nothing.
         upstream.onclose = () => browser.close();
         upstream.onerror = () => browser.close();
       },
       message(browser, message) {
-        const upstream = browser.data.hub;
         const frame = String(message);
-        if (upstream?.readyState === WebSocket.OPEN) {
-          upstream.send(frame);
+        if (browser.data.toHub) {
+          browser.data.toHub.forward(frame);
         } else {
           browser.data.queued.push(frame);
         }
       },
+      drain(browser) {
+        browser.data.toBrowser?.drained();
+      },
       close(browser) {
+        browser.data.toBrowser?.close();
+        browser.data.toHub?.close();
         browser.data.hub?.close();
       },
     },

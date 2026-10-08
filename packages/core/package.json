@@ -16,6 +16,7 @@
     "./live-processes": "./src/live-processes.ts",
     "./lines": "./src/lines.ts",
     "./paced-write": "./src/paced-write.ts",
+    "./wire": "./src/wire.ts",
     "./machine-id": "./src/machine-id.ts",
     "./file-hash": "./src/file-hash.ts",
     "./binary-installation": "./src/binary-installation.ts",
