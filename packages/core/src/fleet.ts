@@ -502,6 +502,19 @@ export interface FleetConfig {
    * machine that runs only what it already ran.
    */
   hooks?: FleetHook[];
+  /**
+   * The marketplaces, by name, whose source is a directory on the hub's own
+   * machine, sent to a machine that is not that machine. Such a path names
+   * nothing here, so the machine links nothing for it: its plugins arrive as
+   * {@link pluginPayloads}, and its row reports what they came to. The hub's
+   * own machine is sent none and links the directory where it stands.
+   *
+   * A plugin of such a marketplace that the hub could not carry has no other
+   * way onto this machine, so its row in {@link plugins} is sent with the
+   * hub's `error`: the one case a machine is given that bookkeeping, because
+   * it is the whole of what the machine's failure has to say.
+   */
+  hubOnlyMarketplaces?: string[];
   marketplaces: FleetMarketplace[];
   mcp: FleetMcpServer[];
   /**

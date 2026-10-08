@@ -166,6 +166,12 @@ interface Sidecar {
    * be, not by whatever this version of cawco would write today.
    */
   hooks: Record<string, ManagedHook>;
+  /**
+   * The fleet marketplaces this machine was told live on the hub's machine
+   * only ({@link FleetConfig.hubOnlyMarketplaces}). Nothing is linked for
+   * them, so a status reads their rows off their plugins, as the sync did.
+   */
+  hubOnlyMarketplaces?: string[];
   marketplaces: ManagedMarketplace[];
   mcp: string[];
   /** The hash cawco last wrote to `~/.claude/CLAUDE.md`; absent = unmanaged. */
@@ -277,6 +283,7 @@ const readSidecar = async (): Promise<Sidecar> => {
       stored?.marketplaces,
       await linkedMarketplaces()
     ),
+    hubOnlyMarketplaces: stored?.hubOnlyMarketplaces ?? [],
     plugins: stored?.plugins ?? [],
     // Read back like every other record: without it each sync starts from an
     // empty one, so it reinstalls every vendored plugin and never uninstalls a
@@ -671,6 +678,41 @@ const marketplaceOf = (id: string): string => id.split("@").pop() ?? "";
 const pluginNameOf = (id: string): string => id.split("@")[0] ?? id;
 
 /**
+ * Why a plugin of a hub-only marketplace is not on this machine. The bytes the
+ * hub carries are its only way here: the marketplace is a directory on the
+ * hub's machine, which no command run here can link. The dashboard names the
+ * fault by this sentence's last clause (fleet-faults.ts `HUB_ONLY`).
+ */
+const hubOnlyMiss = (marketplace: string, hubError: string | undefined) =>
+  `${hubError ? `the hub could not carry it (${hubError})` : "the hub has not resolved it yet"}, and its marketplace ${marketplace} is a directory on the hub's machine`;
+
+/**
+ * A hub-only marketplace's row on this machine. Nothing is linked for it, so
+ * it is what its plugins came to: working when every one of them is
+ * installed, failed naming each one that is not.
+ */
+const hubOnlyStates = (
+  names: readonly string[],
+  plugins: Record<string, FleetItemState>,
+  into: Record<string, FleetItemState>
+): void => {
+  for (const name of names) {
+    const missing = Object.entries(plugins).filter(
+      ([id, item]) => marketplaceOf(id) === name && item.state === "failed"
+    );
+    into[name] =
+      missing.length === 0
+        ? { state: "applied" }
+        : {
+            state: "failed",
+            detail: missing
+              .map(([id, item]) => `${id}: ${item.detail ?? "not installed"}`)
+              .join("; "),
+          };
+  }
+};
+
+/**
  * Which of the marketplaces cawco linked last time are cawco's to unlink
  * now. What goes is a link, so what is compared is the link: renaming a
  * marketplace in the hub's config changes cawco's name for it and nothing on
@@ -691,6 +733,12 @@ export const toUnlink = (
   );
 };
 
+/** What a plugin sync leaves in the sidecar. */
+type PluginRecords = Pick<
+  Sidecar,
+  "marketplaces" | "hubOnlyMarketplaces" | "plugins" | "vendoredPlugins"
+>;
+
 /**
  * Links the marketplaces and installs the plugins, in that order — a plugin
  * whose marketplace is not linked has nowhere to come from. Both commands are
@@ -701,8 +749,9 @@ const syncPlugins = async (
   managed: Sidecar,
   report: FleetSyncReport
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: links every marketplace and installs every plugin the config wants, reporting each one's outcome
-): Promise<Pick<Sidecar, "marketplaces" | "plugins" | "vendoredPlugins">> => {
+): Promise<PluginRecords> => {
   const wantedPlugins = config.plugins.filter((plugin) => plugin.enabled);
+  const hubOnly = config.hubOnlyMarketplaces ?? [];
   const bin = await claudeBin();
   if (!bin) {
     for (const { name } of config.marketplaces) {
@@ -716,6 +765,7 @@ const syncPlugins = async (
     }
     return {
       marketplaces: managed.marketplaces,
+      hubOnlyMarketplaces: managed.hubOnlyMarketplaces,
       plugins: managed.plugins,
       vendoredPlugins: managed.vendoredPlugins,
     };
@@ -726,8 +776,14 @@ const syncPlugins = async (
    * dashboard has; everything that acts on the machine uses the CLI's.
    */
   const marketplaces: ManagedMarketplace[] = [];
+  // What this machine links: everything but a directory on the hub's machine,
+  // whose path names nothing here. Its plugins come as bytes, and its row is
+  // read off them once they are installed.
+  const linkable = config.marketplaces.filter(
+    ({ name }) => !hubOnly.includes(name)
+  );
 
-  for (const { name, source } of config.marketplaces) {
+  for (const { name, source } of linkable) {
     // biome-ignore lint/performance/noAwaitInLoops: each `claude plugin marketplace add` mutates the CLI's shared known_marketplaces.json; concurrent runs would race
     const already = await linkedNameFor(name, source);
     if (already) {
@@ -751,10 +807,13 @@ const syncPlugins = async (
     report.marketplaces[name] = { state: "applied" };
   }
 
+  // A hub-only marketplace cawco once linked here is unlinked like a removed
+  // one: the link pointed at whatever this machine had at that path, which is
+  // not the hub's directory, and its plugins now come from the hub's bytes.
   for (const { name, linkedAs } of toUnlink(
     managed.marketplaces,
     marketplaces,
-    config
+    { marketplaces: linkable }
   )) {
     // biome-ignore lint/performance/noAwaitInLoops: `claude plugin marketplace remove` mutates the CLI's shared known_marketplaces.json; concurrent runs would race
     const ran = await runClaude(bin, [
@@ -782,11 +841,18 @@ const syncPlugins = async (
   const carried = new Set(payloads.map(({ name }) => name));
 
   const linked = await linkedMarketplaces();
-  for (const { id } of wantedPlugins) {
+  for (const { id, error } of wantedPlugins) {
     if (carried.has(pluginNameOf(id))) {
       continue;
     }
     const marketplace = marketplaceOf(id);
+    if (hubOnly.includes(marketplace)) {
+      report.plugins[id] = {
+        state: "failed",
+        detail: hubOnlyMiss(marketplace, error),
+      };
+      continue;
+    }
     // The CLI's own account, not this run's report: a plugin id names the
     // marketplace the CLI's way, which is not the key the report is under.
     if (!linked[marketplace]) {
@@ -834,7 +900,14 @@ const syncPlugins = async (
     report.plugins[id] = { state: "removed" };
   }
 
-  return { marketplaces, plugins, vendoredPlugins: vendored };
+  hubOnlyStates(hubOnly, report.plugins, report.marketplaces);
+
+  return {
+    marketplaces,
+    hubOnlyMarketplaces: hubOnly,
+    plugins,
+    vendoredPlugins: vendored,
+  };
 };
 
 /**
@@ -2125,11 +2198,23 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
         };
   }
   for (const id of managed.plugins) {
+    // A vendored plugin is installed out of cawco's own marketplace, under
+    // that marketplace's name, and the upstream id is uninstalled for it.
+    const name = pluginNameOf(id);
+    const installedAs =
+      managed.vendoredPlugins?.[name] === undefined
+        ? id
+        : `${name}@${VENDOR_NAME}`;
     // biome-ignore lint/performance/noAwaitInLoops: a read-only status check; kept sequential like the rest of this report rather than fanning out parallel file reads
-    report.plugins[id] = (await isInstalled(id))
+    report.plugins[id] = (await isInstalled(installedAs))
       ? { state: "applied" }
       : { state: "failed", detail: "not in installed_plugins.json" };
   }
+  hubOnlyStates(
+    managed.hubOnlyMarketplaces ?? [],
+    report.plugins,
+    report.marketplaces
+  );
   for (const name of Object.keys(managed.skills)) {
     // biome-ignore lint/performance/noAwaitInLoops: a read-only status check; kept sequential like the rest of this report rather than fanning out parallel file reads
     skills[name] = (await dirExists(join(SKILLS_DIR, name)))

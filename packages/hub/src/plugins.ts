@@ -60,15 +60,31 @@ interface Manifest {
   plugins?: (MarketplacePluginInfo & { source?: unknown })[];
 }
 
+/** The directory a hub-directory source names, or undefined for any other form. */
+const hubPath = (source: string): string | undefined => {
+  const trimmed = source.trim();
+  const path = trimmed.startsWith("file://") ? fileURLToPath(trimmed) : trimmed;
+  return isAbsolute(path) ? path : undefined;
+};
+
 /**
- * A marketplace linked from a directory on the hub's own disk: an absolute
- * path or a `file://` URL. It is read where it stands, on every resolve, so a
- * refresh picks up whatever the directory holds now. The hub reads it and sync
- * carries the bytes, so a machine that has no such directory still gets them.
+ * Whether a marketplace source is a directory on the hub's own disk: an
+ * absolute path or a `file://` URL. Such a path means something on the hub's
+ * machine only, so every other machine is sent its plugins as bytes and links
+ * nothing for it (`FleetConfig.hubOnlyMarketplaces`).
+ */
+export const isHubDirectory = (source: string): boolean =>
+  hubPath(source) !== undefined;
+
+/**
+ * A marketplace linked from a directory on the hub's own disk. It is read
+ * where it stands, on every resolve, so a refresh picks up whatever the
+ * directory holds now. The hub reads it and sync carries the bytes, so a
+ * machine that has no such directory still gets them.
  */
 const localRoot = async (source: string): Promise<string | undefined> => {
-  const path = source.startsWith("file://") ? fileURLToPath(source) : source;
-  if (!isAbsolute(path)) {
+  const path = hubPath(source);
+  if (!path) {
     return undefined;
   }
   const found = await stat(path).catch(() => undefined);

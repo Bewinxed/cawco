@@ -232,7 +232,11 @@ import {
   onWorkflowAnswer,
 } from "./pending";
 import { createPlans, planRoutes } from "./plans";
-import { resolveMarketplacePlugins } from "./plugins";
+import {
+  isHubDirectory,
+  pluginMarketplace,
+  resolveMarketplacePlugins,
+} from "./plugins";
 import { previewFrame, previewTargets } from "./preview";
 import {
   canvasChoices,
@@ -6509,9 +6513,35 @@ export const createServer = (
       const current = new Map(
         db.fleetConfig().mcp.map((row) => [row.name, row])
       );
+      // A directory on the hub's disk names nothing on any other machine, so
+      // only the hub's own machine links it; every other one is told which
+      // marketplaces those are and installs their plugins from the bytes.
+      const hubOnly = (await onHubMachine(machineId))
+        ? new Set<string>()
+        : new Set(
+            config.marketplaces
+              .filter(({ source }) => isHubDirectory(source))
+              .map(({ name }) => name)
+          );
+      const hubErrors = new Map(
+        hubOnly.size === 0
+          ? []
+          : db
+              .listPlugins()
+              .flatMap(({ id, error }) => (error ? [[id, error] as const] : []))
+      );
       const outbound = fleetMcp.syncConfig(
         {
           ...config,
+          hubOnlyMarketplaces: [...hubOnly],
+          // What the hub could not carry of a hub-only marketplace reaches that
+          // machine no other way, so the hub's reason goes with the row.
+          plugins: config.plugins.map((plugin) => {
+            const error = hubErrors.get(plugin.id);
+            return error && hubOnly.has(pluginMarketplace(plugin.id))
+              ? { ...plugin, error }
+              : plugin;
+          }),
           mcp: config.mcp.flatMap((row) =>
             current.has(row.name) ? [current.get(row.name) as typeof row] : []
           ),

@@ -50,6 +50,7 @@ export type FaultCause =
   | "cli-missing"
   | "ssh-refused"
   | "marketplace-unlinked"
+  | "hub-only"
   | "drifted"
   | "absent"
   | "unparsable"
@@ -138,6 +139,14 @@ export const CAUSE: Record<FaultCause, CauseCopy> = {
     fix: "Resolve the marketplace failure first; this plugin follows it.",
     action: "none",
   },
+  // agent/fleet.ts hubOnlyMiss — `… and its marketplace X is a directory on the
+  // hub's machine`, on the plugin's row and on its marketplace's.
+  "hub-only": {
+    title: "Only the hub’s machine can install this",
+    why: "Its marketplace is a directory on the hub’s machine, so every other machine gets its plugins as files the hub carries, and the hub could not carry this one.",
+    fix: "Publish the marketplace where every machine can reach it, such as a git repository, and point its row there. Or bring the plugin under the size the hub carries.",
+    action: "none",
+  },
   // agent/fleet.ts DRIFTED — `edited on this machine — adopt it or overwrite`.
   drifted: {
     title: "This machine edited its own copy",
@@ -217,6 +226,7 @@ const SSH_REFUSED =
 const CLI_TOO_OLD = /unknown option|unknown argument|unknown command/i;
 const CLI_MISSING = /claude CLI not found/i;
 const MARKETPLACE_UNLINKED = /marketplace .+ is not linked/i;
+const HUB_ONLY = /is a directory on the hub's machine/i;
 const DRIFTED = /edited on this machine/i;
 const MISSING_BYTES = /the hub sent no files/i;
 const UNSAFE_PATH = /^unsafe path/i;
@@ -246,6 +256,11 @@ export function causeOf(
   }
   if (MARKETPLACE_UNLINKED.test(said)) {
     return "marketplace-unlinked";
+  }
+  // The hub's own refusal is quoted inside; what the machine reports is that
+  // nothing but the hub's machine could install the plugin.
+  if (HUB_ONLY.test(said)) {
+    return "hub-only";
   }
   if (DRIFTED.test(said)) {
     return "drifted";
