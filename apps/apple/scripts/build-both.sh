@@ -14,7 +14,8 @@
 # Each workspace owns ~/build/cawco-apple/<workspace>, including DerivedData
 # and logs. Mac-side locks cover retirement, rsync and both builds;
 # builds from different workspaces wait their turn.
-# Only processes this script starts are stopped, by PID.
+# Only processes this script starts are stopped: the Mac-side build runs in
+# its own process group, which ends (TERM, then KILL) when the SSH link drops.
 set -euo pipefail
 
 SSH=(ssh -F "$HOME/.ssh/config" -o BatchMode=yes mac)
@@ -53,7 +54,22 @@ shlock -p $$ -f "$LOCK" || { echo "workspace $BUILD is already building (lock: $
 MACHINE_LOCK="$ROOT/.locks/.machine"
 MACHINE_OWNER="$ROOT/.locks/.machine.owner"
 WAIT_PID=
+BUILD_PID=
+GO=
+# The build runs in its own process group (leader BUILD_PID): TERM the whole
+# group, then KILL whatever is left after the grace period.
+stop_build() {
+  [[ -n $BUILD_PID ]] || return 0
+  kill -TERM -- "-$BUILD_PID" 2>/dev/null || kill -TERM "$BUILD_PID" 2>/dev/null || true
+  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+    kill -0 -- "-$BUILD_PID" 2>/dev/null || kill -0 "$BUILD_PID" 2>/dev/null || break
+    sleep 0.5
+  done
+  kill -KILL -- "-$BUILD_PID" 2>/dev/null || kill -KILL "$BUILD_PID" 2>/dev/null || true
+  BUILD_PID=
+}
 release_locks() {
+  stop_build
   if [[ -n $WAIT_PID ]]; then kill "$WAIT_PID" 2>/dev/null || true; fi
   rm -f "$LOCK"
   if [[ -f $MACHINE_LOCK && $(<"$MACHINE_LOCK") == $$ ]]; then
@@ -63,9 +79,18 @@ release_locks() {
 trap release_locks EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM HUP
+trap 'GO=1' USR1
 
-# No build input arrives before READY; EOF means the caller has left.
-( read -r waiting_input || kill -TERM "$$" ) <&0 &
+# The caller holds stdin open for the whole run and writes a heartbeat line
+# every 10 s, plus GO once the sync is done. EOF, or no line for 45 s, means
+# the caller has left: TERM this shell, whose EXIT trap ends the build group
+# and releases the locks.
+(
+  while IFS= read -r -t 45 line; do
+    if [[ $line == GO ]]; then kill -USR1 "$$"; fi
+  done
+  kill -TERM "$$"
+) <&0 &
 WAIT_PID=$!
 next_notice=0
 until shlock -p $$ -f "$MACHINE_LOCK"; do
@@ -82,9 +107,6 @@ until shlock -p $$ -f "$MACHINE_LOCK"; do
   fi
   sleep 5
 done
-kill "$WAIT_PID" 2>/dev/null || true
-wait "$WAIT_PID" 2>/dev/null || true
-WAIT_PID=
 printf '%s %s\n' "$BUILD" "$(date +%s)" >"$MACHINE_OWNER"
 
 retire() {
@@ -111,33 +133,19 @@ for directory in "$HOME"/build/cawco-apple-*; do
 done
 mkdir -p "$ROOT/$BUILD/apps/apple"
 echo READY
-# The same SSH process keeps the lock while the caller rsyncs, then executes
-# the build script sent on stdin. EOF on a failed sync releases the lock.
-bash --norc -s -- "build/cawco-apple/$BUILD/apps/apple" "$PLATFORM" "$BUILD" "$COMPILE_ONLY"
+# The same SSH process keeps the locks while the caller rsyncs; GO starts the
+# build. A failed sync ends the caller, and its EOF releases the locks.
+until [[ -n $GO ]]; do wait "$WAIT_PID" || true; done
+perl -e 'setpgrp(0, 0); exec @ARGV or die "exec: $!\n"' \
+  bash --norc -c "$BUILD_SCRIPT" build-both "build/cawco-apple/$BUILD/apps/apple" "$PLATFORM" "$BUILD" "$COMPILE_ONLY" </dev/null &
+BUILD_PID=$!
+status=0
+wait "$BUILD_PID" || status=$?
+BUILD_PID=
+exit "$status"
 EOF
-printf -v COMMAND 'PLATFORM=%q COMPILE_ONLY=%q bash --norc -c %q --' "$PLATFORM" "$COMPILE_ONLY" "$PREPARE"
-for argument in "$BUILD" "${LIVE[@]}"; do printf -v COMMAND '%s %q' "$COMMAND" "$argument"; done
-coproc MAC_BUILD { "${SSH[@]}" "$COMMAND"; }
-MAC_PID=$MAC_BUILD_PID
-exec {MAC_INPUT}>&"${MAC_BUILD[1]}" {MAC_OUTPUT}<&"${MAC_BUILD[0]}"
-MAC_WRITE=${MAC_BUILD[1]}
-MAC_READ=${MAC_BUILD[0]}
-exec {MAC_WRITE}>&- {MAC_READ}<&-
-release() { exec {MAC_INPUT}>&-; }
-trap release EXIT
-while IFS= read -r line <&"$MAC_OUTPUT"; do
-  [[ $line != READY ]] || break
-  echo "$line"
-done
-if [[ ${line:-} != READY ]]; then wait "$MAC_PID"; exit 1; fi
-echo "BUILD DIRECTORY mac:~/build/cawco-apple/$BUILD"
-rsync -rlpD --checksum --delete \
-  --exclude .build --exclude DerivedData \
-  --exclude CawCo.xcodeproj --exclude CawCo/Info.plist \
-  -e "ssh -F $HOME/.ssh/config -o BatchMode=yes" \
-  apps/apple/ "mac:$REMOTE/"
 
-cat >&"$MAC_INPUT" <<'EOF'
+read -r -d '' BUILD_SCRIPT <<'EOF' || true
 set -euo pipefail
 cd "$HOME/$1"
 PLATFORM=$2
@@ -275,7 +283,35 @@ if [[ $PLATFORM != macos ]]; then ios; fi
 if [[ $PLATFORM != ios ]]; then macos; fi
 if [[ $PLATFORM != macos ]]; then ios 'iOS 18.5'; fi
 EOF
-release
-trap - EXIT
+
+printf -v COMMAND 'PLATFORM=%q COMPILE_ONLY=%q BUILD_SCRIPT=%q bash --norc -c %q --' \
+  "$PLATFORM" "$COMPILE_ONLY" "$BUILD_SCRIPT" "$PREPARE"
+for argument in "$BUILD" "${LIVE[@]}"; do printf -v COMMAND '%s %q' "$COMMAND" "$argument"; done
+coproc MAC_BUILD { "${SSH[@]}" "$COMMAND"; }
+MAC_PID=$MAC_BUILD_PID
+exec {MAC_INPUT}>&"${MAC_BUILD[1]}" {MAC_OUTPUT}<&"${MAC_BUILD[0]}"
+MAC_WRITE=${MAC_BUILD[1]}
+MAC_READ=${MAC_BUILD[0]}
+exec {MAC_WRITE}>&- {MAC_READ}<&-
+# The Mac side ends its build when this heartbeat stops or stdin closes.
+( while sleep 10; do printf '\n' || exit 0; done ) >&"$MAC_INPUT" &
+BEAT_PID=$!
+release() {
+  kill "$BEAT_PID" 2>/dev/null || true
+  exec {MAC_INPUT}>&-
+}
+trap release EXIT
+while IFS= read -r line <&"$MAC_OUTPUT"; do
+  [[ $line != READY ]] || break
+  echo "$line"
+done
+if [[ ${line:-} != READY ]]; then wait "$MAC_PID"; exit 1; fi
+echo "BUILD DIRECTORY mac:~/build/cawco-apple/$BUILD"
+rsync -rlpD --checksum --delete \
+  --exclude .build --exclude DerivedData \
+  --exclude CawCo.xcodeproj --exclude CawCo/Info.plist \
+  -e "ssh -F $HOME/.ssh/config -o BatchMode=yes" \
+  apps/apple/ "mac:$REMOTE/"
+echo GO >&"$MAC_INPUT"
 cat <&"$MAC_OUTPUT"
 wait "$MAC_PID"
