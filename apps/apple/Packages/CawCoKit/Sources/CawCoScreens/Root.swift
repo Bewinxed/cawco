@@ -13,6 +13,8 @@ public final class RootViewController: ObservedViewController {
     private lazy var home = HomeModel(hub: hub)
     private lazy var board = ShellController(hub: hub, home: home)
     private lazy var waiting = CawWaiting(waiting: true, status: .loading, side: HomeViewController.cawSide)
+    /// CawCo Pro over this window's board: the lock, the gate bar and the paywall.
+    private lazy var gate = PaywallGate(hub: hub, home: home, shell: board)
     /// The hub whose fleet has been read once on this launch.
     private var readFrom: URL?
     private var shown: UIViewController?
@@ -36,6 +38,9 @@ public final class RootViewController: ObservedViewController {
     override public func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = Palette.surfaceRecess
+        gate.attach(to: view)
+        gate.onChange = { [weak self] in self?.requestRefresh() }
+        board.onKeepPro = { [weak self] in self?.gate.keepPro() }
     }
 
     override public func viewIsAppearing(_ animated: Bool) {
@@ -82,6 +87,8 @@ public final class RootViewController: ObservedViewController {
     }
 
     override public func refreshContent() {
+        // The gate reads what this pass decided: whether the board is up, and read.
+        defer { gate.update(onBoard: shownKey == "board", read: hub.address != nil && readFrom == hub.address) }
         guard let address = hub.address else {
             show(key: "first-run") { ConnectViewController(hub: hub, mode: .firstRun) }
             return
@@ -122,6 +129,7 @@ public final class RootViewController: ObservedViewController {
             case let .project(id): board.go(.project(id))
             case let .task(projectId, taskId, attempt): board.openTask(projectId: projectId, taskId: taskId, attempt: attempt)
             case .board: board.go(.fleet)
+            case .keepPro: gate.keepPro()
             }
         }
     }
@@ -140,7 +148,7 @@ public final class RootViewController: ObservedViewController {
     /// The first ask in the needs-you queue, the card at its top: a session's
     /// permission or question (a run's is answered in its run).
     private var firstAsk: (ask: ParkedAsk, machineId: String)? {
-        guard home.live else {
+        guard home.live, !gate.isLocked else {
             return nil
         }
         if let selected = board.selected { return selected.answerTarget }
@@ -156,13 +164,21 @@ public final class RootViewController: ObservedViewController {
 
     /// Whether Approve and Deny have an ask to act on.
     public var canAnswer: Bool { firstAsk != nil }
-    public var canStopSession: Bool { board.selected?.canStop == true }
-    public var canSteerSession: Bool { board.selected?.canSend == true }
-    public func stopSession() { board.selected?.stopTurn() }
-    public func steerSession() { board.selected?.focusComposer() }
-    public var canOpenSessionWindow: Bool { board.selected != nil && UIApplication.shared.supportsMultipleScenes }
+    public var canStopSession: Bool { !gate.isLocked && board.selected?.canStop == true }
+    public var canSteerSession: Bool { !gate.isLocked && board.selected?.canSend == true }
+    public func stopSession() {
+        guard canStopSession else { return }
+        board.selected?.stopTurn()
+    }
+
+    public func steerSession() {
+        guard canSteerSession else { return }
+        board.selected?.focusComposer()
+    }
+
+    public var canOpenSessionWindow: Bool { !gate.isLocked && board.selected != nil && UIApplication.shared.supportsMultipleScenes }
     public func openSessionWindow() {
-        guard let selected = board.selected else { return }
+        guard canOpenSessionWindow, let selected = board.selected else { return }
         let request = UISceneSessionActivationRequest(role: .windowApplication, userActivity: SessionViewController.activity(selected.sessionId))
         UIApplication.shared.activateSceneSession(for: request) { error in
             Logger(subsystem: "dev.cawco.app", category: "Scene").error("new window refused: \(error.localizedDescription, privacy: .public)")
@@ -173,7 +189,7 @@ public final class RootViewController: ObservedViewController {
     public enum ShellCommand: Sendable { case jump, assistant, startSession, splitRight, splitDown }
 
     public func canRun(_ command: ShellCommand) -> Bool {
-        shownKey == "board" && !waiting.waiting && board.can(command)
+        shownKey == "board" && !waiting.waiting && !gate.isLocked && board.can(command)
     }
 
     public func run(_ command: ShellCommand) {

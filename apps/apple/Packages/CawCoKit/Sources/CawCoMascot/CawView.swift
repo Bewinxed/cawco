@@ -59,9 +59,19 @@ public enum CawStatus: String, CaseIterable, Sendable {
 /// the status is `ready`; any other status's file takes over by the same leave and enter as
 /// anywhere else. The status files draw nothing below the line: their body is behind the edge.
 /// Under Reduce Motion there is no peek: the status's file, behind the edge, fades in.
+///
+/// The ledge files are two: `peek` (peer-over, a Caw thread's composer corner) and `climb`
+/// (climb-peer, the paywall's poster hero: he climbs up and peeks over the cards). Both rest on
+/// the same ledge line.
 public final class CawView: UIView {
-    /// Where the ledge runs across peek.riv's 512 still box, as a share of its side, from the
-    /// top (assets/mascot/loops/rests.json, `peek.ledgeLine`).
+    /// Which ledge clip brings him in (assets/mascot/scripts/scene.mjs `LEDGES`).
+    public enum Ledge: Sendable {
+        case peek
+        case climb
+    }
+
+    /// Where the ledge runs across the ledge files' 512 still box, as a share of its side, from
+    /// the top (assets/mascot/loops/rests.json, `peek.ledgeLine` and `climb.ledgeLine`).
     public static let ledgeLine = 0.5684
 
     public var status: CawStatus {
@@ -90,8 +100,9 @@ public final class CawView: UIView {
     public var onEntered: (() -> Void)?
     public var onGone: (() -> Void)?
 
-    /// He peeks over an edge at the view's bottom; status files are clipped below it.
-    public let ledge: Bool
+    /// He peeks over an edge at the view's bottom, coming in by this clip; status files are
+    /// clipped below it. Nil: no edge.
+    public let ledge: Ledge?
     /// His peek is on: his entrance behind the ledge, then its rest for as long as the status is
     /// `ready`. Off under Reduce Motion, and for good once another status is asked for after it
     /// has entered.
@@ -108,10 +119,10 @@ public final class CawView: UIView {
     private var leaving = false
     private var entered = false
 
-    public init(status: CawStatus, ledge: Bool = false) {
+    public init(status: CawStatus, ledge: Ledge? = nil) {
         self.status = status
         self.ledge = ledge
-        peek = ledge && !UIAccessibility.isReduceMotionEnabled
+        peek = ledge != nil && !UIAccessibility.isReduceMotionEnabled
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         isUserInteractionEnabled = false
@@ -160,7 +171,7 @@ public final class CawView: UIView {
     private var dark: Bool { traitCollection.userInterfaceStyle == .dark }
     private var reducedMotion: Bool { UIAccessibility.isReduceMotionEnabled }
     /// The side his still box is drawn at: the largest centred square, or with `ledge` the width.
-    private var boxSide: Double { ledge ? bounds.width : min(bounds.width, bounds.height) }
+    private var boxSide: Double { ledge != nil ? bounds.width : min(bounds.width, bounds.height) }
     private var pixel: Float { CawContract.pixel(side: boxSide, scale: traitCollection.displayScale) }
     /// `pixel` as last written to the Caw on screen.
     private var written: Float?
@@ -170,7 +181,8 @@ public final class CawView: UIView {
         if peek, peeked, status != .ready {
             peek = false
         }
-        return peek ? .peek : .status(status)
+        if peek, let ledge { return .ledge(ledge) }
+        return .status(status)
     }
 
     /// Brings the wanted file on. The first Caw is simply that file. A Caw on screen showing
@@ -280,7 +292,7 @@ public final class CawView: UIView {
     /// still and the view fades in over `Motion.durFade`, across the Caw below.
     private func start(_ incoming: CawLayer, asked: ContinuousClock.Instant) {
         let below = shown
-        let peeking = incoming.file == .peek
+        let peeking = incoming.file.isLedge
         incoming.hearEntered { [weak self] in
             self?.reportEntered()
             if peeking { self?.peekLanded() }
@@ -330,7 +342,7 @@ public final class CawView: UIView {
     /// sides, and nothing of him draws below the view's bottom. The peek draws its own wing tips
     /// in front of the edge, and is not clipped.
     private func clip(_ layer: CawLayer) {
-        guard ledge, layer.file != .peek else {
+        guard ledge != nil, !layer.file.isLedge else {
             layer.holder.layer.mask = nil
             return
         }
@@ -387,7 +399,7 @@ public final class CawView: UIView {
         // His size is known now, or changed: the rim's device pixel follows it.
         if shown != nil, written != pixel { apply() }
         let scale = side / CawGeometry.stillBox.width
-        let boxTop = ledge ? bounds.minY : bounds.midY - side / 2
+        let boxTop = ledge != nil ? bounds.minY : bounds.midY - side / 2
         let frame = CGRect(
             x: bounds.midX - side / 2 - CawGeometry.stillBox.minX * scale,
             y: boxTop - CawGeometry.stillBox.minY * scale,
@@ -571,17 +583,22 @@ public final class CawWaiting: UIViewController {
     }
 }
 
-/// What a Caw is drawn from: a status's file, or `peek`, his ledge peek (peek.riv: his drawn
-/// enter peering over an edge, resting on its landing).
+/// What a Caw is drawn from: a status's file, or a ledge file (peek.riv, climb.riv: his drawn
+/// enter peering or climbing over an edge, resting on its landing).
 enum CawFile: Hashable, Sendable {
     case status(CawStatus)
-    case peek
+    case ledge(CawView.Ledge)
 
     var name: String {
         switch self {
         case let .status(status): status.rawValue
-        case .peek: "peek"
+        case .ledge(.peek): "peek"
+        case .ledge(.climb): "climb"
         }
+    }
+
+    var isLedge: Bool {
+        if case .ledge = self { true } else { false }
     }
 }
 

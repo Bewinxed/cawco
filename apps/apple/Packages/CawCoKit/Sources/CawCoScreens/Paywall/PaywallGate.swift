@@ -153,13 +153,13 @@ final class PaywallGate {
         UserDefaults.standard.set(true, forKey: Self.shownKey)
         held = nil
         triggerClock?.cancel()
-        PaywallController.present(.onboarding, banner: HeroBanner.from(hub: hub, home: home, held: ask), from: shell.dialogPresenter)
+        PaywallController.present(.onboarding, banners: HeroBanner.cards(hub: hub, home: home, held: ask), from: shell.dialogPresenter)
         onChange()
     }
 
     /// The paywall over whatever the window shows.
     func present(_ entry: PaywallController.Entry) {
-        PaywallController.present(entry, banner: HeroBanner.from(hub: hub, home: home), from: shell.dialogPresenter)
+        PaywallController.present(entry, banners: HeroBanner.cards(hub: hub, home: home), from: shell.dialogPresenter)
     }
 
     /// T's tap and T6's push: the Get Pro form for a live week; the offer otherwise.
@@ -337,6 +337,34 @@ final class GateBar: UIView {
             said.isHidden = true
             linksRow.isHidden = false
         }
+    }
+}
+
+/// T, owned: the rail's small `Pro` tag, an ink tile in the meta role.
+final class ProTag: UIView {
+    init() {
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        backgroundColor = Palette.inkSolid
+        layer.cornerRadius = Radius.radiusSm
+        layer.cornerCurve = .continuous
+        let label = KitLabel(TypeScale.typeMeta, ink: Palette.onInk)
+        label.text = PaywallCopy.Trial.owned
+        label.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(label)
+        NSLayoutConstraint.activate([
+            label.topAnchor.constraint(equalTo: topAnchor, constant: 2),
+            label.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -2),
+            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Space.space2),
+            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Space.space2),
+        ])
+        setContentHuggingPriority(.required, for: .horizontal)
+        isAccessibilityElement = false
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        fatalError("ProTag is built in code")
     }
 }
 

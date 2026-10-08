@@ -20,6 +20,8 @@ protocol SidebarHost: AnyObject {
     func showLimits()
     /// The phone sheet's Search: Jump, once the sheet has stepped aside.
     func search()
+    /// The free week's line (paywall DESIGN.md T): the paywall in its Get Pro form.
+    func keepPro()
 }
 
 /// The management rail (Sidebar.svelte): the wordmark with the assistant
@@ -58,6 +60,11 @@ final class SidebarViewController: ObservedViewController {
     private let themeButton = ThemeButton()
     private let soundButton = SoundButton()
     private let usage = UsageCell(frame: .zero)
+    /// The account row, and under the name the one place CawCo Pro shows (DESIGN.md T):
+    /// the free week's days left, or the Pro tag.
+    private let user = RailRow(height: nil, leading: 10, trailing: 10, gap: 10)
+    private let trialLine = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
+    private let proTag = ProTag()
     private var navHeights: [NSLayoutConstraint] = []
 
     /// Every project block and session row the rail has drawn, by id, kept across updates.
@@ -533,16 +540,22 @@ final class SidebarViewController: ObservedViewController {
         usage.onPage = { [weak self] in self?.host?.go(.usage) }
         usage.heightAnchor.constraint(equalToConstant: 44).isActive = true
 
-        let user = RailRow(height: nil, leading: 10, trailing: 10, gap: 10)
         navConstraint(user)
         // No picture of the reader yet: Caw stands in.
         let avatar = BrandMark(round: true)
         let name = KitLabel(TypeScale.typeBody, ink: Palette.foreground)
         name.text = "bewinxed"
+        let named = UIStackView(arrangedSubviews: [name, trialLine])
+        named.axis = .vertical
+        named.alignment = .leading
+        trialLine.isHidden = true
+        proTag.isHidden = true
         user.content.addArrangedSubview(RailRow.slot(avatar))
-        user.content.addArrangedSubview(name)
+        user.content.addArrangedSubview(named)
+        user.content.addArrangedSubview(proTag)
         user.accessibilityLabel = "bewinxed"
         user.isEnabled = false
+        user.addAction(UIAction { [weak self] _ in self?.host?.keepPro() }, for: .primaryActionTriggered)
 
         configureButton.addAction(UIAction { [weak self] _ in self?.host?.go(.configure) }, for: .primaryActionTriggered)
         KitTip.attach(to: configureButton, label: "Configure")
@@ -586,6 +599,29 @@ final class SidebarViewController: ObservedViewController {
         rowInputs = inputs.rows
         liveCount = inputs.live
         blockedCount = inputs.blocked
+        showAccess()
+    }
+
+    /// T: the free week's whole days left under the name (its last two in
+    /// strong ink), and a press opens the Get Pro form; owned, the Pro tag
+    /// alone. Nothing else in the rail sells.
+    private func showAccess() {
+        let access = Pro.shared.access
+        var line: String?
+        var last = false
+        if case let .trial(endsAt) = access {
+            // `home.now` ticks in milliseconds: read here, the line follows the clock.
+            let days = Int((endsAt.timeIntervalSince(Date(timeIntervalSince1970: home.now / 1000)) / 86400).rounded(.up))
+            line = PaywallCopy.Trial.line(daysLeft: days)
+            last = days <= 2
+        }
+        if trialLine.text != line { trialLine.text = line }
+        trialLine.ink = last ? Palette.inkStrong : Palette.inkMuted
+        trialLine.isHidden = line == nil
+        proTag.isHidden = access != .owned
+        user.isEnabled = line != nil
+        user.accessibilityLabel = ["bewinxed", line, access == .owned ? PaywallCopy.Trial.owned : nil].compactMap(\.self).joined(separator: ", ")
+        user.accessibilityTraits = line != nil ? .button : .staticText
     }
 
     override func drawContent() {

@@ -87,9 +87,9 @@ final class PaywallController: ObservedViewController {
     private static let terms = URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!
     private static let privacy = URL(string: "https://cawco.dev/privacy")!
 
-    init(entry: Entry, banner: HeroBanner) {
+    init(entry: Entry, banners: [HeroBanner]) {
         self.entry = entry
-        hero = PaywallHeroView(variant: variant, banner: banner)
+        hero = PaywallHeroView(variant: variant, banners: banners)
         close = GhostIconButton(.close, label: "Close", tint: variant == .poster ? Palette.crowInk : Palette.paper)
         screen = switch entry {
         case .onboarding, .offer, .keep: .offer
@@ -109,8 +109,8 @@ final class PaywallController: ObservedViewController {
     /// The paywall in the house sheet over `host`: 90% of a phone's height,
     /// a 540pt form centred on a wide screen.
     @discardableResult
-    static func present(_ entry: Entry, banner: HeroBanner, from host: UIViewController) -> PaywallController {
-        let paywall = PaywallController(entry: entry, banner: banner)
+    static func present(_ entry: Entry, banners: [HeroBanner], from host: UIViewController) -> PaywallController {
+        let paywall = PaywallController(entry: entry, banners: banners)
         paywall.loadViewIfNeeded()
         let sheet = HouseSheetController(paywall, style: .card, scroller: paywall.scroll, cap: 0.9)
         sheet.formWidth = 540

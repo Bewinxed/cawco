@@ -1,0 +1,66 @@
+{
+  "appPolicies" : {
+    "eula" : "",
+    "policies" : [
+      {
+        "locale" : "en_US",
+        "policyText" : "",
+        "policyURL" : ""
+      }
+    ]
+  },
+  "identifier" : "5A0C6E2B",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+    {
+      "displayPrice" : "29.99",
+      "familyShareable" : false,
+      "internalID" : "6753000001",
+      "localizations" : [
+        {
+          "description" : "Every machine, project and agent on one board, and notifications that reach you on the lock screen. One purchase for iPhone, iPad and Mac.",
+          "displayName" : "CawCo Pro",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "dev.cawco.app.pro",
+      "referenceName" : "CawCo Pro",
+      "type" : "NonConsumable"
+    },
+    {
+      "displayPrice" : "0.0",
+      "familyShareable" : false,
+      "internalID" : "6753000002",
+      "localizations" : [
+        {
+          "description" : "Seven days of CawCo with everything on. On day 7 the app locks; CawCo Pro is a separate one-time purchase.",
+          "displayName" : "7-Day Trial",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "dev.cawco.app.trial7",
+      "referenceName" : "7-Day Trial",
+      "type" : "NonConsumable"
+    }
+  ],
+  "settings" : {
+    "_askToBuyEnabled" : false,
+    "_billingIssuesEnabled" : false,
+    "_developerTeamID" : "FN5LJSPX2R",
+    "_failTransactionsEnabled" : false,
+    "_locale" : "en_US",
+    "_storefront" : "USA",
+    "_storeKitErrors" : [
+
+    ]
+  },
+  "subscriptionGroups" : [
+
+  ],
+  "version" : {
+    "major" : 4,
+    "minor" : 0
+  }
+}

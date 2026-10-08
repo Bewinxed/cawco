@@ -10,6 +10,10 @@ options:
 packages:
   CawCoKit:
     path: Packages/CawCoKit
+# CawCo Pro's two products for StoreKit Testing in Xcode: in the project,
+# never in the app's bundle; the scheme's Run uses it (target `scheme` below).
+fileGroups:
+  - StoreKit
 settings:
   base:
     SWIFT_VERSION: "6.0"
@@ -25,6 +29,11 @@ targets:
     supportedDestinations: [iOS, macCatalyst]
     sources:
       - path: CawCo
+    # Xcode's Run reads Pro and the free week from this file instead of the
+    # App Store ("only has an effect when you run your app using Xcode",
+    # developer.apple.com/forums/thread/756071).
+    scheme:
+      storeKitConfiguration: StoreKit/CawCo.storekit
     dependencies:
       - package: CawCoKit
         products: [CawCoAPI, CawCoCore, CawCoDesign, CawCoTranscript, CawCoMascot, CawCoScreens]

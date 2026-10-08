@@ -172,7 +172,7 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
         if note.kind == "test" {
             Task { @MainActor in PushRegistry.shared.heardTest() }
         }
-        completionHandler([.banner, .list, .sound])
+        completionHandler([.banner, .sound])
     }
 
     nonisolated func userNotificationCenter(_: UNUserNotificationCenter, didReceive response: UNNotificationResponse,

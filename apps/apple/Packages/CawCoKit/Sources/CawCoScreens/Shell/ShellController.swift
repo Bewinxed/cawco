@@ -613,6 +613,18 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         (presentedViewController ?? self).present(dialog, animated: true)
     }
 
+    /// The window's CawCo Pro gate answers the rail's free-week line (RootViewController sets it).
+    var onKeepPro: () -> Void = {}
+
+    func keepPro() {
+        // The phone's sheet steps aside first: the paywall opens over the page.
+        if let sheet = railSheet {
+            sheet.dismiss(animated: true) { [weak self] in self?.onKeepPro() }
+        } else {
+            onKeepPro()
+        }
+    }
+
     func showLimits() {
         let limits = UsageSheetController(home: home)
         // The list's foot is the way to the Usage page.
@@ -639,6 +651,11 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     private func presentHub() {
         let connect = ConnectViewController(hub: hub, mode: .change) { [weak self] in
             self?.dismiss(animated: true)
+        }
+        // H2's Turn on: the notification setup, over the hub's sheet.
+        connect.turnOnNotifications = { [weak self] in
+            guard let self else { return }
+            PaywallController.present(.setup, banners: HeroBanner.cards(hub: hub, home: home), from: dialogPresenter)
         }
         let sheet = UINavigationController(rootViewController: connect)
         connect.navigationItem.title = "Hub"

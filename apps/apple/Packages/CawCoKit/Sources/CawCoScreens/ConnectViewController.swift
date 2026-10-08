@@ -33,13 +33,21 @@ final class ConnectViewController: ObservedViewController, UITextFieldDelegate {
     private let searching = UIStackView()
     private let noWifi = KitLabel(TypeScale.typeBody, ink: Palette.inkMuted, lines: 0)
     private var connectButton: UIButton!
-    // The hub sheet's push settings (PRD §5.5): iOS's word, and Quiet as the hub answered it.
+    // The hub sheet's Notifications section (paywall DESIGN.md H): never empty,
+    // and the one CawCo Pro surface an owner sees. No price, no selling row.
     private let notifications = UIStackView()
-    private let notificationsOff = KitLabel(TypeScale.typeBody, ink: Palette.inkMuted, lines: 0)
+    private let notifyLine = KitLabel(TypeScale.typeBody, ink: Palette.inkMuted, lines: 0)
+    private let notifySpinner = KitSpinner(side: 16)
+    private let notifyReason = KitLabel(TypeScale.typeMeta, ink: Palette.statusFailInk, lines: 0)
+    private let notifyAction = UIStackView()
     private let quietRow = UIStackView()
     private let quietHint = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
     private let quietSwitch = UISwitch()
-    private let pushProblem = KitLabel(TypeScale.typeMeta, ink: Palette.statusFailInk, lines: 0)
+    private lazy var testLink = LinkButton(PaywallCopy.Hub.test) { Task { await PushRegistry.shared.sendTest() } }
+    private let testProblem = KitLabel(TypeScale.typeMeta, ink: Palette.statusFailInk, lines: 0)
+    private var drawnNotify: NotifyState?
+    /// H2's Turn on: the shell opens the notification setup over this sheet.
+    var turnOnNotifications: () -> Void = {}
     /// Caw on this screen; when the screen goes, Root lets him fade out over the next one.
     private(set) var caw: CawView?
     private var shownFound: [HubDiscovery.Found] = []
@@ -217,18 +225,38 @@ final class ConnectViewController: ObservedViewController, UITextFieldDelegate {
         discovery.stop()
     }
 
+    /// Where this device's notifications stand, as the section says it.
+    private enum NotifyState: Equatable {
+        /// H2: not set up. `entitled` false: no free week or Pro, so no Turn on.
+        case off(entitled: Bool)
+        /// H3: iOS refuses them.
+        case denied
+        /// H3b: the token, or the relay and the hub, on the way.
+        case pending
+        /// H3b: APNs refused this device.
+        case failed
+        /// H3c: Cawrier's or the hub's reason.
+        case relay(String)
+        /// H4.
+        case on
+    }
+
     private func notificationsSection() -> UIView {
         let head = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
-        head.text = "Notifications"
+        head.text = PaywallCopy.Hub.title
         head.accessibilityTraits = .header
-        notificationsOff.text = "Notifications are off in iOS Settings."
+        notifySpinner.isAccessibilityElement = false
+        let lineRow = UIStackView(arrangedSubviews: [notifySpinner, notifyLine])
+        lineRow.spacing = Space.space2
+        lineRow.alignment = .center
+        notifyAction.axis = .vertical
         let label = KitLabel(TypeScale.typeBody, ink: Palette.inkStrong)
-        label.text = "Quiet"
+        label.text = PaywallCopy.Hub.quiet
         let words = UIStackView(arrangedSubviews: [label, quietHint])
         words.axis = .vertical
         words.spacing = Space.space1
         quietSwitch.onTintColor = Palette.inkStrong
-        quietSwitch.accessibilityLabel = "Quiet"
+        quietSwitch.accessibilityLabel = PaywallCopy.Hub.quiet
         quietSwitch.addAction(UIAction { [weak self] _ in
             guard let self else { return }
             PushRegistry.shared.setQuiet(quietSwitch.isOn)
@@ -237,26 +265,80 @@ final class ConnectViewController: ObservedViewController, UITextFieldDelegate {
         quietRow.addArrangedSubview(quietSwitch)
         quietRow.alignment = .center
         quietRow.spacing = Space.space3
+        let test = UIStackView(arrangedSubviews: [testLink, testProblem])
+        test.axis = .vertical
+        test.alignment = .leading
         notifications.axis = .vertical
         notifications.spacing = Space.space2
-        for view in [head, notificationsOff, quietRow, pushProblem] { notifications.addArrangedSubview(view) }
+        for view in [head, lineRow, notifyReason, notifyAction, quietRow, test] { notifications.addArrangedSubview(view) }
         return notifications
+    }
+
+    private var notifyState: NotifyState {
+        let push = PushRegistry.shared
+        guard Pro.shared.access?.entitled == true else { return .off(entitled: false) }
+        if push.authorization == .denied { return .denied }
+        if !push.allowed { return .off(entitled: true) }
+        if push.tokenFailed { return .failed }
+        if push.token == nil { return .pending }
+        switch push.relay {
+        case .done: return .on
+        case let .failed(reason): return .relay(reason)
+        case .idle, .working: return .pending
+        }
     }
 
     /// The hub's answer is what the switch shows; it moves only when the hub said so.
     private func refreshNotifications() {
         guard mode == .change else { return }
         let push = PushRegistry.shared
-        notificationsOff.isHidden = push.authorization != .denied
-        quietRow.isHidden = !push.allowed || push.quiet == nil
+        let state = notifyState
+        if state != drawnNotify {
+            drawnNotify = state
+            for view in notifyAction.arrangedSubviews { view.removeFromSuperview() }
+            var line: String?
+            var reason: String?
+            var action: (String, () -> Void)?
+            switch state {
+            case let .off(entitled):
+                line = PaywallCopy.Hub.off
+                if entitled { action = (PaywallCopy.Hub.turnOn, { [weak self] in self?.turnOnNotifications() }) }
+            case .denied:
+                line = PaywallCopy.Hub.denied
+                action = (PaywallCopy.Hub.openSettings, { UIApplication.shared.open(URL(string: UIApplication.openSettingsURLString)!) })
+            case .pending:
+                line = PaywallCopy.Hub.registering
+            case .failed:
+                line = PaywallCopy.Hub.registerFailed
+                action = (PaywallCopy.Hub.tryAgain, { PushRegistry.shared.retry() })
+            case let .relay(said):
+                line = PaywallCopy.Hub.relayFailed
+                reason = said
+                action = (PaywallCopy.Hub.tryAgain, { PushRegistry.shared.retry() })
+            case .on:
+                break
+            }
+            notifyLine.text = line
+            notifyLine.superview?.isHidden = line == nil
+            notifyLine.ink = state == .failed ? Palette.statusFailInk : Palette.inkMuted
+            notifySpinner.isHidden = state != .pending
+            notifyReason.text = reason
+            notifyReason.isHidden = reason == nil
+            if let (title, run) = action {
+                notifyAction.addArrangedSubview(KitButton.make(title, variant: .outline, height: .lg, stretch: true, action: run))
+            }
+            notifyAction.isHidden = action == nil
+            quietRow.isHidden = state != .on
+            testLink.superview?.isHidden = state != .on
+        }
         if let quiet = push.quiet {
             quietSwitch.setOn(quiet, animated: true)
-            quietHint.text = quiet ? "Sent nothing." : "Gets what needs you."
+            quietHint.text = quiet ? PaywallCopy.Hub.quietOn : PaywallCopy.Hub.quietOff
         }
         quietSwitch.isEnabled = !push.quietSending
-        pushProblem.text = push.problem
-        pushProblem.isHidden = push.problem == nil || !push.allowed
-        notifications.isHidden = notificationsOff.isHidden && quietRow.isHidden && pushProblem.isHidden
+        testLink.busy = push.testSending
+        testProblem.text = push.testProblem
+        testProblem.isHidden = push.testProblem == nil
     }
 
     override func refreshContent() {
