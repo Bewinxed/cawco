@@ -1,6 +1,6 @@
 <script lang="ts">
   /** Right-click on a machine's heading — what you can do to the box, not to a session. */
-  import { machineLabel } from "@cawco/core";
+  import { machineLabel, stepsLeft } from "@cawco/core";
   import type { Snippet } from "svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
@@ -8,6 +8,7 @@
     IconAlert,
     IconDownload,
     IconKey,
+    IconMacReady,
     IconPlus,
     IconRefresh,
     IconTrash,
@@ -21,6 +22,7 @@
   } from "./client.svelte";
   import { confirm } from "./confirm.svelte";
   import ErrorDialog from "./ErrorDialog.svelte";
+  import { macReady } from "./join/mac-ready.svelte";
   import MachineLogin from "./MachineLogin.svelte";
   import UnlockKeychain from "./UnlockKeychain.svelte";
   import { updates } from "./updates/updates.svelte";
@@ -35,6 +37,11 @@
    * leaves the machine holding a token that no lock can hide.
    */
   const stuck = $derived(machine.auth === "unreadable-credentials");
+  /** A Mac's readiness steps still to do; the item shows only while there are any. */
+  const needs = $derived.by(() => {
+    const readiness = macReady.of(machine.machineId);
+    return readiness ? stepsLeft(readiness) : 0;
+  });
   let unlocking = $state(false);
   let loggingIn = $state(false);
   /**
@@ -103,6 +110,12 @@
       <IconKey />
       Log in…
     </ContextMenu.Item>
+    {#if needs}
+      <ContextMenu.Item onSelect={() => macReady.show(machine.machineId)}>
+        <IconMacReady />
+        Finish getting it ready · {needs} need you
+      </ContextMenu.Item>
+    {/if}
     {#if isMac && stuck}
       <ContextMenu.Item
         onSelect={() => {

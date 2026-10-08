@@ -40,6 +40,9 @@
     joinInfo,
     sshJoin,
   } from "./join/join.svelte";
+  import MacReady from "./join/MacReady.svelte";
+  import { macReady } from "./join/mac-ready.svelte";
+  import { reflow } from "./motion/rows.svelte";
 
   /** The way in shown, which every entry can name as it opens the dialog. */
   const tab = $derived(addMachine.way);
@@ -166,7 +169,7 @@
         };
       case "unreachable":
         return {
-          text: `${where} did not answer on port ${job.port ?? 22} (${problem.detail}). Check the address and that SSH is running there, then Retry.`,
+          text: `${where} did not answer on port ${job.port ?? 22} (${problem.detail}). Check the address and that SSH is running there, then Retry. On a Mac, turn on Remote Login under System Settings › General › Sharing first.`,
           tail: [],
         };
       case "download":
@@ -223,6 +226,27 @@
   </div>
 {/snippet}
 
+<!-- Act 3, on a Mac: getting it ready for agents, under the line that says
+     it joined. It arrives once the Mac's readiness does. -->
+{#snippet readyAct(
+  machineId: string | null,
+  name: string
+)}
+  {@const readiness = macReady.of(machineId)}
+  {@const actions = macReady.actions}
+  {#if machineId && readiness && actions}
+    <div data-flip>
+      <MacReady
+        embedded
+        machineName={name}
+        onContinue={(stepId) => actions.continue(machineId, stepId)}
+        onOpenSettings={(stepId) => actions.openSettings(machineId, stepId)}
+        {readiness}
+      />
+    </div>
+  {/if}
+{/snippet}
+
 <Dialog.Root
   bind:open={
     () => addMachine.open,
@@ -231,7 +255,8 @@
   }
   }
 >
-  <Dialog.Content class="sm:max-w-lg">
+  <!-- On a phone, the viewport less 24px (DESIGN.md, Breakpoints). -->
+  <Dialog.Content class="max-w-[calc(100%-24px)] sm:max-w-lg">
     <Dialog.Header>
       <Dialog.Title>Connect a machine</Dialog.Title>
       <Dialog.Description>
@@ -289,9 +314,15 @@
           </details>
         </div>
       {:else if view === "done" && job}
-        <div class="joined">
-          <IconSuccess aria-hidden="true" class="size-5" />
-          <p class="text-body">{joinedName(job.machineId)} joined the fleet.</p>
+        <div class="joined-act" {@attach reflow()}>
+          <div class="joined" data-flip>
+            <IconSuccess aria-hidden="true" class="size-5" />
+            <p class="text-body">
+              {joinedName(job.machineId)}
+              joined the fleet.
+            </p>
+          </div>
+          {@render readyAct(job.machineId, joinedName(job.machineId))}
         </div>
       {:else}
         <form
@@ -378,7 +409,15 @@
           <CopyBox label="Install command" text={installCommand(hubUrl)} />
         {/if}
         {#if checkIn}
-          <CheckInStatus {checkIn} />
+          <div class="joined-act" {@attach reflow()}>
+            <div data-flip><CheckInStatus {checkIn} /></div>
+            {#if checkIn.joined}
+              {@render readyAct(
+                checkIn.joined.machineId,
+                machineLabel(checkIn.joined.hostname)
+              )}
+            {/if}
+          </div>
         {/if}
       </div>
     {/if}
@@ -506,6 +545,11 @@
   }
   .tail {
     max-height: 12rem;
+  }
+  .joined-act {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-5);
   }
   .joined {
     display: flex;

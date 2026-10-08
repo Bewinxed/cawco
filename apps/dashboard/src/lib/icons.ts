@@ -151,7 +151,11 @@ export { default as IconSettings } from "~icons/solar/settings-bold-duotone";
 export { default as IconWorkflow } from "~icons/solar/share-circle-bold-duotone";
 export { default as IconShield } from "~icons/solar/shield-bold-duotone";
 /** Rules: a standing guard over what sessions say, distinct from bare `shield`. */
-export { default as IconRules } from "~icons/solar/shield-check-bold-duotone";
+/** A Mac being got ready for agents: the same guard, checked off step by step. */
+export {
+  default as IconRules,
+  default as IconMacReady,
+} from "~icons/solar/shield-check-bold-duotone";
 export { default as IconShop } from "~icons/solar/shop-bold-duotone";
 export { default as IconSidebar } from "~icons/solar/sidebar-minimalistic-bold-duotone";
 export { default as IconToolGeneric } from "~icons/solar/sledgehammer-bold-duotone";

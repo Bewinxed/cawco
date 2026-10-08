@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { machineLabel } from "@cawco/core";
+  import { machineLabel, stepsLeft } from "@cawco/core";
   /**
    * The machines as a list: each machine (its menu on right-click or
    * long-press: update, reload, log in, unlock, forget), then Add machine.
@@ -17,6 +17,7 @@
   import { cawco } from "./client.svelte";
   import { home } from "./home/home-state.svelte";
   import { addMachine, JOIN_WAYS } from "./join/join.svelte";
+  import { macReady } from "./join/mac-ready.svelte";
   import MachineMenu from "./MachineMenu.svelte";
 
   let { onleave }: { onleave?: () => void } = $props();
@@ -35,6 +36,11 @@
   }
   const faultOf = (machineId: string): string | undefined =>
     home.exceptions.find((entry) => entry.machineId === machineId)?.text;
+  /** A Mac's steps still to do before it is ready for agents; 0 for every other machine. */
+  const needsOf = (machineId: string): number => {
+    const readiness = macReady.of(machineId);
+    return readiness ? stepsLeft(readiness) : 0;
+  };
 </script>
 
 {#if cawco.machines.length === 0}
@@ -68,17 +74,39 @@
       {@const up = machine.status === "online"}
       {@const live = liveOn(machine.machineId)}
       {@const fault = faultOf(machine.machineId)}
+      {@const needs = needsOf(machine.machineId)}
+      {@const trouble = fault ?? (needs ? `${needs} need you` : undefined)}
       <li>
+        {#snippet row()}
+          <MachineRow
+            hue={machineHue(index, up)}
+            icon={machineIcon(machine.os ?? "")}
+            meta={[`${live} live`, fault, needs ? `${needs} need you` : null]
+              .filter(Boolean)
+              .join(" · ")}
+            name={machineLabel(machine.hostname)}
+            presence={presenceOf(up, trouble)}
+          />
+        {/snippet}
         <MachineMenu {machine}>
-          <div class="row press-tint focus-inset" tabindex="-1">
-            <MachineRow
-              hue={machineHue(index, up)}
-              icon={machineIcon(machine.os ?? "")}
-              meta={[`${live} live`, fault].filter(Boolean).join(" · ")}
-              name={machineLabel(machine.hostname)}
-              presence={presenceOf(up, fault)}
-            />
-          </div>
+          {#if needs}
+            <!-- A Mac that still needs you: the row reopens its readiness. -->
+            <button
+              aria-haspopup="dialog"
+              class="row press-tint focus-inset"
+              onclick={() => {
+                onleave?.();
+                macReady.show(machine.machineId);
+              }}
+              type="button"
+            >
+              {@render row()}
+            </button>
+          {:else}
+            <div class="row press-tint focus-inset" tabindex="-1">
+              {@render row()}
+            </div>
+          {/if}
         </MachineMenu>
       </li>
     {/each}
@@ -135,7 +163,8 @@
     font: var(--type-meta);
     color: var(--ink-muted);
   }
-  .way {
+  .way,
+  button.row {
     cursor: pointer;
   }
   /* The row's glyph in its way's hue, at the machine rows' 16px. */

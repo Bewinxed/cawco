@@ -44,6 +44,8 @@ export * from "./plan";
 // Shared because the tool's schema is unforgiving: the answers go back inside
 // the tool's own input or the call fails validation.
 export * from "./question";
+// A Mac's readiness for agents: the steps that let a session drive Xcode.
+export * from "./readiness";
 // The bounded replay ring behind the Ledger Protocol — SessionRing, lifted
 // from packages/hub/src/stream.ts so sessiond's per-child ring (see
 // sessiond.ts) can reuse the identical class.

@@ -45,6 +45,7 @@
   import { sessionName } from "./home/home-state.svelte";
   import JumpPalette, { type JumpOpener } from "./JumpPalette.svelte";
   import { machinesPopover } from "./join/join.svelte";
+  import MacReadyDialog from "./join/MacReadyDialog.svelte";
   import MachinesButton from "./MachinesButton.svelte";
   import NeedsCaw from "./NeedsCaw.svelte";
   import SessionSurface from "./SessionSurface.svelte";
@@ -1067,6 +1068,8 @@
   <ConfirmDialog />
   <!-- One Connect a machine dialog for every entry that adds one (join/join.svelte.ts). -->
   <AddMachineDialog />
+  <!-- One Mac readiness dialog, reopened from a Mac's row or menu (join/mac-ready.svelte.ts). -->
+  <MacReadyDialog />
   <!-- One New Session dialog for every opener (the rail's rows, the phone's
        Start session, a `?spawn=` link) and every session menu's Continue
        (spawn/new-session, continue.svelte.ts). -->
