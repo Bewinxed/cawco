@@ -187,6 +187,18 @@ export class OpencodeServerOwner {
     return written;
   }
 
+  /**
+   * The same process still runs, whoever holds it: its pid, with the start the
+   * OS gave it when it was recorded. Unlike {@link #matches} this outlives the
+   * keeper that started it.
+   */
+  async #runs(identity: ServerIdentity): Promise<boolean> {
+    return (
+      identity.startedAt !== "" &&
+      (await processStart(identity.pid)) === identity.startedAt
+    );
+  }
+
   async #matches(identity: ServerIdentity): Promise<boolean> {
     const client = await this.#sessiond();
     const listed = await client.list();
@@ -275,6 +287,13 @@ export class OpencodeServerOwner {
         }
         return record.active;
       }
+      // An active generation the keeper no longer holds is one whose keeper
+      // was restarted or killed under it: the process may well still run,
+      // under init, serving nothing anyone asks. It was dropped from the
+      // record here, so nothing ever ended it, and every keeper restart left
+      // one more behind (26 on the Mac on 8 Oct). It is retired instead, the
+      // same way a replaced generation is, once it is idle.
+      const stale = manages ? record.active : null;
       const client = await this.#sessiond();
       const listed = await client.list();
       // Initial cutover adopts the existing server held under the stable name.
@@ -296,7 +315,16 @@ export class OpencodeServerOwner {
             await this.#attach(client, OPENCODE_SERVER_PROC_ID, spec, signal)
           )
         : await this.#launch(spec, signal);
-      this.#record = { ...record, active: identity };
+      const current = await this.#load();
+      this.#record = {
+        active: identity,
+        retired: stale
+          ? [
+              ...current.retired.filter((row) => row.procId !== stale.procId),
+              stale,
+            ]
+          : current.retired,
+      };
       if (manages) {
         await this.#save();
         this.maintain();
@@ -392,43 +420,58 @@ export class OpencodeServerOwner {
       throw new Error("Refusing to retire the active OpenCode generation.");
     }
     const client = await this.#sessiond();
-    if (await this.#matches(identity)) {
+    // Held by this keeper, it is ended through the keeper, which signals all
+    // it started. Held by none, its keeper is gone and it runs on under init:
+    // it is ended directly, with its own process group, which it leads (the
+    // keeper starts every child detached) and which holds its MCP servers.
+    const held = await this.#matches(identity);
+    const present = () =>
+      held ? this.#matches(identity) : this.#runs(identity);
+    const signal = async (sig: NodeJS.Signals): Promise<void> => {
+      if (held) {
+        await client.signal(identity.procId, sig);
+        return;
+      }
+      for (const target of [-identity.pid, identity.pid]) {
+        try {
+          process.kill(target, sig);
+        } catch {
+          // that group or process is already gone
+        }
+      }
+    };
+    if (held || (await this.#runs(identity))) {
       if (!(await this.#idle(identity))) {
         throw new Error(
           "OpenCode retirement deferred: generation activity is busy or unknown."
         );
       }
-      if (
-        this.active?.procId === identity.procId ||
-        !(await this.#matches(identity))
-      ) {
+      if (this.active?.procId === identity.procId || !(await present())) {
         return;
       }
+      const whose = held ? "" : " (its keeper is gone)";
       console.info(
-        `[opencode] retire ${identity.procId}/${identity.pid} start=${identity.startedAt}: SIGTERM`
+        `[opencode] retire ${identity.procId}/${identity.pid} start=${identity.startedAt}${whose}: SIGTERM`
       );
-      await client.signal(identity.procId, "SIGTERM");
+      await signal("SIGTERM");
       const deadline = Date.now() + 15_000;
       // biome-ignore lint/performance/noAwaitInLoops: observe this exact retired identity during its grace period
-      while (Date.now() < deadline && (await this.#matches(identity))) {
+      while (Date.now() < deadline && (await present())) {
         await Bun.sleep(200);
       }
       // dd1e4ca1 protects active work and live procId reuse. This generation is
       // retired, has no bound sessions, and its unique procId is never reused.
-      if (
-        this.active?.procId !== identity.procId &&
-        (await this.#matches(identity))
-      ) {
-        await client.signal(identity.procId, "SIGKILL");
+      if (this.active?.procId !== identity.procId && (await present())) {
+        await signal("SIGKILL");
         console.info(
-          `[opencode] retire ${identity.procId}/${identity.pid}: retired-only SIGKILL after grace`
+          `[opencode] retire ${identity.procId}/${identity.pid}${whose}: retired-only SIGKILL after grace`
         );
         const killDeadline = Date.now() + 5000;
         // biome-ignore lint/performance/noAwaitInLoops: verify exit of only the retired identity
-        while (Date.now() < killDeadline && (await this.#matches(identity))) {
+        while (Date.now() < killDeadline && (await present())) {
           await Bun.sleep(100);
         }
-        if (await this.#matches(identity)) {
+        if (await present()) {
           throw new Error("Retired generation remained alive after SIGKILL.");
         }
       }

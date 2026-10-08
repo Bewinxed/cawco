@@ -275,7 +275,7 @@ export const installable = (
 
 // ── the notice ───────────────────────────────────────────────────────────
 
-export type NoticeKind = 1 | 2 | 3 | 4 | 5 | 6 | 7;
+export type NoticeKind = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 export type LineState = "plain" | "done" | "busy" | "wait";
 
 export interface NoticeLine {
@@ -398,6 +398,55 @@ function rolledBack({ machines, name }: Ctx): Notice | null {
     caw: { status: "needs-you", moves: true },
     machineIds: [machine.machineId],
     version: v,
+  };
+}
+
+/** A keeper restart's notice id: the restart itself, by its machine and when the wedge was called. */
+export const keeperRestartId = (machineId: string, at: number): string =>
+  `keeper:${machineId}:${at}`;
+
+/**
+ * 8. A machine's session keeper stopped answering and the agent restarted it
+ * (agent keeper-watchdog.ts). Every session it held ended with it, which is
+ * why it is said even though nothing is left to do.
+ */
+function keeperRestarted({ input, machines, name }: Ctx): Notice | null {
+  const [machine] = machines
+    .filter((m) => {
+      const restart = stateOf(m).keeperRestart;
+      return (
+        restart && !input.seen.has(keeperRestartId(m.machineId, restart.at))
+      );
+    })
+    .sort(byName);
+  const restart = machine && stateOf(machine).keeperRestart;
+  if (!(machine && restart)) {
+    return null;
+  }
+  const minutesSilent = Math.max(1, Math.round(restart.silentForMs / 60_000));
+  return {
+    acks: [keeperRestartId(machine.machineId, restart.at)],
+    kind: 8,
+    title: `The session keeper on ${name(machine)} was restarted`,
+    failed: true,
+    lines: [
+      {
+        state: "plain",
+        text: `It stopped answering for ${plural(minutesSilent, "minute")} (${plural(restart.dials, "call")}, no reply), so no session could start there. It was restarted and sessions start there again.`,
+      },
+      {
+        state: "plain",
+        text: `${restart.children === 1 ? "The 1 process" : `The ${restart.children} processes`} it held ended with it: the sessions running there stopped.`,
+      },
+      {
+        state: "plain",
+        text: `What it was doing is saved on ${name(machine)} in ${restart.diagnostics}.`,
+      },
+    ],
+    configure: false,
+    caw: { status: "needs-you", moves: false },
+    machineIds: [machine.machineId],
+    version: "",
   };
 }
 
@@ -658,6 +707,7 @@ export function noticeFor(
   }
   return (
     rolledBack(ctx) ??
+    keeperRestarted(ctx) ??
     installing(ctx) ??
     landedAll(ctx) ??
     unlessSeen(waitsForYou(ctx), input) ??

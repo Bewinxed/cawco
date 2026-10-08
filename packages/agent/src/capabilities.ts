@@ -78,18 +78,29 @@ function linuxInstall(pkg: string): string {
 const VERSIONED: readonly string[] = ["git", "opencode", "pi", "node"];
 const VERSION = /\d+\.\d+\.\d+(?:[-+][\w.-]+)?/;
 
-/** Asks an installed tool for its version, so the report says which one it is. */
-function readVersion(item: MachineCapability): void {
+/**
+ * Asks an installed tool for its version, so the report says which one it is.
+ * Never synchronously: `opencode --version` takes about a second, and a
+ * synchronous spawn holds the agent's whole loop for it, long enough for every
+ * keeper dial and HTTP timeout pending meanwhile to fire before its answer is
+ * read (and under Bun, spawnSync's private loop misplaces the agent's own
+ * polls: oven-sh/bun#34069).
+ */
+async function readVersion(item: MachineCapability): Promise<void> {
   if (!(item.available && item.path && VERSIONED.includes(item.id))) {
     return;
   }
-  const result = Bun.spawnSync([item.path, "--version"], {
+  const child = Bun.spawn([item.path, "--version"], {
     stdout: "pipe",
     stderr: "pipe",
     timeout: 5000,
   });
-  const text = result.stdout.toString().trim();
-  if (result.exitCode === 0) {
+  const [stdout, exitCode] = await Promise.all([
+    new Response(child.stdout).text(),
+    child.exited,
+  ]);
+  const text = stdout.trim();
+  if (exitCode === 0) {
     item.version = VERSION.exec(text)?.[0] ?? text;
   } else {
     item.reason = "Installed tool did not answer its version command";
@@ -97,7 +108,7 @@ function readVersion(item: MachineCapability): void {
 }
 
 /** Presence is read fresh on registration and every explicit probe. */
-export function probeCapabilities(): MachineCapabilities {
+export async function probeCapabilities(): Promise<MachineCapabilities> {
   const mac = platform() === "darwin";
   const git = resolveBin("git");
   const node = resolveBin("node");
@@ -160,8 +171,6 @@ export function probeCapabilities(): MachineCapabilities {
           }),
     },
   ];
-  for (const item of items) {
-    readVersion(item);
-  }
+  await Promise.all(items.map(readVersion));
   return { at: Date.now(), platform: platform(), items };
 }

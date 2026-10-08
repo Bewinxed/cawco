@@ -18,14 +18,9 @@
  * inside the line it just cut.
  */
 
-import {
-  type ChildProcessWithoutNullStreams,
-  spawn,
-  spawnSync,
-} from "node:child_process";
+import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { chmodSync, mkdirSync } from "node:fs";
-import { unlink } from "node:fs/promises";
+import { chmod, mkdir, unlink } from "node:fs/promises";
 import {
   createConnection,
   createServer,
@@ -98,6 +93,15 @@ export const SWEEP_GRACE_MS = 2000;
 export const SURVEY_INTERVAL_MS = 30_000;
 
 /**
+ * How long one reading of the process table may take before its `ps` is
+ * killed and the reading fails. Our choice: `ps -A` answers in 0.07 s on a Mac
+ * running ~1,000 processes; ten seconds is room for a machine deep in swap,
+ * and the bound means a `ps` that never ends costs one failed reading rather
+ * than every reading after it.
+ */
+export const PROCESS_TABLE_TIMEOUT_MS = 10_000;
+
+/**
  * One process as the operating system lists it. `started` is its start time
  * as `ps` prints it: with the pid, what says a pid seen later is still the
  * same process and not another that was since given its number.
@@ -111,16 +115,8 @@ interface Listed {
 
 const COLUMN_GAP = /\s+/;
 
-/**
- * Every process on the machine. `ps` is the one reading Linux and macOS both
- * give: neither has a call that lists a process's descendants, and `/proc` is
- * Linux alone.
- */
-const processTable = (): Listed[] => {
-  const listed = spawnSync("ps", ["-A", "-o", "pid=,ppid=,pgid=,lstart="], {
-    encoding: "utf8",
-  });
-  return (listed.stdout ?? "").split("\n").flatMap((line) => {
+const parseTable = (text: string): Listed[] =>
+  text.split("\n").flatMap((line) => {
     const [pid, ppid, pgid, ...started] = line.trim().split(COLUMN_GAP);
     return pid && ppid && pgid
       ? [
@@ -133,7 +129,57 @@ const processTable = (): Listed[] => {
         ]
       : [];
   });
-};
+
+/**
+ * Every process on the machine. `ps` is the one reading Linux and macOS both
+ * give: neither has a call that lists a process's descendants, and `/proc` is
+ * Linux alone.
+ *
+ * ASYNC, AND IT MUST STAY SO. This was `spawnSync`, and on a Mac it wedged the
+ * keeper: Bun's `spawnSync` waits on a private kqueue of its own and, while it
+ * waits, points the runtime's loop handle at it, so polls and keep-alives
+ * released or armed in that window land on the wrong loop (oven-sh/bun#34069,
+ * the fix still open as oven-sh/bun#40078). The keeper of 8 Oct held that
+ * second kqueue (lsof fd 8), sat in `kevent64` with its socket open, and sent
+ * no `welcome` to anyone for 35 minutes. Nothing on this daemon's loop may
+ * wait synchronously on another process.
+ */
+const processTable = (): Promise<Listed[]> =>
+  new Promise((resolve, reject) => {
+    const ps = spawn("ps", ["-A", "-o", "pid=,ppid=,pgid=,lstart="], {
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    let text = "";
+    ps.stdout.setEncoding("utf8");
+    ps.stdout.on("data", (chunk: string) => {
+      text += chunk;
+    });
+    const timer = setTimeout(
+      () => ps.kill("SIGKILL"),
+      PROCESS_TABLE_TIMEOUT_MS
+    );
+    ps.once("error", (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+    ps.once("close", (code, signal) => {
+      clearTimeout(timer);
+      if (code === 0) {
+        resolve(parseTable(text));
+        return;
+      }
+      reject(
+        new Error(
+          signal
+            ? `ps was killed (${signal}) after ${PROCESS_TABLE_TIMEOUT_MS}ms`
+            : `ps exited ${code}`
+        )
+      );
+    });
+  });
+
+const reasonOf = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
 
 const signalPid = (pid: number, sig: NodeJS.Signals): void => {
   try {
@@ -210,6 +256,14 @@ export class SessiondServer {
   readonly #conns = new Set<Conn>();
   /** commandId → the ack it settled with. A re-delivery is re-acked, never re-run. */
   readonly #settled = new Map<string, Settled>();
+  /**
+   * commandId → the settlement of a verb still waiting on a process-table
+   * reading. A re-delivery meanwhile is answered with the same settlement,
+   * never run a second time.
+   */
+  readonly #running = new Map<string, Promise<SessiondAck>>();
+  /** A survey's reading is still out: the clock does not start a second. */
+  #surveyInFlight = false;
   /** The sweeps still giving an ended child's tree its grace ({@link #sweep}). */
   readonly #sweeps = new Set<ReturnType<typeof setTimeout>>();
   /** The clock every live child's tree is read on ({@link #survey}). */
@@ -236,8 +290,8 @@ export class SessiondServer {
    * state nothing downstream can recover from.
    */
   async listen(endpoint: string): Promise<void> {
-    mkdirSync(dirname(endpoint), { recursive: true, mode: 0o700 });
-    chmodSync(dirname(endpoint), 0o700);
+    await mkdir(dirname(endpoint), { recursive: true, mode: 0o700 });
+    await chmod(dirname(endpoint), 0o700);
     try {
       await this.#bind(endpoint);
     } catch (error) {
@@ -253,17 +307,35 @@ export class SessiondServer {
       await unlink(endpoint);
       await this.#bind(endpoint);
     }
-    chmodSync(endpoint, 0o600);
+    await chmod(endpoint, 0o600);
     this.#endpoint = endpoint;
     this.#surveying = setInterval(() => {
-      const alive = [...this.#procs.values()].filter((proc) => proc.alive);
-      if (alive.length === 0) {
+      if (
+        // biome-ignore lint/suspicious/noUnnecessaryConditions: set true below and false in the reading's `finally`; biome's inference sees only the initializer
+        this.#surveyInFlight ||
+        ![...this.#procs.values()].some((proc) => proc.alive)
+      ) {
         return;
       }
-      const table = processTable();
-      for (const proc of alive) {
-        this.#survey(proc, table);
-      }
+      this.#surveyInFlight = true;
+      processTable()
+        .then((table) => {
+          // Read at the answer, not at the ask: a child that ended meanwhile
+          // has its tree from this reading only if it is still alive.
+          for (const proc of this.#procs.values()) {
+            if (proc.alive) {
+              this.#survey(proc, table);
+            }
+          }
+        })
+        .catch((error: unknown) => {
+          console.error(
+            `[sessiond] survey: the process table could not be read: ${reasonOf(error)}`
+          );
+        })
+        .finally(() => {
+          this.#surveyInFlight = false;
+        });
     }, SURVEY_INTERVAL_MS);
   }
 
@@ -380,9 +452,15 @@ export class SessiondServer {
         this.#send(conn, prior);
         return;
       }
+      const running = this.#running.get(commandId);
+      if (running) {
+        // biome-ignore lint/complexity/noVoid: the settlement never rejects (see #settleLater)
+        void running.then((settled) => this.#send(conn, settled));
+        return;
+      }
     }
 
-    let settlement: SessiondAck;
+    let settlement: SessiondAck | Promise<SessiondAck>;
     switch (type) {
       case "spawn":
         settlement = this.#spawn(
@@ -419,10 +497,45 @@ export class SessiondServer {
         );
         return;
     }
+    if (settlement instanceof Promise) {
+      this.#settleLater(conn, commandId, settlement);
+      return;
+    }
+    this.#settle(conn, commandId, settlement);
+  }
+
+  #settle(conn: Conn, commandId: string, settlement: SessiondAck): void {
     if (commandId) {
       this.#settled.set(commandId, { ack: settlement, at: this.#now() });
     }
     this.#send(conn, settlement);
+  }
+
+  /**
+   * A verb that reads the process table first settles when the reading is in.
+   * A reading that fails settles the command as failed, with the reason: the
+   * agent learns its signal reached nobody rather than that it landed.
+   */
+  #settleLater(
+    conn: Conn,
+    commandId: string,
+    pending: Promise<SessiondAck>
+  ): void {
+    const settled = pending.catch((error: unknown) =>
+      ack(
+        commandId,
+        "failed",
+        `the process table could not be read: ${reasonOf(error)}`
+      )
+    );
+    if (commandId) {
+      this.#running.set(commandId, settled);
+    }
+    // biome-ignore lint/complexity/noVoid: `settled` never rejects
+    void settled.then((settlement) => {
+      this.#running.delete(commandId);
+      this.#settle(conn, commandId, settlement);
+    });
   }
 
   #lookupSettled(commandId: string): SessiondAck | undefined {
@@ -456,7 +569,13 @@ export class SessiondServer {
     // (the kill-and-replace semantics it has today); the dedup map above is
     // what keeps a mere retry from landing here.
     if (existing?.alive) {
-      this.#signalTree(existing, "SIGKILL");
+      // The kill lands once its tree is read; the successor starts now, under
+      // its own process group, so nothing of it is in what gets killed.
+      this.#signalTree(existing, "SIGKILL").catch((error: unknown) => {
+        console.error(
+          `[sessiond] ${procId}: the replaced child's tree could not be read, so it was not killed: ${reasonOf(error)}`
+        );
+      });
     }
 
     // biome-ignore lint/suspicious/noUnnecessaryConditions: spec is agent-side and opaque (§3.2) — the ProcSpec type promises args, the wire does not
@@ -511,25 +630,43 @@ export class SessiondServer {
     return ack(commandId, "applied");
   }
 
-  #signal(commandId: string, procId: string, sig: NodeJS.Signals): SessiondAck {
+  #signal(
+    commandId: string,
+    procId: string,
+    sig: NodeJS.Signals
+  ): SessiondAck | Promise<SessiondAck> {
     const proc = this.#procs.get(procId);
     if (!proc?.alive) {
       return ack(commandId, "failed", `signal: ${procId} is not alive`);
     }
-    this.#signalTree(proc, sig);
-    return ack(commandId, "applied");
+    return this.#signalTree(proc, sig).then(() => ack(commandId, "applied"));
   }
 
-  #stdinEnd(commandId: string, procId: string): SessiondAck {
+  #stdinEnd(
+    commandId: string,
+    procId: string
+  ): SessiondAck | Promise<SessiondAck> {
     const proc = this.#procs.get(procId);
     if (!proc?.alive) {
       return ack(commandId, "failed", `stdin_end: ${procId} is not alive`);
     }
     // Read before the child starts to go: what it started is its own only
-    // while it is still there to be their ancestor.
-    this.#survey(proc);
-    proc.child.stdin.end();
-    return ack(commandId, "applied");
+    // while it is still there to be their ancestor. The end waits for the
+    // reading; a reading that fails still ends stdin, since closing it is the
+    // harness's own graceful way out and needs no tree.
+    return this.#readTree(proc).then(
+      () => {
+        proc.child.stdin.end();
+        return ack(commandId, "applied");
+      },
+      (error: unknown) => {
+        proc.child.stdin.end();
+        console.error(
+          `[sessiond] ${procId}: its tree could not be read before stdin closed: ${reasonOf(error)}`
+        );
+        return ack(commandId, "applied");
+      }
+    );
   }
 
   // ---------------------------------------------------------------- the tree
@@ -550,7 +687,7 @@ export class SessiondServer {
    * one the kernel kills for memory is asked nothing first, and what it had
    * started is known only from the reading before.
    */
-  #survey(proc: Proc, table: Listed[] = processTable()): number[] {
+  #survey(proc: Proc, table: Listed[]): number[] {
     const root = proc.child.pid ?? -1;
     const byParent = new Map<number, Listed[]>();
     for (const row of table) {
@@ -586,9 +723,14 @@ export class SessiondServer {
     return [...running.keys()];
   }
 
+  /** {@link #survey} on a fresh reading of the process table. */
+  async #readTree(proc: Proc): Promise<number[]> {
+    return this.#survey(proc, await processTable());
+  }
+
   /** A signal for the child reaches everything it started. */
-  #signalTree(proc: Proc, sig: NodeJS.Signals): void {
-    for (const pid of this.#survey(proc)) {
+  async #signalTree(proc: Proc, sig: NodeJS.Signals): Promise<void> {
+    for (const pid of await this.#readTree(proc)) {
       signalPid(pid, sig);
     }
   }
@@ -601,8 +743,8 @@ export class SessiondServer {
    * dozen working sessions the day this was written. Whatever is left is told
    * to end now, and killed after {@link SWEEP_GRACE_MS}.
    */
-  #sweep(proc: Proc): void {
-    const left = this.#survey(proc);
+  async #sweep(proc: Proc): Promise<void> {
+    const left = await this.#readTree(proc);
     if (left.length === 0) {
       return;
     }
@@ -611,7 +753,11 @@ export class SessiondServer {
     }
     const timer = setTimeout(() => {
       this.#sweeps.delete(timer);
-      this.#signalTree(proc, "SIGKILL");
+      this.#signalTree(proc, "SIGKILL").catch((error: unknown) => {
+        console.error(
+          `[sessiond] ${proc.procId}: what it started could not be read for the kill: ${reasonOf(error)}`
+        );
+      });
     }, SWEEP_GRACE_MS);
     this.#sweeps.add(timer);
   }
@@ -728,7 +874,11 @@ export class SessiondServer {
     proc.alive = false;
     proc.exitCode = code;
     proc.signal = signal;
-    this.#sweep(proc);
+    this.#sweep(proc).catch((error: unknown) => {
+      console.error(
+        `[sessiond] ${proc.procId}: what it started could not be read, so it was not swept: ${reasonOf(error)}`
+      );
+    });
     // A proc `#spawn` has already replaced under its id is nobody's session
     // any more: its exit, announced under that id, would land on the
     // successor's subscriber as the successor's own death.
@@ -764,8 +914,17 @@ export class SessiondServer {
    */
   async drain(graceMs = DRAIN_TIMEOUT_MS): Promise<void> {
     const alive = [...this.#procs.values()].filter((proc) => proc.alive);
+    if (alive.length > 0) {
+      const table = await processTable().catch((error: unknown) => {
+        console.error(
+          `[sessiond] drain: the process table could not be read before the children were told to end: ${reasonOf(error)}`
+        );
+      });
+      for (const proc of table ? alive : []) {
+        this.#survey(proc, table as Listed[]);
+      }
+    }
     for (const proc of alive) {
-      this.#survey(proc);
       try {
         proc.child.stdin.end();
       } catch {
@@ -782,8 +941,18 @@ export class SessiondServer {
       clearTimeout(timer);
     }
     this.#sweeps.clear();
-    for (const proc of this.#procs.values()) {
-      this.#signalTree(proc, "SIGKILL");
+    if (this.#procs.size === 0) {
+      return;
+    }
+    const table = await processTable().catch((error: unknown) => {
+      console.error(
+        `[sessiond] drain: the process table could not be read for the final kill; what the children started may outlive them: ${reasonOf(error)}`
+      );
+    });
+    for (const proc of table ? this.#procs.values() : []) {
+      for (const pid of this.#survey(proc, table as Listed[])) {
+        signalPid(pid, "SIGKILL");
+      }
     }
   }
 

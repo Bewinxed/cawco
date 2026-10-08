@@ -104,7 +104,11 @@ async function takeLock(version: string): Promise<boolean> {
       // biome-ignore lint/performance/noAwaitInLoops: at most one retry, after clearing a stale lock
       const handle = await open(lockPath(), "wx", 0o600);
       await handle.writeFile(
-        JSON.stringify({ ...ownIdentity(), startedAt: Date.now(), version })
+        JSON.stringify({
+          ...(await ownIdentity()),
+          startedAt: Date.now(),
+          version,
+        })
       );
       await handle.close();
       return true;
@@ -116,7 +120,7 @@ async function takeLock(version: string): Promise<boolean> {
         await readFile(lockPath(), "utf8").catch(() => "{}")
       ) as Parameters<typeof markerIsLive>[0];
       // Live only if that very process is still running: a killed helper's pid may be reused.
-      if (markerIsLive(held)) {
+      if (await markerIsLive(held)) {
         return false;
       }
       await rm(lockPath(), { force: true });
@@ -196,7 +200,7 @@ async function migrationRunning(db: string | undefined): Promise<boolean> {
   const marker = JSON.parse(
     await readFile(`${db}.migrating`, "utf8").catch(() => "{}")
   );
-  return markerIsLive(marker);
+  return await markerIsLive(marker);
 }
 
 async function readStaged(version: string): Promise<ReleaseManifest> {

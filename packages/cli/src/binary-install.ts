@@ -87,7 +87,8 @@ async function awaitJoined(hubUrl: string): Promise<void> {
 async function offerTools(ask: boolean): Promise<boolean> {
   let installed = false;
   try {
-    for (const item of probeCapabilities().items) {
+    const { items } = await probeCapabilities();
+    for (const item of items) {
       if (item.available) {
         console.log(
           `${item.id}: found${item.version ? ` ${item.version}` : ""}`

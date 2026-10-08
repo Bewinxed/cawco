@@ -143,6 +143,73 @@ export const probeEndpoint = (
   });
 
 /**
+ * What one dial learned of the keeper: whether its `welcome` came, and if not,
+ * how far the dial got. The keeper writes its welcome in the same turn of its
+ * loop as the accept, so any answer but a welcome, from a keeper the service
+ * manager says is running, is a loop that is not turning: one whose backlog
+ * filled refuses or never completes a connect, one that still accepts says
+ * nothing.
+ */
+export interface KeeperDial {
+  answered: boolean;
+  /** How the dial ended, in words for the log: `accepted, no welcome in 10000ms`. */
+  detail: string;
+}
+
+const WELCOME_LINE = /"type"\s*:\s*"welcome"/;
+
+/** One dial of the keeper, waiting `timeoutMs` for its welcome. */
+export const dialKeeper = (
+  endpoint: string,
+  timeoutMs: number
+): Promise<KeeperDial> =>
+  new Promise((resolve) => {
+    // Listeners before the dial, as in {@link probeEndpoint}.
+    const socket = new Socket();
+    let connected = false;
+    let buffer = "";
+    const settle = (answered: boolean, detail: string): void => {
+      clearTimeout(timer);
+      socket.destroy();
+      resolve({ answered, detail });
+    };
+    const timer = setTimeout(
+      () =>
+        settle(
+          false,
+          connected
+            ? `accepted, no welcome in ${timeoutMs}ms`
+            : `connect did not complete in ${timeoutMs}ms`
+        ),
+      timeoutMs
+    );
+    socket.setEncoding("utf8");
+    socket.once("connect", () => {
+      connected = true;
+    });
+    socket.on("data", (chunk: string) => {
+      buffer += chunk;
+      const nl = buffer.indexOf("\n");
+      if (nl >= 0) {
+        const first = buffer.slice(0, nl);
+        settle(
+          WELCOME_LINE.test(first),
+          WELCOME_LINE.test(first) ? "welcome" : "first line was not a welcome"
+        );
+      }
+    });
+    socket.once("error", (error: NodeJS.ErrnoException) =>
+      settle(
+        false,
+        connected
+          ? `accepted, then ${error.code ?? error.message}`
+          : `connect failed: ${error.code ?? error.message}`
+      )
+    );
+    socket.connect(endpoint);
+  });
+
+/**
  * Defined only in the published package's bundle (scripts/build-binary.ts),
  * where this module is `cli.js` itself and sessiond is its `sessiond` verb.
  */

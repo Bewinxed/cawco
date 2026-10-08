@@ -166,7 +166,7 @@ export async function helperIsLive(): Promise<boolean> {
   const lock = await readJson<Parameters<typeof markerIsLive>[0]>(
     lockFilePath()
   );
-  return lock !== undefined && markerIsLive(lock);
+  return lock !== undefined && (await markerIsLive(lock));
 }
 
 /**
@@ -199,7 +199,7 @@ export async function prune(): Promise<void> {
   if (lock && (await helperIsLive())) {
     add(lock.version);
   }
-  for (const version of versionsInUse(binaryRoot())) {
+  for (const version of await versionsInUse(binaryRoot())) {
     add(version);
   }
   const versions = join(binaryRoot(), "versions");

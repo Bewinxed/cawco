@@ -218,6 +218,26 @@ export interface BinaryUpdateState {
   installedVersion: string;
   /** The build the session keeper could not start on; not retried by itself. */
   keeperFailedVersion?: string;
+  /**
+   * The last time the agent found the session keeper wedged (alive, socket
+   * open, no welcome) and restarted it, which ended every session it held.
+   * The event a notice announces, as `keeper:<machineId>:<at>`; the next
+   * restart replaces it.
+   */
+  keeperRestart?: {
+    /** When the wedge was called, in milliseconds: the restart's identity. */
+    at: number;
+    /** Processes the keeper held, each a session or a helper, ended with it. */
+    children: number;
+    /** Where what the keeper was doing was saved, on that machine. */
+    diagnostics: string;
+    /** Dials in a row that got no welcome. */
+    dials: number;
+    /** The wedged keeper's pid. */
+    pid: number;
+    /** From the first silent dial to the call. */
+    silentForMs: number;
+  };
   /** The last install or rollback that finished. */
   landed?: BinaryUpdateLanding;
   notes?: string;

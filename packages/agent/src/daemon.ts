@@ -24,6 +24,7 @@ import {
   CONTROL_WORKSPACE_MIGRATE,
   UPDATE_CAWCO,
 } from "@cawco/core";
+import { readInstallation } from "@cawco/core/binary-installation";
 import {
   AGENT_RESTARTING,
   type BinaryUpdateState,
@@ -48,6 +49,7 @@ import { harnesses } from "./harnesses";
 import type { PiHarness } from "./harnesses/pi";
 import { PI_AUTH_CHECK_INTERVAL_MS } from "./harnesses/pi-auth";
 import { cache as transcriptCache } from "./harnesses/transcript-cache";
+import { KeeperWatchdog, machineKeeper } from "./keeper-watchdog";
 import { endOrphanedSignIns, endSignIns } from "./login";
 import { startMcpGateway } from "./mcp-oauth";
 import { servingPreviews } from "./preview";
@@ -56,7 +58,7 @@ import { outbound, redactConsole } from "./redaction";
 import { fenced, setRestartSource } from "./restart";
 import { TranscriptSearchService } from "./search";
 import { resumableSessions, SessionSupervisor } from "./session";
-import { SessiondClient } from "./sessiond-client";
+import { SessiondClient, serviceManaged } from "./sessiond-client";
 import { probeTools } from "./tools";
 import { UsageScanner } from "./usage/scanner";
 import { abandonCommands, runWorkflowCommand } from "./workflow-command";
@@ -109,7 +111,7 @@ export interface RegisterPayload extends MachineIdentity {
   /** Custody is not attachment: these still need a handle before being listed live. */
   custody: SessionCustody;
   instances: string[];
-  machineCapabilities: ReturnType<typeof probeCapabilities>;
+  machineCapabilities: Awaited<ReturnType<typeof probeCapabilities>>;
   /**
    * The preview listeners this process is serving. A hub that restarted has
    * no targets and takes these as they are; one that only lost the socket
@@ -588,12 +590,16 @@ const attach = (
       readCustody(supervisor.stopSequence, supervisor.custodyInstanceIds)
     );
     const build = yield* Effect.promise(() => buildInfo());
+    // Read fresh for each registration this connection makes, never with a
+    // synchronous spawn (capabilities.ts).
+    const capabilities = () => probeCapabilities();
+    let machineCapabilities = yield* Effect.promise(capabilities);
     const registerPayload = (
       snapshot: Awaited<ReturnType<typeof readSessions>>
     ): RegisterPayload => ({
       ...identity,
       sessionAddresses: supervisor.sessionAddresses,
-      machineCapabilities: probeCapabilities(),
+      machineCapabilities,
       instances: supervisor.instanceIds,
       previews: servingPreviews(),
       custody: snapshot.custody,
@@ -639,6 +645,7 @@ const attach = (
         );
         registrationDeadline = setTimeout(async () => {
           if (awaitingRegisterAck && socket.readyState === WebSocket.OPEN) {
+            machineCapabilities = await capabilities();
             payload = registerPayload(await readSessions());
             if (!awaitingRegisterAck || socket.readyState !== WebSocket.OPEN) {
               return;
@@ -1233,7 +1240,7 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
     // reads this.
     let hubUrl = url;
     yield* Effect.acquireRelease(
-      Effect.sync(() => startMcpGateway(() => hubUrl)),
+      Effect.promise(() => startMcpGateway(() => hubUrl)),
       (listener) => Effect.sync(() => listener.stop(true))
     );
     // The claude harness's auth is the machine's headline word — the original
@@ -1325,6 +1332,26 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
     );
     yield* Effect.addFinalizer(() => Effect.sync(() => updater.stop()));
     yield* Effect.forkScoped(Effect.promise(() => updater.start()));
+
+    // A keeper that is alive and answers nobody is restarted through the
+    // service manager, which is the only thing that runs it on a managed
+    // machine; a hand-run `cawco up` owns its keeper and has no manager to ask.
+    const keeperService = serviceManaged() ? machineKeeper() : undefined;
+    if (keeperService) {
+      const watchdog = new KeeperWatchdog({
+        endpoint: process.env.CAWCO_SESSIOND_ENDPOINT ?? sessiondEndpoint(),
+        service: keeperService,
+        log: (line) => Effect.runFork(Effect.logWarning(line)),
+        // The notice rides the update state, which a binary install keeps.
+        record: async (restart) => {
+          if (await readInstallation()) {
+            await updater.noteKeeperRestart(restart);
+          }
+        },
+      });
+      watchdog.start();
+      yield* Effect.addFinalizer(() => Effect.sync(() => watchdog.stop()));
+    }
 
     // Transcript search index: FTS5-backed BM25 search over transcripts.
     // Created once, syncs every 30s in the background, outlives reconnects.
@@ -1422,11 +1449,12 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
 export const runDaemon = (auth?: AuthState, rediscover = false): void => {
   // No log line prints a session credential.
   redactConsole();
-  // A daemon before this one that was killed or crashed left its logins
-  // waiting; nothing else could ever end them.
-  endOrphanedSignIns();
   const daemon = Effect.runFork(
-    startDaemon(auth, rediscover).pipe(
+    // A daemon before this one that was killed or crashed left its logins
+    // waiting; nothing else could ever end them. Ended before the daemon
+    // starts, so no login of this one is mistaken for one of those.
+    Effect.promise(() => endOrphanedSignIns()).pipe(
+      Effect.andThen(startDaemon(auth, rediscover)),
       Effect.catchDefect((error) =>
         Effect.logError(
           `[daemon] ${error instanceof Error ? error.message : String(error)}`

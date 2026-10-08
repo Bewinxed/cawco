@@ -1691,7 +1691,7 @@ export const hashHookMaterial = (hook: {
     ])
   );
 
-const make = (path: string): DbShape => {
+const make = async (path: string): Promise<DbShape> => {
   mkdirSync(dirname(path), { recursive: true });
   const db = drizzle(path);
   const {
@@ -1733,7 +1733,7 @@ const make = (path: string): DbShape => {
   const migrating = `${path}.migrating`;
   writeFileSync(
     migrating,
-    JSON.stringify({ ...ownIdentity(), startedAt: Date.now() })
+    JSON.stringify({ ...(await ownIdentity()), startedAt: Date.now() })
   );
   // Migrations rebuild tables, which SQLite does with foreign keys off; they
   // run in one transaction, where the pragma cannot change, so it is set on
@@ -5829,4 +5829,4 @@ const make = (path: string): DbShape => {
   };
 };
 
-export const DbLayer = Layer.effect(Db)(Effect.sync(() => make(DB_PATH)));
+export const DbLayer = Layer.effect(Db)(Effect.promise(() => make(DB_PATH)));

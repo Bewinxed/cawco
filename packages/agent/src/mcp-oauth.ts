@@ -209,7 +209,7 @@ async function restartRoute(request: Request): Promise<Response> {
 }
 
 /** One stable loopback endpoint for every harness and the browser's OAuth callback. */
-export const startMcpGateway = (hubUrl: () => string) => {
+export const startMcpGateway = async (hubUrl: () => string) => {
   const port = Number(
     process.env.CAWCO_MCP_CALLBACK_PORT ?? CAWCO_MCP_CALLBACK_PORT
   );
@@ -263,7 +263,7 @@ export const startMcpGateway = (hubUrl: () => string) => {
       // forwarding the port, not an agent, and saying "another agent" sent the
       // diagnosis the wrong way for an hour and a half.
       throw new Error(
-        `MCP gateway port 127.0.0.1:${port} is held by ${portHolder(port)}.`,
+        `MCP gateway port 127.0.0.1:${port} is held by ${await portHolder(port)}.`,
         { cause: error }
       );
     }

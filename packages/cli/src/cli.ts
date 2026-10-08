@@ -588,7 +588,7 @@ const run = async (argv: string[]): Promise<number> => {
       return 0;
     case "capabilities": {
       const { probeCapabilities } = await import("@cawco/agent/capabilities");
-      console.log(JSON.stringify(probeCapabilities(), null, 2));
+      console.log(JSON.stringify(await probeCapabilities(), null, 2));
       return 0;
     }
     case "up":

@@ -4,6 +4,12 @@
  * process runs or names (a session keeper's child whose CLI `--settings` carry
  * a hook under `versions/<v>/` needs that folder for as long as it lives), and
  * the agent, which names the process holding a port it cannot bind.
+ *
+ * macOS is read with `ps` and `lsof`, always through an async spawn: both run
+ * on the agent's loop (prune at a confirmed trial, the gateway's bind), and a
+ * synchronous spawn under Bun waits on a private loop whose handle swap
+ * misplaces the process's own polls (oven-sh/bun#34069): the session keeper
+ * sat wedged on one for 35 minutes.
  */
 import {
   existsSync,
@@ -74,62 +80,67 @@ function linuxProcesses(): LiveProcess[] {
     });
 }
 
-function macProcesses(): LiveProcess[] {
-  const listed = Bun.spawnSync(["ps", "-axww", "-o", "pid=,command="], {
-    stdout: "pipe",
-    stderr: "ignore",
-  });
-  // Every process's text segments at once: the executable is the first, and a
-  // build started through a link shows here by the folder it really lives in.
-  const texts = Bun.spawnSync(["lsof", "-nP", "-w", "-d", "txt", "-Fpn"], {
-    stdout: "pipe",
-    stderr: "ignore",
-  });
+/** What a command prints on stdout, read without holding the loop. */
+const printed = async (argv: string[]): Promise<string> => {
+  const child = Bun.spawn(argv, { stdout: "pipe", stderr: "ignore" });
+  const [text] = await Promise.all([
+    new Response(child.stdout).text(),
+    child.exited,
+  ]);
+  return text;
+};
+
+async function macProcesses(): Promise<LiveProcess[]> {
+  const [listed, texts] = await Promise.all([
+    printed(["ps", "-axww", "-o", "pid=,command="]),
+    // Every process's text segments at once: the executable is the first, and a
+    // build started through a link shows here by the folder it really lives in.
+    printed(["lsof", "-nP", "-w", "-d", "txt", "-Fpn"]),
+  ]);
   const images = new Map<number, string[]>();
   let pid = 0;
-  for (const line of texts.stdout.toString().split("\n")) {
+  for (const line of texts.split("\n")) {
     if (line.startsWith("p")) {
       pid = Number(line.slice(1));
     } else if (line.startsWith("n")) {
       images.set(pid, [...(images.get(pid) ?? []), line.slice(1)]);
     }
   }
-  return listed.stdout
-    .toString()
-    .split("\n")
-    .flatMap((line) => {
-      const match = PS_ROW.exec(line);
-      if (!match) {
-        return [];
-      }
-      const command = match[2] ?? "";
-      const file = SETTINGS_FILE.exec(command)?.[1];
-      return [
-        {
-          pid: Number(match[1]),
-          command,
-          images: images.get(Number(match[1])) ?? [],
-          settingsFile: file && existsSync(file) ? file : undefined,
-        },
-      ];
-    });
+  return listed.split("\n").flatMap((line) => {
+    const match = PS_ROW.exec(line);
+    if (!match) {
+      return [];
+    }
+    const command = match[2] ?? "";
+    const file = SETTINGS_FILE.exec(command)?.[1];
+    return [
+      {
+        pid: Number(match[1]),
+        command,
+        images: images.get(Number(match[1])) ?? [],
+        settingsFile: file && existsSync(file) ? file : undefined,
+      },
+    ];
+  });
 }
 
 /** Every process this user can see, now. */
-export const liveProcesses = (): LiveProcess[] =>
-  process.platform === "linux" ? linuxProcesses() : macProcesses();
+export const liveProcesses = (): Promise<LiveProcess[]> =>
+  process.platform === "linux"
+    ? Promise.resolve(linuxProcesses())
+    : macProcesses();
 
 /**
  * The builds under `<root>/versions/` that a live process runs or names: its
  * executable, its command line, and the settings file its command line names.
  * Read from what is running, never from a count of builds to keep.
  */
-export function versionsInUse(root: string): Set<string> {
+export async function versionsInUse(root: string): Promise<Set<string>> {
   const prefixes = [
     ...new Set([root, readOr(() => realpathSync(root)) ?? root]),
   ].map((path) => `${join(path, "versions")}/`);
   const used = new Set<string>();
-  for (const one of liveProcesses()) {
+  for (const one of await liveProcesses()) {
     const texts = [
       one.command,
       ...one.images,
@@ -184,18 +195,15 @@ function socketOwners(inodes: readonly string[]): number[] {
     .map(Number);
 }
 
-const commandOf = (pid: number): string =>
+const commandOf = async (pid: number): Promise<string> =>
   process.platform === "linux"
     ? (readOr(() => readFileSync(`/proc/${pid}/cmdline`, "utf8")) ?? "")
         .split("\0")
         .filter((arg) => arg !== "")
         .join(" ")
-    : Bun.spawnSync(["ps", "-ww", "-o", "command=", "-p", String(pid)], {
-        stdout: "pipe",
-        stderr: "ignore",
-      })
-        .stdout.toString()
-        .trim();
+    : (
+        await printed(["ps", "-ww", "-o", "command=", "-p", String(pid)])
+      ).trim();
 
 /**
  * Who listens on TCP `port` here, in words: each holder's pid and command
@@ -203,7 +211,7 @@ const commandOf = (pid: number): string =>
  * finds the process that has it open under `/proc/<pid>/fd`; macOS asks
  * `lsof -nP -iTCP:<port> -sTCP:LISTEN`.
  */
-export function portHolder(port: number): string {
+export async function portHolder(port: number): Promise<string> {
   let pids: number[];
   let unseen = "";
   if (process.platform === "linux") {
@@ -213,14 +221,16 @@ export function portHolder(port: number): string {
       unseen = `a process this user cannot see (socket inode ${inodes.join(", ")})`;
     }
   } else {
-    const listed = Bun.spawnSync(
-      ["lsof", "-nP", `-iTCP:${port}`, "-sTCP:LISTEN", "-Fp"],
-      { stdout: "pipe", stderr: "ignore" }
-    );
+    const listed = await printed([
+      "lsof",
+      "-nP",
+      `-iTCP:${port}`,
+      "-sTCP:LISTEN",
+      "-Fp",
+    ]);
     pids = [
       ...new Set(
-        listed.stdout
-          .toString()
+        listed
           .split("\n")
           .filter((line) => line.startsWith("p"))
           .map((line) => Number(line.slice(1)))
@@ -230,7 +240,11 @@ export function portHolder(port: number): string {
   if (pids.length === 0) {
     return unseen || "no process this user can see";
   }
-  return pids
-    .map((pid) => `pid ${pid} (${commandOf(pid) || "no command line"})`)
-    .join("; ");
+  const holders = await Promise.all(
+    pids.map(
+      async (pid) =>
+        `pid ${pid} (${(await commandOf(pid)) || "no command line"})`
+    )
+  );
+  return holders.join("; ");
 }

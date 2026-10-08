@@ -443,6 +443,13 @@ export class BinaryUpdater {
     await rm(keeperRecoveredPath(), { force: true });
   }
 
+  /** The keeper watchdog restarted a wedged keeper: the dashboard says so once. */
+  async noteKeeperRestart(
+    restart: NonNullable<BinaryUpdateState["keeperRestart"]>
+  ): Promise<void> {
+    await this.#set({ keeperRestart: restart });
+  }
+
   /**
    * Every ten seconds: take up what the helper wrote, so the hub learns the
    * phase has moved on; see that an open trial has a decider; take up a keeper

@@ -113,9 +113,8 @@ const readMarker = (account: string): LoginMarker | undefined =>
     ? (JSON.parse(readFileSync(markerFile(account), "utf8")) as LoginMarker)
     : undefined;
 
-const markLogin = (account: string, pid: number): void => {
-  const procStart = processStart(pid);
-  const boot = bootId();
+const markLogin = async (account: string, pid: number): Promise<void> => {
+  const [procStart, boot] = await Promise.all([processStart(pid), bootId()]);
   const marker: LoginMarker = {
     pid,
     ...(procStart ? { procStart } : {}),
@@ -136,13 +135,14 @@ const unmarkLogin = (account: string, pid: number): void => {
  * (its marker names a live process with the same start time), and drops
  * every marker.
  */
-export const endOrphanedSignIns = (): void => {
+export const endOrphanedSignIns = async (): Promise<void> => {
   for (const account of accountIds()) {
     const marker = readMarker(account);
     if (!marker) {
       continue;
     }
-    if (markerIsLive(marker)) {
+    // biome-ignore lint/performance/noAwaitInLoops: one marker per account, each read and ended before the next
+    if (await markerIsLive(marker)) {
       try {
         process.kill(marker.pid, "SIGTERM");
       } catch (error) {
@@ -238,7 +238,7 @@ const beginSignIn = async (
   const current = signIn;
   if (account !== null) {
     const { pid } = current.child;
-    markLogin(account, pid);
+    await markLogin(account, pid);
     // biome-ignore lint/complexity/noVoid: the marker goes however the login ends; nothing waits on it
     void current.child.exited.then(() => unmarkLogin(account, pid));
   }
