@@ -4,9 +4,9 @@
  * one row; it takes a seat under its purchase ({@link Seats}). Each enroll
  * keeps it 30 more days, or to the free week's end when that is sooner; then
  * its alarm wipes it and gives the seat back (as does removing the device in
- * CawCo, through `/v1/unenroll`). So a refunded purchase stops
- * within 30 days, a free week stops when it ends, and an active buyer,
- * re-enrolling on every launch, never lapses.
+ * CawCo, through `/v1/unenroll`). A refunded purchase stops at once: Apple's
+ * notification wipes its pairings ({@link Pairing.revoked}). A free week stops
+ * when it ends, and an active buyer, re-enrolling on every launch, never lapses.
  */
 import { DurableObject } from "cloudflare:workers";
 import type { ApnsEnvironment } from "./apns";
@@ -51,8 +51,8 @@ export interface Enrollment {
   readonly transactionEnvironment: TransactionEnvironment;
 }
 
-/** `held`: under another secret; `full`: the purchase has no seat left. */
-export type Enrolled = "enrolled" | "held" | "full";
+/** `held`: under another secret; `full`: the purchase has no seat left; `revoked`: it was refunded. */
+export type Enrolled = "enrolled" | "held" | "full" | "revoked";
 
 export type Claim =
   | {
@@ -100,13 +100,13 @@ export class Pairing extends DurableObject<Env> {
       if (held && !same(held.secret_hash, next.secretHash)) {
         return "held";
       }
-      if (held?.seat !== next.seat) {
-        if (!(await this.seats(next.seat).take(this.me))) {
-          return "full";
-        }
-        if (held) {
-          await this.seats(held.seat).release(this.me);
-        }
+      // Taken on every enroll, held already or not: a refunded purchase refuses its own devices too.
+      const taken = await this.seats(next.seat).take(this.me);
+      if (taken !== "taken") {
+        return taken;
+      }
+      if (held && held.seat !== next.seat) {
+        await this.seats(held.seat).release(this.me);
       }
       const now = Date.now();
       if (held) {
@@ -173,6 +173,11 @@ export class Pairing extends DurableObject<Env> {
       await this.wipe();
       return true;
     });
+  }
+
+  /** Its purchase was refunded or revoked (Apple's notification): the pairing goes now. */
+  async revoked(): Promise<void> {
+    await this.ctx.blockConcurrencyWhile(() => this.wipe());
   }
 
   override async alarm(): Promise<void> {

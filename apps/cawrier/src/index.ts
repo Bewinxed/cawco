@@ -8,8 +8,11 @@
  * POST /v1/push    Authorization: Bearer <secret>; { pairingId, collapseId?, expiration?, payload }
  * POST /v1/unenroll Authorization: Bearer <secret>; { pairingId }: the pairing and its seat go
  * GET  /v1/health  one APNs probe: proves outbound HTTP/2 to Apple and the key
- * POST /v1/experiment/event  { experiment, variant, event }: one anonymous count
+ * POST /v1/apple/notifications  { signedPayload }: App Store Server Notifications V2
  * GET  /v1/experiment/<name> Authorization: Bearer <EXPERIMENT_READ_TOKEN>: the counts
+ *
+ * The paywall experiment is counted from Apple's notifications only; the app
+ * sends Cawrier nothing for it (App Review 5.1.1(ii)).
  */
 import {
   type ApnsAnswer,
@@ -17,9 +20,13 @@ import {
   hasKey,
   sendApns,
 } from "./apns";
-import { EVENTS, type ExperimentEvent } from "./experiment";
+import type { ExperimentEvent } from "./experiment";
 import { SEATS_PER_PURCHASE } from "./seats";
-import { verifyPurchase } from "./storekit";
+import {
+  type Notification,
+  verifyNotification,
+  verifyPurchase,
+} from "./storekit";
 
 // biome-ignore lint/performance/noBarrelFile: Workers find a Durable Object class among the entry module's exports.
 export { Experiment } from "./experiment";
@@ -35,6 +42,8 @@ const DEVICE_TOKEN = /^[0-9a-f]{64,200}$/;
 /** APNs' limit on an alert's payload. */
 const MAX_PAYLOAD_BYTES = 4096;
 const MAX_BODY_BYTES = 32_768;
+/** A notification carries a signed payload with signed transaction and renewal info inside. */
+const MAX_NOTIFICATION_BYTES = 65_536;
 const HEALTH_TTL_MS = 60_000;
 
 const json = (status: number, body: unknown): Response =>
@@ -62,9 +71,16 @@ const matches = (value: unknown, pattern: RegExp): value is string =>
   typeof value === "string" && pattern.test(value);
 
 /** The body as an object, or undefined when it is too big or not a JSON object. */
-const bodyOf = async (request: Request): Promise<Body | undefined> => {
+const bodyOf = async (
+  request: Request,
+  maxBytes = MAX_BODY_BYTES
+): Promise<Body | undefined> => {
+  const declared = Number(request.headers.get("content-length") ?? 0);
+  if (declared > maxBytes) {
+    return undefined;
+  }
   const text = await request.text();
-  if (bytes(text) > MAX_BODY_BYTES) {
+  if (bytes(text) > maxBytes) {
     return undefined;
   }
   let parsed: unknown;
@@ -166,6 +182,10 @@ const enroll = async (request: Request, env: Env): Promise<Response> => {
   if (enrolled === "held") {
     return refuse(409, "This pairing is held under another secret.");
   }
+  if (enrolled === "revoked") {
+    console.log("enroll 403: the purchase was refunded");
+    return refuse(403, "This purchase was refunded.");
+  }
   if (enrolled === "full") {
     console.log("enroll 409: every seat on the purchase is taken");
     return refuse(
@@ -244,57 +264,149 @@ const unenroll = async (request: Request, env: Env): Promise<Response> => {
     : refuse(401, "No pairing holds this id and secret.");
 };
 
-/** `EXPERIMENTS`: "name:variant,variant;name:variant,…" as a map from name to its variants. */
-const experimentsOf = (env: Env): Map<string, string[]> =>
-  new Map(
-    env.EXPERIMENTS.split(";").map((entry) => {
-      const [name = "", variants = ""] = entry.split(":");
-      return [
-        name.trim(),
-        variants
-          .split(",")
-          .map((variant) => variant.trim())
-          .filter(Boolean),
-      ];
-    })
-  );
+interface Variant {
+  readonly experiment: string;
+  readonly variant: string;
+}
+
+/**
+ * `EXPERIMENT_TOKENS`: "name:variant=token,variant=token;name:…", the fixed
+ * `appAccountToken` each paywall variant hands StoreKit. Read as the variants
+ * of each experiment, and the variant each token names.
+ */
+const experimentsOf = (
+  env: Env
+): { byName: Map<string, string[]>; byToken: Map<string, Variant> } => {
+  const byName = new Map<string, string[]>();
+  const byToken = new Map<string, Variant>();
+  for (const entry of env.EXPERIMENT_TOKENS.split(";")) {
+    const [name = "", pairs = ""] = entry.split(":").map((part) => part.trim());
+    if (!name) {
+      continue;
+    }
+    const variants: string[] = [];
+    for (const pair of pairs.split(",")) {
+      const [variant = "", token = ""] = pair
+        .split("=")
+        .map((part) => part.trim());
+      if (variant && UUID.test(token.toLowerCase())) {
+        variants.push(variant);
+        byToken.set(token.toLowerCase(), { experiment: name, variant });
+      }
+    }
+    byName.set(name, variants);
+  }
+  return { byName, byToken };
+};
 
 const experiment = (env: Env, name: string) =>
   env.EXPERIMENT.get(env.EXPERIMENT.idFromName(name));
 
-/** One anonymous count. The address is the rate limit's key only; nothing stores it. */
-const experimentEvent = async (
+const seats = (env: Env, seat: string) =>
+  env.SEATS.get(env.SEATS.idFromName(seat));
+
+type Verified = Extract<Notification, { ok: true }>;
+
+/** What a purchase counts as under its variant, or nothing. */
+const eventOf = (env: Env, productId: string | undefined) => {
+  if (productId === env.TRIAL_PRODUCT_ID) {
+    return "trial";
+  }
+  const pro = env.PRO_PRODUCT_IDS.split(",").map((id) => id.trim());
+  return productId && pro.includes(productId) ? "bought" : undefined;
+};
+
+/**
+ * A completed purchase (`ONE_TIME_CHARGE`): counted under the variant its
+ * verified transaction's `appAccountToken` names, once per notification and
+ * never over a refund. Family Sharing grants are not purchases and count nothing.
+ */
+const charged = async (env: Env, notice: Verified): Promise<string> => {
+  const { transaction } = notice;
+  const variant = experimentsOf(env).byToken.get(
+    transaction?.appAccountToken?.toLowerCase() ?? ""
+  );
+  const event: ExperimentEvent | undefined = eventOf(
+    env,
+    transaction?.productId
+  );
+  if (
+    !(transaction?.originalTransactionId && variant && event) ||
+    transaction.inAppOwnershipType !== "PURCHASED"
+  ) {
+    return "not counted";
+  }
+  return await experiment(env, variant.experiment).charge({
+    uuid: notice.uuid,
+    transactionKey: `${notice.environment}:${transaction.originalTransactionId}`,
+    variant: variant.variant,
+    event,
+    purchasedAt: transaction.purchaseDate ?? notice.signedAt,
+    signedAt: notice.signedAt,
+  });
+};
+
+/**
+ * A refund or revocation: terminal, in whatever order it arrives. The
+ * purchase is marked revoked under its seats, every pairing on it is wiped
+ * (each gives its seat back as it goes, so a retry finds the rest), and it
+ * comes out of every experiment's counts.
+ */
+const revoked = async (env: Env, notice: Verified): Promise<string> => {
+  const original = notice.transaction?.originalTransactionId;
+  if (!original) {
+    return "no transaction";
+  }
+  const transactionKey = `${notice.environment}:${original}`;
+  const pairings = await seats(env, transactionKey).revoke();
+  await Promise.all(
+    pairings.map((id) =>
+      env.PAIRING.get(env.PAIRING.idFromString(id)).revoked()
+    )
+  );
+  await Promise.all(
+    [...experimentsOf(env).byName.keys()].map((name) =>
+      experiment(env, name).revoke({
+        uuid: notice.uuid,
+        transactionKey,
+        signedAt: notice.signedAt,
+      })
+    )
+  );
+  return `revoked, ${pairings.length} pairing(s) wiped`;
+};
+
+/**
+ * App Store Server Notifications V2. The signed payload and the transaction
+ * inside it are verified against Apple's root, for bundle dev.cawco.app, in
+ * Production or the sandbox; anything else is refused. Types not handled
+ * here answer 200 so Apple does not retry them.
+ */
+const appleNotification = async (
   request: Request,
   env: Env
 ): Promise<Response> => {
-  const ip = request.headers.get("cf-connecting-ip") ?? "unknown";
-  if (!(await env.EVENT_LIMIT.limit({ key: ip })).success) {
-    return refuse(
-      429,
-      "Too many events from this address. Try again in a minute."
-    );
+  const body = await bodyOf(request, MAX_NOTIFICATION_BYTES);
+  if (typeof body?.signedPayload !== "string") {
+    return refuse(400, "The notification is not in the shape Cawrier reads.");
   }
-  const body = await bodyOf(request);
-  const variants =
-    typeof body?.experiment === "string"
-      ? experimentsOf(env).get(body.experiment)
-      : undefined;
-  if (
-    !(
-      body &&
-      variants &&
-      typeof body.variant === "string" &&
-      variants.includes(body.variant) &&
-      (EVENTS as readonly unknown[]).includes(body.event)
-    )
-  ) {
-    return refuse(400, "The event is not one this experiment counts.");
+  const notice = await verifyNotification(env, body.signedPayload);
+  if (!notice.ok) {
+    console.log(`notification 400: ${notice.error}`);
+    return refuse(400, notice.error);
   }
-  await experiment(env, body.experiment as string).count(
-    body.variant,
-    body.event as ExperimentEvent
+  let outcome = "ignored";
+  if (notice.type === "ONE_TIME_CHARGE") {
+    outcome = await charged(env, notice);
+  } else if (notice.type === "REFUND" || notice.type === "REVOKE") {
+    outcome = await revoked(env, notice);
+  } else if (notice.type === "TEST") {
+    outcome = "verified";
+  }
+  console.log(
+    `notification ${notice.type} ${notice.environment} ${notice.uuid}: ${outcome}`
   );
-  return new Response(null, { status: 204 });
+  return json(200, { ok: true });
 };
 
 /** Constant-time over equal-length digests, so the token's length does not show either. */
@@ -326,7 +438,7 @@ const experimentReport = async (
   ) {
     return refuse(401, "The experiment's read token is missing or wrong.");
   }
-  const variants = experimentsOf(env).get(name);
+  const variants = experimentsOf(env).byName.get(name);
   if (!variants) {
     return refuse(404, "No experiment has that name.");
   }
@@ -370,8 +482,8 @@ export default {
     if (request.method === "GET" && pathname === "/v1/health") {
       return await healthCheck(env);
     }
-    if (request.method === "POST" && pathname === `${EXPERIMENT_PATH}event`) {
-      return await experimentEvent(request, env);
+    if (request.method === "POST" && pathname === "/v1/apple/notifications") {
+      return await appleNotification(request, env);
     }
     if (request.method === "GET" && pathname.startsWith(EXPERIMENT_PATH)) {
       return await experimentReport(

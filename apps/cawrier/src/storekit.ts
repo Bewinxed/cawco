@@ -1,6 +1,7 @@
 /**
  * A StoreKit 2 transaction (`Transaction.jwsRepresentation`) proves Pro or
- * the free week. Apple's own verifier checks it offline: the x5c chain to the
+ * the free week, and App Store Server Notifications V2 report purchases and
+ * refunds. Apple's own verifier checks both offline: the x5c chain to the
  * pinned Apple Root CA G3, the ES256 signature, the bundle id and the
  * environment. Here: which environment to check against, and what the
  * transaction must grant.
@@ -32,18 +33,117 @@ export type Purchase =
     }
   | { readonly ok: false; readonly error: string };
 
-/** The environment the transaction claims, read before its signature is checked against that environment. */
-const claimedEnvironment = (jws: string): unknown => {
+/** A notification's signed payload carries a signed transaction and renewal info; real ones are well under this. */
+const MAX_NOTIFICATION_CHARS = 64_000;
+
+type Transaction = Awaited<
+  ReturnType<SignedDataVerifier["verifyAndDecodeTransaction"]>
+>;
+
+/** A JWS's payload, read before its signature is checked: only to pick the environment to check it against. */
+const unverifiedPayload = (jws: string): Record<string, unknown> => {
   try {
     const payload = jws.split(".")[1] ?? "";
-    return (
-      JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as {
-        environment?: unknown;
-      }
-    ).environment;
+    const parsed: unknown = JSON.parse(
+      Buffer.from(payload, "base64url").toString("utf8")
+    );
+    return typeof parsed === "object" && parsed !== null
+      ? (parsed as Record<string, unknown>)
+      : {};
   } catch {
-    return undefined;
+    return {};
   }
+};
+
+const isEnvironment = (value: unknown): value is TransactionEnvironment =>
+  value === "Production" || value === "Sandbox";
+
+/**
+ * Apple's verifier for one environment: the x5c chain to the pinned root, the
+ * ES256 signature, and the payload's bundle id (`APNS_TOPIC`, dev.cawco.app),
+ * app id and environment. Loaded inside the request: its jsrsasign draws
+ * random values when it loads, which Workers refuse at global scope.
+ */
+const verifierFor = async (env: Env, environment: TransactionEnvironment) => {
+  const { Environment, SignedDataVerifier: Verifier } = await import(
+    "@apple/app-store-server-library"
+  );
+  return new Verifier(
+    [APPLE_ROOT_CA_G3],
+    false,
+    environment === "Production" ? Environment.PRODUCTION : Environment.SANDBOX,
+    env.APNS_TOPIC,
+    Number(env.APP_APPLE_ID)
+  );
+};
+
+export type Notification =
+  | {
+      readonly ok: true;
+      readonly environment: TransactionEnvironment;
+      /** Apple's signing time, ms epoch. */
+      readonly signedAt: number;
+      /** The signed transaction inside, verified the same way; absent on a TEST. */
+      readonly transaction: Transaction | undefined;
+      readonly type: string;
+      readonly uuid: string;
+    }
+  | { readonly ok: false; readonly error: string };
+
+/** An App Store Server Notification V2 (`signedPayload`), verified, with the transaction it carries verified too. */
+export const verifyNotification = async (
+  env: Env,
+  signedPayload: string
+): Promise<Notification> => {
+  if (signedPayload.length > MAX_NOTIFICATION_CHARS) {
+    return { ok: false, error: "The notification is too big." };
+  }
+  const data = unverifiedPayload(signedPayload).data as
+    | { environment?: unknown }
+    | undefined;
+  const environment = data?.environment;
+  if (!isEnvironment(environment)) {
+    return {
+      ok: false,
+      error: "The notification is not from the App Store or the sandbox.",
+    };
+  }
+  const verifier = await verifierFor(env, environment);
+  let notice: Awaited<
+    ReturnType<SignedDataVerifier["verifyAndDecodeNotification"]>
+  >;
+  try {
+    notice = await verifier.verifyAndDecodeNotification(signedPayload);
+  } catch {
+    return {
+      ok: false,
+      error: "Apple's signature on the notification does not hold.",
+    };
+  }
+  if (!(notice.notificationType && notice.notificationUUID)) {
+    return { ok: false, error: "The notification carries no type or id." };
+  }
+  let transaction: Transaction | undefined;
+  const signed = notice.data?.signedTransactionInfo;
+  if (signed) {
+    try {
+      transaction = await verifier.verifyAndDecodeTransaction(signed);
+    } catch {
+      return {
+        ok: false,
+        error:
+          "Apple's signature on the notification's transaction does not hold.",
+      };
+    }
+  }
+  return {
+    ok: true,
+    environment,
+    signedAt: notice.signedDate ?? Date.now(),
+    transaction,
+    type: notice.notificationType,
+    uuid: notice.notificationUUID,
+  };
 };
 
 export const verifyPurchase = async (
@@ -51,28 +151,17 @@ export const verifyPurchase = async (
   jws: string
 ): Promise<Purchase> => {
   const environment =
-    jws.length <= MAX_JWS_CHARS ? claimedEnvironment(jws) : undefined;
-  if (environment !== "Production" && environment !== "Sandbox") {
+    jws.length <= MAX_JWS_CHARS
+      ? unverifiedPayload(jws).environment
+      : undefined;
+  if (!isEnvironment(environment)) {
     return {
       ok: false,
       error: "The purchase is not an App Store or TestFlight transaction.",
     };
   }
-  // Loaded inside the request: its jsrsasign draws random values when it
-  // loads, which Workers refuse at global scope.
-  const { Environment, SignedDataVerifier: Verifier } = await import(
-    "@apple/app-store-server-library"
-  );
-  const verifier = new Verifier(
-    [APPLE_ROOT_CA_G3],
-    false,
-    environment === "Production" ? Environment.PRODUCTION : Environment.SANDBOX,
-    env.APNS_TOPIC,
-    Number(env.APP_APPLE_ID)
-  );
-  let transaction: Awaited<
-    ReturnType<SignedDataVerifier["verifyAndDecodeTransaction"]>
-  >;
+  const verifier = await verifierFor(env, environment);
+  let transaction: Transaction;
   try {
     transaction = await verifier.verifyAndDecodeTransaction(jws);
   } catch {
