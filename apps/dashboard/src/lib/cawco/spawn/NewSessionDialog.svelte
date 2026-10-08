@@ -1452,6 +1452,7 @@
     text-overflow: ellipsis;
   }
   .close {
+    --hit-edge: 1px;
     display: inline-flex;
     align-items: center;
     justify-content: center;

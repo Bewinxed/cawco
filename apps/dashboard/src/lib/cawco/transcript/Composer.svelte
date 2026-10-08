@@ -3383,6 +3383,7 @@
     }
   }
   .att-btn {
+    --hit-edge: 1px;
     border: 1px solid var(--border-control);
     background: var(--surface-raised);
     color: var(--ink-muted);
@@ -3542,6 +3543,7 @@
     max-width: 100%;
   }
   .doc-remove {
+    --hit-edge: 1px;
     position: absolute;
     /* The row pads by --space-1, so the corner sits inside its clip. */
     inset-block-start: calc(var(--space-1) * -1);

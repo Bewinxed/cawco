@@ -159,6 +159,7 @@
 
 /* DS Button (§5.1). */
 .ns-theme .ns-btn {
+  --hit-edge: 1px;
   display: inline-flex;
   align-items: center;
   justify-content: center;

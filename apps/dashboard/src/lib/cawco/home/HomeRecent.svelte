@@ -250,6 +250,7 @@
     gap: 2px;
   }
   .search {
+    --hit-edge: 1px;
     display: flex;
     align-items: center;
     gap: var(--space-2);

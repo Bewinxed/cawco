@@ -59,6 +59,7 @@
     text-overflow: ellipsis;
   }
   .copy {
+    --hit-edge: 1px;
     display: inline-flex;
     flex: none;
     align-items: center;

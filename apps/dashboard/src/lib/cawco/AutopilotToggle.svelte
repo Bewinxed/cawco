@@ -245,6 +245,7 @@
 
 <style>
   .ap-trigger {
+    --hit-edge: 1px;
     position: relative;
     width: var(--cin-ctl, 34px);
     height: var(--cin-ctl, 34px);

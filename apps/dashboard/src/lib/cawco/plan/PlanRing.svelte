@@ -39,6 +39,7 @@
 
 <style>
   .plan-ring {
+    --hit-edge: 1px;
     display: inline-flex;
     align-items: center;
     gap: var(--space-1);

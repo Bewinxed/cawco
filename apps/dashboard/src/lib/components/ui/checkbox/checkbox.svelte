@@ -16,7 +16,7 @@
   class={cn(
     "peer relative flex size-4 shrink-0 items-center",
     "justify-center rounded-[var(--radius-xs)] border",
-    "touch-hit border-input",
+    "touch-hit border-input [--hit-edge:1px]",
     "disabled:cursor-not-allowed disabled:opacity-50",
     "group-data-[disabled=true]/field:opacity-50",
     "aria-invalid:border-destructive",

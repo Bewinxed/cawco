@@ -327,6 +327,7 @@
      border takes the same share at 1.5×. Mixed in sRGB: the accent reads as
      if laid over the surface. */
   .chip {
+    --hit-edge: 1px;
     --tint: calc(8% + var(--conf) * 24%);
     display: inline-flex;
     align-items: center;

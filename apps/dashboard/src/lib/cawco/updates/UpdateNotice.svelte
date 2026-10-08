@@ -430,6 +430,7 @@
      the title keeps the whole width. A mouse finds it on hover or focus;
      touch, which has no hover and no swipe here, always sees it. */
   .x {
+    --hit-edge: 1px;
     position: absolute;
     inset-block-start: 6px;
     inset-inline-start: 6px;

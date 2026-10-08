@@ -26,7 +26,7 @@
       : "press-tint [transition:var(--transition-control)]",
     "flex w-fit data-[size=default]:h-9 data-[size=sm]:h-[30px]",
     "items-center justify-between gap-1.5 whitespace-nowrap",
-    "border border-[var(--border-control)]",
+    "border border-[var(--border-control)] [--hit-edge:1px]",
     "bg-[var(--surface-raised)] px-3 text-[var(--ink-strong)]",
     "text-body disabled:cursor-not-allowed",
     "disabled:opacity-50 aria-invalid:border-destructive",
