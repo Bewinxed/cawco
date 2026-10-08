@@ -1073,17 +1073,17 @@
     }
   }
   /* On a phone this row is the app's only bar (Shell, `.top.floating`): the
-     bar's height, the tabs standing on its floor (the list's own 4px pad and
-     32px tabs, 36px, under the row's top pad), and its two ends left to
-     the sidebar toggle (its 44px from the bar's 4px inset) and to Caw's head
-     (its 36px capsule from the bar's 7px inset), each with a 7px gap, so the
-     tabs scroll between them and never under. */
+     bar's height, the tabs standing on its floor (the tab row's height under
+     the row's top pad), and its two ends left to the sidebar toggle (its
+     44px from the bar's 4px inset) and to Caw's glass (the bar's control
+     height from its 7px inset), each with a 7px gap, so the tabs scroll
+     between them and never under. */
   @media (max-width: 899px) {
     :global(.session-tabs:not(.hosted)) {
       min-block-size: var(--c-top-bar-h);
-      padding-block-start: calc(var(--c-top-bar-h) - 36px);
+      padding-block-start: calc(var(--c-top-bar-h) - var(--c-tab-row-h));
       padding-inline: calc(var(--space-1) + 44px + var(--space-2))
-        calc(var(--space-2) + 36px + var(--space-2));
+        calc(var(--space-2) + var(--c-btn-h) + var(--space-2));
     }
   }
 

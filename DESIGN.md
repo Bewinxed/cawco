@@ -364,7 +364,7 @@ components:
     rounded: "{rounded.lg}"
   top-bar:
     backgroundColor: "{colors.surface-raised}"
-    height: "60px"
+    height: "44px"
   ledger-header:
     backgroundColor: "{colors.surface-band}"
     textColor: "{colors.ink-muted}"
@@ -605,7 +605,7 @@ The three dense roles (meta, label, body) keep one size at every width because t
 
 ## Layout
 
-The shell is a resizable rail (228px by default, the reader's own width wins), a 60px top bar with a 1px hairline, and a page on the recessed field. A page pads 25px on the inline start and 21px on the end, and the groups of a page (stat row, attention queue, cards) stand 18px apart. A page head is 96px from the bar to the first group, with the title over its one-line description and the actions centred on the pair.
+The shell is a resizable rail (228px by default, the reader's own width wins), a 44px top bar with a 1px hairline at every width (the compact bar's height, Apple HIG Toolbars), and a page on the recessed field. A page pads 25px on the inline start and 21px on the end, and the groups of a page (stat row, attention queue, cards) stand 18px apart. A page head is 96px from the bar to the first group, with the title over its one-line description and the actions centred on the pair.
 
 **Spacing ladder.** 4, 7, 11, 14, 18, 21, 25 and 32px, measured off the reference comps. It is deliberately not a 4px ladder.
 
@@ -697,6 +697,7 @@ Tactile and quiet: a hairline-edged raised block that dips under the hand.
 - **Board state pill:** fully round, 24px tall, 10px padding, label weight, status tint with no glyph. Idle drops the tint and the padding. When state changes the tint turns over 280ms on ease-out and the word morphs over 180ms, with the width following.
 
 ### Navigation, menus and floating surfaces
+- **Top bar's trailing edge** (Apple HIG, Toolbars): two groups on the bar's 36px control height (`c-btn-h`, 4px in from each edge of the 44px bar), `--space-3` apart (16px on a coarse pointer). First Jump, a search field: `c-bar-search-w` wide, the 10px field radius, the `surface-recess-deep` groove with no edge, a 16px search glyph leading, "Jump" in the placeholder's muted ink and ⌘K a trailing meta hint. Then one icon group: a capsule of the panel's glass (the material, a hairline and the tile shadow; solid raised with the control edge under Reduce Transparency or Increase Contrast) holding borderless 28px items (`c-bar-item`) 4px in, concentric with it, each with a 20px symbol (`c-bar-symbol`) in the muted ink: the machines, then Caw's head, last at the edge. A narrow bar's group holds Caw alone, a 36px glass circle. Items hover to `surface-hover` and tint to `surface-fill` on a press. State is a badge, never a tinted glyph: a 16px pill with a count in a status pair on the item's corner (Caw's in attn for what needs you; the machines' in fail for machines down, attn for machines in trouble).
 - **Popover, dropdown, select, context menu, toast** (`kit-pop`): 12px radius, 1px control edge, overlay shadow, 6px padding, raised surface. A popover whose content changes size tweens to the new height over 180ms on the drawer curve.
 - **Motion (origin-aware):** opens from its trigger's side over 260ms on the drawer curve, rising 8px and growing from 0.92 as it fades in. It leaves the same way over 160ms. These are transitions on `data-state`, so a close caught mid-open turns back from where it is. With reduced motion only the fade runs.
 - **Menu item:** 8px radius, 32px tall (44px on a coarse pointer), label role, 10px padding, 16px icons.
@@ -719,7 +720,7 @@ Solid ink, never coral: `ink-solid` fill and arrow, `on-ink` text, meta role, 8p
 - **The Hold-To-Select Rule.** A press that starts inside a text field in a drawer is not captured by the drawer, so iOS hold-to-select and the Paste callout still reach the field. A held press on a context-menu trigger suppresses the platform callout, because our menu answers it.
 
 ### Toast
-The floating-surface recipe over sonner: 12px radius, overlay shadow, body type, 8px-radius action buttons that scale on press. It enters from `--pop-rise` short of its place on its edge's side over 280ms on ease-out. The stack makes room over 200ms on ease-in-out. A toast exits toward its edge over 160ms. Under a finger it tracks 1:1 and dismisses past 45px or on a flick. The stack stays expanded, so an arrival grows nothing. On a desk toasts sit in the content area's bottom-right corner, 24px in (standing on the tallest composer when one shows), 356px wide, so they never reach the rail. On a phone toasts sit at the top under the 60px bar, full width less 12px a side, because at the bottom they would land on the composer. A toast never paints over navigation: the rail is outside its corner at every width, and while the burger's sheet is open the toasts wait under its scrim. Toasts follow an open modal dialog into the top layer.
+The floating-surface recipe over sonner: 12px radius, overlay shadow, body type, 8px-radius action buttons that scale on press. It enters from `--pop-rise` short of its place on its edge's side over 280ms on ease-out. The stack makes room over 200ms on ease-in-out. A toast exits toward its edge over 160ms. Under a finger it tracks 1:1 and dismisses past 45px or on a flick. The stack stays expanded, so an arrival grows nothing. On a desk toasts sit in the content area's bottom-right corner, 24px in (standing on the tallest composer when one shows), 356px wide, so they never reach the rail. On a phone toasts sit at the top under the 44px bar, full width less 12px a side, because at the bottom they would land on the composer. A toast never paints over navigation: the rail is outside its corner at every width, and while the burger's sheet is open the toasts wait under its scrim. Toasts follow an open modal dialog into the top layer.
 
 ### Channel cards
 Two radio cards side by side at every width (`channel-card-max` wide at most, `--space-3` apart, equal height); the pair shares one selection frame (1px `brand-solid` over `surface-recess`) that moves between them: the leading edge at once, the trailing edge after `--dur-ghost`, each over `--dur-fade` on ease-in-out, and with reduced motion it fades out on the old card and in on the new.

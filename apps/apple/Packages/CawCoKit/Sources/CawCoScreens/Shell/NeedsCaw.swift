@@ -30,8 +30,14 @@ final class NeedsCawButton: UIControl {
     private let capsule: GlassCapsule?
     private let face = CawMark(status: .compacted, side: NeedsCawButton.head)
     private let beatView = UIImageView()
+    /// His count: a chip inside his circle on the rim's top-trailing 45°
+    /// (NeedsCaw.svelte `chipOut`), ringed in the glass's surface. The ring
+    /// is a view of its own round the chip, so both colours follow the scheme.
+    private let badgeRing = UIView()
     private let badgeBox = UIView()
     private let badge = MorphLabel(TypeScale.typeMeta, ink: Palette.statusAttnInk)
+    private var badgeX: NSLayoutConstraint?
+    private var badgeY: NSLayoutConstraint?
     private(set) var count = 0
     private var beating = false
 
@@ -56,37 +62,51 @@ final class NeedsCawButton: UIControl {
         }
         beatView.alpha = 0
         beatView.contentMode = .scaleAspectFit
+        badgeRing.backgroundColor = Palette.surfaceRaised
+        badgeRing.layer.cornerRadius = Size.cBarChip / 2 + Size.cBarChipRing
+        badgeRing.isUserInteractionEnabled = false
+        badgeRing.translatesAutoresizingMaskIntoConstraints = false
         badgeBox.backgroundColor = Palette.statusAttnBg
-        badgeBox.layer.cornerRadius = 8
+        badgeBox.layer.cornerRadius = Size.cBarChip / 2
         badgeBox.isUserInteractionEnabled = false
         badgeBox.translatesAutoresizingMaskIntoConstraints = false
         badge.tabular = true
         badge.translatesAutoresizingMaskIntoConstraints = false
         badgeBox.addSubview(badge)
-        addSubview(badgeBox)
+        badgeRing.addSubview(badgeBox)
+        addSubview(badgeRing)
+        let badgeX = badgeRing.centerXAnchor.constraint(equalTo: centerXAnchor)
+        let badgeY = badgeRing.centerYAnchor.constraint(equalTo: centerYAnchor)
+        self.badgeX = badgeX
+        self.badgeY = badgeY
         NSLayoutConstraint.activate([
             widthAnchor.constraint(equalToConstant: Self.side),
             heightAnchor.constraint(equalToConstant: Self.side),
-            face.centerXAnchor.constraint(equalTo: centerXAnchor),
-            face.centerYAnchor.constraint(equalTo: centerYAnchor),
+            // His head's circle at the centre, not his box (`CawMark.headCentre`).
+            face.centerXAnchor.constraint(equalTo: centerXAnchor, constant: (0.5 - CawMark.headCentre.x) * Self.head),
+            face.centerYAnchor.constraint(equalTo: centerYAnchor, constant: (0.5 - CawMark.headCentre.y) * Self.head),
             face.widthAnchor.constraint(equalToConstant: Self.head),
             face.heightAnchor.constraint(equalToConstant: Self.head),
             beatView.centerXAnchor.constraint(equalTo: centerXAnchor),
             beatView.centerYAnchor.constraint(equalTo: centerYAnchor),
             beatView.widthAnchor.constraint(equalToConstant: Self.beatBox),
             beatView.heightAnchor.constraint(equalToConstant: Self.beatBox),
-            badgeBox.heightAnchor.constraint(equalToConstant: 16),
-            badgeBox.widthAnchor.constraint(greaterThanOrEqualToConstant: 16),
-            badgeBox.topAnchor.constraint(equalTo: topAnchor, constant: -5),
-            badgeBox.trailingAnchor.constraint(equalTo: trailingAnchor, constant: 5),
-            badge.leadingAnchor.constraint(equalTo: badgeBox.leadingAnchor, constant: 4),
-            badge.trailingAnchor.constraint(equalTo: badgeBox.trailingAnchor, constant: -4),
+            badgeX,
+            badgeY,
+            badgeBox.heightAnchor.constraint(equalToConstant: Size.cBarChip),
+            badgeBox.widthAnchor.constraint(greaterThanOrEqualToConstant: Size.cBarChip),
+            badgeBox.leadingAnchor.constraint(equalTo: badgeRing.leadingAnchor, constant: Size.cBarChipRing),
+            badgeBox.trailingAnchor.constraint(equalTo: badgeRing.trailingAnchor, constant: -Size.cBarChipRing),
+            badgeBox.topAnchor.constraint(equalTo: badgeRing.topAnchor, constant: Size.cBarChipRing),
+            badgeBox.bottomAnchor.constraint(equalTo: badgeRing.bottomAnchor, constant: -Size.cBarChipRing),
+            badge.leadingAnchor.constraint(equalTo: badgeBox.leadingAnchor, constant: Size.cBarChip / 4),
+            badge.trailingAnchor.constraint(equalTo: badgeBox.trailingAnchor, constant: -Size.cBarChip / 4),
             badge.centerYAnchor.constraint(equalTo: badgeBox.centerYAnchor),
         ])
-        badgeBox.isHidden = true
+        badgeRing.isHidden = true
         isAccessibilityElement = true
         accessibilityTraits = .button
-        accessibilityLabel = "Nothing needs you"
+        accessibilityLabel = "All caught up"
         addTarget(self, action: #selector(tapped), for: .touchUpInside)
         let pan = UIPanGestureRecognizer(target: self, action: #selector(panned(_:)))
         addGestureRecognizer(pan)
@@ -101,6 +121,24 @@ final class NeedsCawButton: UIControl {
     @objc private func tapped() { onTap() }
     @objc private func panned(_ pan: UIPanGestureRecognizer) { onPan(pan) }
 
+    /// The chip's centre, `out` up and across from his circle's: as far out
+    /// as keeps all of it, ring and all, inside the glass's 1 pt edge. Its end
+    /// caps stand `cap` either side of its centre, and the trailing one meets
+    /// the rim: (out + cap)² + out² = reach², so out = (√(2·reach² − cap²) − cap) / 2.
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let size = badgeRing.bounds.size
+        guard size.height > 0 else { return }
+        let reach = CGFloat(Self.side) / 2 - 1 - size.height / 2
+        let cap = max(0, (size.width - size.height) / 2)
+        let out = ((2 * reach * reach - cap * cap).squareRoot() - cap) / 2
+        let x = effectiveUserInterfaceLayoutDirection == .rightToLeft ? -out : out
+        if badgeX?.constant != x || badgeY?.constant != -out {
+            badgeX?.constant = x
+            badgeY?.constant = -out
+        }
+    }
+
     override var isHighlighted: Bool {
         didSet {
             guard isHighlighted != oldValue else { return }
@@ -112,10 +150,11 @@ final class NeedsCawButton: UIControl {
     /// The Needs you count, and the drawer's state for VoiceOver.
     func configure(count next: Int, open: Bool) {
         count = next
-        accessibilityLabel = next > 0 ? "Needs you, \(next)" : "Nothing needs you"
+        accessibilityLabel = next > 0 ? "Needs you, \(next)" : "All caught up"
         accessibilityValue = open ? "Open" : nil
-        badge.text = "\(next)"
-        badgeBox.isHidden = next == 0
+        badge.text = next > 99 ? "99+" : "\(next)"
+        badgeRing.isHidden = next == 0
+        setNeedsLayout()
     }
 
     /// His needs-you beat, once; nothing with less motion.
@@ -271,7 +310,7 @@ final class NeedsDrawer: UIView {
         ])
         let resting = CawMark(status: .ready, side: 48)
         let emptyLabel = KitLabel(TypeScale.typeLabel, ink: Palette.inkMuted)
-        emptyLabel.text = "Nothing needs you"
+        emptyLabel.text = "All caught up"
         empty.axis = .vertical
         empty.alignment = .center
         empty.spacing = Space.space2
@@ -280,7 +319,7 @@ final class NeedsDrawer: UIView {
         empty.isLayoutMarginsRelativeArrangement = true
         empty.directionalLayoutMargins = NSDirectionalEdgeInsets(top: Space.space6, leading: 0, bottom: Space.space2, trailing: 0)
         empty.isAccessibilityElement = true
-        empty.accessibilityLabel = "Nothing needs you"
+        empty.accessibilityLabel = "All caught up"
         empty.addGestureRecognizer(UIPanGestureRecognizer(target: self, action: #selector(drawerPanned(_:))))
         // The grabber at the drawer's foot: pulled up, the drawer goes back.
         let bar = UIView()

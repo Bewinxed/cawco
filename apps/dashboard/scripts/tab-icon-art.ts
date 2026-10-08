@@ -17,7 +17,10 @@
  *   (`bar-beat-needs-you-<scheme>.png`), which Caw's head in the top bar
  *   plays once when something new needs the operator, written for the
  *   dashboard (src/lib/assets/brand/) and for the Apple apps
- *   (CawCoMascot/Resources/beat/).
+ *   (CawCoMascot/Resources/beat/);
+ * - the bar's smile: his head going from rest into his ^^ face
+ *   (`bar-beat-smile-<scheme>.png`, tab-icon-shots `SMILE`), which Caw's head
+ *   in the top bar plays when the operator's pointer comes onto him.
  *
  * Run it again whenever Caw's files, the shots or the tile's tokens change:
  *
@@ -26,7 +29,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { chromium } from "playwright-core";
-import { NEEDS_YOU, type Shot, SLEEPING } from "./tab-icon-shots";
+import { NEEDS_YOU, type Shot, SLEEPING, SMILE } from "./tab-icon-shots";
 import { TAB_ICON } from "./tab-icon-tile";
 
 const here = (path: string) => join(import.meta.dir, "..", path);
@@ -245,6 +248,21 @@ const barBeat = (["light", "dark"] as const).flatMap((scheme) =>
   }))
 );
 art.push(...barBeat);
+// His smile at the operator's pointer: from rest into the ^^ face, on no
+// tile, in each scheme's Caw (`bar-beat-smile-<scheme>.png`).
+art.push(
+  ...(["light", "dark"] as const).map((scheme) => ({
+    file: join(STILLS, `bar-beat-smile-${scheme}.png`),
+    job: {
+      shot: SMILE,
+      colour: "transparent",
+      radius: 0,
+      scheme,
+      side: BEAT_SIDE,
+      frames: SMILE.frames,
+    },
+  }))
+);
 const working = [
   { file: join(STILLS, "tab-icon-working.png"), side: SIDE },
   ...[32, SIDE].map((side) => ({

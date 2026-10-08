@@ -25,6 +25,14 @@ public final class CawMark: UIView {
     /// How long his rest is drawn before it is paused: the scheme's rim fades in over 200 ms.
     private static let settle = Duration.seconds(1)
 
+    /// Where his head's circle is centred in the `compacted` still's box, as
+    /// shares of its side (the dashboard's `CAW_HEAD_CENTRE`). His beak and
+    /// note reach out to one side, so the box's centre is not his head's: a
+    /// place that sits his head in a circle moves him by (0.5 − this) × his
+    /// side. Measured on `loops/compacted/body-00.svg`: a circle fitted to his
+    /// crown and the back of his head, beak, note and tufts opened away.
+    public static let headCentre = CGPoint(x: 0.35, y: 0.496)
+
     public init(status: CawStatus, side: Double) {
         self.status = status
         self.side = side

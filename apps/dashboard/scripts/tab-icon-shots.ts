@@ -20,7 +20,7 @@ export interface Shot {
   /** The frame the still is. */
   frame: number;
   /** The status file it is drawn from. */
-  status: "needs-you" | "sleeping";
+  status: "needs-you" | "sleeping" | "idle";
 }
 
 /** A still's box: his 220-unit head fills the tile. */
@@ -51,6 +51,30 @@ export const NEEDS_YOU: Shot & { from: number; to: number } = {
   to: 86,
   // Drawing 27, his wing at its highest: the still under Reduced Motion.
   frame: 66,
+};
+
+/**
+ * Caw smiling back at the operator's pointer on his head in the top bar
+ * (owner: "show the smiling ^^ caw's face/animation on hover and on click").
+ * His ^^ face, both eyes closed upward arcs, is the contented hold of
+ * `idle-preen`, drawings 18 to 32. The loop's tail runs from that face back
+ * to his open-eyed rest: drawings 31, 32 (^^), 33, 34 (eyes shut, ◡◡) and 0
+ * (open). The strip is that run backward, so it reads from rest into the
+ * smile, and the bar plays it forward on a pointer's arrival and back on its
+ * leaving. Each is the frame the drawing starts on (timing.json): 0, 94, 92,
+ * 90 and 88.
+ *
+ * The box is his whole still box: these drawings are all of him, not a
+ * head, and a box round his head cut his body off on a straight line. The
+ * bar sizes it so his head is the size its rest face's head is.
+ */
+export const SMILE: Shot & { frames: number[] } = {
+  status: "idle",
+  animation: "loop_idle-preen",
+  box: { x: 256, y: 256, side: 512 },
+  frames: [0, 94, 92, 90, 88],
+  // Drawing 31, the ^^ face: what Reduced Motion cross-fades to.
+  frame: 88,
 };
 
 /** Nothing going on: his `sleeping` rest, eyes closed and head dropped. */

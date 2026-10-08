@@ -938,39 +938,41 @@
           {/if}
         </div>
 
+        <!-- The trailing edge, two groups (Apple HIG, Toolbars): Jump's
+             search field, then one group of icon controls with Caw's head
+             last, at the edge. A phone keeps Search and the machines in its
+             sidebar, so its group holds Caw alone. -->
         <div class="right">
-          <!-- Caw's head, first: what needs you, and its drawer. -->
-          <NeedsCaw />
           {#if railed}
-            <!-- The machines, one click away beside Jump on a wide bar; a phone
-             keeps them in its sidebar, with Search. -->
-            <MachinesButton />
             <Tip keys="⌘K" label="Jump to session">
               {#snippet children(
                 tip
               )}
-                <Button
+                <button
                   {...tip}
                   aria-label="Jump to session"
-                  class="jump"
+                  class="jump-field focus-inset press-tint"
                   data-share="jump"
                   onclick={(event: MouseEvent) => {
                     jumpOpener = event.currentTarget as HTMLElement;
                     jumpOpen = true;
                   }}
-                  size="sm"
-                  variant="outline"
+                  type="button"
                 >
                   <IconSearch />
-                  <span class="hidden sm:inline">Jump</span>
-                  <kbd
-                    class="hidden font-sans text-meta text-muted-foreground min-[900px]:inline"
-                    >⌘K</kbd
-                  >
-                </Button>
+                  <span class="jump-word">Jump</span>
+                  <kbd>⌘K</kbd>
+                </button>
               {/snippet}
             </Tip>
           {/if}
+          <div class="tools" data-bar-group>
+            {#if railed}
+              <MachinesButton />
+            {/if}
+            <!-- Caw's head: what needs you, and its drawer. -->
+            <NeedsCaw />
+          </div>
           <!-- No always-on hub dot: a green light that is green 99% of the time
              says nothing. Connection health folds into the banner below, which
              is shown only when the hub is NOT connected. The theme toggle
@@ -1296,16 +1298,18 @@
     width: 20px;
     height: 20px;
   }
-  /* The cluster's controls sit a --space-2 gap apart and their touch areas
-     meet in it; on a coarse pointer the gap opens to 16px, so a 28px control's
-     area reaches 44px. */
+  /* The trailing edge (Apple HIG, Toolbars): two groups, a --space-3 gap
+     apart, every control on the bar's one control height (`--c-btn-h`) so
+     their tops and bottoms meet one line. On a coarse pointer the gaps open
+     to 16px (DESIGN.md, The 44 Touch Rule) and each touch area stops at
+     the gap's middle. */
   .right {
-    --hit-gap-x: var(--space-2);
+    --hit-gap-x: var(--space-3);
     position: relative;
     margin-left: auto;
     display: flex;
     align-items: center;
-    gap: var(--space-2);
+    gap: var(--space-3);
 
     @media (pointer: coarse) {
       --hit-gap-x: 16px;
@@ -1352,44 +1356,140 @@
       display: none;
     }
   }
-  /* One family: every control in the cluster is the same 28px box — the
-     hairline, the raised surface, the control radius, the same type — so
-     spend, Jump, the assistant and the theme toggle read as one row. */
-  .right > :global(:is(.jump, [data-slot="button"])) {
-    height: 28px;
-    min-width: 28px;
+  /* Jump, a search field (Apple HIG, Toolbars: "an optional search field"
+     on the trailing edge), kept apart from the icon group because it has a
+     text label: the field's height and radius (DESIGN.md, Inputs), its
+     recessed groove for a surface and no edge, the search glyph leading,
+     "Jump" in the placeholder's ink and ⌘K a trailing hint. */
+  .jump-field {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    inline-size: var(--c-bar-search-w);
+    block-size: var(--c-input-h);
+    padding-inline: var(--space-3);
+    border: 0;
+    border-radius: var(--radius-md);
+    background: var(--surface-recess-deep);
+    font: var(--type-body);
+    color: var(--ink-muted);
+    text-align: start;
+    cursor: text;
+    transition: var(--transition-control);
+  }
+  .jump-field :global(svg) {
+    flex: none;
+    inline-size: 16px;
+    block-size: 16px;
+  }
+  .jump-word {
+    flex: 1 1 auto;
+  }
+  .jump-field kbd {
+    font: var(--type-meta);
+  }
+  /* The one icon group: one container of the panel's glass, a capsule on
+     the bar's control height whose items sit concentric inside it, as
+     Liquid Glass draws grouped toolbar items. The glass is drawn by a layer
+     under the items, never by the group itself: a backdrop filter on the
+     group would make it the box Caw's fixed drawer is laid out in. */
+  .tools {
+    --hit-gap-x: var(--c-bar-group-pad);
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: var(--c-bar-group-pad);
+    block-size: var(--c-btn-h);
+    padding: var(--c-bar-group-pad);
+    border-radius: var(--radius-pill);
+
+    @media (pointer: coarse) {
+      --hit-gap-x: 16px;
+      gap: 16px;
+    }
+  }
+  .tools::before {
+    content: "";
+    position: absolute;
+    inset: 0;
     border: 1px solid var(--border-hairline);
-    border-radius: var(--radius-sm);
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
+    border-radius: inherit;
+    background: var(--material-panel);
+    box-shadow: var(--shadow-tile);
+    backdrop-filter: blur(calc(var(--material-blur) * 1.4))
+      saturate(var(--material-saturate));
+    pointer-events: none;
+
+    /* Either setting: the solid raised surface and the control's edge, as
+       the Apple apps' GlassCapsule draws it. */
+    @media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
+      background: var(--surface-raised);
+      backdrop-filter: none;
+      border-color: var(--border-control);
+    }
   }
-  .right > :global(:is(.jump, [data-slot="button"])) {
-    background: var(--surface-raised);
-    box-shadow: none;
+  /* An item of the group: borderless (Apple HIG, Toolbars: "Borders… aren't
+     necessary because the section provides a visible container"), on the
+     glass itself, every one the same height with the same symbol size, in
+     the bar's one ink. Hover lifts it by the hover step; a press tints it. */
+  .tools :global(.bar-item) {
+    position: relative;
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    min-inline-size: var(--c-bar-item);
+    block-size: var(--c-bar-item);
+    border: 0;
+    border-radius: var(--radius-pill);
+    background: none;
+    color: var(--ink-strong);
+    cursor: pointer;
+    transition: var(--transition-control);
   }
-  /* This rule is unlayered and outranks the kit button's own hover (a
-     layered utility), so the cluster states its hover itself. */
+  .tools :global(.bar-item svg) {
+    inline-size: var(--c-bar-symbol);
+    block-size: var(--c-bar-symbol);
+    color: var(--ink-muted);
+  }
+  .tools :global(.bar-item:active) {
+    background: var(--surface-fill);
+  }
   @media (hover: hover) and (pointer: fine) {
-    .right > :global(:is(.jump, [data-slot="button"]):hover:not(:disabled)) {
+    .jump-field:hover {
+      background: light-dark(var(--surface-recess), var(--surface-hover));
+    }
+    .tools :global(.bar-item:hover) {
       background: var(--surface-hover);
     }
   }
-  .right > :global([data-slot="button"]:not(.jump)) {
-    width: 28px;
+  /* The bar's badge: a count chip inside the glass, in a status pair, a
+     circle for one digit and a short capsule for more, ringed in the
+     glass's surface. Caw's count of what needs you, inside his circle, and
+     the machines down or in trouble, on the glyph's corner. */
+  .tools :global(.bar-badge) {
+    position: absolute;
+    display: grid;
+    place-items: center;
+    min-inline-size: var(--c-bar-chip);
+    block-size: var(--c-bar-chip);
+    padding-inline: calc(var(--c-bar-chip) / 4);
+    border-radius: var(--radius-pill);
+    box-shadow: 0 0 0 var(--c-bar-chip-ring) var(--surface-raised);
+    font-size: var(--text-meta);
+    font-weight: var(--weight-body);
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    pointer-events: none;
   }
-  .right :global(.jump) {
-    gap: var(--space-2);
-    padding: 0 var(--space-3);
+  .tools :global(.bar-badge[data-tone="attn"]) {
+    background: var(--status-attn-bg);
+    color: var(--status-attn-ink);
   }
-  .right :global(.jump svg) {
-    width: 16px;
-    height: 16px;
-  }
-  /* The cluster mutes a glyph only where its control carries no tone of its
-     own: a toned control (MachinesButton's `data-tone`) inks its glyph itself,
-     and this scoped rule would outrank it. */
-  .right :global(.jump:not([data-tone]) svg) {
-    color: var(--ink-muted);
+  .tools :global(.bar-badge[data-tone="fail"]) {
+    background: var(--status-fail-bg);
+    color: var(--status-fail-ink);
   }
 
   @media (hover: hover) and (pointer: fine) {
@@ -1416,9 +1516,6 @@
      (PaneTabs), so the two read as one row and the bar draws nothing of its
      own; only its two controls take a touch. */
   @media (max-width: 899px) {
-    .shell {
-      --c-top-bar-h: 44px;
-    }
     .top {
       padding-inline: var(--space-1) var(--space-2);
     }

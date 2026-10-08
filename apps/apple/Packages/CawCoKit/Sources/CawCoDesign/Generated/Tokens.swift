@@ -462,8 +462,22 @@ public enum Size {
     /// A ledger's toolbar zone, holding 32px controls 11px in.
     public static let cToolbarZone: Double = 55
     public static let cToolbarCtl: Double = 32
-    /// The shell's top bar: 59px and its 1px hairline.
-    public static let cTopBarH: Double = 60
+    /// The shell's top bar at every width: 43px and its 1px hairline, the compact bar's height (Apple HIG, Toolbars). Hosted tabs stand on its floor, a tab row's height below its top.
+    public static let cTopBarH: Double = 44
+    /// A session tab row: its list's 4px pad over 32px tabs (PaneTabs).
+    public static let cTabRowH: Double = 36
+    /// The top bar's icon group's inset round its items, and the bar's round its controls: the 44px bar less the 36px control height, halved. The group is a capsule and its items sit concentric inside it.
+    public static let cBarGroupPad: Double = 4
+    /// An item in the top bar's icon group: the group's height, the bar's control height, less its inset on both sides.
+    public static let cBarItem: Double = 28
+    /// A symbol in the top bar's icon group: the machines glyph and Caw's head.
+    public static let cBarSymbol: Double = 20
+    /// A count chip in the top bar's glass: a circle for one digit, a short capsule for more, inside its item's circle on the rim's top-trailing 45°.
+    public static let cBarChip: Double = 14
+    /// The ring round a count chip, in the glass's surface, that parts it from what it sits on.
+    public static let cBarChipRing: Double = 1.5
+    /// The top bar's Jump field: wide enough to read as a field, not a button.
+    public static let cBarSearchW: Double = 180
     /// A page head under the top bar.
     public static let cPageHeadH: Double = 96
     public static let cSidebarW: Double = 248

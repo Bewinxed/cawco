@@ -1723,6 +1723,38 @@ export const createServer = (
     db,
     task: (projectId, id) => tasks.get(projectId, id),
   });
+  /**
+   * An ask the hub itself raises for the person — a workflow's question, an
+   * admin write — parked like a session's own: on the pending ledger, to every
+   * dashboard, and to Telegram and push the first time.
+   */
+  const parkForPerson = (envelope: Envelope): void => {
+    if (!envelope.requestId) {
+      throw new Error("An ask for the person has no request id.");
+    }
+    const existed = pending.get(envelope.requestId);
+    if (!pending.remember(envelope.requestId, envelope)) {
+      return;
+    }
+    registry.broadcast(clientCopy(envelope));
+    if (
+      !existed &&
+      (envelope.payload as { routedTo?: string }).routedTo !== "parent"
+    ) {
+      telegram?.onAsk(envelope);
+      push.onAsk(envelope);
+    }
+  };
+  // Admin writes from any door wait on the person (admin-asks.ts). Made before
+  // the settlement listener below: the boot sweep settles the asks of
+  // sessions that did not survive the restart, and that listener withdraws
+  // their admin writes, so it must find this already made.
+  const adminAsks = createAdminAsks({
+    park: parkForPerson,
+    settle: (requestId) => {
+      pending.resolve(requestId);
+    },
+  });
   // Each project's Caw (caw.ts), made further down once its services are; the
   // settlement, answer and process-end paths above it reach it through this.
   let lead: Caw | undefined;
@@ -8413,35 +8445,6 @@ export const createServer = (
       workItems.cancelled(row);
     }
   }
-  /**
-   * An ask the hub itself raises for the person — a workflow's question, an
-   * admin write — parked like a session's own: on the pending ledger, to every
-   * dashboard, and to Telegram and push the first time.
-   */
-  const parkForPerson = (envelope: Envelope): void => {
-    if (!envelope.requestId) {
-      throw new Error("An ask for the person has no request id.");
-    }
-    const existed = pending.get(envelope.requestId);
-    if (!pending.remember(envelope.requestId, envelope)) {
-      return;
-    }
-    registry.broadcast(clientCopy(envelope));
-    if (
-      !existed &&
-      (envelope.payload as { routedTo?: string }).routedTo !== "parent"
-    ) {
-      telegram?.onAsk(envelope);
-      push.onAsk(envelope);
-    }
-  };
-  // Admin writes from any door wait on the person (admin-asks.ts).
-  const adminAsks = createAdminAsks({
-    park: parkForPerson,
-    settle: (requestId) => {
-      pending.resolve(requestId);
-    },
-  });
   const workflowRuntime = createWorkflowRuntime({
     custodyPending: (machineId, instanceId) => {
       const custody = machineCustody.get(machineId);

@@ -8,6 +8,7 @@ import type {
   ClaudeExtraUsage,
   ClaudeLimits,
   LimitWindow,
+  ProjectCap,
   UsageSpend,
 } from "@cawco/core";
 
@@ -40,6 +41,17 @@ export function hubMidnight(
 
 /** Real or notional dollars — two decimals, never more. */
 export const usd = (n: number): string => `$${n.toFixed(2)}`;
+
+/** What a reached cap holds back, in words. */
+const CAP_HOLDS = {
+  pause: "attempts paused",
+  quiet: "Caw paused",
+  both: "attempts and Caw paused",
+} as const;
+
+/** A project's reached cap in one line: "$12.40 of $10.00 this day · Caw paused". */
+export const capLine = (cap: ProjectCap): string =>
+  `${usd(cap.spentUsd)} of ${usd(cap.usd)} this ${cap.period} · ${CAP_HOLDS[cap.onCap]}`;
 
 const WHOLE_DOLLARS = new Intl.NumberFormat("en-US", {
   style: "currency",

@@ -188,6 +188,8 @@ export function span(ms: number): string {
 export interface AskItem {
   /** What it asks, in plain words. */
   ask: string;
+  /** Where the session runs: its mark's hue, the seed every list uses. */
+  cwd: string;
   /** The session that asked; it is answered there. */
   instanceId: string;
   isQuestion: boolean;
@@ -682,6 +684,7 @@ class Home {
         kind: "ask",
         key: `${item.instanceId}:${item.request.requestId}`,
         instanceId: item.instanceId,
+        cwd: row?.cwd || item.cwd,
         thread: thread ? threadTabId(thread.id) : null,
         machineId: item.machineId,
         title: thread?.title ?? (row ? instanceTitle(row) : item.hostname),

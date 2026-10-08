@@ -1,18 +1,28 @@
 <script lang="ts">
+  import { questionsOf } from "@cawco/core";
   /**
    * Caw's head in the top bar: the way into what needs the operator (the
    * home's Needs you: every parked ask, a workflow run's question, a project
    * past its cap; home-state `needs`, the rows Home's Needs you section shows).
    *
    * He is his compacted head (assets/mascot/README.md, `compacted`: a head
-   * that fills its box, built for 18 px) on a floating glass capsule, the
-   * panel material (DESIGN.md, Materials), solid under Reduce Transparency
-   * and Increase Contrast. The count rides his corner in the attention pill,
-   * morphing digit by digit, while anything waits. When something new
-   * arrives he plays his needs-you beat once (the wave of `needs-you-hey`
-   * through a box round his head, drawn ahead by `bun run tab-icon`; his
-   * guide: "a gentle beat… never a hello") and holds still again. With less
-   * motion only the badge changes.
+   * that fills its box, built for 18 px), the last item of the bar's icon
+   * group, on the group's glass (Shell): borderless, as every item in it is.
+   * His head's circle, not his drawing's box, stands at the item's centre
+   * (CAW_HEAD_CENTRE), since his beak and note reach out to one side. The
+   * count rides his corner in the bar's badge, morphing digit by digit,
+   * while anything waits. When something new arrives he plays his needs-you
+   * beat once (the wave of `needs-you-hey` through a box round his head,
+   * drawn ahead by `bun run tab-icon`; his guide: "a gentle beat… never a
+   * hello") and holds still again. With less motion only the badge changes.
+   *
+   * He smiles back at the operator's own pointer (owner: "show the smiling
+   * ^^ caw's face/animation on hover and on click"): a pointer coming onto
+   * him plays his strip from rest into his ^^ face, which holds while it
+   * stays, and leaving plays it back to rest; a press, by mouse or finger,
+   * squashes his head once on --press-scale and smiles, then the drawer
+   * opens as it always has. The beat, when one plays, goes first. With less
+   * motion no drawing steps: his face cross-fades to the ^^ one and back.
    *
    * A tap on him, or a drag down from him, pulls a drawer down from the top.
    * Dragged, its body grows out of the capsule under the finger 1:1, joined
@@ -29,22 +39,43 @@
   import { TextMorph } from "torph/svelte";
   import beatDark from "#lib/assets/brand/bar-beat-needs-you-dark.png";
   import beatLight from "#lib/assets/brand/bar-beat-needs-you-light.png";
+  import smileDark from "#lib/assets/brand/bar-beat-smile-dark.png";
+  import smileLight from "#lib/assets/brand/bar-beat-smile-light.png";
+  import { IconDollar, IconWorkflow } from "#lib/icons.js";
   import { theme } from "#lib/theme.svelte.js";
   import { goto } from "$app/navigation";
   import { cawco } from "./client.svelte";
   import CawFace from "./home/CawFace.svelte";
+  import { CAW_HEAD_CENTRE } from "./home/caw-still.svelte";
   import { clock, home, type NeedsItem, span } from "./home/home-state.svelte";
   import { conversationHref } from "./links";
   import { easeInOut, morphMs, motionOk } from "./motion/curves.svelte";
   import { integrate, type Sample, sampleAt } from "./motion/spring";
+  import SessionMark from "./SessionMark.svelte";
+  import { capLine } from "./usage";
 
-  /** His head's side, px: the compacted still fills it. */
-  const HEAD = 22;
-  /** The beat's box, px: his head and raised wing (tab-icon-shots `NEEDS_YOU`). */
-  const BEAT_BOX = 32;
+  /** His head's side, px: the compacted still fills it (`--c-bar-symbol`). */
+  const HEAD = 20;
+  /**
+   * The beat's box, px: his head and raised wing (tab-icon-shots
+   * `NEEDS_YOU`), 32 to a 22px head, so his head beats at the size it rests.
+   */
+  const BEAT_BOX = 29;
   /** The beat's drawings, and its pace: his loops are held on twos of 24. */
   const BEAT_FRAMES = 16;
   const BEAT_PACE = 12;
+  /**
+   * The smile's strip (tab-icon-shots `SMILE`): all of him, from rest
+   * through eyes shut to ^^, at the beat's pace. Its box is his still box,
+   * sized so his head is the size the face shows it: the head's circle is
+   * 0.304 of the compacted box and 0.244 of the still box (circles fitted
+   * to his crown, as CAW_HEAD_CENTRE), so his body hangs below his head
+   * within the glass, as it does on any page that shows him whole.
+   */
+  const SMILE_FRAMES = 5;
+  const SMILE_BOX = Math.round((HEAD * 0.304) / 0.244);
+  /** His head's centre in the smile's rest drawing, as shares of its box. */
+  const SMILE_HEAD_CENTRE = { x: 0.481, y: 0.364 } as const;
   /** Where the drawer stands under the capsule once parted, px. */
   const GAP = 8;
   /** The finger's travel by which the neck has thinned to nothing and snapped, px. */
@@ -67,9 +98,38 @@
 
   const needs = $derived(home.needs);
   const count = $derived(needs.length);
-  const label = $derived(
-    count > 0 ? `Needs you, ${count}` : "Nothing needs you"
-  );
+  const label = $derived(count > 0 ? `Needs you, ${count}` : "All caught up");
+
+  /* ── The count ─────────────────────────────────────────────────────── */
+  /**
+   * His count is a chip inside his circle (owner: "circular chips on the
+   * edge of the circle inside the circle"), on the rim's top-trailing 45°,
+   * so nothing of it ever stands past his glass or the screen's edge. His
+   * circle is the bar's control height across, round his item's centre:
+   * the narrow bar's glass circle, and the wide group's trailing end.
+   */
+  let chipWidth = $state(0);
+  /**
+   * How far the chip's centre stands from his circle's, along the 45° line
+   * each way: as far out as keeps all of it, ring and all, inside the rim.
+   * One digit is a circle (d across, ring r past it); more is a capsule
+   * whose end caps stand a = (width − d) / 2 either side of its centre, and
+   * the trailing cap is the one that meets the rim:
+   * (u + a)² + u² = (R − r)², so u = (√(2(R − r)² − a²) − a) / 2.
+   */
+  const chipOut = $derived.by(() => {
+    if (!capsule || chipWidth === 0) {
+      return 0;
+    }
+    const css = getComputedStyle(capsule);
+    const px = (name: string) => Number.parseFloat(css.getPropertyValue(name));
+    // Inside the glass's 1px edge, not on it.
+    const radius = px("--c-btn-h") / 2 - 1;
+    const side = px("--c-bar-chip");
+    const reach = radius - (side / 2 + px("--c-bar-chip-ring"));
+    const cap = Math.max(0, (chipWidth - side) / 2);
+    return (Math.sqrt(2 * reach ** 2 - cap ** 2) - cap) / 2;
+  });
 
   /* ── The beat ──────────────────────────────────────────────────────── */
   /** What he has already seen, by key; null until the fleet is first read. */
@@ -96,6 +156,8 @@
     if (beating || !beatEl) {
       return;
     }
+    // The beat goes first: a smile under way gives way to it at once.
+    stopSmile();
     beating = true;
     const run = beatEl.animate(
       [
@@ -107,14 +169,142 @@
         easing: `steps(${BEAT_FRAMES}, end)`,
       }
     );
-    run.finished.then(
-      () => {
-        beating = false;
-      },
-      () => {
-        beating = false;
+    const done = () => {
+      beating = false;
+      // Still under the pointer when it ends: he smiles at it after all.
+      if (hovered) {
+        smileIn();
+      }
+    };
+    run.finished.then(done, done);
+  }
+
+  /* ── The smile ─────────────────────────────────────────────────────── */
+  let smileEl = $state<HTMLElement | null>(null);
+  /** The strip stands in for his face. */
+  let smiling = $state(false);
+  /** His face and the strip swap as drawings do, at once, rather than fade. */
+  let cut = $state(false);
+  /** A pressed head, squashed while the press lasts. */
+  let pressed = $state(false);
+  /** A fine pointer is on him. */
+  let hovered = false;
+  /** A press is down on him. */
+  let pressing = false;
+  /** The strip's one run, played forward into the smile and back out of it. */
+  let smileRun: Animation | undefined;
+  const smileStrip = $derived(
+    theme.resolved === "dark" ? smileDark : smileLight
+  );
+  /** The ^^ drawing, the strip's last: what Reduce Motion fades to. */
+  const SMILE_LAST = -SMILE_BOX * (SMILE_FRAMES - 1);
+
+  /** The run, made the first time he smiles; one drawing a beat. */
+  function stripRun(el: HTMLElement): Animation {
+    const made = el.animate(
+      [
+        { backgroundPositionX: "0px" },
+        { backgroundPositionX: `${SMILE_LAST}px` },
+      ],
+      {
+        duration: ((SMILE_FRAMES - 1) / BEAT_PACE) * 1000,
+        easing: `steps(${SMILE_FRAMES - 1}, end)`,
+        fill: "both",
       }
     );
+    made.pause();
+    made.currentTime = 0;
+    made.onfinish = () => {
+      if (made.playbackRate < 0) {
+        // Back at rest: his face again.
+        smiling = false;
+      } else if (!(hovered || pressing)) {
+        // A tap's smile: in, and out again once it has landed.
+        smileOut();
+      }
+    };
+    return made;
+  }
+
+  function smileIn() {
+    if (beating || !smileEl) {
+      return;
+    }
+    if (!motionOk.current) {
+      cut = false;
+      smiling = true;
+      return;
+    }
+    cut = true;
+    smiling = true;
+    smileRun ??= stripRun(smileEl);
+    const end = ((SMILE_FRAMES - 1) / BEAT_PACE) * 1000;
+    if (smileRun.playbackRate > 0 && Number(smileRun.currentTime) >= end) {
+      return;
+    }
+    smileRun.updatePlaybackRate(1);
+    smileRun.play();
+  }
+
+  function smileOut() {
+    if (!smiling) {
+      return;
+    }
+    if (!(motionOk.current && smileRun)) {
+      smiling = false;
+      return;
+    }
+    smileRun.updatePlaybackRate(-1);
+    smileRun.play();
+  }
+
+  /** Gone at once, wherever it was: the beat takes his place. */
+  function stopSmile() {
+    smileRun?.cancel();
+    smileRun = undefined;
+    smiling = false;
+    cut = false;
+  }
+
+  function pointerOn(event: PointerEvent) {
+    if (event.pointerType !== "mouse") {
+      return;
+    }
+    hovered = true;
+    smileIn();
+  }
+
+  function pointerOff(event: PointerEvent) {
+    if (event.pointerType !== "mouse") {
+      return;
+    }
+    hovered = false;
+    if (!pressing) {
+      smileOut();
+    }
+  }
+
+  /** A press: one squash, and the smile; the drawer is `grab`'s. */
+  function press(event: PointerEvent) {
+    if (!event.isPrimary || event.button > 0) {
+      return;
+    }
+    pressing = true;
+    pressed = true;
+    smileIn();
+    const lift = () => {
+      pressing = false;
+      pressed = false;
+      window.removeEventListener("pointerup", lift);
+      window.removeEventListener("pointercancel", lift);
+      // A finger has no hover to hold the smile: it ends once it has landed,
+      // or now where nothing plays.
+      if (!hovered && smileRun?.playState !== "running") {
+        smileOut();
+      }
+    };
+    window.addEventListener("pointerup", lift);
+    window.addEventListener("pointercancel", lift);
   }
 
   /* ── The drawer ────────────────────────────────────────────────────── */
@@ -147,7 +337,15 @@
     if (!(capsule && inner)) {
       return null;
     }
-    const cap = capsule.getBoundingClientRect();
+    // Across under him, and down to the foot of the glass he stands on (the
+    // bar's group, `data-bar-group`), so the drawer grows out of what is seen.
+    const own = capsule.getBoundingClientRect();
+    const glass = capsule.closest("[data-bar-group]")?.getBoundingClientRect();
+    const cap = {
+      left: own.left,
+      right: own.right,
+      bottom: glass?.bottom ?? own.bottom,
+    };
     const phone = window.innerWidth < 900;
     const width = phone ? window.innerWidth - 16 : 380;
     const left = phone ? 8 : Math.max(8, cap.right - width);
@@ -341,18 +539,31 @@
       : conversationHref(item.instanceId, cawco.instanceIndex);
   }
 
-  /** A row's second line: what kind of thing waits, and how long it has. */
+  /** What a row asks for, in the words it is asked: its second line. */
+  function wantOf(item: NeedsItem): string {
+    switch (item.kind) {
+      case "ask":
+        return item.isQuestion
+          ? (questionsOf(item.request.toolName, item.request.input)?.[0]
+              ?.question ?? item.ask)
+          : item.ask;
+      case "run":
+        return "Waiting on your answer";
+      default:
+        return capLine(item.cap);
+    }
+  }
+
+  /** A row's last line: the kind, then where it is (machine · project). */
   function metaOf(item: NeedsItem): string {
-    let kind = "Question";
-    if (item.kind === "ask" && !item.isQuestion) {
-      kind = "Permission";
-    } else if (item.kind === "cap") {
-      kind = "Budget reached";
+    switch (item.kind) {
+      case "ask":
+        return `${item.isQuestion ? "Question" : "Permission"} · ${item.place}`;
+      case "run":
+        return `Workflow · ${item.place}`;
+      default:
+        return "Budget";
     }
-    if (item.raisedAt === undefined) {
-      return kind;
-    }
-    return `${kind} · waiting ${span(clock.now - item.raisedAt)}`;
   }
 
   /* ── The hand ──────────────────────────────────────────────────────── */
@@ -471,6 +682,8 @@
     };
   }
 
+  const grabCapsule = grab(false);
+
   function toggle() {
     if (open) {
       closeDrawer();
@@ -557,7 +770,26 @@
                 onclick={() => choose(item)}
                 type="button"
               >
+                <!-- The session's own mark, as the rail draws it; a run and
+                     a budget their glyphs. -->
+                <span class="lead">
+                  {#if item.kind === "ask"}
+                    <SessionMark
+                      id={item.instanceId}
+                      place={item.cwd || item.machineId}
+                      status="attn"
+                    />
+                  {:else if item.kind === "run"}
+                    <IconWorkflow aria-hidden="true" />
+                  {:else}
+                    <IconDollar aria-hidden="true" />
+                  {/if}
+                </span>
                 <span class="name">{item.title}</span>
+                {#if item.raisedAt !== undefined}
+                  <span class="wait">{span(clock.now - item.raisedAt)}</span>
+                {/if}
+                <span class="want">{wantOf(item)}</span>
                 <span class="meta">{metaOf(item)}</span>
               </button>
             </li>
@@ -571,7 +803,7 @@
           tabindex="-1"
         >
           <CawFace size={48} status="ready" />
-          <span>Nothing needs you</span>
+          <span>All caught up</span>
         </div>
       {/if}
       <div aria-hidden="true" class="handle" onpointerdown={grab(true)}>
@@ -585,29 +817,63 @@
     aria-expanded={open}
     aria-haspopup="dialog"
     aria-label={label}
-    class="capsule material-panel touch-hit"
+    class="capsule bar-item touch-hit"
     data-needs-caw
     onclick={onCapsuleClick}
-    onpointerdown={grab(false)}
+    onpointerdown={(event) => {
+      press(event);
+      grabCapsule(event);
+    }}
+    onpointerenter={pointerOn}
+    onpointerleave={pointerOff}
     title={label}
     type="button"
     bind:this={capsule}
   >
-    <span class="face" class:away={beating}>
-      <CawFace size={HEAD} status="compacted" />
+    <span class="mug" class:cut={cut} class:pressed={pressed}>
+      <span
+        class="face"
+        style:--dx={0.5 - CAW_HEAD_CENTRE.x}
+        style:--dy={0.5 - CAW_HEAD_CENTRE.y}
+        style:--side="{HEAD}px"
+        class:away={beating}
+        class:smiled={smiling}
+      >
+        <CawFace size={HEAD} status="compacted" />
+      </span>
+      <span
+        aria-hidden="true"
+        class="beat"
+        bind:this={beatEl}
+        style:--box="{BEAT_BOX}px"
+        style:--frames={BEAT_FRAMES}
+        style:background-image="url({beatStrip})"
+        class:on={beating}
+      ></span>
+      <span
+        aria-hidden="true"
+        class="smile"
+        bind:this={smileEl}
+        style:--box="{SMILE_BOX}px"
+        style:--dx={0.5 - SMILE_HEAD_CENTRE.x}
+        style:--dy={0.5 - SMILE_HEAD_CENTRE.y}
+        style:--frames={SMILE_FRAMES}
+        style:background-image="url({smileStrip})"
+        style:background-position-x="{SMILE_LAST}px"
+        class:on={smiling}
+      ></span>
     </span>
-    <span
-      aria-hidden="true"
-      class="beat"
-      bind:this={beatEl}
-      style:--box="{BEAT_BOX}px"
-      style:--frames={BEAT_FRAMES}
-      style:background-image="url({beatStrip})"
-      class:on={beating}
-    ></span>
     {#if count > 0}
-      <span class="badge"
-        ><TextMorph as="span" duration={morphMs()} text={String(count)} /></span
+      <span
+        class="bar-badge chip"
+        data-tone="attn"
+        style:--out="{chipOut}px"
+        bind:offsetWidth={chipWidth}
+        ><TextMorph
+          as="span"
+          duration={morphMs()}
+          text={count > 99 ? "99+" : String(count)}
+        /></span
       >
     {/if}
   </button>
@@ -622,80 +888,82 @@
     display: grid;
     flex: none;
   }
+  /* An item of the bar's group (Shell's `.bar-item` recipe draws its box,
+     hover and focus); a drag down from him is the drawer's, never a scroll. */
   .capsule {
-    position: relative;
     z-index: 3;
     display: grid;
     place-items: center;
-    inline-size: 32px;
-    block-size: 32px;
+    /* A circle whatever the strips' boxes: the beat's reaches past it. */
+    inline-size: var(--c-bar-item);
     padding: 0;
-    border: 1px solid var(--border-hairline);
-    border-radius: var(--radius-pill);
-    box-shadow: var(--shadow-tile);
-    cursor: pointer;
     touch-action: none;
     -webkit-tap-highlight-color: transparent;
-
-    @media (max-width: 899px) {
-      inline-size: 36px;
-      block-size: 36px;
-    }
-    /* Either setting: the solid raised surface and the control's border, as
-       the Apple apps' GlassCapsule draws it. */
-    @media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
-      background: var(--surface-raised);
-      backdrop-filter: none;
-      border-color: var(--border-control);
-    }
+  }
+  /* His count: centred `--out` up and across from his circle's centre (his
+     item's), on the rim's top-trailing 45° and inside it (`chipOut`). */
+  .chip {
+    inset-block-start: calc(50% - var(--out));
+    inset-inline-start: calc(50% + var(--out));
+    translate: -50% -50%;
+  }
+  /* His head: the face, the beat and the smile in one cell, squashed once
+     under a press (DESIGN.md, The Press Rule) with motion allowed. */
+  .mug {
+    display: grid;
+    place-items: center;
+    pointer-events: none;
     @media (prefers-reduced-motion: no-preference) {
-      transition: transform var(--dur-control) var(--ease-out);
-
-      &:active {
-        transform: scale(var(--press-scale));
-      }
+      transition: transform var(--dur-toggle) var(--ease-out);
+    }
+  }
+  .mug.pressed {
+    @media (prefers-reduced-motion: no-preference) {
+      transform: scale(var(--press-scale));
     }
   }
   .face,
-  .beat {
+  .beat,
+  .smile {
     grid-area: 1 / 1;
   }
+  /* His head's circle at the centre, not his box (CAW_HEAD_CENTRE): moved
+     in layout, not by a transform, so his picture stays on whole pixels. */
   .face {
+    position: relative;
+    inset-inline-start: calc(var(--dx) * var(--side));
+    inset-block-start: calc(var(--dy) * var(--side));
     display: grid;
-    @media (prefers-reduced-motion: no-preference) {
-      transition: opacity var(--dur-fade) var(--ease-out);
-    }
+    transition: opacity var(--dur-fade) var(--ease-out);
   }
-  .face.away {
+  .face.away,
+  .face.smiled {
     opacity: 0;
   }
-  /* The beat's strip, one drawing showing; it is there only while it plays. */
-  .beat {
+  /* The beat's and the smile's strips, one drawing showing. */
+  .beat,
+  .smile {
     inline-size: var(--box);
     block-size: var(--box);
     background-repeat: no-repeat;
     background-size: calc(var(--box) * var(--frames)) var(--box);
     opacity: 0;
-    pointer-events: none;
   }
-  .beat.on {
+  .beat.on,
+  .smile.on {
     opacity: 1;
   }
-  .badge {
-    position: absolute;
-    top: -5px;
-    right: -5px;
-    min-width: 16px;
-    height: 16px;
-    padding: 0 4px;
-    border-radius: var(--radius-pill);
-    background: var(--status-attn-bg);
-    color: var(--status-attn-ink);
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    display: grid;
-    place-items: center;
-    font-variant-numeric: tabular-nums;
+  /* The smile stands where his face does: its rest drawing's head on it. */
+  .smile {
+    position: relative;
+    inset-inline-start: calc(var(--dx) * var(--box));
+    inset-block-start: calc(var(--dy) * var(--box));
+    transition: opacity var(--dur-fade) var(--ease-out);
+  }
+  /* With motion the face and the strip swap as two drawings do, at once;
+     with less of it they cross-fade, and nothing steps. */
+  .cut :is(.face, .smile) {
+    transition: none;
   }
 
   .scrim {
@@ -761,8 +1029,13 @@
     overflow-y: auto;
     overscroll-behavior: contain;
   }
+  /* A row: the session's mark leading on the title's line; the title and
+     its wait; what it wants, two lines at most; then the kind and where. */
   .row {
     display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    column-gap: var(--space-3);
+    align-items: baseline;
     inline-size: 100%;
     min-block-size: 44px;
     padding: var(--space-2) var(--space-3);
@@ -772,16 +1045,56 @@
     text-align: start;
     cursor: pointer;
   }
+  .lead {
+    grid-row: 1;
+    grid-column: 1;
+    align-self: center;
+    display: grid;
+    place-items: center;
+    inline-size: 18px;
+    block-size: 18px;
+    color: var(--ink-muted);
+  }
+  .lead > :global(svg) {
+    inline-size: 16px;
+    block-size: 16px;
+  }
   .name {
+    grid-row: 1;
+    grid-column: 2;
     overflow: hidden;
     font: var(--type-label);
     color: var(--ink-strong);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .meta {
+  .wait {
+    grid-row: 1;
+    grid-column: 3;
     font: var(--type-meta);
     color: var(--ink-muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .want {
+    grid-row: 2;
+    grid-column: 2 / 4;
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    font: var(--type-body);
+    color: var(--ink-strong);
+    overflow-wrap: anywhere;
+  }
+  .meta {
+    grid-row: 3;
+    grid-column: 2 / 4;
+    overflow: hidden;
+    font: var(--type-meta);
+    color: var(--ink-muted);
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .empty {
     display: grid;

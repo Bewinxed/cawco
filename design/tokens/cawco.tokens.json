@@ -2216,8 +2216,43 @@
     },
     "c-top-bar-h": {
       "$type": "dimension",
-      "$value": "60px",
-      "$description": "The shell's top bar: 59px and its 1px hairline."
+      "$value": "44px",
+      "$description": "The shell's top bar at every width: 43px and its 1px hairline, the compact bar's height (Apple HIG, Toolbars). Hosted tabs stand on its floor, a tab row's height below its top."
+    },
+    "c-tab-row-h": {
+      "$type": "dimension",
+      "$value": "36px",
+      "$description": "A session tab row: its list's 4px pad over 32px tabs (PaneTabs)."
+    },
+    "c-bar-group-pad": {
+      "$type": "dimension",
+      "$value": "4px",
+      "$description": "The top bar's icon group's inset round its items, and the bar's round its controls: the 44px bar less the 36px control height, halved. The group is a capsule and its items sit concentric inside it."
+    },
+    "c-bar-item": {
+      "$type": "dimension",
+      "$value": "calc({size.c-btn-h} - 2 * {size.c-bar-group-pad})",
+      "$description": "An item in the top bar's icon group: the group's height, the bar's control height, less its inset on both sides."
+    },
+    "c-bar-symbol": {
+      "$type": "dimension",
+      "$value": "20px",
+      "$description": "A symbol in the top bar's icon group: the machines glyph and Caw's head."
+    },
+    "c-bar-chip": {
+      "$type": "dimension",
+      "$value": "14px",
+      "$description": "A count chip in the top bar's glass: a circle for one digit, a short capsule for more, inside its item's circle on the rim's top-trailing 45°."
+    },
+    "c-bar-chip-ring": {
+      "$type": "dimension",
+      "$value": "1.5px",
+      "$description": "The ring round a count chip, in the glass's surface, that parts it from what it sits on."
+    },
+    "c-bar-search-w": {
+      "$type": "dimension",
+      "$value": "180px",
+      "$description": "The top bar's Jump field: wide enough to read as a field, not a button."
     },
     "c-page-head-h": {
       "$type": "dimension",

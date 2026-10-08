@@ -596,8 +596,22 @@
     /* A ledger's toolbar zone, holding 32px controls 11px in. */
     --c-toolbar-zone: 55px;
     --c-toolbar-ctl: 32px;
-    /* The shell's top bar: 59px and its 1px hairline. */
-    --c-top-bar-h: 60px;
+    /* The shell's top bar at every width: 43px and its 1px hairline, the compact bar's height (Apple HIG, Toolbars). Hosted tabs stand on its floor, a tab row's height below its top. */
+    --c-top-bar-h: 44px;
+    /* A session tab row: its list's 4px pad over 32px tabs (PaneTabs). */
+    --c-tab-row-h: 36px;
+    /* The top bar's icon group's inset round its items, and the bar's round its controls: the 44px bar less the 36px control height, halved. The group is a capsule and its items sit concentric inside it. */
+    --c-bar-group-pad: 4px;
+    /* An item in the top bar's icon group: the group's height, the bar's control height, less its inset on both sides. */
+    --c-bar-item: calc(var(--c-btn-h) - 2 * var(--c-bar-group-pad));
+    /* A symbol in the top bar's icon group: the machines glyph and Caw's head. */
+    --c-bar-symbol: 20px;
+    /* A count chip in the top bar's glass: a circle for one digit, a short capsule for more, inside its item's circle on the rim's top-trailing 45°. */
+    --c-bar-chip: 14px;
+    /* The ring round a count chip, in the glass's surface, that parts it from what it sits on. */
+    --c-bar-chip-ring: 1.5px;
+    /* The top bar's Jump field: wide enough to read as a field, not a button. */
+    --c-bar-search-w: 180px;
     /* A page head under the top bar. */
     --c-page-head-h: 96px;
     --c-sidebar-w: 248px;

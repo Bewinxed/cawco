@@ -25,7 +25,7 @@
     submitCommand,
   } from "../client.svelte";
   import { conversationHref } from "../links";
-  import { resetLabel, usd } from "../usage";
+  import { capLine, resetLabel } from "../usage";
   import { choices } from "./choices.svelte";
   import { clock, type NeedsItem, span } from "./home-state.svelte";
   import { openPeek } from "./peek.svelte";
@@ -49,12 +49,6 @@
       ? "waiting"
       : `waiting ${span(clock.now - item.raisedAt)}`;
   });
-  /** What a cap holds back, as the card's line says it. */
-  const HOLDS = {
-    pause: "attempts paused",
-    quiet: "Caw paused",
-    both: "attempts and Caw paused",
-  } as const;
   /** A permission answered on the card, under the `answer` choice. */
   const answerable = $derived(
     item.kind === "ask" && !item.isQuestion && choices.answer === "a"
@@ -130,8 +124,7 @@
   <span class="place">{item.place}</span>
   <p class="ask">
     {#if item.kind === "cap"}
-      {usd(item.cap.spentUsd)}
-      of {usd(item.cap.usd)} this {item.cap.period} · {HOLDS[item.cap.onCap]}
+      {capLine(item.cap)}
     {:else}
       {item.kind === "run" ? "Waiting on your answer" : item.ask}
     {/if}

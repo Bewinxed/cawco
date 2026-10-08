@@ -52,7 +52,14 @@ that is all they do with him.
 - He moves only while something needs the operator (owner: "it shouldn't animate if there's
   nothing the USER has to pay attention to"): `needs-you`, for a parked ask, a permission or a
   failure. `loading` and `reconnecting` keep their loops too: they are the page saying it
-  cannot show its content yet.
+  cannot show its content yet. One exception: he smiles in reply to the operator's own pointer
+  on his head in the top bar (owner, 2026-10-08: "show the smiling ^^ caw's face/animation on
+  hover and on click"). His ^^ face, both eyes closed upward arcs, is the contented hold of
+  `idle-preen` (drawings 18 to 32); the bar plays that loop's tail backward, drawings 0, 34, 33,
+  32 and 31 (rest, eyes shut, ^^), drawn ahead as `bar-beat-smile-<scheme>.png` by `bun run
+  tab-icon` (`SMILE` in `tab-icon-shots.ts`): in while the pointer is on him, back out as it
+  leaves, in and out once for a press. The needs-you beat goes first. Under Reduce Motion his
+  face cross-fades to drawing 31 and back, and nothing steps.
 - His **still** is the drawing his enter lands on and Reduce Motion holds: a rest's drawing, or
   the first drawing of a waiting status's first loop.
 - `assets/mascot/caw/peek.riv` is Caw's **ledge peek**, a file that is not a status: in a Caw

@@ -8,16 +8,18 @@
 
 <script lang="ts">
   /**
-   * The machines, one click away beside Jump on a wide bar rather than
-   * always on screen. The button says how many are online; its glyph takes
-   * the fail ink when one has dropped and the attention ink when one needs a
-   * hand (behind the hub, a stuck sync), so a dropped machine is still seen
-   * without the list. The popover is the machines' list (MachinesList). The
-   * home's Check machines opens it too (join `machinesPopover`). A phone has
-   * no room for it in the bar: the machines are in its sidebar.
+   * The machines, one click away in the wide bar's icon group rather than
+   * always on screen: an item of the group (Shell's `.bar-item`), its glyph
+   * and the number online in the bar's one ink (Apple HIG, Toolbars: "Reduce
+   * the use of toolbar backgrounds and tinted controls"). A machine down, or
+   * one that needs a hand (behind the hub, a stuck sync), is a badge on the
+   * glyph's corner, the bar's badge in the fail or attention pair, saying
+   * how many, so it is still seen without the list and never by hue alone.
+   * The popover is the machines' list (MachinesList). The home's Check
+   * machines opens it too (join `machinesPopover`). A phone has no room for
+   * it in the bar: the machines are in its sidebar.
    */
   import { mergeProps } from "bits-ui";
-  import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Popover from "#lib/components/ui/popover/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
@@ -34,13 +36,24 @@
   let byPointer = false;
 
   const online = $derived(machinesOnline());
-  /** What the glyph says at a glance: a machine down, one in trouble, or nothing. */
-  const tone = $derived.by(() => {
-    if (cawco.machines.some((machine) => machine.status !== "online")) {
-      return "fail";
+  /** What the badge says at a glance: machines down, ones in trouble, or nothing. */
+  const trouble = $derived.by(() => {
+    const down = cawco.machines.filter(
+      (machine) => machine.status !== "online"
+    ).length;
+    if (down > 0) {
+      return { tone: "fail", count: down, words: `${down} offline` } as const;
     }
-    return home.exceptions.length > 0 ? "attn" : null;
+    const stuck = home.exceptions.length;
+    return stuck > 0
+      ? ({ tone: "attn", count: stuck, words: `${stuck} need a hand` } as const)
+      : null;
   });
+  const label = $derived(
+    trouble
+      ? `Machines, ${online} online, ${trouble.words}`
+      : `Machines, ${online} online`
+  );
 </script>
 
 <svelte:window
@@ -68,17 +81,22 @@
         {#snippet child({
           props,
         })}
-          <Button
+          <button
             {...mergeProps(props, tip)}
-            aria-label="Machines"
-            class="jump machines"
-            data-tone={tone ?? undefined}
-            size="sm"
-            variant="outline"
+            aria-label={label}
+            class="bar-item machines touch-hit"
+            type="button"
           >
-            <IconServer />
+            <span class="glyph">
+              <IconServer aria-hidden="true" />
+              {#if trouble}
+                <span class="bar-badge" data-tone={trouble.tone}
+                  >{trouble.count}</span
+                >
+              {/if}
+            </span>
             <span class="num">{online}</span>
-          </Button>
+          </button>
         {/snippet}
       </Popover.Trigger>
     {/snippet}
@@ -111,16 +129,24 @@
 </Popover.Root>
 
 <style>
-  /* The glyph alone carries a machine in trouble; it crosses over
-     --dur-fade, never pulses. */
-  :global(.machines svg) {
-    transition: color var(--dur-fade) var(--ease-out);
+  /* The number reads beside its glyph; the badge rides the glyph's corner. */
+  .machines {
+    gap: var(--space-2);
+    padding-inline: var(--space-2) var(--space-3);
   }
-  :global(.machines[data-tone="fail"] svg) {
-    color: var(--status-fail-glyph);
+  .glyph {
+    position: relative;
+    display: grid;
   }
-  :global(.machines[data-tone="attn"] svg) {
-    color: var(--status-attn-glyph);
+  /* Over the glyph's top-trailing corner, its ring inside the glass and
+     clear of the number beside it. */
+  .glyph > .bar-badge {
+    inset-block-start: calc(var(--c-bar-chip-ring) - var(--c-bar-chip) / 2);
+    inset-inline-end: calc(-1 * var(--c-bar-chip-ring));
+  }
+  .num {
+    font: var(--type-label);
+    font-variant-numeric: tabular-nums;
   }
   /* Opens with a short scale from its corner, closes faster. */
   :global(.kit-pop.machines-pop) {
