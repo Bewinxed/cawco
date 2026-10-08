@@ -138,8 +138,11 @@ public final class WorkflowRunsStore {
                 let response = try await client.postApiWorkflowRunsByIdCancel(path: .init(id: id))
                 switch response {
                 case .ok: read(id)
-                case let .badRequest(bad): refusal = try await String(collecting: bad.body.plainText, upTo: 64_000)
-                default: refusal = "The hub refused to cancel the run."
+                case let .badRequest(refused): refusal = try await Wire.sentence(refused.body.plainText, status: 400)
+                case let .forbidden(refused): refusal = try await Wire.sentence(refused.body.plainText, status: 403)
+                case let .notFound(refused): refusal = try await Wire.sentence(refused.body.plainText, status: 404)
+                case let .conflict(refused): refusal = try await Wire.sentence(refused.body.plainText, status: 409)
+                case let .undocumented(statusCode, _): refusal = "The hub answered \(statusCode)."
                 }
             } catch { refusal = error.localizedDescription }
             done(refusal)
@@ -155,8 +158,13 @@ public final class WorkflowRunsStore {
                 let response = try await client.postApiWorkflowRunsByIdRerun(path: .init(id: id), body: .json(.init(fromStepId: fromStepId)))
                 switch response {
                 case let .ok(ok): opened(try ok.body.json.runId)
-                case let .badRequest(bad): detail.error = try await String(collecting: bad.body.plainText, upTo: 64_000)
-                default: detail.error = "The hub refused to re-run the workflow."
+                case let .badRequest(refused): detail.error = try await Wire.sentence(refused.body.plainText, status: 400)
+                case let .forbidden(refused): detail.error = try await Wire.sentence(refused.body.plainText, status: 403)
+                case let .notFound(refused): detail.error = try await Wire.sentence(refused.body.plainText, status: 404)
+                case let .conflict(refused): detail.error = try await Wire.sentence(refused.body.plainText, status: 409)
+                case let .unprocessableContent(refused):
+                    detail.error = String(data: try Wire.encoder().encode(try refused.body.applicationProblemJson), encoding: .utf8)
+                case let .undocumented(statusCode, _): detail.error = "The hub answered \(statusCode)."
                 }
             } catch { detail.error = error.localizedDescription }
         }
