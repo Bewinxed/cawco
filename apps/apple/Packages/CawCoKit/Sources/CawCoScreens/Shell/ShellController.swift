@@ -123,7 +123,11 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             button.addAction(UIAction { [weak self] _ in self?.showRailSheet() }, for: .primaryActionTriggered)
         }
         for cluster in [mainCluster, compactCluster, sessionCluster] {
-            cluster.onAttention = { [weak self] in self?.go(.fleet) }
+            cluster.onAttention = { [weak self] in
+                guard let self, let only = home.needs.first, home.needs.count == 1 else { return }
+                openWaiting(only)
+            }
+            cluster.waitingMenu = { [weak self] in self?.waitingMenu() }
             cluster.onAssistant = { [weak self] in self?.toggleAssistant() }
             cluster.onJump = { [weak self] source in self?.openJump(.view(source)) }
             cluster.onMachines = { [weak self] source in self?.openMachines(from: source) }
@@ -329,6 +333,30 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         }
     }
 
+    // MARK: What waits
+
+    /// The attention control goes to what is waiting, never to a place: its
+    /// session's tab comes to the front, the composer already holding the
+    /// parked ask, the transcript where it was left. A run is answered in its run.
+    private func openWaiting(_ item: HomeModel.NeedsItem) {
+        switch item.kind {
+        case let .ask(ask): openSession(ask.instanceId)
+        case let .run(run): openSession(run.rowId)
+        }
+    }
+
+    /// Several asks: one row each, longest wait first, its session's name over
+    /// what it asks and how long it has waited. A row opens its ask.
+    private func waitingMenu() -> UIMenu {
+        let now = Date.now.timeIntervalSince1970 * 1000
+        let rows = home.needs.map { item in
+            let kind = if case let .ask(ask) = item.kind, !ask.isQuestion { "Permission" } else { "Question" }
+            let waited = item.raisedAt.map { "waiting \(Naming.span(ms: now - $0))" } ?? "waiting"
+            return UIAction(title: item.title, subtitle: "\(kind) · \(waited)") { [weak self] _ in self?.openWaiting(item) }
+        }
+        return UIMenu(title: "Waiting on you", children: rows)
+    }
+
     /// A conversation's own way back (its back or close): its tab closes; on a
     /// phone, a group left showing nothing goes back to the board.
     func returnToFleet(_ id: String) {
@@ -445,9 +473,9 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     /// AssistantPanel.svelte's `(max-width: 899px)`: a drawer there, a pane wider.
     private var assistantDrawer: Bool { view.bounds.width < 900 }
 
-    /// Where the assistant comes from: the rail's row on a desk, the bar's orb on a phone.
+    /// Where the assistant comes from: the rail's row on a desk, the bar's More on a phone.
     private var assistantOrigin: CGPoint? {
-        let source: UIView = assistantDrawer ? (compact ? (compactNav.topViewController === workspaceController ? sessionCluster : compactCluster) : mainCluster).assistant : rail.assistantSource
+        let source: UIView = assistantDrawer ? (compact ? (compactNav.topViewController === workspaceController ? sessionCluster : compactCluster) : mainCluster).assistantSource : rail.assistantSource
         guard source.window != nil else { return nil }
         return source.convert(CGPoint(x: source.bounds.midX, y: source.bounds.midY), to: view)
     }
@@ -652,7 +680,8 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     private func refreshBars() {
         defer { barTabs.relayout() }
         let fleet = hub.fleet
-        let blocked = fleet.rows.filter { $0.isLive && home.activity($0.id) == .blocked }.count
+        // The count is the asks the control's menu lists, as the web's is.
+        let blocked = home.needs.count
         let online = fleet.machines.filter { $0.status == "online" }.count
         let tone = MachineHealth.tone(fleet.machines, hubBuild: fleet.hubBuild)
         for cluster in [mainCluster, compactCluster, sessionCluster] {

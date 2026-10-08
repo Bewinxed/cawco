@@ -25,6 +25,8 @@
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import { gridView } from "#lib/cawco/workspace/grid-view.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
+  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Sheet from "#lib/components/ui/sheet/index.js";
@@ -34,8 +36,11 @@
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { DRAWER_QUERY, NARROW_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import {
+    IconAssistant,
     IconChevronLeft,
+    IconMore,
     IconSearch,
+    IconServer,
     IconShield,
     IconSidebar,
   } from "#lib/icons.js";
@@ -44,14 +49,24 @@
   import { goto, onNavigate } from "$app/navigation";
   import { page } from "$app/state";
   import AddMachineDialog from "./AddMachineDialog.svelte";
-  import AssistantOrb from "./assistant/AssistantOrb.svelte";
   import AssistantPanel from "./assistant/AssistantPanel.svelte";
   import ConfirmDialog from "./ConfirmDialog.svelte";
   import { cawco, hubSocketUrl, reconnectNow } from "./client.svelte";
   import { continuing } from "./continue.svelte";
-  import { instanceTitle } from "./home/home-state.svelte";
+  import {
+    clock,
+    home,
+    instanceTitle,
+    type NeedsItem,
+    span,
+  } from "./home/home-state.svelte";
   import JumpPalette, { type JumpOpener } from "./JumpPalette.svelte";
-  import MachinesButton from "./MachinesButton.svelte";
+  import { machinesPopover } from "./join/join.svelte";
+  import { conversationHref } from "./links";
+  import MachinesButton, {
+    machinesOnline,
+    machinesTone,
+  } from "./MachinesButton.svelte";
   import SessionSurface from "./SessionSurface.svelte";
   import Sidebar from "./Sidebar.svelte";
   import NewSessionDialog from "./spawn/NewSessionDialog.svelte";
@@ -380,12 +395,15 @@
           transform: `translate(${end.x}%, ${end.y}%)`,
           opacity: end.opacity,
         };
-        const home: Keyframe = { transform: "none", opacity: 1 };
-        const animation = node.animate(showing ? [away, home] : [from, away], {
-          duration: ms,
-          easing: ease("--ease-drawer"),
-          fill: "forwards",
-        });
+        const settled: Keyframe = { transform: "none", opacity: 1 };
+        const animation = node.animate(
+          showing ? [away, settled] : [from, away],
+          {
+            duration: ms,
+            easing: ease("--ease-drawer"),
+            fill: "forwards",
+          }
+        );
         travelling = animation;
         animation.finished.then(
           () => {
@@ -668,6 +686,59 @@
   const badgeIn = badge(true);
   const badgeOut = badge(false);
 
+  /* ── What waits on the operator ──────────────────────────────────────
+     The attention control goes to what is waiting, never to a place: a
+     session's question or permission, or a workflow run's question, longest
+     wait first (home `needs`, spend caps aside). With one, a press opens it:
+     its session's tab comes to the front and its composer is already grown
+     into the ask, the transcript where it was left. With more, the press
+     opens a menu of them on the control; a row does the one case for its
+     ask. */
+  type Waiting = Exclude<NeedsItem, { kind: "cap" }>;
+  const waiting = $derived(
+    home.needs.filter((item): item is Waiting => item.kind !== "cap")
+  );
+  let attentionOpen = $state(false);
+
+  /** Where an ask is answered: its thread, its session, or its run (NeedsCard's `href`). */
+  function waitingHref(item: Waiting): string {
+    if (item.kind === "run") {
+      return item.href;
+    }
+    return item.thread
+      ? `/session/${item.thread}`
+      : conversationHref(item.instanceId, cawco.instanceIndex);
+  }
+
+  function openWaiting(item: Waiting): void {
+    attentionOpen = false;
+    // biome-ignore lint/complexity/noVoid: the session surface takes it from the route
+    void goto(waitingHref(item));
+  }
+
+  /** A row's second line: what kind of ask, and how long it has waited. */
+  function waitingMeta(item: Waiting): string {
+    const kind =
+      item.kind === "ask" && !item.isQuestion ? "Permission" : "Question";
+    const waited =
+      item.raisedAt === undefined
+        ? "waiting"
+        : `waiting ${span(clock.now - item.raisedAt)}`;
+    return `${kind} · ${waited}`;
+  }
+
+  /* ── The phone's More ─────────────────────────────────────────────────
+     Under 900px the bar's trailing side holds three controls at most: the
+     attention control while something waits, Jump, and More. More holds
+     what else the wide bar shows (Machines) and the phone's assistant, as
+     rows that do what those buttons do. Its glyph wears the Machines tone,
+     so a dropped machine is still seen with the list behind it. A row's
+     action runs once the menu has closed, so what it opens is not closed
+     again by the menu handing focus back to More. */
+  let moreButton = $state<HTMLElement | null>(null);
+  let afterMore: (() => void) | null = null;
+  const moreTone = $derived(machinesTone());
+
   /**
    * What the bar names: the page's own name where it has one (a
    * conversation's title, a project's name), else its section.
@@ -899,32 +970,71 @@
         </div>
 
         <div class="right">
-          <!-- First, so the order read is the order drawn: below 900px it stands
-             left of the cluster rather than in it (the style below). It
-             grows out of the bar's edge and back into it; its count morphs
-             digit by digit. -->
-          {#if cawco.blockedCount > 0}
-            <a
-              class="icobtn touch-hit"
-              href="/session"
-              title="{cawco.blockedCount} waiting on you"
-              in:badgeIn
-              out:badgeOut
-            >
-              <IconShield />
-              <span class="badge"
-                ><TextMorph
-                  as="span"
-                  duration={morphMs()}
-                  text={String(cawco.blockedCount)}
-                /></span
+          <!-- First, so the order read is the order drawn. It grows out of
+             the bar's edge and back into it; its count morphs digit by
+             digit. One ask: the press opens it. More: the press opens the
+             list of them, on the control. -->
+          {#if waiting.length > 0}
+            <span class="attn" in:badgeIn out:badgeOut>
+              <DropdownMenu.Root
+                bind:open={
+                  () => attentionOpen,
+                  (open) => {
+    if (open && waiting.length === 1) {
+      openWaiting(waiting[0]);
+      return;
+    }
+    attentionOpen = open;
+  }
+                }
               >
-            </a>
+                <DropdownMenu.Trigger>
+                  {#snippet child({
+                    props,
+                  })}
+                    <button
+                      {...props}
+                      aria-label="{waiting.length} waiting on you"
+                      class="icobtn touch-hit"
+                      data-attention
+                      title="{waiting.length} waiting on you"
+                      type="button"
+                    >
+                      <IconShield />
+                      <span class="badge"
+                        ><TextMorph
+                          as="span"
+                          duration={morphMs()}
+                          text={String(waiting.length)}
+                        /></span
+                      >
+                    </button>
+                  {/snippet}
+                </DropdownMenu.Trigger>
+                <DropdownMenu.Content
+                  align="end"
+                  aria-label="Waiting on you"
+                  class="w-[min(18rem,calc(100vw-16px))]"
+                  collisionPadding={8}
+                >
+                  {#each waiting as item (item.key)}
+                    <DropdownMenu.Item
+                      class="waiting-row"
+                      onSelect={() => openWaiting(item)}
+                    >
+                      <span class="waiting-words">
+                        <span class="waiting-name">{item.title}</span>
+                        <span class="waiting-meta">{waitingMeta(item)}</span>
+                      </span>
+                    </DropdownMenu.Item>
+                  {/each}
+                </DropdownMenu.Content>
+              </DropdownMenu.Root>
+            </span>
           {/if}
-          <!-- Jump, once, at every width: the far end of the tab row, beside
-             the conversations it jumps between. A phone shows its glyph. -->
-          <!-- The machines, one click away beside Jump. -->
-          <MachinesButton />
+          <!-- The machines, one click away beside Jump on a wide bar. Under
+             900px its button is not drawn and its popover hangs from More. -->
+          <MachinesButton anchor={railed ? null : moreButton} />
           <Tip keys="⌘K" label="Jump to session">
             {#snippet children(
               tip
@@ -950,15 +1060,68 @@
               </Button>
             {/snippet}
           </Tip>
-          <!-- The phone's summon; on a desktop the rail carries it as a row. -->
-          <span class="min-[900px]:hidden">
-            <AssistantOrb
-              onclick={() => {
-                assistantOpen = !assistantOpen;
+          <!-- The phone's More: the third control, and the last. On a desktop
+             the bar shows Machines itself and the rail carries the
+             assistant as a row. The phone's assistant drawer grows from it. -->
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger>
+              {#snippet child({
+                props,
+              })}
+                <Button
+                  {...props}
+                  aria-label="More"
+                  class="more min-[900px]:hidden"
+                  data-assistant-origin
+                  data-tone={moreTone ?? undefined}
+                  size="sm"
+                  variant="outline"
+                  bind:ref={moreButton}
+                >
+                  <IconMore />
+                </Button>
+              {/snippet}
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Content
+              align="end"
+              class="w-56"
+              collisionPadding={8}
+              onCloseAutoFocus={(event: Event) => {
+                const run = afterMore;
+                if (!run) {
+                  return;
+                }
+                afterMore = null;
+                event.preventDefault();
+                run();
               }}
-              open={assistantOpen}
-            />
-          </span>
+            >
+              <DropdownMenu.Item
+                class="more-row"
+                data-tone={moreTone ?? undefined}
+                onSelect={() => {
+                  afterMore = () => {
+                    machinesPopover.open = true;
+                  };
+                }}
+              >
+                <IconServer />
+                Machines
+                <span class="more-count">{machinesOnline()} online</span>
+              </DropdownMenu.Item>
+              <DropdownMenu.Item
+                class="more-row assistant"
+                onSelect={() => {
+                  afterMore = () => {
+                    assistantOpen = !assistantOpen;
+                  };
+                }}
+              >
+                <IconAssistant />
+                {assistantOpen ? "Close assistant" : "Open assistant"}
+              </DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu.Root>
           <!-- No always-on hub dot: a green light that is green 99% of the time
              says nothing. Connection health folds into the banner below, which
              is shown only when the hub is NOT connected. The theme toggle
@@ -1303,8 +1466,17 @@
     .top {
       padding-inline-start: var(--space-7);
     }
+    /* A long name ends in an ellipsis, and stands at least 16px clear of the
+       first control: the bar's gap and the slot's own end inset (7 + 11). */
+    .slot {
+      padding-inline-end: var(--space-3);
+    }
     span.crumb {
+      min-width: 0;
       padding-inline-start: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .top.hosting {
       border-bottom: 1px solid var(--seam);
@@ -1321,7 +1493,7 @@
   /* One family: every control in the cluster is the same 28px box — the
      hairline, the raised surface, the control radius, the same type — so
      spend, Jump, the assistant and the theme toggle read as one row. */
-  .right > :global(:is(.jump, [data-slot="button"])) {
+  .right > :global(:is(.jump, .more, [data-slot="button"])) {
     height: 28px;
     min-width: 28px;
     border: 1px solid var(--border-hairline);
@@ -1329,14 +1501,15 @@
     font-size: var(--text-label);
     font-weight: var(--weight-strong);
   }
-  .right > :global(:is(.jump, [data-slot="button"])) {
+  .right > :global(:is(.jump, .more, [data-slot="button"])) {
     background: var(--surface-raised);
     box-shadow: none;
   }
   /* This rule is unlayered and outranks the kit button's own hover (a
      layered utility), so the cluster states its hover itself. */
   @media (hover: hover) and (pointer: fine) {
-    .right > :global(:is(.jump, [data-slot="button"]):hover:not(:disabled)) {
+    .right
+      > :global(:is(.jump, .more, [data-slot="button"]):hover:not(:disabled)) {
       background: var(--surface-hover);
     }
   }
@@ -1408,18 +1581,72 @@
     place-items: center;
     font-variant-numeric: tabular-nums;
   }
-  /* The attention control comes and goes with the queue. Below 900px, where
-     the cluster also holds Jump and the assistant, it stands the cluster's
-     gap to the left of them and out of the row's flow: arriving, it widens
-     nothing, so nothing already drawn moves (it pushed the cluster aside
-     before, 0.0008 CLS at 390). Wider, it is the cluster's only control. */
-  @media (max-width: 899px) {
-    .right > .icobtn {
-      position: absolute;
-      top: 50%;
-      right: calc(100% + var(--hit-gap-x));
-      translate: 0 -50%;
-    }
+  /* The attention control comes and goes with the queue, the cluster's first
+     control at every width. In the row's flow, so the crumb's room (and its
+     16px from the first control) is measured against it; the cluster is
+     pushed to the bar's end, so arriving it widens the cluster to its left
+     and moves nothing already drawn. The box it grows in is its wrapper's. */
+  .attn {
+    display: grid;
+    flex: none;
+  }
+  button.icobtn {
+    padding: 0;
+    font: inherit;
+  }
+  /* The phone's More: a square control of the family, its glyph muted
+     unless it wears the Machines tone. */
+  /* Its trigger names it `dropdown-menu-trigger`, not `button`: the family's
+     rules above name it by its class. */
+  .right > :global(.more) {
+    width: 28px;
+    padding: 0;
+  }
+  .right :global(.more svg) {
+    width: 16px;
+    height: 16px;
+    color: var(--ink-muted);
+    transition: color var(--dur-fade) var(--ease-out);
+  }
+  .right :global(.more[data-tone="fail"] svg),
+  :global(.more-row[data-tone="fail"] svg) {
+    color: var(--status-fail-glyph);
+  }
+  .right :global(.more[data-tone="attn"] svg),
+  :global(.more-row[data-tone="attn"] svg) {
+    color: var(--status-attn-glyph);
+  }
+  :global(.more-row svg) {
+    color: var(--ink-muted);
+  }
+  :global(.more-row.assistant svg) {
+    color: var(--coral-11);
+  }
+  :global(.more-count) {
+    margin-inline-start: auto;
+    color: var(--ink-muted);
+    font-variant-numeric: tabular-nums;
+  }
+  /* A waiting ask in the attention menu: its session's name, and under it
+     what it asks and how long it has waited. Both lines end in an ellipsis. */
+  :global(.waiting-row) {
+    padding-block: var(--space-2);
+  }
+  :global(.waiting-words) {
+    display: grid;
+    min-width: 0;
+  }
+  :global(:is(.waiting-name, .waiting-meta)) {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  :global(.waiting-name) {
+    color: var(--ink-strong);
+  }
+  :global(.waiting-meta) {
+    font: var(--type-meta);
+    color: var(--ink-muted);
   }
 
   /* The banner floats over the page's top edge, under the bar, rather than

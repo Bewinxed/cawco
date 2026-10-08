@@ -197,15 +197,15 @@
   const growOut = (node: HTMLElement) => fromRow(node, false);
 
   /* On a phone the drawer rises from the bottom edge (vaul) over
-     --dur-panel, and grows toward the header's assistant button as it does:
-     the button is its origin, and it opens from 0.96 on the same curve. */
+     --dur-panel, and grows toward the bar's More button, whose menu opened
+     it: the button is its origin, and it opens from 0.96 on the same curve. */
   let drawer = $state<HTMLElement | null>(null);
   $effect(() => {
     if (!(drawer && motionOk.current)) {
       return;
     }
     const orb = (
-      document.querySelector("[data-assistant-orb]") as HTMLElement
+      document.querySelector("[data-assistant-origin]") as HTMLElement
     ).getBoundingClientRect();
     drawer.animate(
       [

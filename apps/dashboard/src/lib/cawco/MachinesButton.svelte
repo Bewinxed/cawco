@@ -1,3 +1,23 @@
+<script lang="ts" module>
+  import { cawco } from "./client.svelte";
+  import { home } from "./home/home-state.svelte";
+
+  /** How many machines are online: the button's number, and the phone menu's row. */
+  export const machinesOnline = (): number =>
+    cawco.machines.filter((machine) => machine.status === "online").length;
+
+  /**
+   * What the glyph says at a glance: a machine down, one in trouble, or
+   * nothing. The phone's More button wears it too, since Machines is behind it.
+   */
+  export function machinesTone(): "fail" | "attn" | null {
+    if (cawco.machines.some((machine) => machine.status !== "online")) {
+      return "fail";
+    }
+    return home.exceptions.length > 0 ? "attn" : null;
+  }
+</script>
+
 <script lang="ts">
   import { machineLabel } from "@cawco/core";
   /**
@@ -10,6 +30,10 @@
    * no machine yet it is the empty fleet's compact form: one line and the
    * two ways in (MachinesEmpty), each opening Connect a machine on its tab.
    * The home's Check machines opens it too (join `machinesPopover`).
+   *
+   * Under 900px the bar has no room for it: the button is not drawn, the
+   * popover stays mounted, and it hangs from `anchor` (the bar's More
+   * button, whose menu has the Machines row) instead.
    */
   import { mergeProps } from "bits-ui";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -22,10 +46,10 @@
   import * as Popover from "#lib/components/ui/popover/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { IconPlus, IconServer } from "#lib/icons.js";
-  import { cawco } from "./client.svelte";
-  import { home } from "./home/home-state.svelte";
   import { addMachine, JOIN_WAYS, machinesPopover } from "./join/join.svelte";
   import MachineMenu from "./MachineMenu.svelte";
+
+  let { anchor = null }: { anchor?: HTMLElement | null } = $props();
 
   let content = $state<HTMLElement | null>(null);
   /**
@@ -34,16 +58,8 @@
    */
   let byPointer = false;
 
-  const online = $derived(
-    cawco.machines.filter((machine) => machine.status === "online").length
-  );
-  /** What the glyph says at a glance: a machine down, one in trouble, or nothing. */
-  const tone = $derived.by(() => {
-    if (cawco.machines.some((machine) => machine.status !== "online")) {
-      return "fail";
-    }
-    return home.exceptions.length > 0 ? "attn" : null;
-  });
+  const online = $derived(machinesOnline());
+  const tone = $derived(machinesTone());
 
   const liveOn = (machineId: string): number =>
     cawco.runningRows.filter((row) => row.machineId === machineId).length;
@@ -89,7 +105,7 @@
           <Button
             {...mergeProps(props, tip)}
             aria-label="Machines"
-            class="jump machines"
+            class="jump machines max-[899px]:hidden"
             data-tone={tone ?? undefined}
             size="sm"
             variant="outline"
@@ -106,6 +122,7 @@
     aria-label="Machines"
     class="machines-pop w-[min(20rem,calc(100vw-16px))] gap-0"
     collisionPadding={8}
+    customAnchor={anchor}
     onOpenAutoFocus={(event) => {
       // Opened by a press, focus goes into the list as it does from a key,
       // but without the ring: a script's focus would draw it after a press.
