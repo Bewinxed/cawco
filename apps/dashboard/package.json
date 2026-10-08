@@ -9,6 +9,7 @@
   },
   "scripts": {
     "build": "vite build && bun scripts/publish-build.ts",
+    "check": "bun run typecheck",
     "dev": "vite dev",
     "preview": "vite preview",
     "tab-icon": "bun scripts/tab-icon-art.ts",
