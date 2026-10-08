@@ -254,8 +254,8 @@ export async function applyBinary(
 /**
  * Lays `state` over the state as it stands now, read at the write, never over
  * a copy taken when the helper started: the agent writes the same file while
- * an install or a keeper move runs, and an acknowledgement it took meanwhile
- * must not be written back over.
+ * an install or a keeper move runs, and what it wrote meanwhile must not be
+ * written back over.
  */
 async function writeState(state: Partial<BinaryUpdateState>): Promise<void> {
   await writeJsonAtomic(updateStatePath(), {

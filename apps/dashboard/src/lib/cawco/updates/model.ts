@@ -284,6 +284,11 @@ export interface NoticeLine {
 }
 
 export interface Notice {
+  /**
+   * The notice ids acknowledging it records on the hub (notices.svelte.ts):
+   * the events it announces, so it is gone on every tab and device.
+   */
+  acks: string[];
   /** The primary button, when the notice has one. */
   action?: "retry" | "install-all" | "reload";
   /** Caw: a still mark, or (needs-you) the one that moves. */
@@ -308,28 +313,50 @@ export interface Notice {
 export interface NoticeInput {
   /** The machines whose install this tab commanded. */
   commanded: ReadonlySet<string>;
-  /** Notices 4 and 5 the person dismissed, as `"{number}:{version}"`. */
-  dismissed: ReadonlySet<string>;
-  /** Whether notice 2 was dismissed for this exact commanded set. */
-  installingDismissed: boolean;
   machines: UpdateMachine[];
-  policy: BinaryUpdatePolicy;
   /**
-   * The dashboard serving this tab is a newer build than the tab
-   * (served-build.svelte.ts), and the person has not waved the reload off.
+   * The build the dashboard serves, when it is newer than this tab
+   * (served-build.svelte.ts); otherwise null.
    */
-  stale: boolean;
+  newerBuild: string | null;
+  policy: BinaryUpdatePolicy;
+  /** The notice ids acknowledged on any tab or device (notices.svelte.ts). */
+  seen: ReadonlySet<string>;
 }
+
+/** A landing's notice id: the landing itself, by its machine and when it finished. */
+export const landingId = (machineId: string, landing: { at: number }): string =>
+  `landed:${machineId}:${landing.at}`;
+
+/** The reload's notice id: the dashboard build it offers. */
+export const reloadId = (build: string): string => `reload:${build}`;
+
+/** The machines, with every landing someone has acknowledged taken off. */
+export function unseenLandings<T extends UpdateMachine>(
+  machines: T[],
+  seen: ReadonlySet<string>
+): T[] {
+  return machines.map((machine) => {
+    const state = machine.binaryUpdate;
+    return state?.landed && seen.has(landingId(machine.machineId, state.landed))
+      ? { ...machine, binaryUpdate: { ...state, landed: undefined } }
+      : machine;
+  });
+}
+
+/** The ids of the landings the machines carry. */
+const landingIds = (machines: UpdateMachine[]): string[] =>
+  machines.flatMap((m) =>
+    m.binaryUpdate?.landed
+      ? [landingId(m.machineId, m.binaryUpdate.landed)]
+      : []
+  );
 
 const doneOn = (u: BinaryUpdateState): boolean =>
   u.availableVersion !== undefined && u.installedVersion === u.availableVersion;
 
 const byName = (a: UpdateMachine, b: UpdateMachine): number =>
   a.hostname.localeCompare(b.hostname);
-
-/** The key notices 4 and 5 store when dismissed. */
-export const dismissKey = (notice: Notice): string =>
-  `${notice.machineIds.length}:${notice.version}`;
 
 /** What every notice builder reads: the machines that report an update, and how to name one. */
 interface Ctx {
@@ -356,6 +383,7 @@ function rolledBack({ machines, name }: Ctx): Notice | null {
   const v = shownVersion(state.landed?.version);
   const cur = displayVersion(state.installedVersion);
   return {
+    acks: landingIds([machine]),
     kind: 1,
     title: `CawCo ${v} did not install on ${name(machine)}`,
     failed: true,
@@ -419,12 +447,17 @@ function installing({ input, machines, name }: Ctx): Notice | null {
       (state.hostsHub && state.phase === "installing")
     );
   });
-  if (!running || input.installingDismissed) {
+  if (!running) {
     return null;
   }
   const v = shownVersion(
     inSet.map((m) => stateOf(m).availableVersion).find(Boolean)
   );
+  // This install of this build on these machines: a new command shows it again.
+  const id = `installing:${v}:${inSet.map((m) => m.machineId).join(",")}`;
+  if (input.seen.has(id)) {
+    return null;
+  }
   const lines: NoticeLine[] = [];
   if (inSet.length > 1) {
     const done = inSet.filter((m) => doneOn(stateOf(m))).length;
@@ -438,6 +471,7 @@ function installing({ input, machines, name }: Ctx): Notice | null {
   }
   const hub = inSet.find((m) => stateOf(m).hostsHub && !doneOn(stateOf(m)));
   return {
+    acks: [id],
     kind: 2,
     title: `Installing CawCo ${v}`,
     failed: false,
@@ -460,6 +494,8 @@ function landedAll({ input, machines }: Ctx): Notice | null {
   }
   const v = shownVersion(stateOf(asked[0] as UpdateMachine).availableVersion);
   return {
+    // What landed is said here, so it is not announced again (notice 6).
+    acks: landingIds(asked),
     kind: 3,
     title: `CawCo ${v} is running on ${plural(asked.length, "machine")}`,
     failed: false,
@@ -471,6 +507,13 @@ function landedAll({ input, machines }: Ctx): Notice | null {
   };
 }
 
+/**
+ * Notices 4 and 5's id: the build and how many machines wait for it, so
+ * one more machine waiting shows it again.
+ */
+const readyId = (count: number, version: string): string =>
+  `ready:${count}:${version}`;
+
 /** 4. Auto-update is off and a build waits for a person. */
 function waitsForYou({ input, machines }: Ctx): Notice | null {
   const waiting = installable(machines, input.policy).sort(byName);
@@ -481,6 +524,7 @@ function waitsForYou({ input, machines }: Ctx): Notice | null {
   const state = stateOf(lead);
   const v = shownVersion(state.availableVersion);
   return {
+    acks: [readyId(waiting.length, v)],
     kind: 4,
     title: `CawCo ${v} is ready`,
     failed: false,
@@ -507,6 +551,7 @@ function heldBack({ input, machines }: Ctx): Notice | null {
   const state = stateOf(lead);
   const v = shownVersion(state.availableVersion);
   return {
+    acks: [readyId(held.length, v)],
     kind: 5,
     title: `CawCo ${v} is ready`,
     failed: false,
@@ -524,7 +569,8 @@ function heldBack({ input, machines }: Ctx): Notice | null {
  * 6. A build landed that nobody has acknowledged. The toast shows the notes'
  * summary and opens to the whole; the Home card shows the whole. It stands for
  * the landing itself (`landed`), so nothing else the machine reports
- * afterwards brings it back once it is acknowledged.
+ * afterwards brings it back once it is acknowledged. The machines given have
+ * the acknowledged landings taken off (`unseenLandings`).
  */
 export function updatedNotice(machines: UpdateMachine[]): Notice | null {
   const landed = machines
@@ -539,6 +585,7 @@ export function updatedNotice(machines: UpdateMachine[]): Notice | null {
   }
   const v = displayVersion(landing.version);
   return {
+    acks: landingIds(landed),
     kind: 6,
     title: `CawCo updated to ${v}`,
     failed: false,
@@ -552,7 +599,8 @@ export function updatedNotice(machines: UpdateMachine[]): Notice | null {
 }
 
 /** 7. This tab is older than the dashboard serving it, and nothing landed to say why. */
-const RELOAD: Notice = {
+const reloadNotice = (build: string): Notice => ({
+  acks: [reloadId(build)],
   kind: 7,
   title: "CawCo updated",
   failed: false,
@@ -562,15 +610,20 @@ const RELOAD: Notice = {
   caw: { status: "sleeping", moves: false },
   machineIds: [],
   version: "",
-};
+});
 
-/** A landing's notice on a tab that is older than it: it offers the reload. */
-const withReload = (notice: Notice | null): Notice | null =>
-  notice ? { ...notice, action: "reload" } : null;
+/**
+ * A landing's notice on a tab that is older than it: it offers the reload,
+ * and acknowledging it acknowledges the reload too.
+ */
+const withReload = (notice: Notice | null, build: string): Notice | null =>
+  notice
+    ? { ...notice, action: "reload", acks: [...notice.acks, reloadId(build)] }
+    : null;
 
-/** Notices 4 and 5 the person already dismissed are not shown again. */
-const unlessDismissed = (notice: Notice | null, input: NoticeInput) =>
-  notice && input.dismissed.has(dismissKey(notice)) ? null : notice;
+/** Notices 4 and 5 someone already acknowledged are not shown again. */
+const unlessSeen = (notice: Notice | null, input: NoticeInput) =>
+  notice?.acks.every((id) => input.seen.has(id)) ? null : notice;
 
 /**
  * The one notice the screen shows, or null. First match wins. A tab older
@@ -578,31 +631,35 @@ const unlessDismissed = (notice: Notice | null, input: NoticeInput) =>
  * landing that replaced the dashboard says so and offers the reload, and
  * with no landing to announce the reload says it alone. Everything else
  * waits for the reload, since an old tab may misread what it is sent.
+ * Choosing Reload acknowledges what the notice said, so the reloaded tab
+ * does not say it again.
  */
 export function noticeFor(
   input: NoticeInput,
   label: (hostname: string) => string
 ): Notice | null {
+  const machines = unseenLandings(input.machines, input.seen);
   const ctx: Ctx = {
     input,
-    machines: input.machines.filter(
+    machines: machines.filter(
       (machine) => isOnline(machine) && machine.binaryUpdate
     ),
     name: (machine) => label(machine.hostname),
   };
-  if (input.stale) {
+  const build = input.newerBuild;
+  if (build !== null && !input.seen.has(reloadId(build))) {
     return (
-      withReload(landedAll(ctx)) ??
-      withReload(updatedNotice(input.machines)) ??
-      RELOAD
+      withReload(landedAll(ctx), build) ??
+      withReload(updatedNotice(machines), build) ??
+      reloadNotice(build)
     );
   }
   return (
     rolledBack(ctx) ??
     installing(ctx) ??
     landedAll(ctx) ??
-    unlessDismissed(waitsForYou(ctx), input) ??
-    unlessDismissed(heldBack(ctx), input) ??
-    updatedNotice(input.machines)
+    unlessSeen(waitsForYou(ctx), input) ??
+    unlessSeen(heldBack(ctx), input) ??
+    updatedNotice(machines)
   );
 }

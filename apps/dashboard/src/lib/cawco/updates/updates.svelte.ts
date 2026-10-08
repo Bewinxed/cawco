@@ -131,48 +131,10 @@ class Updates {
   }
 
   /**
-   * Landings acknowledged here, by `machineId:at`: seen before the socket
-   * says so. Keyed by the landing, never by `updatedAt`, which moves with
-   * every write the machine makes.
-   */
-  seen = new SvelteSet<string>();
-
-  /**
    * How many Home update cards are on screen. While one is, the card is the
    * landing's surface and the toast does not say it too.
    */
   cards = $state(0);
-
-  /** The machines with the optimistic `seen` marks applied. */
-  withSeen<T extends UpdateMachine>(machines: T[]): T[] {
-    return machines.map((machine) => {
-      const state = machine.binaryUpdate;
-      return state?.landed &&
-        this.seen.has(`${machine.machineId}:${state.landed.at}`)
-        ? { ...machine, binaryUpdate: { ...state, landed: undefined } }
-        : machine;
-    });
-  }
-
-  /**
-   * A person saw the machine's landing: it is cleared on the machine, so it
-   * is gone from every tab and device, not only this one.
-   */
-  async acknowledge(machine: UpdateMachine): Promise<void> {
-    const landing = machine.binaryUpdate?.landed;
-    if (!landing) {
-      return;
-    }
-    this.seen.add(`${machine.machineId}:${landing.at}`);
-    await fetch(
-      `/api/binary-updates/machines/${machine.machineId}/acknowledge`,
-      {
-        method: "POST",
-        headers: JSON_HEADERS,
-        body: JSON.stringify({ at: landing.at }),
-      }
-    ).catch(() => null);
-  }
 }
 
 async function errorText(response: Response): Promise<string> {

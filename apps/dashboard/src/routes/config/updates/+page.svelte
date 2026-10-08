@@ -8,11 +8,13 @@
   import { dur, easeOut } from "#lib/cawco/motion/curves.svelte.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
+  import { notices } from "#lib/cawco/notices.svelte.js";
   import { orderMachines } from "#lib/cawco/rail.svelte.js";
   import ChannelCards from "#lib/cawco/updates/ChannelCards.svelte";
   import {
     displayVersion,
     installable,
+    landingId,
     releaseNotes,
   } from "#lib/cawco/updates/model.js";
   import ReleaseNotes from "#lib/cawco/updates/ReleaseNotes.svelte";
@@ -115,19 +117,16 @@
     checking = false;
   }
 
-  // A person on this page has seen what landed: acknowledge each landing once.
-  const acknowledged = new Set<string>();
+  // A person on this page has seen what landed: each landing is acknowledged for every tab and device.
   $effect(() => {
-    for (const machine of machines) {
-      const landing = machine.binaryUpdate?.landed;
-      if (landing) {
-        const key = `${machine.machineId}:${landing.at}`;
-        if (!acknowledged.has(key)) {
-          acknowledged.add(key);
-          // biome-ignore lint/complexity/noVoid: the acknowledgement reports through the next machine frame
-          void updates.acknowledge(machine);
-        }
-      }
+    const landings = machines.flatMap((machine) =>
+      machine.binaryUpdate?.landed
+        ? [landingId(machine.machineId, machine.binaryUpdate.landed)]
+        : []
+    );
+    if (notices.known && landings.length > 0) {
+      // biome-ignore lint/complexity/noVoid: the hub's record comes back on the next board frame
+      void notices.acknowledge(landings);
     }
   });
 

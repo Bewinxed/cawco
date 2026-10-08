@@ -166,11 +166,10 @@
 
   const input = (over: Partial<NoticeInput>): NoticeInput => ({
     commanded: new Set(),
-    dismissed: new Set(),
-    installingDismissed: false,
     machines: [],
+    newerBuild: null,
     policy: OFF,
-    stale: false,
+    seen: new Set(),
     ...over,
   });
   const LANDED = {
@@ -244,7 +243,7 @@
       machineLabel
     ),
     noticeFor(
-      input({ stale: true, machines: trio([{}, {}, {}]) }),
+      input({ newerBuild: "e3cbba1", machines: trio([{}, {}, {}]) }),
       machineLabel
     ),
   ].filter((notice): notice is Notice => notice !== null);

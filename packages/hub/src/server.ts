@@ -71,7 +71,6 @@ import type {
   WorkspaceRef,
 } from "@cawco/core";
 import {
-  ACKNOWLEDGE_BINARY_UPDATE,
   AGENT_BUSY,
   ASK_USER_QUESTION,
   ATTACHMENTS_HOME,
@@ -219,6 +218,7 @@ import {
   storedFilePath,
   storeFile,
 } from "./media";
+import { createNoticesSeen } from "./notices";
 import type { PendingShape } from "./pending";
 import {
   answerPermission,
@@ -6051,6 +6051,12 @@ export const createServer = (
    * handed on connect and the snapshot it is pushed on every move are the same
    * object by construction.
    */
+  /** The notices a person acknowledged; every change goes out on the next board publish. */
+  const noticesSeen = createNoticesSeen({
+    dbPath: DB_PATH,
+    changed: () => publishInstances(""),
+  });
+
   /** Everything an `instances` frame carries besides the rows themselves. */
   const boardExtras = () => ({
     agents: withPresence(db.listAgents()),
@@ -6061,6 +6067,9 @@ export const createServer = (
     // Carried on every publish, so a dashboard follows a continuation it
     // started over the socket rather than over the request that started it.
     continuations: continuationTable(),
+    // Carried on every publish too: a notice acknowledged on one device
+    // leaves every other one live, and is never shown after a reload.
+    noticesSeen: noticesSeen.ids(),
     // `hubBuild` lets a client tell a hub that is
     // behind from a machine that is. `protocol` is the wire this hub speaks:
     // a page built for an older one reloads itself on its first frame.
@@ -6100,10 +6109,9 @@ export const createServer = (
     publishedExtras.agents.map((row) => [row.machineId, JSON.stringify(row)])
   );
   const publishedMetadata = new Map(
-    (["previews", "handoffs", "continuations"] as const).map((key) => [
-      key,
-      JSON.stringify(publishedExtras[key]),
-    ])
+    (["previews", "handoffs", "continuations", "noticesSeen"] as const).map(
+      (key) => [key, JSON.stringify(publishedExtras[key])]
+    )
   );
 
   const pendingInstancePublishes = new Set<string>();
@@ -6195,7 +6203,12 @@ export const createServer = (
     if (removedAgents.length > 0) {
       delta.removedAgents = removedAgents;
     }
-    for (const key of ["previews", "handoffs", "continuations"] as const) {
+    for (const key of [
+      "previews",
+      "handoffs",
+      "continuations",
+      "noticesSeen",
+    ] as const) {
       const serialised = JSON.stringify(extras[key]);
       if (publishedMetadata.get(key) !== serialised) {
         publishedMetadata.set(key, serialised);
@@ -8706,6 +8719,7 @@ export const createServer = (
       .use(cawRoutes(caw))
       .use(caps.routes())
       .use(viewRoutes(views))
+      .use(noticesSeen.routes)
       .use(
         joinRoutes({
           online: (machineId) => Boolean(registry.agent(machineId)),
@@ -8734,8 +8748,6 @@ export const createServer = (
               }
             }
           },
-          acknowledge: (machineId, at) =>
-            callAgent(machineId, ACKNOWLEDGE_BINARY_UPDATE, [at], 10_000),
           cancel: (machineId) =>
             callAgent(machineId, CANCEL_BINARY_UPDATE, [], 10_000),
           configure: (machineId, policy: BinaryUpdatePolicy) =>

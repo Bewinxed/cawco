@@ -83,6 +83,8 @@ export interface InstancesFrame {
   instances: InstanceRow[];
   /** Hub-originated: the complete board on every connection, including reconnects. */
   kind: "instances";
+  /** The notice ids a person acknowledged, on any tab or device (hub notices.ts). */
+  noticesSeen: string[];
   previews?: PreviewFrame[];
   protocol: number;
   pulses: Record<string, SessionPulse>;
@@ -95,6 +97,7 @@ export interface InstancesDeltaFrame {
   handoffs?: Record<string, { from: string; at: number }>;
   /** Hub-originated: only changed rows and metadata; pulses travel separately. */
   kind: "instances_delta";
+  noticesSeen?: string[];
   previews?: PreviewFrame[];
   removed: string[];
   removedAgents?: string[];

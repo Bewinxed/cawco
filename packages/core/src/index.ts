@@ -1113,8 +1113,5 @@ export * from "./workflow-compile";
 /** Pushed by the hub to an online machine when the fleet's update policy changes. */
 export const CONFIGURE_BINARY_UPDATES = "configureBinaryUpdates";
 
-/** Marks this machine's install-now result as seen by a person. */
-export const ACKNOWLEDGE_BINARY_UPDATE = "acknowledgeBinaryUpdate";
-
 /** Returns a machine that is waiting to install back to `available`: the person changed their mind. */
 export const CANCEL_BINARY_UPDATE = "cancelBinaryUpdate";

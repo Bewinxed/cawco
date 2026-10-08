@@ -9,11 +9,13 @@
  * `olderThanHub`) and reloads, and what asking first protects is kept another
  * way. Every composer writes its unsent words down first (`keepsDrafts`); a
  * field that keeps nothing across a reload holds the reload until it is left.
- * It only reloads once the dashboard serving it has the newer build, or the
- * reload would load this one again. Either wait is told to the caller, which
- * says so in the connection band: a page that has stopped reading says why.
+ * It only reloads once the dashboard's server runs the newer build
+ * (`runningBuild`), or the reload would load this one again. Either wait is
+ * told to the caller, which says so in the connection band: a page that has
+ * stopped reading says why.
  */
-import { updated } from "$app/state";
+import { version } from "$app/env";
+import { runningBuild } from "./served-build.svelte";
 
 /** Writes each composer's unsent words down; each resolves once they are stored. */
 const flushes = new Set<() => Promise<void>>();
@@ -72,7 +74,8 @@ export async function reloadForProtocol(
   if (reloading) {
     return;
   }
-  if (!(await updated.check())) {
+  const running = await runningBuild();
+  if (running === null || running === version) {
     held("build");
     return;
   }

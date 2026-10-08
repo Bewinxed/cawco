@@ -20,10 +20,12 @@
   import MachinesEmpty from "../MachinesEmpty.svelte";
   import { crossIn, crossOut, morphMs } from "../motion/curves.svelte";
   import { reflow } from "../motion/rows.svelte";
-  import { servedNewer } from "../served-build.svelte";
+  import { notices } from "../notices.svelte";
+  import { newerBuild } from "../served-build.svelte";
   import { newSession } from "../spawn/new-session.svelte";
   import UsageMeter from "../UsageMeter.svelte";
-  import { updatedNotice } from "../updates/model";
+  import { reloadId, unseenLandings, updatedNotice } from "../updates/model";
+  import { reloadAcknowledging } from "../updates/update-notice.svelte";
   import { updates } from "../updates/updates.svelte";
   import Caw from "./Caw.svelte";
   import HomeRecent from "./HomeRecent.svelte";
@@ -46,7 +48,9 @@
   const stale = $derived(!home.live);
   /** The landing nobody has acknowledged, until it is dismissed. */
   const updated = $derived(
-    variant === "page" ? updatedNotice(updates.withSeen(cawco.machines)) : null
+    variant === "page" && notices.known
+      ? updatedNotice(unseenLandings(cawco.machines, notices.seen))
+      : null
   );
   // While the card is on screen it is the landing's one surface: the toast stands aside.
   $effect(() => {
@@ -63,21 +67,17 @@
       });
     };
   });
-  function acknowledgeUpdate(): Promise<unknown> {
-    return Promise.all(
-      (updated?.machineIds ?? []).map((id) => {
-        const machine = cawco.machines.find((row) => row.machineId === id);
-        return machine ? updates.acknowledge(machine) : undefined;
-      })
-    );
-  }
   function dismissUpdate(): void {
-    // biome-ignore lint/complexity/noVoid: the acknowledgement reports through the next machine frame
-    void acknowledgeUpdate();
+    // biome-ignore lint/complexity/noVoid: the hub's record comes back on the next board frame
+    void notices.acknowledge(updated?.acks ?? []);
   }
   function reloadForUpdate(): void {
-    // biome-ignore lint/complexity/noVoid: the reload waits on the acknowledgement, and nothing waits on the reload
-    void acknowledgeUpdate().finally(() => location.reload());
+    const build = newerBuild();
+    // biome-ignore lint/complexity/noVoid: the tab goes once the acknowledgement is in
+    void reloadAcknowledging([
+      ...(updated?.acks ?? []),
+      ...(build ? [reloadId(build)] : []),
+    ]);
   }
   /**
    * The tabs are changing their rows and driving the list's height
@@ -212,7 +212,7 @@
         <UpdateCard
           notice={updated}
           ondismiss={dismissUpdate}
-          onreload={servedNewer() ? reloadForUpdate : undefined}
+          onreload={newerBuild() ? reloadForUpdate : undefined}
         />
       </section>
     {/if}

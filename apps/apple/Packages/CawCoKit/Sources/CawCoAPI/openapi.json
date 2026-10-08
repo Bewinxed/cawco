@@ -5751,6 +5751,56 @@
         }
       }
     },
+    "/api/notices/seen": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ids": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "ids"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiNoticesSeen",
+        "responses": {
+          "200": {
+            "description": "postApiNoticesSeen 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiNoticesSeen200"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiNoticesSeen 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/join": {
       "get": {
         "operationId": "getApiJoin",
@@ -6026,61 +6076,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/putApiBinaryUpdatesMachinesByMachineIdState200"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/binary-updates/machines/{machineId}/acknowledge": {
-      "post": {
-        "parameters": [
-          {
-            "name": "machineId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "at": {
-                    "type": "number"
-                  }
-                },
-                "required": [
-                  "at"
-                ]
-              }
-            }
-          }
-        },
-        "operationId": "postApiBinaryUpdatesMachinesByMachineIdAcknowledge",
-        "responses": {
-          "200": {
-            "description": "postApiBinaryUpdatesMachinesByMachineIdAcknowledge 200",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/postApiBinaryUpdatesMachinesByMachineIdAcknowledge200"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "postApiBinaryUpdatesMachinesByMachineIdAcknowledge 422",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -12405,6 +12400,20 @@
           "ok"
         ]
       },
+      "postApiNoticesSeen200": {
+        "type": "object",
+        "properties": {
+          "seen": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "seen"
+        ]
+      },
       "getApiBinaryUpdatesMachines200": {
         "type": "object",
         "properties": {
@@ -12447,17 +12456,6 @@
         ]
       },
       "putApiBinaryUpdatesMachinesByMachineIdState200": {
-        "type": "object",
-        "properties": {
-          "ok": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "ok"
-        ]
-      },
-      "postApiBinaryUpdatesMachinesByMachineIdAcknowledge200": {
         "type": "object",
         "properties": {
           "ok": {
@@ -22404,7 +22402,7 @@
           },
           "landed": {
             "$ref": "#/components/schemas/BinaryUpdateLanding",
-            "description": "The finished install or rollback nobody has acknowledged yet."
+            "description": "The last install or rollback that finished."
           },
           "notes": {
             "type": "string"
@@ -22476,7 +22474,7 @@
         "type": "string"
       },
       "BinaryUpdateLanding": {
-        "description": "An install or a rollback that finished, held until a person acknowledges\nthat very one. It is the event a notice announces, so nothing but the\nfinish of an install or rollback sets it, and only an acknowledgement\nnaming its `at` clears it: the state's other writes carry it through\nunchanged, and the session keeper moving to the build later is part of\nthe same update, not a new one.",
+        "description": "The last install or rollback that finished. It is the event a notice\nannounces, so nothing but the finish of an install or rollback sets it, and\nthe next one replaces it: the state's other writes carry it through\nunchanged, and the session keeper moving to the build later is part of the\nsame update, not a new one. Whether a person has seen it is the hub's\nrecord (`POST /api/notices/seen`, as `landed:<machineId>:<at>`), so one\nacknowledgement holds for every tab and device.",
         "type": "object",
         "properties": {
           "at": {
@@ -27791,6 +27789,13 @@
               "instances"
             ]
           },
+          "noticesSeen": {
+            "description": "The notice ids a person acknowledged, on any tab or device (hub notices.ts).",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "previews": {
             "type": "array",
             "items": {
@@ -27811,6 +27816,7 @@
           "hubBuild",
           "instances",
           "kind",
+          "noticesSeen",
           "protocol",
           "pulses"
         ]
@@ -28124,6 +28130,12 @@
             "enum": [
               "instances_delta"
             ]
+          },
+          "noticesSeen": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "previews": {
             "type": "array",

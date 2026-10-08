@@ -101,6 +101,7 @@ import {
   instanceForSession,
   transcriptUrl,
 } from "./links";
+import { notices } from "./notices.svelte";
 import { unpickedMode } from "./permission-modes";
 import { type HeldPlan, handlePlanMessage } from "./plan";
 import { type PendingSelection, selectionExtras } from "./preview/selection";
@@ -2414,6 +2415,10 @@ function handleFrame(frame: FramePayload): void {
     }
     if (frame.continuations) {
       adoptContinuations(frame.continuations);
+    }
+    // The notices acknowledged on any tab or device: one dismissed elsewhere leaves this tab now.
+    if (frame.noticesSeen) {
+      notices.adopt(frame.noticesSeen);
     }
     if (frame.kind === "instances") {
       adoptInstances(frame.instances);

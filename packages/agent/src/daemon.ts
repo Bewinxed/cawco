@@ -12,7 +12,6 @@ import type {
   SpawnPayload,
 } from "@cawco/core";
 import {
-  ACKNOWLEDGE_BINARY_UPDATE,
   CANCEL_BINARY_UPDATE,
   CAWCO_ENV,
   CAWCO_HUB_PORT,
@@ -1260,9 +1259,6 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
     );
     supervisor.registerDaemonFunction(CANCEL_BINARY_UPDATE, () =>
       updater.cancel()
-    );
-    supervisor.registerDaemonFunction(ACKNOWLEDGE_BINARY_UPDATE, (at) =>
-      updater.acknowledge(at)
     );
     yield* Effect.addFinalizer(() => Effect.sync(() => updater.stop()));
     yield* Effect.forkScoped(Effect.promise(() => updater.start()));

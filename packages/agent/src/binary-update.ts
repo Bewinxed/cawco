@@ -338,19 +338,6 @@ export class BinaryUpdater {
   }
 
   /**
-   * A person saw the landing finished at `at`. Only that one is cleared: an
-   * acknowledgement that crossed a newer landing on its way leaves the newer
-   * one to be seen.
-   */
-  async acknowledge(at: unknown): Promise<BinaryUpdateState> {
-    await this.#load();
-    if (this.#state.landed && this.#state.landed.at === at) {
-      await this.#set({ landed: undefined });
-    }
-    return this.#state;
-  }
-
-  /**
    * Returns a machine waiting to install to `available`: the person changed
    * their mind. A drain under way sees it at its end and installs nothing.
    */

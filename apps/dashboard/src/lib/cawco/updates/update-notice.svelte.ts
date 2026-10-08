@@ -3,24 +3,23 @@
  * the box stays mounted and its props change in place, so every state
  * replaces the last in the same box. Started once from the root layout.
  *
- * A landing (an install or a rollback that finished) is seen once, by
- * anyone, anywhere: closing it acknowledges it on its machine, which clears
- * it for every tab and device. A Home card on screen is the landing's one
- * surface while it is there.
+ * Every notice is acknowledged on the hub (notices.svelte.ts), by the ids of
+ * the events it announces: closing it, or acting on it, clears it for every
+ * tab and device, and a reload never brings it back. A Home card on screen
+ * is the landing's one surface while it is there.
  */
 import { machineLabel } from "@cawco/core";
 import { untrack } from "svelte";
-import { SvelteSet } from "svelte/reactivity";
 import { page } from "$app/state";
 import { cawco } from "../client.svelte";
-import { servedNewer } from "../served-build.svelte";
+import { notices } from "../notices.svelte";
+import { newerBuild } from "../served-build.svelte";
 import { toast } from "../toasts";
-import { dismissKey, type Notice, noticeFor } from "./model";
+import { type Notice, noticeFor } from "./model";
 import UpdateNotice from "./UpdateNotice.svelte";
 import { updates } from "./updates.svelte";
 
 const ID = "cawco-update";
-const STORE = "cawco.update.dismissed";
 /** How long "running on N machines" stays up. */
 const DONE_MS = 6000;
 
@@ -45,21 +44,18 @@ export const remeasure =
     });
   };
 
-function stored(): string[] {
-  try {
-    return JSON.parse(localStorage.getItem(STORE) ?? "[]") as string[];
-  } catch {
-    return [];
-  }
+/**
+ * Reload chosen: what the notice said is acknowledged on the hub first, so
+ * neither the reloaded tab nor any other says it again, then the tab loads
+ * the build the dashboard's server is running.
+ */
+export async function reloadAcknowledging(acks: string[]): Promise<void> {
+  await notices.acknowledge(acks);
+  location.reload();
 }
 
 export function startUpdateNotice(): () => void {
   return $effect.root(() => {
-    const dismissed = new SvelteSet<string>(stored());
-    /** The commanded set the person dismissed notice 2 for. */
-    let installingDismissed = $state("");
-    /** The person closed the reload: this tab stays as it is. */
-    let reloadDismissed = $state(false);
     const view = $state<{ notice: Notice; onPage: boolean }>({
       notice: undefined as unknown as Notice,
       onPage: false,
@@ -67,62 +63,35 @@ export function startUpdateNotice(): () => void {
     let shown = false;
     /** A dismissal we asked for ourselves is not the person's. */
     let ours = false;
+    /** Reload was chosen: the box stays as it stands until the tab goes. */
+    let leaving = false;
 
-    const commandedKey = () => [...updates.commanded].sort().join(",");
-
-    /** Acknowledges the landings of the machines a notice stands for. */
-    const acknowledge = (ids: string[]): Promise<unknown> =>
-      Promise.all(
-        ids.map((id) => {
-          const machine = cawco.machines.find((row) => row.machineId === id);
-          return machine ? updates.acknowledge(machine) : undefined;
-        })
-      );
-
-    /** The person closed the notice (✕ or swipe). */
+    /** The person closed the notice (its ✕). */
     const dismiss = () => {
       if (ours) {
         return;
       }
       shown = false;
       const { notice } = view;
-      if (notice.action === "reload") {
-        // Closing the reload keeps this tab as it is, and its landing seen.
-        reloadDismissed = true;
-      }
-      switch (notice.kind) {
-        case 1:
-        case 6:
-          // biome-ignore lint/complexity/noVoid: the acknowledgement reports through the next machine frame
-          void acknowledge(notice.machineIds);
-          break;
-        case 7:
-          break;
-        case 2:
-          installingDismissed = commandedKey();
-          break;
-        case 3:
-          finishDone(notice.machineIds);
-          break;
-        default:
-          dismissed.add(dismissKey(notice));
-          localStorage.setItem(STORE, JSON.stringify([...dismissed]));
+      // biome-ignore lint/complexity/noVoid: the hub's record comes back on the next board frame
+      void notices.acknowledge(notice.acks);
+      if (notice.kind === 3) {
+        updates.commanded.clear();
       }
     };
 
-    const finishDone = (ids: string[]) => {
-      // biome-ignore lint/complexity/noVoid: the acknowledgement reports through the next machine frame
-      void acknowledge(ids);
+    const finishDone = (acks: string[]) => {
+      // biome-ignore lint/complexity/noVoid: the hub's record comes back on the next board frame
+      void notices.acknowledge(acks);
       updates.commanded.clear();
     };
 
     const act = (action: NonNullable<Notice["action"]>) => {
+      const { notice } = view;
       if (action === "reload") {
-        // The landing the reload stands for is seen by reloading for it.
-        // biome-ignore lint/complexity/noVoid: the reload waits on the acknowledgement, and nothing waits on the reload
-        void acknowledge(view.notice.machineIds).finally(() =>
-          location.reload()
-        );
+        leaving = true;
+        // biome-ignore lint/complexity/noVoid: the tab goes once the acknowledgement is in
+        void reloadAcknowledging(notice.acks);
         return;
       }
       const { policy } = updates;
@@ -132,13 +101,13 @@ export function startUpdateNotice(): () => void {
         return;
       }
       const machine = cawco.machines.find(
-        (row) => row.machineId === view.notice.machineIds[0]
+        (row) => row.machineId === notice.machineIds[0]
       );
       if (machine) {
         // biome-ignore lint/complexity/noVoid: the machine reports its own outcome
         void updates.installNow(machine);
-        // biome-ignore lint/complexity/noVoid: the acknowledgement reports through the next machine frame
-        void acknowledge([machine.machineId]);
+        // biome-ignore lint/complexity/noVoid: the hub's record comes back on the next board frame
+        void notices.acknowledge(notice.acks);
       }
     };
 
@@ -152,16 +121,17 @@ export function startUpdateNotice(): () => void {
 
     $effect(() => {
       const { policy } = updates;
-      const input = policy
-        ? {
-            commanded: new Set(updates.commanded),
-            dismissed: new Set(dismissed),
-            installingDismissed: installingDismissed === commandedKey(),
-            machines: updates.withSeen(cawco.machines),
-            policy,
-            stale: servedNewer() && !reloadDismissed,
-          }
-        : null;
+      // Until the hub's record is in, no notice can know it was already seen.
+      const input =
+        policy && notices.known
+          ? {
+              commanded: new Set(updates.commanded),
+              machines: cawco.machines,
+              newerBuild: newerBuild(),
+              policy,
+              seen: new Set(notices.seen),
+            }
+          : null;
       const found = input
         ? noticeFor(input, (hostname) => machineLabel(hostname))
         : null;
@@ -169,6 +139,9 @@ export function startUpdateNotice(): () => void {
       const notice = found?.kind === 6 && updates.cards > 0 ? null : found;
       const onPage = page.url.pathname === "/config/updates";
       untrack(() => {
+        if (leaving) {
+          return;
+        }
         if (!notice) {
           if (shown) {
             shown = false;
@@ -183,7 +156,7 @@ export function startUpdateNotice(): () => void {
           toast.custom(UpdateNotice, {
             id: ID,
             duration: Number.POSITIVE_INFINITY,
-            // Closing it acknowledges a landing on its machine, for every tab and device, so only its
+            // Closing it acknowledges it for every tab and device, so only its
             // own ✕ closes it: never a stray swipe.
             dismissible: false,
             onDismiss: dismiss,
@@ -204,13 +177,13 @@ export function startUpdateNotice(): () => void {
       if (!(shown && notice?.kind === 3)) {
         return;
       }
-      const ids = notice.machineIds;
-      // biome-ignore lint/complexity/noVoid: the acknowledgement reports through the next machine frame
-      void acknowledge(ids);
+      const { acks } = notice;
+      // biome-ignore lint/complexity/noVoid: the hub's record comes back on the next board frame
+      void notices.acknowledge(acks.filter((id) => id.startsWith("landed:")));
       if (notice.action === "reload") {
         return;
       }
-      const timer = setTimeout(() => finishDone(ids), DONE_MS);
+      const timer = setTimeout(() => finishDone(acks), DONE_MS);
       return () => clearTimeout(timer);
     });
   });

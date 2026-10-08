@@ -44,12 +44,13 @@ export interface BinaryUpdateChannels {
 }
 
 /**
- * An install or a rollback that finished, held until a person acknowledges
- * that very one. It is the event a notice announces, so nothing but the
- * finish of an install or rollback sets it, and only an acknowledgement
- * naming its `at` clears it: the state's other writes carry it through
- * unchanged, and the session keeper moving to the build later is part of
- * the same update, not a new one.
+ * The last install or rollback that finished. It is the event a notice
+ * announces, so nothing but the finish of an install or rollback sets it, and
+ * the next one replaces it: the state's other writes carry it through
+ * unchanged, and the session keeper moving to the build later is part of the
+ * same update, not a new one. Whether a person has seen it is the hub's
+ * record (`POST /api/notices/seen`, as `landed:<machineId>:<at>`), so one
+ * acknowledgement holds for every tab and device.
  */
 export interface BinaryUpdateLanding {
   /** When it finished, in milliseconds: the landing's identity. */
@@ -212,7 +213,7 @@ export interface BinaryUpdateState {
   installedVersion: string;
   /** The build the session keeper could not start on; not retried by itself. */
   keeperFailedVersion?: string;
-  /** The finished install or rollback nobody has acknowledged yet. */
+  /** The last install or rollback that finished. */
   landed?: BinaryUpdateLanding;
   notes?: string;
   phase: BinaryUpdatePhase;
