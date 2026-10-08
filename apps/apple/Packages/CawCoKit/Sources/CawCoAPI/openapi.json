@@ -10144,6 +10144,71 @@
         }
       }
     },
+    "/api/fleet/skills/{name}/push": {
+      "post": {
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "machineId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "machineId"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiFleetSkillsByNamePush",
+        "responses": {
+          "200": {
+            "description": "postApiFleetSkillsByNamePush 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiFleetSkillsByNamePush200"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiFleetSkillsByNamePush 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiFleetSkillsByNamePush 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/fleet/agents/{name}": {
       "put": {
         "parameters": [
@@ -15302,6 +15367,17 @@
         ]
       },
       "deleteApiFleetSkillsByName200": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
+      "postApiFleetSkillsByNamePush200": {
         "type": "object",
         "properties": {
           "ok": {

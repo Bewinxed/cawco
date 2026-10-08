@@ -600,6 +600,21 @@ export const adoptSkill = (
     `adopt ${name}`
   );
 
+/**
+ * The fleet's copy of a skill over the one a machine edited. The machine sets
+ * its edited copy aside before it writes the fleet's.
+ */
+export const pushSkill = (name: string, machineId: string): Promise<unknown> =>
+  send(
+    `/api/fleet/skills/${encodeURIComponent(name)}/push`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ machineId }),
+    },
+    "overwrite this machine"
+  );
+
 /** Resolves the same source again — for a skill whose repo has moved on. */
 export const refreshSkill = (name: string): Promise<FleetSkillMeta> =>
   send(

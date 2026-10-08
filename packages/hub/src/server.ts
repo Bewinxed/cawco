@@ -11134,6 +11134,34 @@ export const createServer = (
         fanOutFleet();
         return { ok: true };
       })
+      // The click that settles a skill edited on one machine the fleet's way:
+      // `force: true` on that one skill, for that one machine. The machine sets
+      // its edited copy aside (`~/.cawco/replaced-skills`) before it writes the
+      // fleet's, so the edit an overwrite replaces still exists. The other way
+      // to settle it is to adopt that copy (`PUT …/skills/:name` with
+      // `fromMachine`).
+      .post(
+        "/api/fleet/skills/:name/push",
+        { body: t.Object({ machineId: t.String() }) },
+        ({ params, body, status }) => {
+          const agent = registry.agent(body.machineId);
+          if (!agent) {
+            return status(404, `machine ${body.machineId} is not connected`);
+          }
+          const config = db.fleetConfig();
+          if (!config.skills?.some((skill) => skill.name === params.name)) {
+            return status(404, `the fleet carries no skill ${params.name}`);
+          }
+          pushFleetConfig(body.machineId, agent, {
+            ...config,
+            skills: config.skills.map((skill) =>
+              skill.name === params.name ? { ...skill, force: true } : skill
+            ),
+          });
+          publishInstances(body.machineId);
+          return { ok: true };
+        }
+      )
       // A subagent is its markdown file (NEW.md §11): front matter over a body
       // that becomes the system prompt. The file is stored verbatim, and the only
       // thing parsed out of it is what a broken one has to be refused on — the

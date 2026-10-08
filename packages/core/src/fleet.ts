@@ -179,6 +179,11 @@ export interface FleetSkillMeta extends FleetPlacement {
  */
 export interface FleetSkillPayload extends FleetPlacement {
   files?: SkillFile[];
+  /**
+   * Set on a targeted push only: overwrite a copy that was edited on the
+   * machine. Without it an edited copy is left as it is and reported drifted.
+   */
+  force?: boolean;
   hash: string;
   name: string;
   /** Hub-owned workflow stub; refuses to replace an operator's skill. */

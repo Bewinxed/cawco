@@ -17,7 +17,13 @@ import type {
   FleetMemory,
   FleetSkillPayload,
 } from "@cawco/core";
-import { heldSkills, memoryPlan, writeSkillFile } from "../fleet";
+import {
+  heldSkills,
+  memoryPlan,
+  setAsideSkill,
+  skillDrift,
+  writeSkillFile,
+} from "../fleet";
 import {
   guardWorkflowSkillRemoval,
   workflowSkillCollision,
@@ -127,6 +133,14 @@ export const syncSkillFiles = async (
       continue;
     }
 
+    // Edited on this machine: left as it is until it is adopted or overwritten.
+    const drift = skillDrift(held[skill.name], managed[skill.name], skill.hash);
+    if (drift && !skill.force) {
+      written[skill.name] = managed[skill.name];
+      report[skill.name] = { state: "failed", detail: drift };
+      continue;
+    }
+
     // The hub read this disk just before it built this sync and left out the
     // bytes of exactly what it held. Reaching here without files means the
     // disk changed in between; nothing is written, and the next sync's read
@@ -155,6 +169,9 @@ export const syncSkillFiles = async (
     }
 
     try {
+      if (drift) {
+        await setAsideSkill(dir, skill.name);
+      }
       await writeSkill(dir, skill);
       written[skill.name] = skill.hash;
       report[skill.name] = { state: "applied" };
@@ -170,6 +187,18 @@ export const syncSkillFiles = async (
   const wanted = new Set(desired.map(({ name }) => name));
   for (const name of Object.keys(managed)) {
     if (wanted.has(name)) {
+      continue;
+    }
+    // An edited copy outlives the fleet's row, unmanaged.
+    if (
+      held[name] !== undefined &&
+      managed[name] &&
+      held[name] !== managed[name]
+    ) {
+      report[name] = {
+        state: "removed",
+        detail: "kept: edited on this machine",
+      };
       continue;
     }
     try {

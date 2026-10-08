@@ -11,6 +11,7 @@
 
 import {
   chmod,
+  mkdir,
   readdir,
   realpath,
   rename,
@@ -1107,6 +1108,48 @@ export const heldSkills = async (
   return held;
 };
 
+/**
+ * Whether a skill cawco owns was edited on this machine, and what it reports
+ * if so — the rule a memory document follows ({@link memoryPlan}). Edited is
+ * a directory on disk that is neither what cawco last wrote there (`recorded`,
+ * the sidecar's hash) nor already what the fleet carries: a copy someone
+ * changed by hand. It is not rewritten; the operator adopts it or overwrites
+ * it. A missing directory is not an edit, and neither is one with no record
+ * of what was written (a write that failed part-way), so both are written.
+ * When the fleet's copy also moved since cawco wrote, both changes are named
+ * and neither wins.
+ */
+export const skillDrift = (
+  disk: string | undefined,
+  recorded: string | undefined,
+  fleet: string
+): string | undefined => {
+  if (disk === undefined || !recorded || disk === recorded || disk === fleet) {
+    return undefined;
+  }
+  return recorded === fleet
+    ? DRIFTED
+    : `edited on this machine (now ${disk.slice(0, 7)}), and the fleet's copy changed since (now ${fleet.slice(0, 7)}) — adopt this machine's copy or overwrite it with the fleet's`;
+};
+
+/**
+ * Where an edited skill goes when an overwrite replaces it: kept, outside
+ * every skills directory, so no session loads it and nothing is lost.
+ */
+const REPLACED_SKILLS_DIR = expandHome("~/.cawco/replaced-skills");
+
+/** Moves an edited skill's directory aside before an overwrite writes the fleet's. */
+export const setAsideSkill = async (dir: string, name: string) => {
+  await mkdir(REPLACED_SKILLS_DIR, { recursive: true });
+  await rename(
+    join(dir, name),
+    join(
+      REPLACED_SKILLS_DIR,
+      `${name}-${new Date().toISOString().replaceAll(":", "-")}`
+    )
+  );
+};
+
 /** What the vendored marketplace holds on this disk now: plugin name → hash. */
 const readVendoredPlugins = async (): Promise<Record<string, string>> => {
   const root = join(VENDOR_DIR, "plugins");
@@ -1289,6 +1332,16 @@ const syncSkillFiles = async (
       continue;
     }
 
+    // Edited on this machine: left exactly as it is until the operator adopts
+    // it or overwrites it, and the record of what cawco wrote stays, so the
+    // edit is still told apart from the fleet's next change.
+    const drift = skillDrift(held[skill.name], managed[skill.name], skill.hash);
+    if (drift && !skill.force) {
+      written[skill.name] = managed[skill.name];
+      report[skill.name] = { state: "failed", detail: drift };
+      continue;
+    }
+
     // The hub read this disk just before it built this sync and left out the
     // bytes of exactly what it held. Reaching here without files means the
     // disk changed in between; nothing is written, and the next sync's read
@@ -1318,6 +1371,9 @@ const syncSkillFiles = async (
     }
 
     try {
+      if (drift) {
+        await setAsideSkill(SKILLS_DIR, skill.name);
+      }
       await writeSkill(skill);
       written[skill.name] = skill.hash;
       report[skill.name] = { state: "applied" };
@@ -1333,6 +1389,19 @@ const syncSkillFiles = async (
   const wanted = new Set(desired.map(({ name }) => name));
   for (const name of Object.keys(managed)) {
     if (wanted.has(name)) {
+      continue;
+    }
+    // An edited copy outlives the fleet's row, unmanaged, as an edited memory
+    // document does: only exactly what cawco wrote is ever taken away.
+    if (
+      held[name] !== undefined &&
+      managed[name] &&
+      held[name] !== managed[name]
+    ) {
+      report[name] = {
+        state: "removed",
+        detail: "kept: edited on this machine",
+      };
       continue;
     }
     try {
@@ -2323,11 +2392,18 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
     report.plugins,
     report.marketplaces
   );
-  for (const name of Object.keys(managed.skills)) {
-    // biome-ignore lint/performance/noAwaitInLoops: a read-only status check; kept sequential like the rest of this report rather than fanning out parallel file reads
-    skills[name] = (await dirExists(join(SKILLS_DIR, name)))
-      ? { state: "applied" }
-      : { state: "failed", detail: "not on disk" };
+  const heldNow = await heldSkills(SKILLS_DIR, Object.keys(managed.skills));
+  for (const [name, recorded] of Object.entries(managed.skills)) {
+    // A status knows what cawco wrote, not what the fleet carries now, so an
+    // edit is told apart from the record alone.
+    const drift = skillDrift(heldNow[name], recorded, recorded);
+    if (heldNow[name] === undefined) {
+      skills[name] = { state: "failed", detail: "not on disk" };
+    } else if (drift) {
+      skills[name] = { state: "failed", detail: drift };
+    } else {
+      skills[name] = { state: "applied" };
+    }
   }
   if (managed.memory !== undefined) {
     const fileHash = await memoryFileHash();

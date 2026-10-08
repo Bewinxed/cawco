@@ -3169,7 +3169,14 @@ export class SessionSupervisor {
         mcpByHarness[adapter.kind] = report.mcp;
         Object.assign(marketplaces, report.marketplaces);
         Object.assign(plugins, report.plugins);
-        Object.assign(skills, report.skills ?? {});
+        // A skill lives in more than one harness's directory, so its row is
+        // the worst of them: one harness's copy edited or missing is not
+        // undone by another's that is fine.
+        for (const [name, item] of Object.entries(report.skills ?? {})) {
+          skills[name] = skills[name]
+            ? worstFleetState([skills[name], item])
+            : item;
+        }
         Object.assign(memoryDocs, report.memoryDocs ?? {});
         Object.assign(hooks, report.hooks ?? {});
         if (report.memory) {

@@ -5,6 +5,7 @@ import type {
   AuthState,
   FleetConfig,
   FleetHoldings,
+  FleetItemState,
   FleetSyncReport,
   HarnessCapabilities,
   HarnessReport,
@@ -26,7 +27,7 @@ import {
   ModelRuntime,
   SessionManager,
 } from "@earendil-works/pi-coding-agent";
-import { heldSkills } from "../fleet";
+import { heldSkills, skillDrift } from "../fleet";
 import { resolveBin } from "../tools";
 import {
   hashText,
@@ -594,13 +595,16 @@ export class PiProfile {
           "pi has no MCP support. Use Claude Code or OpenCode to call this server.",
       };
     }
-    for (const name of Object.keys(sidecar.skills)) {
-      const file = Bun.file(join(PI_SKILLS, name, "SKILL.md"));
-      (report.skills as NonNullable<FleetSyncReport["skills"]>)[name] =
-        // biome-ignore lint/performance/noAwaitInLoops: small ordered profile report
-        (await file.exists())
-          ? { state: "applied" }
-          : { state: "failed", detail: "not on disk" };
+    const held = await heldSkills(PI_SKILLS, Object.keys(sidecar.skills));
+    for (const [name, recorded] of Object.entries(sidecar.skills)) {
+      const drift = skillDrift(held[name], recorded, recorded);
+      let state: FleetItemState = { state: "applied" };
+      if (held[name] === undefined) {
+        state = { state: "failed", detail: "not on disk" };
+      } else if (drift) {
+        state = { state: "failed", detail: drift };
+      }
+      (report.skills as NonNullable<FleetSyncReport["skills"]>)[name] = state;
     }
     if (sidecar.memory !== undefined) {
       const file = Bun.file(PI_MEMORY);

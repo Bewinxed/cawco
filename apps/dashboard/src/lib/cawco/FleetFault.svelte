@@ -23,7 +23,13 @@
     IconWarningTriangle,
   } from "#lib/icons.js";
   import type { Machine } from "./client.svelte";
-  import { refreshPlugin, refreshSkill, syncFleet } from "./fleet";
+  import {
+    adoptSkill,
+    pushSkill,
+    refreshPlugin,
+    refreshSkill,
+    syncFleet,
+  } from "./fleet";
   import {
     CAUSE,
     type FaultGroup,
@@ -173,6 +179,47 @@
       result = { tone: "fail", text: message(error) };
     } finally {
       busy = false;
+    }
+  }
+
+  /**
+   * A skill has no editor of its own to compare copies in, so its drift is
+   * settled here, with the hook editor's two buttons and words: adopt this
+   * machine's copy into the fleet, or send the fleet's over it.
+   */
+  let settling = $state<Record<string, "adopt" | "push">>({});
+  let settleFailed = $state<Record<string, boolean>>({});
+  const machineName = $derived(
+    machine ? machineLabel(machine.hostname) : (group.machineId ?? "")
+  );
+
+  async function settle(name: string, way: "adopt" | "push") {
+    if (!group.machineId) {
+      return;
+    }
+    settling[name] = way;
+    delete settleFailed[name];
+    result = null;
+    try {
+      if (way === "adopt") {
+        await adoptSkill(name, group.machineId);
+        result = {
+          tone: "done",
+          text: `The fleet now keeps ${machineName}'s copy.`,
+        };
+      } else {
+        await pushSkill(name, group.machineId);
+        result = {
+          tone: "done",
+          text: `${machineName} takes the fleet's copy.`,
+        };
+      }
+      onresolved?.();
+    } catch (error) {
+      settleFailed[name] = true;
+      result = { tone: "fail", text: message(error) };
+    } finally {
+      delete settling[name];
     }
   }
 
@@ -345,6 +392,36 @@
             variant="outline"
           />
           <span class="hint">{actionHint}</span>
+        {:else if copy.action === "settle" && group.scope === "skills"}
+          {#each shown as fault (fault.key)}
+            {#if group.faults.length > 1}
+              <code>{fault.key}</code>
+            {/if}
+            <Button
+              disabled={!online || settling[fault.key] === "push"}
+              failed={settleFailed[fault.key] === true}
+              label="Adopt this copy"
+              onclick={() => settle(fault.key, "adopt")}
+              pending={settling[fault.key] === "adopt"}
+              pendingLabel="Adopting…"
+              size="xs"
+              variant="outline"
+            />
+            <Button
+              disabled={!online || settling[fault.key] === "adopt"}
+              failed={settleFailed[fault.key] === true}
+              label="Send ours"
+              onclick={() => settle(fault.key, "push")}
+              pending={settling[fault.key] === "push"}
+              pendingLabel="Sending…"
+              size="xs"
+              variant="outline"
+            />
+          {/each}
+          <span class="hint"
+            >Adopt this machine’s copy into the fleet, or overwrite it with the
+            fleet’s.</span
+          >
         {:else if copy.action === "settle"}
           <Button href={faultHref(group.faults[0])} size="xs" variant="outline"
             >Compare the two copies</Button
