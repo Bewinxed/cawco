@@ -34,7 +34,7 @@ import resvg_py
 import vtracer
 from PIL import Image
 from scipy import ndimage
-from scipy.spatial import ConvexHull, QhullError
+from scipy.spatial import ConvexHull, Delaunay, QhullError
 
 HERE = Path(__file__).resolve().parent
 LOOPS = HERE.parent / "loops"
@@ -93,8 +93,14 @@ PAPER = (255, 255, 255)
 # use_inks() adds them, so every other take is traced with the four above, as it always was.
 #   cream: the paper note in the compacted Caw's beak, measured from the owner's pick (median of
 #          the note's opaque pixels). It is the one light ink that touches the page around him.
+#   tan:   a template pose prop's shaded face (the magnifier's rim, the easel's side, the
+#          laptop's keys and front edge): the median of the faces' core pixels (away from their
+#          soft edges) in the held frames of seo 1, design 4 and code 5, (199, 182, 148),
+#          (212, 201, 170) and (202, 185, 158) each, 5th-95th percentile (174, 157, 128) to
+#          (218, 201, 173). Only tan_outline() draws it (see TAN_FACE).
 EXTRA_INKS = {
     "cream": (251, 244, 229),
+    "tan": (201, 185, 157),
 }
 # Red minus blue a pixel needs to read as cream, and the darkest channel it may have. The note
 # measures 22 (its fold's shadow 20); the page and his eye whites, neutral, under 3. Without the
@@ -124,6 +130,17 @@ EYE_RING = 0.5
 # outline's core measures 40 at the median (89% of its pixels at 26 or more; the rest are its
 # soft edge).
 TAN = {"rg": (-100, 45), "gb": (10, 45), "rb": (26, 70), "min": (110, 199), "max": (0, 225)}
+# Where a status traces the tan ink too, a tan run is an outline only where it is thin: the parts
+# of it a disk TAN_FACE take pixels across fits inside are a shaded face, traced tan, and the rest
+# of the run, its thin edges, black. Measured on the held frames of seo 1, design 4 and code 5
+# (local width, twice the distance to the run's edge on its medial pixels): the props' outlines
+# run 2 px at the median and 6 at most; the faces 6 to 19 (the magnifier's rim), 6 to 10 (the
+# laptop's keys), 17 to 24 (its front edge). 7 take px is 4.2 box units at the takes' 0.607.
+TAN_FACE = 7
+# The narrowest run of black (take px across) that is his body, not a prop's outline: wider than
+# the props' outlines (6 px at most, as TAN_FACE measures them), and his black round an eye white
+# is many times that.
+HIS_BLACK = 9
 # Two frames are the same drawing when they differ by less than this mean absolute RGB difference
 # (held pairs measure <= 0.7, a new drawing >= 6).
 SAME_DRAWING = 1.5
@@ -289,6 +306,10 @@ def inks(rgb: np.ndarray, centres: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         px[..., 1] - px[..., 2] >= YELLOW_CHROMA
     )
     distance[..., yellow] = np.where(is_yellow, distance[..., yellow], np.inf)
+    if "tan" in INKS:
+        # No pixel is tan by colour alone (vermilion's soft edge against paper sits nearer tan
+        # than vermilion): tan_outline() gives it the faces of tan runs.
+        distance[..., list(INKS).index("tan") + 1] = np.inf
     if "cream" in INKS:
         # Cream sits a few levels from the page and from an eye white, so it is told by its
         # warmth, as yellow is: a warm, light pixel is the note, and nothing neutral is.
@@ -327,12 +348,18 @@ def tan(px: np.ndarray) -> np.ndarray:
 
 def tan_outline(label: np.ndarray, px: np.ndarray) -> None:
     """A cream prop's tan outline (see TAN) traced in black, in place: each connected run of tan
-    pixels that touches cream."""
+    pixels that touches cream. Where the status traces the tan ink, the run's wide parts (see
+    TAN_FACE) are a shaded face and traced tan; its thin edges stay the black outline."""
     cream = list(INKS).index("cream") + 1
     outline = tan(px)
     parts, _ = ndimage.label(outline, structure=np.ones((3, 3)))
     touching = np.unique(parts[ndimage.binary_dilation(label == cream) & outline])
-    label[np.isin(parts, touching[touching > 0])] = list(INKS).index("black") + 1
+    runs = np.isin(parts, touching[touching > 0])
+    label[runs] = list(INKS).index("black") + 1
+    if "tan" in INKS:
+        r = TAN_FACE // 2
+        y, x = np.ogrid[-r : r + 1, -r : r + 1]
+        label[ndimage.binary_opening(runs, structure=x * x + y * y <= r * r)] = list(INKS).index("tan") + 1
 
 
 def warm_eye_whites(label: np.ndarray, px: np.ndarray) -> None:
@@ -427,11 +454,21 @@ def solidity(region: np.ndarray) -> float:
         return 1.0
 
 
+def inside_hull(point: np.ndarray, region: np.ndarray) -> bool:
+    """Whether a (row, column) point lies inside a region's convex hull."""
+    points = np.column_stack(np.nonzero(region))
+    try:
+        corners = points[ConvexHull(points).vertices]
+        return bool(Delaunay(corners).find_simplex(point) >= 0)
+    except QhullError:  # a region too thin for a hull (a line of pixels) encloses nothing
+        return False
+
+
 def see_through(
     enclosed: list[np.ndarray],
     labels: list[np.ndarray],
     start_paper: np.ndarray,
-    end_paper: np.ndarray,
+    end_paper: np.ndarray | None,
 ) -> list[np.ndarray]:
     """Which enclosed near-white regions are paper seen through a gap (between a raised wing and
     the beak, say) rather than an eye white. Some takes draw eye whites exactly as neutral and
@@ -449,14 +486,31 @@ def see_through(
     solid wedge (0.98-1.03) or a ragged hole among splayed feathers or inside an impact burst
     (0.40-0.64). And his eyes sit only in the black, so a region ringed mostly by any other ink (a
     slit in a feather, the inside of a yellow burst) is paper; an eye's ring is black with a third
-    or less of vermilion bled in by the video."""
+    or less of vermilion bled in by the video.
+
+    A pupil's catchlight is its own small round region inside the pupil's black, and both guesses
+    call it paper: its shape is too solid for an eye, and the vermilion the video bleeds into its
+    soft edge can outnumber the black in its thin ring (seo take 1's held frame: 202 px at 1.10
+    solidity, 56 vermilion to 42 black, cut out as a hole beside his eye white; trying-headwind's
+    drawing 47 the same). A gap never opens inside an eye, so a region called paper by a guess
+    alone, whose centre lies inside the convex hull of a region decided eye in the same drawing,
+    is that eye's catchlight, eye white. Evidence from a still is never overruled.
+
+    A take that ends on no still (a template pose, trace_pose.py: he ends holding a prop no still
+    has) passes end_paper None: there is no evidence from its end, so every region the forward pass
+    cannot evidence is told by its shape and ring."""
     forward = decide(enclosed, start_paper)
-    backward = decide(enclosed[::-1], end_paper)[::-1]
+    backward = (
+        decide(enclosed[::-1], end_paper)[::-1]
+        if end_paper is not None
+        else [{r: (False, False) for r in d} for d in forward]
+    )
     black = list(INKS).index("black") + 1
     low, high = EYE_SOLIDITY
     papers = []
     for i, regions in enumerate(enclosed):
         paper = np.zeros(regions.shape, bool)
+        eyes, guessed = [], []
         for r, (fwd, fwd_seen) in forward[i].items():
             bwd, bwd_seen = backward[i][r]
             region = regions == r
@@ -470,7 +524,15 @@ def see_through(
             around = around[around > 0]
             if around.size and np.bincount(around).argmax() != black:
                 is_paper = True
-            if is_paper:
+            if not is_paper:
+                eyes.append(region)
+            elif not (fwd_seen or bwd_seen):
+                guessed.append(region)
+            else:
+                paper |= region
+        for region in guessed:
+            centre = np.array(ndimage.center_of_mass(region))
+            if not any(inside_hull(centre, eye) for eye in eyes):
                 paper |= region
         papers.append(paper)
     return papers
@@ -510,7 +572,47 @@ def finish(label: np.ndarray, rgb: np.ndarray, paper: np.ndarray) -> np.ndarray:
         (label == 0) | (label == 1) | lines | coloured
     )  # black is the base every ink sits on
     _, (iy, ix) = ndimage.distance_transform_edt(~keep, return_indices=True)
-    return label[iy, ix]
+    return eye_whites_in_black(label[iy, ix])
+
+
+def eye_whites_in_black(label: np.ndarray) -> np.ndarray:
+    """Eye white only inside his black, in place and returned. His eye whites and lid lines sit
+    in his black body: a region of white whose ring (two pixels round it) is EYE_RING or more his
+    body's black and touches no page is one (paper seen through a gap inside him is not the page:
+    an eye beside one stays). His body's black is his black with every run thinner than HIS_BLACK
+    opened away: a prop's black outline is not his (a magnifier's glass, ringed by its black rim,
+    once traced as an eye white). Any other region of white is a light patch on whatever it sits
+    on (a sliver along a prop's lit edge once traced as eye white beside the page): it takes the
+    commonest ink of its ring other than black and white, the page included. Run over every take,
+    it changed 105 regions in 20 loops and no eye: the pinched inner ends of see-through slits
+    (between a wing and his body, between his toes) that the lid-line rule drew white, 40 to 470
+    take px, now paper as the rest of the slit is; and specks of white 4 to 53 px inside his
+    vermilion, now vermilion."""
+    black = list(INKS).index("black") + 1
+    blank, _ = ndimage.label(label == 0)
+    edge = np.unique(np.concatenate([blank[0], blank[-1], blank[:, 0], blank[:, -1]]))
+    page = np.isin(blank, edge[edge > 0])
+    r = HIS_BLACK // 2
+    y, x = np.ogrid[-r : r + 1, -r : r + 1]
+    his = ndimage.binary_opening(label == black, structure=x * x + y * y <= r * r)
+    regions, _ = ndimage.label(label == WHITE)
+    h, w = label.shape
+    for k, box in enumerate(ndimage.find_objects(regions), start=1):
+        if box is None:
+            continue
+        box = (
+            slice(max(box[0].start - 2, 0), min(box[0].stop + 2, h)),
+            slice(max(box[1].start - 2, 0), min(box[1].stop + 2, w)),
+        )
+        region = regions[box] == k
+        around = ndimage.binary_dilation(region, iterations=2) & ~region
+        counts = np.bincount(label[box][around], minlength=len(INKS) + 1)
+        if not page[box][around].any() and his[box][around].mean() >= EYE_RING:
+            continue
+        counts[[black, WHITE]] = 0
+        if counts.any():
+            label[box][region] = counts.argmax()
+    return label
 
 
 def largest(mask: np.ndarray) -> np.ndarray:
