@@ -489,6 +489,18 @@ final class TopBarCluster: UIView {
     private var lastWidth = 0.0
     private var end: NSLayoutConstraint!
 
+    /// Caw's head is drawn 36pt but answers a finger from 44pt about it (the
+    /// web capsule's `touch-hit`), past the cluster's own edge: the stack that
+    /// holds him and the strip beside him would otherwise take that margin.
+    /// A control hit directly (Search, Machines) keeps its touch.
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        super.point(inside: point, with: event) || TouchReach.reaches(point, in: self, [caw])
+    }
+
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        TouchReach.redirect(super.hitTest(point, with: event), at: point, in: self, to: [caw])
+    }
+
     override func layoutSubviews() {
         super.layoutSubviews()
         guard let bar = hostingBar else { return }

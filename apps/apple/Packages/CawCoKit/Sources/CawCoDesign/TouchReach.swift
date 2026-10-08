@@ -23,7 +23,7 @@ public enum TouchReach {
     }
 
     /// `box` grown to at least 44×44 about its centre.
-    static func reach(_ box: CGRect) -> CGRect {
+    public static func reach(_ box: CGRect) -> CGRect {
         let side = Size.cBtnHLg
         return box.insetBy(dx: min(0, (box.width - side) / 2), dy: min(0, (box.height - side) / 2))
     }
@@ -38,6 +38,48 @@ public enum TouchReach {
     private static func takesTouches(_ view: UIView) -> Bool {
         !view.isHidden && view.alpha > 0.01 && view.isUserInteractionEnabled && (view is UIControl || !(view.gestureRecognizers ?? []).isEmpty)
     }
+
+    /// A container's hit test for controls drawn inside a parent no bigger
+    /// than they are (a dialog's footer, a tab's row, the bar's cluster):
+    /// UIKit never asks a child about a touch outside its parent, so the
+    /// container takes it and hands it to the nearest of `controls` whose
+    /// reach holds `point` (in `container`'s space). Two neighbours split the
+    /// gap at its midpoint. A touch on a control itself keeps its `direct`
+    /// view; a Mac's pointer takes the drawn boxes alone.
+    @MainActor
+    public static func redirect(_ direct: UIView?, at point: CGPoint, in container: UIView, to controls: [UIView]) -> UIView? {
+        guard container.traitCollection.userInterfaceIdiom != .mac, takesPart(container) else { return direct }
+        var view = direct
+        while let current = view, current !== container {
+            if current is UIControl { return direct }
+            view = current.superview
+        }
+        return nearest(point, in: container, controls)?.control ?? direct
+    }
+
+    /// Whether `point` falls in the reach of any of `controls` (for a
+    /// container's `point(inside:)`, so its parent asks it at all).
+    @MainActor
+    public static func reaches(_ point: CGPoint, in container: UIView, _ controls: [UIView]) -> Bool {
+        container.traitCollection.userInterfaceIdiom != .mac && takesPart(container) && nearest(point, in: container, controls) != nil
+    }
+
+    @MainActor
+    private static func takesPart(_ view: UIView) -> Bool {
+        !view.isHidden && view.alpha > 0.01 && view.isUserInteractionEnabled
+    }
+
+    @MainActor
+    private static func nearest(_ point: CGPoint, in container: UIView, _ controls: [UIView]) -> (control: UIView, distance: Double)? {
+        var best: (control: UIView, distance: Double)?
+        for control in controls where control.window != nil && takesTouches(control) {
+            let box = control.convert(control.bounds, to: container)
+            guard reach(box).contains(point) else { continue }
+            let gap = distance(point, box)
+            if best.map({ gap < $0.distance }) ?? true { best = (control, gap) }
+        }
+        return best
+    }
 }
 
 /// A button with the kit's touch reach (`KitButton.make` makes these).
@@ -48,34 +90,20 @@ public final class ReachButton: UIButton {
 }
 
 /// A card whose buttons keep their reach when the stack holding them is no
-/// taller than they are (a dialog's footer): UIKit never asks a child about
-/// a touch outside its parent, so a touch in that margin lands here and goes
-/// to the nearest button whose reach holds it. A touch on a control itself
-/// always goes to it. A Mac's pointer takes the drawn boxes alone.
+/// taller than they are (a dialog's footer): `TouchReach.redirect` over
+/// every button it holds, for a touch inside the card.
 final class ReachCard: UIView {
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
         let direct = super.hitTest(point, with: event)
-        guard traitCollection.userInterfaceIdiom != .mac, isUserInteractionEnabled, !isHidden, alpha > 0.01,
-              self.point(inside: point, with: event) else { return direct }
-        var view = direct
-        while let current = view, current !== self {
-            if current is UIControl { return direct }
-            view = current.superview
-        }
-        var best: (button: UIButton, distance: Double)?
+        guard isUserInteractionEnabled, !isHidden, alpha > 0.01, self.point(inside: point, with: event) else { return direct }
+        var buttons: [UIView] = []
         func visit(_ view: UIView) {
             guard !view.isHidden, view.alpha > 0.01, view.isUserInteractionEnabled else { return }
-            if let button = view as? UIButton {
-                let box = button.convert(button.bounds, to: self)
-                guard TouchReach.reach(box).contains(point) else { return }
-                let distance = TouchReach.distance(point, box)
-                if best.map({ distance < $0.distance }) ?? true { best = (button, distance) }
-                return
-            }
+            if view is UIButton { return buttons.append(view) }
             view.subviews.forEach(visit)
         }
         visit(self)
-        return best?.button ?? direct
+        return TouchReach.redirect(direct, at: point, in: self, to: buttons)
     }
 }
 

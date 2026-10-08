@@ -679,6 +679,17 @@ final class TabView: UIView {
         label.ink = chosen || hovering || tab?.needs == true ? Palette.inkStrong : Palette.inkMuted
     }
 
+    /// The close answers a finger from 44pt about it (the web's `.tclose`
+    /// `touch-hit`), past the 24pt row and the 32pt tab that hold it. The
+    /// chevron keeps its drawn box: its reach would take the label's end.
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        super.point(inside: point, with: event) || TouchReach.reaches(point, in: self, [close])
+    }
+
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        TouchReach.redirect(super.hitTest(point, with: event), at: point, in: self, to: [close])
+    }
+
     override func layoutSubviews() {
         super.layoutSubviews()
         CATransaction.begin()
