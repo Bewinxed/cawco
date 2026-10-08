@@ -54,14 +54,17 @@ const TEXT_INPUTS = new Set([
 
 type Field = HTMLInputElement | HTMLTextAreaElement | HTMLElement;
 
+// By tag, not `instanceof`: a field in a preview's frame is another
+// window's element, which no class of this window's is the class of.
 const typed = (element: Element | null): element is Field =>
-  element instanceof HTMLElement &&
-  (element.isContentEditable ||
-    element instanceof HTMLTextAreaElement ||
-    (element instanceof HTMLInputElement && TEXT_INPUTS.has(element.type)));
+  element !== null &&
+  ((element as HTMLElement).isContentEditable ||
+    element.tagName === "TEXTAREA" ||
+    (element.tagName === "INPUT" &&
+      TEXT_INPUTS.has((element as HTMLInputElement).type)));
 
 const textOf = (field: Field): string =>
-  field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement
+  "value" in field && typeof field.value === "string"
     ? field.value
     : (field.textContent ?? "");
 
@@ -69,15 +72,20 @@ const textOf = (field: Field): string =>
 const started = new Map<Field, string>();
 let lastInput = 0;
 
-if (typeof window !== "undefined") {
-  lastInput = performance.now();
+/**
+ * Hears pointer and key input, and fields being focused, in `target`: this
+ * window, and each preview frame's window as it loads (PreviewPane). Input
+ * inside a frame never reaches the page around it, so someone working in a
+ * preview would otherwise look idle.
+ */
+export function watchInput(target: Window): void {
   const touched = () => {
     lastInput = performance.now();
   };
   for (const kind of ["pointerdown", "pointermove", "keydown", "wheel"]) {
-    window.addEventListener(kind, touched, { capture: true, passive: true });
+    target.addEventListener(kind, touched, { capture: true, passive: true });
   }
-  window.addEventListener(
+  target.addEventListener(
     "focusin",
     (event) => {
       const field = event.target as Element | null;
@@ -87,6 +95,30 @@ if (typeof window !== "undefined") {
     },
     { capture: true }
   );
+}
+
+if (typeof window !== "undefined") {
+  lastInput = performance.now();
+  watchInput(window);
+}
+
+/** The element with the keyboard, looking into the frame that has it (a preview). */
+function focused(): Element | null {
+  let element = document.activeElement;
+  while (element?.tagName === "IFRAME") {
+    let inner: Element | null = null;
+    try {
+      inner =
+        (element as HTMLIFrameElement).contentDocument?.activeElement ?? null;
+    } catch {
+      // Another origin's frame: what has its keyboard is not ours to read.
+    }
+    if (!inner || inner === element) {
+      break;
+    }
+    element = inner;
+  }
+  return element;
 }
 
 /**
@@ -110,7 +142,11 @@ function unsentWords(): boolean {
 /**
  * What stands over the page: a dialog or sheet, a popover, a menu or a
  * list to pick from, a drawer (the Needs-you drawer is `inert` while
- * closed), or a preview. Toasts are not in it.
+ * closed). Toasts are not in it, and neither is a preview: one sits beside
+ * the conversation most of the time, and it comes back after the reload as
+ * it was (open, from the hub's snapshot; at the reader's place in it,
+ * PreviewPane `keptAt`). Input inside it counts as using the tab
+ * (`watchInput`).
  */
 const OVERLAYS = [
   "dialog[open]",
@@ -121,7 +157,6 @@ const OVERLAYS = [
   // A bits-ui popover's content has no role of its own.
   '[data-popover-content][data-state="open"]',
   "[data-vaul-drawer]",
-  'iframe[src*="/preview/"]',
 ].join(", ");
 
 function overlayOpen(): boolean {
@@ -139,7 +174,7 @@ function overlayOpen(): boolean {
  */
 export function busy(): "typing" | "unsent" | "open" | "recent" | null {
   const visible = document.visibilityState === "visible";
-  if (visible && typed(document.activeElement)) {
+  if (visible && typed(focused())) {
     return "typing";
   }
   if (unsentWords()) {

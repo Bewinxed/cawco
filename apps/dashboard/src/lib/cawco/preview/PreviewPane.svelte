@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { CanvasChoices } from "@cawco/core";
-  import type { Snippet } from "svelte";
+  import { type Snippet, untrack } from "svelte";
   import { toast } from "#lib/cawco/toasts.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import PendingContent, {
@@ -22,6 +22,7 @@
   } from "../client.svelte";
   import { appear, dur } from "../motion/curves.svelte";
   import { closeInto, depart } from "../motion/share.svelte";
+  import { watchInput } from "../reload.svelte";
   import SideSurface from "../side/SideSurface.svelte";
   import PlacePick from "./PlacePick.svelte";
   import {
@@ -88,8 +89,48 @@
   const source = $derived(preview?.source);
   /** Each show gives the document and its assets a fresh URL namespace. */
   const previewBase = $derived(preview?.path ?? "");
-  /** Iframe src uses the base; the header shows the app's own path. */
-  const url = $derived(previewBase);
+  /**
+   * Where the reader had gone inside this show, kept per session so a reload
+   * of the tab (by hand, or by itself once idle: reload.svelte.ts) opens the
+   * preview there again. A new show (another revision) starts at its root.
+   */
+  const keepKey = $derived(`cawco-preview-at:${instanceId}`);
+  function keptAt(): string | null {
+    try {
+      const kept = JSON.parse(localStorage.getItem(keepKey) ?? "null") as {
+        at?: unknown;
+        revision?: unknown;
+      } | null;
+      return kept?.revision === preview?.revision &&
+        typeof kept?.at === "string" &&
+        previewBase !== "" &&
+        kept.at.startsWith(previewBase)
+        ? kept.at
+        : null;
+    } catch {
+      return null;
+    }
+  }
+  function keepAt(at: URL): void {
+    const place = `${at.pathname}${at.search}${at.hash}`;
+    if (!(previewBase && place.startsWith(previewBase) && preview)) {
+      return;
+    }
+    localStorage.setItem(
+      keepKey,
+      JSON.stringify({ revision: preview.revision, at: place })
+    );
+  }
+  /**
+   * The frame opens at the base, or where the reader was in this show; read
+   * once per show, so their going on inside it never reloads the frame.
+   */
+  const url = $derived.by(() => {
+    if (!(preview?.revision && previewBase)) {
+      return previewBase;
+    }
+    return untrack(keptAt) ?? previewBase;
+  });
   let displayPath = $state("");
   /**
    * A decision page names itself in its own heading, and it is served at the
@@ -332,6 +373,7 @@
         }
         const parsed = new URL(at);
         displayPath = `${parsed.pathname}${parsed.search}${parsed.hash}`;
+        keepAt(parsed);
         preview.title = previewTitle(message.title) ?? "";
         if (message.type === "cawco:ready") {
           connected = true;
@@ -589,8 +631,19 @@
       allow="clipboard-write"
       inert={!current}
       onerror={() => arrived(key)}
-      onload={() => {
+      onload={(event) => {
         arrived(key);
+        // Input inside the frame never reaches this page: heard there, it
+        // keeps a tab in use from reloading under its reader.
+        try {
+          const inner = (event.currentTarget as HTMLIFrameElement)
+            .contentWindow;
+          if (inner) {
+            watchInput(inner);
+          }
+        } catch {
+          // A frame of another origin: its input is not ours to hear.
+        }
         if (key === frameKey) {
           announce();
         }
