@@ -86,16 +86,6 @@ const FORWARDED_PARAMETER =
   /(?:^|;)\s*([!#$%&'*+.^_`|~0-9a-z-]+)\s*=\s*("(?:\\.|[^"\\])*"|[^;\s]+)\s*(?=;|$)/gi;
 const QUOTED_PAIR = /\\(.)/g;
 
-// Cloudflare Tunnel does not reliably forward X-Forwarded-Proto, but always sends
-// CF-Visitor: {"scheme":"https"} (https://developers.cloudflare.com/fundamentals/reference/http-headers/).
-function cloudflareScheme(header) {
-  try {
-    return JSON.parse(header ?? "null")?.scheme;
-  } catch {
-    // A CF-Visitor that is not JSON names no scheme.
-  }
-}
-
 function publicOrigin(req) {
   const first =
     req.headers.forwarded?.match(FIRST_FORWARDED_ELEMENT)?.[0] ?? "";
@@ -110,7 +100,6 @@ function publicOrigin(req) {
   const protocol = (
     forwarded.get("proto") ??
     req.headers["x-forwarded-proto"]?.split(",")[0] ??
-    cloudflareScheme(req.headers["cf-visitor"]) ??
     "http"
   )
     .trim()
