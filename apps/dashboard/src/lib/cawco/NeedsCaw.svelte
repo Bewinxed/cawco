@@ -1,0 +1,808 @@
+<script lang="ts">
+  /**
+   * Caw's head in the top bar: the way into what needs the operator (the
+   * home's Needs you: every parked ask, a workflow run's question, a project
+   * past its cap; home-state `needs`, the rows Home's Needs you section shows).
+   *
+   * He is his compacted head (assets/mascot/README.md, `compacted`: a head
+   * that fills its box, built for 18 px) on a floating glass capsule, the
+   * panel material (DESIGN.md, Materials), solid under Reduce Transparency
+   * and Increase Contrast. The count rides his corner in the attention pill,
+   * morphing digit by digit, while anything waits. When something new
+   * arrives he plays his needs-you beat once (the wave of `needs-you-hey`
+   * through a box round his head, drawn ahead by `bun run tab-icon`; his
+   * guide: "a gentle beat… never a hello") and holds still again. With less
+   * motion only the badge changes.
+   *
+   * A tap on him, or a drag down from him, pulls a drawer down from the top.
+   * Dragged, its body grows out of the capsule under the finger 1:1, joined
+   * to it by a neck that thins as the two part and snaps once they are a gap
+   * apart (a metaball's join); let go, it opens or closes on where the
+   * finger was heading (its position projected along its speed) and settles
+   * on the spring every hand-driven surface uses (motion/spring), which a
+   * finger can take hold of again mid-flight. Inside, the rows, longest
+   * wait first; choosing one closes the drawer and opens it: a session with
+   * its composer grown into the ask, a run, or a project's spend. It closes
+   * by a drag up, a tap outside, Escape, or a row.
+   */
+  import { untrack } from "svelte";
+  import { TextMorph } from "torph/svelte";
+  import beatDark from "#lib/assets/brand/bar-beat-needs-you-dark.png";
+  import beatLight from "#lib/assets/brand/bar-beat-needs-you-light.png";
+  import { theme } from "#lib/theme.svelte.js";
+  import { goto } from "$app/navigation";
+  import { cawco } from "./client.svelte";
+  import CawFace from "./home/CawFace.svelte";
+  import { clock, home, type NeedsItem, span } from "./home/home-state.svelte";
+  import { conversationHref } from "./links";
+  import { easeInOut, morphMs, motionOk } from "./motion/curves.svelte";
+  import { integrate, type Sample, sampleAt } from "./motion/spring";
+
+  /** His head's side, px: the compacted still fills it. */
+  const HEAD = 22;
+  /** The beat's box, px: his head and raised wing (tab-icon-shots `NEEDS_YOU`). */
+  const BEAT_BOX = 32;
+  /** The beat's drawings, and its pace: his loops are held on twos of 24. */
+  const BEAT_FRAMES = 16;
+  const BEAT_PACE = 12;
+  /** Where the drawer stands under the capsule once parted, px. */
+  const GAP = 8;
+  /** The finger's travel by which the neck has thinned to nothing and snapped, px. */
+  const SNAP = 56;
+  /** The travel over which the body widens from the capsule's width to its own, px. */
+  const WIDEN = 160;
+  /** Travel before a press is a drag, px. */
+  const SLOP = 8;
+  /** Release speed is read over this last stretch, ms. */
+  const VELOCITY_WINDOW = 80;
+  /**
+   * How far a release is carried along its speed when deciding where it was
+   * going, ms: the projection a deceleration of 0.99 a millisecond reaches
+   * (0.99 / (1 − 0.99) = 99).
+   */
+  const PROJECT_MS = 99;
+  /** Past fully open, a third of the finger's travel shows, and no more than a fifth. */
+  const RESIST = 0.35;
+  const RESIST_MAX = 0.2;
+
+  const needs = $derived(home.needs);
+  const count = $derived(needs.length);
+  const label = $derived(
+    count > 0 ? `Needs you, ${count}` : "Nothing needs you"
+  );
+
+  /* ── The beat ──────────────────────────────────────────────────────── */
+  /** What he has already seen, by key; null until the fleet is first read. */
+  let seen: Set<string> | null = null;
+  let beating = $state(false);
+  let beatEl = $state<HTMLElement | null>(null);
+  const beatStrip = $derived(theme.resolved === "dark" ? beatDark : beatLight);
+
+  $effect(() => {
+    const keys = needs.map((item) => item.key);
+    if (!home.ready) {
+      return;
+    }
+    untrack(() => {
+      const before = seen;
+      seen = new Set(keys);
+      if (before && keys.some((key) => !before.has(key)) && motionOk.current) {
+        beat();
+      }
+    });
+  });
+
+  function beat() {
+    if (beating || !beatEl) {
+      return;
+    }
+    beating = true;
+    const run = beatEl.animate(
+      [
+        { backgroundPositionX: "0px" },
+        { backgroundPositionX: `${-BEAT_BOX * BEAT_FRAMES}px` },
+      ],
+      {
+        duration: (BEAT_FRAMES / BEAT_PACE) * 1000,
+        easing: `steps(${BEAT_FRAMES}, end)`,
+      }
+    );
+    run.finished.then(
+      () => {
+        beating = false;
+      },
+      () => {
+        beating = false;
+      }
+    );
+  }
+
+  /* ── The drawer ────────────────────────────────────────────────────── */
+  let capsule = $state<HTMLButtonElement | null>(null);
+  let body = $state<HTMLElement | null>(null);
+  let inner = $state<HTMLElement | null>(null);
+  let neck = $state<SVGPathElement | null>(null);
+  let scrim = $state<HTMLElement | null>(null);
+  /** The drawer is open, or opening: what the capsule says and the focus follows. */
+  let open = $state(false);
+  /** How far down it is drawn: 0 folded into the capsule, 1 open. */
+  let progress = 0;
+  /** Any of it is on screen. */
+  let shown = $state(false);
+
+  interface Geometry {
+    /** The capsule's box. */
+    capBottom: number;
+    capLeft: number;
+    capRight: number;
+    /** The open drawer's box. */
+    height: number;
+    left: number;
+    width: number;
+  }
+  let geo: Geometry | null = null;
+
+  /** Where the open drawer stands, read off the capsule and the content as they are now. */
+  function measure(): Geometry | null {
+    if (!(capsule && inner)) {
+      return null;
+    }
+    const cap = capsule.getBoundingClientRect();
+    const phone = window.innerWidth < 900;
+    const width = phone ? window.innerWidth - 16 : 380;
+    const left = phone ? 8 : Math.max(8, cap.right - width);
+    inner.style.width = `${width}px`;
+    // Its travel: the gap it parts by, then the content, as far as the screen allows.
+    const room = window.innerHeight - cap.bottom - 16;
+    const height = Math.min(inner.scrollHeight + GAP, room, 560 + GAP);
+    return {
+      capLeft: cap.left,
+      capRight: cap.right,
+      capBottom: cap.bottom,
+      left,
+      width,
+      height,
+    };
+  }
+
+  const clamp01 = (t: number) => Math.min(1, Math.max(0, t));
+  /** Where the neck snaps: SNAP, or sooner in a drawer too short for it. */
+  const snapAt = (g: Geometry) => Math.min(SNAP, g.height * 0.4);
+  const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+
+  /** Draws the drawer at `at` of its travel: body, neck, content and scrim. */
+  function paint(at: number) {
+    progress = at;
+    const g = geo;
+    if (!(g && body && inner)) {
+      return;
+    }
+    const q = Math.max(0, at);
+    const over = Math.max(0, q - 1);
+    // The finger's travel: 1:1 to fully open, then the rubber band.
+    const travel =
+      Math.min(q, 1) * g.height +
+      Math.min(over * g.height * RESIST, g.height * RESIST_MAX);
+    // Its edges leave the capsule's for its own: it grows out from under him,
+    // done by the time it is open however short it is.
+    const widen = easeInOut(clamp01(travel / Math.min(WIDEN, g.height * 0.8)));
+    const left = lerp(g.capLeft, g.left, widen);
+    const right = lerp(g.capRight, g.left + g.width, widen);
+    const gap = GAP * clamp01(travel / snapAt(g));
+    const top = g.capBottom + gap;
+    const h = Math.max(0, travel - gap);
+    const w = right - left;
+    const r = Math.min(12, h / 2, w / 2);
+    body.style.left = `${left}px`;
+    body.style.top = `${top}px`;
+    body.style.width = `${w}px`;
+    body.style.height = `${h}px`;
+    body.style.borderRadius = `${r}px`;
+    inner.style.transform = `translateX(${g.left - left}px)`;
+    inner.style.opacity = String(clamp01((q - 0.3) / 0.4));
+    if (scrim) {
+      scrim.style.opacity = String(clamp01(q));
+    }
+    if (neck) {
+      neck.setAttribute("d", neckPath(g, travel, { left, right, top, h, r }));
+    }
+    shown = q > 0.001;
+  }
+
+  /**
+   * The join between the capsule and the body until they are a gap apart:
+   * from a chord across the capsule's foot down to one across the body's
+   * head under him, pinched at its middle to a waist that thins to nothing
+   * as the finger travels, when it snaps and is drawn no more.
+   */
+  function neckPath(
+    g: Geometry,
+    travel: number,
+    bodyBox: { left: number; right: number; top: number; h: number; r: number }
+  ): string {
+    const t = travel / snapAt(g);
+    if (travel <= 0.5 || t >= 1 || bodyBox.h <= 0) {
+      return "";
+    }
+    const capW = g.capRight - g.capLeft;
+    const capX = g.capLeft + capW / 2;
+    const a = capW * 0.36;
+    const b = Math.min((bodyBox.right - bodyBox.left) / 2, a * 1.4);
+    // Under him, kept off the body's rounded corners.
+    const x = Math.min(
+      Math.max(capX, bodyBox.left + bodyBox.r + b),
+      bodyBox.right - bodyBox.r - b
+    );
+    const waist = a * (1 - t) ** 1.6;
+    const y1 = g.capBottom - capW * 0.12;
+    const y2 = bodyBox.top + Math.min(bodyBox.h, 10);
+    const ym = (y1 + y2) / 2;
+    const xm = (capX + x) / 2;
+    const d1 = (ym - y1) / 2;
+    const d2 = (y2 - ym) / 2;
+    return [
+      `M ${capX - a} ${y1}`,
+      `C ${capX - a} ${y1 + d1} ${xm - waist} ${ym - d1} ${xm - waist} ${ym}`,
+      `C ${xm - waist} ${ym + d2} ${x - b} ${y2 - d2} ${x - b} ${y2}`,
+      `L ${x + b} ${y2}`,
+      `C ${x + b} ${y2 - d2} ${xm + waist} ${ym + d2} ${xm + waist} ${ym}`,
+      `C ${xm + waist} ${ym - d1} ${capX + a} ${y1 + d1} ${capX + a} ${y1}`,
+      "Z",
+    ].join(" ");
+  }
+
+  /* The settle: the spring integrated once at release, sampled each frame,
+     so a finger that takes hold mid-flight takes it from where it is. */
+  let settleFrame = 0;
+  let settling: { path: Sample[]; start: number; target: 0 | 1 } | null = null;
+
+  function stopSettle() {
+    cancelAnimationFrame(settleFrame);
+    settling = null;
+  }
+
+  function settle(target: 0 | 1, velocity = 0) {
+    stopSettle();
+    const g = geo;
+    if (!g) {
+      return;
+    }
+    if (!motionOk.current) {
+      paint(target);
+      finished(target);
+      return;
+    }
+    const path = integrate((progress - target) * g.height, velocity * 1000);
+    settling = { path, start: performance.now(), target };
+    const step = (now: number) => {
+      if (!settling) {
+        return;
+      }
+      // biome-ignore lint/style/useAtIndex: integrate() always returns at least two points
+      const end = settling.path[settling.path.length - 1].t;
+      const seconds = (now - settling.start) / 1000;
+      const sample = sampleAt(settling.path, seconds);
+      paint(settling.target + sample.x / g.height);
+      if (seconds >= end) {
+        const done = settling.target;
+        settling = null;
+        finished(done);
+        return;
+      }
+      settleFrame = requestAnimationFrame(step);
+    };
+    settleFrame = requestAnimationFrame(step);
+  }
+
+  /** The drawer came to rest. */
+  function finished(at: 0 | 1) {
+    if (at === 0) {
+      shown = false;
+      return;
+    }
+    if (!body?.contains(document.activeElement)) {
+      body
+        ?.querySelector<HTMLElement>(".row, .empty")
+        ?.focus({ preventScroll: true });
+    }
+  }
+
+  function openDrawer(velocity = 0) {
+    // From rest it is measured as it is now; mid-flight it keeps its box.
+    if (!geo || progress <= 0.001) {
+      geo = measure();
+    }
+    open = true;
+    settle(1, velocity);
+  }
+
+  function closeDrawer(velocity = 0) {
+    open = false;
+    const hadFocus = body?.contains(document.activeElement);
+    settle(0, velocity);
+    if (hadFocus) {
+      capsule?.focus({ preventScroll: true });
+    }
+  }
+
+  /** A row: the drawer closes and what it asks for opens. */
+  function choose(item: NeedsItem) {
+    closeDrawer();
+    // biome-ignore lint/complexity/noVoid: the session surface takes it from the route
+    void goto(hrefOf(item));
+  }
+
+  function hrefOf(item: NeedsItem): string {
+    if (item.kind !== "ask") {
+      return item.href;
+    }
+    return item.thread
+      ? `/session/${item.thread}`
+      : conversationHref(item.instanceId, cawco.instanceIndex);
+  }
+
+  /** A row's second line: what kind of thing waits, and how long it has. */
+  function metaOf(item: NeedsItem): string {
+    let kind = "Question";
+    if (item.kind === "ask" && !item.isQuestion) {
+      kind = "Permission";
+    } else if (item.kind === "cap") {
+      kind = "Budget reached";
+    }
+    if (item.raisedAt === undefined) {
+      return kind;
+    }
+    return `${kind} · waiting ${span(clock.now - item.raisedAt)}`;
+  }
+
+  /* ── The hand ──────────────────────────────────────────────────────── */
+  /**
+   * A press on the capsule, or on the open drawer's head and handle: a tap
+   * toggles, a drag moves the drawer under the finger. From the capsule the
+   * drag is downward (or back up, once it has it); from the drawer, upward.
+   */
+  interface Hold {
+    base: number;
+    dragging: boolean;
+    fromDrawer: boolean;
+    samples: Array<{ at: number; t: number }>;
+    startX: number;
+    startY: number;
+  }
+
+  /**
+   * The first real travel decides whether a press is a drag: mostly down or
+   * up, and toward where the drawer can go (down from the capsule while it
+   * is shut, up from the open drawer).
+   */
+  function takesHold(hold: Hold, e: PointerEvent): boolean {
+    const dy = e.clientY - hold.startY;
+    const dx = Math.abs(e.clientX - hold.startX);
+    if (Math.abs(dy) < SLOP || dx > Math.abs(dy)) {
+      return false;
+    }
+    if (hold.fromDrawer) {
+      return dy < 0;
+    }
+    return open || dy > 0;
+  }
+
+  /** Release speed along the drawer's travel, px/ms, over the last stretch. */
+  function speedOf(samples: Hold["samples"]): number {
+    const last = samples.at(-1);
+    const first = samples.find(
+      (sample) => last && last.t - sample.t <= VELOCITY_WINDOW
+    );
+    if (!(first && last) || last.t <= first.t) {
+      return 0;
+    }
+    return (last.at - first.at) / (last.t - first.t);
+  }
+
+  function follow(hold: Hold, e: PointerEvent) {
+    const g = geo;
+    if (!g) {
+      return;
+    }
+    const at = hold.base + (e.clientY - hold.startY) / g.height;
+    paint(at);
+    hold.samples.push({ at: at * g.height, t: e.timeStamp });
+    while (
+      hold.samples.length > 2 &&
+      e.timeStamp - hold.samples[0].t > VELOCITY_WINDOW
+    ) {
+      hold.samples.shift();
+    }
+  }
+
+  /** Let go: it goes where its position, carried along its speed, points. */
+  function letGo(hold: Hold) {
+    const g = geo as Geometry;
+    const v = speedOf(hold.samples);
+    if (progress + (v * PROJECT_MS) / g.height > 0.5) {
+      openDrawer(v / g.height);
+    } else {
+      closeDrawer(v / g.height);
+    }
+  }
+
+  function grab(fromDrawer: boolean) {
+    return (event: PointerEvent) => {
+      if (!event.isPrimary || event.button > 0) {
+        return;
+      }
+      const node = event.currentTarget as HTMLElement;
+      const hold: Hold = {
+        base: progress,
+        dragging: false,
+        fromDrawer,
+        samples: [],
+        startX: event.clientX,
+        startY: event.clientY,
+      };
+      const move = (e: PointerEvent) => {
+        if (!hold.dragging) {
+          if (!takesHold(hold, e)) {
+            return;
+          }
+          hold.dragging = true;
+          node.setPointerCapture(e.pointerId);
+          stopSettle();
+          if (!fromDrawer && progress <= 0.001) {
+            geo = measure();
+          }
+          hold.base = progress;
+        }
+        follow(hold, e);
+      };
+      const end = (e: PointerEvent) => {
+        node.removeEventListener("pointermove", move);
+        node.removeEventListener("pointerup", end);
+        node.removeEventListener("pointercancel", end);
+        if (hold.dragging) {
+          letGo(hold);
+        } else if (e.type === "pointerup" && !fromDrawer) {
+          toggle();
+        }
+      };
+      node.addEventListener("pointermove", move);
+      node.addEventListener("pointerup", end);
+      node.addEventListener("pointercancel", end);
+    };
+  }
+
+  function toggle() {
+    if (open) {
+      closeDrawer();
+    } else {
+      openDrawer();
+    }
+  }
+
+  /** A key's press: a pointer's is the `pointerup` above, its click left alone. */
+  function onCapsuleClick(event: MouseEvent) {
+    if (event.detail === 0) {
+      toggle();
+    }
+  }
+
+  /** The drawer follows the window and the content while it stands open. */
+  $effect(() => {
+    if (!shown) {
+      return;
+    }
+    const again = () => {
+      if (settling || !open) {
+        return;
+      }
+      geo = measure();
+      paint(progress);
+    };
+    window.addEventListener("resize", again);
+    return () => window.removeEventListener("resize", again);
+  });
+  $effect(() => {
+    // The rows changed under an open drawer: its height follows them.
+    const rows = needs.length;
+    untrack(() => {
+      if (rows >= 0 && open && !settling) {
+        requestAnimationFrame(() => {
+          geo = measure();
+          paint(1);
+        });
+      }
+    });
+  });
+</script>
+
+<svelte:window
+  onkeydown={(event) => {
+    if (event.key === "Escape" && open) {
+      event.preventDefault();
+      closeDrawer();
+    }
+  }}
+/>
+
+<div class="needs-caw" class:shown>
+  <!-- Under the drawer: a tap outside closes it. -->
+  <div
+    aria-hidden="true"
+    class="scrim"
+    onclick={() => closeDrawer()}
+    bind:this={scrim}
+  ></div>
+  <svg aria-hidden="true" class="neck"><path d="" bind:this={neck}></path></svg>
+  <div
+    aria-label="Needs you"
+    aria-modal="false"
+    class="drawer"
+    id="needs-drawer"
+    inert={!open}
+    role="dialog"
+    bind:this={body}
+  >
+    <div class="inner" bind:this={inner}>
+      {#if needs.length > 0}
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div class="head" onpointerdown={grab(true)}>
+          <span class="title">Needs you</span>
+          <span class="count">{needs.length}</span>
+        </div>
+        <ul class="rows">
+          {#each needs as item (item.key)}
+            <li>
+              <button
+                class="row press-tint focus-inset"
+                onclick={() => choose(item)}
+                type="button"
+              >
+                <span class="name">{item.title}</span>
+                <span class="meta">{metaOf(item)}</span>
+              </button>
+            </li>
+          {/each}
+        </ul>
+      {:else}
+        <div
+          class="empty"
+          onpointerdown={grab(true)}
+          role="status"
+          tabindex="-1"
+        >
+          <CawFace size={48} status="ready" />
+          <span>Nothing needs you</span>
+        </div>
+      {/if}
+      <div aria-hidden="true" class="handle" onpointerdown={grab(true)}>
+        <span></span>
+      </div>
+    </div>
+  </div>
+
+  <button
+    aria-controls="needs-drawer"
+    aria-expanded={open}
+    aria-haspopup="dialog"
+    aria-label={label}
+    class="capsule material-panel touch-hit"
+    data-needs-caw
+    onclick={onCapsuleClick}
+    onpointerdown={grab(false)}
+    title={label}
+    type="button"
+    bind:this={capsule}
+  >
+    <span class="face" class:away={beating}>
+      <CawFace size={HEAD} status="compacted" />
+    </span>
+    <span
+      aria-hidden="true"
+      class="beat"
+      bind:this={beatEl}
+      style:--box="{BEAT_BOX}px"
+      style:--frames={BEAT_FRAMES}
+      style:background-image="url({beatStrip})"
+      class:on={beating}
+    ></span>
+    {#if count > 0}
+      <span class="badge"
+        ><TextMorph as="span" duration={morphMs()} text={String(count)} /></span
+      >
+    {/if}
+  </button>
+</div>
+
+<style>
+  /* Its own stacking context over the page: the scrim, the neck and the
+     drawer under the capsule, so the neck joins the capsule from beneath. */
+  .needs-caw {
+    position: relative;
+    z-index: 60;
+    display: grid;
+    flex: none;
+  }
+  .capsule {
+    position: relative;
+    z-index: 3;
+    display: grid;
+    place-items: center;
+    inline-size: 32px;
+    block-size: 32px;
+    padding: 0;
+    border: 1px solid var(--border-hairline);
+    border-radius: var(--radius-pill);
+    box-shadow: var(--shadow-tile);
+    cursor: pointer;
+    touch-action: none;
+    -webkit-tap-highlight-color: transparent;
+
+    @media (max-width: 899px) {
+      inline-size: 36px;
+      block-size: 36px;
+    }
+    @media (prefers-contrast: more) {
+      background: var(--surface-raised);
+      backdrop-filter: none;
+      border-color: var(--border-control);
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      transition: transform var(--dur-control) var(--ease-out);
+
+      &:active {
+        transform: scale(var(--press-scale));
+      }
+    }
+  }
+  .face,
+  .beat {
+    grid-area: 1 / 1;
+  }
+  .face {
+    display: grid;
+    @media (prefers-reduced-motion: no-preference) {
+      transition: opacity var(--dur-fade) var(--ease-out);
+    }
+  }
+  .face.away {
+    opacity: 0;
+  }
+  /* The beat's strip, one drawing showing; it is there only while it plays. */
+  .beat {
+    inline-size: var(--box);
+    block-size: var(--box);
+    background-repeat: no-repeat;
+    background-size: calc(var(--box) * var(--frames)) var(--box);
+    opacity: 0;
+    pointer-events: none;
+  }
+  .beat.on {
+    opacity: 1;
+  }
+  .badge {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: var(--radius-pill);
+    background: var(--status-attn-bg);
+    color: var(--status-attn-ink);
+    font-size: var(--text-meta);
+    font-weight: var(--weight-body);
+    display: grid;
+    place-items: center;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .scrim {
+    position: fixed;
+    z-index: 1;
+    inset: 0;
+    visibility: hidden;
+    background: oklch(from var(--surface-recess) l c h / 0.4);
+    opacity: 0;
+  }
+  .neck {
+    position: fixed;
+    z-index: 2;
+    inset: 0;
+    inline-size: 100vw;
+    block-size: 100dvh;
+    visibility: hidden;
+    overflow: visible;
+    pointer-events: none;
+    fill: var(--surface-raised);
+  }
+  .drawer {
+    position: fixed;
+    z-index: 2;
+    visibility: hidden;
+    overflow: hidden;
+    background: var(--surface-raised);
+    box-shadow: var(--shadow-overlay);
+  }
+  .shown :is(.scrim, .neck, .drawer) {
+    visibility: visible;
+  }
+  .inner {
+    display: flex;
+    flex-direction: column;
+    max-block-size: min(560px, calc(100dvh - 120px));
+    @media (prefers-reduced-motion: reduce) {
+      transition: opacity var(--dur-fade) var(--ease-out);
+    }
+  }
+  .head {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
+    padding: var(--space-4) var(--space-4) var(--space-2);
+    touch-action: none;
+  }
+  .title {
+    font: var(--type-label);
+    color: var(--ink-strong);
+  }
+  .count {
+    font: var(--type-meta);
+    color: var(--ink-muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .rows {
+    flex: 1 1 auto;
+    min-block-size: 0;
+    margin: 0;
+    padding: 0 var(--space-2);
+    list-style: none;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .row {
+    display: grid;
+    inline-size: 100%;
+    min-block-size: 44px;
+    padding: var(--space-2) var(--space-3);
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: none;
+    text-align: start;
+    cursor: pointer;
+  }
+  .name {
+    overflow: hidden;
+    font: var(--type-label);
+    color: var(--ink-strong);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .meta {
+    font: var(--type-meta);
+    color: var(--ink-muted);
+  }
+  .empty {
+    display: grid;
+    justify-items: center;
+    gap: var(--space-2);
+    padding: var(--space-6) var(--space-4) var(--space-2);
+    font: var(--type-label);
+    color: var(--ink-muted);
+    outline: none;
+    touch-action: none;
+  }
+  /* The grabber at the drawer's foot: pulled up, the drawer goes back. */
+  .handle {
+    display: grid;
+    place-items: center;
+    block-size: 24px;
+    touch-action: none;
+    cursor: grab;
+  }
+  .handle span {
+    inline-size: 36px;
+    block-size: 4px;
+    border-radius: var(--radius-pill);
+    background: var(--border-control);
+  }
+</style>

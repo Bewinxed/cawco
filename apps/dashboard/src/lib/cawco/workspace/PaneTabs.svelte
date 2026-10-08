@@ -675,7 +675,8 @@
                      changes its width; the chevron shows on the chosen tab
                      only. The empty slot on another tab is part of that
                      tab, and a click there chooses it. A workflow run's tab
-                     has no details card, and so no slot. -->
+                     has no details card, and so no slot. A phone draws no
+                     slot at all: the tab's menu is its long press. -->
                 {#if !(runIdOf(tab.id) || isThreadTab(tab.id))}
                   <button
                     aria-expanded={chosen
@@ -992,6 +993,11 @@
       opacity: 0;
       scale: var(--pop-scale);
     }
+    /* A phone's tabs have no chevron: a long press opens the tab's menu
+       (Session details first), and a tap on the chosen tab its details. */
+    @media (max-width: 899px) {
+      display: none;
+    }
     & :global(svg) {
       inline-size: 12px;
       block-size: 12px;
@@ -1064,6 +1070,20 @@
   @container leaf (width <= 620px) {
     :global(.session-tabs:not(.hosted)) {
       padding-inline-start: var(--space-4);
+    }
+  }
+  /* On a phone this row is the app's only bar (Shell, `.top.floating`): the
+     bar's height, the tabs standing on its floor (the list's own 4px pad and
+     32px tabs, 36px, under the row's top pad), and its two ends left to
+     the sidebar toggle (its 44px from the bar's 4px inset) and to Caw's head
+     (its 36px capsule from the bar's 7px inset), each with a 7px gap, so the
+     tabs scroll between them and never under. */
+  @media (max-width: 899px) {
+    :global(.session-tabs:not(.hosted)) {
+      min-block-size: var(--c-top-bar-h);
+      padding-block-start: calc(var(--c-top-bar-h) - 36px);
+      padding-inline: calc(var(--space-1) + 44px + var(--space-2))
+        calc(var(--space-2) + 36px + var(--space-2));
     }
   }
 

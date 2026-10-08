@@ -30,6 +30,12 @@ export interface TileSpec {
   colour: string;
   /** The corner radius at `TAB_ICON` px; it scales with `side`. */
   radius: number;
+  /**
+   * Which scheme's Caw: the tile is his ground in both schemes, so the tab
+   * icon is always the light one; on a clear ground (the bar's beat) he
+   * takes the page's scheme, the night one with its cream rim.
+   */
+  scheme?: "light" | "dark";
   shot: Shot;
   /** The bitmap's side in px. */
   side: number;
@@ -50,12 +56,11 @@ export async function openTile(
   const artboard = file.artboardByName("Caw");
   const animation = (name: string) =>
     new rive.LinearAnimationInstance(artboard.animationByName(name), artboard);
-  // The tile is his ground in both schemes, so he is never the night Caw.
   // A file draws nothing until it is told what to show: a loop shows itself,
   // and a resting file shows his still.
   const layers = [
     ...(shot.animation ? [] : ["variant_still"]),
-    "scheme_light",
+    `scheme_${spec.scheme ?? "light"}`,
     "motion_full",
   ];
   for (const name of layers) {

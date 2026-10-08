@@ -36,6 +36,7 @@
     IconAssistant,
     IconBox,
     IconPlus,
+    IconSearch,
     IconSettings,
     IconSort,
     IconWorkflow,
@@ -58,6 +59,8 @@
   import HomeRecent from "./home/HomeRecent.svelte";
   import { home } from "./home/home-state.svelte";
   import { rowHref } from "./links";
+  import { machinesOnline } from "./MachinesButton.svelte";
+  import MachinesList from "./MachinesList.svelte";
   import { markHue } from "./mark";
   import { type BranchOptions, branch, nestFrom } from "./motion/branch.svelte";
   import { CURVE, dur } from "./motion/curves.svelte";
@@ -88,15 +91,25 @@
 
   let {
     onassistant,
+    onsearch,
     assistantOpen,
     narrow,
+    sheet = false,
     scroller,
   }: {
     /** Toggles the assistant, which Shell owns so ⌘J and this row share it. */
     onassistant: () => void;
+    /** Opens Jump, from the phone's Search field (Shell owns the palette). */
+    onsearch?: (opener: HTMLElement) => void;
     assistantOpen: boolean;
     /** The Shell's live narrow answer: a phone opens Configure on its list. */
     narrow: boolean;
+    /**
+     * The phone's sidebar, a sheet under the drawer's line: its bar holds
+     * only the toggle, the tabs and Caw, so Search leads the sheet and the
+     * machines have a section of their own in it.
+     */
+    sheet?: boolean;
     /**
      * Attached to the box the rail's groups scroll in, once they are drawn.
      * The Shell keeps the wide screen's scroll through it while the rail is
@@ -886,6 +899,21 @@
        mark is `data-flip`, so it arrives and leaves in place and what it moves
        slides instead of jumping (motion/rows `reflow`). -->
   <Sidebar.Content class="gap-0 py-1" {@attach reflow()} {@attach scroller}>
+    {#if sheet && onsearch}
+      <!-- The phone's search: the Jump palette's field, which opens Jump. -->
+      <div class="px-2 pb-1">
+        <button
+          aria-haspopup="dialog"
+          class="search press-tint focus-inset"
+          data-share="jump"
+          onclick={(event) => onsearch(event.currentTarget)}
+          type="button"
+        >
+          <IconSearch />
+          <span>Search sessions, projects, machines</span>
+        </button>
+      </div>
+    {/if}
     <!-- On a wide screen the home is the sidebar: what needs you, what is
          working, what finished, and the rest, while the transcripts take the
          screen. On the narrow line the same home leads the sheet, above the
@@ -1141,6 +1169,17 @@
       <!-- Everything else that can be opened, after the projects. -->
       <HomeRecent inset />
     {/if}
+    {#if sheet}
+      <!-- The machines, where a phone keeps them: each with its status and
+           its menu (a long press), then Add machine. -->
+      <Sidebar.Group class={GROUP} data-flip>
+        <Sidebar.GroupLabel class={GROUP_LABEL}>
+          Machines
+          <span class="machines-count">{machinesOnline()} online</span>
+        </Sidebar.GroupLabel>
+        <MachinesList />
+      </Sidebar.Group>
+    {/if}
   </Sidebar.Content>
 
   <!-- ────────────────────── footer ──────────────────────── -->
@@ -1222,6 +1261,37 @@
   /* The same picture as the reader's placeholder: a round one. */
   .brand-icon.avatar {
     border-radius: var(--radius-pill);
+  }
+  /* The phone's search: Jump's field, standing where the sheet starts; a
+     press opens the palette, which grows from it (`data-share="jump"`). */
+  .search {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    inline-size: 100%;
+    min-block-size: 44px;
+    padding-inline: var(--space-3);
+    border: 1px solid var(--border-control);
+    border-radius: var(--radius-sm);
+    background: var(--surface-raised);
+    font: var(--type-body);
+    color: var(--ink-muted);
+    text-align: start;
+    cursor: text;
+  }
+  .search :global(svg) {
+    flex: none;
+    inline-size: 16px;
+    block-size: 16px;
+  }
+  .search span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .machines-count {
+    margin-inline-start: auto;
+    font-variant-numeric: tabular-nums;
   }
   /* The header's corner actions: icon buttons on the nav row's height. */
   .head-action {

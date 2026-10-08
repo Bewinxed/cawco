@@ -12,7 +12,12 @@
  *   drawings side by side, which the icon steps through while it moves;
  * - .context/favicon/<state>-<side>.png at the repository's root, one strip
  *   per state at 32 and 64 px (the needs-you wave a drawing at a time, the
- *   stills alone), for looking at.
+ *   stills alone), for looking at;
+ * - the bar's beat: the same wave on a clear ground, in each scheme
+ *   (`bar-beat-needs-you-<scheme>.png`), which Caw's head in the top bar
+ *   plays once when something new needs the operator, written for the
+ *   dashboard (src/lib/assets/brand/) and for the Apple apps
+ *   (CawCoMascot/Resources/beat/).
  *
  * Run it again whenever Caw's files, the shots or the tile's tokens change:
  *
@@ -29,15 +34,25 @@ const RIVE = here("node_modules/@rive-app/canvas/");
 const CAW = here("src/lib/assets/caw/");
 const STILLS = here("src/lib/assets/brand/");
 const STRIPS = here("../../.context/favicon/");
+const APPLE_BEAT = here(
+  "../apple/Packages/CawCoKit/Sources/CawCoMascot/Resources/beat/"
+);
 
 /** The side the dashboard draws the icon at (tab-icon.svelte.ts `SIDE`). */
 const SIDE = 64;
+
+/**
+ * The side a drawing of the bar's beat is made at: the beat's box at 32 px
+ * (CawHead's `BEAT_BOX`) on a 3x display, so no screen scales it up.
+ */
+const BEAT_SIDE = 96;
 
 interface Job {
   colour: string;
   /** The frames to draw, side by side. */
   frames: number[];
   radius: number;
+  scheme?: "light" | "dark";
   shot: Shot;
   side: number;
 }
@@ -215,6 +230,21 @@ const art = states.flatMap(({ shot, moving }) => {
     })),
   ];
 });
+// The bar's beat: the wave, once, on no tile, in each scheme's Caw.
+const barBeat = (["light", "dark"] as const).flatMap((scheme) =>
+  [STILLS, APPLE_BEAT].map((dir) => ({
+    file: join(dir, `bar-beat-needs-you-${scheme}.png`),
+    job: {
+      shot: NEEDS_YOU,
+      colour: "transparent",
+      radius: 0,
+      scheme,
+      side: BEAT_SIDE,
+      frames: wave,
+    },
+  }))
+);
+art.push(...barBeat);
 const working = [
   { file: join(STILLS, "tab-icon-working.png"), side: SIDE },
   ...[32, SIDE].map((side) => ({
