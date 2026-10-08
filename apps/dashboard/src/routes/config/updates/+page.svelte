@@ -13,8 +13,9 @@
   import {
     displayVersion,
     installable,
-    noteLines,
+    releaseNotes,
   } from "#lib/cawco/updates/model.js";
+  import ReleaseNotes from "#lib/cawco/updates/ReleaseNotes.svelte";
   import UpdateTable from "#lib/cawco/updates/UpdateTable.svelte";
   import { updates } from "#lib/cawco/updates/updates.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -85,7 +86,7 @@
     return "Switching keeps each machine on the build it runs until Stable has a newer one.";
   });
 
-  const notes = $derived(release ? noteLines(release.notes) : []);
+  const notes = $derived(release ? releaseNotes(release.notes) : null);
   let foldOpen = $state(false);
 
   // The switch shows the stored value again when a save is refused.
@@ -189,7 +190,7 @@
           {/if}
         {/key}
       </div>
-      {#if release && notes.length > 0}
+      {#if release && notes}
         <div class="fold">
           <button
             aria-expanded={foldOpen}
@@ -203,11 +204,9 @@
             What's new in {displayVersion(release.version)}
           </button>
           {#if foldOpen}
-            <ul transition:unfold>
-              {#each notes as line (line)}
-                <li>{line}</li>
-              {/each}
-            </ul>
+            <div class="notes" transition:unfold>
+              <ReleaseNotes source={notes.full} />
+            </div>
           {/if}
         </div>
       {/if}
@@ -297,10 +296,8 @@
   .trigger[aria-expanded="true"] :global(.chev) {
     rotate: 90deg;
   }
-  .fold ul {
-    margin-top: 6px;
-    padding-inline-start: 18px;
-    list-style: disc;
+  .notes {
+    padding-top: 6px;
     font: var(--type-body);
     color: var(--ink-strong);
   }

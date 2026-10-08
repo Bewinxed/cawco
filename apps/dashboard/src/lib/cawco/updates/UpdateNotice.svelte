@@ -5,16 +5,30 @@
    * so every state replaces the last in the same box. The box here is
    * presentation only: what to say comes from `noticeFor`, what the buttons
    * do from the caller.
+   *
+   * A build's notes show as their summary (the first section's first
+   * bullets) and, when there are more, the toast opens in place to all of
+   * them, as Family's trays do (https://benji.org/family-values): Caw and
+   * the title hold their place and only the notes grow, the box's height
+   * morphs, the rows it gains fly in on the list switch's stagger, the
+   * close glyph turns into the back chevron that closes it again, and
+   * "Show all N changes" morphs letter by letter into "Show less". Esc
+   * closes it too.
    */
+  import { tick } from "svelte";
   import { fade } from "svelte/transition";
-  import { dur, motionOk } from "#lib/cawco/motion/curves.svelte.js";
+  import { dur, ease, motionOk } from "#lib/cawco/motion/curves.svelte.js";
+  import { ListSwap } from "#lib/cawco/motion/list-swap.svelte.js";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
+  import CloseBack from "#lib/components/icons/CloseBack.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
+  import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
-  import { IconClose, IconError } from "#lib/icons.js";
+  import { IconError } from "#lib/icons.js";
   import Caw, { type CawStatus } from "../home/Caw.svelte";
   import CawMark from "../home/CawMark.svelte";
   import type { Notice } from "./model";
+  import ReleaseNotes from "./ReleaseNotes.svelte";
 
   let {
     view,
@@ -34,7 +48,58 @@
   const status = $derived(notice.caw.status as CawStatus);
   /** The first busy line takes the one spinner; the rest are plain words. */
   const spinnerAt = $derived(notice.lines.findIndex((l) => l.state === "busy"));
+
+  const notes = $derived(notice.notes ?? null);
+  /** The notes hold more than their summary, so the toast opens to them. */
+  const opens = $derived(notes !== null && notes.count > notes.shown);
+  /** The notice the toast stands open on; a notice that replaces it opens closed. */
+  let openOn = $state<string | null>(null);
+  const shownKey = $derived(`${notice.kind}:${notice.version}`);
+  const open = $derived(opens && openOn === shownKey);
+  const notesId = $props.id();
+  let notesBox = $state<HTMLElement>();
+
+  /** The rows of the notes: each section's heading and each bullet. */
+  const ROWS = "h1, h2, h3, h4, h5, h6, li";
+
+  /**
+   * Opens or closes the notes. The box's height follows by itself (`morph`
+   * hears the notes change); opening, the rows past the summary's fly in.
+   * With reduced motion the notes cross-fade instead.
+   */
+  async function setOpen(next: boolean): Promise<void> {
+    if (next === open) {
+      return;
+    }
+    const had = notesBox?.querySelectorAll(ROWS).length ?? 0;
+    openOn = next ? shownKey : null;
+    await tick();
+    const box = notesBox;
+    if (!box) {
+      return;
+    }
+    if (!motionOk.current) {
+      box.animate([{ opacity: 0 }, { opacity: 1 }], {
+        duration: dur("--dur-fade"),
+        easing: ease("--ease-out"),
+      });
+      return;
+    }
+    if (next) {
+      ListSwap.reveal([...box.querySelectorAll(ROWS)].slice(had));
+    }
+  }
 </script>
+
+<svelte:window
+  onkeydown={(event) => {
+    if (open && event.key === "Escape" && !event.defaultPrevented) {
+      event.preventDefault();
+      // biome-ignore lint/complexity/noVoid: closing reports nothing back
+      void setOpen(false);
+    }
+  }}
+/>
 
 <div class="notice" role="status" {@attach morph()}>
   {#key notice.kind}
@@ -66,17 +131,60 @@
       </span>
     {/key}
   </div>
+  <!-- One icon, two roles: it dismisses the notice, and while the notes
+       stand open it is the way back to their summary. -->
   <button
-    aria-label="Dismiss"
+    aria-label={open ? "Show less" : "Dismiss"}
     class="x touch-hit pointer-hit"
     onclick={() => {
+      if (open) {
+        // biome-ignore lint/complexity/noVoid: closing reports nothing back
+        void setOpen(false);
+        return;
+      }
       ondismiss();
       closeToast?.();
     }}
     type="button"
   >
-    <IconClose class="size-3" />
+    <CloseBack back={open} class="size-3" />
   </button>
+
+  {#if notes}
+    <!-- A click anywhere on the summary opens it, as a convenience for the
+         pointer; the keyboard's way is the button under it. -->
+    <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+    <!-- biome-ignore lint/a11y: the pointer's shortcut; the "Show all" button under it is the keyboard's and the screen reader's -->
+    <div
+      aria-live="off"
+      class="notes"
+      id={notesId}
+      onclick={() => {
+        if (opens && !open) {
+          // biome-ignore lint/complexity/noVoid: opening reports nothing back
+          void setOpen(true);
+        }
+      }}
+      bind:this={notesBox}
+      class:open
+      class:opens
+    >
+      <ReleaseNotes source={open ? notes.full : notes.summary} />
+    </div>
+    {#if opens}
+      <button
+        aria-controls={notesId}
+        aria-expanded={open}
+        class="more touch-hit pointer-hit"
+        onclick={() => setOpen(!open)}
+        type="button"
+      >
+        <MorphText
+          text={open ? "Show less" : `Show all ${notes.count} changes`}
+        />
+      </button>
+    {/if}
+  {/if}
 
   {#if notice.lines.length > 0 || notice.closing}
     <div class="body">
@@ -212,6 +320,40 @@
   }
   .ink {
     color: var(--ink-strong);
+  }
+  .notes {
+    grid-column: 2;
+    min-inline-size: 0;
+    margin-top: var(--space-1);
+    font: var(--type-meta);
+    color: var(--ink-strong);
+  }
+  .notes.opens:not(.open) {
+    cursor: pointer;
+  }
+  /* Open, the notes scroll past about two thirds of the screen, so the
+     buttons under them stay on it. */
+  .notes.open {
+    max-block-size: 60vh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .more {
+    grid-column: 2;
+    justify-self: start;
+    margin-top: var(--space-1);
+    padding: 0;
+    border: 0;
+    background: none;
+    font: var(--type-meta);
+    color: var(--ink-muted);
+    cursor: pointer;
+    transition: color var(--dur-control) var(--ease-out);
+  }
+  @media (hover: hover) {
+    .more:hover {
+      color: var(--ink-strong);
+    }
   }
   .busy {
     display: flex;

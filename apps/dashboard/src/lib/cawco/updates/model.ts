@@ -24,6 +24,7 @@ export const isOnline = (machine: { status: string }): boolean =>
 
 const NIGHTLY_SUFFIX = /-nightly\.(\d+)$/;
 const LIST_MARK = /^(?:[-*+]|\d+\.)\s+/;
+const HEADING = /^#{1,6}\s+(.+?)\s*#*$/;
 
 /** A version as people read it: no build suffix, and a nightly as `nightly 412`. */
 export function displayVersion(version: string): string {
@@ -33,16 +34,82 @@ export function displayVersion(version: string): string {
   return nightly ? `nightly ${nightly[1]}` : bare;
 }
 
-/** The release notes as plain lines: no blanks, headings or list marks. */
-export function noteLines(notes: string | undefined): string[] {
-  if (!notes) {
-    return [];
+/** One section of a release's notes: `### New`, `### Improved`, `### Fixed`, or none. */
+interface NoteSection {
+  heading?: string;
+  items: string[];
+}
+
+/** A release's notes, as markdown every surface renders the same way. */
+export interface ReleaseNotes {
+  /** Bullets in all. */
+  count: number;
+  /** Every section, each its heading and then its bullets. */
+  full: string;
+  /** Bullets the summary holds. */
+  shown: number;
+  /**
+   * The first section's heading and its first bullets: the top of `full`,
+   * so the rows it shows stand where they stand in the whole.
+   */
+  summary: string;
+}
+
+/** Bullets the summary holds at most. */
+const SUMMARY_ITEMS = 3;
+
+/**
+ * Splits the notes (docs/releases/README.md) at their headings: each
+ * heading opens a section, each other line is one bullet of it. Notes
+ * written before sections are bullets under no heading: one list.
+ */
+function sectionsOf(notes: string): NoteSection[] {
+  const sections: NoteSection[] = [];
+  let open: NoteSection | undefined;
+  for (const raw of notes.split("\n")) {
+    const line = raw.trim();
+    if (line === "") {
+      continue;
+    }
+    const heading = HEADING.exec(line);
+    if (heading) {
+      open = { heading: heading[1], items: [] };
+      sections.push(open);
+      continue;
+    }
+    if (!open) {
+      open = { items: [] };
+      sections.push(open);
+    }
+    open.items.push(line.replace(LIST_MARK, ""));
   }
-  return notes
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line !== "" && !line.startsWith("#"))
-    .map((line) => line.replace(LIST_MARK, ""));
+  return sections.filter((section) => section.items.length > 0);
+}
+
+const markdownOf = (sections: NoteSection[]): string =>
+  sections
+    .map((section) =>
+      [
+        ...(section.heading ? [`### ${section.heading}`, ""] : []),
+        ...section.items.map((item) => `- ${item}`),
+      ].join("\n")
+    )
+    .join("\n\n");
+
+/** The notes a build carries, or null when it carries none. */
+export function releaseNotes(notes: string | undefined): ReleaseNotes | null {
+  const sections = sectionsOf(notes ?? "");
+  const [first] = sections;
+  if (!first) {
+    return null;
+  }
+  const lead = { ...first, items: first.items.slice(0, SUMMARY_ITEMS) };
+  return {
+    full: markdownOf(sections),
+    summary: markdownOf([lead]),
+    count: sections.reduce((sum, section) => sum + section.items.length, 0),
+    shown: lead.items.length,
+  };
 }
 
 export const plural = (n: number, noun: string): string =>
@@ -231,8 +298,8 @@ export interface Notice {
   lines: NoticeLine[];
   /** Ids of the machines it stands for. */
   machineIds: string[];
-  /** Every release-note line, for the notice kind that lists them all. */
-  notes?: string[];
+  /** The build's release notes, for the notices that speak of one build (4, 5, 6). */
+  notes?: ReleaseNotes | null;
   title: string;
   /** The version the notice speaks of, as shown. */
   version: string;
@@ -259,18 +326,6 @@ const doneOn = (u: BinaryUpdateState): boolean =>
 
 const byName = (a: UpdateMachine, b: UpdateMachine): number =>
   a.hostname.localeCompare(b.hostname);
-
-/** The first three note lines, then `and N more`. */
-export function noticeNotes(notes: string | undefined): NoticeLine[] {
-  const lines = noteLines(notes);
-  const shown: NoticeLine[] = lines
-    .slice(0, 3)
-    .map((text) => ({ state: "plain", text }));
-  if (lines.length > 3) {
-    shown.push({ state: "plain", text: `and ${lines.length - 3} more` });
-  }
-  return shown;
-}
 
 /** The key notices 4 and 5 store when dismissed. */
 export const dismissKey = (notice: Notice): string =>
@@ -429,7 +484,8 @@ function waitsForYou({ input, machines }: Ctx): Notice | null {
     kind: 4,
     title: `CawCo ${v} is ready`,
     failed: false,
-    lines: noticeNotes(state.notes),
+    lines: [],
+    notes: releaseNotes(state.notes),
     closing: "Auto-update is off. It waits until you install it.",
     configure: true,
     action: "install-all",
@@ -454,7 +510,8 @@ function heldBack({ input, machines }: Ctx): Notice | null {
     kind: 5,
     title: `CawCo ${v} is ready`,
     failed: false,
-    lines: noticeNotes(state.notes),
+    lines: [],
+    notes: releaseNotes(state.notes),
     closing: `Each machine installs it once its work in flight ends, within ${UPDATE_WAIT_CAP_MS / 60_000} minutes. Turns keep running through it. ${held.length} ${held.length === 1 ? "is" : "are"} waiting now.`,
     configure: true,
     caw: { status: "ready", moves: false },
@@ -464,8 +521,8 @@ function heldBack({ input, machines }: Ctx): Notice | null {
 }
 
 /**
- * 6. A build landed that nobody has acknowledged. The toast shows the first
- * three note lines; the Home card shows `notes`, every line. It stands for
+ * 6. A build landed that nobody has acknowledged. The toast shows the notes'
+ * summary and opens to the whole; the Home card shows the whole. It stands for
  * the landing itself (`landed`), so nothing else the machine reports
  * afterwards brings it back once it is acknowledged.
  */
@@ -485,8 +542,8 @@ export function updatedNotice(machines: UpdateMachine[]): Notice | null {
     kind: 6,
     title: `CawCo updated to ${v}`,
     failed: false,
-    lines: noticeNotes(landing.notes),
-    notes: noteLines(landing.notes),
+    lines: [],
+    notes: releaseNotes(landing.notes),
     configure: true,
     caw: { status: "sleeping", moves: false },
     machineIds: landed.map((m) => m.machineId),

@@ -1,12 +1,13 @@
 <script lang="ts">
   /**
    * An update the person has not seen, left on Home until they dismiss it:
-   * the title, every release-note line as a list, and Dismiss, with Reload
+   * the title, the release notes as their sections and lists, and Dismiss, with Reload
    * beside it when this tab is older than the dashboard the update brought.
    * Nothing installs from here. The card recipe is NeedsCard's.
    */
   import { Button } from "#lib/components/ui/button/index.js";
   import type { Notice } from "../updates/model";
+  import ReleaseNotes from "../updates/ReleaseNotes.svelte";
 
   let {
     notice,
@@ -22,12 +23,8 @@
 
 <article aria-label={notice.title} class="card" data-flip>
   <h2 class="title">{notice.title}</h2>
-  {#if notice.notes && notice.notes.length > 0}
-    <ul class="notes">
-      {#each notice.notes as line, i (i)}
-        <li>{line}</li>
-      {/each}
-    </ul>
+  {#if notice.notes}
+    <div class="notes"><ReleaseNotes source={notice.notes.full} /></div>
   {/if}
   <div class="actions">
     <Button onclick={ondismiss} size="sm" variant="secondary">Dismiss</Button>
@@ -55,12 +52,8 @@
     overflow-wrap: anywhere;
   }
   .notes {
-    margin: 0;
-    padding-inline-start: var(--space-4);
-    list-style: disc;
     font: var(--type-body);
     color: var(--ink-row);
-    overflow-wrap: anywhere;
   }
   .actions {
     display: flex;

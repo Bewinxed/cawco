@@ -25,14 +25,33 @@
   import UpdateTable from "#lib/cawco/updates/UpdateTable.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
 
+  /** Notes as every release writes them (docs/releases/README.md). */
   const NOTES = [
+    "### New",
+    "",
+    "- Sessions reopen where you left them",
+    "- The update notice opens to every change in the build",
+    "",
+    "### Improved",
+    "",
+    "- Long transcripts load faster",
+    "- The channel cards remember your pick",
+    "- Fewer hub restarts",
+    "",
+    "### Fixed",
+    "",
+    "- Telegram approvals arrive once",
+    "- Install state survives a restart",
+    "- Rollbacks name the build they undid",
+    "- A `cawco update` started twice no longer installs twice",
+  ].join("\n");
+  /** Notes written before sections: bullet lines under no heading. */
+  const PLAIN_NOTES = [
     "- Sessions reopen where you left them",
     "- Long transcripts load faster",
     "- Telegram approvals arrive once",
     "- Install state survives a restart",
     "- Rollbacks name the build they undid",
-    "- The channel cards remember your pick",
-    "- Fewer hub restarts",
   ].join("\n");
   const NIGHTLY = "0.2.0-nightly.412+abc123def456";
   /** What a ready build waits on: two relayed tool calls and an image generation. */
@@ -236,6 +255,17 @@
       {},
     ])
   ) as Notice;
+  const UPDATED_PLAIN = updatedNotice(
+    trio([
+      {
+        phase: "installed",
+        installedVersion: "1.4.2",
+        landed: { ...LANDED, notes: PLAIN_NOTES },
+      },
+      {},
+      {},
+    ])
+  ) as Notice;
 
   // The real toast: one id, and the box changes in place.
   const ID = "cawco-update-demo";
@@ -297,6 +327,23 @@
         />
       </div>
     {/each}
+  </div>
+
+  <h1>Updated, with notes written before sections</h1>
+  <div class="notices" data-states="notice-plain">
+    <div class="one" data-notice="plain">
+      <UpdateNotice
+        onaction={noop}
+        ondismiss={noop}
+        view={{ notice: UPDATED_PLAIN, onPage: false }}
+      />
+      <Button
+        label="Show as toast"
+        onclick={() => showAsToast(UPDATED_PLAIN)}
+        size="sm"
+        variant="outline"
+      />
+    </div>
   </div>
 
   <h1>Updated, unseen, on Home</h1>

@@ -4,6 +4,7 @@ import json
 import os
 import pathlib
 import plistlib
+import re
 import shutil
 import subprocess
 import sys
@@ -55,13 +56,22 @@ def group(app):
 
 
 def plain(text):
-    """App Store Connect rejects some glyphs in whatsNew - 0.1.11's notes carry
-    U+2715 - so fold the few we use to words and drop the rest, keeping the
-    ordinary typography it does accept."""
+    """whatsNew is plain text: a markdown section heading (docs/releases/README.md,
+    `### New`) becomes its words and a colon (`New:`), and the `- ` bullets under
+    it stay as they are. App Store Connect also rejects some glyphs - 0.1.11's
+    notes carry U+2715 - so fold the few we use to words and drop the rest,
+    keeping the ordinary typography it does accept."""
+    text = "\n".join(heading(line) for line in text.splitlines())
     for glyph, replacement in {"✕": "x", "✖": "x", "✓": "yes", "✔": "yes", "↑": "Up", "↓": "Down", "←": "Left", "→": "Right"}.items():
         text = text.replace(glyph, replacement)
     keep = " -–—''\"“”‘’…·()[]{},.:;!?/&%$#@+=*<>|~^`"
     return "".join(char for char in text if char.isascii() or char in keep)
+
+
+def heading(line):
+    """A markdown heading line as a plain one: `### Fixed` reads `Fixed:`."""
+    match = re.match(r"\s{0,3}#{1,6}\s+(.*?)[\s#]*$", line)
+    return f"{match.group(1).rstrip(':')}:" if match else line
 
 
 def read_notes(path):

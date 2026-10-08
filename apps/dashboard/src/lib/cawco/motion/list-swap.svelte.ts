@@ -21,7 +21,7 @@
  * The keyframes are global (app.css): the rows name them from an inline
  * style, which a component's scoped <style> cannot rewrite.
  */
-import { motionOk } from "./curves.svelte";
+import { ease, motionOk } from "./curves.svelte";
 
 export const OUT_MS = 200;
 const OUT_STAGGER = 18;
@@ -110,6 +110,32 @@ export class ListSwap<T> {
   /** When the i-th incoming line starts, from the swap. */
   static enterAt(i: number, notBefore = 0): number {
     return Math.max(IN_LEAD + Math.min(i, STAGGER_CAP) * IN_STAGGER, notBefore);
+  }
+
+  /**
+   * Rows a list grows by, with nothing leaving it (the update toast opening
+   * to its whole notes): they come in as a swap's new rows do (`ns-in-r`),
+   * IN_STAGGER apart and capped alike, with no lead, since no old row is
+   * there to wait for. With reduced motion they are simply there.
+   */
+  static reveal(rows: readonly Element[]): void {
+    if (!motionOk.current) {
+      return;
+    }
+    rows.forEach((row, i) => {
+      row.animate(
+        [
+          { opacity: 0, transform: "translateX(18px)" },
+          { opacity: 1, transform: "none" },
+        ],
+        {
+          duration: IN_MS,
+          delay: Math.min(i, STAGGER_CAP) * IN_STAGGER,
+          easing: ease("--ease-out"),
+          fill: "backwards",
+        }
+      );
+    });
   }
 
   #enter(): void {
