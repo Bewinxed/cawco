@@ -375,10 +375,17 @@
 </div>
 
 <style>
+  /* The page's box, never its rows': the bench stands in the shell's page,
+     shorter than the window, and a `100dvh` flex item with an automatic
+     minimum shrank only as far as its content let it, so the transcript's
+     scroller grew with the list until the list filled it. A pane's scroller
+     is a fixed box; virtua resizing it from inside its own measure was a
+     ResizeObserver loop no real pane has. */
   .bench {
     display: flex;
+    flex: 1 1 auto;
     flex-direction: column;
-    height: 100dvh;
+    min-block-size: 0;
     background: var(--surface-recess);
   }
   header {
