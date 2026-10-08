@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { CONFIG_PATH, readConfig, toHttpBase } from "@cawco/agent";
+import { CONFIG_PATH, toHttpBase } from "@cawco/agent";
 import type { AgentRow, AuthState } from "@cawco/core";
 import {
   CAWCO_ENV,
@@ -8,9 +8,7 @@ import {
   readEnv,
 } from "@cawco/core";
 import { protocolRange, runtimeCommit } from "@cawco/core/runtime";
-import { ask, closeAsking } from "./ask";
 import { discoverHub, findExistingHub, type Hub } from "./discover";
-import { clearToken, LoginError, login, saveToken } from "./login";
 import {
   isServiceAction,
   isServiceId,
@@ -48,8 +46,6 @@ Usage
                                           call one, under the same role checks as MCP
                                           (session: --session or CAWCO_INSTANCE_ID;
                                           credential: CAWCO_SESSION_CREDENTIAL)
-  cawco login [--token <token>]           give this machine a Claude Code token
-  cawco logout                            forget it
 
 Services
   ${SERVICE_IDS.join(", ")} — each its own per-user service, started by systemd or
@@ -86,7 +82,6 @@ Updating
 
 Options
   --hub <url>     hub to use, as http://host:port or ws://host:port/ws
-  --token <token> a \`claude setup-token\` token, for \`login\` without a terminal
   --dev           for \`service install\`: run from the checkout, watching it
   --when-idle     for \`service restart\`: wait until the restart would cut nothing
   --force         for \`service restart\`: restart now, cutting what is in flight
@@ -96,15 +91,16 @@ Options
   --version       print the version
 
 Signing in
-  The daemon runs Claude Code as you, so it needs the credentials you logged in
-  with. Run it as a service — \`cawco service install\` — and on macOS it
-  inherits your desktop session and reads them from the login keychain, which is
-  the whole fix. A daemon started over SSH cannot: the keychain refuses a process
-  with no GUI session, and every turn comes back "Not logged in".
+  The daemon runs Claude Code as you, so it uses the login Claude Code keeps on
+  this machine. Log a machine in from the dashboard — Log in… in its machine
+  menu — which runs \`claude auth login\` there and takes the code you paste
+  back, or run \`claude auth login\` on the machine yourself.
 
-  Where that is not possible — a headless box — \`cawco login\` mints a token
-  instead, kept in ${CONFIG_PATH} at mode 0600 and exported to the daemon as
-  CLAUDE_CODE_OAUTH_TOKEN, which skips the keychain entirely.
+  On macOS, run the daemon as a service — \`cawco service install\` — so it
+  inherits your desktop session and can read the login keychain. A daemon
+  started over SSH cannot, and every turn comes back "Not logged in" until the
+  machine is logged in from the dashboard, which keeps that login in a file the
+  daemon can read.
 
 Finding the hub, in order — the first that answers wins
   1. --hub, then ${CAWCO_ENV.hubUrl}
@@ -149,7 +145,6 @@ interface Args {
   rest: string[];
   /** The session `tools` and `tool` act as. */
   session?: string;
-  token?: string;
   verbose: boolean;
   version: boolean;
   whenIdle: boolean;
@@ -222,13 +217,6 @@ const parseArgs = (argv: string[]): Args => {
         args.session = argv[index];
         if (!args.session) {
           throw new UsageError("--session needs a session id");
-        }
-        break;
-      case "--token":
-        index += 1;
-        args.token = argv[index];
-        if (!args.token) {
-          throw new UsageError("--token needs a token");
         }
         break;
       case "--dev":
@@ -354,41 +342,25 @@ const status = async (args: Args): Promise<number> => {
 };
 
 /**
- * Hands the daemon the stored token, unless the environment already names one —
- * whoever set that meant it. Returns whether the SDK will find a token; the
- * value itself is never logged, framed, or written anywhere but the config.
- */
-const applyToken = async (): Promise<boolean> => {
-  if (process.env.CLAUDE_CODE_OAUTH_TOKEN) {
-    return true;
-  }
-  const token = (await readConfig())?.claudeToken;
-  if (!token) {
-    return false;
-  }
-  process.env.CLAUDE_CODE_OAUTH_TOKEN = token;
-  return true;
-};
-
-/**
  * What a machine that cannot reach its credentials should be told, and how it
  * differs by why. The macOS case is the one worth spelling out: the credentials
- * are there and correct, so "log in again" is the one thing that will not work.
+ * are there and correct, but this process cannot open the keychain they are in.
  */
 const authNote = (state: Exclude<AuthState, "authenticated">): string =>
   state === "unreadable-credentials"
     ? `cawco: this machine has Claude Code credentials, but this process cannot read them.
 They live in your login keychain, and the keychain only opens for a process
 inside your desktop session — a daemon started over SSH is not one, so sessions
-will start and then answer "Not logged in". Logging in again will not change it.`
+will start and then answer "Not logged in". A login made from here is kept in a
+file instead, which this process can read.`
     : `cawco: nobody is signed in to Claude Code on this machine, so sessions will
 start and then answer "Not logged in".`;
 
 /**
  * Asked before registering, because a machine that cannot start a session should
- * say so rather than sit in the fleet looking ready. With a terminal this offers
- * the fix; without one it prints it and carries on — a daemon under launchd or
- * systemd has nobody to ask, and blocking on stdin there is a hang, not a prompt.
+ * say so rather than sit in the fleet looking ready. It prints the fix and
+ * carries on: the fix is a sign-in through Claude Code's own flow, which the
+ * dashboard drives once this daemon is up.
  */
 const preflight = async (): Promise<AuthState> => {
   // Loaded here rather than at the top so `status` never pays for the agent SDK.
@@ -399,27 +371,12 @@ const preflight = async (): Promise<AuthState> => {
   }
 
   console.error(authNote(state));
-
-  if (!process.stdin.isTTY) {
-    console.error(`
-Fix it from this machine with \`cawco login\`, or run the daemon as a service
-— \`cawco service install\` — which on macOS is enough on its own. Starting
-anyway; the fleet will show this machine as needing sign-in.`);
-    return state;
-  }
-
-  const answer = (await ask("\nRun `claude setup-token` now to fix it? [Y/n] "))
-    ?.trim()
-    .toLowerCase();
-  closeAsking();
-  if (answer === undefined || !["", "y", "yes"].includes(answer)) {
-    return state;
-  }
-
-  await login();
-  // The token the flow produced is loaded like any other, so `up` continues with
-  // exactly what a later start would have.
-  return (await applyToken()) ? "authenticated" : state;
+  console.error(`
+Log this machine in from the dashboard — Log in… in its machine menu — or run
+\`claude auth login\` here. On macOS, running the daemon as a service — \`cawco
+service install\` — is enough on its own. Starting anyway; the fleet will show
+this machine as needing sign-in.`);
+  return state;
 };
 
 const up = async (args: Args): Promise<number> => {
@@ -430,7 +387,6 @@ const up = async (args: Args): Promise<number> => {
   }
   console.log(`cawco: hub ${hub.httpUrl} (found by ${hub.source})`);
 
-  await applyToken();
   const auth = await preflight();
   if (process.stdin.isTTY) {
     console.log(
@@ -630,23 +586,6 @@ const run = async (argv: string[]): Promise<number> => {
       return runTool(args);
     case "service":
       return runService(args);
-    case "login":
-      if (args.token) {
-        await saveToken(args.token);
-      } else {
-        await login();
-      }
-      console.log(
-        `cawco: token saved to ${CONFIG_PATH}. Restart the daemon to use it.`
-      );
-      return 0;
-    case "logout":
-      console.log(
-        (await clearToken())
-          ? `cawco: token cleared from ${CONFIG_PATH}.`
-          : "cawco: no token was stored."
-      );
-      return 0;
     default:
       throw new UsageError(`unknown command ${args.command}`);
   }
@@ -657,11 +596,7 @@ const code = await run(Bun.argv.slice(2)).catch((error: unknown) => {
     console.error(`cawco: ${error.message}\n\nRun \`cawco --help\`.`);
     return 2;
   }
-  if (
-    error instanceof LoginError ||
-    error instanceof ServiceError ||
-    error instanceof ToolError
-  ) {
+  if (error instanceof ServiceError || error instanceof ToolError) {
     console.error(`cawco: ${error.message}`);
     return 1;
   }

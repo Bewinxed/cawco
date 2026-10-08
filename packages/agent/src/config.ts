@@ -4,13 +4,6 @@ import { join } from "node:path";
 
 /** Machine configuration shared by the CLI and daemon. */
 export interface CliConfig {
-  /**
-   * A `claude setup-token` token, for a machine whose daemon cannot reach the
-   * credentials the user logged in with — a headless Linux box, or a Mac whose
-   * daemon runs outside the desktop session. Exported as
-   * `CLAUDE_CODE_OAUTH_TOKEN`, which bypasses the keychain entirely.
-   */
-  claudeToken?: string;
   hubUrl: string;
   /** Transcript cache budget in megabytes (default 256). */
   transcriptCacheMb?: number;
@@ -23,10 +16,14 @@ export const CONFIG_PATH = join(
   "config.json"
 );
 
-/** The config can name a credential, so it is readable by its owner and nobody else. */
+/** Readable by its owner and nobody else. */
 const CONFIG_MODE = 0o600;
 
-/** Undefined for a first run, and for a file someone has since broken. */
+/**
+ * Undefined for a first run, and for a file someone has since broken. Only the
+ * fields above are read, so a key the config no longer has (the Claude token
+ * `cawco` once kept here) is dropped by the next write.
+ */
 export const readConfig = async (
   path = CONFIG_PATH
 ): Promise<CliConfig | undefined> => {
@@ -40,7 +37,6 @@ export const readConfig = async (
   }
   const tcm = config.transcriptCacheMb;
   return {
-    ...config,
     hubUrl: typeof config.hubUrl === "string" ? config.hubUrl : "",
     transcriptCacheMb:
       typeof tcm === "number" && Number.isFinite(tcm) && tcm > 0
@@ -51,8 +47,8 @@ export const readConfig = async (
 };
 
 /**
- * Merges over what is already there: remembering a hub must not drop the token,
- * and signing in must not forget the hub. The mode is set after the write
+ * Merges over what is already there: remembering a hub must not drop the
+ * transcript cache budget. The mode is set after the write
  * because it has to be re-applied to a file that already existed.
  */
 export const writeConfig = async (
