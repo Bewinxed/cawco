@@ -24,6 +24,27 @@ const STORE = "cawco.update.dismissed";
 /** How long "running on N machines" stays up. */
 const DONE_MS = 6000;
 
+/**
+ * Has sonner measure the toast `id` again once its notes opened or closed
+ * and its box settled. svelte-sonner (1.2.1, the latest) stores each toast's
+ * height when it mounts and measures it again only when its title or
+ * description changes (Toast.svelte's height effect, upstream PR #76), and
+ * stacks every older toast by those stored heights; a custom toast that
+ * grows in place would otherwise lie over the toasts behind it. So the same
+ * toast is given again, by its id, with a description naming the state. A
+ * custom toast never draws its description (Toast.svelte renders the
+ * component in place of title and description), so the word is never shown;
+ * the update keeps its component, props, duration and onDismiss.
+ */
+export const remeasure =
+  (id: string) =>
+  (open: boolean): void => {
+    toast.custom(UpdateNotice, {
+      id,
+      description: open ? "notes open" : "notes closed",
+    });
+  };
+
 function stored(): string[] {
   try {
     return JSON.parse(localStorage.getItem(STORE) ?? "[]") as string[];
@@ -166,7 +187,12 @@ export function startUpdateNotice(): () => void {
             // own ✕ closes it: never a stray swipe.
             dismissible: false,
             onDismiss: dismiss,
-            componentProps: { view, onaction: act, ondismiss: dismiss },
+            componentProps: {
+              view,
+              onaction: act,
+              ondismiss: dismiss,
+              onsettle: remeasure(ID),
+            },
           });
         }
       });

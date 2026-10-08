@@ -11,6 +11,7 @@
     BinaryUpdatePolicy,
     BinaryUpdateState,
   } from "@cawco/core/binary-updates";
+  import { tick } from "svelte";
   import { toast } from "svelte-sonner";
   import UpdateCard from "#lib/cawco/home/UpdateCard.svelte";
   import ChannelCards from "#lib/cawco/updates/ChannelCards.svelte";
@@ -23,6 +24,7 @@
   } from "#lib/cawco/updates/model.js";
   import UpdateNotice from "#lib/cawco/updates/UpdateNotice.svelte";
   import UpdateTable from "#lib/cawco/updates/UpdateTable.svelte";
+  import { remeasure } from "#lib/cawco/updates/update-notice.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
 
   /** Notes as every release writes them (docs/releases/README.md). */
@@ -286,10 +288,30 @@
         view: demo,
         onaction: () => undefined,
         ondismiss: () => undefined,
+        onsettle: remeasure(ID),
       },
     });
   }
   const noop = () => undefined;
+  /**
+   * Two ordinary toasts that stay, to stack around the notice: one tick
+   * apart, as toasts arrive in the app. Two made in one tick are measured
+   * at the front toast's height (svelte-sonner issue #24), whatever the
+   * notice does.
+   */
+  let stacked = 0;
+  function stackOne() {
+    stacked += 1;
+    toast(`Toast ${stacked}`, {
+      description: "Stacked with the notice",
+      duration: Number.POSITIVE_INFINITY,
+    });
+  }
+  async function stackTwo() {
+    stackOne();
+    await tick();
+    stackOne();
+  }
 </script>
 
 <svelte:head><title>Update states · CawCo</title></svelte:head>
@@ -311,6 +333,14 @@
   </section>
 
   <h1>Notices 1 to 7</h1>
+  <div data-states="stack">
+    <Button
+      label="Stack two toasts"
+      onclick={stackTwo}
+      size="sm"
+      variant="outline"
+    />
+  </div>
   <div class="notices" data-states="notices">
     {#each NOTICES as notice (notice.kind)}
       <div class="one" data-notice={notice.kind}>

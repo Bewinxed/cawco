@@ -34,12 +34,19 @@
     view,
     onaction,
     ondismiss,
+    onsettle,
     closeToast,
   }: {
     /** Read through, so the mounted box follows when the notice changes. */
     view: { notice: Notice; onPage: boolean };
     onaction: (action: NonNullable<Notice["action"]>) => void;
     ondismiss: () => void;
+    /**
+     * The box stands at its new height after the notes opened or closed,
+     * its morph run: a toaster that stacks by stored heights measures it
+     * again here (`remeasure`).
+     */
+    onsettle?: (open: boolean) => void;
     /** Sonner's own, given to a custom toast. */
     closeToast?: () => void;
   } = $props();
@@ -58,9 +65,41 @@
   const open = $derived(opens && openOn === shownKey);
   const notesId = $props.id();
   let notesBox = $state<HTMLElement>();
+  let noticeBox = $state<HTMLElement>();
+  /** Bumped on every open or close, so only the last one reports it settled. */
+  let turn = 0;
+
+  /** Resolves once no tween is left on `box`, waiting again on one that restarted. */
+  async function still(box: HTMLElement | undefined): Promise<void> {
+    const tweens = box?.getAnimations() ?? [];
+    if (tweens.length === 0) {
+      return;
+    }
+    await Promise.allSettled(tweens.map((tween) => tween.finished));
+    await still(box);
+  }
 
   /** The rows of the notes: each section's heading and each bullet. */
   const ROWS = "h1, h2, h3, h4, h5, h6, li";
+
+  /**
+   * Once the box's morph has run (or at once, with nothing to run), says
+   * the box stands at its new height. The morph starts in the microtask
+   * after the notes change, so a frame later it is on the box. It can start
+   * again on the way: the button's words morph a frame after the notes do,
+   * and that change cancels the tween in flight (its `finished` settles)
+   * and tweens on from where it stood. So the box is waited on until no
+   * tween is left on it.
+   */
+  async function settle(next: boolean): Promise<void> {
+    turn += 1;
+    const mine = turn;
+    await new Promise((done) => requestAnimationFrame(done));
+    await still(noticeBox);
+    if (mine === turn) {
+      onsettle?.(next);
+    }
+  }
 
   /**
    * Opens or closes the notes. The box's height follows by itself (`morph`
@@ -83,11 +122,10 @@
         duration: dur("--dur-fade"),
         easing: ease("--ease-out"),
       });
-      return;
-    }
-    if (next) {
+    } else if (next) {
       ListSwap.reveal([...box.querySelectorAll(ROWS)].slice(had));
     }
+    await settle(next);
   }
 </script>
 
@@ -101,7 +139,7 @@
   }}
 />
 
-<div class="notice" role="status" {@attach morph()}>
+<div class="notice" role="status" bind:this={noticeBox} {@attach morph()}>
   {#key notice.kind}
     <div
       aria-hidden="true"
