@@ -21,7 +21,11 @@
  * the Telegram bridge's `CAWCO_TELEGRAM_API` precedent.
  */
 import { createHash } from "node:crypto";
-import type { Envelope, PermissionRequestFrame } from "@cawco/core";
+import {
+  type Envelope,
+  machineLabel,
+  type PermissionRequestFrame,
+} from "@cawco/core";
 import { Elysia, t } from "elysia";
 import type { DbShape, PushDeviceRow, WorkItemRow } from "./db";
 import { hidden } from "./hidden";
@@ -116,18 +120,12 @@ const collapse = (prefix: string, id: string): string =>
     ? `${prefix}-${id}`
     : `${prefix}-${createHash("sha256").update(id).digest("hex").slice(0, 40)}`;
 
-const folder = (cwd: string): string =>
-  cwd.split("/").filter(Boolean).pop() ?? cwd;
-
-/** A session as its row names it: its title, the title its first message gave it, or its folder. */
-const sessionName = (
-  row:
-    | { cwd: string; derivedTitle?: string | null; title?: string | null }
-    | undefined
-): string | undefined =>
-  row
-    ? row.title?.trim() || row.derivedTitle?.trim() || folder(row.cwd)
-    : undefined;
+/** Each harness as the operator knows it; a row without one is Claude Code. */
+const HARNESS_NAMES: Record<string, string> = {
+  claude: "Claude Code",
+  opencode: "OpenCode",
+  pi: "pi",
+};
 
 /** Which category an ask goes as: a question, a permission to open, or one Approve may answer. */
 const askCategory = (
@@ -306,6 +304,28 @@ export const createPush = ({ db, task }: PushServices) => {
   const projectName = (projectId: string | null | undefined): string | null =>
     (projectId ? db.project(projectId)?.name : undefined) ?? null;
 
+  /**
+   * A push title crosses Cawrier and APNs and shows on a lock screen (App
+   * Review 4.5.4), so it never carries what the work said: not the title a
+   * session's first message gave it, not a title the agent gave itself, not
+   * its folder. Only a name the owner gave it, else "<harness> on <machine>".
+   */
+  const sessionName = (instanceId: string): string | undefined => {
+    const [row] = instanceId ? db.getInstancesByIds([instanceId]) : [];
+    if (!row) {
+      return undefined;
+    }
+    const owned = row.titleSource === "owner" ? row.title?.trim() : undefined;
+    if (owned) {
+      return owned;
+    }
+    const harness = HARNESS_NAMES[row.harness ?? "claude"] ?? row.harness;
+    const host = db
+      .listAgents()
+      .find((agent) => agent.machineId === row.machineId)?.hostname;
+    return host ? `${harness} on ${machineLabel(host)}` : harness;
+  };
+
   return {
     /**
      * A session (or a workflow) is blocked on you: a permission or a question.
@@ -332,9 +352,12 @@ export const createPush = ({ db, task }: PushServices) => {
       const run = payload.workflowRunId
         ? db.getWorkflowRun(payload.workflowRunId)
         : undefined;
+      const owned =
+        row?.titleSource === "owner" ? row.title?.trim() : undefined;
       const name =
-        sessionName(row) ??
-        (run ? db.getWorkflow(run.workflowId)?.name : undefined) ??
+        owned ||
+        (run ? db.getWorkflow(run.workflowId)?.name : undefined) ||
+        sessionName(instanceId) ||
         "A session";
       const projectId = row?.projectId ?? null;
       moment({
@@ -388,26 +411,32 @@ export const createPush = ({ db, task }: PushServices) => {
     /**
      * A work item ended (work-items.ts `itemEnded`). An attempt at a task that
      * failed leaves the task waiting for you; a plain delegate's failure goes
-     * to its parent session, not to you.
+     * to its parent session, not to you. Named by its task's title, which the
+     * owner wrote; an item's own title is the delegating agent's words.
      */
     itemEnded(item: WorkItemRow): void {
-      if (item.state !== "failed" || !item.taskId || !item.projectId) {
+      const { taskId, projectId } = item;
+      if (item.state !== "failed" || !taskId || !projectId) {
         return;
       }
-      moment({
-        name: item.title,
-        project: projectName(item.projectId),
-        category: PUSH_CATEGORIES.attempt,
-        collapseId: collapse("task", `${item.projectId}:${item.taskId}`),
-        threadId: item.projectId,
-        data: {
-          kind: "attempt",
-          instanceId: item.instanceId,
-          projectId: item.projectId,
-          taskId: item.taskId,
-          workItemId: item.id,
-        },
-      });
+      task(projectId, taskId)
+        .catch(() => undefined)
+        .then((view) => {
+          moment({
+            name: view?.title || sessionName(item.instanceId) || "A task",
+            project: projectName(projectId),
+            category: PUSH_CATEGORIES.attempt,
+            collapseId: collapse("task", `${projectId}:${taskId}`),
+            threadId: projectId,
+            data: {
+              kind: "attempt",
+              instanceId: item.instanceId,
+              projectId,
+              taskId,
+              workItemId: item.id,
+            },
+          });
+        });
     },
 
     /** A test: a push to the devices given, quiet ones too. */
