@@ -118,7 +118,7 @@
   import DelegateTray from "./DelegateTray.svelte";
   import DocThumb from "./DocThumb.svelte";
   import { uploadFile } from "./file-upload";
-  import { GrownShape, type LineBox, measureShape } from "./grown";
+  import { GrownShape, measureShape } from "./grown";
   import {
     asBubble,
     asField,
@@ -1302,7 +1302,7 @@
   const stops = $derived(busy && !draft.lifted);
 
   function onaction(): void {
-    // The ask holds the composer: Stop still withdraws it, nothing is sent.
+    // An ask folding back into the pill: nothing is sent until it has landed.
     if (askOpen && !busy) {
       return;
     }
@@ -1994,10 +1994,14 @@
    * sides straight and its top solid, since an ask has no rows leaning back
    * and no oldest row fading out. What stands over the pill (the delegate
    * tray, the plan's ring, the suggestion chips, an offer, a perch) steps
-   * aside while it is up, so nothing covers it. History stays down; the
-   * draft stays in the field, unseen and untouched, and the field's line is
-   * a question's own answer. Answered, dismissed or withdrawn, the ask folds
-   * back into the pill and the draft and its attachments are as they were;
+   * aside while it is up, so nothing covers it, and so do the pill's own
+   * controls and the attachments: the only controls in the composer are the
+   * ask's. The card stands on the shell's foot, over the pill, so no empty
+   * band is left under it; the shape keeps the pill's measured height as its
+   * foot and reaches the rest of the card's height above it. The draft stays
+   * in the field, unseen and untouched. Answered, dismissed or withdrawn, the
+   * ask folds back into the pill and the draft and its attachments are as they
+   * were;
    * the next ask waiting takes its place in the grown shape without folding,
    * its parts staggering in again.
    */
@@ -2010,14 +2014,14 @@
   /** Whether what stands in the shape is up. */
   let askShown = $state(false);
   /**
-   * The grown shape's measures, read before it was made: the pill under it,
-   * how far over it it reaches, the room it has there, the field's line.
+   * The grown shape's measures: the pill's height when it grew (the shape's
+   * foot, held for the whole ask), how far over it the card reaches, and the
+   * room the card has.
    */
   let askBox = $state<{
     base: number;
     ext: number;
     max: number;
-    line: LineBox;
   } | null>(null);
   let askPanel = $state<HTMLElement>();
   let dockEl = $state<HTMLElement>();
@@ -2054,7 +2058,7 @@
     if (!(askShape && askPanel && askBox)) {
       return;
     }
-    const ext = askPanel.offsetHeight;
+    const ext = askPanel.offsetHeight - askBox.base;
     if (!force && Math.abs(ext - askBox.ext) < 0.5) {
       return;
     }
@@ -2067,12 +2071,7 @@
       return;
     }
     // Every size first, before anything is written: one layout per growth.
-    const { size, line } = measureShape(
-      shell,
-      pill,
-      historyButton ?? field,
-      field
-    );
+    const { size } = measureShape(shell, pill, historyButton ?? field, field);
     const max = askRoom();
     // What else grows out of the pill puts itself away: the ask has it.
     if (recall) {
@@ -2089,14 +2088,15 @@
     }
     askDraft = draft;
     askRun = 0;
-    askBox = { base: size.base, ext: 0, max, line };
+    askBox = { base: size.base, ext: 0, max };
     drawnAsk = next;
     askRaised = true;
     await tick();
     if (turn !== askTurn || !askPanel) {
       return;
     }
-    const ext = askPanel.offsetHeight;
+    // The card stands on the shell's foot: the pill's height is its own.
+    const ext = askPanel.offsetHeight - size.base;
     askBox.ext = ext;
     const shape = new GrownShape(shell, size, ext, {
       frosted: false,
@@ -2107,8 +2107,8 @@
     // The card comes up from inside the shape, never above its edge.
     shape.clip(askPanel, () => ({
       left: 0,
-      bottom: askBox?.base ?? 0,
-      height: askBox?.ext ?? 0,
+      bottom: 0,
+      height: (askBox?.base ?? 0) + (askBox?.ext ?? 0),
     }));
     shape.morphTo(1, ext, dur("--dur-grow"));
     // Partway up, once there is room for it.
@@ -2155,6 +2155,14 @@
     askRaised = false;
     const shape = askShape;
     if (shape) {
+      // It folds into the pill as it stands now (a long draft folded to its
+      // first line as the field let the keys go): the foot takes the pill's
+      // height and the reach the rest, so the outline holds still meanwhile.
+      if (pill) {
+        const base = pill.offsetHeight;
+        shape.ext += shape.base - base;
+        shape.base = base;
+      }
       await shape.morphTo(0, shape.ext, dur("--dur-grow-exit"));
     }
     if (turn !== askTurn) {
@@ -2215,24 +2223,6 @@
       sizes.disconnect();
       window.removeEventListener("resize", room);
     };
-  });
-
-  // The pill folds a long draft as the field lets the keys go: the shape
-  // and its card stay on its top edge.
-  $effect(() => {
-    const node = pill;
-    if (!(node && askBox)) {
-      return;
-    }
-    const sizes = new ResizeObserver(([entry]) => {
-      const base = entry.borderBoxSize[0].blockSize;
-      if (askShape && askBox && Math.abs(base - askBox.base) > 0.5) {
-        askBox.base = base;
-        askShape.base = base;
-      }
-    });
-    sizes.observe(node, { box: "border-box" });
-    return () => sizes.disconnect();
   });
 
   $effect(() => () => {
@@ -2677,19 +2667,13 @@
         </div>
       {/if}
       {#if drawnAsk && askBox}
-        <!-- The ask the composer has grown into, on the pill's top edge and
-             cut to the shape as it grows and folds; a question's own answer
-             is written on the field's line under it. -->
+        <!-- The ask the composer has grown into, on the shell's foot over
+             the pill and cut to the shape as it grows and folds. -->
         <div
           class="ask"
           inert={!askShown}
           bind:this={askPanel}
-          style:--ask-base="{askBox.base}px"
-          style:--ask-line-bottom="{askBox.line.bottom}px"
-          style:--ask-line-left="{askBox.line.left}px"
-          style:--ask-line-width="{askBox.line.width}px"
           style:--ask-max="{askBox.max}px"
-          style:bottom="{askBox.base}px"
         >
           {#key drawnAsk.request.requestId}
             <Prompt
@@ -2870,7 +2854,6 @@
           <button
             aria-label="Attach a file or image"
             class="att-btn touch-hit"
-            disabled={askOpen}
             onclick={() => fileInput?.click()}
             type="button"
           >
@@ -2886,7 +2869,6 @@
                 ? "Keep your queued message as it was"
                 : "Show what you sent here"}
               class="history-btn touch-hit"
-              disabled={askOpen}
               onclick={onhistory}
               type="button"
               bind:this={historyButton}
@@ -3364,6 +3346,7 @@
     align-items: center;
     gap: var(--space-2);
     flex: 0 0 auto;
+    transition: var(--step-aside);
 
     @media (pointer: coarse) {
       --hit-gap-x: 10px;
@@ -3492,6 +3475,7 @@
     max-height: 180px;
     overflow-y: auto;
     padding: var(--space-1);
+    transition: var(--step-aside);
 
     @media (pointer: coarse) {
       padding: calc(var(--space-1) + 8px);
@@ -3609,9 +3593,8 @@
     }
   }
 
-  /* The wheel's rows stand in the field's place, and a question's own
-     answer stands on its line: its own text, caret and hint are clear
-     meanwhile. */
+  /* The wheel's rows stand in the field's place, and an ask's card over
+     it: its own text, caret and hint are clear meanwhile. */
   .wheeling textarea,
   .wheeling textarea::placeholder,
   .asking textarea,
@@ -3623,31 +3606,27 @@
   .asking .more {
     visibility: hidden;
   }
-  /* While an ask holds the composer, history and attach wait. */
-  .att-btn:disabled,
-  .history-btn:disabled {
-    opacity: 0.55;
-    cursor: default;
-    pointer-events: none;
-  }
-
-  /* While the composer is grown into an ask, what stands over the pill
-     steps aside: the offer column, the tray row with its chips and the
-     plan's ring, and a perch. They fade out and are gone, and come back
-     the same way (`--step-aside`) as the ask folds. */
-  .dock.asking :is(.prompts, .lift, .perch) {
+  /* While the composer is grown into an ask, everything in it that does not
+     act on the ask steps aside: the offer column, the tray row with its
+     chips and the plan's ring, a perch, the attachments, and the pill's own
+     controls (Autopilot, attach, history, Stop/Send). They fade out and are
+     gone, out of the tab order with them, and come back the same way
+     (`--step-aside`) as the ask folds. */
+  .dock.asking :is(.prompts, .lift, .perch, .atts, .ctrls) {
     opacity: 0;
     visibility: hidden;
     transition:
       opacity var(--dur-fade) var(--ease-out),
       visibility 0s linear var(--dur-fade);
   }
-  /* The ask's card, on the pill's top edge across the composer's width:
-     over the pill, as the wheel's rows and the editing row are. */
+  /* The ask's card, on the shell's foot across the composer's width: over
+     the pill, as the wheel's rows and the editing row are, so the pill's row
+     is the card's own and no empty band stands under it. */
   .ask {
     position: absolute;
     z-index: 3;
     inset-inline: 0;
+    bottom: 0;
   }
 
   /* The grown shape and its frosted fade (grown.ts), made as it grows:

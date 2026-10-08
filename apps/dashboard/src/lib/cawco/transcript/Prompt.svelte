@@ -21,7 +21,7 @@
    * The one human-in-the-loop surface, held in the composer's grown shape
    * (Composer, grown.ts): a permission gate (a measurably-symmetric Approve /
    * Deny pair, with scope-widening kept apart) or a question (selectable
-   * answers, and the field's line for an answer of the reader's own). Both
+   * answers, and a line for an answer of the reader's own). Both
    * settle their parked tool call by handing the answer up, where it goes out
    * as one tracked command whose stages this card's wait line reads.
    *
@@ -154,9 +154,8 @@
   };
 
   /**
-   * An answer of the reader's own, written on the field's line: the
-   * composer's field is the free answer while a question stands in it. It
-   * answers the question it was opened for (`otherAt`); what was written
+   * An answer of the reader's own, written on the card's last line, set as
+   * the composer's field is. It answers the question it was opened for (`otherAt`); what was written
    * for each question is kept, so going back to it finds it there.
    */
   let otherAt = $state<number | null>(null);
@@ -450,7 +449,7 @@
               <span class="kc">{i + 1}</span><span>{opt.label}</span>
             </button>
           {/each}
-          <!-- The reader's own answer, written on the field's line. -->
+          <!-- The reader's own answer, written on the card's last line. -->
           {#if own < 9}
             {@const live = ownsKeys && qi === current}
             <button
@@ -581,10 +580,9 @@
   {/if}
 </section>
 
-<!-- The composer's field, once a question's "Other" is chosen: the reader's
-     own answer to that question, on the field's own line (Composer places
-     it there; the draft keeps the field meanwhile). "Other" is its one way
-     in. -->
+<!-- Once a question's "Other" is chosen, the reader's own answer to it, the
+     card's last line, set as the composer's field is (the draft keeps the
+     field, under the card, meanwhile). "Other" is its one way in. -->
 {#if questions && otherAt !== null}
   {@const q = questions[otherAt]}
   <input
@@ -697,16 +695,15 @@
   h2 :global(.place) {
     margin-inline-start: auto;
   }
-  /* The field's line, while a question stands in the composer: set as the
-     field sets its text, on the field's own box (Composer's
-     `--ask-line-*`, off the panel's foot). */
+  /* The reader's own answer, the card's last line: set as the composer's
+     field sets its text, on the field's one-line height and inset off the
+     card's edge as the field is off the pill's. It fades up as it opens. */
   .other {
-    position: absolute;
-    inset-inline-start: var(--ask-line-left, 0px);
-    inset-block-end: calc(var(--ask-line-bottom, 0px) - var(--ask-base, 0px));
-    inline-size: var(--ask-line-width, 100%);
+    display: block;
+    inline-size: 100%;
     block-size: var(--c-composer-field);
-    padding: 0;
+    margin-block-end: var(--c-composer-inset);
+    padding: 0 var(--space-3);
     border: 0;
     outline: none;
     background: transparent;
@@ -720,6 +717,10 @@
 
     &.shown {
       opacity: 1;
+
+      @starting-style {
+        opacity: 0;
+      }
     }
     &::placeholder {
       color: var(--ink-muted);
