@@ -1,5 +1,4 @@
 import { readFileSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
 import { join, posix } from "node:path";
 import { generateCodeChallenge, generateCodeVerifier } from "@cawco/auth";
 import type {
@@ -173,6 +172,7 @@ import {
   type BinaryUpdatePolicy,
   type BinaryUpdateState,
 } from "@cawco/core/binary-updates";
+import { machineId as hostMachineId } from "@cawco/core/machine-id";
 import { Elysia, t, ValidationError } from "elysia";
 import { websocket } from "elysia/websocket";
 import {
@@ -279,7 +279,6 @@ import {
 import {
   FolderRefusal,
   listFolder,
-  PROJECTS_DIR,
   projectFolderRoutes,
   projectRoot,
   readFolderFile,
@@ -6856,6 +6855,19 @@ export const createServer = (
   };
 
   /**
+   * The machine this hub runs on, by the id every agent registers under. The
+   * id is a function of the host alone (core/machine-id.ts), and the hub and
+   * its agent run as the same user's services there (cli/service.ts), so an
+   * agent registered under it shares the hub's disk: a path on the hub, the
+   * projects' folders and a hub-directory marketplace, is a path on that
+   * machine. Every install type registers it, and no question is asked, so
+   * there is no answer to wait for and none to time out into a wrong one.
+   */
+  const ownMachineId = hostMachineId();
+  const isHubMachine = async (id: string): Promise<boolean> =>
+    id === (await ownMachineId);
+
+  /**
    * Sends the machine what the fleet's Claude Code is supposed to be able to
    * reach (NEW.md §11): every MCP server, marketplace and plugin, for the
    * machine to converge on and report back. Sent when a machine reports what
@@ -6883,25 +6895,15 @@ export const createServer = (
       // A directory on the hub's disk names nothing on any other machine, so
       // only the hub's own machine links it; every other one is told which
       // marketplaces those are and installs their plugins from the bytes.
-      // Whether this machine is the hub's is its own word, off its register
-      // and its beats: no question is asked here, so none can go unanswered
-      // into a wrong answer. A machine that has not said (a daemon that is not
-      // a binary install, or one whose updater has not read its installation
-      // yet) is sent no decision and keeps the one it last had; its first word
-      // re-syncs it (the heartbeat's `hubRoleLearned`).
-      const hostsHub = binaryUpdateStates.get(machineId)?.hostsHub;
-      let hubOnly: Set<string> | undefined;
-      if (hostsHub !== undefined) {
-        hubOnly = hostsHub
-          ? new Set()
-          : new Set(
-              config.marketplaces
-                .filter(({ source }) => isHubDirectory(source))
-                .map(({ name }) => name)
-            );
-      }
+      const hubOnly = (await isHubMachine(machineId))
+        ? new Set<string>()
+        : new Set(
+            config.marketplaces
+              .filter(({ source }) => isHubDirectory(source))
+              .map(({ name }) => name)
+          );
       const hubErrors = new Map(
-        hubOnly?.size
+        hubOnly.size
           ? db
               .listPlugins()
               .flatMap(({ id, error }) => (error ? [[id, error] as const] : []))
@@ -6910,12 +6912,12 @@ export const createServer = (
       const outbound = fleetMcp.syncConfig(
         {
           ...config,
-          ...(hubOnly ? { hubOnlyMarketplaces: [...hubOnly] } : {}),
+          hubOnlyMarketplaces: [...hubOnly],
           // What the hub could not carry of a hub-only marketplace reaches that
           // machine no other way, so the hub's reason goes with the row.
           plugins: config.plugins.map((plugin) => {
             const error = hubErrors.get(plugin.id);
-            return error && hubOnly?.has(pluginMarketplace(plugin.id))
+            return error && hubOnly.has(pluginMarketplace(plugin.id))
               ? { ...plugin, error }
               : plugin;
           }),
@@ -8147,41 +8149,6 @@ export const createServer = (
       .filter((machineId) => registry.agent(machineId));
 
   /**
-   * The hub's own machine shows itself by reading a token the hub wrote into
-   * its data folder: an agent that reads it back shares the hub's disk, so
-   * the projects' folders on the hub are its folders too. Asked once per
-   * connection (a register forgets the answer).
-   */
-  const hubToken = crypto.randomUUID();
-  const hubTokenPath = posix.join(PROJECTS_DIR, ".hub-machine");
-  let hubTokenWritten: Promise<void> | undefined;
-  const sharesHubDisk = new Map<string, Promise<boolean>>();
-  const onHubMachine = (machineId: string): Promise<boolean> => {
-    const known = sharesHubDisk.get(machineId);
-    if (known) {
-      return known;
-    }
-    const asked = (async () => {
-      hubTokenWritten ??= mkdir(PROJECTS_DIR, { recursive: true }).then(() =>
-        writeFile(hubTokenPath, hubToken)
-      );
-      await hubTokenWritten;
-      const agent = registry.agent(machineId);
-      const read = agent
-        ? await callFs(machineId, agent, { op: "read", path: hubTokenPath })
-        : "timeout";
-      if (read === "timeout") {
-        // No answer is no answer: the next start asks again.
-        sharesHubDisk.delete(machineId);
-        return false;
-      }
-      return read.ok && read.result === hubToken;
-    })();
-    sharesHubDisk.set(machineId, asked);
-    return asked;
-  };
-
-  /**
    * Where a project's Caw starts before any checkout of it is online (D2):
    * its folder on the hub, on the hub's machine, when that machine runs an
    * agent; else `~/.cawco/caw/<projectId>`, made on the first machine that is
@@ -8191,8 +8158,8 @@ export const createServer = (
     projectId: string
   ): Promise<{ machineId: string; cwd: string } | undefined> => {
     const machines = onlineMachines();
-    const shares = await Promise.all(machines.map(onHubMachine));
-    const hubMachine = machines.find((_, index) => shares[index]);
+    const own = await ownMachineId;
+    const hubMachine = machines.find((id) => id === own);
     if (hubMachine) {
       // Made and committed on first use, as every read of it does.
       await listFolder(projectId);
@@ -12605,7 +12572,6 @@ export const createServer = (
                 }
               }
               registry.registerAgent(message.machineId, ws, ws.remoteAddress);
-              sharesHubDisk.delete(message.machineId);
               // A project Caw could not set up while no machine was online is set up now.
               queueMicrotask(() => caw.machineOnline());
               workItems.discardUnfiled(message.machineId);
@@ -13039,14 +13005,6 @@ export const createServer = (
                   binaryUpdateStates.get(message.machineId),
                   beaten
                 );
-              // Whether this machine runs the hub decides which marketplaces it
-              // links (`pushFleetConfig`). A sync sent before the machine said
-              // so carried no decision, so the first word, or a changed one, is
-              // what has it converge on the right one.
-              const hubRoleLearned =
-                beaten !== undefined &&
-                binaryUpdateStates.get(message.machineId)?.hostsHub !==
-                  beaten.hostsHub;
               if (beaten) {
                 binaryUpdateStates.set(message.machineId, beaten);
               }
@@ -13077,8 +13035,6 @@ export const createServer = (
                   peekTools(message.payload)
                 );
                 autoInstall(message.machineId, ws);
-                sendFleetSync(message.machineId, ws);
-              } else if (hubRoleLearned) {
                 sendFleetSync(message.machineId, ws);
               }
               if (

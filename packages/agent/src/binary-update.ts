@@ -48,10 +48,10 @@ import {
   UPDATE_DRAIN_MS,
   UPDATE_WAIT_CAP_MS,
 } from "@cawco/core/binary-updates";
+import { machineId } from "@cawco/core/machine-id";
 import { verifyManifest } from "@cawco/core/release-manifest";
 import { runtimeVersion } from "@cawco/core/runtime";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
-import { machineId } from "./machine-id";
 import { lowerFence, raiseFence, restartReadiness } from "./restart";
 import { heldSessions, SessiondClient } from "./sessiond-client";
 

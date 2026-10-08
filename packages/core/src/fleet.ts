@@ -508,9 +508,8 @@ export interface FleetConfig {
    * nothing here, so the machine links nothing for it: its plugins arrive as
    * {@link pluginPayloads}, and its row reports what they came to. The hub's
    * own machine is sent an empty list and links the directory where it stands.
-   * Absent while the hub does not know whether this machine is its own (the
-   * machine has not reported `binaryUpdate.hostsHub`): no decision, and the
-   * machine keeps the one it last had.
+   * The hub knows its own machine by the id that machine registers under, the
+   * same for every install type, so it always decides.
    *
    * A plugin of such a marketplace that the hub could not carry has no other
    * way onto this machine, so its row in {@link plugins} is sent with the

@@ -20,5 +20,4 @@ export {
   toHttpBase,
   toWsUrl,
 } from "./discovery";
-export { machineId } from "./machine-id";
 export { type FrameSink, SessionSupervisor } from "./session";

@@ -28,6 +28,7 @@ import {
   AGENT_RESTARTING,
   type BinaryUpdateState,
 } from "@cawco/core/binary-updates";
+import { machineId } from "@cawco/core/machine-id";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
 import { fetchOpenCodeGoLimits } from "@cawco/core/usage/opencode-go";
 import { Data, Duration, Effect, Fiber, Schedule } from "effect";
@@ -46,7 +47,6 @@ import { harnesses } from "./harnesses";
 import type { PiHarness } from "./harnesses/pi";
 import { PI_AUTH_CHECK_INTERVAL_MS } from "./harnesses/pi-auth";
 import { cache as transcriptCache } from "./harnesses/transcript-cache";
-import { machineId } from "./machine-id";
 import { startMcpGateway } from "./mcp-oauth";
 import { servingPreviews } from "./preview";
 import { parseProcId, SESSION_PROC_KINDS } from "./proc-id";

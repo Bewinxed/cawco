@@ -365,7 +365,7 @@ const probeAgent = async (): Promise<string | undefined> => {
   if (!(hub && agents)) {
     return undefined;
   }
-  const { machineId } = await import("@cawco/agent");
+  const { machineId } = await import("@cawco/core/machine-id");
   const id = await machineId();
   const self = agents.find((agent) => agent.machineId === id);
   return self
@@ -425,7 +425,7 @@ export const awaitFirstMachineReady = async (
   hub: string,
   note: (line: string) => void
 ): Promise<void> => {
-  const { machineId } = await import("@cawco/agent");
+  const { machineId } = await import("@cawco/core/machine-id");
   const id = await machineId();
   const checks: readonly [ServiceId, () => Promise<boolean>][] = [
     [
@@ -1338,7 +1338,7 @@ const sessionsMidTurn = async (): Promise<string[] | "unknown"> => {
     return "unknown";
   }
   // Imported here rather than at the top so no other verb pays for the agent SDK.
-  const { machineId } = await import("@cawco/agent");
+  const { machineId } = await import("@cawco/core/machine-id");
   const report = await probeJson<BusyReport>(
     `${hub}/api/agents/${await machineId()}/busy`
   );

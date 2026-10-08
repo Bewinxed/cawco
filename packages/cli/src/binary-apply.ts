@@ -20,7 +20,6 @@ import {
   symlink,
 } from "node:fs/promises";
 import { join } from "node:path";
-import { machineId } from "@cawco/agent";
 import { heldSessions, SessiondClient } from "@cawco/agent/sessiond-client";
 import { probeHealth } from "@cawco/core/binary-health";
 import {
@@ -43,6 +42,7 @@ import {
   writeJsonAtomic,
 } from "@cawco/core/binary-installation";
 import type { BinaryUpdateState } from "@cawco/core/binary-updates";
+import { machineId } from "@cawco/core/machine-id";
 import { markerIsLive, ownIdentity } from "@cawco/core/process-identity";
 import {
   type ReleaseManifest,

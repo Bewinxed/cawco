@@ -6,7 +6,6 @@
  */
 import { chmod, rm } from "node:fs/promises";
 import { platform } from "node:os";
-import { machineId } from "@cawco/agent";
 import { probeCapabilities } from "@cawco/agent/capabilities";
 import {
   type AgentRow,
@@ -27,6 +26,7 @@ import type {
   BinaryUpdateState,
 } from "@cawco/core/binary-updates";
 import { BINARY_WRAPPER } from "@cawco/core/binary-wrapper";
+import { machineId } from "@cawco/core/machine-id";
 import { runtimeVersion } from "@cawco/core/runtime";
 import { askYes, closeAsking } from "./ask";
 import { discoverHub } from "./discover";
