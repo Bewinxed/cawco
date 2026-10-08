@@ -593,14 +593,17 @@ export const instances = sqliteTable("instances", {
    */
   cwd: text("cwd").notNull(),
   /**
-   * False on a row from before `cwd` was pinned whose launch directory is still
-   * to be read from its conversation (the harness's first recorded cwd): its
-   * machine is asked at its next register, before anything is restored. True
-   * on every row spawned since.
+   * Whether `cwd` is the launch directory. `known` on every row spawned since
+   * `cwd` was pinned. `unread` on a row from before, whose launch directory is
+   * still to be read from its conversation (the harness's first recorded cwd):
+   * its machine is asked at its next register, before anything is restored.
+   * `unknown` when that machine had no record of the conversation: `cwd` may be
+   * a folder the CLI wandered into, so the row is never named by it nor
+   * spawned there.
    */
-  launchDirRead: integer("launch_dir_read", { mode: "boolean" })
+  launchDir: text("launch_dir", { enum: ["known", "unread", "unknown"] })
     .notNull()
-    .default(true),
+    .default("known"),
   /**
    * The session's given name: the owner's rename, or the name the session
    * gave itself (`set_title`) or was spawned under (a delegate's title).

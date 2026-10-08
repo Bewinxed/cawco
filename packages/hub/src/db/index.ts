@@ -180,7 +180,7 @@ export type PublicInstanceRow = Omit<
   | "endAttempts"
   | "owedSpawn"
   | "owedAt"
-  | "launchDirRead"
+  | "launchDir"
 >;
 export type BoardInstanceRow = Omit<PublicInstanceRow, "tooling">;
 export type PlaceRow = typeof projectPlaces.$inferSelect;
@@ -546,8 +546,14 @@ export interface DbShape {
   ) => void;
   /** The canvas a session showed last, for `read_choices` after its preview closed. */
   readonly latestCanvasOf: (instanceId: string) => CanvasRow | undefined;
-  /** The directory a row was launched in, which every spawn of it uses; undefined for a new id. */
-  readonly launchDirOf: (id: string) => string | undefined;
+  /**
+   * The directory a row was launched in, which every spawn of it uses;
+   * `"unknown"` when its machine had no record of its conversation; undefined
+   * for a new id.
+   */
+  readonly launchDirOf: (
+    id: string
+  ) => { cwd: string } | { unknown: true } | undefined;
   /** Keys a send to the id its harness stores it under. */
   readonly linkSend: (uuid: string, harnessId: string) => void;
   /**
@@ -1288,7 +1294,7 @@ export interface DbShape {
      */
     resumableAt?: Record<string, number>
   ) => SettledInstance[];
-  /** Files a row's launch directory as read: `cwd` when its conversation named one. */
+  /** Files a row's launch directory as read: `cwd` when its conversation named one, else unknown. */
   readonly settleLaunchDir: (id: string, cwd?: string) => void;
   readonly settleRemovedSession: (id: string, present: boolean) => void;
   readonly settleUnavailableRecovery: (id: string) => boolean;
@@ -1715,7 +1721,7 @@ const make = async (path: string): Promise<DbShape> => {
     endConfirmedAt: _endConfirmedAt,
     owedSpawn: _owedSpawn,
     owedAt: _owedAt,
-    launchDirRead: _launchDirRead,
+    launchDir: _launchDir,
     ...publicColumns
   } = getTableColumns(instances);
   const { tooling: _tooling, ...boardColumns } = publicColumns;
@@ -2958,12 +2964,17 @@ const make = async (path: string): Promise<DbShape> => {
         .where(eq(instances.id, id))
         .run();
     },
-    launchDirOf: (id) =>
-      db
-        .select({ cwd: instances.cwd })
+    launchDirOf: (id) => {
+      const row = db
+        .select({ cwd: instances.cwd, launchDir: instances.launchDir })
         .from(instances)
         .where(eq(instances.id, id))
-        .get()?.cwd,
+        .get();
+      if (!row) {
+        return;
+      }
+      return row.launchDir === "unknown" ? { unknown: true } : { cwd: row.cwd };
+    },
     unreadLaunchDirs: (machineId) =>
       db
         .select({
@@ -2975,7 +2986,7 @@ const make = async (path: string): Promise<DbShape> => {
         .where(
           and(
             eq(instances.machineId, machineId),
-            eq(instances.launchDirRead, false),
+            eq(instances.launchDir, "unread"),
             isNotNull(instances.sessionId)
           )
         )
@@ -2985,7 +2996,7 @@ const make = async (path: string): Promise<DbShape> => {
         ),
     settleLaunchDir: (id, cwd) => {
       db.update(instances)
-        .set({ launchDirRead: true, ...(cwd ? { cwd } : {}) })
+        .set(cwd ? { launchDir: "known", cwd } : { launchDir: "unknown" })
         .where(eq(instances.id, id))
         .run();
     },

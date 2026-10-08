@@ -2091,6 +2091,28 @@ export const createServer = (
     id: string;
     title?: string | null;
   }): string => row.title || row.derivedTitle || row.id.slice(0, 8);
+  /**
+   * A session as peers read it: `name` is its launch folder's leaf and `tag`
+   * is `folder#id8`. When its launch directory is unknown (its machine has no
+   * record of its conversation) `cwd` may be a folder its CLI wandered into,
+   * so it is named by its title, else its harness (`harness#id8`).
+   */
+  const sessionLabel = (row: {
+    cwd: string;
+    harness?: string | null;
+    id: string;
+    title?: string | null;
+  }): { name: string; tag: string } => {
+    const id8 = row.id.slice(0, 8);
+    const launch = db.launchDirOf(row.id);
+    if (launch && "unknown" in launch) {
+      const harness = row.harness || "session";
+      return row.title
+        ? { name: row.title, tag: row.title }
+        : { name: harness, tag: `${harness}#${id8}` };
+    }
+    return { name: leaf(row.cwd), tag: `${leaf(row.cwd)}#${id8}` };
+  };
   /** A session a send wakes: its process is gone, its conversation on record. */
   const wakesForSend = (row: {
     sessionId: string | null;
@@ -2443,11 +2465,11 @@ export const createServer = (
    * machine-readable so the parent's model can copy the ids verbatim.
    */
   const deliverDelegateAsk = (
-    delegate: { id: string; machineId: string; cwd: string },
+    delegate: InstanceRow,
     parent: { id: string; machineId: string },
     ask: { requestId?: string; payload: unknown }
   ): void => {
-    const label = `${leaf(delegate.cwd)}#${delegate.id.slice(0, 8)}`;
+    const { name, tag: label } = sessionLabel(delegate);
     const body = renderDelegateAsk(ask.payload);
     const instruction =
       "Answer it with the answer_delegate tool: answer_delegate(target, requestId, answers) — " +
@@ -2476,7 +2498,7 @@ export const createServer = (
           origin: {
             kind: "peer",
             from: delegate.id,
-            name: leaf(delegate.cwd),
+            name,
             fromSession: delegate.id,
           },
           shouldQuery: false,
@@ -2539,7 +2561,7 @@ export const createServer = (
     completion?: { resultId: string; completedAt?: string },
     notice = false
   ): void => {
-    const label = `${leaf(delegate.cwd)}#${delegate.id.slice(0, 8)}`;
+    const { name, tag: label } = sessionLabel(delegate);
     deliverSend({
       verb: "send",
       machineId: parent.machineId,
@@ -2557,7 +2579,7 @@ export const createServer = (
           origin: {
             kind: "peer",
             from: delegate.id,
-            name: leaf(delegate.cwd),
+            name,
             fromSession: delegate.id,
           },
           shouldQuery: false,
@@ -2707,7 +2729,7 @@ export const createServer = (
           uuid: crypto.randomUUID(),
           message: {
             role: "user",
-            content: `[CawCo] Your message to ${leaf(to.cwd)}#${to.id.slice(0, 8)} was not delivered: ${reason}`,
+            content: `[CawCo] Your message to ${sessionLabel(to).tag} was not delivered: ${reason}`,
           },
           parent_tool_use_id: null,
           origin: { kind: "system", name: "undelivered" },
@@ -3687,11 +3709,17 @@ export const createServer = (
       forgetPending(instanceId, refused);
       return;
     }
+    const launched = atLaunchDir(instanceId, { cwd: row.cwd });
+    if ("refusal" in launched) {
+      console.warn(`[hub] not waking ${instanceId}: ${launched.refusal}`);
+      forgetPending(instanceId, launched.refusal);
+      return;
+    }
     const settled = settleMode(
       machineId,
       {
         instanceId,
-        cwd: row.cwd,
+        cwd: launched.payload.cwd,
         ...(row.harness ? { harness: row.harness as HarnessKind } : {}),
         resume: { sessionKey: row.sessionId },
         ...(relaunch ? { relaunch: true as const } : {}),
@@ -3715,7 +3743,7 @@ export const createServer = (
       id: instanceId,
       addressProtocol: addressProtocolMachines.has(machineId),
       machineId,
-      cwd: row.cwd,
+      cwd: revive.cwd,
       sessionId: row.sessionId,
       harness: row.harness ?? undefined,
       kind: row.kind ?? undefined,
@@ -4510,7 +4538,7 @@ export const createServer = (
     }
     try {
       await writeFolderFile(projectId, path, built.html, {
-        author: { name: row.title || leaf(row.cwd) },
+        author: { name: sessionLabel(row).name },
         message: `decisions: ${path.split("/")[1]}`,
       });
       return undefined;
@@ -5005,13 +5033,46 @@ export const createServer = (
    * A spawn of a row that exists goes to the directory the row was launched
    * in, whatever directory the caller sent: the harness keeps the conversation
    * under that directory, and a folder the CLI later wandered into may be gone.
+   * A row whose launch directory is unknown (its machine had no record of its
+   * conversation) is refused: there is nothing there to resume.
    */
   const atLaunchDir = <P extends { cwd: string }>(
     instanceId: string | undefined,
     payload: P
-  ): P => {
+  ): { payload: P } | { refusal: string } => {
     const launched = instanceId ? db.launchDirOf(instanceId) : undefined;
-    return launched ? { ...payload, cwd: launched } : payload;
+    if (!launched) {
+      return { payload };
+    }
+    if ("unknown" in launched) {
+      const row = instanceId
+        ? db.getInstancesByIds([instanceId])[0]
+        : undefined;
+      const name = row ? sessionName(row) : String(instanceId).slice(0, 8);
+      const machine = row ? machineName(row.machineId) : "its machine";
+      return {
+        refusal: `${name}'s conversation is no longer on ${machine}, so it can't be resumed.`,
+      };
+    }
+    return { payload: { ...payload, cwd: launched.cwd } };
+  };
+
+  /** A hub-issued spawn's mode (`settleMode`) and directory (`atLaunchDir`), or the first refusal. */
+  const settleSpawn = (
+    machineId: string,
+    asked: SpawnPayload,
+    fallbackMode?: string | null
+  ):
+    | { payload: SpawnPayload; permissionMode: string | null }
+    | { refusal: string } => {
+    const settled = settleMode(machineId, asked, fallbackMode);
+    if ("refusal" in settled) {
+      return settled;
+    }
+    const launched = atLaunchDir(settled.payload.instanceId, settled.payload);
+    return "refusal" in launched
+      ? launched
+      : { payload: launched.payload, permissionMode: settled.permissionMode };
   };
 
   const issueSpawn = (
@@ -5030,11 +5091,11 @@ export const createServer = (
         `machine ${machineId} is installing an update; start the session again when it finishes`
       );
     }
-    const settled = settleMode(machineId, asked, fallbackMode);
+    const settled = settleSpawn(machineId, asked, fallbackMode);
     if ("refusal" in settled) {
       throw new WorkItemRefusal(400, settled.refusal);
     }
-    const payload = atLaunchDir(settled.payload.instanceId, settled.payload);
+    const { payload } = settled;
     const placed = placedOrRefused(machineId, payload, workItemId);
     forgetPending(payload.instanceId, UNREAD.restarted);
     db.openInstance({
@@ -5163,11 +5224,11 @@ export const createServer = (
     if (holdingStarts(machineId)) {
       throw new MachineAway(machineId);
     }
-    const settled = settleMode(machineId, asked, fallbackMode);
+    const settled = settleSpawn(machineId, asked, fallbackMode);
     if ("refusal" in settled) {
       throw new Error(settled.refusal);
     }
-    const payload = atLaunchDir(settled.payload.instanceId, settled.payload);
+    const { payload } = settled;
     const placed = placedOrRefused(machineId, payload);
     const requestId = crypto.randomUUID();
     forgetPending(payload.instanceId, UNREAD.restarted);
@@ -5273,7 +5334,7 @@ export const createServer = (
           origin: {
             kind: "peer",
             from: from.id,
-            name: leaf(from.cwd),
+            name: sessionLabel(from).name,
             fromSession: from.id,
           },
         },
@@ -6823,8 +6884,9 @@ export const createServer = (
       return;
     }
     // `row` is the register's snapshot, read before its machine was asked for
-    // the launch directories of rows from before they were pinned.
-    const asked: SpawnPayload = atLaunchDir(row.id, {
+    // the launch directories of rows from before they were pinned. A row whose
+    // conversation its machine has no record of is not restored.
+    const launched = atLaunchDir(row.id, {
       instanceId: row.id,
       cwd: row.cwd,
       ...(row.workflowStepId
@@ -6853,7 +6915,12 @@ export const createServer = (
       // delegate the `delegate` tool back.
       ...(row.canDelegate === false ? { canDelegate: false } : {}),
       ...typeSettingsOf(row),
-    });
+    } satisfies SpawnPayload);
+    if ("refusal" in launched) {
+      console.warn(`[hub] not restored: ${launched.refusal}`);
+      return;
+    }
+    const asked: SpawnPayload = launched.payload;
     // Adopt the stored mode without revalidating a new launch; custody must not be skipped.
     if (reattachOnly) {
       lifecycle.restoring(row.id);
@@ -11622,7 +11689,7 @@ export const createServer = (
             const row = named.get(state.instanceId);
             return {
               ...state,
-              where: row ? leaf(row.cwd) : "a session that is gone",
+              where: row ? sessionLabel(row).name : "a session that is gone",
               harness: row?.harness ?? null,
             };
           }),
@@ -15439,7 +15506,13 @@ export const createServer = (
                 toDashboard(ws, failure(message, settled.refusal));
                 break;
               }
-              const payload = atLaunchDir(message.instanceId, settled.payload);
+              const launched = atLaunchDir(message.instanceId, settled.payload);
+              if ("refusal" in launched) {
+                console.warn(`[hub] refused spawn: ${launched.refusal}`);
+                toDashboard(ws, failure(message, launched.refusal));
+                break;
+              }
+              const { payload } = launched;
               const placed = message.instanceId
                 ? placeSpawn(message.machineId, {
                     ...payload,
