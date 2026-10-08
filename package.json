@@ -41,7 +41,8 @@
     "ultracite": "7.12.2"
   },
   "patchedDependencies": {
-    "virtua@0.52.10": "patches/virtua@0.52.10.patch"
+    "virtua@0.52.10": "patches/virtua@0.52.10.patch",
+    "bits-ui@2.19.5": "patches/bits-ui@2.19.5.patch"
   },
   "trustedDependencies": [
     "socket-activation"

@@ -36,6 +36,11 @@
  * children let go) the natural sizes, then the tweens written. That is two
  * layouts for any number of them.
  *
+ * A row an `unfold` opens or folds inside it (motion/fold `unfolding`) is
+ * read at the end of its fold, open or gone, never at the frame the fold is
+ * on, and the tween runs on that fold's clock: the edge and the row land
+ * together, and the box is never held at a size the fold then leaves.
+ *
  * `rows`: what changes inside is a `reflow`'s rows (a run's steps opening
  * a result under one, motion/branch), so the container's edge moves with
  * them: at their batch's pace (motion/rows `atTravel`), from the frame it
@@ -43,6 +48,7 @@
  * the rows inside are never cut by it.
  */
 import { CURVE, dur, ease, motionOk } from "./curves.svelte";
+import { leaving, unfolding } from "./fold.svelte";
 import { heldToTravel } from "./rows.svelte";
 
 interface Size {
@@ -53,7 +59,60 @@ interface Size {
 /** A container's natural size and its children's block sizes in it. */
 interface Natural {
   children: { child: HTMLElement; blockSize: number }[];
+  /** The clock of the folds it was read past (`atFoldsEnd`), if any. */
+  clock: { easing: string; ms: number } | null;
   size: Size;
+}
+
+/**
+ * Runs `read` with every row an `unfold` is moving inside `node` held at
+ * the end of its fold: open, or gone. Important inline declarations win
+ * over the fold's keyframes, so the read sees the box the fold is bound for
+ * instead of the frame it happens to be on; they are taken back before
+ * anything is drawn. Returns the clock of the longest fold found, so the
+ * box's edge and the rows inside it move together.
+ */
+function atFoldsEnd<T>(
+  node: HTMLElement,
+  read: () => T
+): { clock: Natural["clock"]; value: T } {
+  const held: { el: HTMLElement; props: [string, string, string][] }[] = [];
+  let clock: Natural["clock"] = null;
+  for (const [el, fold] of unfolding) {
+    if (el === node || !node.contains(el)) {
+      continue;
+    }
+    const ends: [string, string][] = leaving(el)
+      ? [["display", "none"]]
+      : [
+          ["height", `${fold.height}px`],
+          ["margin-block-end", `${fold.margin}px`],
+          ...fold.edges.map(([edge, px]): [string, string] => [
+            edge,
+            `${px}px`,
+          ]),
+        ];
+    const props = ends.map(([prop, end]): [string, string, string] => {
+      const was: [string, string, string] = [
+        prop,
+        el.style.getPropertyValue(prop),
+        el.style.getPropertyPriority(prop),
+      ];
+      el.style.setProperty(prop, end, "important");
+      return was;
+    });
+    held.push({ el, props });
+    if (!clock || fold.ms > clock.ms) {
+      clock = { ms: fold.ms, easing: fold.easing };
+    }
+  }
+  const value = read();
+  for (const { el, props } of held) {
+    for (const [prop, was, priority] of props) {
+      el.style.setProperty(prop, was, priority);
+    }
+  }
+  return { clock, value };
 }
 
 /** One attached container, as the shared measure sees it. */
@@ -140,19 +199,28 @@ export function morph({
      * The tween itself: its own curve, or the rows' (`rows`), at their
      * batch's pace over the `distance` its edge moves.
      */
-    const play = (frames: Keyframe[], distance: number): Animation =>
-      rows
-        ? heldToTravel(
-            node.animate(frames, {
-              duration: dur("--dur-panel"),
-              easing: ease("--ease-in-out"),
-            }),
-            distance
-          )
-        : node.animate(frames, {
-            duration: ms ?? dur("--dur-morph"),
-            easing: CURVE.drawer,
-          });
+    const play = (
+      frames: Keyframe[],
+      distance: number,
+      clock: Natural["clock"]
+    ): Animation => {
+      if (rows) {
+        return heldToTravel(
+          node.animate(frames, {
+            duration: dur("--dur-panel"),
+            easing: ease("--ease-in-out"),
+          }),
+          distance
+        );
+      }
+      // A fold inside sets the pace: the edge lands with the row it opens.
+      return node.animate(
+        frames,
+        clock
+          ? { duration: clock.ms, easing: clock.easing }
+          : { duration: ms ?? dur("--dur-morph"), easing: CURVE.drawer }
+      );
+    };
 
     /** How far its edge moves: down, or across too (`width`). */
     const moves = (from: Size, to: Size) =>
@@ -162,22 +230,27 @@ export function morph({
       // In flight, where the tween has it right now; else where layout last
       // put it, since the content has already changed under it.
       drawn: () => (running ? sizeNow() : laid),
-      natural: () => ({
-        size: sizeNow(),
-        children: [...node.children]
-          .filter((child): child is HTMLElement => child instanceof HTMLElement)
-          .map((child) => ({
-            child,
-            blockSize: child.getBoundingClientRect().height,
-          })),
-      }),
+      natural: () => {
+        const { clock, value } = atFoldsEnd(node, () => ({
+          size: sizeNow(),
+          children: [...node.children]
+            .filter(
+              (child): child is HTMLElement => child instanceof HTMLElement
+            )
+            .map((child) => ({
+              child,
+              blockSize: child.getBoundingClientRect().height,
+            })),
+        }));
+        return { ...value, clock };
+      },
       stop: () => {
         running?.cancel();
         running = undefined;
         release?.();
         release = undefined;
       },
-      tween: (from, { size: to, children }) => {
+      tween: (from, { size: to, children, clock }) => {
         const moved =
           Math.abs(to.h - from.h) > 0.5 ||
           (width && Math.abs(to.w - from.w) > 0.5);
@@ -202,7 +275,7 @@ export function morph({
           child.style.flexShrink = "0";
           child.style.blockSize = `${blockSize}px`;
         }
-        const animation = play(frames, moves(from, to));
+        const animation = play(frames, moves(from, to), clock);
         running = animation;
         const letGo = () => {
           for (const { child, was, shrink } of held) {

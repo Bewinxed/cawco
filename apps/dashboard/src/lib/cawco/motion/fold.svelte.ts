@@ -6,7 +6,7 @@
  * height, so content that arrives later is never clipped to a measurement.
  */
 import type { TransitionConfig } from "svelte/transition";
-import { dur, easeOut, motionOk } from "./curves.svelte";
+import { dur, ease, easeOut, motionOk } from "./curves.svelte";
 import { reflowsFrom, reread } from "./rows.svelte";
 
 export interface FoldOptions {
@@ -159,6 +159,39 @@ function rereadOnEnd(node: HTMLElement): void {
 }
 
 /**
+ * A row an `unfold` is moving: the geometry it is bound for, open, and the
+ * clock it moves on. A `morph` around it (motion/morph) reads its box with
+ * every such row at its end, open or gone, and tweens on the row's clock.
+ * Without that, the morph read whatever frame of the fold it caught: Svelte
+ * writes an intro's first frame in a microtask of its own
+ * (svelte/internal/client/dom/elements/transitions.js), whose order against
+ * the morph's MutationObserver microtask is not fixed. Read at that first
+ * frame (the row shut) or an outro's (the row still open), the morph held
+ * its box at a size the fold then left, and snapped it to the real one when
+ * its tween ended: a dialog jumped by the row's height.
+ */
+export interface Unfolding {
+  easing: string;
+  /** Its edges open: padding and border widths (px). */
+  edges: [string, number][];
+  /** Its border-box height open (px). */
+  height: number;
+  /** Its block-end margin open (px). */
+  margin: number;
+  ms: number;
+}
+
+/**
+ * Every row an `unfold` is moving now. Leaving or arriving is read at the
+ * time of asking (`leaving`): a bidirectional transition turned back keeps
+ * the options it was made with, and with them this entry.
+ */
+export const unfolding = new Map<HTMLElement, Unfolding>();
+
+/** Svelte makes a row inert for as long as it is on its way out. */
+export const leaving = (node: HTMLElement) => node.inert;
+
+/**
  * The same fold for content an `{#if}` mounts and unmounts, as a Svelte
  * transition: `in:unfold` grows it from nothing to its measured height
  * (--dur-pop), `out:unfold` folds it back (--dur-exit), fading with the height, so
@@ -193,8 +226,19 @@ export function unfold(
     STACKS.test(getComputedStyle(parent).display)
       ? Number.parseFloat(getComputedStyle(parent).rowGap) || 0
       : 0;
+  const duration = ms ?? dur(direction === "out" ? "--dur-exit" : "--dur-pop");
+  unfolding.set(node, {
+    height,
+    edges: edges as [string, number][],
+    margin: Number.parseFloat(styles.marginBlockEnd) || 0,
+    ms: duration,
+    easing: ease("--ease-out"),
+  });
+  const ended = () => unfolding.delete(node);
+  node.addEventListener("introend", ended, { once: true });
+  node.addEventListener("outroend", ended, { once: true });
   return {
-    duration: ms ?? dur(direction === "out" ? "--dur-exit" : "--dur-pop"),
+    duration,
     easing: easeOut,
     css: (t) =>
       [

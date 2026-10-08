@@ -1,0 +1,19 @@
+diff --git a/dist/internal/presence-manager.svelte.js b/dist/internal/presence-manager.svelte.js
+index 1e7dd9c7a5cf1896eef933b64a77dd6d502bad8b..c2b737d29fb97c3a7a46325f862095ae462467f9 100644
+--- a/dist/internal/presence-manager.svelte.js
++++ b/dist/internal/presence-manager.svelte.js
+@@ -19,9 +19,13 @@ export class PresenceManager {
+         });
+         onDestroyEffect(() => this.#clearTransitionFrame());
+         watch(() => this.#opts.open.current, (isOpen) => {
++            // The first run only skips when `open` still holds the value it
++            // was constructed with: one set true in between (a route's onMount
++            // runs before this effect) is an open like any other.
+             if (!this.#hasMounted) {
+                 this.#hasMounted = true;
+-                return;
++                if (isOpen === this.#shouldRender)
++                    return;
+             }
+             this.#clearTransitionFrame();
+             if (!isOpen && this.#opts.shouldSkipExitAnimation?.()) {
