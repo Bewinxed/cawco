@@ -58,6 +58,7 @@ import type {
 import {
   ACCOUNT_READ,
   ASK_USER_QUESTION,
+  BOUNDARY_RELAUNCH,
   CAWCO_ENV,
   CLAUDE_CONVERSATION_GONE,
   CONTROL_BEGIN_ACCOUNT_LOGIN,
@@ -1454,6 +1455,11 @@ class ClaudeSession implements HarnessSession {
         }
         this.#stamp(message);
         ctx.frame(neutral);
+        // A turn of a CLI whose boundary hook fails open has ended: its
+        // boundary is where the hub relaunches it onto the hook that refuses.
+        if (message.type === "result") {
+          this.askRelaunch();
+        }
       }
     } catch (error) {
       ctx.busy(false);
@@ -1589,6 +1595,27 @@ class ClaudeSession implements HarnessSession {
         )
       );
     return refusal;
+  }
+
+  /**
+   * Asks the hub to relaunch the session onto the workspace's hook script
+   * ({@link BOUNDARY_RELAUNCH}) when its CLI runs a hook that fails open:
+   * called at the attach when no turn is running, and as each turn ends. The
+   * hub does so only while the session is idle; until then the turn-start
+   * check and the transcript watch stand in.
+   */
+  askRelaunch(): void {
+    if (this.#boundaryHook?.needs.length && !this.#hookRefusal) {
+      this.#ctx.frame({ type: "system", subtype: BOUNDARY_RELAUNCH });
+    }
+  }
+
+  /** Installed by the supervisor: an attach that met no running turn asks for its relaunch now ({@link askRelaunch}). */
+  attached(): void {
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: Turn.busy is mutated by Turn.start()/.end() elsewhere; the checker doesn't see that cross-class mutation
+    if (!this.#turn.busy) {
+      this.askRelaunch();
+    }
   }
 
   /** An adopted CLI's boundary hook, read off its command line ({@link launchedHook}). */

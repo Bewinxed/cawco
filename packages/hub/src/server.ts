@@ -90,6 +90,7 @@ import {
   archiveRefusal,
   attachedFileLine,
   attachedFileName,
+  BOUNDARY_RELAUNCH,
   BUCKET_MS,
   CANCEL_BINARY_UPDATE,
   CLAUDE_CONVERSATION_GONE,
@@ -9849,6 +9850,56 @@ export const createServer = (
     );
   };
 
+  /** Sessions a boundary relaunch was sent for, so a second word on it before the spawn lands sends no second one. */
+  const relaunching = new Set<string>();
+  const RELAUNCH_SETTLE_MS = 60_000;
+
+  /**
+   * A session whose CLI runs a boundary hook that fails open, as its machine
+   * says at the attach and at each of its turns' ends ({@link BOUNDARY_RELAUNCH}):
+   * relaunched on its conversation, account and config dir — the at-limit
+   * move's path — so it comes back with the workspace's hook that refuses
+   * instead. Only between turns: one mid-turn, or with a send or an ask
+   * outstanding, is left to its next turn's end, which says so again. A send
+   * that follows the spawn waits behind it on the machine and reaches the new
+   * process.
+   */
+  const relaunchOntoHook = async (
+    machineId: string,
+    instanceId: string
+  ): Promise<void> => {
+    if (relaunching.has(instanceId)) {
+      return;
+    }
+    const [row] = db.getInstancesByIds([instanceId]);
+    const agent = registry.agent(machineId);
+    // One put to sleep at that boundary has no process left to replace: its
+    // next wake launches it onto the hook that refuses.
+    if (
+      !(row?.sessionId && agent && row.machineId === machineId) ||
+      row.status === "sleeping"
+    ) {
+      return;
+    }
+    if (!(await sessionIdle(row))) {
+      console.info(
+        `[hub] boundary: ${instanceId} is mid-turn; it is relaunched onto the fail-closed hook at its next turn's end`
+      );
+      return;
+    }
+    const { sessionId } = row;
+    relaunching.add(instanceId);
+    setTimeout(
+      () => relaunching.delete(instanceId),
+      RELAUNCH_SETTLE_MS
+    ).unref?.();
+    transcripts.noteRelaunch(instanceId);
+    resumeSpawn(agent, machineId, { ...row, sessionId }, false, true);
+    console.info(
+      `[hub] boundary: relaunching ${instanceId} onto the fail-closed hook`
+    );
+  };
+
   const keepAliveScheduler = createKeepAliveScheduler({
     rows: db.listInstances,
     limits: () => sessionLimitsReader(db),
@@ -14668,6 +14719,21 @@ export const createServer = (
                 const signal = peekSendSignal(frame);
                 if (signal) {
                   takeSendSignal(message.instanceId, signal);
+                  break;
+                }
+                // A session whose boundary hook fails open, at a turn
+                // boundary: relaunched onto the one that refuses when idle.
+                if (
+                  frame.message.type === "system" &&
+                  frame.message.subtype === BOUNDARY_RELAUNCH
+                ) {
+                  const { machineId, instanceId } = message;
+                  relaunchOntoHook(machineId, instanceId).catch(
+                    (error: unknown) =>
+                      console.error(
+                        `[hub] boundary: relaunching ${instanceId} failed: ${String(error)}`
+                      )
+                  );
                   break;
                 }
                 // The session's effort as its agent read it back: the row's

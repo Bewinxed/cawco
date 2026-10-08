@@ -120,6 +120,17 @@ export const isEffortLevel = (value: unknown): value is EffortLevel =>
 export const EFFORT_READ = "effort";
 
 /**
+ * The `system` subtype an agent says, for a Claude session it attached to,
+ * that the session's CLI runs a boundary hook that fails open (the form
+ * before the workspace's hook script, naming cawco's versioned binary): said
+ * at the attach when no turn is running, and at each of its turns' ends. The
+ * hub relaunches the session onto its conversation at that turn boundary
+ * when it is idle, so it comes back with the hook that refuses instead. It
+ * never reaches a screen.
+ */
+export const BOUNDARY_RELAUNCH = "boundary_relaunch";
+
+/**
  * The `system` subtype an agent passes a Claude session's `rate_limit_event`
  * on in, its `rate_limit_info` as Claude Code reported it. The hub reads it as
  * the session's account's limit reading; it never reaches a screen.

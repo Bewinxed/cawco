@@ -39,6 +39,7 @@ import type {
 import {
   AGENT_BUSY,
   alreadyIngested,
+  BOUNDARY_RELAUNCH,
   CAWCO_SCRATCH_TAG,
   CONTROL_GIT_CHANGES,
   CONTROL_QUERIES,
@@ -582,6 +583,8 @@ export class SessionSupervisor {
   readonly #queues = new Map<string, Promise<void>>();
   /** The sessions with a turn in flight — from the `send` that starts one until the turn ends. */
   readonly #busy = new Set<string>();
+  /** Attached sessions whose CLI runs a boundary hook that fails open, until the relaunch that replaces it ({@link BOUNDARY_RELAUNCH}). */
+  readonly #failOpen = new Set<string>();
   readonly #keepAlive = new Map<string, string>();
   /**
    * Each session's run of identical failed turns since its last send: the
@@ -1540,6 +1543,13 @@ export class SessionSupervisor {
    * OpenCode reattach). A spawn that says it relaunches (a move to another
    * account) replaces the process instead.
    */
+  /** A session saying its CLI runs a boundary hook that fails open ({@link BOUNDARY_RELAUNCH}), kept for the relaunch that replaces it. */
+  #noteFailOpen(instanceId: string, message: NeutralMessage): void {
+    if (message.type === "system" && message.subtype === BOUNDARY_RELAUNCH) {
+      this.#failOpen.add(instanceId);
+    }
+  }
+
   #reuseRecovery(payload: SpawnPayload): boolean {
     const { instanceId, requestId: ack } = payload;
     if (
@@ -1745,6 +1755,11 @@ export class SessionSupervisor {
           : { credential: payload.sessionCredential }
       );
       this.#sessions.set(instanceId, session);
+      if (boundary && this.#failOpen.delete(instanceId)) {
+        console.info(
+          `boundary: relaunched ${instanceId} onto the fail-closed hook`
+        );
+      }
       session.attached?.();
       if (payload.reattachOnly) {
         // biome-ignore lint/complexity/noVoid: the catalog read dates a rest already under way; nothing waits on it
@@ -1914,6 +1929,7 @@ export class SessionSupervisor {
         this.#line.set(instanceId, { srcEpoch, srcSeq });
       },
       frame: (message) => {
+        this.#noteFailOpen(instanceId, message);
         const ping = this.#keepAlive.get(instanceId);
         if (
           ping &&
