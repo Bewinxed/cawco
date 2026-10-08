@@ -31,7 +31,7 @@ Start is gated while a popover is open, location is unreadable or unverified, a 
 
 ## 4. Motion
 
-DialKit controls the scrim, card scale .96 to 1 and fade, prompt arrival, pills staggered left to right, then Start. The live demo retains its parameter subscription and scrubbable timeline; changing either replays the sequence. DialRoot and DialTimeline mount only at widths of at least 481px.
+The scrim fades in over `--dur-panel`; the card rises 6px and fades in over `--dur-panel` on `--ease-out`, and leaves over `--dur-exit` settling to `--press-scale`. The prompt section arrives first, then the sections below it at 60ms and 80ms, each rising 8px over `--dur-pop`. Popovers rise from `--pop-scale` and their rows stagger in. Every value is a root token or a line named in PRESERVE.md §4, "Opening choreography and tuned values".
 
 Mobile uses the same card clip for an upward slide and fade after the scrim begins. Reduced motion places the sheet directly at its resting position.
 
