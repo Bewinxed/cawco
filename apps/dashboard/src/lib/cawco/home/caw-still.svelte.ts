@@ -1,13 +1,21 @@
 /**
  * Caw's still as a picture: for a place too small or too many for a Caw of
- * its own (a face beside a word, a mark on every row of a list). A row of
+ * its own (a face beside a word, a mark on every row of a list, a pose on
+ * each of New project's template cards). A row of
  * these must cost nothing, so a picture runs no Rive of its own: each file's
  * still is drawn once for each look it can have (file, size, scheme, device
  * pixels) on the runtime's own renderer (`stageCaw`'s rest, on a canvas
  * nobody shows), kept, and copied by every place that shows it.
  */
 import { theme } from "#lib/theme.svelte.js";
-import { type CawBox, type CawFile, stageCaw } from "./Caw.svelte";
+import {
+  ARTBOARD,
+  BOX,
+  type CawBox,
+  type CawFile,
+  type CawPose,
+  stageCaw,
+} from "./Caw.svelte";
 import { deviceRatio } from "./device-ratio.svelte";
 
 /**
@@ -59,7 +67,32 @@ export function cawStill(status: CawFile, px: number): CawStill {
     y: CAW_STILL_BLEED * scale,
     side: px * scale,
   };
-  const key = `${status}:${px}:${dark}:${backing}`;
+  return look(`${status}:${px}`, status, backing, box, dark);
+}
+
+/**
+ * A template pose's picture, `px` CSS px square: the file's whole artboard,
+ * not his still's box, since a pose is placed in the artboard's action-safe
+ * area and reaches past that box (a laptop held out, a rocket raised). Read
+ * inside an effect or an attachment, it is read again when the scheme or the
+ * device pixel ratio changes.
+ */
+export function cawPose(pose: CawPose, px: number): CawStill {
+  const dark = theme.resolved === "dark";
+  const backing = Math.round(px * deviceRatio.current);
+  const unit = backing / ARTBOARD;
+  const box = { x: BOX.x * unit, y: BOX.y * unit, side: BOX.side * unit };
+  return look(`${pose}:artboard:${px}`, pose, backing, box, dark);
+}
+
+function look(
+  framing: string,
+  status: CawFile,
+  backing: number,
+  box: CawBox,
+  dark: boolean
+): CawStill {
+  const key = `${framing}:${dark}:${backing}`;
   return {
     backing,
     box,

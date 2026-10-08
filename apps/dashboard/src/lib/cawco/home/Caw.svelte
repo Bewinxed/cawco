@@ -17,10 +17,25 @@
     | "compacted";
 
   /**
-   * Every file Caw is drawn from: a status's, or `peek`, his ledge peek,
-   * which is not a status (assets/mascot/README.md, Contract).
+   * A New project template card's Caw, with the template's prop: a rest,
+   * one drawing held, with no drawn enter, placed inside the artboard's
+   * action-safe area (assets/mascot/README.md, Contract). Not a status: a
+   * card shows it as a picture (`CawPosePicture`).
    */
-  export type CawFile = CawStatus | "peek";
+  export type CawPose =
+    | "template-code"
+    | "template-launch"
+    | "template-seo"
+    | "template-brand"
+    | "template-design"
+    | "template-social";
+
+  /**
+   * Every file Caw is drawn from: a status's, `peek`, his ledge peek, or a
+   * template pose, none of which is a status (assets/mascot/README.md,
+   * Contract).
+   */
+  export type CawFile = CawStatus | CawPose | "peek";
 
   /**
    * Where the ledge runs across peek.riv's 512 still box, as a share of its
@@ -86,8 +101,14 @@
   export const PREFETCHES = [riveWasm, fileUrl("loading")];
 
   /** The files' 592 px artboard and the 512 px still box in it, at (43, 40). */
-  const ARTBOARD = 592;
-  const BOX = { x: 43, y: 40, side: 512 };
+  export const ARTBOARD = 592;
+  export const BOX = { x: 43, y: 40, side: 512 } as const;
+  /**
+   * The action-safe margin, a share of the artboard's side in from each
+   * edge, that a template pose's ink sits inside (EBU R95's 3.5%,
+   * assets/mascot/scripts/trace_pose.py).
+   */
+  export const SAFE_MARGIN = 0.035;
   /**
    * How far his acting can reach above his still's box, as a share of its
    * side: the artboard's top, where a status file may draw (a working

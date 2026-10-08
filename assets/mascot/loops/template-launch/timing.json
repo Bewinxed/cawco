@@ -1,0 +1,59 @@
+{
+  "take": "tk_2i97rPBY-cM2HbPWVCXEm",
+  "still": "working",
+  "frames": 2,
+  "fps": 24,
+  "drawings": [
+    {
+      "start": 0,
+      "length": 2,
+      "drawing": 0
+    }
+  ],
+  "placement": {
+    "scale": 0.60625,
+    "x": -39.546875,
+    "y": -30.501250000000027
+  },
+  "stillOverlap": 0.9864,
+  "inks": {
+    "black": 72327,
+    "vermilion": 9247,
+    "white": 4170,
+    "yellow": 1682,
+    "cream": 13627
+  },
+  "halo": {
+    "00": 0
+  },
+  "probe": {
+    "moved": {
+      "x": 15.1,
+      "y": -43.87
+    },
+    "shards": [],
+    "heldFrom": 90,
+    "heldFrames": 51,
+    "eyesCut": 0,
+    "whiteMarks": [],
+    "outsideSafePx": 0,
+    "sameInk": {
+      "black": 0.994,
+      "vermilion": 0.983,
+      "white": 0.536,
+      "yellow": 0.994,
+      "cream": 0.948,
+      "tan": 0.084
+    },
+    "inkBox": [40.5, -4.4, 496.4, 529.7],
+    "gates": {
+      "opensOnStill": true,
+      "held": true,
+      "halo": true,
+      "eyes": true,
+      "whiteMarks": true,
+      "noShards": true,
+      "safeArea": true
+    }
+  }
+}

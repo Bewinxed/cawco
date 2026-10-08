@@ -2,7 +2,8 @@
   /**
    * An icon card's face (app.css `.icon-card`): its head, the icon tile
    * (DESIGN.md: the duotone glyph on a raised 26px tile, in its section
-   * hue) with whatever stands beside it; then its name and its meta line.
+   * hue) with whatever stands beside it; its art, where it has one, centred
+   * between the head and the name; then its name and its meta line.
    */
   import type { Component, Snippet } from "svelte";
 
@@ -12,6 +13,7 @@
     name,
     meta,
     aside,
+    art,
   }: {
     /** Its glyph on the tile (Solar duotone). */
     icon: Component;
@@ -22,6 +24,8 @@
     meta: string;
     /** What stands in the head beside the tile. */
     aside?: Snippet;
+    /** The card's picture, between the head and the name. */
+    art?: Snippet;
   } = $props();
 </script>
 
@@ -29,16 +33,24 @@
   <span class="tile" style:color={hue}><Icon /></span>
   {@render aside?.()}
 </span>
+{#if art}
+  <span class="art">{@render art()}</span>
+{/if}
 <span class="name">{name}</span>
 <span class="meta">{meta}</span>
 
 <style>
   /* Over the card's highlight layers. */
   .head,
+  .art,
   .name,
   .meta {
     position: relative;
     z-index: 2;
+  }
+  .art {
+    align-self: center;
+    margin-block-end: var(--space-2);
   }
   .head {
     display: flex;

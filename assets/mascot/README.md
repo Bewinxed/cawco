@@ -62,6 +62,22 @@ that is all they do with him.
   face cross-fades to drawing 31 and back, and nothing steps.
 - His **still** is the drawing his enter lands on and Reduce Motion holds: a rest's drawing, or
   the first drawing of a waiting status's first loop.
+- `assets/mascot/caw/template-<name>.riv` (`code`, `launch`, `seo`, `brand`, `design`,
+  `social`) are Caw's **template poses**, files that are not statuses: each New project
+  template card shows its own, Caw with the template's prop (the owner's picks, Backlot film
+  `B8VeHkbHHu1urJavapTPB`). Each is a rest, the end hold of its take traced by `trace_pose.py`,
+  with no drawn enter: the dashboard draws it once as a picture (`CawPosePicture`, no Rive left
+  running) and fades it in as the card first shows; with Reduce Motion he is simply there. The
+  Apple apps have no template cards and carry no pose. A pose is not placed on the still box: it
+  keeps its take's scale (every pose the same) and is moved, centred across on his body, only as
+  far as its ink must go to sit inside the artboard's action-safe area (3.5% in from each edge),
+  so an app frames a pose by the artboard and every pose fits whole. The props are cream with
+  tan shaded faces: two inks of the poses' own (`rests.json` `inks`). Tan, (201, 185, 157), is the
+  median of the faces' core pixels in seo 1, design 4 and code 5; a tan run is a face only where a
+  disk 7 take px (4.2 box units) across fits inside it, and its thinner runs, the props' outlines
+  (2 px at the median, 6 at most), are traced black. Both sit inside the silhouette, so the dark
+  rim runs round them; neither needs a look of its own (each borders his black or the page with
+  a black outline).
 - `assets/mascot/caw/peek.riv` is Caw's **ledge peek**, a file that is not a status: in a Caw
   thread he peeks over the composer's top-leading corner (the owner's pick, the `peer-over`
   ledge clip). He comes up from behind the ledge by that clip, his drawn enter (`enters` on), and
@@ -188,12 +204,20 @@ them (the editor cannot import `.riv` files). From `assets/mascot/scripts` (`bun
 - `uv run trace_still.py <status>` traces a resting status's picture
   (`stills/light-<status>.png`) into `loops/<status>/body-00.svg`, for a status that was never
   a loop (`compacted`). Same tracer, the status's own inks, at the takes' 1.6 px a unit.
-- `node build.mjs` writes `caw/<status>.riv` and `caw/peek.riv` from `scene.mjs` and the traced
-  drawings in `assets/mascot/loops/` and `assets/mascot/clips/`, and the same bytes to each app's copies:
-  `apps/apple/Packages/CawCoKit/Sources/CawCoMascot/Resources/caw/`, which `CawView` loads, and
-  `apps/dashboard/src/lib/assets/caw/`, which the dashboard's `Caw.svelte` loads. Each app keeps
-  its own copy because each app is built from its own directories. It removes any other `.riv` in those
-  folders. rive-mcp-server's exported `buildScene` and
+- `uv run trace_pose.py <pose> <take> <still the take opens on>` traces a template pose into
+  `assets/mascot/loops/<pose>/body-00.svg` with the same tracer, in the inks `rests.json` names
+  for it: the take's end hold, registered onto the still it opens on (no still has the pose, so
+  its eye whites are told forward from that still and, past the evidence, by shape), then placed
+  by its own ink (see the Contract). Gates: drawing 00 on its still (0.9 overlap or more), an end
+  hold of a second or more, halo 0, no eye white see-through, no white marks, no shards (no cream
+  or white region under MIN_REGION inside a tan face), and the safe area.
+- `node build.mjs` writes `caw/<status>.riv`, `caw/peek.riv` and `caw/template-<name>.riv` from
+  `scene.mjs` and the traced drawings in `assets/mascot/loops/` and `assets/mascot/clips/`, and the
+  same bytes to each app's copy of the files that app shows:
+  `apps/apple/Packages/CawCoKit/Sources/CawCoMascot/Resources/caw/` (the statuses and the peek),
+  which `CawView` loads, and `apps/dashboard/src/lib/assets/caw/` (all of them), which the
+  dashboard's `Caw.svelte` loads. Each app keeps its own copy because each app is built from its
+  own directories. It removes any other `.riv` in those folders. rive-mcp-server's exported `buildScene` and
   `writeRiv` write each scene; rive-mcp-server has no view-model authoring, so `build.mjs`
   inserts those objects into its object list before writing, in the shapes Rive's own exports use
   (rive-runtime's importers in `src/file.cpp`): the `Caw` view model with its default instance
@@ -214,7 +238,7 @@ them (the editor cannot import `.riv` files). From `assets/mascot/scripts` (`bun
   - every drawing stays on screen two frames or more (on twos), read back from the file;
   - load plus instancing (parse, artboard, state machine, bind, first frame) must take 100 ms or
     less, the median of five steady runs;
-  - a resting file (`ready`, `sleeping`, `compacted`, `peek`) must show its one drawing, in the
+  - a resting file (`ready`, `sleeping`, `compacted`, `peek`, each template pose) must show its one drawing, in the
     scheme `dark` selects, and nothing else, with motion on or reduced;
   - `enters` reads on exactly in the files with a drawn enter;
   - `pixel` sets the dark rim's width and nothing else: light renders the same at every value;
@@ -227,8 +251,8 @@ them (the editor cannot import `.riv` files). From `assets/mascot/scripts` (`bun
 
   The runtime's clocks and entropy are pinned so the random turns repeat across two runs. It
   prints one line per file (the peek's names its ledge line), the totals (`loops animate: 7/7`,
-  `stills rest: 4/4`, `reducedMotion holds still: 11/11`, `drawn enters play and land: 5/5`,
-  `no drawn enter, simply there: 6/6`, `pixel sizes the dark rim: 11/11`, `files proven: 11/11`)
+  `stills rest: 10/10`, `reducedMotion holds still: 17/17`, `drawn enters play and land: 5/5`,
+  `no drawn enter, simply there: 12/12`, `pixel sizes the dark rim: 17/17`, `files proven: 17/17`)
   and, on success, `Caw view model drives the state machine in every file`.
 - `node measure-rim.mjs [--sizes 14,18,34,48,80] [--light]` measures the dark rim as the apps
   draw him: each file's still framed as `cawStill` frames it, at each size, 1x and 2x, on the
@@ -274,7 +298,11 @@ reused rather than traced again.
    vermilion, eye white, yellow; and cream, the note, where a status names it). Thin fringes go, closed eyes' lid lines stay, and gaps in his
    silhouette (between a raised wing and his beak) are told from eye whites from both ends of the
    take: forward from the opening still and backward from the closing one, evidence over guesses,
-   and where neither end has evidence, by shape (a pupil always bites into an eye white). It
+   and where neither end has evidence, by shape (a pupil always bites into an eye white), except
+   that nothing inside an eye is a gap: a region guessed paper inside an eye's hull is its
+   pupil's catchlight. Eye white stays only inside his body's black; white elsewhere (a slit's
+   pinched end, a speck in his vermilion, a sliver on a prop's lit edge) takes the ink it sits
+   on, so no eye white touches the page round him. It
    registers drawing 00 onto the status's still and traces each ink with vtracer (spline, holes
    kept) into `body-NN.svg`, with `timing.json`. `trace.py --halo` reports yellow traced where
    the take has none, and `trace.py --eyes` reports any eye white a drawing on disk shows as

@@ -17,10 +17,11 @@
 // (RIM_CONVERTER, rimBind): a DataBindContext right after the Stroke it targets.
 //
 // usage: node build.mjs [outDir]
-//   Without an argument it writes ../caw/ and the apps' copies, CawCoMascot's Resources/caw/ and
-//   the dashboard's src/lib/assets/caw/, so all three always hold the same bytes; any other .riv
-//   there is removed. Each app keeps its own copy because each is built from its own
-//   directories.
+//   Without an argument it writes every file to ../caw/, and to each app's copy the files that
+//   app shows: CawCoMascot's Resources/caw/ (the statuses and the peek; the Apple apps have no
+//   template cards, so no pose) and the dashboard's src/lib/assets/caw/ (all of them), the same
+//   bytes in each; any other .riv there is removed. Each app keeps its own copy because each is
+//   built from its own directories. With an argument it writes every file there.
 import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -29,21 +30,31 @@ import {
   parseColor,
   writeRiv,
 } from "rive-mcp-server/dist/rivWriter.js";
-import { enterOf, FILES, fileName, KIT_RIM, statusScene } from "./scene.mjs";
+import {
+  enterOf,
+  FILES,
+  fileName,
+  KIT_RIM,
+  statusScene,
+  TEMPLATES,
+} from "./scene.mjs";
 
+const here = (path) => fileURLToPath(new URL(path, import.meta.url));
+/** Each directory written and the files it holds. */
 const outDirs = process.argv[2]
-  ? [process.argv[2]]
+  ? [{ dir: process.argv[2], files: FILES }]
   : [
-      fileURLToPath(new URL("../caw/", import.meta.url)),
-      fileURLToPath(
-        new URL(
-          "../../../apps/apple/Packages/CawCoKit/Sources/CawCoMascot/Resources/caw/",
-          import.meta.url
-        )
-      ),
-      fileURLToPath(
-        new URL("../../../apps/dashboard/src/lib/assets/caw/", import.meta.url)
-      ),
+      { dir: here("../caw/"), files: FILES },
+      {
+        dir: here(
+          "../../../apps/apple/Packages/CawCoKit/Sources/CawCoMascot/Resources/caw/"
+        ),
+        files: FILES.filter((file) => !TEMPLATES.includes(file)),
+      },
+      {
+        dir: here("../../../apps/dashboard/src/lib/assets/caw/"),
+        files: FILES,
+      },
     ];
 
 /** The `Caw` view model, in property order (a property's index is its id in a data-bind path). */
@@ -445,9 +456,9 @@ function completeTransition(object, at) {
   ];
 }
 
-for (const dir of outDirs) {
+for (const { dir, files } of outDirs) {
   mkdirSync(dir, { recursive: true });
-  const keep = new Set(FILES.map((s) => `${fileName(s)}.riv`));
+  const keep = new Set(files.map((s) => `${fileName(s)}.riv`));
   for (const f of readdirSync(dir)) {
     if (f.endsWith(".riv") && !keep.has(f)) {
       rmSync(join(dir, f));
@@ -456,8 +467,10 @@ for (const dir of outDirs) {
 }
 for (const status of FILES) {
   const { bytes, objects, inputs, warnings } = build(status);
-  for (const dir of outDirs) {
-    writeFileSync(join(dir, `${fileName(status)}.riv`), bytes);
+  for (const { dir, files } of outDirs) {
+    if (files.includes(status)) {
+      writeFileSync(join(dir, `${fileName(status)}.riv`), bytes);
+    }
   }
   console.log(
     `${fileName(status)}.riv: ${bytes.length} bytes, ${objects} objects, inputs: ${inputs}`
@@ -466,4 +479,6 @@ for (const status of FILES) {
     console.log(`  warning: ${w}`);
   }
 }
-console.log(`wrote ${FILES.length} files to ${outDirs.join(" and ")}`);
+for (const { dir, files } of outDirs) {
+  console.log(`wrote ${files.length} files to ${dir}`);
+}

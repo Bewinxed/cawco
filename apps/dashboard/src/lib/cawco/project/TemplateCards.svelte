@@ -9,6 +9,11 @@
    * Caw's ledge peek stands on the card that fits the prompt, the ledge line
    * on its top edge, "Fits your prompt" on it.
    *
+   * Each card shows its own Caw, its template's pose (template-<name>.riv),
+   * between its head and its name: a rest, drawn as a picture (`CawPosePicture`),
+   * so he fades in once as the card first shows and holds that drawing, and
+   * no Rive runs for him (assets/mascot/README.md, Contract).
+   *
    * The page decides when the peek is there (one live Caw at a time: the
    * page's 80px Caw goes before he peeks); once there, he moves to whichever
    * card fits now. A tap picks a card whatever fits.
@@ -17,7 +22,8 @@
   import { appear } from "#lib/cawco/motion/curves.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
-  import Caw, { LEDGE_LINE } from "../home/Caw.svelte";
+  import Caw, { LEDGE_LINE, SAFE_MARGIN } from "../home/Caw.svelte";
+  import CawPosePicture from "../home/CawPosePicture.svelte";
   import CardFace from "./CardFace.svelte";
   import type { TemplateCard, TemplateName } from "./new-project";
 
@@ -55,6 +61,14 @@
      */
     action?: { template: TemplateName; label: string; onclick: () => void };
   } = $props();
+
+  /**
+   * The side of a card's pose picture, his whole artboard, px. The poses
+   * share one scale and each one's ink sits inside the artboard's
+   * action-safe area, so that area is made the 120px art box the owner
+   * judged the poses in on their review page.
+   */
+  const POSE_SIZE = Math.round(120 / (1 - 2 * SAFE_MARGIN));
 
   interface Box {
     height: number;
@@ -154,6 +168,12 @@
             meta={metaOf(card)}
             name={card.name}
           >
+            {#snippet art()}
+              <CawPosePicture
+                pose={`template-${card.template}` as const}
+                size={POSE_SIZE}
+              />
+            {/snippet}
             {#snippet aside()}
               {#if fit === card.template && peek}
                 <span class="fits" transition:appear>Fits your prompt</span>

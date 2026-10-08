@@ -16,5 +16,35 @@
     "clip": "peer-over",
     "drawing": 9,
     "ledgeLine": 0.5684
+  },
+  "template-code": {
+    "loop": "template-code",
+    "drawing": 0,
+    "inks": ["cream", "tan"]
+  },
+  "template-launch": {
+    "loop": "template-launch",
+    "drawing": 0,
+    "inks": ["cream", "tan"]
+  },
+  "template-seo": {
+    "loop": "template-seo",
+    "drawing": 0,
+    "inks": ["cream", "tan"]
+  },
+  "template-brand": {
+    "loop": "template-brand",
+    "drawing": 0,
+    "inks": ["cream", "tan"]
+  },
+  "template-design": {
+    "loop": "template-design",
+    "drawing": 0,
+    "inks": ["cream", "tan"]
+  },
+  "template-social": {
+    "loop": "template-social",
+    "drawing": 0,
+    "inks": ["cream", "tan"]
   }
 }

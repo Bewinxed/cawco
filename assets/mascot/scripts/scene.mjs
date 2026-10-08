@@ -54,8 +54,22 @@ export const STATUS = [
  * drawing. Apps put its ledge line (rests.json `ledgeLine`) on the edge he peeks over.
  */
 export const PEEK = "peek";
-/** Every file build.mjs writes: one per status, then the peek. */
-export const FILES = [...STATUS, PEEK];
+/**
+ * Caw's template poses, files that are not statuses: each New project template card shows its
+ * own, Caw with the template's prop. Each is a rest (rests.json), the end hold of the owner's
+ * pick traced by trace_pose.py, with no drawn enter: the take opens on the `working` still at
+ * full size, and an enter starts on an empty page. Apps fade him in.
+ */
+export const TEMPLATES = [
+  "template-code",
+  "template-launch",
+  "template-seo",
+  "template-brand",
+  "template-design",
+  "template-social",
+];
+/** Every file build.mjs writes: one per status, the peek, then the template poses. */
+export const FILES = [...STATUS, PEEK, ...TEMPLATES];
 /** Each file's name: assets/mascot/caw/<name>.riv. */
 export const fileName = (status) => status.replace("_", "-");
 
@@ -63,7 +77,8 @@ export const fileName = (status) => status.replace("_", "-");
  * The files that rest: one drawing, held, with no loop. loops/rests.json names each one's
  * drawing among the traced loops (`ready` is ready-attention's first drawing, `sleeping` the
  * nod in idle-nod-off, eyes closed), the drawing trace_still.py traced from its still picture
- * (`compacted`, which was never a loop), or a clip's drawing (`peek`, peer-over's landing).
+ * (`compacted`, which was never a loop), a clip's drawing (`peek`, peer-over's landing), or a
+ * template pose's end hold, which trace_pose.py traced (`template-<name>`).
  */
 export const RESTS = JSON.parse(readFileSync(`${LOOPS}rests.json`, "utf8"));
 /** A rest's drawing on disk: in its loop's folder, or in its clip's. */
