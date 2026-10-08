@@ -1,0 +1,76 @@
+{
+  "frame": [
+    1024,
+    1536
+  ],
+  "source": "story-end.png (Sunburst, fal request 01a11b55-bdce-7d30-b7b6-85e66c5cb463)",
+  "slots_px": [
+    {
+      "x": 108,
+      "y": 338,
+      "width": 810,
+      "height": 192
+    },
+    {
+      "x": 108,
+      "y": 586,
+      "width": 810,
+      "height": 192
+    },
+    {
+      "x": 108,
+      "y": 836,
+      "width": 810,
+      "height": 190
+    }
+  ],
+  "slots_frac": [
+    {
+      "x": 0.1055,
+      "y": 0.2201,
+      "width": 0.791,
+      "height": 0.125
+    },
+    {
+      "x": 0.1055,
+      "y": 0.3815,
+      "width": 0.791,
+      "height": 0.125
+    },
+    {
+      "x": 0.1055,
+      "y": 0.5443,
+      "width": 0.791,
+      "height": 0.1237
+    }
+  ],
+  "corner_radius_nominal_px": 36,
+  "nominal_px": {
+    "x": [
+      96,
+      928
+    ],
+    "width": 832,
+    "height": 176,
+    "tops_y": [
+      352,
+      592,
+      832
+    ],
+    "gap": 64
+  },
+  "gaps_px": [
+    56,
+    58
+  ],
+  "fill_measured_rgb": [
+    38.1,
+    37.8,
+    35.8
+  ],
+  "screen_measured_rgb": [
+    15.5,
+    14.9,
+    12.1
+  ]
+}

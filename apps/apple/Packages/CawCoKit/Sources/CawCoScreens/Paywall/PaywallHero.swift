@@ -2,6 +2,7 @@ import AVFoundation
 import CawCoCore
 import CawCoDesign
 import CawCoMascot
+import OSLog
 import UIKit
 
 /// What one of the hero's notification cards says: a real ask, or a real
@@ -10,11 +11,13 @@ struct HeroBanner: Equatable {
     let title: String
     let body: String
 
-    /// The hero's three cards: the asks waiting (`held`, the one just answered,
-    /// first), then the fleet's live harness-and-machine pairs with the example
-    /// ask, then the first machine with each harness CawCo runs.
+    /// The hero's cards (`PaywallHeroView.cardCount` of them): the asks waiting
+    /// (`held`, the one just answered, first), then the fleet's live
+    /// harness-and-machine pairs with the example ask, then the first machine
+    /// with each harness CawCo runs.
     @MainActor
     static func cards(hub: HubConnection, home: HomeModel, held: ParkedAsk? = nil) -> [HeroBanner] {
+        let count = PaywallHeroView.cardCount
         let fleet = hub.fleet
         var asks = home.needs.compactMap { item -> ParkedAsk? in
             if case let .ask(ask) = item.kind { return ask }
@@ -24,7 +27,7 @@ struct HeroBanner: Equatable {
             asks.removeAll { $0.requestId == held.requestId }
             asks.insert(held, at: 0)
         }
-        var cards: [HeroBanner] = asks.prefix(3).map { ask in
+        var cards: [HeroBanner] = asks.prefix(count).map { ask in
             let row = fleet.byId[ask.instanceId]
             let machine = row.map { fleet.machineName($0.machineId) } ?? fleet.machines.first?.name ?? "your machine"
             let line = ask.summary.split(separator: "\n").first.map(String.init) ?? ask.summary
@@ -33,13 +36,91 @@ struct HeroBanner: Equatable {
         var pairs: [(harness: String, machine: String)] = home.working.map { ($0.harness, fleet.machineName($0.machineId)) }
         let first = fleet.machines.first?.name ?? "your machine"
         pairs += ["claude", "opencode", "pi"].map { ($0, first) }
-        for pair in pairs where cards.count < 3 {
-            let card = HeroBanner(title: PaywallCopy.bannerTitle(harness: ModelCatalog.harnessName(pair.harness), machine: pair.machine),
-                                  body: PaywallCopy.bannerExample)
-            if !cards.contains(card) { cards.append(card) }
+        let examples = pairs.map { HeroBanner(title: PaywallCopy.bannerTitle(harness: ModelCatalog.harnessName($0.harness), machine: $0.machine),
+                                              body: PaywallCopy.bannerExample) }
+        for card in examples where cards.count < count && !cards.contains(card) {
+            cards.append(card)
+        }
+        // A stack deeper than the fleet has pairs repeats them.
+        while cards.count < count, let card = examples.first {
+            cards.append(card)
         }
         return cards
     }
+}
+
+/// The story still's notification slots (`story-end.slots.json`, bundled
+/// beside the still), in the still's pixels: any number of cards, each with
+/// its place in the stack (`order`, 0 in front) and the part of it that shows.
+nonisolated struct StorySlots: Decodable {
+    struct Rect: Decodable {
+        let x: Double
+        let y: Double
+        let width: Double
+        let height: Double
+
+        var cg: CGRect { CGRect(x: x, y: y, width: width, height: height) }
+    }
+
+    struct Slot: Decodable {
+        let x: Double
+        let y: Double
+        let width: Double
+        let height: Double
+        /// 0 is the front card, a higher number further back; absent, the file's order.
+        let order: Int?
+        /// The part that shows past the cards in front of it; absent, all of it.
+        let visible: Rect?
+        /// Its drawn corner; absent, the file's nominal corner.
+        let radius: Double?
+
+        var rect: CGRect { CGRect(x: x, y: y, width: width, height: height) }
+        /// A card mostly behind another shows its edge only, as iOS stacks a group.
+        var showsContent: Bool { visible.map { $0.height >= height * 0.9 } ?? true }
+    }
+
+    let size: CGSize
+    /// Front to back; without `order`, the file's own order.
+    let slots: [Slot]
+    /// The file says how the cards stack, rather than listing equal slots.
+    var stacked: Bool { slots.contains { $0.order != nil } }
+    let radius: Double
+
+    private enum Keys: String, CodingKey {
+        case frame, slots, cards
+        case slotsPx = "slots_px"
+        case radius = "corner_radius_nominal_px"
+    }
+
+    init(from decoder: any Decoder) throws {
+        let keys = try decoder.container(keyedBy: Keys.self)
+        let frame = try keys.decode([Double].self, forKey: .frame)
+        guard frame.count == 2 else {
+            throw DecodingError.dataCorruptedError(forKey: .frame, in: keys, debugDescription: "frame is [width, height]")
+        }
+        size = CGSize(width: frame[0], height: frame[1])
+        let listed = try keys.decodeIfPresent([Slot].self, forKey: .slotsPx)
+            ?? keys.decodeIfPresent([Slot].self, forKey: .slots)
+            ?? keys.decode([Slot].self, forKey: .cards)
+        slots = listed.enumerated()
+            .sorted { ($0.element.order ?? $0.offset) < ($1.element.order ?? $1.offset) }
+            .map(\.element)
+        radius = try keys.decodeIfPresent(Double.self, forKey: .radius) ?? 36
+    }
+
+    /// The bundled file, read once.
+    static let bundled: StorySlots? = {
+        guard let url = Bundle.module.url(forResource: "story-end.slots", withExtension: "json") else {
+            Logger(subsystem: "dev.cawco.app", category: "Paywall").error("story-end.slots.json is not in the bundle")
+            return nil
+        }
+        do {
+            return try JSONDecoder().decode(StorySlots.self, from: Data(contentsOf: url))
+        } catch {
+            Logger(subsystem: "dev.cawco.app", category: "Paywall").error("story-end.slots.json unreadable: \(String(describing: error), privacy: .public)")
+            return nil
+        }
+    }()
 }
 
 /// The paywall's hero band (DESIGN.md §2 and §4, ruling 6). Brand art, so it
@@ -48,9 +129,10 @@ struct HeroBanner: Equatable {
 ///
 /// - `story`: the desk scene's move (`paywall-story.mp4`, once, muted) from
 ///   `PaywallStoryStart` to `PaywallStoryRest`, the phone's lock screen with
-///   three empty slots; three native cards then stack into the slots (the
-///   still's `story-end.slots.json`). Until the move is in the bundle, and
-///   under Reduce Motion, the band is the rest frame with the cards in it.
+///   empty card slots; native cards then come into them. The slots, their
+///   number and their stacking are the still's `story-end.slots.json`, read
+///   from the bundle, so a new still and its file need no code. Under Reduce
+///   Motion the band is the rest frame with the cards already in it.
 /// - `poster`: Butter above an exact horizon, Ivory below, a code-made grain
 ///   at 3%, the headline set huge; three native cards drop in, staggered, and
 ///   Caw climbs up and peeks over them (climb.riv), resting there.
@@ -89,20 +171,27 @@ final class PaywallHeroView: UIView {
     static let storyRest = "PaywallStoryRest"
     static let storyStart = "PaywallStoryStart"
     static let storyMove = "paywall-story"
-    /// story-end.slots.json, in the still's 1024 × 1536 pixels: the three slots.
-    static let storyFrame = CGSize(width: 1024, height: 1536)
-    static let storySlots = [CGRect(x: 108, y: 338, width: 810, height: 192),
-                             CGRect(x: 108, y: 586, width: 810, height: 192),
-                             CGRect(x: 108, y: 836, width: 810, height: 190)]
-    /// The slots' drawn corner, in the still's pixels.
-    static let storySlotRadius = 36.0
     /// Caw's climb box on the poster (the poster's 120pt, a little smaller in a phone's band).
     static let climbSide = 104.0
+    /// The poster's stack.
+    private static let posterCards = 3
+
+    /// How many cards a hero needs: the story still's slots, or the poster's stack.
+    static var cardCount: Int { max(posterCards, StorySlots.bundled?.slots.count ?? 0) }
+
+    /// The story still's slots, front to back; `cards` holds the card for each.
+    private let story: StorySlots?
 
     init(variant: PaywallExperiment.Variant, banners: [HeroBanner]) {
         self.variant = variant
         let story = variant == .story
-        cards = banners.prefix(3).enumerated().map { NotificationCard($0.element, compact: story, front: $0.offset == 0) }
+        if story {
+            self.story = StorySlots.bundled
+            cards = zip(self.story?.slots ?? [], banners).map { NotificationCard($1, compact: true, front: $0.showsContent) }
+        } else {
+            self.story = nil
+            cards = banners.prefix(Self.posterCards).enumerated().map { NotificationCard($0.element, compact: false, front: $0.offset == 0) }
+        }
         climber = story ? nil : CawView(status: .ready, ledge: .climb)
         stageCaw = CawView(status: .loading)
         super.init(frame: .zero)
@@ -212,23 +301,23 @@ final class PaywallHeroView: UIView {
         super.layoutSubviews()
         field.frame = bounds
         art.frame = bounds
-        guard variant == .story else { return }
-        // The still is fitted so the slot stack fills the band's height less a
+        guard let story, let first = story.slots.first else { return }
+        // The still is fitted so its cards fill the band's height less a
         // margin, centred; the phone's bezels frame it on the Ink field.
-        let top = Self.storySlots[0].minY
-        let bottom = Self.storySlots[2].maxY
-        let scale = min(bounds.width / Self.storyFrame.width, (bounds.height - 2 * Space.space2) / (bottom - top))
+        let stack = story.slots.dropFirst().reduce(first.rect) { $0.union($1.rect) }
+        let frame = story.size
+        let scale = min(bounds.width / frame.width, (bounds.height - 2 * Space.space2) / stack.height)
         guard scale > 0 else { return }
-        let image = CGRect(x: (bounds.width - Self.storyFrame.width * scale) / 2,
-                           y: bounds.midY - (top + bottom) / 2 * scale,
-                           width: Self.storyFrame.width * scale,
-                           height: Self.storyFrame.height * scale)
+        let image = CGRect(x: (bounds.width - frame.width * scale) / 2,
+                           y: bounds.midY - stack.midY * scale,
+                           width: frame.width * scale,
+                           height: frame.height * scale)
         for view in [rest, start, movie] { view.frame = image }
         video.frame = movie.bounds
-        for (card, slot) in zip(cards, Self.storySlots) {
+        for (card, slot) in zip(cards, story.slots) {
             card.bounds = CGRect(origin: .zero, size: CGSize(width: slot.width * scale, height: slot.height * scale))
-            card.center = CGPoint(x: image.minX + slot.midX * scale, y: image.minY + slot.midY * scale)
-            card.corner = Self.storySlotRadius * scale
+            card.center = CGPoint(x: image.minX + slot.rect.midX * scale, y: image.minY + slot.rect.midY * scale)
+            card.corner = (slot.radius ?? story.radius) * scale
         }
     }
 
@@ -265,7 +354,8 @@ final class PaywallHeroView: UIView {
             climber?.present = true
             return
         }
-        let order = variant == .poster ? Array(cards.reversed()) : cards
+        // A stack comes in back to front, as notifications arrive; equal slots top to bottom.
+        let order = variant == .poster || story?.stacked == true ? Array(cards.reversed()) : cards
         for (index, card) in order.enumerated() {
             card.transform = CGAffineTransform(translationX: 0, y: variant == .poster ? -Space.space5 : Space.space2)
             let drop = Motion.easeOut.animator(Motion.durPop) {
@@ -434,7 +524,7 @@ private final class NotificationCard: UIView {
             column.addArrangedSubview(actions)
         }
         // A card behind the front one shows only its edge, as iOS stacks them.
-        column.isHidden = !compact && !front
+        column.isHidden = !front
         column.translatesAutoresizingMaskIntoConstraints = false
         addSubview(column)
         let inset = compact ? Space.space2 : Space.space3
@@ -446,7 +536,7 @@ private final class NotificationCard: UIView {
             compact ? column.centerYAnchor.constraint(equalTo: centerYAnchor) : column.topAnchor.constraint(equalTo: topAnchor, constant: inset),
             compact ? column.topAnchor.constraint(greaterThanOrEqualTo: topAnchor) : column.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -inset),
         ])
-        isAccessibilityElement = front || compact
+        isAccessibilityElement = front
         accessibilityLabel = "\(banner.title). \(banner.body)"
     }
 
