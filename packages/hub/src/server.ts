@@ -15,6 +15,7 @@ import type {
   FleetConfig,
   FleetHook,
   FleetMcpConfig,
+  FleetSkillMeta,
   FleetSyncReport,
   FramePayload,
   FsImage,
@@ -6882,29 +6883,39 @@ export const createServer = (
       // A directory on the hub's disk names nothing on any other machine, so
       // only the hub's own machine links it; every other one is told which
       // marketplaces those are and installs their plugins from the bytes.
-      const hubOnly = (await onHubMachine(machineId))
-        ? new Set<string>()
-        : new Set(
-            config.marketplaces
-              .filter(({ source }) => isHubDirectory(source))
-              .map(({ name }) => name)
-          );
+      // Whether this machine is the hub's is its own word, off its register
+      // and its beats: no question is asked here, so none can go unanswered
+      // into a wrong answer. A machine that has not said (a daemon that is not
+      // a binary install, or one whose updater has not read its installation
+      // yet) is sent no decision and keeps the one it last had; its first word
+      // re-syncs it (the heartbeat's `hubRoleLearned`).
+      const hostsHub = binaryUpdateStates.get(machineId)?.hostsHub;
+      let hubOnly: Set<string> | undefined;
+      if (hostsHub !== undefined) {
+        hubOnly = hostsHub
+          ? new Set()
+          : new Set(
+              config.marketplaces
+                .filter(({ source }) => isHubDirectory(source))
+                .map(({ name }) => name)
+            );
+      }
       const hubErrors = new Map(
-        hubOnly.size === 0
-          ? []
-          : db
+        hubOnly?.size
+          ? db
               .listPlugins()
               .flatMap(({ id, error }) => (error ? [[id, error] as const] : []))
+          : []
       );
       const outbound = fleetMcp.syncConfig(
         {
           ...config,
-          hubOnlyMarketplaces: [...hubOnly],
+          ...(hubOnly ? { hubOnlyMarketplaces: [...hubOnly] } : {}),
           // What the hub could not carry of a hub-only marketplace reaches that
           // machine no other way, so the hub's reason goes with the row.
           plugins: config.plugins.map((plugin) => {
             const error = hubErrors.get(plugin.id);
-            return error && hubOnly.has(pluginMarketplace(plugin.id))
+            return error && hubOnly?.has(pluginMarketplace(plugin.id))
               ? { ...plugin, error }
               : plugin;
           }),
@@ -7337,11 +7348,13 @@ export const createServer = (
    * So the bytes are resolved here and stored, and sync carries them. What
    * cannot be resolved keeps its sentence on the row and is left to the old
    * path, which is the only one that still needs a machine to reach github.
+   * Answers whether any row came to files, which is news for the machines.
    */
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: groups ids by marketplace, resolves each group, and stores every outcome (resolved or errored) in one place; splitting it would scatter the per-marketplace fallback this depends on.
-  const resolvePlugins = async (ids: readonly string[]): Promise<void> => {
+  const resolvePlugins = async (ids: readonly string[]): Promise<boolean> => {
+    let carried = false;
     if (ids.length === 0) {
-      return;
+      return carried;
     }
     const sources = new Map(
       db.fleetConfig().marketplaces.map(({ name, source }) => [name, source])
@@ -7384,17 +7397,12 @@ export const createServer = (
             bytes: plugin.bytes,
             files: plugin.files,
           });
+          carried = true;
         }
       }
     }
+    return carried;
   };
-
-  // Plugins added before this hub could fetch them, and any whose fetch has not
-  // been attempted yet. Done once at boot rather than on every sync: a resolved
-  // plugin is bytes the fleet already agrees on, and re-fetching it would be a
-  // download per restart for a file nobody asked to change.
-  // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — boot must not stall on network fetches for plugins that were already unresolved.
-  void resolvePlugins(db.unresolvedPlugins());
 
   const fanOutFleet = (): void => {
     toolsMayHaveChanged();
@@ -7407,6 +7415,48 @@ export const createServer = (
       publishInstances(machineId);
     }
   };
+
+  /** A stored skill fetched again from the source it names; the row as it now is. */
+  const reresolveSkill = async (
+    stored: FleetSkillMeta
+  ): Promise<FleetSkillMeta> => {
+    const resolved = await resolveSkill(stored.source);
+    return db.putSkill({
+      name: stored.name,
+      source: stored.source,
+      enabled: stored.enabled,
+      ...("error" in resolved
+        ? { error: resolved.error }
+        : {
+            hash: resolved.hash,
+            bytes: resolved.bytes,
+            files: resolved.files,
+          }),
+    });
+  };
+
+  // Every row the hub holds no bytes for, plugin or skill: never fetched, or
+  // fetched and failed. Done once at boot rather than on every sync: a resolved
+  // row is bytes the fleet already agrees on, and re-fetching it would be a
+  // download per restart for a file nobody asked to change. A failed one is
+  // tried again so the sentence on it is this hub's, in this hub's words, and a
+  // source that came back heals with nobody pressing refresh. An adopted
+  // skill's source is a machine, which is not fetched from here.
+  // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — boot must not stall on network fetches for rows that were already unresolved.
+  void (async () => {
+    let moved = await resolvePlugins(db.unresolvedPlugins());
+    const failedSkills = db
+      .listSkills()
+      .filter((skill) => skill.error && !skill.source.startsWith("machine:"));
+    for (const stored of failedSkills) {
+      // biome-ignore lint/performance/noAwaitInLoops: one source fetched at a time, as a refresh does it
+      const skill = await reresolveSkill(stored);
+      moved ||= skill.hash !== stored.hash;
+    }
+    if (moved) {
+      fanOutFleet();
+    }
+  })();
 
   /** Each place's path by its id, for a folded hook report to say which place a copy failed in. */
   const placePathById = (): ((placeId: string) => string | undefined) => {
@@ -11020,7 +11070,6 @@ export const createServer = (
         }
       )
       // The same source, fetched again — for a skill whose repo has moved on.
-      // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: resolves and re-diffs every field of a refreshed skill in one place; splitting it would scatter the validation order this route depends on.
       .post("/api/fleet/skills/:name/refresh", async ({ params, status }) => {
         const stored = db
           .listSkills()
@@ -11071,19 +11120,7 @@ export const createServer = (
           return skill;
         }
 
-        const resolved = await resolveSkill(stored.source);
-        const skill = db.putSkill({
-          name: stored.name,
-          source: stored.source,
-          enabled: stored.enabled,
-          ...("error" in resolved
-            ? { error: resolved.error }
-            : {
-                hash: resolved.hash,
-                bytes: resolved.bytes,
-                files: resolved.files,
-              }),
-        });
+        const skill = await reresolveSkill(stored);
         if (skill.hash !== stored.hash) {
           fanOutFleet();
         }
@@ -13002,6 +13039,14 @@ export const createServer = (
                   binaryUpdateStates.get(message.machineId),
                   beaten
                 );
+              // Whether this machine runs the hub decides which marketplaces it
+              // links (`pushFleetConfig`). A sync sent before the machine said
+              // so carried no decision, so the first word, or a changed one, is
+              // what has it converge on the right one.
+              const hubRoleLearned =
+                beaten !== undefined &&
+                binaryUpdateStates.get(message.machineId)?.hostsHub !==
+                  beaten.hostsHub;
               if (beaten) {
                 binaryUpdateStates.set(message.machineId, beaten);
               }
@@ -13032,6 +13077,8 @@ export const createServer = (
                   peekTools(message.payload)
                 );
                 autoInstall(message.machineId, ws);
+                sendFleetSync(message.machineId, ws);
+              } else if (hubRoleLearned) {
                 sendFleetSync(message.machineId, ws);
               }
               if (

@@ -772,7 +772,13 @@ const syncPlugins = async (
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: links every marketplace and installs every plugin the config wants, reporting each one's outcome
 ): Promise<PluginRecords> => {
   const wantedPlugins = config.plugins.filter((plugin) => plugin.enabled);
-  const hubOnly = config.hubOnlyMarketplaces ?? [];
+  // No list is no decision (the hub does not know yet whether this is its own
+  // machine): the last one stands, for the marketplaces the fleet still has.
+  const hubOnly = (
+    config.hubOnlyMarketplaces ??
+    managed.hubOnlyMarketplaces ??
+    []
+  ).filter((name) => config.marketplaces.some((one) => one.name === name));
   const bin = await claudeBin();
   if (!bin) {
     for (const { name } of config.marketplaces) {

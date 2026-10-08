@@ -204,17 +204,28 @@ const extract = async (
 };
 
 /**
- * A GitHub repo's tarball, extracted, fetched through the hub's own `gh`.
+ * How long one `git` step of a repo download gets. A shallow fetch of a large
+ * marketplace is tens of megabytes, which is more than a page fetch.
+ */
+const GIT_TIMEOUT_MS = 180_000;
+
+/**
+ * A GitHub repo at one ref, extracted, fetched through the system `git`.
  *
- * `gh` because a fleet's plugins and skills live in private repositories as
- * often as public ones, and the hub machine's `gh` login is the credential the
- * owner already keeps. It is still read HERE, once: a machine never needs
- * reachability to github or an account of its own, which is what resolving at
- * the hub is for. A source that pinned no ref takes the repository's real
- * default branch, as GitHub reports it, rather than a guess at its name.
+ * `git` because it needs nothing of cawco's: a public repository is read with
+ * no account at all, and a private one with whatever credential helper the
+ * hub machine's own git already has. Cawco never reads, stores or passes a
+ * token. It is still fetched HERE, once: a machine never needs reachability
+ * to github or an account of its own, which is what resolving at the hub is
+ * for. A source that pinned no ref fetches `HEAD`, which is the repository's
+ * real default branch, never a guess at its name; a pinned ref may be a
+ * branch, a tag or a full commit sha.
  *
- * No `gh`, or a `gh` that is not logged in, is a failure that says so. There
- * is no anonymous second attempt: one fetch path, one sentence when it fails.
+ * Only the one commit is fetched, and `git archive` writes it out, so the
+ * files are what a release tarball of that commit holds (`export-ignore`
+ * honoured) and no `.git` comes with them. A credential the helper does not
+ * have is a failure that says so: prompts are off, so it never waits on a
+ * terminal nobody is at.
  */
 export const downloadRepo = async (
   owner: string,
@@ -223,21 +234,44 @@ export const downloadRepo = async (
   work: string
 ): Promise<string> => {
   const slug = `${owner}/${repo}`;
-  const gh = async (args: string[], out?: string): Promise<string> => {
-    const run = out
-      ? await $`gh api ${args} > ${out}`.nothrow().quiet()
-      : await $`gh api ${args}`.nothrow().quiet();
-    if (run.exitCode !== 0) {
-      const why = run.stderr.toString().trim() || `exit ${run.exitCode}`;
-      throw new Error(`gh api ${args.join(" ")} failed for ${slug}: ${why}`);
+  const store = join(work, "repo.git");
+  const git = async (step: string, args: string[]): Promise<void> => {
+    const child = Bun.spawn(["git", `--git-dir=${store}`, step, ...args], {
+      env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+      stdout: "ignore",
+      stderr: "pipe",
+      timeout: GIT_TIMEOUT_MS,
+    });
+    const [code, stderr] = await Promise.all([
+      child.exited,
+      new Response(child.stderr).text(),
+    ]);
+    if (code !== 0) {
+      const why =
+        stderr.trim() ||
+        (child.signalCode
+          ? `timed out after ${GIT_TIMEOUT_MS / 1000}s`
+          : `exit ${code}`);
+      throw new Error(`git ${step} failed for ${slug}: ${why}`);
     }
-    return run.stdout.toString().trim();
   };
 
-  const branch =
-    ref ?? (await gh([`repos/${slug}`, "--jq", ".default_branch"]));
+  await git("init", ["--quiet", "--bare"]);
+  await git("fetch", [
+    "--quiet",
+    "--depth",
+    "1",
+    `https://github.com/${slug}.git`,
+    ref ?? "HEAD",
+  ]);
+  // One wrapping directory, so `extract` strips exactly it whatever the root holds.
   const archive = join(work, "archive.tar.gz");
-  await gh([`repos/${slug}/tarball/${branch}`], archive);
+  await git("archive", [
+    "--format=tar.gz",
+    `--prefix=${repo}/`,
+    `--output=${archive}`,
+    "FETCH_HEAD",
+  ]);
   return await extract(archive, work, "archive.tar.gz");
 };
 

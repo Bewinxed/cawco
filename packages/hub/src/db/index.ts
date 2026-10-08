@@ -1326,7 +1326,11 @@ export interface DbShape {
    * steady state, which is what makes that read free to offer.
    */
   readonly unnamedSessions: (machineId: string) => PublicInstanceRow[];
-  /** Enabled plugins with no resolved files and no recorded failure — what a resolve is for. */
+  /**
+   * Enabled plugins with no resolved files, whether never tried or failed —
+   * what a resolve at boot is for. A failed one is tried again so its sentence
+   * is this hub's, and a source that came back heals without a refresh.
+   */
   readonly unresolvedPlugins: () => string[];
   /** Moves one job; the row as it now is, or undefined when it is gone. */
   readonly updateContinuation: (
@@ -3453,11 +3457,11 @@ const make = (path: string): DbShape => {
     },
     unresolvedPlugins: () =>
       db
-        .select({ id: plugins.id, hash: plugins.hash, error: plugins.error })
+        .select({ id: plugins.id, hash: plugins.hash })
         .from(plugins)
         .where(eq(plugins.enabled, true))
         .all()
-        .flatMap(({ id, hash, error }) => (hash || error ? [] : [id])),
+        .flatMap(({ id, hash }) => (hash ? [] : [id])),
     listPlugins: () =>
       db
         .select({
