@@ -71,6 +71,7 @@
     type ComposerBinding,
     composerBindings,
   } from "./workspace/composer-dock.svelte";
+  import { settleWhile } from "./workspace/dock.svelte";
   import { rebuildScheduler } from "./workspace/scheduler.svelte";
   import { workspace } from "./workspace/workspace.svelte";
 
@@ -469,6 +470,12 @@
    * is the cross-fade, and nothing under it moves.
    */
   const veiled = $derived(!namedState && (waiting || !shown));
+  // Hidden while veiled, the pane is still laid out, so its transcript can
+  // measure and draw before its tab is chosen (dock.svelte.ts `settling`).
+  settleWhile(
+    () => viewId,
+    () => veiled
+  );
 
   /**
    * A named state leaving under the one arriving: out of the flow where it

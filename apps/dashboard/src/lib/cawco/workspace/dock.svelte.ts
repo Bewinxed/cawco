@@ -13,7 +13,7 @@
  * only the scroll offsets need carrying across, because a scrolling box is
  * destroyed with the layout box and comes back at zero.
  */
-import { SvelteMap } from "svelte/reactivity";
+import { SvelteMap, SvelteSet } from "svelte/reactivity";
 
 /**
  * Each tab's slot, by conversation id: where its pane is docked. Changes only
@@ -29,6 +29,32 @@ export const slots = new SvelteMap<string, HTMLElement>();
  * props were evaluated again, and so was everything that read the slots.
  */
 export const shownPanes = new SvelteMap<string, boolean>();
+
+/**
+ * The conversations whose pane has not drawn its first picture yet: its
+ * placeholder still stands over history on its way or a transcript not yet
+ * measured. Written by the pane (`SessionPane`, `ThreadPane`).
+ *
+ * A group lays such a pane out while it is hidden, and skips only those that
+ * have drawn (PaneLeaf `.pane-settling`). A transcript draws once every row
+ * in view is measured, and a skipped subtree is never measured: built in the
+ * background behind `content-visibility: hidden`, a tab's transcript waited
+ * for the click that showed it and then drew in front of the reader, over
+ * 50-320ms of its skeleton.
+ */
+export const settling = new SvelteSet<string>();
+
+/** Holds `id` in `settling` for as long as `veiled()` says its pane is still drawing. */
+export function settleWhile(id: () => string, veiled: () => boolean): void {
+  $effect(() => {
+    const pane = id();
+    if (!veiled()) {
+      return;
+    }
+    settling.add(pane);
+    return () => settling.delete(pane);
+  });
+}
 
 /** A group's slot for one tab. Registered while the group keeps it mounted. */
 export function slot(node: HTMLElement, param: { id: string; shown: boolean }) {

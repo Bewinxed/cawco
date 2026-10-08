@@ -36,7 +36,7 @@
   import { runIdOf } from "../workflow-runs";
   import { composerBindings } from "./composer-dock.svelte";
   import { dropHint, paneDropTarget } from "./dnd.svelte";
-  import { slot } from "./dock.svelte";
+  import { settling, slot } from "./dock.svelte";
   import { createSwipe } from "./gesture.svelte";
   import PaneTabs from "./PaneTabs.svelte";
   import { contextOf, type LeafNode, workspace } from "./workspace.svelte";
@@ -380,7 +380,8 @@
         data-delta={delta}
         data-pane={paneId}
         inert={!isActive}
-        class:pane-hidden={!shown}
+        class:pane-hidden={!(shown || settling.has(paneId))}
+        class:pane-settling={!shown && settling.has(paneId)}
         use:slot={{ id: paneId, shown }}
         {@attach land(() => (isActive ? `pane:${paneId}` : undefined), {
           mode: "clip",
@@ -536,7 +537,7 @@
      grid, and wherever the rail's width leaves the pane on a fractional x
      the whole transcript reads soft and hazy. The switch glide promotes the
      pane only for its 260ms. */
-  .swipe > .pane:not(.pane-hidden) {
+  .swipe > .pane:not(.pane-hidden, .pane-settling) {
     will-change: transform;
   }
   .swipe > .pane[data-delta="-1"] {
@@ -563,6 +564,15 @@
      reflow of the group, which is what a tab switch paid for. */
   .pane-hidden {
     content-visibility: hidden;
+    pointer-events: none;
+  }
+  /* A pane off screen that has not drawn its first picture yet (dock.svelte.ts
+     `settling`) is laid out but not painted, so its transcript measures its
+     rows and draws before its tab is chosen; once drawn it is skipped as
+     above. Only the hidden state is declared, as on the surfaces (see
+     `.groups.hidden-surface` in SessionSurface). */
+  .pane-settling {
+    visibility: hidden;
     pointer-events: none;
   }
 </style>

@@ -76,6 +76,7 @@
     type ComposerBinding,
     composerBindings,
   } from "./workspace/composer-dock.svelte";
+  import { settleWhile } from "./workspace/dock.svelte";
   import { workspace } from "./workspace/workspace.svelte";
 
   let {
@@ -219,6 +220,12 @@
   let shown = $state(false);
   const waiting = $derived(messages === null && !readProblem);
   const veiled = $derived(waiting || (!shown && (messages?.length ?? 0) > 0));
+  // Hidden while veiled, the pane is still laid out, so its transcript can
+  // measure and draw before its tab is chosen (dock.svelte.ts `settling`).
+  settleWhile(
+    () => viewId,
+    () => veiled
+  );
 
   // --- Caw, the lead -----------------------------------------------------------
 
