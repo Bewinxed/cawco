@@ -1147,7 +1147,6 @@ export interface DbShape {
   readonly ruleStatesFor: (ruleId: string) => RuleState[];
   /** Per-rule totals for the list, aggregated in SQL rather than per row. */
   readonly ruleStats: () => RuleStats[];
-  readonly runningDelegateCounts: () => Map<string, number>;
   /**
    * The listed Claude sessions that are running, as the accounts read them:
    * two columns, so asking which accounts a session runs on reads no row whole.
@@ -1156,6 +1155,7 @@ export interface DbShape {
     accountId: string | null;
     machineId: string;
   }[];
+  readonly runningDelegateCounts: () => Map<string, number>;
   /** One send's record, by its uuid. */
   readonly sendRecord: (uuid: string) => SentMessageRow | undefined;
   /**
