@@ -163,6 +163,9 @@ function overlayOpen(): boolean {
   return [...document.querySelectorAll(OVERLAYS)].some(
     (element) =>
       !element.closest("[inert], [data-sonner-toaster]") &&
+      // On a phone the preview stands in a sheet (side/SideSheet): it is
+      // the preview, which comes back after the reload, not something open.
+      !element.querySelector('iframe[title="Preview"]') &&
       element.getClientRects().length > 0
   );
 }

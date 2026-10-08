@@ -103,17 +103,18 @@
       } | null;
       return kept?.revision === preview?.revision &&
         typeof kept?.at === "string" &&
-        previewBase !== "" &&
-        kept.at.startsWith(previewBase)
-        ? kept.at
+        previewBase.endsWith("/") &&
+        kept.at.startsWith("/")
+        ? `${previewBase}${kept.at.slice(1)}`
         : null;
     } catch {
       return null;
     }
   }
+  /** `at` is the app's own place, the preview's prefix stripped (the overlay's `url`). */
   function keepAt(at: URL): void {
     const place = `${at.pathname}${at.search}${at.hash}`;
-    if (!(previewBase && place.startsWith(previewBase) && preview)) {
+    if (!(previewBase && preview)) {
       return;
     }
     localStorage.setItem(
