@@ -976,7 +976,8 @@
     flex: none;
     display: grid;
     place-items: center;
-    inline-size: 22px;
+    /* Its 12px glyph 4px clear of the title's end, as the close's is. */
+    inline-size: 20px;
     block-size: 24px;
     border: 0;
     border-radius: var(--radius-xs);
