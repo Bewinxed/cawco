@@ -41,7 +41,7 @@
     // Apple allows one notification URL per app: every verified notification's
     // exact body goes on to Yield, the owner's revenue dashboard.
     "ASSN_FORWARD_URL": "https://yield.petralab.ai/api/asc/webhook",
-    "EXPERIMENT_TOKENS":"paywall-1:story=5c0f1a7e-0000-4000-8000-00000000057a,poster=5c0f1a7e-0000-4000-8000-0000000057e2"
+    "EXPERIMENT_TOKENS": "paywall-1:story=5c0f1a7e-0000-4000-8000-00000000057a,poster=5c0f1a7e-0000-4000-8000-0000000057e2"
   },
   // Secrets, set by hand: APNS_TEAM_ID, APNS_KEY_ID, APNS_P8, EXPERIMENT_READ_TOKEN.
   // No request logs: only the status codes and APNs reasons the code logs.
