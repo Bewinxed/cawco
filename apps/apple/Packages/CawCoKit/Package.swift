@@ -15,6 +15,7 @@ let package = Package(
     products: [
         .library(name: "CawCoAPI", targets: ["CawCoAPI"]),
         .library(name: "CawCoCore", targets: ["CawCoCore"]),
+        .library(name: "CawCoPush", targets: ["CawCoPush"]),
         .library(name: "CawCoDesign", targets: ["CawCoDesign"]),
         .library(name: "CawCoTranscript", targets: ["CawCoTranscript"]),
         .library(name: "CawCoMascot", targets: ["CawCoMascot"]),
@@ -37,10 +38,15 @@ let package = Package(
             swiftSettings: concurrency,
             plugins: [.plugin(name: "OpenAPIGenerator", package: "swift-openapi-generator")]
         ),
+        // The pairing and push key in the Keychain group the app shares with its
+        // Notification Service Extension, and the opening of a sealed push.
+        // Extension-safe: Foundation, Security and CryptoKit only.
+        .target(name: "CawCoPush", swiftSettings: concurrency),
         .target(
             name: "CawCoCore",
             dependencies: [
                 "CawCoAPI",
+                "CawCoPush",
                 .product(name: "OpenAPIRuntime", package: "swift-openapi-runtime"),
                 .product(name: "OpenAPIURLSession", package: "swift-openapi-urlsession"),
             ],

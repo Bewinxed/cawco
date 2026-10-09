@@ -15,6 +15,7 @@ import urllib.parse
 HOME = pathlib.Path.home()
 ROOT = HOME / "build/cawco-testflight"
 PROFILE = "CawCo App Store 20261007"
+EXTENSION_PROFILE = "CawCo NotificationService App Store 20261009"
 TEAM = "FN5LJSPX2R"
 
 
@@ -198,7 +199,7 @@ def ship(app, mode, notes):
         if mode == "archive":
             return
         options = ROOT / "ExportOptions.plist"
-        options.write_bytes(plistlib.dumps({"method": "app-store-connect", "destination": "upload", "teamID": TEAM, "uploadSymbols": True, "signingStyle": "manual", "signingCertificate": "Apple Distribution", "manageAppVersionAndBuildNumber": False, "provisioningProfiles": {"dev.cawco.app": PROFILE}}))
+        options.write_bytes(plistlib.dumps({"method": "app-store-connect", "destination": "upload", "teamID": TEAM, "uploadSymbols": True, "signingStyle": "manual", "signingCertificate": "Apple Distribution", "manageAppVersionAndBuildNumber": False, "provisioningProfiles": {"dev.cawco.app": PROFILE, "dev.cawco.app.NotificationService": EXTENSION_PROFILE}}))
         identifiers = {}
         for line in (HOME / ".appstoreconnect/anbar.env").read_text().splitlines():
             if "=" in line:

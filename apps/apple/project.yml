@@ -39,6 +39,8 @@ targets:
     dependencies:
       - package: CawCoKit
         products: [CawCoAPI, CawCoCore, CawCoDesign, CawCoTranscript, CawCoMascot, CawCoScreens]
+      # Embedded in PlugIns: opens each push's sealed alert on the device.
+      - target: NotificationService
     settings:
       base:
         DEVELOPMENT_TEAM: FN5LJSPX2R
@@ -97,6 +99,9 @@ targets:
       properties:
         # Alerts only: no `remote-notification` background mode, no silent pushes.
         aps-environment: $(APS_ENVIRONMENT)
+        # The pairing and its push key, shared with NotificationService (CawCoPush).
+        # Every profile of the team allows `FN5LJSPX2R.*`.
+        keychain-access-groups: [$(AppIdentifierPrefix)dev.cawco.app.shared]
     info:
       path: CawCo/Info.plist
       properties:
@@ -144,3 +149,59 @@ targets:
         # The hub announces itself as `_cawco._tcp` (packages/hub/src/mdns.ts).
         NSBonjourServices:
           - _cawco._tcp
+
+  # The Notification Service Extension: reads this device's push key from the
+  # shared Keychain group and opens the push's sealed alert (`"e"`) before it
+  # shows. Signed as the app is, per SDK and configuration, with its own
+  # profiles (made 2026-10-09 through the App Store Connect API).
+  NotificationService:
+    type: app-extension
+    supportedDestinations: [iOS, macCatalyst]
+    sources:
+      - path: NotificationService
+    dependencies:
+      - package: CawCoKit
+        products: [CawCoPush]
+    settings:
+      base:
+        DEVELOPMENT_TEAM: FN5LJSPX2R
+        PRODUCT_BUNDLE_IDENTIFIER: dev.cawco.app.NotificationService
+        PRODUCT_NAME: NotificationService
+        TARGETED_DEVICE_FAMILY: "1,2,6"
+        SUPPORTS_MACCATALYST: YES
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+        "IPHONEOS_DEPLOYMENT_TARGET[sdk=macosx*]": "18.0"
+        # The system calls the extension off the main thread.
+        SWIFT_DEFAULT_ACTOR_ISOLATION: nonisolated
+        # A Mac Catalyst extension without the App Sandbox does not run
+        # (developer.apple.com/forums/thread/693011).
+        ENABLE_APP_SANDBOX: YES
+        ENABLE_HARDENED_RUNTIME[sdk=macosx*]: NO
+      configs:
+        Debug:
+          "CODE_SIGN_STYLE[sdk=iphoneos*]": Manual
+          "CODE_SIGN_IDENTITY[sdk=iphoneos*]": Apple Development
+          "PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]": CawCo NotificationService Development 20261009
+          "CODE_SIGN_STYLE[sdk=macosx*]": Manual
+          "CODE_SIGN_IDENTITY[sdk=macosx*]": Apple Development
+          "PROVISIONING_PROFILE_SPECIFIER[sdk=macosx*]": CawCo NotificationService Mac Catalyst Development 20261009
+        Release:
+          "CODE_SIGN_STYLE[sdk=iphoneos*]": Manual
+          "CODE_SIGN_IDENTITY[sdk=iphoneos*]": Apple Distribution
+          "PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]": CawCo NotificationService App Store 20261009
+          "CODE_SIGN_STYLE[sdk=macosx*]": Manual
+          "CODE_SIGN_IDENTITY[sdk=macosx*]": Apple Distribution
+          "PROVISIONING_PROFILE_SPECIFIER[sdk=macosx*]": CawCo NotificationService Mac Catalyst App Store 20261009
+    entitlements:
+      path: NotificationService/NotificationService.entitlements
+      properties:
+        keychain-access-groups: [$(AppIdentifierPrefix)dev.cawco.app.shared]
+    info:
+      path: NotificationService/Info.plist
+      properties:
+        CFBundleDisplayName: CawCo
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.usernotifications.service
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).NotificationService

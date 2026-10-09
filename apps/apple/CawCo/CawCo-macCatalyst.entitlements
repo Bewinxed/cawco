@@ -4,5 +4,9 @@
 <dict>
 	<key>com.apple.developer.aps-environment</key>
 	<string>$(APS_ENVIRONMENT)</string>
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)dev.cawco.app.shared</string>
+	</array>
 </dict>
 </plist>

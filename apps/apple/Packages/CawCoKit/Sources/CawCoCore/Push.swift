@@ -1,15 +1,17 @@
 public import CawCoAPI
+import CawCoPush
 public import Foundation
 import Observation
 import OpenAPIRuntime
 import OSLog
-import Security
 public import UIKit
 public import UserNotifications
 
 // The app's half of the hub's APNs pushes (PRD 2026-10-06-projects.md §5.5,
 // "iOS app"; the hub's half is packages/hub/src/push.ts). A push carries no
-// tool input, path or prompt: the app reads those from the hub.
+// tool input, path or prompt: the app reads those from the hub. Its real
+// title and body travel sealed with this device's push key (CawCoPush), and
+// the NotificationService extension opens them on the device.
 
 /// Where a push opens.
 public enum PushRoute: Sendable, Equatable {
@@ -115,7 +117,9 @@ public enum PushCategories {
 /// Keychain. Cawrier holds the device token under it (on proof of Pro or a
 /// live free week); the hub holds the id and secret and pushes through
 /// Cawrier with them. The pairing enrols again on every launch and on every
-/// new token; Cawrier skips the write when nothing changed.
+/// new token; Cawrier skips the write when nothing changed. The hub also holds
+/// the pairing's push key, made at the first registration and deleted by every
+/// unregister, and seals each push's alert with it.
 @MainActor
 @Observable
 public final class PushRegistry {
@@ -351,7 +355,7 @@ public final class PushRegistry {
     }
 
     /// H7: the hub unenrols this device from Cawrier (`/api/push/unregister`),
-    /// then the pairing leaves the Keychain. Nothing is enrolled again until
+    /// then the pairing and its push key leave the Keychain. Nothing is enrolled again until
     /// the operator turns notifications on, which makes a new pairing.
     public func removeFromRelay() async {
         guard !removing, let hub = HubConnection.keptAddress else { return }
@@ -386,6 +390,12 @@ public final class PushRegistry {
         quiet = nil
         if relay == .done { relay = .idle }
         guard let pairing = try? Pairing.kept(existing: true) else { return }
+        // Now, before the next registration can read it: that one makes a new key.
+        do {
+            try PushKey.forget(pairingId: pairing.id)
+        } catch {
+            log.error("push key not deleted: \(String(describing: error), privacy: .public)")
+        }
         Task {
             do {
                 let answer: Unregistered = try await Self.post(hub.appending(path: "api/push/unregister"), Unregistration(pairingId: pairing.id), refused: "The hub")
@@ -428,7 +438,14 @@ public final class PushRegistry {
     /// Registers the pairing with `hub`; `quiet` is sent only from the toggle,
     /// so a launch's registration keeps what the operator set. Nil, or the hub's reason.
     private func register(hub: URL, pairing: Pairing, quiet next: Bool?) async -> String? {
-        let body = Registration(pairingId: pairing.id, secret: pairing.secret, name: UIDevice.current.name, platform: Self.platform, quiet: next)
+        let key: String
+        do {
+            key = try PushKey.kept(pairingId: pairing.id).base64
+        } catch {
+            log.error("push key keychain failed: \(String(describing: error), privacy: .public)")
+            return "This device couldn't keep its notification key."
+        }
+        let body = Registration(pairingId: pairing.id, secret: pairing.secret, key: key, name: UIDevice.current.name, platform: Self.platform, quiet: next)
         do {
             let answer: Registered = try await Self.post(hub.appending(path: "api/push/register"), body, refused: "The hub")
             registeredWith = hub
@@ -495,6 +512,8 @@ public final class PushRegistry {
     private struct Registration: Encodable, Sendable {
         let pairingId: String
         let secret: String
+        /// The push key's 32 bytes, base64 standard and padded.
+        let key: String
         let name: String
         let platform: String
         let quiet: Bool?
@@ -548,69 +567,6 @@ public final class PushRegistry {
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard status == 200 else { throw Refusal(message: Wire.sentence(data, status: status, from: who)) }
         return try JSONDecoder().decode(Answer.self, from: data)
-    }
-}
-
-/// This device's pairing: a lowercase v4 uuid and 32 random bytes in
-/// base64url, made once and kept in the Keychain (service `dev.cawco.app.cawrier`).
-struct Pairing: Codable, Sendable {
-    let id: String
-    let secret: String
-
-    private static let service = "dev.cawco.app.cawrier"
-    private static let account = "pairing"
-
-    enum Failure: Error {
-        case missing
-        case random(OSStatus)
-        case keychain(OSStatus)
-    }
-
-    /// The kept pairing; made and kept now when there is none, unless `existing`.
-    static func kept(existing: Bool = false) throws -> Pairing {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
-        ]
-        var found: CFTypeRef?
-        let read = SecItemCopyMatching(query as CFDictionary, &found)
-        if read == errSecSuccess, let data = found as? Data, let pairing = try? JSONDecoder().decode(Pairing.self, from: data) {
-            return pairing
-        }
-        guard read == errSecItemNotFound else { throw Failure.keychain(read) }
-        guard !existing else { throw Failure.missing }
-        var bytes = [UInt8](repeating: 0, count: 32)
-        let drawn = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
-        guard drawn == errSecSuccess else { throw Failure.random(drawn) }
-        let secret = Data(bytes).base64EncodedString()
-            .replacingOccurrences(of: "+", with: "-")
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "=", with: "")
-        let pairing = Pairing(id: UUID().uuidString.lowercased(), secret: secret)
-        let add: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
-            kSecValueData as String: try JSONEncoder().encode(pairing),
-        ]
-        let wrote = SecItemAdd(add as CFDictionary, nil)
-        guard wrote == errSecSuccess else { throw Failure.keychain(wrote) }
-        return pairing
-    }
-
-    /// Deletes the kept pairing (H7); the next `kept()` makes a new one.
-    static func forget() throws {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-        ]
-        let deleted = SecItemDelete(query as CFDictionary)
-        guard deleted == errSecSuccess || deleted == errSecItemNotFound else { throw Failure.keychain(deleted) }
     }
 }
 

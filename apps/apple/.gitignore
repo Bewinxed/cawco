@@ -6,3 +6,5 @@
 .build/
 .swiftpm/
 DerivedData/
+/NotificationService/Info.plist
+/NotificationService/NotificationService.entitlements
