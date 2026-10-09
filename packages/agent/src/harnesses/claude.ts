@@ -189,6 +189,14 @@ import {
 } from "./claude-transcript";
 
 /**
+ * The agent SDK's word for a CLI a signal killed: "Claude Code process
+ * terminated by signal SIGKILL", then the tail of its stderr (agent SDK
+ * 0.3.296, `sdk.mjs`).
+ */
+const KILLED_BY_SIGNAL =
+  /Claude Code process terminated by signal (SIG[A-Z0-9]+)/;
+
+/**
  * The CLI's word on one command it was sent: `command_uuid` is the uuid the
  * send carried, and `started` is the moment its prompt was consumed — the
  * turn it opens, or the tool boundary it is folded in at. It is written just
@@ -1794,11 +1802,16 @@ class ClaudeSession implements HarnessSession {
       }
     } catch (error) {
       ctx.busy(false);
-      ctx.failed(
-        String(error).includes("No conversation found with session ID:")
-          ? new Error(CLAUDE_CONVERSATION_GONE)
-          : error
-      );
+      const signal = String(error).match(KILLED_BY_SIGNAL)?.[1];
+      if (signal && ctx.died) {
+        ctx.died(signal, error);
+      } else {
+        ctx.failed(
+          String(error).includes("No conversation found with session ID:")
+            ? new Error(CLAUDE_CONVERSATION_GONE)
+            : error
+        );
+      }
     } finally {
       this.#transcriptWatch?.close();
       for (const delivery of this.#delivery.values()) {

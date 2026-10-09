@@ -200,8 +200,15 @@ export interface StoppedFrame {
 }
 
 export interface AsleepFrame {
+  /**
+   * Its process died on a signal while the daemon ran it, and nothing of the
+   * daemon's stopped it (an OOM kill, a sessiond restart, a stray `kill`):
+   * the signal, and the harness's own words. The hub starts it again with
+   * the turn it cut, unless it died so right after the last such start.
+   */
+  died?: { error: string; signal: string };
   instanceId: string;
-  /** The daemon stopped an at-rest session's processes; its next message wakes it. */
+  /** The daemon stopped an at-rest session's processes, or one ended of its own accord; its next message wakes it. */
   kind: "asleep";
 }
 

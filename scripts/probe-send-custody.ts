@@ -17,12 +17,16 @@
  *   stop     — a person stopping it with a send queued: that send fails;
  *   predeploy — a send handed to its machine by a hub from before sends were
  *              kept whole (its record written so), the hub started again,
- *              then the session's process killed.
+ *              then the session's process killed;
+ *   killed   — a delegate's Claude Code CLI SIGKILLed mid-turn with a send
+ *              queued: its item keeps running, its turn is handed back once
+ *              and the send read once; then killed twice in quick
+ *              succession, and its item fails.
  *
  * Claude runs every case; opencode and pi run exit and restart. A case whose
- * session is left failed rather than asleep (its harness said the process
- * died) is woken by a person's next message, as a failed session is, and
- * both sends must then be read once each.
+ * session is left failed rather than asleep is woken by a person's next
+ * message, as a failed session is, and both sends must then be read once
+ * each.
  *
  * Prints `send custody: <harness> <case> <outcome>` per case that passed,
  * and exits 0 only if every one did.
@@ -42,7 +46,8 @@ type Case =
   | "relaunch"
   | "restart"
   | "stop"
-  | "predeploy";
+  | "predeploy"
+  | "killed";
 const CASES: Record<Harness, Case[]> = {
   claude: [
     "sleep",
@@ -52,6 +57,7 @@ const CASES: Record<Harness, Case[]> = {
     "stop",
     "restart",
     "predeploy",
+    "killed",
   ],
   opencode: ["exit", "restart"],
   pi: ["exit", "restart"],
@@ -71,10 +77,16 @@ const casesWanted = new Set(named("--case"));
 
 /** A slow turn: long enough for a send to queue behind it and its process to go. */
 const SLOW = "CUSTODY-SLOW";
+/** A conversation whose turn a kill's hand-back starts is slow too. */
+const SLOW_AGAIN = "CUSTODY-SLOW-AGAIN";
+/** The text of the hand-back of a turn a kill cut (server.ts `killedWords`). */
+const KILLED = "Your process was killed (SIGKILL)";
 const fleet = await scratchFleet({
   name: "send-custody-probe",
   respond: (request) =>
-    request.tools && request.last.includes(SLOW)
+    request.tools &&
+    (request.last.includes(SLOW) ||
+      (request.last.includes(KILLED) && request.all.includes(SLOW_AGAIN)))
       ? {
           words: Array.from({ length: 120 }, (_, i) => `w${i} `),
           everyMs: 500,
@@ -179,7 +191,9 @@ const stopCase = async (
 const killOwn = async (label: string, id: string) => {
   const pid = await fleet.sessionPid(id);
   if (!pid) {
-    throw new Error(`${label}: no process of its own to kill`);
+    throw new Error(
+      `${label}: no process of its own to kill; sessiond holds ${JSON.stringify(await fleet.heldProcs())}`
+    );
   }
   await fleet.killTree(pid, "SIGKILL");
 };
@@ -291,7 +305,145 @@ const tearDown = async (
   return uuid;
 };
 
+/** Requests whose turn a kill's hand-back started, in the conversation tagged `marker`. */
+const handBacksIn = (marker: string) =>
+  fleet.seen.filter(
+    (one) => one.tools && one.last.includes(KILLED) && one.all.includes(marker)
+  ).length;
+const itemOf = (workItemId: string) =>
+  fleet.query<{ state: string; error: string | null }>(
+    "SELECT state, error FROM work_items WHERE id = ?",
+    workItemId
+  )[0];
+
+/** A delegate of `parent` whose first turn is slow, streaming; its item and session. */
+const startDelegate = async (parent: string, prompt: string, slow: string) => {
+  const started = await fleet.api<{ workItemId: string; instanceId: string }>(
+    "/api/work-items",
+    {
+      parentInstanceId: parent,
+      title: `Count slowly ${slow.slice(-6)}`,
+      prompt,
+      harness: "claude",
+      model: "claude-haiku-4-5",
+      cwd: fleet.repo,
+      checks: [{ name: "Probe check", command: "true" }],
+    }
+  );
+  await until(
+    `${slow} streaming`,
+    () => turnsOf(slow),
+    (n) => n >= 1,
+    180_000
+  );
+  return started;
+};
+
+/**
+ * A delegate's Claude Code CLI killed by SIGKILL mid-turn, with a person's
+ * send queued behind its turn: the kill does not fail its item, the turn the
+ * kill cut is handed back once, and the send is read once. The mock's
+ * one-word answers never call finish_item, so the item's own rule may end it
+ * later for that; what counts is that the kill did not.
+ */
+const killedOnce = async (label: string, parent: string) => {
+  const slow = mark("claude", "killed", "slow");
+  const started = await startDelegate(
+    parent,
+    `${SLOW} ${slow}: count slowly.`,
+    slow
+  );
+  const delegate = started.instanceId;
+  const queued = mark("claude", "killed", "queued");
+  const uuid = await fleet.send(delegate, `${queued}: say ok.`);
+  await Bun.sleep(1500);
+  await killOwn(label, delegate);
+  await until(
+    "the cut turn handed back",
+    () => handBacksIn(slow),
+    (n) => n >= 1,
+    120_000
+  ).catch(() => undefined);
+  const atHandBack = itemOf(started.workItemId);
+  const queuedOutcome = await readOnce(uuid, queued);
+  const after = itemOf(started.workItemId);
+  const outcome = {
+    handBacks: handBacksIn(slow),
+    queued: queuedOutcome,
+    itemAtHandBack: atHandBack,
+    itemAfter: after,
+  };
+  const ok =
+    outcome.handBacks === 1 &&
+    queuedOutcome.turns === 1 &&
+    queuedOutcome.send?.state === "read" &&
+    atHandBack?.state === "running" &&
+    !(after?.error ?? "").includes("SIGKILL");
+  return { ok, outcome };
+};
+
+/**
+ * A delegate killed, then the process its restart started killed in its
+ * turn, within the two minutes the hub allows between kills (server.ts
+ * `SIGNAL_REPEAT_MS`): its item fails with the kill's own words, and its row
+ * is filed failed. Its restarted turn streams slowly, so the second kill
+ * lands while that process runs.
+ */
+const killedTwice = async (label: string, parent: string) => {
+  const slow = mark("claude", "killed", "again");
+  const started = await startDelegate(
+    parent,
+    `${SLOW} ${SLOW_AGAIN} ${slow}: count slowly.`,
+    slow
+  );
+  const delegate = started.instanceId;
+  await killOwn(label, delegate);
+  await until(
+    "the first kill's turn handed back",
+    () => handBacksIn(slow),
+    (n) => n >= 1,
+    120_000
+  );
+  await Bun.sleep(2000);
+  await killOwn(label, delegate);
+  const item = await until(
+    "the item failed",
+    () => itemOf(started.workItemId),
+    (one) => one?.state === "failed",
+    90_000
+  ).catch(() => itemOf(started.workItemId));
+  const outcome = { item, row: fleet.instance(delegate) };
+  const ok =
+    item?.state === "failed" &&
+    (item.error ?? "").includes("SIGKILL") &&
+    outcome.row?.status === "error";
+  return { ok, outcome };
+};
+
+const killedCase = async (label: string) => {
+  const parent = await fleet.spawn("claude", "Custody parent", fleet.repo);
+  const hello = mark("claude", "killed", "parent");
+  await fleet.send(parent, `${hello}: say ok.`);
+  await until(
+    `${hello} answered`,
+    () => turnsOf(hello),
+    (n) => n >= 1
+  );
+  const once = await killedOnce(label, parent);
+  const twice = await killedTwice(label, parent);
+  report(
+    label,
+    once.ok && twice.ok,
+    { killedOnce: once.outcome, killedTwice: twice.outcome },
+    "carried on once after a kill; failed when killed again within two minutes"
+  );
+};
+
 const runCase = async (harness: Harness, name: Case) => {
+  if (name === "killed") {
+    await killedCase(`${harness} ${name}`);
+    return;
+  }
   const id = await fleet.spawn(harness, `Custody ${harness} ${name}`);
   // A first turn, so the session has a conversation to come back on.
   const first = mark(harness, name, "first");

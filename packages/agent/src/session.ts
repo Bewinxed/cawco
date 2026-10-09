@@ -2279,6 +2279,32 @@ export class SessionSupervisor {
         recovery
           ? this.#failures.set(instanceId, String(error))
           : this.#fail(instanceId, error, processGeneration),
+      died: (signal, error) => {
+        const { session } = holder;
+        // The process this runs now, killed by nothing of this daemon's (a
+        // sleep, a stop, a relaunch): the hub starts it again with its turn.
+        // Anything else died as a failure does.
+        if (
+          recovery ||
+          !session ||
+          this.#sessions.get(instanceId) !== session ||
+          this.#ending.has(session)
+        ) {
+          if (recovery) {
+            this.#failures.set(instanceId, String(error));
+          } else {
+            this.#fail(instanceId, error, processGeneration);
+          }
+          return;
+        }
+        this.#sessions.delete(instanceId);
+        this.#busy.delete(instanceId);
+        this.#forgetPulse(instanceId);
+        this.#gone(instanceId, processGeneration, {
+          signal,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      },
       refused: (error) => this.#fail(instanceId, error, processGeneration),
       keeperRefused: (error) =>
         this.#refusedInput(instanceId, error, processGeneration),
@@ -2876,10 +2902,20 @@ export class SessionSupervisor {
   /**
    * The session's process went away and nothing failed: the hub files it
    * asleep, its next message waking it, and is handed back what that process
-   * never read, which wakes it now.
+   * never read, which wakes it now. `died`: a signal killed it, and the hub
+   * starts it again with the turn it cut.
    */
-  #gone(instanceId: string, processGeneration: string | undefined): void {
-    this.#sayGone({ kind: "asleep", instanceId, processGeneration });
+  #gone(
+    instanceId: string,
+    processGeneration: string | undefined,
+    died?: { signal: string; error: string }
+  ): void {
+    this.#sayGone({
+      kind: "asleep",
+      instanceId,
+      processGeneration,
+      ...(died ? { died } : {}),
+    });
     this.#handBack(instanceId);
   }
 

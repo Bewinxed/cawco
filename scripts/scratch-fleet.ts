@@ -471,6 +471,17 @@ export async function scratchFleet(options: {
       `… sessiond (pid ${child.pid}) and its ${tree.length - 1} children killed`
     );
   };
+  /** What sessiond holds: each live process's proc id and PID. */
+  const heldProcs = async (): Promise<{ procId: string; pid: number }[]> => {
+    const client = await SessiondClient.connect(sessiondSocket);
+    try {
+      return client.procs
+        .filter((proc) => proc.alive)
+        .map(({ procId, pid }) => ({ procId, pid }));
+    } finally {
+      client.close();
+    }
+  };
   /** The PID sessiond runs a session's own process under (Claude Code, a pi host), by its proc id. */
   const sessionPid = async (
     instanceId: string
@@ -696,6 +707,7 @@ export async function scratchFleet(options: {
     killTree,
     killSessiond,
     sessionPid,
+    heldProcs,
     api,
     post,
     query,

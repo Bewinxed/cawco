@@ -34204,11 +34204,27 @@
       "AsleepFrame": {
         "type": "object",
         "properties": {
+          "died": {
+            "description": "Its process died on a signal while the daemon ran it, and nothing of the\ndaemon's stopped it (an OOM kill, a sessiond restart, a stray `kill`):\nthe signal, and the harness's own words. The hub starts it again with\nthe turn it cut, unless it died so right after the last such start.",
+            "type": "object",
+            "properties": {
+              "error": {
+                "type": "string"
+              },
+              "signal": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "error",
+              "signal"
+            ]
+          },
           "instanceId": {
             "type": "string"
           },
           "kind": {
-            "description": "The daemon stopped an at-rest session's processes; its next message wakes it.",
+            "description": "The daemon stopped an at-rest session's processes, or one ended of its own accord; its next message wakes it.",
             "type": "string",
             "enum": [
               "asleep"

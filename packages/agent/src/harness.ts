@@ -92,6 +92,13 @@ export interface HarnessContext {
   closed?(): void;
   /** The resolved working directory (after worktree / bootstrap). */
   readonly cwd: string;
+  /**
+   * The session's process was killed by `signal` (its harness's `error` says
+   * so): a death of the process, not of the session's work. The supervisor
+   * decides whether that is one it starts again or a failure.
+   */
+  // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
+  died?(signal: string, error: unknown): void;
   /** Put an envelope the harness built itself on the daemon's hub socket. */
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
   emit(envelope: Envelope): void;

@@ -694,6 +694,10 @@ const CARRY_ON_CUT = "Carry on from where it stopped.";
 const restartedWords = (restartedAt: Date): string =>
   `CawCo restarted this session's process at ${utcClock(restartedAt)} while your turn was running. ${CARRY_ON_CUT}`;
 
+/** What a session whose process a signal killed is told of the turn that kill cut. */
+const killedWords = (signal: string, killedAt: Date): string =>
+  `Your process was killed (${signal}) at ${utcClock(killedAt)} while your turn was running, and CawCo started it again. ${CARRY_ON_CUT}`;
+
 /** What a delegate's session asleep on a cut turn is told when the hub wakes it to carry on. */
 const unresumedWords = (lastHeard: Date): string =>
   `A restart cut your turn after ${utcClock(lastHeard)}, and nothing resumed it. ${CARRY_ON_CUT}`;
@@ -13269,39 +13273,48 @@ export const createServer = (
     } satisfies Envelope<SendPayload>);
 
   /**
-   * The turn of `row` a restart cut and nothing has taken up since, by when
-   * it was first heard ({@link instances.turnOpenAt}); nothing when there is
-   * none, or when something else answers for the session's next turn.
-   * `serverStopped`: its harness said the server its turn ran in stopped
-   * before finishing it ({@link SERVER_STOPPED_MID_TURN}), on a session it
-   * reattached to the server running now; that turn is cut whenever it was
-   * heard. Otherwise, what rules it out:
-   * - its turn ran in this launch, or ended: not older than `spawnedAt`;
-   * - the hub never recorded it ({@link TURN_UNRECORDED}): a restore of a
-   *   session from before it did hands nothing back;
-   * And either way:
+   * The turn of `row` a restart or a kill cut and nothing has taken up
+   * since, by when it was first heard ({@link instances.turnOpenAt});
+   * nothing when there is none, or when something else answers for the
+   * session's next turn. How it was cut (`how`):
+   * - `restored`: its process was restored after a restart. The turn ran in
+   *   the launch before (older than `spawnedAt`), and the hub recorded it
+   *   ({@link TURN_UNRECORDED}: a restore of a session from before it did
+   *   hands nothing back). The process is up (`running` or `starting`), and
+   *   a send still pending, owed or handed is its turn instead (a keep-alive
+   *   ping is no turn of its own).
+   * - `serverStopped`: its harness said the server its turn ran in stopped
+   *   before finishing it ({@link SERVER_STOPPED_MID_TURN}), on a session it
+   *   reattached to the server running now; cut whenever it was heard, the
+   *   process up, a pending send its turn instead.
+   * - `killed`: a signal killed its process just now ({@link diedOnSignal}),
+   *   which filed it asleep: the turn it had open, recorded, goes first,
+   *   ahead of what the dead process never read.
+   * And whichever way, what rules it out:
    * - the session is being ended, or is a summariser or a workflow step
    *   (a continuation and the workflow runtime run those);
-   * - it has no process up (`running` or `starting`);
    * - the at-limit controller has it, or a continuation of it is under way,
    *   or it moves account at its turn's end: those send their own word;
-   * - a send to it is still pending, owed or handed: that send is its turn
-   *   (a keep-alive ping is no turn of its own);
    * - an ask of it is parked: its process is waiting on that ask.
    */
   const cutTurnOf = (
     row: PublicInstanceRow,
-    serverStopped = false
+    how: "restored" | "serverStopped" | "killed"
   ): number | undefined => {
     const owned = db.ownedInstance(row.id, row.machineId);
     const open = owned?.turnOpenAt ?? null;
     const launched = row.spawnedAt?.getTime();
+    const cut =
+      how === "serverStopped" ||
+      (open !== TURN_UNRECORDED &&
+        (how === "killed" ||
+          (launched !== undefined && (open ?? 0) < launched)));
+    const processUp = row.status === "running" || row.status === "starting";
     if (
       open === null ||
-      !(
-        serverStopped ||
-        (open !== TURN_UNRECORDED && launched !== undefined && open < launched)
-      )
+      !cut ||
+      (how === "killed" ? row.status !== "sleeping" : !processUp) ||
+      (how !== "killed" && awaitsSend(row.id))
     ) {
       return undefined;
     }
@@ -13309,7 +13322,6 @@ export const createServer = (
       !!owned?.endIntent ||
       row.kind === "summariser" ||
       row.workflowStepId !== null ||
-      !(row.status === "running" || row.status === "starting") ||
       atLimit.handling(row.id) ||
       relaunchAtTurnEnd.has(row.id) ||
       db
@@ -13317,7 +13329,6 @@ export const createServer = (
         .some(
           (job) => job.sourceInstanceId === row.id && !SETTLED.has(job.stage)
         ) ||
-      awaitsSend(row.id) ||
       pending.list().some((ask) => ask.instanceId === row.id);
     return ruledOut ? undefined : open;
   };
@@ -13340,7 +13351,9 @@ export const createServer = (
    */
   const resumeCutTurn = (instanceId: string, serverStopped?: Date): void => {
     const [row] = db.getInstancesByIds([instanceId]);
-    const cut = row ? cutTurnOf(row, serverStopped !== undefined) : undefined;
+    const cut = row
+      ? cutTurnOf(row, serverStopped ? "serverStopped" : "restored")
+      : undefined;
     const restartedAt = serverStopped ?? row?.spawnedAt;
     if (!(row && cut !== undefined && restartedAt)) {
       if (serverStopped) {
@@ -13361,6 +13374,120 @@ export const createServer = (
         `[hub] ${row.id}: handed back the turn a restart cut (heard ${new Date(cut).toISOString()})`
       );
     }
+  };
+
+  /**
+   * A session failed to start, or its process died of something the reader
+   * should see: the row records it, a live work item fails and its parent
+   * hears why, and what it was sent and never read waits, owed, for the
+   * session's next start — or fails with it, when its conversation is gone.
+   */
+  const processFailed = (
+    machineId: string,
+    instanceId: string,
+    reason: string
+  ): void => {
+    turnWaiters.get(instanceId)?.reject(new Error(reason));
+    db.failInstance(instanceId, reason);
+    // A live work item whose session never started failed, and its
+    // parent hears why rather than waiting on a report forever.
+    const [unstarted] = db.getInstancesByIds([instanceId]);
+    const line = unstarted?.workItemId
+      ? workItems.spawnFailed(unstarted, reason)
+      : undefined;
+    if (unstarted && line !== undefined) {
+      reportToParent(unstarted, `${reason}${line}`, true);
+    }
+    workflowRuntime.observe(instanceId, reason);
+    losePending(instanceId, reason !== CLAUDE_CONVERSATION_GONE, reason);
+    escalateRoutedAsks(instanceId);
+    if (!summarisers.has(instanceId)) {
+      telegram?.onError(instanceId, reason);
+    }
+    publishInstances(machineId);
+  };
+
+  /**
+   * How close a second signal death may follow a session's last one and
+   * still be started again (our call): a process killed again within two
+   * minutes of the last kill is dying on its own, and starting it again
+   * would only spin.
+   */
+  const SIGNAL_REPEAT_MS = 2 * 60_000;
+
+  /** When each session's process was last killed by a signal and started again ({@link diedOnSignal}). */
+  const signalDeaths = new Map<string, number>();
+
+  /**
+   * A session's process was killed by a signal while its machine ran it,
+   * nothing of the machine's own stopping it (an OOM kill, a sessiond
+   * restart, a stray `kill`). That is the process dying, not the session's
+   * work: the row is filed asleep and its work item keeps running; what it
+   * was sent and never read is owed to its next process; and the turn the
+   * kill cut is handed back once ({@link resumeCutTurn}'s path), which
+   * starts that process. A session killed again within
+   * {@link SIGNAL_REPEAT_MS} of its last kill fails as any dead process
+   * does, and so does a summariser or a workflow step, which the
+   * continuation and the workflow runtime run.
+   */
+  const diedOnSignal = (
+    machineId: string,
+    instanceId: string,
+    died: { signal: string; error: string }
+  ): void => {
+    const [row] = db.getInstancesByIds([instanceId]);
+    const last = signalDeaths.get(instanceId);
+    const now = Date.now();
+    if (
+      !row ||
+      row.kind === "summariser" ||
+      row.workflowStepId !== null ||
+      (last !== undefined && now - last < SIGNAL_REPEAT_MS)
+    ) {
+      signalDeaths.delete(instanceId);
+      if (last !== undefined) {
+        console.warn(
+          `[hub] ${instanceId}: killed by ${died.signal} again ${Math.round((now - last) / 1000)}s after the last kill; it fails rather than spin`
+        );
+      }
+      processFailed(machineId, instanceId, died.error);
+      return;
+    }
+    signalDeaths.set(instanceId, now);
+    console.log(
+      `[hub] ${instanceId}: its process was killed by ${died.signal}; it carries on`
+    );
+    sessionAsleep(machineId, instanceId);
+    resumeKilledTurn(instanceId, died.signal, new Date(now));
+  };
+
+  /**
+   * Hands a session whose process a signal killed the turn that kill cut,
+   * once: through the send path, which starts its process, ahead of what the
+   * dead one never read. Nothing when no turn was open, or something else
+   * answers for its next turn ({@link cutTurnOf}).
+   */
+  const resumeKilledTurn = (
+    instanceId: string,
+    signal: string,
+    killedAt: Date
+  ): void => {
+    const [row] = db.getInstancesByIds([instanceId]);
+    const cut = row ? cutTurnOf(row, "killed") : undefined;
+    if (!(row && cut !== undefined)) {
+      return;
+    }
+    const sent = handTurnBack(row, String(cut), killedWords(signal, killedAt));
+    if (sent.state === "failed") {
+      turnOver(row.id);
+      console.warn(
+        `[hub] ${row.id}: the turn a kill cut was not handed back: ${sent.reason ?? "the send failed"}`
+      );
+      return;
+    }
+    console.log(
+      `[hub] ${row.id}: handed back the turn a kill cut (heard ${new Date(cut).toISOString()})`
+    );
   };
 
   /** Machines whose work items asleep on a cut turn this hub has settled since it started. */
@@ -18875,7 +19002,14 @@ export const createServer = (
                   peek(message.payload, "processGeneration") ===
                     processGeneration(process)
                 ) {
-                  sessionAsleep(message.machineId, message.instanceId);
+                  const { died } = message.payload as FramePayload & {
+                    kind: "asleep";
+                  };
+                  if (died) {
+                    diedOnSignal(message.machineId, message.instanceId, died);
+                  } else {
+                    sessionAsleep(message.machineId, message.instanceId);
+                  }
                 }
                 break;
               }
@@ -19754,33 +19888,11 @@ export const createServer = (
                 ) {
                   break;
                 }
-                const reason =
-                  peek(message.payload, "message") ?? "the session failed";
-                turnWaiters.get(message.instanceId)?.reject(new Error(reason));
-                db.failInstance(message.instanceId, reason);
-                // A live work item whose session never started failed, and its
-                // parent hears why rather than waiting on a report forever.
-                const [unstarted] = db.getInstancesByIds([message.instanceId]);
-                const line = unstarted?.workItemId
-                  ? workItems.spawnFailed(unstarted, reason)
-                  : undefined;
-                if (unstarted && line !== undefined) {
-                  reportToParent(unstarted, `${reason}${line}`, true);
-                }
-                workflowRuntime.observe(message.instanceId, reason);
-                // A failed session runs again when something starts it: what
-                // it was sent and never read waits, owed, for that start. One
-                // whose conversation is gone never runs again.
-                losePending(
+                processFailed(
+                  message.machineId,
                   message.instanceId,
-                  reason !== CLAUDE_CONVERSATION_GONE,
-                  reason
+                  peek(message.payload, "message") ?? "the session failed"
                 );
-                escalateRoutedAsks(message.instanceId);
-                if (!internal) {
-                  telegram?.onError(message.instanceId, reason);
-                }
-                publishInstances(message.machineId);
               }
               // A session's message to the owner, pushed without an ask: straight
               // to the bridge, tracked so a reply reaches the session that wrote it.
