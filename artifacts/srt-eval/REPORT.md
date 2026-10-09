@@ -451,3 +451,33 @@ Options, each with its risk:
   `enableWeakerNetworkIsolation` note), JVM tools.
 - The harness-config escape (5i) is shown at the file level: the files can be
   written. No harness was launched against a planted file.
+
+## 9. After the cutover
+
+The product now runs §7 (packages/agent/src/boundary.ts, boundary-host.ts,
+boundary-policy.ts, tool-door.ts). The prototype files beside this report stay
+as the evaluation's evidence. Three scripts here check the product itself:
+- `run-linux-checks.sh [OTHER_CLONE] [HOST_PID]`: run from inside a Linux
+  workspace. It prints every escape row, and exits 1 if any is open.
+- `run-linux-works.sh`: what must keep working, also from inside a Linux
+  workspace.
+- `run-mac-checks.sh`: run on the Mac from an unsandboxed shell. It cuts its
+  own workspace through `rig-workspace.ts`.
+
+Found while building it:
+- **A read-denied dir is an empty writable tmpfs, not read-only.** srt masks
+  `/tmp` and `$HOME` with `--tmpfs` (linux-sandbox-utils.js:1415: "inside the
+  sandbox it is an EMPTY WRITABLE directory", README). A `denyWrite` outside
+  `allowWrite` is skipped, so nothing makes the mask read-only.
+  - A write to the literal `/tmp/x` or `~/x` succeeds into the sandbox's own
+    memory. It reaches nothing on the host, and it is gone when the boundary
+    is replaced.
+  - So the checks judge a write by the filesystem it landed on (`stat -f`).
+    `findmnt -T` is not enough: it also lists the host mounts the mask covers.
+- **An allowed `localhost` reaches the host's loopback.** srt's address guard
+  lets an allowed reserved loopback name resolve to loopback. So the ask
+  callback refuses `localhost` and `*.localhost` by name: through the proxy
+  they were the hub (`200`, then `403` after the fix).
+- **`alternates` chain.** A clone of a clone borrows objects two levels down.
+  The policy now reads the whole chain, without which git said "unable to
+  normalize alternate object path".

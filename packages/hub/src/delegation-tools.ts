@@ -646,7 +646,7 @@ export function handoffTools(deps: HandoffDeps) {
               "value here wins either way. Set true only for an orchestrator-style delegate that must fan out."
           ),
         checks: checksParameter().describe(
-          "The item's acceptance checks. The hub runs each command in the item's worktree, inside its workspace boundary exactly as the delegate's own shell commands run (same mounts, same private /tmp), when the delegate calls finish_item; the item is done only when every command exits 0 and its stdout contains `expect` where one is given. Write the checks a reviewer would run: build, lint, type-check, a grep that proves a removal, one script run for a live assertion. The delegate runs nothing beyond these to prove the work."
+          "The item's acceptance checks. The hub runs each command in the item's worktree, inside its workspace boundary exactly as the delegate's own shell commands run (same sandbox, same $TMPDIR), when the delegate calls finish_item; the item is done only when every command exits 0 and its stdout contains `expect` where one is given. Write the checks a reviewer would run: build, lint, type-check, a grep that proves a removal, one script run for a live assertion. The delegate runs nothing beyond these to prove the work."
         ),
         lands: z
           .enum(LANDS_MODES as [LandsMode, ...LandsMode[]])

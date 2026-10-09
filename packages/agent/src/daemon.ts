@@ -65,7 +65,7 @@ import {
   latestBinaryUpdate,
   reportBinaryUpdate,
 } from "./binary-update";
-import { rearmHooks } from "./boundary";
+import { checkBoundaryHost, rearmHooks } from "./boundary";
 import { buildInfo } from "./build";
 import { probeCapabilities } from "./capabilities";
 import { convertWorktrees } from "./clone";
@@ -1689,6 +1689,7 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
     // First: CLIs already running read their workspace's hook on every shell
     // call, and one an earlier build wrote runs what this build no longer has.
     yield* Effect.promise(() => rearmHooks());
+    checkBoundaryHost();
     const url = process.env[CAWCO_ENV.hubUrl] ?? DEFAULT_HUB_URL;
     // Re-pinned by the rediscovery trigger below (discovered hubs only), read fresh by every attempt
     // `reconnecting` makes — see its own doc for why a plain closure variable

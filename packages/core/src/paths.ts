@@ -344,6 +344,16 @@ export const workspaceStateDir = (id: string): string =>
 export const workspaceScratchDir = (id: string): string =>
   join(workspaceStateDir(id), "tmp");
 
+/**
+ * The part of a workspace's state dir a command inside its boundary reads:
+ * the runner's FIFO, the empty git template, the tool door's socket and, on
+ * macOS, the shims. Read-only inside, and a sibling of the scratch dir, never
+ * its parent: srt binds a writable dir nested in a read carve-out back
+ * read-only (srt #446).
+ */
+export const workspaceReadOnlyDir = (id: string): string =>
+  join(workspaceStateDir(id), "ro");
+
 /** The name of a workspace's policy file in its state dir. */
 export const WORKSPACE_POLICY_NAME = "policy.json";
 

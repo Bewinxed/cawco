@@ -4,11 +4,13 @@
  */
 
 import { readdirSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { parseMany, readTranscript } from "../src/index.ts";
 import { TranscriptIndex } from "../src/fts5.ts";
 
 const root = process.argv[2] ?? `${process.env.HOME}/.claude/projects`;
-const indexPath = process.argv[3] ?? "/tmp/jsonl-parser-bench.db";
+const indexPath = process.argv[3] ?? join(tmpdir(), "jsonl-parser-bench.db");
 
 const files = readdirSync(root, { recursive: true })
   .map(String)

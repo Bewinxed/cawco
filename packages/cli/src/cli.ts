@@ -24,7 +24,7 @@ import {
   ServiceError,
   service,
 } from "./service";
-import { callTool, listTools, sessionOf, ToolError } from "./tools";
+import { callTool, listTools, sessionOf, ToolError, toolDoor } from "./tools";
 
 /** Reported by `--version`; keep in sync with package.json. */
 /**
@@ -518,22 +518,21 @@ const gitCredential = async (args: Args): Promise<number> => {
 
 /** `cawco tools` and `cawco tool <name> [json]`: the session's MCP tools, under its role. */
 const runTool = async (args: Args): Promise<number> => {
-  const found = await resolve(args);
-  if (!found) {
+  // Inside a workspace's boundary the tool door is the way in: no hub is reachable.
+  const at = toolDoor() ? undefined : (await resolve(args))?.httpUrl;
+  if (!(at || toolDoor())) {
     console.error(NO_HUB);
     return 1;
   }
   const instanceId = sessionOf(args.session);
   if (args.command === "tools") {
-    console.log(await listTools(found.httpUrl, instanceId));
+    console.log(await listTools(at, instanceId));
     return 0;
   }
   if (!args.action) {
     throw new UsageError("tool needs a tool name, then its arguments as JSON");
   }
-  console.log(
-    await callTool(found.httpUrl, instanceId, args.action, args.rest[0])
-  );
+  console.log(await callTool(at, instanceId, args.action, args.rest[0]));
   return 0;
 };
 

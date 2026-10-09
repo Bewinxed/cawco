@@ -8,6 +8,7 @@
  */
 
 import { readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { userLayerPath } from "@cawco/core/paths";
 import { readTranscript } from "@cawco/jsonl-parser";
@@ -93,8 +94,8 @@ if (midFile) {
   const partial = lines.slice(0, split).join("\n");
   const full = lines.join("\n");
 
-  const tmpPartial = "/tmp/cache-bench.jsonl";
-  const tmpFull = "/tmp/cache-bench-full.jsonl";
+  const tmpPartial = join(tmpdir(), "cache-bench.jsonl");
+  const tmpFull = join(tmpdir(), "cache-bench-full.jsonl");
 
   writeFileSync(tmpPartial, partial);
 

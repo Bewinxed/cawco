@@ -45,7 +45,7 @@ const isWorkspaceRef = (value: unknown): value is WorkspaceRef =>
  *
  * Given a `workspace`, the command runs inside that workspace's boundary,
  * through the executor its sessions' shell commands run through: the same
- * mounts, the same private `/tmp`, the same pid namespace. A boundary this
+ * sandbox, the same scratch dir as `$TMPDIR`, the same pid namespace. A boundary this
  * machine cannot start rejects with its reason; the command never runs
  * outside it.
  */

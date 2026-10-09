@@ -1,5 +1,7 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 process.chdir(fileURLToPath(new URL('..', import.meta.url)));
@@ -25,7 +27,7 @@ const revision = execFileSync('git', ['rev-parse', '--short=8', 'HEAD'], {
 run('npm', ['run', 'build']);
 writeFileSync('dist/version.txt', `${revision}\n`);
 
-const logDirectory = mkdtempSync('/tmp/cawco-site-wrangler-');
+const logDirectory = mkdtempSync(join(tmpdir(), 'cawco-site-wrangler-'));
 run('npx', ['wrangler@latest', 'deploy'], {
   env: {
     ...process.env,

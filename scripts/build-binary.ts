@@ -206,7 +206,30 @@ export async function buildBinary(options: {
     join(work, "workspace-judge.ts"),
     await Bun.file(join(ROOT, "packages/core/src/workspace-judge.ts")).bytes()
   );
+  // A Linux workspace's boundary host, srt inside, run as plain Bun by sessiond
+  // (boundary.ts), and the ripgrep srt scans a clone with: a fresh machine has
+  // none (REPORT.md §1). macOS boundaries run on Seatbelt and need neither.
+  const linuxTarget = options.target.startsWith("linux-");
+  if (linuxTarget) {
+    const host = await Bun.build({
+      entrypoints: [join(ROOT, "packages/agent/src/boundary-host.ts")],
+      target: "bun",
+      format: "esm",
+      minify: true,
+    });
+    if (!host.success) {
+      throw new AggregateError(host.logs, "Boundary host build failed");
+    }
+    await writeFile(join(work, "srt-host.js"), await host.outputs[0].text());
+  }
+  const ripgrep = packageDir("@vscode/ripgrep-universal", requireAgent);
   const assets = [
+    ...(linuxTarget
+      ? [
+          ["srt/host.js", join(work, "srt-host.js")],
+          ["srt/rg", join(ripgrep, "bin", options.target, "rg")],
+        ]
+      : []),
     ...(await filesUnder(join(ROOT, "packages/hub/drizzle"), "drizzle")),
     ...(await filesUnder(join(ROOT, "packages/hub/skills"), "skills")),
     ...(await filesUnder(

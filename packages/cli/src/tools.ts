@@ -22,6 +22,30 @@ export const TOOL_ENV = {
 
 export class ToolError extends Error {}
 
+/**
+ * Inside a workspace's boundary, which reaches no hub: the agent's tool door
+ * for this workspace (`tool-door.ts`), a unix socket that takes the two tool
+ * routes and nothing else. Undefined everywhere else.
+ */
+export const toolDoor = (): string | undefined =>
+  process.env[CAWCO_ENV.toolSocket]?.trim() || undefined;
+
+/** One of the two tool routes, through the workspace's tool door when there is one, else at `hub`. */
+const toolRoute = (
+  hub: string | undefined,
+  path: string,
+  init: BunFetchRequestInit = {}
+): Promise<Response> => {
+  const door = toolDoor();
+  if (door) {
+    return fetch(`http://cawco${path}`, { ...init, unix: door });
+  }
+  if (!hub) {
+    throw new ToolError("no hub to call the tools of");
+  }
+  return fetch(`${hub}${path}`, init);
+};
+
 const credentialHeader = (): Record<string, string> => {
   const credential = process.env[TOOL_ENV.credential]?.trim();
   if (!credential) {
@@ -45,11 +69,12 @@ export const sessionOf = (flag: string | undefined): string => {
 
 /** The tools the session's role has, one per line: name, then what it does. */
 export const listTools = async (
-  hub: string,
+  hub: string | undefined,
   instanceId: string
 ): Promise<string> => {
-  const response = await fetch(
-    `${hub}/api/delegation/tools?instanceId=${encodeURIComponent(instanceId)}`
+  const response = await toolRoute(
+    hub,
+    `/api/delegation/tools?instanceId=${encodeURIComponent(instanceId)}`
   );
   if (!response.ok) {
     throw new ToolError(`${response.status}: ${await response.text()}`);
@@ -67,7 +92,7 @@ export const listTools = async (
 
 /** Calls one tool with a JSON object of arguments; answers its text, or throws the refusal. */
 export const callTool = async (
-  hub: string,
+  hub: string | undefined,
   instanceId: string,
   name: string,
   json: string | undefined
@@ -83,8 +108,9 @@ export const callTool = async (
       );
     }
   }
-  const response = await fetch(
-    `${hub}/api/delegation/call/${encodeURIComponent(instanceId)}`,
+  const response = await toolRoute(
+    hub,
+    `/api/delegation/call/${encodeURIComponent(instanceId)}`,
     {
       method: "POST",
       headers: { "content-type": "application/json", ...credentialHeader() },

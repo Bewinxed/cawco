@@ -3,7 +3,7 @@
  * Screenshot harness for the CawCo redesign preview (port 3457).
  *
  * Usage:
- *   node scripts/shot.mjs --url http://localhost:3457/session --out /tmp/x.png \
+ *   node scripts/shot.mjs --url http://localhost:3457/session --out "$TMPDIR"/x.png \
  *     [--viewport 1728x1080] [--dark] [--wait 2500] [--fullpage]
  *
  * Viewports for the three targets:

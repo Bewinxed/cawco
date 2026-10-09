@@ -22,11 +22,13 @@
  * Run with `bun peer-echo-proof.ts`. Prints a DIAG line per peer-mappable frame.
  */
 
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { NeutralMessage } from "@cawco/core";
 import type { HarnessContext, HarnessSession } from "./src/harness";
 import { claudeHarness } from "./src/harnesses/claude";
 
-const PROOF_DIR = "/tmp/peer-echo-proof";
+const PROOF_DIR = join(tmpdir(), "peer-echo-proof");
 
 await Bun.$`rm -rf ${PROOF_DIR}`.quiet().nothrow();
 await Bun.$`mkdir -p ${PROOF_DIR}`.quiet();

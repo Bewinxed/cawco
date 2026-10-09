@@ -2532,7 +2532,7 @@ export const createWorkItems = ({
   /**
    * Runs `checks` in order. A check runs in the workspace's worktree, on its
    * machine, inside its boundary: it reads what its delegate wrote, at the
-   * path the delegate wrote it (`/tmp` is the workspace's own there). A check
+   * path the delegate wrote it (`$TMPDIR` is the workspace's own scratch dir there). A check
    * that names another machine runs there, in the workspace's check workspace
    * ({@link checkWorkspace}), inside that one's boundary, at the workspace's
    * last commit: the commits past its base go over as a git bundle, once per

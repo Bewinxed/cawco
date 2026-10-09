@@ -4,6 +4,8 @@
 # Phase 3 end-to-end verification. Every DW item that can be checked mechanically.
 set -u
 cd "$(dirname "$0")/.."
+# Logs and scratch output: mktemp honours $TMPDIR, a workspace's own scratch dir.
+T=$(mktemp -d)
 fail=0
 say(){ printf '\n\033[1m%s\033[0m\n' "$1"; }
 ok(){ if [ "$1" = 0 ]; then echo "  PASS  $2"; else echo "  FAIL  $2"; fail=$((fail+1)); fi; }
@@ -13,7 +15,7 @@ say "mocks reproduce from source (mocks/src -> mocks/*.html)"
 # rebuild that skipped the second step shipped mocks with no status glyphs
 # and nothing noticed. Sources are in the repo now and a stale build fails.
 before=$(cat mocks/v2-fleet.html mocks/v3-assistant.html mocks/v4-transcript.html mocks/v5-components.html mocks/v5-agent.html mocks/v5-data.html mocks/v5-workspace.html mocks/v5-assistant.html | md5sum | cut -d" " -f1)
-bash mocks/build-mocks.sh > /tmp/rebuild.log 2>&1 || echo "  rebuild FAILED (see /tmp/rebuild.log)"
+bash mocks/build-mocks.sh > $T/rebuild.log 2>&1 || echo "  rebuild FAILED (see $T/rebuild.log)"
 after=$(cat mocks/v2-fleet.html mocks/v3-assistant.html mocks/v4-transcript.html mocks/v5-components.html mocks/v5-agent.html mocks/v5-data.html mocks/v5-workspace.html mocks/v5-assistant.html | md5sum | cut -d" " -f1)
 echo "  checked-in $before   fresh build $after"
 [ "$before" = "$after" ]
@@ -65,9 +67,9 @@ ok $? "the checked-in PNGs are a fresh render of the checked-in HTML"
 
 say "DW-3.1  palette.mjs --scheme both exits 0, no FAIL lines"
 node ~/.claude/plugins/cache/rtd/design-for-ai/4.2.0/scripts/palette.mjs \
-  --seed 263 --chroma muted --harmony analogous --scheme both > /tmp/v-pal.css 2>/tmp/v-pal.err
-rc=$?; n=$(grep -c FAIL /tmp/v-pal.css)
-echo "  exit=$rc  FAIL lines=$n  stderr=$(wc -c </tmp/v-pal.err) bytes"
+  --seed 263 --chroma muted --harmony analogous --scheme both > $T/v-pal.css 2>$T/v-pal.err
+rc=$?; n=$(grep -c FAIL $T/v-pal.css)
+echo "  exit=$rc  FAIL lines=$n  stderr=$(wc -c <$T/v-pal.err) bytes"
 ok $(( rc != 0 || n != 0 )) "exit 0 and zero FAIL lines"
 
 say "DW-3.2  ramp + alias + functional coverage, both schemes"
@@ -172,8 +174,8 @@ ok $tot "all three mocks carry zero raw hex"
 
 say "DW-3.9  detect.mjs nested-cards findings, verified at container level"
 node ~/.claude/plugins/cache/rtd/design-for-ai/4.2.0/scripts/detect.mjs \
-  mocks/v2-fleet.html mocks/v3-assistant.html mocks/v4-transcript.html 2>/dev/null > /tmp/detect.json
-python3 mocks/detectcheck.py /tmp/detect.json
+  mocks/v2-fleet.html mocks/v3-assistant.html mocks/v4-transcript.html 2>/dev/null > $T/detect.json
+python3 mocks/detectcheck.py $T/detect.json
 ok $? "every nested-cards finding is a control, not a uniform-padding card-in-card"
 
 say "hand-typed colour in ANY notation, not just hex"
@@ -181,36 +183,36 @@ python3 mocks/literalcheck.py
 ok $? "every colour in every mock resolves through a token"
 
 say "v5 component library — token discipline, density, focus, touch, responsive"
-python3 mocks/literalcheck.py v5-components.html > /tmp/v5-literal.log 2>&1
-ok $? "v5 carries zero hand-typed colours ($(grep 'literal(s)' /tmp/v5-literal.log | awk '{print $2}') hits)"
+python3 mocks/literalcheck.py v5-components.html > $T/v5-literal.log 2>&1
+ok $? "v5 carries zero hand-typed colours ($(grep 'literal(s)' $T/v5-literal.log | awk '{print $2}') hits)"
 
 say "v5 agent surface — token discipline"
-python3 mocks/literalcheck.py v5-agent.html > /tmp/v5a-literal.log 2>&1
-ok $? "v5-agent carries zero hand-typed colours ($(grep 'literal(s)' /tmp/v5a-literal.log | awk '{print $2}') hits)"
+python3 mocks/literalcheck.py v5-agent.html > $T/v5a-literal.log 2>&1
+ok $? "v5-agent carries zero hand-typed colours ($(grep 'literal(s)' $T/v5a-literal.log | awk '{print $2}') hits)"
 
 say "v5 agent surface — DW-5 approval gate, fixed anchors, coarse targets, a11y"
 node mocks/v5agentcheck.mjs
 ok $? "approve/deny symmetric, no preselect/autofocus, fixed anchors, >=44px, scope-widen separated, live regions + headings"
 
 say "v5 data surfaces — token discipline"
-python3 mocks/literalcheck.py v5-data.html > /tmp/v5d-literal.log 2>&1
-ok $? "v5-data carries zero hand-typed colours ($(grep 'literal(s)' /tmp/v5d-literal.log | awk '{print $2}') hits)"
+python3 mocks/literalcheck.py v5-data.html > $T/v5d-literal.log 2>&1
+ok $? "v5-data carries zero hand-typed colours ($(grep 'literal(s)' $T/v5d-literal.log | awk '{print $2}') hits)"
 
 say "v5 data surfaces — DW-6 gate: tables, stat cards, threshold ink, charts, meters"
 node mocks/v5datacheck.mjs
 ok $? "bar zero-baseline, stat triplet, no gauge, threshold non-colour cue + discrete, table alignment, chart alt/aria-describedby, CVD encoding, <=7 metrics"
 
 say "v5 workspace surface — token discipline"
-python3 mocks/literalcheck.py v5-workspace.html > /tmp/v5w-literal.log 2>&1
-ok $? "v5-workspace carries zero hand-typed colours ($(grep 'literal(s)' /tmp/v5w-literal.log | awk '{print $2}') hits)"
+python3 mocks/literalcheck.py v5-workspace.html > $T/v5w-literal.log 2>&1
+ok $? "v5-workspace carries zero hand-typed colours ($(grep 'literal(s)' $T/v5w-literal.log | awk '{print $2}') hits)"
 
 say "v5 workspace surface — Phase 8 gate: tabs/split/mobile shell, DW-8.1..8.9"
 node mocks/v5workspacecheck.mjs
 ok $? "CSS-order reorder, one-workspace split with non-colour active cue, fixed anchors, mobile-defect checklist, no pan-y transcript, gesture non-equivalents, reachable set open tabs"
 
 say "v5 fleet assistant — token discipline"
-python3 mocks/literalcheck.py v5-assistant.html > /tmp/v5a-literal.log 2>&1
-ok $? "v5-assistant carries zero hand-typed colours ($(grep 'literal(s)' /tmp/v5a-literal.log | awk '{print $2}') hits)"
+python3 mocks/literalcheck.py v5-assistant.html > $T/v5a-literal.log 2>&1
+ok $? "v5-assistant carries zero hand-typed colours ($(grep 'literal(s)' $T/v5a-literal.log | awk '{print $2}') hits)"
 
 say "v5 fleet assistant — Phase 9b gate: preserved shell, action contract, distinguishability, canon gaps"
 node mocks/v5assistantcheck.mjs
@@ -245,14 +247,14 @@ node mocks/overflowcheck.mjs
 ok $? "no document overflow, and no content trapped behind a non-scrolling ancestor"
 
 say "v5 component library — computed-style + rendered-pixel verification"
-node mocks/v5check.mjs > /tmp/v5check.log 2>&1 && python3 mocks/v5pixels.py >> /tmp/v5check.log 2>&1
+node mocks/v5check.mjs > $T/v5check.log 2>&1 && python3 mocks/v5pixels.py >> $T/v5check.log 2>&1
 ok $? "v5 states, density=dims-only, focus rings, 16px inputs, >=44px targets, painted pixels"
 
 say "Phase 7 Words — voice/tone/terminology over the built mocks"
-node mocks/wordcheck.mjs > /tmp/wordcheck.log 2>&1
+node mocks/wordcheck.mjs > $T/wordcheck.log 2>&1
 wcrc=$?
 # echo a compact wordcheck summary to the progress stream (the full log is kept)
-grep 'wordcheck:' /tmp/wordcheck.log | sed 's/^/  /'
+grep 'wordcheck:' $T/wordcheck.log | sed 's/^/  /'
 ok $wcrc "wordcheck: banned strings, terminology, labels, buttons, error-fix all clean"
 
 say "RESULT"

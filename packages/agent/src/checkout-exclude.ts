@@ -4,6 +4,7 @@
  */
 import { appendFile, mkdir, realpath } from "node:fs/promises";
 import { dirname, isAbsolute, relative as relativePath } from "node:path";
+import { projectClaudeDir } from "@cawco/core/paths";
 import { SAFE_GIT_ENV, SAFE_GIT_FLAGS } from "@cawco/core/safe-git";
 import { resolveBin, toolEnv } from "./tools";
 
@@ -31,6 +32,67 @@ export const gitIn = async (
     // No git to run, or it could not start: not a checkout cawco can tell.
     return undefined;
   }
+};
+
+/**
+ * What a workspace's sandbox may leave in its clone, as git sees it: for a
+ * protected name that does not exist, srt mounts a read-only empty file there
+ * for the sandbox's life (its README, "Mandatory Deny Paths"), and `git add
+ * -A` then refuses it ("can only add regular files", REPORT.md §5c). srt's own
+ * names, unanchored as srt applies them (`DANGEROUS_FILES` and
+ * `getDangerousDirectories()` in sandbox-utils.ts at 0.0.79), and the harness
+ * project config the workspace's policy denies at the clone's root.
+ */
+const SANDBOX_NAMES = [
+  ".gitconfig",
+  ".gitmodules",
+  ".bashrc",
+  ".bash_profile",
+  ".zshrc",
+  ".zprofile",
+  ".profile",
+  ".ripgreprc",
+  ".mcp.json",
+  ".vscode",
+  ".idea",
+  projectClaudeDir("", "commands"),
+  projectClaudeDir("", "agents"),
+  ...["settings.json", "settings.local.json", "hooks"].map(
+    (name) => `/${projectClaudeDir("", name)}`
+  ),
+  "/opencode.json",
+  "/opencode.jsonc",
+  "/.opencode",
+];
+
+/**
+ * Keeps {@link SANDBOX_NAMES} out of a workspace clone's status, through its
+ * own `info/exclude`, each line added once. Written before its boundary
+ * starts; a tracked file is the project's own and stays tracked.
+ */
+export const excludeSandboxNames = async (clone: string): Promise<void> => {
+  const exclude = await gitIn(clone, [
+    "rev-parse",
+    "--path-format=absolute",
+    "--git-path",
+    "info/exclude",
+  ]);
+  if (!exclude) {
+    throw new Error(
+      `${clone} has no git dir to keep its sandbox's names out of`
+    );
+  }
+  const current = await Bun.file(exclude)
+    .text()
+    .catch(() => "");
+  const lines = new Set(current.split("\n").map((each) => each.trim()));
+  const missing = SANDBOX_NAMES.filter((name) => !lines.has(name));
+  if (missing.length === 0) {
+    return;
+  }
+  await mkdir(dirname(exclude), { recursive: true });
+  const lead = current === "" || current.endsWith("\n") ? "" : "\n";
+  await appendFile(exclude, `${lead}${missing.join("\n")}\n`);
 };
 
 /**

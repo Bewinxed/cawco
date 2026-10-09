@@ -1303,6 +1303,12 @@ export const CAWCO_ENV = {
    */
   instanceId: "CAWCO_INSTANCE_ID",
   sessionCredential: "CAWCO_SESSION_CREDENTIAL",
+  /**
+   * Inside a workspace's boundary, which reaches none of the owner's
+   * machines: the unix socket of the agent's door to the hub's two tool
+   * routes, which `cawco tools` and `cawco tool` go through instead of the hub.
+   */
+  toolSocket: "CAWCO_TOOL_SOCKET",
   /** Which service manager the installer targets: `systemd`, `launchd`, … */
   serviceMode: "CAWCO_SERVICE_MODE",
   /**

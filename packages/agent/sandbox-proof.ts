@@ -11,11 +11,13 @@
  * Run with `bun sandbox-proof.ts`.
  */
 
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { NeutralMessage } from "@cawco/core";
 import type { HarnessContext, HarnessSession } from "./src/harness";
 import { claudeHarness } from "./src/harnesses/claude";
 
-const PROOF_DIR = "/tmp/sandbox-proof";
+const PROOF_DIR = join(tmpdir(), "sandbox-proof");
 
 await Bun.$`rm -rf ${PROOF_DIR}`.quiet().nothrow();
 await Bun.$`mkdir -p ${PROOF_DIR}`.quiet();

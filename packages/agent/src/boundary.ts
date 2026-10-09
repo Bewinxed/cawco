@@ -1,63 +1,50 @@
 /**
  * A delegation workspace's boundary, on the machine that holds it: the one
- * place every shell command of the workspace's work items runs. Inside it a
- * command sees and signals only its own workspace's processes, cannot reach
- * the user's service manager, and writes only the workspace's clone, its
- * scratch dir (its `/tmp`, on disk at `~/.cawco/workspaces/<id>/tmp`, which no
- * command inside can remove) and the workspaces' own cache
- * (`workspaceCacheDir`), where the executor points bun, npm, uv and
- * `XDG_CACHE_HOME`. Every host cache is read-only inside: a host process runs
- * what is in them, so a workspace that wrote one would run code outside. On
- * macOS, build tools also write in the user's temp/cache folders and the
- * provisioning profile folders automatic signing fills, and `swift`,
- * `xcodebuild` and `log` run through shims that keep them working inside and
- * point SwiftPM's and Xcode's caches at the workspaces' cache
- * ({@link writeShims}). The network is the host's, so the hub and the
- * internet stay reachable. The executor and the hook call every host tool by
- * an absolute path or a system PATH: `~/.bun/bin`, on a host process's PATH,
- * is only read-only inside, and nothing a workspace wrote must run outside.
+ * place every shell command of the workspace's work items runs. What a
+ * command reads and writes is the workspace's policy (`workspace-policy.ts`),
+ * the same one every harness's file tools are judged by, enforced from the
+ * one translation of it (`boundary-policy.ts`):
  *
- * Linux: one anchor per workspace — a user, pid and mount namespace whose
- * tree is read-only but for those paths, with the user runtime dir (the
- * service manager's bus, sessiond's socket) swapped for a private one — that
- * every command joins with `nsenter`. macOS: one `sandbox-exec` runner per
- * workspace that runs each command it is handed; Seatbelt keeps its signals
- * inside its own sandbox and its writes inside the workspace, and refuses
- * `launchctl`. macOS has no private pid or port space to give it.
+ * - Linux: one @anthropic-ai/sandbox-runtime (srt) sandbox per workspace,
+ *   hosted by `boundary-host.ts` in library mode. Inside it a command reads
+ *   nothing in the home dir but what the policy reads back, writes only the
+ *   clone, its scratch dir and the workspaces' cache, sees and signals only
+ *   the workspace's processes (its own pid namespace), and reaches the
+ *   network only through srt's proxy: any public host, none of the owner's
+ *   machines. Every host socket is out of sight.
+ * - macOS: one `sandbox-exec` runner per workspace, under a Seatbelt profile
+ *   written from the same policy: the home dir read-denied but for what the
+ *   policy reads back, writes only where it writes. Seatbelt keeps its
+ *   signals inside its own sandbox and refuses `launchctl`. macOS has no
+ *   private pid or port space to give it, and Chromium cannot start inside
+ *   srt there until srt can allow it its `mach-register` names (srt #210,
+ *   PR #598). `swift`, `xcodebuild` and `log` run through shims that keep them
+ *   working inside ({@link writeShims}).
  *
- * sessiond holds both, so an agent restart leaves them — and every process
- * in them — running, as it leaves the sessions. One started by an earlier
- * build, in another form, is replaced the first time nothing runs in it
- * ({@link replaceWhenIdle}). A machine that cannot hold a boundary refuses
- * the work: a work item never runs without one.
- *
- * Each workspace's executor is a script, `~/.cawco/workspaces/<id>/exec
- * [--cwd-out FILE] COMMAND`, that every harness runs its shell commands
+ * Both run the same runner ({@link RUNNER}), which takes every command of the
+ * workspace over a FIFO and runs it inside: one network namespace on Linux,
+ * so a dev server one command starts answers the next. Commands go in
+ * through one executor, `~/.cawco/workspaces/<id>/exec [--cwd-out FILE]
+ * COMMAND` ({@link execScript}), that every harness runs its shell commands
  * through: claude by a PreToolUse hook that rewrites the command (the
  * workspace's `hook` script, which runs `boundary-hook.ts`), OpenCode by its
- * plugin's `bash` tool, pi by its bash tool's operations. The GitHub CLI's
- * keyring sits behind the bus the boundary hides, so the executor reads its
- * token on the host side and hands it in as `GH_TOKEN`: pushes and `gh` keep
- * working inside.
+ * plugin's `bash` tool, pi by its bash tool's operations, a workflow's
+ * `runCommand`. The GitHub CLI's keyring is the host's, so the executor reads
+ * its token on the host side and hands it in as `GH_TOKEN`: pushes and `gh`
+ * keep working inside. `cawco tools` reaches the hub's tools through the
+ * workspace's tool door (`tool-door.ts`).
  *
- * Every store core's `credentialStores` names is hidden from every command.
- * Linux: each store that is a directory goes under an empty tmpfs as the
- * anchor starts, with what a command needs from beneath it bound back, and
- * each that is a file under an empty read-only file. The kernel drops a
- * file's mask in this namespace once the host renames a new file over it, as
- * a token refresh does; the srt cutover replaces this with a tmpfs over the
- * whole home dir. Before the anchor starts, every file in the clone that
- * shares an inode with another gets its own ({@link ownInodes}), so nothing
- * the workspace writes is a file the host runs. macOS: a Seatbelt deny on
- * each, the login keychain among them, and on every file named as secrets
- * are (`SECRET_FILE_NAME`) outside the workspace's own clone.
+ * sessiond holds the boundary, so an agent restart leaves it — and every
+ * process in it — running, as it leaves the sessions. One started in another
+ * form (another policy, runner, executor or host) is replaced the first time
+ * nothing runs in it ({@link replaceWhenIdle}). A machine that cannot hold a
+ * boundary refuses the work: a work item never runs without one.
  *
- * No command holds a key or reaches a key agent: `~/.ssh` is a store, the
- * executor drops every agent socket's variable (`AGENT_SOCKET_ENV`), Linux's
- * private runtime dir and `/tmp` hold none of the host's sockets, and macOS
- * refuses a connect to one inside a store or to launchd's ssh-agent. A
- * workspace reaches another machine only through CawCo: a check that names
- * one runs in a workspace there (the hub's `runChecks`).
+ * No command holds a key or reaches a key agent: `~/.ssh` is under the
+ * home dir's deny, the executor drops every agent socket's variable
+ * (`AGENT_SOCKET_ENV`), and no host socket is reachable. A workspace reaches
+ * another machine only through CawCo: a check that names one runs in a
+ * workspace there (the hub's `runChecks`).
  */
 import { createHash } from "node:crypto";
 import { accessSync, constants, existsSync } from "node:fs";
@@ -76,20 +63,18 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { homedir } from "node:os";
-import { basename, dirname, join } from "node:path";
+import { dirname, join } from "node:path";
 import type { WorkspaceRef } from "@cawco/core";
 import { WORKSPACE_BOUNDARY_START_TIMEOUT_MS } from "@cawco/core";
 import { binaryRoot } from "@cawco/core/binary-installation";
 import {
   AGENT_SOCKET_ENV,
-  credentialStores,
-  darwinUserDirs,
-  SECRET_FILE_NAME,
   sessionIdentityDir,
   workspaceCacheDir,
   workspaceCacheEnv,
   workspaceCaches,
   workspacePolicyFile,
+  workspaceReadOnlyDir,
   workspaceScratchDir,
   workspaceStateDir,
   workspacesDir,
@@ -99,13 +84,21 @@ import {
   commandLines,
   processLineage,
 } from "@cawco/core/process-identity";
-import { embeddedFile, runtimeDataDir, standalone } from "@cawco/core/runtime";
+import {
+  embeddedFile,
+  materializeExecutable,
+  standalone,
+} from "@cawco/core/runtime";
 import { type ProcSpec, sessiondEndpoint } from "@cawco/core/sessiond";
 import { workspacePolicy } from "@cawco/core/workspace-policy";
+import { rgPath } from "@vscode/ripgrep-universal";
+import { seatbeltProfile, srtSettings } from "./boundary-policy";
+import { excludeSandboxNames } from "./checkout-exclude";
 import { cloneInPlace } from "./clone";
 import { logRelay } from "./log-relay";
 import { procIdFor } from "./proc-id";
 import { ensureSessiond, SessiondClient } from "./sessiond-client";
+import { closeToolDoor, openToolDoor, toolDoorOf } from "./tool-door";
 
 /** A running boundary, as a harness uses it. */
 export interface Boundary {
@@ -113,102 +106,61 @@ export interface Boundary {
   readonly exec: string;
   /** The PreToolUse hook a claude session runs before each tool call ({@link hookScript}). */
   readonly hook: string;
-  /** The anchor (Linux) or runner (macOS) process. */
+  /** The process sessiond holds: the srt host (Linux) or the runner (macOS). */
   readonly pid: number;
   /** The workspace's policy file, which every harness judges its file tools by (`workspace-policy.ts`). */
   readonly policy: string;
-  /** The workspace's scratch dir, its `/tmp`: `~/.cawco/workspaces/<id>/tmp`, on disk and outside the clone. */
+  /** The workspace's scratch dir, its `TMPDIR`: `~/.cawco/workspaces/<id>/tmp`, on disk and outside the clone. */
   readonly scratch: string;
 }
 
 /** What `boundary.json` keeps: the boundary, and what proves it is still the one this machine started. */
 interface Held extends Boundary {
   /**
-   * The form the anchor or runner was started in ({@link formOf}). One of
-   * another form, or of none, is replaced once it is idle ({@link ensure}).
+   * The form it was started in ({@link planOf}). One of another form, or of
+   * none, is replaced once it is idle ({@link ensure}).
    */
   readonly form?: string;
-  /** Linux: the anchor's user namespace, as `/proc/<pid>/ns/user` names it. macOS: `runner`. */
-  readonly identity: string;
+  /**
+   * Linux: every process of the sandbox when its runner was ready (its init,
+   * srt's shell and socat bridges, the runner): anything else in the
+   * sandbox's pid namespace is the workspace's work ({@link busy}).
+   */
+  readonly idle?: readonly number[];
+  /** Linux: the sandbox's init, whose mount table the executor checks before each command. */
+  readonly inner?: number;
   readonly path: string;
+  /** Linux: the outer bwrap; killing it ends the sandbox with everything in it. */
+  readonly sandbox?: number;
 }
 
 const stateDir = workspaceStateDir;
-
-/**
- * A workspace's scratch dir (`workspaceScratchDir`). A command inside the
- * boundary writes in it but cannot remove it: on Linux it is a mountpoint, on
- * macOS Seatbelt refuses its unlink.
- */
 const scratchOf = workspaceScratchDir;
+const roOf = workspaceReadOnlyDir;
 
-/** The disk behind a Linux boundary's private user runtime dir. */
-const runOf = (id: string): string => join(stateDir(id), "run");
-
-const SSH_INCLUDES = "/etc/ssh/ssh_config.d";
-
-/** Where a Linux boundary keeps its copy of the host's ssh includes; "" on a host without them. */
-const sshCopyOf = (id: string): string =>
-  existsSync(SSH_INCLUDES) ? join(stateDir(id), "ssh_config.d") : "";
+/** The runner's FIFO, in the part of the state dir a command reads. */
+const fifoOf = (id: string): string => join(roOf(id), "runner.fifo");
 
 /**
- * A Linux boundary's copy of the host's ssh includes, owned by the user, or
- * "" on a host without them. Rewritten on every start, so it follows the host.
+ * An empty git template: srt denies writes to every `.git/hooks`, so a `git
+ * clone` inside (SwiftPM checkouts, git dependencies) fails copying git's
+ * template hooks unless it has none to copy (REPORT.md §5g).
  */
-const copySshIncludes = async (id: string): Promise<string> => {
-  const names = await readdir(SSH_INCLUDES).catch(
-    (error: NodeJS.ErrnoException) => {
-      if (error.code === "ENOENT") {
-        return;
-      }
-      throw error;
-    }
-  );
-  const copy = sshCopyOf(id);
-  if (!(names && copy)) {
-    return "";
-  }
-  await rm(copy, { recursive: true, force: true });
-  await mkdir(copy, { recursive: true });
-  await Promise.all(
-    names
-      .filter((name) => name.endsWith(".conf"))
-      .map(async (name) =>
-        writeFile(join(copy, name), await readFile(join(SSH_INCLUDES, name)), {
-          mode: 0o644,
-        })
-      )
-  );
-  return copy;
-};
+const gitTemplateOf = (id: string): string => join(roOf(id), "git-template");
 
 const WHITESPACE = /\s+/;
 
-/** The line a boundary prints once a command can join it. */
+/** The line the runner prints once a command can be handed to it. */
 const READY = "cawco-boundary-ready";
-const STOP_TIMEOUT_MS = 2000;
-
-/**
- * The caches a command may write, so installs and builds keep working
- * (`workspaceCaches`): the workspaces' own cache, which the executor points
- * every tool at (`workspaceCacheEnv`), and on macOS the provisioning profile
- * folders. Every host cache (`~/.cache`, `~/.bun`, `~/.npm`,
- * `~/Library/Caches`, Xcode's DerivedData, SwiftPM's) is read-only inside: a
- * host process runs what is in them.
- */
-const cachesOf = workspaceCaches;
-
-/**
- * What a command inside runs from beneath a credential store's directory (the
- * data dir holds both): the `cawco` CLI, and the runtime trees it reads.
- */
-const keptInStores = (): string[] => [binaryRoot(), dirname(runtimeDataDir())];
+/** The line the srt host prints with the outer bwrap's pid (`boundary-host.ts`). */
+const SANDBOX_LINE = "cawco-boundary-sandbox";
+const STOP_TIMEOUT_MS = 5000;
 
 export const shellQuote = (value: string): string =>
   `'${value.replaceAll("'", "'\\''")}'`;
 
 /**
- * The PATH the executor, the hook and the anchor find their own tools on:
+ * The PATH the executor, the hook and the host find their own tools on:
  * the system's dirs alone, which nothing inside a workspace writes. The
  * command itself runs with its caller's PATH.
  */
@@ -239,17 +191,18 @@ const HOOK_LIMIT_S = HOOK_TIMEOUT_S - 10;
 export const BOUNDARY_HOOK_SLOW = "cawco: the boundary hook took longer than";
 
 /**
- * The workspace's PreToolUse hook, run before every tool call. It has
- * `boundary-hook.ts` rewrite a shell call's command to run through the
- * executor and judge every other call's paths by the workspace's policy, and
- * refuses the call every way that can fail. Claude Code blocks a call only
- * on exit 2: any other failure — a missing binary, a crash, a signal — is a
- * "non-blocking error", and the call runs as it was written, outside the
- * boundary (code.claude.com/docs/en/hooks#exit-code-2). So every status but
- * 0 becomes 2. A run that hangs is killed at {@link HOOK_LIMIT_S} and refused
- * with {@link BOUNDARY_HOOK_SLOW}, which refuses that call alone. A run that
- * exits 2 has refused the call and said why. Every other failure says the
- * hook failed. The first line it writes names the hook, so a failure the CLI
+ * The workspace's PreToolUse hook, run before every tool call it is matched
+ * to ({@link HOOKED_TOOLS}). It has `boundary-hook.ts` rewrite a shell call's
+ * command to run through the executor and judge every other call's paths by
+ * the workspace's policy, and refuses the call every way that can fail.
+ * Claude Code blocks a call only on exit 2: any other failure — a missing
+ * binary, a crash, a signal — is a "non-blocking error", and the call runs as
+ * it was written, outside the boundary
+ * (code.claude.com/docs/en/hooks#exit-code-2). So every status but 0 becomes
+ * 2. A run that hangs is killed at {@link HOOK_LIMIT_S} and refused with
+ * {@link BOUNDARY_HOOK_SLOW}, which refuses that call alone. A run that exits
+ * 2 has refused the call and said why. Every other failure says the hook
+ * failed. The first line it writes names the hook, so a failure the CLI
  * reports is known as this one's.
  *
  * It names its runtime by a path no update deletes: the binary install's
@@ -300,38 +253,51 @@ echo "cawco: the boundary hook $0 failed (status $status), so this call did not 
 exit 2
 `;
 
-/** What the hook runs `boundary-hook.ts` with: an environment prefix for the shell, and the command. */
+/** What runs one of the boundary's plain Bun scripts: an environment prefix for the shell, and the command. */
 interface Runner {
   readonly argv: readonly string[];
   readonly env: string;
 }
 
 /**
- * Writes the hook's script into the workspace's state dir, and says how the
- * hook runs it: `BUN_BE_BUN=1 <binary root>/run` in a binary install, which
- * ships the script embedded; bun in a checkout, from its source. Refuses the
- * workspace when the runtime is not there, rather than writing a hook that
- * refuses every command.
+ * The runtime the boundary's plain Bun scripts run on: `BUN_BE_BUN=1 <binary
+ * root>/run` in a binary install, bun in a checkout. Refuses the workspace
+ * when it is not there, rather than writing a hook that refuses every
+ * command.
  */
-const hookRunner = async (id: string): Promise<Runner> => {
+const bunRuntime = async (id: string): Promise<string> => {
   const runtime = standalone
     ? join(binaryRoot(), "run")
     : (Bun.which("bun") ?? "bun");
   await access(runtime, constants.X_OK).catch(() => {
     throw refusal(
       id,
-      `${runtime} is not there, so its boundary hook could not run`
+      `${runtime} is not there, so its boundary scripts could not run`
     );
   });
+  return runtime;
+};
+
+/**
+ * Writes the hook's script into the workspace's state dir, and says how the
+ * hook runs it: on {@link bunRuntime}, from the script the binary install
+ * ships embedded or the checkout's source.
+ */
+const hookRunner = async (id: string): Promise<Runner> => {
+  const runtime = await bunRuntime(id);
   // The hook imports the judge from beside it; OpenCode's plugin imports
   // the same copy.
   await writeScript(
-    id,
+    stateDir(id),
     JUDGE_SCRIPT,
     "boundary/workspace-judge.ts",
     join(import.meta.dir, "..", "..", "core", "src", JUDGE_SCRIPT)
   );
-  const source = await writeScript(id, "boundary-hook.ts", "boundary/hook.ts");
+  const source = await writeScript(
+    stateDir(id),
+    "boundary-hook.ts",
+    "boundary/hook.ts"
+  );
   return { env: standalone ? "BUN_BE_BUN=1 " : "", argv: [runtime, source] };
 };
 
@@ -339,18 +305,17 @@ const hookRunner = async (id: string): Promise<Runner> => {
 export const JUDGE_SCRIPT = "workspace-judge.ts";
 
 /**
- * Writes one of the plain Bun scripts the boundary runs into the workspace's
- * state dir, under its source name: from this checkout (`source`, by default
- * beside this file), or as the binary install embedded it
- * (scripts/build-binary.ts).
+ * Writes one of the plain Bun scripts the boundary runs into `dir`, under its
+ * source name: from this checkout (`source`, by default beside this file),
+ * or as the binary install embedded it (scripts/build-binary.ts).
  */
 const writeScript = async (
-  id: string,
+  dir: string,
   name: string,
   embedded: string,
   source = join(import.meta.dir, name)
 ): Promise<string> => {
-  const path = join(stateDir(id), name);
+  const path = join(dir, name);
   await writeWhole(
     path,
     await Bun.file(standalone ? embeddedFile(embedded) : source).text(),
@@ -360,53 +325,69 @@ const writeScript = async (
 };
 
 /** A macOS workspace's shims, first on the PATH of every command in its boundary: read-only inside. */
-const shimsOf = (id: string): string => join(stateDir(id), "bin");
+const shimsOf = (id: string): string => join(roOf(id), "bin");
 
 /**
  * The tools a macOS boundary runs in its own way, each a shim on its PATH.
  * macOS sandboxes do not nest: the boundary is Seatbelt's sandbox, so a tool
- * that makes one of its own inside it fails.
+ * that makes one of its own inside it fails (srt #67).
  *
  * - `swift build|test|run|package` gets `--disable-sandbox`: SwiftPM's
  *   "Disable using the sandbox when executing subprocesses"
  *   (docs.swift.org/…/packagemanagerdocs/swiftbuild), which also hands the
  *   compiler `-disable-sandbox` for macro servers
- *   (github.com/swiftlang/swift-package-manager/pull/7167). And its
- *   `--cache-path` and `--security-path` in the workspaces' cache: SwiftPM's
- *   own, in `~/Library`, are the host's and read-only here.
+ *   (github.com/swiftlang/swift-package-manager/pull/7167). Its
+ *   `--cache-path` and `--security-path` go in the workspaces' cache
+ *   (SwiftPM's own, in `~/Library`, are the host's and read-only here), and
+ *   so does its build dir, `--scratch-path`, one per package dir, unless the
+ *   command names its own (REPORT.md §5m).
  * - `xcodebuild` gets the IDE defaults that turn off its package manifest and
  *   plugin sandboxes, as nixpkgs builds Xcode projects under its own sandbox,
  *   and `-disable-sandbox` in OTHER_SWIFT_FLAGS for macro plugin servers. Its
  *   DerivedData goes in the workspaces' cache through the
- *   `IDECustomDerivedDataLocation` default, which every action takes; its
+ *   `IDECustomDerivedDataLocation` default, which every action takes, where
+ *   `-derivedDataPath` is refused by some (`-showsdks`, exit 64); its
  *   package cache through `-packageCachePath`, which only a build or a
- *   package resolution takes (`-showsdks` refuses it, exit 64).
+ *   package resolution takes.
  * - `log`, which Seatbelt refuses outright, asks the agent to run `log show`
  *   or `log stream` outside the boundary (`log-relay.ts`).
  *
  * Each finds the real tool with `xcrun --find`, so it follows the selected
  * Xcode. Nothing is set globally: the owner's own Xcode is untouched.
  */
-const writeShims = async (id: string, runner: Runner): Promise<void> => {
+const writeShims = async (id: string, runtime: string): Promise<void> => {
   const bin = shimsOf(id);
   await mkdir(bin, { recursive: true });
-  await writeScript(id, "boundary-log-protocol.ts", "boundary/log-protocol.ts");
-  const client = await writeScript(id, "boundary-log.ts", "boundary/log.ts");
+  await writeScript(
+    roOf(id),
+    "boundary-log-protocol.ts",
+    "boundary/log-protocol.ts"
+  );
+  const client = await writeScript(
+    roOf(id),
+    "boundary-log.ts",
+    "boundary/log.ts"
+  );
   const { port, token } = logRelay();
   const cache = workspaceCacheDir();
   const swiftpm = shellQuote(join(cache, "swiftpm"));
   await Promise.all([
     writeWhole(
       join(bin, "swift"),
-      `#!/bin/sh
+      `#!/bin/bash
 # CawCo workspace ${id}: swift, with SwiftPM's own sandbox off inside the boundary's
-# and its caches in the workspaces' cache.
+# and its caches and build dir in the workspaces' cache.
 swift=$(/usr/bin/xcrun --find swift) || exit 1
 case "\${1:-}" in
   build | test | run | package)
     command=$1
     shift
-    exec "$swift" "$command" --disable-sandbox --cache-path ${swiftpm}/cache --security-path ${swiftpm}/security "$@"
+    scratch=()
+    case " $* " in
+      *" --scratch-path"* | *" --build-path"*) ;;
+      *) scratch=(--scratch-path ${swiftpm}/build/"$(/sbin/md5 -q -s "$PWD")") ;;
+    esac
+    exec "$swift" "$command" --disable-sandbox --cache-path ${swiftpm}/cache --security-path ${swiftpm}/security "\${scratch[@]}" "$@"
     ;;
 esac
 exec "$swift" "$@"
@@ -450,7 +431,7 @@ exec "$xcodebuild" -IDEPackageSupportDisableManifestSandbox=YES -IDEPackageSuppo
       join(bin, "log"),
       `#!/bin/sh
 # CawCo workspace ${id}: log show and log stream, run by the agent outside the boundary.
-${runner.env ? `export ${runner.env.trim()}\n` : ""}exec ${[runner.argv[0] as string, client, String(port), token].map(shellQuote).join(" ")} "$@"
+${standalone ? "export BUN_BE_BUN=1\n" : ""}exec ${[runtime, client, String(port), token].map(shellQuote).join(" ")} "$@"
 `,
       0o755
     ),
@@ -470,14 +451,12 @@ const writeWhole = async (
 
 /**
  * Writes the workspace's hook for `held`, its executor in this build's form
- * for the anchor or runner `held` names, and the record of them. An executor
- * only hands commands in, so it is current from the next command on, whatever
- * form the anchor or runner is: a boundary started by an earlier build takes
- * this build's PATH and cache environment from the next command on. On macOS
- * also its shims. The workspace's policy is written again too, as this
- * machine stands now (`workspacePolicy`): every harness reads it at each
- * file tool call, so a store, toolchain or account added since is in it from
- * the next call on.
+ * for the boundary `held` names, and the record of them, and serves its tool
+ * door. An executor only hands commands in, so it is current from the next
+ * command on, whatever form the boundary is. On macOS also its shims. The
+ * workspace's policy is written again too, as this machine stands now
+ * (`workspacePolicy`): every harness reads it at each file tool call, so a
+ * store, toolchain or account added since is in it from the next call on.
  */
 const armHook = async (
   id: string,
@@ -496,21 +475,11 @@ const armHook = async (
     hookScript(id, runner, held.exec, held.scratch, policy),
     0o755
   );
-  const gh = await hostGh();
   if (process.platform === "darwin") {
-    await writeShims(id, runner);
-    await writeWhole(
-      held.exec,
-      darwinExec(id, held.pid, fifoOf(id), held.scratch, shimsOf(id), gh),
-      0o755
-    );
-  } else {
-    await writeWhole(
-      held.exec,
-      linuxExec(id, held.pid, held.identity, gh),
-      0o755
-    );
+    await writeShims(id, runner.argv[0] as string);
   }
+  await writeWhole(held.exec, execScript(id, held, await hostGh()), 0o755);
+  await openToolDoor(id);
   const armed: Held = { ...held, hook, policy };
   await writeWhole(
     join(stateDir(id), "boundary.json"),
@@ -522,12 +491,11 @@ const armHook = async (
 
 /**
  * Writes every held workspace's hook and its script again, in this build's
- * form. The agent does this as it starts, before it adopts or launches a
- * session: a running CLI reads its workspace's hook on every tool call, so
- * one an earlier build wrote must not outlive that build's runtime. An anchor
- * or runner of an older form is replaced once it is idle
- * ({@link replaceWhenIdle}): the mounts or profile that hide the credential
- * stores are the anchor's or runner's own.
+ * form, and serves its tool door. The agent does this as it starts, before it
+ * adopts or launches a session: a running CLI reads its workspace's hook on
+ * every tool call, so one an earlier build wrote must not outlive that
+ * build's runtime. A boundary of an older form is replaced once it is idle
+ * ({@link replaceWhenIdle}).
  */
 export const rearmHooks = async (): Promise<void> => {
   const ids = await readdir(workspacesDir()).catch(
@@ -549,7 +517,7 @@ export const rearmHooks = async (): Promise<void> => {
         // A gate an agent left as it died names no process this one waits for.
         await rm(gateOf(id), { force: true });
         const ref = { id, path: held.path };
-        if (held.form !== (await formOf(ref))) {
+        if (held.form !== (await planOf(ref)).form) {
           replaceWhenIdle(ref);
         }
       }
@@ -563,25 +531,32 @@ export const rearmHooks = async (): Promise<void> => {
 };
 
 /**
- * The PreToolUse matcher the boundary hook runs on: every tool. Claude Code
- * runs its file tools (Read, Write, Edit, Glob, Grep, NotebookEdit) and MCP
- * calls in the CLI, on the host, so each is judged by the workspace's policy;
- * shell tools are rewritten through the executor. A hook's deny holds in
- * every permission mode ("a hook deny applies even in bypassPermissions
- * mode", code.claude.com/docs/en/agent-sdk/permissions).
+ * The tools the boundary hook runs on (a JavaScript regular expression,
+ * code.claude.com/docs/en/hooks#matcher-patterns: "Contains any other
+ * character | JavaScript regular expression, unanchored"). The shell tools,
+ * whose command it rewrites through the executor, and PowerShell, which it
+ * refuses; and every tool that names a local path, which it judges by the
+ * workspace's policy: the file tools, LSP, Artifact and SendUserFile (which
+ * send a file out), EnterWorktree, and every MCP tool, whose arguments the
+ * judge reads for paths. Claude Code runs those in the CLI, on the host. No
+ * other tool takes a path (code.claude.com/docs/en/tools-reference), and the
+ * hook's sh and bun run on none of them. A hook's deny holds in every
+ * permission mode ("a hook deny applies even in bypassPermissions mode",
+ * code.claude.com/docs/en/agent-sdk/permissions).
  */
-const EVERY_TOOL = "*";
+const HOOKED_TOOLS =
+  "^(Bash|Monitor|PowerShell|Read|Write|Edit|MultiEdit|NotebookEdit|NotebookRead|Glob|Grep|LS|LSP|Artifact|SendUserFile|EnterWorktree|mcp__.*)$";
 
 /**
  * The `query()` options that bound a claude session, none for a session with
- * no boundary: flag settings with a PreToolUse hook on every tool
- * ({@link EVERY_TOOL}), and the hook events in the stream, which is how the
- * session hears that the hook failed. The CLI runs the hook itself, so it
- * holds while the agent that started the session restarts; a local settings
- * file cannot turn it off, because flag settings outrank it. `|| exit 2`
- * refuses the call when the hook script itself is gone (the shell's 127
- * would let it through). The adapter merges these settings with the ones
- * every session carries into the CLI's one `--settings`.
+ * no boundary: flag settings with a PreToolUse hook on {@link HOOKED_TOOLS},
+ * and the hook events in the stream, which is how the session hears that the
+ * hook failed. The CLI runs the hook itself, so it holds while the agent that
+ * started the session restarts; a local settings file cannot turn it off,
+ * because flag settings outrank it. `|| exit 2` refuses the call when the
+ * hook script itself is gone (the shell's 127 would let it through). The
+ * adapter merges these settings with the ones every session carries into the
+ * CLI's one `--settings`.
  */
 export const claudeBoundaryOptions = (boundary: Boundary | undefined) =>
   boundary
@@ -592,7 +567,7 @@ export const claudeBoundaryOptions = (boundary: Boundary | undefined) =>
           hooks: {
             PreToolUse: [
               {
-                matcher: EVERY_TOOL,
+                matcher: HOOKED_TOOLS,
                 hooks: [
                   {
                     type: "command" as const,
@@ -607,13 +582,20 @@ export const claudeBoundaryOptions = (boundary: Boundary | undefined) =>
       }
     : {};
 
+/** The matchers the hook has been launched on that judge the file tools: every tool, as builds before this one wrote it, and {@link HOOKED_TOOLS}. */
+const GATING_MATCHERS = new Set(["*", HOOKED_TOOLS]);
+
+const escapeRegExp = (text: string): string =>
+  text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 /**
  * The boundary hook's entry in the `--settings` JSON {@link claudeBoundaryOptions}
- * launches a CLI with: its matcher — {@link EVERY_TOOL}, or `Bash|Monitor` as
- * every build before this one wrote it — and its command, still JSON-quoted.
+ * launches a CLI with: its matcher — {@link HOOKED_TOOLS}, `*` or `Bash|Monitor`
+ * as earlier builds wrote it — and its command, still JSON-quoted.
  */
-const LAUNCHED_HOOK =
-  /"matcher":"(\*|Bash\|Monitor)","hooks":\[\{"type":"command","command":("(?:[^"\\]|\\.)*")/;
+const LAUNCHED_HOOK = new RegExp(
+  `"matcher":"(${escapeRegExp(HOOKED_TOOLS)}|\\*|Bash\\|Monitor)","hooks":\\[\\{"type":"command","command":("(?:[^"\\\\]|\\\\.)*")`
+);
 const HOOK_COMMAND = /^'([^']+\/hook)' \|\| exit 2$/;
 /** One word of a command {@link shellQuote} built: `'…'`, with `'\''` for a quote. */
 const QUOTED_WORD = /'((?:[^']|'\\'')*)'/g;
@@ -629,9 +611,9 @@ export interface LaunchedHook {
    */
   readonly events: boolean;
   /**
-   * Whether the hook runs on every tool ({@link EVERY_TOOL}). One launched
-   * on `Bash|Monitor` alone leaves the CLI's file tools and MCP calls
-   * unjudged: such a CLI is relaunched onto the hook that judges them
+   * Whether the hook judges the CLI's file tools and MCP calls
+   * ({@link GATING_MATCHERS}). One launched on `Bash|Monitor` alone leaves
+   * them unjudged: such a CLI is relaunched onto the hook that judges them
    * ({@link hookFailsOpen}).
    */
   readonly gatesFiles: boolean;
@@ -665,7 +647,7 @@ export const launchedHook = async (
     return;
   }
   const events = HOOK_EVENTS_FLAG.test(commandLine);
-  const gatesFiles = matcher === EVERY_TOOL;
+  const gatesFiles = GATING_MATCHERS.has(matcher as string);
   const command = JSON.parse(quoted) as string;
   const hook = HOOK_COMMAND.exec(command)?.[1];
   if (hook) {
@@ -753,8 +735,34 @@ const sessiond = async (): Promise<SessiondClient> => {
 const refusal = (id: string, why: string): Error =>
   new Error(`workspace ${id} cannot run a delegate on this machine: ${why}`);
 
-const userNamespaceOf = (pid: number): Promise<string | undefined> =>
-  readlink(`/proc/${pid}/ns/user`).catch(() => undefined);
+/**
+ * What a Linux machine runs a boundary with, each by the package that ships
+ * it: srt's own dependencies (its README, "Platform-Specific Dependencies").
+ * Its ripgrep is the one this build ships ({@link ripgrep}).
+ */
+const HOST_TOOLS = [
+  ["bwrap", "bubblewrap"],
+  ["socat", "socat"],
+] as const;
+
+/** The host tools this machine lacks, each named with its package; none off Linux. */
+const missingHostTools = (): string[] =>
+  process.platform === "linux"
+    ? HOST_TOOLS.filter(
+        ([tool]) =>
+          !SYSTEM_PATH.split(":").some((dir) => existsSync(join(dir, tool)))
+      ).map(([tool, pkg]) => `${tool} (install the ${pkg} package)`)
+    : [];
+
+/** Says, as the agent starts, what this machine needs before it can hold a workspace boundary. */
+export const checkBoundaryHost = (): void => {
+  const missing = missingHostTools();
+  if (missing.length > 0) {
+    console.warn(
+      `[workspace] this machine refuses workspace work until it has ${missing.join(" and ")}`
+    );
+  }
+};
 
 const readHeld = async (id: string): Promise<Held | undefined> => {
   const text = await readFile(
@@ -782,12 +790,7 @@ const running = async (
   const proc = (await client.list()).procs.find(
     (candidate) => candidate.procId === procIdFor("boundary", id)
   );
-  if (!proc?.alive) {
-    return false;
-  }
-  return process.platform === "linux"
-    ? (await userNamespaceOf(held.pid)) === held.identity
-    : proc.pid === held.pid;
+  return Boolean(proc?.alive) && proc?.pid === held.pid;
 };
 
 const starting = new Map<string, Promise<Boundary>>();
@@ -814,6 +817,10 @@ const ensure = async (ref: WorkspaceRef): Promise<Boundary> => {
       `workspace boundaries run on Linux and macOS, and this machine runs ${process.platform}`
     );
   }
+  const missing = missingHostTools();
+  if (missing.length > 0) {
+    throw refusal(ref.id, `this machine has no ${missing.join(" and no ")}`);
+  }
   const git = await stat(join(ref.path, ".git")).catch(() => undefined);
   if (!git) {
     throw refusal(ref.id, `${ref.path} is not a git checkout`);
@@ -832,7 +839,7 @@ const ensure = async (ref: WorkspaceRef): Promise<Boundary> => {
   // Written again each time: one an earlier agent started may have no hook
   // yet, or one that reaches cawco another way.
   const armed = await armHook(ref.id, held);
-  if (held.form === (await formOf(ref))) {
+  if (held.form === (await planOf(ref)).form) {
     forgetStale(ref.id);
     return armed;
   }
@@ -846,16 +853,186 @@ const ensure = async (ref: WorkspaceRef): Promise<Boundary> => {
 };
 
 /**
- * Where the agent marks that it is replacing a workspace's anchor or runner:
- * the agent's pid, in the state dir, which nothing inside the boundary
- * writes. The executor waits while it names a live process, then runs
- * through the new one ({@link linuxExec}, {@link darwinExec}).
+ * Where the agent marks that it is replacing a workspace's boundary: the
+ * agent's pid, in the state dir, which nothing inside the boundary writes.
+ * The executor waits while it names a live process, then runs through the
+ * new one ({@link execScript}).
  */
 const gateOf = (id: string): string => join(stateDir(id), "replacing");
 
-/** The form a boundary of this workspace takes in this build: a running one of another form is replaced once it is idle. */
-const formOf = async (ref: WorkspaceRef): Promise<string> =>
-  process.platform === "darwin" ? (await darwinForm(ref)).form : linuxForm(ref);
+/**
+ * The runner: reads request directories off its FIFO and runs each in its
+ * own process group, inside the sandbox. A request carries the command, the
+ * caller's directory and environment; the runner leaves the exit status and
+ * the directory the command ended in beside them. The FIFO is opened
+ * read-only (it lies where a command cannot write) and reopened after each
+ * writer closes it. Linux: srt's own plumbing for the sandbox (its proxy, the
+ * proxy credential git presents) is read once as the runner starts and set
+ * again over each request's environment, which the executor writes on the
+ * host, so no caller's environment can drop it.
+ */
+const RUNNER = `fifo=$1
+CAWCO_SANDBOX_ENV=$(export -p | grep -E '^declare -x (HTTPS?_PROXY|https?_proxy|ALL_PROXY|all_proxy|NO_PROXY|no_proxy|GIT_SSH_COMMAND|SANDBOX_RUNTIME|JAVA_TOOL_OPTIONS|GIT_CONFIG_[A-Z0-9_]+|DOCKER_HTTPS?_PROXY|CLOUDSDK_PROXY_[A-Z_]+|GRPC_PROXY|grpc_proxy|RSYNC_PROXY|FTP_PROXY|ftp_proxy|CLAUDE_CODE_HOST_[A-Z_]+)=')
+export CAWCO_SANDBOX_ENV
+echo ${READY}
+while :; do
+  while IFS= read -r req; do
+    (
+      /usr/bin/perl -e 'setpgrp(0, 0); exec @ARGV' /bin/bash --norc --noprofile -c '. "$1/env" >/dev/null 2>&1; eval "$CAWCO_SANDBOX_ENV"; cd "$(cat "$1/cwd")" || exit 1; eval "$(cat "$1/cmd")"; status=$?; pwd -P > "$1/cwd-out"; exit $status' cawco "$req" > "$req/out" 2> "$req/err" < /dev/null &
+      echo $! > "$req/pid"
+      wait $!
+      echo $? > "$req/status"
+    ) &
+  done < "$fifo"
+done`;
+
+/**
+ * Where launchd keeps the ssh-agent socket it starts for a login
+ * (`SSH_AUTH_SOCK` on macOS: `/private/tmp/com.apple.launchd.<id>/Listeners`).
+ * A workspace writes nothing there, so every socket in it is the host's.
+ */
+const LAUNCHD_SOCKETS = "/private/tmp";
+
+/** A Linux workspace's srt temp dir, short (a socket path is capped at 108 bytes, srt #213) and its own (REPORT.md §5o). */
+const srtTmpOf = (id: string): string => {
+  const runtime = process.env.XDG_RUNTIME_DIR;
+  if (!runtime) {
+    throw refusal(
+      id,
+      "the agent has no XDG_RUNTIME_DIR, where its sandbox's proxy socket goes"
+    );
+  }
+  return join(
+    runtime,
+    "cawco-srt",
+    createHash("sha256").update(id).digest("hex").slice(0, 12)
+  );
+};
+
+/** The ripgrep srt scans a clone with: the one this build ships. */
+const ripgrep = (): string =>
+  standalone ? materializeExecutable("srt/rg") : rgPath;
+
+/** The srt host script, as this build runs it: its embedded bundle, or the checkout's source. */
+const hostScript = (): string =>
+  standalone
+    ? materializeExecutable("srt/host.js")
+    : join(import.meta.dir, "boundary-host.ts");
+
+/** What the host script holds, for the form: a change to it is a change of form. */
+let hostText: Promise<string> | undefined;
+
+/** How a workspace's boundary starts in this build, and the form that names it. */
+interface Plan {
+  /** Written into the state dir before the boundary starts. */
+  readonly files: readonly (readonly [string, string])[];
+  /**
+   * A hash of what the boundary runs under: its srt settings or Seatbelt
+   * profile (so the policy as this machine stands now), the runner, the
+   * executor and, on Linux, the host script. A boundary started in another
+   * form is replaced once it is idle (REPORT.md §7.7).
+   */
+  readonly form: string;
+  readonly spec: ProcSpec;
+}
+
+/** The {@link Plan} of workspace `ref` on this machine now. */
+const planOf = async (ref: WorkspaceRef): Promise<Plan> => {
+  const { id } = ref;
+  const policy = await workspacePolicy(ref);
+  const runtime = await bunRuntime(id);
+  const exec = execScript(
+    id,
+    {
+      exec: join(stateDir(id), "exec"),
+      path: ref.path,
+      pid: 0,
+      scratch: scratchOf(id),
+    },
+    await hostGh()
+  );
+  const hash = createHash("sha256");
+  if (process.platform === "darwin") {
+    const profile = seatbeltProfile(policy, {
+      door: toolDoorOf(id),
+      hostSockets: await Promise.all(
+        [
+          dirname(workspacesDir()),
+          dirname(sessiondPath()),
+          LAUNCHD_SOCKETS,
+        ].map((path) => realpath(path).catch(() => path))
+      ),
+    });
+    const file = join(stateDir(id), "boundary.sb");
+    return {
+      files: [[file, profile]],
+      form: hash
+        .update(profile)
+        .update("\0")
+        .update(RUNNER)
+        .update("\0")
+        .update(exec)
+        .digest("hex")
+        .slice(0, 16),
+      spec: {
+        command: "/usr/bin/sandbox-exec",
+        args: [
+          "-f",
+          file,
+          "/bin/bash",
+          "--norc",
+          "--noprofile",
+          "-c",
+          RUNNER,
+          "cawco-boundary",
+          fifoOf(id),
+        ],
+        // The marker is how an archive finds every process the workspace started.
+        env: { CAWCO_WORKSPACE: id, TMPDIR: policy.scratch },
+      },
+    };
+  }
+  const srtTmp = srtTmpOf(id);
+  const settings = `${JSON.stringify(srtSettings(policy, { rg: ripgrep(), srtTmp }), null, 2)}\n`;
+  const host = hostScript();
+  hostText ??= Bun.file(host).text();
+  const files = {
+    settings: join(stateDir(id), "srt.json"),
+    runner: join(stateDir(id), "runner.sh"),
+  };
+  return {
+    files: [
+      [files.settings, settings],
+      [files.runner, RUNNER],
+    ],
+    form: hash
+      .update(settings)
+      .update("\0")
+      .update(RUNNER)
+      .update("\0")
+      .update(exec)
+      .update("\0")
+      .update(await hostText)
+      .digest("hex")
+      .slice(0, 16),
+    spec: {
+      command: runtime,
+      args: [host, files.settings, files.runner, fifoOf(id), policy.clone],
+      // The host starts here, never in the clone: Bun reads bunfig.toml and
+      // .env from where it starts (boundary-host.ts).
+      cwd: stateDir(id),
+      env: {
+        ...(standalone ? { BUN_BE_BUN: "1" } : {}),
+        // srt's own temp dir, for its sockets; the commands' TMPDIR is the
+        // scratch dir, which srt hands in from CLAUDE_CODE_TMPDIR.
+        TMPDIR: srtTmp,
+        CLAUDE_CODE_TMPDIR: policy.scratch,
+        CAWCO_WORKSPACE: id,
+        PATH: SYSTEM_PATH,
+      },
+    },
+  };
+};
 
 /** One process, as {@link busy} reads it. */
 interface Seen {
@@ -863,7 +1040,6 @@ interface Seen {
   readonly pid: number;
   /** Linux: its pid namespace, as `/proc/<pid>/ns/pid` names it. */
   readonly pidNs?: string;
-  readonly ppid: number;
 }
 
 /** Every process on the machine, read once for every workspace {@link busy} looks at. */
@@ -877,7 +1053,6 @@ const snapshot = async (): Promise<Seen[]> => {
   return await Promise.all(
     rows.map(async (row) => ({
       pid: row.pid,
-      ppid: row.ppid,
       command: commands.get(row.pid) ?? "",
       pidNs: linux
         ? await readlink(`/proc/${row.pid}/ns/pid`).catch(() => undefined)
@@ -886,38 +1061,43 @@ const snapshot = async (): Promise<Seen[]> => {
   );
 };
 
+/** Linux: the processes in the pid namespace of `inner`, the sandbox's init. */
+const inSandbox = (seen: Seen[], inner: number | undefined): Seen[] => {
+  const space = seen.find((one) => one.pid === inner)?.pidNs;
+  return space === undefined ? [] : seen.filter((one) => one.pidNs === space);
+};
+
 /**
  * Whether anything bounded is running in a workspace: an executor on its way
- * in (its own path is on its command line), of any form, or a command or a
- * process it left — on Linux anything in the anchor's pid namespace but the
- * anchor's own loop and its `sleep`, on macOS anything carrying the runner's
- * marker.
+ * in (its own path is on its command line), or a command or a process it
+ * left — on Linux anything in the sandbox's pid namespace that was not there
+ * when its runner was ready, on macOS anything carrying the runner's marker.
  */
 const busy = (seen: Seen[], id: string, held: Held): boolean => {
   const exec = join(stateDir(id), "exec");
-  const linux = process.platform === "linux";
-  const space = linux
-    ? seen.find((one) => one.pid === held.pid)?.pidNs
-    : undefined;
+  if (
+    seen.some((one) => one.pid !== process.pid && one.command.includes(exec))
+  ) {
+    return true;
+  }
+  if (process.platform === "linux") {
+    const idle = new Set(held.idle ?? []);
+    return inSandbox(seen, held.inner).some((one) => !idle.has(one.pid));
+  }
   return seen.some(
     (one) =>
       one.pid !== held.pid &&
       one.pid !== process.pid &&
-      (one.command.includes(exec) ||
-        (linux
-          ? space !== undefined &&
-            one.pidNs === space &&
-            !(one.ppid === held.pid && one.command.startsWith("sleep "))
-          : one.command.includes(`CAWCO_WORKSPACE=${id}`)))
+      one.command.includes(`CAWCO_WORKSPACE=${id}`)
   );
 };
 
 /**
- * Replaces a workspace's anchor or runner with one of this build's form,
- * when nothing bounded is running in it; nothing when something is. The gate
- * goes up before the look, and an executor checks the gate after it is
- * already a process: so either the look sees the executor, or the executor
- * sees the gate and waits for the new one. No command is cut off.
+ * Replaces a workspace's boundary with one of this build's form, when nothing
+ * bounded is running in it; nothing when something is. The gate goes up
+ * before the look, and an executor checks the gate after it is already a
+ * process: so either the look sees the executor, or the executor sees the
+ * gate and waits for the new one. No command is cut off.
  */
 const replaceIfIdle = async (
   client: SessiondClient,
@@ -930,7 +1110,6 @@ const replaceIfIdle = async (
     if (busy(await snapshot(), ref.id, held)) {
       return;
     }
-    await client.signal(procIdFor("boundary", ref.id), "SIGKILL");
     const replaced = await start(client, ref);
     console.info(
       `[workspace] ${ref.id}: its boundary ${held.pid} (form ${held.form ?? "none"}) was idle and is replaced by ${replaced.pid}`
@@ -1011,377 +1190,8 @@ const forgetStale = (id: string): void => {
   }
 };
 
-/**
- * The anchor's setup, run as root of a fresh user namespace (so the mounts
- * are allowed) with its own pid and mount namespaces. Everything goes
- * read-only — the kernel's `mount_setattr(AT_RECURSIVE)`, called directly:
- * util-linux's `ro=recursive` is that call only where libmount was built with
- * the new mount API (2.42 here), and elsewhere (2.41.3, Ubuntu's) it exits 0
- * having remounted `/` alone, every mount under it still writable — so the
- * anchor checks that none is left writable, and refuses otherwise. The
- * writable paths come back, the scratch dir becomes `/tmp`
- * (and stays writable at its own path, where the executor's `--cwd-out`
- * files land; a mountpoint both places, so nothing inside can remove it),
- * the user runtime dir becomes a private one, sessiond's directory an empty
- * one, `/dev/shm` a private tmpfs (Chromium needs it). The scratch and run
- * dirs are bound read-write onto themselves first and `/tmp` and the runtime
- * dir are binds of those, so they come up read-write: a remount aimed at
- * `/tmp` itself is refused, because libmount reads the flags of the host
- * mount beneath it and asks the kernel to change a locked atime flag. The
- * host's ssh includes are replaced by the user's own copy of them, because
- * host root shows up as nobody here and ssh refuses an included file no
- * longer owned by root or the user. Each credential store ({@link linuxSpec})
- * goes under an empty read-only tmpfs when it is a directory — so a file the
- * host adds there later is hidden too — and under an empty read-only file
- * when it is a file. What a command needs from beneath a store (the `cawco`
- * CLI in the data dir) is held aside first and bound back into the tmpfs at
- * its own path. Then a nested
- * user namespace maps the user back to their own uid — tools see who they
- * always see, not root — and its own mount namespace locks every mount above.
- * The anchor is that namespace's PID 1: a bash loop, which reaps the orphans
- * a command leaves, printing {@link READY} once a command can join it.
- */
-const ANCHOR = `exec 2>&1
-set -eu
-PATH=${SYSTEM_PATH}
-export PATH
-ws=$1 scratch=$2 run=$3 uid=$4 gid=$5 runtime=$6 hidden=$7 ssh=$8 stores=$9 keeps=\${10}
-shift 10
-# mount_setattr (syscall 442 on x86_64 and arm64): AT_FDCWD "/", AT_RECURSIVE, attr_set MOUNT_ATTR_RDONLY
-perl -e 'my ($path, $attr) = ("/", pack("Q4", 1, 0, 0, 0)); syscall(442, -100, $path, 0x8000, $attr, 32) == 0 or die "mount_setattr: $!"'
-writable=$(awk '$6 !~ /(^|,)ro(,|$)/ { print $5 }' /proc/self/mountinfo)
-if [ -n "$writable" ]; then echo "these mounts stayed writable: $writable"; exit 1; fi
-mount -o remount,rw /proc
-for path in "$ws" "$scratch" "$run" "$@"; do
-  mount --bind "$path" "$path"
-  mount -o remount,bind,rw "$path"
-done
-mount --bind "$scratch" /tmp
-if [ -n "$runtime" ] && [ -d "$runtime" ]; then mount --bind "$run" "$runtime"; fi
-if [ -n "$hidden" ] && [ -d "$hidden" ]; then mount -t tmpfs -o size=4k,mode=0555 hidden "$hidden"; fi
-mask=$run/.auth-mask keep=$run/.keep
-rm -rf "$keep"
-mkdir -p "$mask" "$keep"
-mount -t tmpfs -o size=4k,mode=0700,uid=0,gid=0 auth-mask "$mask"
-touch "$mask/empty"
-mount -o remount,bind,ro "$mask"
-kept=()
-while IFS= read -r path; do
-  if [ -z "$path" ] || ! [ -e "$path" ]; then continue; fi
-  held=$keep/\${#kept[@]}
-  if [ -d "$path" ]; then mkdir "$held"; else touch "$held"; fi
-  mount --rbind "$path" "$held"
-  kept+=("$path")
-done <<< "$keeps"
-masked=()
-while IFS= read -r path; do
-  if [ -z "$path" ]; then continue; fi
-  if [ -d "$path" ]; then
-    mount -t tmpfs -o size=4k,mode=0555 hidden "$path"
-    masked+=("$path")
-  elif [ -f "$path" ]; then
-    mount --bind "$mask/empty" "$path"
-    mount -o remount,bind,ro "$path"
-  fi
-done <<< "$stores"
-for i in "\${!kept[@]}"; do
-  path=\${kept[$i]}
-  if ! [ -e "$path" ]; then
-    mkdir -p "$(dirname "$path")"
-    if [ -d "$keep/$i" ]; then mkdir "$path"; else touch "$path"; fi
-    mount --rbind "$keep/$i" "$path"
-  fi
-  umount -R "$keep/$i"
-done
-for path in "\${masked[@]}"; do mount -o remount,bind,ro "$path"; done
-if [ -n "$ssh" ]; then mount --bind "$ssh" ${SSH_INCLUDES}; fi
-mount -t tmpfs -o mode=1777,nosuid,nodev shm /dev/shm
-exec unshare --user --mount --map-user="$uid" --map-group="$gid" bash -c 'echo ${READY}; while :; do sleep 86400 & wait; done'`;
-
-/** A directory to hide, unless the workspace or a cache lives under it. */
-const hideable = (dir: string, kept: string[]): string =>
-  kept.some((path) => path === dir || path.startsWith(`${dir}/`)) ? "" : dir;
-
-/**
- * A Linux anchor's spec: what it binds writable, and each credential store
- * there is now, by real path, with what a command needs from beneath one —
- * the workspace, its caches, the `cawco` CLI — bound back in ({@link ANCHOR}).
- */
-const linuxSpec = async (
-  ref: WorkspaceRef,
-  scratch: string,
-  run: string,
-  ssh: string,
-  caches: string[]
-): Promise<ProcSpec> => {
-  const runtime = process.env.XDG_RUNTIME_DIR ?? "";
-  // The repository the clone reads its objects from stays visible too.
-  const alternates = await readFile(
-    join(ref.path, ".git", "objects", "info", "alternates"),
-    "utf8"
-  ).catch(() => "");
-  const kept = [
-    ref.path,
-    ...caches,
-    ...alternates.split("\n").filter((line) => line.startsWith("/")),
-  ];
-  const reals = await Promise.all(
-    credentialStores().map((path) => realpath(path).catch(() => undefined))
-  );
-  const stores = [
-    ...new Set(reals.filter((real): real is string => Boolean(real))),
-  ];
-  const needed = [
-    ...kept,
-    ...(await Promise.all(
-      keptInStores().map((path) => realpath(path).catch(() => path))
-    )),
-  ];
-  const keeps = needed.filter((path) =>
-    stores.some((store) => path === store || path.startsWith(`${store}/`))
-  );
-  return {
-    command: "/usr/bin/unshare",
-    args: [
-      "--user",
-      "--map-root-user",
-      "--pid",
-      "--mount",
-      "--fork",
-      "--mount-proc",
-      "--propagation",
-      "private",
-      // The unshare process going (sessiond draining it) takes the anchor, and
-      // with it every process in the workspace.
-      "--kill-child=SIGKILL",
-      "bash",
-      "-c",
-      ANCHOR,
-      "cawco-boundary",
-      ref.path,
-      scratch,
-      run,
-      String(process.getuid?.() ?? 0),
-      String(process.getgid?.() ?? 0),
-      hideable(runtime, kept),
-      hideable(dirname(sessiondPath()), kept),
-      ssh,
-      stores.join("\n"),
-      keeps.join("\n"),
-      ...caches,
-    ],
-  };
-};
-
-/**
- * The form a Linux anchor of this workspace takes in this build: a hash of
- * what it runs and every argument it is given, the credential stores among
- * them. A store that appears, or a change to {@link ANCHOR}, reaches every
- * running anchor once it is idle.
- */
-const linuxForm = async (ref: WorkspaceRef): Promise<string> =>
-  specForm(
-    await linuxSpec(
-      ref,
-      scratchOf(ref.id),
-      runOf(ref.id),
-      sshCopyOf(ref.id),
-      cachesOf()
-    )
-  );
-
-const specForm = (spec: ProcSpec): string =>
-  createHash("sha256")
-    .update([spec.command, ...spec.args].join("\0"))
-    .digest("hex")
-    .slice(0, 16);
-
-/**
- * The macOS runner: reads request directories off its FIFO and runs each in
- * its own process group, inside this sandbox. A request carries the command,
- * the caller's directory and environment; the runner leaves the exit status
- * and the directory the command ended in beside them. The FIFO is opened
- * read-only (a write would be refused outside the workspace) and reopened
- * after each writer closes it.
- */
-const RUNNER = `fifo=$1
-echo ${READY}
-while :; do
-  while IFS= read -r req; do
-    (
-      /usr/bin/perl -e 'setpgrp(0, 0); exec @ARGV' /bin/bash --norc --noprofile -c '. "$1/env" >/dev/null 2>&1; cd "$(cat "$1/cwd")" || exit 1; eval "$(cat "$1/cmd")"; status=$?; pwd -P > "$1/cwd-out"; exit $status' cawco "$req" > "$req/out" 2> "$req/err" < /dev/null &
-      echo $! > "$req/pid"
-      wait $!
-      echo $? > "$req/status"
-    ) &
-  done < "$fifo"
-done`;
-
-/**
- * Where launchd keeps the ssh-agent socket it starts for a login
- * (`SSH_AUTH_SOCK` on macOS: `/private/tmp/com.apple.launchd.<id>/Listeners`).
- * A workspace writes nothing there, so every socket in it is the host's.
- */
-const LAUNCHD_SOCKETS = "/private/tmp";
-
-const sbString = (path: string): string =>
-  `"${path.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
-
-/** Resolve existing ancestors too, so an absent credential store still has a deny rule. */
-const secretRealpath = async (path: string): Promise<string> => {
-  try {
-    return await realpath(path);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-      throw error;
-    }
-    return join(await secretRealpath(dirname(path)), basename(path));
-  }
-};
-
-/**
- * The Seatbelt profile for one workspace. Paths are real paths: Seatbelt
- * matches the resolved path, so a rule on a symlink never fires (a Mac's
- * `~/.cawco` has been one).
- */
-const profileOf = async (
-  ws: string,
-  scratch: string,
-  caches: string[]
-): Promise<string> => {
-  const scratchPath = await realpath(scratch);
-  const wsPath = await realpath(ws);
-  const stores = await Promise.all(credentialStores().map(secretRealpath));
-  // Seatbelt's last matching rule wins: what a command runs from inside a
-  // store is read again after the deny.
-  const keptPaths = await Promise.all(keptInStores().map(secretRealpath));
-  // A lookup of a kept path stats each dir on the way: those inside a store
-  // answer that alone, never their listing or any other entry.
-  const inStore = (path: string): boolean =>
-    stores.some((store) => path === store || path.startsWith(`${store}/`));
-  const lookupDirs = [
-    ...new Set(
-      keptPaths.flatMap((path) => {
-        const above: string[] = [];
-        for (let dir = dirname(path); inStore(dir); dir = dirname(dir)) {
-          above.push(dir);
-        }
-        return above;
-      })
-    ),
-  ];
-  const userDirs = await darwinUserDirs();
-  const writable = await Promise.all(
-    [ws, ...caches, ...userDirs].map((path) => realpath(path))
-  );
-  const sockets = await Promise.all(
-    [dirname(workspacesDir()), dirname(sessiondPath())].map((path) =>
-      realpath(path).catch(() => path)
-    )
-  );
-  return [
-    "(version 1)",
-    "(allow default)",
-    "(deny signal)",
-    "(allow signal (target same-sandbox))",
-    "(deny file-write*)",
-    ...stores.map((path) => `(deny file-read* (subpath ${sbString(path)}))`),
-    // A project's secret files, wherever they lie: the clone's own are read
-    // again below.
-    `(deny file-read* (regex #"/(${SECRET_FILE_NAME})$"))`,
-    ...[...keptPaths, wsPath].map(
-      (path) => `(allow file-read* (subpath ${sbString(path)}))`
-    ),
-    ...lookupDirs.map(
-      (path) => `(allow file-read-metadata (literal ${sbString(path)}))`
-    ),
-    "(allow file-write*",
-    ...[...writable, scratchPath].map(
-      (path) => `  (subpath ${sbString(path)})`
-    ),
-    '  (literal "/dev/null") (literal "/dev/zero") (literal "/dev/dtracehelper")',
-    '  (regex #"^/dev/tty") (regex #"^/dev/fd/"))',
-    // Its contents are the workspace's to write; the scratch dir itself stays.
-    `(deny file-write-unlink (literal ${sbString(scratchPath)}))`,
-    '(deny process-exec (literal "/bin/launchctl"))',
-    // Key agents: a socket inside a store (gpg-agent's in ~/.gnupg), and
-    // the ssh-agent socket launchd holds for every login.
-    ...[...new Set([...sockets, ...stores, LAUNCHD_SOCKETS])].map(
-      (path) =>
-        `(deny network-outbound (remote unix-socket (subpath ${sbString(path)})))`
-    ),
-    "",
-  ].join("\n");
-};
-
-/** The macOS runner's FIFO, in the state dir. */
-const fifoOf = (id: string): string => join(stateDir(id), "runner.fifo");
-
-/**
- * The form a macOS boundary of this workspace takes in this build: its
- * profile, and a hash of that profile with the runner and executor scripts.
- * A runner started in another form is replaced ({@link ensure}), so a change
- * to any of the three reaches every running boundary.
- */
-const darwinForm = async (
-  ref: WorkspaceRef
-): Promise<{ readonly form: string; readonly profile: string }> => {
-  await makeDirs(ref.id);
-  const scratch = scratchOf(ref.id);
-  const profile = await profileOf(ref.path, scratch, cachesOf());
-  const form = createHash("sha256")
-    .update(profile)
-    .update("\0")
-    .update(RUNNER)
-    .update("\0")
-    .update(
-      darwinExec(
-        ref.id,
-        0,
-        fifoOf(ref.id),
-        scratch,
-        shimsOf(ref.id),
-        await hostGh()
-      )
-    )
-    .digest("hex")
-    .slice(0, 16);
-  return { form, profile };
-};
-
-const darwinSpec = async (
-  ref: WorkspaceRef,
-  scratch: string,
-  profileText: string
-): Promise<ProcSpec> => {
-  const fifo = fifoOf(ref.id);
-  await rm(fifo, { force: true });
-  const made = await Bun.$`mkfifo ${fifo}`.quiet().nothrow();
-  if (made.exitCode !== 0) {
-    throw refusal(ref.id, `mkfifo failed: ${made.stderr.toString().trim()}`);
-  }
-  const profile = join(stateDir(ref.id), "boundary.sb");
-  await writeFile(profile, profileText);
-  return {
-    command: "/usr/bin/sandbox-exec",
-    args: [
-      "-f",
-      profile,
-      "/bin/bash",
-      "--norc",
-      "--noprofile",
-      "-c",
-      RUNNER,
-      "cawco-boundary",
-      fifo,
-    ],
-    // The marker is how an archive finds every process the workspace started.
-    env: { CAWCO_WORKSPACE: ref.id, TMPDIR: scratch },
-  };
-};
-
-/** Waits for the boundary's {@link READY} line; its own words if it dies first. */
-const ready = (client: SessiondClient, procId: string): Promise<void> =>
+/** Waits for the boundary's {@link READY} line; answers every line said before it, or its own words if it dies first. */
+const ready = (client: SessiondClient, procId: string): Promise<string[]> =>
   new Promise((resolve, reject) => {
     const said: string[] = [];
     const words = (): string => (said.length ? `: ${said.join(" / ")}` : "");
@@ -1391,7 +1201,7 @@ const ready = (client: SessiondClient, procId: string): Promise<void> =>
       if (error) {
         reject(error);
       } else {
-        resolve();
+        resolve(said);
       }
     };
     const timer = setTimeout(
@@ -1460,94 +1270,97 @@ const ghToken = (gh: string | undefined): string =>
 fi`
     : "";
 
-/** The variables every command runs with: the workspaces' own cache, by `workspaceCacheEnv`. */
-const cacheAssignments = (): string[] =>
-  Object.entries(workspaceCacheEnv()).map(
-    ([name, value]) => `${name}=${shellQuote(value)}`
-  );
-
-/** `env`'s words that drop every key agent's socket ({@link AGENT_SOCKET_ENV}) from a command's environment. */
-const agentUnsets = (): string =>
-  AGENT_SOCKET_ENV.map((name) => `-u ${name}`).join(" ");
+/**
+ * What every command runs with besides its caller's environment: the
+ * workspaces' own cache (`workspaceCacheEnv`), its scratch dir as `TMPDIR`,
+ * the empty git template, the tool door, and `CAWCO_WORKSPACE`, by which a
+ * script tells that it runs inside one; never a key agent's socket
+ * ({@link AGENT_SOCKET_ENV}).
+ */
+const commandEnv = (id: string, scratch: string): string[] => [
+  `unset ${AGENT_SOCKET_ENV.join(" ")}`,
+  ...Object.entries({
+    ...workspaceCacheEnv(),
+    TMPDIR: scratch,
+    GIT_TEMPLATE_DIR: gitTemplateOf(id),
+    CAWCO_TOOL_SOCKET: toolDoorOf(id),
+    CAWCO_WORKSPACE: id,
+  }).map(([name, value]) => `export ${name}=${shellQuote(value)}`),
+];
 
 const stoppedLine = (id: string): string =>
   `cawco: workspace ${id}'s boundary is not running, so this command did not run. The workspace's next session starts it again.`;
 
 /**
- * The executor joins the anchor's namespaces and runs the command with the
- * workspaces' cache in its environment and the caller's PATH. The executor
- * finds its own tools on {@link SYSTEM_PATH}. `CAWCO_WORKSPACE` names the
- * workspace to every command, as a macOS runner's marker does: a script
- * tells by it that it runs inside one.
+ * Linux: srt protects the clone's `.git/config` and `.git/hooks` with
+ * read-only binds, and the kernel drops such a bind in every other mount
+ * namespace when the host renames or unlinks what it covers (a host-side
+ * `git config` does: lock, then rename). So before every command the
+ * sandbox's own mount table must still hold both; when it does not, the whole
+ * sandbox is killed, background processes too, and the command refused
+ * (REPORT.md §5d). CawCo never writes a live clone's config: it writes
+ * `branch.*` only before the boundary starts (`cloneInPlace`).
  */
-const linuxExec = (
+const mountCheck = (
   id: string,
-  pid: number,
-  identity: string,
-  gh: string | undefined
-): string => `#!/bin/sh
-# CawCo workspace ${id}: runs one shell command inside the workspace's boundary.
-# exec [--cwd-out FILE] COMMAND — FILE gets the directory COMMAND ended in.
-caller_path=$PATH
-PATH=${SYSTEM_PATH}
-export PATH
-# While the agent replaces the anchor, wait, then run through the new one.
-gate=${shellQuote(gateOf(id))}
-if [ -e "$gate" ]; then
-  while [ -e "$gate" ] && kill -0 "$(cat "$gate" 2>/dev/null)" 2>/dev/null; do sleep 0.1; done
-  [ -e "$gate" ] || PATH=$caller_path exec "$0" "$@"
-fi
-anchor=${pid}
-if [ "$(readlink /proc/$anchor/ns/user 2>/dev/null)" != ${shellQuote(identity)} ]; then
-  echo ${shellQuote(stoppedLine(id))} >&2
-  exit 126
-fi
-cwd_out=
-if [ "$1" = --cwd-out ]; then cwd_out=$2; shift 2; fi
-${ghToken(gh)}
-exec /usr/bin/nsenter --user --mount --pid --preserve-credentials --target "$anchor" --wdns="$PWD" \\
-  /usr/bin/env ${agentUnsets()} PATH="$caller_path" TMPDIR=/tmp CAWCO_WORKSPACE=${shellQuote(id)} ${cacheAssignments().join(" ")} \\
-  /bin/bash -c 'eval "$1"; status=$?; [ -z "$2" ] || pwd -P > "$2"; exit $status' cawco "$1" "$cwd_out"
-`;
+  held: Pick<Held, "inner" | "path" | "sandbox">
+): string => {
+  const clone = held.path;
+  return `table=/proc/${held.inner ?? 0}/mountinfo
+for protected in ${shellQuote(join(clone, ".git", "config"))} ${shellQuote(join(clone, ".git", "hooks"))}; do
+  if ! awk -v p="$protected" '$5 == p { found = 1 } END { exit !found }' "$table" 2>/dev/null; then
+    kill -KILL ${held.sandbox ?? 0} 2>/dev/null
+    echo "cawco: $protected lost its protection in workspace ${id}'s boundary (it was changed on the host), so the boundary was stopped and this command did not run. The workspace's next session starts it again." >&2
+    exit 126
+  fi
+done`;
+};
 
-const darwinExec = (
+/**
+ * The executor: hands a command, the caller's directory and environment to
+ * the workspace's runner over its FIFO, streams the output back and exits
+ * with the command's status. It finds its own tools on {@link SYSTEM_PATH};
+ * the command runs with its caller's PATH, behind the shims on macOS.
+ */
+const execScript = (
   id: string,
-  pid: number,
-  fifo: string,
-  scratch: string,
-  shims: string,
+  held: Pick<Held, "exec" | "inner" | "path" | "pid" | "sandbox" | "scratch">,
   gh: string | undefined
-): string => `#!/bin/bash
+): string => {
+  const linux = process.platform === "linux";
+  const path = linux
+    ? `printf 'export PATH=%q\\n' "$caller_path"`
+    : `printf 'export PATH=%q\\n' ${shellQuote(`${shimsOf(id)}:`)}"$caller_path"`;
+  return `#!/bin/bash
 # CawCo workspace ${id}: runs one shell command inside the workspace's boundary.
 # exec [--cwd-out FILE] COMMAND — FILE gets the directory COMMAND ended in.
 caller_path=$PATH
 PATH=${SYSTEM_PATH}
 export PATH
-# While the agent replaces the runner, wait, then run through the new one.
+# While the agent replaces the boundary, wait, then run through the new one.
 gate=${shellQuote(gateOf(id))}
 if [ -e "$gate" ]; then
   while [ -e "$gate" ] && kill -0 "$(cat "$gate" 2>/dev/null)" 2>/dev/null; do sleep 0.1; done
   [ -e "$gate" ] || PATH=$caller_path exec "$0" "$@"
 fi
-fifo=${shellQuote(fifo)}
-if ! [ -p "$fifo" ] || ! kill -0 ${pid} 2>/dev/null; then
+fifo=${shellQuote(fifoOf(id))}
+if ! [ -p "$fifo" ] || ! kill -0 ${held.pid} 2>/dev/null; then
   echo ${shellQuote(stoppedLine(id))} >&2
   exit 126
 fi
+${linux ? mountCheck(id, held) : ""}
 cwd_out=
 if [ "$1" = --cwd-out ]; then cwd_out=$2; shift 2; fi
 ${ghToken(gh)}
-req=$(mktemp -d ${shellQuote(scratch)}/.run.XXXXXX) || exit 126
+req=$(mktemp -d ${shellQuote(held.scratch)}/.run.XXXXXX) || exit 126
 printf '%s' "$1" > "$req/cmd"
 pwd -P > "$req/cwd"
 {
   export -p
-  echo ${shellQuote(`unset ${AGENT_SOCKET_ENV.join(" ")}`)}
-  echo "export TMPDIR=${scratch}"
-${cacheAssignments()
-  .map((assignment) => `  echo ${shellQuote(`export ${assignment}`)}`)
+${commandEnv(id, held.scratch)
+  .map((line) => `  echo ${shellQuote(line)}`)
   .join("\n")}
-  printf 'export PATH=%q\\n' ${shellQuote(`${shims}:`)}"$caller_path"
+  ${path}
 } > "$req/env"
 mkfifo "$req/out" "$req/err"
 trap 'kill -TERM -- "-$(cat "$req/pid" 2>/dev/null)" 2>/dev/null; rm -rf "$req"; exit 143' TERM INT HUP
@@ -1555,27 +1368,32 @@ printf '%s\\n' "$req" > "$fifo"
 cat "$req/out" & out=$!
 cat "$req/err" >&2 & err=$!
 wait "$out" "$err"
-until [ -s "$req/status" ]; do sleep 0.02; done
+until [ -s "$req/status" ]; do sleep 0.01; done
 status=$(cat "$req/status")
 if [ -n "$cwd_out" ] && [ -s "$req/cwd-out" ]; then cp "$req/cwd-out" "$cwd_out"; fi
 rm -rf "$req"
 exit "$status"
 `;
+};
 
-/** The folders a boundary needs before it starts: its state, scratch and run dirs, and the caches it writes. */
+/**
+ * The folders a boundary needs before it starts: its state dir, the part of
+ * it a command reads (with the empty git template), its scratch dir beside
+ * that, and the caches it writes. Never nested in one another (srt #446).
+ */
 const makeDirs = async (id: string): Promise<void> => {
   await mkdir(sessionIdentityDir(), { recursive: true, mode: 0o700 });
   await Promise.all(
     [
       stateDir(id),
+      roOf(id),
+      gitTemplateOf(id),
       scratchOf(id),
-      ...(process.platform === "linux" ? [runOf(id)] : []),
-      ...cachesOf(),
+      ...workspaceCaches(),
     ].map((path) => mkdir(path, { recursive: true }))
   );
 };
 
-/** Starts the workspace's boundary under sessiond and writes its executor. */
 /** How many files {@link ownInodes} copies at once. */
 const OWN_INODE_BATCH = 64;
 
@@ -1584,9 +1402,9 @@ const OWN_INODE_BATCH = 64;
  * many it copied. bun installs by hardlinking from its cache, so a clone
  * installed outside a boundary shares inodes with the host's bun cache and
  * every host tree installed from it, and a write inside the clone would
- * change a file the host runs. Inside a boundary the cache is another mount
- * and bun copies, so after a clone's first start this finds nothing. Runs
- * before the anchor starts, with nothing inside to write.
+ * change a file the host runs. Inside a boundary the cache is the workspaces'
+ * own, so after a clone's first start this finds nothing. Runs before the
+ * boundary starts, with nothing inside to write.
  */
 const ownInodes = async (path: string): Promise<number> => {
   const listed =
@@ -1608,82 +1426,6 @@ const ownInodes = async (path: string): Promise<number> => {
   return files.length;
 };
 
-const start = async (
-  client: SessiondClient,
-  ref: WorkspaceRef
-): Promise<Boundary> => {
-  const dir = stateDir(ref.id);
-  const scratch = scratchOf(ref.id);
-  const linux = process.platform === "linux";
-  const run = runOf(ref.id);
-  const caches = cachesOf();
-  await makeDirs(ref.id);
-  const procId = procIdFor("boundary", ref.id);
-  // One this machine can no longer vouch for (its record is gone or names
-  // another process) is replaced, never joined.
-  if (await holding(client, procId)) {
-    await client.signal(procId, "SIGKILL");
-  }
-  if (linux) {
-    const split = await ownInodes(ref.path);
-    if (split > 0) {
-      console.info(
-        `[workspace] ${ref.id}: ${split} file(s) in its clone shared an inode with a file outside it, and each now has its own`
-      );
-    }
-  }
-  const darwin = linux ? undefined : await darwinForm(ref);
-  const spec = darwin
-    ? await darwinSpec(ref, scratch, darwin.profile)
-    : await linuxSpec(ref, scratch, run, await copySshIncludes(ref.id), caches);
-  await client.spawnProc(procId, spec);
-  await ready(client, procId).catch((error: Error) => {
-    throw refusal(ref.id, error.message);
-  });
-  const proc = (await client.list()).procs.find(
-    (candidate) => candidate.procId === procId
-  );
-  if (!proc?.alive) {
-    throw refusal(ref.id, "the boundary exited right after it started");
-  }
-  let held: Omit<Held, "hook" | "policy">;
-  const exec = join(dir, "exec");
-  if (linux) {
-    // sessiond's child is the unshare process; the anchor is its one child.
-    const children = await readFile(
-      `/proc/${proc.pid}/task/${proc.pid}/children`,
-      "utf8"
-    );
-    const pid = Number.parseInt(children.trim().split(WHITESPACE)[0] ?? "", 10);
-    const identity = Number.isNaN(pid) ? undefined : await userNamespaceOf(pid);
-    if (!identity || identity === (await readlink("/proc/self/ns/user"))) {
-      throw refusal(
-        ref.id,
-        `the anchor under ${proc.pid} is not in a namespace of its own`
-      );
-    }
-    held = {
-      exec,
-      pid,
-      scratch,
-      identity,
-      path: ref.path,
-      form: specForm(spec),
-    };
-  } else {
-    held = {
-      exec,
-      pid: proc.pid,
-      scratch,
-      identity: "runner",
-      path: ref.path,
-      form: darwin?.form,
-    };
-  }
-  // armHook writes the executor.
-  return armHook(ref.id, held);
-};
-
 const kill = (pid: number, signal: NodeJS.Signals): void => {
   try {
     process.kill(pid, signal);
@@ -1691,6 +1433,12 @@ const kill = (pid: number, signal: NodeJS.Signals): void => {
     // already gone
   }
 };
+
+/** Whether `pid` is still a bwrap: a pid on record names no other process. */
+const isBwrap = async (pid: number): Promise<boolean> =>
+  (await readFile(`/proc/${pid}/cmdline`, "utf8").catch(() => ""))
+    .split("\0")[0]
+    ?.endsWith("bwrap") ?? false;
 
 /** Every process a macOS workspace started, found by the marker its runner handed them all. */
 const killMarked = async (id: string): Promise<void> => {
@@ -1702,36 +1450,134 @@ const killMarked = async (id: string): Promise<void> => {
 };
 
 /**
- * Kills the workspace's boundary with every process in it: on Linux, SIGKILL
- * to the anchor — its namespace's PID 1, which ignores anything softer — takes
- * the whole namespace; on macOS the runner and everything carrying the
- * workspace's marker. Then its state goes.
+ * Stops the boundary sessiond holds for workspace `id`, with every process in
+ * it. Linux: SIGKILL to the outer bwrap ends the sandbox's pid namespace; srt
+ * then sees its child exit, and its host removes srt's proxy, socat bridges
+ * and mount points and exits (killing the host instead would leave those
+ * behind, REPORT.md §5e). macOS: the runner and everything carrying the
+ * workspace's marker.
  */
-export const closeBoundary = async (ref: WorkspaceRef): Promise<void> => {
-  forgetStale(ref.id);
-  const client = await sessiond();
-  const held = await readHeld(ref.id);
-  if (
-    held &&
-    process.platform === "linux" &&
-    (await userNamespaceOf(held.pid)) === held.identity
-  ) {
-    kill(held.pid, "SIGKILL");
+const stopBoundary = async (
+  client: SessiondClient,
+  id: string,
+  held: Held | undefined
+): Promise<void> => {
+  const procId = procIdFor("boundary", id);
+  if (held?.sandbox && (await isBwrap(held.sandbox))) {
+    kill(held.sandbox, "SIGKILL");
     const deadline = Date.now() + STOP_TIMEOUT_MS;
     while (
-      // biome-ignore lint/performance/noAwaitInLoops: polls one namespace until the kernel has torn it down, or the deadline passes
-      (await userNamespaceOf(held.pid)) === held.identity &&
+      // biome-ignore lint/performance/noAwaitInLoops: polls one process until its host has cleaned up, or the deadline passes
+      (await holding(client, procId)) &&
       Date.now() < deadline
     ) {
       await Bun.sleep(20);
     }
   }
-  const procId = procIdFor("boundary", ref.id);
   if (await holding(client, procId)) {
     await client.signal(procId, "SIGKILL");
   }
   if (process.platform === "darwin") {
-    await killMarked(ref.id);
+    await killMarked(id);
+  }
+};
+
+/** The outer bwrap's pid, from the line the srt host said before its runner was ready. */
+const sandboxPid = (said: string[]): number | undefined => {
+  const line = said.find((one) => one.startsWith(`${SANDBOX_LINE} `));
+  const pid = Number.parseInt(line?.split(WHITESPACE)[1] ?? "", 10);
+  return Number.isNaN(pid) ? undefined : pid;
+};
+
+/** Starts the workspace's boundary under sessiond and writes its executor. */
+const start = async (
+  client: SessiondClient,
+  ref: WorkspaceRef
+): Promise<Boundary> => {
+  const linux = process.platform === "linux";
+  await makeDirs(ref.id);
+  const procId = procIdFor("boundary", ref.id);
+  // One this machine can no longer vouch for, or one of another form, is
+  // stopped first, never joined.
+  await stopBoundary(client, ref.id, await readHeld(ref.id));
+  if (linux) {
+    const split = await ownInodes(ref.path);
+    if (split > 0) {
+      console.info(
+        `[workspace] ${ref.id}: ${split} file(s) in its clone shared an inode with a file outside it, and each now has its own`
+      );
+    }
+    const srtTmp = srtTmpOf(ref.id);
+    await rm(srtTmp, { recursive: true, force: true });
+    await mkdir(srtTmp, { recursive: true, mode: 0o700 });
+  }
+  await excludeSandboxNames(ref.path);
+  const plan = await planOf(ref);
+  for (const [path, content] of plan.files) {
+    // biome-ignore lint/performance/noAwaitInLoops: two small files
+    await writeWhole(path, content, 0o644);
+  }
+  const fifo = fifoOf(ref.id);
+  await rm(fifo, { force: true });
+  const made = await Bun.$`/usr/bin/mkfifo ${fifo}`.quiet().nothrow();
+  if (made.exitCode !== 0) {
+    throw refusal(ref.id, `mkfifo failed: ${made.stderr.toString().trim()}`);
+  }
+  await client.spawnProc(procId, plan.spec);
+  const said = await ready(client, procId).catch((error: Error) => {
+    throw refusal(ref.id, error.message);
+  });
+  const proc = (await client.list()).procs.find(
+    (candidate) => candidate.procId === procId
+  );
+  if (!proc?.alive) {
+    throw refusal(ref.id, "the boundary exited right after it started");
+  }
+  const held: Omit<Held, "hook" | "policy"> = {
+    exec: join(stateDir(ref.id), "exec"),
+    pid: proc.pid,
+    scratch: scratchOf(ref.id),
+    path: ref.path,
+    form: plan.form,
+    ...(linux ? await sandboxOf(ref.id, said) : {}),
+  };
+  // armHook writes the executor.
+  return armHook(ref.id, held);
+};
+
+/** Linux: the outer bwrap, the sandbox's init beneath it, and what runs in the sandbox while its runner is idle. */
+const sandboxOf = async (
+  id: string,
+  said: string[]
+): Promise<Pick<Held, "idle" | "inner" | "sandbox">> => {
+  const sandbox = sandboxPid(said);
+  const children = sandbox
+    ? await readFile(`/proc/${sandbox}/task/${sandbox}/children`, "utf8").catch(
+        () => ""
+      )
+    : "";
+  const inner = Number.parseInt(children.trim().split(WHITESPACE)[0] ?? "", 10);
+  if (!sandbox || Number.isNaN(inner)) {
+    throw refusal(
+      id,
+      "its sandbox's processes could not be found as it started"
+    );
+  }
+  const idle = inSandbox(await snapshot(), inner).map((one) => one.pid);
+  return { sandbox, inner, idle };
+};
+
+/**
+ * Kills the workspace's boundary with every process in it ({@link
+ * stopBoundary}), stops serving its tool door, then its state goes, and on
+ * Linux srt's temp dir with the sockets srt leaves there (REPORT.md §5o).
+ */
+export const closeBoundary = async (ref: WorkspaceRef): Promise<void> => {
+  forgetStale(ref.id);
+  await closeToolDoor(ref.id);
+  await stopBoundary(await sessiond(), ref.id, await readHeld(ref.id));
+  if (process.platform === "linux" && process.env.XDG_RUNTIME_DIR) {
+    await rm(srtTmpOf(ref.id), { recursive: true, force: true });
   }
   await rm(stateDir(ref.id), { recursive: true, force: true });
 };

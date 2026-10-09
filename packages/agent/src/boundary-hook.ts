@@ -1,7 +1,7 @@
 /**
  * `boundary-hook.ts EXEC SCRATCH POLICY`: what a workspace's hook script
- * (`boundary.ts`) runs before every tool call of a work item's claude
- * session. A shell call (`Bash`, `Monitor`) gets its command rewritten so it
+ * (`boundary.ts`) runs before each shell or path-naming tool call of a work
+ * item's claude session (`HOOKED_TOOLS`). A shell call (`Bash`, `Monitor`) gets its command rewritten so it
  * runs through the workspace's executor, inside the workspace's boundary.
  * Every other call — the CLI's own file tools, MCP calls — is judged by the
  * workspace's policy (`workspace-judge.ts`): each path it names that the
@@ -57,6 +57,13 @@ try {
     throw new Error("the call names no tool");
   }
   const call = input.tool_input ?? {};
+  if (input.tool_name === "PowerShell") {
+    // Its commands are PowerShell's, which the executor's bash cannot run.
+    console.error(
+      "cawco: PowerShell does not run in a workspace: its commands would run outside the workspace's boundary. Use Bash."
+    );
+    process.exit(2);
+  }
   if (SHELL_TOOLS.has(input.tool_name)) {
     // Monitor's websocket form runs no command, so there is nothing to bound.
     if (typeof call.command === "string") {

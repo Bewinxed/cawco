@@ -5,11 +5,13 @@
  * neutral frames the harness folds. Run with `bun opencode-proof.ts`.
  */
 
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { NeutralMessage, SpawnPayload } from "@cawco/core";
 import type { Harness, HarnessContext, HarnessSession } from "./src/harness";
 import { OpencodeHarness } from "./src/harnesses/opencode";
 
-const PROOF_DIR = "/tmp/opencode-proof-dir";
+const PROOF_DIR = join(tmpdir(), "opencode-proof-dir");
 
 // --- setup: a scratch git dir, so opencode's bash tool has a cwd to touch ---
 await Bun.$`mkdir -p ${PROOF_DIR}`.quiet();
@@ -673,7 +675,7 @@ if (!session) {
 
 // ============================ Test J (command) ============================
 {
-  const cmdDir = "/tmp/opencode-proof-cmd";
+  const cmdDir = join(tmpdir(), "opencode-proof-cmd");
   await Bun.$`rm -rf ${cmdDir}`.quiet().nothrow();
   await Bun.$`mkdir -p ${cmdDir}`.quiet();
   await Bun.$`git -C ${cmdDir} init`.quiet().nothrow();
