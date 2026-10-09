@@ -28,10 +28,11 @@
  * limit the item fails, its parent is told, and its session is ended. The
  * project's **lead** is a co-parent: it may answer, steer and stop the
  * project's items, hears their reports beside the parent, and alone once the
- * parent has ended. And the **plan ↔ to-do link**: a task attempt's Claude
- * Code plan ledger is read on its turn's end, a completed `[td-n]` item ticks
- * that to-do, `finish_item` asks once about the to-dos still open, and plan
- * items left open become `(proposed)` to-dos.
+ * parent has ended. And the **plan ↔ to-do link**: a task attempt's plan, as
+ * its plan panel reads it on any harness (CawCo's own steps where "CawCo's
+ * to-dos" is on, else the harness's list), is read on its turn's end, a
+ * completed `[td-n]` step ticks that to-do, `finish_item` asks once about the
+ * to-dos still open, and steps left open become `(proposed)` to-dos.
  */
 import type {
   CommandResult,
@@ -42,6 +43,7 @@ import type {
   LandsMode,
   NeutralOrigin,
   PermissionMode,
+  PlanStep,
   SendPayload,
   SpawnPayload,
   WorkItemSummary,
@@ -74,7 +76,6 @@ import type {
   WorkItemCheck,
   WorkItemSubmission,
 } from "./db/schema";
-import { type HarnessPlanDeps, harnessTasks } from "./harness-plans";
 import { leafOf, sessionLabel } from "./labels";
 import {
   type BranchOutcome,
@@ -440,8 +441,6 @@ export interface WorkItemDeps {
     timeoutMs?: number,
     workspace?: WorkspaceRef
   ) => Promise<CommandResult>;
-  /** A machine control answered by a session's harness: its task list (harness-plans.ts). */
-  readonly control: HarnessPlanDeps["control"];
   readonly db: DbShape;
   /** Store stop intent and wait for the machine's positive end confirmation. */
   readonly end: (instanceId: string) => Promise<void>;
@@ -460,6 +459,12 @@ export interface WorkItemDeps {
    * cap holds (project-caps.ts `pauses`); nothing when it may.
    */
   readonly pauses: (projectId: string) => string | undefined;
+  /**
+   * The session's plan steps as its plan panel reads them (plans.ts): CawCo's
+   * own list where "CawCo's to-dos" is on for it, else its harness's (Claude
+   * Code's ledger, OpenCode's todos). The plan ↔ to-do link reads these.
+   */
+  readonly planSteps: (instanceId: string) => Promise<PlanStep[]>;
   readonly publish: (item: WorkItemSummary) => void;
   /** Hands a report to the parent of the item's session. */
   readonly report: (
@@ -506,12 +511,6 @@ export interface WorkItemDeps {
   };
   /** The delegate types a session of the project sees (the fleet's without one), read at dispatch. */
   readonly types: (projectId?: string | null) => DelegateType[];
-}
-
-/** One item of a Claude Code session's plan, as its task list says. */
-interface PlanItem {
-  status: string;
-  subject: string;
 }
 
 /** A plan item's to-do id, `[td-3] Persist the choice` → `td-3`. */
@@ -955,13 +954,13 @@ const TRAY_HOLD_MS = 6000;
 
 export const createWorkItems = ({
   call,
-  control,
   command,
   db,
   end,
   itemEnded,
   lifetime,
   pauses,
+  planSteps,
   publish,
   report,
   inTurn,
@@ -1345,20 +1344,9 @@ export const createWorkItems = ({
 
   // --- plan ↔ to-dos ----------------------------------------------------------------
 
-  /** The item's session's plan, read off its machine; undefined when it has none to read. */
-  const planFor = async (
-    item: WorkItemRow
-  ): Promise<PlanItem[] | undefined> => {
-    const [row] = db.getInstancesByIds([item.instanceId]);
-    if (!(row?.sessionId && row.harness === "claude")) {
-      return;
-    }
-    const tasks = await harnessTasks(
-      { control, online: () => true },
-      row
-    ).catch(() => undefined);
-    return tasks?.map(({ subject, status }) => ({ subject, status }));
-  };
+  /** The item's session's plan as its panel reads it; undefined when it cannot be read now. */
+  const planFor = (item: WorkItemRow): Promise<PlanStep[] | undefined> =>
+    planSteps(item.instanceId).catch(() => undefined);
 
   /** The task an item is an attempt at, when the plan link can reach it. */
   const taskOf = (
@@ -1382,7 +1370,7 @@ export const createWorkItems = ({
     const completed = new Set(
       plan
         .filter((entry) => entry.status === "completed")
-        .map((entry) => PLAN_TODO.exec(entry.subject)?.[1])
+        .map((entry) => PLAN_TODO.exec(entry.content)?.[1])
         .filter((id): id is string => id !== undefined)
     );
     if (completed.size === 0) {
@@ -1433,9 +1421,9 @@ export const createWorkItems = ({
     const left = plan
       .filter(
         (entry) =>
-          entry.status !== "completed" && !PLAN_TODO.test(entry.subject)
+          entry.status !== "completed" && !PLAN_TODO.test(entry.content)
       )
-      .map((entry) => entry.subject.replace(/\s+/g, " ").trim())
+      .map((entry) => entry.content.replace(/\s+/g, " ").trim())
       .filter((text) => text && !known.has(text.toLowerCase()))
       .slice(0, PROPOSALS_LIMIT);
     if (left.length > 0) {

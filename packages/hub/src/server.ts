@@ -11831,7 +11831,10 @@ export const createServer = (
   const workItems = createWorkItems({
     db,
     lifetime,
-    control: planControl,
+    // Read through the plan panel's own read, so the link sees the list the
+    // session keeps on any harness. Called only once the hub is up, after
+    // `plans` below is made.
+    planSteps: async (instanceId) => (await plans.read(instanceId)).steps,
     pauses: (projectId) => caps.pauses(projectId),
     end: async (instanceId) => {
       endSession(instanceId, "stop");
