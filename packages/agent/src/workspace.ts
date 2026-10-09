@@ -84,6 +84,14 @@ export const createWorkspace = async (
   if (problem) {
     throw new Error(`${repoRoot} cannot have a workspace: ${problem}`);
   }
+  // A workspace starts from origin's default branch and lands there: asked
+  // before anything is made, so a refusal leaves nothing behind.
+  const remotes = (await git(repoRoot, "remote")).split("\n");
+  if (!remotes.includes("origin")) {
+    throw new Error(
+      `${repoRoot} has no origin remote, so a workspace can't be cut from it. Add one with \`git remote add origin <url>\` and delegate again.`
+    );
+  }
   const id = String(workspaceId);
   const id8 = id.slice(0, 8);
   const path = expandHome(`~/.worktrees/${basename(repoRoot)}-${id8}`);

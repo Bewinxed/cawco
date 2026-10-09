@@ -30,8 +30,9 @@
  * workspace's `hook` script, which asks its judge, `boundary-judge.ts`), OpenCode by its
  * plugin's `bash` tool, pi by its bash tool's operations, a workflow's
  * `runCommand`. The GitHub CLI's keyring is the host's, so the executor reads
- * its token on the host side and hands it in as `GH_TOKEN`: pushes and `gh`
- * keep working inside. `cawco tools` reaches the hub's tools through the
+ * its token on the host side, from a copy it keeps in the workspace's state
+ * dir ({@link ghToken}), and hands it in as `GH_TOKEN`: pushes and `gh` keep
+ * working inside. `cawco tools` reaches the hub's tools through the
  * workspace's tool door (`tool-door.ts`).
  *
  * sessiond holds the boundary and the workspace's judge, so an agent restart
@@ -1435,11 +1436,36 @@ const hostGh = async (): Promise<string | undefined> => {
   return real;
 };
 
-/** The command token for `gh`, read on the host, where the keyring is. */
-const ghToken = (gh: string | undefined): string =>
+/**
+ * Where the executor keeps `gh`'s token for workspace `id`: its state dir,
+ * which no workspace reads (`workspacePolicy` gives back only its `ro` and
+ * `tmp` parts), and which goes with the workspace ({@link closeBoundary}).
+ */
+const ghTokenCacheOf = (id: string): string => join(stateDir(id), "gh-token");
+
+/**
+ * The command token for `gh` when its caller has none, read on the host,
+ * where the keyring is. `gh auth token` costs a command about 26 ms
+ * (artifacts/srt-eval/REPORT.md §9), so the executor keeps its answer in a
+ * 0600 file and asks again only when the file is missing or gh's `hosts.yml`
+ * is not older than it: `gh auth login`, `logout` and `switch` rewrite
+ * `hosts.yml`. The newer answer replaces the file by a rename; no answer
+ * removes it, and no token goes in. The fast path forks nothing.
+ */
+const ghToken = (id: string, gh: string | undefined): string =>
   gh
     ? `if [ -z "\${GH_TOKEN:-}" ]; then
-  token=$(${shellQuote(gh)} auth token 2>/dev/null) && [ -n "$token" ] && GH_TOKEN=$token && export GH_TOKEN
+  gh_cache=${shellQuote(ghTokenCacheOf(id))}
+  gh_hosts=\${GH_CONFIG_DIR:-\${XDG_CONFIG_HOME:-$HOME/.config}/gh}/hosts.yml
+  if [ -s "$gh_cache" ] && [ "$gh_cache" -nt "$gh_hosts" ]; then
+    read -r GH_TOKEN < "$gh_cache"
+  elif token=$(${shellQuote(gh)} auth token 2>/dev/null) && [ -n "$token" ]; then
+    (umask 077 && printf '%s\\n' "$token" > "$gh_cache.$$" && mv -f "$gh_cache.$$" "$gh_cache") || rm -f "$gh_cache.$$"
+    GH_TOKEN=$token
+  else
+    rm -f "$gh_cache"
+  fi
+  [ -n "\${GH_TOKEN:-}" ] && export GH_TOKEN
 fi`
     : "";
 
@@ -1550,7 +1576,7 @@ fi
 ${linux ? mountCheck(id, held) : ""}
 cwd_out=
 if [ "$1" = --cwd-out ]; then cwd_out=$2; shift 2; fi
-${ghToken(gh)}
+${ghToken(id, gh)}
 req=$(mktemp -d ${shellQuote(held.scratch)}/.run.XXXXXX) || exit 126
 printf '%s' "$1" > "$req/cmd"
 pwd -P > "$req/cwd"
