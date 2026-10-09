@@ -37,8 +37,8 @@ final class JoinState {
             case let .ok(ok):
                 info = try ok.body.json
                 infoError = nil
-            case let .undocumented(status, _):
-                infoError = "The hub answered \(status) when asked for its addresses. Reopen this to try again."
+            case let .undocumented(status, payload):
+                infoError = await Wire.words(payload.body) ?? "The hub answered \(status) when asked for its addresses. Reopen this to try again."
             }
         } catch {
             infoError = "The hub did not answer when asked for its addresses. Check that it is running, then reopen this."
@@ -55,9 +55,7 @@ final class JoinState {
             case let .unprocessableContent(refusal):
                 refused = (try? await Self.text(refusal.body)) ?? "The hub answered 422."
             case let .undocumented(status, payload):
-                var said: String?
-                if let body = payload.body { said = try? await String(collecting: body, upTo: 64 * 1024) }
-                refused = (said?.isEmpty == false ? said : nil) ?? "The hub answered \(status)."
+                refused = await Wire.words(payload.body) ?? "The hub answered \(status)."
             }
         } catch {
             refused = "The hub did not answer, so nothing was started. Check that it is running, then try again."

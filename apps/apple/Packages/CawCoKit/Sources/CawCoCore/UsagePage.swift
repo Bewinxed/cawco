@@ -308,14 +308,16 @@ public enum UsageGrouping: String, CaseIterable, Sendable {
 }
 
 extension HubConnection {
-    /// One summary read: a harness's spend from `since`, grouped. Throws
-    /// "The hub answered 500." as the web's read does.
+    /// One summary read: a harness's spend from `since`, grouped. Throws the
+    /// hub's own words, else "The hub answered 500.", as the web's read does
+    /// (hub-read.ts `hubFailure`).
     public func usageSummary(harness: UsageHarness, groupBy: UsageGroupBy, since: Double) async throws -> UsageSummary {
         let answer = try await api.usage.summary(.init(query: .init(since: .init(value1: since), harness: harness.rawValue, groupBy: groupBy)))
         switch answer {
         case let .ok(ok): return try ok.body.json
-        case .unprocessableContent: throw ControlError(message: "The hub answered 422.")
-        case let .undocumented(status, _): throw ControlError(message: "The hub answered \(status).")
+        case let .unprocessableContent(refused):
+            throw ControlError(message: (try? refused.body.applicationProblemJson).flatMap { Wire.words(problem: $0) } ?? "The hub answered 422.")
+        case let .undocumented(status, payload): throw ControlError(message: await Wire.words(payload.body) ?? "The hub answered \(status).")
         }
     }
 

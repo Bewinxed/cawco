@@ -287,7 +287,8 @@ public final class WorkflowsStore {
             let rows: [WorkflowRow]
             switch try await client.getApiWorkflows() {
             case let .ok(ok): rows = try Wire.transcode(ok.body.json.workflows)
-            case let .undocumented(statusCode, _): throw HubConnection.ControlError(message: "The hub answered \(statusCode).")
+            case let .undocumented(statusCode, payload):
+                throw HubConnection.ControlError(message: await Wire.words(payload.body) ?? "The hub answered \(statusCode).")
             }
             var names: [String: String] = [:]
             for workflow in rows {
@@ -329,8 +330,8 @@ public final class WorkflowsStore {
     public func load(_ id: String) async throws -> WorkflowDetail {
         let response = try await hub.api.workflows.read(.init(path: .init(id: id)))
         guard case let .ok(ok) = response else {
-            if case let .undocumented(statusCode, _) = response {
-                throw HubConnection.ControlError(message: "The hub answered \(statusCode).")
+            if case let .undocumented(statusCode, payload) = response {
+                throw HubConnection.ControlError(message: await Wire.words(payload.body) ?? "The hub answered \(statusCode).")
             }
             throw HubConnection.ControlError(message: "The hub could not read this workflow.")
         }
@@ -401,8 +402,8 @@ public final class WorkflowsStore {
             throw HubConnection.ControlError(message: try await Wire.sentence(refused.body.plainText, status: 404))
         case let .conflict(refused):
             throw HubConnection.ControlError(message: try await Wire.sentence(refused.body.plainText, status: 409))
-        case let .undocumented(statusCode, _):
-            throw HubConnection.ControlError(message: "The hub answered \(statusCode).")
+        case let .undocumented(statusCode, payload):
+            throw HubConnection.ControlError(message: await Wire.words(payload.body) ?? "The hub answered \(statusCode).")
         }
         await refresh()
         return id
@@ -454,8 +455,8 @@ public final class WorkflowsStore {
             throw HubConnection.ControlError(message: try await Wire.sentence(refused.body.plainText, status: 404))
         case let .conflict(refused):
             throw HubConnection.ControlError(message: try await Wire.sentence(refused.body.plainText, status: 409))
-        case let .undocumented(statusCode, _):
-            throw HubConnection.ControlError(message: "The hub answered \(statusCode).")
+        case let .undocumented(statusCode, payload):
+            throw HubConnection.ControlError(message: await Wire.words(payload.body) ?? "The hub answered \(statusCode).")
         }
     }
 

@@ -520,8 +520,9 @@ public final class PushRegistry {
         (error as? Refusal)?.message ?? "\(who) couldn't be reached. Check this device's connection, then try again."
     }
 
-    /// POSTs `body` as JSON. A refusal carries the server's sentence: the
-    /// hub's plain text, or Cawrier's `{ error }`.
+    /// POSTs `body` as JSON. A refusal carries the server's own words, read
+    /// the one way (Wire `sentence`): the hub's plain text or problem
+    /// `detail`, Cawrier's `{ error }`.
     private static func post<Body: Encodable & Sendable, Answer: Decodable & Sendable>(_ url: URL, _ body: Body, refused who: String) async throws -> Answer {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -530,13 +531,7 @@ public final class PushRegistry {
         request.timeoutInterval = 20
         let (data, response) = try await URLSession.shared.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard status == 200 else {
-            let text = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
-            if let said = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["error"] as? String {
-                throw Refusal(message: said)
-            }
-            throw Refusal(message: text.isEmpty || text.hasPrefix("{") ? "\(who) answered \(status)." : text)
-        }
+        guard status == 200 else { throw Refusal(message: Wire.sentence(data, status: status, from: who)) }
         return try JSONDecoder().decode(Answer.self, from: data)
     }
 }

@@ -96,9 +96,7 @@ extension HubConnection {
     }
 
     private static func text(_ body: HTTPBody?, or fallback: String = "") async throws -> String {
-        guard let body else { return fallback }
-        let read = try await String(collecting: body, upTo: 64000)
-        return read.isEmpty ? fallback : read
+        await Wire.words(body) ?? fallback
     }
 
     private static func text(_ body: Operations.GetApiInstancesByIdContinue.Output.UnprocessableContent.Body) async throws -> String {

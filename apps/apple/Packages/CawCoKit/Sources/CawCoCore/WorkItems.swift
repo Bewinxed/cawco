@@ -101,8 +101,8 @@ public final class WorkItemsStore {
         case let .notFound(answer):
             let said = try await String(collecting: answer.body.plainText, upTo: 64000)
             throw Refused(message: said.isEmpty ? "The hub answered 404, so the delegate was not dismissed." : said)
-        case let .undocumented(statusCode, _):
-            throw Refused(message: "The hub answered \(statusCode), so the delegate was not dismissed.")
+        case let .undocumented(statusCode, payload):
+            throw Refused(message: await Wire.words(payload.body) ?? "The hub answered \(statusCode), so the delegate was not dismissed.")
         }
     }
 

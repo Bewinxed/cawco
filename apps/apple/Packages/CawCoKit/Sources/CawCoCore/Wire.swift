@@ -1,10 +1,10 @@
 public import CawCoAPI
 public import Foundation
-import OpenAPIRuntime
+public import OpenAPIRuntime
 
 /// The hub's JSON, read and written the one way every hub client does: dates
 /// as `Date.toISOString()` writes them, milliseconds included.
-enum Wire {
+public enum Wire {
     static func decoder() -> JSONDecoder {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .custom { decoder in
@@ -44,11 +44,40 @@ enum Wire {
         try encoder().encode(container)
     }
 
-    /// A refusal's own sentence, or "The hub answered <status>." when it
-    /// wrote none (workflows.ts `request`: `text || The hub answered …`).
+    /// A refusal's own words, read as the dashboard reads them (hub-read.ts
+    /// `hubFailure`): a problem's `detail` (a schema refusal is
+    /// application/problem+json, `{ detail: "must have required properties
+    /// pairingId, secret" }`), an `error` (the api proxy's, Cawrier's), the
+    /// problem's `title`, else the text; "<who> answered <status>." when it
+    /// wrote none.
+    static func sentence(_ data: Data, status: Int, from who: String = "The hub") -> String {
+        words(data) ?? "\(who) answered \(status)."
+    }
+
     static func sentence(_ body: HTTPBody, status: Int) async throws -> String {
-        let text = try await String(collecting: body, upTo: 64_000)
-        return text.isEmpty ? "The hub answered \(status)." : text
+        sentence(try await Data(collecting: body, upTo: 64_000), status: status)
+    }
+
+    /// A refusal's own words (`sentence`'s reading), nil when it wrote none.
+    static func words(_ data: Data) -> String? {
+        let text = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.hasPrefix("{"), let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            for key in ["detail", "error", "title"] {
+                if let said = body[key] as? String, !said.isEmpty { return said }
+            }
+        }
+        return text.isEmpty ? nil : text
+    }
+
+    /// The words of an answer the generated client did not expect, when it has a body.
+    public static func words(_ body: HTTPBody?) async -> String? {
+        guard let body, let data = try? await Data(collecting: body, upTo: 64_000) else { return nil }
+        return words(data)
+    }
+
+    /// A problem the generated client decoded (a schema refusal), read for its words.
+    public static func words(problem: some Encodable) -> String? {
+        (try? encoder().encode(problem)).flatMap(words)
     }
 }
 

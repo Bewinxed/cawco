@@ -386,10 +386,12 @@ public final class HubConnection {
         case let .badRequest(answer):
             // The hub's own reason the project can't be made there (a folder it can't use, a name taken).
             throw ControlError(message: try await String(collecting: answer.body.plainText, upTo: 64_000))
-        case .unprocessableContent:
-            throw ControlError(message: "Could not save this project — the hub answered 422. Try again.")
-        case let .undocumented(statusCode, _):
-            throw ControlError(message: "Could not save this project — the hub answered \(statusCode). Try again.")
+        case let .unprocessableContent(refused):
+            let said = (try? refused.body.applicationProblemJson).flatMap { Wire.words(problem: $0) }
+            throw ControlError(message: said.map { "Could not save this project — \($0)" } ?? "Could not save this project — the hub answered 422. Try again.")
+        case let .undocumented(statusCode, payload):
+            let said = await Wire.words(payload.body)
+            throw ControlError(message: said.map { "Could not save this project — \($0)" } ?? "Could not save this project — the hub answered \(statusCode). Try again.")
         }
         fleet.projects = try await api.projects.list().ok.body.json
         return created
@@ -406,8 +408,9 @@ public final class HubConnection {
             // still run in cockpit; stop them first.").
             let body = try conflict.body.plainText
             throw ControlError(message: try await String(collecting: body, upTo: 64_000))
-        case let .undocumented(statusCode, _):
-            throw ControlError(message: "Could not forget this project — the hub answered \(statusCode). Try again.")
+        case let .undocumented(statusCode, payload):
+            let said = await Wire.words(payload.body)
+            throw ControlError(message: said.map { "Could not forget this project — \($0)" } ?? "Could not forget this project — the hub answered \(statusCode). Try again.")
         }
         fleet.projects = try await api.projects.list().ok.body.json
     }
@@ -431,15 +434,8 @@ public final class HubConnection {
             statusCode = code
             body = payload.body
         }
-        let message: String
-        if let body {
-            message = try await String(collecting: body, upTo: 64_000)
-        } else {
-            message = ""
-        }
-        throw ControlError(message: message.isEmpty
-            ? "The hub answered \(statusCode), so the machine was not removed. Try again."
-            : message)
+        throw ControlError(message: await Wire.words(body)
+            ?? "The hub answered \(statusCode), so the machine was not removed. Try again.")
     }
 
     /// Marks sessions and runs (`run:<id>`) seen on the hub: `look`, the owner

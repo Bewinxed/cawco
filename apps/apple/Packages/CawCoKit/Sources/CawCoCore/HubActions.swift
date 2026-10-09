@@ -178,18 +178,24 @@ extension HubConnection {
     private func updateSession(id: String, body: Operations.PatchApiInstancesById.Input.Body.JsonPayload, action: String) async throws {
         let response = try await api.instances.update(.init(path: .init(id: id), body: .json(body)))
         let statusCode: Int
+        var said: String?
         switch response {
         case .ok: return
         case .badRequest: statusCode = 400
         case .notFound: statusCode = 404
         case .conflict: statusCode = 409
-        case .unprocessableContent: statusCode = 422
+        case let .unprocessableContent(refused):
+            statusCode = 422
+            said = (try? refused.body.applicationProblemJson).flatMap { Wire.words(problem: $0) }
         case .internalServerError: statusCode = 500
         case .serviceUnavailable: statusCode = 503
         case .gatewayTimeout: statusCode = 504
-        case let .undocumented(code, _): statusCode = code
+        case let .undocumented(code, payload):
+            statusCode = code
+            said = await Wire.words(payload.body)
         }
-        throw ControlError(message: "Could not \(action) this session — the hub answered \(statusCode). Try again.")
+        throw ControlError(message: said.map { "Could not \(action) this session — \($0)" }
+            ?? "Could not \(action) this session — the hub answered \(statusCode). Try again.")
     }
 
     public func removeSession(id: String) async throws {
@@ -204,13 +210,7 @@ extension HubConnection {
         case let .badGateway(answer): body = try answer.body.plainText
         case let .undocumented(_, answer): body = answer.body
         }
-        let message: String
-        if let body {
-            message = try await String(collecting: body, upTo: 64_000)
-        } else {
-            message = ""
-        }
-        throw ControlError(message: message)
+        throw ControlError(message: await Wire.words(body) ?? "")
     }
     public func deleteSession(machineId: String, sessionKey: String, dir: String? = nil,
         harness: Components.Schemas.ControlPayload.HarnessPayload? = nil) async throws {

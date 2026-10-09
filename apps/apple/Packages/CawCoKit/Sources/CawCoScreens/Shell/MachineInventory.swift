@@ -160,6 +160,10 @@ final class MachineInventoryView: UIStackView {
                 let response = try await hub.api.machines.inspect(.init(path: .init(machineId: id), body: .json(.init())))
                 switch response {
                 case let .ok(ok): self?.found[id] = try ok.body.json
+                case let .undocumented(code, payload):
+                    let said = await Wire.words(payload.body)
+                    self?.unread[id] = said.map { "Could not read what this machine has — \($0)" }
+                        ?? "Could not read what this machine has — the hub answered \(code)."
                 default: self?.unread[id] = "Could not read what this machine has — the hub answered \(Self.status(response))."
                 }
             } catch {
@@ -192,14 +196,16 @@ final class MachineInventoryView: UIStackView {
                 switch response {
                 case .ok:
                     break
-                case let .undocumented(code, _):
-                    throw AdoptError(message: "Could not save \(row.name) — the hub answered \(code).")
+                case let .undocumented(code, payload):
+                    let said = await Wire.words(payload.body)
+                    throw AdoptError(message: "Could not save \(row.name) — \(said ?? "the hub answered \(code).")")
                 case .badRequest:
                     throw AdoptError(message: "Could not save \(row.name) — the hub answered 400.")
                 case .notFound:
                     throw AdoptError(message: "Could not save \(row.name) — the hub answered 404.")
-                case .unprocessableContent:
-                    throw AdoptError(message: "Could not save \(row.name) — the hub answered 422.")
+                case let .unprocessableContent(refused):
+                    let said = (try? refused.body.applicationProblemJson).flatMap { Wire.words(problem: $0) }
+                    throw AdoptError(message: "Could not save \(row.name) — \(said ?? "the hub answered 422.")")
                 }
                 Toast.success("\(row.name) is the fleet's now — every machine gets it.", in: self)
             } catch {

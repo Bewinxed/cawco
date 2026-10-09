@@ -206,9 +206,8 @@ public final class SessionsStore {
             if statusCode == 503, let away = payload.headerFields.first(where: { $0.name.canonicalName == "x-cawco-machine" })?.value {
                 return .away(away)
             }
-            var detail = ""
-            if let body = payload.body { detail = try await String(collecting: body, upTo: 64_000) }
-            throw Fault(ReadFault(reason: .failed, machineId: nil, message: detail.isEmpty ? "The hub answered \(statusCode)" : detail))
+            let detail = await Wire.words(payload.body)
+            throw Fault(ReadFault(reason: .failed, machineId: nil, message: detail ?? "The hub answered \(statusCode)"))
         case let .conflict(answer): throw Fault(try await failed(answer.body.plainText))
         case let .internalServerError(answer): throw Fault(try await failed(answer.body.plainText))
         case let .gatewayTimeout(answer): throw Fault(try await failed(answer.body.plainText))

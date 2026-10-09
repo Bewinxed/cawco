@@ -57,7 +57,7 @@ public final class WorkflowRunsStore {
                 case let .forbidden(refused): detail.error = try await Wire.sentence(refused.body.plainText, status: 403)
                 case let .notFound(refused): detail.error = try await Wire.sentence(refused.body.plainText, status: 404)
                 case let .conflict(refused): detail.error = try await Wire.sentence(refused.body.plainText, status: 409)
-                case let .undocumented(statusCode, _): detail.error = "The hub answered \(statusCode)."
+                case let .undocumented(statusCode, payload): detail.error = await Wire.words(payload.body) ?? "The hub answered \(statusCode)."
                 }
             } catch {
                 if !Task.isCancelled { detail.error = error.localizedDescription }
@@ -113,11 +113,10 @@ public final class WorkflowRunsStore {
                     detail.error = try await Wire.sentence(refused.body.plainText, status: 409)
                     detail.answerStage = .failed
                 case let .unprocessableContent(bad):
-                    let problem = try bad.body.applicationProblemJson
-                    detail.error = String(data: try Wire.encoder().encode(problem), encoding: .utf8)
+                    detail.error = Wire.words(problem: try bad.body.applicationProblemJson) ?? "The hub answered 422."
                     detail.answerStage = .failed
-                case let .undocumented(statusCode, _):
-                    detail.error = "The hub answered \(statusCode)."
+                case let .undocumented(statusCode, payload):
+                    detail.error = await Wire.words(payload.body) ?? "The hub answered \(statusCode)."
                     detail.answerStage = .failed
                 }
             } catch { detail.error = error.localizedDescription; detail.answerStage = .failed }
@@ -142,7 +141,7 @@ public final class WorkflowRunsStore {
                 case let .forbidden(refused): refusal = try await Wire.sentence(refused.body.plainText, status: 403)
                 case let .notFound(refused): refusal = try await Wire.sentence(refused.body.plainText, status: 404)
                 case let .conflict(refused): refusal = try await Wire.sentence(refused.body.plainText, status: 409)
-                case let .undocumented(statusCode, _): refusal = "The hub answered \(statusCode)."
+                case let .undocumented(statusCode, payload): refusal = await Wire.words(payload.body) ?? "The hub answered \(statusCode)."
                 }
             } catch { refusal = error.localizedDescription }
             done(refusal)
@@ -163,8 +162,8 @@ public final class WorkflowRunsStore {
                 case let .notFound(refused): detail.error = try await Wire.sentence(refused.body.plainText, status: 404)
                 case let .conflict(refused): detail.error = try await Wire.sentence(refused.body.plainText, status: 409)
                 case let .unprocessableContent(refused):
-                    detail.error = String(data: try Wire.encoder().encode(try refused.body.applicationProblemJson), encoding: .utf8)
-                case let .undocumented(statusCode, _): detail.error = "The hub answered \(statusCode)."
+                    detail.error = Wire.words(problem: try refused.body.applicationProblemJson) ?? "The hub answered 422."
+                case let .undocumented(statusCode, payload): detail.error = await Wire.words(payload.body) ?? "The hub answered \(statusCode)."
                 }
             } catch { detail.error = error.localizedDescription }
         }
