@@ -24,10 +24,7 @@ export function questionAnswer(
 export const CLI_REJECTED =
   "The user doesn't want to proceed with this tool use.";
 
-/**
- * Dismiss, pressed on a question: a denial in the words the CLI uses for its
- * own. Only that button sends it; closing or leaving the card sends nothing.
- */
+/** Walking away from a question, which is a denial — the CLI answers its own the same way. */
 export const questionDismissal: PermissionResult = {
   behavior: "deny",
   message: QUESTION_DISMISSED,

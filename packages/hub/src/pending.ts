@@ -43,33 +43,20 @@ export interface PendingShape {
   ) => boolean;
   /**
    * `why` is said with a cancellation the hub can explain: an ask it could
-   * not show anyone (`askRefusal` in server.ts). `settlement` names who
-   * settled it and how, for the one line every settlement is logged with; an
-   * answer the hub relayed carries its own (`answerPendingPermission`).
+   * not show anyone (`askRefusal` in server.ts).
    */
   readonly resolve: (
     requestId: string,
     outcome?: "answered" | "cancelled",
-    why?: string,
-    settlement?: Settlement
+    why?: string
   ) => boolean;
-}
-
-/**
- * Who settled an ask (`dashboard`, `ios`, `telegram`, `delegate-parent`,
- * `session-end`, …) and what was chosen: what its log line says.
- */
-export interface Settlement {
-  by: string;
-  choice: string;
 }
 
 /** Hears every parked ask that leaves, with why when the hub could say. */
 export type SettledListener = (
   envelope: Envelope,
   outcome: "answered" | "cancelled",
-  why?: string,
-  settlement?: Settlement
+  why?: string
 ) => void;
 
 /** Stamps a parked ask's presentation onto its payload. */
@@ -102,12 +89,10 @@ export const answerWorkflow = (
   result: PermissionResult
 ): boolean => workflowAnswers.get(pending)?.(id, result) ?? false;
 
-/** `by` names who answered (a {@link Settlement}'s `by`): the log line says it. */
 type AnswerHandler = (
   instanceId: string,
   requestId: string,
-  result: PermissionResult,
-  by: string
+  result: PermissionResult
 ) => Promise<void>;
 const permissionAnswers = new WeakMap<PendingShape, AnswerHandler>();
 export const onPermissionAnswer = (
@@ -119,14 +104,13 @@ export const answerPermission = (
   pending: PendingShape,
   instanceId: string,
   requestId: string,
-  result: PermissionResult,
-  by: string
+  result: PermissionResult
 ): Promise<void> => {
   const handler = permissionAnswers.get(pending);
   if (!handler) {
     return Promise.reject(new Error("Permission answering is not ready."));
   }
-  return handler(instanceId, requestId, result, by);
+  return handler(instanceId, requestId, result);
 };
 
 /**
@@ -159,12 +143,7 @@ const make = (kept: DbShape["parkedAsks"]): PendingShape => {
   const settledIds = new Set<string>();
   let settled: SettledListener | undefined;
   let present: Presenter | undefined;
-  const resolve: PendingShape["resolve"] = (
-    requestId,
-    outcome,
-    why,
-    settlement
-  ) => {
+  const resolve: PendingShape["resolve"] = (requestId, outcome, why) => {
     const envelope = requests.get(requestId);
     if (!envelope) {
       return false;
@@ -172,7 +151,7 @@ const make = (kept: DbShape["parkedAsks"]): PendingShape => {
     requests.delete(requestId);
     kept.drop(requestId);
     settledIds.add(requestId);
-    settled?.(envelope, outcome ?? "answered", why, settlement);
+    settled?.(envelope, outcome ?? "answered", why);
     return true;
   };
 
@@ -224,10 +203,7 @@ const make = (kept: DbShape["parkedAsks"]): PendingShape => {
     forget: (instanceId) => {
       for (const [requestId, envelope] of requests) {
         if (envelope.instanceId === instanceId) {
-          resolve(requestId, "cancelled", undefined, {
-            by: "session-end",
-            choice: "cancelled",
-          });
+          resolve(requestId, "cancelled");
         }
       }
     },

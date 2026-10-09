@@ -50,7 +50,7 @@
     permissionAnswer,
   } from "../client.svelte";
   import { suggestedRule } from "../permission-summary";
-  import { questionAnswer, questionDismissal } from "../question";
+  import { questionAnswer } from "../question";
 
   let {
     request,
@@ -320,10 +320,7 @@
 
   /**
    * The keys the card already advertises: a digit picks the option wearing that
-   * keycap, Enter sends once every question has an answer. Escape is not one:
-   * it is heard window-wide, where it closes a menu, a dialog or a peek, and
-   * an ask is settled only by the reader's own choice, never by a key meant
-   * for something else (an Escape here once dismissed a question unseen).
+   * keycap, Enter sends once every question has an answer, Escape dismisses.
    * They are inert while the reader is writing (`isTyping`) — which is what
    * lets "2" mean an option here and a character in the composer — inert under
    * a modifier, so browser and OS chords still reach their owners, and inert
@@ -335,6 +332,11 @@
       return;
     }
     if (event.metaKey || event.ctrlKey || event.altKey || isTyping()) {
+      return;
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      answer("deny");
       return;
     }
     if (event.key >= "1" && event.key <= "9") {
@@ -366,15 +368,6 @@
     }
     pressed = "answer";
     commandId = onanswer(questionAnswer(input, answers));
-  }
-
-  /** Dismiss, pressed: the question is declined in the words the CLI uses for it. */
-  function dismissQuestion(): void {
-    if (!answerable) {
-      return;
-    }
-    pressed = "deny";
-    commandId = onanswer(questionDismissal);
   }
 
   /* shadcn <Button>, dressed in DESIGN.md tokens so nothing reads as stock
@@ -515,7 +508,7 @@
           disabled={disabledOf("deny")}
           failed={failedOf("deny")}
           label="Dismiss"
-          onclick={dismissQuestion}
+          onclick={() => answer("deny")}
           pending={pendingOf("deny")}
           pendingLabel="Dismissing…"
           variant="outline"

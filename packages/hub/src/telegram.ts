@@ -521,13 +521,7 @@ export const createTelegramBridge = ({
     const request = envelope.payload as PermissionRequest;
     settledHere.add(requestId);
     try {
-      await answerPermission(
-        pending,
-        request.instanceId,
-        requestId,
-        result,
-        "telegram"
-      );
+      await answerPermission(pending, request.instanceId, requestId, result);
       return true;
     } catch (error) {
       settledHere.delete(requestId);

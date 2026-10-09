@@ -3681,17 +3681,11 @@ export class SessionSupervisor {
     }
 
     if (method === RESOLVE_PERMISSION) {
-      const result = args[1] as PermissionResult;
-      this.#session(instanceId).resolvePermission(args[0] as string, result);
-      this.#settleAsk(instanceId, args[0] as string);
-      // Who answered is the hub's third argument (`answerPendingPermission`).
-      const said =
-        result.behavior === "deny" && result.message
-          ? ` ${JSON.stringify(result.message)}`
-          : "";
-      console.log(
-        `[agent] ask settled session=${instanceId} request=${args[0] as string} by=${typeof args[2] === "string" ? args[2] : "unnamed"} choice=${result.behavior}${said}`
+      this.#session(instanceId).resolvePermission(
+        args[0] as string,
+        args[1] as PermissionResult
       );
+      this.#settleAsk(instanceId, args[0] as string);
       return undefined;
     }
     if (method === WITHDRAW_PERMISSION) {

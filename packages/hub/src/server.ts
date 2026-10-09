@@ -309,7 +309,7 @@ import {
   storeFile,
 } from "./media";
 import { createNoticesSeen } from "./notices";
-import type { PendingShape, Settlement } from "./pending";
+import type { PendingShape } from "./pending";
 import {
   answerPermission,
   answerWorkflow,
@@ -1462,39 +1462,6 @@ const peekAnswers = (result: unknown): Record<string, unknown> | undefined => {
     : undefined;
 };
 
-/**
- * Which client sent a permission answer, as its log line names it: the app
- * says `via` on its `permission.answer` (the dashboard, the iOS app), and the
- * dashboard's tab id rides in its `provenance`. A client built before `via`
- * is named by its tab id alone.
- */
-const answeredVia = (payload: unknown): string => {
-  const via = peek(payload, "via");
-  const { provenance } = payload as { provenance?: { clientId?: unknown } };
-  const client =
-    typeof provenance?.clientId === "string"
-      ? ` client=${provenance.clientId}`
-      : "";
-  return `${via === "dashboard" || via === "ios" ? via : "unnamed-client"}${client}`;
-};
-
-/** What an answer chose, in words for the settlement's log line. */
-const askChoice = (parked: Envelope, result: PermissionResult): string => {
-  const { toolName, input } = parked.payload as Partial<PermissionRequestFrame>;
-  const question = questionsOf(toolName ?? "", input ?? {}) !== null;
-  if (result.behavior === "deny") {
-    const said = result.message ? ` ${JSON.stringify(result.message)}` : "";
-    return `${question ? "dismissed" : "deny"}${said}`;
-  }
-  if (question) {
-    return `answered ${JSON.stringify(peekAnswers(result) ?? {}).slice(0, 300)}`;
-  }
-  return result.updatedPermissions?.length ? "allow-always" : "allow";
-};
-
-/** A parked ask whose process is no longer the session's live one. */
-const PROCESS_ENDED: Settlement = { by: "session-end", choice: "cancelled" };
-
 /** And what the machine answered it with. */
 const peekToolStatus = (payload: unknown): ToolStatus | undefined => {
   if (typeof payload !== "object" || payload === null) {
@@ -1956,14 +1923,12 @@ export const createServer = (
 
   // An ask that leaves the hub's pending list is over on every screen: one
   // frame, whichever path settled it (an answer from any device, Telegram, a
-  // parent session or a workflow; a harness settling it itself; its process
-  // ending). Nothing else settles one: no timeout, no screen closing it.
-  // Without it every other client kept a card nobody could answer until it
-  // reconnected. An answer in flight holds who sent it and what it says, for
-  // the settlement's log line.
+  // parent session or a workflow; a harness settling it itself; a timeout; its
+  // process ending). Without it every other client kept a card nobody could
+  // answer until it reconnected.
   const answeringPermissions = new Map<
     string,
-    { outcome?: "answered" | "cancelled"; settlement: Settlement }
+    { outcome?: "answered" | "cancelled" }
   >();
   // Pushes to the iOS app when something newly needs you (push.ts).
   const push = createPush({
@@ -2005,7 +1970,7 @@ export const createServer = (
   // Each project's Caw (caw.ts), made further down once its services are; the
   // settlement, answer and process-end paths above it reach it through this.
   let lead: Caw | undefined;
-  pending.onSettled((parked, outcome, why, settlement) => {
+  pending.onSettled((parked, outcome, why) => {
     if (!(parked.requestId && parked.instanceId)) {
       return;
     }
@@ -2017,18 +1982,6 @@ export const createServer = (
     if (answering) {
       answering.outcome = outcome;
     }
-    // Every settlement, one line: who settled it and what was chosen. A path
-    // that names its own wins (a process ending under an answer in flight
-    // ended it); then the answer in flight; else a harness settled it itself
-    // (answered in its own UI, or withdrawn by an interrupt).
-    const said = settlement ??
-      (outcome === "answered" ? answering?.settlement : undefined) ?? {
-        by: outcome === "cancelled" ? "harness-withdrawn" : "harness",
-        choice: outcome,
-      };
-    console.log(
-      `[hub] ask settled session=${parked.instanceId} request=${parked.requestId} tool=${peek(parked.payload, "toolName") ?? "unknown"} by=${said.by} choice=${said.choice}${why ? ` why=${JSON.stringify(why)}` : ""}`
-    );
     telegram?.onSettled(parked.requestId);
     push.onSettled(parked.requestId);
     // An admin write whose ask left unanswered (its session ended) is refused.
@@ -9657,14 +9610,11 @@ export const createServer = (
   /**
    * One answer transaction for dashboards, Telegram and parent tools. The
    * machine's receipt and the ledger's settlement must both precede success.
-   * `by` names who answered: the settlement's log line says it, and so does
-   * the machine's (a third argument it logs).
    */
   const answerPendingPermission = async (
     instanceId: string,
     requestId: string,
-    answer: PermissionResult,
-    by: string
+    answer: PermissionResult
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one transaction validates ownership, workflow answers, delivery receipts and concurrent process death before reporting success.
   ): Promise<void> => {
     const parked = pending.get(requestId);
@@ -9676,10 +9626,7 @@ export const createServer = (
     if (answeringPermissions.has(requestId)) {
       throw new Error("That request is already being answered.");
     }
-    const receipt: {
-      outcome?: "answered" | "cancelled";
-      settlement: Settlement;
-    } = { settlement: { by, choice: askChoice(parked, result) } };
+    const receipt: { outcome?: "answered" | "cancelled" } = {};
     answeringPermissions.set(requestId, receipt);
     try {
       // A hub-raised ask is settled here, never delivered to a machine: a
@@ -9694,13 +9641,13 @@ export const createServer = (
         return;
       }
       if (!ownsPermission(parked)) {
-        pending.resolve(requestId, "cancelled", undefined, PROCESS_ENDED);
+        pending.resolve(requestId, "cancelled");
         throw new Error("That request is no longer pending.");
       }
       const delivered = await callAgent(
         parked.machineId,
         RESOLVE_PERMISSION,
-        [requestId, result, by],
+        [requestId, result],
         READ_TIMEOUT_MS,
         undefined,
         instanceId
@@ -9715,7 +9662,7 @@ export const createServer = (
         throw new Error(delivered.error ?? "The session refused the answer.");
       }
       if (receipt.outcome === "cancelled" || !ownsPermission(parked)) {
-        pending.resolve(requestId, "cancelled", undefined, PROCESS_ENDED);
+        pending.resolve(requestId, "cancelled");
         throw new Error("That request is no longer pending.");
       }
       pending.resolve(requestId);
@@ -9776,8 +9723,7 @@ export const createServer = (
       pending,
       message.instanceId ?? message.payload.instanceId ?? "",
       answer?.requestId ?? "",
-      answer?.result as PermissionResult,
-      answeredVia(message.payload)
+      answer?.result as PermissionResult
     ).then(
       () =>
         reply({ kind: "control_result", requestId: correlationId, ok: true }),
@@ -11188,13 +11134,7 @@ export const createServer = (
             "That ask is a fleet-settings change waiting on the person; only they answer it."
           );
         }
-        await answerPermission(
-          pending,
-          row.id,
-          answer.requestId,
-          result,
-          `delegate-parent session=${requester.id}`
-        );
+        await answerPermission(pending, row.id, answer.requestId, result);
         return;
       }
       const agent = registry.agent(row.machineId);
@@ -15959,12 +15899,7 @@ export const createServer = (
                   !heldIds.has(parked.instanceId ?? "") &&
                   !(heldOpencode && owner?.harness === "opencode")
                 ) {
-                  pending.resolve(
-                    parked.requestId ?? "",
-                    "cancelled",
-                    undefined,
-                    PROCESS_ENDED
-                  );
+                  pending.resolve(parked.requestId ?? "", "cancelled");
                 }
               }
               // Sessions that ran on while this hub was away: a read that
@@ -16858,10 +16793,7 @@ export const createServer = (
                     `[hub] ask refused session=${message.instanceId ?? "none"} request=${message.requestId} tool=${peek(message.payload, "toolName") ?? "unknown"}: ${refusal}`
                   );
                   pending.remember(message.requestId, message);
-                  pending.resolve(message.requestId, "cancelled", refusal, {
-                    by: "hub-unshown",
-                    choice: "withdrawn",
-                  });
+                  pending.resolve(message.requestId, "cancelled", refusal);
                   // biome-ignore lint/complexity/noVoid: the withdrawal says its own outcome in the log; admission does not wait on the machine
                   void withdrawUnshown(message, refusal);
                   break;
@@ -16926,16 +16858,11 @@ export const createServer = (
                         args: [
                           message.requestId,
                           { behavior: "deny", message: QUESTION_DISMISSED },
-                          "workflow-step",
                         ],
                       },
                     });
                   }
-                  pending.resolve(message.requestId, "answered", undefined, {
-                    by: "workflow-step",
-                    choice:
-                      "dismissed (a workflow step's question has no one to ask)",
-                  });
+                  pending.resolve(message.requestId);
                   break;
                 }
                 // A parent whose own work is finished cannot take the ask.

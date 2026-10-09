@@ -939,12 +939,13 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     override var keyCommands: [UIKeyCommand]? {
         var keys = [UIKeyCommand(title: "Stop", action: #selector(stopKey), input: ".", modifierFlags: .command),
                     UIKeyCommand(title: "Steer", action: #selector(steerKey), input: "l", modifierFlags: .command)]
-        // The first question card owns the digits and Return while the field is not being written in.
+        // The first question card owns the digits, Return and Escape while the field is not being written in.
         if !composerBinding.isWriting, cards.values.contains(where: \.ask.isQuestion) {
             for digit in 1 ... 9 {
                 keys.append(UIKeyCommand(input: "\(digit)", modifierFlags: [], action: #selector(cardKey(_:))))
             }
             keys.append(UIKeyCommand(input: "\r", modifierFlags: [], action: #selector(cardKey(_:))))
+            keys.append(UIKeyCommand(input: UIKeyCommand.inputEscape, modifierFlags: [], action: #selector(cardKey(_:))))
         }
         return keys
     }
