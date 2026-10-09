@@ -10,11 +10,20 @@ import {
   readEnv,
 } from "@cawco/core";
 import { holdPhrases, type RestartReadiness } from "@cawco/core/binary-updates";
+import { keeperEndpoint, keeperService } from "@cawco/core/keepers";
 import { hubDataDir } from "@cawco/core/paths";
 import { processStart } from "@cawco/core/process-identity";
-import { standalone } from "@cawco/core/runtime";
+import { runtimeVersion, standalone } from "@cawco/core/runtime";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
+
+/**
+ * The machine's keeper endpoint, as this machine derives it
+ * (`@cawco/core/sessiond`, design §12), with the same override the daemon's
+ * entry point honours: what names the current keeper (core keepers.ts).
+ */
+const sessiondSocket = (): string =>
+  process.env.CAWCO_SESSIOND_ENDPOINT ?? sessiondEndpoint();
 
 /**
  * The whole stack, as four services this machine can run for you, in the order
@@ -71,9 +80,13 @@ const MODE_ENV = CAWCO_ENV.serviceMode;
 /** Thrown for anything the caller can fix — a wrong platform, a failed launchctl. */
 export class ServiceError extends Error {}
 
-/** systemd wants a name, launchd wants a reverse-DNS label; they are one service. */
-const unitName = (id: ServiceId): string => `cawco-${id}.service`;
-const label = (id: ServiceId): string => `dev.cawco.${id}`;
+/**
+ * systemd wants a name, launchd wants a reverse-DNS label; they are one
+ * service, by its name: its id, or for a build's session keeper
+ * `sessiond-<version>` (core keepers.ts `keeperService`).
+ */
+const unitName = (name: string): string => `cawco-${name}.service`;
+const label = (name: string): string => `dev.cawco.${name}`;
 
 const SYSTEMD_DIR = join(
   process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"),
@@ -81,15 +94,15 @@ const SYSTEMD_DIR = join(
   "user"
 );
 
-const systemdPath = (id: ServiceId): string => join(SYSTEMD_DIR, unitName(id));
+const systemdPath = (name: string): string => join(SYSTEMD_DIR, unitName(name));
 
 /** The listening socket systemd holds for a socket-activated service. */
 const socketName = (id: ServiceId): string => `cawco-${id}.socket`;
 const socketPath = (id: ServiceId): string => join(SYSTEMD_DIR, socketName(id));
-const launchAgentPath = (id: ServiceId): string =>
-  join(homedir(), "Library", "LaunchAgents", `${label(id)}.plist`);
-const launchAgentLog = (id: ServiceId): string =>
-  join(homedir(), "Library", "Logs", `cawco-${id}.log`);
+const launchAgentPath = (name: string): string =>
+  join(homedir(), "Library", "LaunchAgents", `${label(name)}.plist`);
+const launchAgentLog = (name: string): string =>
+  join(homedir(), "Library", "Logs", `cawco-${name}.log`);
 
 /**
  * The node the dashboard's server runs under, found on the installing shell's
@@ -108,6 +121,29 @@ interface Launch {
   readonly command: readonly string[];
   readonly needs: string;
 }
+
+/**
+ * The session keeper a set of units runs: its launch, the service name its
+ * unit and label carry, and the endpoint it listens on. A checkout's keeper
+ * is `sessiond`, on the machine's endpoint itself; a build's is
+ * `sessiond-<version>`, on its own endpoint beside it, which it makes the
+ * machine's when it is the current one (core keepers.ts).
+ */
+interface KeeperLaunch extends Launch {
+  readonly endpoint: string;
+  readonly name: string;
+}
+
+/** A build's own keeper, run from `executable` (core keepers.ts). */
+const buildKeeper = (version: string, executable: string): KeeperLaunch => {
+  const keeper = { kind: "build", version } as const;
+  return {
+    command: [executable, "sessiond"],
+    needs: executable,
+    name: keeperService(keeper),
+    endpoint: keeperEndpoint(keeper, sessiondSocket()),
+  };
+};
 
 /**
  * Every command and path a set of units names, derived from one root. A
@@ -135,7 +171,7 @@ interface Layout {
   };
   readonly hub: Launch;
   readonly root: string;
-  readonly sessiond: Launch;
+  readonly sessiond: KeeperLaunch;
 }
 
 const checkoutLayout = (
@@ -151,6 +187,8 @@ const checkoutLayout = (
     sessiond: {
       command: [process.execPath, sessiondEntry],
       needs: sessiondEntry,
+      name: "sessiond",
+      endpoint: sessiondSocket(),
     },
     agent: { command: [process.execPath, cliEntry, "up"], needs: cliEntry },
     dashboard: {
@@ -205,7 +243,7 @@ const here = (): Layout => {
       root: dirname(executable),
       hub: launch("hub"),
       agent: launch("up"),
-      sessiond: launch("sessiond"),
+      sessiond: buildKeeper(runtimeVersion, executable),
       dashboard: launch("dashboard"),
       dashboardBuild: executable,
       dashboardCwd: homedir(),
@@ -370,13 +408,6 @@ const probeAgent = async (): Promise<string | undefined> => {
 };
 
 /**
- * Where sessiond listens, as this machine derives it (`@cawco/core/sessiond`,
- * design §12), with the same override the daemon's entry point honours.
- */
-const sessiondSocket = (): string =>
-  process.env.CAWCO_SESSIOND_ENDPOINT ?? sessiondEndpoint();
-
-/**
  * A unix socket that is merely *there* proves nothing — a sessiond killed with
  * SIGKILL leaves the node behind — so the probe actually connects and hangs up.
  * Windows named pipes are not reachable this way and this whole file refuses
@@ -467,10 +498,11 @@ export const awaitFirstMachineReady = async (
     }
     if (Date.now() >= deadline) {
       const [serviceId] = failed;
+      // A build's keeper is `sessiond-<version>`: the pattern names it too.
       const logs =
         platform() === "darwin"
-          ? `tail -n 50 "${launchAgentLog(serviceId)}"`
-          : `journalctl --user -u cawco-${serviceId} -n 50`;
+          ? `tail -n 50 "${join(dirname(launchAgentLog(serviceId)), `cawco-${serviceId}`)}"*.log`
+          : `journalctl --user -u 'cawco-${serviceId}*' -n 50`;
       throw new ServiceError(
         `${serviceId} did not become ready within ${READY_TIMEOUT_MS / 1000}s. Read why with: ${logs}`
       );
@@ -482,6 +514,8 @@ export const awaitFirstMachineReady = async (
 export interface ServiceSpec {
   /** systemd ordering only — launchd has none, see {@link plist}. */
   readonly after: readonly string[];
+  /** systemd ordering only: the units this one starts before. */
+  readonly before?: readonly string[];
   /**
    * Asked before anything is written. A throw refuses the install outright: a
    * unit that could only crash-loop is never written.
@@ -506,6 +540,11 @@ export interface ServiceSpec {
   readonly launchAgentNote?: readonly string[];
   readonly mode: ServiceMode;
   /**
+   * What its unit (`cawco-<name>.service`), label (`dev.cawco.<name>`) and
+   * log carry: its id, or a build's session keeper's own name.
+   */
+  readonly name: string;
+  /**
    * Writes systemd's `OOMPolicy=continue`, for a service whose processes are
    * not one piece of work. Absent, systemd's default `stop` ends every process
    * of the unit when the kernel kills one of them for memory. launchd has no
@@ -522,6 +561,12 @@ export interface ServiceSpec {
    * apps, that is to say, none". systemd has no counterpart.
    */
   readonly processType?: "Interactive";
+  /**
+   * systemd `RequiredBy=` in `[Install]`: the units that, while this one is
+   * enabled, cannot start without it, and are stopped or restarted with it.
+   * Disabling it lets them go on without it.
+   */
+  readonly requiredBy?: readonly string[];
   /**
    * Hard dependencies: systemd `Requires=`. A unit here is one the service
    * genuinely cannot work without, so its failure must take this one down
@@ -565,6 +610,7 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
   return {
     hub: {
       id: "hub",
+      name: "hub",
       mode: "prod",
       description: "CawCo hub",
       // `bun run --filter '@cawco/hub' start` needs a shell for the quoting and
@@ -599,6 +645,7 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
 
     dashboard: {
       id: "dashboard",
+      name: "dashboard",
       mode: "prod",
       description: "CawCo dashboard",
       command: layout.dashboard.command,
@@ -655,13 +702,24 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
      * and cuts only what the agent carries itself ({@link clearToRestart}). So
      * {@link unit} emits no `KillMode=` for anybody, and that absence is the
      * decision, not an oversight.
+     *
+     * A build's keeper is a unit of its own, `cawco-sessiond-<version>`, so
+     * the keeper of the next build starts beside it and the sessions it holds
+     * run on (core keepers.ts). Which one starts with the machine is which
+     * one is enabled: the current one.
      */
     sessiond: {
       id: "sessiond",
+      name: layout.sessiond.name,
       mode: "prod",
-      description: "CawCo sessiond",
+      description:
+        layout.sessiond.name === "sessiond"
+          ? "CawCo sessiond"
+          : `CawCo sessiond ${layout.sessiond.name.slice("sessiond-".length)}`,
       command: layout.sessiond.command,
-      environment: { [CAWCO_ENV.sessiondEndpoint]: sessiondSocket() },
+      environment: {
+        [CAWCO_ENV.sessiondEndpoint]: layout.sessiond.endpoint,
+      },
       // Not the checkout: sessiond spawns children with a cwd the agent hands it
       // per child, and nothing it does resolves against its own.
       workingDirectory: homedir(),
@@ -669,6 +727,16 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
       // to the processes it owns. It is the one service that can come up alone.
       after: [],
       wants: [],
+      // The agent dials it, so it starts first. Since the claude bridge became
+      // the only spawn path (C7: no flag, no in-process fallback), an agent
+      // without a keeper is up and unable to start a single session, failing
+      // one spawn at a time: so the agent requires it, and if it cannot
+      // start, the agent does not either, and systemd says why in one place.
+      // Said here, on the keeper's side, so the requirement goes with the
+      // keeper that is enabled: a retiring keeper, disabled, is required by
+      // nothing, and its end stops nothing.
+      before: [unitName("agent")],
+      requiredBy: [unitName("agent")],
       // Draining on SIGTERM and exiting 0 is sessiond doing as it was told; only a
       // crash is worth restarting for (design §11: `Restart=on-failure`).
       restartOnSuccess: false,
@@ -703,6 +771,7 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
 
     agent: {
       id: "agent",
+      name: "agent",
       mode: "prod",
       description: "CawCo agent",
       /**
@@ -719,15 +788,10 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
       },
       workingDirectory: homedir(),
       // The hub is soft: the daemon reconnects with backoff and works through an
-      // outage. sessiond is NOT — since the claude bridge became the only spawn
-      // path (C7: no flag, no in-process fallback), a daemon without it is up and
-      // unable to start a single session, failing one spawn at a time. That is
-      // the quiet failure this build exists to remove, so sessiond is
-      // `Requires=`: if it cannot start, the agent does not either, and systemd
-      // says why in one place instead of the operator finding out per session.
-      after: [unitName("hub"), unitName("sessiond")],
+      // outage. The session keeper is not, and requires this unit from its own
+      // side (`RequiredBy=`, above), whichever keeper is the machine's now.
+      after: [unitName("hub")],
       wants: [unitName("hub")],
-      requires: [unitName("sessiond")],
       restartOnSuccess: false,
       restartSec: 5,
       launchAgentNote: [
@@ -891,7 +955,7 @@ const plist = (
 <plist version="1.0">
 <dict>${orderingComment(spec)}
   <key>Label</key>
-  <string>${xml(label(spec.id))}</string>
+  <string>${xml(label(spec.name))}</string>
   <key>ProgramArguments</key>
   <array>
 ${spec.command.map((argument) => `    <string>${xml(argument)}</string>`).join("\n")}
@@ -939,9 +1003,9 @@ ${environment(spec)
   <key>WorkingDirectory</key>
   <string>${xml(spec.workingDirectory)}</string>
   <key>StandardOutPath</key>
-  <string>${xml(launchAgentLog(spec.id))}</string>
+  <string>${xml(launchAgentLog(spec.name))}</string>
   <key>StandardErrorPath</key>
-  <string>${xml(launchAgentLog(spec.id))}</string>
+  <string>${xml(launchAgentLog(spec.name))}</string>
 </dict>
 </plist>
 `;
@@ -955,10 +1019,10 @@ ${environment(spec)
 const unit = (spec: ServiceSpec): string => `[Unit]
 Description=${spec.description}
 ${[
-  // A service with neither — sessiond — would otherwise contribute a blank line.
   ...(spec.requires ?? []).map((target) => `Requires=${target}`),
   ...spec.wants.map((target) => `Wants=${target}`),
   ...spec.after.map((target) => `After=${target}`),
+  ...(spec.before ?? []).map((target) => `Before=${target}`),
   "StartLimitIntervalSec=0",
 ].join("\n")}
 
@@ -976,7 +1040,7 @@ RestartSec=${spec.restartSec}${spec.oomContinue ? "\nOOMPolicy=continue" : ""}${
 }
 
 [Install]
-WantedBy=default.target
+${["WantedBy=default.target", ...(spec.requiredBy ?? []).map((target) => `RequiredBy=${target}`)].join("\n")}
 `;
 
 /**
@@ -1063,8 +1127,8 @@ const loadLaunchAgent = async (
   bootstrap: boolean,
   note: (line: string) => void
 ): Promise<void> => {
-  const path = launchAgentPath(spec.id);
-  const target = `${guiDomain()}/${label(spec.id)}`;
+  const path = launchAgentPath(spec.name);
+  const target = `${guiDomain()}/${label(spec.name)}`;
   // launchd refuses to bootstrap a label it already knows.
   await run(["launchctl", "bootout", target]);
   // …and `bootout` returns before the label is gone: a service that drains on
@@ -1119,7 +1183,7 @@ export const installLaunchAgents = async (
     if (index > 0) {
       note("");
     }
-    const path = launchAgentPath(spec.id);
+    const path = launchAgentPath(spec.name);
     const text = plist(spec);
     // A job launchd holds a socket for keeps it only while it stays loaded:
     // booting it out closes the socket, and a page load in that gap is refused.
@@ -1131,7 +1195,7 @@ export const installLaunchAgents = async (
       (await Bun.file(path)
         .text()
         .catch(() => "")) === text &&
-      (await run(["launchctl", "print", `${guiDomain()}/${label(spec.id)}`]))
+      (await run(["launchctl", "print", `${guiDomain()}/${label(spec.name)}`]))
         .exitCode === 0
     ) {
       note(`${path} is unchanged and loaded, so its socket stays open`);
@@ -1142,7 +1206,7 @@ export const installLaunchAgents = async (
 
     await loadLaunchAgent(spec, bootstrap, note);
 
-    note(`logs ${launchAgentLog(spec.id)}`);
+    note(`logs ${launchAgentLog(spec.name)}`);
     if (spec.launchAgentNote) {
       note("");
       for (const line of spec.launchAgentNote) {
@@ -1158,10 +1222,10 @@ const uninstallLaunchAgents = async (
 ): Promise<void> => {
   const bootstrap = await hasBootstrap();
   for (const spec of specs) {
-    const path = launchAgentPath(spec.id);
+    const path = launchAgentPath(spec.name);
     if (bootstrap) {
       // biome-ignore lint/performance/noAwaitInLoops: services uninstall one at a time so each one's notes print in its own order and a failure is attributable to the service that caused it.
-      await run(["launchctl", "bootout", `${guiDomain()}/${label(spec.id)}`]);
+      await run(["launchctl", "bootout", `${guiDomain()}/${label(spec.name)}`]);
     } else {
       await run(["launchctl", "unload", "-w", path]);
     }
@@ -1264,7 +1328,12 @@ const bindSocket = async (
   spec: ServiceSpec,
   note: (line: string) => void
 ): Promise<void> => {
-  const stopped = await run(["systemctl", "--user", "stop", unitName(spec.id)]);
+  const stopped = await run([
+    "systemctl",
+    "--user",
+    "stop",
+    unitName(spec.name),
+  ]);
   if (stopped.exitCode !== 0) {
     throw failed("systemctl --user stop", stopped);
   }
@@ -1299,8 +1368,8 @@ const installSystemdUnits = async (
     if (spec.socket && (await writeSocketUnit(spec, spec.socket, note))) {
       rebind.add(spec.id);
     }
-    await writeUnit(systemdPath(spec.id), unit(spec));
-    note(`wrote ${systemdPath(spec.id)}`);
+    await writeUnit(systemdPath(spec.name), unit(spec));
+    note(`wrote ${systemdPath(spec.name)}`);
   }
 
   // Once for the set: systemd re-reads every file it was handed, and enabling a
@@ -1320,13 +1389,13 @@ const installSystemdUnits = async (
       "--user",
       "enable",
       "--now",
-      unitName(spec.id),
+      unitName(spec.name),
     ]);
     if (enabled.exitCode !== 0) {
       throw failed("systemctl --user enable --now", enabled);
     }
-    note(`enabled and started ${unitName(spec.id)}`);
-    note(`logs journalctl --user -u ${unitName(spec.id)} -f`);
+    note(`enabled and started ${unitName(spec.name)}`);
+    note(`logs journalctl --user -u ${unitName(spec.name)} -f`);
   }
 
   await lingerHint(note);
@@ -1338,13 +1407,13 @@ const uninstallSystemdUnits = async (
 ): Promise<void> => {
   for (const spec of specs) {
     // biome-ignore lint/performance/noAwaitInLoops: units uninstall one at a time so each one's notes print in its own order and a failure is attributable to the unit that caused it.
-    await run(["systemctl", "--user", "disable", "--now", unitName(spec.id)]);
-    await Bun.file(systemdPath(spec.id))
+    await run(["systemctl", "--user", "disable", "--now", unitName(spec.name)]);
+    await Bun.file(systemdPath(spec.name))
       .delete()
       .catch(() => {
         // best effort: the unit file may already be gone
       });
-    note(`removed ${systemdPath(spec.id)}`);
+    note(`removed ${systemdPath(spec.name)}`);
     if (spec.socket) {
       await run([
         "systemctl",
@@ -1618,7 +1687,7 @@ const restartLaunchAgent = async (
   spec: ServiceSpec,
   note: (line: string) => void
 ): Promise<void> => {
-  if (!existsSync(launchAgentPath(spec.id))) {
+  if (!existsSync(launchAgentPath(spec.name))) {
     throw new ServiceError(
       `${spec.id} is not installed — \`cawco service install ${spec.id}\` first.`
     );
@@ -1628,7 +1697,7 @@ const restartLaunchAgent = async (
       "launchctl",
       "kickstart",
       "-k",
-      `${guiDomain()}/${label(spec.id)}`,
+      `${guiDomain()}/${label(spec.name)}`,
     ]);
     if (kicked.exitCode !== 0) {
       throw failed("launchctl kickstart -k", kicked);
@@ -1636,14 +1705,14 @@ const restartLaunchAgent = async (
   } else {
     await loadLaunchAgent(spec, await hasBootstrap(), note);
   }
-  note(`restarted ${label(spec.id)}`);
+  note(`restarted ${label(spec.name)}`);
 };
 
 const restartSystemdUnit = async (
   spec: ServiceSpec,
   note: (line: string) => void
 ): Promise<void> => {
-  if (!existsSync(systemdPath(spec.id))) {
+  if (!existsSync(systemdPath(spec.name))) {
     throw new ServiceError(
       `${spec.id} is not installed — \`cawco service install ${spec.id}\` first.`
     );
@@ -1652,12 +1721,12 @@ const restartSystemdUnit = async (
     "systemctl",
     "--user",
     "restart",
-    unitName(spec.id),
+    unitName(spec.name),
   ]);
   if (restarted.exitCode !== 0) {
     throw failed("systemctl --user restart", restarted);
   }
-  note(`restarted ${unitName(spec.id)}`);
+  note(`restarted ${unitName(spec.name)}`);
 };
 
 /** Stops one installed service and leaves it stopped. */
@@ -1702,10 +1771,10 @@ const launchAgentStatus = async (
   spec: ServiceSpec,
   note: (line: string) => void
 ): Promise<void> => {
-  const listed = await run(["launchctl", "list", label(spec.id)]);
+  const listed = await run(["launchctl", "list", label(spec.name)]);
   const pid = LAUNCHCTL_PID.exec(listed.stdout.toString())?.[1];
-  note(`service  ${spec.id} (${label(spec.id)})`);
-  note(`unit     ${launchAgentPath(spec.id)}`);
+  note(`service  ${spec.id} (${label(spec.name)})`);
+  note(`unit     ${launchAgentPath(spec.name)}`);
   let state: string;
   if (listed.exitCode !== 0) {
     state = "not loaded";
@@ -1715,12 +1784,12 @@ const launchAgentStatus = async (
     state = "loaded, not running";
   }
   note(`state    ${state}`);
-  note(`mode     ${await modeLine(spec, launchAgentPath(spec.id))}`);
+  note(`mode     ${await modeLine(spec, launchAgentPath(spec.name))}`);
   const live = await spec.probe();
   if (live) {
     note(`live     ${live}`);
   }
-  note(`logs     ${launchAgentLog(spec.id)}`);
+  note(`logs     ${launchAgentLog(spec.name)}`);
 };
 
 const systemdStatus = async (
@@ -1731,16 +1800,16 @@ const systemdStatus = async (
     "systemctl",
     "--user",
     "is-active",
-    unitName(spec.id),
+    unitName(spec.name),
   ]);
   const enabled = await run([
     "systemctl",
     "--user",
     "is-enabled",
-    unitName(spec.id),
+    unitName(spec.name),
   ]);
-  note(`service  ${spec.id} (${unitName(spec.id)})`);
-  note(`unit     ${systemdPath(spec.id)}`);
+  note(`service  ${spec.id} (${unitName(spec.name)})`);
+  note(`unit     ${systemdPath(spec.name)}`);
   note(
     `state    ${active.stdout.toString().trim() || "unknown"} (${enabled.stdout.toString().trim() || "not installed"})`
   );
@@ -1755,12 +1824,12 @@ const systemdStatus = async (
       `socket   ${socketName(spec.id)} ${listening.stdout.toString().trim() || "unknown"} on ${spec.socket.host}:${spec.socket.port}`
     );
   }
-  note(`mode     ${await modeLine(spec, systemdPath(spec.id))}`);
+  note(`mode     ${await modeLine(spec, systemdPath(spec.name))}`);
   const live = await spec.probe();
   if (live) {
     note(`live     ${live}`);
   }
-  note(`logs     journalctl --user -u ${unitName(spec.id)} -f`);
+  note(`logs     journalctl --user -u ${unitName(spec.name)} -f`);
 };
 
 /** How many lines of a service's history are worth reading without asking for more. */
@@ -1770,7 +1839,7 @@ const launchAgentLogs = async (
   spec: ServiceSpec,
   follow: boolean
 ): Promise<void> => {
-  const path = launchAgentLog(spec.id);
+  const path = launchAgentLog(spec.name);
   if (!(await Bun.file(path).exists())) {
     throw new ServiceError(`no log yet at ${path} — is the service installed?`);
   }
@@ -1789,7 +1858,7 @@ const systemdLogs = async (
     "journalctl",
     "--user",
     "-u",
-    unitName(spec.id),
+    unitName(spec.name),
     "-n",
     `${LOG_TAIL_LINES}`,
   ];
@@ -1800,9 +1869,15 @@ const systemdLogs = async (
 };
 
 export interface ServiceOptions {
-  /** Verified binary install: every unit starts through the wrapper, which picks the build from the `current` and `keeper` links. */
+  /**
+   * Verified binary install: the hub, dashboard and agent units start through
+   * the wrapper, which picks the build from the `current` link; the session
+   * keeper's unit is `keeper`'s own, run from its folder.
+   */
   binaryLayout?: {
     executable: string;
+    /** The build whose session keeper the keeper's unit runs, and its program. */
+    keeper: { executable: string; version: string };
     wrapper: string;
   };
   follow: boolean;
@@ -1838,10 +1913,10 @@ const specsOf = (
           command: [binaryLayout.wrapper, "dashboard"],
           needs: binaryLayout.executable,
         },
-        sessiond: {
-          command: [binaryLayout.wrapper, "sessiond"],
-          needs: binaryLayout.executable,
-        },
+        sessiond: buildKeeper(
+          binaryLayout.keeper.version,
+          binaryLayout.keeper.executable
+        ),
         dashboardBuild: binaryLayout.executable,
         dashboardCwd: homedir(),
       }
@@ -1851,12 +1926,13 @@ const specsOf = (
 
 /**
  * Rewrites the units of `ids` this build writes differently from what is on
- * disk, and has systemd reload its unit files once; restarts nothing. A
- * service picks its new definition up at its next start. What an update calls
- * once its build has passed verification and before the keeper moves to it
- * (`cawco binary-units`, binary-apply.ts `settle`), so a change to a unit
- * reaches machines installed before it. On macOS the plist is rewritten the
- * same way, and launchd reads it at the job's next load.
+ * disk, and has systemd reload its unit files once; restarts, starts and
+ * enables nothing. A service picks its new definition up at its next start.
+ * What a keeper handover runs from the build it hands the keeper to (`cawco
+ * binary-units`, binary-apply.ts `handOverKeeper`): that build's keeper's own
+ * unit, so a change to it reaches machines installed before it. On macOS the
+ * plist is rewritten the same way, and launchd reads it at the job's next
+ * load.
  */
 export const refreshUnits = async (
   ids: readonly ServiceId[],
@@ -1867,8 +1943,8 @@ export const refreshUnits = async (
   const changed: string[] = [];
   for (const spec of specsOf(ids, "prod", binaryLayout)) {
     const [path, text] = mac
-      ? [launchAgentPath(spec.id), plist(spec)]
-      : [systemdPath(spec.id), unit(spec)];
+      ? [launchAgentPath(spec.name), plist(spec)]
+      : [systemdPath(spec.name), unit(spec)];
     // biome-ignore lint/performance/noAwaitInLoops: one unit at a time, each note in its order
     const before = await Bun.file(path)
       .text()
@@ -1887,6 +1963,48 @@ export const refreshUnits = async (
     note("systemd reloaded its unit files");
   }
   return changed;
+};
+
+/** What the agent's unit said of the keeper before keepers ran side by side. */
+const LEGACY_KEEPER_LINES = new Set([
+  `Requires=${unitName("sessiond")}`,
+  `After=${unitName("sessiond")}`,
+]);
+
+/**
+ * The agent's unit, as builds from before keepers ran side by side wrote it,
+ * requires `cawco-sessiond.service` and starts after it: retiring that keeper
+ * would stop the agent with it, and the unit's removal would fail the agent's
+ * next start. Those two lines are taken out of the unit on disk, and nothing
+ * else is touched: the rest is what the installing shell knew (the hub's
+ * address), which the process doing this may not (`cawco up` holds the hub's
+ * address in another form). The keeper that is the machine's now requires the
+ * agent's unit from its own side (`RequiredBy=`). systemd only; a launchd job
+ * names no other.
+ */
+export const releaseAgentUnit = async (
+  note: (line: string) => void
+): Promise<void> => {
+  if (platform() !== "linux") {
+    return;
+  }
+  const path = systemdPath("agent");
+  const before = await Bun.file(path)
+    .text()
+    .catch(() => "");
+  const after = before
+    .split("\n")
+    .filter((line) => !LEGACY_KEEPER_LINES.has(line.trim()))
+    .join("\n");
+  if (after === before) {
+    return;
+  }
+  await writeUnit(path, after);
+  const reloaded = await run(["systemctl", "--user", "daemon-reload"]);
+  if (reloaded.exitCode !== 0) {
+    throw failed("systemctl --user daemon-reload", reloaded);
+  }
+  note(`${path} no longer requires ${unitName("sessiond")}`);
 };
 
 /**

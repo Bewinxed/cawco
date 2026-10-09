@@ -22,6 +22,7 @@
     "./machine-id": "./src/machine-id.ts",
     "./file-hash": "./src/file-hash.ts",
     "./binary-installation": "./src/binary-installation.ts",
+    "./keepers": "./src/keepers.ts",
     "./install-script": "./src/install-script.ts",
     "./preview-proxy": "./src/preview-proxy.ts",
     "./paths": "./src/paths.ts",

@@ -17,41 +17,34 @@
 
 import { accountReports, claudeAuth } from "../../packages/agent/src/accounts";
 import type { Harness } from "../../packages/agent/src/harness";
+import { KeeperPool } from "../../packages/agent/src/keepers";
 import { parseProcId, procIdFor } from "../../packages/agent/src/proc-id";
 import type { SessiondAdoption } from "../../packages/agent/src/session";
 import {
   endProc,
-  ensureSessiond,
-  SessiondClient,
+  type SessiondClient,
 } from "../../packages/agent/src/sessiond-client";
 import { CONTROL_PROBE_ACCOUNT } from "../../packages/core/src/accounts";
 import { CAPABILITIES_NONE } from "../../packages/core/src/harness";
 import type { HarnessKind, HarnessReport } from "../../packages/core/src/index";
-import { sessiondEndpoint } from "../../packages/core/src/sessiond";
 
 /** What a session is handed by the supervisor, and what the harness hands back for it. */
 type Context = Parameters<Harness["spawn"]>[1];
 type Session = Awaited<ReturnType<Harness["spawn"]>>;
 
-let connection: Promise<SessiondClient> | undefined;
-/** The machine's one session-holder connection, dialled lazily and re-dialled when it drops. */
-async function holder(): Promise<SessiondClient> {
-  const endpoint = process.env.CAWCO_SESSIOND_ENDPOINT ?? sessiondEndpoint();
-  const existing = await connection?.catch(() => undefined);
-  if (existing && !existing.retired) {
-    return existing;
-  }
-  connection = (async () => {
-    await ensureSessiond(endpoint);
-    return SessiondClient.connect(endpoint);
-  })();
-  return connection;
-}
+/**
+ * The machine's keepers, as the real harnesses reach them: a start goes to
+ * the current keeper, and a session is held, stopped and taken back on the
+ * keeper that holds it, current or retiring.
+ */
+const keepers = new KeeperPool();
 
+/** A session held by `client`'s keeper, as a real session keeps the keeper it was started or adopted on. */
 function session(
   kind: "claude" | "pi",
   instanceId: string,
-  ctx: Context
+  ctx: Context,
+  client: SessiondClient
 ): Session {
   const procId = procIdFor(kind, instanceId);
   return {
@@ -66,7 +59,7 @@ function session(
     resolvePermission: () => undefined,
     send: () => undefined,
     stop: async () => {
-      await endProc(await holder(), procId);
+      await endProc(client, procId);
       ctx.closed?.();
     },
     withdrawPermission: () => undefined,
@@ -106,13 +99,18 @@ for (const kind of ["claude", "opencode", "pi"] as const) {
   // What the supervisor's reattach reaches on a sessiond-backed adapter,
   // checked against the shape it reads.
   const adoption: SessiondAdoption = {
-    adopt: (instanceId, ctx) =>
-      Promise.resolve(session(held ?? "claude", instanceId, ctx)),
+    adopt: async (instanceId, ctx) => {
+      const kept = held ?? "claude";
+      const proc = await keepers.holding(procIdFor(kept, instanceId));
+      if (!proc) {
+        throw new Error(`no keeper holds a live child ${instanceId}`);
+      }
+      return session(kept, instanceId, ctx, proc.client);
+    },
     custodyCandidates: async () => {
-      const welcome = await (await holder()).list();
+      await keepers.current();
       return {
-        ...welcome,
-        procs: welcome.procs.filter(
+        procs: (await keepers.held()).filter(
           (proc) => held !== undefined && parseProcId(proc.procId).kind === held
         ),
       };
@@ -150,24 +148,27 @@ for (const kind of ["claude", "opencode", "pi"] as const) {
       if (!held) {
         throw new Error("The proof harness holds no opencode sessions");
       }
-      await (await holder()).spawnProc(procIdFor(held, ctx.instanceId), {
+      const procId = procIdFor(held, ctx.instanceId);
+      const client = await keepers.current();
+      await keepers.replaceElsewhere(procId, client);
+      await client.spawnProc(procId, {
         command: "sleep",
         args: ["3000"],
         cwd: ctx.cwd,
         env: {},
       });
-      return session(held, ctx.instanceId, ctx);
+      return session(held, ctx.instanceId, ctx, client);
     },
-    // The agent came back: the child is still there, and is taken over, not started again.
+    // The agent came back: the child is still there, on whichever keeper
+    // holds it, and is taken over, not started again.
     reattach: async (_payload, ctx) => {
       if (!held) {
         return;
       }
-      const welcome = await (await holder()).list();
-      const child = welcome.procs.find(
-        (proc) => proc.procId === procIdFor(held, ctx.instanceId) && proc.alive
-      );
-      return child ? session(held, ctx.instanceId, ctx) : undefined;
+      const child = await keepers.holding(procIdFor(held, ctx.instanceId));
+      return child
+        ? session(held, ctx.instanceId, ctx, child.client)
+        : undefined;
     },
     deleteSession: () => Promise.resolve(),
     renameSession: () => Promise.resolve(),

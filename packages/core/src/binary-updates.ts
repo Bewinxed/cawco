@@ -6,10 +6,12 @@ export interface BinaryUpdatePolicy {
 }
 
 /**
- * Where a machine stands. `waiting-sessions` is the session keeper's own
- * state: it holds running children and so keeps its old binary; the count is
- * `heldChildren`. A machine whose new agent cannot speak to that keeper is in
- * the same state with `installedVersion` still the old one.
+ * Where a machine stands. `waiting-sessions`: the new build's agent could not
+ * speak to a session keeper that holds running children, so the whole update
+ * waits for them to end (`heldChildren`), and `installedVersion` is still the
+ * old one. A keeper of an earlier build that still holds sessions is no wait:
+ * the keeper of the installed build runs beside it and takes every new
+ * session at once (`retiringKeepers`).
  */
 export const BINARY_UPDATE_PHASES = [
   "none",
@@ -202,6 +204,14 @@ export function mergeHolds(
     .map(([reason, ids]) => ({ reason, ids: [...ids] }));
 }
 
+/** A keeper of an earlier build still holding sessions while the current one takes every new start. */
+export interface RetiringKeeper {
+  /** Its sessions, and any other process it holds (a workspace's boundary, an OpenCode server). */
+  sessions: number;
+  /** Its build. */
+  version: string;
+}
+
 export interface BinaryUpdateState {
   availableVersion?: string;
   channel: BinaryUpdatePolicy["channel"];
@@ -219,21 +229,13 @@ export interface BinaryUpdateState {
   error?: string;
   /** The build that failed to come up and was rolled back; not retried by itself. */
   failedVersion?: string;
-  /** Children the session keeper holds, while it is the reason for waiting. */
+  /** Children a keeper the new build cannot speak to holds, while they are the reason for waiting (`waiting-sessions`). */
   heldChildren?: number;
   /** True on the machine that runs the hub. */
   hostsHub: boolean;
   installedVersion: string;
-  /** The build the session keeper could not start on; not retried by itself. */
+  /** The build whose session keeper could not start; the keeper is not handed to it again by itself. */
   keeperFailedVersion?: string;
-  /**
-   * The build the keeper is owed a move to: a person's Install now of it was
-   * confirmed while the keeper held children. Not a command: the agent moves
-   * the keeper to this build alone, once it holds nothing, whatever the
-   * auto-update setting, and clears it as it does. A newer install or a
-   * rollback clears it too.
-   */
-  keeperOwed?: string;
   /**
    * The last time the agent found the session keeper wedged (alive, socket
    * open, no welcome) and restarted it, which ended every session it held.
@@ -258,7 +260,14 @@ export interface BinaryUpdateState {
   landed?: BinaryUpdateLanding;
   notes?: string;
   phase: BinaryUpdatePhase;
-  /** The version the session keeper's link names; differs from the build while it holds children. */
+  /**
+   * Keepers of earlier builds still holding sessions after a handover, each
+   * with how many: every new session starts on the current keeper
+   * (`sessiondVersion`), and each of these exits once the last session it
+   * holds has ended or gone to sleep. Absent when there is none.
+   */
+  retiringKeepers?: RetiringKeeper[];
+  /** The build of the current session keeper, the one every new session starts on: the `keeper` link. */
   sessiondVersion?: string;
   /** When anything in this state last changed. Not an identity for anything. */
   updatedAt: number;

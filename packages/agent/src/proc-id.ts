@@ -10,6 +10,9 @@ export type ProcId =
 
 const JUDGE_PREFIX = "judge-";
 
+/** How many hex digits of its hash a judge's form is (boundary.ts `judgeFor`). */
+export const JUDGE_FORM_LENGTH = 16;
+
 /** A workspace's judge of one form (boundary.ts `judgeFor`): one runs per form. */
 export const judgeProcId = (workspace: string, form: string): string =>
   `${JUDGE_PREFIX}${workspace}-${form}`;

@@ -97,11 +97,6 @@ export async function readRunningManifest(): Promise<ReleaseManifest> {
  * crash loop). Nothing but a decider acts on it.
  */
 export interface TrialMarker {
-  /**
-   * A person's Install now asked for this build: once it is confirmed, the
-   * keeper is owed the move to it (`BinaryUpdateState.keeperOwed`).
-   */
-  commanded?: boolean;
   /** The hub database copy a rollback restores, when the schema changed. */
   dbBackup?: string;
   dbPath?: string;
@@ -114,9 +109,7 @@ export interface TrialMarker {
    * the one already begun rather than deciding again.
    */
   decision?: "confirm" | "roll-back";
-  /** The keeper's build when the trial began: a rollback puts a keeper that moved back on it. */
-  keeper?: string;
-  /** The keeper step is done and the state says installed: a resumed helper does not move the keeper again. */
+  /** The keeper handover is done and the state says installed: a resumed helper does not hand it over again. */
   keeperDone?: boolean;
   previous: string;
   /** Why a rollback was decided: the problem that stood at the deadline. */
@@ -143,8 +136,11 @@ export const trialUnits = (
   role === "hub" ? ["agent", "hub", "dashboard"] : ["agent"];
 
 /**
- * The session keeper's pin: a relative link `<root>/keeper` -> `versions/<v>`,
- * changed only by an atomic rename, like `current`. The keeper's unit runs
+ * Which build's session keeper is the machine's current one: a relative link
+ * `<root>/keeper` -> `versions/<v>`, changed only by an atomic rename, like
+ * `current`, and only by a keeper handover (`cawco binary-apply`). The keeper
+ * of that build runs in a job of its own, from `versions/<v>/cawco`, and the
+ * machine's endpoint names it (keepers.ts). A legacy keeper's unit runs
  * `<root>/run sessiond`, which execs through this link.
  */
 const VERSIONS_PREFIX = /^versions\//;
@@ -157,22 +153,6 @@ export const readKeeperVersion = async (): Promise<string | undefined> => {
   }
 };
 
-/** Present only while a keeper move is unconfirmed: what to put back, and when. */
-export interface KeeperTrial {
-  /** Unix seconds after which a keeper start that finds this puts `from` back. */
-  deadline: number;
-  from: string;
-  to: string;
-}
-export const keeperTrialPath = (): string =>
-  join(binaryRoot(), "keeper-trial.json");
-/** The trial's content, left by the wrapper when it put the previous keeper back; the agent reads and removes it. */
-export const keeperRecoveredPath = (): string =>
-  join(binaryRoot(), "keeper-trial.recovered");
-export const readKeeperTrial = (): Promise<KeeperTrial | undefined> =>
-  readJson<KeeperTrial>(keeperTrialPath());
-export const readKeeperRecovered = (): Promise<KeeperTrial | undefined> =>
-  readJson<KeeperTrial>(keeperRecoveredPath());
 export const lockFilePath = (): string => join(binaryRoot(), "apply.lock");
 
 const linkedVersion = async (path: string): Promise<string | undefined> => {
@@ -194,11 +174,11 @@ export async function helperIsLive(): Promise<boolean> {
 /**
  * Deletes the directories under `versions/` nothing needs. Kept: what `current`
  * and `keeper` name, what a pending update trial would restore or has swapped
- * in (`trial.json`), what a pending keeper trial names (`keeper-trial.json`),
- * the build a live helper is applying (named in `apply.lock`), and every build
- * a live process runs or names ({@link versionsInUse}): a unit still on a build
- * the links have left, the keeper's children, and the hooks baked into their
- * CLI settings. The caller never supplies a keep-list.
+ * in (`trial.json`), the build a live helper is applying (named in
+ * `apply.lock`), and every build a live process runs or names
+ * ({@link versionsInUse}): a unit still on a build the links have left, a
+ * retiring keeper and its children, and the hooks baked into their CLI
+ * settings. The caller never supplies a keep-list.
  */
 export async function prune(): Promise<void> {
   const keep = new Set<string>();
@@ -212,9 +192,6 @@ export async function prune(): Promise<void> {
   const trial = await readTrial();
   add(trial?.previous);
   add(trial?.version);
-  const keeperTrial = await readKeeperTrial();
-  add(keeperTrial?.from);
-  add(keeperTrial?.to);
   const lock = await readJson<
     { version?: string } & Parameters<typeof markerIsLive>[0]
   >(lockFilePath());

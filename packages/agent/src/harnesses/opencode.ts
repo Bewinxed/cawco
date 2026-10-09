@@ -105,7 +105,7 @@ import {
 // The protocol subpath, never the `@cawco/core` barrel: `sessiond.ts` reaches
 // for `node:os` and the barrel is imported by the browser bundle (see f2e1c4c).
 import { SESSION_CAWCO_ENV } from "@cawco/core/session-env";
-import { type ProcSpec, sessiondEndpoint } from "@cawco/core/sessiond";
+import type { ProcSpec } from "@cawco/core/sessiond";
 import { opencodeDataDir } from "@cawco/core/usage/opencode-go";
 import {
   type AssistantMessage,
@@ -144,6 +144,7 @@ import {
   ReattachFailed,
   SessionAddressRefused,
 } from "../harness";
+import { KeeperPool } from "../keepers";
 import { isMachineAgent } from "../machine-agent";
 import { gaugeTables } from "../memory";
 import { OPENCODE_SERVER_PROC_ID, parseProcId } from "../proc-id";
@@ -158,7 +159,7 @@ import {
 import { readAccountSoon } from "../provider-usage";
 import { fenced, holdRestart, withRestartHold } from "../restart";
 import { acknowledgeSessionCredential } from "../session-identity";
-import { ensureSessiond, SessiondClient } from "../sessiond-client";
+import type { SessiondClient } from "../sessiond-client";
 import { resolveBin } from "../tools";
 import { workspaceHolding, workspaceRefs } from "../workspace-records";
 import {
@@ -4904,7 +4905,8 @@ export class OpencodeHarness implements Harness {
   readonly capabilities = OPENCODE_CAPABILITIES;
   auth: import("@cawco/core").AuthState = "authenticated";
 
-  #sessiond: Promise<SessiondClient> | undefined;
+  /** The machine's keepers as OpenCode's servers reach them: a server starts on the current one, and is read and ended on the one that holds it. */
+  readonly #keepers = new KeeperPool();
   readonly #serverOwner = this.#newOwner(undefined);
   readonly #machine: ServerSlot = {
     account: undefined,
@@ -4938,6 +4940,7 @@ export class OpencodeHarness implements Harness {
   #newOwner(account: string | undefined): OpencodeServerOwner {
     return new OpencodeServerOwner(
       () => this.sessiond(),
+      (epoch) => this.#keepers.byEpoch(epoch),
       async (sessiond, procId, spec, signal) =>
         (await attachOpencodeServer({ sessiond, procId, spec, signal })).url,
       isMachineAgent,
@@ -5236,6 +5239,22 @@ export class OpencodeHarness implements Harness {
       slot.owner.maintain();
     }
     await this.#retireIdleAccounts();
+    // A keeper handover left the machine's server on the keeper before it:
+    // nothing it runs is applied on the current keeper, so it is replaced
+    // at rest as one on another config is, its sessions moving over as each
+    // comes to rest, and the keeper before is left holding nothing of it.
+    if (
+      this.#appliedHash !== null &&
+      !this.#applyGate &&
+      (await this.#serverOwner.onRetiringKeeper())
+    ) {
+      console.info(
+        `[opencode] the machine's server ${this.#serverOwner.active?.procId} runs on a retiring session keeper; a server on the current one takes its sessions as each comes to rest`
+      );
+      this.#appliedHash = null;
+      this.#appliedVersion = null;
+      this.#configState = "pending";
+    }
     const versionChanged = version !== this.#desiredVersion;
     this.#desiredVersion = version;
     if (hash === null) {
@@ -5363,8 +5382,12 @@ export class OpencodeHarness implements Harness {
         }
         // biome-ignore lint/performance/noAwaitInLoops: one server is replaced at a time
         const { revision, spec } = await this.#accountRevision(account);
-        // Read again after the await: a start may have begun meanwhile.
-        if (slot.starting || slot.applied === revision) {
+        // Read again after the await: a start may have begun meanwhile. One
+        // a keeper handover left on the keeper before is replaced as well.
+        if (
+          slot.starting ||
+          (slot.applied === revision && !(await slot.owner.onRetiringKeeper()))
+        ) {
           continue;
         }
         try {
@@ -6199,25 +6222,12 @@ export class OpencodeHarness implements Harness {
   }
 
   /**
-   * The machine's one sessiond connection for this harness, dialled lazily.
-   * A dropped socket is re-dialled and the SERVER is untouched by that — the
-   * property the whole leaf exists for.
+   * The current keeper's connection for this harness, dialled lazily: where
+   * a server starts. A dropped socket is re-dialled and the SERVER is
+   * untouched by that — the property the whole leaf exists for.
    */
-  async sessiond(
-    // `CAWCO_SESSIOND_ENDPOINT` is sessiond's own override
-    // (`sessiond/src/main.ts`), honoured here too so a dev run — or a test —
-    // points both halves at a scratch socket instead of the real one.
-    endpoint: string = process.env.CAWCO_SESSIOND_ENDPOINT ?? sessiondEndpoint()
-  ): Promise<SessiondClient> {
-    const existing = await this.#sessiond?.catch(() => undefined);
-    if (existing && !existing.retired) {
-      return existing;
-    }
-    this.#sessiond = (async () => {
-      await ensureSessiond(endpoint);
-      return SessiondClient.connect(endpoint);
-    })();
-    return this.#sessiond;
+  sessiond(): Promise<SessiondClient> {
+    return this.#keepers.current();
   }
 
   /**
@@ -8229,12 +8239,9 @@ export class OpencodeHarness implements Harness {
     }
     this.#handoffTimer = null;
     this.#stopPumps();
-    // The socket, not the child: a closed sessiond connection is re-dialled by
-    // `sessiond()` and the held server never notices.
-    // biome-ignore lint/complexity/noVoid: fire-and-forget close; dispose() must not block on the socket teardown
-    // biome-ignore lint/suspicious/noEmptyBlockStatements: best-effort close, a failed close here is not actionable
-    void this.#sessiond?.then((client) => client.close()).catch(() => {});
-    this.#sessiond = undefined;
+    // The sockets, not the children: a closed keeper connection is re-dialled
+    // by `sessiond()` and the held server never notices.
+    this.#keepers.close();
     for (const slot of this.#slots()) {
       slot.client = null;
       slot.ready = null;

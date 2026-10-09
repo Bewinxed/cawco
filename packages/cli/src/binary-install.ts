@@ -19,6 +19,7 @@ import {
   installationPath,
   readInstallation,
   updateStatePath,
+  versionDirectory,
   writeJsonAtomic,
 } from "@cawco/core/binary-installation";
 import type {
@@ -52,9 +53,11 @@ export interface BinaryInstallOptions {
   role: BinaryInstallation["role"];
 }
 
-export const binaryLayout = () => ({
+/** A binary install's units, with the keeper's for `keeper`'s build (its own, run from its folder). */
+export const binaryLayout = (keeper: string) => ({
   executable: `${binaryRoot()}/current/cawco`,
   wrapper: `${binaryRoot()}/run`,
+  keeper: { version: keeper, executable: `${versionDirectory(keeper)}/cawco` },
 });
 
 async function awaitJoined(hubUrl: string): Promise<void> {
@@ -159,7 +162,8 @@ async function bringUp(options: BinaryInstallOptions): Promise<void> {
     force: false,
     whenIdle: false,
     note,
-    binaryLayout: binaryLayout(),
+    // The installer's `keeper` link names this build: its keeper is the machine's from the start.
+    binaryLayout: binaryLayout(runtimeVersion),
   });
   if (options.role === "hub") {
     await awaitFirstMachineReady(options.hubUrl, note);
@@ -185,7 +189,7 @@ async function bringUp(options: BinaryInstallOptions): Promise<void> {
       force: true,
       whenIdle: false,
       note,
-      binaryLayout: binaryLayout(),
+      binaryLayout: binaryLayout(runtimeVersion),
     });
   }
   console.log(`CawCo ${runtimeVersion} is installed.`);
@@ -218,7 +222,8 @@ export async function rejoinBinary(hubUrl: string): Promise<void> {
   // The agent's unit names its hub, so the unit is rewritten before the agent restarts.
   await discoverHub({ hub: hubUrl });
   process.env[CAWCO_ENV.hubUrl] = hubUrl;
-  const layout = binaryLayout();
+  // Only the agent's unit is written: no keeper's is touched.
+  const layout = binaryLayout(installed.installedVersion);
   const options = {
     ids: ["agent"] as const,
     mode: "prod" as const,

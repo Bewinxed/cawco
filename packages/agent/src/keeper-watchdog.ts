@@ -12,6 +12,10 @@
  * are: nobody can reach their pipes. The loss is said in the log line, in the
  * machine's state the dashboard reads (`keeperRestart`), and what they had
  * started is ended rather than left running under init with nobody to read it.
+ *
+ * Every keeper on the machine is watched (core keepers.ts): the current one
+ * is restarted, and a retiring one, which no new session would ever start on
+ * again, is removed.
  */
 
 import {
@@ -25,13 +29,18 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { BinaryUpdateState } from "@cawco/core/binary-updates";
 import {
+  type FoundKeeper,
+  keeperEndpoints,
+  machineEndpoint,
+} from "@cawco/core/keepers";
+import {
   commandLine,
   cpuTimeText,
   etimeText,
   processTable as readProcessTable,
 } from "@cawco/core/process-identity";
 import { hostEnvironment } from "@cawco/core/session-env";
-import { sessiondEndpoint } from "@cawco/core/sessiond";
+import { type KeeperJob, keeperJob } from "./keeper-jobs";
 import { dialKeeper } from "./sessiond-client";
 
 /**
@@ -70,16 +79,6 @@ const KEEPER_BACK_MS = 30_000;
 /** The restart the dashboard announces (`BinaryUpdateState.keeperRestart`). */
 export type KeeperRestart = NonNullable<BinaryUpdateState["keeperRestart"]>;
 
-/** The machine's service manager, as far as the keeper goes. */
-export interface KeeperService {
-  /** Named in the log line: `launchd (gui/501/dev.cawco.sessiond)`. */
-  readonly name: string;
-  /** The keeper's pid as the service manager knows it, or none when it is not running. */
-  pid: () => Promise<number | undefined>;
-  /** Restart the keeper; resolves once the service manager has done it. */
-  restart: () => Promise<void>;
-}
-
 interface Run {
   code: number;
   stderr: string;
@@ -98,72 +97,6 @@ const run = async (argv: string[]): Promise<Run> => {
     child.exited,
   ]);
   return { code, stdout, stderr };
-};
-
-const LAUNCHD_PID = /^\s*pid = (\d+)$/m;
-
-/** The keeper as launchd runs it: the `dev.cawco.sessiond` job (cli/src/service.ts). */
-const launchdKeeper = (): KeeperService => {
-  const target = `gui/${process.getuid?.() ?? 0}/dev.cawco.sessiond`;
-  return {
-    name: `launchd (${target})`,
-    async pid() {
-      const printed = await run(["launchctl", "print", target]);
-      const pid = LAUNCHD_PID.exec(printed.stdout)?.[1];
-      return printed.code === 0 && pid ? Number(pid) : undefined;
-    },
-    async restart() {
-      const kicked = await run(["launchctl", "kickstart", "-k", target]);
-      if (kicked.code !== 0) {
-        throw new Error(
-          `launchctl kickstart -k ${target} exited ${kicked.code}: ${kicked.stderr.trim()}`
-        );
-      }
-    },
-  };
-};
-
-/** The keeper as systemd runs it: the `cawco-sessiond.service` user unit (cli/src/service.ts). */
-const systemdKeeper = (): KeeperService => {
-  const unit = "cawco-sessiond.service";
-  return {
-    name: `systemd (--user ${unit})`,
-    async pid() {
-      const shown = await run([
-        "systemctl",
-        "--user",
-        "show",
-        "-p",
-        "MainPID",
-        "--value",
-        unit,
-      ]);
-      const pid = Number(shown.stdout.trim());
-      return shown.code === 0 && pid > 0 ? pid : undefined;
-    },
-    async restart() {
-      // `cawco-agent.service` has `Requires=cawco-sessiond.service`, so
-      // systemd restarts this agent with the keeper: everything the recovery
-      // has to say is written before this call.
-      const restarted = await run(["systemctl", "--user", "restart", unit]);
-      if (restarted.code !== 0) {
-        throw new Error(
-          `systemctl --user restart ${unit} exited ${restarted.code}: ${restarted.stderr.trim()}`
-        );
-      }
-    },
-  };
-};
-
-/** This machine's keeper service, by its service manager. */
-export const machineKeeper = (): KeeperService | undefined => {
-  if (process.platform === "darwin") {
-    return launchdKeeper();
-  }
-  if (process.platform === "linux") {
-    return systemdKeeper();
-  }
-  return undefined;
 };
 
 interface Row {
@@ -327,34 +260,51 @@ interface Streak {
   pid: number;
 }
 
+/** The one line a wedged keeper's recovery is said in: what it is, how long it was silent, what goes with it. */
+const wedgedLine = (
+  found: FoundKeeper,
+  job: KeeperJob,
+  streak: Streak,
+  held: readonly Row[],
+  dir: string,
+  silentForMs: number
+): string => {
+  const counts = new Map<string, number>();
+  for (const detail of streak.details) {
+    counts.set(detail, (counts.get(detail) ?? 0) + 1);
+  }
+  const dials = [...counts].map(([detail, n]) => `${detail} ×${n}`).join("; ");
+  const action = found.current
+    ? "restarting it"
+    : "removing it: no session starts on it again";
+  const processes = `${held.length} process${held.length === 1 ? "" : "es"}`;
+  const which = held.length ? ` (${held.map(brief).join(", ")})` : "";
+  return `session keeper ${streak.pid} (${found.keeper.version}${found.current ? "" : ", retiring"}) is wedged: alive under ${job.name}, ${found.endpoint} present, no welcome on ${streak.details.length} dials over ${minutes(silentForMs)} (${dials}); diagnostics in ${dir}; ${action} — the ${processes} it held end with it${which}`;
+};
+
 export interface KeeperWatchdogOptions {
   /** Where each recovery's diagnostics go, one folder per recovery. */
   diagnosticsRoot?: string;
-  endpoint?: string;
   log: (line: string) => void;
-  /** Records the restart where the dashboard reads it, before the restart runs. */
+  /** Records the current keeper's restart where the dashboard reads it, before the restart runs. */
   record: (restart: KeeperRestart) => Promise<void>;
-  service: KeeperService;
 }
 
-/** Dials the keeper on {@link KEEPER_PROBE_MS} and recovers a wedged one. */
+/** Dials every keeper on {@link KEEPER_PROBE_MS} and recovers a wedged one. */
 export class KeeperWatchdog {
-  readonly #endpoint: string;
   readonly #diagnosticsRoot: string;
   readonly #log: (line: string) => void;
   readonly #record: (restart: KeeperRestart) => Promise<void>;
-  readonly #service: KeeperService;
-  #streak: Streak | undefined;
+  /** Each keeper's run of silent dials, by its endpoint. */
+  readonly #streaks = new Map<string, Streak>();
   #timer: ReturnType<typeof setInterval> | undefined;
   #probing: Promise<void> | undefined;
 
   constructor(options: KeeperWatchdogOptions) {
-    this.#endpoint = options.endpoint ?? sessiondEndpoint();
     this.#diagnosticsRoot =
       options.diagnosticsRoot ?? join(homedir(), ".cawco", "diagnostics");
     this.#log = options.log;
     this.#record = options.record;
-    this.#service = options.service;
   }
 
   start(intervalMs = KEEPER_PROBE_MS): void {
@@ -376,33 +326,49 @@ export class KeeperWatchdog {
     clearInterval(this.#timer);
   }
 
-  /** One dial, and the recovery when it is the {@link KEEPER_WEDGED_DIALS}th silent one in a row. */
+  /** One dial of every keeper, and the recovery of each whose dial is the {@link KEEPER_WEDGED_DIALS}th silent one in a row. */
   async probe(welcomeMs = KEEPER_WELCOME_MS): Promise<void> {
-    const pid = await this.#service.pid();
+    const found = await keeperEndpoints();
+    for (const endpoint of this.#streaks.keys()) {
+      if (!found.some((keeper) => keeper.endpoint === endpoint)) {
+        this.#streaks.delete(endpoint);
+      }
+    }
+    await Promise.all(found.map((keeper) => this.#probeOne(keeper, welcomeMs)));
+  }
+
+  async #probeOne(found: FoundKeeper, welcomeMs: number): Promise<void> {
+    const job = keeperJob(found.keeper);
+    const pid = await job?.pid();
     // Not running is the service manager's to start, not a wedge.
-    if (!(pid && alive(pid))) {
-      this.#streak = undefined;
+    if (!(job && pid && alive(pid))) {
+      this.#streaks.delete(found.endpoint);
       return;
     }
-    const dial = await dialKeeper(this.#endpoint, welcomeMs);
+    const dial = await dialKeeper(found.endpoint, welcomeMs);
     if (dial.answered) {
-      this.#streak = undefined;
+      this.#streaks.delete(found.endpoint);
       return;
     }
     // A new keeper starts a new count: a restart is not the same silence.
-    if (this.#streak?.pid !== pid) {
-      this.#streak = { pid, firstAt: Date.now(), details: [] };
+    let streak = this.#streaks.get(found.endpoint);
+    if (streak?.pid !== pid) {
+      streak = { pid, firstAt: Date.now(), details: [] };
+      this.#streaks.set(found.endpoint, streak);
     }
-    this.#streak.details.push(dial.detail);
-    if (this.#streak.details.length < KEEPER_WEDGED_DIALS) {
+    streak.details.push(dial.detail);
+    if (streak.details.length < KEEPER_WEDGED_DIALS) {
       return;
     }
-    const streak = this.#streak;
-    this.#streak = undefined;
-    await this.#recover(streak);
+    this.#streaks.delete(found.endpoint);
+    await this.#recover(found, job, streak);
   }
 
-  async #recover(streak: Streak): Promise<void> {
+  async #recover(
+    found: FoundKeeper,
+    job: KeeperJob,
+    streak: Streak
+  ): Promise<void> {
     const at = Date.now();
     const silentForMs = at - streak.firstAt;
     const dir = join(
@@ -421,21 +387,11 @@ export class KeeperWatchdog {
       children: held.length,
       diagnostics: dir,
     };
-    await this.#record(restart);
-    const counts = new Map<string, number>();
-    for (const detail of streak.details) {
-      counts.set(detail, (counts.get(detail) ?? 0) + 1);
+    if (found.current) {
+      await this.#record(restart);
     }
-    this.#log(
-      `session keeper ${streak.pid} is wedged: alive under ${this.#service.name}, ${this.#endpoint} present, no welcome on ${streak.details.length} dials over ${minutes(silentForMs)} (${[
-        ...counts,
-      ]
-        .map(([detail, n]) => `${detail} ×${n}`)
-        .join(
-          "; "
-        )}); diagnostics in ${dir}; restarting it — the ${held.length} process${held.length === 1 ? "" : "es"} it held end with it${held.length ? ` (${held.map(brief).join(", ")})` : ""}`
-    );
-    await this.#service.restart();
+    this.#log(wedgedLine(found, job, streak, held, dir, silentForMs));
+    await (found.current ? job.restart() : job.remove());
     // What the dead keeper started is ended here: a keeper killed outright
     // (launchd's SIGKILL after its exit timeout) leaves its children under
     // init, each in its own process group, where nobody can reach them.
@@ -455,16 +411,22 @@ export class KeeperWatchdog {
         // gone between the reading and the kill
       }
     }
+    if (!found.current) {
+      this.#log(
+        `retiring session keeper ${streak.pid} (${found.keeper.version}) removed; ${left.length} of the ${tree.length} processes it had started were still running and were killed`
+      );
+      return;
+    }
     const back = Date.now() + KEEPER_BACK_MS;
     let answered = false;
     while (!answered && Date.now() < back) {
       // biome-ignore lint/performance/noAwaitInLoops: polls the restarted keeper until it answers or the budget ends
-      ({ answered } = await dialKeeper(this.#endpoint, 2000));
+      ({ answered } = await dialKeeper(machineEndpoint(), 2000));
       if (!answered) {
         await Bun.sleep(500);
       }
     }
-    const pid = await this.#service.pid();
+    const pid = await job.pid();
     this.#log(
       answered
         ? `session keeper restarted: ${pid ?? "?"} answers ${Date.now() - at}ms after the wedge was called; ${left.length} of the ${tree.length} processes the old keeper had started were still running and were killed`

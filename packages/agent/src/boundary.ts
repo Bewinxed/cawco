@@ -38,11 +38,14 @@
  * sessiond holds the boundary and the workspace's judge, so an agent restart
  * leaves them — and every process in the boundary — running, as it leaves the
  * sessions. One started in another form (another policy, runner, executor or
- * host) is handed over ({@link handOver}): a boundary of this build's form
- * starts beside it, every new command runs in the new one, and the older one
- * runs on, untouched, until nothing runs in it, then closes
- * ({@link closeIdle}). A machine that cannot hold a boundary refuses the
- * work: a work item never runs without one.
+ * host), or held by a retiring session keeper (a keeper handover left it
+ * there, core keepers.ts), is handed over ({@link handOver}): a boundary of
+ * this build's form starts beside it on the current keeper, every new command
+ * runs in the new one, and the older one runs on, untouched, until nothing
+ * runs in it, then closes ({@link closeIdle}). Every boundary and judge
+ * process is found and stopped on whichever keeper holds it. A machine that
+ * cannot hold a boundary refuses the work: a work item never runs without
+ * one.
  *
  * No command holds a key or reaches a key agent: `~/.ssh` is under the
  * home dir's deny, the executor drops every agent socket's variable
@@ -67,10 +70,11 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import type { WorkspaceRef } from "@cawco/core";
 import { WORKSPACE_BOUNDARY_START_TIMEOUT_MS } from "@cawco/core";
 import { binaryRoot } from "@cawco/core/binary-installation";
+import { currentEndpoint, machineEndpoint } from "@cawco/core/keepers";
 import {
   AGENT_SOCKET_ENV,
   sessionIdentityDir,
@@ -93,20 +97,22 @@ import {
   materializeExecutable,
   standalone,
 } from "@cawco/core/runtime";
-import { type ProcSpec, sessiondEndpoint } from "@cawco/core/sessiond";
+import type { ProcSpec } from "@cawco/core/sessiond";
 import { cloneDenies, workspacePolicy } from "@cawco/core/workspace-policy";
 import { rgPath } from "@vscode/ripgrep-universal";
 import { seatbeltProfile, srtSettings } from "./boundary-policy";
 import { excludeSandboxNames } from "./checkout-exclude";
 import { cloneInPlace } from "./clone";
+import { type HeldProc, KeeperPool } from "./keepers";
 import { logRelay } from "./log-relay";
 import {
   boundaryProcId,
   isBoundaryOf,
   isJudgeOf,
+  JUDGE_FORM_LENGTH,
   judgeProcId,
 } from "./proc-id";
-import { ensureSessiond, SessiondClient } from "./sessiond-client";
+import type { SessiondClient } from "./sessiond-client";
 import { hasLeftDirs, removeStandIns, rewriteLeftFiles } from "./stand-ins";
 import { closeToolDoor, openToolDoor, toolDoorOf } from "./tool-door";
 
@@ -449,10 +455,15 @@ const judgeFor = async (
     held.scratch,
     policy,
   ];
+  // The keeper it runs on is part of its form: after a keeper handover, the
+  // next arming starts the workspace's judge on the current keeper, beside the
+  // one a retiring keeper runs, which leaves once the hook no longer names it.
+  // So the retiring keeper is left holding nothing of the workspace.
+  const keeper = basename(await currentEndpoint(sessiondPath()));
   const form = createHash("sha256")
-    .update([serverText, judgeText, ...handed].join("\0"))
+    .update([serverText, judgeText, ...handed, keeper].join("\0"))
     .digest("hex")
-    .slice(0, 16);
+    .slice(0, JUDGE_FORM_LENGTH);
   const socket = join(stateDir(id), `judge-${form}.sock`);
   const procId = judgeProcId(id, form);
   // Written each time: OpenCode's plugin imports this build's judge from here.
@@ -464,7 +475,7 @@ const judgeFor = async (
   if (!started) {
     started = (async () => {
       const client = await sessiond();
-      if (await holding(client, procId)) {
+      if (await holding(procId)) {
         return;
       }
       await client.spawnProc(procId, {
@@ -758,7 +769,7 @@ export const rearmHooks = async (): Promise<void> => {
       said("its boundary's form could not be checked")
     );
     const stale = form !== undefined && held.form !== form;
-    if (stale && (await running(await sessiond(), id, held))) {
+    if (stale && (await running(id, held))) {
       // Handed over now, behind the gate: the executor an earlier build left
       // may not reach this boundary (Nightly C wrote its srt executor over
       // every anchor from before srt), so a command waits at the gate and
@@ -968,24 +979,18 @@ export const boundaryFor = (
 ): Promise<Boundary | undefined> =>
   workspace ? ensureBoundary(workspace) : Promise.resolve(undefined);
 
-const sessiondPath = (): string =>
-  process.env.CAWCO_SESSIOND_ENDPOINT ?? sessiondEndpoint();
+/** The machine's keeper endpoint: its directory, where every keeper's endpoint is, is hidden from a bounded command. */
+const sessiondPath = machineEndpoint;
 
-let connection: Promise<SessiondClient> | undefined;
+/**
+ * The machine's keepers as this module reaches them, dialled on first use: a
+ * boundary or a judge starts on the current keeper, and one a retiring keeper
+ * holds is found and stopped there.
+ */
+const keepers = new KeeperPool();
 
-/** This module's own sessiond connection, dialled on first use. */
-const sessiond = async (): Promise<SessiondClient> => {
-  const open = await connection?.catch(() => undefined);
-  if (open && !open.retired) {
-    return open;
-  }
-  const endpoint = sessiondPath();
-  connection = (async () => {
-    await ensureSessiond(endpoint);
-    return SessiondClient.connect(endpoint);
-  })();
-  return connection;
-};
+/** The keeper every new boundary and judge starts on: the current one. */
+const sessiond = (): Promise<SessiondClient> => keepers.current();
 
 const refusal = (id: string, why: string): Error =>
   new Error(`workspace ${id} cannot run a delegate on this machine: ${why}`);
@@ -1027,35 +1032,30 @@ const readHeld = async (id: string): Promise<Held | undefined> => {
   return text ? (JSON.parse(text) as Held) : undefined;
 };
 
-/** Whether sessiond holds a live process under `procId`. */
-const holding = async (
-  client: SessiondClient,
-  procId: string
-): Promise<boolean> =>
-  (await client.list()).procs.some(
-    (candidate) => candidate.procId === procId && candidate.alive
-  );
+/** Whether a keeper, the current one or a retiring one, holds a live process under `procId`. */
+const holding = async (procId: string): Promise<boolean> =>
+  Boolean(await keepers.holding(procId));
 
 /**
- * Whether the boundary `held` names is the one sessiond is still running. A
- * Linux one from before srt names its anchor, the child of the process
- * sessiond holds, by the anchor's user namespace.
+ * The keeper's process running the boundary `held` names, on whichever keeper
+ * runs it, when it is still the one that was started. A Linux one from
+ * before srt names its anchor, the child of the process sessiond holds, by
+ * the anchor's user namespace.
  */
 const running = async (
-  client: SessiondClient,
   id: string,
   held: Held
-): Promise<boolean> => {
-  const proc = (await client.list()).procs.find(
-    (candidate) => candidate.procId === boundaryProcId(id, held.gen)
-  );
-  if (!proc?.alive) {
-    return false;
+): Promise<HeldProc | undefined> => {
+  const proc = await keepers.holding(boundaryProcId(id, held.gen));
+  if (!proc) {
+    return;
   }
-  return process.platform === "linux" && held.identity
-    ? (await readlink(`/proc/${held.pid}/ns/user`).catch(() => undefined)) ===
+  const same =
+    process.platform === "linux" && held.identity
+      ? (await readlink(`/proc/${held.pid}/ns/user`).catch(() => undefined)) ===
         held.identity
-    : proc.pid === held.pid;
+      : proc.pid === held.pid;
+  return same ? proc : undefined;
 };
 
 const starting = new Map<string, Promise<Boundary>>();
@@ -1098,11 +1098,14 @@ const ensure = async (ref: WorkspaceRef): Promise<Boundary> => {
   }
   const client = await sessiond();
   const held = await readHeld(ref.id);
-  if (!(held && (await running(client, ref.id, held)))) {
-    await stopUnvouched(client, ref.id, held);
+  const holder = held ? await running(ref.id, held) : undefined;
+  if (!(held && holder)) {
+    await stopUnvouched(ref.id, held);
     return start(client, ref);
   }
-  if (held.form !== (await formOf(ref))) {
+  // One of an older form, or one a retiring keeper holds, is handed over to
+  // one of this build's form on the current keeper.
+  if (held.form !== (await formOf(ref)) || holder.epoch !== client.epoch) {
     if (process.platform === "linux" && (await hasLeftDirs(ref.path))) {
       // A boundary started beside it would bind the same mount point and
       // keep it; this one is replaced whole once nothing runs in it.
@@ -1124,11 +1127,10 @@ const ensure = async (ref: WorkspaceRef): Promise<Boundary> => {
  * Stops what this machine can no longer vouch for before a boundary starts,
  * never joining it: the boundary `held` names, which is no longer running as
  * it was started, and any other boundary process of the workspace that no
- * record names. An older boundary still running beside it is left alone
- * ({@link handOver}).
+ * record names, on every keeper. An older boundary still running beside it
+ * is left alone ({@link handOver}).
  */
 const stopUnvouched = async (
-  client: SessiondClient,
   id: string,
   held: Held | undefined
 ): Promise<void> => {
@@ -1136,16 +1138,16 @@ const stopUnvouched = async (
     (await readRetiring(id)).map((old) => boundaryProcId(id, old.gen))
   );
   if (held) {
-    await stopBoundary(client, id, held);
+    await stopBoundary(id, held);
     await cleanGeneration(id, held);
   }
   await Promise.all(
-    (await client.list()).procs
+    (await keepers.held())
       .filter(
         (proc) =>
           proc.alive && isBoundaryOf(proc.procId, id) && !kept.has(proc.procId)
       )
-      .map((proc) => client.signal(proc.procId, "SIGKILL"))
+      .map((proc) => proc.client.signal(proc.procId, "SIGKILL"))
   );
   if (process.platform === "darwin" && kept.size === 0) {
     await killMarked(id);
@@ -1576,21 +1578,17 @@ const handOver = async (
  * more, or that is no longer running, and cleans its files; one that still
  * runs something is left as it is. Answers whether any is left.
  */
-const closeIdle = async (
-  client: SessiondClient,
-  seen: Seen[],
-  id: string
-): Promise<boolean> => {
+const closeIdle = async (seen: Seen[], id: string): Promise<boolean> => {
   const current = await readHeld(id).catch(() => undefined);
   let left = false;
   for (const old of await readRetiring(id)) {
     // biome-ignore lint/performance/noAwaitInLoops: one older boundary at a time
-    const alive = await running(client, id, old);
+    const alive = Boolean(await running(id, old));
     if (alive && (await busyOld(seen, id, old, current))) {
       left = true;
       continue;
     }
-    await stopBoundary(client, id, old);
+    await stopBoundary(id, old);
     await cleanGeneration(id, old);
     await rm(retiringFileOf(id, old), { force: true });
     console.info(
@@ -1617,13 +1615,12 @@ let staleTimer: ReturnType<typeof setInterval> | undefined;
  * once no older boundary of it is left.
  */
 const lookAtStale = async (): Promise<void> => {
-  const client = await sessiond();
-  await handOverStale(client);
+  await handOverStale();
   if (retiring.size > 0) {
-    await closeRetiring(client);
+    await closeRetiring();
   }
   if (stubbed.size > 0) {
-    await restartStubbed(client);
+    await restartStubbed();
   }
 };
 
@@ -1670,12 +1667,13 @@ const sandboxesGone = async (inners: readonly number[]): Promise<boolean> => {
  * through the new one. A workspace with no boundary running, or no such
  * mount point left, is forgotten: its next start makes the stand-in.
  */
-const restartStubbed = async (client: SessiondClient): Promise<void> => {
+const restartStubbed = async (): Promise<void> => {
   for (const ref of [...stubbed.values()]) {
     try {
       // biome-ignore lint/performance/noAwaitInLoops: one workspace at a time
       const held = await readHeld(ref.id);
-      const alive = (await client.list()).procs
+      // On every keeper: the current one, and a retiring one still running one.
+      const alive = (await keepers.held())
         .filter((proc) => proc.alive && isBoundaryOf(proc.procId, ref.id))
         .map((proc) => proc.procId);
       if (!held || alive.length === 0 || !(await hasLeftDirs(ref.path))) {
@@ -1689,7 +1687,7 @@ const restartStubbed = async (client: SessiondClient): Promise<void> => {
         // An older boundary closes first, once idle ({@link closeIdle}).
         continue;
       }
-      const restart = restartIfIdle(client, ref, held);
+      const restart = restartIfIdle(ref, held);
       starting.set(ref.id, restart);
       await restart.finally(() => starting.delete(ref.id));
     } catch (error) {
@@ -1700,9 +1698,12 @@ const restartStubbed = async (client: SessiondClient): Promise<void> => {
   }
 };
 
-/** {@link restartStubbed}'s one workspace: its boundary as it is while anything runs in it, else a new one. */
+/**
+ * {@link restartStubbed}'s one workspace: its boundary as it is while
+ * anything runs in it, else a new one on the current keeper, the one before
+ * stopped on whichever keeper runs it.
+ */
 const restartIfIdle = async (
-  client: SessiondClient,
   ref: WorkspaceRef,
   held: Held
 ): Promise<Boundary> => {
@@ -1717,14 +1718,14 @@ const restartIfIdle = async (
       return held;
     }
     const place = await readPlace(ref.id, held.gen);
-    await stopBoundary(client, ref.id, held);
+    await stopBoundary(ref.id, held);
     if (!(await sandboxesGone(place ? [place.inner] : []))) {
       throw new Error(
         `its sandbox ${place?.inner} was still there ${STOP_TIMEOUT_MS / 1000}s after it was stopped`
       );
     }
     await cleanGeneration(ref.id, held);
-    const fresh = await start(client, ref);
+    const fresh = await start(await sessiond(), ref);
     forgetStubbed(ref.id);
     console.info(
       `[workspace] ${ref.id}: its boundary ${held.pid} held an srt mount point where a dir stands in, had nothing running and is replaced by ${fresh.pid}`
@@ -1735,7 +1736,7 @@ const restartIfIdle = async (
   }
 };
 
-const handOverStale = async (client: SessiondClient): Promise<void> => {
+const handOverStale = async (): Promise<void> => {
   for (const ref of [...stale.values()]) {
     if (starting.has(ref.id)) {
       continue;
@@ -1743,7 +1744,7 @@ const handOverStale = async (client: SessiondClient): Promise<void> => {
     try {
       // biome-ignore lint/performance/noAwaitInLoops: one boundary handed over at a time
       const held = await readHeld(ref.id);
-      if (!(held && (await running(client, ref.id, held)))) {
+      if (!(held && (await running(ref.id, held)))) {
         forgetStale(ref.id);
         continue;
       }
@@ -1756,7 +1757,7 @@ const handOverStale = async (client: SessiondClient): Promise<void> => {
   }
 };
 
-const closeRetiring = async (client: SessiondClient): Promise<void> => {
+const closeRetiring = async (): Promise<void> => {
   const seen = await snapshot();
   for (const id of [...retiring]) {
     if (starting.has(id)) {
@@ -1764,7 +1765,7 @@ const closeRetiring = async (client: SessiondClient): Promise<void> => {
     }
     try {
       // biome-ignore lint/performance/noAwaitInLoops: one workspace's older boundaries at a time
-      if (!(await closeIdle(client, seen, id))) {
+      if (!(await closeIdle(seen, id))) {
         forgetRetiring(id);
       }
     } catch (error) {
@@ -1831,6 +1832,64 @@ const forgetStale = (id: string): void => {
 const forgetRetiring = (id: string): void => {
   retiring.delete(id);
   stopLooking();
+};
+
+/**
+ * What a retiring session keeper runs of a workspace (a keeper handover left
+ * it there) moves to the current keeper, so the keeper before is left holding
+ * nothing of it (binary-update.ts `#tendKeepers`, while any keeper retires):
+ *
+ * - its current boundary is handed over at the next look ({@link
+ *   replaceSoon}), as one of an older form is; the one on the retiring keeper
+ *   runs on until nothing runs in it, then closes, as does an older
+ *   generation that keeper still runs;
+ * - its judge, when none runs on the current keeper: the hook is armed again,
+ *   which starts the judge on the current keeper (its form names its keeper,
+ *   {@link judgeFor}) and points the hook at it once it answers; the one
+ *   before leaves once the hook no longer names it.
+ *
+ * One listing of each keeper, whatever the number of workspaces.
+ */
+export const leaveRetiringKeepers = async (): Promise<void> => {
+  const current = await sessiond();
+  const procs = (await keepers.held()).filter((proc) => proc.alive);
+  const elsewhere = procs.filter((proc) => proc.epoch !== current.epoch);
+  if (elsewhere.length === 0) {
+    return;
+  }
+  const ids = await readdir(workspacesDir()).catch(() => [] as string[]);
+  for (const id of ids) {
+    if (starting.has(id)) {
+      continue;
+    }
+    // biome-ignore lint/performance/noAwaitInLoops: one small read per workspace, only while a keeper retires
+    const held = await readHeld(id).catch(() => undefined);
+    if (!held) {
+      continue;
+    }
+    const boundary = boundaryProcId(id, held.gen);
+    if (!stale.has(id) && elsewhere.some((proc) => proc.procId === boundary)) {
+      console.info(
+        `[workspace] ${id}: its boundary runs on a retiring session keeper, and is handed over to one on the current keeper`
+      );
+      replaceSoon({ id, path: held.path });
+    }
+    const judged = (procsOn: typeof procs) =>
+      procsOn.some((proc) => isJudgeOf(proc.procId, id));
+    if (
+      judged(elsewhere) &&
+      !judged(procs.filter((proc) => proc.epoch === current.epoch))
+    ) {
+      console.info(
+        `[workspace] ${id}: its judge runs on a retiring session keeper; its hook is armed again, with a judge on the current one`
+      );
+      await armHook(id, held).catch((error: unknown) => {
+        console.warn(
+          `[workspace] ${id}: its judge could not be started on the current session keeper: ${error instanceof Error ? error.message : String(error)}`
+        );
+      });
+    }
+  }
 };
 
 /** Waits for a process's `line` (the boundary's {@link READY}); answers every line said before it, or its own words if it dies first. */
@@ -2164,9 +2223,9 @@ const killMarked = async (id: string): Promise<void> => {
  * instead would leave those behind, REPORT.md §5e). An anchor from before
  * srt goes with the `unshare` sessiond holds (`--kill-child`). macOS: the
  * runner; what it started goes with the workspace ({@link closeBoundary}).
+ * On whichever keeper holds it: the current one, or a retiring one.
  */
 const stopBoundary = async (
-  client: SessiondClient,
   id: string,
   held: Pick<Held, "gen">
 ): Promise<void> => {
@@ -2177,14 +2236,15 @@ const stopBoundary = async (
     const deadline = Date.now() + STOP_TIMEOUT_MS;
     while (
       // biome-ignore lint/performance/noAwaitInLoops: polls one process until its host has cleaned up, or the deadline passes
-      (await holding(client, procId)) &&
+      (await holding(procId)) &&
       Date.now() < deadline
     ) {
       await Bun.sleep(20);
     }
   }
-  if (await holding(client, procId)) {
-    await client.signal(procId, "SIGKILL");
+  const left = await keepers.holding(procId);
+  if (left) {
+    await left.client.signal(procId, "SIGKILL");
   }
 };
 
@@ -2240,7 +2300,7 @@ const start = async (
   try {
     return await launch(client, ref, gen);
   } catch (error) {
-    await stopBoundary(client, ref.id, { gen });
+    await stopBoundary(ref.id, { gen });
     await cleanGeneration(ref.id, { gen });
     throw error;
   }
@@ -2318,15 +2378,14 @@ const launch = async (
  * sandboxes are gone, the deny stand-ins in its clone go
  * (`stand-ins.ts`). Then its state goes, and on Linux
  * srt's temp dirs with the sockets srt leaves there (REPORT.md §5o).
- * Its judges go last: with the state dir gone there is no workspace to start
- * one again for ({@link watchJudge}).
+ * Its judges go last, on every keeper that runs one: with the state dir gone
+ * there is no workspace to start one again for ({@link watchJudge}).
  */
 export const closeBoundary = async (ref: WorkspaceRef): Promise<void> => {
   forgetStale(ref.id);
   forgetRetiring(ref.id);
   forgetStubbed(ref.id);
   await closeToolDoor(ref.id);
-  const client = await sessiond();
   const held = await readHeld(ref.id).catch(() => undefined);
   const boundaries = [...(held ? [held] : []), ...(await readRetiring(ref.id))];
   const inners: number[] = [];
@@ -2336,14 +2395,14 @@ export const closeBoundary = async (ref: WorkspaceRef): Promise<void> => {
     if (place) {
       inners.push(place.inner);
     }
-    await stopBoundary(client, ref.id, boundary);
+    await stopBoundary(ref.id, boundary);
     await cleanGeneration(ref.id, boundary);
   }
   const signalAll = async (owned: (procId: string) => boolean) =>
     await Promise.all(
-      (await client.list()).procs
+      (await keepers.held())
         .filter((proc) => proc.alive && owned(proc.procId))
-        .map((proc) => client.signal(proc.procId, "SIGKILL"))
+        .map((proc) => proc.client.signal(proc.procId, "SIGKILL"))
     );
   await signalAll((procId) => isBoundaryOf(procId, ref.id));
   if (process.platform === "darwin") {

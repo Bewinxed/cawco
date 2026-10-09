@@ -25523,7 +25523,7 @@
             "type": "string"
           },
           "heldChildren": {
-            "description": "Children the session keeper holds, while it is the reason for waiting.",
+            "description": "Children a keeper the new build cannot speak to holds, while they are the reason for waiting (`waiting-sessions`).",
             "type": "number"
           },
           "hostsHub": {
@@ -25534,11 +25534,7 @@
             "type": "string"
           },
           "keeperFailedVersion": {
-            "description": "The build the session keeper could not start on; not retried by itself.",
-            "type": "string"
-          },
-          "keeperOwed": {
-            "description": "The build the keeper is owed a move to: a person's Install now of it was\nconfirmed while the keeper held children. Not a command: the agent moves\nthe keeper to this build alone, once it holds nothing, whatever the\nauto-update setting, and clears it as it does. A newer install or a\nrollback clears it too.",
+            "description": "The build whose session keeper could not start; the keeper is not handed to it again by itself.",
             "type": "string"
           },
           "keeperRestart": {
@@ -25589,8 +25585,15 @@
           "phase": {
             "$ref": "#/components/schemas/BinaryUpdatePhase"
           },
+          "retiringKeepers": {
+            "description": "Keepers of earlier builds still holding sessions after a handover, each\nwith how many: every new session starts on the current keeper\n(`sessiondVersion`), and each of these exits once the last session it\nholds has ended or gone to sleep. Absent when there is none.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RetiringKeeper"
+            }
+          },
           "sessiondVersion": {
-            "description": "The version the session keeper's link names; differs from the build while it holds children.",
+            "description": "The build of the current session keeper, the one every new session starts on: the `keeper` link.",
             "type": "string"
           },
           "updatedAt": {
@@ -25696,6 +25699,24 @@
           "waiting-sessions"
         ],
         "type": "string"
+      },
+      "RetiringKeeper": {
+        "description": "A keeper of an earlier build still holding sessions while the current one takes every new start.",
+        "type": "object",
+        "properties": {
+          "sessions": {
+            "description": "Its sessions, and any other process it holds (a workspace's boundary, an OpenCode server).",
+            "type": "number"
+          },
+          "version": {
+            "description": "Its build.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sessions",
+          "version"
+        ]
       },
       "BuildInfo": {
         "description": "What a daemon reports about the checkout it was started from.",

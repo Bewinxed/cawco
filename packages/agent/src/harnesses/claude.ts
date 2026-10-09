@@ -103,7 +103,6 @@ import {
   sessionConfigDir,
 } from "@cawco/core/paths";
 import { sessionEnvironment } from "@cawco/core/session-env";
-import { sessiondEndpoint } from "@cawco/core/sessiond";
 import {
   accountEnv,
   accountReports,
@@ -153,6 +152,7 @@ import {
   HeldProcessRefused,
   type TurnExtras,
 } from "../harness";
+import { type HeldProc, KeeperPool } from "../keepers";
 import {
   beginAccountLogin,
   completeAccountLogin,
@@ -172,10 +172,8 @@ import { acknowledgeSessionCredential } from "../session-identity";
 import {
   type BridgeRing,
   endProc,
-  ensureSessiond,
   procEpoch,
-  SessiondClient,
-  type SessiondWelcomeInfo,
+  type SessiondClient,
   sessiondBridge,
 } from "../sessiond-client";
 import { ChildActivity, type RingLine, readRing } from "../sessiond-custody";
@@ -2638,34 +2636,24 @@ export class ClaudeHarness implements Harness {
   }
 
   /**
-   * The machine's one sessiond connection, dialled lazily and shared by every
-   * claude session. Lazy rather than eager so a machine with no sessions never
-   * needs a daemon, and so the install-time error lands on the spawn that
-   * needed it (with an instance to report against) rather than at import time.
+   * The machine's keepers as every claude session reaches them, one
+   * connection each, dialled lazily: a machine with no sessions never needs
+   * a keeper, and the install-time error lands on the spawn that needed it
+   * (with an instance to report against) rather than at import time.
    */
-  #sessiond: Promise<SessiondClient> | undefined;
+  readonly #keepers = new KeeperPool();
 
-  async sessiond(
-    // `CAWCO_SESSIOND_ENDPOINT` is sessiond's own override
-    // (`sessiond/src/main.ts`), honoured on this side too so a dev run — or a
-    // test — can point both halves at a scratch socket instead of the real one.
-    endpoint: string = process.env.CAWCO_SESSIOND_ENDPOINT ?? sessiondEndpoint()
-  ): Promise<SessiondClient> {
-    const existing = await this.#sessiond?.catch(() => undefined);
-    if (existing && !existing.retired) {
-      return existing;
-    }
-    // A dead connection is re-dialled, and so is one to a keeper that is
-    // draining; the CHILDREN are unaffected, which is the whole property
-    // sessiond exists to provide.
-    this.#sessiond = (async () => {
-      await ensureSessiond(endpoint);
-      const client = await SessiondClient.connect(endpoint);
-      this.#swept ??= this.#sweepMcpConfigs(client);
-      await this.#swept;
-      return client;
-    })();
-    return this.#sessiond;
+  /**
+   * The current keeper's connection, which every start goes to. A dead
+   * connection is dialled again, and so is one to a keeper that is draining
+   * or that the machine's endpoint no longer names; the CHILDREN are
+   * unaffected, which is the whole property sessiond exists to provide.
+   */
+  async sessiond(): Promise<SessiondClient> {
+    const client = await this.#keepers.current();
+    this.#swept ??= this.#sweepMcpConfigs();
+    await this.#swept;
+    return client;
   }
 
   /** This agent's one removal of the MCP configs of children that are gone. */
@@ -2673,13 +2661,14 @@ export class ClaudeHarness implements Harness {
 
   /**
    * The MCP config files ({@link mcpConfigOffArgv}) of Claude children that
-   * no longer exist: an agent that stopped before its child did never saw
-   * that child end. Done on the first connection, before this agent writes a
-   * file of its own; a failure is said and left to the next agent's start.
+   * no longer exist on any keeper: an agent that stopped before its child did
+   * never saw that child end. Done on the first connection, before this agent
+   * writes a file of its own; a failure is said and left to the next agent's
+   * start.
    */
-  async #sweepMcpConfigs(client: SessiondClient): Promise<void> {
+  async #sweepMcpConfigs(): Promise<void> {
     try {
-      const { procs } = await client.list();
+      const procs = await this.#keepers.held();
       sweepMcpConfigs(
         new Set(
           procs.flatMap((proc) => {
@@ -2702,8 +2691,14 @@ export class ClaudeHarness implements Harness {
     // The child is spawned under sessiond, unconditionally — no flag, no
     // in-process fallback (PLAN.md C7). `procId` is the instance id: stable
     // across agent restarts, which is what lets the returning agent match a
-    // surviving child to the row it belongs to.
+    // surviving child to the row it belongs to. It goes to the current
+    // keeper; a process a retiring keeper still holds under the id is the
+    // one this replaces.
     const client = await this.sessiond();
+    await this.#keepers.replaceElsewhere(
+      procIdFor("claude", ctx.instanceId),
+      client
+    );
     const account = await launchAccountOf(spec);
     // No account: the machine's own login, moving into one now.
     const place = { accountId: account ?? null };
@@ -2786,15 +2781,15 @@ export class ClaudeHarness implements Harness {
     spec: SpawnPayload,
     ctx: HarnessContext
   ): Promise<HarnessSession | undefined> {
-    const welcome = await this.custodyCandidates();
-    const proc = welcome.procs.find(
+    const { procs } = await this.custodyCandidates();
+    const proc = procs.find(
       (child) => child.procId === ctx.instanceId && child.alive
     );
     if (!proc) {
       return undefined;
     }
     return this.adopt(ctx.instanceId, ctx, {
-      afterSeq: resumeCursor(procEpoch(welcome.epoch, proc.pid), ctx.ingested),
+      afterSeq: resumeCursor(procEpoch(proc.epoch, proc.pid), ctx.ingested),
       head: proc.head,
       sessionId: spec.resume?.sessionKey ?? null,
       turnRunning: await this.turnRunning(ctx.instanceId, proc.head),
@@ -2813,10 +2808,15 @@ export class ClaudeHarness implements Harness {
    * times further each time a look finds nothing about a turn, until it has
    * read back to the oldest line sessiond holds. A full read of every ring is
    * what an adoption does ({@link adopt}), and doing that here for 138 rings
-   * at once is the very wait this answer must not sit behind.
+   * at once is the very wait this answer must not sit behind. Read from the
+   * keeper that holds it; one no keeper holds any more runs no turn.
    */
   async turnRunning(instanceId: string, head: number): Promise<boolean> {
-    const client = await this.sessiond();
+    const held = await this.#keepers.holding(procIdFor("claude", instanceId));
+    if (!held) {
+      return false;
+    }
+    const { client } = held;
     for (let span = TURN_LOOK_LINES; ; span *= 4) {
       const from = Math.max(head - span, 0);
       const activity = new ChildActivity("claude");
@@ -2874,15 +2874,15 @@ export class ClaudeHarness implements Harness {
       permissionMode?: import("@cawco/core").PermissionMode;
     }
   ): Promise<HarnessSession> {
-    const client = await this.sessiond();
     const { head, turnRunning } = options;
     const procId = procIdFor("claude", instanceId);
-    const child = (await client.list()).procs.find(
-      (proc) => proc.procId === procId && proc.alive
-    );
+    // The keeper that holds it, current or retiring: the session keeps that
+    // connection for as long as its process runs there.
+    const child = await this.#keepers.holding(procId);
     if (!child) {
-      throw new Error(`sessiond holds no live child ${procId}`);
+      throw new Error(`no keeper holds a live child ${procId}`);
     }
+    const { client } = child;
     // A CLI keeps the hook it was launched with for life. One whose boundary
     // hook is in the form before the workspace's script lets a command
     // through, outside the boundary, when the cawco binary it names is gone:
@@ -2995,13 +2995,15 @@ export class ClaudeHarness implements Harness {
     return session;
   }
 
-  /** What sessiond is still holding for this machine — the reattach's first read. */
-  async custodyCandidates(): Promise<SessiondWelcomeInfo> {
-    const client = await this.sessiond();
-    const welcome = await client.list();
+  /**
+   * What every keeper is still holding for this machine, the current one's
+   * first — the reattach's first read. Each child carries its keeper's
+   * epoch, the space its seqs count in.
+   */
+  async custodyCandidates(): Promise<{ procs: HeldProc[] }> {
+    await this.sessiond();
     return {
-      ...welcome,
-      procs: welcome.procs.filter(
+      procs: (await this.#keepers.held()).filter(
         (proc) => parseProcId(proc.procId).kind === "claude"
       ),
     };

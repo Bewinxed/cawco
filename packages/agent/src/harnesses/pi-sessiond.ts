@@ -15,7 +15,6 @@ import {
   mcpGatewayPort,
 } from "@cawco/core";
 import { standalone } from "@cawco/core/runtime";
-import { sessiondEndpoint } from "@cawco/core/sessiond";
 import { gateForm } from "../gate-form";
 import { sessionGitEnv } from "../git-credential";
 import {
@@ -24,13 +23,13 @@ import {
   KeeperRefused,
   type TurnExtras,
 } from "../harness";
+import { KeeperPool } from "../keepers";
 import { procIdFor } from "../proc-id";
 import type { SessiondAwareContext } from "../session";
 import {
-  ensureSessiond,
   procEpoch,
   refusalReason,
-  SessiondClient,
+  type SessiondClient,
 } from "../sessiond-client";
 
 export type PiHostCommand =
@@ -69,23 +68,12 @@ export type PiHostEvent =
   | { type: "rejected"; uuid: string; error: string }
   | { type: "reply"; id: string; value?: unknown; error?: string };
 
-let connection: Promise<SessiondClient> | undefined;
+/** The machine's keepers as pi's hosts reach them: new hosts start on the current one, each host is read on the one that holds it. */
+export const piKeepers = new KeeperPool();
 /** History reads must not turn a retry gap into a stored failed turn. */
 export const piOpenTurns = new Set<string>();
 /** Sessions whose host was found on another gate, by instance: the form it ran, until the relaunch that replaces it. */
 const staleHosts = new Map<string, string>();
-export async function piSessiond(): Promise<SessiondClient> {
-  const previous = await connection?.catch(() => undefined);
-  if (previous && !previous.retired) {
-    return previous;
-  }
-  const endpoint = process.env.CAWCO_SESSIOND_ENDPOINT ?? sessiondEndpoint();
-  connection = (async () => {
-    await ensureSessiond(endpoint);
-    return SessiondClient.connect(endpoint);
-  })();
-  return connection;
-}
 
 declare const __CAWCO_RELEASE__: boolean | undefined;
 
@@ -332,11 +320,12 @@ export async function spawnPi(
   spec: SpawnPayload,
   ctx: HarnessContext
 ): Promise<HarnessSession> {
-  const client = await piSessiond();
+  const client = await piKeepers.current();
   const host = join(
     dirname(fileURLToPath(import.meta.url)),
     typeof __CAWCO_RELEASE__ === "boolean" ? "pi-host.js" : "pi-host.ts"
   );
+  await piKeepers.replaceElsewhere(procIdFor("pi", ctx.instanceId), client);
   await client.spawnProc(procIdFor("pi", ctx.instanceId), {
     command: process.execPath,
     args: standalone ? ["pi-host"] : [host],
@@ -379,7 +368,11 @@ export async function spawnPi(
 }
 
 export async function piSnapshot(instanceId: string): Promise<PiHostState> {
-  const client = await piSessiond();
+  const held = await piKeepers.holding(procIdFor("pi", instanceId));
+  if (!held) {
+    throw new Error(`pi host ${instanceId} is gone`);
+  }
+  const { client } = held;
   const id = crypto.randomUUID();
   return new Promise((resolve, reject) => {
     client.subscribe(procIdFor("pi", instanceId), {
@@ -411,15 +404,14 @@ export async function adoptPi(
   ctx: HarnessContext,
   options: { afterSeq?: number; head: number }
 ): Promise<HarnessSession> {
-  const client = await piSessiond();
-  const proc = (await client.list()).procs.find(
-    (one) => one.procId === procIdFor("pi", instanceId) && one.alive
-  );
+  // The keeper that holds it, current or retiring: the session reads and
+  // writes the host through that one for as long as it runs there.
+  const proc = await piKeepers.holding(procIdFor("pi", instanceId));
   if (!proc) {
     throw new Error(`pi host ${instanceId} is gone`);
   }
   const session = new PiRemoteSession(
-    client,
+    proc.client,
     ctx,
     proc.pid,
     options.afterSeq ?? options.head,

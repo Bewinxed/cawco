@@ -5,9 +5,10 @@
  *
  * An apply: copy the hub's database when the schema changes, write the trial
  * (`trial.json`), swap `current`, restart every unit that runs from it; once
- * the new build answers, move the session keeper to it if it holds nothing,
- * and say installed (the hub keeps this machine's new session starts only
- * while it says installing); then decide. Healthy, unbroken, for a minute (the
+ * the new build answers, hand the session keeper over to it (its keeper
+ * starts beside the one before, which keeps every session it holds), and say
+ * installed (the hub keeps this machine's new session starts only while it
+ * says installing); then decide. Healthy, unbroken, for a minute (the
  * hub, the dashboard and this machine's agent on the new build, started after
  * the swap, the agent holding its session keeper connection) confirms it; not
  * healthy by the trial's deadline, minutes after the swap and moved only by a
@@ -20,8 +21,8 @@
  * trial is removed only once it has been. A helper that dies leaves the trial
  * with no live lock; the next helper, `--resume`, finishes a decision already
  * written or decides again from now (the agent launches one within seconds,
- * the service wrapper at any unit's start). The session keeper is never
- * restarted while it holds a child.
+ * the service wrapper at any unit's start). No session keeper is restarted or
+ * signalled here: one is handed over to, beside the one before.
  */
 
 import { Database } from "bun:sqlite";
@@ -37,13 +38,13 @@ import {
   symlink,
 } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { heldSessions, SessiondClient } from "@cawco/agent/sessiond-client";
+import { keeperJob } from "@cawco/agent/keeper-jobs";
+import { SessiondClient } from "@cawco/agent/sessiond-client";
 import { probeHealth } from "@cawco/core/binary-health";
 import {
   binaryRoot,
   installationPath,
   keeperPath,
-  keeperTrialPath,
   lockFilePath,
   prune,
   readInstallation,
@@ -59,17 +60,30 @@ import {
   writeJsonAtomic,
 } from "@cawco/core/binary-installation";
 import type { BinaryUpdateState } from "@cawco/core/binary-updates";
+import {
+  answers,
+  currentKeeper,
+  keeperEndpoint,
+  machineEndpoint,
+  publishKeeper,
+} from "@cawco/core/keepers";
 import { machineId } from "@cawco/core/machine-id";
 import { markerIsLive, ownIdentity } from "@cawco/core/process-identity";
 import {
   type ReleaseManifest,
   verifyManifest,
 } from "@cawco/core/release-manifest";
-import { sessiondEndpoint } from "@cawco/core/sessiond";
+import { runtimeVersion } from "@cawco/core/runtime";
 import { binaryLayout } from "./binary-install";
-import { hubDbPath, type ServiceId, service, stopService } from "./service";
+import {
+  hubDbPath,
+  releaseAgentUnit,
+  type ServiceId,
+  service,
+  stopService,
+} from "./service";
 
-/** How long a restarted keeper or agent gets to answer during a keeper move. */
+/** How long a keeper handed over to gets to answer at its own endpoint. */
 const HEALTH_MS = 45_000;
 const MIGRATION_CAP_MS = 30 * 60_000;
 const SERVICE_TIMEOUT_MS = 120_000;
@@ -157,7 +171,8 @@ const svc = (action: "install" | "restart", ids: readonly ServiceId[]) =>
       force: true,
       whenIdle: false,
       note: (line) => console.log(`update: ${line}`),
-      binaryLayout: binaryLayout(),
+      // The hub's, the dashboard's and the agent's units: no keeper's is touched through here.
+      binaryLayout: binaryLayout(runtimeVersion),
     }),
     SERVICE_TIMEOUT_MS,
     `${action} ${ids.join(", ")}`
@@ -176,24 +191,6 @@ async function pointLinkAt(link: string, version: string): Promise<void> {
 }
 const pointCurrentAt = (version: string) =>
   pointLinkAt(join(binaryRoot(), "current"), version);
-
-/** Held children and epoch of the keeper, read now. */
-async function readKeeper(): Promise<{
-  epoch: string | undefined;
-  held: number;
-}> {
-  const client = await SessiondClient.connect(
-    process.env.CAWCO_SESSIOND_ENDPOINT ?? sessiondEndpoint()
-  );
-  try {
-    return {
-      held: heldSessions(client.procs),
-      epoch: client.epoch,
-    };
-  } finally {
-    client.close();
-  }
-}
 
 async function migrationRunning(db: string | undefined): Promise<boolean> {
   if (!db) {
@@ -220,7 +217,7 @@ async function readStaged(version: string): Promise<ReleaseManifest> {
 /**
  * Lays `state` over the state as it stands now, read at the write, never over
  * a copy taken when the helper started: the agent writes the same file while
- * an install or a keeper move runs, and what it wrote meanwhile must not be
+ * an install or a keeper handover runs, and what it wrote meanwhile must not be
  * written back over.
  */
 async function writeState(state: Partial<BinaryUpdateState>): Promise<void> {
@@ -231,27 +228,18 @@ async function writeState(state: Partial<BinaryUpdateState>): Promise<void> {
   });
 }
 
-/**
- * Applies a staged build, or (`keeperOnly`) moves the session keeper to the
- * running one. `commanded`: a person's Install now asked for the build.
- */
+/** Applies a staged build, or (`keeperOnly`) hands the session keeper over to the running one. */
 export async function applyBinary(
   version: string,
-  held: number,
-  keeperOnly: boolean,
-  commanded: boolean
+  keeperOnly: boolean
 ): Promise<void> {
   if (!(await takeLock(version))) {
     console.log("update: another update helper is running; nothing to do");
     return;
   }
   try {
-    await say(
-      `start ${version} held=${held} keeperOnly=${keeperOnly}${commanded ? " commanded" : ""}`
-    );
-    await (keeperOnly
-      ? moveKeeperAlone(version)
-      : applyBuild(version, commanded));
+    await say(`start ${version} keeperOnly=${keeperOnly}`);
+    await (keeperOnly ? handOverKeeperAlone(version) : applyBuild(version));
     await say(`end ${version}`);
   } catch (error) {
     // Refused before anything changed: say so rather than leave the state at `installing`.
@@ -294,205 +282,175 @@ export async function resumeBinary(): Promise<void> {
   }
 }
 
-const KEEPER_TRIAL_S = 120;
-
 type KeeperMove =
-  | { outcome: "already" | "moved" | "unreachable" }
-  | { held: number; outcome: "held" }
-  | {
-      custodyOnPrevious: boolean;
-      error: string;
-      outcome: "failed";
-    };
+  | { outcome: "already" | "moved" }
+  | { error: string; outcome: "failed" };
 
-/** Reads the keeper, three tries one second apart; undefined when it never answered. */
-async function readKeeperWithRetry(): Promise<
-  { epoch: string | undefined; held: number } | undefined
-> {
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    try {
-      // biome-ignore lint/performance/noAwaitInLoops: at most three tries, one second apart
-      return await readKeeper();
-    } catch {
-      if (attempt < 2) {
-        await Bun.sleep(1000);
-      }
-    }
-  }
-  return undefined;
-}
-
-/** The keeper answers, and (unless any answer will do) as a new process. */
-async function awaitKeeperAnswers(
-  epochBefore: string | undefined,
-  anyAnswer: boolean
-): Promise<void> {
+/** A keeper's welcome at `endpoint`, within {@link HEALTH_MS}: one that starts and answers. */
+async function awaitWelcome(endpoint: string): Promise<void> {
   const end = Date.now() + HEALTH_MS;
+  let last = "it never answered";
   while (Date.now() < end) {
-    // biome-ignore lint/performance/noAwaitInLoops: a poll
-    const now = await readKeeper().catch(() => undefined);
-    if (now && (anyAnswer || (now.epoch && now.epoch !== epochBefore))) {
+    try {
+      // biome-ignore lint/performance/noAwaitInLoops: a poll
+      const client = await SessiondClient.connect(endpoint);
+      client.close();
       return;
+    } catch (error) {
+      last = message(error);
     }
     await Bun.sleep(500);
   }
   throw new Error(
-    anyAnswer
-      ? "The session keeper did not answer"
-      : "The session keeper did not come back as a new process"
+    `no welcome at ${endpoint} within ${HEALTH_MS / 1000}s (${last})`
   );
 }
 
-/** This machine's agent, started after `since`, registered on the running build and holding its keeper connection. */
-async function awaitAgentWithKeeper(since: number): Promise<void> {
-  const installation = await readInstallation();
-  if (!installation) {
-    throw new Error("This machine has no binary installation");
+/**
+ * `cawco binary-units` from the build the keeper goes to: its keeper's own
+ * unit (or plist) and the agent's, as that build writes them. A build from
+ * before keepers ran side by side writes no unit of its own for its keeper,
+ * and is refused here: it has no keeper to hand over to.
+ */
+async function writeKeeperUnits(
+  version: string,
+  file: string
+): Promise<string> {
+  const units = Bun.spawn(
+    [join(versionDirectory(version), "cawco"), "binary-units"],
+    { stdout: "pipe", stderr: "pipe" }
+  );
+  const [out, err, code] = await Promise.all([
+    new Response(units.stdout).text(),
+    new Response(units.stderr).text(),
+    units.exited,
+  ]);
+  if (code !== 0) {
+    throw new Error(`binary-units exited ${code}: ${err.trim() || out.trim()}`);
   }
-  const id = await machineId();
-  const deadline = Date.now() + HEALTH_MS;
-  for (;;) {
-    // biome-ignore lint/performance/noAwaitInLoops: a poll; each read must see the services after the previous one
-    const problem = await probeHealth({
-      installation: { ...installation, role: "agent" },
-      machineId: id,
-      sinceMs: since,
-      agentStartedAfterMs: since,
-      version: installation.installedVersion,
-      requireCustody: true,
-    });
-    if (!problem) {
-      return;
-    }
-    if (Date.now() > deadline) {
-      throw new Error(problem);
-    }
-    await Bun.sleep(1000);
+  if (!(await Bun.file(file).exists())) {
+    throw new Error(
+      `${version} wrote no ${file}: a build from before keepers ran side by side has no keeper of its own to hand over to`
+    );
   }
+  return out.trim().replaceAll("\n", "; ") || "the units are current";
 }
 
 /**
- * The one place the keeper's pin (`<root>/keeper`) and `keeper-trial.json`
- * are written. Moves the keeper to `to` only if it holds nothing, proves the
- * keeper and the agent hold sessions on it, and otherwise puts the previous
- * build back. A keeper holding a live child is never restarted. A helper that
- * dies mid-move leaves the trial, and the wrapper puts `from` back at the
- * keeper's next start.
+ * THE ONE KEEPER HANDOVER, and the one place the keeper's pin
+ * (`<root>/keeper`) is written. The keeper of `to` starts beside the current
+ * one, in a job of its own, from its own build's unit; once it answers at its
+ * own endpoint it becomes the machine's: the `keeper` link names it, the
+ * machine's endpoint names it (a legacy keeper's own socket there moves to its
+ * legacy name in the same instant), and its job starts with the machine where
+ * the one before's no longer does. The keeper before is not signalled: it
+ * runs on with every session it holds, each through its own connection, and
+ * the agent removes it once it holds nothing (binary-update.ts
+ * `#tendKeepers`). A keeper of `to` that does not answer is removed before
+ * anything else changes, so the current keeper stays the machine's with
+ * everything it holds; one that was already running (a retiring keeper of
+ * `to`, made current again) is never removed here.
  */
-async function moveKeeper(to: string): Promise<KeeperMove> {
-  const from = await readKeeperVersion();
-  if (!from) {
-    throw new Error("The session keeper link is missing");
-  }
-  if (from === to) {
+async function handOverKeeper(to: string): Promise<KeeperMove> {
+  const machine = machineEndpoint();
+  const before = await currentKeeper(machine);
+  if (
+    before?.keeper.kind === "build" &&
+    before.keeper.version === to &&
+    (await readKeeperVersion()) === to
+  ) {
     return { outcome: "already" };
   }
   if (!(await Bun.file(join(versionDirectory(to), "cawco")).exists())) {
     throw new Error(`The build ${to} is not on this machine`);
   }
-  const first = await readKeeperWithRetry();
-  if (!first) {
-    return { outcome: "unreachable" };
+  const keeper = { kind: "build", version: to } as const;
+  const endpoint = keeperEndpoint(keeper, machine);
+  const job = keeperJob(keeper);
+  if (!job) {
+    throw new Error(
+      `No service manager CawCo installs into runs here (${process.platform})`
+    );
   }
-  if (first.held > 0) {
-    return { outcome: "held", held: first.held };
-  }
-  await writeJsonAtomic(keeperTrialPath(), {
-    from,
-    to,
-    deadline: Math.floor(Date.now() / 1000) + KEEPER_TRIAL_S,
-  });
-  await pointLinkAt(keeperPath(), to);
-  let firstError: string;
+  const running = await answers(endpoint);
   try {
-    const second = await readKeeper();
-    if (second.held > 0) {
-      await pointLinkAt(keeperPath(), from);
-      await rm(keeperTrialPath(), { force: true });
-      return { outcome: "held", held: second.held };
-    }
-    const started = Date.now();
-    await startAgain(["sessiond"]);
-    await startAgain(["agent"]);
-    await awaitKeeperAnswers(first.epoch, false);
-    await awaitAgentWithKeeper(started);
-    await rm(keeperTrialPath(), { force: true });
-    return { outcome: "moved" };
+    await say(`keeper ${to}: units: ${await writeKeeperUnits(to, job.file)}`);
+    await job.start();
+    await awaitWelcome(endpoint);
   } catch (error) {
-    firstError = message(error);
+    if (!running) {
+      await job
+        .remove()
+        .catch((removing: unknown) =>
+          say(
+            `keeper ${to}: its job could not be removed: ${message(removing)}`
+          )
+        );
+    }
+    return {
+      outcome: "failed",
+      error: `The session keeper of ${to} did not start: ${message(error)}`,
+    };
   }
-  // It did not work: put it back. A keeper that answers and holds a child works as a keeper: it stays.
-  const now = await readKeeper().catch(() => undefined);
-  if (now && now.held > 0) {
-    await rm(keeperTrialPath(), { force: true });
-    return { outcome: "moved" };
+  // The agent's unit stops naming the keeper before it, so that keeper's end
+  // ends nothing else; the keeper of `to` requires it from its own side once
+  // it is enabled, below.
+  await releaseAgentUnit((line) => console.log(`update: ${line}`));
+  await say(
+    `keeper ${to}: answers at ${endpoint}; the machine's endpoint names it now${before ? `, and ${before.keeper.version}'s keeper keeps what it holds` : ""}`
+  );
+  await pointLinkAt(keeperPath(), to);
+  await publishKeeper(
+    endpoint,
+    before?.keeper.kind === "legacy" ? before.keeper.version : undefined
+  );
+  await job.enable();
+  if (before && before.endpoint !== endpoint) {
+    await keeperJob(before.keeper)
+      ?.retire()
+      .catch((error: unknown) =>
+        say(
+          `keeper ${before.keeper.version}: it still starts with the machine: ${message(error)}`
+        )
+      );
   }
-  await pointLinkAt(keeperPath(), from);
-  let custodyOnPrevious = false;
-  try {
-    const started = Date.now();
-    await startAgain(["sessiond"]);
-    await startAgain(["agent"]);
-    await awaitKeeperAnswers(undefined, true);
-    await awaitAgentWithKeeper(started);
-    custodyOnPrevious = true;
-  } catch {
-    custodyOnPrevious = false;
-  }
-  await rm(keeperTrialPath(), { force: true });
-  return { outcome: "failed", error: firstError, custodyOnPrevious };
+  return { outcome: "moved" };
 }
 
-/** What the update state says about the keeper after a move: its link, and what became of the move. */
+/** A handover that threw is a handover that failed: said, and the keeper before is the machine's. */
+const handOver = (to: string): Promise<KeeperMove> =>
+  handOverKeeper(to).catch(
+    (error): KeeperMove => ({ outcome: "failed", error: message(error) })
+  );
+
+/** What the update state says about the keeper after a handover: the build it runs, and a keeper that could not start. */
 async function keeperState(
   move: KeeperMove,
   version: string
 ): Promise<Partial<BinaryUpdateState>> {
   const sessiondVersion = await readKeeperVersion();
-  switch (move.outcome) {
-    case "moved":
-    case "already":
-      return {
-        phase: "installed",
-        sessiondVersion,
-        heldChildren: undefined,
-        keeperFailedVersion: undefined,
-        error: undefined,
-      };
-    case "held":
-      return {
-        phase: "waiting-sessions",
-        sessiondVersion,
-        heldChildren: move.held,
-        error: undefined,
-      };
-    case "unreachable":
-      return {
-        phase: "waiting-sessions",
-        sessiondVersion,
-        heldChildren: undefined,
-        error: undefined,
-      };
-    default:
-      return {
-        phase: "installed",
-        sessiondVersion,
-        heldChildren: undefined,
-        keeperFailedVersion: version,
-        error: move.error,
-      };
-  }
+  return move.outcome === "failed"
+    ? { sessiondVersion, keeperFailedVersion: version, error: move.error }
+    : { sessiondVersion, keeperFailedVersion: undefined, error: undefined };
 }
 
 /**
- * The keeper by itself (`--keeper-only`): move it to the running build and
- * say what became of it. The move finishes an update already announced when
- * its build landed, so it announces nothing of its own.
+ * The keeper by itself (`--keeper-only`): hand it over to the running build
+ * and say what became of it. It finishes an update already announced when its
+ * build landed, so it announces nothing of its own; a machine that waited on
+ * its keeper the way builds before this one did waits no more.
  */
-async function moveKeeperAlone(version: string): Promise<void> {
-  const move = await moveKeeper(version);
+async function handOverKeeperAlone(version: string): Promise<void> {
+  const move = await handOver(version);
+  await say(
+    `keeper ${version}: ${move.outcome}${move.outcome === "failed" ? ` (${move.error})` : ""}`
+  );
   await prune();
-  await writeState(await keeperState(move, version));
+  const waited = (await readUpdateState())?.phase === "waiting-sessions";
+  await writeState({
+    ...(await keeperState(move, version)),
+    ...(waited ? { phase: "installed", heldChildren: undefined } : {}),
+  });
 }
 
 /** `VACUUM INTO` a copy of the hub database beside it, named for the build it belongs to. */
@@ -508,7 +466,7 @@ function backUpDatabase(db: string, previous: string): string {
   return copy;
 }
 
-async function applyBuild(version: string, commanded: boolean): Promise<void> {
+async function applyBuild(version: string): Promise<void> {
   const installed = await readInstallation();
   if (!installed) {
     throw new Error("This machine has no binary installation");
@@ -530,12 +488,7 @@ async function applyBuild(version: string, commanded: boolean): Promise<void> {
   const db = installed.role === "hub" ? hubDbPath() : undefined;
   const schemaChange =
     db !== undefined && manifest.schemaVersion !== running.schemaVersion;
-  // A newer install supersedes a keeper move an earlier one was owed.
-  await writeState({
-    phase: "installing",
-    heldChildren: undefined,
-    keeperOwed: undefined,
-  });
+  await writeState({ phase: "installing", heldChildren: undefined });
   const backup = schemaChange && db ? backUpDatabase(db, previous) : undefined;
   if (backup) {
     await say(`database copy ${backup}`);
@@ -547,9 +500,7 @@ async function applyBuild(version: string, commanded: boolean): Promise<void> {
     role: installed.role,
     swappedAt,
     decideBy: swappedAt + TRIAL_WINDOW_S,
-    keeper: await readKeeperVersion(),
     ...(backup && db ? { dbBackup: backup, dbPath: db } : {}),
-    ...(commanded ? { commanded: true } : {}),
   };
   // From here the trial is open, and only a decision closes it.
   await writeJsonAtomic(trialPath(), trial);
@@ -560,8 +511,8 @@ async function applyBuild(version: string, commanded: boolean): Promise<void> {
       installedVersion: version,
     });
     await say(`swap ${previous} -> ${version}; restarting ${units.join(", ")}`);
-    // The keeper is left alone: it is the one piece that holds sessions, so it
-    // moves only once the new build has answered.
+    // The keeper is left alone: it is the one piece that holds sessions, and
+    // it is handed over only once the new build has answered.
     await svc("restart", units);
   } catch (error) {
     // What did not happen shows in the verification: the build is not healthy.
@@ -606,34 +557,13 @@ async function decide(start: TrialMarker, resumed: boolean): Promise<void> {
 /**
  * The trial from the restart to its verdict, in the order the machine needs it.
  * The update is installing (the hub keeps this machine's new session starts)
- * only until the new build answers and the keeper has followed it or kept its
- * children; then the state says installed, with what became of the keeper, and
- * starts go through while the build is watched for the rest of its trial. The
+ * only until the new build answers and its keeper has been handed over to;
+ * then the state says installed, with what became of the keeper, and starts
+ * go through while the build is watched for the rest of its trial. The
  * verdict is the problem that decides a rollback, or `undefined` to confirm.
- * A build whose agent can hold sessions with neither keeper is rolled back.
+ * A keeper that cannot start is no verdict on the build: the keeper before
+ * stays the machine's, untouched, and the state says so.
  */
-/**
- * `cawco binary-units`, run from the build on trial: what it writes for the
- * keeper's unit replaces what is on disk where they differ, and systemd
- * reloads its unit files. What it said, for the log; a failure is said, and
- * the update goes on with the unit it had.
- */
-async function refreshKeeperUnit(version: string): Promise<string> {
-  const units = Bun.spawn(
-    [join(versionDirectory(version), "cawco"), "binary-units"],
-    { stdout: "pipe", stderr: "pipe" }
-  );
-  const [out, err, code] = await Promise.all([
-    new Response(units.stdout).text(),
-    new Response(units.stderr).text(),
-    units.exited,
-  ]);
-  if (code !== 0) {
-    return `binary-units exited ${code}: ${err.trim() || out.trim()}`;
-  }
-  return out.trim().replaceAll("\n", "; ") || "the keeper's unit is current";
-}
-
 async function settle(start: TrialMarker): Promise<string | undefined> {
   const up = await verify(start, 0);
   if (up) {
@@ -641,28 +571,17 @@ async function settle(start: TrialMarker): Promise<string | undefined> {
   }
   let trial = (await readTrial()) ?? start;
   if (!trial.keeperDone) {
-    // The keeper's unit as the new build writes it, before the keeper may
-    // restart on it: a unit change (its cgroup delegation) reaches machines
-    // installed before it, and a keeper that moves now starts under it.
+    const move = await handOver(trial.version);
     await say(
-      `units ${trial.version}: ${await refreshKeeperUnit(trial.version)}`
+      `keeper ${trial.version}: ${move.outcome}${move.outcome === "failed" ? ` (${move.error})` : ""}`
     );
-    const move = await moveKeeper(trial.version).catch(
-      (error): KeeperMove => ({
-        outcome: "failed",
-        error: message(error),
-        custodyOnPrevious: false,
-      })
-    );
-    await say(`keeper ${trial.version}: ${move.outcome}`);
-    if (move.outcome === "failed" && !move.custodyOnPrevious) {
-      return `The new build cannot hold sessions with either session keeper: ${move.error}`;
-    }
     trial = { ...trial, keeperDone: true };
     await writeJsonAtomic(trialPath(), trial);
     const manifest = await readStaged(trial.version);
     await writeState({
       ...(await keeperState(move, trial.version)),
+      phase: "installed",
+      heldChildren: undefined,
       installedVersion: trial.version,
       availableVersion: trial.version,
       channel: manifest.channel,
@@ -831,17 +750,8 @@ class TrialWatch {
 /**
  * The build stays: its landing and its keeper's outcome were written when it
  * answered ({@link settle}); the trial ends, and what nothing needs is pruned.
- * A person's Install now installs the whole build: a keeper it left holding
- * children is owed the move to it, recorded before the trial ends so a decider
- * that resumes here records it again rather than not at all.
  */
 async function confirm(trial: TrialMarker): Promise<void> {
-  if (trial.commanded && (await readKeeperVersion()) !== trial.version) {
-    await writeState({ keeperOwed: trial.version });
-    await say(
-      `keeper ${trial.version}: owed the move, once it holds nothing (Install now)`
-    );
-  }
   await rm(trialPath(), { force: true });
   await say(`confirmed ${trial.version}`);
   if (trial.dbPath && trial.dbBackup) {
@@ -864,8 +774,10 @@ async function confirm(trial: TrialMarker): Promise<void> {
  * and the installation point at the previous build, the database copy replaces
  * the migrated file (which is kept beside it, with its WAL, never deleted),
  * and every unit that runs from `current` is restarted, so none is left on the
- * build that failed. A keeper that moved in the trial goes back with it unless
- * it holds a child, as a keeper holding a child is never restarted.
+ * build that failed. A keeper handed over to the build that failed is handed
+ * over again, to the build rolled back to, which keeps the sessions the failed
+ * build's keeper started where they run until each ends or sleeps: the keeper
+ * follows the build the machine runs, and no session is cut for it.
  */
 async function rollBack(start: TrialMarker): Promise<void> {
   let trial = start;
@@ -892,16 +804,10 @@ async function rollBack(start: TrialMarker): Promise<void> {
   } catch (error) {
     await say(`roll back ${trial.version}: restart: ${message(error)}`);
   }
-  if (trial.keeper && (await readKeeperVersion()) !== trial.keeper) {
-    const back = await moveKeeper(trial.keeper).catch(
-      (error): KeeperMove => ({
-        outcome: "failed",
-        error: message(error),
-        custodyOnPrevious: false,
-      })
-    );
+  if ((await readKeeperVersion()) === trial.version) {
+    const back = await handOver(trial.previous);
     await say(
-      `roll back ${trial.version}: keeper to ${trial.keeper}: ${back.outcome}`
+      `roll back ${trial.version}: keeper to ${trial.previous}: ${back.outcome}${back.outcome === "failed" ? ` (${back.error})` : ""}`
     );
   }
   const manifest = await readStaged(trial.version).catch(() => undefined);
@@ -911,8 +817,6 @@ async function rollBack(start: TrialMarker): Promise<void> {
     sessiondVersion: await readKeeperVersion(),
     failedVersion: trial.version,
     availableVersion: trial.version,
-    // Nothing is owed a move to a build that was rolled back.
-    keeperOwed: undefined,
     ...(manifest ? { channel: manifest.channel, notes: manifest.notes } : {}),
     error: trial.reason ?? "The new build did not become healthy",
     landed: { at: Date.now(), outcome: "rolled-back", version: trial.version },

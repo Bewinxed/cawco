@@ -23,9 +23,8 @@ import {
   type BinaryInstallation,
   binaryRoot,
   helperIsLive,
-  keeperRecoveredPath,
+  prune,
   readInstallation,
-  readKeeperRecovered,
   readKeeperVersion,
   readRunningManifest,
   readTrial,
@@ -41,16 +40,25 @@ import {
   mergeHolds,
   type RestartHold,
   type RestartReadiness,
+  type RetiringKeeper,
   UPDATE_DRAIN_MS,
   UPDATE_WAIT_CAP_MS,
 } from "@cawco/core/binary-updates";
 import { BINARY_WRAPPER, writeWrapper } from "@cawco/core/binary-wrapper";
+import {
+  answers,
+  currentKeeper,
+  keeperEndpoints,
+  publishKeeper,
+} from "@cawco/core/keepers";
 import { machineId } from "@cawco/core/machine-id";
 import { verifyManifest } from "@cawco/core/release-manifest";
 import { runtimeVersion } from "@cawco/core/runtime";
-import { sessiondEndpoint } from "@cawco/core/sessiond";
+import { leaveRetiringKeepers } from "./boundary";
+import { keeperJob } from "./keeper-jobs";
+import { withKeepers } from "./keepers";
 import { lowerFence, raiseFence, restartReadiness } from "./restart";
-import { heldSessions, SessiondClient } from "./sessiond-client";
+import { heldSessions } from "./sessiond-client";
 
 const POLL_MS = 60_000;
 /** An update that says it is installing for longer than this, with no helper and no trial, has lost its helper. */
@@ -120,23 +128,38 @@ export const reportBinaryUpdate = (state: BinaryUpdateState): void => {
   latest = state;
 };
 
-/** The session keeper's held children, what it speaks and its epoch, read now. */
-async function readKeeper(): Promise<{
-  capabilities: readonly string[];
-  held: number;
-}> {
-  const client = await SessiondClient.connect(
-    process.env.CAWCO_SESSIOND_ENDPOINT ?? sessiondEndpoint()
+/** Each session keeper there, current and retiring: its held sessions, what it speaks, and every live child it holds. */
+const readKeepers = (): Promise<
+  {
+    capabilities: readonly string[];
+    current: boolean;
+    endpoint: string;
+    /** Its sessions: what an update the new agent cannot speak to it would wait on. */
+    held: number;
+    keeper: { kind: "build" | "legacy"; version: string };
+    /** Every live child, a session, a workspace's boundary or an OpenCode server: what it must be rid of before it goes. */
+    live: number;
+  }[]
+> =>
+  withKeepers((keepers) =>
+    Promise.resolve(
+      keepers.map(({ client, current, endpoint, keeper }) => ({
+        capabilities: client.capabilities,
+        current,
+        endpoint,
+        held: heldSessions(client.procs),
+        keeper,
+        live: client.procs.filter((proc) => proc.alive).length,
+      }))
+    )
   );
-  try {
-    return {
-      held: heldSessions(client.procs),
-      capabilities: client.capabilities,
-    };
-  } finally {
-    client.close();
-  }
-}
+
+/**
+ * How long a retiring keeper must hold nothing, over two looks of the
+ * updater's watch, before it is removed: past the two seconds a keeper gives
+ * what an ended child started before it kills it.
+ */
+const RETIRING_EMPTY_MS = 20_000;
 
 /**
  * A failed updater step, said in the log: a filesystem error's message names
@@ -328,7 +351,6 @@ export class BinaryUpdater {
     this.#hostsHub = (await readInstallation())?.role === "hub";
     console.info(`[update] updating the binary install at ${binaryRoot()}`);
     await this.#load();
-    await this.#noteKeeperRecovery().catch(logFailure);
     this.#timer = setInterval(() => this.tick(), POLL_MS);
     this.#timer.unref();
     this.#trialTimer = setInterval(
@@ -447,23 +469,6 @@ export class BinaryUpdater {
     this.#report(this.#state);
   }
 
-  /** The keeper's wrapper put the previous keeper back after a move whose helper died; this records it and does not retry that build. */
-  async #noteKeeperRecovery(): Promise<void> {
-    const trial = await readKeeperRecovered();
-    if (!trial) {
-      return;
-    }
-    await this.#set({
-      error: `The session keeper could not start on ${trial.to} and runs ${trial.from} again.`,
-      keeperFailedVersion: trial.to,
-      sessiondVersion: trial.from,
-      // The move is over (the wrapper writes this only when no helper is live): an `installing` left by a helper
-      // that died mid-move is not an update in flight.
-      ...(this.#state.phase === "installing" ? { phase: "installed" } : {}),
-    });
-    await rm(keeperRecoveredPath(), { force: true });
-  }
-
   /** The keeper watchdog restarted a wedged keeper: the dashboard says so once. */
   async noteKeeperRestart(
     restart: NonNullable<BinaryUpdateState["keeperRestart"]>
@@ -473,9 +478,9 @@ export class BinaryUpdater {
 
   /**
    * Every ten seconds: take up what the helper wrote, so the hub learns the
-   * phase has moved on; see that an open trial has a decider; take up a keeper
-   * recovery; and, on a build no trial is deciding, keep the service wrapper as
-   * this build writes it.
+   * phase has moved on; see that an open trial has a decider; tend the
+   * retiring session keepers; and, on a build no trial is deciding, keep the
+   * service wrapper as this build writes it.
    */
   async #watch(): Promise<void> {
     if (!this.#running) {
@@ -494,9 +499,111 @@ export class BinaryUpdater {
         await this.#lowerFence();
       }
     }
-    await this.#noteKeeperRecovery();
     await this.#keepDecider();
     await this.#ownWrapper();
+    await this.#tendKeepers();
+  }
+
+  /** Each retiring keeper's first look at which it held nothing, by its endpoint. */
+  readonly #emptySince = new Map<string, number>();
+
+  /**
+   * THE KEEPERS BESIDE THE CURRENT ONE GO WHEN THEY HOLD NOTHING. A keeper
+   * handover leaves the keeper before it running with the sessions it holds;
+   * every new start goes to the current keeper. Each retiring keeper that has
+   * held no live child for {@link RETIRING_EMPTY_MS} is removed (its job ends
+   * and leaves the machine; keeper-jobs.ts), and what no process runs any
+   * more is pruned. One holding anything is never signalled. The machine's
+   * endpoint is made to name the keeper the `keeper` link names, once that
+   * one answers, should a handover have stopped between the two. What is
+   * still retiring is in the state (`retiringKeepers`). Nothing is done while
+   * an update helper runs: keepers are its to hand over then.
+   */
+  async #tendKeepers(): Promise<void> {
+    if (await helperIsLive()) {
+      return;
+    }
+    const keepers = await readKeepers();
+    const link = await readKeeperVersion();
+    const named = keepers.find(
+      ({ keeper }) => keeper.kind === "build" && keeper.version === link
+    );
+    if (named && !named.current) {
+      // A legacy keeper still on the machine's endpoint is the handover's to set aside, with its build's name.
+      await publishKeeper(named.endpoint).then(
+        () =>
+          console.info(
+            `[update] the machine's keeper endpoint names ${named.keeper.version}'s keeper again`
+          ),
+        logFailure
+      );
+    }
+    const retiring = keepers.filter(
+      (keeper) => !(keeper.current || keeper === named)
+    );
+    if (retiring.length > 0) {
+      // Workspace boundaries a retiring keeper runs move to the current one as each is idle.
+      await leaveRetiringKeepers().catch(logFailure);
+    }
+    let removed = false;
+    for (const keeper of retiring) {
+      if (keeper.live > 0) {
+        this.#emptySince.delete(keeper.endpoint);
+        continue;
+      }
+      const since = this.#emptySince.get(keeper.endpoint) ?? Date.now();
+      this.#emptySince.set(keeper.endpoint, since);
+      if (Date.now() - since < RETIRING_EMPTY_MS) {
+        continue;
+      }
+      try {
+        // biome-ignore lint/performance/noAwaitInLoops: one keeper at a time, each removal said in its order
+        await keeperJob(keeper.keeper)?.remove();
+        await rm(keeper.endpoint, { force: true });
+        this.#emptySince.delete(keeper.endpoint);
+        removed = true;
+        console.info(
+          `[update] the retiring session keeper ${keeper.keeper.version} holds nothing and is gone`
+        );
+      } catch (error) {
+        logFailure(error);
+      }
+    }
+    // What a keeper that is gone left: a file nothing answers on now. Asked at
+    // the removal, not from the reading above: a keeper started since (by a
+    // helper that began meanwhile) answers from the moment its file is there.
+    await Promise.all(
+      (await keeperEndpoints())
+        .filter((found) => !found.current)
+        .map(async (found) => {
+          if (!(await answers(found.endpoint))) {
+            await rm(found.endpoint, { force: true });
+          }
+        })
+    );
+    if (removed) {
+      await prune().catch(logFailure);
+    }
+    await this.#sayRetiring(
+      (await readKeepers())
+        .filter((keeper) => !keeper.current)
+        .map(({ keeper, live }) => ({
+          version: keeper.version,
+          sessions: live,
+        }))
+    );
+  }
+
+  /** The retiring keepers in the state, written only when they changed, and never over a pass's state that only memory holds. */
+  async #sayRetiring(retiring: RetiringKeeper[]): Promise<void> {
+    const next = retiring.length > 0 ? retiring : undefined;
+    if (
+      this.#running ||
+      JSON.stringify(next) === JSON.stringify(this.#state.retiringKeepers)
+    ) {
+      return;
+    }
+    await this.#set({ retiringKeepers: next });
   }
 
   /**
@@ -765,9 +872,13 @@ export class BinaryUpdater {
     }
     if (
       manifest.version === runtimeVersion ||
-      manifest.version === (await readKeeperVersion())
+      manifest.version === (await readKeeperVersion()) ||
+      (await keeperEndpoints()).some(
+        ({ keeper }) => keeper.version === manifest.version
+      )
     ) {
-      // A folder a running process was started from is never touched.
+      // A folder a running process was started from is never touched: this
+      // agent's, and every keeper's, the current one and each retiring one.
       throw new Error("This version is one that is already running");
     }
     const target = `${process.platform}-${process.arch}`;
@@ -853,36 +964,27 @@ export class BinaryUpdater {
     if (this.#state.phase !== "ready") {
       return;
     }
-    const keeper = await readKeeper();
-    if (
-      keeper.held > 0 &&
-      !keeper.capabilities.includes(release.manifest.sessiondProtocol)
-    ) {
-      // The new agent could not speak to the keeper that holds the sessions:
-      // the whole machine's update waits, and nothing is ended to make room.
+    const unspoken = (await readKeepers()).filter(
+      (keeper) =>
+        keeper.held > 0 &&
+        !keeper.capabilities.includes(release.manifest.sessiondProtocol)
+    );
+    if (unspoken.length > 0) {
+      // The new agent could not speak to a keeper that holds sessions: the
+      // whole machine's update waits, and nothing is ended to make room.
       await this.#set({
         phase: "waiting-sessions",
-        heldChildren: keeper.held,
+        heldChildren: unspoken.reduce((sum, keeper) => sum + keeper.held, 0),
         waitingOn: undefined,
         waitingSince: undefined,
       });
       return;
     }
-    // On the hub's machine the update restarts the hub as well. Read before
-    // the replace, which spends the command: the helper hears whether a person
-    // asked for this build, and so whether its keeper is owed the move.
+    // On the hub's machine the update restarts the hub as well.
     const installation = await readInstallation();
-    const { commanded } = this.#flags;
     await this.#replace(
       installation?.role === "hub" ? installation.hubUrl : undefined,
-      () =>
-        launchApplyHelper([
-          "binary-apply",
-          release.manifest.version,
-          "--held",
-          String(keeper.held),
-          ...(commanded ? ["--commanded"] : []),
-        ])
+      () => launchApplyHelper(["binary-apply", release.manifest.version])
     );
   }
 
@@ -894,10 +996,9 @@ export class BinaryUpdater {
    */
   async #replace(
     hub: string | undefined,
-    launch: () => Promise<void>,
-    owed = false
+    launch: () => Promise<void>
   ): Promise<void> {
-    const cut = await this.#drain(hub, owed);
+    const cut = await this.#drain(hub);
     if (!cut) {
       return;
     }
@@ -938,15 +1039,12 @@ export class BinaryUpdater {
    * outlasted a drain gets no new fence until it has ended
    * ({@link #outlasted}): a long call is waited out, not fenced every minute.
    */
-  async #drain(
-    hub: string | undefined,
-    owed: boolean
-  ): Promise<RestartHold[] | undefined> {
+  async #drain(hub: string | undefined): Promise<RestartHold[] | undefined> {
     const before = this.#state.phase;
     const capped = (): boolean =>
       this.#state.waitingSince !== undefined &&
       Date.now() - this.#state.waitingSince >= UPDATE_WAIT_CAP_MS;
-    if (await this.#cancelled(before, owed)) {
+    if (await this.#cancelled(before)) {
       return undefined;
     }
     if (!(this.#flags.commanded || capped())) {
@@ -975,7 +1073,7 @@ export class BinaryUpdater {
         await Bun.sleep(DRAIN_POLL_MS);
         reading = await readReadiness(hub);
       }
-      if (await this.#cancelled(before, owed)) {
+      if (await this.#cancelled(before)) {
         return undefined;
       }
       if (reading.ready || this.#flags.commanded || capped()) {
@@ -998,15 +1096,10 @@ export class BinaryUpdater {
   /**
    * A person's cancel came in during the pass (or the drain): nothing is
    * installed, a fence raised for it comes down, and a ready build goes back
-   * to `available`. Never with auto-update on, which a cancel does not stop,
-   * nor for a keeper move a confirmed install is owed (`owed`): a cancel takes
-   * back an install not yet applied, and that one was.
+   * to `available`. Never with auto-update on, which a cancel does not stop.
    */
-  async #cancelled(
-    before: BinaryUpdateState["phase"],
-    owed: boolean
-  ): Promise<boolean> {
-    if (owed || this.#flags.commanded || this.#policy.autoUpdate) {
+  async #cancelled(before: BinaryUpdateState["phase"]): Promise<boolean> {
+    if (this.#flags.commanded || this.#policy.autoUpdate) {
       return false;
     }
     const fenced = this.#fence !== undefined;
@@ -1057,75 +1150,49 @@ export class BinaryUpdater {
   }
 
   /**
-   * The session keeper advances only once it holds nothing, and only under the
-   * same policy as any update: auto-update on, or a person's Install now. Not
-   * to a build it already could not start on.
-   *
-   * A person's Install now reaches the keeper after the agent that heard it is
-   * gone (the trial restarts it): the confirmed install leaves `keeperOwed`,
-   * the build, never the command. It moves the keeper to that build only, the
-   * one this agent runs, and is cleared as the move starts, so it is acted on
-   * once; a keeper that cannot start there is not moved there again
-   * (`keeperFailedVersion`, checked first).
+   * THE KEEPER FOLLOWS THE BUILD THIS AGENT RUNS, AND WAITS ON NOTHING. When
+   * the current keeper is not this build's own (a legacy keeper, or one of an
+   * earlier build), the update helper hands it over (`binary-apply
+   * <version> --keeper-only`): this build's keeper starts beside it and takes
+   * every new session, and the one before keeps the sessions it holds until
+   * each ends or sleeps (#tendKeepers). Nothing restarts, so nothing is
+   * drained, fenced or cut, and no setting holds it back: the build it
+   * follows was installed under the update policy already. Not to a build
+   * whose keeper could not start (`keeperFailedVersion`), and not while a
+   * helper runs.
    */
   async #advanceKeeper(): Promise<void> {
-    const keeperVersion = await readKeeperVersion();
-    if (keeperVersion === runtimeVersion) {
+    const current = await currentKeeper();
+    const linked = await readKeeperVersion();
+    if (
+      current?.keeper.kind === "build" &&
+      current.keeper.version === runtimeVersion &&
+      linked === runtimeVersion
+    ) {
+      // Only a change is written: every write moves `updatedAt`, which the board reads as news.
       if (
         this.#state.phase === "waiting-sessions" ||
-        this.#state.keeperOwed !== undefined
+        this.#state.sessiondVersion !== runtimeVersion
       ) {
         await this.#set({
           ...(this.#state.phase === "waiting-sessions"
             ? { phase: "installed", heldChildren: undefined }
             : {}),
-          keeperOwed: undefined,
+          sessiondVersion: runtimeVersion,
         });
       }
       return;
     }
-    if (this.#state.keeperFailedVersion === runtimeVersion) {
-      if (this.#state.keeperOwed !== undefined) {
-        await this.#set({ keeperOwed: undefined });
-      }
+    if (
+      this.#state.keeperFailedVersion === runtimeVersion ||
+      !current ||
+      (await helperIsLive())
+    ) {
       return;
     }
-    const keeper = await readKeeper();
-    if (keeper.held > 0) {
-      // Only a change is written: every write moves `updatedAt`, which the board reads as news.
-      if (
-        this.#state.phase !== "waiting-sessions" ||
-        this.#state.heldChildren !== keeper.held ||
-        this.#state.sessiondVersion !== keeperVersion
-      ) {
-        await this.#set({
-          phase: "waiting-sessions",
-          heldChildren: keeper.held,
-          sessiondVersion: keeperVersion,
-        });
-      }
-      return;
-    }
-    const owed = this.#state.keeperOwed === runtimeVersion;
-    if (!(this.#flags.commanded || this.#policy.autoUpdate || owed)) {
-      return;
-    }
-    // The keeper moves with this agent alone; the hub stays up.
-    await this.#replace(
-      undefined,
-      async () => {
-        await launchApplyHelper([
-          "binary-apply",
-          runtimeVersion,
-          "--held",
-          "0",
-          "--keeper-only",
-        ]);
-        if (this.#state.keeperOwed !== undefined) {
-          await this.#set({ keeperOwed: undefined });
-        }
-      },
-      owed
+    console.info(
+      `[update] the session keeper ${current.keeper.version}${current.keeper.kind === "legacy" ? " (from before keepers ran side by side)" : ""} is handed over to ${runtimeVersion}'s`
     );
+    await launchApplyHelper(["binary-apply", runtimeVersion, "--keeper-only"]);
   }
 }

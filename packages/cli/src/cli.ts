@@ -143,12 +143,9 @@ interface Args {
   autoUpdate: boolean;
   channel?: "stable" | "nightly";
   command?: string;
-  /** `binary-apply --commanded`: a person's Install now asked for this build. */
-  commanded: boolean;
   dev: boolean;
   follow: boolean;
   force: boolean;
-  held?: number;
   help: boolean;
   hub?: string;
   keeperOnly: boolean;
@@ -172,7 +169,6 @@ const parseArgs = (argv: string[]): Args => {
     rest: [],
     ask: false,
     keeperOnly: false,
-    commanded: false,
     resume: false,
     autoUpdate: false,
     dev: false,
@@ -202,21 +198,9 @@ const parseArgs = (argv: string[]): Args => {
       case "--keeper-only":
         args.keeperOnly = true;
         break;
-      case "--commanded":
-        args.commanded = true;
-        break;
       case "--resume":
         args.resume = true;
         break;
-      case "--held": {
-        index += 1;
-        const held = Number(argv[index]);
-        if (!Number.isInteger(held) || held < 0) {
-          throw new UsageError("--held needs a count of held children");
-        }
-        args.held = held;
-        break;
-      }
       case "--release-host":
         index += 1;
         args.releaseHost = argv[index];
@@ -423,12 +407,22 @@ const runService = async (args: Args): Promise<number> => {
   // Naming nothing means the whole stack, which is what someone setting a
   // machine up wants; `logs` is the exception and says so itself.
   const ids = named.length > 0 ? named : SERVICE_IDS;
-  // On a binary install every unit starts through the wrapper, never a build's own path, or an
-  // update would restart the build it was meant to replace.
-  const { readInstallation } = await import("@cawco/core/binary-installation");
+  // On a binary install the hub, dashboard and agent units start through the wrapper, never a
+  // build's own path, or an update would restart the build it was meant to replace; the session
+  // keeper's unit is the current keeper's own, the build the `keeper` link names.
+  const { readInstallation, readKeeperVersion } = await import(
+    "@cawco/core/binary-installation"
+  );
   const { binaryLayout } = await import("./binary-install");
+  const installation = await readInstallation();
+  const keeper = installation ? await readKeeperVersion() : undefined;
+  if (installation && !keeper) {
+    throw new UsageError(
+      `this binary install has no keeper link (${installation.root}/keeper), so which session keeper's unit to act on is not known`
+    );
+  }
   await service(args.action, {
-    ...((await readInstallation()) ? { binaryLayout: binaryLayout() } : {}),
+    ...(keeper ? { binaryLayout: binaryLayout(keeper) } : {}),
     ids,
     mode: args.dev ? "dev" : "prod",
     follow: args.follow,
@@ -481,13 +475,11 @@ const runBinaryApply = async (args: Args): Promise<number> => {
     await resumeBinary();
     return 0;
   }
-  if (!args.action || args.held === undefined) {
-    throw new UsageError(
-      "binary-apply needs a staged version and --held <count>"
-    );
+  if (!args.action) {
+    throw new UsageError("binary-apply needs a staged version");
   }
   const { applyBinary } = await import("./binary-apply");
-  await applyBinary(args.action, args.held, args.keeperOnly, args.commanded);
+  await applyBinary(args.action, args.keeperOnly);
   return 0;
 };
 
@@ -561,13 +553,13 @@ const run = async (argv: string[]): Promise<number> => {
       return 0;
     }
     case "binary-units": {
-      // A verified update's step before the keeper moves, run from that build: the
-      // session keeper's unit as this build writes it. Only that unit: the
-      // others carry what the installing shell knew (the hub's address, the
-      // dashboard's port), which this process may not.
+      // A keeper handover's first step, run by the update helper from the build the
+      // keeper goes to: that build's own keeper unit, as this build writes it. Only
+      // that unit: the others carry what the installing shell knew (the hub's
+      // address, the dashboard's port), which this process may not.
       const { binaryLayout } = await import("./binary-install");
       const { refreshUnits } = await import("./service");
-      await refreshUnits(["sessiond"], binaryLayout(), (line) =>
+      await refreshUnits(["sessiond"], binaryLayout(CLI_VERSION), (line) =>
         console.log(`units: ${line}`)
       );
       return 0;

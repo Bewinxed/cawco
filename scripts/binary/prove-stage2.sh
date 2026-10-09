@@ -155,7 +155,7 @@ diagnose() {
     echo "################ $c"
     echo "---- systemctl --user status 'cawco-*' (first 40 lines)"
     asu "$c" systemctl --user --no-pager status 'cawco-*' | head -n 40
-    for unit in hub dashboard agent sessiond; do
+    for unit in hub dashboard agent 'sessiond*'; do
       echo "---- journal cawco-$unit.service (last 80)"
       asu "$c" journalctl --user --no-pager -n 80 -u "cawco-$unit.service"
     done
@@ -195,6 +195,8 @@ machine_id() { hub_api /api/agents | json "d => d.find(a => a.hostname === '$1')
 build_version() { hub_api /api/agents | json "d => d.find(a => a.machineId === '$1')?.build?.version"; }
 phase() { hub_api /api/binary-updates/machines | json "d => d.machines['$1']?.phase"; }
 field() { hub_api /api/binary-updates/machines | json "d => d.machines['$1']?.$2"; }
+# The keepers of earlier builds still holding something on a machine, as its update state says: `<build>:<held> ...`.
+retiring() { hub_api /api/binary-updates/machines | json "d => (d.machines['$1']?.retiringKeepers ?? []).map(k => k.version + ':' + k.sessions).join(' ')"; }
 wait_until() {
   local seconds=$1; shift
   local end=$((SECONDS + seconds))
@@ -236,12 +238,34 @@ start_loop() {
     sleep 0.5
   done
 }
-# What the machine's session holder holds, read from its socket: the first line it answers a list with.
+# The machine's session keepers (packages/core/src/keepers.ts): each listens on an endpoint of its own beside the
+# machine's, sessiond-<build>.sock (legacy-sessiond-<build>.sock for one set aside from before keepers ran side by
+# side), and the machine's endpoint sessiond.sock is a symlink naming the current one, which every new start goes to.
+# What the current keeper holds, read from the machine's endpoint: the first line it answers a list with.
 keeper_list() { as_user "$1" sh -c 'printf "{\"type\":\"list\"}\n" | socat -t1 - UNIX-CONNECT:/run/user/1000/cawco/sessiond.sock | head -n 1'; }
-# The pids of the live children held under one id (one number when there is exactly one child, as there must be).
-child_pids() { keeper_list "$1" | json "d => d.procs.filter(p => p.alive && p.procId === '$2').map(p => p.pid).join(',')"; }
-children_with() { keeper_list "$1" | json "d => d.procs.filter(p => p.alive && p.procId.startsWith('$2')).length"; }
-children_total() { keeper_list "$1" | json "d => d.procs.filter(p => p.alive).length"; }
+# What every keeper holds, current and retiring: one listing per line, each with the endpoint it answered on.
+keeper_lists() {
+  as_user "$1" sh -c 'for s in /run/user/1000/cawco/sessiond-*.sock /run/user/1000/cawco/legacy-sessiond-*.sock; do
+    [ -S "$s" ] || continue
+    printf "{\"type\":\"list\"}\n" | socat -t1 - UNIX-CONNECT:"$s" 2> /dev/null | head -n 1 | sed "s|^{|{\"endpoint\":\"$(basename "$s")\",|"
+  done'
+}
+# Reads JSON lines into an array for the function given.
+jsonl() { bun -e "const t = await Bun.stdin.text(); const d = t.split('\n').filter((l) => l.trim()).map((l) => JSON.parse(l)); const v = ($1)(d); console.log(v === undefined ? '' : v)"; }
+# The pids of the live children held under one id, on any keeper (one number when there is exactly one child, as there must be).
+child_pids() { keeper_lists "$1" | jsonl "d => d.flatMap(k => k.procs).filter(p => p.alive && p.procId === '$2').map(p => p.pid).join(',')"; }
+children_with() { keeper_lists "$1" | jsonl "d => d.flatMap(k => k.procs).filter(p => p.alive && p.procId.startsWith('$2')).length"; }
+children_total() { keeper_lists "$1" | jsonl "d => d.flatMap(k => k.procs).filter(p => p.alive).length"; }
+# The endpoint of the keeper holding a live child under the id (sessiond-<build>.sock), empty when none does.
+holder_of() { keeper_lists "$1" | jsonl "d => d.find(k => k.procs.some(p => p.alive && p.procId === '$2'))?.endpoint"; }
+# The live children one keeper holds, by its endpoint's name.
+held_on() { keeper_lists "$1" | jsonl "d => d.find(k => k.endpoint === '$2')?.procs.filter(p => p.alive).length ?? 0"; }
+# The current keeper's own endpoint, as the machine's endpoint names it.
+current_endpoint() { as_user "$1" readlink /run/user/1000/cawco/sessiond.sock; }
+# A build's keeper's endpoint and unit (keeperService: what a unit name cannot carry becomes _).
+endpoint_of() { echo "sessiond-$1.sock"; }
+unit_of() { local v=$1; echo "cawco-sessiond-${v//[^A-Za-z0-9._-]/_}.service"; }
+current_unit() { local e; e=$(current_endpoint "$1"); e=${e#sessiond-}; unit_of "${e%.sock}"; }
 session_running() { [[ "$(hub_api /api/instances | json "d => d.find(r => r.id === '$1')?.status")" == running ]]; }
 # Starts sessions through the hub, waits until each runs, and writes down the pid of the process holding it.
 start_before() {
@@ -278,9 +302,12 @@ accepted_ran_once() {
   [[ "$(children_with "$container" "$prefix-")" == "$(hub_api /api/instances | json "d => d.filter(r => r.id.startsWith('$prefix-') && r.status === 'running').length")" ]]
   [[ "$(as_user "$container" sh -c 'pgrep -x sleep | wc -l')" == "$(children_total "$container")" ]]
 }
-keeper_pid() { as_user "$1" systemctl --user show -p MainPID --value cawco-sessiond.service; }
+# The main process of a keeper's unit (the current keeper's when no unit is named).
+keeper_pid() { as_user "$1" systemctl --user show -p MainPID --value "${2:-$(current_unit "$1")}"; }
+# Asks the hub, from inside its own container, to stop a session, the way the dashboard does.
+stop_session() { as_user "$hubc" env BUN_BE_BUN=1 /home/cawco/.local/bin/cawco /shared/stage2-stop-session.ts http://127.0.0.1:3456 "$1" "$2"; }
 untouched() { as_user "$1" sh -c 'test ! -e "$HOME/.local/share/cawco" && test ! -e "$HOME/.local/bin/cawco" && echo untouched'; }
-export -f as_user as_user_tty hub_api api_on spawn_child start_session start_loop keeper_list child_pids children_with children_total session_running start_before survived accepted_ran_once keeper_pid untouched json machine_id build_version phase field wait_until publish
+export -f as_user as_user_tty hub_api api_on spawn_child start_session stop_session start_loop keeper_list keeper_lists jsonl child_pids children_with children_total holder_of held_on current_endpoint endpoint_of unit_of current_unit session_running start_before survived accepted_ran_once keeper_pid untouched json machine_id build_version phase field retiring wait_until publish
 
 boot() {
   local c=$1 ip=$2 name=$3 linger=${4:-linger}
@@ -332,7 +359,7 @@ setup "publish the bad-signature release" "$out/logs/fixture-badsig.log" publish
 setup "publish the unsigned release" "$out/logs/fixture-nosig.log" publish nosig stable 0.0.1-test.1 $sha1111 "$bins/cawco-1" "$key" 10 "$schema" no-signature
 setup "write the broken build" "$out/logs/fixture-broken.log" fixture broken-binary "$out/broken-cawco"
 setup "write the workflow the hub keeps" "$out/logs/fixture-workflow.log" bun -e "await Bun.write('$out/shared/workflow.json', JSON.stringify({name: 'kept-through-rollback', program: 'import { z } from \"zod\"; export const inputs=z.object({name:z.string()}); export default async function(w:Workflow<typeof inputs>){await w.checkpoint(\"binary\",w.inputs);return {name:w.inputs.name};}'}))"
-setup "put the session starter where the machines can read it" "$out/logs/starter.log" cp "$here/stage2-start-session.ts" "$here/stage2-during-install.ts" "$out/shared/"
+setup "put the session starter where the machines can read it" "$out/logs/starter.log" cp "$here/stage2-start-session.ts" "$here/stage2-stop-session.ts" "$here/stage2-during-install.ts" "$out/shared/"
 cat > "$out/shared/reset-hub.sh" <<'EOF'
 # Puts the hub machine back on a known working build. $1 is the last good one: used when its directory is
 # still on disk, otherwise the build `current` names (provided the hub answers on it after the cleanup below).
@@ -353,25 +380,37 @@ if [ ! -d "$binary/versions/$good" ]; then
   fi
 fi
 healthy() { curl -fsS --max-time 5 http://127.0.0.1:3456/health 2> /dev/null | grep -q "\"version\":\"$good\""; }
+# The good build's keeper, and only it: its own unit, the keeper link, the machine's endpoint naming it.
+goodunit="cawco-sessiond-$(printf '%s' "$good" | sed 's/[^A-Za-z0-9._-]/_/g').service"
 clean() {
   [ ! -e "$binary/apply.lock" ] && [ ! -e "$binary/trial.json" ] && [ ! -e "$data/cawco.db.migrating" ] &&
-    [ ! -e "$binary/keeper-trial.json" ] && [ ! -e "$binary/keeper-trial.recovered" ] && [ ! -e "$HOME/.config/systemd/user/cawco-sessiond.service.d" ] && ! ls "$binary"/versions/*/cawco.real > /dev/null 2>&1 &&
-    [ "$(readlink "$binary/current")" = "versions/$good" ] &&
+    ! ls "$binary"/versions/*/cawco.real > /dev/null 2>&1 &&
+    [ "$(readlink "$binary/current")" = "versions/$good" ] && [ "$(readlink "$binary/keeper")" = "versions/$good" ] &&
+    [ "$(readlink /run/user/1000/cawco/sessiond.sock)" = "sessiond-$good.sock" ] &&
+    [ "$(systemctl --user is-active "$goodunit")" = active ] &&
     grep -qE '"phase":"(none|installed|waiting-sessions|available)"' "$binary/update-state.json" 2> /dev/null
 }
 if healthy && clean && [ -S /run/user/1000/cawco/sessiond.sock ]; then echo "GOODVERSION=$good"; exit 0; fi
 pkill -9 -f binary-apply
 systemctl --user stop cawco-agent.service cawco-hub.service cawco-dashboard.service
-rm -f "$binary/apply.lock" "$binary/trial.json" "$binary/keeper-trial.json" "$binary/keeper-trial.recovered" "$binary/update-failures.json" "$data/cawco.db.migrating"
-rm -rf "$HOME/.config/systemd/user/cawco-sessiond.service.d"
+rm -f "$binary/apply.lock" "$binary/trial.json" "$binary/update-failures.json" "$data/cawco.db.migrating"
 for d in "$binary"/versions/*/; do [ -f "${d}cawco.real" ] && mv -f "${d}cawco.real" "${d}cawco"; done
-systemctl --user daemon-reload
 ln -sfn "versions/$good" "$binary/current.reset" && mv -T "$binary/current.reset" "$binary/current"
 ln -sfn "versions/$good" "$binary/keeper.reset" && mv -T "$binary/keeper.reset" "$binary/keeper"
 sed -i "s/\"installedVersion\":\"[^\"]*\"/\"installedVersion\":\"$good\"/" "$binary/installation.json"
 printf '{"phase":"none","installedVersion":"%s","channel":"stable","updatedAt":%s000,"unseen":false,"hostsHub":true}\n' "$good" "$(date +%s)" > "$binary/update-state.json"
+# Every other keeper goes, with what it holds; the good build's own unit is written by that build, enabled and restarted.
+for unit in $(systemctl --user list-unit-files --no-legend 'cawco-sessiond*.service' | awk '{print $1}'); do
+  [ "$unit" = "$goodunit" ] && continue
+  systemctl --user disable --now "$unit"
+  rm -f "$HOME/.config/systemd/user/$unit"
+done
+rm -f /run/user/1000/cawco/sessiond-*.sock /run/user/1000/cawco/legacy-sessiond-*.sock
+"$binary/versions/$good/cawco" binary-units
+systemctl --user daemon-reload
 systemctl --user reset-failed
-systemctl --user restart cawco-sessiond.service
+systemctl --user enable "$goodunit"
+systemctl --user restart "$goodunit"
 systemctl --user start cawco-hub.service cawco-dashboard.service cawco-agent.service
 n=0
 until healthy; do
@@ -388,36 +427,25 @@ until healthy; do
   sleep 2
 done
 until [ -S /run/user/1000/cawco/sessiond.sock ]; do sleep 1; done
+until [ "$(readlink /run/user/1000/cawco/sessiond.sock)" = "sessiond-$good.sock" ]; do sleep 1; done
 echo "stopped any update in flight, restored current and keeper and the state files, restarted the services; used $used"
 echo "GOODVERSION=$good"
 EOF
-# Makes the keeper unit fail on one build, or start slowly, without any hook in the product: a systemd drop-in.
-# On the build named, the unit starts (so the wrapper runs and the keeper link is read), then fails and is restarted
-# every two seconds; on any other build it is healthy.
+# Makes a build's session keeper fail to start, or start slowly, without any hook in the product: the build's
+# executable is replaced by a stub for one verb. Each build's keeper runs from its own folder in a unit of its own
+# (packages/core/src/keepers.ts), so the stub reaches that build's keeper and nothing else.
 cat > "$out/shared/keeper-dropin.sh" <<'EOF'
-dir="$HOME/.config/systemd/user/cawco-sessiond.service.d"
 root="$HOME/.local/share/cawco/binary"
 case "$1" in
-  fail-on)
-    mkdir -p "$dir"
-    printf '[Service]\nExecStartPost=/bin/sh -c '"'"'[ "$$(readlink %s/keeper)" != versions/%s ]'"'"'\n' "$root" "$2" > "$dir/proof.conf" ;;
-  slow-fail-on)
-    # Fails on the build named, but only after $3 seconds: the restart job stays open that long, so a helper
-    # waiting on it can be killed while the keeper link names the build.
-    mkdir -p "$dir"
-    printf '[Service]\nExecStartPre=/bin/sh -c '"'"'[ "$$(readlink %s/keeper)" != versions/%s ] || sleep %s'"'"'\nExecStartPost=/bin/sh -c '"'"'[ "$$(readlink %s/keeper)" != versions/%s ]'"'"'\n' "$root" "$2" "$3" "$root" "$2" > "$dir/proof.conf" ;;
-  delay)
-    mkdir -p "$dir"
-    printf '[Service]\nExecStartPre=/bin/sleep %s\n' "$2" > "$dir/proof.conf" ;;
-  break-build|break-when-staged)
+  break-build|break-when-staged|slow-when-staged)
     # A build cannot run one verb because its executable is replaced by a stub that fails for that verb ($3,
     # `sessiond` by default) and runs the real program (kept as a hard link, `cawco.real`) for every other verb.
-    # No unit is touched, so the wrapper runs at every start and the verb then fails, as a real build that cannot
-    # run it would. `break-when-staged` first waits for the update to put the build on disk (the extracted
-    # directory appears whole, by rename) and stubs it in a few milliseconds, long before the swap.
+    # `slow-when-staged` instead holds its `sessiond` verb $3 seconds before running it: a keeper slow to start.
+    # No unit is touched, so the verb fails (or waits) at every start, as a real build that cannot run it would.
+    # The `*-when-staged` modes first wait for the update to put the build on disk (the extracted directory appears
+    # whole, by rename) and stub it in a few milliseconds, long before the swap.
     v="$root/versions/$2"
-    verb="${3:-sessiond}"
-    if [ "$1" = break-when-staged ]; then
+    if [ "$1" != break-build ]; then
       n=0
       until [ -f "$v/cawco" ] && [ -f "$v/release.json" ]; do
         n=$((n + 1))
@@ -426,11 +454,14 @@ case "$1" in
       done
     fi
     [ -f "$v/cawco.real" ] || ln "$v/cawco" "$v/cawco.real"
-    printf '#!/bin/sh\n[ "$1" = %s ] && exit 1\nexec "$(dirname "$(readlink -f "$0")")/cawco.real" "$@"\n' "$verb" > "$v/cawco.stub"
+    if [ "$1" = slow-when-staged ]; then
+      printf '#!/bin/sh\n[ "$1" = sessiond ] && sleep %s\nexec "$(dirname "$(readlink -f "$0")")/cawco.real" "$@"\n' "$3" > "$v/cawco.stub"
+    else
+      printf '#!/bin/sh\n[ "$1" = %s ] && exit 1\nexec "$(dirname "$(readlink -f "$0")")/cawco.real" "$@"\n' "${3:-sessiond}" > "$v/cawco.stub"
+    fi
     chmod 700 "$v/cawco.stub"
     mv "$v/cawco.stub" "$v/cawco" ;;
   remove)
-    rm -rf "$dir"
     for d in "$root"/versions/*/; do
       if [ -f "${d}cawco.real" ]; then
         mv -f "${d}cawco.real" "${d}cawco"
@@ -476,13 +507,17 @@ data="$HOME/.local/share/cawco"
 echo "== apply.log (last 60 lines)"
 tail -n 60 "$binary/apply.log" 2>&1
 cd "$binary" 2> /dev/null || { echo "no $binary"; exit 0; }
-for f in installation.json update-state.json trial.json keeper-trial.json keeper-trial.recovered apply.lock; do
+for f in installation.json update-state.json trial.json apply.lock; do
   if [ -e "$f" ]; then echo "== $f"; cat "$f"; echo; else echo "== $f: absent"; fi
 done
 echo "== current -> $(readlink current)"
 echo "== keeper -> $(readlink keeper)"
-echo "== keeper unit drop-ins"
-ls "$HOME/.config/systemd/user/cawco-sessiond.service.d" 2>&1
+echo "== keeper endpoints (the machine's names the current one)"
+ls -la /run/user/1000/cawco 2>&1
+echo "== keeper units"
+systemctl --user list-unit-files --no-legend 'cawco-sessiond*' 2>&1
+systemctl --user list-units --all --no-legend 'cawco-sessiond*' 2>&1
+grep -H 'Requires\|After\|Before\|RequiredBy' "$HOME/.config/systemd/user/cawco-agent.service" "$HOME/.config/systemd/user"/cawco-sessiond*.service 2>&1
 echo "== versions/"
 ls -la versions
 for m in "$data"/cawco.db.migrating "$data"/cawco.db.migrated-* "$data"/cawco.db.pre-*; do
@@ -779,10 +814,10 @@ joiner_starts_held() {
   install_now_request "$jid" > /dev/null
   start_loop "$jid" joinerstart "$out/accepted-joiner.txt" "$out/stop-joiner" &
   loop=$!
-  # The machine's sessions are held by its session keeper, which is never restarted while it holds a child:
-  # the update is complete when the new build runs and the phase is waiting-sessions (the keeper stays on
-  # the old build), or installed when nothing was held. It is not complete while the phase is installing.
-  wait_until 300 '[[ "$(build_version $jid)" == 0.0.1-test.2 && ( "$(phase $jid)" == installed || "$(phase $jid)" == waiting-sessions ) ]]'
+  # The machine's sessions are held by its session keeper, which no update restarts: the new build's keeper
+  # starts beside it and the update is complete, installed, when the new build runs. It is not complete while
+  # the phase is installing.
+  wait_until 300 '[[ "$(build_version $jid)" == 0.0.1-test.2 && "$(phase $jid)" == installed ]]'
   [[ "$(field $jid installedVersion)" == 0.0.1-test.2 ]]
   touch "$out/stop-joiner"
   wait "$loop"
@@ -886,12 +921,13 @@ check "changing the channel takes effect" channel_change 600 "Install now applie
 
 auto_with_held_child() {
   need_hub
-  # A child the session keeper holds, as a running session's process would be.
+  # A child the session keeper holds, as a running session's process would be: its pid, and the keeper's pid, unit
+  # and endpoint.
   spawn_child "$hubc" held
   child=$(child_pids "$hubc" boundary-held)
   keeper=$(keeper_pid "$hubc")
   [[ -n "$child" && -n "$keeper" ]]
-  echo "$child $keeper" > "$out/held.txt"
+  echo "$child $keeper $(current_unit "$hubc") $(current_endpoint "$hubc")" > "$out/held.txt"
   # Sessions already running on the hub's own machine before its update begins.
   start_before "$hid" "$hubc" "$out/hub-before.txt" hubpre-1 hubpre-2
   # Two watchers, started before the update is asked for: one asks the hub to start sessions on its own machine,
@@ -922,14 +958,22 @@ check "a session already running on the hub's own machine before its update is t
 
 held_survives() {
   need_hub
-  read -r child keeper < "$out/held.txt"
+  local child keeper unit endpoint new=0.0.1-nightly.3+333333333333
+  read -r child keeper unit endpoint < "$out/held.txt"
+  # The child runs on, held by the very keeper process it started under, which the update did not touch.
   as_user "$hubc" kill -0 "$child"
-  [[ "$(keeper_pid "$hubc")" == "$keeper" ]]
-  wait_until 120 '[[ "$(phase $hid)" == waiting-sessions && "$(field $hid heldChildren)" -ge 1 ]]'
-  [[ "$(as_user "$hubc" readlink /home/cawco/.local/share/cawco/binary/keeper)" == versions/0.0.1-test.2 ]]
+  [[ "$(keeper_pid "$hubc" "$unit")" == "$keeper" ]]
+  [[ "$(holder_of "$hubc" boundary-held)" == "$endpoint" ]]
+  # The new build's keeper is the machine's: the keeper link and the machine's endpoint name it. Nothing waits: the
+  # update is installed, and the state says the keeper before still holds what it holds.
+  wait_until 120 '[[ "$(phase $hid)" == installed && "$(field $hid sessiondVersion)" == "'"$new"'" ]]'
+  [[ "$(as_user "$hubc" readlink /home/cawco/.local/share/cawco/binary/keeper)" == "versions/$new" ]]
+  [[ "$(current_endpoint "$hubc")" == "$(endpoint_of "$new")" ]]
+  wait_until 60 '[[ "$(retiring $hid)" == *"0.0.1-test.2:"* ]]'
+  echo "retiring keepers: $(retiring $hid)"
 }
 export -f held_survives
-check "a child held by the session keeper survives the update and the keeper is untouched" held_survives 600 "with auto-update on the build is applied when the machine is idle"
+check "a child held by the session keeper survives the update on that keeper, untouched, while the new build's keeper becomes the machine's" held_survives 600 "with auto-update on the build is applied when the machine is idle"
 
 session_during_update() {
   need_hub
@@ -942,9 +986,10 @@ session_during_update() {
   local n id alive
   n=$(watched_ids "$out/watch-joiner.txt" | wc -l)
   [[ $n -ge 1 ]]
-  # Every one the watcher recorded as accepted is still alive afterwards. (The keeper also holds the few the
-  # watcher sent just as the hub went down or the phase moved on; those are not in the count, and are not required.)
-  alive=" $(keeper_list "$joinerc" | json "d => d.procs.filter(p => p.alive).map(p => p.procId).join(' ')") "
+  # Every one the watcher recorded as accepted is still alive afterwards, on whichever keeper took it. (The keepers
+  # also hold the few the watcher sent just as the hub went down or the phase moved on; those are not in the count,
+  # and are not required.)
+  alive=" $(keeper_lists "$joinerc" | jsonl "d => d.flatMap(k => k.procs).filter(p => p.alive).map(p => p.procId).join(' ')") "
   for id in $(watched_ids "$out/watch-joiner.txt"); do
     [[ "$alive" == *" $id "* ]] || { echo "the accepted child $id is not alive"; return 1; }
   done
@@ -954,16 +999,25 @@ check "a session started while an update is installing is still alive afterwards
 
 keeper_advances() {
   need_hub
-  read -r child keeper < "$out/held.txt"
-  # Every session on the machine ends, so the keeper holds nothing.
-  for pid in $(keeper_list "$hubc" | json "d => d.procs.filter(p => p.alive).map(p => p.pid).join(' ')"); do
+  local child keeper unit endpoint pid now
+  read -r child keeper unit endpoint < "$out/held.txt"
+  now=$(keeper_pid "$hubc")
+  # Everything the keeper before holds ends, so it holds nothing.
+  for pid in $(keeper_lists "$hubc" | jsonl "d => (d.find(k => k.endpoint === '$endpoint')?.procs ?? []).filter(p => p.alive).map(p => p.pid).join(' ')"); do
     as_user "$hubc" kill "$pid"
   done
-  wait_until 300 '[[ -n "$(keeper_pid "$hubc")" && "$(keeper_pid "$hubc")" != "'"$keeper"'" && "$(phase $hid)" == installed ]]'
+  # It goes by itself once it has held nothing for 20 s: its process, its unit and its endpoint are gone, nothing
+  # says it is retiring, and the machine's keeper is the same process as before.
+  wait_until 180 '! as_user "$hubc" kill -0 "'"$keeper"'" 2> /dev/null'
+  wait_until 60 '! as_user "$hubc" test -e "/home/cawco/.config/systemd/user/'"$unit"'"'
+  wait_until 60 '! as_user "$hubc" test -e "/run/user/1000/cawco/'"$endpoint"'"'
+  wait_until 60 '[[ -z "$(retiring $hid)" ]]'
+  [[ "$(keeper_pid "$hubc")" == "$now" ]]
+  [[ "$(phase $hid)" == installed ]]
   [[ "$(as_user "$hubc" readlink /home/cawco/.local/share/cawco/binary/keeper)" == versions/0.0.1-nightly.3+333333333333 ]]
 }
 export -f keeper_advances
-check "the session keeper advances once it holds nothing" keeper_advances 600 "with auto-update on the build is applied when the machine is idle"
+check "the keeper before goes by itself once it holds nothing, and the machine's keeper is untouched" keeper_advances 600 "with auto-update on the build is applied when the machine is idle"
 
 nightly_to_stable_waits() {
   need_hub
@@ -993,12 +1047,12 @@ check "the capability report lists what each container has, with versions" capab
 
 
 # ---------------------------------------------------------------- the session keeper's own checks
-# Builds 4 to 8 are healthy builds further along the nightly channel (build-stage2.ts), so each check
-# below gets a full update or a keeper move of its own. The keeper is made unable to start on one build,
-# or slow to start, by a systemd drop-in written by /shared/keeper-dropin.sh. Each check starts from a
-# state it makes itself (no drop-in, no update in flight, the keeper holding nothing), removes its drop-in
-# on every way out, and depends only on "Install now applies the newer build", so one failing keeper
-# check leaves the others to run.
+# Builds 4 to 9 are healthy builds further along the nightly channel (build-stage2.ts), so each check below
+# gets a full update, and with it a keeper handover, of its own. A build's keeper is made unable to start, or
+# slow to start, by a stub on that build's `sessiond` verb, written by /shared/keeper-dropin.sh the moment the
+# update stages the build. Each check starts from a state it makes itself (no stub, no update in flight, no
+# keeper holding anything, none retiring), removes its stub on every way out, and depends only on "Install
+# now applies the newer build", so one failing keeper check leaves the others to run.
 
 nb() { printf '0.0.1-nightly.%s+%s' "$1" "$(printf "$1%.0s" {1..12})"; }
 publish_nightly() { publish ok nightly "$(nb "$1")" "$(printf "$1%.0s" {1..40})" "$bins/cawco-$1" "$key" "$2" "$schema"; }
@@ -1008,14 +1062,18 @@ current_link() { as_user "$1" readlink /home/cawco/.local/share/cawco/binary/cur
 has_file() { as_user "$1" test -e "/home/cawco/.local/share/cawco/binary/$2"; }
 has_version() { as_user "$1" test -d "/home/cawco/.local/share/cawco/binary/versions/$2"; }
 custody_of() { hub_api /api/agents | json "d => d.find(a => a.machineId === '$1')?.custody?.state"; }
+# Ends every process every keeper on the machine holds.
 end_all_sessions() {
   local pid
-  for pid in $(keeper_list "$1" | json "d => d.procs.filter(p => p.alive).map(p => p.pid).join(' ')"); do
+  for pid in $(keeper_lists "$1" | jsonl "d => d.flatMap(k => k.procs).filter(p => p.alive).map(p => p.pid).join(' ')"); do
     as_user "$1" kill "$pid"
   done
 }
 apply_log_count() { as_user "$hubc" sh -c "grep -c '$1' /home/cawco/.local/share/cawco/binary/apply.log || true"; }
-# The state every keeper check starts from, made here and not left by an earlier check.
+# Puts a stub on build $1's verb $2 (sessiond: its keeper cannot start) the moment the update stages it, in the background.
+stub_when_staged() { as_user "$hubc" sh -c 'rm -f /tmp/stub.done; sh /shared/keeper-dropin.sh "$1" "$2" "$3" && touch /tmp/stub.done' _ "$@" > /dev/null 2>&1 & }
+# The state every keeper check starts from, made here and not left by an earlier check: nothing held, and so no
+# keeper retiring, on the hub's machine.
 keeper_start_state() {
   need_hub
   trap 'keeper_dropin remove > /dev/null 2>&1 || true' EXIT
@@ -1023,28 +1081,35 @@ keeper_start_state() {
   end_all_sessions "$hubc"
   wait_until 60 '[[ "$(children_total "$hubc")" == 0 ]]'
   wait_until 180 '[[ "$(phase $hid)" != installing ]]'
+  wait_until 120 '[[ -z "$(retiring $hid)" ]]'
   put_policy nightly true
 }
-export -f nb publish_nightly keeper_dropin keeper_link current_link has_file has_version custody_of end_all_sessions apply_log_count keeper_start_state
+export -f nb publish_nightly keeper_dropin keeper_link current_link has_file has_version custody_of end_all_sessions apply_log_count stub_when_staged keeper_start_state
 
 full_update_keeper_cannot_start() {
   keeper_start_state
   local before
   before=$(keeper_link "$hubc")
-  keeper_dropin fail-on "$(nb 4)"
+  stub_when_staged break-when-staged "$(nb 4)" sessiond
   publish_nightly 4 41
   learn
   wait_until 400 '[[ "$(build_version $hid)" == "$(nb 4)" && "$(phase $hid)" == installed ]]'
   [[ "$(current_link "$hubc")" == "versions/$(nb 4)" ]]
+  wait_until 60 '[[ "$(field $hid keeperFailedVersion)" == "$(nb 4)" ]]'
+  # The keeper before is still the machine's: the keeper link and the machine's endpoint name it, and the keeper
+  # that could not start left nothing behind, no unit and no endpoint.
   [[ "$(keeper_link "$hubc")" == "$before" ]]
-  [[ "$(field $hid keeperFailedVersion)" == "$(nb 4)" ]]
+  [[ "$(current_endpoint "$hubc")" == "$(endpoint_of "${before#versions/}")" ]]
+  as_user "$hubc" test ! -e "/home/cawco/.config/systemd/user/$(unit_of "$(nb 4)")"
+  as_user "$hubc" test ! -e "/run/user/1000/cawco/$(endpoint_of "$(nb 4)")"
   [[ "$(custody_of $hid)" == available ]]
   keeper_dropin remove
   start_session "$hid" keeperlive-4
   wait_until 60 'session_running keeperlive-4'
+  [[ "$(holder_of "$hubc" keeperlive-4)" == "$(endpoint_of "${before#versions/}")" ]]
 }
 export -f full_update_keeper_cannot_start
-check "in a full update a keeper that cannot start does not undo a healthy build" full_update_keeper_cannot_start 900 "Install now applies the newer build" "$(printf '0.0.1-nightly.4+%s' 444444444444)"
+check "in a full update a keeper that cannot start does not undo a healthy build, and the keeper before stays the machine's" full_update_keeper_cannot_start 900 "Install now applies the newer build" "$(printf '0.0.1-nightly.4+%s' 444444444444)"
 
 trial_keeps_what_it_restores() {
   keeper_start_state
@@ -1055,99 +1120,164 @@ trial_keeps_what_it_restores() {
   # While the helper decides the trial, the build it would restore is still on disk.
   wait_until 400 '[[ "$(current_link "$hubc")" == "versions/$(nb 5)" ]] && has_file "$hubc" trial.json'
   has_version "$hubc" "${previous#versions/}"
-  # Once the helper has confirmed the build the trial is gone, the keeper has followed it, and nothing runs or
-  # names the previous build, so it is pruned.
+  # Once the helper has confirmed the build the trial is gone, the keeper has been handed over to it, and nothing
+  # runs or names the previous build, so it is pruned.
   wait_until 400 '[[ "$(build_version $hid)" == "$(nb 5)" && "$(phase $hid)" == installed ]] && ! has_file "$hubc" trial.json'
-  wait_until 120 '[[ "$(keeper_link "$hubc")" == "versions/$(nb 5)" ]]'
+  wait_until 120 '[[ "$(keeper_link "$hubc")" == "versions/$(nb 5)" && "$(current_endpoint "$hubc")" == "$(endpoint_of "$(nb 5)")" ]]'
   wait_until 60 '! has_version "$hubc" "${previous#versions/}"'
 }
 export -f trial_keeps_what_it_restores
 check "the build a pending trial would restore is still on disk, and is removed after the trial is confirmed" trial_keeps_what_it_restores 900 "Install now applies the newer build" "$(printf '0.0.1-nightly.5+%s' 555555555555)"
 
-keeper_alone_cannot_start() {
+keeper_cannot_start_with_held() {
   keeper_start_state
-  # A held child keeps the keeper where it is through the update to build 6, then ends, and the keeper must move by itself to a build it cannot start on.
+  local before held keeper
+  before=$(keeper_link "$hubc")
+  # A child the keeper holds through the update to build 6, whose keeper cannot start.
   spawn_child "$hubc" k1hold
+  held=$(child_pids "$hubc" boundary-k1hold)
+  keeper=$(keeper_pid "$hubc")
+  [[ -n "$held" && -n "$keeper" ]]
+  stub_when_staged break-when-staged "$(nb 6)" sessiond
   publish_nightly 6 43
   learn
-  wait_until 400 '[[ "$(build_version $hid)" == "$(nb 6)" && "$(phase $hid)" == waiting-sessions ]]'
-  local before
-  before=$(keeper_link "$hubc")
-  [[ "$before" != "versions/$(nb 6)" ]]
-  keeper_dropin fail-on "$(nb 6)"
-  end_all_sessions "$hubc"
-  wait_until 500 '[[ "$(field $hid keeperFailedVersion)" == "$(nb 6)" ]]'
+  wait_until 400 '[[ "$(build_version $hid)" == "$(nb 6)" && "$(phase $hid)" == installed ]]'
+  wait_until 60 '[[ "$(field $hid keeperFailedVersion)" == "$(nb 6)" ]]'
+  # The child and its keeper are as they were, and that keeper is still the machine's.
   [[ "$(keeper_link "$hubc")" == "$before" ]]
-  [[ "$(phase $hid)" == installed ]]
+  [[ "$(child_pids "$hubc" boundary-k1hold)" == "$held" && "$(keeper_pid "$hubc")" == "$keeper" ]]
+  [[ "$(holder_of "$hubc" boundary-k1hold)" == "$(current_endpoint "$hubc")" ]]
   wait_until 60 '[[ "$(custody_of $hid)" == available ]]'
   keeper_dropin remove
   start_session "$hid" keeperlive-6
   wait_until 60 'session_running keeperlive-6'
-  # Not tried again for the same build: the helper is launched once for it and not again in the next three polls.
-  [[ "$(apply_log_count "start $(nb 6) held=0 keeperOnly=true")" == 1 ]]
+  # Not handed over to the same build again by itself: its keeper's unit was written once, and not again in the
+  # next three polls.
+  [[ "$(apply_log_count "keeper $(nb 6): units")" == 1 ]]
   sleep 190
-  [[ "$(apply_log_count "start $(nb 6) held=0 keeperOnly=true")" == 1 ]]
+  [[ "$(apply_log_count "keeper $(nb 6): units")" == 1 ]]
+  [[ "$(keeper_link "$hubc")" == "$before" ]]
 }
-export -f keeper_alone_cannot_start
-check "the keeper by itself, moved to a build it cannot start on, goes back and sessions still start" keeper_alone_cannot_start 1500 "Install now applies the newer build" "$(printf '0.0.1-nightly.6+%s' 666666666666)"
+export -f keeper_cannot_start_with_held
+check "with a child held, a build whose keeper cannot start leaves the child and its keeper as they were, sessions still start, and it is not tried again" keeper_cannot_start_with_held 1500 "Install now applies the newer build" "$(printf '0.0.1-nightly.6+%s' 666666666666)"
 
-helper_killed_mid_keeper_move() {
+helper_killed_mid_handover() {
   keeper_start_state
+  local before held keeper
+  before=$(keeper_link "$hubc")
   spawn_child "$hubc" k2hold
+  held=$(child_pids "$hubc" boundary-k2hold)
+  keeper=$(keeper_pid "$hubc")
+  [[ -n "$held" && -n "$keeper" ]]
+  # Build 7's keeper takes 30 s to start.
+  stub_when_staged slow-when-staged "$(nb 7)" 30
   publish_nightly 7 44
   learn
-  wait_until 400 '[[ "$(build_version $hid)" == "$(nb 7)" && "$(phase $hid)" == waiting-sessions ]]'
-  local before
-  before=$(keeper_link "$hubc")
-  [[ "$before" != "versions/$(nb 7)" ]]
-  keeper_dropin break-build "$(nb 7)"
-  end_all_sessions "$hubc"
-  # The keeper-only helper moves the link and waits up to 45 s for the keeper; the keeper's unit starts through
-  # the wrapper, whose exec of build 7 fails at once, over and over. The helper is killed while it waits.
-  wait_until 400 '[[ "$(keeper_link "$hubc")" == "versions/$(nb 7)" ]]'
-  sleep 4
+  # The helper writes build 7's keeper unit, starts it beside the keeper before, and waits for it; it is killed
+  # while it waits. Nothing has been switched: the keeper before is the machine's.
+  wait_until 400 'as_user "$hubc" test -e "/home/cawco/.config/systemd/user/$(unit_of "$(nb 7)")"'
+  sleep 5
   as_user "$hubc" pkill -9 -f binary-apply
-  has_file "$hubc" keeper-trial.json
-  # The property, for a helper killed at this point: within the keeper trial's deadline (120 s) plus a restart or
-  # two, the keeper link names the build it was on, the build is untouched, the keeper answers and the agent
-  # holds it, the state says what happened, and nothing is left in flight. (The marker the wrapper leaves for the
-  # agent lives for less than a restart of the agent, so it is not what is checked.)
-  wait_until 300 '[[ "$(keeper_link "$hubc")" == "'"$before"'" ]]'
-  ! has_file "$hubc" keeper-trial.json
-  wait_until 120 '[[ "$(custody_of $hid)" == available ]]'
-  wait_until 120 '[[ "$(field $hid keeperFailedVersion)" == "$(nb 7)" ]]'
-  wait_until 120 '[[ "$(phase $hid)" != installing ]]'
-  [[ "$(current_link "$hubc")" == "versions/$(nb 7)" ]]
-  [[ "$(build_version $hid)" == "$(nb 7)" ]]
-  # The build was confirmed before its keeper moved, and nothing rolled it back.
-  wait_until 300 '! has_file "$hubc" trial.json'
-  ! has_file "$hubc" apply.lock
-  [[ "$(current_link "$hubc")" == "versions/$(nb 7)" ]]
-  # Sessions start, and the keeper link was not touched again.
+  [[ "$(keeper_link "$hubc")" == "$before" ]]
+  [[ "$(current_endpoint "$hubc")" == "$(endpoint_of "${before#versions/}")" ]]
+  # The trial it left open is decided by a helper the agent starts: the build answers, its keeper is up by then and is
+  # handed over to, the build is confirmed, and nothing is left in flight.
+  wait_until 400 '[[ "$(keeper_link "$hubc")" == "versions/$(nb 7)" && "$(current_endpoint "$hubc")" == "$(endpoint_of "$(nb 7)")" ]]'
+  wait_until 300 'as_user "$hubc" test ! -e /home/cawco/.local/share/cawco/binary/trial.json'
+  as_user "$hubc" test ! -e /home/cawco/.local/share/cawco/binary/apply.lock
+  wait_until 120 '[[ "$(phase $hid)" == installed && "$(build_version $hid)" == "$(nb 7)" ]]'
+  [[ -z "$(field $hid keeperFailedVersion)" ]]
+  wait_until 60 '[[ "$(custody_of $hid)" == available ]]'
+  # The held child ran through all of it on the keeper before, the same process.
+  [[ "$(child_pids "$hubc" boundary-k2hold)" == "$held" ]]
+  [[ "$(holder_of "$hubc" boundary-k2hold)" == "$(endpoint_of "${before#versions/}")" ]]
+  [[ "$(keeper_pid "$hubc" "$(unit_of "${before#versions/}")")" == "$keeper" ]]
+  # A session starts, on build 7's keeper.
   start_session "$hid" keeperlive-7
   wait_until 60 'session_running keeperlive-7'
-  [[ "$(keeper_link "$hubc")" == "$before" ]]
+  [[ "$(holder_of "$hubc" keeperlive-7)" == "$(endpoint_of "$(nb 7)")" ]]
   keeper_dropin remove
 }
-export -f helper_killed_mid_keeper_move
-check "a helper killed right after the keeper's link moved to a build it cannot start on is recovered by the keeper's own start" helper_killed_mid_keeper_move 1200 "Install now applies the newer build" "$(printf '0.0.1-nightly.7+%s' 777777777777)"
+export -f helper_killed_mid_handover
+check "a helper killed while the keeper it hands over to is starting leaves the machine whole, and the decider that resumes finishes the handover" helper_killed_mid_handover 1200 "Install now applies the newer build" "$(printf '0.0.1-nightly.7+%s' 777777777777)"
 
-keeper_moves_on_joined_machine() {
+# The brief's case: a joined machine with sessions running on its keeper installs a build. The new build's keeper
+# takes a new session at once, the old sessions run on and stay answerable, through an agent restart in the middle
+# of the handover too, and when they end the old keeper goes by itself.
+handover_on_joined_machine() {
   keeper_start_state
-  # The joined machine follows its hub's build; its keeper stays where it was while sessions hold it, and follows once it holds nothing.
-  # The build the joined machine itself runs (not its hub's: a reset may have put the hub on an older one).
-  local want
-  want=$(build_version $jid)
-  [[ -n "$want" ]]
-  wait_until 180 '[[ "$(phase $jid)" != installing ]]'
-  [[ "$(keeper_link "$joinerc")" != "versions/$want" ]]
+  # One update at a time from here, each asked for: the hub's machine, then the joined one.
+  put_policy nightly false
+  sleep 15
+  wait_until 300 '[[ "$(phase $hid)" != installing && "$(phase $jid)" != installing ]]'
+  if [[ "$(build_version $jid)" != "$(build_version $hid)" ]]; then install_now_request "$jid" > /dev/null; fi
+  wait_until 600 '[[ "$(build_version $jid)" == "$(build_version $hid)" && "$(phase $jid)" != installing ]]'
+  # The joined machine holds nothing, so no earlier keeper of its is left: the one it has is the only one.
   end_all_sessions "$joinerc"
-  wait_until 500 '[[ "$(keeper_link "$joinerc")" == "versions/'"$want"'" ]]'
-  wait_until 120 '[[ "$(phase $jid)" == installed ]]'
-  wait_until 60 '[[ "$(custody_of $jid)" == available ]]'
+  wait_until 180 '[[ "$(children_total "$joinerc")" == 0 && -z "$(retiring $jid)" ]]'
+  local old oldend oldunit oldpid new id pid
+  old=$(keeper_link "$joinerc")
+  old=${old#versions/}
+  oldend=$(current_endpoint "$joinerc")
+  oldunit=$(current_unit "$joinerc")
+  oldpid=$(keeper_pid "$joinerc")
+  [[ "$oldend" == "$(endpoint_of "$old")" && -n "$oldpid" ]]
+  # Three sessions running on the joined machine's keeper before its update.
+  start_before "$jid" "$joinerc" "$out/handover-before.txt" handover-1 handover-2 handover-3
+  # Build 8 reaches the hub's machine, then the joined machine, which installs it with its sessions running.
+  publish_nightly 8 45
+  learn
+  install_now_request "$hid" > /dev/null
+  wait_until 400 '[[ "$(build_version $hid)" == "$(nb 8)" && "$(phase $hid)" == installed ]]'
+  wait_until 120 '[[ "$(field $jid availableVersion)" == "$(nb 8)" ]]'
+  install_now_request "$jid" > /dev/null
+  new=$(nb 8)
+  wait_until 400 '[[ "$(build_version $jid)" == "'"$new"'" && "$(phase $jid)" == installed ]]'
+  # The new build's keeper is the joined machine's at once: the keeper link, the machine's endpoint and the update
+  # state name it, and the state says the keeper before is handing over with the three sessions it holds.
+  [[ "$(keeper_link "$joinerc")" == "versions/$new" ]]
+  [[ "$(current_endpoint "$joinerc")" == "$(endpoint_of "$new")" ]]
+  wait_until 60 '[[ "$(field $jid sessiondVersion)" == "'"$new"'" && "$(retiring $jid)" == "'"$old"':3" ]]'
+  hub_api /api/binary-updates/machines | json "d => JSON.stringify({phase: d.machines['$jid'].phase, sessiondVersion: d.machines['$jid'].sessiondVersion, retiringKeepers: d.machines['$jid'].retiringKeepers})"
+  # A new session starts at once, on the new keeper.
+  start_session "$jid" handover-new
+  wait_until 60 'session_running handover-new'
+  [[ "$(holder_of "$joinerc" handover-new)" == "$(endpoint_of "$new")" ]]
+  # The old sessions run on: the same processes, still on the keeper before, which is the same process.
+  survived "$joinerc" "$out/handover-before.txt"
+  while read -r id pid; do
+    [[ "$(holder_of "$joinerc" "$id")" == "$oldend" ]]
+  done < "$out/handover-before.txt"
+  [[ "$(keeper_pid "$joinerc" "$oldunit")" == "$oldpid" ]]
+  # The agent restarts in the middle of the handover: it takes back the sessions on both keepers.
+  as_user "$joinerc" systemctl --user restart cawco-agent.service
+  wait_until 120 '[[ "$(custody_of $jid)" == available && "$(hub_api /api/agents | json "d => d.find(a => a.machineId === \"$jid\")?.status")" == online ]]'
+  survived "$joinerc" "$out/handover-before.txt"
+  wait_until 120 'session_running handover-new'
+  [[ "$(holder_of "$joinerc" handover-new)" == "$(endpoint_of "$new")" ]]
+  [[ "$(keeper_pid "$joinerc" "$oldunit")" == "$oldpid" ]]
+  # An old session answers: stopped through the hub, the keeper before ends it.
+  read -r id pid < "$out/handover-before.txt"
+  stop_session "$jid" "$id"
+  wait_until 60 '! as_user "$joinerc" kill -0 "'"$pid"'" 2> /dev/null'
+  wait_until 60 '[[ "$(retiring $jid)" == "'"$old"':2" ]]'
+  # The other two end; the keeper before then goes by itself, its process, unit and endpoint, and the new
+  # keeper's session runs on.
+  for pid in $(tail -n +2 "$out/handover-before.txt" | awk '{print $2}'); do
+    as_user "$joinerc" kill "$pid"
+  done
+  wait_until 180 '! as_user "$joinerc" kill -0 "'"$oldpid"'" 2> /dev/null'
+  wait_until 60 'as_user "$joinerc" test ! -e "/home/cawco/.config/systemd/user/'"$oldunit"'"'
+  wait_until 60 'as_user "$joinerc" test ! -e "/run/user/1000/cawco/'"$oldend"'"'
+  wait_until 60 '[[ -z "$(retiring $jid)" ]]'
+  [[ "$(holder_of "$joinerc" handover-new)" == "$(endpoint_of "$new")" ]]
+  session_running handover-new
+  [[ "$(phase $jid)" == installed ]]
+  # Only the new build's keeper unit is left on the machine.
+  [[ "$(as_user "$joinerc" systemctl --user list-unit-files --no-legend 'cawco-sessiond*.service' | awk '{print $1}')" == "$(unit_of "$new")" ]]
 }
-export -f keeper_moves_on_joined_machine
-check "the keeper moves by itself on a joined machine once it holds nothing" keeper_moves_on_joined_machine 1200 "Install now applies the newer build"
+export -f handover_on_joined_machine
+check "a joined machine installs a build with sessions on its keeper: the new keeper takes a new session at once, the old sessions run on and answer through an agent restart, and the old keeper goes when they end" handover_on_joined_machine 1800 "Install now applies the newer build"
 
 agent_cannot_start_whole_recovery() {
   keeper_start_state
@@ -1174,8 +1304,8 @@ agent_cannot_start_whole_recovery() {
   wait_until 60 '[[ "$(hub_api /api/agents | json "d => d.find(a => a.machineId === \"$hid\")?.status")" == online ]]'
   wait_until 60 '[[ "$(custody_of $hid)" == available ]]'
   wait_until 60 '[[ "$(phase $hid)" == failed-rolled-back && "$(field $hid failedVersion)" == "$(nb 9)" ]]'
-  ! has_file "$hubc" trial.json
-  ! has_file "$hubc" apply.lock
+  as_user "$hubc" test ! -e /home/cawco/.local/share/cawco/binary/trial.json
+  as_user "$hubc" test ! -e /home/cawco/.local/share/cawco/binary/apply.lock
   start_session "$hid" keeperlive-9
   wait_until 60 'session_running keeperlive-9'
 }
@@ -1183,22 +1313,22 @@ export -f agent_cannot_start_whole_recovery
 check "a helper killed after the swap of a build whose agent cannot start is put back whole, though its hub runs" agent_cannot_start_whole_recovery 900 "Install now applies the newer build"
 
 # ---------------------------------------------------------------- the keeper's children cgroup
-# The keeper's unit delegates the pids controller (Delegate=pids, DelegateSubgroup=keeper): systemd starts the
-# keeper in …/cawco-sessiond.service/keeper, and the keeper puts every child in …/children, whose pids.max is the
-# tightest task limit above it less the 64 tasks it keeps for itself (packages/sessiond/src/cgroup.ts).
+# A keeper's unit delegates the pids controller (Delegate=pids, DelegateSubgroup=keeper): systemd starts the
+# keeper in …/cawco-sessiond-<build>.service/keeper, and the keeper puts every child in …/children, whose pids.max
+# is the tightest task limit above it less the 64 tasks it keeps for itself (packages/sessiond/src/cgroup.ts).
 #
-# The limit is a known one, set before the keeper starts: TasksMax on the keeper's own unit, in an administrator's
-# drop-in (/etc/systemd/user/cawco-sessiond.service.d), not on the user's whole tree (user-1000.slice or
-# user@1000.service). The children's cap is derived from the tightest limit above them, and a limit on the
-# keeper's unit binds only the keeper and its children; one on the user's tree is shared with the hub, the agent
-# and the dashboard, and a forker allowed that limit less 64 would take the threads they need (Bun aborts when it
-# cannot start one), leaving the machine broken for the checks after. /etc is also out of reach of the proof's
-# own clean-ups, which remove ~/.config/systemd/user/cawco-sessiond.service.d. This check runs last, so the
-# limit changes nothing for the checks before it; the keeper is restarted after the limit is set, holding nothing.
+# The limit is a known one, set before the keeper starts: TasksMax on the keepers' units, in an administrator's
+# drop-in for every unit named cawco-sessiond-* (/etc/systemd/user/cawco-sessiond-.service.d), not on the user's
+# whole tree (user-1000.slice or user@1000.service). The children's cap is derived from the tightest limit above
+# them, and a limit on the keeper's unit binds only the keeper and its children; one on the user's tree is shared
+# with the hub, the agent and the dashboard, and a forker allowed that limit less 64 would take the threads they
+# need (Bun aborts when it cannot start one), leaving the machine broken for the checks after. This check runs
+# last, so the limit changes nothing for the checks before it; the current keeper is restarted after the limit is
+# set, holding nothing.
 export KEEPER_TASKS=200
-export PLACED_RE='^\[sessiond\] children run in (/sys/fs/cgroup/.+/cawco-sessiond\.service/children) under pids\.max ([0-9]+) \(([0-9]+), less 64 kept for the keeper\)$'
+export PLACED_RE='^\[sessiond\] children run in (/sys/fs/cgroup/.+/cawco-sessiond-[^/]+\.service/children) under pids\.max ([0-9]+) \(([0-9]+), less 64 kept for the keeper\)$'
 # The keeper's last word on where its children run, since a moment (unix seconds): one of the lines cgroup.ts says.
-keeper_said() { as_user "$1" journalctl --user --no-pager -o cat -u cawco-sessiond.service --since "@$2" | grep '^\[sessiond\] ' | grep -v '^\[sessiond\] listening on \|^\[sessiond\] SIGTERM' | tail -n 1; }
+keeper_said() { as_user "$1" journalctl --user --no-pager -o cat -u "$(current_unit "$1")" --since "@$2" | grep '^\[sessiond\] ' | grep -v ' listening on \|^\[sessiond\] SIGTERM\| names this keeper$\|not the machine.s keeper' | tail -n 1; }
 # Asks the keeper to start a child (container, procId, command, JSON args) and prints its ack for it. The keeper
 # acks a spawn only once the child has started or been refused, after a process-table read, and its socket does
 # not stay half-open: socat's shut-none keeps the request side open, and -t5 waits up to 5s for the ack.
@@ -1216,11 +1346,11 @@ highest_pids() {
 keeper_children_capped_on() {
   local c=$1 since said group max limit keeper pid forker ack top events
   echo "======== $c"
-  $P exec "$c" sh -c "mkdir -p /etc/systemd/user/cawco-sessiond.service.d && printf '[Service]\nTasksMax=%s\n' $KEEPER_TASKS > /etc/systemd/user/cawco-sessiond.service.d/proof-tasks.conf"
+  $P exec "$c" sh -c "mkdir -p /etc/systemd/user/cawco-sessiond-.service.d && printf '[Service]\nTasksMax=%s\n' $KEEPER_TASKS > /etc/systemd/user/cawco-sessiond-.service.d/proof-tasks.conf"
   as_user "$c" systemctl --user daemon-reload
   end_all_sessions "$c"
   since=$(as_user "$c" date +%s)
-  as_user "$c" systemctl --user restart cawco-sessiond.service
+  as_user "$c" systemctl --user restart "$(current_unit "$c")"
   wait_until 60 '[[ -n "$(keeper_said "$c" "$since")" ]] && as_user "$c" test -S /run/user/1000/cawco/sessiond.sock'
   # 1. The keeper says its children run in its delegated cgroup, under the limit set above less 64; any other
   # line (not delegated, could not be asked, no task limit, could not be set up) is the failure, printed.
@@ -1233,13 +1363,13 @@ keeper_children_capped_on() {
   # 2. A child it starts is in children; the keeper itself is in keeper.
   keeper=$(keeper_pid "$c")
   echo "keeper $keeper is in $(cgroup_of "$c" "$keeper")"
-  [[ "$(cgroup_of "$c" "$keeper")" == */cawco-sessiond.service/keeper ]]
+  [[ "$(cgroup_of "$c" "$keeper")" == */cawco-sessiond-*.service/keeper ]]
   ack=$(keeper_spawn "$c" cg-child sleep '["3000"]')
   echo "spawn cg-child: $ack"
   [[ $ack == *'"stage":"applied"'* ]]
   pid=$(child_pids "$c" cg-child)
   echo "child $pid is in $(cgroup_of "$c" "$pid")"
-  [[ "$(cgroup_of "$c" "$pid")" == */cawco-sessiond.service/children && "/sys/fs/cgroup$(cgroup_of "$c" "$pid")" == "$group" ]]
+  [[ "$(cgroup_of "$c" "$pid")" == */cawco-sessiond-*.service/children && "/sys/fs/cgroup$(cgroup_of "$c" "$pid")" == "$group" ]]
   # 3. A child that forks without end stops at the cap: children never holds more than pids.max, and the kernel
   # refused its forks there (pids.events counts each refusal).
   # A forker that never gives up: dash exits at its first refused fork and bash after a few retries, and the

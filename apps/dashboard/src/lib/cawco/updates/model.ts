@@ -147,6 +147,19 @@ const words = (...parts: string[]): string =>
   parts.filter((part) => part !== "").join(" ");
 
 /**
+ * A keeper handover still under way, in words: `Session keeper handing over:
+ * 3 sessions left on nightly 2229`. Empty when no earlier keeper holds
+ * anything. Nothing waits on it: new sessions start on the current keeper.
+ */
+const handingOver = (u: BinaryUpdateState): string =>
+  (u.retiringKeepers ?? [])
+    .map(
+      (keeper) =>
+        `Session keeper handing over: ${plural(keeper.sessions, "session")} left on ${displayVersion(keeper.version)}`
+    )
+    .join(" · ");
+
+/**
  * What a ready build waits for, in words: the work in flight its restart
  * would cut (`2 tool calls`, `1 image generation`). Empty when nothing holds it.
  */
@@ -205,7 +218,7 @@ export function cellFor(
     }
     case "waiting-sessions": {
       if (u.installedVersion === u.availableVersion) {
-        return EMPTY(8);
+        return current(8, u);
       }
       const held = u.heldChildren ?? 0;
       return {
@@ -231,9 +244,15 @@ export function cellFor(
         buttons: ["install"],
       };
     default:
-      return EMPTY(12);
+      return current(12, u);
   }
 }
+
+/** Rows 8 and 12, the build is the newest there is: blank, or the keeper handover still under way. */
+const current = (row: 8 | 12, u: BinaryUpdateState): Cell => {
+  const text = handingOver(u);
+  return { ...EMPTY(row), plain: text !== "", text };
+};
 
 /** The build is the newest there is: rows 8 and 12 of the table. */
 export function isCurrent(machine: UpdateMachine): boolean {

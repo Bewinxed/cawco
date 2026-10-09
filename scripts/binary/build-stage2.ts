@@ -33,7 +33,7 @@ const builds = [
     "0.0.1-nightly.3+333333333333",
     "3333333333333333333333333333333333333333",
   ],
-  // Healthy builds further along the nightly channel, for the keeper checks: each full update or keeper move needs a build that is newer and answers as itself.
+  // Healthy builds further along the nightly channel, for the keeper checks: each full update, and the keeper handover in it, needs a build that is newer and answers as itself.
   [
     "4",
     "0.0.1-nightly.4+444444444444",

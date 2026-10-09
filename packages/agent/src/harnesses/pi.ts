@@ -5,7 +5,7 @@ import { parseProcId, procIdFor } from "../proc-id";
 import { readAccountSoon } from "../provider-usage";
 import { procEpoch } from "../sessiond-client";
 import { PiProfile } from "./pi-services";
-import { adoptPi, piSessiond, piSnapshot, spawnPi } from "./pi-sessiond";
+import { adoptPi, piKeepers, piSnapshot, spawnPi } from "./pi-sessiond";
 
 /** A session on an account: each turn's end reads the account's windows shortly after. */
 const withAccountReads = (
@@ -42,11 +42,11 @@ export class PiHarness extends PiProfile implements Harness {
     return await spawnPi(spec, withAccountReads(spec, ctx));
   }
 
+  /** What every keeper holds of pi's, the current keeper's first, each with its keeper's epoch. */
   async custodyCandidates() {
-    const welcome = await (await piSessiond()).list();
+    await piKeepers.current();
     return {
-      ...welcome,
-      procs: welcome.procs.filter(
+      procs: (await piKeepers.held()).filter(
         (proc) => parseProcId(proc.procId).kind === "pi"
       ),
     };
@@ -68,17 +68,14 @@ export class PiHarness extends PiProfile implements Harness {
     spec: SpawnPayload,
     ctx: HarnessContext
   ): Promise<HarnessSession | undefined> {
-    const welcome = await this.custodyCandidates();
-    const proc = welcome.procs.find(
+    const { procs } = await this.custodyCandidates();
+    const proc = procs.find(
       (one) => one.alive && one.procId === procIdFor("pi", spec.instanceId)
     );
     return proc
       ? await this.adopt(spec.instanceId, withAccountReads(spec, ctx), {
           head: proc.head,
-          afterSeq: resumeCursor(
-            procEpoch(welcome.epoch, proc.pid),
-            ctx.ingested
-          ),
+          afterSeq: resumeCursor(procEpoch(proc.epoch, proc.pid), ctx.ingested),
         })
       : undefined;
   }

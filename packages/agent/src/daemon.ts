@@ -52,9 +52,9 @@ import {
   AGENT_RESTARTING,
   type BinaryUpdateState,
 } from "@cawco/core/binary-updates";
+import { machineEndpoint } from "@cawco/core/keepers";
 import { machineId } from "@cawco/core/machine-id";
 import { userLayerPath } from "@cawco/core/paths";
-import { sessiondEndpoint } from "@cawco/core/sessiond";
 import { fetchOpenCodeGoLimits } from "@cawco/core/usage/opencode-go";
 import { announcingParts, clientLine } from "@cawco/core/wire";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
@@ -78,7 +78,8 @@ import { harness, harnesses } from "./harnesses";
 import { removeCawcoSessionConfigs } from "./harnesses/opencode";
 import { PI_AUTH_CHECK_INTERVAL_MS } from "./harnesses/pi-auth";
 import { cache as transcriptCache } from "./harnesses/transcript-cache";
-import { KeeperWatchdog, machineKeeper } from "./keeper-watchdog";
+import { KeeperWatchdog } from "./keeper-watchdog";
+import { withKeepers } from "./keepers";
 import { endOrphanedSignIns, endSignIns } from "./login";
 import { isMachineAgent } from "./machine-agent";
 import { setAccountFreshener, startMcpGateway } from "./mcp-oauth";
@@ -126,7 +127,7 @@ import {
   resumableSessions,
   SessionSupervisor,
 } from "./session";
-import { SessiondClient, serviceManaged } from "./sessiond-client";
+import { serviceManaged } from "./sessiond-client";
 import { probeTools } from "./tools";
 import { UsageScanner } from "./usage/scanner";
 import { abandonCommands, runWorkflowCommand } from "./workflow-command";
@@ -696,8 +697,10 @@ export const custodyRow = (
 });
 
 /**
- * What the register says about this machine's sessions: what sessiond is still
- * holding, and what each harness could resume.
+ * What the register says about this machine's sessions: what every keeper is
+ * still holding, the current one and any retiring one, and what each harness
+ * could resume. The current keeper must answer; so must every other one
+ * there, or what it holds would be read as nothing.
  */
 const readCustody = async (
   stopSequence = 0,
@@ -705,29 +708,33 @@ const readCustody = async (
 ): Promise<SessionCustody> => {
   const readStartedAt = Date.now();
   try {
-    const client = await SessiondClient.connect(
-      process.env.CAWCO_SESSIOND_ENDPOINT ?? sessiondEndpoint()
-    );
-    try {
-      const held = client.procs.filter((proc) => proc.alive);
-      return {
-        state: "available",
+    return await withKeepers((keepers) => {
+      if (!keepers.some((keeper) => keeper.current)) {
+        throw new Error(`no keeper answers at ${machineEndpoint()}`);
+      }
+      const held = keepers.flatMap(({ client }) =>
+        client.procs.filter((proc) => proc.alive)
+      );
+      return Promise.resolve({
+        state: "available" as const,
         readStartedAt,
         stopSequence,
         pending,
-        instances: held.flatMap((proc) => {
-          const id = parseProcId(proc.procId);
-          return id.kind === "claude" || id.kind === "pi"
-            ? [id.instanceId]
-            : [];
-        }),
+        instances: [
+          ...new Set(
+            held.flatMap((proc) => {
+              const id = parseProcId(proc.procId);
+              return id.kind === "claude" || id.kind === "pi"
+                ? [id.instanceId]
+                : [];
+            })
+          ),
+        ],
         opencode: held.some(
           (proc) => parseProcId(proc.procId).kind === "opencode-server"
         ),
-      };
-    } finally {
-      client.close();
-    }
+      });
+    });
   } catch (error) {
     Effect.runFork(
       Effect.logWarning(`session custody unavailable: ${String(error)}`)
@@ -752,7 +759,7 @@ const reconnectAfterHubRestart = async (
     return;
   }
   const file = join(
-    dirname(process.env.CAWCO_SESSIOND_ENDPOINT ?? sessiondEndpoint()),
+    dirname(machineEndpoint()),
     `hub-epoch-${new URL(url).host.replaceAll(":", "_")}`
   );
   const last = await readFile(file, "utf8").catch(() => undefined);
@@ -1945,14 +1952,12 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
       )
     );
 
-    // A keeper that is alive and answers nobody is restarted through the
-    // service manager, which is the only thing that runs it on a managed
-    // machine; a hand-run `cawco up` owns its keeper and has no manager to ask.
-    const keeperService = serviceManaged() ? machineKeeper() : undefined;
-    if (keeperService) {
+    // A keeper that is alive and answers nobody is restarted (or, retiring,
+    // removed) through the service manager, which is the only thing that runs
+    // it on a managed machine; a hand-run `cawco up` owns its keeper and has
+    // no manager to ask.
+    if (serviceManaged()) {
       const watchdog = new KeeperWatchdog({
-        endpoint: process.env.CAWCO_SESSIOND_ENDPOINT ?? sessiondEndpoint(),
-        service: keeperService,
         log: (line) => Effect.runFork(Effect.logWarning(line)),
         // The notice rides the update state, which a binary install keeps.
         record: async (restart) => {

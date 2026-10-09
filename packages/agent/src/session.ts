@@ -88,7 +88,6 @@ import { SAFE_GIT, SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import {
   processLimitSentence,
   SESSIOND_PROCESS_LIMIT,
-  sessiondEndpoint,
 } from "@cawco/core/sessiond";
 import { Effect } from "effect";
 import { withFiles } from "./attachments";
@@ -109,6 +108,7 @@ import {
 import { harnesses, harness as harnessOf } from "./harnesses";
 import { hashText, readJson, writeJson } from "./harnesses/fleet-common";
 import { generateImage } from "./image-generation";
+import { withKeepers } from "./keepers";
 import { isMachineAgent } from "./machine-agent";
 import { prepareFleetMcp } from "./mcp-launcher";
 import { gaugeGroup, gaugeTables } from "./memory";
@@ -117,7 +117,7 @@ import { parseProcId, type SESSION_PROC_KINDS } from "./proc-id";
 import { type PromptWriteNotice, withPromptWrites } from "./prompt-writes";
 import { rememberCredential } from "./redaction";
 import { fenced } from "./restart";
-import { endProc, procEpoch, SessiondClient } from "./sessiond-client";
+import { endProc, procEpoch } from "./sessiond-client";
 import { installTool, probeTools } from "./tools";
 import { runWorkflowCommand } from "./workflow-command";
 import { workspaceHolding } from "./workspace-records";
@@ -147,13 +147,17 @@ export interface SessiondAdoption {
   ): Promise<HarnessSession>;
   // biome-ignore lint/style/useConsistentMethodSignatures: a property signature changes parameter variance here and would break the claude adapter's implementation
   custodyCandidates(): Promise<{
-    /** sessiond's per-boot epoch; with a child's pid, the space its seqs count in (design §7). */
-    epoch: string;
-    /** `cwd` is what lets a survivor the hub never named be adopted at all. */
+    /**
+     * What every keeper holds, the current keeper's first. `cwd` is what lets
+     * a survivor the hub never named be adopted at all; `epoch` is its
+     * keeper's per-boot epoch, and with its pid the space its seqs count in
+     * (design §7).
+     */
     procs: {
       procId: string;
       alive: boolean;
       cwd?: string;
+      epoch: string;
       head: number;
       pid: number;
     }[];
@@ -166,7 +170,7 @@ export interface SessiondAdoption {
 /** A surviving child one reattach has claimed, and what it decided about it. */
 interface Claimed {
   failed?: boolean;
-  proc: { head: number; pid: number };
+  proc: { epoch: string; head: number; pid: number };
   row: {
     instanceId: string;
     cwd: string;
@@ -1965,7 +1969,6 @@ export class SessionSupervisor {
             const running = await candidate.turnRunning(instanceId, proc.head);
             await this.#adoptClaimed(
               candidate as Harness & SessiondAdoption,
-              welcome.epoch,
               { row, proc, running, settle: settleClaim },
               Object.fromEntries(this.#ingested)
             );
@@ -2555,17 +2558,20 @@ export class SessionSupervisor {
     try {
       const welcome = await custodyProbe(claude.custodyCandidates(), signal);
       signal.throwIfAborted();
-      const held = new Map(
-        welcome.procs
-          .filter((proc) => proc.alive)
-          .flatMap((proc) => {
-            const id = parseProcId(proc.procId);
-            return (id.kind === "claude" || id.kind === "pi") &&
-              id.kind === kind
-              ? [[id.instanceId, proc] as const]
-              : [];
-          })
-      );
+      // Every keeper's, the current keeper's first: an id two keepers hold
+      // alive (a relaunch caught half-way) is the current keeper's.
+      const held = new Map<string, (typeof welcome.procs)[number]>();
+      for (const proc of welcome.procs) {
+        const id = parseProcId(proc.procId);
+        if (
+          proc.alive &&
+          (id.kind === "claude" || id.kind === "pi") &&
+          id.kind === kind &&
+          !held.has(id.instanceId)
+        ) {
+          held.set(id.instanceId, proc);
+        }
+      }
 
       // 1. CLAIM. ONE QUERY PER CHILD. A hub reconnect while a reattach is
       // still walking its rows starts a second one, and the new ack names the
@@ -2644,7 +2650,7 @@ export class SessionSupervisor {
         }
         try {
           // biome-ignore lint/performance/noAwaitInLoops: rows are attached one at a time: each mutates the shared #ingested map
-          await this.#adoptClaimed(claude, welcome.epoch, entry, ingested);
+          await this.#adoptClaimed(claude, entry, ingested);
           adopted.push(entry.row.instanceId);
           decided(entry.row.instanceId, "attached");
         } catch (problem) {
@@ -2728,7 +2734,6 @@ export class SessionSupervisor {
   /** {@link reattach}'s step 3 for one claimed, decided row. */
   async #adoptClaimed(
     claude: Harness & SessiondAdoption,
-    epoch: string,
     { row, proc, running, settle }: Claimed,
     ingested: Record<string, IngestMark> | undefined
   ): Promise<void> {
@@ -2740,14 +2745,14 @@ export class SessionSupervisor {
       return;
     }
     // THE HONEST-LOSS RULE (design §7). A mark in THIS child's sequence space
-    // — sessiond's current boot and this process — is a cursor: replay
+    // — its keeper's current boot and this process — is a cursor: replay
     // exactly the gap the hub named. Anything else is replayed as NOTHING and
-    // followed from head: a mark from a sessiond that has since restarted
+    // followed from head: a mark from a keeper that has since restarted
     // names lines that no longer exist, and one from an earlier process
     // under the same id names another ring. Disk transcripts cover the
     // middle.
     const mark = ingested?.[row.instanceId];
-    const cursor = resumeCursor(procEpoch(epoch, proc.pid), mark);
+    const cursor = resumeCursor(procEpoch(proc.epoch, proc.pid), mark);
     if (cursor !== undefined && mark) {
       this.#ingested.set(row.instanceId, mark);
     } else {
@@ -3166,21 +3171,23 @@ export class SessionSupervisor {
     session.send(message, { attachments, images, urgent });
   }
 
-  async #endHeld(instanceId: string): Promise<boolean> {
-    const client = await SessiondClient.connect(
-      process.env.CAWCO_SESSIOND_ENDPOINT ?? sessiondEndpoint()
-    );
-    try {
-      const children = client.procs.filter((proc) => {
-        const id = parseProcId(proc.procId);
-        return (
-          proc.alive &&
-          (id.kind === "claude" || id.kind === "pi") &&
-          id.instanceId === instanceId
-        );
-      });
+  /** Ends the instance's children on every keeper that holds one, the current or a retiring one, and waits until each has gone. */
+  #endHeld(instanceId: string): Promise<boolean> {
+    return withKeepers(async (keepers) => {
+      const children = keepers.flatMap(({ client }) =>
+        client.procs
+          .filter((proc) => {
+            const id = parseProcId(proc.procId);
+            return (
+              proc.alive &&
+              (id.kind === "claude" || id.kind === "pi") &&
+              id.instanceId === instanceId
+            );
+          })
+          .map((proc) => ({ client, child: proc }))
+      );
       await Promise.all(
-        children.map(async (child) => {
+        children.map(async ({ client, child }) => {
           await endProc(client, child.procId);
           const deadline = Date.now() + 10_000;
           let alive = true;
@@ -3202,9 +3209,7 @@ export class SessionSupervisor {
         })
       );
       return children.length > 0;
-    } finally {
-      client.close();
-    }
+    });
   }
 
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one stop settles carried, sessiond-held and discarded custody with the same receipt

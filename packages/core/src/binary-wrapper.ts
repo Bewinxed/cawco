@@ -16,10 +16,10 @@ import { join } from "node:path";
  * manager, not of this unit, so the rollback it may decide, which restarts
  * this unit, does not end it.
  *
- * The session keeper is started through the same script from its own link,
- * and keeps its own recovery for a keeper move: a move writes
- * `keeper-trial.json` before it changes the link, and the keeper's next start
- * after the deadline, with no helper live, puts the previous keeper back.
+ * A build's session keeper runs from its own folder, in a job of its own
+ * (keepers.ts), and not through here. A legacy keeper's unit, from before
+ * keepers ran side by side, still starts through `sessiond`, from the
+ * `keeper` link, until the handover that retires it removes the unit.
  *
  * Written by the installer, and afterwards only by a build the update helper
  * has confirmed ({@link writeWrapper}): the script that recovers a trial is
@@ -44,10 +44,6 @@ helper_live() {
     live_boot="$(sysctl -n kern.boottime 2>/dev/null)"
   fi
   [ -n "$live_start" ] && [ "$live_start" = "$lock_start" ] && [ "$live_boot" = "$lock_boot" ]
-}
-# Atomic: a temporary link, then a rename onto the link (GNU mv -T, BSD mv -h).
-swap_link() {
-  ln -sfn "$1" "$2.swap" && { mv -T "$2.swap" "$2" 2>/dev/null || mv -h "$2.swap" "$2"; }
 }
 # What the decider is given of this unit's environment: CawCo's own settings, and where things are.
 forwarded() {
@@ -95,16 +91,6 @@ if [ "$unit_start" = 1 ] && [ -f "$TRIAL" ] && ! helper_live; then
   fi
 fi
 if [ "$1" = sessiond ]; then
-  KEEPER_TRIAL="$ROOT/keeper-trial.json"
-  if [ -f "$KEEPER_TRIAL" ] && ! helper_live; then
-    keeper_deadline="$(sed -n 's/.*"deadline":\\([0-9][0-9]*\\).*/\\1/p' "$KEEPER_TRIAL")"
-    keeper_from="$(sed -n 's/.*"from":"\\([^"]*\\)".*/\\1/p' "$KEEPER_TRIAL")"
-    if [ -n "$keeper_deadline" ] && [ -n "$keeper_from" ] && [ "$(date +%s)" -gt "$keeper_deadline" ]; then
-      swap_link "versions/$keeper_from" "$ROOT/keeper"
-      cp "$KEEPER_TRIAL" "$ROOT/keeper-trial.recovered"
-      rm -f "$KEEPER_TRIAL" "$ROOT/apply.lock"
-    fi
-  fi
   exec "$ROOT/keeper/cawco" sessiond
 fi
 exec "$ROOT/current/cawco" "$@"

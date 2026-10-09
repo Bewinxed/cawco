@@ -8,6 +8,7 @@
     "./capabilities": "./src/capabilities.ts",
     "./config": "./src/config.ts",
     "./discovery": "./src/discovery.ts",
+    "./keeper-jobs": "./src/keeper-jobs.ts",
     "./pi-host": "./src/harnesses/pi-host.ts",
     "./sessiond-client": "./src/sessiond-client.ts"
   },

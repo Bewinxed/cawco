@@ -101,7 +101,10 @@ export class OpencodeServerOwner {
   /** The account whose server this owner keeps; undefined for the machine's own. */
   readonly account: string | undefined;
   readonly #path: string;
+  /** The current keeper: where a server starts. */
   readonly #sessiond: () => Promise<SessiondClient>;
+  /** The keeper with this boot epoch, current or retiring, while it answers: where a server it started is read and ended. */
+  readonly #keeperOf: (epoch: string) => Promise<SessiondClient | undefined>;
   readonly #attach: Attach;
   readonly #mayManage: () => Promise<boolean>;
   readonly #idle: (identity: ServerIdentity) => Promise<boolean>;
@@ -114,6 +117,7 @@ export class OpencodeServerOwner {
 
   constructor(
     sessiond: () => Promise<SessiondClient>,
+    keeperOf: (epoch: string) => Promise<SessiondClient | undefined>,
     attach: Attach,
     mayManage: () => Promise<boolean>,
     idle: (identity: ServerIdentity) => Promise<boolean>,
@@ -129,6 +133,7 @@ export class OpencodeServerOwner {
       `${recordStem()}${account === undefined ? "" : `-account-${account}`}.json`
     );
     this.#sessiond = sessiond;
+    this.#keeperOf = keeperOf;
     this.#attach = attach;
     this.#mayManage = mayManage;
     this.#idle = idle;
@@ -208,8 +213,15 @@ export class OpencodeServerOwner {
     );
   }
 
+  /**
+   * The same process still runs under the keeper that started it, current
+   * or retiring: its procId, pid and start, under that keeper's boot.
+   */
   async #matches(identity: ServerIdentity): Promise<boolean> {
-    const client = await this.#sessiond();
+    const client = await this.#keeperOf(identity.epoch);
+    if (!client) {
+      return false;
+    }
     const listed = await client.list();
     const proc = listed.procs.find((row) => row.procId === identity.procId);
     return Boolean(
@@ -218,6 +230,20 @@ export class OpencodeServerOwner {
         proc.pid === identity.pid &&
         (await processStart(identity.pid)) === identity.startedAt
     );
+  }
+
+  /**
+   * Whether the active server runs under a keeper other than the current
+   * one: a keeper handover left it there, and it is replaced at rest like one
+   * on another config, its sessions moving over as each comes to rest.
+   */
+  async onRetiringKeeper(): Promise<boolean> {
+    await this.#load();
+    const active = this.#record?.active;
+    if (!active || active.epoch === (await this.#sessiond()).epoch) {
+      return false;
+    }
+    return this.#matches(active);
   }
 
   async #identify(
@@ -458,16 +484,17 @@ export class OpencodeServerOwner {
     if (this.active?.procId === identity.procId) {
       throw new Error("Refusing to retire the active OpenCode generation.");
     }
-    const client = await this.#sessiond();
-    // Held by this keeper, it is ended through the keeper, which signals all
-    // it started. Held by none, its keeper is gone and it runs on under init:
-    // it is ended directly, with its own process group, which it leads (the
-    // keeper starts every child detached) and which holds its MCP servers.
+    // Held by a keeper (current or retiring), it is ended through that
+    // keeper, which signals all it started. Held by none, its keeper is gone
+    // and it runs on under init: it is ended directly, with its own process
+    // group, which it leads (the keeper starts every child detached) and
+    // which holds its MCP servers.
     const held = await this.#matches(identity);
+    const client = held ? await this.#keeperOf(identity.epoch) : undefined;
     const present = () =>
       held ? this.#matches(identity) : this.#runs(identity);
     const signal = async (sig: NodeJS.Signals): Promise<void> => {
-      if (held) {
+      if (client) {
         await client.signal(identity.procId, sig);
         return;
       }
