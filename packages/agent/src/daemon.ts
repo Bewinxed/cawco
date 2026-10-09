@@ -684,11 +684,13 @@ const attach = (
       () => {
         supervisor.resetStopSequence();
         clearTimeout(registrationDeadline);
+        // A new epoch first, so the aborted attempt's failure is for an epoch
+        // that has ended and says nothing.
+        supervisor.loseCustody();
         recoveryController?.abort(new Error("Custody connection was lost."));
-        supervisor.failCustody(
-          custodyEpoch,
-          new Error(
-            "Registration connection was lost; custody must be recovered after reconnect"
+        Effect.runFork(
+          Effect.logInfo(
+            "hub connection lost: custody is recovered on the next register"
           )
         );
       },
@@ -995,7 +997,13 @@ const attach = (
             )
           );
         }
-        supervisor.completeCustody(epoch);
+        if (supervisor.completeCustody(epoch)) {
+          Effect.runFork(
+            Effect.logInfo(
+              `custody recovered: ${supervisor.instanceIds.length} session(s) held`
+            )
+          );
+        }
         custodyIds.clear();
         for (const envelope of custodyWaiting.splice(0)) {
           supervisor.dispatch(envelope);

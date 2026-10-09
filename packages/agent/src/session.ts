@@ -887,21 +887,45 @@ export class SessionSupervisor {
     return this.#custodyEpoch;
   }
 
-  completeCustody(epoch: number): void {
+  /** Whether custody is ready now: false when the hub refused its contract (reported as a failure) or a newer epoch began. */
+  completeCustody(epoch: number): boolean {
     // biome-ignore lint/suspicious/noUnnecessaryConditions: register declarations mutate this connection-local contract before custody completion
     if (!this.#hubContract) {
       this.failCustody(epoch, new HubContractRefused(this.#hubRefusal));
-      return;
+      return false;
     }
-    if (epoch === this.#custodyEpoch) {
-      this.#custodyState = "ready";
-      this.#custodyError = undefined;
-      this.#custodyInstances.clear();
+    if (epoch !== this.#custodyEpoch) {
+      return false;
     }
+    this.#custodyState = "ready";
+    this.#custodyError = undefined;
+    this.#custodyInstances.clear();
+    return true;
   }
 
+  /**
+   * The hub connection ended. Custody goes back to recovering under a new
+   * epoch, naming the sessions held now, until the next connection's register
+   * decides it: so the epoch that ended, completed or still recovering, can
+   * neither complete nor fail any more. Not a failure: recovering holds every
+   * idle-gated operation as failed did, and a recovery on the next connection
+   * that does not complete is reported then (`failCustody`).
+   */
+  loseCustody(): void {
+    this.beginCustody([
+      ...new Set([...this.#custodyInstances, ...this.custodyInstanceIds]),
+    ]);
+  }
+
+  /**
+   * A recovery that did not complete: the register went unanswered, an
+   * attempt failed or ran out of time, or the hub refused the contract. Said
+   * to every session it named and in the log, and idle-gated operations stay
+   * held. Only for the epoch in progress: one that completed was recovered,
+   * and losing the connection after that begins a new one (`loseCustody`).
+   */
   failCustody(epoch: number, problem: unknown): void {
-    if (epoch !== this.#custodyEpoch) {
+    if (epoch !== this.#custodyEpoch || this.#custodyState === "ready") {
       return;
     }
     this.#custodyState = "failed";
