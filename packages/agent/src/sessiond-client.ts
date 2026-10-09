@@ -786,10 +786,17 @@ export const sessiondBridge = (
   let consumed = attach?.afterSeq ?? 0;
   const stdin = new Writable({
     write(chunk: Buffer | string, _encoding, callback) {
-      client
-        .write(
-          procId,
-          typeof chunk === "string" ? chunk : chunk.toString("utf8")
+      // Not before the spawn is acked (`started`): sessiond registers the
+      // child only once its launch has run, and a write it gets before that
+      // reaches no child ("is not alive", or on a relaunch the old child
+      // under the same procId). The SDK's first write is its `initialize`,
+      // and one lost there left the session waiting on an answer forever.
+      started
+        .then(() =>
+          client.write(
+            procId,
+            typeof chunk === "string" ? chunk : chunk.toString("utf8")
+          )
         )
         .then(() => callback())
         // A write to a child that already died is the child's death, not a
@@ -797,8 +804,8 @@ export const sessiondBridge = (
         .catch(() => callback());
     },
     final(callback) {
-      client
-        .stdinEnd(procId)
+      started
+        .then(() => client.stdinEnd(procId))
         .then(() => callback())
         .catch(() => callback());
     },
