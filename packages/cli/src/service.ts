@@ -1845,15 +1845,7 @@ const specsOf = (
         dashboardCwd: homedir(),
       }
     : HERE;
-  const specs = ids.map((id) => specFor(id, mode, layout));
-  if (binaryLayout) {
-    for (const spec of specs) {
-      (spec.environment as Record<string, string>).CAWCO_BINARY_ROOT = dirname(
-        dirname(binaryLayout.executable)
-      );
-    }
-  }
-  return specs;
+  return ids.map((id) => specFor(id, mode, layout));
 };
 
 /**

@@ -138,6 +138,16 @@ async function readKeeper(): Promise<{
   }
 }
 
+/**
+ * A failed updater step, said in the log: a filesystem error's message names
+ * its path. What runs on a timer ends here, never as an unhandled rejection.
+ */
+const logFailure = (error: unknown): void => {
+  console.error(
+    `[update] ${error instanceof Error ? error.message : String(error)}`
+  );
+};
+
 /** The hub could not be reached at all: no answer, not an answer that refused. */
 class HubUnreachable extends Error {}
 
@@ -316,11 +326,15 @@ export class BinaryUpdater {
       return;
     }
     this.#hostsHub = (await readInstallation())?.role === "hub";
+    console.info(`[update] updating the binary install at ${binaryRoot()}`);
     await this.#load();
-    await this.#noteKeeperRecovery();
+    await this.#noteKeeperRecovery().catch(logFailure);
     this.#timer = setInterval(() => this.tick(), POLL_MS);
     this.#timer.unref();
-    this.#trialTimer = setInterval(() => this.#watch(), 10_000);
+    this.#trialTimer = setInterval(
+      () => this.#watch().catch(logFailure),
+      10_000
+    );
     this.#trialTimer.unref();
     await this.tick();
   }
@@ -532,7 +546,11 @@ export class BinaryUpdater {
     }
   }
 
-  /** One pass of load, check and (when allowed) stage and apply; callers share a pass in flight. */
+  /**
+   * One pass of load, check and (when allowed) stage and apply; callers share
+   * a pass in flight. Never rejects: a pass that fails, even to record its
+   * failure, logs it and the next tick runs.
+   */
   tick(): Promise<void> {
     this.#running ??= this.#pass().finally(() => {
       this.#running = undefined;
@@ -558,10 +576,11 @@ export class BinaryUpdater {
         console.warn(`[update] ${error.message}`);
         return;
       }
+      logFailure(error);
       await this.#set({
         phase: "failed",
         error: error instanceof Error ? error.message : String(error),
-      });
+      }).catch(logFailure);
     }
   }
 

@@ -27,8 +27,14 @@ export interface BinaryInstallation {
   root: string;
 }
 
+/**
+ * The binary install of the data dir this process runs with, and the only
+ * derivation of it: every updater, helper, wrapper and installer read and
+ * write goes through here. A unit is given its data dir as `XDG_DATA_HOME`
+ * (service.ts `environment`), so a process started with a scratch data dir
+ * (a rig, a proof) has a scratch install and never reaches the machine's.
+ */
 export const binaryRoot = (): string =>
-  process.env.CAWCO_BINARY_ROOT ??
   join(
     process.env.XDG_DATA_HOME ?? join(homedir(), ".local", "share"),
     "cawco",
