@@ -269,10 +269,6 @@
   // A release that hands the choice over mid-gesture swaps the two ends
   // and the fraction with it, and the track does not move for it either.
   //
-  // Every tab's box is read here, not only the chosen one's: a tab beside it
-  // settling to its width (a title arriving) moves where a whole leading
-  // tab starts, and the scroll is placed again for it.
-  //
   // One frame is asked for at a time, and it places the track by whatever
   // was last asked of it. A frame cancelled and asked for again on every
   // change never came while a gesture's settle ran: the settle moves its
@@ -286,11 +282,9 @@
     const rect = selectedRect;
     const { travel } = tabs;
     const toward = travel && rects.at(tabs.order.indexOf(travel.toward));
-    const boxes = [...rects.rects.values()];
     const { width } = rects.viewport;
     const track = node;
-    const room = endRoom;
-    if (!(scrollable && track && room && rect && width > 0)) {
+    if (!(scrollable && track && rect && width > 0)) {
       place = null;
       return;
     }
@@ -299,22 +293,23 @@
       // the browser abandons when the track's content changes under it, and
       // the tabs' own motion is the motion here.
       const at = track.scrollLeft;
+      const style = getComputedStyle(track);
+      const room = {
+        start: Number.parseFloat(style.getPropertyValue("--edge-room-start")),
+        end: Number.parseFloat(style.getPropertyValue("--edge-room-end")),
+      };
       let to: number;
       if (travel && toward) {
         rideFrom ??= at;
         to = lerp(
-          inView(rideFrom, rect, boxes, width),
-          inView(rideFrom, toward, boxes, width),
+          inView(rideFrom, rect, width, room),
+          inView(rideFrom, toward, width, room),
           Math.min(1, Math.max(0, travel.fraction))
         );
       } else {
         rideFrom = null;
-        to = inView(at, rect, boxes, width);
+        to = inView(at, rect, width, room);
       }
-      // The end room is what the track lacks to reach `to`: written before
-      // the scroll, which is clamped to the track's width as laid out.
-      const max = track.scrollWidth - track.clientWidth - room.offsetWidth;
-      room.style.inlineSize = `${Math.max(0, Math.ceil(to - max))}px`;
       if (Math.abs(to - at) > 0.5) {
         stopGlide();
         track.scrollLeft = to;
@@ -332,35 +327,29 @@
   });
 
   /**
-   * Where the track stands: the chosen item whole in view, and the leading
-   * edge on no item's middle (a tab cut at the left edge reads as a broken
-   * tab, not as more to scroll to). Any tab's start from where the chosen
-   * one's end comes into view to the chosen one's own start qualifies, the
-   * nearest to where the track stands now, so a track already showing the
-   * chosen item over a whole leading edge stays put. Past the last tab the
-   * track gets the room it needs (`endRoom`): a strip ending in empty room,
-   * as a browser's does, rather than starting on a sliver of a tab.
+   * Where the track stands to show the chosen item: whole and clear of each
+   * edge's fade (`room`, `--edge-room-start`/`-end`), scrolled from `at`
+   * only as far as it takes and not at all when it is already in view, so
+   * choosing a tab never moves the strip under the others. The owner:
+   * "switching between them kinda shifts things around in a way that
+   * doesn't make sense" — the track had stood only where no tab's box
+   * straddled its leading edge, which overlapping folder tabs never allow,
+   * so every choice right-aligned the chosen tab. A tab cut at either edge
+   * dissolves into that edge's fade (`.kit-edge-fade`).
    */
   function inView(
     at: number,
     chosen: { left: number; width: number },
-    boxes: readonly { left: number; width: number }[],
-    width: number
+    width: number,
+    room: { end: number; start: number }
   ): number {
-    const pad = 8;
-    const lo = Math.max(0, chosen.left + chosen.width + pad - width);
-    const whole = (s: number) =>
-      !boxes.some(
-        (box) => box.left < s - 0.5 && box.left + box.width > s + 0.5
-      );
-    const [nearest] = [at, 0, ...boxes.map((box) => box.left)]
-      .filter((s) => s >= lo - 0.5 && s <= chosen.left + 0.5 && whole(s))
-      .sort((a, b) => Math.abs(a - at) - Math.abs(b - at));
-    return nearest ?? Math.min(lo, chosen.left);
+    const least = chosen.left + chosen.width + room.end - width;
+    const most = chosen.left - room.start;
+    return Math.max(
+      0,
+      least > most ? most : Math.min(most, Math.max(least, at))
+    );
   }
-
-  /** The room after the last tab that lets the leading edge reach a whole tab. */
-  let endRoom = $state<HTMLElement | undefined>();
 
   /**
    * A vertical wheel over the track moves it sideways on a spring: each
@@ -486,9 +475,6 @@
     <div aria-hidden="true" class="ring" style={px(focusRect)}></div>
   {/if}
   {@render children()}
-  {#if scrollable}
-    <span aria-hidden="true" class="end-room" bind:this={endRoom}></span>
-  {/if}
 </div>
 
 <style>
@@ -528,6 +514,10 @@
     /* Where tabs run past an edge, that edge fades them out (app.css
        .kit-edge-fade, on the track). */
     &.scrollable {
+      /* A chosen tab is brought clear of each edge's fade (`inView`); a
+         host whose fades differ sets its own. */
+      --edge-room-start: var(--fade-len);
+      --edge-room-end: var(--fade-len);
       flex: 0 1 auto;
       min-inline-size: 0;
       max-inline-size: 100%;
@@ -601,21 +591,9 @@
      every tab 16px back past the track's leading flare room. */
   :global([data-variant="folder"])
     .ff-tabs-list
-    > :global(
-      :not(.segment, .ring, .kit-ghost, .kit-pill, .kit-pill-trail, .end-room)
-    ) {
+    > :global(:not(.segment, .ring, .kit-ghost, .kit-pill, .kit-pill-trail)) {
     position: relative;
     margin-inline-start: calc(-1 * var(--overlap));
-  }
-
-  /* The room after the last tab (`endRoom`): none at rest, its gap taken
-     back, so it changes nothing until the scroll needs it. */
-  .end-room {
-    flex: none;
-    align-self: stretch;
-    inline-size: 0;
-    margin-inline-start: calc(-1 * var(--gap));
-    pointer-events: none;
   }
   /* Placed by `transform`, not `left`/`top`: moving between tabs is then a
      compositor-only translate. Only the width change lays out, and it lays

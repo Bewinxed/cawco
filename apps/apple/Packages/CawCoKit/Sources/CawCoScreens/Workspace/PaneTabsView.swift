@@ -233,25 +233,36 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
         if !added.isEmpty || previous != next { reveal(added.count == ids.count ? next : (added.last ?? next), animated: !still) }
     }
 
-    /// The one way a tab is brought into the strip: all of it, with the strip's edge room, scrolled only as far as it takes.
+    /// The one way a tab is brought into the strip: all of it, clear of the
+    /// strip's edge fades, scrolled only as far as it takes and not at all
+    /// when it is already in view (TabsList.svelte `inView`).
     private func reveal(_ id: String?, animated: Bool) {
-        guard let id, let view = views[id] else { return }
-        scroll.scrollRectToVisible(view.frame.insetBy(dx: -flare, dy: 0), animated: animated)
+        guard let id else { return }
+        let x = restOffset(id, from: scroll.contentOffset.x)
+        guard abs(x - scroll.contentOffset.x) > 0.5 else { return }
+        scroll.setContentOffset(CGPoint(x: x, y: scroll.contentOffset.y), animated: animated)
     }
 
-    /// Where the strip would rest to show `id` as `reveal` brings it in,
-    /// scrolled from `base`: all of it with its edge room, moved no further.
+    /// Where the strip rests to show `id`, scrolled from `base`: the tab whole
+    /// and clear of each edge's fade (`edges`), moved no further. Choosing a
+    /// tab already in view moves nothing (owner: "switching between them
+    /// kinda shifts things around in a way that doesn't make sense").
     private func restOffset(_ id: String, from base: CGFloat) -> CGFloat {
         guard let view = views[id] else { return base }
-        let rect = view.frame.insetBy(dx: -flare, dy: 0)
+        let room = fadeRoom
+        let rect = view.frame
         let width = scroll.bounds.width
         let least = -scroll.contentInset.left
         let most = max(least, scroll.contentSize.width + scroll.contentInset.right - width)
         var x = base
-        if rect.maxX > x + width { x = rect.maxX - width }
-        if rect.minX < x { x = rect.minX }
+        if rect.maxX + room.end > x + width { x = rect.maxX + room.end - width }
+        if rect.minX - room.start < x { x = rect.minX - room.start }
         return min(max(x, least), most)
     }
+
+    /// How far each edge's fade reaches into the strip (`edges`): the phone's
+    /// row 24pt at its start and 16pt at its end, a group's strip 40pt.
+    private var fadeRoom: (start: Double, end: Double) { barRow ? (24, 16) : (40, 40) }
 
     /// A swipe carrying the choice: the tab it is heading to, how far it has
     /// gone (0 to 1), and where the strip stood when it began.
@@ -481,8 +492,8 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
     /// On the phone's row an unchosen tab recedes a step toward the shelf
     /// for each tab between it and the chosen one, to three, the chosen
     /// tab's own card (under its sheet) one step back; with none chosen
-    /// every tab is one step back. A tab after the chosen one has its
-    /// leading end tucked under its neighbour.
+    /// every tab is one step back. Nothing here sizes a tab: choosing one
+    /// never moves the others.
     private func recede() {
         let chosen = active.flatMap { order.firstIndex(of: $0) }
         let to = scrubTo.flatMap { order.firstIndex(of: $0) } ?? chosen
@@ -491,14 +502,7 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
             guard let view = views[id] else { continue }
             func step(_ at: Int?) -> Int { at.map { max(1, min(abs(index - $0), 3)) } ?? 1 }
             func pick(_ at: Int?) -> Double { at == index ? 1 : 0 }
-            func after(_ at: Int?) -> Double { at.map { index > $0 ? 1 : 0 } ?? 0 }
-            view.look = TabView.Look(
-                pick: pick(chosen) + (pick(to) - pick(chosen)) * f,
-                from: step(chosen),
-                to: step(to),
-                f: f,
-                after: after(chosen) + (after(to) - after(chosen)) * f
-            )
+            view.look = TabView.Look(pick: pick(chosen) + (pick(to) - pick(chosen)) * f, from: step(chosen), to: step(to), f: f)
         }
     }
 
@@ -522,7 +526,12 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
 
     func scrollViewDidScroll(_: UIScrollView) { edges() }
 
-    /// Only an edge with more past it fades, over 40pt.
+    /// Only an edge with more past it fades (app.css `.kit-edge-fade`), coming
+    /// in over the first 6% of the strip's travel from that end. In a group
+    /// it fades over 40pt, straight. The phone's row fades on PaneTabs.svelte's
+    /// eased curve, so a tab dissolves into the bar rather than being cut: the
+    /// start over 24pt, clear for its first 6, so a title scrolled past it
+    /// never stands against the sidebar toggle's glyph; the end over 16pt.
     private func edges() {
         let offset = scroll.contentOffset.x + scroll.contentInset.left
         let more = scroll.contentSize.width + scroll.contentInset.left + scroll.contentInset.right - scroll.bounds.width
@@ -531,14 +540,19 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
             return
         }
         let width = max(1, scroll.bounds.width)
-        let start = offset > 0.5 ? 40 / width : 0
-        let end = offset < more - 0.5 ? 40 / width : 0
+        let ramp = 0.06 * more
+        let len = barRow ? 16.0 : 40.0
+        let start = len * min(1, max(0, offset) / ramp)
+        let end = len * min(1, max(0, more - offset) / ramp)
+        // (distance from the edge in fade lengths, opacity) for each stop.
+        let lead: [(Double, Double)] = barRow ? [(0, 0), (0.375, 0), (0.75, 0.15), (1.125, 0.6), (1.5, 1)] : [(0, 0), (1, 1)]
+        let trail: [(Double, Double)] = barRow ? [(1, 1), (0.75, 0.9), (0.5, 0.5), (0.25, 0.1), (0, 0)] : [(1, 1), (0, 0)]
+        var stops = lead.map { (at: $0.0 * start / width, alpha: start > 0 ? $0.1 : 1) }
+        stops += trail.map { (at: 1 - $0.0 * end / width, alpha: end > 0 ? $0.1 : 1) }
         fade.startPoint = CGPoint(x: 0, y: 0.5)
         fade.endPoint = CGPoint(x: 1, y: 0.5)
-        fade.colors = [UIColor.clear.cgColor, UIColor.black.cgColor, UIColor.black.cgColor, UIColor.clear.cgColor]
-        fade.locations = [0, NSNumber(value: start), NSNumber(value: 1 - end), 1]
-        if start == 0 { fade.colors?[0] = UIColor.black.cgColor }
-        if end == 0 { fade.colors?[3] = UIColor.black.cgColor }
+        fade.colors = stops.map { UIColor.black.withAlphaComponent($0.alpha).cgColor }
+        fade.locations = stops.map { NSNumber(value: $0.at) }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         fade.frame = scroll.bounds
@@ -685,29 +699,27 @@ final class TabView: UIView {
         var from = 1
         var to = 1
         var f = 0.0
-        /// How much its leading end is tucked under its neighbour, 0 to 1.
-        var after = 0.0
     }
 
     var look = Look() {
         didSet {
             guard look != oldValue else { return }
-            if look.after != oldValue.after { pad() }
             paint(animated: false)
         }
     }
 
-    /// The tab's two ends. On the phone's row its title stands a lead in from
-    /// its start, plus the overlap where its own leading end is tucked under
-    /// its neighbour; its trailing room clears the overlap and the chosen
-    /// sheet's flare, so a neighbour tucked over its end never touches its
-    /// last glyph (PaneTabs.svelte, `--px-start`/`--px-end`).
+    /// The tab's two ends. On the phone's row a title's room at each end
+    /// clears the overlap, so a neighbour tucked over either end never
+    /// touches it: a lead past the overlap before it, the chosen sheet's
+    /// flare past the overlap after it. The same on every tab, chosen or
+    /// not, so a choice never resizes a tab and moves the ones after it
+    /// (PaneTabs.svelte, `--px-start`/`--px-end`).
     private func pad() {
         let coarse = traitCollection.userInterfaceIdiom != .mac
         let leading: Double
         let trailing: Double
         if phoneRow {
-            leading = Size.cTabLead + PaneTabsView.overlap * look.after
+            leading = PaneTabsView.overlap + Size.cTabLead
             trailing = PaneTabsView.overlap + Radius.radiusLg
         } else {
             leading = PaneTabsView.px

@@ -34,6 +34,19 @@
   inherits: false;
   initial-value: 0px;
 }
+/* How far clear of each edge's fade a scrolling tab track brings a chosen
+   tab (TabsList `inView`), registered so script reads it as one length
+   whatever expression set it. */
+@property --edge-room-start {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+@property --edge-room-end {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
 /* How far a stretch of a nesting line is cut back from its right and from
    its foot while the line draws (.kit-nest, motion/branch), registered so the
    fold can move them. At rest neither cuts: well clear of the stretch. */

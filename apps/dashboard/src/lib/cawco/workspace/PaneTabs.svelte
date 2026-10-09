@@ -239,21 +239,18 @@
    *   A tab steps back toward the shelf for each tab between it and the
    *   chosen one, to three; the chosen tab's own card, under its sheet, is
    *   one step back. With none chosen every tab is one step back.
-   * - `after`: how much its leading end is tucked under its neighbour,
-   *   which it is when it stands after the chosen tab, 0 to 1.
+   * Nothing here sizes a tab: choosing one never moves the others.
    */
   const look = (i: number) => {
     const { to, f } = scrub;
     const step = (at: number) =>
       at < 0 ? 1 : Math.max(1, Math.min(Math.abs(i - at), 3));
     const pick = (at: number) => (i === at ? 1 : 0);
-    const after = (at: number) => (at >= 0 && i > at ? 1 : 0);
     return {
       pick: pick(chosenAt) + (pick(to) - pick(chosenAt)) * f,
       fillFrom: `var(--tab-recede-${step(chosenAt)})`,
       fillTo: `var(--tab-recede-${step(to)})`,
       f,
-      after: after(chosenAt) + (after(to) - after(chosenAt)) * f,
     };
   };
 
@@ -958,7 +955,6 @@
           hoverTab(tab.id, event);
         }}
         onpointerleave={leaveDetails}
-        style:--after={drawn.after}
         style:--f={drawn.f}
         style:--fill-from={drawn.fillFrom}
         style:--fill-to={drawn.fillTo}
@@ -1487,10 +1483,11 @@
      mobile"), and their flared foot follows it; they still overlap by the
      desktop's 8px. Where tabs run past an end, that end fades on an
      eased curve, so a tab dissolves into the bar rather than being cut:
-     the start over 24px, transparent for its first 9, so a sliver of a
+     the start over 24px, transparent for its first 6, so a sliver of a
      tab scrolled past it never shows beside the toggle; the end over 16px.
      At rest the strip's start does not fade, so a first tab is drawn
-     whole, its foot and all. */
+     whole, its foot and all. A chosen tab is brought clear of both fades
+     (TabsList `inView`). */
   @media (max-width: 899px) {
     :global(
       .session-tabs:not(.hosted)[data-slot="tabs"] .ff-tabs-list.scrollable
@@ -1498,6 +1495,7 @@
       --item: var(--c-tab-row-h);
       --pad: 0px;
       --fade-len: 16px;
+      --edge-room-start: calc(var(--fade-len) * 1.5);
       --radius: var(--radius-lg);
       --overlap: var(--radius-sm);
       padding-block-start: calc(var(--c-top-bar-h) - var(--c-tab-row-h));
@@ -1580,9 +1578,9 @@
      A swipe carries the choice from tab to tab with the finger (`look`):
      how chosen a tab is (`--pick`) sets its rim's strength and its title's
      ink, its card mixes between its recede steps either side of the swipe
-     (`--fill-from`, `--fill-to`, by `--f`), and its leading room follows
-     how far its leading end is tucked (`--after`). At rest they are the
-     chosen tab's alone. */
+     (`--fill-from`, `--fill-to`, by `--f`). At rest they are the chosen
+     tab's alone. None of them sizes a tab: choosing one never moves the
+     others. */
   .rim {
     display: none;
   }
@@ -1604,13 +1602,15 @@
     .tglyph {
       display: none;
     }
-    /* The title stands a lead in from the tab's start. Its trailing room
-       clears the overlap and the chosen sheet's flare, so a neighbour
-       tucked over its end never touches its last glyph; a tab whose
-       leading end is tucked under its neighbour adds the overlap before
-       its title. */
+    /* A title's room at each end clears the overlap, so a neighbour
+       tucked over either end never touches it: a lead past the overlap
+       before it, the chosen sheet's flare past the overlap after it. The
+       same on every tab, chosen or not, so a choice never resizes a tab
+       and moves the ones after it (owner: "switching between them kinda
+       shifts things around"); before, a tab after the chosen one took the
+       overlap at its start and gave it up when the choice passed it. */
     .tab {
-      --px-start: calc(var(--c-tab-lead) + var(--overlap) * var(--after));
+      --px-start: calc(var(--overlap) + var(--c-tab-lead));
       --px-end: calc(var(--overlap) + var(--radius-lg));
     }
     /* The title's ink follows how chosen its tab is; parked on you, it
