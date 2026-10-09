@@ -5,8 +5,11 @@
  * the user's service manager, and writes only the workspace's clone, its
  * scratch dir (its `/tmp`, on disk at `~/.cawco/workspaces/<id>/tmp`, which no
  * command inside can remove) and the package caches. On macOS, build tools
- * also write in the user's temp/cache folders, DerivedData and SwiftPM folders.
- * The network is the host's, so the hub and the internet stay reachable.
+ * also write in the user's temp/cache folders, DerivedData, SwiftPM folders and
+ * the provisioning profile folders automatic signing fills, and `swift`,
+ * `xcodebuild` and `log` run through shims that keep them working inside
+ * ({@link writeShims}). The network is the host's, so the hub and the
+ * internet stay reachable.
  *
  * Linux: one anchor per workspace — a user, pid and mount namespace whose
  * tree is read-only but for those paths, with the user runtime dir (the
@@ -51,6 +54,7 @@ import { sessionIdentityDir } from "@cawco/core/paths";
 import { embeddedFile, standalone } from "@cawco/core/runtime";
 import { type ProcSpec, sessiondEndpoint } from "@cawco/core/sessiond";
 import { cloneInPlace } from "./clone";
+import { logRelay } from "./log-relay";
 import { procIdFor } from "./proc-id";
 import { ensureSessiond, SessiondClient } from "./sessiond-client";
 
@@ -142,6 +146,16 @@ const cachesOf = (): string[] => [
         join(homedir(), "Library", "Developer", "Xcode", "DerivedData"),
         join(homedir(), ".swiftpm"),
         join(homedir(), "Library", "org.swift.swiftpm"),
+        // Where automatic signing keeps the provisioning profiles it fetches.
+        join(
+          homedir(),
+          "Library",
+          "Developer",
+          "Xcode",
+          "UserData",
+          "Provisioning Profiles"
+        ),
+        join(homedir(), "Library", "MobileDevice", "Provisioning Profiles"),
       ]
     : []),
 ];
@@ -172,10 +186,6 @@ const HOOK_LIMIT_S = HOOK_TIMEOUT_S - 10;
  * command again, and the work item goes on (claude.ts `#watchBoundary`).
  */
 export const BOUNDARY_HOOK_SLOW = "cawco: the boundary hook took longer than";
-
-/** The hook's script, beside the hook in the workspace's state dir: read-only inside the boundary. */
-const hookSourceOf = (id: string): string =>
-  join(stateDir(id), "boundary-hook.ts");
 
 /**
  * The workspace's PreToolUse hook. It has `boundary-hook.ts` rewrite the
@@ -256,17 +266,106 @@ const hookRunner = async (id: string): Promise<Runner> => {
       `${runtime} is not there, so its boundary hook could not run`
     );
   });
-  const source = hookSourceOf(id);
+  const source = await writeScript(id, "boundary-hook.ts", "boundary/hook.ts");
+  return { env: standalone ? "BUN_BE_BUN=1 " : "", argv: [runtime, source] };
+};
+
+/**
+ * Writes one of the plain Bun scripts the boundary runs into the workspace's
+ * state dir, under its source name: from this checkout, or as the binary
+ * install embedded it (scripts/build-binary.ts).
+ */
+const writeScript = async (
+  id: string,
+  name: string,
+  embedded: string
+): Promise<string> => {
+  const path = join(stateDir(id), name);
   await writeWhole(
-    source,
+    path,
     await Bun.file(
-      standalone
-        ? embeddedFile("boundary/hook.ts")
-        : join(import.meta.dir, "boundary-hook.ts")
+      standalone ? embeddedFile(embedded) : join(import.meta.dir, name)
     ).text(),
     0o644
   );
-  return { env: standalone ? "BUN_BE_BUN=1 " : "", argv: [runtime, source] };
+  return path;
+};
+
+/** A macOS workspace's shims, first on the PATH of every command in its boundary: read-only inside. */
+const shimsOf = (id: string): string => join(stateDir(id), "bin");
+
+/**
+ * The tools a macOS boundary runs in its own way, each a shim on its PATH.
+ * macOS sandboxes do not nest: the boundary is Seatbelt's sandbox, so a tool
+ * that makes one of its own inside it fails.
+ *
+ * - `swift build|test|run|package` gets `--disable-sandbox`: SwiftPM's
+ *   "Disable using the sandbox when executing subprocesses"
+ *   (docs.swift.org/…/packagemanagerdocs/swiftbuild), which also hands the
+ *   compiler `-disable-sandbox` for macro servers
+ *   (github.com/swiftlang/swift-package-manager/pull/7167).
+ * - `xcodebuild` gets the IDE defaults that turn off its package manifest and
+ *   plugin sandboxes, as nixpkgs builds Xcode projects under its own sandbox,
+ *   and `-disable-sandbox` in OTHER_SWIFT_FLAGS for macro plugin servers.
+ * - `log`, which Seatbelt refuses outright, asks the agent to run `log show`
+ *   or `log stream` outside the boundary (`log-relay.ts`).
+ *
+ * Each finds the real tool with `xcrun --find`, so it follows the selected
+ * Xcode. Nothing is set globally: the owner's own Xcode is untouched.
+ */
+const writeShims = async (id: string, runner: Runner): Promise<void> => {
+  const bin = shimsOf(id);
+  await mkdir(bin, { recursive: true });
+  await writeScript(id, "boundary-log-protocol.ts", "boundary/log-protocol.ts");
+  const client = await writeScript(id, "boundary-log.ts", "boundary/log.ts");
+  const { port, token } = logRelay();
+  await Promise.all([
+    writeWhole(
+      join(bin, "swift"),
+      `#!/bin/sh
+# CawCo workspace ${id}: swift, with SwiftPM's own sandbox off inside the boundary's.
+swift=$(/usr/bin/xcrun --find swift) || exit 1
+case "\${1:-}" in
+  build | test | run | package)
+    command=$1
+    shift
+    exec "$swift" "$command" --disable-sandbox "$@"
+    ;;
+esac
+exec "$swift" "$@"
+`,
+      0o755
+    ),
+    writeWhole(
+      join(bin, "xcodebuild"),
+      `#!/bin/bash
+# CawCo workspace ${id}: xcodebuild, with its package and macro sandboxes off inside the boundary's.
+xcodebuild=$(/usr/bin/xcrun --find xcodebuild) || exit 1
+flags=
+args=()
+for arg in "$@"; do
+  case $arg in
+    OTHER_SWIFT_FLAGS=*)
+      args+=("$arg -disable-sandbox")
+      flags=1
+      ;;
+    *) args+=("$arg") ;;
+  esac
+done
+[ -n "$flags" ] || args+=('OTHER_SWIFT_FLAGS=$(inherited) -disable-sandbox')
+exec "$xcodebuild" -IDEPackageSupportDisableManifestSandbox=YES -IDEPackageSupportDisablePluginExecutionSandbox=YES "\${args[@]}"
+`,
+      0o755
+    ),
+    writeWhole(
+      join(bin, "log"),
+      `#!/bin/sh
+# CawCo workspace ${id}: log show and log stream, run by the agent outside the boundary.
+${runner.env ? `export ${runner.env.trim()}\n` : ""}exec ${[runner.argv[0] as string, client, String(port), token].map(shellQuote).join(" ")} "$@"
+`,
+      0o755
+    ),
+  ]);
 };
 
 /** Writes `path` whole or not at all: a reader never sees it half written. */
@@ -283,11 +382,15 @@ const writeWhole = async (
 /** Writes the workspace's hook for `held`, and the record of it. */
 const armHook = async (id: string, held: Omit<Held, "hook">): Promise<Held> => {
   const hook = join(stateDir(id), "hook");
+  const runner = await hookRunner(id);
   await writeWhole(
     hook,
-    hookScript(id, await hookRunner(id), held.exec, held.scratch),
+    hookScript(id, runner, held.exec, held.scratch),
     0o755
   );
+  if (process.platform === "darwin") {
+    await writeShims(id, runner);
+  }
   const armed: Held = { ...held, hook };
   await writeWhole(
     join(stateDir(id), "boundary.json"),
@@ -904,7 +1007,8 @@ const darwinExec = (
   id: string,
   pid: number,
   fifo: string,
-  scratch: string
+  scratch: string,
+  shims: string
 ): string => `#!/bin/bash
 # CawCo workspace ${id}: runs one shell command inside the workspace's boundary.
 # exec [--cwd-out FILE] COMMAND — FILE gets the directory COMMAND ended in.
@@ -919,7 +1023,7 @@ ${GH_TOKEN}
 req=$(mktemp -d ${shellQuote(scratch)}/.run.XXXXXX) || exit 126
 printf '%s' "$1" > "$req/cmd"
 pwd -P > "$req/cwd"
-{ export -p; echo "export TMPDIR=${scratch}"; } > "$req/env"
+{ export -p; echo "export TMPDIR=${scratch}"; echo ${shellQuote(`export PATH=${shellQuote(shims)}:"$PATH"`)}; } > "$req/env"
 mkfifo "$req/out" "$req/err"
 trap 'kill -TERM -- "-$(cat "$req/pid" 2>/dev/null)" 2>/dev/null; rm -rf "$req"; exit 143' TERM INT HUP
 printf '%s\\n' "$req" > "$fifo"
@@ -1004,7 +1108,13 @@ const start = async (
     };
     await writeWhole(
       exec,
-      darwinExec(ref.id, proc.pid, join(dir, "runner.fifo"), scratch),
+      darwinExec(
+        ref.id,
+        proc.pid,
+        join(dir, "runner.fifo"),
+        scratch,
+        shimsOf(ref.id)
+      ),
       0o755
     );
   }

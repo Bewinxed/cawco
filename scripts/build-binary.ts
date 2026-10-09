@@ -222,6 +222,12 @@ export async function buildBinary(options: {
     ["preview/overlay.js", join(work, "overlay.js")],
     // Run as plain Bun by each workspace's boundary hook, never as cawco (boundary.ts).
     ["boundary/hook.ts", join(ROOT, "packages/agent/src/boundary-hook.ts")],
+    // Run as plain Bun by a macOS workspace's `log` shim (boundary.ts).
+    ["boundary/log.ts", join(ROOT, "packages/agent/src/boundary-log.ts")],
+    [
+      "boundary/log-protocol.ts",
+      join(ROOT, "packages/agent/src/boundary-log-protocol.ts"),
+    ],
     ["native/claude", await nativeClaude(options.target, work)],
   ] as [string, string][];
   const assetsSource = `${assets.map(([, path], i) => `import a${i} from ${JSON.stringify(path)} with { type: "file" };`).join("\n")}\nexport const binaryAssets = {${assets.map(([key], i) => `${JSON.stringify(key)}:a${i}`).join(",")}};`;
