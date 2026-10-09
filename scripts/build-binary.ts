@@ -191,6 +191,15 @@ export async function buildBinary(options: {
       await Bun.file(join(ROOT, "packages/core/src", name)).bytes()
     );
   }
+  // Embedded from a copy, as the workflow files are: log-relay.ts imports the
+  // source as a module, and a file the bundle also imports `with { type:
+  // "file" }` is a file to every importer, so its named exports vanish.
+  await writeFile(
+    join(work, "boundary-log-protocol.ts"),
+    await Bun.file(
+      join(ROOT, "packages/agent/src/boundary-log-protocol.ts")
+    ).bytes()
+  );
   const assets = [
     ...(await filesUnder(join(ROOT, "packages/hub/drizzle"), "drizzle")),
     ...(await filesUnder(join(ROOT, "packages/hub/skills"), "skills")),
@@ -224,10 +233,7 @@ export async function buildBinary(options: {
     ["boundary/hook.ts", join(ROOT, "packages/agent/src/boundary-hook.ts")],
     // Run as plain Bun by a macOS workspace's `log` shim (boundary.ts).
     ["boundary/log.ts", join(ROOT, "packages/agent/src/boundary-log.ts")],
-    [
-      "boundary/log-protocol.ts",
-      join(ROOT, "packages/agent/src/boundary-log-protocol.ts"),
-    ],
+    ["boundary/log-protocol.ts", join(work, "boundary-log-protocol.ts")],
     ["native/claude", await nativeClaude(options.target, work)],
   ] as [string, string][];
   const assetsSource = `${assets.map(([, path], i) => `import a${i} from ${JSON.stringify(path)} with { type: "file" };`).join("\n")}\nexport const binaryAssets = {${assets.map(([key], i) => `${JSON.stringify(key)}:a${i}`).join(",")}};`;
