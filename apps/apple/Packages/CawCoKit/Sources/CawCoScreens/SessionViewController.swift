@@ -156,8 +156,9 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     override func refreshContent() {
         let row = hub.fleet.byId[sessionId]
         transcriptView.configure(transcript)
+        let prestart = syncMove()
 
-        composerBinding.writable = canSend
+        composerBinding.writable = canSend && !prestart
         let command = sent.flatMap { hub.ledger.commands[$0] }
         let withdrawal = withdrawing.flatMap { hub.ledger.commands[$0] }
         if command?.stage == .submitted || withdrawal?.stage == .submitted || withdrawal?.stage == .accepted {
@@ -170,6 +171,107 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         syncCards(machineId: row?.machineId)
         composerBinding.publish()
         syncPreview()
+    }
+
+    // MARK: A project moving for this session (move/MoveWait.svelte)
+
+    /// The staged wait: the whole pane until the move starts the session,
+    /// then over its transcript until that has rows (design §2e: the moved
+    /// line is the transcript's first row by then).
+    private var moveWait: MoveWaitView?
+    /// The transcript was read again once the move started the session: its first read found nothing.
+    private var readAfterStart = false
+    #if DEBUG
+    /// What the move's wait last said to a simulator pass's log.
+    private var probeSaid = ""
+    #endif
+
+    /// Shows or takes away the move's wait; true while the session does not exist yet.
+    private func syncMove() -> Bool {
+        guard let move = hub.fleet.move(for: sessionId) else {
+            removeMoveWait()
+            return false
+        }
+        let prestart = move.stage != .started
+        if !prestart, !readAfterStart, hub.fleet.byId[sessionId] != nil {
+            readAfterStart = true
+            hub.sessions.read(sessionId)
+        }
+        guard prestart || transcript.blocks.isEmpty else {
+            removeMoveWait()
+            return false
+        }
+        let wait = moveWait ?? makeMoveWait()
+        wait.show(move) { [hub] id in hub.fleet.machines.first { $0.machineId == id }?.hostname ?? id }
+        #if DEBUG
+        let said = "move \(move.id.prefix(8)): \(move.stage.rawValue) · \(wait.said)"
+        if said != probeSaid {
+            probeSaid = said
+            Self.restoring.notice("probe \(said, privacy: .public)")
+        }
+        #endif
+        return prestart
+    }
+
+    private func makeMoveWait() -> MoveWaitView {
+        let wait = MoveWaitView()
+        wait.onCancel = { [weak self] in self?.cancelMove() }
+        wait.onRetry = { [weak self] in self?.retryMove() }
+        wait.onClose = { [weak self] in self?.onReturnToFleet() }
+        wait.onAnswer = { [weak self] moveIt in self?.answerMove(moveIt) }
+        view.addSubview(wait)
+        NSLayoutConstraint.activate([
+            wait.topAnchor.constraint(equalTo: view.topAnchor),
+            wait.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            wait.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            wait.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+        ])
+        moveWait = wait
+        return wait
+    }
+
+    /// The wait fades from over the transcript.
+    private func removeMoveWait() {
+        guard let wait = moveWait else { return }
+        moveWait = nil
+        guard view.window != nil, !UIAccessibility.isReduceMotionEnabled else {
+            wait.removeFromSuperview()
+            return
+        }
+        let fade = Motion.easeOut.animator(Motion.durFade) { wait.alpha = 0 }
+        fade.addCompletion { _ in wait.removeFromSuperview() }
+        fade.startAnimation()
+    }
+
+    /// Cancel: the hub stops the step in flight; the tab closes and says what stayed on disk.
+    private func cancelMove() {
+        guard let move = hub.fleet.move(for: sessionId) else { return }
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let stopped = try await hub.cancelMove(id: move.id)
+                Toast.show((["Stopped.", stopped.kept].compactMap(\.self)).joined(separator: " "), in: view.window)
+                onReturnToFleet()
+            } catch {
+                Toast.error("Couldn't stop the move. \(error.localizedDescription)", in: view)
+            }
+        }
+    }
+
+    private func retryMove() {
+        guard let move = hub.fleet.move(for: sessionId) else { return }
+        Task { [weak self] in
+            guard let self else { return }
+            do { try await hub.retryMove(id: move.id) } catch { Toast.error("Couldn't retry the move. \(error.localizedDescription)", in: view) }
+        }
+    }
+
+    /// The approval card's answer, through the same channel as every ask's.
+    private func answerMove(_ moveIt: Bool) {
+        guard let move = hub.fleet.move(for: sessionId),
+              let ask = hub.needs.parked["move:\(move.id)"]?.first(where: { $0.requestId == move.askId }),
+              let question = ask.questions.first?.question else { return }
+        hub.needs.answerQuestion(ask, machineId: move.sourceMachineId, answers: [question: [moveIt ? "Move it" : "Don't move"]])
     }
 
     // MARK: The preview (SessionPane's preview split, PreviewSheet)

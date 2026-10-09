@@ -150,6 +150,19 @@ final class SystemLineView: RailRow, RowContent, Disclosing {
                 let spaced = UIView()
                 spaced.pin(hung(why), insets: UIEdgeInsets(top: Space.space1, left: 0, bottom: 0, right: 0))
                 below.addArrangedSubview(spaced)
+            case "ui.system_note" where block.string("subtype") == "moved_here":
+                // Where the project came from (core MOVED_HERE): what moved
+                // with the done glyph, and what stayed under it, open.
+                set(.passed, title: noteTitle ?? "", ink: Palette.inkMuted)
+                cell.glyph.tintColor = Palette.statusLiveGlyph
+                if !block.content.isEmpty {
+                    let stayed = WrapLabel(wrap: .pretty)
+                    stayed.attributedText = Styled.string(block.content, TypeScale.typeMeta, color: Palette.inkMuted,
+                                                          leading: TypeScale.leadingBody, lineBreak: .byWordWrapping)
+                    let spaced = UIView()
+                    spaced.pin(hung(stayed), insets: UIEdgeInsets(top: Space.space1, left: 0, bottom: 0, right: 0))
+                    below.addArrangedSubview(spaced)
+                }
             default:
                 let named = noteTitle != nil || errorTitle != nil
                 let title = errorTitle ?? noteTitle ?? "Note"

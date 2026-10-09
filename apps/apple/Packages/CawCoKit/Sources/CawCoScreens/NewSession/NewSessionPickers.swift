@@ -16,6 +16,9 @@ struct NsMachine {
     let load: String
     let glyph: Glyph
     let hue: UIColor
+    /// With a project chosen, where it is on this machine: its folder there,
+    /// or "will clone · 340 MB" when Start moves it there first.
+    var place: String? = nil
 }
 
 /// A project as the chip, its popover and the `@` menu draw it (`ProjectItem`).
@@ -76,8 +79,9 @@ final class MachinesPopover: NsPopoverController {
             let content = MachineRowView()
             let presence: MachineRowView.Presence = !machine.online ? .off : (machine.load == "Idle" ? .online : .away)
             content.configure(glyph: machine.glyph, hue: machine.hue, name: machine.name,
-                              meta: (machine.os.isEmpty ? "" : "\(machine.os) · ") + machine.load, presence: presence)
-            let row = NsRow(content, label: "\(machine.name), \(machine.load)")
+                              meta: (machine.os.isEmpty ? "" : "\(machine.os) · ") + machine.load + (machine.place.map { " · \($0)" } ?? ""),
+                              presence: presence)
+            let row = NsRow(content, label: [machine.name, machine.load, machine.place].compactMap(\.self).joined(separator: ", "))
             // MachinesChip.svelte `.row { height: 44px }`.
             row.heightAnchor.constraint(equalToConstant: Size.cBtnHLg).isActive = true
             row.isEnabled = machine.online

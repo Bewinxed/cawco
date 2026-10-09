@@ -103,6 +103,16 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
     private var scheduled = ""
     private var verifying: Task<Void, Never>?
 
+    // MARK: Moving (Projects §5.1; the design's §1b and the owner's revision of C)
+
+    /// The hub's estimate of moving the project, or why it couldn't read one, for the key it was read for.
+    private var moveRead: (key: String, estimate: Components.Schemas.MoveEstimate?, error: String?)?
+    /// The key the estimate in flight was asked for.
+    private var moveAsked = ""
+    private var moveReading: Task<Void, Never>?
+    /// Step 2: Move & start morphed the form to what moving does and its yes; Back returns it as it was.
+    private var moveStep = false
+
     // MARK: Views
 
     private let card = UIView()
@@ -121,6 +131,12 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
     private let locationChip = NsChip()
     private let lifetimeChip = NsChip()
     private let reading = KitLabel(TypeScale.typeMeta, ink: Palette.statusFailInk)
+    private let heading = KitLabel(TypeScale.typeTitle, ink: Palette.inkStrong)
+    /// Step 2's way out: the × gives way to a back chevron in its place.
+    private let closeButton = KitGhostButton(.close, label: "Close")
+    private let backButton = KitGhostButton(.chevronLeft, label: "Back")
+    /// Step 2's words under the chips: what moving does.
+    private let moveTray = UIStackView()
     /// Full Send chosen, however it got there: in view beside Start, outside the body's scroll.
     private let fullSendNote = KitAlert(tone: .warning, glyph: .shield)
     private let sizing = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
@@ -130,6 +146,8 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
     private var cancel: NsButton!
     private var start: NsButton!
     private var composer = UIView()
+    private var promptComb = UIView()
+    private var contentComb = UIView()
     private var footPad: NSLayoutConstraint!
     private var layoutCompact: Bool?
     private var entered = false
@@ -181,6 +199,9 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         projectChip.addAction(UIAction { [weak self] _ in self?.toggle(.project) }, for: .touchUpInside)
         locationChip.addAction(UIAction { [weak self] _ in self?.toggle(.location) }, for: .touchUpInside)
         lifetimeChip.addAction(UIAction { [weak self] _ in self?.toggle(.lifetime) }, for: .touchUpInside)
+        closeButton.addAction(UIAction { [weak self] _ in self?.close() }, for: .primaryActionTriggered)
+        backButton.addAction(UIAction { [weak self] _ in self?.back() }, for: .primaryActionTriggered)
+        backButton.isHidden = true
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (form: NewSessionViewController, _: UITraitCollection) in form.tint() }
         fullSendNote.isHidden = true
         reset()
@@ -341,16 +362,29 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
             let running = fleet.rows.filter { $0.machineId == row.machineId && $0.isLive }.count
             let load = !online ? "Offline" : (running == 0 ? "Idle" : "\(running) session\(running == 1 ? "" : "s")")
             return NsMachine(id: row.machineId, name: row.hostname, os: row.os, online: online, load: load,
-                             glyph: MachineHealth.icon(row.os), hue: MachineHealth.hue(index, online: online))
+                             glyph: MachineHealth.icon(row.os), hue: MachineHealth.hue(index, online: online),
+                             place: placeHint(row.machineId))
         }
+    }
+
+    /// With a project chosen, where it is on a machine, or that Start clones it there first (design §1b).
+    private func placeHint(_ machineId: String) -> String? {
+        guard let project = chosenProject else { return nil }
+        if let place = project.checkout(on: machineId) { return place.path }
+        // The clone's size is the project's, whichever machine it goes to.
+        guard let estimate = moveRead?.estimate, estimate.needed, moveRead?.key.hasPrefix(project.id) == true else { return "will clone" }
+        return "will clone · \(moveSize(estimate.bytes + estimate.lfsBytes))"
     }
 
     private var projectItems: [NsProject] {
         // A project is offered on the machines it has a checkout on, at that checkout.
-        fleet.projects.compactMap { row in machineIds.lazy.compactMap { row.checkout(on: $0) }.first.map { (row, $0) } }
+        let placed = fleet.projects.compactMap { row in machineIds.lazy.compactMap { row.checkout(on: $0) }.first.map { (row, $0) } }
             .enumerated().map { index, pair in
                 NsProject(id: pair.0.id, machineId: pair.1.machineId, name: pair.0.name, path: pair.1.path, hue: nsHues[(index + 3) % 5])
             }
+        // The chosen project stays chosen on a machine it moves to, where it goes.
+        guard let project = chosenProject, let to = moveTo else { return placed }
+        return placed + [NsProject(id: project.id, machineId: to, name: project.name, path: moveDestination, hue: nsHues[3])]
     }
 
     private var locationReading: String {
@@ -367,16 +401,74 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         return ""
     }
 
+    /// The project chosen by id (the form's `projectId`).
+    private var chosenProject: Components.Schemas.GetApiProjects200Payload? {
+        projectId.flatMap { id in fleet.projects.first { $0.id == id } }
+    }
+
+    /// The project moves to the machine first: one chosen, one machine, and
+    /// no checkout of it there. A continuation and a repository's clone never move.
+    private var moveTo: String? {
+        guard continuing == nil, repo == nil, machineIds.count == 1, let project = chosenProject,
+              project.checkout(on: machineIds[0]) == nil else { return nil }
+        return machineIds[0]
+    }
+
+    /// What the estimate is asked about: the project, the machine, and whether the two machines are online.
+    private var moveKey: String {
+        guard let project = chosenProject, let to = moveTo else { return "" }
+        let online = [to, project.primaryPlace?.machineId ?? ""].map { id in
+            fleet.machines.first { $0.machineId == id }?.status == "online" ? "on" : "off"
+        }
+        return ([project.id, to] + online).joined(separator: "\u{1}")
+    }
+
+    private var moveEstimated: Components.Schemas.MoveEstimate? { moveRead?.key == moveKey ? moveRead?.estimate : nil }
+    private var moveError: String? { moveRead?.key == moveKey ? moveRead?.error : nil }
+
+    /// A move is needed and can run: Start says "Move & start".
+    private var moving: Bool {
+        guard moveTo != nil, let estimate = moveEstimated else { return false }
+        return estimate.needed && estimate.refused == nil && estimate.ask != nil
+    }
+
+    /// The folder there is already a clone of the project: Start starts in it.
+    private var movedAlready: Bool { moveTo != nil && moveEstimated?.needed == false }
+
+    /// Where the project goes there: the hub's destination, or its default until read.
+    private var moveDestination: String {
+        moveEstimated?.display ?? "~/" + (path.split(separator: "/").last.map(String.init) ?? "")
+    }
+
+    /// A move's reading (design §1b, §1c): what Move & start does first and how much it fetches, or why it can't.
+    private var moveReadingText: String {
+        guard let project = chosenProject, let to = moveTo else { return "" }
+        if let moveError { return moveError }
+        guard let estimate = moveEstimated else { return "Reading…" }
+        if let refused = estimate.refused { return refused }
+        guard estimate.needed else { return "" }
+        let there = fleet.machines.first { $0.machineId == to }?.hostname ?? to
+        let sourceId = project.primaryPlace?.machineId ?? ""
+        let source = fleet.machines.first { $0.machineId == sourceId }?.hostname ?? sourceId
+        // One size, history and large files together: step 2 splits them.
+        let total = estimate.bytes + estimate.lfsBytes
+        let size = total > 0 ? " (\(moveSize(total)))" : ""
+        let work = estimate.uncommittedFiles > 0 ? ", with your uncommitted work on \(source)" : ""
+        return "\(project.name) isn't on \(there) yet. Move & start clones it there first\(work)\(size)."
+    }
+
     private var readingText: String {
         guard connected else { return "No spawn while the hub is unreachable. Reconnect to continue." }
         if !error.isEmpty { return error }
+        if moveTo != nil { return moveReadingText }
         let location = locationReading
         if !location.isEmpty { return location }
         return locationUnverified ? "Reading…" : ""
     }
 
     private var locationInformational: Bool {
-        error.isEmpty && !locationUnverified && !unreadable && offlineMachine == nil && !missingMachines.isEmpty && connected
+        if moveTo != nil { return error.isEmpty && moveError == nil && moveEstimated?.refused == nil }
+        return error.isEmpty && !locationUnverified && !unreadable && offlineMachine == nil && !missingMachines.isEmpty && connected
     }
 
     /// Why a model cannot summarise this session: it would not fit what it reads.
@@ -405,10 +497,12 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
 
     private var cantStart: Bool {
         continueBlocked || !connected || machineIds.isEmpty || offlineMachine != nil || unreadable || locationUnverified || !repoValid
+            || (moveTo != nil && !(moving || movedAlready))
     }
 
     private var startLabel: String {
         if continuing != nil { return "Continue" }
+        if moving { return moveStep ? "Move it" : "Move & start" }
         return machineIds.count > 1 ? "Start \(machineIds.count) sessions" : "Start session"
     }
 
@@ -440,13 +534,47 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         if !honoured.contains(permissionMode), let next = PermissionLook.fallback(permissionMode, honoured: honoured) {
             permissionMode = next
         }
+        // Step 2 holds only while the move it asks about can run.
+        if moveStep, !moving { moveStep = false; applyStep(animated: true) }
         verify()
+        readMove()
         follow()
+    }
+
+    /// What moving the project there takes, read 250ms after the choice rests.
+    private func readMove() {
+        let key = moveKey
+        guard key != moveAsked else { return }
+        moveAsked = key
+        moveReading?.cancel()
+        guard !key.isEmpty, connected, let id = chosenProject?.id, let to = moveTo else { return }
+        moveReading = Task { [weak self, hub] in
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled else { return }
+            let read: (Components.Schemas.MoveEstimate?, String?)
+            do {
+                read = (try await hub.moveEstimate(projectId: id, machineId: to), nil)
+            } catch {
+                read = (nil, error.localizedDescription)
+            }
+            guard !Task.isCancelled, let self else { return }
+            moveRead = (key, read.0, read.1)
+            requestRefresh()
+        }
     }
 
     /// The location is read 600ms after it stops changing, on every chosen machine.
     private func verify() {
         let key = locationKey
+        // A project moving there goes where the hub's estimate says, which
+        // reads that folder itself: this one is the project's on its source.
+        if moveTo != nil {
+            verifying?.cancel()
+            unreadable = false
+            missingMachines = []
+            verifiedLocation = key
+            return
+        }
         guard verifiedLocation != key else { return }
         let stamp = key + "\u{3}" + (machine?.status ?? "")
         guard stamp != scheduled else { return }
@@ -529,9 +657,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         let bolt = GlyphView(.bolt, size: 12, tint: Palette.onInk)
         boltTile.addSubview(bolt)
         crumb.lineBreakMode = .byTruncatingTail
-        let close = KitGhostButton(.close, label: "Close")
-        close.addAction(UIAction { [weak self] _ in self?.close() }, for: .primaryActionTriggered)
-        let headRow = UIStackView(arrangedSubviews: [boltTile, crumb, UIView(), close])
+        let headRow = UIStackView(arrangedSubviews: [boltTile, crumb, UIView(), backButton, closeButton])
         headRow.spacing = 10
         headRow.alignment = .center
         headRow.translatesAutoresizingMaskIntoConstraints = false
@@ -560,8 +686,8 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         content.translatesAutoresizingMaskIntoConstraints = false
         scroll.addSubview(content)
 
-        let heading = KitLabel(TypeScale.typeTitle, ink: Palette.inkStrong)
         heading.text = "New Session"
+        heading.numberOfLines = 0
         heading.accessibilityTraits = .header
         content.addArrangedSubview(heading)
         content.setCustomSpacing(16, after: heading)
@@ -589,16 +715,21 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         composerColumn.axis = .vertical
         composerColumn.translatesAutoresizingMaskIntoConstraints = false
         composer.addSubview(composerColumn)
+        // A move's line may take two lines; anything else keeps to one.
         reading.lineBreakMode = .byTruncatingTail
         promptHeader = UIView()
         promptSection.axis = .vertical
         promptSection.spacing = 8
-        for part in [promptHeader, NsComb(), composer, reading] as [UIView] { promptSection.addArrangedSubview(part) }
+        promptComb = NsComb()
+        moveTray.axis = .vertical
+        moveTray.spacing = Space.space2
+        moveTray.isHidden = !moveStep
+        for part in [promptHeader, promptComb, composer, reading, moveTray] as [UIView] { promptSection.addArrangedSubview(part) }
         content.addArrangedSubview(promptSection)
         content.setCustomSpacing(18, after: promptSection)
-        let comb = NsComb()
-        content.addArrangedSubview(comb)
-        content.setCustomSpacing(18, after: comb)
+        contentComb = NsComb()
+        content.addArrangedSubview(contentComb)
+        content.setCustomSpacing(18, after: contentComb)
         sizing.tabular = true
         content.addArrangedSubview(sizing)
         content.setCustomSpacing(18, after: sizing)
@@ -700,6 +831,51 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         buildMode()
         editor.set(prompt)
         tint()
+        applyStep(animated: false)
+    }
+
+    // MARK: Step 2, the move tray (the owner's revision of C)
+
+    /// Step 2 is the same form with only what a move asks left in it: the
+    /// chips that say where it runs, and what moving does under them. The
+    /// rest is kept as it was, out of sight, for Back. The × gives way to a
+    /// back chevron, the heading asks the move's question, and the card
+    /// takes its new height on the panel's beat.
+    private func applyStep(animated: Bool) {
+        guard layoutCompact != nil else { return }
+        let step = moveStep
+        if step, let ask = moveEstimated?.ask {
+            moveTray.arrangedSubviews.forEach { $0.removeFromSuperview() }
+            let words = MoveAskView(ask)
+            words.onResize = { [weak self] in self?.view.layoutIfNeeded() }
+            moveTray.addArrangedSubview(words)
+        }
+        let change: @MainActor @Sendable () -> Void = { [self] in
+            for part in [promptHeader, promptComb, editor as UIView, reading, contentComb, sizing, models] as [UIView] {
+                part.isHidden = step || (part === sizing && continuing == nil)
+            }
+            moveTray.isHidden = !step
+            moveTray.alpha = step ? 1 : 0
+            backButton.isHidden = !step
+            closeButton.isHidden = step
+            heading.text = step ? (moveEstimated?.ask?.title ?? "New Session") : "New Session"
+            chips.isUserInteractionEnabled = !step
+            view.layoutIfNeeded()
+        }
+        if animated, !UIAccessibility.isReduceMotionEnabled, view.window != nil {
+            Motion.easeOut.animator(Motion.durPanel, animations: change).startAnimation()
+        } else {
+            change()
+        }
+    }
+
+    /// Back from step 2: the form as it was.
+    private func back() {
+        guard moveStep else { return }
+        moveStep = false
+        error = ""
+        applyStep(animated: true)
+        requestRefresh()
     }
 
     /// The parts that differ between a new session and a continuation.
@@ -820,8 +996,38 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         paint()
     }
 
+    #if DEBUG
+    /// A simulator pass's `-new-session-machines`: the machines picker, open
+    /// once the move is read; `-new-session-step`: Move & start pressed once it can be.
+    private var probeMachines = ProcessInfo.processInfo.arguments.contains("-new-session-machines")
+    private var probeStep = ProcessInfo.processInfo.arguments.contains("-new-session-step")
+
+    /// What the pass last logged, so each change of the form is said once.
+    private var probeSaid = ""
+
+    private func probeForm() {
+        let said = "form: step \(moveStep) · start \"\(startLabel)\" · heading \"\(heading.text ?? "")\" · reading \"\(readingText)\""
+        if said != probeSaid, ProcessInfo.processInfo.arguments.contains("-new-session") {
+            probeSaid = said
+            Logger(subsystem: "dev.cawco.app", category: "Probe").notice("\(said, privacy: .public)")
+        }
+        guard moving, view.window != nil else { return }
+        if probeMachines {
+            probeMachines = false
+            DispatchQueue.main.async { [weak self] in self?.toggle(.machines) }
+        }
+        if probeStep, !moveStep {
+            probeStep = false
+            DispatchQueue.main.async { [weak self] in self?.submit() }
+        }
+    }
+    #endif
+
     private func paint() {
         guard layoutCompact != nil else { return }
+        #if DEBUG
+        probeForm()
+        #endif
         readPlacement()
         let picked = machineItems.filter { machineIds.contains($0.id) }
         machinesChip.show(Glyph.machineServer.image, tint: Palette.hueCyan500,
@@ -842,7 +1048,12 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
             projectChip.setTrailing(nil)
         }
 
-        if let repo {
+        if moveTo != nil {
+            // Moving, the chip names where the project goes there.
+            locationChip.show(Glyph.folderOpen.image, tint: Palette.hueAmber500, label: moveDestination, mono: true)
+            locationChip.empty = false
+            locationChip.accessibilityValue = moveDestination
+        } else if let repo {
             let named = repo.trimmingCharacters(in: .whitespaces)
             locationChip.show(BrandLogo.github.image, label: named.isEmpty ? "Clone from GitHub" : named, mono: !named.isEmpty)
             locationChip.empty = named.isEmpty
@@ -872,6 +1083,9 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         }
 
         let text = readingText
+        // A move's line wraps to a second line, never a third.
+        reading.numberOfLines = moveTo != nil ? 2 : 1
+        reading.lineBreakMode = moveTo != nil ? .byWordWrapping : .byTruncatingTail
         reading.text = text.isEmpty ? "\u{a0}" : text
         reading.ink = locationInformational ? Palette.inkMuted : Palette.statusFailInk
         reading.accessibilityLabel = text
@@ -908,7 +1122,9 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
     private func toggleMachine(_ id: String) {
         machinesTouched = true
         if let at = machineIds.firstIndex(of: id) { machineIds.remove(at: at) } else { machineIds.append(id) }
-        if let project, !machineIds.contains(where: project.placed(on:)) { projectId = nil }
+        // One machine without the project keeps it: it moves there (design §1b).
+        // Several, and none has it, start no project.
+        if let project, machineIds.count != 1, !machineIds.contains(where: project.placed(on:)) { projectId = nil }
         overridden = true
         requestRefresh()
     }
@@ -984,6 +1200,8 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
     /// A chip's press opens its picker, closes it when it is the one open, and
     /// moves straight to it from a sibling's.
     private func toggle(_ picker: Picker) {
+        // Moving, the location is the hub's destination: the chip names it and opens nothing.
+        if picker == .location, moveTo != nil { return }
         let target = chip(picker)
         if let open = popover {
             let same = openChip === target
@@ -1087,25 +1305,44 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
             requestRefresh()
             return
         }
+        // Move & start morphs the form to what moving does; Move it starts it.
+        if moving, !moveStep {
+            moveStep = true
+            closePopover()
+            view.endEditing(true)
+            applyStep(animated: true)
+            requestRefresh()
+            return
+        }
         submission += 1
         let id = submission
-        let draft = SessionDraft(
+        var draft = SessionDraft(
             machineIds: machineIds, baseCwd: path, cwd: workdir, prompt: prompt, harness: harness, permissionMode: permissionMode, model: model,
             effort: effort, spinOff: spinOff, repo: repo?.trimmingCharacters(in: .whitespaces), projectId: projectId,
             // The person's own picks; "" when they left the harness's default.
             summarizerHarness: summarizerHarness, summarizerModel: summarizerModel, usedModel: model
         )
         let sendsMode = !modeless
+        // The folder there is already the project's: the session starts in it.
+        if movedAlready, let there = moveEstimated?.path {
+            draft.baseCwd = there
+            draft.cwd = there
+        }
+        let moves = moving
         busy = true
         closePopover()
         view.endEditing(true)
         requestRefresh()
-        Task { [weak self] in
+        Task { [weak self, draft] in
             guard let self else { return }
             let current = { [weak self] in self?.submission == id }
             do {
                 if let source = continuing {
                     try await startContinue(source, draft, sendsMode: sendsMode, current: current)
+                    return
+                }
+                if moves {
+                    try await startMoving(draft, sendsMode: sendsMode, current: current)
                     return
                 }
                 var first = ""
@@ -1217,6 +1454,43 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         requestRefresh()
     }
 
+    /// Move it: the hub moves the project to the machine and starts the
+    /// session there, as a job it owns; the yes said here goes with it, so it
+    /// asks for none. The form leaves for the session as a spawn does, and its
+    /// pane follows the move until the session starts (design §2, E1).
+    private func startMoving(_ draft: SessionDraft, sendsMode: Bool, current: () -> Bool) async throws {
+        guard let ask = moveEstimated?.ask, let to = moveTo, let id = chosenProject?.id else { return }
+        let model = Self.shown(draft)
+        let prompt = draft.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        let request = HubConnection.MoveRequest(
+            approved: ask.key,
+            machineId: to,
+            spawn: .init(
+                harness: try Self.wire(draft.harness),
+                model: model.isEmpty ? nil : model,
+                effort: try draft.effort.map(Self.wire),
+                permissionMode: sendsMode ? try Self.wire(draft.permissionMode) : nil
+            ),
+            prompt: prompt.isEmpty ? nil : prompt
+        )
+        let job: Components.Schemas.MoveJob
+        do {
+            job = try await hub.startMove(projectId: id, request: request)
+        } catch {
+            // What moving does changed since it was read: read it again, so
+            // the step shows what a yes now covers.
+            moveRead = nil
+            moveAsked = ""
+            moveStep = false
+            applyStep(animated: true)
+            throw error
+        }
+        SpawnMemory.recordUse(harness: draft.harness, model: draft.usedModel)
+        try remember(draft)
+        guard current() else { return }
+        exit(to: job.targetInstanceId)
+    }
+
     /// Leave for the new session as the form starts to close, not after.
     private func exit(to instanceId: String) {
         close()
@@ -1267,11 +1541,12 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
 
     override public var canBecomeFirstResponder: Bool { true }
 
-    @objc private func escapePressed() { close() }
+    /// Esc in step 2 goes back to the form; anywhere else it closes.
+    @objc private func escapePressed() { moveStep ? back() : close() }
     @objc private func submitKey() { submit() }
 
     override public func accessibilityPerformEscape() -> Bool {
-        close()
+        escapePressed()
         return true
     }
 

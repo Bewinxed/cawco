@@ -18,6 +18,16 @@ public struct HubAPI: Sendable {
     public var search: Search { Search(client: client) }
     public var delegates: Delegates { Delegates(client: client) }
     public var tools: Tools { Tools(client: client) }
+    public var moves: Moves { Moves(client: client) }
+
+    /// Moving a project to a machine that has no checkout of it (core move.ts).
+    public struct Moves: Sendable {
+        let client: Client
+        public func estimate(_ input: Operations.GetApiProjectsByIdMoveEstimate.Input) async throws -> Operations.GetApiProjectsByIdMoveEstimate.Output { try await client.getApiProjectsByIdMoveEstimate(input) }
+        public func start(_ input: Operations.PostApiProjectsByIdMoves.Input) async throws -> Operations.PostApiProjectsByIdMoves.Output { try await client.postApiProjectsByIdMoves(input) }
+        public func cancel(_ input: Operations.DeleteApiMovesById.Input) async throws -> Operations.DeleteApiMovesById.Output { try await client.deleteApiMovesById(input) }
+        public func retry(_ input: Operations.PostApiMovesByIdRetry.Input) async throws -> Operations.PostApiMovesByIdRetry.Output { try await client.postApiMovesByIdRetry(input) }
+    }
 
     public struct Projects: Sendable {
         let client: Client

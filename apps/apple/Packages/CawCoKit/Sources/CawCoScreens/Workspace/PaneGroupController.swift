@@ -248,7 +248,9 @@ final class PaneGroupController: UIViewController, UIDropInteractionDelegate {
     private func tab(for id: String) -> PaneTab {
         let fleet = context.hub.fleet
         let row = fleet.byId[id]
-        let label = row.map(fleet.title) ?? panes.title(id) ?? String(id.prefix(8))
+        // A session its project is moving for has no row until it starts: the
+        // move names it (its first prompt's words, else its project).
+        let label = row.map(fleet.title) ?? fleet.move(for: id)?.title ?? panes.title(id) ?? String(id.prefix(8))
         let activity = context.home.activity(id)
         let face: SessionStatusView.Face = {
             guard let row else { return .stored }

@@ -163,6 +163,14 @@ public final class FleetStore {
     public internal(set) var projects: [Components.Schemas.GetApiProjects200Payload] = []
     /// The continuations the hub is carrying, settled ones for a few minutes after.
     public internal(set) var continuations: [Components.Schemas.ContinuationJob] = []
+    /// The project moves the hub is carrying (core move.ts), settled ones for a
+    /// few minutes after: the board frame's on connect, then each `moves` frame.
+    public internal(set) var moves: [Components.Schemas.MoveJob] = []
+
+    /// The move whose session is `instanceId`, while the hub keeps it.
+    public func move(for instanceId: String) -> Components.Schemas.MoveJob? {
+        moves.first { $0.targetInstanceId == instanceId }
+    }
     /// Each session's pulse, observed on its own (`PulseCell`): pulses arrive
     /// more than once a second across the fleet, and a screen must not be
     /// redrawn by sessions it does not show. A cell is made the first time

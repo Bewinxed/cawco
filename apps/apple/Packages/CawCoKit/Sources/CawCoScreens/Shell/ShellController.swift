@@ -191,12 +191,31 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     /// and the pass landed on the board. Reads the rows on every pass while
     /// it waits, so the watcher comes back when they change.
     private func openProbeSession() {
+        openProbeForm()
         guard let id = probeSession else { return }
-        let held = home.ready && hub.fleet.rows.contains { $0.id == id }
+        // A session its project is moving for is held by its move until it has a row.
+        let held = home.ready && (hub.fleet.rows.contains { $0.id == id } || hub.fleet.move(for: id) != nil)
         guard held, isViewLoaded, view.window != nil else { return }
         probeSession = nil
         // After the watcher's read: opening changes the workspace it observes.
         DispatchQueue.main.async { [weak self] in self?.openSession(id) }
+    }
+
+    /// A simulator pass's `-new-session <projectId> <machineId>`: the New
+    /// Session form, opened once the fleet's read holds that project, with it
+    /// chosen on that machine (`-new-session-step` and `-new-session-machines`
+    /// take the form on from there: NewSessionViewController).
+    private var probeForm: (projectId: String, machineId: String)? = {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let at = arguments.firstIndex(of: "-new-session"), arguments.indices.contains(at + 2) else { return nil }
+        return (arguments[at + 1], arguments[at + 2])
+    }()
+
+    private func openProbeForm() {
+        guard let form = probeForm, home.ready, hub.fleet.projects.contains(where: { $0.id == form.projectId }),
+              isViewLoaded, view.window != nil else { return }
+        probeForm = nil
+        DispatchQueue.main.async { [weak self] in self?.startSession(machineId: form.machineId, cwd: nil, projectId: form.projectId) }
     }
     #endif
 

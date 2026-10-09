@@ -199,6 +199,8 @@ enum Frame {
     case thread
     /// A session's preview opened, changed or closed.
     case preview(Components.Schemas.PreviewFrame)
+    /// Every project move the hub is carrying, whole, on each change.
+    case moves([Components.Schemas.MoveJob])
     case ignored
 
     /// `answering`: the envelope's own `requestId`, which an error frame takes
@@ -235,6 +237,8 @@ enum Frame {
             self = .thread
         case .preview(let frame):
             self = .preview(frame)
+        case .moves(let frame):
+            self = .moves(frame.moves)
         default:
             self = .ignored
         }

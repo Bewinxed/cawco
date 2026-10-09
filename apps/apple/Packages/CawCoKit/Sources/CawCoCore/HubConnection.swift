@@ -498,12 +498,15 @@ public final class HubConnection {
         async let pending = try? await client.getApiPending().ok.body.json
         // A continuation that moved while this device was away.
         async let carried = try? await client.getApiContinuations().ok.body.json
+        // Likewise a project move.
+        async let moving = try? await client.getApiMoves().ok.body.json
         // Read on connect, not only pushed on change: a device that connects
         // between reports has missed every `usage` frame.
         async let limits = try? await client.getApiUsageLimits().ok.body.json
         async let spend = try? await client.getApiUsageSpend().ok.body.json
         let (machines, rows, projects, readPending, readLimits, readSpend, readCarried) =
             await (machinesRead, rowsRead, projectsRead, pending, limits, spend, carried)
+        let readMoves = await moving
         let readMachines = try? machines.get()
         let readRows = try? rows.get()
         let readProjects = try? projects.get()
@@ -565,6 +568,9 @@ public final class HubConnection {
             }
             if let readCarried {
                 hub.fleet.continuations = readCarried
+            }
+            if let readMoves {
+                hub.fleet.moves = readMoves
             }
             if !unreadable.isEmpty {
                 hub.cannotRead(unreadable)
@@ -744,6 +750,7 @@ public final class HubConnection {
         case let .instances(board, hubBuild):
             if let hubBuild { fleet.hubBuild = hubBuild }
             fleet.continuations = board.continuations
+            fleet.moves = board.moves
             adopt(machines: board.agents)
             fleet.adopt(rows: board.instances)
             previews.reconcile(board.previews)
@@ -801,6 +808,8 @@ public final class HubConnection {
             }
         case let .preview(frame):
             previews.adopt(frame)
+        case let .moves(jobs):
+            fleet.moves = jobs
         case .ignored:
             break
         }
