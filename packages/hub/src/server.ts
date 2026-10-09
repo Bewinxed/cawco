@@ -3017,6 +3017,10 @@ export const createServer = (
         );
         if (changed) {
           publishUsage(machineId);
+          // A machine's sign-ins land after its register, behind probes: a
+          // project whose start the register's look refused for want of a
+          // signed-in account gets its look again now, not at the safety net.
+          dispatcher.machineOnline(machineId);
         }
         if (failed && registry.agent(machineId)) {
           const delay = Math.min(30 * 60_000, 30_000 * 2 ** sync.attempt);

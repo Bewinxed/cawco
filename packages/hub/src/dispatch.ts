@@ -1271,7 +1271,10 @@ export const createDispatcher = ({
       return problem?.hash === task.hash ? problem.message : null;
     },
 
-    /** A machine connected: every project with a checkout there gets another look, its old start failures forgotten. */
+    /**
+     * A machine connected, or its sign-ins changed: every project with a
+     * checkout there gets another look, its old start failures forgotten.
+     */
     machineOnline(machineId: string): void {
       for (const project of db.listProjects()) {
         if (
