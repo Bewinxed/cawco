@@ -194,6 +194,12 @@ final class PaywallController: ObservedViewController {
         // Read so a change redraws: the catalogue, the entitlement and every setup step.
         _ = (pro.access, pro.catalog, pro.canMakePayments, pro.pending)
         _ = (push.authorization, push.token, push.tokenFailed, push.relay, push.testArrived, push.testSent, push.testProblem, push.testSending)
+        // The board opened (`Pro.boardOpen`) under an offer that rose before
+        // the catalogue failed: the offer goes.
+        if pro.boardOpen, screen == .offer {
+            finish()
+            return
+        }
         advance()
         let key = key(for: screen)
         if key != builtKey {

@@ -247,7 +247,7 @@ public final class PushRegistry {
 
     /// The purchase changed: a device that has its token enrols on it now.
     func entitlementChanged() {
-        if token != nil, Pro.shared.proof != nil { enrol() }
+        if token != nil, Pro.shared.enrolmentProof != nil { enrol() }
     }
 
     /// A hub answered: a device already set up registers with it.
@@ -278,7 +278,7 @@ public final class PushRegistry {
     }
 
     private func enrolOnce() async {
-        guard !removed, let token, let proof = Pro.shared.proof else {
+        guard !removed, let token, let proof = Pro.shared.enrolmentProof else {
             relay = .idle
             return
         }
@@ -292,7 +292,7 @@ public final class PushRegistry {
             return
         }
         let enrolment = Enrolment(pairingId: pairing.id, secret: pairing.secret, deviceToken: token,
-                                  apnsEnvironment: environment.rawValue, proof: .init(transaction: proof))
+                                  apnsEnvironment: environment.rawValue, proof: .init(proof))
         do {
             let _: Enrolled = try await Self.post(Cawrier.origin.appending(path: "v1/enroll"), enrolment, refused: "The relay")
             log.notice("enrolled with Cawrier (\(self.environment.rawValue, privacy: .public))")
@@ -461,9 +461,24 @@ public final class PushRegistry {
 
     // The hub's routes are hidden from openapi.json, and Cawrier has none, so they are called with URLSession.
     private struct Enrolment: Encodable, Sendable {
+        /// `{ kind: "appStore", transaction }`, or `{ kind: "appTransaction", jws }`.
         struct Proof: Encodable, Sendable {
-            var kind = "appStore"
-            let transaction: String
+            let kind: String
+            let transaction: String?
+            let jws: String?
+
+            init(_ proof: EnrolmentProof) {
+                switch proof {
+                case let .transaction(signed):
+                    kind = "appStore"
+                    transaction = signed
+                    jws = nil
+                case let .appTransaction(signed):
+                    kind = "appTransaction"
+                    transaction = nil
+                    jws = signed
+                }
+            }
         }
 
         let pairingId: String

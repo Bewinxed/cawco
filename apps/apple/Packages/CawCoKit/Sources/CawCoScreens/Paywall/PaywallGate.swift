@@ -83,12 +83,14 @@ final class PaywallGate {
     /// once the hub's fleet was read.
     func update(onBoard: Bool, read: Bool) {
         let pro = Pro.shared
-        let state = "board \(onBoard) read \(read) access \(pro.access.map { String(describing: $0) } ?? "unread") shown \(UserDefaults.standard.bool(forKey: Self.shownKey)) locked \(locked)"
+        let state = "board \(onBoard) read \(read) access \(pro.access.map { String(describing: $0) } ?? "unread") shown \(UserDefaults.standard.bool(forKey: Self.shownKey)) open \(pro.boardOpen) locked \(locked)"
         if state != seen {
             seen = state
             log.notice("gate: \(state, privacy: .public)")
         }
-        guard onBoard, let access = pro.access else {
+        // `Pro.boardOpen` (TestFlight before the App Store has products):
+        // the board stays open and nothing below shows.
+        guard onBoard, let access = pro.access, !pro.boardOpen else {
             lock(false)
             bar.isHidden = true
             card.isHidden = true
@@ -195,7 +197,7 @@ final class PaywallGate {
 
     /// T's tap and T6's push: the Get Pro form for a live week; the offer otherwise.
     func keepPro() {
-        guard let access = Pro.shared.access, access != .owned else { return }
+        guard !Pro.shared.boardOpen, let access = Pro.shared.access, access != .owned else { return }
         present(access.entitled ? .keep : .offer)
     }
 

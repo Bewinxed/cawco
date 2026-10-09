@@ -314,7 +314,7 @@ final class ConnectViewController: ObservedViewController, UITextFieldDelegate {
 
     private var notifyState: NotifyState {
         let push = PushRegistry.shared
-        guard Pro.shared.access?.entitled == true else { return .off(entitled: false) }
+        guard Pro.shared.proOn else { return .off(entitled: false) }
         if push.authorization == .denied { return .denied }
         // H7 took this device off the relay: H2 until it is turned on again.
         if !push.allowed || push.removed { return .off(entitled: true) }

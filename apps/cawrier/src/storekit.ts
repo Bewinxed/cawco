@@ -146,6 +146,69 @@ export const verifyNotification = async (
   };
 };
 
+/**
+ * A TestFlight install while the App Store serves no products (the Paid Apps
+ * Agreement isn't active yet): the app's own signed AppTransaction stands in
+ * for a purchase. Only the sandbox's, which is TestFlight's; App Store and
+ * Xcode installs are refused. Apple's verifier checks the chain to the pinned
+ * root, the signature, the bundle id and the environment (`receiptType`). The
+ * seat is the install's app transaction, with no end: once the agreement is
+ * active, the app enrolls on its real purchase instead.
+ */
+export const verifyAppTransaction = async (
+  env: Env,
+  jws: string
+): Promise<Purchase> => {
+  const receiptType =
+    jws.length <= MAX_JWS_CHARS
+      ? unverifiedPayload(jws).receiptType
+      : undefined;
+  if (receiptType === "Production") {
+    return {
+      ok: false,
+      error:
+        "An App Store install enrolls on its purchase, not on the app's transaction.",
+    };
+  }
+  if (receiptType === "Xcode") {
+    return {
+      ok: false,
+      error:
+        "An Xcode build's app transaction is not signed by Apple, so Cawrier does not accept it.",
+    };
+  }
+  if (receiptType !== "Sandbox") {
+    return {
+      ok: false,
+      error: "The app transaction is not a TestFlight install's.",
+    };
+  }
+  const verifier = await verifierFor(env, "Sandbox");
+  let transaction: Awaited<
+    ReturnType<SignedDataVerifier["verifyAndDecodeAppTransaction"]>
+  >;
+  try {
+    transaction = await verifier.verifyAndDecodeAppTransaction(jws);
+  } catch {
+    return {
+      ok: false,
+      error: "Apple's signature on the app transaction does not hold.",
+    };
+  }
+  if (!transaction.appTransactionId) {
+    return {
+      ok: false,
+      error: "The app transaction carries no app transaction id.",
+    };
+  }
+  return {
+    ok: true,
+    environment: "Sandbox",
+    seat: `Sandbox:app:${transaction.appTransactionId}`,
+    endsAt: null,
+  };
+};
+
 export const verifyPurchase = async (
   env: Env,
   jws: string

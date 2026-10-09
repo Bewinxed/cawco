@@ -24,6 +24,8 @@ import type { ExperimentEvent } from "./experiment";
 import { SEATS_PER_PURCHASE } from "./seats";
 import {
   type Notification,
+  type Purchase,
+  verifyAppTransaction,
   verifyNotification,
   verifyPurchase,
 } from "./storekit";
@@ -104,7 +106,7 @@ interface Enrollment {
   readonly apnsEnvironment: ApnsEnvironment;
   readonly deviceToken: string;
   readonly pairingId: string;
-  /** Kept a union on `kind`: one kind today; a Polar purchase would be another. */
+  /** A union on `kind`: `appStore` (a StoreKit transaction) or `appTransaction` (a TestFlight install's). */
   readonly proof: Body;
   readonly secret: string;
 }
@@ -158,6 +160,24 @@ const pushOf = (body: Body | undefined): Push | undefined =>
 const pairing = (env: Env, pairingId: string) =>
   env.PAIRING.get(env.PAIRING.idFromName(pairingId));
 
+/**
+ * The proof, verified: a StoreKit transaction (`appStore`), or a TestFlight
+ * install's AppTransaction (`appTransaction`) while the App Store serves no
+ * products. Undefined for any other shape.
+ */
+const purchaseOf = async (
+  env: Env,
+  proof: Body
+): Promise<Purchase | undefined> => {
+  if (proof.kind === "appStore" && typeof proof.transaction === "string") {
+    return await verifyPurchase(env, proof.transaction);
+  }
+  if (proof.kind === "appTransaction" && typeof proof.jws === "string") {
+    return await verifyAppTransaction(env, proof.jws);
+  }
+  return undefined;
+};
+
 const enroll = async (request: Request, env: Env): Promise<Response> => {
   const ip = request.headers.get("cf-connecting-ip") ?? "unknown";
   if (!(await env.ENROLL_LIMIT.limit({ key: ip })).success) {
@@ -170,11 +190,10 @@ const enroll = async (request: Request, env: Env): Promise<Response> => {
   if (!enrollment) {
     return refuse(400, "The enrollment is not in the shape Cawrier reads.");
   }
-  const { proof } = enrollment;
-  if (proof.kind !== "appStore" || typeof proof.transaction !== "string") {
+  const purchase = await purchaseOf(env, enrollment.proof);
+  if (!purchase) {
     return refuse(403, "The proof of purchase is not one Cawrier accepts.");
   }
-  const purchase = await verifyPurchase(env, proof.transaction);
   if (!purchase.ok) {
     console.log(`enroll 403: ${purchase.error}`);
     return refuse(403, purchase.error);
