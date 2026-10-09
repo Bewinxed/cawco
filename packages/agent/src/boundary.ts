@@ -26,8 +26,10 @@
  * `launchctl`. macOS has no private pid or port space to give it.
  *
  * sessiond holds both, so an agent restart leaves them — and every process
- * in them — running, as it leaves the sessions. A machine that cannot hold a
- * boundary refuses the work: a work item never runs without one.
+ * in them — running, as it leaves the sessions. One started by an earlier
+ * build, in another form, is replaced the first time nothing runs in it
+ * ({@link replaceWhenIdle}). A machine that cannot hold a boundary refuses
+ * the work: a work item never runs without one.
  *
  * Each workspace's executor is a script, `~/.cawco/workspaces/<id>/exec
  * [--cwd-out FILE] COMMAND`, that every harness runs its shell commands
@@ -40,17 +42,22 @@
  *
  * Every store core's `credentialStores` names is hidden from every command.
  * Linux: each store that is a directory goes under an empty tmpfs as the
- * anchor starts, and each that is a file under an empty read-only file. The
- * kernel drops a file's mask in this namespace once the host renames a new
- * file over it, as a token refresh does; the srt cutover replaces this with a
- * tmpfs over the whole home dir. macOS: a Seatbelt deny on each, the login
- * keychain among them, and on every file named as secrets are
- * (`SECRET_FILE_NAME`) outside the workspace's own clone.
+ * anchor starts, with what a command needs from beneath it bound back, and
+ * each that is a file under an empty read-only file. The kernel drops a
+ * file's mask in this namespace once the host renames a new file over it, as
+ * a token refresh does; the srt cutover replaces this with a tmpfs over the
+ * whole home dir. Before the anchor starts, every file in the clone that
+ * shares an inode with another gets its own ({@link ownInodes}), so nothing
+ * the workspace writes is a file the host runs. macOS: a Seatbelt deny on
+ * each, the login keychain among them, and on every file named as secrets
+ * are (`SECRET_FILE_NAME`) outside the workspace's own clone.
  */
 import { createHash } from "node:crypto";
-import { accessSync, constants } from "node:fs";
+import { accessSync, constants, existsSync } from "node:fs";
 import {
   access,
+  chmod,
+  copyFile,
   mkdir,
   readdir,
   readFile,
@@ -76,6 +83,7 @@ import {
 import {
   commandLine as commandLineOf,
   commandLines,
+  processLineage,
 } from "@cawco/core/process-identity";
 import { embeddedFile, runtimeDataDir, standalone } from "@cawco/core/runtime";
 import { type ProcSpec, sessiondEndpoint } from "@cawco/core/sessiond";
@@ -99,8 +107,8 @@ export interface Boundary {
 /** What `boundary.json` keeps: the boundary, and what proves it is still the one this machine started. */
 interface Held extends Boundary {
   /**
-   * macOS: the form the runner was started in ({@link darwinForm}). A runner
-   * of another form, or of none, is replaced once it is idle ({@link ensure}).
+   * The form the anchor or runner was started in ({@link formOf}). One of
+   * another form, or of none, is replaced once it is idle ({@link ensure}).
    */
   readonly form?: string;
   /** Linux: the anchor's user namespace, as `/proc/<pid>/ns/user` names it. macOS: `runner`. */
@@ -126,6 +134,10 @@ const runOf = (id: string): string => join(stateDir(id), "run");
 
 const SSH_INCLUDES = "/etc/ssh/ssh_config.d";
 
+/** Where a Linux boundary keeps its copy of the host's ssh includes; "" on a host without them. */
+const sshCopyOf = (id: string): string =>
+  existsSync(SSH_INCLUDES) ? join(stateDir(id), "ssh_config.d") : "";
+
 /**
  * A Linux boundary's copy of the host's ssh includes, owned by the user, or
  * "" on a host without them. Rewritten on every start, so it follows the host.
@@ -139,10 +151,10 @@ const copySshIncludes = async (id: string): Promise<string> => {
       throw error;
     }
   );
-  if (!names) {
+  const copy = sshCopyOf(id);
+  if (!(names && copy)) {
     return "";
   }
-  const copy = join(stateDir(id), "ssh_config.d");
   await rm(copy, { recursive: true, force: true });
   await mkdir(copy, { recursive: true });
   await Promise.all(
@@ -487,8 +499,10 @@ const armHook = async (id: string, held: Omit<Held, "hook">): Promise<Held> => {
  * Writes every held workspace's hook and its script again, in this build's
  * form. The agent does this as it starts, before it adopts or launches a
  * session: a running CLI reads its workspace's hook on every shell call, so
- * one an earlier build wrote must not outlive that build's runtime. A macOS
- * runner of an older form is replaced once it is idle ({@link replaceWhenIdle}).
+ * one an earlier build wrote must not outlive that build's runtime. An anchor
+ * or runner of an older form is replaced once it is idle
+ * ({@link replaceWhenIdle}): the mounts or profile that hide the credential
+ * stores are the anchor's or runner's own.
  */
 export const rearmHooks = async (): Promise<void> => {
   const ids = await readdir(workspacesDir()).catch(
@@ -507,13 +521,11 @@ export const rearmHooks = async (): Promise<void> => {
       if (held) {
         await armHook(id, held);
         armed += 1;
-        if (process.platform === "darwin") {
-          // A gate an agent left as it died names no process this one waits for.
-          await rm(gateOf(id), { force: true });
-          const ref = { id, path: held.path };
-          if (held.form !== (await darwinForm(ref)).form) {
-            replaceWhenIdle(ref);
-          }
+        // A gate an agent left as it died names no process this one waits for.
+        await rm(gateOf(id), { force: true });
+        const ref = { id, path: held.path };
+        if (held.form !== (await formOf(ref))) {
+          replaceWhenIdle(ref);
         }
       }
     } catch (error) {
@@ -760,10 +772,7 @@ const ensure = async (ref: WorkspaceRef): Promise<Boundary> => {
   // Written again each time: one an earlier agent started may have no hook
   // yet, or one that reaches cawco another way.
   const armed = await armHook(ref.id, held);
-  if (
-    process.platform !== "darwin" ||
-    held.form === (await darwinForm(ref)).form
-  ) {
+  if (held.form === (await formOf(ref))) {
     forgetStale(ref.id);
     return armed;
   }
@@ -777,34 +786,78 @@ const ensure = async (ref: WorkspaceRef): Promise<Boundary> => {
 };
 
 /**
- * Where the agent marks that it is replacing a macOS workspace's runner: the
- * agent's pid, in the state dir, which nothing inside the boundary writes.
- * The executor waits while it names a live process, then runs through the
- * new runner ({@link darwinExec}).
+ * Where the agent marks that it is replacing a workspace's anchor or runner:
+ * the agent's pid, in the state dir, which nothing inside the boundary
+ * writes. The executor waits while it names a live process, then runs
+ * through the new one ({@link linuxExec}, {@link darwinExec}).
  */
 const gateOf = (id: string): string => join(stateDir(id), "replacing");
 
-/**
- * Whether anything bounded is running in a macOS workspace: a command or a
- * process it left, each carrying the runner's marker, or an executor on its
- * way in (its own path is on its command line), of any form.
- */
-const busy = async (id: string, runner: number): Promise<boolean> => {
-  const exec = join(stateDir(id), "exec");
-  return (await commandLines({ environment: true })).some(
-    ({ pid, command }) =>
-      pid !== runner &&
-      pid !== process.pid &&
-      (command.includes(`CAWCO_WORKSPACE=${id}`) || command.includes(exec))
+/** The form a boundary of this workspace takes in this build: a running one of another form is replaced once it is idle. */
+const formOf = async (ref: WorkspaceRef): Promise<string> =>
+  process.platform === "darwin" ? (await darwinForm(ref)).form : linuxForm(ref);
+
+/** One process, as {@link busy} reads it. */
+interface Seen {
+  readonly command: string;
+  readonly pid: number;
+  /** Linux: its pid namespace, as `/proc/<pid>/ns/pid` names it. */
+  readonly pidNs?: string;
+  readonly ppid: number;
+}
+
+/** Every process on the machine, read once for every workspace {@link busy} looks at. */
+const snapshot = async (): Promise<Seen[]> => {
+  const linux = process.platform === "linux";
+  const [rows, lines] = await Promise.all([
+    processLineage(),
+    commandLines({ environment: !linux }),
+  ]);
+  const commands = new Map(lines.map((line) => [line.pid, line.command]));
+  return await Promise.all(
+    rows.map(async (row) => ({
+      pid: row.pid,
+      ppid: row.ppid,
+      command: commands.get(row.pid) ?? "",
+      pidNs: linux
+        ? await readlink(`/proc/${row.pid}/ns/pid`).catch(() => undefined)
+        : undefined,
+    }))
   );
 };
 
 /**
- * Replaces a macOS workspace's runner with one of this build's form, when
- * nothing bounded is running in it; nothing when something is. The gate goes
- * up before the look, and an executor checks the gate after it is already a
- * process: so either the look sees the executor, or the executor sees the
- * gate and waits for the new runner. No command is cut off.
+ * Whether anything bounded is running in a workspace: an executor on its way
+ * in (its own path is on its command line), of any form, or a command or a
+ * process it left — on Linux anything in the anchor's pid namespace but the
+ * anchor's own loop and its `sleep`, on macOS anything carrying the runner's
+ * marker.
+ */
+const busy = (seen: Seen[], id: string, held: Held): boolean => {
+  const exec = join(stateDir(id), "exec");
+  const linux = process.platform === "linux";
+  const space = linux
+    ? seen.find((one) => one.pid === held.pid)?.pidNs
+    : undefined;
+  return seen.some(
+    (one) =>
+      one.pid !== held.pid &&
+      one.pid !== process.pid &&
+      (one.command.includes(exec) ||
+        (linux
+          ? space !== undefined &&
+            one.pidNs === space &&
+            !(one.ppid === held.pid && one.command.startsWith("sleep "))
+          : one.command.includes(`CAWCO_WORKSPACE=${id}`)))
+  );
+};
+
+/**
+ * Replaces a workspace's anchor or runner with one of this build's form,
+ * when nothing bounded is running in it; nothing when something is. The gate
+ * goes up before the look, and an executor checks the gate after it is
+ * already a process: so either the look sees the executor, or the executor
+ * sees the gate and waits for the new one. No command is cut off.
  */
 const replaceIfIdle = async (
   client: SessiondClient,
@@ -814,13 +867,13 @@ const replaceIfIdle = async (
   const gate = gateOf(ref.id);
   await writeFile(gate, String(process.pid));
   try {
-    if (await busy(ref.id, held.pid)) {
+    if (busy(await snapshot(), ref.id, held)) {
       return;
     }
     await client.signal(procIdFor("boundary", ref.id), "SIGKILL");
     const replaced = await start(client, ref);
     console.info(
-      `[workspace] ${ref.id}: its boundary runner ${held.pid} (form ${held.form ?? "none"}) was idle and is replaced by ${replaced.pid}`
+      `[workspace] ${ref.id}: its boundary ${held.pid} (form ${held.form ?? "none"}) was idle and is replaced by ${replaced.pid}`
     );
     return replaced;
   } finally {
@@ -828,45 +881,74 @@ const replaceIfIdle = async (
   }
 };
 
-/** How often a macOS boundary of an older form is looked at until it is idle. */
+/** How often the boundaries of an older form are looked at until each is idle. */
 const STALE_LOOK_MS = 5000;
-const stale = new Map<string, ReturnType<typeof setInterval>>();
+/** The workspaces whose boundary is of an older form. */
+const stale = new Map<string, WorkspaceRef>();
+let staleTimer: ReturnType<typeof setInterval> | undefined;
 
 /**
- * Looks at a running macOS boundary of an older form every
- * {@link STALE_LOOK_MS} and replaces it the first time it is idle
- * ({@link ensureBoundary}). Stops once it is replaced, current, or no longer
- * running.
+ * Looks at every running boundary of an older form each
+ * {@link STALE_LOOK_MS}, reading the processes once for all of them, and
+ * replaces each the first time it is idle ({@link ensureBoundary}). A
+ * workspace leaves the set once its boundary is replaced, current, or no
+ * longer running.
  */
-const replaceWhenIdle = (ref: WorkspaceRef): void => {
-  if (stale.has(ref.id)) {
-    return;
-  }
-  const look = async (): Promise<void> => {
+const lookAtStale = async (): Promise<void> => {
+  const seen = await snapshot();
+  const client = await sessiond();
+  for (const ref of [...stale.values()]) {
     if (starting.has(ref.id)) {
-      return;
+      continue;
     }
-    const held = await readHeld(ref.id);
-    if (!(held && (await running(await sessiond(), ref.id, held)))) {
-      forgetStale(ref.id);
-      return;
-    }
-    await ensureBoundary(ref);
-  };
-  const timer = setInterval(() => {
-    look().catch((error: unknown) => {
+    try {
+      // biome-ignore lint/performance/noAwaitInLoops: one boundary replaced at a time
+      const held = await readHeld(ref.id);
+      if (!(held && (await running(client, ref.id, held)))) {
+        forgetStale(ref.id);
+        continue;
+      }
+      if (!busy(seen, ref.id, held)) {
+        await ensureBoundary(ref);
+      }
+    } catch (error) {
       console.warn(
         `[workspace] ${ref.id}: its older boundary could not be replaced yet: ${error instanceof Error ? error.message : String(error)}`
       );
-    });
+    }
+  }
+};
+
+const replaceWhenIdle = (ref: WorkspaceRef): void => {
+  stale.set(ref.id, ref);
+  if (staleTimer) {
+    return;
+  }
+  let looking = false;
+  staleTimer = setInterval(() => {
+    if (looking) {
+      return;
+    }
+    looking = true;
+    lookAtStale()
+      .catch((error: unknown) => {
+        console.warn(
+          `[workspace] the older boundaries could not be looked at: ${error instanceof Error ? error.message : String(error)}`
+        );
+      })
+      .finally(() => {
+        looking = false;
+      });
   }, STALE_LOOK_MS);
-  timer.unref();
-  stale.set(ref.id, timer);
+  staleTimer.unref();
 };
 
 const forgetStale = (id: string): void => {
-  clearInterval(stale.get(id));
   stale.delete(id);
+  if (stale.size === 0 && staleTimer) {
+    clearInterval(staleTimer);
+    staleTimer = undefined;
+  }
 };
 
 /**
@@ -888,9 +970,12 @@ const forgetStale = (id: string): void => {
  * mount beneath it and asks the kernel to change a locked atime flag. The
  * host's ssh includes are replaced by the user's own copy of them, because
  * host root shows up as nobody here and ssh refuses an included file no
- * longer owned by root or the user. Each credential store ({@link linuxStores})
- * goes under an empty read-only tmpfs when it is a directory, and under an
- * empty read-only file when it is a file. Then a nested
+ * longer owned by root or the user. Each credential store ({@link linuxSpec})
+ * goes under an empty read-only tmpfs when it is a directory — so a file the
+ * host adds there later is hidden too — and under an empty read-only file
+ * when it is a file. What a command needs from beneath a store (the `cawco`
+ * CLI in the data dir) is held aside first and bound back into the tmpfs at
+ * its own path. Then a nested
  * user namespace maps the user back to their own uid — tools see who they
  * always see, not root — and its own mount namespace locks every mount above.
  * The anchor is that namespace's PID 1: a bash loop, which reaps the orphans
@@ -900,8 +985,8 @@ const ANCHOR = `exec 2>&1
 set -eu
 PATH=${SYSTEM_PATH}
 export PATH
-ws=$1 scratch=$2 run=$3 uid=$4 gid=$5 runtime=$6 hidden=$7 ssh=$8 stores=$9
-shift 9
+ws=$1 scratch=$2 run=$3 uid=$4 gid=$5 runtime=$6 hidden=$7 ssh=$8 stores=$9 keeps=\${10}
+shift 10
 # mount_setattr (syscall 442 on x86_64 and arm64): AT_FDCWD "/", AT_RECURSIVE, attr_set MOUNT_ATTR_RDONLY
 perl -e 'my ($path, $attr) = ("/", pack("Q4", 1, 0, 0, 0)); syscall(442, -100, $path, 0x8000, $attr, 32) == 0 or die "mount_setattr: $!"'
 writable=$(awk '$6 !~ /(^|,)ro(,|$)/ { print $5 }' /proc/self/mountinfo)
@@ -914,19 +999,41 @@ done
 mount --bind "$scratch" /tmp
 if [ -n "$runtime" ] && [ -d "$runtime" ]; then mount --bind "$run" "$runtime"; fi
 if [ -n "$hidden" ] && [ -d "$hidden" ]; then mount -t tmpfs -o size=4k,mode=0555 hidden "$hidden"; fi
-mask=$(mktemp -d "$run/auth-mask.XXXXXX")
+mask=$run/.auth-mask keep=$run/.keep
+rm -rf "$keep"
+mkdir -p "$mask" "$keep"
 mount -t tmpfs -o size=4k,mode=0700,uid=0,gid=0 auth-mask "$mask"
 touch "$mask/empty"
 mount -o remount,bind,ro "$mask"
+kept=()
+while IFS= read -r path; do
+  if [ -z "$path" ] || ! [ -e "$path" ]; then continue; fi
+  held=$keep/\${#kept[@]}
+  if [ -d "$path" ]; then mkdir "$held"; else touch "$held"; fi
+  mount --rbind "$path" "$held"
+  kept+=("$path")
+done <<< "$keeps"
+masked=()
 while IFS= read -r path; do
   if [ -z "$path" ]; then continue; fi
   if [ -d "$path" ]; then
-    mount -t tmpfs -o size=4k,mode=0555,ro hidden "$path"
+    mount -t tmpfs -o size=4k,mode=0555 hidden "$path"
+    masked+=("$path")
   elif [ -f "$path" ]; then
     mount --bind "$mask/empty" "$path"
     mount -o remount,bind,ro "$path"
   fi
 done <<< "$stores"
+for i in "\${!kept[@]}"; do
+  path=\${kept[$i]}
+  if ! [ -e "$path" ]; then
+    mkdir -p "$(dirname "$path")"
+    if [ -d "$keep/$i" ]; then mkdir "$path"; else touch "$path"; fi
+    mount --rbind "$keep/$i" "$path"
+  fi
+  umount -R "$keep/$i"
+done
+for path in "\${masked[@]}"; do mount -o remount,bind,ro "$path"; done
 if [ -n "$ssh" ]; then mount --bind "$ssh" ${SSH_INCLUDES}; fi
 mount -t tmpfs -o mode=1777,nosuid,nodev shm /dev/shm
 exec unshare --user --mount --map-user="$uid" --map-group="$gid" bash -c 'echo ${READY}; while :; do sleep 86400 & wait; done'`;
@@ -936,39 +1043,10 @@ const hideable = (dir: string, kept: string[]): string =>
   kept.some((path) => path === dir || path.startsWith(`${dir}/`)) ? "" : dir;
 
 /**
- * What a Linux anchor masks, by real path: each credential store there is
- * now. A directory that holds something a command needs (the data dir holds
- * the `cawco` CLI) is masked entry by entry instead, all but what is needed.
+ * A Linux anchor's spec: what it binds writable, and each credential store
+ * there is now, by real path, with what a command needs from beneath one —
+ * the workspace, its caches, the `cawco` CLI — bound back in ({@link ANCHOR}).
  */
-const linuxStores = async (kept: string[]): Promise<string[]> => {
-  const holds = (dir: string): boolean =>
-    kept.some((path) => path === dir || path.startsWith(`${dir}/`));
-  const expand = async (path: string): Promise<string[]> => {
-    if (!holds(path)) {
-      return [path];
-    }
-    if (kept.includes(path)) {
-      return [];
-    }
-    const names = await readdir(path).catch(() => [] as string[]);
-    return (
-      await Promise.all(names.map((name) => expand(join(path, name))))
-    ).flat();
-  };
-  const reals = await Promise.all(
-    credentialStores().map((path) => realpath(path).catch(() => undefined))
-  );
-  const stores = await Promise.all(
-    [...new Set(reals)].map(async (real) => {
-      const info = real ? await stat(real).catch(() => undefined) : undefined;
-      return real && info && (info.isDirectory() || info.isFile())
-        ? expand(real)
-        : [];
-    })
-  );
-  return stores.flat();
-};
-
 const linuxSpec = async (
   ref: WorkspaceRef,
   scratch: string,
@@ -987,12 +1065,21 @@ const linuxSpec = async (
     ...caches,
     ...alternates.split("\n").filter((line) => line.startsWith("/")),
   ];
-  const stores = await linuxStores([
+  const reals = await Promise.all(
+    credentialStores().map((path) => realpath(path).catch(() => undefined))
+  );
+  const stores = [
+    ...new Set(reals.filter((real): real is string => Boolean(real))),
+  ];
+  const needed = [
     ...kept,
     ...(await Promise.all(
       keptInStores().map((path) => realpath(path).catch(() => path))
     )),
-  ]);
+  ];
+  const keeps = needed.filter((path) =>
+    stores.some((store) => path === store || path.startsWith(`${store}/`))
+  );
   return {
     command: "/usr/bin/unshare",
     args: [
@@ -1020,10 +1107,34 @@ const linuxSpec = async (
       hideable(dirname(sessiondPath()), kept),
       ssh,
       stores.join("\n"),
+      keeps.join("\n"),
       ...caches,
     ],
   };
 };
+
+/**
+ * The form a Linux anchor of this workspace takes in this build: a hash of
+ * what it runs and every argument it is given, the credential stores among
+ * them. A store that appears, or a change to {@link ANCHOR}, reaches every
+ * running anchor once it is idle.
+ */
+const linuxForm = async (ref: WorkspaceRef): Promise<string> =>
+  specForm(
+    await linuxSpec(
+      ref,
+      scratchOf(ref.id),
+      runOf(ref.id),
+      sshCopyOf(ref.id),
+      cachesOf()
+    )
+  );
+
+const specForm = (spec: ProcSpec): string =>
+  createHash("sha256")
+    .update([spec.command, ...spec.args].join("\0"))
+    .digest("hex")
+    .slice(0, 16);
 
 /**
  * The macOS runner: reads request directories off its FIFO and runs each in
@@ -1077,6 +1188,21 @@ const profileOf = async (
   // Seatbelt's last matching rule wins: what a command runs from inside a
   // store is read again after the deny.
   const keptPaths = await Promise.all(keptInStores().map(secretRealpath));
+  // A lookup of a kept path stats each dir on the way: those inside a store
+  // answer that alone, never their listing or any other entry.
+  const inStore = (path: string): boolean =>
+    stores.some((store) => path === store || path.startsWith(`${store}/`));
+  const lookupDirs = [
+    ...new Set(
+      keptPaths.flatMap((path) => {
+        const above: string[] = [];
+        for (let dir = dirname(path); inStore(dir); dir = dirname(dir)) {
+          above.push(dir);
+        }
+        return above;
+      })
+    ),
+  ];
   const userDirs = await Promise.all(
     ["DARWIN_USER_TEMP_DIR", "DARWIN_USER_CACHE_DIR"].map(async (name) => {
       const path = (await Bun.$`getconf ${name}`.quiet()).text().trim();
@@ -1106,6 +1232,9 @@ const profileOf = async (
     `(deny file-read* (regex #"/(${SECRET_FILE_NAME})$"))`,
     ...[...keptPaths, wsPath].map(
       (path) => `(allow file-read* (subpath ${sbString(path)}))`
+    ),
+    ...lookupDirs.map(
+      (path) => `(allow file-read-metadata (literal ${sbString(path)}))`
     ),
     "(allow file-write*",
     ...[...writable, scratchPath].map(
@@ -1295,6 +1424,12 @@ const linuxExec = (
 caller_path=$PATH
 PATH=${SYSTEM_PATH}
 export PATH
+# While the agent replaces the anchor, wait, then run through the new one.
+gate=${shellQuote(gateOf(id))}
+if [ -e "$gate" ]; then
+  while [ -e "$gate" ] && kill -0 "$(cat "$gate" 2>/dev/null)" 2>/dev/null; do sleep 0.1; done
+  [ -e "$gate" ] || PATH=$caller_path exec "$0" "$@"
+fi
 anchor=${pid}
 if [ "$(readlink /proc/$anchor/ns/user 2>/dev/null)" != ${shellQuote(identity)} ]; then
   echo ${shellQuote(stoppedLine(id))} >&2
@@ -1373,6 +1508,38 @@ const makeDirs = async (id: string): Promise<void> => {
 };
 
 /** Starts the workspace's boundary under sessiond and writes its executor. */
+/** How many files {@link ownInodes} copies at once. */
+const OWN_INODE_BATCH = 64;
+
+/**
+ * Gives every file in a Linux clone an inode of its own, and answers how
+ * many it copied. bun installs by hardlinking from its cache, so a clone
+ * installed outside a boundary shares inodes with the host's bun cache and
+ * every host tree installed from it, and a write inside the clone would
+ * change a file the host runs. Inside a boundary the cache is another mount
+ * and bun copies, so after a clone's first start this finds nothing. Runs
+ * before the anchor starts, with nothing inside to write.
+ */
+const ownInodes = async (path: string): Promise<number> => {
+  const listed =
+    await Bun.$`/usr/bin/find ${path} -xdev -type f -links +1 -print0`
+      .quiet()
+      .nothrow();
+  const files = listed.stdout.toString().split("\0").filter(Boolean);
+  for (let at = 0; at < files.length; at += OWN_INODE_BATCH) {
+    // biome-ignore lint/performance/noAwaitInLoops: a bounded batch of copies at a time
+    await Promise.all(
+      files.slice(at, at + OWN_INODE_BATCH).map(async (file) => {
+        const copy = `${file}.cawco-own-inode`;
+        await copyFile(file, copy, constants.COPYFILE_FICLONE);
+        await chmod(copy, (await stat(file)).mode);
+        await rename(copy, file);
+      })
+    );
+  }
+  return files.length;
+};
+
 const start = async (
   client: SessiondClient,
   ref: WorkspaceRef
@@ -1388,6 +1555,14 @@ const start = async (
   // another process) is replaced, never joined.
   if (await holding(client, procId)) {
     await client.signal(procId, "SIGKILL");
+  }
+  if (linux) {
+    const split = await ownInodes(ref.path);
+    if (split > 0) {
+      console.info(
+        `[workspace] ${ref.id}: ${split} file(s) in its clone shared an inode with a file outside it, and each now has its own`
+      );
+    }
   }
   const darwin = linux ? undefined : await darwinForm(ref);
   const spec = darwin
@@ -1419,7 +1594,14 @@ const start = async (
         `the anchor under ${proc.pid} is not in a namespace of its own`
       );
     }
-    held = { exec, pid, scratch, identity, path: ref.path };
+    held = {
+      exec,
+      pid,
+      scratch,
+      identity,
+      path: ref.path,
+      form: specForm(spec),
+    };
   } else {
     held = {
       exec,
