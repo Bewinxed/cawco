@@ -5,20 +5,26 @@ import {
   mkdir,
   open,
   readFile,
+  rename,
   stat,
   unlink,
 } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, extname, join, resolve } from "node:path";
 import { type GeneratedImage, IMAGE_GENERATION_TIMEOUT_MS } from "@cawco/core";
-import { LineSplitter } from "@cawco/core/lines";
 import { z } from "zod";
 
+/** Native Codex's image model and edit-image cap (codex-rs/ext/image-generation/src/tool.rs). */
+const IMAGE_MODEL = "gpt-image-2";
+const MAX_EDIT_IMAGES = 5;
 const requestSchema = z
   .object({
     prompt: z.string().trim().min(1),
     output_path: z.string().min(1),
-    reference_images: z.array(z.string().min(1)).optional(),
+    reference_images: z
+      .array(z.string().min(1))
+      .max(MAX_EDIT_IMAGES)
+      .optional(),
     size: z.string().default("auto"),
     quality: z.enum(["auto", "low", "medium", "high"]).default("auto"),
   })
@@ -26,12 +32,24 @@ const requestSchema = z
 const oauthSchema = z.object({
   type: z.literal("oauth"),
   access: z.string().min(1),
+  refresh: z.string().min(1),
+  expires: z.number(),
   accountId: z.string().optional(),
 });
+type OAuth = z.infer<typeof oauthSchema>;
+const tokenSchema = z.object({
+  access_token: z.string().min(1),
+  refresh_token: z.string().min(1),
+  expires_in: z.number().optional(),
+});
+/** OpenCode's ChatGPT OAuth client (opencode 1.18 codex plugin), whose login this tool shares. */
+const OPENCODE_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
+/** Codex's image backend: CHATGPT_CODEX_BASE_URL + images/{generations,edits} (openai/codex codex-api). */
+const CODEX_IMAGES = "https://chatgpt.com/backend-api/codex/images";
 const SIZE = /^(\d+)x(\d+)$/;
-const SSE_LINES = /\r?\n/;
 const PNG = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 const activeOutputs = new Set<string>();
+let refreshing: Promise<OAuth> | undefined;
 
 async function requireNewOutput(output: string): Promise<void> {
   try {
@@ -107,105 +125,204 @@ function imageMime(bytes: Buffer): string {
   );
 }
 
-async function subscriptionAuth() {
+function authFile(): string {
   const dataRoot =
     process.env.XDG_DATA_HOME ?? join(homedir(), ".local", "share");
+  return join(dataRoot, "opencode", "auth.json");
+}
+
+async function readAuth(): Promise<{
+  file: Record<string, unknown>;
+  openai: OAuth;
+}> {
   let data: unknown;
   try {
-    data = JSON.parse(
-      await readFile(join(dataRoot, "opencode", "auth.json"), "utf8")
-    );
+    data = JSON.parse(await readFile(authFile(), "utf8"));
   } catch (cause) {
     throw new Error(
       "ChatGPT subscription login is unavailable on this machine. Run `opencode auth login` and choose OpenAI → ChatGPT. API keys are not accepted.",
       { cause }
     );
   }
-  const result = z.object({ openai: oauthSchema }).safeParse(data);
+  const result = z
+    .object({ openai: oauthSchema })
+    .passthrough()
+    .safeParse(data);
   if (!result.success) {
     throw new Error(
       "ChatGPT OAuth is required. Run `opencode auth login` and choose OpenAI → ChatGPT. This tool never uses an OpenAI API key."
     );
   }
-  return result.data.openai;
+  return { file: result.data, openai: result.data.openai };
 }
 
-function eventImage(event: string): string | undefined {
-  const data = event
-    .split(SSE_LINES)
-    .filter((line) => line.startsWith("data:"))
-    .map((line) => line.slice(5).trimStart())
-    .join("\n");
-  if (!data || data === "[DONE]") {
-    return;
+/**
+ * Renews an expired access token the way OpenCode's codex plugin does, and
+ * stores the rotated tokens back in OpenCode's auth.json so OpenCode keeps a
+ * valid refresh token.
+ */
+async function refreshAuth(): Promise<OAuth> {
+  // Re-read: OpenCode may have rotated the tokens since the caller looked.
+  const { file, openai } = await readAuth();
+  if (openai.expires > Date.now()) {
+    return openai;
   }
-  const value = JSON.parse(data);
-  if (value.type === "error" || value.type === "response.failed") {
+  const response = await fetch("https://auth.openai.com/oauth/token", {
+    method: "POST",
+    redirect: "error",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: openai.refresh,
+      client_id: OPENCODE_CLIENT_ID,
+    }).toString(),
+  });
+  if (!response.ok) {
     throw new Error(
-      "ChatGPT image generation failed. No image was saved; the tool did not switch providers or retry."
+      `ChatGPT login refresh returned HTTP ${response.status}: ${await errorDetail(response)} Run \`opencode auth login\` and choose OpenAI → ChatGPT.`
     );
   }
-  if (
-    value.type === "response.output_item.done" &&
-    value.item?.type === "image_generation_call" &&
-    typeof value.item.result === "string"
-  ) {
-    return value.item.result;
-  }
-}
-
-async function imageFromStream(
-  body: ReadableStream<Uint8Array>
-): Promise<Buffer> {
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  // The image arrives as one base64 event of megabytes: it is framed line by
-  // line, each chunk searched once, never the whole pending event again.
-  const lines = new LineSplitter();
-  let event: string[] = [];
-  /** Takes up `text`'s lines; the image of the first event they complete that carries one. */
-  const take = (text: string[]): string | undefined => {
-    for (const raw of text) {
-      const line = raw.endsWith("\r") ? raw.slice(0, -1) : raw;
-      if (line !== "") {
-        event.push(line);
-        continue;
-      }
-      // A blank line ends an event.
-      const image = eventImage(event.join("\n"));
-      event = [];
-      if (image) {
-        return image;
-      }
-    }
-    return undefined;
+  const tokens = tokenSchema.parse(await response.json());
+  const renewed: OAuth = {
+    type: "oauth",
+    access: tokens.access_token,
+    refresh: tokens.refresh_token,
+    expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
+    ...(openai.accountId ? { accountId: openai.accountId } : {}),
   };
+  const target = authFile();
+  const temporary = join(dirname(target), `.auth-${randomUUID()}.tmp`);
+  const handle = await open(temporary, "wx", 0o600);
   try {
-    for (;;) {
-      // biome-ignore lint/performance/noAwaitInLoops: SSE chunks must be decoded in wire order.
-      const { value, done } = await reader.read();
-      if (done) {
-        break;
-      }
-      const image = take(lines.push(decoder.decode(value, { stream: true })));
-      if (image) {
-        return Buffer.from(image, "base64");
-      }
-    }
-    // What the stream ended on: the decoder's last bytes, the unfinished
-    // line, and the blank line that closes an event the stream did not.
-    const image = take([...lines.push(decoder.decode()), lines.end(), ""]);
-    if (image) {
-      return Buffer.from(image, "base64");
-    }
-    throw new Error(
-      "ChatGPT returned no completed image. No file was saved. Do not automatically retry an uncertain generation."
+    await handle.writeFile(
+      JSON.stringify({ ...file, openai: renewed }, null, 2)
     );
+    await handle.sync();
   } finally {
-    // An already-errored stream can reject cancellation; preserve the original result/error.
-    await reader.cancel().catch(() => undefined);
-    reader.releaseLock();
+    await handle.close();
   }
+  await rename(temporary, target);
+  return renewed;
+}
+
+async function subscriptionAuth(): Promise<OAuth> {
+  const { openai } = await readAuth();
+  if (openai.expires > Date.now()) {
+    return openai;
+  }
+  refreshing ??= refreshAuth().finally(() => {
+    refreshing = undefined;
+  });
+  return await refreshing;
+}
+
+/** The token's ChatGPT compute residency, sent as OpenCode's codex plugin does. */
+function residency(access: string): string | undefined {
+  try {
+    const claims = JSON.parse(
+      Buffer.from(access.split(".")[1] ?? "", "base64url").toString()
+    );
+    const value =
+      claims?.["https://api.openai.com/auth"]?.chatgpt_compute_residency ??
+      claims?.chatgpt_compute_residency;
+    return typeof value === "string" && value !== "no_constraint"
+      ? value
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The server's own error text: `error.message` when JSON, else the body's start. */
+async function errorDetail(response: Response): Promise<string> {
+  const text = (await response.text()).trim();
+  try {
+    const body = JSON.parse(text);
+    const message = body?.error?.message ?? body?.detail;
+    if (typeof message === "string" && message) {
+      return message;
+    }
+  } catch {
+    // Not JSON: report the text as sent.
+  }
+  return text.slice(0, 1000) || "(empty body)";
+}
+
+/** Each reference as a data URL, checked before its bytes are read. */
+async function referenceImages(
+  cwd: string,
+  references: string[]
+): Promise<{ image_url: string }[]> {
+  const images: { image_url: string }[] = [];
+  let total = 0;
+  for (const reference of references) {
+    const referencePath = resolve(cwd, reference);
+    // biome-ignore lint/performance/noAwaitInLoops: check each file before allocating its image buffer.
+    const info = await stat(referencePath);
+    total += info.size;
+    if (
+      !info.isFile() ||
+      info.size > 50 * 1024 * 1024 ||
+      total > 100 * 1024 * 1024
+    ) {
+      throw new Error(
+        "References must be image files of at most 50 MiB each and 100 MiB combined."
+      );
+    }
+    const image = await readFile(referencePath);
+    images.push({
+      image_url: `data:${imageMime(image)};base64,${image.toString("base64")}`,
+    });
+  }
+  return images;
+}
+
+/**
+ * One request to native Codex's Images client (openai/codex codex-api
+ * endpoint/images.rs): generations for text alone, edits when images are given.
+ */
+async function requestImage(
+  auth: OAuth,
+  body: { images?: { image_url: string }[] } & Record<string, unknown>
+): Promise<Buffer> {
+  const region = residency(auth.access);
+  const response = await fetch(
+    `${CODEX_IMAGES}/${body.images ? "edits" : "generations"}`,
+    {
+      method: "POST",
+      redirect: "error",
+      signal: AbortSignal.timeout(IMAGE_GENERATION_TIMEOUT_MS),
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        Authorization: `Bearer ${auth.access}`,
+        ...(auth.accountId ? { "ChatGPT-Account-Id": auth.accountId } : {}),
+        ...(region ? { "x-openai-internal-codex-residency": region } : {}),
+        originator: "opencode",
+      },
+      body: JSON.stringify(body),
+    }
+  );
+  if (!response.ok) {
+    const action =
+      response.status === 401 || response.status === 403
+        ? "Refresh the machine's ChatGPT login with `opencode auth login`."
+        : "No image was saved and no retry was submitted.";
+    throw new Error(
+      `ChatGPT image generation returned HTTP ${response.status}: ${await errorDetail(response)} ${action} No API-key request was made.`
+    );
+  }
+  const result = z
+    .object({
+      data: z.array(z.object({ b64_json: z.string().min(1) })).min(1),
+    })
+    .safeParse(await response.json().catch(() => undefined));
+  if (!result.success) {
+    throw new Error(
+      "ChatGPT returned no image. No file was saved. Do not automatically retry an uncertain generation."
+    );
+  }
+  return Buffer.from(result.data.data[0].b64_json, "base64");
 }
 
 /** Credentials remain on the caller's machine; the hub receives only the saved path. */
@@ -222,31 +339,7 @@ export async function generateImage(
     );
   }
   const auth = await subscriptionAuth();
-  const content: (
-    | { type: "input_text"; text: string }
-    | { type: "input_image"; image_url: string }
-  )[] = [{ type: "input_text", text: args.prompt }];
-  let total = 0;
-  for (const reference of args.reference_images ?? []) {
-    const referencePath = resolve(cwd, reference);
-    // biome-ignore lint/performance/noAwaitInLoops: check each file before allocating its image buffer.
-    const info = await stat(referencePath);
-    total += info.size;
-    if (
-      !info.isFile() ||
-      info.size > 50 * 1024 * 1024 ||
-      total > 100 * 1024 * 1024
-    ) {
-      throw new Error(
-        "References must be image files of at most 50 MiB each and 100 MiB combined."
-      );
-    }
-    const image = await readFile(referencePath);
-    content.push({
-      type: "input_image",
-      image_url: `data:${imageMime(image)};base64,${image.toString("base64")}`,
-    });
-  }
+  const images = await referenceImages(cwd, args.reference_images ?? []);
   await mkdir(dirname(output), { recursive: true });
   await requireNewOutput(output);
   if (activeOutputs.has(output)) {
@@ -256,49 +349,13 @@ export async function generateImage(
   }
   activeOutputs.add(output);
   try {
-    const response = await fetch(
-      "https://chatgpt.com/backend-api/codex/responses",
-      {
-        method: "POST",
-        redirect: "error",
-        signal: AbortSignal.timeout(IMAGE_GENERATION_TIMEOUT_MS),
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "text/event-stream",
-          Authorization: `Bearer ${auth.access}`,
-          ...(auth.accountId ? { "ChatGPT-Account-Id": auth.accountId } : {}),
-          originator: "opencode",
-        },
-        body: JSON.stringify({
-          model: "gpt-5.5",
-          instructions:
-            "Generate the requested image by invoking image_generation exactly once. Do not respond with text only.",
-          input: [{ role: "user", content }],
-          tools: [
-            {
-              type: "image_generation",
-              output_format: "png",
-              quality: args.quality,
-              size: args.size,
-            },
-          ],
-          tool_choice: { type: "image_generation" },
-          stream: true,
-          store: false,
-        }),
-      }
-    );
-    if (!(response.ok && response.body)) {
-      await response.body?.cancel();
-      const action =
-        response.status === 401 || response.status === 403
-          ? "Refresh the machine's ChatGPT login with `opencode auth login`."
-          : "Check ChatGPT subscription availability before retrying.";
-      throw new Error(
-        `ChatGPT image generation returned HTTP ${response.status}. ${action} No API-key request was made.`
-      );
-    }
-    const bytes = await imageFromStream(response.body);
+    const bytes = await requestImage(auth, {
+      ...(images.length ? { images } : {}),
+      prompt: args.prompt,
+      model: IMAGE_MODEL,
+      quality: args.quality,
+      size: args.size,
+    });
     if (bytes.length < 24 || !bytes.subarray(0, 8).equals(PNG)) {
       throw new Error("ChatGPT returned an invalid PNG; no image was saved.");
     }

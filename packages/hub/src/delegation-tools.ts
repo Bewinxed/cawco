@@ -349,9 +349,10 @@ export function handoffTools(deps: HandoffDeps) {
           ),
         reference_images: z
           .array(z.string().min(1))
+          .max(5)
           .optional()
           .describe(
-            "Ordered local PNG/JPEG/WebP/GIF paths. Assign each a role in the prompt, e.g. 'Image 1: person to preserve; Image 2: clothing to apply.' For follow-up edits, attach the previous output and restate preservation constraints. Limit: 50 MiB per image, 100 MiB combined."
+            "Ordered local PNG/JPEG/WebP/GIF paths. Assign each a role in the prompt, e.g. 'Image 1: person to preserve; Image 2: clothing to apply.' For follow-up edits, attach the previous output and restate preservation constraints. Limit: 5 images, 50 MiB per image, 100 MiB combined."
           ),
         size: z
           .string()
