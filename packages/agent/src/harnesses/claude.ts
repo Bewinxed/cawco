@@ -1130,6 +1130,40 @@ const sessionMcpServers = (
 });
 
 /**
+ * The CLI flags a session launches with besides the SDK's own.
+ *
+ * Claude in Chrome is on by default for every cawco session. The CLI resolves
+ * it in `shouldEnableClaudeInChrome`, in this order: OAuth scope ->
+ * `--chrome`/`--no-chrome` -> `CLAUDE_CODE_ENABLE_CFC` -> `if
+ * (!isInteractive()) return false` -> `~/.claude.json`'s
+ * `claudeInChromeDefaultEnabled`. Every cawco session is non-interactive
+ * stream-json, so it always trips the interactive gate and never reads the
+ * config key — setting `claudeInChromeDefaultEnabled: true` cannot work here
+ * at any value. `--chrome` short-circuits above that gate. A spec that names
+ * `chrome` or `no-chrome` itself still wins.
+ *
+ * A project's Caw launches with `--no-chrome` and no caller's flags: on
+ * `--chrome` the browser's MCP server joins the launch's own
+ * (`le={...le,...w}`, which `--strict-mcp-config` keeps: CLI 2.1.296), and a
+ * caller's `mcp-config` would add servers of its own.
+ */
+const sessionExtraArgs = (
+  options: unknown,
+  lead: boolean
+): Record<string, string | null> => {
+  if (lead) {
+    return { "no-chrome": null };
+  }
+  const callerArgs =
+    (options as { extraArgs?: Record<string, string | null> } | undefined)
+      ?.extraArgs ?? {};
+  return {
+    ...("no-chrome" in callerArgs ? {} : { chrome: null }),
+    ...callerArgs,
+  };
+};
+
+/**
  * The SDK's command line, handed to sessiond with its MCP servers in a file
  * rather than inline ({@link mcpConfigOffArgv}): CawCo's carries the
  * session's bearer, and argv is every local user's to read. The file goes
@@ -1302,25 +1336,7 @@ class ClaudeSession implements HarnessSession {
     this.#input = input;
     const turn = new Turn();
     this.#turn = turn;
-
-    // Claude in Chrome is on by default for every cawco session.
-    //
-    // The CLI resolves it in `shouldEnableClaudeInChrome`, in this order:
-    // OAuth scope -> `--chrome`/`--no-chrome` -> `CLAUDE_CODE_ENABLE_CFC` ->
-    // `if (!isInteractive()) return false` -> `~/.claude.json`'s
-    // `claudeInChromeDefaultEnabled`. Every cawco session is non-interactive
-    // stream-json, so it always trips the interactive gate and never reads the
-    // config key — setting `claudeInChromeDefaultEnabled: true` cannot work
-    // here at any value. `--chrome` short-circuits above that gate.
-    //
-    // A spec that names `chrome` or `no-chrome` itself still wins.
-    const callerArgs =
-      (options as { extraArgs?: Record<string, string | null> } | undefined)
-        ?.extraArgs ?? {};
-    const extraArgs: Record<string, string | null> = {
-      ...("no-chrome" in callerArgs ? {} : { chrome: null }),
-      ...callerArgs,
-    };
+    const extraArgs = sessionExtraArgs(options, lead);
 
     const handle = query({
       prompt: input,
@@ -1333,8 +1349,10 @@ class ClaudeSession implements HarnessSession {
         mcpServers,
         // A lead's servers are these and no others: the CLI's
         // `--strict-mcp-config`, set after the caller's options so none of
-        // them turns it off.
-        ...(lead ? { strictMcpConfig: true } : {}),
+        // them turns it off. It keeps the servers of `agents` passed in
+        // ("and servers declared by explicitly-passed agent definitions in
+        // `agents`", sdk.d.ts 0.3.296), so a lead takes no caller's agents.
+        ...(lead ? { strictMcpConfig: true, agents: undefined } : {}),
         // What the CLI holds for later, said at each turn's end: the SDK's
         // `Stop` hook input lists the wake-ups the session has scheduled
         // ("Lets hooks distinguish 'session is done' from 'session is paused
