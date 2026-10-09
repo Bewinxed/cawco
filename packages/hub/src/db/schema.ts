@@ -1394,6 +1394,19 @@ export const accounts = sqliteTable("accounts", {
     .$defaultFn(() => new Date()),
 });
 
+/**
+ * Every account this hub removed (or joined away into another), and when.
+ * A connecting machine forgets its store of an account in this record and
+ * no other: a store whose id this hub never heard of (as after its database
+ * was wiped or restored from an older copy) is left alone.
+ */
+export const removedAccounts = sqliteTable("removed_accounts", {
+  id: text("id").primaryKey(),
+  removedAt: timestamp("removed_at").notNull(),
+  /** `removed` by a person, or `joined` into the account its sign-in already was. */
+  why: text("why").$type<"removed" | "joined">().notNull(),
+});
+
 /** Where each account is signed in, as each machine's agent last reported it. */
 export const accountSignins = sqliteTable(
   "account_signins",

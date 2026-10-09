@@ -5134,24 +5134,38 @@ export const createServer = (
 
   /**
    * Of the account stores a connecting machine named (`accountStores` on its
-   * register), the ids this hub has no account for: the machine forgets
-   * each ({@link RegisterAckPayload.unknownAccounts}). Undefined when it
-   * named none, as an agent that is not the machine's does.
+   * register), the ones this hub deliberately removed (or joined away): the
+   * machine forgets each ({@link RegisterAckPayload.unknownAccounts}). A
+   * store this hub has no account for and no record of removing is left
+   * alone: a hub whose database was wiped, or restored from an older copy,
+   * has never heard of accounts that are real, and their logins may exist
+   * nowhere else. Undefined when the machine named none, as an agent that is
+   * not the machine's does.
    */
-  const unknownAccountsOf = (payload: unknown): string[] | undefined => {
+  const unknownAccountsOf = (
+    machineId: string,
+    payload: unknown
+  ): string[] | undefined => {
     const stores = (payload as { accountStores?: unknown }).accountStores;
     if (!Array.isArray(stores)) {
       return undefined;
     }
-    const unknown = stores.filter(
+    const unheld = stores.filter(
       (id): id is string => typeof id === "string" && !db.accounts.get(id)
     );
-    if (unknown.length > 0) {
+    const removed = db.accounts.removedOf(unheld);
+    const strangers = unheld.filter((id) => !removed.includes(id));
+    if (removed.length > 0) {
       console.log(
-        `[accounts] a machine holds stores of ${unknown.length} account${unknown.length === 1 ? "" : "s"} this hub does not have (${unknown.join(", ")}); it forgets them`
+        `[accounts] ${machineName(machineId)} holds stores of ${removed.length} account${removed.length === 1 ? "" : "s"} this hub removed (${removed.join(", ")}); it forgets them`
       );
     }
-    return unknown;
+    if (strangers.length > 0) {
+      console.warn(
+        `[accounts] ${machineName(machineId)} holds stores of ${strangers.length} account${strangers.length === 1 ? "" : "s"} this hub has never heard of (${strangers.join(", ")}); left alone`
+      );
+    }
+    return removed;
   };
 
   /** The other account of `account`'s provider that already is `identity`. */
@@ -5245,7 +5259,7 @@ export const createServer = (
       // biome-ignore lint/performance/noAwaitInLoops: one machine at a time; an offline one forgets its empty store when it next connects (`unknownAccountsOf`)
       await forgetOn(account, signin.machineId);
     }
-    db.accounts.remove(account.id);
+    db.accounts.remove(account.id, "joined");
     joinedInto.set(account.id, existing.id);
     publishUsage();
     return joined;
@@ -14978,8 +14992,9 @@ export const createServer = (
         // Each machine signed in to it signs it out (Claude Code itself for a
         // Claude dir, the agent for any other) and drops the account's store
         // there. One that is offline does so when it next connects: it names
-        // its stores, and this hub answers the ones it no longer has
-        // (`unknownAccountsOf`). One that is online and fails says why.
+        // its stores, and this hub answers the ones it removed, by the record
+        // `remove` keeps (`unknownAccountsOf`). One that is online and fails
+        // says why.
         const failed: string[] = [];
         const later: string[] = [];
         for (const signin of signins) {
@@ -14997,7 +15012,7 @@ export const createServer = (
             `${failed.join(", ")} did not sign ${accountName(account)} out; try again.`
           );
         }
-        db.accounts.remove(account.id);
+        db.accounts.remove(account.id, "removed");
         publishUsage();
         // Machines offline now, which sign it out when they next connect.
         return { ok: true, later };
@@ -15998,7 +16013,7 @@ export const createServer = (
                 registerAck(
                   message,
                   streams.ingestedFor(reattaching),
-                  unknownAccountsOf(message.payload)
+                  unknownAccountsOf(message.machineId, message.payload)
                 )
               );
               for (const row of toEnd) {

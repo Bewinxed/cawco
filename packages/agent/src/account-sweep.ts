@@ -1,12 +1,13 @@
 /**
- * A machine never keeps a store for an account its hub doesn't have. At
- * every connect the machine agent names its account stores (every id under
- * `~/.cawco/accounts/`), the hub answers the ids it has no account for (one
- * removed while this machine was offline, or joined into another), and each
- * is forgotten here the way removing the account forgets it on a machine
- * that is online (`forgetOn`): Claude Code signs its dir out, pi-ai a
- * provider credential, and the store goes. This is the one path that clears
- * a removed account's store from a machine that missed its removal.
+ * A machine never keeps a store for an account its hub removed. At every
+ * connect the machine agent names its account stores (every id under
+ * `~/.cawco/accounts/`), the hub answers the ones it removed (while this
+ * machine was offline, or joined into another), and each is forgotten here
+ * the way removing the account forgets it on a machine that is online
+ * (`forgetOn`): Claude Code signs its dir out, pi-ai a provider credential,
+ * and the store goes. A store the hub has never heard of is never named:
+ * the hub keeps a record of what it removed. This is the one path that
+ * clears a removed account's store from a machine that missed its removal.
  */
 import { existsSync, readdirSync } from "node:fs";
 import {
@@ -30,7 +31,7 @@ export const accountStoreIds = (): string[] => {
 };
 
 /**
- * Forgets each store the hub named as no account of its own. Only ids this
+ * Forgets each store the hub named as an account it removed. Only ids this
  * machine itself listed are acted on; a store whose sign-out fails is left
  * for the next connect, and the others go on.
  */
@@ -47,11 +48,11 @@ export const forgetUnknownAccounts = async (ids: string[]): Promise<void> => {
       }
       await removeAccountRoot(id);
       console.log(
-        `[accounts] ${id}: the hub has no such account; signed out and removed here`
+        `[accounts] ${id}: the hub removed this account; signed out and removed here`
       );
     } catch (error) {
       console.warn(
-        `[accounts] ${id}: the hub has no such account, but it could not be signed out here: ${error instanceof Error ? error.message : String(error)}; tried again at the next connect`
+        `[accounts] ${id}: the hub removed this account, but it could not be signed out here: ${error instanceof Error ? error.message : String(error)}; tried again at the next connect`
       );
     }
   }

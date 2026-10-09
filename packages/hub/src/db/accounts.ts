@@ -16,7 +16,7 @@ import {
   type ModelInfo,
   type ProviderRouting,
 } from "@cawco/core";
-import { and, asc, eq, gt, gte, lte, max } from "drizzle-orm";
+import { and, asc, eq, gt, gte, inArray, lte, max } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import {
   accountBench,
@@ -27,6 +27,7 @@ import {
   accounts,
   loginMoves,
   movedFromSessions,
+  removedAccounts,
   usageLimitHistory,
 } from "./schema";
 
@@ -114,7 +115,14 @@ export interface AccountsDb {
     }
   ) => boolean;
   readonly readings: () => AccountReading[];
-  readonly remove: (id: string) => boolean;
+  /**
+   * Removes the account, kept in the record of removed accounts with when
+   * and why (`removed_accounts`): a machine that missed it forgets its store
+   * at its next connect.
+   */
+  readonly remove: (id: string, why: "removed" | "joined") => boolean;
+  /** Of `ids`, the ones this hub removed. */
+  readonly removedOf: (ids: readonly string[]) => string[];
   readonly removeMove: (
     move: Pick<LoginMove, "machineId" | "store" | "storeProvider">
   ) => void;
@@ -240,9 +248,28 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
       db.update(accounts).set({ identity }).where(eq(accounts.id, id)).run();
     },
     // Its sign-ins, readings, catalog and bench go with it (cascade).
-    remove: (id) =>
-      db.delete(accounts).where(eq(accounts.id, id)).returning().all().length >
-      0,
+    remove: (id, why) =>
+      db.transaction((tx) => {
+        const gone =
+          tx.delete(accounts).where(eq(accounts.id, id)).returning().all()
+            .length > 0;
+        if (gone) {
+          tx.insert(removedAccounts)
+            .values({ id, removedAt: new Date(), why })
+            .onConflictDoNothing()
+            .run();
+        }
+        return gone;
+      }),
+    removedOf: (ids) =>
+      ids.length === 0
+        ? []
+        : db
+            .select({ id: removedAccounts.id })
+            .from(removedAccounts)
+            .where(inArray(removedAccounts.id, [...ids]))
+            .all()
+            .map((row) => row.id),
     signins: () =>
       db
         .select()

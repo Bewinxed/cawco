@@ -214,10 +214,11 @@ export interface RegisterAckPayload {
   ok: true;
   /**
    * Of the account stores the machine named at register (`accountStores`),
-   * the ids this hub has no account for: a removed account (removed while
-   * the machine was offline, or joined into another). The machine signs each
-   * out with its harness's own logout and deletes it. An id the hub has is
-   * never named.
+   * the ids of accounts this hub removed: removed while the machine was
+   * offline, or joined into another. The machine signs each out with its
+   * harness's own logout and deletes it. An id the hub has is never named,
+   * and nor is one it has no record of removing (a hub whose database was
+   * wiped or restored from an older copy has never heard of real accounts).
    */
   unknownAccounts?: string[];
 }
