@@ -4,20 +4,31 @@
  * starts its boundary once, keeps the boundary running while the workspace's
  * sessions can be continued, and deletes it all on archive.
  */
+import { constants } from "node:fs";
 import {
   chmod,
   copyFile,
   mkdir,
+  open,
   readFile,
   rm,
   stat,
   writeFile,
 } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import type { WorkspaceCheckout, WorkspaceRef } from "@cawco/core";
+import type {
+  CommandResult,
+  WorkspaceCheckout,
+  WorkspaceCommit,
+  WorkspaceRef,
+} from "@cawco/core";
 import { WORKSPACE_GIT_TIMEOUT_MS } from "@cawco/core";
 import { isSecretFileName } from "@cawco/core/paths";
-import { repositoryConfigProblem, SAFE_GIT } from "@cawco/core/safe-git";
+import {
+  repositoryConfigProblem,
+  SAFE_GIT,
+  SAFE_GIT_SHELL,
+} from "@cawco/core/safe-git";
 import {
   closeBoundary,
   ensureBoundary,
@@ -157,6 +168,126 @@ const PACKAGE_TREES = new Set([
   "build",
   "target",
 ]);
+
+/** The largest bundle of a workspace's commits another machine takes. */
+const BUNDLE_LIMIT = 256 * 1024 * 1024;
+const COMMIT = /^[0-9a-f]{40}([0-9a-f]{24})?$/;
+
+/** Runs git commands in a workspace's clone, inside its boundary, as `safe-git.ts` says; throws git's words. */
+const insideGit =
+  (workspace: WorkspaceRef) =>
+  async (cmd: string): Promise<string> => {
+    const result: CommandResult = await runWorkflowCommand(
+      workspace.path,
+      `${SAFE_GIT_SHELL}${cmd}`,
+      WORKSPACE_GIT_TIMEOUT_MS,
+      workspace
+    );
+    if (result.exitCode !== 0) {
+      throw new Error(
+        `${cmd.split(" ").slice(0, 3).join(" ")} failed in workspace ${workspace.id}: ${(result.stderr || result.stdout).trim() || `exit ${result.exitCode}`}`
+      );
+    }
+    return result.stdout.trim();
+  };
+
+/** A bundle's name in a workspace's scratch dir, which is `$TMPDIR` inside its boundary. */
+const bundleName = (): string => `.cawco-bundle-${crypto.randomUUID()}`;
+
+/**
+ * {@link CONTROL_WORKSPACE_BUNDLE}: the clone's HEAD and a bundle of its
+ * commits past `origin/<base>`, made inside the boundary in its scratch dir
+ * and read from there here. The file is opened without following a link and
+ * taken only as a regular file of one link: the workspace writes that dir.
+ */
+export const workspaceBundle = async (
+  ref: unknown,
+  base: unknown
+): Promise<WorkspaceCommit> => {
+  const workspace = ref as WorkspaceRef;
+  const upstream = shellQuote(`origin/${String(base)}`);
+  const git = insideGit(workspace);
+  const head = await git("git rev-parse --verify 'HEAD^{commit}'");
+  const ahead = Number(
+    await git(`git rev-list --count HEAD --not ${upstream}`)
+  );
+  if (ahead === 0) {
+    return { head, bundle: null };
+  }
+  const { scratch } = await ensureBoundary(workspace);
+  const name = bundleName();
+  const path = join(scratch, name);
+  try {
+    await git(
+      `git bundle create --quiet "$TMPDIR"/${name} HEAD --not ${upstream}`
+    );
+    const file = await open(
+      path,
+      // biome-ignore lint/suspicious/noBitwiseOperators: open(2) takes its flags as one bit set
+      constants.O_RDONLY | constants.O_NOFOLLOW
+    );
+    try {
+      const info = await file.stat();
+      if (!info.isFile() || info.nlink !== 1) {
+        throw new Error(
+          `the bundle of workspace ${workspace.id} is not a file of its own`
+        );
+      }
+      if (info.size > BUNDLE_LIMIT) {
+        throw new Error(
+          `the commits of workspace ${workspace.id} past ${String(base)} come to ${(info.size / 1024 / 1024).toFixed(1)} MiB, past the ${BUNDLE_LIMIT / 1024 / 1024} MiB another machine takes`
+        );
+      }
+      return { head, bundle: (await file.readFile()).toString("base64") };
+    } finally {
+      await file.close();
+    }
+  } finally {
+    await rm(path, { force: true });
+  }
+};
+
+/**
+ * {@link CONTROL_WORKSPACE_AT}: a check workspace at another workspace's
+ * commit. The bundle is written into its scratch dir as a new file (never
+ * through one already there), then inside its boundary git fetches its base
+ * and the bundle and checks the commit out, detached, with every untracked
+ * file gone.
+ */
+export const workspaceAt = async (
+  ref: unknown,
+  base: unknown,
+  commit: unknown,
+  source: unknown
+): Promise<void> => {
+  const workspace = ref as WorkspaceRef;
+  const { head, bundle } = commit as WorkspaceCommit;
+  if (!COMMIT.test(head)) {
+    throw new Error(`"${head}" is not a commit id`);
+  }
+  const git = insideGit(workspace);
+  const { scratch } = await ensureBoundary(workspace);
+  const name = bundleName();
+  const path = join(scratch, name);
+  try {
+    await git(`git fetch --quiet origin ${shellQuote(String(base))}`);
+    if (bundle) {
+      await writeFile(path, Buffer.from(bundle, "base64"), {
+        flag: "wx",
+        mode: 0o600,
+      });
+      await git(`git fetch --quiet "$TMPDIR"/${name} HEAD`);
+    }
+    await git(
+      `git checkout --quiet --force --detach ${head} && git clean -ffdq`
+    );
+  } finally {
+    await rm(path, { force: true });
+  }
+  console.info(
+    `[workspace] ${workspace.id}: at ${head.slice(0, 9)}, the commit of workspace ${String(source)}, for the checks it names this machine for`
+  );
+};
 
 /** {@link CONTROL_WORKSPACE_BOUNDARY}: the boundary, running; answers its pid. */
 export const workspaceBoundary = async (ref: unknown): Promise<number> =>

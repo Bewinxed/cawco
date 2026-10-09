@@ -52,6 +52,8 @@ import {
   CONTROL_SET_PERMISSION_MODE,
   CONTROL_SLEEP,
   CONTROL_WORKSPACE_ARCHIVE,
+  CONTROL_WORKSPACE_AT,
+  CONTROL_WORKSPACE_BUNDLE,
   CONTROL_WORKSPACE_CREATE,
   FLEET_STATUS,
   FLEET_SYNC,
@@ -817,7 +819,11 @@ export class SessionSupervisor {
     } else if (control?.method === CONTROL_WORKSPACE_CREATE) {
       // A late create must finish before its discard; different workspace ids do not queue together.
       key = `workspace:${String(control.args?.[1])}`;
-    } else if (control?.method === CONTROL_WORKSPACE_ARCHIVE) {
+    } else if (
+      control?.method === CONTROL_WORKSPACE_ARCHIVE ||
+      control?.method === CONTROL_WORKSPACE_BUNDLE ||
+      control?.method === CONTROL_WORKSPACE_AT
+    ) {
       key = `workspace:${(control.args?.[0] as { id?: string } | undefined)?.id}`;
     } else if (control && !envelope.instanceId) {
       // Fleet convergence cannot serialize unrelated machine controls behind

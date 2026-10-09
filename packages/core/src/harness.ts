@@ -1254,6 +1254,31 @@ export const CONTROL_WORKSPACE_BOUNDARY = "workspaceBoundary";
 export const CONTROL_WORKSPACE_ARCHIVE = "workspaceArchive";
 
 /**
+ * A workspace's commit as another machine takes it: `head`, the clone's
+ * HEAD, and `bundle`, a git bundle (base64) of every commit HEAD has that
+ * `origin/<base>` does not, or null when it has none. Git runs inside the
+ * workspace's boundary. Args `[WorkspaceRef, base]`; answers
+ * {@link WorkspaceCommit}. Machine-scoped.
+ */
+export const CONTROL_WORKSPACE_BUNDLE = "workspaceBundle";
+
+/** What {@link CONTROL_WORKSPACE_BUNDLE} answers. */
+export interface WorkspaceCommit {
+  /** Base64 of a git bundle of the commits past `origin/<base>`; null when HEAD has none. */
+  bundle: string | null;
+  head: string;
+}
+
+/**
+ * A check workspace at another machine's commit: inside its boundary, it
+ * fetches `origin/<base>`, then the bundle, and checks out `head` detached,
+ * its tracked files as the commit has them and every untracked file gone
+ * (ignored ones, a dependency install or a build, stay). Args
+ * `[WorkspaceRef, base, WorkspaceCommit, sourceWorkspaceId]`. Machine-scoped.
+ */
+export const CONTROL_WORKSPACE_AT = "workspaceAt";
+
+/**
  * At an agent's start, its machine's active workspaces: each one still a git
  * worktree from before workspaces were clones becomes a shared clone in
  * place — same path, branch, HEAD, index and working files — and the

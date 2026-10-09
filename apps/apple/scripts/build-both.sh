@@ -17,13 +17,20 @@
 # Only processes this script starts are stopped: the Mac-side build runs in
 # its own process group, which ends (TERM, then KILL) when the SSH link drops.
 # Run on the Mac itself, the Mac side runs here through the same steps and
-# the same link, with no SSH, under ~/Library/Caches/cawco-apple: the one
-# place a CawCo workspace's boundary lets it write builds.
+# the same link, with no SSH, under $XDG_CACHE_HOME/cawco-apple: inside a
+# CawCo workspace that is the workspaces' own cache, where its boundary lets
+# it write builds; in the owner's shell, ~/Library/Caches.
+# The SSH hop is for a person's shell on Linux only. A CawCo workspace holds
+# no key and reaches no other machine: there the check names the Mac and the
+# hub runs this script in a workspace on it.
 set -euo pipefail
 
 if [[ $(uname -s) == Darwin ]]; then
   MAC=(bash --norc -c)
-  APPLE_ROOT=$HOME/Library/Caches/cawco-apple
+  APPLE_ROOT=${XDG_CACHE_HOME:-$HOME/Library/Caches}/cawco-apple
+elif [[ -n ${CAWCO_WORKSPACE:-} ]]; then
+  echo "build-both.sh builds on the Mac, and this CawCo workspace reaches no other machine. Name the Mac on the check instead, e.g. { machine: \"Omars-MacBook-Pro\", command: \"bash apps/apple/scripts/build-both.sh ios --compile-only\", expect: \"BUILT iOS\" }, or delegate the work to the Mac." >&2
+  exit 2
 else
   MAC=(ssh -F "$HOME/.ssh/config" -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3 mac)
   # Empty: the Mac side's own ~/build/cawco-apple.
@@ -138,9 +145,13 @@ for directory in "$ROOT"/* "$ROOT"/.[!.]* "$ROOT"/..?*; do
   for workspace in "$@"; do [[ $name != "$workspace" ]] || live=1; done
   [[ $live == 1 ]] || retire "$directory" "$ROOT/.locks/$name"
 done
-for directory in "$HOME"/build/cawco-apple-*; do
-  retire "$directory" "$ROOT/.locks/legacy-${directory##*/}"
-done
+# The legacy dirs are the SSH side's; a run on the Mac itself (a workspace's
+# boundary among them) leaves them alone.
+if [[ -z ${APPLE_ROOT:-} ]]; then
+  for directory in "$HOME"/build/cawco-apple-*; do
+    retire "$directory" "$ROOT/.locks/legacy-${directory##*/}"
+  done
+fi
 mkdir -p "$ROOT/$BUILD/apps/apple"
 echo READY
 # The same SSH process keeps the locks while the caller rsyncs; GO starts the

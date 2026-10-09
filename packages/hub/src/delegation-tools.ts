@@ -54,6 +54,12 @@ const checksParameter = () =>
           .describe(
             "A literal string the last 4,000 characters of stdout must contain."
           ),
+        machine: z
+          .string()
+          .optional()
+          .describe(
+            "Run it on this machine (hostname or machineId) at the item's last commit, like an Xcode build on the Mac. Workspaces never ssh."
+          ),
         timeoutSec: z
           .number()
           .int()
@@ -551,7 +557,7 @@ export function handoffTools(deps: HandoffDeps) {
         "Do NOT delegate: a single command or file read whose exact output you need; edits to files you are actively changing; anything the user asked to watch you do directly.\n\n" +
         "A delegate that is not a fork cannot see this conversation, so `prompt` must stand alone: intent, constraints, acceptance criteria, and what not to do. Keep the decisions yourself and ask for evidence and conclusions, not file dumps.\n\n" +
         "Prefer `type` over raw harness/model — it routes by what the work needs rather than a model string you must already know; use list_delegate_types for the live catalog. Prefer this over start_session when the work must report back, and over handoff for new standalone work (set cwd for another repository).\n\n" +
-        "Each call starts one work item in a workspace: a shared clone of the repository on its own branch, with a boundary every shell command of the delegate runs inside. It writes only its clone, its own scratch folder and the package caches. On macOS it can also write the user's temp and cache folders, ~/Library/Caches, ~/Library/Developer/Xcode/DerivedData, ~/.swiftpm and ~/Library/org.swift.swiftpm. Harness sign-in files and the proxy auth directory remain unreadable, and service-manager control remains denied. On Linux it sees only its own processes; on macOS it can see other processes but cannot signal them. The workspace is cut on this session's machine unless `machine` names another one of the fleet. Without `workspace` the item gets a new one; with `workspace` it is the follow-up there: a new item, under its own title, in the workspace's last session, which reads the brief as its next message on its cached transcript. " +
+        "Each call starts one work item in a workspace: a shared clone of the repository on its own branch, with a boundary every shell command of the delegate runs inside. It writes only its clone, its own scratch folder and the workspaces' own cache (package caches, DerivedData, SwiftPM); host caches are read-only. Credential stores, SSH keys and key agents stay unreadable and service-manager control denied: it reaches another machine only by a check's `machine` or a delegate there. On Linux it sees only its own processes; on macOS it can see other processes but cannot signal them. The workspace is cut on this session's machine unless `machine` names another one of the fleet. Without `workspace` the item gets a new one; with `workspace` it is the follow-up there: a new item, under its own title, in the workspace's last session, which reads the brief as its next message on its cached transcript. " +
         "A workspace runs one item at a time, and keeps its checkout while its session can be continued. To follow up on a delegate's work, handoff to that delegate, or delegate with its `workspace` to file the follow-up as its own item: either way it continues its own session and cached transcript. Prefer a fresh delegate unless the existing session is warm and holds context this task needs. A cold workspace session is refused once with the cost considerations, and a repeat of the call is delivered.\n\n" +
         "Set `fork: true` when the work needs what this conversation already holds: the delegate starts as a copy of this conversation (on this session's harness and model, so the prompt cache carries over) and reads the brief as its next turn, in a new workspace of its own." +
         delegateTypeLine(deps.delegateTypes),

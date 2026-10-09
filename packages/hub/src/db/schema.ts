@@ -832,6 +832,12 @@ export const workspaces = sqliteTable("workspaces", {
     .notNull()
     .default([]),
   createdByInstanceId: text("created_by_instance_id").notNull(),
+  /**
+   * The workspace whose checks this one runs, on a machine other than that
+   * one's: a check workspace, cut there the first time one of its items'
+   * checks names the machine, and archived with it. Null for a delegate's.
+   */
+  checksFor: text("checks_for"),
   createdAt: timestamp("created_at")
     .notNull()
     .$defaultFn(() => new Date()),
@@ -853,6 +859,12 @@ export type WorkItemState =
 export interface WorkItemCheck {
   command: string;
   expect?: string;
+  /**
+   * The machine it runs on, by machineId, when not the workspace's own: the
+   * hub runs it in that workspace's check workspace there, at the item's
+   * last commit (work-items.ts `runChecks`).
+   */
+  machine?: string;
   /** Two to six plain words. */
   name: string;
   /** Seconds before the command is killed; 600 when not given. */

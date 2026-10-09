@@ -15,6 +15,12 @@
 # The hub: $CAWCO_HUB, else the one this machine's cawco joined.
 set -euo pipefail
 HUB=${CAWCO_HUB:-http://127.0.0.1:3456}
+# Symbolicating reaches the Mac over ssh: a person's shell only, as a CawCo
+# workspace holds no SSH key and reaches no other machine.
+if [[ -n ${1:-} && $1 != --kind && -n ${CAWCO_WORKSPACE:-} ]]; then
+  echo "apple-diagnostics.sh symbolicates on the Mac over ssh, and this CawCo workspace reaches no other machine. Listing works here; symbolicate from the orchestrator's own shell on obelisk." >&2
+  exit 2
+fi
 SSH=(ssh -F "$HOME/.ssh/config" -o BatchMode=yes mac)
 
 case ${1:-} in

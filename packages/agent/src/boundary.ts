@@ -51,6 +51,13 @@
  * the workspace writes is a file the host runs. macOS: a Seatbelt deny on
  * each, the login keychain among them, and on every file named as secrets
  * are (`SECRET_FILE_NAME`) outside the workspace's own clone.
+ *
+ * No command holds a key or reaches a key agent: `~/.ssh` is a store, the
+ * executor drops every agent socket's variable (`AGENT_SOCKET_ENV`), Linux's
+ * private runtime dir and `/tmp` hold none of the host's sockets, and macOS
+ * refuses a connect to one inside a store or to launchd's ssh-agent. A
+ * workspace reaches another machine only through CawCo: a check that names
+ * one runs in a workspace there (the hub's `runChecks`).
  */
 import { createHash } from "node:crypto";
 import { accessSync, constants, existsSync } from "node:fs";
@@ -74,6 +81,7 @@ import type { WorkspaceRef } from "@cawco/core";
 import { WORKSPACE_BOUNDARY_START_TIMEOUT_MS } from "@cawco/core";
 import { binaryRoot } from "@cawco/core/binary-installation";
 import {
+  AGENT_SOCKET_ENV,
   credentialStores,
   SECRET_FILE_NAME,
   sessionIdentityDir,
@@ -1157,6 +1165,13 @@ while :; do
   done < "$fifo"
 done`;
 
+/**
+ * Where launchd keeps the ssh-agent socket it starts for a login
+ * (`SSH_AUTH_SOCK` on macOS: `/private/tmp/com.apple.launchd.<id>/Listeners`).
+ * A workspace writes nothing there, so every socket in it is the host's.
+ */
+const LAUNCHD_SOCKETS = "/private/tmp";
+
 const sbString = (path: string): string =>
   `"${path.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
 
@@ -1245,7 +1260,9 @@ const profileOf = async (
     // Its contents are the workspace's to write; the scratch dir itself stays.
     `(deny file-write-unlink (literal ${sbString(scratchPath)}))`,
     '(deny process-exec (literal "/bin/launchctl"))',
-    ...[...new Set(sockets)].map(
+    // Key agents: a socket inside a store (gpg-agent's in ~/.gnupg), and
+    // the ssh-agent socket launchd holds for every login.
+    ...[...new Set([...sockets, ...stores, LAUNCHD_SOCKETS])].map(
       (path) =>
         `(deny network-outbound (remote unix-socket (subpath ${sbString(path)})))`
     ),
@@ -1405,13 +1422,19 @@ const cacheAssignments = (): string[] =>
     ([name, value]) => `${name}=${shellQuote(value)}`
   );
 
+/** `env`'s words that drop every key agent's socket ({@link AGENT_SOCKET_ENV}) from a command's environment. */
+const agentUnsets = (): string =>
+  AGENT_SOCKET_ENV.map((name) => `-u ${name}`).join(" ");
+
 const stoppedLine = (id: string): string =>
   `cawco: workspace ${id}'s boundary is not running, so this command did not run. The workspace's next session starts it again.`;
 
 /**
  * The executor joins the anchor's namespaces and runs the command with the
  * workspaces' cache in its environment and the caller's PATH. The executor
- * finds its own tools on {@link SYSTEM_PATH}.
+ * finds its own tools on {@link SYSTEM_PATH}. `CAWCO_WORKSPACE` names the
+ * workspace to every command, as a macOS runner's marker does: a script
+ * tells by it that it runs inside one.
  */
 const linuxExec = (
   id: string,
@@ -1439,7 +1462,7 @@ cwd_out=
 if [ "$1" = --cwd-out ]; then cwd_out=$2; shift 2; fi
 ${ghToken(gh)}
 exec /usr/bin/nsenter --user --mount --pid --preserve-credentials --target "$anchor" --wdns="$PWD" \\
-  /usr/bin/env PATH="$caller_path" TMPDIR=/tmp ${cacheAssignments().join(" ")} \\
+  /usr/bin/env ${agentUnsets()} PATH="$caller_path" TMPDIR=/tmp CAWCO_WORKSPACE=${shellQuote(id)} ${cacheAssignments().join(" ")} \\
   /bin/bash -c 'eval "$1"; status=$?; [ -z "$2" ] || pwd -P > "$2"; exit $status' cawco "$1" "$cwd_out"
 `;
 
@@ -1475,6 +1498,7 @@ printf '%s' "$1" > "$req/cmd"
 pwd -P > "$req/cwd"
 {
   export -p
+  echo ${shellQuote(`unset ${AGENT_SOCKET_ENV.join(" ")}`)}
   echo "export TMPDIR=${scratch}"
 ${cacheAssignments()
   .map((assignment) => `  echo ${shellQuote(`export ${assignment}`)}`)

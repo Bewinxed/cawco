@@ -1,0 +1,1 @@
+ALTER TABLE `workspaces` ADD `checks_for` text;

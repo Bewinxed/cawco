@@ -46,14 +46,18 @@ import type {
   SpawnPayload,
   WorkItemSummary,
   WorkspaceCheckout,
+  WorkspaceCommit,
   WorkspaceRef,
 } from "@cawco/core";
 import {
   CONTROL_WORKSPACE_ARCHIVE,
+  CONTROL_WORKSPACE_AT,
   CONTROL_WORKSPACE_BOUNDARY,
+  CONTROL_WORKSPACE_BUNDLE,
   CONTROL_WORKSPACE_CREATE,
   CONTROL_WORKSPACE_MIGRATE,
   handoffMarker,
+  machineLabel,
   type WorkspaceLanding,
   withLandingLine,
   withWorkspaceLine,
@@ -694,6 +698,9 @@ export const checksProblem = (checks: WorkItemCheck[]): string | undefined => {
     if (!check.command.trim()) {
       return `check "${check.name}": command is blank.`;
     }
+    if (check.machine !== undefined && !check.machine.trim()) {
+      return `check "${check.name}": machine is blank; name one, or leave it out to run the check on the workspace's own machine.`;
+    }
     const limit = check.timeoutSec;
     if (
       limit !== undefined &&
@@ -843,6 +850,8 @@ interface CheckOutcome {
   exitCode: number;
   passed: boolean;
   result: CommandResult;
+  /** Where a check that names another machine ran: `on Omars-MacBook-Pro at 1a2b3c4d5`. */
+  where?: string;
 }
 
 /** A fenced block that no command output can close early. */
@@ -859,12 +868,13 @@ const checkLine = ({
   exitCode,
   durationMs,
   result,
+  where,
 }: CheckOutcome): string => {
   const missing =
     exitCode === 0 && !passed && check.expect !== undefined
       ? `, stdout does not contain ${JSON.stringify(check.expect)}`
       : "";
-  const line = `- ${check.name}: ${passed ? "pass" : "fail"} (exit ${exitCode}, ${(durationMs / 1000).toFixed(1)}s${missing})`;
+  const line = `- ${check.name}: ${passed ? "pass" : "fail"} (exit ${exitCode}, ${(durationMs / 1000).toFixed(1)}s${missing}${where ? `, ${where}` : ""})`;
   // A pass is its line: its output is the report's length, not its news.
   return !passed && result.stdout.trim()
     ? `${line}${fenced(result.stdout)}`
@@ -1497,6 +1507,23 @@ export const createWorkItems = ({
     }
   };
 
+  /** A workspace's clone and boundary gone on its machine, its places with them, and its row archived. */
+  const closeWorkspace = async (
+    workspace: WorkspaceRow
+  ): Promise<WorkspaceRow> => {
+    await call(workspace.machineId, CONTROL_WORKSPACE_ARCHIVE, [
+      refOf(workspace),
+    ]);
+    db.removeWorkspacePlaces(workspace.machineId, workspace.path);
+    placesChanged(workspace.machineId);
+    return (
+      db.updateWorkspace(workspace.id, {
+        state: "archived",
+        boundaryPid: null,
+      }) ?? workspace
+    );
+  };
+
   /**
    * The workspace a follow-up names, and the item before it there. Refused
    * while that workspace has a live item: one writer per checkout. Nothing
@@ -1520,6 +1547,12 @@ export const createWorkItems = ({
       throw new WorkItemRefusal(
         409,
         `Workspace ${workspace.id} is archived: its clone and boundary are gone. Delegate without workspace to start a new one.`
+      );
+    }
+    if (workspace.checksFor) {
+      throw new WorkItemRefusal(
+        409,
+        `Workspace ${workspace.id} runs the checks of workspace ${workspace.checksFor} on its machine and takes no work item. Delegate with workspace ${workspace.checksFor}, or without workspace to start a new one.`
       );
     }
     const items = db.workItemsIn(workspace.id);
@@ -1552,11 +1585,15 @@ export const createWorkItems = ({
     db.updateWorkspace(workspace.id, { boundaryPid });
   };
 
-  /** A new workspace: its machine cuts the clone and starts its boundary, then the hub files it. */
+  /**
+   * A new workspace: its machine cuts the clone and starts its boundary, then
+   * the hub files it. `checksFor` makes it the check workspace of that one.
+   */
   const openWorkspace = async (
-    parent: InstanceRow,
+    createdBy: string,
     cwd: string,
-    machineId: string
+    machineId: string,
+    checksFor?: string
   ): Promise<WorkspaceRow> => {
     const id = crypto.randomUUID();
     db.beginWorkspaceCreate(id, machineId);
@@ -1576,7 +1613,8 @@ export const createWorkItems = ({
         base: checkout.base,
         boundaryPid: checkout.boundaryPid,
         state: "active",
-        createdByInstanceId: parent.id,
+        createdByInstanceId: createdBy,
+        checksFor: checksFor ?? null,
       });
     } catch (error) {
       opening.delete(id);
@@ -1882,6 +1920,7 @@ export const createWorkItems = ({
     if (problem) {
       throw new WorkItemRefusal(400, problem);
     }
+    request.checks = machinesOf(request.checks);
     // An attempt spends the project's money: none starts past its cap.
     const capped = request.task ? pauses(request.task.projectId) : undefined;
     if (capped) {
@@ -1927,7 +1966,7 @@ export const createWorkItems = ({
       const machineId = targetMachine(request, parent);
       const settings = settingsOf(request, parent);
       const workspace = await openWorkspace(
-        parent,
+        parent.id,
         request.cwd ?? parent.cwd,
         machineId
       );
@@ -2223,6 +2262,44 @@ export const createWorkItems = ({
     checks.map((check) => check.name).join(", ");
 
   /**
+   * `checks`, each machine one names kept as its machineId: named by that id,
+   * its hostname, or the hostname as the fleet shows it, case aside. Refused
+   * when a name is no machine of the fleet's, or several. The machine need
+   * not be online now, only when the checks run.
+   */
+  const machinesOf = (checks: WorkItemCheck[]): WorkItemCheck[] => {
+    const agents = db.listAgents();
+    return checks.map((check) => {
+      if (check.machine === undefined) {
+        return check;
+      }
+      const needle = check.machine.trim().toLowerCase();
+      const matches = agents.filter(
+        (agent) =>
+          agent.machineId.toLowerCase() === needle ||
+          agent.hostname.toLowerCase() === needle ||
+          machineLabel(agent.hostname).toLowerCase() === needle
+      );
+      const [found] = matches;
+      if (matches.length === 1 && found) {
+        return { ...check, machine: found.machineId };
+      }
+      throw new WorkItemRefusal(
+        400,
+        matches.length > 1
+          ? `check "${check.name}": "${check.machine}" names ${matches.length} machines: ${matches.map((agent) => `${machineLabel(agent.hostname)} (${agent.machineId})`).join(", ")}. Name one by its machineId.`
+          : `check "${check.name}": no machine of the fleet is named "${check.machine}". The fleet: ${agents.map((agent) => machineLabel(agent.hostname)).join(", ") || "none"}.`
+      );
+    });
+  };
+
+  /** A machine as a check's line names it: its hostname as the fleet shows it. */
+  const machineName = (machineId: string): string => {
+    const agent = db.listAgents().find((each) => each.machineId === machineId);
+    return agent ? machineLabel(agent.hostname) : machineId;
+  };
+
+  /**
    * The session's live, checked item that `finish_item` may finish; the done
    * result, when it is done already; or the refusal.
    */
@@ -2261,29 +2338,167 @@ export const createWorkItems = ({
   };
 
   /**
-   * Runs `checks` in order in the workspace's worktree, on its machine, inside
-   * the workspace's boundary: a check reads what its delegate wrote, at the
-   * path the delegate wrote it (`/tmp` is the workspace's own there).
+   * The project's repository on a machine, which a check workspace there is
+   * cut from: its checkout there (the primary first), or the repository a
+   * workspace of the project there was cut from. Nothing when the hub knows
+   * neither.
+   */
+  const repositoryOn = (
+    projectId: string,
+    machineId: string
+  ): string | undefined => {
+    const places = (db.project(projectId)?.places ?? []).filter(
+      (place) => place.machineId === machineId
+    );
+    const checkout = places.find((place) => place.kind === "checkout");
+    if (checkout) {
+      return checkout.path;
+    }
+    const clones = new Set(
+      places
+        .filter((place) => place.kind === "workspace")
+        .map((place) => place.path)
+    );
+    return db
+      .activeWorkspacesOn(machineId)
+      .find((each) => clones.has(each.path))?.repoRoot;
+  };
+
+  /**
+   * The workspace that runs `workspace`'s checks on `machineId`: the one cut
+   * there before, or a new one cut from the project's repository on that
+   * machine. It stays between runs, so a build there is incremental; it is
+   * archived with `workspace`.
+   */
+  const checkWorkspace = async (
+    workspace: WorkspaceRow,
+    item: WorkItemRow,
+    machineId: string
+  ): Promise<WorkspaceRow> => {
+    const held = db
+      .checkWorkspacesOf(workspace.id)
+      .find((each) => each.machineId === machineId);
+    if (held) {
+      return held;
+    }
+    const { projectId } = item;
+    const repository = projectId
+      ? repositoryOn(projectId, machineId)
+      : undefined;
+    if (!(projectId && repository)) {
+      throw new Error(
+        projectId
+          ? `the hub knows no checkout of this project on ${machineName(machineId)}. Open a session in the repository there once, so it is one of the project's places, and call finish_item again.`
+          : "this item belongs to no project, so the hub knows no checkout of its repository there."
+      );
+    }
+    const opened = await openWorkspace(
+      item.instanceId,
+      repository,
+      machineId,
+      workspace.id
+    );
+    db.addPlace({ projectId, machineId, path: opened.path, kind: "workspace" });
+    placesChanged(machineId, projectId);
+    return opened;
+  };
+
+  /**
+   * Runs `checks` in order. A check runs in the workspace's worktree, on its
+   * machine, inside its boundary: it reads what its delegate wrote, at the
+   * path the delegate wrote it (`/tmp` is the workspace's own there). A check
+   * that names another machine runs there, in the workspace's check workspace
+   * ({@link checkWorkspace}), inside that one's boundary, at the workspace's
+   * last commit: the commits past its base go over as a git bundle, once per
+   * run and machine. Uncommitted work stays where it is.
    */
   const runChecks = async (
     workspace: WorkspaceRow,
+    item: WorkItemRow,
     checks: WorkItemCheck[]
   ): Promise<CheckOutcome[]> => {
+    let commit: Promise<WorkspaceCommit> | undefined;
+    const placed = new Map<
+      string,
+      Promise<{ at: WorkspaceRow; head: string }>
+    >();
+    /** The check workspace on `machineId`, at the workspace's commit. */
+    const elsewhere = (
+      machineId: string
+    ): Promise<{ at: WorkspaceRow; head: string }> => {
+      const ready =
+        placed.get(machineId) ??
+        (async () => {
+          const at = await checkWorkspace(workspace, item, machineId);
+          commit ??= call(workspace.machineId, CONTROL_WORKSPACE_BUNDLE, [
+            refOf(workspace),
+            workspace.base,
+          ]) as Promise<WorkspaceCommit>;
+          const made = await commit;
+          await call(machineId, CONTROL_WORKSPACE_AT, [
+            refOf(at),
+            workspace.base,
+            made,
+            workspace.id,
+          ]);
+          return { at, head: made.head };
+        })();
+      placed.set(machineId, ready);
+      return ready;
+    };
+    /** One check on another machine; a machine that cannot run it fails the check in its words. */
+    const runElsewhere = async (
+      machineId: string,
+      check: WorkItemCheck,
+      limit: number
+    ): Promise<{ complete: CommandResult; where: string }> => {
+      const on = `on ${machineName(machineId)}`;
+      try {
+        const { at, head } = await elsewhere(machineId);
+        return {
+          where: `${on} at ${head.slice(0, 9)}`,
+          complete: await command(
+            machineId,
+            at.path,
+            check.command,
+            limit,
+            refOf(at)
+          ),
+        };
+      } catch (error) {
+        return {
+          where: on,
+          complete: {
+            exitCode: 1,
+            stdout: "",
+            stderr: `The hub could not run this check ${on}: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        };
+      }
+    };
     const outcomes: CheckOutcome[] = [];
     for (const check of checks) {
       const started = Date.now();
-      // biome-ignore lint/performance/noAwaitInLoops: checks run in order, one at a time, in one worktree
-      const complete = await command(
-        workspace.machineId,
-        workspace.path,
-        check.command,
-        (check.timeoutSec ?? CHECK_TIMEOUT_SEC) * 1000,
-        refOf(workspace)
-      );
+      const limit = (check.timeoutSec ?? CHECK_TIMEOUT_SEC) * 1000;
+      const { complete, where } =
+        check.machine && check.machine !== workspace.machineId
+          ? // biome-ignore lint/performance/noAwaitInLoops: checks run in order, one at a time
+            await runElsewhere(check.machine, check, limit)
+          : {
+              complete: await command(
+                workspace.machineId,
+                workspace.path,
+                check.command,
+                limit,
+                refOf(workspace)
+              ),
+              where: undefined,
+            };
       const result = checkTails(complete);
       outcomes.push({
         check,
         result,
+        where,
         exitCode: result.exitCode,
         durationMs: Date.now() - started,
         passed:
@@ -2359,7 +2574,7 @@ export const createWorkItems = ({
     const outcome = await land<CheckOutcome[]>(base, {
       run: runIn(workspace),
       recheck: async () => {
-        const again = await runChecks(workspace, checks);
+        const again = await runChecks(workspace, item, checks);
         return again.some((check) => !check.passed) ? again : undefined;
       },
       queue: landings,
@@ -2689,7 +2904,7 @@ export const createWorkItems = ({
     const settled = { checkingSince: null, submission: null };
     finishing.add(item.id);
     try {
-      const outcomes = await runChecks(workspace, checks);
+      const outcomes = await runChecks(workspace, item, checks);
       const failing = outcomes.filter((outcome) => !outcome.passed);
       if (failing.length > 0) {
         update(item.id, settled);
@@ -3162,7 +3377,7 @@ export const createWorkItems = ({
       if (unchecked) {
         throw new WorkItemRefusal(400, unchecked);
       }
-      update(item.id, { checks });
+      update(item.id, { checks: machinesOf(checks) });
       tell(
         row,
         `Your work item's checks were replaced by your parent. Its checks: ${checkNames(checks)}.`
@@ -3250,17 +3465,9 @@ export const createWorkItems = ({
       await Promise.all(
         db.workItemsIn(workspace.id).map((item) => end(item.instanceId))
       );
-      await call(workspace.machineId, CONTROL_WORKSPACE_ARCHIVE, [
-        refOf(workspace),
-      ]);
-      db.removeWorkspacePlaces(workspace.machineId, workspace.path);
-      placesChanged(workspace.machineId);
-      return (
-        db.updateWorkspace(workspace.id, {
-          state: "archived",
-          boundaryPid: null,
-        }) ?? workspace
-      );
+      // Its check workspaces on other machines go first: none outlives it.
+      await Promise.all(db.checkWorkspacesOf(workspace.id).map(closeWorkspace));
+      return closeWorkspace(workspace);
     },
 
     /**

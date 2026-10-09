@@ -371,6 +371,8 @@ export interface DbShape {
   /** Dollars a project's Caw sessions have spent, from the usage their machines report. */
   /** Dollars the project's Caw turns have cost since `since` (ms epoch). */
   readonly cawSpentSince: (projectId: string, since: number) => number;
+  /** The check workspaces, still with their checkout, that run a workspace's checks on other machines. */
+  readonly checkWorkspacesOf: (workspaceId: string) => WorkspaceRow[];
   /** Claims one harness completion before any turn-end side effect. */
   readonly claimCompletedTurn: (
     instanceId: string,
@@ -5202,6 +5204,17 @@ const make = async (path: string): Promise<DbShape> => {
         .where(
           and(
             eq(workspaces.machineId, machineId),
+            eq(workspaces.state, "active")
+          )
+        )
+        .all(),
+    checkWorkspacesOf: (workspaceId) =>
+      db
+        .select()
+        .from(workspaces)
+        .where(
+          and(
+            eq(workspaces.checksFor, workspaceId),
             eq(workspaces.state, "active")
           )
         )

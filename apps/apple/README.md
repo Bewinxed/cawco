@@ -27,7 +27,14 @@ documents the command and its outputs. The icon catalog
 Build a hub client with `Client(hub:)` from CawCoCore: the hub's dates carry
 milliseconds.
 
-Build and launch both platforms on the Mac (`ssh mac`), from the repo root:
+Build and launch both platforms on the Mac, from the repo root. From a
+person's shell on obelisk the script reaches the Mac over `ssh mac`; on the
+Mac it runs there. A CawCo workspace holds no SSH key and reaches no other
+machine, so from one the script refuses: an item's check names the Mac
+instead (`delegate`'s `checks[].machine`, e.g. `{ machine: "Omars-MacBook-Pro",
+command: "bash apps/apple/scripts/build-both.sh ios --compile-only", expect:
+"BUILT iOS" }`), and the hub runs it in a workspace on the Mac at the item's
+commit; or the work is delegated to the Mac.
 
 ```sh
 bash apps/apple/scripts/build-both.sh         # BUILT/LAUNCHED iOS, then BUILT/LAUNCHED macOS

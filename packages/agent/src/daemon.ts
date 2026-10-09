@@ -30,7 +30,9 @@ import {
   CONTROL_SEARCH_TRANSCRIPTS,
   CONTROL_SET_PROVIDER_KEY,
   CONTROL_WORKSPACE_ARCHIVE,
+  CONTROL_WORKSPACE_AT,
   CONTROL_WORKSPACE_BOUNDARY,
+  CONTROL_WORKSPACE_BUNDLE,
   CONTROL_WORKSPACE_CREATE,
   CONTROL_WORKSPACE_MIGRATE,
   joinProviders,
@@ -104,7 +106,9 @@ import { abandonCommands, runWorkflowCommand } from "./workflow-command";
 import {
   archiveWorkspace,
   createWorkspace,
+  workspaceAt,
   workspaceBoundary,
+  workspaceBundle,
 } from "./workspace";
 
 const DEFAULT_HUB_URL = `ws://localhost:${CAWCO_HUB_PORT}/ws`;
@@ -1715,6 +1719,18 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
     supervisor.registerDaemonFunction(
       CONTROL_WORKSPACE_ARCHIVE,
       archiveWorkspace
+    );
+    // A check that names another machine: the commit leaves here, and arrives there.
+    supervisor.registerDaemonFunction(
+      CONTROL_WORKSPACE_BUNDLE,
+      workspaceBundle
+    );
+    supervisor.registerDaemonFunction(
+      CONTROL_WORKSPACE_AT,
+      (ref, base, at, from) =>
+        fenced()
+          ? Promise.reject(new Error(AGENT_RESTARTING))
+          : workspaceAt(ref, base, at, from)
     );
     supervisor.registerDaemonFunction(
       CONTROL_WORKSPACE_MIGRATE,

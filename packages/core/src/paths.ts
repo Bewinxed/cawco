@@ -365,6 +365,18 @@ export const isSecretFileName = (name: string): boolean =>
   new RegExp(`^(${SECRET_FILE_NAME})$`).test(name);
 
 /**
+ * The variables that name a key agent's socket: ssh-agent's, GPG's, the
+ * desktop keyring's. Every workspace command runs without them, so nothing
+ * inside signs or logs in with the host's keys, wherever the socket lies.
+ */
+export const AGENT_SOCKET_ENV = [
+  "SSH_AUTH_SOCK",
+  "SSH_AGENT_PID",
+  "GPG_AGENT_INFO",
+  "GNOME_KEYRING_CONTROL",
+] as const;
+
+/**
  * Every place on this machine that holds a credential CawCo, a harness or
  * another tool keeps. Every workspace boundary hides each one from every
  * command it runs (packages/agent/src/boundary.ts): a directory with all that
@@ -419,6 +431,9 @@ export const credentialStores = (): string[] => {
     join(home, ".cloudflared"),
     join(home, ".wrangler"),
     join(xdgConfigHome(), ".wrangler"),
+    // SSH: every private key, and the agent sockets a tool may leave there.
+    // A workspace reaches another machine only through CawCo, never by ssh.
+    join(home, ".ssh"),
     join(home, ".gnupg"),
     join(home, ".password-store"),
     // Shell histories, where a pasted token stays.

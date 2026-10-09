@@ -17785,12 +17785,19 @@
           },
           "createdByInstanceId": {
             "type": "string"
+          },
+          "checksFor": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         },
         "required": [
           "base",
           "boundaryPid",
           "branch",
+          "checksFor",
           "createdAt",
           "createdByInstanceId",
           "id",

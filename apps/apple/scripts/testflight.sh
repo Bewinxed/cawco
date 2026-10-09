@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
 # Run from the repository on obelisk; all credentials stay on the Mac.
 # Every upload carries end-user notes (docs/releases/README.md): --notes <file>.
+# A person's shell only: a CawCo workspace holds no SSH key and reaches no
+# other machine.
 set -euo pipefail
+if [[ -n ${CAWCO_WORKSPACE:-} ]]; then
+  echo "testflight.sh reaches the Mac over ssh, and this CawCo workspace reaches no other machine. Run it from the orchestrator's own shell on obelisk; a build check names the Mac on the item's check instead." >&2
+  exit 2
+fi
 cd "$(git rev-parse --show-toplevel)"
 SSH=(ssh -F "$HOME/.ssh/config" -o BatchMode=yes mac)
 USAGE='usage: testflight.sh --notes <file> | --status | --attach <build> --notes <file> | --set-notes <build> <file>'

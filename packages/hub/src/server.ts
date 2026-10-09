@@ -138,7 +138,9 @@ import {
   CONTROL_SET_PROVIDER_KEY,
   CONTROL_SLEEP,
   CONTROL_WORKSPACE_ARCHIVE,
+  CONTROL_WORKSPACE_AT,
   CONTROL_WORKSPACE_BOUNDARY,
+  CONTROL_WORKSPACE_BUNDLE,
   CONTROL_WORKSPACE_CREATE,
   CUSTODY_HELD,
   contextFitRefusal,
@@ -692,6 +694,7 @@ const checksSchema = t.Array(
     name: t.String(),
     command: t.String(),
     expect: t.Optional(t.String()),
+    machine: t.Optional(t.String()),
     timeoutSec: t.Optional(t.Number()),
   }),
   { minItems: 1 }
@@ -11184,7 +11187,9 @@ export const createServer = (
     call: async (machineId, method, args) => {
       const timeout =
         method === CONTROL_WORKSPACE_CREATE ||
-        method === CONTROL_WORKSPACE_ARCHIVE
+        method === CONTROL_WORKSPACE_ARCHIVE ||
+        method === CONTROL_WORKSPACE_BUNDLE ||
+        method === CONTROL_WORKSPACE_AT
           ? WORKSPACE_CREATE_TIMEOUT_MS
           : WORKSPACE_TIMEOUT_MS;
       const answer = await callAgent(machineId, method, args, timeout);
