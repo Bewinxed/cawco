@@ -51,14 +51,34 @@ enum TopBar {
         lead.setCustomSpacing(0, after: inset)
         let leading = UIBarButtonItem(customView: lead)
         leading.title = crumb.text
-        let trailing = UIBarButtonItem(customView: cluster)
-        trailing.title = "Fleet controls"
-        for bar in [leading, trailing] { unshared(bar) }
+        unshared(leading)
+        // A phone's cluster is no item: it stands on the bar itself (`pin`).
+        var trailing: [UIBarButtonItem] = []
+        if !cluster.compact {
+            let item = UIBarButtonItem(customView: cluster)
+            item.title = "Fleet controls"
+            unshared(item)
+            trailing = [item]
+        }
         item.title = nil
         item.titleView = UIView()
         item.largeTitleDisplayMode = .never
-        NavigationItems.configure(item, leading: [leading], prominent: [trailing])
+        NavigationItems.configure(item, leading: [leading], prominent: trailing)
         item.hidesBackButton = true
+    }
+
+    /// A phone's cluster on the bar itself, over every page's items: its
+    /// trailing edge on the bar's safe trailing edge, so Caw's glass is flush
+    /// with the screen's (Shell.svelte, the phone's one row). A bar item
+    /// stands inside the system's margin and could not reach it.
+    static func pin(_ cluster: TopBarCluster, to bar: UINavigationBar) {
+        // On the bar's middle, the line its sidebar toggle item stands on.
+        cluster.cawLine = Size.cTopBarH / 2
+        bar.addSubview(cluster)
+        NSLayoutConstraint.activate([
+            cluster.trailingAnchor.constraint(equalTo: bar.safeAreaLayoutGuide.trailingAnchor),
+            cluster.bottomAnchor.constraint(equalTo: bar.bottomAnchor),
+        ])
     }
 
     /// No Liquid Glass capsule behind a house control (iOS 26's shared background).
@@ -415,6 +435,14 @@ final class TopBarCluster: UIView {
         didSet { arrange() }
     }
 
+    /// A phone's Caw: his centre's height over the floor of the row he
+    /// stands in, on the line its sidebar toggle stands on. In the session
+    /// row, the tabs' centre line (the toggle is placed on it); on a bar
+    /// (`TopBar.pin`), the bar's middle, where its toggle item stands.
+    var cawLine = Size.cTabRowH / 2 {
+        didSet { arrange() }
+    }
+
     /// Caw's head as this bar shows it.
     var caw: NeedsCawButton { compact ? phoneCaw : groupCaw }
 
@@ -484,14 +512,13 @@ final class TopBarCluster: UIView {
     private func arrange() {
         for view in stack.arrangedSubviews { stack.removeArrangedSubview(view); view.removeFromSuperview() }
         stack.addArrangedSubview(compact ? phoneCaw : group)
-        // A phone's Caw is centred on the tabs' centre line, half the tab
-        // row up from the bar's floor, which leaves the bar's inset between
-        // his glass and the transcript.
+        // A phone's Caw is centred on his row's toggle line (`cawLine`),
+        // which leaves his glass clear of what is under the row.
         stack.alignment = compact ? .bottom : .center
         stack.isLayoutMarginsRelativeArrangement = compact
         stack.directionalLayoutMargins = NSDirectionalEdgeInsets(
             top: 0, leading: 0,
-            bottom: compact ? Size.cTabRowH / 2 - NeedsCawButton.standingSide / 2 : 0,
+            bottom: compact ? cawLine - NeedsCawButton.standingSide / 2 : 0,
             trailing: 0
         )
     }
@@ -499,18 +526,37 @@ final class TopBarCluster: UIView {
     private var lastWidth = 0.0
     private var end: NSLayoutConstraint!
 
+    /// A phone's touch area for Caw: 44pt at the screen's edge, the bar's
+    /// whole height, so none of it falls off the screen or under the
+    /// transcript (DESIGN.md, The 44 Touch Rule).
+    private var cawTouch: CGRect {
+        CGRect(x: bounds.maxX - 44, y: bounds.minY, width: 44, height: bounds.height)
+    }
+
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        (compact && cawTouch.contains(point)) || super.point(inside: point, with: event)
+    }
+
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        guard compact, !isHidden, alpha > 0.01, isUserInteractionEnabled, cawTouch.contains(point) else {
+            return super.hitTest(point, with: event)
+        }
+        return phoneCaw
+    }
+
     override func layoutSubviews() {
         super.layoutSubviews()
-        // Out of a bar (the phone's session row) its place is its own end.
-        guard let bar = hostingBar else {
-            if end.constant != 0 { end.constant = 0 }
-            return
+        // A phone's glass is flush with its place's end (`TopBar.pin`, the
+        // session row), as is anything out of a bar; a desk's group stands
+        // `space6` inside the bar's safe trailing edge.
+        let bar = hostingBar
+        var next = 0.0
+        if !compact, let bar {
+            let own = bar.bounds.width - bar.safeAreaInsets.right - convert(bounds, to: bar).maxX
+            next = -max(0, Space.space6 - own)
         }
-        let own = bar.bounds.width - bar.safeAreaInsets.right - convert(bounds, to: bar).maxX
-        // A phone's glass stands `cBarPhoneEdge` in, as the web's; a desk's group at `space6`.
-        let next = -max(0, (compact ? Size.cBarPhoneEdge : Space.space6) - own)
         if abs(end.constant - next) > 0.25 { end.constant = next }
-        if abs(bounds.width - lastWidth) > 0.25 {
+        if bar != nil, abs(bounds.width - lastWidth) > 0.25 {
             lastWidth = bounds.width
             onResize()
         }

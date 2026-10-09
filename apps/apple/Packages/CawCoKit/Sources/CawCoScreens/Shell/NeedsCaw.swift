@@ -18,25 +18,27 @@ import UIKit
 /// or a press; with less motion only the arcs change. A tap or a drag down
 /// from him moves the drawer (`NeedsDrawer`), which the shell owns.
 final class NeedsCawButton: UIControl {
-    /// His head's side, pt.
+    /// His head's side in the wide bar's group, pt.
     static let head = 22.0
     /// His side in the wide bar's group: the group's height.
     static let side = 36.0
-    /// His own glass's side on a phone: an item's box (`cBarItem`), centred
-    /// on the tabs' centre line, which leaves the bar's inset between its
-    /// foot and the transcript.
-    static let standingSide = Size.cBarItem
+    /// His own glass's side on a phone (`cBarCawGlassPhone`), centred on the
+    /// tabs' centre line, which leaves it clear of the transcript.
+    static let standingSide = Size.cBarCawGlassPhone
 
     var onTap: () -> Void = {}
     var onPan: (UIPanGestureRecognizer) -> Void = { _ in }
 
-    /// On a phone his glass is his own, round at its leading corners and
-    /// square at its trailing two (owner: "it's top right doesn't need to be
-    /// rounded"), and the arcs run along that outline instead of his circle.
+    /// On a phone his glass is his own, a tab tucked into the screen's
+    /// trailing edge: square on that side, round on the other (owner: "it's
+    /// top right doesn't need to be rounded"), his head filling it to the
+    /// group's 4pt margin (`cBarCawHeadPhone`, owner: "caw itself can be
+    /// bigger"), and the arcs run along that outline instead of his circle.
     let standing: Bool
     private var glassSide: Double { standing ? Self.standingSide : Self.side }
+    private let headSide: Double
     private let capsule: GlassCapsule?
-    private let face = CawBeat(side: NeedsCawButton.head)
+    private let face: CawBeat
     /// What waits, on his circle's rim (NeedsCaw.svelte, The count): an arc
     /// for each, `arc`° long with `arcGap`° between, from 12 o'clock
     /// clockwise, in the attention ink; past `arcs` the count refills the
@@ -55,6 +57,8 @@ final class NeedsCawButton: UIControl {
 
     init(standing: Bool) {
         self.standing = standing
+        headSide = standing ? Size.cBarCawHeadPhone : Self.head
+        face = CawBeat(side: headSide)
         capsule = standing ? GlassCapsule() : nil
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
@@ -85,10 +89,10 @@ final class NeedsCawButton: UIControl {
             widthAnchor.constraint(equalToConstant: glassSide),
             heightAnchor.constraint(equalToConstant: glassSide),
             // His head's optical centre at the centre, not his box (`CawMark.headCentre`).
-            face.centerXAnchor.constraint(equalTo: centerXAnchor, constant: (0.5 - CawMark.headCentre.x) * Self.head),
-            face.centerYAnchor.constraint(equalTo: centerYAnchor, constant: (0.5 - CawMark.headCentre.y) * Self.head),
-            face.widthAnchor.constraint(equalToConstant: Self.head),
-            face.heightAnchor.constraint(equalToConstant: Self.head),
+            face.centerXAnchor.constraint(equalTo: centerXAnchor, constant: (0.5 - CawMark.headCentre.x) * headSide),
+            face.centerYAnchor.constraint(equalTo: centerYAnchor, constant: (0.5 - CawMark.headCentre.y) * headSide),
+            face.widthAnchor.constraint(equalToConstant: headSide),
+            face.heightAnchor.constraint(equalToConstant: headSide),
         ])
         inkRing()
         isAccessibilityElement = true
@@ -105,11 +109,6 @@ final class NeedsCawButton: UIControl {
     @available(*, unavailable)
     required init?(coder _: NSCoder) {
         fatalError("NeedsCawButton is built in code")
-    }
-
-    /// A finger's 44pt round his glass, whatever its drawn size (DESIGN.md, The 44 Touch Rule).
-    override func point(inside point: CGPoint, with _: UIEvent?) -> Bool {
-        bounds.insetBy(dx: min(0, (bounds.width - 44) / 2), dy: min(0, (bounds.height - 44) / 2)).contains(point)
     }
 
     @objc private func tapped() { onTap() }

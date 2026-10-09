@@ -6,14 +6,18 @@ import UIKit
 /// the system's Liquid Glass, regular, interactive; before it, the house's
 /// panel material, as the composer wears it: an ultra-thin blur under the
 /// raised surface at 72%, with a hairline. Under Reduce Transparency or
-/// Increase Contrast it is the solid raised surface with the control's
-/// border (HIG: respect those settings), and it follows them live. A capsule
+/// Increase Contrast it is the solid raised surface with an edge that holds
+/// 3:1 (`borderContrast`; HIG: respect those settings), and it follows them
+/// live. A capsule
 /// whatever its size; what stands on it is the caller's, added to `content`.
 public final class GlassCapsule: UIView {
     /// Where the capsule's controls go: over the glass, never inside its effect.
     public let content = UIView()
     private let glass: UIVisualEffectView
     private let tint = UIView()
+    /// The edge of a glass tucked into the screen's edge (`squaredTrailing`):
+    /// open on the trailing side, which meets the screen and draws nothing.
+    private let tuckedEdge = CAShapeLayer()
     private let usesSystemGlass: Bool
 
     public init() {
@@ -44,6 +48,10 @@ public final class GlassCapsule: UIView {
         glass.clipsToBounds = true
         tint.clipsToBounds = true
         layer.borderWidth = 1
+        tuckedEdge.fillColor = nil
+        tuckedEdge.lineWidth = 1
+        tuckedEdge.isHidden = true
+        layer.addSublayer(tuckedEdge)
         boxShadow = Shadow.shadowTile
         for name in [UIAccessibility.reduceTransparencyStatusDidChangeNotification, UIAccessibility.darkerSystemColorsStatusDidChangeNotification] {
             NotificationCenter.default.addObserver(self, selector: #selector(settingsChanged), name: name, object: nil)
@@ -71,14 +79,22 @@ public final class GlassCapsule: UIView {
         glass.isHidden = solid
         // The system glass is its own surface; the house blur takes the panel tint over it.
         tint.backgroundColor = solid ? Palette.surfaceRaised : (usesSystemGlass ? .clear : Palette.materialPanel)
-        let edge = solid ? Palette.borderControl : Palette.borderHairline
-        layer.borderColor = edge.resolvedColor(with: traits).cgColor
+        // Solid, its edge holds 3:1 against the bar and the surface it encloses.
+        let edge = (solid ? Palette.borderContrast : Palette.borderHairline).resolvedColor(with: traits).cgColor
+        layer.borderColor = edge
+        tuckedEdge.strokeColor = edge
     }
 
-    /// Round at the leading corners only, square at the trailing two: Caw's
-    /// own glass on the phone bar (Shell.svelte, the phone's one row).
+    /// Round at the leading corners only, square at the trailing two, and no
+    /// edge on the trailing side: Caw's own glass on the phone bar, tucked
+    /// into the screen's edge (Shell.svelte, the phone's one row).
     public var squaredTrailing = false {
-        didSet { if squaredTrailing != oldValue { setNeedsLayout() } }
+        didSet {
+            guard squaredTrailing != oldValue else { return }
+            layer.borderWidth = squaredTrailing ? 0 : 1
+            tuckedEdge.isHidden = !squaredTrailing
+            setNeedsLayout()
+        }
     }
 
     override public func layoutSubviews() {
@@ -99,6 +115,19 @@ public final class GlassCapsule: UIView {
         } else {
             glass.layer.cornerRadius = radius
             glass.layer.maskedCorners = corners
+        }
+        if squaredTrailing {
+            // From the top of the trailing side, round the leading half
+            // circle, to the bottom of the trailing side, half a point in.
+            let inset = bounds.insetBy(dx: 0.5, dy: 0.5)
+            let r = inset.height / 2
+            let edge = UIBezierPath()
+            edge.move(to: CGPoint(x: bounds.maxX, y: inset.minY))
+            edge.addLine(to: CGPoint(x: inset.minX + r, y: inset.minY))
+            edge.addArc(withCenter: CGPoint(x: inset.minX + r, y: inset.midY), radius: r, startAngle: 3 * .pi / 2, endAngle: .pi / 2, clockwise: false)
+            edge.addLine(to: CGPoint(x: bounds.maxX, y: inset.maxY))
+            tuckedEdge.frame = bounds
+            tuckedEdge.path = edge.cgPath
         }
     }
 }

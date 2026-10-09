@@ -147,6 +147,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         needsDrawer.onOpenChange = { [weak self] _ in self?.refreshBars() }
         TopBar.install(on: detail.navigationItem, crumb: mainCrumb, cluster: mainCluster, burger: railToggle)
         TopBar.install(on: board.navigationItem, crumb: compactCrumb, cluster: compactCluster, burger: burger, showsCrumb: false)
+        TopBar.pin(compactCluster, to: compactNav.navigationBar)
         placeSessionRow()
         // One group on a wide screen: its strip is the bar's, in the crumb's place.
         workspaceController.onHost = { [weak self] strip in self?.barTabs.host(strip) }
@@ -194,14 +195,14 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     /// toggle glyph's leading edge `cBarPhoneEdge` from the screen's, its
     /// centre on the tabs' centre line (they stand on the row's floor), in a
     /// 44pt touch area reaching into the screen's edge; Caw's glass on the
-    /// same centre line `cBarPhoneEdge` from the other edge (TopBarCluster).
+    /// same centre line, flush with the other edge (TopBarCluster).
     private func placeSessionRow() {
         let row = workspaceController.barOverlay
         for part in [sessionBurger, sessionCluster] as [UIView] { row.addSubview(part) }
         NSLayoutConstraint.activate([
             sessionBurger.centerXAnchor.constraint(equalTo: row.leadingAnchor, constant: Size.cBarPhoneEdge + Size.cBarToggleGlyph / 2),
             sessionBurger.centerYAnchor.constraint(equalTo: row.bottomAnchor, constant: -Size.cTabRowH / 2),
-            sessionCluster.trailingAnchor.constraint(equalTo: row.trailingAnchor, constant: -Size.cBarPhoneEdge),
+            sessionCluster.trailingAnchor.constraint(equalTo: row.safeAreaLayoutGuide.trailingAnchor),
             sessionCluster.bottomAnchor.constraint(equalTo: row.bottomAnchor),
         ])
     }

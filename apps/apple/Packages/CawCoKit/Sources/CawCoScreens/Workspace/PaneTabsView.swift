@@ -91,8 +91,9 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
 
     /// On a phone the strip is the app's only bar (ShellController's floating
     /// row, variant B): the compact bar's 44pt with the tabs standing on its
-    /// floor, its ends left to the sidebar toggle's glyph and to Caw's glass,
-    /// each `cBarPhoneEdge` from the screen's edge, the first tab starting
+    /// floor, its ends left to the sidebar toggle's glyph, `cBarPhoneEdge`
+    /// from the screen's edge, and to Caw's glass, flush with the other; the
+    /// first tab starting
     /// `cBarPhoneGap` after the glyph and the strip stopping that short of
     /// Caw, so the tabs scroll between them and never under. Its tabs have no
     /// chevrons and no close: their options are a long press or a pull down.
@@ -115,13 +116,19 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
     /// draws under it; the track's flare of room puts the first tab a flare
     /// further in, and a chosen first tab's foot spreads into that room whole.
     private var barLead: Double { Size.cBarPhoneEdge + Size.cBarToggleGlyph }
-    private var barTrail: Double { Size.cBarPhoneGap + NeedsCawButton.standingSide + Size.cBarPhoneEdge }
+    private var barTrail: Double { Size.cBarPhoneGap + NeedsCawButton.standingSide + safeAreaInsets.right }
 
     /// `padding-block: 4px 0` over the 32pt tabs, in a group; hosted, the bar sizes it.
     private lazy var ownHeight = heightAnchor.constraint(equalToConstant: Self.item + 4)
     private var scrollLead: NSLayoutConstraint!
     private var scrollTrail: NSLayoutConstraint!
     private var scrollHeight: NSLayoutConstraint!
+
+    /// A landscape notch moves Caw's glass in: the strip's end follows it.
+    override func safeAreaInsetsDidChange() {
+        super.safeAreaInsetsDidChange()
+        if barRow { dress() }
+    }
 
     private func dress() {
         backgroundColor = hosted ? .clear : Palette.surfaceShelf

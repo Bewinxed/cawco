@@ -147,6 +147,8 @@ public enum Palette {
     /// The edge of a well (surface-well): the hairline by day; at night the control edge, the hairline being all but invisible on the deep recess.
     public static let borderWell = Palette.named("border-well")
     public static let borderControl = Palette.named("border-control")
+    /// The top bar's glass, solid under Increase Contrast or Reduce Transparency: its edge holds 3:1 against the bar and against the raised surface it encloses (5.4 and 4.0 by day, 3.8 and 4.7 at night).
+    public static let borderContrast = Palette.named("border-contrast")
     /// An icon card's edge (New project's templates, the empty fleet's ways in) on the recess: the control edge by day; at night a step past it, the control edge all but meeting the recess.
     public static let borderCard = Palette.named("border-card")
     public static let input = Palette.named("input")
@@ -496,6 +498,10 @@ public enum Size {
     public static let cBarItem: Double = 28
     /// A symbol in the top bar's glass group: the machines glyph and Caw's head.
     public static let cBarSymbol: Double = 20
+    /// Caw's own glass on the phone bar: round at its leading side, square at its trailing one, flush with the screen's trailing edge, centred on the tabs' centre line, which leaves it 2px clear of the transcript.
+    public static let cBarCawGlassPhone: Double = 32
+    /// Caw's head in his phone glass: the glass less the desktop item's 4px margin round its head on each side.
+    public static let cBarCawHeadPhone: Double = 24
     /// The stroke of the arcs on Caw's rim in the top bar, one for each thing waiting on the operator.
     public static let cCawRing: Double = 2
     /// Jump, the first item of the top bar's glass group: wide enough to read as a place to type, not a button.

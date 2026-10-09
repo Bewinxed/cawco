@@ -192,6 +192,11 @@
     /* The edge of a well (surface-well): the hairline by day; at night the control edge, the hairline being all but invisible on the deep recess. */
     --border-well: light-dark(var(--border-hairline), var(--neutral-6));
     --border-control: light-dark(var(--neutral-5), var(--neutral-6));
+    /* The top bar's glass, solid under Increase Contrast or Reduce Transparency: its edge holds 3:1 against the bar and against the raised surface it encloses (5.4 and 4.0 by day, 3.8 and 4.7 at night). */
+    --border-contrast: light-dark(
+      var(--neutral-9),
+      color-mix(in oklab, var(--neutral-9), var(--neutral-11) 25%)
+    );
     /* An icon card's edge (New project's templates, the empty fleet's ways in) on the recess: the control edge by day; at night a step past it, the control edge all but meeting the recess. */
     --border-card: light-dark(var(--neutral-5), var(--neutral-7));
     --input: light-dark(
@@ -638,6 +643,10 @@
     --c-bar-item: calc(var(--c-btn-h) - 2 * var(--c-bar-group-pad));
     /* A symbol in the top bar's glass group: the machines glyph and Caw's head. */
     --c-bar-symbol: 20px;
+    /* Caw's own glass on the phone bar: round at its leading side, square at its trailing one, flush with the screen's trailing edge, centred on the tabs' centre line, which leaves it 2px clear of the transcript. */
+    --c-bar-caw-glass-phone: 32px;
+    /* Caw's head in his phone glass: the glass less the desktop item's 4px margin round its head on each side. */
+    --c-bar-caw-head-phone: 24px;
     /* The stroke of the arcs on Caw's rim in the top bar, one for each thing waiting on the operator. */
     --c-caw-ring: 2px;
     /* Jump, the first item of the top bar's glass group: wide enough to read as a place to type, not a button. */

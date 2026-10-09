@@ -45,9 +45,13 @@
    */
   import { mergeProps } from "bits-ui";
   import { untrack } from "svelte";
+  import { MediaQuery } from "svelte/reactivity";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
+  import { DRAWER_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import { IconDollar, IconWorkflow } from "#lib/icons.js";
+  import { browser } from "$app/env";
   import { goto } from "$app/navigation";
+  import { page } from "$app/state";
   import { cawco } from "./client.svelte";
   import { type CawFile, type CawHead, stageCaw } from "./home/Caw.svelte";
   import CawFace from "./home/CawFace.svelte";
@@ -63,8 +67,20 @@
   import SessionMark from "./SessionMark.svelte";
   import { capLine } from "./usage";
 
-  /** His head's side, px: the compacted still fills it (`--c-bar-symbol`). */
-  const HEAD = 20;
+  /**
+   * The phone bar, where his glass is his own (Shell). The server has the
+   * width cookie's guess (`narrow`) for the first paint.
+   */
+  const phoneQuery = new MediaQuery(DRAWER_QUERY);
+  const phone = $derived(
+    browser ? phoneQuery.current : Boolean(page.data.narrow)
+  );
+  /**
+   * His head's side, px: the compacted still fills it. In the wide bar's
+   * group, a symbol's (`--c-bar-symbol`); on a phone, his own glass less the
+   * same 4px margin (`--c-bar-caw-head-phone`).
+   */
+  const head = $derived(phone ? 24 : 20);
   /** Where the drawer stands under the capsule once parted, px. */
   const GAP = 8;
   /** The finger's travel by which the neck has thinned to nothing and snapped, px. */
@@ -119,9 +135,9 @@
    * leaves the screen. The number itself is in his label, his tooltip and
    * the drawer's head. His circle is the bar's control height across,
    * round his item's centre: the wide group's trailing end. On the phone
-   * his glass is his item's box, round at its leading corners and square at
-   * its trailing two (Shell), and the arcs run along that outline instead
-   * (`outlinePath`).
+   * his glass is his own, a tab tucked into the screen's trailing edge,
+   * round on its leading side and square on the edge's (Shell), and the
+   * arcs run along that outline instead (`outlinePath`).
    * Apple's NeedsCawButton draws the same arcs.
    */
   const ARC = 30;
@@ -173,17 +189,17 @@
   };
 
   /*
-   * The phone's glass: his item's box (`--c-bar-item`), a half circle at
-   * its leading side and square at its trailing corners, centred in the
-   * rim's box. The arcs' path is that outline drawn half the stroke in:
+   * The phone's glass (`--c-bar-caw-glass-phone`): a half circle at its
+   * leading side and square at its trailing corners, centred in the rim's
+   * box. The arcs' path is that outline drawn half the stroke in:
    * clockwise from 12 o'clock along the top edge, down the trailing edge,
    * back along the bottom edge, then round the half circle back to 12. Each
    * arc is ARC/360 of the outline's length and ARC_GAP/360 from the next,
    * as on the circle.
    */
   const MID = RING_BOX / 2;
-  /** The phone's glass, px (`--c-bar-item`). */
-  const STAND_BOX = 28;
+  /** The phone's glass, px (`--c-bar-caw-glass-phone`). */
+  const STAND_BOX = 32;
   /** The outline's half height on the path, half the stroke in from the glass's edge. */
   const STAND = STAND_BOX / 2 - RIM_STROKE / 2;
   const OUTLINE_LENGTH = (4 + Math.PI) * STAND;
@@ -271,7 +287,7 @@
 
   // His ^^ face is drawn ahead, so the frame a smile lands in can show it.
   $effect(() => {
-    cawStill("head-smile", HEAD).drawn.catch(() => {
+    cawStill("head-smile", head).drawn.catch(() => {
       // Drawn again when he smiles.
     });
   });
@@ -315,7 +331,7 @@
   /** Plays `file` once on this canvas over his face. */
   function playClip(file: CawHead) {
     return (canvas: HTMLCanvasElement) => {
-      const still = untrack(() => cawStill(file, HEAD));
+      const still = untrack(() => cawStill(file, head));
       canvas.width = still.backing;
       canvas.height = still.backing;
       let here = true;
@@ -480,7 +496,6 @@
       right: own.right,
       bottom: glass?.bottom ?? own.bottom,
     };
-    const phone = window.innerWidth < 900;
     const width = phone ? window.innerWidth - 16 : 380;
     const left = phone ? 8 : Math.max(8, cap.right - width);
     inner.style.width = `${width}px`;
@@ -969,7 +984,7 @@
         aria-expanded={open}
         aria-haspopup="dialog"
         aria-label={label}
-        class="capsule bar-item touch-hit"
+        class="capsule bar-item touch-hit press-tint"
         data-needs-caw
         type="button"
         bind:this={capsule}
@@ -981,10 +996,10 @@
             style:--bleed="{CAW_STILL_BLEED}px"
             style:--dx={0.5 - CAW_HEAD_CENTRE.x}
             style:--dy={0.5 - CAW_HEAD_CENTRE.y}
-            style:--side="{HEAD}px"
+            style:--side="{head}px"
             class:covered={covering}
           >
-            <CawFace size={HEAD} status={face} />
+            <CawFace size={head} status={face} />
             {#if clip}
               {#key clip.id}
                 <canvas
@@ -1086,6 +1101,24 @@
     padding: 0;
     touch-action: none;
     -webkit-tap-highlight-color: transparent;
+  }
+  /* On a phone his box is his own glass's (Shell). His 44px touch area is
+     the bar's whole height at the screen's edge, so none of it falls off
+     the screen or under the transcript. */
+  @media (max-width: 899px) and (pointer: coarse) {
+    .needs-caw .capsule::after {
+      inset: auto;
+      inset-inline-end: 0;
+      inset-block-start: calc(
+        var(--c-tab-row-h) /
+        2 +
+        var(--c-bar-caw-glass-phone) /
+        2 -
+        var(--c-top-bar-h)
+      );
+      inline-size: 44px;
+      block-size: var(--c-top-bar-h);
+    }
   }
   /* What waits, on his circle's rim: his circle's box round his item's
      centre, the arcs a 2px round-capped attention stroke, each with a path

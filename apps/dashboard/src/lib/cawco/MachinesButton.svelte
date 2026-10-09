@@ -104,7 +104,7 @@
           <button
             {...mergeProps(props, tipProps)}
             aria-label={label}
-            class="bar-item machines touch-hit"
+            class="bar-item machines touch-hit press-tint"
             data-tone={tone}
             type="button"
           >

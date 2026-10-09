@@ -953,7 +953,7 @@
                   <button
                     {...tip}
                     aria-label="Jump to session"
-                    class="bar-item jump touch-hit"
+                    class="bar-item jump touch-hit press-tint"
                     data-share="jump"
                     onclick={(event: MouseEvent) => {
                       jumpOpener = event.currentTarget as HTMLElement;
@@ -1379,12 +1379,13 @@
       saturate(var(--material-saturate));
     pointer-events: none;
 
-    /* Either setting: the solid raised surface and the control's edge, as
-       the Apple apps' GlassCapsule draws it. */
+    /* Either setting: the solid raised surface and an edge that holds 3:1
+       against the bar and the surface (`border-contrast`), as the Apple
+       apps' GlassCapsule draws it. */
     @media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
       background: var(--surface-raised);
       backdrop-filter: none;
-      border-color: var(--border-control);
+      border-color: var(--border-contrast);
     }
   }
   /* An item of the group: borderless (Apple HIG, Toolbars: "Borders… aren't
@@ -1413,9 +1414,8 @@
     block-size: var(--c-bar-symbol);
     color: var(--ink-muted);
   }
-  .tools :global(.bar-item:active) {
-    background: var(--surface-fill);
-  }
+  /* A press is each item's `press-tint` (DESIGN.md, The Press Rule: grouped
+     controls tint): by day the step past this hover. */
   @media (hover: hover) and (pointer: fine) {
     .tools :global(.bar-item:hover) {
       background: var(--surface-hover);
@@ -1472,8 +1472,10 @@
      (PaneTabs), so the two read as one row and the bar draws nothing of its
      own; only its two controls take a touch. */
   @media (max-width: 899px) {
+    /* Caw's glass ends on the screen's trailing edge (inside a landscape
+       notch's inset), so the row has no trailing pad of its own. */
     .top {
-      padding-inline: 0 var(--c-bar-phone-edge);
+      padding-inline: 0 env(safe-area-inset-right, 0px);
     }
     /* The toggle is a bare glyph (owner, variant B): its leading edge
        c-bar-phone-edge from the screen's, its centre on the tabs' centre
@@ -1500,26 +1502,38 @@
       width: var(--glyph);
       height: var(--glyph);
     }
-    /* Caw's glass is his item's own box, centred on the tabs' centre line
-       as the toggle is, which leaves the bar's inset (`c-bar-group-pad`)
-       between its foot and the transcript under the row. Round at its
-       leading corners, square at its trailing two (owner: "it's top right
-       doesn't need to be rounded"); his rim's arcs follow it (NeedsCaw). */
+    /* Caw's glass (`c-bar-caw-glass-phone`) is a tab tucked into the
+       screen's trailing edge: square on that side, which meets the edge,
+       and round on the other (owner: "it's top right doesn't need to be
+       rounded"). It is centred on the tabs' centre line as the toggle is,
+       which leaves it clear of the transcript under the row. His rim's arcs
+       follow its outline (NeedsCaw). */
     .right {
       align-self: stretch;
     }
     .tools {
       align-self: flex-start;
-      block-size: var(--c-bar-item);
+      block-size: var(--c-bar-caw-glass-phone);
       margin-block-start: calc(
         var(--c-top-bar-h) -
         var(--c-tab-row-h) /
         2 -
-        var(--c-bar-item) /
+        var(--c-bar-caw-glass-phone) /
         2
       );
       padding: 0;
-      border-radius: calc(var(--c-bar-item) / 2) 0 0 calc(var(--c-bar-item) / 2);
+      border-radius: calc(var(--c-bar-caw-glass-phone) / 2) 0 0
+        calc(var(--c-bar-caw-glass-phone) / 2);
+    }
+    /* The side that meets the screen's edge draws no edge of its own. */
+    .tools::before {
+      border-inline-end-width: 0;
+    }
+    /* Caw, the group's one item, is the glass's whole box. */
+    .tools :global(.bar-item) {
+      inline-size: var(--c-bar-caw-glass-phone);
+      min-inline-size: var(--c-bar-caw-glass-phone);
+      block-size: var(--c-bar-caw-glass-phone);
     }
     .top.floating {
       position: absolute;

@@ -994,6 +994,16 @@
         }
       }
     },
+    "border-contrast": {
+      "$type": "color",
+      "$value": "{color.neutral-9}",
+      "$description": "The top bar's glass, solid under Increase Contrast or Reduce Transparency: its edge holds 3:1 against the bar and against the raised surface it encloses (5.4 and 4.0 by day, 3.8 and 4.7 at night).",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "color-mix(in oklab, {color.neutral-9}, {color.neutral-11} 25%)"
+        }
+      }
+    },
     "border-card": {
       "$type": "color",
       "$value": "{color.neutral-5}",
@@ -2309,6 +2319,16 @@
       "$type": "dimension",
       "$value": "20px",
       "$description": "A symbol in the top bar's glass group: the machines glyph and Caw's head."
+    },
+    "c-bar-caw-glass-phone": {
+      "$type": "dimension",
+      "$value": "32px",
+      "$description": "Caw's own glass on the phone bar: round at its leading side, square at its trailing one, flush with the screen's trailing edge, centred on the tabs' centre line, which leaves it 2px clear of the transcript."
+    },
+    "c-bar-caw-head-phone": {
+      "$type": "dimension",
+      "$value": "24px",
+      "$description": "Caw's head in his phone glass: the glass less the desktop item's 4px margin round its head on each side."
     },
     "c-caw-ring": {
       "$type": "dimension",
