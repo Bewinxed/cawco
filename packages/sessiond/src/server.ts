@@ -49,14 +49,6 @@ import { JOIN_CHILDREN } from "./cgroup";
 import { capChildTasks, START_ROOM, TASK_RESERVE, taskHeadroom } from "./tasks";
 
 /**
- * The idempotency window, from the hub's own discipline
- * (`hub/src/stream.ts:55`, `COMMAND_TTL_MS = 5 * 60_000`) — same constant,
- * same reason: long enough to cover any reconnect series, short enough that
- * the map is not a leak.
- */
-export const COMMAND_TTL_MS = 5 * 60_000;
-
-/**
  * Byte ceiling per child's replay window — our choice, design §6: lines are
  * not uniform (a user-echo line can fold in a base64 image, megabytes in one
  * record), so a line count alone does not bound memory. 8 MiB × ~40 children
@@ -204,18 +196,11 @@ export interface Conn {
   socket: Socket;
 }
 
-interface Settled {
-  ack: SessiondAck;
-  at: number;
-}
-
 export interface SessiondOptions {
   /** Reported in `welcome` so the agent can surface skew as a board notice. */
   build?: BuildInfo;
   /** The children's cgroup's `cgroup.procs`, which each child joins before it execs (cgroup.ts). */
   children?: string;
-  /** Injectable for tests; production passes nothing and gets the real clock. */
-  now?: () => number;
 }
 
 const DEFAULT_BUILD: BuildInfo = { version: "0.1.0", startedAt: Date.now() };
@@ -233,14 +218,6 @@ export class SessiondServer {
   readonly epoch = randomUUID();
   readonly #procs = new Map<string, Proc>();
   readonly #conns = new Set<Conn>();
-  /** commandId → the ack it settled with. A re-delivery is re-acked, never re-run. */
-  readonly #settled = new Map<string, Settled>();
-  /**
-   * commandId → the settlement of a verb still waiting on a process-table
-   * reading. A re-delivery meanwhile is answered with the same settlement,
-   * never run a second time.
-   */
-  readonly #running = new Map<string, Promise<SessiondAck>>();
   /** A survey's reading is still out: the clock does not start a second. */
   #surveyInFlight = false;
   /** The spawn in progress; the next waits for it ({@link #queueSpawn}). */
@@ -252,7 +229,6 @@ export class SessiondServer {
   /** The clock every live child's tree is read on ({@link #survey}). */
   #surveying: ReturnType<typeof setInterval> | undefined;
   readonly #build: BuildInfo;
-  readonly #now: () => number;
   #server: Server | undefined;
   #endpoint: string | undefined;
   /** The inode of the socket file this keeper bound: the path is unlinked only while it is still this one. */
@@ -267,7 +243,6 @@ export class SessiondServer {
 
   constructor(options: SessiondOptions = {}) {
     this.#build = options.build ?? DEFAULT_BUILD;
-    this.#now = options.now ?? Date.now;
     this.#children = options.children;
   }
 
@@ -441,26 +416,6 @@ export class SessiondServer {
       return;
     }
 
-    // §8: a re-delivered commandId is re-acked, never re-executed. This is
-    // what makes "re-send everything unacked after a socket drop" safe, and
-    // it is why `spawn` retried across a drop is an ack rather than a
-    // kill-and-replace of a perfectly healthy child.
-    if (commandId) {
-      const prior = this.#lookupSettled(commandId);
-      if (prior) {
-        this.#send(conn, prior);
-        return;
-      }
-      const running = this.#running.get(commandId);
-      if (running !== undefined) {
-        detach(
-          running.then((settled) => this.#send(conn, settled)),
-          "sessiond settlement"
-        );
-        return;
-      }
-    }
-
     let settlement: SessiondAck | Promise<SessiondAck>;
     switch (type) {
       case "spawn":
@@ -502,13 +457,6 @@ export class SessiondServer {
       this.#settleLater(conn, commandId, settlement);
       return;
     }
-    this.#settle(conn, commandId, settlement);
-  }
-
-  #settle(conn: Conn, commandId: string, settlement: SessiondAck): void {
-    if (commandId) {
-      this.#settled.set(commandId, { ack: settlement, at: this.#now() });
-    }
     this.#send(conn, settlement);
   }
 
@@ -529,28 +477,10 @@ export class SessiondServer {
         `the process table could not be read: ${reasonOf(error)}`
       )
     );
-    if (commandId) {
-      this.#running.set(commandId, settled);
-    }
     detach(
-      settled.then((settlement) => {
-        this.#running.delete(commandId);
-        this.#settle(conn, commandId, settlement);
-      }),
+      settled.then((settlement) => this.#send(conn, settlement)),
       "sessiond settlement"
     );
-  }
-
-  #lookupSettled(commandId: string): SessiondAck | undefined {
-    const entry = this.#settled.get(commandId);
-    if (!entry) {
-      return undefined;
-    }
-    if (this.#now() - entry.at > COMMAND_TTL_MS) {
-      this.#settled.delete(commandId);
-      return undefined;
-    }
-    return entry.ack;
   }
 
   // -------------------------------------------------------------------- verbs
@@ -609,9 +539,9 @@ export class SessiondServer {
       );
     }
     const existing = this.#procs.get(procId);
-    // A fresh commandId for a live procId is the agent's deliberate relaunch
-    // (the kill-and-replace semantics it has today); the dedup map above is
-    // what keeps a mere retry from landing here.
+    // A spawn for a live procId is the agent's deliberate relaunch (the
+    // kill-and-replace semantics it has today): the agent never sends a
+    // spawn twice, so nothing but a relaunch lands here.
     if (existing?.alive) {
       // The kill lands once its tree is read; the successor starts now, under
       // its own process group, so nothing of it is in what gets killed.

@@ -33,8 +33,8 @@ export interface ProcSpec {
 
 /**
  * agent → sessiond: start a child under sessiond's custody. `procId` is
- * minted by the agent so `spawn` can carry a `commandId` for the idempotency
- * map (design §8) without sessiond ever seeing the harness it belongs to.
+ * minted by the agent, so sessiond never sees the harness it belongs to;
+ * `commandId` names the ack that answers this one spawn.
  */
 export interface SessiondSpawn {
   commandId: string;
