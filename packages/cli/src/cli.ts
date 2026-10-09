@@ -579,9 +579,6 @@ const run = async (argv: string[]): Promise<number> => {
     case "pi-host":
       await import("@cawco/agent/pi-host");
       return 0;
-    case "boundary-hook":
-      await import("@cawco/agent/boundary-hook");
-      return 0;
     case "capabilities": {
       const { probeCapabilities } = await import("@cawco/agent/capabilities");
       console.log(JSON.stringify(await probeCapabilities(), null, 2));

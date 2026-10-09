@@ -220,6 +220,8 @@ export async function buildBinary(options: {
     ["workflow/workflow-program.ts", join(work, "workflow-program.ts")],
     ["workflow/workflow.ts", join(work, "workflow.ts")],
     ["preview/overlay.js", join(work, "overlay.js")],
+    // Run as plain Bun by each workspace's boundary hook, never as cawco (boundary.ts).
+    ["boundary/hook.ts", join(ROOT, "packages/agent/src/boundary-hook.ts")],
     ["native/claude", await nativeClaude(options.target, work)],
   ] as [string, string][];
   const assetsSource = `${assets.map(([, path], i) => `import a${i} from ${JSON.stringify(path)} with { type: "file" };`).join("\n")}\nexport const binaryAssets = {${assets.map(([key], i) => `${JSON.stringify(key)}:a${i}`).join(",")}};`;

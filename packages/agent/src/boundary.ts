@@ -48,7 +48,7 @@ import type { WorkspaceRef } from "@cawco/core";
 import { WORKSPACE_BOUNDARY_START_TIMEOUT_MS } from "@cawco/core";
 import { binaryRoot } from "@cawco/core/binary-installation";
 import { sessionIdentityDir } from "@cawco/core/paths";
-import { standalone } from "@cawco/core/runtime";
+import { embeddedFile, standalone } from "@cawco/core/runtime";
 import { type ProcSpec, sessiondEndpoint } from "@cawco/core/sessiond";
 import { cloneInPlace } from "./clone";
 import { procIdFor } from "./proc-id";
@@ -153,49 +153,70 @@ export const shellQuote = (value: string): string =>
 export const boundaryCommand = (boundary: Boundary, command: string): string =>
   `${shellQuote(boundary.exec)} ${shellQuote(command)}`;
 
-/**
- * How long the hook's own run of cawco may take before the hook kills it and
- * refuses the command. Well under {@link HOOK_TIMEOUT_S}: Claude Code lets the
- * call through when it times a hook out ("A timed-out `command`… hook doesn't
- * block the tool call", code.claude.com/docs/en/hooks#timeouts), so the hook
- * always answers first.
- */
-const HOOK_LIMIT_S = 30;
-
 /** Claude Code's own limit on the boundary hook, in seconds; its default is 600. */
 const HOOK_TIMEOUT_S = 90;
 
 /**
- * The workspace's PreToolUse hook: has cawco rewrite the call's command to run
- * through the executor, and refuses the call every way that can fail. Claude
- * Code blocks a call only on exit 2: any other failure — a missing binary, a
- * crash, a signal — is a "non-blocking error" and the command runs as it was
- * written, outside the boundary (code.claude.com/docs/en/hooks#exit-code-2).
- * So every status but 0 becomes 2, and a run that hangs is killed at
- * {@link HOOK_LIMIT_S} and refused too. The first line it writes names the
- * hook, so a failure the CLI reports is known as this one's.
+ * How long the hook's run of `boundary-hook.ts` may take before the hook kills
+ * it and refuses the command. Under {@link HOOK_TIMEOUT_S}, with 10s to spare:
+ * Claude Code lets the call through when it times a hook out ("A timed-out
+ * `command`… hook doesn't block the tool call",
+ * code.claude.com/docs/en/hooks#timeouts), so the hook always answers first.
+ * The run takes 15–60ms, even on a Mac at load 170.
+ */
+const HOOK_LIMIT_S = HOOK_TIMEOUT_S - 10;
+
+/**
+ * How the hook's refusal of a run that outlived {@link HOOK_LIMIT_S} begins.
+ * That refusal stops only the one call. The model reads the line and runs the
+ * command again, and the work item goes on (claude.ts `#watchBoundary`).
+ */
+export const BOUNDARY_HOOK_SLOW = "cawco: the boundary hook took longer than";
+
+/** The hook's script, beside the hook in the workspace's state dir: read-only inside the boundary. */
+const hookSourceOf = (id: string): string =>
+  join(stateDir(id), "boundary-hook.ts");
+
+/**
+ * The workspace's PreToolUse hook. It has `boundary-hook.ts` rewrite the
+ * call's command to run through the executor, and refuses the call every way
+ * that can fail. Claude Code blocks a call only on exit 2: any other failure
+ * — a missing binary, a crash, a signal — is a "non-blocking error", and the
+ * command runs as it was written, outside the boundary
+ * (code.claude.com/docs/en/hooks#exit-code-2). So every status but 0 becomes
+ * 2. A run that hangs is killed at {@link HOOK_LIMIT_S} and refused with
+ * {@link BOUNDARY_HOOK_SLOW}, which refuses that call alone. Every other
+ * failure says the hook failed. The first line it writes names the hook, so
+ * a failure the CLI reports is known as this one's.
  *
- * It names cawco by a path no update deletes: the binary install's `run`
- * wrapper, which execs whatever `current` names, or, in a checkout, bun on
- * the CLI's source. The CLI keeps the hook command it launched with for as
- * long as it lives, and outlives the agent that started it; a hook naming the
+ * It names its runtime by a path no update deletes: the binary install's
+ * `run` wrapper, which execs whatever `current` names, or, in a checkout,
+ * bun. The CLI keeps the hook command it launched with for as long as it
+ * lives, and outlives the agent that started it. A hook that named the
  * agent's own versioned binary stopped resolving once an update pruned that
  * version, and every command then ran outside the boundary.
+ *
+ * The script runs on that runtime as plain Bun (`BUN_BE_BUN=1`), not as
+ * cawco: cawco's start-up took over 30s on a loaded Mac, and the watchdog
+ * then killed it. It runs from the state dir: Bun reads `bunfig.toml` (its
+ * preloads) and `.env` from the directory it starts in, and the session's
+ * own directory is the clone, which a command inside the boundary writes.
  */
 const hookScript = (
   id: string,
-  runner: string[],
+  runner: Runner,
   exec: string,
   scratch: string
 ): string => `#!/bin/sh
 # CawCo workspace ${id}: the PreToolUse hook its claude sessions run before each
 # shell tool call. Any status but 0 refuses the call (exit 2).
 echo "cawco boundary hook $0" >&2
+cd ${shellQuote(stateDir(id))} || exit 2
 exec 3<&0
-${[...runner, "boundary-hook", exec, scratch].map(shellQuote).join(" ")} <&3 3<&- &
+${runner.env}${[...runner.argv, exec, scratch].map(shellQuote).join(" ")} <&3 3<&- &
 hook=$!
 (
-  trap 'kill "$timer" 2>/dev/null; exit 0' TERM
+  trap 'kill "$timer" 2>/dev/null; exit 1' TERM
   sleep ${HOOK_LIMIT_S} & timer=$!
   wait "$timer" && kill -KILL "$hook" 2>/dev/null
 ) </dev/null >/dev/null 2>&1 &
@@ -204,34 +225,48 @@ wait "$hook"
 status=$?
 kill "$watchdog" 2>/dev/null
 [ "$status" -eq 0 ] && exit 0
+if wait "$watchdog"; then
+  echo "${BOUNDARY_HOOK_SLOW} ${HOOK_LIMIT_S}s on a loaded machine, so this command did not run. Run it again." >&2
+  exit 2
+fi
 echo "cawco: the boundary hook $0 failed (status $status), so this command did not run" >&2
 exit 2
 `;
 
+/** What the hook runs `boundary-hook.ts` with: an environment prefix for the shell, and the command. */
+interface Runner {
+  readonly argv: readonly string[];
+  readonly env: string;
+}
+
 /**
- * How the hook reaches cawco: `<binary root>/run` in a binary install, bun on
- * `packages/cli/src/cli.ts` in a checkout. Refuses the workspace when that is
- * not there, rather than writing a hook that refuses every command.
+ * Writes the hook's script into the workspace's state dir, and says how the
+ * hook runs it: `BUN_BE_BUN=1 <binary root>/run` in a binary install, which
+ * ships the script embedded; bun in a checkout, from its source. Refuses the
+ * workspace when the runtime is not there, rather than writing a hook that
+ * refuses every command.
  */
-const hookRunner = async (id: string): Promise<string[]> => {
-  const runner = standalone
-    ? [join(binaryRoot(), "run")]
-    : [
-        Bun.which("bun") ?? "bun",
-        join(import.meta.dir, "..", "..", "cli", "src", "cli.ts"),
-      ];
-  for (const [index, target] of runner.entries()) {
-    // biome-ignore lint/performance/noAwaitInLoops: one or two paths, each checked before the hook names it
-    await access(target, index === 0 ? constants.X_OK : constants.R_OK).catch(
-      () => {
-        throw refusal(
-          id,
-          `${target} is not there, so its boundary hook could not reach cawco`
-        );
-      }
+const hookRunner = async (id: string): Promise<Runner> => {
+  const runtime = standalone
+    ? join(binaryRoot(), "run")
+    : (Bun.which("bun") ?? "bun");
+  await access(runtime, constants.X_OK).catch(() => {
+    throw refusal(
+      id,
+      `${runtime} is not there, so its boundary hook could not run`
     );
-  }
-  return runner;
+  });
+  const source = hookSourceOf(id);
+  await writeWhole(
+    source,
+    await Bun.file(
+      standalone
+        ? embeddedFile("boundary/hook.ts")
+        : join(import.meta.dir, "boundary-hook.ts")
+    ).text(),
+    0o644
+  );
+  return { env: standalone ? "BUN_BE_BUN=1 " : "", argv: [runtime, source] };
 };
 
 /** Writes `path` whole or not at all: a reader never sees it half written. */
@@ -260,6 +295,39 @@ const armHook = async (id: string, held: Omit<Held, "hook">): Promise<Held> => {
     0o644
   );
   return armed;
+};
+
+/**
+ * Writes every held workspace's hook and its script again, in this build's
+ * form. The agent does this as it starts, before it adopts or launches a
+ * session: a running CLI reads its workspace's hook on every shell call, so
+ * one an earlier build wrote must not outlive that build's runtime.
+ */
+export const rearmHooks = async (): Promise<void> => {
+  const ids = await readdir(workspacesDir()).catch(
+    (error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") {
+        return [];
+      }
+      throw error;
+    }
+  );
+  let armed = 0;
+  for (const id of ids) {
+    try {
+      // biome-ignore lint/performance/noAwaitInLoops: a few small writes per workspace, one workspace at a time
+      const held = await readHeld(id);
+      if (held) {
+        await armHook(id, held);
+        armed += 1;
+      }
+    } catch (error) {
+      console.warn(
+        `[workspace] ${id}: its boundary hook could not be written again: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+  console.info(`[workspace] boundary hooks written for ${armed} workspace(s)`);
 };
 
 /**

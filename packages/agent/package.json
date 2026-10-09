@@ -9,7 +9,6 @@
     "./config": "./src/config.ts",
     "./discovery": "./src/discovery.ts",
     "./pi-host": "./src/harnesses/pi-host.ts",
-    "./boundary-hook": "./src/boundary-hook.ts",
     "./sessiond-client": "./src/sessiond-client.ts"
   },
   "main": "./src/index.ts",

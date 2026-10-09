@@ -1,9 +1,15 @@
 /**
- * `cawco boundary-hook EXEC SCRATCH`: what a workspace's hook script
+ * `boundary-hook.ts EXEC SCRATCH`: what a workspace's hook script
  * (`boundary.ts`) runs before every shell tool call (`Bash`, `Monitor`) of a
  * work item's claude session. It rewrites the call's command so it runs
  * through the workspace's executor, inside the workspace's boundary. The CLI
  * runs it, not the agent, so it holds while the agent restarts.
+ *
+ * It is a plain script on Bun, never a module of cawco: cawco's own start-up
+ * took over 30s on a loaded machine. The agent writes this file into the
+ * workspace's state dir, which nothing inside the boundary can write. A binary
+ * install runs it on cawco's own runtime (`BUN_BE_BUN=1`), and a checkout runs
+ * it on bun. So it imports only Bun's and node's built-ins.
  *
  * The rewritten command carries the directory the command ended in back out
  * of the boundary and `cd`s there, so the session's working directory still
@@ -13,9 +19,8 @@
  * — the one outcome a hook's output cannot override: a command never runs
  * outside the boundary.
  *
- * argv, after the runtime's own two and the verb: the executor, the
- * workspace's scratch dir. The same three in a binary install and a checkout,
- * where `bun packages/cli/src/cli.ts boundary-hook` runs it.
+ * argv, after the runtime and the script: the executor, the workspace's
+ * scratch dir.
  */
 import { randomUUID } from "node:crypto";
 import { accessSync, constants } from "node:fs";
@@ -24,7 +29,7 @@ import { join } from "node:path";
 const quote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`;
 
 try {
-  const [exec, scratch] = process.argv.slice(3);
+  const [exec, scratch] = process.argv.slice(2);
   if (!(exec && scratch)) {
     throw new Error("the hook was registered without its executor");
   }

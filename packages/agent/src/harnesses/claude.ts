@@ -102,6 +102,7 @@ import {
   unlockKeychain,
 } from "../auth";
 import {
+  BOUNDARY_HOOK_SLOW,
   claudeBoundaryOptions,
   hookMissing,
   type LaunchedHook,
@@ -1530,7 +1531,9 @@ class ClaudeSession implements HarnessSession {
       hook.outcome !== "error" ||
       ![hook.stderr, hook.output].some((said) =>
         own.names.some((name) => said?.includes(name))
-      )
+      ) ||
+      // A hook the loaded machine ran too slowly refused that one call (boundary.ts).
+      hook.stderr?.includes(BOUNDARY_HOOK_SLOW)
     ) {
       return;
     }
