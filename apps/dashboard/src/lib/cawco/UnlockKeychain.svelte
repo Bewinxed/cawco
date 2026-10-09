@@ -128,7 +128,7 @@
       {#key view}
         <div
           class="flex flex-col gap-6"
-          style:min-height={view === "status" ? `${held}px` : undefined}
+          style:min-height={phase.kind === "working" ? `${held}px` : undefined}
           in:crossIn
           out:crossOut
         >

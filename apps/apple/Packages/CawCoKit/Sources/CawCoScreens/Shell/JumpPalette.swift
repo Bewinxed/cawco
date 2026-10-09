@@ -767,10 +767,12 @@ final class JumpPaletteController: UIViewController, UIViewControllerTransitioni
         return box
     }
 
-    /// One row: the mark in muted ink, the name, and the trailing fact. The
-    /// fact's last part (a session's status, a machine's offer, a line's
-    /// role) is said whole; what stands before it (a path, a host) gives way
-    /// from its middle, at most 45% of the row, and the name gives way first.
+    /// One row: the mark in muted ink, the name, and the trailing fact, never
+    /// wider than 45% of the row (`.jump-trail`), so the name keeps the rest.
+    /// Inside that, what stands before the fact's last part (a path, a host)
+    /// gives way from its middle down to its first 48pt, and the last part (a
+    /// session's status, a machine's offer, a line's role) is said whole if
+    /// the rest of the room holds it, else cut at its tail.
     private func item(glyph: Glyph, name: NSAttributedString, trail: NSAttributedString) -> UIView {
         let nameLabel = UILabel()
         nameLabel.attributedText = name
@@ -786,10 +788,15 @@ final class JumpPaletteController: UIViewController, UIViewControllerTransitioni
         headLabel.lineBreakMode = .byTruncatingMiddle
         headLabel.setContentCompressionResistancePriority(.defaultLow + 1, for: .horizontal)
         headLabel.setContentHuggingPriority(.required, for: .horizontal)
+        // A host or a path is never cut to a bare ellipsis: at least its own width, up to 48pt.
+        let floor = headLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: min(headLabel.intrinsicContentSize.width, 48))
+        floor.priority = .required - 1
+        floor.isActive = true
         let tailLabel = UILabel()
         tailLabel.attributedText = tailText
         tailLabel.isHidden = tailText == nil
-        tailLabel.setContentCompressionResistancePriority(.required - 1, for: .horizontal)
+        tailLabel.lineBreakMode = .byTruncatingTail
+        tailLabel.setContentCompressionResistancePriority(.required - 2, for: .horizontal)
         tailLabel.setContentHuggingPriority(.required, for: .horizontal)
         let trailRow = UIStackView(arrangedSubviews: [headLabel, tailLabel])
         trailRow.alignment = .firstBaseline
@@ -800,7 +807,7 @@ final class JumpPaletteController: UIViewController, UIViewControllerTransitioni
         let row = UIStackView(arrangedSubviews: [GlyphView(glyph, size: 16, tint: Palette.inkMuted), nameLabel, trailRow, tick])
         row.spacing = 8
         row.alignment = .center
-        headLabel.widthAnchor.constraint(lessThanOrEqualTo: row.widthAnchor, multiplier: 0.45).isActive = true
+        trailRow.widthAnchor.constraint(lessThanOrEqualTo: row.widthAnchor, multiplier: 0.45).isActive = true
         row.accessibilityLabel = "\(name.string), \(trail.string)"
         return row
     }

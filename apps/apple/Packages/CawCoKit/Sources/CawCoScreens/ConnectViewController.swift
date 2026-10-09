@@ -103,7 +103,7 @@ final class ConnectViewController: ObservedViewController, UITextFieldDelegate {
         let title = KitLabel(TypeScale.typeTitle, ink: Palette.inkStrong, lines: 0)
         title.text = mode == .reconnecting ? "Your hub" : "Connect to your hub"
         title.accessibilityTraits = .header
-        body.text = "The hub's address on your network, like http://192.168.3.100:3456."
+        body.text = Self.hint(false)
 
         field.placeholder = "http://hub:3456"
         field.text = hub.address?.absoluteString
@@ -383,6 +383,15 @@ final class ConnectViewController: ObservedViewController, UITextFieldDelegate {
         testProblem.isHidden = push.testProblem == nil
     }
 
+    /// What the address looks like: on the network, or over Tailscale when
+    /// there is no local path. The example address is one word: a line breaks
+    /// before it, never inside it (word joiners between its characters).
+    private static func hint(_ tailnet: Bool) -> String {
+        let example = tailnet ? "http://<machine>.<tailnet>.ts.net:3456" : "http://192.168.3.100:3456"
+        let joined = example.map(String.init).joined(separator: "\u{2060}")
+        return tailnet ? "The hub's Tailscale address, like \(joined)." : "The hub's address on your network, like \(joined)."
+    }
+
     override func refreshContent() {
         refreshNotifications()
         // A hub that was never entered has no state to say.
@@ -391,9 +400,7 @@ final class ConnectViewController: ObservedViewController, UITextFieldDelegate {
         networkAccess.isHidden = !discovery.localNetworkDenied
         let noLocalPath = discovery.localNetworkAvailable == false
         noWifi.isHidden = !noLocalPath
-        body.text = noLocalPath
-            ? "The hub's Tailscale address, like http://<machine>.<tailnet>.ts.net:3456."
-            : "The hub's address on your network, like http://192.168.3.100:3456."
+        body.text = Self.hint(noLocalPath)
         field.placeholder = noLocalPath ? "http://<machine>.<tailnet>.ts.net:3456" : "http://hub:3456"
         let hubs = discovery.found
         searching.isHidden = !discovery.browsing || !hubs.isEmpty

@@ -81,7 +81,11 @@ open class KitDialogController: UIViewController, UIViewControllerTransitioningD
         scroll.addSubview(body)
 
         let wanted = frameView.widthAnchor.constraint(equalToConstant: width.points)
-        wanted.priority = .defaultHigh
+        // Under the screen's own edge (the required cap below), over anything
+        // the content asks for: at `.defaultHigh` it tied with a label's pull
+        // to stand on one line (its compression resistance), so on a wide
+        // screen a body's lines were laid out one line tall and cut.
+        wanted.priority = .required - 1
         // As tall as what it holds, until the screen (or the keyboard) stops it;
         // centred only where that leaves it room. Its height outranks its
         // centring: a tall dialog rises above the keyboard whole instead of
@@ -357,6 +361,13 @@ public final class CrossView: UIView {
     @available(*, unavailable)
     required init?(coder _: NSCoder) {
         fatalError("CrossView is built in code")
+    }
+
+    /// Lets go of the height `show(_:holdHeight:)` held: the box is as tall
+    /// as what it now shows (in the caller's `morph`).
+    public func release() {
+        floor?.isActive = false
+        floor = nil
     }
 
     public func show(_ next: UIView, holdHeight: Bool = false) {

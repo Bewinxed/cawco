@@ -156,8 +156,9 @@ public enum Glyph: String, CaseIterable, Sendable {
     }
 }
 
-/// A maker's or a harness's mark in its own colours (HarnessLogo.svelte,
-/// ProviderLogo.svelte, the GitHub mark): never tinted, only placed.
+/// A maker's or a harness's mark (HarnessLogo.svelte, ProviderLogo.svelte,
+/// the GitHub mark): in its own colours, never tinted, only placed; but for
+/// the one-ink marks (`inked`), which draw in the ink of wherever they stand.
 public enum BrandLogo: String, Sendable {
     case claude = "logo-claude"
     case openai = "logo-openai"
@@ -174,11 +175,15 @@ public enum BrandLogo: String, Sendable {
     case zhipu = "logo-zhipu"
     case opencode = "logo-opencode"
 
+    /// ProviderLogo.svelte's `INK`: upstream these carry a fixed dark fill
+    /// that vanishes on the dark theme; they follow the ink, as glyphs do.
+    public var inked: Bool { [.openai, .github, .grok, .moonshot].contains(self) }
+
     public var image: UIImage {
         guard let image = UIImage(named: rawValue, in: .module, with: nil) else {
             preconditionFailure("Icons.xcassets has no \(rawValue); run apps/apple/scripts/icons.ts")
         }
-        return image.withRenderingMode(.alwaysOriginal)
+        return image.withRenderingMode(inked ? .alwaysTemplate : .alwaysOriginal)
     }
 
     /// ProviderLogo.svelte's LOGOS, by the lab `providerOf` names.

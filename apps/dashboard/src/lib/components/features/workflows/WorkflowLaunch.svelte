@@ -195,7 +195,7 @@
               }}
               value=""
             >
-              <option value="">Choose a project or enter a directory</option>
+              <option value="">Choose a project</option>
               {#each cawco.projects.filter((each) =>
                 checkoutOf(each)
               ) as project (project.id)}

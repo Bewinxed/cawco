@@ -219,7 +219,20 @@ for (const name of SOLAR_ICONS) {
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">${body}</svg>`;
 }
 
-/** Brand marks keep their colours: their SVGs go in as drawn, not as templates. */
+/**
+ * The marks drawn in a single ink (ProviderLogo.svelte's `INK`): upstream
+ * they carry a fixed dark fill that vanishes on the dark theme, so they go in
+ * as templates and draw in the ink of wherever they stand, as the web fills
+ * them with `--ink-strong`.
+ */
+const INK_BRANDS = new Set([
+  "logo-openai",
+  "logo-grok",
+  "logo-moonshot",
+  "logo-github",
+]);
+
+/** Brand marks keep their colours: their SVGs go in as drawn, not as templates, but for the one-ink marks. */
 const brands: Record<string, string> = { ...DRAWN_BRANDS };
 const sets = new Map<string, IconSet>();
 for (const [asset, [setName, name]] of Object.entries(BRANDS)) {
@@ -237,8 +250,16 @@ for (const [asset, [setName, name]] of Object.entries(BRANDS)) {
   }
   const width = icon.width ?? from.width ?? 24;
   const height = icon.height ?? from.height ?? 24;
-  brands[asset] =
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">${icon.body}</svg>`;
+  // A one-ink mark draws by alpha, as a glyph does.
+  const body = INK_BRANDS.has(asset)
+    ? icon.body.replaceAll(/fill="(?!none)[^"]*"/g, 'fill="#000"')
+    : icon.body;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">${body}</svg>`;
+  if (INK_BRANDS.has(asset)) {
+    svgs[asset] = svg;
+  } else {
+    brands[asset] = svg;
+  }
 }
 
 rmSync(OUT, { recursive: true, force: true });

@@ -197,7 +197,8 @@ final class WorkflowLaunchController: KitDialogController {
     private func draw() {
         let machines = hub.fleet.machines
         projectSelect.set(
-            [.init(value: "", label: "Choose a project or enter a directory")] + hub.fleet.projects.map { .init(value: $0.id, label: $0.name) },
+            // The directory has its own field under this one.
+            [.init(value: "", label: "Choose a project")] + hub.fleet.projects.map { .init(value: $0.id, label: $0.name) },
             value: chosenProject
         )
         machineSelect.set(

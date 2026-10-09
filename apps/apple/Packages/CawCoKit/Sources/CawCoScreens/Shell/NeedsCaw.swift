@@ -352,6 +352,13 @@ final class NeedsDrawer: UIView {
         headRow.alignment = .firstBaseline
         headRow.isLayoutMarginsRelativeArrangement = true
         headRow.directionalLayoutMargins = NSDirectionalEdgeInsets(top: Space.space4, leading: Space.space4, bottom: Space.space2, trailing: Space.space4)
+        // A first-baseline row pins no height of its own, so fitting it (the
+        // drawer is sized by `measure`) came out ~45pt taller than its words:
+        // the title, its tallest part, stands it from margin to margin.
+        NSLayoutConstraint.activate([
+            titleLabel.topAnchor.constraint(equalTo: headRow.layoutMarginsGuide.topAnchor),
+            titleLabel.bottomAnchor.constraint(equalTo: headRow.layoutMarginsGuide.bottomAnchor),
+        ])
         head.addSubview(headRow)
         headRow.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
@@ -639,6 +646,13 @@ final class NeedsDrawer: UIView {
         if at == 0 {
             isHidden = true
             return
+        }
+        // At rest open it is measured again as it now stands: it opened at a
+        // size measured as it began (its width or its rows not yet settled),
+        // and kept that size, the head stretched into the room left over.
+        if let fresh = measure(), abs(fresh.travel - (geo?.travel ?? 0)) > 0.5 {
+            geo = fresh
+            paint(1)
         }
         UIAccessibility.post(notification: .screenChanged, argument: items.isEmpty ? empty : rows.arrangedSubviews.first)
     }

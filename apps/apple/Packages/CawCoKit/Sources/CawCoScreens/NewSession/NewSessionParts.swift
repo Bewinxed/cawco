@@ -14,12 +14,14 @@ func nsPress(_ view: UIView, _ down: Bool) {
 }
 
 /// A glyph or a mark drawn at `side` points, as a button's image slot takes it
-/// (`svg { width: 16px; height: 16px }`); `alpha` fades a mark that is not the chosen one.
+/// (`svg { width: 16px; height: 16px }`); `alpha` fades a mark that is not the
+/// chosen one. A template stays one (a one-ink mark, `BrandLogo.inked`): it
+/// draws in the ink of wherever it stands.
 @MainActor
 func nsSized(_ image: UIImage, _ side: Double, template: Bool, alpha: Double = 1) -> UIImage {
     let box = CGRect(x: 0, y: 0, width: side, height: side)
     let drawn = UIGraphicsImageRenderer(size: box.size).image { _ in image.draw(in: box, blendMode: .normal, alpha: alpha) }
-    return drawn.withRenderingMode(template ? .alwaysTemplate : .alwaysOriginal)
+    return drawn.withRenderingMode(template || image.renderingMode == .alwaysTemplate ? .alwaysTemplate : .alwaysOriginal)
 }
 
 /// A small labelled control in the form's own skin: a 16pt glyph, 6pt, its

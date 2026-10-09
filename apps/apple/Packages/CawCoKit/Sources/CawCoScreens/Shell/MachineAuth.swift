@@ -44,6 +44,11 @@ final class MachineAuthStatusView: UIStackView {
         buttonRow.addArrangedSubview(UIView())
         let gap = UIView()
         gap.setContentHuggingPriority(.defaultLow - 1, for: .vertical)
+        // With no height held (the answer), the room is nothing and the
+        // button stands under the words; a held height still opens it.
+        let none = gap.heightAnchor.constraint(equalToConstant: 0)
+        none.priority = .defaultLow
+        none.isActive = true
         addArrangedSubview(head)
         addArrangedSubview(gap)
         addArrangedSubview(buttonRow)
@@ -142,6 +147,13 @@ class MachineAuthDialog: KitDialogController {
         status.working(title: title, steps: steps)
         morph { views.show(status, holdHeight: true) }
         return status
+    }
+
+    /// The answer: the status says it, and the dialog lets go of the form's
+    /// height it held while it worked, settling to what the answer takes.
+    func answer(_ status: MachineAuthStatusView, _ state: Components.Schemas.AuthState, said: AuthSaid) {
+        status.answered(state, said: said)
+        morph { views.release() }
     }
 }
 
@@ -271,8 +283,7 @@ final class MachineLoginController: MachineAuthDialog, UITextFieldDelegate {
                 let state = try await hub.completeLogin(machineId: machine.machineId, code: code)
                 guard let self, mine == attempt else { return }
                 codeField.text = ""
-                status.answered(state, said: said)
-                morph {}
+                answer(status, state, said: said)
             } catch {
                 guard let self, mine == attempt else { return }
                 fail(error.localizedDescription)
@@ -366,8 +377,7 @@ final class UnlockKeychainController: MachineAuthDialog, UITextFieldDelegate {
             do {
                 let state = try await hub.unlockKeychain(machineId: machine.machineId, password: sent)
                 guard let self, mine == attempt else { return }
-                status.answered(state, said: said)
-                morph {}
+                answer(status, state, said: said)
             } catch {
                 guard let self, mine == attempt else { return }
                 views.show(form())

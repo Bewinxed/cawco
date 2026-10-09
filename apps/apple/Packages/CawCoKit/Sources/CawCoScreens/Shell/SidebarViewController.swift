@@ -41,6 +41,8 @@ final class SidebarViewController: ObservedViewController {
     var homeController: UIViewController? { didSet { mountHome(oldValue) } }
 
     private let scroll = UIScrollView()
+    /// The list fades at an edge it goes on past (`.kit-edge-fade-block`).
+    private var scrollFade: EdgeFade?
     private let column = UIStackView()
     private let headerRow = UIStackView()
     private let assistantButton = HeadAction(.assistant, label: "Assistant", tint: Palette.coral11)
@@ -196,6 +198,7 @@ final class SidebarViewController: ObservedViewController {
         scroll.translatesAutoresizingMaskIntoConstraints = false
         scroll.alwaysBounceVertical = true
         scroll.showsVerticalScrollIndicator = false
+        scrollFade = EdgeFade(scroll)
         column.axis = .vertical
         column.translatesAutoresizingMaskIntoConstraints = false
         scroll.addSubview(column)
