@@ -10,17 +10,24 @@
  * `transcriptCacheMb` in cawco's machine config), estimated as source-file
  * bytes x HEAP_FACTOR. A single session larger than the whole budget is
  * cached alone; everything else is evicted.
+ *
+ * The cache serves sessions someone is reading: an entry nobody has read for
+ * {@link IDLE_MS} is evicted, so a few large transcripts opened once do not
+ * stay resident for the life of the agent.
  */
 
 import { stat } from "node:fs/promises";
 import type { Checkpoint, LocatedRecord } from "@cawco/jsonl-parser";
 import { readTranscript, readTranscriptTail } from "@cawco/jsonl-parser";
+import { gauge } from "../memory.ts";
 import { CHAIN_TYPES } from "./claude-transcript.ts";
 
 export interface CachedSession {
   /** Estimated heap cost: source bytes x HEAP_FACTOR. */
   bytes: number;
   checkpoint: Checkpoint;
+  /** When a caller last read it (ms epoch): what {@link IDLE_MS} counts from. */
+  readAt: number;
   records: LocatedRecord[];
   /**
    * Lazily-cached chain-walked messages. Invalidated (set to undefined) when
@@ -38,6 +45,15 @@ const DEFAULT_BUDGET_BYTES = 256 * 1024 * 1024;
  */
 const HEAP_FACTOR = 2;
 
+/**
+ * How long an entry stays once nobody reads it. Long enough for what the cache
+ * exists for — a session's tail-then-full open, its live refreshes, paging
+ * back through it — and short of keeping it for sessions no one is looking at.
+ */
+const IDLE_MS = 10 * 60 * 1000;
+/** How often idle entries are looked for. */
+const SWEEP_MS = 60 * 1000;
+
 export class TranscriptCache {
   /** LRU map — iteration order = insertion/touch order. */
   private readonly entries = new Map<string, CachedSession>();
@@ -49,6 +65,20 @@ export class TranscriptCache {
 
   constructor(budgetBytes = DEFAULT_BUDGET_BYTES) {
     this.budgetBytes = budgetBytes;
+    setInterval(() => this.evictIdle(Date.now() - IDLE_MS), SWEEP_MS).unref();
+  }
+
+  /**
+   * Evicts every entry last read before `cutoff`. Reads touch an entry to the
+   * end of the LRU order, so the idle ones are the oldest, at the front.
+   */
+  private evictIdle(cutoff: number): void {
+    for (const [path, entry] of this.entries) {
+      if (entry.readAt >= cutoff) {
+        return;
+      }
+      this.evict(path);
+    }
   }
 
   /** Public read — the only entry point for callers. */
@@ -109,6 +139,7 @@ export class TranscriptCache {
       const info = await stat(path);
       if (info.size === existing.checkpoint.size) {
         // Touch LRU.
+        existing.readAt = Date.now();
         this.entries.delete(path);
         this.entries.set(path, existing);
         return existing;
@@ -129,6 +160,7 @@ export class TranscriptCache {
       existing.bytes = existing.checkpoint.size * HEAP_FACTOR;
       this.totalBytes += existing.bytes;
       // Touch LRU.
+      existing.readAt = Date.now();
       this.entries.delete(path);
       this.entries.set(path, existing);
       this.enforceBudget(path);
@@ -143,6 +175,7 @@ export class TranscriptCache {
       records: result.records,
       checkpoint: result.checkpoint,
       bytes: result.checkpoint.size * HEAP_FACTOR,
+      readAt: Date.now(),
     };
     this.entries.set(path, entry);
     this.totalBytes += entry.bytes;
@@ -180,3 +213,7 @@ export class TranscriptCache {
 
 /** Module-level singleton. */
 export const cache = new TranscriptCache();
+gauge("transcriptCache.entries", () => cache.stats().entries);
+gauge("transcriptCache.budgetedMB", () =>
+  Math.round(cache.stats().bytes / 1024 / 1024)
+);

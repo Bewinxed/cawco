@@ -22,11 +22,3 @@ export interface ScannedRecord {
   tokens: UsageTokens;
   ts: number; // ms epoch
 }
-
-/** Per-file incremental watermark for a Claude JSONL transcript. */
-export interface ClaudeFileWatermark {
-  mtimeMs: number;
-  /** Bytes consumed; transcripts are append-only, so the next read starts here. */
-  offset: number;
-  size: number;
-}

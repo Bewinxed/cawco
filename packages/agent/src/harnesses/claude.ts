@@ -569,6 +569,35 @@ const transcriptEnds = async (file: string): Promise<SessionStoreEntry[]> => {
 };
 
 /**
+ * How many transcripts a listing reads at once. Each read holds a
+ * transcript's two 64 KiB ends as bytes, as text and as parsed lines; read
+ * all at once, one listing of 1,500 transcripts took the agent to 977 MB RSS,
+ * and it kept 932 MB after (measured on a rig at obelisk's scale).
+ */
+const LISTING_READS = 8;
+
+/** `read` over every item, at most {@link LISTING_READS} at a time; results in order. */
+const listingRead = async <T, R>(
+  items: readonly T[],
+  read: (item: T) => Promise<R>
+): Promise<R[]> => {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const reader = async (): Promise<void> => {
+    while (next < items.length) {
+      const index = next;
+      next += 1;
+      // biome-ignore lint/performance/noAwaitInLoops: the reader takes the next transcript only once this one is read; that is the bound
+      results[index] = await read(items[index]);
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(LISTING_READS, items.length) }, reader)
+  );
+  return results;
+};
+
+/**
  * The SDK's own session readers and writers (getSessionInfo, listSessions,
  * tagSession, renameSession, deleteSession) look only in the config dir the
  * agent started with: it reads CLAUDE_CONFIG_DIR once and keeps it. A session
@@ -1932,6 +1961,15 @@ class ClaudeSession implements HarnessSession {
     this.#crons = count;
   }
 
+  tables(): Record<string, number> {
+    return {
+      claudeSeqs: this.#seqs.size,
+      claudeDelivery: this.#delivery.size,
+      claudePermissions: this.#permissions.size,
+      claudeQuestions: this.#openQuestions.size + this.#dismissedQuestions.size,
+    };
+  }
+
   holding(): string | undefined {
     if (!this.#stored) {
       return "its conversation is not stored, so nothing could wake it";
@@ -2756,21 +2794,27 @@ export class ClaudeHarness implements Harness {
   }
 
   /**
-   * Every stored session: the SDK lists the agent's own config dir, and each
-   * account's dir is read here, since the SDK never looks there.
+   * Every stored session, in the agent's own config dir and each account's:
+   * the SDK never looks in an account's dir, so each is read here
+   * ({@link listingRead}).
    */
   async listSessions(dir?: string): Promise<NeutralSessionInfo[]> {
-    const own = await listSessions({ ...(dir ? { dir } : {}) });
-    const slug = dir ? projectSlug(await realpath(dir)) : null;
-    const files: { file: string; sessionId: string }[] = [];
-    // The SDK lists the dir the agent itself was started with.
+    // The dir the agent itself was started with. Scoped to a project, the SDK
+    // lists it, with the project's git worktrees; unscoped, it is read here
+    // like every account's dir, a few transcripts at a time.
     const sdkDir = process.env.CLAUDE_CONFIG_DIR ?? claudeHome();
-    for (const accountId of accountIds()) {
-      if (accountConfigDir(accountId) === sdkDir) {
-        continue;
-      }
-      const projects = join(accountConfigDir(accountId), "projects");
-      // biome-ignore lint/performance/noAwaitInLoops: a handful of account dirs, each listed into the shared `files`
+    const own = dir ? await listSessions({ dir }) : [];
+    const slug = dir ? projectSlug(await realpath(dir)) : null;
+    const configDirs = [
+      ...(dir ? [] : [sdkDir]),
+      ...accountIds()
+        .map(accountConfigDir)
+        .filter((configDir) => configDir !== sdkDir),
+    ];
+    const files: { file: string; sessionId: string }[] = [];
+    for (const configDir of configDirs) {
+      const projects = join(configDir, "projects");
+      // biome-ignore lint/performance/noAwaitInLoops: a handful of config dirs, each listed into the shared `files`
       const projectDirs = slug ? [slug] : await subdirectories(projects);
       for (const project of projectDirs) {
         for (const name of await jsonlNames(join(projects, project))) {
@@ -2781,16 +2825,18 @@ export class ClaudeHarness implements Harness {
         }
       }
     }
-    const accounts = await Promise.all(
-      files.map(({ file, sessionId }) =>
-        getSessionInfo(sessionId, {
-          sessionStore: transcriptStore(file, transcriptEnds),
-        })
-      )
-    );
+    const read = await listingRead(files, async ({ file, sessionId }) => {
+      const info = await getSessionInfo(sessionId, {
+        sessionStore: transcriptStore(file, transcriptEnds),
+      });
+      // A copy in strings of its own. Each field the SDK read off the
+      // transcript's ends shares the decoded 64 KiB end it was parsed from, so
+      // keeping a field kept that end: 130 MB across 1,500 sessions (measured).
+      return info && structuredClone(info);
+    });
     return [
       ...own,
-      ...accounts.filter((info): info is SDKSessionInfo => info !== undefined),
+      ...read.filter((info): info is SDKSessionInfo => info !== undefined),
     ].map(toInfo);
   }
 

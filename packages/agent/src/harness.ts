@@ -199,6 +199,13 @@ export interface HarnessSession {
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
   stop(): Promise<void>;
   /**
+   * The entry count of each table this session keeps for its own life, by
+   * name: summed across live sessions into the agent's memory line
+   * ({@link import("./memory").memoryLine}).
+   */
+  // biome-ignore lint/style/useConsistentMethodSignatures: matches the session methods
+  tables?(): Record<string, number>;
+  /**
    * Take back a parked permission nobody could be shown (WITHDRAW_PERMISSION):
    * denied with `message`, and recorded as withdrawn, never as the reader's
    * dismissal.

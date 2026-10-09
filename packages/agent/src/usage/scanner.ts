@@ -1,377 +1,469 @@
-import type { Stats } from "node:fs";
+import { Database } from "bun:sqlite";
+import { mkdirSync, rmSync, statSync } from "node:fs";
 import { stat } from "node:fs/promises";
-import type { UsageBucket } from "@cawco/core";
+import { join } from "node:path";
+import type { UsageBucket, UsageTokens } from "@cawco/core";
 import {
   BUCKET_MS,
   bucketStart,
   refreshPricing,
   totalTokens,
 } from "@cawco/core";
-import { listClaudeFiles } from "@cawco/core/paths";
-import {
-  emptyIndex,
-  loadIndex,
-  saveIndex,
-  type UsageIndex,
-} from "./index-store";
-import { parseClaudeRecords } from "./scan-claude";
+import { cawcoDataDir, listClaudeFiles } from "@cawco/core/paths";
+import { gauge } from "../memory";
+import { parseClaudeLine } from "./scan-claude";
 import { openDbPath, scanOpencode } from "./scan-opencode";
 import type { ScannedRecord } from "./types";
 
 /**
- * The per-machine usage scanner (USAGE-SPEC.md §5). Owns the in-memory dedup
- * set and the absolute bucket totals for the process lifetime; re-sends are
- * idempotent because the hub upserts by bucket id. Incremental scans compare
- * `(mtimeMs, size)` per Claude transcript and a `time_created` watermark for
- * opencode; a full rebuild re-heals every 30 minutes.
+ * The per-machine usage scanner (USAGE-SPEC.md §5). Folds every transcript's
+ * usage into absolute bucket totals the hub upserts by bucket id. Incremental
+ * scans compare `(mtimeMs, size)` per Claude transcript and a `time_created`
+ * watermark for opencode; a full rebuild re-heals and re-costs every 30 min.
+ *
+ * Its state lives on disk, in `usage.db` under the agent's data dir: the dedup
+ * set holds one row per assistant message the machine ever wrote, so it grows
+ * with history, and kept in memory it was most of the agent's heap (261k keys,
+ * ~140 MB, measured on a 1,500-transcript rig). SQLite's page cache is the
+ * only part held in memory, capped at {@link PAGE_CACHE_KIB}. The store also
+ * outlives a restart, so a start scans incrementally and the full rebuild
+ * waits for its own schedule.
  */
 
-interface DedupEntry {
-  bucketKey: string;
-  record: ScannedRecord;
-  totalTokens: number;
+/** SQLite's page cache for the store, in KiB: all of it the agent holds in memory. */
+const PAGE_CACHE_KIB = 8192;
+
+const SCHEMA = `
+CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value NUMERIC NOT NULL) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS files (
+  path TEXT PRIMARY KEY, mtime_ms REAL NOT NULL, size INTEGER NOT NULL, offset INTEGER NOT NULL
+) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS buckets (
+  key TEXT PRIMARY KEY, harness TEXT NOT NULL, start INTEGER NOT NULL,
+  first_ts INTEGER NOT NULL, last_ts INTEGER NOT NULL, session_id TEXT NOT NULL,
+  project TEXT NOT NULL, project_path TEXT, model TEXT NOT NULL, provider TEXT,
+  input INTEGER NOT NULL, output INTEGER NOT NULL, cache_creation INTEGER NOT NULL,
+  cache_read INTEGER NOT NULL, reasoning INTEGER NOT NULL, cost REAL NOT NULL,
+  messages INTEGER NOT NULL, touched INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS claude (
+  key TEXT PRIMARY KEY, bucket TEXT NOT NULL, side INTEGER NOT NULL,
+  total INTEGER NOT NULL, counted INTEGER NOT NULL,
+  input INTEGER NOT NULL, output INTEGER NOT NULL, cache_creation INTEGER NOT NULL,
+  cache_read INTEGER NOT NULL, reasoning INTEGER NOT NULL, cost REAL NOT NULL
+) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS claude_side (key TEXT PRIMARY KEY, main TEXT NOT NULL) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS opencode_seen (id TEXT PRIMARY KEY) WITHOUT ROWID;
+`;
+
+/** A kept Claude message: which bucket it went into and what it added there. */
+interface ClaudeRow {
+  bucket: string;
+  cache_creation: number;
+  cache_read: number;
+  cost: number;
+  /** 0 once its share was taken back out of its bucket. */
+  counted: number;
+  input: number;
+  key: string;
+  output: number;
+  reasoning: number;
+  side: number;
+  total: number;
 }
 
-export interface ScanStats {
-  buckets: number;
-  claudeFiles: number;
-  claudeKept: number;
-  claudeParsed: number;
-  claudeSkipped: number;
-  durationMs: number;
-  opencodeKept: number;
-  opencodeParsed: number;
+interface BucketRow {
+  cache_creation: number;
+  cache_read: number;
+  cost: number;
+  first_ts: number;
+  harness: UsageBucket["harness"];
+  input: number;
+  last_ts: number;
+  messages: number;
+  model: string;
+  output: number;
+  project: string;
+  project_path: string | null;
+  provider: string | null;
+  reasoning: number;
+  session_id: string;
+  start: number;
+}
+
+interface FileRow {
+  mtime_ms: number;
+  offset: number;
+  size: number;
 }
 
 /** `rec` beats `existing`: non-sidechain wins; then the larger total tokens. */
-const prefers = (rec: ScannedRecord, existing: DedupEntry): boolean => {
-  if (rec.isSidechain !== existing.record.isSidechain) {
+const prefers = (rec: ScannedRecord, existing: ClaudeRow): boolean => {
+  if (rec.isSidechain !== (existing.side === 1)) {
     return !rec.isSidechain;
   }
-  return totalTokens(rec.tokens) > existing.totalTokens;
+  return totalTokens(rec.tokens) > existing.total;
 };
 
-/** Reads only the bytes appended after `offset`; a partial trailing line is deferred. */
-const readTail = async (
+const tokenValues = (t: UsageTokens) =>
+  [t.input, t.output, t.cacheCreation, t.cacheRead, t.reasoning] as const;
+
+const NEWLINE = 10;
+
+/**
+ * Hands `onLine` every whole line of `path` from byte `offset` on, as the
+ * file streams in, and answers the offset after the last whole line: a
+ * partial last line is a live session mid-write, left for the next read.
+ * Only one line is ever held whole, never the file.
+ */
+const eachLine = async (
   path: string,
-  offset: number
-): Promise<{ text: string; nextOffset: number }> => {
-  const file = Bun.file(path);
-  const { size } = file;
-  if (size <= offset) {
-    return { text: "", nextOffset: offset };
+  offset: number,
+  onLine: (line: string) => void
+): Promise<number> => {
+  const decoder = new TextDecoder();
+  let consumed = offset;
+  let pending: Uint8Array[] = [];
+  let pendingBytes = 0;
+  for await (const chunk of Bun.file(path).slice(offset).stream()) {
+    let start = 0;
+    for (
+      let end = chunk.indexOf(NEWLINE);
+      end !== -1;
+      end = chunk.indexOf(NEWLINE, start)
+    ) {
+      const head = chunk.subarray(start, end);
+      const line =
+        pending.length === 0 ? head : Buffer.concat([...pending, head]);
+      consumed += pendingBytes + head.length + 1;
+      pending = [];
+      pendingBytes = 0;
+      onLine(decoder.decode(line));
+      start = end + 1;
+    }
+    if (start < chunk.length) {
+      // A copy: the stream may reuse the chunk's buffer for the next one.
+      pending.push(chunk.slice(start));
+      pendingBytes += chunk.length - start;
+    }
   }
-  const text = await file.slice(offset, size).text();
-  if (text.endsWith("\n")) {
-    return { text, nextOffset: size };
-  }
-  const lastNewline = text.lastIndexOf("\n");
-  if (lastNewline === -1) {
-    return { text: "", nextOffset: offset };
-  }
-  return {
-    text: text.slice(0, lastNewline + 1),
-    nextOffset: offset + lastNewline + 1,
-  };
-};
-
-const readWhole = async (
-  path: string
-): Promise<{ text: string; nextOffset: number }> => {
-  const file = Bun.file(path);
-  const { size } = file;
-  const text = await file.text();
-  if (text.endsWith("\n")) {
-    return { text, nextOffset: size };
-  }
-  const lastNewline = text.lastIndexOf("\n");
-  if (lastNewline === -1) {
-    return { text, nextOffset: 0 };
-  }
-  return { text: text.slice(0, lastNewline + 1), nextOffset: lastNewline + 1 };
+  return consumed;
 };
 
 export class UsageScanner {
-  private readonly buckets = new Map<string, UsageBucket>();
-  private readonly claudeMain = new Map<string, DedupEntry>();
-  private readonly claudeSide = new Map<string, DedupEntry>();
-  private readonly opencodeSeen = new Set<string>();
-  private readonly touchedKeys = new Set<string>();
-  private index: UsageIndex;
-  private lastFullRebuild = 0;
+  readonly #db: Database;
+  readonly #path: string;
+  readonly #firstScan = Promise.withResolvers<void>();
+  /** Settles once the first scan, full or incremental, has ended. */
+  readonly scanned = this.#firstScan.promise;
 
-  constructor(index: UsageIndex | null = null) {
-    this.index = index ?? emptyIndex();
+  readonly #getMeta;
+  readonly #setMeta;
+  readonly #getFile;
+  readonly #putFile;
+  readonly #getClaude;
+  readonly #getSide;
+  readonly #putClaude;
+  readonly #putSide;
+  readonly #uncount;
+  readonly #seeOpencode;
+  readonly #fold;
+  readonly #reverse;
+  readonly #report;
+  readonly #untouch;
+
+  constructor(dir = cawcoDataDir()) {
+    mkdirSync(dir, { recursive: true });
+    // The JSON watermarks this store replaced (schema 1 of usage-index.json).
+    rmSync(join(dir, "usage-index.json"), { force: true });
+    this.#path = join(dir, "usage.db");
+    this.#db = new Database(this.#path, { create: true });
+    this.#db.exec(
+      `PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA cache_size = -${PAGE_CACHE_KIB};`
+    );
+    this.#db.exec(SCHEMA);
+    const db = this.#db;
+    this.#getMeta = db.query<{ value: number }, [string]>(
+      "SELECT value FROM meta WHERE key = ?"
+    );
+    this.#setMeta = db.query<unknown, [string, number]>(
+      "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value"
+    );
+    this.#getFile = db.query<FileRow, [string]>(
+      "SELECT mtime_ms, size, offset FROM files WHERE path = ?"
+    );
+    this.#putFile = db.query<unknown, [string, number, number, number]>(
+      `INSERT INTO files (path, mtime_ms, size, offset) VALUES (?, ?, ?, ?)
+       ON CONFLICT (path) DO UPDATE SET mtime_ms = excluded.mtime_ms, size = excluded.size, offset = excluded.offset`
+    );
+    this.#getClaude = db.query<ClaudeRow, [string]>(
+      "SELECT * FROM claude WHERE key = ?"
+    );
+    this.#getSide = db.query<ClaudeRow, [string]>(
+      "SELECT c.* FROM claude_side s JOIN claude c ON c.key = s.main WHERE s.key = ?"
+    );
+    this.#putClaude = db.query<
+      unknown,
+      [
+        string,
+        string,
+        number,
+        number,
+        number,
+        number,
+        number,
+        number,
+        number,
+        number,
+      ]
+    >(
+      `INSERT INTO claude (key, bucket, side, total, counted, input, output, cache_creation, cache_read, reasoning, cost)
+       VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT (key) DO UPDATE SET bucket = excluded.bucket, side = excluded.side, total = excluded.total,
+         counted = 1, input = excluded.input, output = excluded.output, cache_creation = excluded.cache_creation,
+         cache_read = excluded.cache_read, reasoning = excluded.reasoning, cost = excluded.cost`
+    );
+    this.#putSide = db.query<unknown, [string, string]>(
+      "INSERT INTO claude_side (key, main) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET main = excluded.main"
+    );
+    this.#uncount = db.query<unknown, [string]>(
+      "UPDATE claude SET counted = 0 WHERE key = ?"
+    );
+    this.#seeOpencode = db.query<{ id: string }, [string]>(
+      "INSERT OR IGNORE INTO opencode_seen (id) VALUES (?) RETURNING id"
+    );
+    this.#fold = db.query<
+      unknown,
+      [
+        string,
+        string,
+        number,
+        number,
+        number,
+        string,
+        string,
+        string | null,
+        string,
+        string | null,
+        number,
+        number,
+        number,
+        number,
+        number,
+        number,
+      ]
+    >(
+      `INSERT INTO buckets (key, harness, start, first_ts, last_ts, session_id, project, project_path, model, provider,
+         input, output, cache_creation, cache_read, reasoning, cost, messages, touched)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1)
+       ON CONFLICT (key) DO UPDATE SET
+         input = input + excluded.input, output = output + excluded.output,
+         cache_creation = cache_creation + excluded.cache_creation, cache_read = cache_read + excluded.cache_read,
+         reasoning = reasoning + excluded.reasoning, cost = cost + excluded.cost, messages = messages + 1,
+         first_ts = min(first_ts, excluded.first_ts), last_ts = max(last_ts, excluded.last_ts), touched = 1`
+    );
+    this.#reverse = db.query<
+      unknown,
+      [number, number, number, number, number, number, string]
+    >(
+      `UPDATE buckets SET input = input - ?, output = output - ?, cache_creation = cache_creation - ?,
+         cache_read = cache_read - ?, reasoning = reasoning - ?, cost = cost - ?, messages = messages - 1, touched = 1
+       WHERE key = ?`
+    );
+    this.#report = db.query<BucketRow, [number, number]>(
+      "SELECT * FROM buckets WHERE start IN (?, ?) OR touched = 1"
+    );
+    this.#untouch = db.query<unknown, []>(
+      "UPDATE buckets SET touched = 0 WHERE touched = 1"
+    );
+    gauge("usage.dbMB", () => Math.round(statSync(this.#path).size / 2 ** 20));
   }
 
-  static async load(): Promise<UsageScanner> {
-    return new UsageScanner(await loadIndex());
+  get #lastFullRebuild(): number {
+    return this.#getMeta.get("last_full_rebuild")?.value ?? 0;
   }
 
-  private fold(rec: ScannedRecord): string {
+  /** Folds `rec` into its bucket; answers the bucket's key. */
+  #foldIn(rec: ScannedRecord): string {
     const start = bucketStart(rec.ts);
     const key = `${rec.harness}:${rec.sessionId}:${rec.model}:${start}`;
-    const b = this.buckets.get(key);
-    if (b) {
-      b.tokens.input += rec.tokens.input;
-      b.tokens.output += rec.tokens.output;
-      b.tokens.cacheCreation += rec.tokens.cacheCreation;
-      b.tokens.cacheRead += rec.tokens.cacheRead;
-      b.tokens.reasoning += rec.tokens.reasoning;
-      b.costUsd += rec.costUsd;
-      b.messages += 1;
-      if (rec.ts < b.firstTs) {
-        b.firstTs = rec.ts;
-      }
-      if (rec.ts > b.lastTs) {
-        b.lastTs = rec.ts;
-      }
-    } else {
-      this.buckets.set(key, {
-        harness: rec.harness,
-        start,
-        spanMs: BUCKET_MS,
-        firstTs: rec.ts,
-        lastTs: rec.ts,
-        sessionId: rec.sessionId,
-        project: rec.project,
-        projectPath: rec.projectPath,
-        model: rec.model,
-        provider: rec.provider,
-        tokens: {
-          input: rec.tokens.input,
-          output: rec.tokens.output,
-          cacheCreation: rec.tokens.cacheCreation,
-          cacheRead: rec.tokens.cacheRead,
-          reasoning: rec.tokens.reasoning,
-        },
-        costUsd: rec.costUsd,
-        messages: 1,
-      });
-    }
-    this.touchedKeys.add(key);
+    this.#fold.run(
+      key,
+      rec.harness,
+      start,
+      rec.ts,
+      rec.ts,
+      rec.sessionId,
+      rec.project,
+      rec.projectPath,
+      rec.model,
+      rec.provider,
+      ...tokenValues(rec.tokens),
+      rec.costUsd
+    );
     return key;
   }
 
-  private reverse(entry: DedupEntry): void {
-    const b = this.buckets.get(entry.bucketKey);
-    if (!b) {
+  /**
+   * Takes a kept message's share back out of its bucket, once. firstTs/lastTs
+   * are deliberately not reversed: a rare mid-stream replacement leaves at
+   * most a stale window edge, which the 30-minute full rebuild heals
+   * (USAGE-SPEC.md §5.1).
+   */
+  #takeBack(row: ClaudeRow): void {
+    if (row.counted === 0) {
       return;
     }
-    b.tokens.input -= entry.record.tokens.input;
-    b.tokens.output -= entry.record.tokens.output;
-    b.tokens.cacheCreation -= entry.record.tokens.cacheCreation;
-    b.tokens.cacheRead -= entry.record.tokens.cacheRead;
-    b.tokens.reasoning -= entry.record.tokens.reasoning;
-    b.costUsd -= entry.record.costUsd;
-    b.messages -= 1;
-    // firstTs/lastTs are deliberately not reversed: a rare mid-stream
-    // replacement leaves at most a stale window edge, which the 30-minute full
-    // rebuild heals (USAGE-SPEC.md §5.1).
+    this.#reverse.run(
+      row.input,
+      row.output,
+      row.cache_creation,
+      row.cache_read,
+      row.reasoning,
+      row.cost,
+      row.bucket
+    );
+    this.#uncount.run(row.key);
   }
 
-  /** Folds `rec` in if it survives dedup; returns true when it was kept. */
-  private ingest(rec: ScannedRecord): boolean {
+  /** Folds `rec` in if it survives dedup (USAGE-SPEC.md §5.2). */
+  #ingest(rec: ScannedRecord): void {
     if (rec.harness === "opencode") {
-      if (this.opencodeSeen.has(rec.messageId)) {
-        return false;
+      if (this.#seeOpencode.get(rec.messageId)) {
+        this.#foldIn(rec);
       }
-      this.opencodeSeen.add(rec.messageId);
-      this.fold(rec);
-      return true;
+      return;
     }
 
     const mainKey = `${rec.messageId}\u0000${rec.requestId}`;
-    const mainExisting = this.claudeMain.get(mainKey);
-    if (mainExisting && !prefers(rec, mainExisting)) {
-      return false;
+    const main = this.#getClaude.get(mainKey);
+    if (main && !prefers(rec, main)) {
+      return;
+    }
+    const sideKey = `${rec.messageId}\u0000`;
+    const side = rec.isSidechain ? this.#getSide.get(sideKey) : null;
+    if (side && !prefers(rec, side)) {
+      return;
     }
 
+    if (main) {
+      this.#takeBack(main);
+    }
+    const bucket = this.#foldIn(rec);
+    this.#putClaude.run(
+      mainKey,
+      bucket,
+      rec.isSidechain ? 1 : 0,
+      totalTokens(rec.tokens),
+      ...tokenValues(rec.tokens),
+      rec.costUsd
+    );
     if (rec.isSidechain) {
-      const sideExisting = this.claudeSide.get(`${rec.messageId}\u0000`);
-      if (sideExisting && !prefers(rec, sideExisting)) {
-        return false;
+      if (side && side.key !== mainKey) {
+        this.#takeBack(side);
       }
+      this.#putSide.run(sideKey, mainKey);
     }
-
-    if (mainExisting) {
-      this.reverse(mainExisting);
-    }
-    const bucketKey = this.fold(rec);
-    const entry: DedupEntry = {
-      record: rec,
-      totalTokens: totalTokens(rec.tokens),
-      bucketKey,
-    };
-    this.claudeMain.set(mainKey, entry);
-    if (rec.isSidechain) {
-      const sideKey = `${rec.messageId}\u0000`;
-      const sideExisting = this.claudeSide.get(sideKey);
-      if (sideExisting && sideExisting !== mainExisting) {
-        this.reverse(sideExisting);
-      }
-      this.claudeSide.set(sideKey, entry);
-    }
-    return true;
   }
 
-  private ingestAll(records: ScannedRecord[]): number {
-    let kept = 0;
-    for (const rec of records) {
-      if (this.ingest(rec)) {
-        kept += 1;
-      }
+  /** Runs `work` as one transaction: all of it lands, or none. */
+  async #inTransaction(work: () => void | Promise<void>): Promise<void> {
+    this.#db.exec("BEGIN");
+    try {
+      await work();
+      this.#db.exec("COMMIT");
+    } catch (error) {
+      this.#db.exec("ROLLBACK");
+      throw error;
     }
-    return kept;
+  }
+
+  /** Reads `path` from `offset`, folding each usage line in; records the new watermark. */
+  async #scanFile(
+    path: string,
+    project: string,
+    offset: number,
+    info: { mtimeMs: number; size: number }
+  ): Promise<void> {
+    await this.#inTransaction(async () => {
+      const next = await eachLine(path, offset, (line) => {
+        const rec = parseClaudeLine(line, project);
+        if (rec) {
+          this.#ingest(rec);
+        }
+      });
+      this.#putFile.run(path, info.mtimeMs, info.size, next);
+    });
+  }
+
+  async #scanOpencode(since: number): Promise<void> {
+    const dbPath = await openDbPath();
+    if (!dbPath) {
+      return;
+    }
+    await this.#inTransaction(() => {
+      const latest = scanOpencode(dbPath, since, (rec) => this.#ingest(rec));
+      this.#setMeta.run("opencode_max_time_created", latest);
+    });
   }
 
   /** Reads every transcript and the opencode DB from scratch; clears prior state. */
-  async fullRebuild(): Promise<ScanStats> {
-    const start = Date.now();
-    // Re-cost against the live catalog before re-costing the corpus. The
-    // bundled snapshot goes stale the moment a new model ships — and a model
-    // it does not know prices at 0, silently, forever, because incremental
-    // scans never revisit a bucket they already wrote. The rebuild is the one
-    // place that re-costs everything, so it is the one place the rates must be
-    // fresh. `refreshPricing` throttles itself to 24h and swallows its own
-    // failures; offline keeps the snapshot and the rebuild proceeds.
-    await refreshPricing();
-    this.buckets.clear();
-    this.claudeMain.clear();
-    this.claudeSide.clear();
-    this.opencodeSeen.clear();
-    this.touchedKeys.clear();
-    this.index = emptyIndex();
-
-    let claudeFiles = 0;
-    let claudeParsed = 0;
-    for (const file of await listClaudeFiles()) {
-      claudeFiles += 1;
-      let info: Stats;
-      try {
-        // biome-ignore lint/performance/noAwaitInLoops: each file folds into the shared dedup maps and buckets in sequence
-        info = await stat(file.path);
-      } catch {
-        continue;
+  async fullRebuild(): Promise<void> {
+    try {
+      // Re-cost against the live catalog before re-costing the corpus. The
+      // bundled snapshot goes stale the moment a new model ships — and a model
+      // it does not know prices at 0, silently, forever, because incremental
+      // scans never revisit a bucket they already wrote. The rebuild is the one
+      // place that re-costs everything, so it is the one place the rates must be
+      // fresh. `refreshPricing` throttles itself to 24h and swallows its own
+      // failures; offline keeps the snapshot and the rebuild proceeds.
+      await refreshPricing();
+      this.#db.exec(
+        "DELETE FROM buckets; DELETE FROM claude; DELETE FROM claude_side; DELETE FROM opencode_seen; DELETE FROM files; DELETE FROM meta;"
+      );
+      for (const file of await listClaudeFiles()) {
+        let info: { mtimeMs: number; size: number };
+        try {
+          // biome-ignore lint/performance/noAwaitInLoops: each file folds into the shared dedup set and buckets in sequence
+          info = await stat(file.path);
+        } catch {
+          continue;
+        }
+        await this.#scanFile(file.path, file.project, 0, info);
       }
-      const { text, nextOffset } = await readWhole(file.path);
-      const records = parseClaudeRecords(text, file.project);
-      claudeParsed += records.length;
-      this.ingestAll(records);
-      this.index.claude[file.path] = {
-        mtimeMs: info.mtimeMs,
-        size: info.size,
-        offset: nextOffset,
-      };
+      await this.#scanOpencode(0);
+      this.#setMeta.run("last_full_rebuild", Date.now());
+    } finally {
+      this.#firstScan.resolve();
     }
-
-    let opencodeParsed = 0;
-    let opencodeKept = 0;
-    const dbPath = await openDbPath();
-    if (dbPath) {
-      const res = scanOpencode(dbPath, 0);
-      opencodeParsed = res.parsed;
-      opencodeKept += this.ingestAll(res.records);
-      this.index.opencode = { maxTimeCreated: res.maxTimeCreated };
-    }
-
-    this.lastFullRebuild = Date.now();
-    await saveIndex(this.index);
-
-    // Surviving records = non-sidechain main winners + sidechain fallback
-    // winners. The fold path counts every fold (including ones later reversed
-    // by a larger-token replay), so it is not the surviving count.
-    let nonSideKept = 0;
-    for (const entry of this.claudeMain.values()) {
-      if (!entry.record.isSidechain) {
-        nonSideKept += 1;
-      }
-    }
-    const claudeKept = nonSideKept + this.claudeSide.size;
-
-    return {
-      claudeFiles,
-      claudeSkipped: 0,
-      claudeParsed,
-      claudeKept,
-      opencodeParsed,
-      opencodeKept,
-      buckets: this.buckets.size,
-      durationMs: Date.now() - start,
-    };
   }
 
   /** Compares watermarks and reads only what changed since the last scan. */
-  async incremental(): Promise<ScanStats> {
-    const start = Date.now();
-    let claudeFiles = 0;
-    let claudeSkipped = 0;
-    let claudeParsed = 0;
-    let claudeKept = 0;
-    for (const file of await listClaudeFiles()) {
-      claudeFiles += 1;
-      let info: Stats;
-      try {
-        // biome-ignore lint/performance/noAwaitInLoops: each file folds into the shared dedup maps and buckets in sequence
-        info = await stat(file.path);
-      } catch {
-        continue;
+  async incremental(): Promise<void> {
+    try {
+      for (const file of await listClaudeFiles()) {
+        let info: { mtimeMs: number; size: number };
+        try {
+          // biome-ignore lint/performance/noAwaitInLoops: each file folds into the shared dedup set and buckets in sequence
+          info = await stat(file.path);
+        } catch {
+          continue;
+        }
+        const wm = this.#getFile.get(file.path);
+        if (wm && info.mtimeMs === wm.mtime_ms && info.size === wm.size) {
+          continue;
+        }
+        // Grown: transcripts are append-only, so only the bytes after the
+        // watermark are new. Shrunk or rotated: read it whole again.
+        const from = wm && info.size > wm.size ? wm.offset : 0;
+        await this.#scanFile(file.path, file.project, from, info);
       }
-      const wm = this.index.claude[file.path];
-      if (wm && info.mtimeMs === wm.mtimeMs && info.size === wm.size) {
-        claudeSkipped += 1;
-        continue;
-      }
-      if (wm && info.size > wm.size) {
-        const { text, nextOffset } = await readTail(file.path, wm.offset);
-        const records = parseClaudeRecords(text, file.project);
-        claudeParsed += records.length;
-        claudeKept += this.ingestAll(records);
-        this.index.claude[file.path] = {
-          mtimeMs: info.mtimeMs,
-          size: info.size,
-          offset: nextOffset,
-        };
-      } else {
-        const { text, nextOffset } = await readWhole(file.path);
-        const records = parseClaudeRecords(text, file.project);
-        claudeParsed += records.length;
-        claudeKept += this.ingestAll(records);
-        this.index.claude[file.path] = {
-          mtimeMs: info.mtimeMs,
-          size: info.size,
-          offset: nextOffset,
-        };
-      }
+      await this.#scanOpencode(
+        this.#getMeta.get("opencode_max_time_created")?.value ?? 0
+      );
+    } finally {
+      this.#firstScan.resolve();
     }
-
-    let opencodeParsed = 0;
-    let opencodeKept = 0;
-    const watermark = this.index.opencode?.maxTimeCreated ?? 0;
-    const dbPath = await openDbPath();
-    if (dbPath) {
-      const res = scanOpencode(dbPath, watermark);
-      opencodeParsed = res.parsed;
-      opencodeKept += this.ingestAll(res.records);
-      this.index.opencode = { maxTimeCreated: res.maxTimeCreated };
-    }
-
-    await saveIndex(this.index);
-    return {
-      claudeFiles,
-      claudeSkipped,
-      claudeParsed,
-      claudeKept,
-      opencodeParsed,
-      opencodeKept,
-      buckets: this.buckets.size,
-      durationMs: Date.now() - start,
-    };
-  }
-
-  /** Every absolute bucket total, keyed `${harness}:${sessionId}:${model}:${start}`. */
-  listBuckets(): UsageBucket[] {
-    return [...this.buckets.values()];
   }
 
   /**
@@ -382,23 +474,35 @@ export class UsageScanner {
    */
   reportBuckets(now: number): UsageBucket[] {
     const current = bucketStart(now);
-    const previous = current - BUCKET_MS;
-    const out: UsageBucket[] = [];
-    for (const [key, b] of this.buckets) {
-      if (
-        b.start === current ||
-        b.start === previous ||
-        this.touchedKeys.has(key)
-      ) {
-        out.push(b);
-      }
-    }
-    this.touchedKeys.clear();
-    return out;
+    const buckets = this.#report.all(current, current - BUCKET_MS).map(
+      (row): UsageBucket => ({
+        harness: row.harness,
+        start: row.start,
+        spanMs: BUCKET_MS,
+        firstTs: row.first_ts,
+        lastTs: row.last_ts,
+        sessionId: row.session_id,
+        project: row.project,
+        projectPath: row.project_path,
+        model: row.model,
+        provider: row.provider,
+        tokens: {
+          input: row.input,
+          output: row.output,
+          cacheCreation: row.cache_creation,
+          cacheRead: row.cache_read,
+          reasoning: row.reasoning,
+        },
+        costUsd: row.cost,
+        messages: row.messages,
+      })
+    );
+    this.#untouch.run();
+    return buckets;
   }
 
-  /** True when the last full rebuild is older than `intervalMs`. */
+  /** True when the last full rebuild, on this machine's store, is older than `intervalMs`. */
   dueForFullRebuild(intervalMs: number): boolean {
-    return Date.now() - this.lastFullRebuild >= intervalMs;
+    return Date.now() - this.#lastFullRebuild >= intervalMs;
   }
 }

@@ -122,6 +122,7 @@ import { GATE_FORM_ENV, gateForm } from "../gate-form";
 import type { Harness, HarnessContext, HarnessSession } from "../harness";
 import { HarnessRecoveryRefused, SessionAddressRefused } from "../harness";
 import { isMachineAgent } from "../machine-agent";
+import { gaugeTables } from "../memory";
 import { OPENCODE_SERVER_PROC_ID, parseProcId } from "../proc-id";
 import {
   opencodeAccountEnv,
@@ -2187,6 +2188,20 @@ export class OpencodeSession implements HarnessSession {
    */
   get unhanded(): number {
     return this.#queue.length;
+  }
+
+  tables(): Record<string, number> {
+    return {
+      opencodeRoles: this.#roles.size,
+      opencodeCosts: this.#costs.size,
+      opencodePending: this.#pending.size,
+      opencodeTools: this.#toolsEmitted.size,
+      opencodeCreated: this.#created.size,
+      opencodeWritten: this.#written.size,
+      opencodeGates: this.#seenGates.size + this.#resolvedGates.size,
+      opencodeChildren: this.#childInfo.size + this.#childState.size,
+      opencodeBoundCalls: this.#boundCalls.size,
+    };
   }
 
   /**
@@ -4686,6 +4701,19 @@ export class OpencodeHarness implements Harness {
   readonly #recoveryWaiters: (() => void)[] = [];
   readonly #reconcileJobs = new Map<OpencodeSession, Promise<void>>();
   readonly #reconcileAgain = new Set<OpencodeSession>();
+
+  constructor() {
+    gaugeTables("opencode", {
+      slots: this.#accounts,
+      sessions: this.#sessions,
+      children: this.#children,
+      activities: this.#activities,
+      sessionOwners: this.#sessionOwners,
+      generationClients: this.#generationClients,
+      pumps: this.#pumps,
+      reconcileJobs: this.#reconcileJobs,
+    });
+  }
 
   // ---------------------------------------------------- config convergence
 

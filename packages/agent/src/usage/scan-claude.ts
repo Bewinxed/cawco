@@ -81,26 +81,19 @@ const parseClaudeRecord = (
   };
 };
 
-/** Parses a chunk of transcript text (lines joined by `\n`) into records. */
-export const parseClaudeRecords = (
-  text: string,
+/** Parses one transcript line into a record, or null when it carries no usage to count. */
+export const parseClaudeLine = (
+  line: string,
   project: string
-): ScannedRecord[] => {
-  const records: ScannedRecord[] = [];
-  for (const line of text.split("\n")) {
-    if (!line.includes('"usage":{')) {
-      continue;
-    }
-    let obj: unknown;
-    try {
-      obj = JSON.parse(line);
-    } catch {
-      continue;
-    }
-    const rec = parseClaudeRecord(obj, project);
-    if (rec) {
-      records.push(rec);
-    }
+): ScannedRecord | null => {
+  if (!line.includes('"usage":{')) {
+    return null;
   }
-  return records;
+  let obj: unknown;
+  try {
+    obj = JSON.parse(line);
+  } catch {
+    return null;
+  }
+  return parseClaudeRecord(obj, project);
 };

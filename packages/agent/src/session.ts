@@ -110,6 +110,7 @@ import { hashText, readJson, writeJson } from "./harnesses/fleet-common";
 import { generateImage } from "./image-generation";
 import { isMachineAgent } from "./machine-agent";
 import { prepareFleetMcp } from "./mcp-launcher";
+import { gaugeGroup, gaugeTables } from "./memory";
 import { startPreview, stopPreview, stopPreviews } from "./preview";
 import { parseProcId, SESSION_PROC_KINDS } from "./proc-id";
 import { type PromptWriteNotice, withPromptWrites } from "./prompt-writes";
@@ -558,6 +559,34 @@ export class SessionSupervisor {
   #custodyInstances = new Set<string>();
 
   constructor() {
+    gaugeTables("supervisor", {
+      sessions: this.#sessions,
+      asleep: this.#asleep,
+      handed: this.#handed,
+      queues: this.#queues,
+      resumable: this.#resumable,
+      ingested: this.#ingested,
+      openAsks: this.#openAsks,
+      unheardSettles: this.#unheardSettles,
+      worktrees: this.#worktrees,
+      spinOffs: this.#spinOffs,
+      titles: this.#titles,
+      failures: this.#failures,
+      generations: this.#generations,
+      activeAt: this.#activeAt,
+      pulseAt: this.#pulseAt,
+      keepAlive: this.#keepAlive,
+    });
+    // Each live session's own tables, summed by name across sessions.
+    gaugeGroup("session", () => {
+      const totals: Record<string, number> = {};
+      for (const session of this.#sessions.values()) {
+        for (const [name, size] of Object.entries(session.tables?.() ?? {})) {
+          totals[name] = (totals[name] ?? 0) + size;
+        }
+      }
+      return totals;
+    });
     this.#adapter("opencode").setCustodyReadiness?.(() => this.custodyReady);
     setInterval(() => {
       this.#sweepIdle().catch((error: unknown) =>

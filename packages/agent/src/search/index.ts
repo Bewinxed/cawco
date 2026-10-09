@@ -23,6 +23,9 @@ export class TranscriptSearchService {
   #timer: ReturnType<typeof setInterval> | null = null;
   #syncing = false;
   #openCodeWatermark = 0;
+  readonly #firstSync = Promise.withResolvers<void>();
+  /** Settles once the first sync has ended, however it ended. */
+  readonly synced = this.#firstSync.promise;
 
   private constructor(index: TranscriptIndex) {
     this.#index = index;
@@ -92,9 +95,11 @@ export class TranscriptSearchService {
   /** Start the background sync loop. First sync is kicked off immediately. */
   start(): void {
     // Fire-and-forget initial sync — must not block startup.
-    this.sync().catch(() => {
-      // Swallowed: a failed initial sync is not fatal.
-    });
+    this.sync()
+      .catch(() => {
+        // Swallowed: a failed initial sync is not fatal.
+      })
+      .finally(() => this.#firstSync.resolve());
     this.#timer = setInterval(() => {
       this.sync().catch(() => {
         // Swallowed: a periodic sync failure must not kill the daemon.

@@ -79,6 +79,7 @@ import { KeeperWatchdog, machineKeeper } from "./keeper-watchdog";
 import { endOrphanedSignIns, endSignIns } from "./login";
 import { isMachineAgent } from "./machine-agent";
 import { setAccountFreshener, startMcpGateway } from "./mcp-oauth";
+import { MEMORY_LOG_INTERVAL_MS, memoryLine } from "./memory";
 import {
   moveCancel,
   moveClone,
@@ -131,6 +132,7 @@ import {
 const DEFAULT_HUB_URL = `ws://localhost:${CAWCO_HUB_PORT}/ws`;
 const HEARTBEAT_INTERVAL = Duration.seconds(15);
 const USAGE_INTERVAL = Duration.seconds(60);
+const MEMORY_LOG_INTERVAL = Duration.millis(MEMORY_LOG_INTERVAL_MS);
 const USAGE_FULL_REBUILD_MS = 30 * 60 * 1000;
 /** How often every CawCo account dir's `auth status` is read again. */
 const CLAUDE_LOGIN_CHECK_INTERVAL_MS = 60_000;
@@ -1709,9 +1711,9 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
         )
     );
 
-    // The usage scanner outlives connections too: its dedup set is rebuilt only
-    // on start (USAGE-SPEC.md §5.1), so a reconnect must not reset it.
-    const scanner = yield* Effect.promise(() => UsageScanner.load());
+    // The usage scanner outlives connections too: its store (usage.db) is the
+    // machine's, so a reconnect picks up where the last scan stopped.
+    const scanner = yield* Effect.sync(() => new UsageScanner());
     supervisor.registerDaemonFunction("probeCapabilities", probeCapabilities);
 
     // Updates arrive only as signed builds from the hub: this one object owns
@@ -1777,6 +1779,22 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
       TranscriptSearchService.create()
     );
     search.start();
+    // The agent's memory, by what holds it (memory.ts): once its first usage
+    // scan and search sync have ended, and on its own clock from the start, so
+    // an agent that never reaches its hub still says it.
+    const logMemory = Effect.suspend(() => Effect.logInfo(memoryLine()));
+    yield* Effect.forkScoped(
+      Effect.promise(() => Promise.all([scanner.scanned, search.synced])).pipe(
+        Effect.andThen(logMemory)
+      )
+    );
+    yield* Effect.forkScoped(
+      Effect.sleep(MEMORY_LOG_INTERVAL).pipe(
+        Effect.andThen(
+          Effect.repeat(logMemory, Schedule.spaced(MEMORY_LOG_INTERVAL))
+        )
+      )
+    );
     // A command runs as this process's child, so a restart kills it: none starts behind a raised fence.
     supervisor.registerDaemonFunction(
       CONTROL_RUN_COMMAND,

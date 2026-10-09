@@ -41,14 +41,6 @@ interface MessageRow {
   time_created: number;
 }
 
-export interface OpencodeScanResult {
-  kept: number;
-  /** Highest `time_created` seen, for the next incremental watermark. */
-  maxTimeCreated: number;
-  parsed: number;
-  records: ScannedRecord[];
-}
-
 const projectOf = (
   data: RawOpenCodeMessage
 ): { project: string; projectPath: string | null } => {
@@ -60,25 +52,27 @@ const projectOf = (
 };
 
 /**
- * Reads every assistant message with `time_created > maxTimeCreated`, in
- * read-only mode. Rows whose `role !== 'assistant'` or whose every token field
- * is zero are skipped. `data.cost` is authoritative; computed pricing is only
- * the fallback when cost is absent/zero and tokens are non-zero.
+ * Hands `onRecord` every assistant message with `time_created >
+ * maxTimeCreated`, a row at a time, in read-only mode, and answers the highest
+ * `time_created` seen: the next incremental watermark. Rows whose
+ * `role !== 'assistant'` or whose every token field is zero are skipped.
+ * `data.cost` is authoritative; computed pricing is only the fallback when
+ * cost is absent/zero and tokens are non-zero.
  */
 export const scanOpencode = (
   dbPath: string,
-  maxTimeCreated: number
+  maxTimeCreated: number,
+  onRecord: (record: ScannedRecord) => void
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one pass filtering the four ways a row can be skipped, then shaping the record
-): OpencodeScanResult => {
+): number => {
   const db = new Database(dbPath, { readonly: true });
   try {
     const rows = db
       .query<MessageRow, [number]>(
         "SELECT id, session_id, time_created, data FROM message WHERE time_created > ?1"
       )
-      .all(maxTimeCreated);
+      .iterate(maxTimeCreated);
 
-    const records: ScannedRecord[] = [];
     let nextMax = maxTimeCreated;
 
     for (const row of rows) {
@@ -139,7 +133,7 @@ export const scanOpencode = (
       }
 
       const { project, projectPath } = projectOf(data);
-      records.push({
+      onRecord({
         harness: "opencode",
         ts: data.time?.created ?? row.time_created,
         sessionId,
@@ -155,12 +149,7 @@ export const scanOpencode = (
       });
     }
 
-    return {
-      records,
-      maxTimeCreated: nextMax,
-      parsed: rows.length,
-      kept: records.length,
-    };
+    return nextMax;
   } finally {
     db.close();
   }

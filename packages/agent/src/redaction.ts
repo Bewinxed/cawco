@@ -26,6 +26,7 @@ import {
 import { sessionIdentityDir } from "@cawco/core/paths";
 import { WIRE_PART_CHARS } from "@cawco/core/wire";
 import { delegationHubUrl } from "./delegation";
+import { gauge } from "./memory";
 
 export const REDACTED = "[cawco credential]";
 
@@ -39,6 +40,8 @@ const storeFile = (): string =>
 let known: { file: string; values: Set<string> } | undefined;
 /** Each live session's own credential, for the stream carry. */
 const bySession = new Map<string, string>();
+gauge("redaction.sessions", () => bySession.size);
+gauge("redaction.known", () => known?.values.size ?? 0);
 
 const loaded = (): Set<string> => {
   const file = storeFile();
@@ -158,6 +161,7 @@ const carries = new Map<
   string,
   { envelope: Envelope; delta: Delta; text: string }
 >();
+gauge("redaction.carries", () => carries.size);
 
 /** One message for the socket: its JSON as it is written, and about how long. */
 export interface OutboundMessage {
