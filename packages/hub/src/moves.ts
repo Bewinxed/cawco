@@ -122,6 +122,8 @@ export interface MoveState {
 }
 
 export interface MovesDeps {
+  /** Every ask parked now, the ones kept across a hub restart included (server.ts `pending`). */
+  readonly asks: () => Envelope[];
   /**
    * A machine's control: its result, or {@link MoveAway} when the machine is
    * not connected (or went while it answered), or the machine's own error.
@@ -146,7 +148,11 @@ export interface MovesDeps {
     line: { at: number; moved: string; stayed?: string }
   ) => void;
   readonly online: (machineId: string) => boolean;
-  /** Parks an ask for the person (server.ts `parkForPerson`). */
+  /**
+   * Parks an ask for the person (server.ts `parkForPerson`), kept across a
+   * hub restart: its answer is read against the job's record (`answer`), so
+   * the hub that comes back carries it out, and the ask rings once.
+   */
   readonly park: (envelope: Envelope) => void;
   /** Whether an ask is parked now. */
   readonly parked: (requestId: string) => boolean;
@@ -1500,6 +1506,24 @@ export const createMoves = (deps: MovesDeps) => {
    * row now), and the settled ones are let go later.
    */
   const resume = (): void => {
+    // A kept approval no job waits on any more (the hub stopped between a
+    // move's end and its ask's) is settled: never left on a screen with
+    // nothing to carry out its answer.
+    for (const envelope of deps.asks()) {
+      const jobId = (envelope.payload as { move?: { jobId?: unknown } }).move
+        ?.jobId;
+      if (typeof jobId !== "string" || !envelope.requestId) {
+        continue;
+      }
+      const row = db.moveRow(jobId);
+      const waits =
+        row?.stage === "approval" &&
+        !row.state.approved &&
+        row.state.askId === envelope.requestId;
+      if (!waits) {
+        deps.settle(envelope.requestId, "cancelled");
+      }
+    }
     for (const row of db.moveRows()) {
       if (row.stage === "started" || row.stage === "cancelled") {
         forgetLater(row);

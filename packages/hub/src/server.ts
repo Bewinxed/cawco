@@ -2301,7 +2301,13 @@ export const createServer = (
   const swept = db.sweepBootStatuses(RESTART_RESUMABLE);
   for (const parked of pending.list()) {
     const [row] = db.getInstancesByIds([parked.instanceId ?? ""]);
-    if (!(row && ["running", "starting", "unknown"].includes(row.status))) {
+    // A move's approval is kept on its `moving` row, which no process holds;
+    // the move settles one no job waits on (moves.ts `resume`).
+    if (
+      !(
+        row && ["running", "starting", "unknown", "moving"].includes(row.status)
+      )
+    ) {
       pending.forget(parked.instanceId ?? "");
     }
   }
@@ -10018,7 +10024,8 @@ export const createServer = (
     online: (machineId) => registry.agent(machineId) !== undefined,
     machineName,
     movedHere: (instanceId, line) => noteMovedHere(instanceId, line),
-    park: parkForPerson,
+    asks: () => pending.list(),
+    park: (envelope) => parkForPerson(envelope, true),
     parked: (requestId) => pending.get(requestId) !== undefined,
     settle: (requestId, outcome) => {
       pending.resolve(requestId, outcome);
