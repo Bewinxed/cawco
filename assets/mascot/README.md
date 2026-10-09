@@ -185,6 +185,16 @@ them (the editor cannot import `.riv` files). From `assets/mascot/scripts` (`bun
 - `uv run trace.py [loop …]` traces the takes listed in `assets/mascot/loops/takes.json` (each
   status's loops, with their take and still) into `assets/mascot/loops/<loop>/` (see Pipeline).
   It needs `ffmpeg` and `curl`; uv installs its Python dependencies from the script's own header.
+  Each loop is traced beside its folder and replaces it only when every drawing sits inside the
+  safe area, the same line enters are held to (below): a loop that runs past the artboard is
+  named with its drawings and not written, and the run exits non-zero.
+- `uv run trace.py --safe [loop …]` runs that check alone over the loops on disk: one line per
+  loop naming each drawing outside the line (its place in playing order, its file and the take
+  frame it starts on), `safe: N/M loops inside the safe line`, and a non-zero exit if any fails.
+  It is the art pipeline's own check, not part of `build.mjs` or the app builds, which build from
+  the committed `.riv` files: on 2026-10-09 it failed 17 of the 22 loops (13 cut at the take's
+  frame or the artboard, 4 only inside the 3.5% margin) until their replacement takes are
+  picked and traced; then `build.mjs` runs it before writing, as it runs `ink_gate.py`.
 - `uv run trace_clip.py <status>-enter <take> [clips folder]` traces one enter into
   `assets/mascot/clips/<status>-enter/` (or the folder named) with the same tracer, registered
   onto the still it lands on. It trims the take to the move itself (the holds at either end

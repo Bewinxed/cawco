@@ -8,6 +8,11 @@ usage: uv run trace.py [loop ...]        (default: every loop in ../loops/takes.
        uv run trace.py --halo [loop ...] yellow traced where the take has none, per drawing on disk
        uv run trace.py --eyes [loop ...] eye whites the drawings on disk show see-through; exits
                                          non-zero if any loop has one
+       uv run trace.py --safe [loop ...] drawings on disk with ink outside the safe line (3.5% in
+                                         from the take's frame and the apps' artboard), each by its
+                                         place, file and take frame; exits non-zero if any has one.
+                                         Tracing a loop runs the same check and writes nothing for
+                                         a loop that fails it
 
 ../loops/takes.json lists each status's variant loops: a loop name, its Backlot take (shot with the
 H3 keyframe sequence adapter, on twos) and the still it opens and closes on. For each loop this
@@ -24,6 +29,7 @@ registered onto the loop's light still (assets/mascot/stills).
 import io
 import json
 import re
+import shutil
 import subprocess
 import sys
 from multiprocessing import Pool
@@ -193,6 +199,53 @@ LID_LINE = 90
 # beside vermilion over 40).
 NEUTRAL = 30
 ARTBOARD = 512
+# The artboard the apps draw, in the stills' units: 592 square, the still box 43 right, 40 down.
+APP_ARTBOARD = (-43.0, -40.0, 592.0)
+SAFE = 0.035  # EBU R95 / ITU-R BT.1848 action-safe margin, in from each edge
+SAFE_PX = 600  # the side the safe area is measured at
+
+
+def unsafe_drawings(folder: Path) -> list[int]:
+    """A traced loop's or clip's drawings, counted from 1 in playing order, with ink outside the
+    safe line: 3.5% in from each edge of the tighter of the take's frame and the artboard the apps
+    draw, so he is wholly visible or not there at all (EBU R95 and ITU-R BT.1848 give the 3.5%
+    action-safe margin; SMPTE RP 218: "all significant action shall be contained")."""
+    timing = json.loads((folder / "timing.json").read_text())
+    p = timing["placement"]
+    take = (p["x"], p["y"], 1024 * p["scale"])
+    left, top = max(take[0], APP_ARTBOARD[0]), max(take[1], APP_ARTBOARD[1])
+    right = min(take[0] + take[2], APP_ARTBOARD[0] + APP_ARTBOARD[2])
+    bottom = min(take[1] + take[2], APP_ARTBOARD[1] + APP_ARTBOARD[2])
+    # A view one margin wider than the box, so ink beyond its edge is seen too.
+    w, h = right - left, bottom - top
+    view = f'viewBox="{left - SAFE * w} {top - SAFE * h} {w * (1 + 2 * SAFE)} {h * (1 + 2 * SAFE)}"'
+    out = []
+    for k, slot in enumerate(timing["drawings"]):
+        text = (folder / f"body-{slot['drawing']:02d}.svg").read_text()
+        text = text.replace(f'viewBox="0 0 {ARTBOARD} {ARTBOARD}"', view + ' preserveAspectRatio="none"')
+        png = resvg_py.svg_to_bytes(svg_string=text, width=SAFE_PX, height=SAFE_PX)
+        ink = np.asarray(Image.open(io.BytesIO(bytes(png))).convert("RGBA"))[..., 3] > 127
+        # resvg keeps the view's aspect, so a box that is not square renders short on one side:
+        # the safe line is the same share of each side as rendered, one margin outside the box
+        # to its edge and one inside it.
+        rows, cols = ink.shape
+        my, mx = round(rows * 2 * SAFE / (1 + 2 * SAFE)), round(cols * 2 * SAFE / (1 + 2 * SAFE))
+        inner = np.zeros_like(ink)
+        inner[my : rows - my, mx : cols - mx] = True
+        if (ink & ~inner).any():
+            out.append(k + 1)
+    return out
+
+
+def unsafe_report(name: str, folder: Path) -> str:
+    """One line naming a traced folder's drawings outside the safe line: each by its place in
+    playing order, its file and the take frame it starts on; empty when all are inside."""
+    unsafe = unsafe_drawings(folder)
+    if not unsafe:
+        return ""
+    slots = json.loads((folder / "timing.json").read_text())["drawings"]
+    named = ", ".join(f"#{k} body-{slots[k - 1]['drawing']:02d} (frame {slots[k - 1]['start']})" for k in unsafe)
+    return f"{name}: {len(unsafe)} of {len(slots)} drawings outside the safe line: {named}"
 
 
 def use_inks(names: list[str]) -> None:
@@ -900,15 +953,20 @@ def paper_of(
 
 
 def trace(
-    loop: str, take: str, still_name: str, end_still_name: str | None = None
+    loop: str,
+    take: str,
+    still_name: str,
+    end_still_name: str | None = None,
+    into: Path | None = None,
 ) -> dict:
     """Traces a take that opens on still_name's still and closes on end_still_name's (a status
-    change), or on the same still it opened on (a loop, the default)."""
+    change), or on the same still it opened on (a loop, the default), into `into`, else
+    LOOPS/<loop>."""
     frames = frames_of(loop, take)
     drawings = drawings_of(frames)
     still = STILLS / f"light-{still_name}.png"
     end_still = STILLS / f"light-{end_still_name or still_name}.png"
-    out = LOOPS / loop
+    out = into or LOOPS / loop
     out.mkdir(parents=True, exist_ok=True)
     for old in out.glob("*.svg"):
         old.unlink()
@@ -1082,13 +1140,34 @@ def main() -> None:
                 f"{name}: halo {sum(h.values())} px over {sum(v > 0 for v in h.values())} of {len(h)} drawings, most {h[worst]} in {worst}"
             )
         return
+    if args[:1] == ["--safe"]:
+        reports = [unsafe_report(name, LOOPS / name) for name in args[1:] or list(loops)]
+        for name, report in zip(args[1:] or list(loops), reports):
+            print(report or f"{name}: every drawing inside the safe line")
+        broken = sum(bool(r) for r in reports)
+        print(f"safe: {len(reports) - broken}/{len(reports)} loops inside the safe line")
+        sys.exit(1 if broken else 0)
+    refused = 0
     for name in args or list(loops):
         v = loops[name]
-        t = trace(name, v["take"], v["still"])
+        # Traced beside the loop, replacing it only once every drawing sits inside the safe
+        # line, so a loop that runs past the artboard never lands.
+        scratch = LOOPS / f".{name}.tracing"
+        shutil.rmtree(scratch, ignore_errors=True)
+        t = trace(name, v["take"], v["still"], into=scratch)
+        report = unsafe_report(name, scratch)
+        if report:
+            shutil.rmtree(scratch)
+            refused += 1
+            print(f"{report}; not written")
+            continue
+        shutil.rmtree(LOOPS / name, ignore_errors=True)
+        scratch.rename(LOOPS / name)
         print(
             f"{name}: {len(t['drawings'])} drawings over {t['frames']} frames, "
             f"overlap with still {t['stillOverlap']}, halo {sum(t['halo'].values())} px"
         )
+    sys.exit(1 if refused else 0)
 
 
 if __name__ == "__main__":

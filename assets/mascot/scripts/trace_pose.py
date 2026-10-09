@@ -53,13 +53,10 @@ HELD = 24  # frames the end hold lasts at least: one second
 # a hold where the video's noise drifts over its length.
 HOLD_DELTA = 40
 HOLD_PX = 600
-SAFE = 0.035  # EBU R95 / ITU-R BT.1848 action-safe margin, in from each edge
 EDGE = 1.0  # box units a placed pose keeps inside the safe line: its traced edge's soft half pixel
 # The radius (take px) of the disk his body is found with: wider than any prop's outline (6 px at
 # most, trace.py TAN_FACE) and than the laptop's keys, narrower than any part of his body.
 BODY = 8
-# The artboard the apps draw, in the stills' units: 592 square, the still box 43 right, 40 down.
-ARTBOARD = (-43.0, -40.0, 592.0)
 WHITE = np.array(T.INKS["white"])
 
 pose, take, opens = sys.argv[1:4]
@@ -92,8 +89,8 @@ body = T.largest(ndimage.binary_opening(held == list(T.INKS).index("black") + 1,
 bx = np.nonzero(body.any(0))[0]
 iy, ix = np.nonzero(held > 0)
 ink_box = (ix.min() * scale, iy.min() * scale, (ix.max() + 1) * scale, (iy.max() + 1) * scale)
-lo = (ARTBOARD[0] + SAFE * ARTBOARD[2] + EDGE, ARTBOARD[1] + SAFE * ARTBOARD[2] + EDGE)
-hi = (ARTBOARD[0] + (1 - SAFE) * ARTBOARD[2] - EDGE, ARTBOARD[1] + (1 - SAFE) * ARTBOARD[2] - EDGE)
+lo = (T.APP_ARTBOARD[0] + T.SAFE * T.APP_ARTBOARD[2] + EDGE, T.APP_ARTBOARD[1] + T.SAFE * T.APP_ARTBOARD[2] + EDGE)
+hi = (T.APP_ARTBOARD[0] + (1 - T.SAFE) * T.APP_ARTBOARD[2] - EDGE, T.APP_ARTBOARD[1] + (1 - T.SAFE) * T.APP_ARTBOARD[2] - EDGE)
 nx = T.ARTBOARD / 2 - scale * (bx.min() + bx.max() + 1) / 2
 nx = min(max(nx, lo[0] - ink_box[0]), hi[0] - ink_box[2])
 ny = min(max(ty, lo[1] - ink_box[1]), hi[1] - ink_box[3])
@@ -135,14 +132,14 @@ white_marks = [
 # The safe area: the line 3.5% in from each edge of the tighter of the take's frame and the
 # artboard (trace_clip.py's unsafe_drawings), on the drawing over the take's frame, in take pixels:
 # nothing is traced outside the frame.
-left, top = max(frame[0], ARTBOARD[0]), max(frame[1], ARTBOARD[1])
-right = min(frame[0] + frame[2], ARTBOARD[0] + ARTBOARD[2])
-bottom = min(frame[1] + frame[2], ARTBOARD[1] + ARTBOARD[2])
+left, top = max(frame[0], T.APP_ARTBOARD[0]), max(frame[1], T.APP_ARTBOARD[1])
+right = min(frame[0] + frame[2], T.APP_ARTBOARD[0] + T.APP_ARTBOARD[2])
+bottom = min(frame[1] + frame[2], T.APP_ARTBOARD[1] + T.APP_ARTBOARD[2])
 w, h = right - left, bottom - top
 cols = tx + scale * (np.arange(shape[1]) + 0.5)
 rows = ty + scale * (np.arange(shape[0]) + 0.5)
-inner = ((rows >= top + SAFE * h) & (rows <= bottom - SAFE * h))[:, None] & (
-    (cols >= left + SAFE * w) & (cols <= right - SAFE * w)
+inner = ((rows >= top + T.SAFE * h) & (rows <= bottom - T.SAFE * h))[:, None] & (
+    (cols >= left + T.SAFE * w) & (cols <= right - T.SAFE * w)
 )[None, :]
 outside_safe = int((opaque & ~inner).sum())
 

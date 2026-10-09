@@ -65,38 +65,6 @@ HEAD_FORMED = 0.9  # share of his landed black from which a drawing reads as him
 SPECK = 200  # opaque px at 512: a drawing with less is dust traced off the take's paper
 INKS = np.array([[20, 20, 20], [230, 80, 50], [244, 240, 230], [245, 200, 40]])
 
-# The artboard the apps draw, in the stills' units: 592 square, the still box 43 right, 40 down.
-ARTBOARD = (-43.0, -40.0, 592.0)
-SAFE = 0.035  # EBU R95 / ITU-R BT.1848 action-safe margin, in from each edge
-SAFE_PX = 600  # the side the safe area is measured at
-
-
-def unsafe_drawings(folder: Path) -> list[int]:
-    """The clip's drawings, counted from 1 in playing order, with ink outside the safe line: 3.5%
-    in from each edge of the tighter of the take's frame and the artboard."""
-    timing = json.loads((folder / "timing.json").read_text())
-    p = timing["placement"]
-    take = (p["x"], p["y"], 1024 * p["scale"])
-    left, top = max(take[0], ARTBOARD[0]), max(take[1], ARTBOARD[1])
-    right = min(take[0] + take[2], ARTBOARD[0] + ARTBOARD[2])
-    bottom = min(take[1] + take[2], ARTBOARD[1] + ARTBOARD[2])
-    # A view one margin wider than the box, so ink beyond its edge is seen too.
-    w, h = right - left, bottom - top
-    view = f'viewBox="{left - SAFE * w} {top - SAFE * h} {w * (1 + 2 * SAFE)} {h * (1 + 2 * SAFE)}"'
-    inner = np.zeros((SAFE_PX, SAFE_PX), bool)
-    m = round(SAFE_PX * 2 * SAFE / (1 + 2 * SAFE))
-    inner[m : SAFE_PX - m, m : SAFE_PX - m] = True
-    out = []
-    for k, slot in enumerate(timing["drawings"]):
-        text = (folder / f"body-{slot['drawing']:02d}.svg").read_text()
-        text = text.replace('viewBox="0 0 512 512"', view + ' preserveAspectRatio="none"')
-        png = resvg_py.svg_to_bytes(svg_string=text, width=SAFE_PX, height=SAFE_PX)
-        ink = np.asarray(Image.open(io.BytesIO(bytes(png))).convert("RGBA"))[..., 3] > 127
-        if (ink & ~inner).any():
-            out.append(k + 1)
-    return out
-
-
 def out_of_order(folder: Path, own: list[str]) -> dict[str, list[int]]:
     """The clip's drawings, counted from 1 in playing order, where an ink is out of place.
     `foreign`: an ink his landing does not carry (under INK_SHOWS px there) shows; a take once put
@@ -153,7 +121,7 @@ if sys.argv[1:2] in (["--safe"], ["--inks"]):
     for clip in names:
         slots = len(json.loads((folder / clip / "timing.json").read_text())["drawings"])
         if mode == "--safe":
-            unsafe = unsafe_drawings(folder / clip)
+            unsafe = T.unsafe_drawings(folder / clip)
             broken |= bool(unsafe)
             print(f"{clip}: {slots} drawings, " + (f"outside the safe line: {unsafe}" if unsafe else "all inside the safe line"))
         else:
@@ -566,7 +534,7 @@ timing.update(frames=report["frames"], drawings=slots)
 (out / "timing.json").write_text(T.dump_json(timing))
 report["inksOutOfOrder"] = out_of_order(out, own_inks)
 gates["inkOrder"] = not (report["inksOutOfOrder"]["foreign"] or report["inksOutOfOrder"]["ownEarly"])
-report["outsideSafe"] = unsafe_drawings(out)
+report["outsideSafe"] = T.unsafe_drawings(out)
 gates["safeArea"] = not report["outsideSafe"]
 timing.update(frames=report["frames"], drawings=slots, halo=halos, probe=report)
 (out / "timing.json").write_text(T.dump_json(timing))
