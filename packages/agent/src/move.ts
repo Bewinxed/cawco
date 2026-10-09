@@ -40,6 +40,7 @@ import {
   type MoveLfsResult,
   type MovePrepareRequest,
   type MoveProgressFrame,
+  type MoveRemoteAuth,
   type MoveSnapshotRequest,
   type MoveSnapshotResult,
 } from "@cawco/core";
@@ -93,9 +94,85 @@ const basicOf = (): string => {
   return Buffer.from(`${machineId}:${credential}`).toString("base64");
 };
 
-/** Every form the credential could take in text a tool printed. */
-const secretsOf = (): string[] =>
-  hubCredential ? [hubCredential.credential, basicOf()] : [];
+/**
+ * An outside remote's credentials held by the steps running now
+ * ({@link holdingRemote}), each with how many hold it: taken out of
+ * anything a step says.
+ */
+const remoteSecrets = new Map<string, number>();
+
+/** Every form a credential could take in text a tool printed. */
+const secretsOf = (): string[] => [
+  ...(hubCredential ? [hubCredential.credential, basicOf()] : []),
+  ...remoteSecrets.keys(),
+];
+
+/**
+ * A remote's URL with any credential it carries taken off, and that
+ * credential as HTTP Basic (base64 of `user:password`, decoded from the
+ * URL's percent-encoding). Only http(s) URLs carry one: `ssh://git@…` and
+ * `git@host:…` name an ssh login, not a secret, and stay as they are.
+ */
+export const remoteWithoutCredential = (
+  remote: string
+): { url: string; basic?: string } => {
+  let parsed: URL;
+  try {
+    parsed = new URL(remote);
+  } catch {
+    return { url: remote };
+  }
+  if (
+    !(
+      (parsed.protocol === "https:" || parsed.protocol === "http:") &&
+      (parsed.username || parsed.password)
+    )
+  ) {
+    return { url: remote };
+  }
+  const pair = `${decodeURIComponent(parsed.username)}:${decodeURIComponent(parsed.password)}`;
+  parsed.username = "";
+  parsed.password = "";
+  return {
+    url: parsed.toString(),
+    basic: Buffer.from(pair).toString("base64"),
+  };
+};
+
+/**
+ * `work` with an outside remote's credential taken out of all it says, for
+ * as long as it runs: the Basic value and each part of what it decodes to.
+ */
+const holdingRemote = async <T>(
+  basic: string | undefined,
+  work: () => Promise<T>
+): Promise<T> => {
+  if (!basic) {
+    return await work();
+  }
+  const held = [
+    basic,
+    ...Buffer.from(basic, "base64")
+      .toString()
+      .split(":")
+      .filter((part) => part.length >= 4),
+  ];
+  for (const secret of held) {
+    remoteSecrets.set(secret, (remoteSecrets.get(secret) ?? 0) + 1);
+  }
+  try {
+    return await work();
+  } finally {
+    for (const secret of held) {
+      const left = (remoteSecrets.get(secret) ?? 1) - 1;
+      if (left > 0) {
+        remoteSecrets.set(secret, left);
+      } else {
+        remoteSecrets.delete(secret);
+      }
+    }
+  }
+};
 
 const AUTHORIZATION_VALUE = /(authorization:\s*\w+\s+)\S+/gi;
 
@@ -163,6 +240,29 @@ const plainEnv = (extra: [string, string][] = []): Record<string, string> =>
     GIT_OPTIONAL_LOCKS: "0",
     ...configEnv(extra),
   }) as Record<string, string>;
+
+/**
+ * git's environment for a command that reaches the outside remote at `url`
+ * (no credential in it): with `basic`, the remote's credential as an
+ * `Authorization` header for every request to its host, env-only as the
+ * hub's is. git-lfs reads the same key for its own requests
+ * (`c.uc.GetAll("http", u.String(), "extraHeader")`, lfshttp/client.go,
+ * since git-lfs 2.1.0).
+ */
+const outsideEnv = (
+  url: string,
+  basic: string | undefined
+): Record<string, string> =>
+  plainEnv(
+    basic
+      ? [
+          [
+            `http.${new URL(url).origin}/.extraHeader`,
+            `Authorization: Basic ${basic}`,
+          ],
+        ]
+      : []
+  );
 
 /** Who a commit CawCo makes is by: CawCo, on this machine. */
 const CAWCO_IDENTITY = (): Record<string, string> => {
@@ -712,6 +812,7 @@ export const moveInspect = async (asked: string): Promise<MoveInspection> => {
     head: null,
     branch: null,
     origin: null,
+    originCredential: false,
     pushed: false,
     lockfile: null,
   };
@@ -731,11 +832,14 @@ export const moveInspect = async (asked: string): Promise<MoveInspection> => {
   if (!(await exists(join(path, ".git")))) {
     return inspectPlain(path, { ...base, lockfile });
   }
-  const [head, branch, origin] = await Promise.all([
+  const [head, branch, remote] = await Promise.all([
     maybe(path, ["rev-parse", "-q", "--verify", "HEAD^{commit}"]),
     maybe(path, ["symbolic-ref", "-q", "--short", "HEAD"]),
     maybe(path, ["remote", "get-url", "origin"]),
   ]);
+  // A credential in the URL stays here ({@link moveRemoteCredential}).
+  const bare = remote ? remoteWithoutCredential(remote) : undefined;
+  const origin = bare?.url ?? null;
   const [status, ignored, counted, onRemote] = await Promise.all([
     must(
       undefined,
@@ -789,6 +893,7 @@ export const moveInspect = async (asked: string): Promise<MoveInspection> => {
     head,
     branch,
     origin,
+    originCredential: bare?.basic !== undefined,
     lockfile,
     pushed: (onRemote ?? "")
       .split("\n")
@@ -803,6 +908,26 @@ export const moveInspect = async (asked: string): Promise<MoveInspection> => {
     uncommitted: changed.length,
     ...stayingAtRoot(ignored, listedChanges.filter(isSecretPath)),
   };
+};
+
+/**
+ * The credential `path`'s `origin` URL carries, as HTTP Basic, read now for
+ * one step on the target ({@link CONTROL_MOVE_REMOTE_CREDENTIAL}). A URL
+ * that carries none any more fails: the step it was read for would fail
+ * against the remote without it.
+ */
+export const moveRemoteCredential = async (
+  asked: string
+): Promise<MoveRemoteAuth> => {
+  const path = asked.startsWith("~/") ? join(homedir(), asked.slice(2)) : asked;
+  const remote = await maybe(path, ["remote", "get-url", "origin"]);
+  const basic = remote ? remoteWithoutCredential(remote).basic : undefined;
+  if (!basic) {
+    throw new StepFailed(
+      `${basename(path)}'s origin no longer carries the credential it had when the move began.`
+    );
+  }
+  return { remoteBasic: basic };
 };
 
 // ── Prepare (the approval's "Move it") ─────────────────────────────────────
@@ -1192,6 +1317,14 @@ const clonedBefore = async (path: string, jobId: string): Promise<boolean> =>
   ).trim() === jobId;
 
 export const moveClone = (request: MoveCloneRequest): Promise<MoveLfsResult> =>
+  holdingRemote(request.remoteBasic, () => cloneStep(request));
+
+/**
+ * The clone itself. An outside remote's URL carries no credential, so the
+ * clone's `origin` is the bare URL; its credential, when it has one, reaches
+ * git through the environment for this one command.
+ */
+const cloneStep = (request: MoveCloneRequest): Promise<MoveLfsResult> =>
   runStep(request.jobId, "clone", async (run) => {
     const { path, jobId, snapshot } = request;
     if (await clonedBefore(path, jobId)) {
@@ -1224,7 +1357,9 @@ export const moveClone = (request: MoveCloneRequest): Promise<MoveLfsResult> =>
         {
           cwd: dirname(path),
           env: {
-            ...(fromHub ? hubEnv(request.hub.projectId) : plainEnv()),
+            ...(request.cloneUrl === undefined
+              ? hubEnv(request.hub.projectId)
+              : outsideEnv(request.cloneUrl, request.remoteBasic)),
             GIT_LFS_SKIP_SMUDGE: "1",
           },
           onStderr: (text) => {
@@ -1388,6 +1523,25 @@ const fromHubLfs = async (
  * remote finds them already here.
  */
 export const moveLfs = (request: MoveLfsRequest): Promise<MoveLfsResult> =>
+  holdingRemote(request.remoteBasic, () => lfsStep(request));
+
+/** git's environment for the pull: the hub's, or the clone's own `origin` with its credential. */
+const pullEnv = async (
+  request: MoveLfsRequest
+): Promise<Record<string, string>> => {
+  if (request.fromHub) {
+    return hubEnv(request.hub.projectId);
+  }
+  const origin = await must(
+    undefined,
+    request.path,
+    ["remote", "get-url", "origin"],
+    "The clone has no origin to fetch large files from"
+  );
+  return outsideEnv(origin.trim(), request.remoteBasic);
+};
+
+const lfsStep = (request: MoveLfsRequest): Promise<MoveLfsResult> =>
   runStep(request.jobId, "lfs", async (run) => {
     const { path, jobId, snapshot } = request;
     const wanted = await pointersIn(path, snapshot.commit);
@@ -1399,7 +1553,7 @@ export const moveLfs = (request: MoveLfsRequest): Promise<MoveLfsResult> =>
     const progressFile = join(scratch, "lfs-progress");
     await rm(progressFile, { force: true });
     const env = {
-      ...(request.fromHub ? hubEnv(request.hub.projectId) : plainEnv()),
+      ...(await pullEnv(request)),
       GIT_LFS_PROGRESS: progressFile,
     };
     const feed = throttled(sendProgress);

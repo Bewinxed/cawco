@@ -27,6 +27,7 @@ import {
   CONTROL_MOVE_INSTALL,
   CONTROL_MOVE_LFS,
   CONTROL_MOVE_PREPARE,
+  CONTROL_MOVE_REMOTE_CREDENTIAL,
   CONTROL_MOVE_SNAPSHOT,
   deriveTitleFromFirstMessage,
   type Envelope,
@@ -40,6 +41,7 @@ import {
   type MoveLargeFile,
   type MoveLfsResult,
   type MoveProgressFrame,
+  type MoveRemoteAuth,
   type MoveRequest,
   type MoveSnapshotResult,
   type MoveStage,
@@ -78,7 +80,13 @@ export interface MoveState {
   /** The uncommitted large files the approval sends to LFS. */
   bigFiles: MoveLargeFile[];
   bytes: number;
-  /** The outside remote's URL, as the source's `origin` names it. */
+  /**
+   * The source's `origin` URL carries a credential. It is never kept here:
+   * each target step that reaches the remote has the source read it for
+   * that one call ({@link remoteAuthFor}).
+   */
+  cloneCredential?: true;
+  /** The outside remote's URL, as the source's `origin` names it, with no credential in it. */
   cloneUrl?: string;
   error?: MoveError;
   from: MoveJob["from"];
@@ -414,14 +422,53 @@ export const createMoves = (deps: MovesDeps) => {
 
   // ── Where a job's steps run ─────────────────────────────────────────────
 
+  /** The step a job is at, or failed at. */
+  const stepOf = (row: MoveRow): MoveStage =>
+    row.stage === "failed" ? (row.state.error?.stage ?? "start") : row.stage;
+
+  /** Whether a job's target steps reach a remote whose credential the source holds. */
+  const readsCredential = ({ state }: MoveRow, stage: MoveStage): boolean =>
+    state.cloneCredential === true &&
+    state.from.kind === "outside" &&
+    (stage === "clone" || stage === "lfs");
+
   /** The machine a job's current step runs on. */
   const machineFor = (row: MoveRow): string => {
-    const stage =
-      row.stage === "failed" ? (row.state.error?.stage ?? "start") : row.stage;
+    const stage = stepOf(row);
     return stage === "approval" || stage === "snapshot"
       ? row.state.sourceMachineId
       : row.state.targetMachineId;
   };
+
+  /**
+   * Every machine a job's current step needs: the one it runs on, and the
+   * source too while it holds the remote's credential the step reads.
+   */
+  const machinesFor = (row: MoveRow): string[] =>
+    readsCredential(row, stepOf(row))
+      ? [machineFor(row), row.state.sourceMachineId]
+      : [machineFor(row)];
+
+  /** Whether every machine a job's current step needs is here. */
+  const allHere = (row: MoveRow): boolean =>
+    machinesFor(row).every((machineId) => deps.online(machineId));
+
+  /**
+   * The remote's credential for one target step, read from the source now
+   * and handed to that call alone: the job's record never holds it.
+   */
+  const remoteAuthFor = async (
+    row: MoveRow,
+    stage: MoveStep
+  ): Promise<MoveRemoteAuth> =>
+    readsCredential(row, stage)
+      ? ((await deps.call(
+          row.state.sourceMachineId,
+          CONTROL_MOVE_REMOTE_CREDENTIAL,
+          [row.state.sourcePath],
+          INSPECT_TIMEOUT_MS
+        )) as MoveRemoteAuth)
+      : {};
 
   const inspect = (machineId: string, path: string) =>
     deps.call(
@@ -843,6 +890,7 @@ export const createMoves = (deps: MovesDeps) => {
       bytes: s.bytes,
       from,
       ...(s.origin ? { cloneUrl: s.origin } : {}),
+      ...(s.origin && s.originCredential ? { cloneCredential: true } : {}),
       ignoredSecrets: s.ignoredSecrets,
       ignores: s.ignores,
       ...(install ? { install } : {}),
@@ -984,6 +1032,7 @@ export const createMoves = (deps: MovesDeps) => {
               machine: target,
               hub,
               ...(state.cloneUrl ? { cloneUrl: state.cloneUrl } : {}),
+              ...(await remoteAuthFor(row, stage)),
               lfs: state.steps.includes("lfs"),
               bytes: state.bytes,
               snapshot: state.snapshot,
@@ -1006,6 +1055,7 @@ export const createMoves = (deps: MovesDeps) => {
               machine: target,
               hub,
               fromHub: state.from.kind === "hub",
+              ...(await remoteAuthFor(row, stage)),
               snapshot: state.snapshot,
             },
           ],
@@ -1141,7 +1191,7 @@ export const createMoves = (deps: MovesDeps) => {
         parkApproval(row);
         return;
       }
-      if (!deps.online(machineFor(row))) {
+      if (!allHere(row)) {
         return;
       }
       const stage = row.stage as MoveStep;
@@ -1169,7 +1219,7 @@ export const createMoves = (deps: MovesDeps) => {
     if (!(row && WORKING.has(row.stage))) {
       return false;
     }
-    if (error instanceof MoveAway || !deps.online(machineFor(row))) {
+    if (error instanceof MoveAway || !allHere(row)) {
       console.log(`[moves] ${id}: ${row.stage} waits for its machine`);
       return true;
     }
@@ -1196,7 +1246,7 @@ export const createMoves = (deps: MovesDeps) => {
       advancing.delete(id);
       // A machine that went and came back registered while this unwound.
       const row = away ? db.moveRow(id) : undefined;
-      if (row && deps.online(machineFor(row))) {
+      if (row && allHere(row)) {
         goOn(id);
       }
     }
@@ -1372,7 +1422,10 @@ export const createMoves = (deps: MovesDeps) => {
         db.updateMove(row.id, {
           state: { ...row.state, stopOn: undefined },
         });
-      } else if (WORKING.has(row.stage) && machineFor(row) === machineId) {
+      } else if (
+        WORKING.has(row.stage) &&
+        machinesFor(row).includes(machineId)
+      ) {
         goOn(row.id);
       }
     }

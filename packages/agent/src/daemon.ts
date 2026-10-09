@@ -31,6 +31,7 @@ import {
   CONTROL_MOVE_INSTALL,
   CONTROL_MOVE_LFS,
   CONTROL_MOVE_PREPARE,
+  CONTROL_MOVE_REMOTE_CREDENTIAL,
   CONTROL_MOVE_SNAPSHOT,
   CONTROL_READ_HOME_CREDENTIALS,
   CONTROL_RUN_COMMAND,
@@ -88,6 +89,7 @@ import {
   moveInstall,
   moveLfs,
   movePrepare,
+  moveRemoteCredential,
   moveSnapshot,
   setHubCredential,
   setMoveProgress,
@@ -1899,6 +1901,9 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
     );
     supervisor.registerDaemonFunction(CONTROL_MOVE_INSPECT, (path) =>
       moveInspect(path as string)
+    );
+    supervisor.registerDaemonFunction(CONTROL_MOVE_REMOTE_CREDENTIAL, (path) =>
+      moveRemoteCredential(path as string)
     );
     supervisor.registerDaemonFunction(
       CONTROL_MOVE_PREPARE,

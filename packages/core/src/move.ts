@@ -217,6 +217,23 @@ export const CONTROL_MOVE_LFS = "moveLfs";
 export const CONTROL_MOVE_INSTALL = "moveInstall";
 /** Stops whatever step of a job runs on the machine. */
 export const CONTROL_MOVE_CANCEL = "moveCancel";
+/**
+ * On the source, for a target step that reaches an outside remote whose URL
+ * carries a credential ({@link MoveInspection.originCredential}): that
+ * credential as HTTP Basic, read from the folder's `origin` now. The hub
+ * hands it to that one call ({@link MoveRemoteAuth}) and keeps nothing.
+ */
+export const CONTROL_MOVE_REMOTE_CREDENTIAL = "moveRemoteCredential";
+
+/**
+ * An outside remote's credential for one step on the target: base64 of
+ * `user:password`, as HTTP Basic carries it. git gets it only through
+ * env-only config (`http.<url>.extraHeader`), never on its command line, and
+ * the hub never stores it.
+ */
+export interface MoveRemoteAuth {
+  remoteBasic?: string;
+}
 
 /**
  * The controls that are one job's steps, each naming its job as
@@ -256,8 +273,17 @@ export interface MoveInspection {
   lfs: { bytes: number; files: number };
   /** The lockfile at the root, by which `install` is chosen; null when none. */
   lockfile: string | null;
-  /** `origin`'s URL as git has it; null when none. */
+  /**
+   * `origin`'s URL as git has it, less any credential an http(s) URL carries
+   * (`https://user:token@host/…` reads `https://host/…`); null when none.
+   */
   origin: string | null;
+  /**
+   * `origin`'s URL carried a credential, taken off {@link origin}. It stays
+   * on this machine: a step that needs it has the hub read it here for that
+   * one call ({@link CONTROL_MOVE_REMOTE_CREDENTIAL}).
+   */
+  originCredential: boolean;
   /** The folder read, absolute: a `~/…` asked for is the machine's home's. */
   path: string;
   /** HEAD is on a remote-tracking branch of `origin` (its commits are on the remote). */
@@ -323,10 +349,10 @@ export interface MoveSnapshotResult {
 }
 
 /** {@link CONTROL_MOVE_CLONE}'s request. */
-export interface MoveCloneRequest {
+export interface MoveCloneRequest extends MoveRemoteAuth {
   /** Bytes still to fetch, for the free-space check. */
   bytes: number;
-  /** The project's outside remote's URL; absent: the hub's. */
+  /** The project's outside remote's URL, with no credential in it; absent: the hub's. */
   cloneUrl?: string;
   /** The destination as the person reads it (`~/cockpit`), for a refusal. */
   display: string;
@@ -341,7 +367,7 @@ export interface MoveCloneRequest {
 }
 
 /** {@link CONTROL_MOVE_LFS}'s request. */
-export interface MoveLfsRequest {
+export interface MoveLfsRequest extends MoveRemoteAuth {
   /** The hub is the LFS server (no outside remote). */
   fromHub: boolean;
   hub: MoveHubRemote;
