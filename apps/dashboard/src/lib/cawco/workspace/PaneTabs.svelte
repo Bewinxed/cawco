@@ -1033,11 +1033,12 @@
             </TabItem>
           </ContextMenu.Trigger>
           <!-- Under a finger it hangs below the tab's foot, from its
-               leading edge, shifted to stay on screen; a mouse's opens
-               beside the pointer. -->
+               leading edge, shifted left only when it would pass the
+               screen's edge less 12px (as TabOptionsSheet on iOS); a
+               mouse's opens beside the pointer. -->
           <ContextMenu.Content
             align="start"
-            collisionPadding={8}
+            collisionPadding={12}
             side={touch.current ? "bottom" : "right"}
           >
             {#if !(runIdOf(tab.id) || isThreadTab(tab.id))}
@@ -1433,9 +1434,11 @@
      rims' glow is not cut off. Its tabs take a rounder top than the
      desktop's, the next radius up (owner: "round the tabs more on
      mobile"), and their flared foot follows it; they still overlap by the
-     desktop's 8px. Where tabs run past an end, that end fades over 16px
-     on an eased curve, so a tab dissolves into the bar rather than being
-     cut; at rest the strip's start does not fade, so a first tab is drawn
+     desktop's 8px. Where tabs run past an end, that end fades on an
+     eased curve, so a tab dissolves into the bar rather than being cut:
+     the start over 24px, transparent for its first 9, so a sliver of a
+     tab scrolled past it never shows beside the toggle; the end over 16px.
+     At rest the strip's start does not fade, so a first tab is drawn
      whole, its foot and all. */
   @media (max-width: 899px) {
     :global(
@@ -1451,10 +1454,10 @@
       mask-image: linear-gradient(
         to right,
         transparent,
-        rgb(0 0 0 / 0.1) calc(var(--fade-start) * 0.25),
-        rgb(0 0 0 / 0.5) calc(var(--fade-start) * 0.5),
-        rgb(0 0 0 / 0.9) calc(var(--fade-start) * 0.75),
-        #000 var(--fade-start),
+        transparent calc(var(--fade-start) * 0.375),
+        rgb(0 0 0 / 0.15) calc(var(--fade-start) * 0.75),
+        rgb(0 0 0 / 0.6) calc(var(--fade-start) * 1.125),
+        #000 calc(var(--fade-start) * 1.5),
         #000 calc(100% - var(--fade-end)),
         rgb(0 0 0 / 0.9) calc(100% - var(--fade-end) * 0.75),
         rgb(0 0 0 / 0.5) calc(100% - var(--fade-end) * 0.5),

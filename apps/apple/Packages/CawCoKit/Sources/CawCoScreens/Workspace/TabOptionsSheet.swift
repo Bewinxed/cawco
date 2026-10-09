@@ -59,7 +59,10 @@ final class TabOptionsSheet: UIView {
         let size = list.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize)
         let width = min(280, max(200, size.width + 12))
         height = size.height + 12
-        let x = min(max(8, foot.minX), host.bounds.width - width - 8)
+        // From the tab's leading edge, shifted left only when it would pass
+        // the screen's edge less 12pt (the web's menu takes the same rule).
+        let margin = 12.0
+        let x = max(margin, min(foot.minX, host.bounds.width - width - margin))
         card.frame = CGRect(x: x, y: 0, width: width, height: height)
         card.layer.borderColor = Palette.borderControl.resolvedColor(with: host.traitCollection).cgColor
         card.accessibilityViewIsModal = true
