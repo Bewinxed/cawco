@@ -39,7 +39,7 @@ import {
   workspaceReadOnlyDir,
   workspaceScratchDir,
 } from "./paths";
-import { type Policy, resolveReal } from "./workspace-judge";
+import { type Policy, resolveDenied, resolveReal } from "./workspace-judge";
 
 /**
  * Harness project config in a clone: Claude Code loads the project's
@@ -135,9 +135,13 @@ export const workspacePolicy = async (
 ): Promise<Policy> => {
   const home = homedir();
   const real = (paths: string[]): string[] => unique(paths.map(resolveReal));
+  // Paths that only go into a deny rule: one this process may not look up is
+  // denied as written (`resolveDenied`).
+  const denied = (paths: string[]): string[] =>
+    unique(paths.map(resolveDenied));
   const clone = resolveReal(workspace.path);
   const scratch = resolveReal(workspaceScratchDir(workspace.id));
-  const stores = real(credentialStores());
+  const stores = denied(credentialStores());
   const mac = process.platform === "darwin";
   const caches = [...workspaceCaches(), ...(await darwinUserDirs())];
   const allowRead = real([
@@ -164,9 +168,9 @@ export const workspacePolicy = async (
       : []),
   ]);
   const denyRead = unique([
-    resolveReal(home),
+    resolveDenied(home),
     ...stores,
-    ...(mac ? [] : real(LINUX_HOST_PRIVATE)),
+    ...(mac ? [] : denied(LINUX_HOST_PRIVATE)),
   ]);
   return {
     home,
@@ -184,7 +188,7 @@ export const workspacePolicy = async (
       ...caches,
     ]),
     denyWrite: unique([
-      ...real([
+      ...denied([
         ...GIT_CONFIG.map((parts) => join(workspace.path, ...parts)),
         ...harnessConfig(workspace.path),
       ]),

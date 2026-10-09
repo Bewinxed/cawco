@@ -103,7 +103,32 @@ export const readPolicy = (file: string): Policy => {
  * as written; a `..` there is refused, because what it names depends on what
  * gets created first.
  */
-export const resolveReal = (path: string): string => {
+export const resolveReal = (path: string): string => resolve(path, MISSING);
+
+/**
+ * {@link resolveReal} for a path that only ever goes into a deny rule. A
+ * component this process may not look up (EPERM, EACCES) is treated like one
+ * that does not exist: the path from it on is kept as written, and a `..`
+ * after it is refused all the same. macOS's privacy protection answers EPERM
+ * for another app's data (`~/Library/Application Support/Google/Chrome`, …)
+ * to an agent launchd runs without Full Disk Access.
+ *
+ * Denying the path as written can only deny more, never open anything: every
+ * component before it is still its real path, so the entry names the
+ * directory this process would reach by that name, and a deny entry never
+ * widens what the policy allows. A path an allow rule takes keeps
+ * {@link resolveReal}'s strictness: one it cannot resolve throws.
+ */
+export const resolveDenied = (path: string): string =>
+  resolve(path, UNREADABLE);
+
+/** A component that does not exist: the rest of the path is appended as written. */
+const MISSING = new Set(["ENOENT", "ENOTDIR"]);
+
+/** For a deny entry, also a component this process may not look up. */
+const UNREADABLE = new Set([...MISSING, "EPERM", "EACCES"]);
+
+const resolve = (path: string, asWritten: ReadonlySet<string>): string => {
   if (!isAbsolute(path)) {
     throw new Error(`${path} is not an absolute path`);
   }
@@ -122,14 +147,15 @@ export const resolveReal = (path: string): string => {
       current = realpathSync(next);
     } catch (error) {
       const { code } = error as NodeJS.ErrnoException;
-      if (code !== "ENOENT" && code !== "ENOTDIR") {
+      if (!(code && asWritten.has(code))) {
         throw error;
       }
       const rest = parts.slice(index + 1);
       if (rest.includes("..")) {
-        throw new Error(`${path} climbs out of ${next}, which does not exist`, {
-          cause: error,
-        });
+        throw new Error(
+          `${path} climbs out of ${next}, which ${MISSING.has(code) ? "does not exist" : "cannot be looked up"}`,
+          { cause: error }
+        );
       }
       return join(next, ...rest);
     }
@@ -236,7 +262,7 @@ const claudeSession = (
 const opencodeSession = (policy: Policy, call: Call): Policy => ({
   ...policy,
   denyRead: call.toolOutput
-    ? [...policy.denyRead, resolveReal(call.toolOutput)]
+    ? [...policy.denyRead, resolveDenied(call.toolOutput)]
     : policy.denyRead,
   allowRead: [
     ...policy.allowRead,
