@@ -283,6 +283,12 @@ them (the editor cannot import `.riv` files). From `assets/mascot/scripts` (`bun
   px, the share of the first ring of pixels round his body at 3:1 or more against the page,
   and that ring's tenth-percentile contrast. `--light` adds a digest of each light picture, to
   show a change left light alone.
+- `uv run regress.py [--old <git ref>] [--mascot <folder>] [--only name,…]` runs every source the
+  pipeline traces (the loops, the clips, the ledges, every still) through a ref's `trace.py`
+  (default `origin/main`) and the working one, down to the final labels vtracer traces, and
+  prints per source the pixels that differ and each ink's count before and after. A change to a
+  tracing rule is run over every source this way before it ships: a rule fenced to one kind of
+  take hides what it does to the rest.
 - `uv run head_circle.py` draws every drawing of every head file as the bar draws his head (the
   dashboard's 20 px head at 1x and 3x, Apple's 22 pt at 2x and 3x, in each app's 36 glass
   circle), in light and in dark with his rim, and fails if any ink comes within two device
@@ -342,7 +348,8 @@ reused rather than traced again.
    pinched end, a speck in his vermilion, a sliver on a prop's lit edge) takes the ink it sits
    on, so no eye white touches the page round him. A pixel is vermilion or yellow only with
    that ink's chroma (neutral greys, a soft frame's blend of black into white, sit nearer either
-   than black or white). It registers drawing 00 onto the status's still where the two overlap
+   than black or white), and an orange blend of the two takes whichever is nearer in Lab, as
+   `--halo` judges it (in RGB it sat nearer yellow, and traced yellow over a take with none). It registers drawing 00 onto the status's still where the two overlap
    most (`register()`: scale and offset searched from the extents' whole-pixel estimate, so no
    single tip or edge pixel decides where a loop sits) and traces each ink with vtracer (spline, holes
    kept) into `body-NN.svg`, with `timing.json`. `trace.py --halo` reports yellow traced where
