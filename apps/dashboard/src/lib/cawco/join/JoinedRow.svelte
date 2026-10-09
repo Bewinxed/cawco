@@ -99,7 +99,7 @@
           class:done={line.hue === "done"}
         >
           {#if Glyph}
-            <Glyph aria-hidden="true" class="size-4" />
+            <Glyph aria-hidden="true" class="duo size-4" />
           {:else}
             <Spinner aria-hidden="true" class="size-4" role="presentation" />
           {/if}
@@ -136,13 +136,17 @@
     column-gap: 10px;
     min-width: 0;
   }
-  /* The duotone's solid tone carries the shape: ink-strong when no hue, so
-     a neutral glyph holds 3:1 on the recess in both themes. */
+  /* The glyph is the row's status signal, so both its tones hold 3:1 on the
+     recess in both themes: ink-strong when no hue, and the duotone's second
+     layer at the status-glyph opacity (the spinner keeps its own track). */
   .glyph {
     display: flex;
     align-items: center;
     height: calc(var(--text-body) * 1.45);
     color: var(--ink-strong);
+  }
+  .glyph :global(svg.duo [opacity]) {
+    opacity: var(--glyph-duo-status-opacity);
   }
   .glyph.done {
     color: var(--status-done-glyph);

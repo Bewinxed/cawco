@@ -804,7 +804,7 @@ A 34px raised control. Armed, its glyph and edge take `brand-ink`. While the sup
 - **Machine row:** tile, name in label, a meta line led by a 6px presence dot (green online, orange away, neutral-8 off).
 
 ### Icons
-**The Solar Duotone Rule.** Every product icon is Solar's bold-duotone cut, imported through `$lib/icons.ts`: one face for the whole product. The duotone's second layer is the same `currentColor` at 50% opacity. Chevrons and arrows (`alt-arrow-*`, `arrow-*`) use Solar's linear cut because they are glyphs, not marks. Close, Minus, Plus and Tick are local glyphs drawn to Solar's 24px grid with a 1.5 linear stroke and round caps, because Solar has no bare version.
+**The Solar Duotone Rule.** Every product icon is Solar's bold-duotone cut, imported through `$lib/icons.ts`: one face for the whole product. The duotone's second layer is the same `currentColor` at 50% opacity. A status glyph in an alert row (the joined row in Connect a machine) is the row's signal, so its second layer takes `glyph-duo-status-opacity` (0.81), which holds both tones at 3:1 on the recess in both schemes. Chevrons and arrows (`alt-arrow-*`, `arrow-*`) use Solar's linear cut because they are glyphs, not marks. Close, Minus, Plus and Tick are local glyphs drawn to Solar's 24px grid with a 1.5 linear stroke and round caps, because Solar has no bare version.
 - **Sizes:** 12px beside meta text, 16px in controls and rows (the default for any unsized icon), 20px in nav and headers.
 
 ### Focus and hit areas

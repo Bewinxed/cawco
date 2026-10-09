@@ -728,6 +728,8 @@ public enum Motion {
     public static let echoScale: Double = 1.45
     /// A working session's echo as it leaves the tile.
     public static let echoOpacity: Double = 0.45
+    /// The duotone second layer of a status glyph in an alert row (join/JoinedRow): the lowest at which it holds 3:1 on the recess in both schemes for the ink-strong, done and attn glyph inks, the attn glyph by day being the floor. Every other Solar glyph keeps 0.5.
+    public static let glyphDuoStatusOpacity: Double = 0.81
     /// The first stretch of its nesting line over which a child's icon fades in as it leaves its parent's (motion/branch).
     public static let rideFade: Double = 14
     public static let popRise: Double = 8

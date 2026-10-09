@@ -439,20 +439,25 @@
     open={addMachine.open}
     shouldScaleBackground={false}
   >
+    <!-- The head's Close is the sheet's way out, as on every kit sheet, so
+         joined it is the only one: the done view is the head, then the row. -->
     <Drawer.Content aria-label="Connect a machine">
-      <!-- Leading, as the dialog's title is, so the title, row and Close share one edge. -->
-      <Drawer.Header
-        class="group-data-[vaul-drawer-direction=bottom]/drawer-content:text-left"
-      >
-        <Drawer.Title class="text-title">Connect a machine</Drawer.Title>
-        {#if !joined}
-          <Drawer.Description>{@render description()}</Drawer.Description>
-        {/if}
+      <Drawer.Header>
+        <Drawer.Title>Connect a machine</Drawer.Title>
       </Drawer.Header>
-      <div class="sheet-body">{@render body()}</div>
-      <Drawer.Footer class="flex-col-reverse">
-        {@render actions()}
-      </Drawer.Footer>
+      <div class="sheet-body kit-sheet-scroll">
+        {#if !joined}
+          <Drawer.Description class="text-body text-[var(--ink-muted)]">
+            {@render description()}
+          </Drawer.Description>
+        {/if}
+        {@render body()}
+      </div>
+      {#if !joined}
+        <Drawer.Footer class="flex-col-reverse px-0 pb-0">
+          {@render actions()}
+        </Drawer.Footer>
+      {/if}
     </Drawer.Content>
   </Drawer.Root>
 {:else}
@@ -484,13 +489,12 @@
 
 <style>
   /* The sheet's body keeps the dialog body's rhythm and scrolls under its
-     header and footer when the install output grows. */
+     head (cut on the head's seam) and footer when the install output grows. */
   .sheet-body {
     display: flex;
     flex-direction: column;
     gap: calc(var(--spacing) * 6);
     min-height: 0;
-    padding-inline: 16px;
     overflow-y: auto;
     overscroll-behavior: contain;
   }
