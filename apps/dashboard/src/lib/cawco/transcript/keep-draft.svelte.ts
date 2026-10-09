@@ -19,7 +19,10 @@ import { type DraftContent, loadDraft, saveDraft } from "./draft-store";
 export function keepDraft(
   draft: ComposerDraft,
   key: () => string | null
-): void {
+): {
+  /** The draft is done with (sent, or dismissed): its stored copy goes now. */
+  discard: () => void;
+} {
   /** The key the draft is read and written under; null while there is none. */
   let kept = $state<string | null>(null);
   /** The draft as it should be stored, waiting for the next write. */
@@ -63,9 +66,11 @@ export function keepDraft(
     });
     return () => {
       live = false;
-      // The key goes: what the draft holds now is what is kept under it.
+      // The key goes: what waits to be written lands under it. Not the
+      // draft read here: a teardown reads state as it stood before the
+      // change that ended it, so a draft emptied in the same breath would
+      // be written back whole (`discard` is how a surface lets one go).
       if (kept === id) {
-        unwritten = untrack(() => draft.keep);
         // biome-ignore lint/complexity/noVoid: fire-and-forget — the write lands on its own
         void write();
         kept = null;
@@ -91,4 +96,22 @@ export function keepDraft(
       release();
     };
   });
+
+  return {
+    discard: () => {
+      clearTimeout(timer);
+      timer = undefined;
+      unwritten = null;
+      if (kept) {
+        // biome-ignore lint/complexity/noVoid: fire-and-forget — an empty draft deletes its record
+        void saveDraft(kept, {
+          text: "",
+          images: [],
+          texts: [],
+          files: [],
+          selections: [],
+        });
+      }
+    },
+  };
 }

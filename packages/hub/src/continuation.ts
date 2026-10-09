@@ -24,6 +24,8 @@ import {
   type HarnessKind,
   type NeutralContentBlock,
   type PermissionMode,
+  type SendAttachment,
+  type SendPayload,
   type SessionMessage,
   SUMMARY_CAP_TOKENS,
 } from "@cawco/core";
@@ -39,6 +41,13 @@ export interface ContinuationSource {
 
 /** What "continue in new session" is asked: who summarises, what starts. */
 export interface ContinueRequest {
+  /**
+   * What rides the new session's opening message beside its words, as a
+   * send carries it: texts and the hub's files, and images (base64). Kept
+   * with the job until the opening goes; the summariser never sees them.
+   */
+  attachments?: SendAttachment[];
+  images?: SendPayload["images"];
   note?: string;
   /** Absent `model`: the harness's own default. Absent `account`: placed as any start is. */
   summarizer: { harness: HarnessKind; model?: string; account?: string };

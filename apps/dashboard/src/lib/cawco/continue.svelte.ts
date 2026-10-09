@@ -15,7 +15,7 @@ import type {
   PermissionMode,
 } from "@cawco/core";
 import { goto } from "$app/navigation";
-import { cawco, followContinuations } from "./client.svelte";
+import { cawco, followContinuations, type SendExtras } from "./client.svelte";
 import { conversationHref } from "./links";
 import { toast } from "./toasts";
 import { contextOf, workspace } from "./workspace/workspace.svelte";
@@ -38,6 +38,8 @@ export interface SessionDraft {
   baseCwd: string;
   cwd: string;
   effort: EffortLevel | null;
+  /** What rode the prompt: its images and attachments, as a send carries them. */
+  extras: SendExtras;
   harness: HarnessKind;
   machineIds: string[];
   model: string;

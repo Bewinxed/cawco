@@ -7478,6 +7478,81 @@
                   },
                   "note": {
                     "type": "string"
+                  },
+                  "images": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "mediaType": {
+                          "type": "string"
+                        },
+                        "data": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "mediaType",
+                        "data"
+                      ]
+                    }
+                  },
+                  "attachments": {
+                    "type": "array",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "text"
+                            },
+                            "name": {
+                              "type": "string"
+                            },
+                            "content": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "name",
+                            "content"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "file"
+                            },
+                            "name": {
+                              "type": "string"
+                            },
+                            "mediaType": {
+                              "type": "string"
+                            },
+                            "size": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "ref": {
+                              "pattern": "^/api/files/",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "name",
+                            "mediaType",
+                            "size",
+                            "ref"
+                          ]
+                        }
+                      ]
+                    }
                   }
                 },
                 "required": [

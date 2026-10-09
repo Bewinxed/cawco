@@ -721,6 +721,29 @@ const continueBody = t.Object({
     projectId: t.Optional(t.String()),
   }),
   note: t.Optional(t.String()),
+  // What rides the new session's opening message beside its words, as a
+  // send carries it. The summariser is never handed them.
+  images: t.Optional(
+    t.Array(t.Object({ mediaType: t.String(), data: t.String() }))
+  ),
+  attachments: t.Optional(
+    t.Array(
+      t.Union([
+        t.Object({
+          kind: t.Literal("text"),
+          name: t.String(),
+          content: t.String(),
+        }),
+        t.Object({
+          kind: t.Literal("file"),
+          name: t.String(),
+          mediaType: t.String(),
+          size: t.Integer({ minimum: 0 }),
+          ref: t.String({ pattern: "^/api/files/" }),
+        }),
+      ])
+    )
+  ),
 });
 
 const ruleBody = t.Object({
@@ -6539,13 +6562,19 @@ export const createServer = (
     instanceId: string,
     content: string,
     from: LabelledRow,
-    uuid: string
+    uuid: string,
+    /** What rides it beside its words, as a dashboard's send carries it. */
+    extras: Pick<SendPayload, "images" | "attachments"> = {}
   ): void => {
     deliverSend({
       verb: "send",
       machineId,
       instanceId,
       payload: {
+        ...(extras.images?.length ? { images: extras.images } : {}),
+        ...(extras.attachments?.length
+          ? { attachments: extras.attachments }
+          : {}),
         instanceId,
         message: {
           type: "user",
@@ -7977,7 +8006,9 @@ export const createServer = (
         cwd: row.prepared.source.cwd,
         launchDir: "known",
       },
-      row.openingUuid
+      row.openingUuid,
+      // Kept on the job's record until now, so a restart in between keeps them.
+      { images: row.request.images, attachments: row.request.attachments }
     );
   };
 

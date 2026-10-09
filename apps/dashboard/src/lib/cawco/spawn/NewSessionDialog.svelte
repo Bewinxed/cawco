@@ -55,7 +55,6 @@
     machineFs,
     placementFor,
     projectAtFolder,
-    type SendExtras,
     spawnSession,
   } from "../client.svelte";
   import {
@@ -151,8 +150,8 @@
   }
   // The first prompt outlives a reload of this tab (`reload.svelte.ts`), as
   // a session's draft does: kept as it is written while the dialog is open,
-  // read back as it opens, gone once it closes (`close` empties it first).
-  keepDraft(firstMessage, () => (open ? keptKey() : null));
+  // read back as it opens, gone once it closes (`close` discards it).
+  const keptDraft = keepDraft(firstMessage, () => (open ? keptKey() : null));
   const STILL_UPLOADING = "Wait for your file to finish uploading.";
   const NOT_UPLOADED =
     "A file couldn't upload. Tap it to try again, or remove it.";
@@ -167,18 +166,6 @@
         error = "";
       }
     });
-  });
-  // Continue's next step goes to the summariser as a note, which carries no
-  // attachments: a first prompt read back with some lets them go there.
-  $effect(() => {
-    if (
-      continueFrom &&
-      (firstMessage.images.length ||
-        firstMessage.texts.length ||
-        firstMessage.files.length)
-    ) {
-      firstMessage.dropAttachments();
-    }
   });
   const mobile = new MediaQuery("(max-width: 640px)");
   let card = $state<HTMLElement | null>(null);
@@ -751,7 +738,8 @@
       verifiedLocation = "";
       if (continueFrom && restore) {
         ({ repo, projectId, harness, effort, permissionMode } = restore);
-        firstMessage.text = restore.prompt;
+        // Its words and what rode them, as they were submitted.
+        firstMessage.restore(restore.prompt, restore.extras);
         fullSendCarried = permissionMode === "fullSend";
         ({ harness: summarizerHarness, model: summarizerModel } =
           restore.summarizer);
@@ -904,6 +892,7 @@
     submission += 1;
     firstMessage.text = "";
     firstMessage.dropAttachments();
+    keptDraft.discard();
     onclose();
   }
   /** Cancel while a continuation runs: the hub stops it, and the dialog closes. */
@@ -1073,17 +1062,13 @@
     const attached = id ? cawco.project(id) : null;
     return attached && placedOn(attached, target) ? attached.id : undefined;
   }
-  function spawnOne(
-    target: string,
-    draft: SessionDraft,
-    extras: SendExtras
-  ): Promise<string> {
+  function spawnOne(target: string, draft: SessionDraft): Promise<string> {
     const toAttach = attachable(draft.projectId, target);
     return spawnSession({
       machineId: target,
       cwd: draft.cwd,
       prompt: draft.prompt,
-      extras,
+      extras: draft.extras,
       harness: draft.harness,
       ...(modeless ? {} : { permissionMode: draft.permissionMode }),
       ...(shownModel(draft) ? { model: shownModel(draft) } : {}),
@@ -1138,8 +1123,8 @@
       // The person's own pick; "" when they left the harness's default.
       usedModel: model,
       ...(accountTool && account ? { account } : {}),
+      extras: firstMessage.extras(),
     };
-    const extras = firstMessage.extras();
     busy = true;
     popover = null;
     let first = "";
@@ -1158,7 +1143,7 @@
         // open. `first ||= spawnOne(…)` short-circuited after machine one, so
         // "Start 3 sessions" started exactly one. Each waits for the hub's
         // answer: one it refuses throws its reason, and nothing navigates.
-        const spawned = await spawnOne(target, draft, extras);
+        const spawned = await spawnOne(target, draft);
         first ||= spawned;
       }
       if (!current()) {
@@ -1216,6 +1201,12 @@
         ...(toAttach ? { projectId: toAttach } : {}),
       },
       ...(draft.prompt.trim() ? { note: draft.prompt.trim() } : {}),
+      // They ride the new session's opening message; the summariser reads
+      // the note's words alone.
+      ...(draft.extras.images ? { images: draft.extras.images } : {}),
+      ...(draft.extras.attachments
+        ? { attachments: draft.extras.attachments }
+        : {}),
     });
     // Dismissed while the hub was starting it: the tab sees it through.
     if (current()) {
@@ -1377,16 +1368,14 @@
             lead={sourceChip}
             {menuItems}
             onleadremove={onexitcontinue}
-            onpaste={(data) => !continueFrom && firstMessage.paste(data)}
+            onpaste={(data) => firstMessage.paste(data)}
             onsubmit={start}
             bind:element={editor}
             bind:value={firstMessage.text}
           />
-          {#if !continueFrom}
-            <div class="prompt-atts">
-              <AttachmentChips draft={firstMessage} />
-            </div>
-          {/if}
+          <div class="prompt-atts">
+            <AttachmentChips draft={firstMessage} />
+          </div>
           <div class="chips">
             <MachinesChip
               machines={machineItems}
@@ -1453,13 +1442,11 @@
               }}
               open={popover === "lifetime"}
             />
-            {#if !continueFrom}
-              <!-- Attach acts on the prompt, not on where it runs: it stands
-                   apart from the setting chips, at the row's end. -->
-              <span class="attach">
-                <AttachButton draft={firstMessage} />
-              </span>
-            {/if}
+            <!-- Attach acts on the prompt, not on where it runs: it stands
+                 apart from the setting chips, at the row's end. -->
+            <span class="attach">
+              <AttachButton draft={firstMessage} />
+            </span>
           </div>
         </div>
         <p
