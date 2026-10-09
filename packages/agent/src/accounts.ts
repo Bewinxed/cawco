@@ -333,23 +333,25 @@ export const linkUserLayer = async (account: string): Promise<void> => {
     ...USER_LAYER_DIRS.map((entry) =>
       shareDir(join(dir, entry), userLayerPath(entry), account)
     ),
-    ...USER_LAYER_FILES.map(async (entry) => {
+    ...USER_LAYER_FILES.map((entry) => {
       const target = userLayerPath(entry);
       const path = join(dir, entry);
-      if (!(await lstat(target).catch(() => undefined))) {
-        return;
-      }
-      const there = await lstat(path).catch(() => undefined);
-      if (there?.isSymbolicLink()) {
-        return;
-      }
-      if (there) {
-        console.warn(
-          `[accounts] ${path} is the account's own, not the fleet's; left as it is`
-        );
-        return;
-      }
-      await symlink(target, path);
+      return onePathAtATime(path, async () => {
+        if (!(await lstat(target).catch(() => undefined))) {
+          return;
+        }
+        const there = await lstat(path).catch(() => undefined);
+        if (there?.isSymbolicLink()) {
+          return;
+        }
+        if (there) {
+          console.warn(
+            `[accounts] ${path} is the account's own, not the fleet's; left as it is`
+          );
+          return;
+        }
+        await symlink(target, path);
+      });
     }),
   ]);
   for (const slug of await memorySlugs(dir)) {
@@ -421,18 +423,55 @@ const sameFile = async (a: string, b: string): Promise<boolean> => {
 };
 
 /**
+ * The link being made now at each config-dir path, as a promise that never
+ * rejects. A link is a look then a change (lstat, then move and symlink), and
+ * launches run in parallel: ten sessions started at once in one project each
+ * link its memory, and every one that looked before the first had linked
+ * failed its symlink with EEXIST, its launch with it. So one path is linked by
+ * one call at a time: a later call waits for the earlier one to end, then
+ * looks, finds the link, and returns.
+ */
+const linking = new Map<string, Promise<void>>();
+
+const onePathAtATime = (
+  path: string,
+  link: () => Promise<void>
+): Promise<void> => {
+  const key = resolve(path);
+  const run = (linking.get(key) ?? Promise.resolve()).then(link);
+  const ended = run.then(
+    () => undefined,
+    () => undefined
+  );
+  linking.set(key, ended);
+  ended.then(() => {
+    if (linking.get(key) === ended) {
+      linking.delete(key);
+    }
+  });
+  return run;
+};
+
+/**
  * Makes `path`, a dir in an account's config dir, a symlink to `target`, the
  * user's one copy in {@link claudeHome}, made there if it is not yet. What
  * the account's dir already holds of its own there is moved into the copy
  * entry by entry first: one the copy already has with the same bytes goes,
  * one with other bytes is kept beside it as `<base>.account-<id8><ext>`, so
  * neither is lost. A file where the dir should be is left alone and said in
- * the log.
+ * the log. One call at a time per path ({@link onePathAtATime}).
  */
-const shareDir = async (
+const shareDir = (
   path: string,
   target: string,
   /** The account `path` is in, whose first 8 characters mark a copy kept beside. */
+  account: string
+): Promise<void> =>
+  onePathAtATime(path, () => shareDirNow(path, target, account));
+
+const shareDirNow = async (
+  path: string,
+  target: string,
   account: string
 ): Promise<void> => {
   const there = await lstat(path).catch(() => undefined);
