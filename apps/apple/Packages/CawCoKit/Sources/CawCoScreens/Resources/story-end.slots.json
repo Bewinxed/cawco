@@ -4,6 +4,11 @@
   "measured_with": "measure_video.end_bands: measure.py mid_bands rows (x 450-600, free fills) + band_x_extent columns",
   "order": "front to back; back cards' rect_px is the nominal hidden extent (band x, front height, bottom at the band's bottom); visible_px is the measured band",
   "corner_radius_nominal_px": 36,
+  "rails_px": {
+    "measured_with": "PaywallStoryRest.png columns yellow (R>200, G>170, B<120) the whole height, 2026-10-09",
+    "leading": { "x": 40, "width": 8 },
+    "trailing": { "x": 977, "width": 7 }
+  },
   "cards": [
     {
       "name": "front",

@@ -54,6 +54,8 @@ final class PaywallController: ObservedViewController {
     private let entry: Entry
     private let hero: PaywallHeroView
     private let close: GhostIconButton
+    /// The close button's leading inset, set from the still's leading rail once the band is laid out.
+    private let closeLeading: NSLayoutConstraint
     let scroll = UIScrollView()
     private let panel = UIStackView()
     private var screen: Screen
@@ -90,8 +92,11 @@ final class PaywallController: ObservedViewController {
 
     init(entry: Entry, banners: [HeroBanner]) {
         self.entry = entry
-        hero = PaywallHeroView(banners: banners)
-        close = GhostIconButton(.close, label: "Close", tint: Palette.paper)
+        let hero = PaywallHeroView(banners: banners)
+        let close = GhostIconButton(.close, label: "Close", tint: Palette.paper, side: Size.cBtnHLg)
+        self.hero = hero
+        self.close = close
+        closeLeading = close.leadingAnchor.constraint(equalTo: hero.leadingAnchor, constant: Space.space2)
         screen = switch entry {
         case .onboarding, .offer, .keep: .offer
         case let .buy(product): .buying(product)
@@ -143,7 +148,7 @@ final class PaywallController: ObservedViewController {
             tall,
             hero.heightAnchor.constraint(lessThanOrEqualToConstant: 300),
             close.topAnchor.constraint(equalTo: hero.topAnchor, constant: Space.space2),
-            close.leadingAnchor.constraint(equalTo: hero.leadingAnchor, constant: Space.space2),
+            closeLeading,
             scroll.topAnchor.constraint(equalTo: hero.bottomAnchor, constant: Space.space4),
             scroll.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: view.trailingAnchor),
@@ -157,6 +162,15 @@ final class PaywallController: ObservedViewController {
         foreground = NotificationCenter.default.addObserver(forName: UIScene.willEnterForegroundNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.cameBack() }
         }
+    }
+
+    /// The close glyph stands `space2` inside the still's leading rail, wherever
+    /// the band puts the still: its 44pt button centres a 16pt glyph.
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        guard let rail = hero.leadingRailEdge else { return }
+        let inset = rail + Space.space2 - (Size.cBtnHLg - Size.iconMd) / 2
+        if abs(closeLeading.constant - inset) > 0.25 { closeLeading.constant = inset }
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -764,6 +778,14 @@ final class SpinnerButton: UIView {
         spinner.tintColor = variant == .action ? Palette.onAction : Palette.inkMuted
         spinner.isHidden = true
         spinner.isAccessibilityElement = false
+        // Busy, the button waits at its full look with the spinner: the kit's
+        // disabled half-alpha would wash the coral under its white label
+        // (DESIGN.md, The White On Coral Rule).
+        let kit = button.configurationUpdateHandler
+        button.configurationUpdateHandler = { [weak self] button in
+            kit?(button)
+            if self?.busy == true { button.alpha = 1 }
+        }
         addSubview(button)
         addSubview(spinner)
         NSLayoutConstraint.activate([
@@ -785,6 +807,7 @@ final class SpinnerButton: UIView {
         didSet {
             spinner.isHidden = !busy
             button.accessibilityValue = busy ? "In progress" : nil
+            button.setNeedsUpdateConfiguration()
         }
     }
 
@@ -978,8 +1001,21 @@ public enum PaywallProbe {
             let paywall = PaywallController.present(.onboarding, banners: banners, from: self)
             let log = Logger(subsystem: "dev.cawco.app", category: "Paywall")
             log.notice("probe: the sheet is presented")
+            // `-paywall-evidence-after <s>`: that long after the sheet is up, for a frame mid-film.
+            // Without it, once the film has played to its end and the cards and Caw have come.
+            let after = UserDefaults.standard.object(forKey: "paywall-evidence-after").map { _ in
+                UserDefaults.standard.double(forKey: "paywall-evidence-after")
+            }
             Task { @MainActor [weak paywall] in
-                try? await Task.sleep(for: .seconds(15))
+                if let after {
+                    try? await Task.sleep(for: .seconds(after))
+                } else {
+                    while let paywall, !paywall.probeAtRest {
+                        try? await Task.sleep(for: .milliseconds(250))
+                    }
+                    log.notice("probe: at rest")
+                    try? await Task.sleep(for: .seconds(5))
+                }
                 guard let paywall else {
                     log.error("probe: the sheet is gone before its evidence")
                     return
@@ -991,6 +1027,13 @@ public enum PaywallProbe {
 }
 
 extension PaywallController {
+    /// The sheet is up and, where the band plays the film, it has played to its end.
+    fileprivate var probeAtRest: Bool {
+        guard viewIfLoaded?.window != nil else { return false }
+        if case .scene = mode(for: screen) { return hero.probeCardsShown }
+        return true
+    }
+
     /// One line of JSON on stdout: every label that shows, in the sheet's
     /// space, the height its words need at its width against the height it
     /// has, and the links row's insets.
@@ -1048,7 +1091,8 @@ extension PaywallController {
         let buttons = panel.subviews.flatMap { labelsOrButtons($0) }
         let evidence: [String: Any] = ["screen": builtKey, "sheet": ["width": sheet.bounds.width, "visible": visible, "top": inWindow.minY],
                                        "hero": hero.convert(hero.bounds, to: sheet).debugDescription,
-                                       "proseWords": words, "links": links, "buttons": buttons, "labels": rows]
+                                       "proseWords": words, "links": links, "buttons": buttons, "labels": rows,
+                                       "heroState": hero.probeState, "close": closeEvidence(in: sheet)]
         // Into the app's Documents (`simctl get_app_container … data`), where the pass reads it.
         guard let data = try? JSONSerialization.data(withJSONObject: evidence, options: [.sortedKeys]),
               let folder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
@@ -1059,6 +1103,16 @@ extension PaywallController {
         } catch {
             log.error("probe: evidence not written: \(String(describing: error), privacy: .public)")
         }
+    }
+
+    /// The close glyph's box and the leading rail's inner edge, in the sheet's
+    /// space, and how far inside the rail the glyph stands.
+    private func closeEvidence(in sheet: UIView) -> [String: Any] {
+        guard let glyph = close.imageView, let rail = hero.leadingRailEdge else { return [:] }
+        let box = glyph.convert(glyph.bounds, to: sheet)
+        let edge = hero.convert(CGPoint(x: rail, y: 0), to: sheet).x
+        return ["glyph": box.debugDescription, "button": close.convert(close.bounds, to: sheet).debugDescription,
+                "railEdge": edge, "insideRail": box.minX - edge, "hidden": close.isHidden]
     }
 
     private func labelsOrButtons(_ node: UIView) -> [String] {

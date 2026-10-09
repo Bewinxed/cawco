@@ -85,14 +85,27 @@ nonisolated struct StorySlots: Decodable {
         }
     }
 
+    /// The phone's yellow side rails, the full height of the still.
+    struct Rails: Decodable {
+        struct Column: Decodable {
+            let x: Double
+            let width: Double
+        }
+
+        let leading: Column
+        let trailing: Column
+    }
+
     let size: CGSize
     /// Front to back, the file's order.
     let slots: [Slot]
     let radius: Double
+    let rails: Rails
 
     private enum Keys: String, CodingKey {
         case frame, cards
         case radius = "corner_radius_nominal_px"
+        case rails = "rails_px"
     }
 
     init(from decoder: any Decoder) throws {
@@ -104,6 +117,7 @@ nonisolated struct StorySlots: Decodable {
         size = CGSize(width: frame[0], height: frame[1])
         slots = try keys.decode([Slot].self, forKey: .cards)
         radius = try keys.decode(Double.self, forKey: .radius)
+        rails = try keys.decode(Rails.self, forKey: .rails)
     }
 
     /// The bundled file, read once.
@@ -234,20 +248,37 @@ final class PaywallHeroView: UIView {
         fatalError("PaywallHeroView is built in code")
     }
 
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        art.frame = bounds
-        guard let story, let first = story.slots.first else { return }
-        // The still is fitted so its cards fill the band's height less a
-        // margin, centred; the phone's bezels frame it on the Ink field.
+    /// Where the still stands in the band, and its scale. It is fitted so its
+    /// cards fill the band's height less a margin and centred; the phone's
+    /// bezels frame it on the Ink field. Then it is lowered, as far as the
+    /// room under the cards allows, until a whole `climbSide` Caw stands over
+    /// the front card, in every mode, so the cards never move when he comes.
+    private var still: (image: CGRect, scale: Double)? {
+        guard let story, let first = story.slots.first else { return nil }
         let stack = story.slots.dropFirst().reduce(first.rect) { $0.union($1.rect) }
         let frame = story.size
         let scale = min(bounds.width / frame.width, (bounds.height - 2 * Space.space2) / stack.height)
-        guard scale > 0 else { return }
-        let image = CGRect(x: (bounds.width - frame.width * scale) / 2,
-                           y: bounds.midY - stack.midY * scale,
-                           width: frame.width * scale,
-                           height: frame.height * scale)
+        guard scale > 0 else { return nil }
+        var y = bounds.midY - stack.midY * scale
+        let headroom = Space.space2 + (Self.climbSide * CawView.ledgeLine).rounded(.up)
+        let ledge = y + stack.minY * scale
+        let below = bounds.maxY - Space.space2 - (y + stack.maxY * scale)
+        y += max(0, min(headroom - ledge, below))
+        return (CGRect(x: (bounds.width - frame.width * scale) / 2, y: y, width: frame.width * scale, height: frame.height * scale), scale)
+    }
+
+    /// The inner edge of the still's leading rail, in the band's space.
+    var leadingRailEdge: Double? {
+        guard let story, let still else { return nil }
+        return still.image.minX + (story.rails.leading.x + story.rails.leading.width) * still.scale
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        art.frame = bounds
+        guard let story, let still else { return }
+        let image = still.image
+        let scale = still.scale
         for view in [rest, start, movie] { view.frame = image }
         video.frame = movie.bounds
         for (card, slot) in zip(cards, story.slots) {
@@ -347,6 +378,25 @@ final class PaywallHeroView: UIView {
         cards.first?.flashApprove()
     }
 }
+
+#if DEBUG
+extension PaywallHeroView {
+    /// For the paywall probe: the film has played to its end and the cards are coming.
+    var probeCardsShown: Bool { cardsShown }
+
+    /// For the paywall probe: where the film is, and Caw's climb box.
+    var probeState: [String: Any] {
+        let seconds = player.map { CMTimeGetSeconds($0.currentTime()) } ?? -1
+        let duration = player?.currentItem.map { CMTimeGetSeconds($0.duration) } ?? -1
+        return ["filmSeconds": seconds, "filmDuration": duration, "filmShowing": !movie.isHidden && player != nil,
+                "startShowing": !start.isHidden && start.image != nil, "cardsShown": cardsShown,
+                "climber": ["frame": climber.frame.debugDescription, "present": climber.present, "status": climber.status.rawValue,
+                            "inWindow": climber.convert(climber.bounds, to: nil).debugDescription,
+                            "dark": climber.traitCollection.userInterfaceStyle == .dark],
+                "leadingRailEdge": leadingRailEdge ?? -1]
+    }
+}
+#endif
 
 /// A lock-screen notification drawn natively, sized to its slot in the
 /// still: the app's icon and name, the ask's title and first line. A card
