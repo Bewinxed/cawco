@@ -50,11 +50,11 @@
     }
   ],
   "placement": {
-    "scale": 0.6261959832857142,
-    "x": -64.54787319278569,
-    "y": -84.38405584957138
+    "scale": 0.6240193329040209,
+    "x": -63.37305597678943,
+    "y": -82.48718121827756
   },
-  "stillOverlap": 0.9909,
+  "stillOverlap": 0.9918,
   "halo": {
     "01": 0,
     "02": 0,
@@ -73,39 +73,39 @@
     "tracedFrames": 22,
     "traced": [
       [0, 6, 0],
-      [6, 2, 5412],
-      [8, 2, 25297],
-      [10, 2, 59776],
-      [12, 2, 76453],
-      [14, 2, 83566],
-      [16, 2, 80505],
-      [18, 2, 84570],
-      [20, 2, 89133]
+      [6, 2, 5384],
+      [8, 2, 25165],
+      [10, 2, 59357],
+      [12, 2, 75860],
+      [14, 2, 82974],
+      [16, 2, 79940],
+      [18, 2, 83962],
+      [20, 2, 88447]
     ],
+    "trimmedLeadingFrames": 0,
     "trimmedTrailingFrames": 0,
     "last": {
       "against": "ready-attention/body-00",
-      "iou": 0.9886,
-      "sameInks": 0.9839,
-      "outlineMaxPx": 5.0,
-      "outlineP99Px": 1.78,
+      "iou": 0.9903,
+      "sameInks": 0.9852,
+      "outlineMaxPx": 3.61,
+      "outlineP99Px": 1.41,
       "largestDiffs": [
         {
-          "px": 26,
-          "at": [276, 424]
+          "px": 15,
+          "at": [338, 148]
         },
         {
-          "px": 20,
-          "at": [338, 146]
+          "px": 14,
+          "at": [98, 318]
         },
         {
-          "px": 20,
-          "at": [109, 376]
+          "px": 12,
+          "at": [356, 268]
         }
       ]
     },
     "firstInkPx": 0,
-    "trimmedLeadingFrames": 0,
     "frames": 18,
     "slots": 9,
     "drawings": 9,
@@ -125,18 +125,12 @@
     "eyesCut": {},
     "gates": {
       "landing": true,
-      "opensSmall": true,
+      "firstEmpty": true,
       "onTwos": true,
       "whiteMarks": true,
       "halo": true,
       "eyes": true,
-      "inkOrder": true,
       "safeArea": true
-    },
-    "inksOutOfOrder": {
-      "foreign": [],
-      "ownEarly": [],
-      "ownBy": {}
     },
     "outsideSafe": []
   }

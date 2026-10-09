@@ -332,15 +332,6 @@ def inks(rgb: np.ndarray, centres: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         distance[..., 0] = np.where(is_cream, np.inf, distance[..., 0])
         distance[..., WHITE] = np.where(is_cream, np.inf, distance[..., WHITE])
     label = distance.argmin(-1)
-    # Between yellow and vermilion the choice is made as halo() judges it, by nearness in Lab: an
-    # orange blend of the two sits nearer yellow in RGB and nearer vermilion to the eye, and was
-    # traced as yellow over a take with none there (trying-stumble drawing 11: 112 px of
-    # (238, 152, 94); done-dust-off drawing 26: 12 px).
-    blend = np.flatnonzero(label == yellow)
-    if blend.size:
-        seen = lab(px.reshape(-1, 3)[blend])
-        nearer = ((seen - lab(centres[vermilion])) ** 2).sum(-1) < ((seen - lab(centres[yellow])) ** 2).sum(-1)
-        label.flat[blend[nearer]] = vermilion
     if "cream" in INKS:
         tan_outline(label, px)
         warm_eye_whites(label, px)

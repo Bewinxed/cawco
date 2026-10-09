@@ -11,25 +11,25 @@
     }
   ],
   "placement": {
-    "scale": 0.6088481516506641,
-    "x": -41.11789800552407,
-    "y": -32.90454027686428
+    "scale": 0.60625,
+    "x": -39.546875,
+    "y": -30.501250000000027
   },
-  "stillOverlap": 0.9923,
+  "stillOverlap": 0.9864,
   "inks": {
-    "black": 73162,
-    "vermilion": 9328,
-    "white": 3859,
-    "yellow": 1694,
-    "cream": 13947
+    "black": 72327,
+    "vermilion": 9247,
+    "white": 4170,
+    "yellow": 1682,
+    "cream": 13627
   },
   "halo": {
     "00": 0
   },
   "probe": {
     "moved": {
-      "x": 14.67,
-      "y": -45.15
+      "x": 15.1,
+      "y": -43.87
     },
     "shards": [],
     "heldFrom": 90,
@@ -39,13 +39,13 @@
     "outsideSafePx": 0,
     "sameInk": {
       "black": 0.994,
-      "vermilion": 0.979,
-      "white": 0.516,
-      "yellow": 0.986,
-      "cream": 0.957,
-      "tan": 0.063
+      "vermilion": 0.983,
+      "white": 0.536,
+      "yellow": 0.994,
+      "cream": 0.948,
+      "tan": 0.084
     },
-    "inkBox": [39.9, -6.1, 497.7, 530.3],
+    "inkBox": [40.5, -4.4, 496.4, 529.7],
     "gates": {
       "opensOnStill": true,
       "held": true,

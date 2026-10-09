@@ -46,10 +46,6 @@
    */
   let tapped = $state<TemplateName | null>(null);
   const selected = $derived(tapped ?? fit);
-  /** A card picked on the cards: the tap. */
-  function tap(next: TemplateName | null) {
-    tapped = next;
-  }
 
   /** The prompt's fit, now: a new fit releases the tap and the frame follows it. */
   function refit(text: string) {
@@ -185,7 +181,12 @@
       peekPresent={!leaving}
       peekShare={made ? `caw:${made}` : undefined}
       peekSize={CAW_SIZE}
-      bind:selected={() => selected, tap}
+      bind:selected={
+        () => selected,
+        (next) => {
+          tapped = next;
+        }
+      }
     />
   </div>
 </main>
