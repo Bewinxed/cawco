@@ -9,7 +9,7 @@ import {
   stat,
   unlink,
 } from "node:fs/promises";
-import { homedir } from "node:os";
+import { arch, homedir, platform, release } from "node:os";
 import { dirname, extname, join, resolve } from "node:path";
 import { type GeneratedImage, IMAGE_GENERATION_TIMEOUT_MS } from "@cawco/core";
 import { z } from "zod";
@@ -216,21 +216,38 @@ async function subscriptionAuth(): Promise<OAuth> {
   return await refreshing;
 }
 
-/** The token's ChatGPT compute residency, sent as OpenCode's codex plugin does. */
-function residency(access: string): string | undefined {
+/** What the access token says about its ChatGPT account; never the token itself. */
+function accountFacts(access: string): {
+  email?: string;
+  planType?: string;
+  residency?: string;
+} {
+  let claims: Record<string, unknown> | undefined;
   try {
-    const claims = JSON.parse(
+    claims = JSON.parse(
       Buffer.from(access.split(".")[1] ?? "", "base64url").toString()
     );
-    const value =
-      claims?.["https://api.openai.com/auth"]?.chatgpt_compute_residency ??
-      claims?.chatgpt_compute_residency;
-    return typeof value === "string" && value !== "no_constraint"
-      ? value
-      : undefined;
   } catch {
-    return undefined;
+    return {};
   }
+  const text = (value: unknown) =>
+    typeof value === "string" && value ? value : undefined;
+  const auth = claims?.["https://api.openai.com/auth"] as
+    | Record<string, unknown>
+    | undefined;
+  const profile = claims?.["https://api.openai.com/profile"] as
+    | Record<string, unknown>
+    | undefined;
+  // Residency-enforced workspaces require the data (else compute) residency.
+  const residency =
+    text(auth?.chatgpt_data_residency) ??
+    text(auth?.chatgpt_compute_residency) ??
+    text(claims?.chatgpt_compute_residency);
+  return {
+    email: text(profile?.email) ?? text(claims?.email),
+    planType: text(auth?.chatgpt_plan_type),
+    residency: residency === "no_constraint" ? undefined : residency,
+  };
 }
 
 /** The server's own error text: `error.message` when JSON, else the body's start. */
@@ -246,6 +263,26 @@ async function errorDetail(response: Response): Promise<string> {
     // Not JSON: report the text as sent.
   }
   return text.slice(0, 1000) || "(empty body)";
+}
+
+/**
+ * Names the cause of a refused request. An expired token was renewed before
+ * the request, so only a 401 asks for a new sign-in; a 403 on the free plan
+ * names the plan.
+ */
+async function failure(
+  response: Response,
+  account: { email?: string; planType?: string }
+): Promise<string> {
+  const detail = await errorDetail(response);
+  const suffix = "No image was saved and no API-key request was made.";
+  if (response.status === 403 && account.planType === "free") {
+    return `This machine's ChatGPT login (${account.email ?? "unknown email"}) is on the free plan, which can't generate images. Sign in with a paid ChatGPT account: \`opencode auth login\` → OpenAI → ChatGPT. ${suffix}`;
+  }
+  if (response.status === 401) {
+    return `ChatGPT rejected this machine's login (HTTP 401: ${detail}). Sign in again: \`opencode auth login\` → OpenAI → ChatGPT. ${suffix}`;
+  }
+  return `ChatGPT image generation returned HTTP ${response.status}: ${detail} ${suffix} No retry was submitted.`;
 }
 
 /** Each reference as a data URL, checked before its bytes are read. */
@@ -285,7 +322,7 @@ async function requestImage(
   auth: OAuth,
   body: { images?: { image_url: string }[] } & Record<string, unknown>
 ): Promise<Buffer> {
-  const region = residency(auth.access);
+  const account = accountFacts(auth.access);
   const response = await fetch(
     `${CODEX_IMAGES}/${body.images ? "edits" : "generations"}`,
     {
@@ -297,20 +334,19 @@ async function requestImage(
         Accept: "application/json",
         Authorization: `Bearer ${auth.access}`,
         ...(auth.accountId ? { "ChatGPT-Account-Id": auth.accountId } : {}),
-        ...(region ? { "x-openai-internal-codex-residency": region } : {}),
+        ...(account.residency
+          ? { "x-openai-internal-codex-residency": account.residency }
+          : {}),
+        "x-codex-image-turn-id": randomUUID(),
+        // The login is OpenCode's, so the request carries OpenCode's identity.
         originator: "opencode",
+        "User-Agent": `opencode (${platform()} ${release()}; ${arch()})`,
       },
       body: JSON.stringify(body),
     }
   );
   if (!response.ok) {
-    const action =
-      response.status === 401 || response.status === 403
-        ? "Refresh the machine's ChatGPT login with `opencode auth login`."
-        : "No image was saved and no retry was submitted.";
-    throw new Error(
-      `ChatGPT image generation returned HTTP ${response.status}: ${await errorDetail(response)} ${action} No API-key request was made.`
-    );
+    throw new Error(await failure(response, account));
   }
   const result = z
     .object({
