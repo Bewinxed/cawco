@@ -27,15 +27,16 @@
  * through one executor, `~/.cawco/workspaces/<id>/exec [--cwd-out FILE]
  * COMMAND` ({@link execScript}), that every harness runs its shell commands
  * through: claude by a PreToolUse hook that rewrites the command (the
- * workspace's `hook` script, which runs `boundary-hook.ts`), OpenCode by its
+ * workspace's `hook` script, which asks its judge, `boundary-judge.ts`), OpenCode by its
  * plugin's `bash` tool, pi by its bash tool's operations, a workflow's
  * `runCommand`. The GitHub CLI's keyring is the host's, so the executor reads
  * its token on the host side and hands it in as `GH_TOKEN`: pushes and `gh`
  * keep working inside. `cawco tools` reaches the hub's tools through the
  * workspace's tool door (`tool-door.ts`).
  *
- * sessiond holds the boundary, so an agent restart leaves it — and every
- * process in it — running, as it leaves the sessions. One started in another
+ * sessiond holds the boundary and the workspace's judge, so an agent restart
+ * leaves them — and every process in the boundary — running, as it leaves the
+ * sessions. One started in another
  * form (another policy, runner, executor or host) is replaced the first time
  * nothing runs in it ({@link replaceWhenIdle}). A machine that cannot hold a
  * boundary refuses the work: a work item never runs without one.
@@ -96,7 +97,7 @@ import { seatbeltProfile, srtSettings } from "./boundary-policy";
 import { excludeSandboxNames } from "./checkout-exclude";
 import { cloneInPlace } from "./clone";
 import { logRelay } from "./log-relay";
-import { procIdFor } from "./proc-id";
+import { isJudgeOf, judgeProcId, procIdFor } from "./proc-id";
 import { ensureSessiond, SessiondClient } from "./sessiond-client";
 import { closeToolDoor, openToolDoor, toolDoorOf } from "./tool-door";
 
@@ -194,90 +195,117 @@ export const boundaryCommand = (boundary: Boundary, command: string): string =>
 const HOOK_TIMEOUT_S = 90;
 
 /**
- * How long the hook's run of `boundary-hook.ts` may take before the hook kills
- * it and refuses the command. Under {@link HOOK_TIMEOUT_S}, with 10s to spare:
- * Claude Code lets the call through when it times a hook out ("A timed-out
- * `command`… hook doesn't block the tool call",
- * code.claude.com/docs/en/hooks#timeouts), so the hook always answers first.
- * The run takes 15–60ms, even on a Mac at load 170.
+ * How long the hook waits for the judge's answer before it refuses the call.
+ * Under {@link HOOK_TIMEOUT_S}, with 10s to spare: Claude Code lets the call
+ * through when it times a hook out ("A timed-out `command`… hook doesn't
+ * block the tool call", code.claude.com/docs/en/hooks#timeouts), so the hook
+ * always answers first. The judge answers in under a millisecond; the hook
+ * takes 2–4ms on obelisk.
  */
 const HOOK_LIMIT_S = HOOK_TIMEOUT_S - 10;
 
 /**
- * How the hook's refusal of a run that outlived {@link HOOK_LIMIT_S} begins.
+ * How the hook's refusal of a call it waited {@link HOOK_LIMIT_S} on begins.
  * That refusal stops only the one call. The model reads the line and runs the
  * command again, and the work item goes on (claude.ts `#watchBoundary`).
  */
 export const BOUNDARY_HOOK_SLOW = "cawco: the boundary hook took longer than";
 
 /**
+ * The perl the hook runs on. The runner already runs every command of a
+ * workspace through it, on Linux and macOS alike.
+ */
+const PERL = "/usr/bin/perl";
+
+/** `value` as a single-quoted perl string. */
+const perlQuote = (value: string): string =>
+  `'${value.replaceAll("\\", "\\\\").replaceAll("'", "\\'")}'`;
+
+/** A workspace's judge, as its hook reaches it. */
+interface JudgeAt {
+  /** Its socket's address, packed by perl's `Socket` on this machine, in hex. */
+  readonly address: string;
+  readonly socket: string;
+}
+
+/**
  * The workspace's PreToolUse hook, run before every tool call it is matched
- * to ({@link HOOKED_TOOLS}). It has `boundary-hook.ts` rewrite a shell call's
- * command to run through the executor and judge every other call's paths by
- * the workspace's policy, and refuses the call every way that can fail.
- * Claude Code blocks a call only on exit 2: any other failure — a missing
- * binary, a crash, a signal — is a "non-blocking error", and the call runs as
- * it was written, outside the boundary
- * (code.claude.com/docs/en/hooks#exit-code-2). So every status but 0 becomes
- * 2. A run that hangs is killed at {@link HOOK_LIMIT_S} and refused with
- * {@link BOUNDARY_HOOK_SLOW}, which refuses that call alone. A run that exits
- * 2 has refused the call and said why. Every other failure says the hook
- * failed. The first line it writes names the hook, so a failure the CLI
+ * to ({@link HOOKED_TOOLS}). It hands the call to the workspace's judge
+ * (`boundary-judge.ts`, {@link judgeFor}), which rewrites a shell call's
+ * command to run through the executor and judges every other call's paths by
+ * the workspace's policy, and says what the judge answered. A Bun started for
+ * every call cost each one a process start a loaded Mac takes long to
+ * schedule; the judge starts once, and the hook is perl with nothing to load.
+ *
+ * It refuses the call every way that can fail. Claude Code blocks a call only
+ * on exit 2: any other failure — a missing binary, a crash, a signal — is a
+ * "non-blocking error", and the call runs as it was written, outside the
+ * boundary (code.claude.com/docs/en/hooks#exit-code-2). So it exits 0 only
+ * when the judge allowed the call and its answer reached the CLI whole, and 2
+ * otherwise: a judge that is not there or answers nothing, and an answer not
+ * in by {@link HOOK_LIMIT_S} ({@link BOUNDARY_HOOK_SLOW}), each refuse that
+ * call alone. Each refusal's first line names the hook, so a failure the CLI
  * reports is known as this one's.
  *
- * It names its runtime by a path no update deletes: the binary install's
- * `run` wrapper, which execs whatever `current` names, or, in a checkout,
- * bun. The CLI keeps the hook command it launched with for as long as it
- * lives, and outlives the agent that started it. A hook that named the
- * agent's own versioned binary stopped resolving once an update pruned that
- * version, and every command then ran outside the boundary.
- *
- * The script runs on that runtime as plain Bun (`BUN_BE_BUN=1`), not as
- * cawco: cawco's start-up took over 30s on a loaded Mac, and the watchdog
- * then killed it. It runs from the state dir: Bun reads `bunfig.toml` (its
- * preloads) and `.env` from the directory it starts in, and the session's
- * own directory is the clone, which a command inside the boundary writes.
+ * It runs as `perl -T`, which reads no module path or switch from the
+ * environment, and loads no module: the socket's address is packed by perl's
+ * `Socket` as the agent writes the hook ({@link socketAddress}), and AF_UNIX
+ * and SOCK_STREAM are 1 on Linux and macOS alike. The call's JSON goes over
+ * on one line (a line break in JSON is whitespace or invalid).
  */
 const hookScript = (
   id: string,
-  runner: Runner,
-  exec: string,
-  scratch: string,
-  policy: string
-): string => `#!/bin/sh
+  hook: string,
+  judge: JudgeAt
+): string => `#!${PERL} -T
 # CawCo workspace ${id}: the PreToolUse hook its claude sessions run before each
-# tool call. Any status but 0 refuses the call (exit 2).
-PATH=${SYSTEM_PATH}
-export PATH
-echo "cawco boundary hook $0" >&2
-cd ${shellQuote(stateDir(id))} || exit 2
-exec 3<&0
-${runner.env}${[...runner.argv, exec, scratch, policy].map(shellQuote).join(" ")} <&3 3<&- &
-hook=$!
-(
-  trap 'kill "$timer" 2>/dev/null; exit 1' TERM
-  sleep ${HOOK_LIMIT_S} & timer=$!
-  wait "$timer" && kill -KILL "$hook" 2>/dev/null
-) </dev/null >/dev/null 2>&1 &
-watchdog=$!
-wait "$hook"
-status=$?
-kill "$watchdog" 2>/dev/null
-[ "$status" -eq 0 ] && exit 0
-if wait "$watchdog"; then
-  echo "${BOUNDARY_HOOK_SLOW} ${HOOK_LIMIT_S}s on a loaded machine, so this call did not run. Run it again." >&2
-  exit 2
-fi
-[ "$status" -eq 2 ] && exit 2
-echo "cawco: the boundary hook $0 failed (status $status), so this call did not run" >&2
-exit 2
+# tool call. It asks the workspace's judge and says what it answered. Any
+# status but 0 refuses the call (exit 2).
+$hook = ${perlQuote(hook)};
+$judge = ${perlQuote(judge.socket)};
+sub refuse { print STDERR "cawco boundary hook $hook\\n@_\\n"; exit 2 }
+$SIG{ALRM} = sub { refuse(${perlQuote(`${BOUNDARY_HOOK_SLOW} ${HOOK_LIMIT_S}s on a loaded machine, so this call did not run. Run it again.`)}) };
+$SIG{PIPE} = 'IGNORE';
+alarm ${HOOK_LIMIT_S};
+$call = do { local $/; <STDIN> };
+refuse("cawco: the call reached the boundary hook with no input, so it did not run") unless length $call;
+$call =~ tr/\\r\\n/  /;
+socket(JUDGE, 1, 1, 0) or refuse("cawco: the boundary hook could not open a socket ($!), so this call did not run");
+connect(JUDGE, pack('H*', '${judge.address}')) or refuse("cawco: the workspace's judge at $judge did not answer ($!), so this call did not run");
+select((select(JUDGE), $| = 1)[0]);
+print JUDGE $call, "\\n" or refuse("cawco: the call could not be handed to the workspace's judge at $judge ($!), so it did not run");
+$answer = do { local $/; <JUDGE> };
+$answer =~ /\\A([02])\\n/ or refuse("cawco: the workspace's judge at $judge answered nothing, so this call did not run");
+$allowed = $1 eq '0';
+$said = substr($answer, 2);
+refuse($said) unless $allowed;
+print STDOUT $said or refuse("cawco: the judge's answer could not be written ($!), so this call did not run");
+close STDOUT or refuse("cawco: the judge's answer could not be written ($!), so this call did not run");
+exit 0;
 `;
 
-/** What runs one of the boundary's plain Bun scripts: an environment prefix for the shell, and the command. */
-interface Runner {
-  readonly argv: readonly string[];
-  readonly env: string;
-}
+const HEX = /^[0-9a-f]+$/;
+
+/**
+ * `socket`'s address as perl's `Socket` packs it on this machine, in hex: the
+ * hook connects with it and loads no module of its own ({@link hookScript}).
+ * Refuses the workspace when perl cannot pack it, rather than writing a hook
+ * that refuses every call.
+ */
+const socketAddress = async (id: string, socket: string): Promise<string> => {
+  const packed =
+    await Bun.$`${PERL} -MSocket -e ${'print unpack("H*", pack_sockaddr_un($ARGV[0]))'} ${socket}`
+      .quiet()
+      .nothrow();
+  const address = packed.stdout.toString();
+  if (packed.exitCode !== 0 || !HEX.test(address)) {
+    throw refusal(
+      id,
+      `${PERL} could not pack its judge's socket address (${packed.stderr.toString().trim() || `status ${packed.exitCode}`})`
+    );
+  }
+  return address;
+};
 
 /**
  * The runtime the boundary's plain Bun scripts run on: `BUN_BE_BUN=1 <binary
@@ -298,36 +326,23 @@ const bunRuntime = async (id: string): Promise<string> => {
   return runtime;
 };
 
-/**
- * Writes the hook's script into the workspace's state dir, and says how the
- * hook runs it: on {@link bunRuntime}, from the script the binary install
- * ships embedded or the checkout's source.
- */
-const hookRunner = async (id: string): Promise<Runner> => {
-  const runtime = await bunRuntime(id);
-  // The hook imports the judge from beside it; OpenCode's plugin imports
-  // the same copy.
-  await writeScript(
-    stateDir(id),
-    JUDGE_SCRIPT,
-    "boundary/workspace-judge.ts",
-    join(import.meta.dir, "..", "..", "core", "src", JUDGE_SCRIPT)
-  );
-  const source = await writeScript(
-    stateDir(id),
-    "boundary-hook.ts",
-    "boundary/hook.ts"
-  );
-  return { env: standalone ? "BUN_BE_BUN=1 " : "", argv: [runtime, source] };
-};
-
 /** The judge's file name in a workspace's state dir: `@cawco/core/workspace-judge`, as a plain Bun script. */
 export const JUDGE_SCRIPT = "workspace-judge.ts";
+
+/** The judge server's file name in a workspace's state dir, beside {@link JUDGE_SCRIPT}. */
+const JUDGE_SERVER = "boundary-judge.ts";
+
+/** The line the judge prints once it answers on its socket. */
+const JUDGE_READY = "cawco-judge-ready";
+
+/** One of the plain Bun scripts the boundary runs: as the binary install embedded it (scripts/build-binary.ts), or the checkout's `source`. */
+const scriptText = (embedded: string, source: string): Promise<string> =>
+  Bun.file(standalone ? embeddedFile(embedded) : source).text();
 
 /**
  * Writes one of the plain Bun scripts the boundary runs into `dir`, under its
  * source name: from this checkout (`source`, by default beside this file),
- * or as the binary install embedded it (scripts/build-binary.ts).
+ * or as the binary install embedded it.
  */
 const writeScript = async (
   dir: string,
@@ -336,12 +351,129 @@ const writeScript = async (
   source = join(import.meta.dir, name)
 ): Promise<string> => {
   const path = join(dir, name);
-  await writeWhole(
-    path,
-    await Bun.file(standalone ? embeddedFile(embedded) : source).text(),
-    0o644
-  );
+  await writeWhole(path, await scriptText(embedded, source), 0o644);
   return path;
+};
+
+/** The judges starting now, by their sessiond id: one start each, however many ask. */
+const judging = new Map<string, Promise<void>>();
+/** The judges whose exit this agent watches, by their sessiond id, each with the connection it watches on. */
+const watchedJudges = new Map<string, SessiondClient>();
+
+/**
+ * The workspace's judge, running: `boundary-judge.ts` on {@link bunRuntime},
+ * held by sessiond like the boundary, so it outlives the agent and every CLI
+ * keeps asking it. It and the judge beside it (which OpenCode's plugin
+ * imports too) are written into the state dir first.
+ *
+ * Its form is a hash of what it runs and is handed; one of each form runs,
+ * on its own socket (`judge-<form>.sock`), under its own sessiond id. So a new
+ * build's judge starts beside the old one, and the hook is pointed at it only
+ * once it answers: a hook already running still reaches the old one, which
+ * leaves on its own once the hook has not named it for as long as a hook
+ * lives (`boundary-judge.ts`). One that exits otherwise is started again
+ * ({@link watchJudge}). Refuses the workspace when it cannot start.
+ */
+const judgeFor = async (
+  id: string,
+  held: Pick<Held, "exec" | "scratch">,
+  hook: string,
+  policy: string
+): Promise<JudgeAt> => {
+  const runtime = await bunRuntime(id);
+  const [judgeText, serverText] = await Promise.all([
+    scriptText(
+      "boundary/workspace-judge.ts",
+      join(import.meta.dir, "..", "..", "core", "src", JUDGE_SCRIPT)
+    ),
+    scriptText("boundary/judge.ts", join(import.meta.dir, JUDGE_SERVER)),
+  ]);
+  const server = join(stateDir(id), JUDGE_SERVER);
+  const handed = [
+    hook,
+    String(HOOK_TIMEOUT_S),
+    held.exec,
+    held.scratch,
+    policy,
+  ];
+  const form = createHash("sha256")
+    .update([serverText, judgeText, ...handed].join("\0"))
+    .digest("hex")
+    .slice(0, 16);
+  const socket = join(stateDir(id), `judge-${form}.sock`);
+  const procId = judgeProcId(id, form);
+  // Written each time: OpenCode's plugin imports this build's judge from here.
+  await Promise.all([
+    writeWhole(join(stateDir(id), JUDGE_SCRIPT), judgeText, 0o644),
+    writeWhole(server, serverText, 0o644),
+  ]);
+  let started = judging.get(procId);
+  if (!started) {
+    started = (async () => {
+      const client = await sessiond();
+      if (await holding(client, procId)) {
+        return;
+      }
+      await client.spawnProc(procId, {
+        command: runtime,
+        args: [server, socket, ...handed],
+        // Bun reads bunfig.toml and .env from where it starts: the state dir,
+        // which nothing inside the boundary writes.
+        cwd: stateDir(id),
+        env: {
+          ...(standalone ? { BUN_BE_BUN: "1" } : {}),
+          PATH: SYSTEM_PATH,
+        },
+      });
+      await ready(client, procId, JUDGE_READY, "its judge").catch(
+        (error: Error) => {
+          throw refusal(id, error.message);
+        }
+      );
+      console.info(`[workspace] ${id}: its judge (form ${form}) is running`);
+    })().finally(() => judging.delete(procId));
+    judging.set(procId, started);
+  }
+  await started;
+  await watchJudge(id, procId);
+  return { socket, address: await socketAddress(id, socket) };
+};
+
+/**
+ * Starts the workspace's judge again when it exits while the workspace is
+ * still held, by arming its hook again ({@link armHook}): a crashed judge
+ * would refuse every call. One that left because a newer judge took over, or
+ * the workspace closed, finds the current one running, or no workspace. A
+ * watch lives on its sessiond connection, so a new connection watches again.
+ */
+const watchJudge = async (id: string, procId: string): Promise<void> => {
+  const client = await sessiond();
+  if (watchedJudges.get(procId) === client) {
+    return;
+  }
+  watchedJudges.set(procId, client);
+  client.subscribe(procId, {
+    line: () => undefined,
+    exit: (code, signal) => {
+      watchedJudges.delete(procId);
+      client.unsubscribe(procId);
+      readHeld(id)
+        .then(async (held) => {
+          if (!held) {
+            return;
+          }
+          console.warn(
+            `[workspace] ${id}: its judge ${procId} exited (${signal ?? `code ${code}`}); arming its hook again`
+          );
+          await armHook(id, held);
+        })
+        .catch((error: unknown) => {
+          console.warn(
+            `[workspace] ${id}: its judge could not be started again: ${error instanceof Error ? error.message : String(error)}`
+          );
+        });
+    },
+  });
 };
 
 /** A macOS workspace's shims, first on the PATH of every command in its boundary: read-only inside. */
@@ -470,10 +602,12 @@ const writeWhole = async (
 };
 
 /**
- * Writes the workspace's hook for `held`, its executor in this build's form
- * for the boundary `held` names, and the record of them, and serves its tool
- * door. An executor only hands commands in, so it is current from the next
- * command on, whatever form the boundary is. On macOS also its shims. The
+ * Starts the workspace's judge in this build's form and writes its hook for
+ * `held` to ask it, its executor in this build's form for the boundary `held`
+ * names, and the record of them, and serves its tool door. An executor only
+ * hands commands in, so it is current from the next command on, whatever form
+ * the boundary is; a running CLI reads its hook at every call, so it asks
+ * the new judge from the next call on. On macOS also its shims. The
  * workspace's policy is written again too, as this machine stands now
  * (`workspacePolicy`): every harness reads it at each file tool call, so a
  * store, toolchain or account added since is in it from the next call on.
@@ -489,14 +623,12 @@ const armHook = async (
     `${JSON.stringify(await workspacePolicy({ id, path: held.path }), null, 2)}\n`,
     0o644
   );
-  const runner = await hookRunner(id);
-  await writeWhole(
-    hook,
-    hookScript(id, runner, held.exec, held.scratch, policy),
-    0o755
-  );
+  const judge = await judgeFor(id, held, hook, policy);
+  await writeWhole(hook, hookScript(id, hook, judge), 0o755);
+  // What the hook ran before it asked a judge.
+  await rm(join(stateDir(id), "boundary-hook.ts"), { force: true });
   if (process.platform === "darwin") {
-    await writeShims(id, runner.argv[0] as string);
+    await writeShims(id, await bunRuntime(id));
   }
   await writeWhole(held.exec, execScript(id, held, await hostGh()), 0o755);
   await openToolDoor(id);
@@ -560,7 +692,7 @@ export const rearmHooks = async (): Promise<void> => {
  * send a file out), EnterWorktree, and every MCP tool, whose arguments the
  * judge reads for paths. Claude Code runs those in the CLI, on the host. No
  * other tool takes a path (code.claude.com/docs/en/tools-reference), and the
- * hook's sh and bun run on none of them. A hook's deny holds in every
+ * hook and its judge run on none of them. A hook's deny holds in every
  * permission mode ("a hook deny applies even in bypassPermissions mode",
  * code.claude.com/docs/en/agent-sdk/permissions).
  */
@@ -1226,8 +1358,13 @@ const forgetStale = (id: string): void => {
   }
 };
 
-/** Waits for the boundary's {@link READY} line; answers every line said before it, or its own words if it dies first. */
-const ready = (client: SessiondClient, procId: string): Promise<string[]> =>
+/** Waits for a process's `line` (the boundary's {@link READY}); answers every line said before it, or its own words if it dies first. */
+const ready = (
+  client: SessiondClient,
+  procId: string,
+  line: string,
+  what: string
+): Promise<string[]> =>
   new Promise((resolve, reject) => {
     const said: string[] = [];
     const words = (): string => (said.length ? `: ${said.join(" / ")}` : "");
@@ -1244,7 +1381,7 @@ const ready = (client: SessiondClient, procId: string): Promise<string[]> =>
       () =>
         finish(
           new Error(
-            `the boundary did not start within ${WORKSPACE_BOUNDARY_START_TIMEOUT_MS / 1000}s${words()}`
+            `${what} did not start within ${WORKSPACE_BOUNDARY_START_TIMEOUT_MS / 1000}s${words()}`
           )
         ),
       WORKSPACE_BOUNDARY_START_TIMEOUT_MS
@@ -1253,17 +1390,17 @@ const ready = (client: SessiondClient, procId: string): Promise<string[]> =>
       procId,
       {
         line: (event) => {
-          const line = event.data.trim();
-          if (line === READY) {
+          const text = event.data.trim();
+          if (text === line) {
             finish();
-          } else if (line) {
-            said.push(line);
+          } else if (text) {
+            said.push(text);
           }
         },
         exit: (code, signal) =>
           finish(
             new Error(
-              `the boundary exited (${signal ?? `code ${code}`}) as it started${words()}`
+              `${what} exited (${signal ?? `code ${code}`}) as it started${words()}`
             )
           ),
       },
@@ -1590,7 +1727,7 @@ const start = async (
     throw refusal(ref.id, `mkfifo failed: ${made.stderr.toString().trim()}`);
   }
   await client.spawnProc(procId, plan.spec);
-  await ready(client, procId).catch((error: Error) => {
+  await ready(client, procId, READY, "the boundary").catch((error: Error) => {
     throw refusal(ref.id, error.message);
   });
   const proc = (await client.list()).procs.find(
@@ -1621,13 +1758,21 @@ const start = async (
  * Kills the workspace's boundary with every process in it ({@link
  * stopBoundary}), stops serving its tool door, then its state goes, and on
  * Linux srt's temp dir with the sockets srt leaves there (REPORT.md §5o).
+ * Its judges go last: with the state dir gone there is no workspace to start
+ * one again for ({@link watchJudge}).
  */
 export const closeBoundary = async (ref: WorkspaceRef): Promise<void> => {
   forgetStale(ref.id);
   await closeToolDoor(ref.id);
-  await stopBoundary(await sessiond(), ref.id);
+  const client = await sessiond();
+  await stopBoundary(client, ref.id);
   if (process.platform === "linux" && process.env.XDG_RUNTIME_DIR) {
     await rm(srtTmpOf(ref.id), { recursive: true, force: true });
   }
   await rm(stateDir(ref.id), { recursive: true, force: true });
+  await Promise.all(
+    (await client.list()).procs
+      .filter((proc) => proc.alive && isJudgeOf(proc.procId, ref.id))
+      .map((proc) => client.signal(proc.procId, "SIGKILL"))
+  );
 };

@@ -2,11 +2,12 @@
  * Judges whether a workspace's harness may read or write a path, by the
  * workspace's policy (`workspace-policy.ts` builds it; the agent writes it
  * into the workspace's state dir as `policy.json`). One judge for every
- * harness: Claude Code's PreToolUse hook (`boundary-hook.ts`), CawCo's
- * OpenCode plugin and pi's file tools all hand it the call as the harness
- * sees it, and it answers with the first path the call may not touch.
+ * harness: Claude Code's PreToolUse hook (through the workspace's judge,
+ * `boundary-judge.ts`), CawCo's OpenCode plugin and pi's file tools all hand
+ * it the call as the harness sees it, and it answers with the first path the
+ * call may not touch.
  *
- * It imports only node's built-ins: the hook runs it as a plain Bun script
+ * It imports only node's built-ins: the judge runs it as a plain Bun script
  * from the workspace's state dir, and OpenCode's server imports that same copy.
  *
  * The policy has @anthropic-ai/sandbox-runtime's filesystem shape and

@@ -5,7 +5,7 @@
  * it, and passes the output and the exit status through. Any other `log` is
  * refused here with one line, before it is asked; the agent checks again.
  *
- * Like `boundary-hook.ts`, a plain script on Bun that the agent writes into
+ * Like `boundary-judge.ts`, a plain script on Bun that the agent writes into
  * the workspace's state dir: it imports only Bun's and node's built-ins and
  * the protocol beside it.
  */

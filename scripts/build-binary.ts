@@ -258,12 +258,12 @@ export async function buildBinary(options: {
     ["workflow/workflow-program.ts", join(work, "workflow-program.ts")],
     ["workflow/workflow.ts", join(work, "workflow.ts")],
     ["preview/overlay.js", join(work, "overlay.js")],
-    // Run as plain Bun by each workspace's boundary hook, never as cawco (boundary.ts).
-    ["boundary/hook.ts", join(ROOT, "packages/agent/src/boundary-hook.ts")],
+    // Run as plain Bun as each workspace's judge, never as cawco (boundary.ts).
+    ["boundary/judge.ts", join(ROOT, "packages/agent/src/boundary-judge.ts")],
     // Run as plain Bun by a macOS workspace's `log` shim (boundary.ts).
     ["boundary/log.ts", join(ROOT, "packages/agent/src/boundary-log.ts")],
     ["boundary/log-protocol.ts", join(work, "boundary-log-protocol.ts")],
-    // Run as plain Bun beside the hook, and imported by OpenCode's plugin (boundary.ts).
+    // Run as plain Bun beside the judge, and imported by OpenCode's plugin (boundary.ts).
     ["boundary/workspace-judge.ts", join(work, "workspace-judge.ts")],
     ["native/claude", await nativeClaude(options.target, work)],
   ] as [string, string][];

@@ -50,15 +50,17 @@ import { parseProcId } from "./proc-id";
 import { holdRestart } from "./restart";
 
 /**
- * What an update must wait for: the keeper's live children, less the OpenCode
- * server, which is the agent's own helper and is alive whenever the agent is.
- * Counting it would keep the keeper from ever moving on a machine that runs
- * OpenCode. Busy sessions are the busy check's to refuse.
+ * What an update must wait for: the keeper's live children, less the agent's
+ * own helpers: the OpenCode server, alive whenever the agent is, and the
+ * workspaces' judges, alive whenever a workspace is (boundary.ts `judgeFor`).
+ * Counting them would keep the keeper from ever moving on a machine that runs
+ * OpenCode or holds a workspace. Busy sessions are the busy check's to refuse.
  */
 export const heldSessions = (procs: readonly SessiondProcInfo[]): number =>
-  procs.filter(
-    (proc) => proc.alive && parseProcId(proc.procId).kind !== "opencode-server"
-  ).length;
+  procs.filter((proc) => {
+    const { kind } = parseProcId(proc.procId);
+    return proc.alive && kind !== "opencode-server" && kind !== "judge";
+  }).length;
 
 /**
  * How long a dial or a `welcome` may take before the agent calls the endpoint
