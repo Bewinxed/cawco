@@ -1613,6 +1613,25 @@
       --px-start: calc(var(--overlap) + var(--c-tab-lead));
       --px-end: calc(var(--overlap) + var(--radius-lg));
     }
+    /* A shoulder tucked under its neighbour (TabsList `data-tucked`) is
+       square, card and rim: the neighbour over it is rounder than the
+       overlap is deep, so a round shoulder would rise out of the notch and
+       its rim cross the neighbour's, a double stroke at the junction.
+       Square, its top runs on under the neighbour and meets its shoulder
+       at the top, as the mockup's tabs do, whose radius is their overlap.
+       The kit's card reads the same two radii, and runs under the
+       neighbour in full (`--tuck`): here the rim draws the outline. */
+    .tab {
+      --r-start: var(--radius);
+      --r-end: var(--radius);
+      --tuck: 0px;
+    }
+    .tab[data-tucked="start"] {
+      --r-start: 0px;
+    }
+    .tab[data-tucked="end"] {
+      --r-end: 0px;
+    }
     /* The title's ink follows how chosen its tab is; parked on you, it
        stays strong (`.needs`). */
     .tab:not(.needs) :global(.ff-tab) {
@@ -1663,7 +1682,7 @@
         inset: var(--spill) var(--spill) 0;
       }
       &::before {
-        border-radius: var(--radius) var(--radius) 0 0;
+        border-radius: var(--r-start) var(--r-end) 0 0;
         box-shadow: 0 0 6px
           color-mix(in oklab, var(--tone) calc(var(--rim-mix) / 2), transparent);
         transition: box-shadow var(--dur-panel) var(--ease-out);
@@ -1671,10 +1690,14 @@
       /* The stroke as a shape, so it holds its full width across the top
          and round both shoulders, where a shadow's would thin with the
          corner's radius, and only then tapers, over the next --spill down
-         each side, to its side width. */
+         each side, to its side width. Each shoulder takes its own radius
+         (`--r-start`, `--r-end`); the stroke's inner edge turns on one
+         `--top` less, none on a square shoulder (`--in-*`). */
       &::after {
         --top: 1.5px;
         --side: 0.5px;
+        --in-start: max(var(--r-start), var(--top));
+        --in-end: max(var(--r-end), var(--top));
         background: color-mix(
           in oklab,
           var(--tone) var(--rim-mix),
@@ -1682,20 +1705,20 @@
         );
         clip-path: shape(
           from 0 100%,
-          line to 0 var(--radius),
-          arc to var(--radius) 0 of var(--radius) cw,
-          line to calc(100% - var(--radius)) 0,
-          arc to 100% var(--radius) of var(--radius) cw,
+          line to 0 var(--r-start),
+          arc to var(--r-start) 0 of var(--r-start) cw,
+          line to calc(100% - var(--r-end)) 0,
+          arc to 100% var(--r-end) of var(--r-end) cw,
           line to 100% 100%,
           line to calc(100% - var(--side)) 100%,
-          line to calc(100% - var(--side)) calc(var(--radius) + var(--spill)),
-          line to calc(100% - var(--top)) var(--radius),
-          arc to calc(100% - var(--radius)) var(--top) of
-            calc(var(--radius) - var(--top)) ccw,
-          line to var(--radius) var(--top),
-          arc to var(--top) var(--radius) of calc(var(--radius) - var(--top))
-            ccw,
-          line to var(--side) calc(var(--radius) + var(--spill)),
+          line to calc(100% - var(--side)) calc(var(--in-end) + var(--spill)),
+          line to calc(100% - var(--top)) var(--in-end),
+          arc to calc(100% - var(--in-end)) var(--top) of
+            calc(var(--in-end) - var(--top)) ccw,
+          line to var(--in-start) var(--top),
+          arc to var(--top) var(--in-start) of
+            calc(var(--in-start) - var(--top)) ccw,
+          line to var(--side) calc(var(--in-start) + var(--spill)),
           line to var(--side) 100%,
           close
         );

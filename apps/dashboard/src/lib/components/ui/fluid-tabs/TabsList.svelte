@@ -163,14 +163,24 @@
       return;
     }
     const top = items.length + 1;
+    const rank = items.map((_, i) =>
+      i === chosen ? top : items.length - Math.abs(i - Math.max(chosen, 0))
+    );
     items.forEach((item, i) => {
       let laid: HTMLElement = item;
       while (laid.parentElement && laid.parentElement !== track) {
         laid = laid.parentElement;
       }
-      laid.style.zIndex = String(
-        i === chosen ? top : items.length - Math.abs(i - Math.max(chosen, 0))
-      );
+      laid.style.zIndex = String(rank[i]);
+      // The edge a neighbour drawn above it covers: a host may square that
+      // shoulder (PaneTabs' phone row, whose rim draws the outline).
+      let tucked = "none";
+      if (i > 0 && rank[i - 1] > rank[i]) {
+        tucked = "start";
+      } else if (i < items.length - 1 && rank[i + 1] > rank[i]) {
+        tucked = "end";
+      }
+      laid.dataset.tucked = tucked;
     });
     track.style.setProperty("--stack-top", String(top + 1));
   });

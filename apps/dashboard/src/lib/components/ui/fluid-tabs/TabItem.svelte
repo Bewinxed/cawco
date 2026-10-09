@@ -245,7 +245,9 @@
       position: absolute;
       inset: 0;
       z-index: 0;
-      border-radius: var(--radius) var(--radius) 0 0;
+      /* A host may square a shoulder tucked under a neighbour (PaneTabs). */
+      border-radius: var(--r-start, var(--radius)) var(--r-end, var(--radius)) 0
+        0;
       /* A host may recede a tab further from the chosen one (PaneTabs). */
       background: var(--tab-fill, var(--surface-recess-deep));
 
@@ -254,6 +256,20 @@
           background-color var(--dur-ghost) var(--ease-out),
           opacity 0s;
       }
+    }
+    /* A card tucked under a neighbour drawn above it (TabsList
+       `data-tucked`) starts where that neighbour's edge stands, its own
+       shoulder rounded there, so the neighbour's shoulder shows against
+       the shelf and each tab stands on it with its rounded top, not run
+       under the next into one slab. A host whose rim draws the outline
+       lets it run under (`--tuck: 0px`, PaneTabs' phone row). */
+    :global([data-tucked="start"]) &::before,
+    &:global([data-tucked="start"])::before {
+      inset-inline-start: var(--tuck, var(--overlap));
+    }
+    :global([data-tucked="end"]) &::before,
+    &:global([data-tucked="end"])::before {
+      inset-inline-end: var(--tuck, var(--overlap));
     }
     /* Hidden once the sheet has covered it, so no tint fringes the
        sheet's shoulders at rest; back at once when the sheet leaves. */

@@ -519,10 +519,18 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
             let db = abs(b.offset - chosen)
             return da == db ? a.offset < b.offset : da > db
         }
-        for (_, id) in farthestFirst {
-            if let view = views[id] { track.bringSubviewToFront(view) }
+        var rank = [Int](repeating: 0, count: order.count)
+        for (place, entry) in farthestFirst.enumerated() {
+            rank[entry.offset] = place
+            if let view = views[entry.element] { track.bringSubviewToFront(view) }
         }
         track.bringSubviewToFront(caret)
+        // Each tab's edge a neighbour drawn above it covers: its rim stops there.
+        for (index, id) in order.enumerated() {
+            let leading = index > 0 && rank[index - 1] > rank[index]
+            let trailing = index < order.count - 1 && rank[index + 1] > rank[index]
+            views[id]?.tucked = leading ? .leading : trailing ? .trailing : .none
+        }
     }
 
     func scrollViewDidScroll(_: UIScrollView) { edges() }
@@ -749,6 +757,28 @@ final class TabView: UIView {
     private let glowOutside = CAShapeLayer()
     /// Room round the outline for the glow, inside the fade.
     private static let spill = 6.0
+
+    /// The edge a neighbour drawn above this tab covers (`PaneTabsView.stack`).
+    enum Tucked {
+        case none, leading, trailing
+    }
+
+    var tucked = Tucked.none {
+        didSet { if tucked != oldValue { setNeedsLayout() } }
+    }
+
+    /// Its shoulders' radii. On the phone's row a shoulder tucked under its
+    /// neighbour is square, card and rim (PaneTabs.svelte `--r-start`,
+    /// `--r-end`): the neighbour over it is rounder than the overlap is
+    /// deep, so a round shoulder would rise out of the notch and its rim
+    /// cross the neighbour's, a double stroke at the junction. Square, its
+    /// top runs on under the neighbour and meets its shoulder at the top, as
+    /// the mockup's tabs do, whose radius is their overlap.
+    private var shoulders: (leading: Double, trailing: Double) {
+        let r = radius
+        guard phoneRow else { return (r, r) }
+        return (tucked == .leading ? 0 : r, tucked == .trailing ? 0 : r)
+    }
     private let status = SessionStatusView(.idle, compact: true)
     private let label = KitLabel(TypeScale.typeLabel, ink: Palette.inkMuted)
     private let details = ChevronButton()
@@ -1116,7 +1146,8 @@ final class TabView: UIView {
         let flare = phoneRow ? Radius.radiusLg : Radius.radiusSm
         let radius = radius
         tint.frame = bounds
-        tint.path = Self.outline(bounds, radius: radius).cgPath
+        let corners = shoulders
+        tint.path = Self.outline(bounds, leading: corners.leading, trailing: corners.trailing).cgPath
         sheet.frame = bounds.insetBy(dx: -flare, dy: 0)
         sheet.path = Self.sheetPath(in: sheet.bounds, radius: radius, flare: flare)
         anchorMask(right: sheetMask.anchorPoint.x > 0.5)
@@ -1135,9 +1166,10 @@ final class TabView: UIView {
         rim.frame = rimHost.bounds
         let outline = CGRect(x: spill, y: spill, width: bounds.width, height: bounds.height)
         let solid = solidRim
-        rim.path = Self.ring(outline, radius: radius, top: solid ? 1 : 1.5, side: solid ? 1 : 0.5, taper: spill).cgPath
+        let corners = shoulders
+        rim.path = Self.ring(outline, leading: corners.leading, trailing: corners.trailing, top: solid ? 1 : 1.5, side: solid ? 1 : 0.5, taper: spill).cgPath
         // The glow is the outline's shadow, shown only outside the outline.
-        let shape = Self.outline(outline, radius: radius)
+        let shape = Self.outline(outline, leading: corners.leading, trailing: corners.trailing)
         glowHost.frame = rimHost.bounds
         glow.frame = rimHost.bounds
         glow.shadowPath = shape.cgPath
@@ -1151,39 +1183,42 @@ final class TabView: UIView {
         rimHost.mask = solid ? nil : rimFade
     }
 
-    /// A tab's outline: circular shoulders of `radius`, as the web's border
-    /// radius draws them, square at the foot.
-    static func outline(_ rect: CGRect, radius: Double) -> UIBezierPath {
+    /// A tab's outline: circular shoulders, `leading` and `trailing` their
+    /// radii (0 square), as the web's border radius draws them, square at the foot.
+    static func outline(_ rect: CGRect, leading: Double, trailing: Double) -> UIBezierPath {
         let path = UIBezierPath()
         path.move(to: CGPoint(x: rect.minX, y: rect.maxY))
-        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + radius))
-        path.addArc(withCenter: CGPoint(x: rect.minX + radius, y: rect.minY + radius), radius: radius, startAngle: .pi, endAngle: .pi * 1.5, clockwise: true)
-        path.addLine(to: CGPoint(x: rect.maxX - radius, y: rect.minY))
-        path.addArc(withCenter: CGPoint(x: rect.maxX - radius, y: rect.minY + radius), radius: radius, startAngle: .pi * 1.5, endAngle: 0, clockwise: true)
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + leading))
+        path.addArc(withCenter: CGPoint(x: rect.minX + leading, y: rect.minY + leading), radius: leading, startAngle: .pi, endAngle: .pi * 1.5, clockwise: true)
+        path.addLine(to: CGPoint(x: rect.maxX - trailing, y: rect.minY))
+        path.addArc(withCenter: CGPoint(x: rect.maxX - trailing, y: rect.minY + trailing), radius: trailing, startAngle: .pi * 1.5, endAngle: 0, clockwise: true)
         path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
         path.close()
         return path
     }
 
     /// The outline's stroke, inside it: `top` wide across the top and round
-    /// both shoulders, narrowing over `taper` below them to `side` down each
-    /// side, open at the foot (the web's `shape()` for `.rim::after`).
-    static func ring(_ rect: CGRect, radius: Double, top: Double, side: Double, taper: Double) -> UIBezierPath {
+    /// both shoulders (`leading` and `trailing` their radii, 0 square),
+    /// narrowing over `taper` below them to `side` down each side, open at
+    /// the foot (the web's `shape()` for `.rim::after`). The stroke's inner
+    /// edge turns on a radius `top` less than its shoulder's, none when square.
+    static func ring(_ rect: CGRect, leading: Double, trailing: Double, top: Double, side: Double, taper: Double) -> UIBezierPath {
         let path = UIBezierPath()
-        let r = radius
+        let lead = max(leading, top)
+        let trail = max(trailing, top)
         path.move(to: CGPoint(x: rect.minX, y: rect.maxY))
-        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + r))
-        path.addArc(withCenter: CGPoint(x: rect.minX + r, y: rect.minY + r), radius: r, startAngle: .pi, endAngle: .pi * 1.5, clockwise: true)
-        path.addLine(to: CGPoint(x: rect.maxX - r, y: rect.minY))
-        path.addArc(withCenter: CGPoint(x: rect.maxX - r, y: rect.minY + r), radius: r, startAngle: .pi * 1.5, endAngle: 0, clockwise: true)
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + leading))
+        path.addArc(withCenter: CGPoint(x: rect.minX + leading, y: rect.minY + leading), radius: leading, startAngle: .pi, endAngle: .pi * 1.5, clockwise: true)
+        path.addLine(to: CGPoint(x: rect.maxX - trailing, y: rect.minY))
+        path.addArc(withCenter: CGPoint(x: rect.maxX - trailing, y: rect.minY + trailing), radius: trailing, startAngle: .pi * 1.5, endAngle: 0, clockwise: true)
         path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
         path.addLine(to: CGPoint(x: rect.maxX - side, y: rect.maxY))
-        path.addLine(to: CGPoint(x: rect.maxX - side, y: rect.minY + r + taper))
-        path.addLine(to: CGPoint(x: rect.maxX - top, y: rect.minY + r))
-        path.addArc(withCenter: CGPoint(x: rect.maxX - r, y: rect.minY + r), radius: r - top, startAngle: 0, endAngle: .pi * 1.5, clockwise: false)
-        path.addLine(to: CGPoint(x: rect.minX + r, y: rect.minY + top))
-        path.addArc(withCenter: CGPoint(x: rect.minX + r, y: rect.minY + r), radius: r - top, startAngle: .pi * 1.5, endAngle: .pi, clockwise: false)
-        path.addLine(to: CGPoint(x: rect.minX + side, y: rect.minY + r + taper))
+        path.addLine(to: CGPoint(x: rect.maxX - side, y: rect.minY + trail + taper))
+        path.addLine(to: CGPoint(x: rect.maxX - top, y: rect.minY + trail))
+        path.addArc(withCenter: CGPoint(x: rect.maxX - trail, y: rect.minY + trail), radius: trail - top, startAngle: 0, endAngle: .pi * 1.5, clockwise: false)
+        path.addLine(to: CGPoint(x: rect.minX + lead, y: rect.minY + top))
+        path.addArc(withCenter: CGPoint(x: rect.minX + lead, y: rect.minY + lead), radius: lead - top, startAngle: .pi * 1.5, endAngle: .pi, clockwise: false)
+        path.addLine(to: CGPoint(x: rect.minX + side, y: rect.minY + lead + taper))
         path.addLine(to: CGPoint(x: rect.minX + side, y: rect.maxY))
         path.close()
         return path
