@@ -1089,6 +1089,15 @@ export const sentMessages = sqliteTable(
      * reached the session.
      */
     held: integer("held", { mode: "boolean" }).notNull().default(false),
+    /**
+     * A send the hub accepted and its machine has not been handed yet, as the
+     * envelope to hand it: its session's start is held (its machine is
+     * installing an update) or its machine's agent is away within the grace a
+     * restart gets. The record is `pending`, which every screen draws as
+     * queued; the envelope goes once the hold ends, in the order accepted.
+     * Null for every send its machine has.
+     */
+    owed: text("owed"),
   },
   (table) => [
     index("sent_messages_harness_id").on(table.harnessId),

@@ -107,11 +107,19 @@ export interface RestartReadiness {
  * call before it runs and finishes it after a restart. `finish_item` stores
  * its submission and `checkingSince` before the first check, the hub reruns
  * the checks when the machine's agent registers again, and the session is
- * told an outcome the cut call could no longer carry. A call to one of these
- * holds no restart, and a fence lets it through.
+ * told an outcome the cut call could no longer carry. `handoff` stores its
+ * send in the same step that takes it and answers at once: the hub's send
+ * queue carries the message from there, through any restart, so a peer's
+ * message is never refused for one. `list_sessions` only reads, so a cut
+ * one loses nothing, and every session's launch proves its credential with
+ * it (the agent's `#installSessionCredential`): refused, it failed the start
+ * of every session woken while the fence stood, and what it was sent with it.
+ * A call to one of these holds no restart, and a fence lets it through.
  */
 export const RESUMABLE_CAWCO_TOOLS: ReadonlySet<string> = new Set([
   "finish_item",
+  "handoff",
+  "list_sessions",
 ]);
 
 /**

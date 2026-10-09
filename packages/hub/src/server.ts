@@ -2176,6 +2176,8 @@ export const createServer = (
         continue;
       }
       sendFrame(agent, JSON.parse(owed.envelope) as Envelope<SpawnPayload>);
+      // What it was sent while its start was held goes right behind it.
+      releaseOwed({ instanceId: owed.id });
     }
   };
 
@@ -3244,7 +3246,12 @@ export const createServer = (
     if (unstored === "fail") {
       unanswered.delete(instanceId);
     }
-    const all = db.sendsIn(instanceId, ["pending"]).filter(only);
+    // A send still owed never reached a machine, so no machine lost it; only
+    // an end ("fail") ends it.
+    const all = db
+      .sendsIn(instanceId, ["pending"])
+      .filter((send) => unstored === "fail" || !send.owed)
+      .filter(only);
     const sends = all.filter((send) => !deciding.has(send.uuid));
     const whole = sends.length === all.length;
     if (sends.length === 0) {
@@ -4499,12 +4506,19 @@ export const createServer = (
     }, MOVE_TICK_MS);
     moveTicker.unref?.();
   };
-  if (movingLogins().length > 0 || movedFrom().size > 0) {
+  /** What a hub that just started finds in its database it carries on with. */
+  const carryOnMoves = (): void => {
+    const moves = movingLogins().length;
+    const moved = movedFrom().size;
+    if (moves === 0 && moved === 0) {
+      return;
+    }
     console.log(
-      `[hub] carrying on ${movingLogins().length} login move(s) and ${movedFrom().size} session(s) still running from a moved login`
+      `[hub] carrying on ${moves} login move(s) and ${moved} session(s) still running from a moved login`
     );
     tickMoves();
-  }
+  };
+  carryOnMoves();
 
   /**
    * What taking a send means beyond the send itself, whoever sent it — the
@@ -4559,10 +4573,21 @@ export const createServer = (
    * A uuid the hub already has a record for is the same send again (a tab
    * trying once more after its socket dropped): the machine is not handed it
    * twice, and the record it has is said again for whoever asked.
+   *
+   * ONE RULE FOR EVERY HOLD: a send its session cannot take yet is never
+   * handed to the machine, where a session with no process refuses it, and
+   * never refused for the hold. It is accepted as owed (`sent_messages.owed`),
+   * drawn queued like any pending send, and goes once the hold ends
+   * ({@link releaseOwed}), in the order accepted. The holds: the session's
+   * start held while its machine installs an update ({@link holdingStarts}),
+   * its machine's agent away within its reconnect grace
+   * ({@link awaitingMachine}), and a send owed before it to the same session,
+   * which it never overtakes.
    */
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the single send transaction orders refusal, recovery, delivery and persistence.
   const deliverSend = (envelope: Envelope<SendPayload>): SentMessageRow => {
     const { instanceId, message } = envelope.payload;
+    const { machineId } = envelope;
     const keepAlive = isKeepAlive(message);
     const known = db.sendRecord(message.uuid);
     if (known) {
@@ -4575,38 +4600,14 @@ export const createServer = (
     if (refused === CLAUDE_CONVERSATION_GONE) {
       throw new WorkItemRefusal(409, refused);
     }
-    // A machine that closed its socket moments ago is restarting its agent:
-    // the send waits for its register and goes then, through this same path
-    // ({@link releaseAwaiting}). It is written down when it goes, not now: the
-    // register settles what its sessions held, and a record already pending
-    // would be settled as a send the restart lost.
-    const reconnecting = awaitingMachine.get(envelope.machineId);
-    if (
-      !(keepAlive || refused) &&
-      reconnecting &&
-      !registry.agent(envelope.machineId)
-    ) {
-      reconnecting.push(envelope);
-      return {
-        uuid: message.uuid,
-        instanceId,
-        acceptedAt: new Date(),
-        harnessId: null,
-        body: sentFrame(envelope.payload),
-        mode: sendMode(envelope.payload),
-        state: "pending",
-        reason: null,
-        anchor: null,
-        replaces: message.replaces ?? null,
-        replacedBy: null,
-        held: false,
-      };
-    }
-    const agent = refused ? undefined : registry.agent(envelope.machineId);
+    const agent = refused ? undefined : registry.agent(machineId);
+    const away =
+      !(refused || agent || keepAlive) && awaitingMachine.has(machineId);
+    const accepted = Boolean(agent) || away;
     const from =
       message.origin.kind === "peer" ? message.origin.fromSession : undefined;
     const waitSummary =
-      agent && from ? workItems.waitSummary(from, instanceId) : "";
+      accepted && from ? workItems.waitSummary(from, instanceId) : "";
     if (waitSummary) {
       const { content } = message.message;
       message.message.content =
@@ -4618,8 +4619,12 @@ export const createServer = (
       if (keepAlive) {
         db.updateKeepAlive(instanceId, { keepAliveTurn: message.uuid });
       } else {
-        wakeForSend(agent, envelope.machineId, instanceId);
+        wakeForSend(agent, machineId, instanceId);
       }
+    }
+    const owed =
+      away || (agent !== undefined && !keepAlive && sendWaits(instanceId));
+    if (agent && !owed) {
       sendFrame(agent, envelope);
     }
     // Built after the send has gone: the machine is handed the image bytes,
@@ -4632,21 +4637,29 @@ export const createServer = (
       body: externalizeImages(sentFrame(envelope.payload)),
       mode,
       ...(message.replaces ? { replaces: message.replaces } : {}),
-      ...(agent
-        ? { state: "pending" as const }
+      ...(accepted
+        ? {
+            state: "pending" as const,
+            ...(owed ? { owed: JSON.stringify(envelope) } : {}),
+          }
         : {
             state: "failed" as const,
-            reason: refused ?? `machine ${envelope.machineId} is not connected`,
+            reason: refused ?? `machine ${machineId} is not connected`,
             anchor: anchors.get(instanceId) ?? null,
           }),
     });
+    if (owed) {
+      console.log(
+        `[hub] send ${message.uuid} to ${instanceId} queued: ${away ? "its machine is reconnecting" : "its session cannot take it yet"}`
+      );
+    }
     // The send it retries goes first, so a screen folds that row away as
     // this one arrives.
     if (message.replaces) {
       replaceSend(message.replaces, record.uuid);
     }
     publishSend(record);
-    if (agent) {
+    if (accepted) {
       if (from) {
         workItems.delivered(from, instanceId);
       }
@@ -4656,25 +4669,83 @@ export const createServer = (
   };
 
   /**
-   * Sends waiting on a machine whose agent is restarting, by machine: there
-   * from the moment its socket closes until it registers again or
-   * {@link RECONNECT_GRACE_MS} runs out, whichever is first.
+   * Whether a session cannot take a send now though its machine is
+   * connected: its start is held while the machine installs an update
+   * ({@link sendSpawn}), or a send owed before this one has not gone yet.
    */
-  const awaitingMachine = new Map<string, Envelope<SendPayload>[]>();
+  const sendWaits = (instanceId: string): boolean =>
+    db.owesSpawn(instanceId) || db.owedSends({ instanceId }).length > 0;
 
   /**
-   * What waited on a machine, sent now through {@link deliverSend}: after its
-   * register, where it reaches the agent behind the restores (the agent holds
-   * a send for a session it is still taking custody of); or, when the grace
-   * ran out, failed "not connected" as any send to an absent machine is.
+   * Machines whose agent is away within its reconnect grace: from the moment
+   * its socket closes, or this hub starts, until it registers or
+   * {@link RECONNECT_GRACE_MS} runs out. A send to one of their sessions is
+   * owed ({@link deliverSend}).
    */
-  const releaseAwaiting = (machineId: string): void => {
-    const waited = awaitingMachine.get(machineId);
-    awaitingMachine.delete(machineId);
-    for (const envelope of waited ?? []) {
-      deliverSend(envelope);
+  const awaitingMachine = new Set<string>();
+  const awaitGrace = (machineId: string): void => {
+    awaitingMachine.add(machineId);
+    setTimeout(() => {
+      if (awaitingMachine.delete(machineId) && !registry.agent(machineId)) {
+        failOwedAway(machineId);
+      }
+    }, RECONNECT_GRACE_MS).unref?.();
+  };
+
+  /**
+   * What a machine is owed, handed over once the hold it waited on is over,
+   * in the order accepted and each once: a session asleep is woken first
+   * (as for a send that crossed its sleep, so the wake fails none of them),
+   * and one whose start is still held keeps its sends owed until that start
+   * goes ({@link flushOwedStarts}). Each goes out as accepted now: what its
+   * machine settles at its register never counts it among the sends a
+   * restart lost, as it never reached the machine before.
+   */
+  const releaseOwed = (
+    of: { instanceId: string } | { machineId: string }
+  ): void => {
+    for (const send of db.owedSends(of)) {
+      const [row] = db.getInstancesByIds([send.instanceId]);
+      const agent = row ? registry.agent(row.machineId) : undefined;
+      if (!(row && agent)) {
+        continue;
+      }
+      const envelope = JSON.parse(send.owed ?? "{}") as Envelope<SendPayload>;
+      const refused = inputRefusal(
+        send.instanceId,
+        envelope.payload.message.origin
+      );
+      if (refused) {
+        db.takeOwedSend(send.uuid);
+        failSend(send, refused);
+        continue;
+      }
+      wakeForSend(agent, row.machineId, send.instanceId, true);
+      if (db.owesSpawn(send.instanceId)) {
+        continue;
+      }
+      if (db.takeOwedSend(send.uuid) === undefined) {
+        continue;
+      }
+      changeSend(send, { acceptedAt: new Date() });
+      sendFrame(agent, envelope);
     }
   };
+
+  /** A machine past its grace: what it was owed fails as any send to an absent machine does, but for a start an update still holds. */
+  const failOwedAway = (machineId: string): void => {
+    for (const send of db.owedSends({ machineId })) {
+      if (db.owesSpawn(send.instanceId)) {
+        continue;
+      }
+      if (db.takeOwedSend(send.uuid) !== undefined) {
+        failSend(send, `machine ${machineId} is not connected`);
+      }
+    }
+  };
+  // A hub that just started has heard no machine yet: each gets the grace a
+  // restarting agent gets, so a send to it waits for its register.
+  db.listAgents().map((machine) => awaitGrace(machine.machineId));
   /**
    * Each session's final message of the turn in flight: the text frames that
    * followed its last tool call. A tool call empties it, so what came before
@@ -10414,15 +10485,16 @@ export const createServer = (
         endSession(envelope.instanceId, "stop");
         return;
       }
+      // A send waits wherever its session cannot take it yet ({@link deliverSend}).
+      if (envelope.verb === "send") {
+        deliverSend(envelope as Envelope<SendPayload>);
+        return;
+      }
       const agent = registry.agent(envelope.machineId);
       if (!agent) {
         throw new Error(`Machine ${envelope.machineId} is not connected.`);
       }
-      if (envelope.verb === "send") {
-        deliverSend(envelope as Envelope<SendPayload>);
-      } else {
-        sendFrame(agent, envelope);
-      }
+      sendFrame(agent, envelope);
     },
     spawn: spawnSession,
     halt: (machineId, instanceId) =>
@@ -11059,10 +11131,7 @@ export const createServer = (
       !reading.instances.includes(row.id) &&
       !!registry.agent(row.machineId) &&
       db.sendsIn(row.id, ["pending"]).length === 0 &&
-      !pending.list().some((ask) => ask.instanceId === row.id) &&
-      ![...awaitingMachine.values()].some((sends) =>
-        sends.some((send) => send.instanceId === row.id)
-      )
+      !pending.list().some((ask) => ask.instanceId === row.id)
     );
   };
 
@@ -15812,7 +15881,8 @@ export const createServer = (
               );
               // Behind the restores and the ack, so the agent reads each send
               // after the spawn it waits on.
-              releaseAwaiting(message.machineId);
+              awaitingMachine.delete(message.machineId);
+              releaseOwed({ machineId: message.machineId });
               // biome-ignore lint/complexity/noVoid: reconnect immediately retries overdue stored schedules after the register ACK
               void keepAliveScheduler.wake();
               workflowRuntime.recover(message.machineId);
@@ -17156,13 +17226,7 @@ export const createServer = (
             return;
           }
           // Sends to it wait for its next register, within the grace.
-          const awaiting: Envelope<SendPayload>[] = [];
-          awaitingMachine.set(machineId, awaiting);
-          setTimeout(() => {
-            if (awaitingMachine.get(machineId) === awaiting) {
-              releaseAwaiting(machineId);
-            }
-          }, RECONNECT_GRACE_MS);
+          awaitGrace(machineId);
           for (const [requestId, machine] of waitingMachines) {
             if (machine === machineId) {
               waiting.get(requestId)?.({

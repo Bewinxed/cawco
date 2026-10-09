@@ -772,6 +772,10 @@ export interface DbShape {
   }) => void;
   /** The offers nobody has answered yet. */
   readonly openProjectOffers: () => ProjectOfferRow[];
+  /** The sends still owed to their machine ({@link sentMessages.owed}), pending, in the order accepted: a session's, or a machine's. */
+  readonly owedSends: (
+    of: { instanceId: string } | { machineId: string }
+  ) => SentMessageRow[];
   /** What a machine is owed, in the order it was asked for. */
   readonly owedSpawns: (
     machineId: string
@@ -793,6 +797,8 @@ export interface DbShape {
    */
   /** Keeps a start the machine could not be sent yet, on the row already written for it. */
   readonly oweSpawn: (id: string, envelope: string, at: number) => void;
+  /** Whether the session's start is still owed to its machine ({@link oweSpawn}). */
+  readonly owesSpawn: (id: string) => boolean;
   /**
    * The fields a dashboard may move on a live row: "Keep" — a spin-off that
    * earned its place stops being treated as scratch — and the model and
@@ -1338,6 +1344,8 @@ export interface DbShape {
   readonly takeMcpAuthorization: (
     state: string
   ) => typeof fleetMcpOauth.$inferSelect | undefined;
+  /** Takes a send's owed envelope, once: the envelope, or undefined when another took it first. */
+  readonly takeOwedSend: (uuid: string) => string | undefined;
   /** Takes one owed start off the books; true for exactly one caller. */
   readonly takeOwedSpawn: (id: string) => boolean;
   /** Every row of a project's task index, in id order. */
@@ -1437,6 +1445,7 @@ export interface DbShape {
         | "body"
         | "harnessId"
         | "held"
+        | "acceptedAt"
       >
     >
   ) => SentMessageRow | undefined;
@@ -3011,6 +3020,12 @@ const make = async (path: string): Promise<DbShape> => {
         .where(eq(instances.id, id))
         .run();
     },
+    owesSpawn: (id) =>
+      db
+        .select({ id: instances.id })
+        .from(instances)
+        .where(and(eq(instances.id, id), isNotNull(instances.owedSpawn)))
+        .get() !== undefined,
     owedSpawns: (machineId) =>
       db
         .select({ id: instances.id, envelope: instances.owedSpawn })
@@ -4885,6 +4900,40 @@ const make = async (path: string): Promise<DbShape> => {
         )
         .orderBy(asc(sentMessages.acceptedAt))
         .all(),
+    owedSends: (of) =>
+      db
+        .select({ send: sentMessages })
+        .from(sentMessages)
+        .innerJoin(instances, eq(instances.id, sentMessages.instanceId))
+        .where(
+          and(
+            isNotNull(sentMessages.owed),
+            eq(sentMessages.state, "pending"),
+            "instanceId" in of
+              ? eq(sentMessages.instanceId, of.instanceId)
+              : eq(instances.machineId, of.machineId)
+          )
+        )
+        .orderBy(asc(sentMessages.acceptedAt))
+        .all()
+        .map((row) => row.send),
+    takeOwedSend: (uuid) => {
+      const owed = db
+        .select({ owed: sentMessages.owed })
+        .from(sentMessages)
+        .where(eq(sentMessages.uuid, uuid))
+        .get()?.owed;
+      if (!owed) {
+        return;
+      }
+      const taken = db
+        .update(sentMessages)
+        .set({ owed: null })
+        .where(and(eq(sentMessages.uuid, uuid), isNotNull(sentMessages.owed)))
+        .returning({ uuid: sentMessages.uuid })
+        .all();
+      return taken.length > 0 ? owed : undefined;
+    },
     updateSend: (uuid, change) =>
       db
         .update(sentMessages)
