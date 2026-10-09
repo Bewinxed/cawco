@@ -1283,8 +1283,10 @@
      by the keyboard's height as it opened and dropped as it closed, for
      three frames each way. Held by its top, it stays where it is until its
      new place is drawn. Neither value transitions, so the sheet steps with
-     the keyboard instead of animating against it. */
-  [data-slot="drawer-content"][data-vaul-drawer-direction="bottom"] {
+     the keyboard instead of animating against it. Only a sheet the kit
+     places takes this (data-placed); one that fills a host of its own (the
+     preview on the composer, `hosted`) is left where its host puts it. */
+  [data-slot="drawer-content"][data-placed][data-vaul-drawer-direction="bottom"] {
     top: calc(var(--visible-top, 0px) + var(--visible-height, 100%));
     translate: 0 -100%;
     max-height: min(

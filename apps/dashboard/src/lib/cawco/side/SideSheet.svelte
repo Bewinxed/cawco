@@ -194,7 +194,8 @@
        handle and settles on the nearest snap on vaul's own curve. The
        lowest snap is the middle one, so the page always stands at a usable
        height; the header's Close is how the preview is put away, and
-       nothing behind it scales. -->
+       nothing behind it scales. It fills its host (inset 0), so it is
+       `hosted`: the kit does not place it on the visible area. -->
   <Drawer.Root
     container={host}
     dismissible={false}
@@ -208,6 +209,7 @@
   >
     <Drawer.Content
       class="preview-sheet"
+      hosted
       onCloseAutoFocus={(event) => event.preventDefault()}
       onEscapeKeydown={(event) => {
         if (lightbox.current) {

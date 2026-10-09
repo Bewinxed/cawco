@@ -12,21 +12,27 @@
     class: className,
     style,
     portalProps,
+    hosted = false,
     children,
     ...restProps
   }: DrawerPrimitive.ContentProps & {
     portalProps?: WithoutChildrenOrChild<ComponentProps<typeof DrawerPortal>>;
+    /**
+     * The sheet fills a host of its own (the preview standing on the
+     * composer): the host places it, and the kit leaves its place alone.
+     */
+    hosted?: boolean;
   } = $props();
 
   /**
    * The visible area as the sheet's --visible-top and --visible-height,
-   * from the one measurement of it (cawco/visible-viewport); app.css rests a
-   * bottom sheet on the keyboard from the two. They reach the sheet through
-   * its `style` prop: a property written on the node is lost whenever that
-   * attribute is redrawn.
+   * from the one measurement of it (cawco/visible-viewport); app.css places
+   * a bottom sheet the kit marks `data-placed` on the visible area from the
+   * two. They reach the sheet through its `style` prop: a property written
+   * on the node is lost whenever that attribute is redrawn.
    */
   const place = $derived(
-    visible.height > 0
+    !hosted && visible.height > 0
       ? `--visible-top:${visible.top}px;--visible-height:${visible.height}px;`
       : ""
   );
@@ -43,6 +49,7 @@
       "group/drawer-content fixed z-50 flex h-auto flex-col bg-transparent p-4 text-foreground text-label before:absolute before:inset-2 before:-z-10 before:rounded-[var(--radius-lg)] before:border before:border-border before:bg-[var(--surface-raised)] data-[vaul-drawer-direction=bottom]:inset-x-0 data-[vaul-drawer-direction=top]:inset-x-0 data-[vaul-drawer-direction=left]:inset-y-0 data-[vaul-drawer-direction=right]:inset-y-0 data-[vaul-drawer-direction=top]:top-0 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=left]:left-0 data-[vaul-drawer-direction=top]:mb-24 data-[vaul-drawer-direction=top]:max-h-[80vh] data-[vaul-drawer-direction=left]:w-3/4 data-[vaul-drawer-direction=right]:w-3/4 data-[vaul-drawer-direction=bottom]:pb-[calc(1rem+env(safe-area-inset-bottom))] data-[vaul-drawer-direction=bottom]:before:inset-x-0 data-[vaul-drawer-direction=bottom]:before:bottom-0 data-[vaul-drawer-direction=bottom]:before:rounded-b-none data-[vaul-drawer-direction=bottom]:before:border-x-0 data-[vaul-drawer-direction=bottom]:before:border-b-0 data-[vaul-drawer-direction=left]:sm:max-w-sm data-[vaul-drawer-direction=right]:sm:max-w-sm",
       className
     )}
+    data-placed={hosted ? undefined : ""}
     data-slot="drawer-content"
     style={`${place}${style ?? ""}`}
     bind:ref
