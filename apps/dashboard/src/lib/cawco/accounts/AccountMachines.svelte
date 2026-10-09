@@ -1,14 +1,17 @@
 <script lang="ts">
   /**
    * Where an account stands on each machine that runs its provider's
-   * harnesses: the machine, then a dot and a word. A machine it isn't signed
-   * in on carries Sign in (Send key, for a key account), which opens a
-   * popover anchored to it with that sign-in's panel for that machine; the
-   * popovers are one surface (NsPopoverGroup), gliding from row to row.
+   * harnesses. A machine it is signed in on is its name and its ⋯ (Sign out
+   * on this machine): a healthy row says nothing (The Idle Has No Fill
+   * Rule). Any other row says what is wrong and carries its one action: Sign
+   * in (Send key, for a key account), which opens a popover anchored to it
+   * with that sign-in's panel for that machine; an offline machine only says
+   * so. Word and action share one trailing column, at one x on every row.
+   * The popovers are one surface (NsPopoverGroup), gliding from row to row.
    * Signed in, the check draws, holds for --dur-hold, and the popover puts
    * itself away.
    */
-  import type { Account, SigninState } from "@cawco/core";
+  import type { Account } from "@cawco/core";
   import { SvelteMap } from "svelte/reactivity";
   import { cawco, signOutOn } from "#lib/cawco/client.svelte.js";
   import RowMenu from "#lib/cawco/config/RowMenu.svelte";
@@ -17,7 +20,7 @@
   import NsPopover from "#lib/cawco/spawn/NsPopover.svelte";
   import NsPopoverGroup from "#lib/cawco/spawn/NsPopoverGroup.svelte";
   import { buttonVariants } from "#lib/components/ui/button/index.js";
-  import { IconLogout } from "#lib/icons.js";
+  import { IconLogout, IconWarningTriangle } from "#lib/icons.js";
   import "../spawn/ns-theme.css";
   import DevicePanel from "./DevicePanel.svelte";
   import { DeviceFlow } from "./device.svelte";
@@ -102,12 +105,12 @@
     }
   }
 
-  const WORDS: Record<SigninState | "offline", string> = {
-    "signed-in": "Signed in",
+  /** What a row says: nothing for a machine it is signed in on. */
+  const WORDS = {
     "signed-out": "Not signed in",
     mismatch: "Signed in as someone else",
     offline: "Offline",
-  };
+  } as const;
 </script>
 
 <NsPopoverGroup>
@@ -121,59 +124,73 @@
       {@const open = openOn === machine.machineId}
       <li class="mrow" data-flip>
         <span class="mname">{name}</span>
-        <span class="state" data-state={shown}>
-          <i aria-hidden="true" class="dot"></i>
-          {WORDS[shown]}
-        </span>
-        <span class="act">
-          {#if online && (state !== "signed-in" || open)}
-            <NsPopover
-              align="end"
-              id="signin-{account.id}-{machine.machineId}"
-              label="{key ? "Send key" : "Sign in"} {nameOf(account)} on {name}"
-              onchange={(next) => setOpen(machine.machineId, next)}
-              {open}
-              triggerClass={buttonVariants({ variant: "outline", size: "sm" })}
-              width={340}
-            >
-              {#snippet trigger()}
-                {key ? "Send key" : "Sign in"}
-              {/snippet}
-              <div class="panel">
-                <p class="title">{name}</p>
-                {#if flow?.kind === "paste"}
-                  <SigninPanel
-                    expected={account.email}
-                    flow={flow.flow}
-                    machine={name}
-                    {online}
-                  />
-                {:else if flow?.kind === "device"}
-                  <DevicePanel flow={flow.flow} machine={name} {online} />
-                {:else if flow?.kind === "key"}
-                  <KeyPanel
-                    account={() => Promise.resolve(account.id)}
-                    machines={[machine]}
-                    onsent={() => {
-                      flows.set(machine.machineId, { kind: "key", sent: true });
-                    }}
-                  />
-                {/if}
-              </div>
-            </NsPopover>
-          {:else if online && state === "signed-in"}
-            <RowMenu
-              actions={[
-                {
-                  label: "Sign out on this machine",
-                  icon: IconLogout,
-                  destructive: true,
-                  onselect: () => signOut(machine.machineId),
-                },
-              ]}
-              label="{nameOf(account)} on {name}"
-            />
+        <span class="trail">
+          {#if shown !== "signed-in"}
+            <span class="state" data-state={shown}>
+              {#if shown === "mismatch"}
+                <IconWarningTriangle aria-hidden="true" />
+              {/if}
+              {WORDS[shown]}
+            </span>
           {/if}
+          <span class="act">
+            {#if online && (state !== "signed-in" || open)}
+              <NsPopover
+                align="end"
+                id="signin-{account.id}-{machine.machineId}"
+                label="{key ? "Send key" : "Sign in"} {nameOf(
+                  account
+                )} on {name}"
+                onchange={(next) => setOpen(machine.machineId, next)}
+                {open}
+                triggerClass={buttonVariants({
+                  variant: "outline",
+                  size: "sm",
+                })}
+                width={340}
+              >
+                {#snippet trigger()}
+                  {key ? "Send key" : "Sign in"}
+                {/snippet}
+                <div class="panel">
+                  <p class="title">{name}</p>
+                  {#if flow?.kind === "paste"}
+                    <SigninPanel
+                      expected={account.email}
+                      flow={flow.flow}
+                      machine={name}
+                      {online}
+                    />
+                  {:else if flow?.kind === "device"}
+                    <DevicePanel flow={flow.flow} machine={name} {online} />
+                  {:else if flow?.kind === "key"}
+                    <KeyPanel
+                      account={() => Promise.resolve(account.id)}
+                      machines={[machine]}
+                      onsent={() => {
+                        flows.set(machine.machineId, {
+                          kind: "key",
+                          sent: true,
+                        });
+                      }}
+                    />
+                  {/if}
+                </div>
+              </NsPopover>
+            {:else if online && state === "signed-in"}
+              <RowMenu
+                actions={[
+                  {
+                    label: "Sign out on this machine",
+                    icon: IconLogout,
+                    destructive: true,
+                    onselect: () => signOut(machine.machineId),
+                  },
+                ]}
+                label="{nameOf(account)} on {name}"
+              />
+            {/if}
+          </span>
         </span>
         {#if refusals.get(machine.machineId)}
           <p class="refused" data-flip role="alert">
@@ -188,17 +205,15 @@
 </NsPopoverGroup>
 
 <style>
-  /* One grid for every row (each row a subgrid of it), so the states stand
-     in one column and the actions end on one edge, whatever each row's
-     action is. */
+  /* Flat rows under hairlines, as the Accounts list draws its rows. One grid
+     for every row (each row a subgrid of it): the trailing column, the word
+     and its action, starts at one x on every row and ends on one edge. */
   .rows {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) max-content max-content;
+    grid-template-columns: minmax(0, 1fr) max-content;
     margin: 0;
     padding: 0;
     list-style: none;
-    border: 1px solid var(--border-hairline);
-    border-radius: var(--radius-lg);
   }
   .mrow {
     display: grid;
@@ -207,7 +222,7 @@
     align-items: center;
     column-gap: var(--space-4);
     min-height: var(--c-btn-h-lg);
-    padding: var(--space-1) var(--space-2) var(--space-1) var(--space-4);
+    padding: var(--space-1) var(--space-2);
   }
   .mrow + .mrow {
     border-block-start: 1px solid var(--border-hairline);
@@ -219,41 +234,29 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  .trail {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--space-3);
+    min-width: 0;
+  }
   .state {
     display: inline-flex;
     align-items: center;
-    gap: var(--space-2);
+    gap: var(--space-1);
     font: var(--type-meta);
     color: var(--ink-muted);
     white-space: nowrap;
     transition: color var(--dur-panel) var(--ease-out);
   }
-  .dot {
-    flex: none;
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--neutral-8);
-    transition:
-      background-color var(--dur-panel) var(--ease-out),
-      box-shadow var(--dur-panel) var(--ease-out);
-  }
-  .state[data-state="signed-in"] {
-    color: var(--ink-row);
-  }
-  .state[data-state="signed-in"] .dot {
-    background: var(--presence-online);
-  }
   .state[data-state="mismatch"] {
     color: var(--status-attn-ink);
   }
-  .state[data-state="mismatch"] .dot {
-    background: var(--status-attn-glyph);
-  }
-  /* Offline is hollow, as an unreachable machine is everywhere else. */
-  .state[data-state="offline"] .dot {
-    background: transparent;
-    box-shadow: inset 0 0 0 1.5px var(--neutral-8);
+  .state :global(svg) {
+    flex: none;
+    width: 12px;
+    height: 12px;
   }
   .act {
     display: flex;
@@ -281,33 +284,5 @@
     padding: var(--space-3) var(--space-4);
     font: var(--type-meta);
     color: var(--ink-muted);
-  }
-  /* A phone: the state under the machine's name, the action at the end. */
-  @media (max-width: 640px) {
-    .rows {
-      grid-template-columns: minmax(0, 1fr) max-content;
-    }
-    .mrow {
-      grid-template-areas:
-        "name act"
-        "state act"
-        "refused refused";
-      row-gap: 2px;
-    }
-    .mname {
-      grid-area: name;
-    }
-    .state {
-      grid-area: state;
-    }
-    /* At the row's foot: the popover opens under its trigger, so it then
-       opens under the row, never over the state line. */
-    .act {
-      grid-area: act;
-      align-self: end;
-    }
-    .refused {
-      grid-area: refused;
-    }
   }
 </style>

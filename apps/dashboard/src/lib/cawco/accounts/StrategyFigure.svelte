@@ -20,12 +20,15 @@
     board,
     lanes,
     playing,
+    limits = true,
     pin,
     policy,
   }: {
     board: Board;
     lanes: Lane[];
     playing: boolean;
+    /** Whether CawCo reads the provider's limits: the at-the-limit policy shows below. */
+    limits?: boolean;
     pin?: number;
     policy?: Policy;
   } = $props();
@@ -38,7 +41,7 @@
 
   /** What the figure is drawn from; a change rebuilds it. */
   const key = $derived(
-    JSON.stringify({ board, lanes, pin, policy, width, dark })
+    JSON.stringify({ board, lanes, limits, pin, policy, width, dark })
   );
 
   $effect(() => {
@@ -79,6 +82,7 @@
     const spec = JSON.parse(key) as {
       board: Board;
       lanes: Lane[];
+      limits: boolean;
       pin?: number;
       policy?: Policy;
       width: number;
@@ -169,13 +173,6 @@
     width: 12px;
     height: 12px;
     color: var(--ink-muted);
-  }
-  .stage :global(.ln-lbl .hdl) {
-    width: 8px;
-    height: 12px;
-    background:
-      radial-gradient(circle, var(--ink-subtle) 1px, transparent 1.4px) 0 0 /
-      4px 4px;
   }
   .stage :global(.clk) {
     padding: 0 5px;

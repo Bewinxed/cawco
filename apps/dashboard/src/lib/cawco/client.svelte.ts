@@ -41,7 +41,7 @@ import type {
   PermissionPresentation,
   PermissionResult,
   PermissionUpdate,
-  PlacementExplain,
+  PlacementPreview,
   ProjectCap,
   ProjectOfferSummary,
   ProjectSpend,
@@ -2114,27 +2114,30 @@ export const sendAccountKey = (
   });
 
 /**
- * Which account a session would start on, and why (`/api/accounts/placement`):
- * the account whose models a picker offers. Undefined when it cannot be read;
- * a refusal is thrown in the hub's words.
+ * Which account a session would start on, why, and the model it was read for
+ * as the session would start on it in `cwd` (`/api/accounts/placement`).
+ * Undefined when it cannot be read; a refusal is thrown in the hub's words:
+ * no account can take it (400), or the machine could not say which model pi
+ * starts on in that folder (503), either of which refuses the start too.
  */
 export async function placementFor(query: {
+  cwd?: string;
   harness: string;
   machineId: string;
   model?: string;
   projectId?: string;
-}): Promise<PlacementExplain | undefined> {
+}): Promise<PlacementPreview | undefined> {
   const params = new URLSearchParams(
     Object.entries(query).filter(
       (entry): entry is [string, string] => entry[1] !== undefined
     )
   );
   const response = await fetch(`/api/accounts/placement?${params}`);
-  if (response.status === 400) {
+  if (response.status === 400 || response.status === 503) {
     throw new Error(await response.text());
   }
   return response.ok
-    ? ((await response.json()) as PlacementExplain)
+    ? ((await response.json()) as PlacementPreview)
     : undefined;
 }
 

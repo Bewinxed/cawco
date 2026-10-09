@@ -25,6 +25,7 @@
     hueVar,
     nameOf,
     pinnedOf,
+    providerLimits,
     STRATEGIES,
     type Strategy,
   } from "./model.svelte";
@@ -169,6 +170,7 @@
         <StrategyFigure
           board={strategy.board}
           lanes={lanesOf(strategy.board === "fill" ? ordered : shown)}
+          limits={providerLimits(provider)}
           pin={strategy.board === "pinned"
             ? Math.max(
                 0,

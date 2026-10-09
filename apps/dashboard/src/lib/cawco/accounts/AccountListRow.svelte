@@ -1,18 +1,20 @@
 <script lang="ts">
   /**
-   * One account in its provider's card: its tile, its name, and the chevron,
-   * the whole row one link to the account. A second line only when something
-   * is wrong, in the attention ink behind the warning glyph; it tints in and
-   * its words morph as the problem changes (the board state pill's recipe).
-   * Opening it, the name flies into the account page's title and the tile
-   * into its tile (motion/share).
+   * One account in its provider's group, in the live list's row recipe (a
+   * flat row under a hairline): the account's colour as a 10px dot, its
+   * name, and the chevron (HIG's disclosure indicator for a drill-in row) in
+   * one fixed trailing column, the whole row one link to the account. The
+   * provider's mark is the group header's alone. A second line only when
+   * something is wrong, in the attention ink behind the warning glyph; it
+   * tints in and its words morph as the problem changes (the board state
+   * pill's recipe). Opening it, the name flies into the account page's title
+   * (motion/share).
    */
   import type { Account } from "@cawco/core";
   import { TextMorph } from "torph/svelte";
   import { morphMs } from "#lib/cawco/motion/curves.svelte.js";
   import { IconChevronRight, IconWarningTriangle } from "#lib/icons.js";
-  import AccountTile from "./AccountTile.svelte";
-  import { nameOf, problemOf } from "./model.svelte";
+  import { hueVar, nameOf, problemOf } from "./model.svelte";
 
   let { account }: { account: Account } = $props();
 
@@ -25,9 +27,7 @@
 
 <li class="arow" data-flip>
   <a class={["link", problem && "two"]} {href}>
-    <span class="tile" data-share="icon:{href}">
-      <AccountTile hue={account.hue} provider={account.provider} />
-    </span>
+    <i aria-hidden="true" class="dot" style:--c={hueVar(account.hue)}></i>
     <span class="name"
       ><span class="words" data-share="title:{href}">{name}</span></span
     >
@@ -42,40 +42,33 @@
 </li>
 
 <style>
+  /* The live Accounts row: a hairline above every row, 11px by 7px of
+     padding, 56px tall, its parts 14px apart. */
   .arow {
     container: arow / inline-size;
+    display: flex;
     min-width: 0;
-  }
-  /* By type, not child: the list's hover layers (spans) stand before the rows. */
-  .arow:not(:first-of-type) {
+    min-height: 56px;
     border-block-start: 1px solid var(--border-hairline);
   }
   .link {
+    flex: 1 1 auto;
+    min-width: 0;
     display: grid;
-    grid-template-columns: 32px minmax(0, 1fr) 16px;
-    grid-template-areas: "tile name chev";
+    grid-template-columns: 10px minmax(0, 1fr) 16px;
+    grid-template-areas: "dot name chev";
     align-items: center;
-    column-gap: var(--space-3);
+    column-gap: var(--space-4);
     row-gap: 2px;
-    min-height: var(--c-btn-h-lg);
-    padding: var(--space-1) var(--space-4) var(--space-1) var(--space-3);
+    padding: var(--space-3) var(--space-2);
     color: inherit;
     text-decoration: none;
     transition: var(--transition-control);
   }
   .link.two {
     grid-template-areas:
-      "tile name chev"
-      "tile problem chev";
-    padding-block: var(--space-2);
-  }
-  .arow:first-of-type .link {
-    border-start-start-radius: calc(var(--radius-lg) - 1px);
-    border-start-end-radius: calc(var(--radius-lg) - 1px);
-  }
-  .arow:last-of-type .link {
-    border-end-start-radius: calc(var(--radius-lg) - 1px);
-    border-end-end-radius: calc(var(--radius-lg) - 1px);
+      "dot name chev"
+      ". problem chev";
   }
   /* A wide row tints under the press and moves nothing (The Press Rule). */
   .link:active {
@@ -85,10 +78,13 @@
     outline: var(--focus-ring-width) solid var(--focus-ring);
     outline-offset: var(--focus-ring-inset);
   }
-  .tile {
-    grid-area: tile;
-    display: flex;
-    align-self: center;
+  .dot {
+    grid-area: dot;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--c);
+    transition: background-color var(--dur-fade) var(--ease-out);
   }
   .name {
     grid-area: name;
@@ -120,7 +116,6 @@
   .chev {
     grid-area: chev;
     display: flex;
-    align-self: center;
     color: var(--ink-subtle);
   }
   .chev :global(svg) {

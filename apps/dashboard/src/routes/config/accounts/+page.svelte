@@ -73,7 +73,7 @@
           </header>
           <ul
             aria-labelledby="provider-{group.provider}"
-            class="card"
+            class="rows"
             data-flip="box"
             {@attach highlight({ rows: ".link" })}
           >
@@ -105,7 +105,7 @@
     align-items: center;
     gap: var(--space-2);
     min-height: var(--c-btn-h-xs);
-    padding-inline: var(--space-3);
+    padding-inline: var(--space-2);
   }
   .name {
     flex: 1 1 auto;
@@ -136,15 +136,14 @@
     width: 12px;
     height: 12px;
   }
-  .card {
+  /* Flat rows on the section's own surface, as the live list draws them:
+     the rows' hairlines are the only rule. */
+  .rows {
     display: flex;
     flex-direction: column;
     min-width: 0;
     margin: 0;
     padding: 0;
     list-style: none;
-    border: 1px solid var(--border-hairline);
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
   }
 </style>

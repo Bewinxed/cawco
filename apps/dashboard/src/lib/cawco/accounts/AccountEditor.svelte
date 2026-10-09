@@ -22,8 +22,8 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import AccountMachines from "./AccountMachines.svelte";
-  import AccountTile from "./AccountTile.svelte";
   import { harnessWords, hueVar, nameOf, providerLimits } from "./model.svelte";
+  import ProviderMark from "./ProviderMark.svelte";
   import Swatches from "./Swatches.svelte";
 
   let { account }: { account: Account } = $props();
@@ -126,7 +126,7 @@
   title={nameOf(account)}
 >
   {#snippet tile()}
-    <AccountTile hue={fields.hue} provider={account.provider} />
+    <ProviderMark provider={account.provider} />
   {/snippet}
   {#snippet header()}
     <TitleInput
@@ -150,25 +150,26 @@
   {#if limits}
     <EditorSection hue="var(--hue-amber-500)" icon={IconUsage} label="Limits">
       <SwitchField
-        hint="Only a pick or a pin starts sessions on it; no strategy falls back to it."
         id="never-backup"
         label="Never use as a backup"
         bind:checked={fields.neverBackup}
       />
       <div class="reserve">
         <label for="reserve">Stop placing new work past</label>
-        <Input
-          aria-describedby={reservePct === undefined
-            ? "reserve-line"
-            : undefined}
-          aria-invalid={reservePct === undefined ? "true" : undefined}
-          class="field"
-          id="reserve"
-          inputmode="numeric"
-          placeholder="—"
-          bind:value={fields.reserve}
-        />
-        <span>% of the week</span>
+        <!-- The figure and its unit hold together on one line. -->
+        <span class="amount">
+          <Input
+            aria-describedby={reservePct === undefined
+              ? "reserve-line"
+              : undefined}
+            aria-invalid={reservePct === undefined ? "true" : undefined}
+            class="field"
+            id="reserve"
+            inputmode="numeric"
+            bind:value={fields.reserve}
+          />
+          <span>% of the week</span>
+        </span>
       </div>
       {#if reservePct === undefined}
         <p class="problem" id="reserve-line" in:appear>
@@ -191,6 +192,13 @@
     gap: var(--space-3);
     padding-block-start: var(--space-2);
     color: var(--ink-row);
+  }
+  .amount {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: var(--space-3);
+    white-space: nowrap;
   }
   .reserve :global(.field) {
     flex: none;

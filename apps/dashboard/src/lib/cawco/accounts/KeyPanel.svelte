@@ -25,12 +25,15 @@
     account,
     machines,
     onsent,
+    primary = true,
   }: {
     /** The account's id, making it first where the setup has not yet. */
     account: () => Promise<string>;
     machines: AccountMachine[];
     /** The key landed on at least one machine. */
     onsent?: () => void;
+    /** Send key is the step's primary; once a key is on a machine, Continue is. */
+    primary?: boolean;
   } = $props();
 
   const id = $props.id();
@@ -192,6 +195,7 @@
       pendingLabel="Sending…"
       size="sm"
       type="submit"
+      variant={primary ? "default" : "outline"}
     />
     {#if one && machines[0]}
       <span class="result">{@render outcome(machines[0].machineId)}</span>

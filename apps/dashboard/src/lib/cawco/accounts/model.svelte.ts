@@ -67,7 +67,7 @@ export function choiceLabel(choice: ProviderChoice): string {
   if (choice.provider === CLAUDE_PROVIDER) {
     return choice.kind === "console" ? "Anthropic Console" : "Claude";
   }
-  return choice.kind === "api_key" ? `${choice.name} API key` : choice.name;
+  return choice.name;
 }
 
 /** What a provider is called: its first picker row's name ("Claude" for Anthropic). */

@@ -30,6 +30,7 @@
   import { goto } from "$app/navigation";
   import AtLimitBlock from "./AtLimitBlock.svelte";
   import { providerLimits, providerName, strategyLabel } from "./model.svelte";
+  import ProviderMark from "./ProviderMark.svelte";
   import StrategyPicker from "./StrategyPicker.svelte";
 
   let {
@@ -143,6 +144,9 @@
   {saving}
   {title}
 >
+  {#snippet tile()}
+    <ProviderMark {provider} />
+  {/snippet}
   {#snippet header()}
     <h1 class="title">{title}</h1>
     {#if refused}
@@ -230,7 +234,9 @@
       display: none;
     }
   }
+  /* "Your sessions · Spread": a space before the dot, as in a sentence. */
   .strategy {
+    margin-inline-start: 0.25em;
     font-weight: var(--weight-body);
     color: var(--ink-muted);
   }

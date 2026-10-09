@@ -462,6 +462,18 @@ export interface PlacementExplain {
 }
 
 /**
+ * What the placement preview answers (`GET /api/accounts/placement`): the
+ * placement, and the model it was read for as the session would start on it
+ * there (`provider/id`; pi's `default` as pi picks it in the session's
+ * directory, a bare id as the machine resolves it), so a screen names the
+ * session's provider by the same answer placement used. Null when the session
+ * names no model and nothing resolves one.
+ */
+export interface PlacementPreview extends PlacementExplain {
+  model: string | null;
+}
+
+/**
  * Claude harness controls for one account's dir on a machine. Begin starts
  * Claude Code's own `claude auth login` in `~/.cawco/accounts/<id>/claude`
  * (args: account id, kind) and answers `{ url }`; complete types the pasted

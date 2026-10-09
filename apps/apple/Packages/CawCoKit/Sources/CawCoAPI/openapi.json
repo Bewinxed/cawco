@@ -17769,6 +17769,12 @@
       "getApiAccountsPlacement200": {
         "type": "object",
         "properties": {
+          "model": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "accountId": {
             "type": [
               "null",
@@ -17795,6 +17801,7 @@
         },
         "required": [
           "accountId",
+          "model",
           "strategy",
           "why"
         ]

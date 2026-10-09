@@ -1,5 +1,6 @@
 <script lang="ts">
   import {
+    type AccountProvider,
     accountName,
     CLAUDE_PROVIDER,
     contextFitRefusal,
@@ -7,7 +8,7 @@
     HARNESSES,
     type HarnessKind,
     type PermissionMode,
-    type PlacementExplain,
+    type PlacementPreview,
     providerOf,
     repoPath,
     SUMMARISER_OUTPUT_RESERVE_TOKENS,
@@ -295,52 +296,69 @@
     )
   );
   /**
-   * The account a session here would start on, as the hub's placement says
-   * (`/api/accounts/placement`): a Claude session's, whose catalog is what
-   * the picker offers, or a pi or OpenCode session's on an account
-   * provider's model. Null while unread, for a model no account provider
-   * bills, and with no account signed in.
+   * Where a session here would start, as the hub's placement preview says
+   * (`/api/accounts/placement`): the account it would run on (a Claude
+   * session's catalog is what the picker offers), and the model it was read
+   * for as the session would start on it, in its own directory: pi's
+   * `default` is what pi picks in that folder (its `.pi/settings.json`
+   * included). The account chip names its provider by that model and nothing
+   * else, so it never offers another provider's accounts than placement
+   * places on. Null while unread and for no machine. A new answer replaces
+   * the last only when it lands: until then the chip keeps what it showed.
    * Placement weighs every account's readings and bench, so it is asked again
    * whenever the hub's accounts view moves (`cawco.accounts` is replaced only
    * when it differs): Auto never names an account that has since run out.
    */
-  let placement = $state<PlacementExplain | null>(null);
+  /** How long a folder being typed rests before placement is asked about it, ms. */
+  const PLACEMENT_SETTLE_MS = 250;
+  let placement = $state<{
+    preview: PlacementPreview;
+    provider: AccountProvider | undefined;
+  } | null>(null);
   /**
-   * Why no Claude session can start here, in the hub's words: no account is
-   * signed in on the machine, or none of them is allowed. Start waits on it.
+   * Why no session can start here, in the hub's words: no account of its
+   * provider is signed in on the machine, or none of them is allowed. Start
+   * waits on it.
    */
   let placementRefusal = $state<string | null>(null);
   $effect(() => {
     const view = cawco.accounts;
-    const named = billedModel;
     const query = {
       harness,
       machineId,
-      ...(named ? { model: named } : {}),
+      ...(model ? { model } : {}),
+      ...(workdir ? { cwd: workdir } : {}),
       ...(projectId ? { projectId } : {}),
     };
-    if (!(providerOf(harness, named) && machineId && view)) {
+    if (!(machineId && view)) {
       placement = null;
       placementRefusal = null;
       return;
     }
     let stale = false;
-    placementFor(query)
-      .then((placed) => {
-        if (!stale) {
-          placement = placed ?? null;
-          placementRefusal = null;
-        }
-      })
-      .catch((cause: unknown) => {
-        if (!stale) {
-          placement = null;
-          placementRefusal =
-            cause instanceof Error ? cause.message : String(cause);
-        }
-      });
+    // A folder being typed is asked about once it rests.
+    const timer = setTimeout(() => {
+      placementFor(query)
+        .then((preview) => {
+          if (!stale && preview) {
+            placement = {
+              preview,
+              provider: providerOf(query.harness, preview.model),
+            };
+            placementRefusal = null;
+          }
+        })
+        .catch((cause: unknown) => {
+          if (!stale) {
+            placement = null;
+            placementRefusal =
+              cause instanceof Error ? cause.message : String(cause);
+          }
+        });
+    }, PLACEMENT_SETTLE_MS);
     return () => {
       stale = true;
+      clearTimeout(timer);
     };
   });
   /** The account picked for this session alone; null: Auto, where placement puts it. */
@@ -348,24 +366,15 @@
   $effect(() => {
     startForecast();
   });
-  const placedAccount = $derived(account ?? placement?.accountId ?? null);
+  const placedAccount = $derived(
+    account ?? placement?.preview.accountId ?? null
+  );
   const offered = $derived(
     models.forHarness(
       harness,
       machineIds,
       harness === "claude" ? placedAccount : undefined
     )
-  );
-  /**
-   * The model as the account providers name it: pi's `default` (or a bare
-   * id) by the catalog's resolution of it. A Claude Code model is Claude's
-   * whatever it is, so its catalog (which follows the placed account) is
-   * never read for it.
-   */
-  const billedModel = $derived(
-    harness === "claude"
-      ? model
-      : (offered.find((row) => row.value === model)?.resolvedModel ?? model)
   );
   /**
    * The account chip, when the harness's provider has two or more accounts:
@@ -375,7 +384,10 @@
    * starts from a session's menu and runs on its parent's account.
    */
   const accountTool = $derived.by((): AccountTool | null => {
-    const provider = providerOf(harness, billedModel);
+    const provider = placement?.provider;
+    if (!provider) {
+      return null;
+    }
     const own = (cawco.accounts?.accounts ?? [])
       .filter((one) => one.provider === provider)
       .sort((a, b) => a.order - b.order);
@@ -386,8 +398,8 @@
     return {
       value: account,
       auto: {
-        id: placement?.accountId ?? null,
-        why: placement?.why ?? "",
+        id: placement?.preview.accountId ?? null,
+        why: placement?.preview.why ?? "",
       },
       onpick: (id) => {
         account = id;

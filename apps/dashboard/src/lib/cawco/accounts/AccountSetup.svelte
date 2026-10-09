@@ -25,7 +25,7 @@
     type StrategyChoice,
   } from "@cawco/core";
   import { onDestroy, untrack } from "svelte";
-  import { SvelteMap, SvelteSet } from "svelte/reactivity";
+  import { SvelteMap } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
   import {
     cawco,
@@ -51,7 +51,6 @@
   import {
     IconArrowUpRight,
     IconChevronRight,
-    IconSearch,
     IconSuccess,
     IconWarningTriangle,
   } from "#lib/icons.js";
@@ -91,6 +90,24 @@
       ? choices.filter((one) => choiceLabel(one).toLowerCase().includes(words))
       : choices;
   });
+  /**
+   * The rows in two groups, by how the account signs in: a sign-in (pasted
+   * code or device code), or a key. Each row is named by its provider alone.
+   */
+  const pickGroups = $derived(
+    [
+      {
+        id: "signin",
+        label: "Sign in",
+        rows: shownChoices.filter((one) => one.signin !== "api-key"),
+      },
+      {
+        id: "keys",
+        label: "API keys",
+        rows: shownChoices.filter((one) => one.signin === "api-key"),
+      },
+    ].filter((group) => group.rows.length > 0)
+  );
   /** The machines that run any of a row's harnesses. */
   const runsOn = (harnesses: HarnessKind[]) =>
     cawco.machines.filter((machine) =>
@@ -168,7 +185,6 @@
   const machines = $derived(choice ? runsOn(choice.harnesses) : []);
   const pastes = new SvelteMap<string, SigninFlow>();
   const devices = new SvelteMap<string, DeviceFlow>();
-  const later = new SvelteSet<string>();
   $effect.pre(() => {
     const kind = choice?.signin;
     for (const machine of machines) {
@@ -233,6 +249,10 @@
 
   const canGo = $derived(
     at === "Provider" ? false : at !== "Sign in" || signedIn > 0
+  );
+  /** A key not yet on any machine: Send key is the step's one primary, not Continue. */
+  const keyFirst = $derived(
+    at === "Sign in" && choice?.signin === "api-key" && signedIn === 0
   );
   const nextLabel = $derived.by(() => {
     if (step === LAST && full) {
@@ -480,6 +500,7 @@
             onclick={next}
             pending={busy}
             pendingLabel="Saving…"
+            variant={keyFirst ? "outline" : "default"}
           />
         </div>
       </div>
@@ -490,70 +511,78 @@
 {#snippet pick()}
   <section class="sec">
     {#if choices.length > 8}
-      <label class="search">
-        <IconSearch aria-hidden="true" />
-        <input
-          aria-label="Search providers"
-          autocomplete="off"
-          placeholder="Search"
-          spellcheck="false"
-          type="search"
-          bind:value={query}
-        >
-      </label>
+      <Input
+        aria-label="Search providers"
+        autocomplete="off"
+        class="search"
+        placeholder="Search providers"
+        spellcheck="false"
+        type="search"
+        bind:value={query}
+      />
     {/if}
-    <ul
-      aria-label="Providers"
-      class="choices"
-      {@attach highlight({ rows: ".choice:not([aria-disabled='true'])" })}
-    >
-      {#each shownChoices as row (keyOf(row))}
-        {@const free = runsOn(row.harnesses).length > 0}
-        {@const label = choiceLabel(row)}
-        {#snippet button(
-          props: Record<string, unknown>
-        )}
-          <button
-            {...props}
-            aria-disabled={free ? undefined : "true"}
-            class="choice"
-            onclick={(event) => {
-              if (free) {
-                choose(
-                  row,
-                  event.currentTarget.querySelector<HTMLElement>(".ptile")
-                );
-              }
-            }}
-            type="button"
-          >
-            <span class="ptile"><ProviderMark provider={row.provider} /></span>
-            <span class="plabel">{label}</span>
-            <span aria-hidden="true" class="chev"><IconChevronRight /></span>
-          </button>
-        {/snippet}
-        <li class="crow">
-          {#if free}
-            {@render button({})}
-          {:else}
-            <Tip
-              label="No machine runs {row.harnesses
-                .map((one) => HARNESS[one])
-                .join(" or ")}"
-            >
-              {#snippet children(
-                props
-              )}
-                {@render button(props)}
-              {/snippet}
-            </Tip>
-          {/if}
-        </li>
-      {:else}
-        <li class="none">No provider matches “{query.trim()}”</li>
-      {/each}
-    </ul>
+    {#each pickGroups as group (group.label)}
+      <h3 class="ghead" id="pick-{group.id}">{group.label}</h3>
+      {@render choiceRows(group.rows, group.id)}
+    {:else}
+      <p class="none">No provider matches “{query.trim()}”</p>
+    {/each}
   </section>
+{/snippet}
+
+{#snippet choiceRows(
+  rows: ProviderChoice[],
+  group: string
+)}
+  <ul
+    aria-labelledby="pick-{group}"
+    class="choices"
+    {@attach highlight({ rows: ".choice:not([aria-disabled='true'])" })}
+  >
+    {#each rows as row (keyOf(row))}
+      {@const free = runsOn(row.harnesses).length > 0}
+      {@const label = choiceLabel(row)}
+      {#snippet button(
+        props: Record<string, unknown>
+      )}
+        <button
+          {...props}
+          aria-disabled={free ? undefined : "true"}
+          class="choice"
+          onclick={(event) => {
+            if (free) {
+              choose(
+                row,
+                event.currentTarget.querySelector<HTMLElement>(".ptile")
+              );
+            }
+          }}
+          type="button"
+        >
+          <span class="ptile"><ProviderMark provider={row.provider} /></span>
+          <span class="plabel">{label}</span>
+          <span aria-hidden="true" class="chev"><IconChevronRight /></span>
+        </button>
+      {/snippet}
+      <li class="crow">
+        {#if free}
+          {@render button({})}
+        {:else}
+          <Tip
+            label="No machine runs {row.harnesses
+              .map((one) => HARNESS[one])
+              .join(" or ")}"
+          >
+            {#snippet children(
+              props
+            )}
+              {@render button(props)}
+            {/snippet}
+          </Tip>
+        {/if}
+      </li>
+    {/each}
+  </ul>
 {/snippet}
 
 {#snippet signIn()}
@@ -577,7 +606,7 @@
       </div>
     {/if}
     {#if choice?.signin === "api-key"}
-      <KeyPanel account={ensureAccount} {machines} />
+      <KeyPanel account={ensureAccount} {machines} primary={keyFirst} />
     {:else}
       <ul class="machines">
         {#each machines as machine (machine.machineId)}
@@ -602,66 +631,12 @@
               </span>
             </li>
           {:else if paste}
-            <li class="mrow">
+            <!-- One control per machine: Sign in opens Claude Code's link in
+                 a new tab and opens the row onto the link, the paste field
+                 and Done. Continue is how a machine is skipped. -->
+            {@const asked = paste.phase !== "idle" || paste.url !== null}
+            <li class="mrow paste">
               <b class="mname">{name}</b>
-              <div class="controls">
-                {#if paste.url && !done}
-                  <Button
-                    href={paste.url}
-                    icon={IconArrowUpRight}
-                    label="Open sign-in link"
-                    rel="noopener noreferrer"
-                    size="sm"
-                    target="_blank"
-                    variant="outline"
-                  />
-                {:else}
-                  <Button
-                    disabled={!online || done}
-                    icon={IconArrowUpRight}
-                    label="Open sign-in link"
-                    onclick={() => paste.open()}
-                    pending={paste.phase === "opening"}
-                    pendingLabel="Opening…"
-                    size="sm"
-                    variant="outline"
-                  />
-                {/if}
-                <Input
-                  aria-invalid={paste.problem ? "true" : undefined}
-                  aria-label="Code for {name}"
-                  autocomplete="off"
-                  class="code h-[30px]"
-                  disabled={paste.url === null || done}
-                  onkeydown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      paste.done();
-                    }
-                  }}
-                  placeholder="Paste the code"
-                  spellcheck="false"
-                  bind:value={paste.code}
-                />
-                <Button
-                  disabled={paste.url === null ||
-                    done ||
-                    paste.code.trim() === ""}
-                  failed={paste.problem !== null}
-                  label="Done"
-                  onclick={() => paste.done()}
-                  pending={paste.phase === "checking"}
-                  pendingLabel="Checking…"
-                  size="sm"
-                />
-                <Button
-                  disabled={done}
-                  label="Later"
-                  onclick={() => later.add(machine.machineId)}
-                  size="sm"
-                  variant="ghost"
-                />
-              </div>
               <span
                 class={["st", done && "ok", state === "mismatch" && "warn"]}
               >
@@ -671,10 +646,65 @@
                   <IconWarningTriangle aria-hidden="true" />Someone else
                 {:else if !online}
                   Offline
-                {:else if later.has(machine.machineId)}
-                  Later
+                {:else if !asked}
+                  <Button
+                    label="Sign in"
+                    onclick={() => paste.open()}
+                    size="sm"
+                    variant="outline"
+                  />
                 {/if}
               </span>
+              {#if asked && !done}
+                <div class="controls" in:unfold>
+                  {#if paste.url}
+                    <Button
+                      href={paste.url}
+                      icon={IconArrowUpRight}
+                      label="Open sign-in link"
+                      rel="noopener noreferrer"
+                      size="sm"
+                      target="_blank"
+                      variant="outline"
+                    />
+                  {:else}
+                    <Button
+                      disabled
+                      icon={IconArrowUpRight}
+                      label="Open sign-in link"
+                      pending={paste.phase === "opening"}
+                      pendingLabel="Opening…"
+                      size="sm"
+                      variant="outline"
+                    />
+                  {/if}
+                  <Input
+                    aria-invalid={paste.problem ? "true" : undefined}
+                    aria-label="Code for {name}"
+                    autocomplete="off"
+                    class="code h-[30px]"
+                    disabled={paste.url === null}
+                    onkeydown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        paste.done();
+                      }
+                    }}
+                    placeholder="Paste the code"
+                    spellcheck="false"
+                    bind:value={paste.code}
+                  />
+                  <Button
+                    disabled={paste.url === null || paste.code.trim() === ""}
+                    failed={paste.problem !== null}
+                    label="Done"
+                    onclick={() => paste.done()}
+                    pending={paste.phase === "checking"}
+                    pendingLabel="Checking…"
+                    size="sm"
+                  />
+                </div>
+              {/if}
               {#if paste.problem}
                 <p class="row-problem" role="alert" in:appear>
                   {paste.problem}
@@ -867,38 +897,18 @@
     text-wrap: pretty;
   }
 
-  /* The provider picker: a grouped inset list on the well. */
-  .search {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    height: var(--c-btn-h);
-    margin-block-end: var(--space-3);
-    padding: 0 var(--space-3);
-    border-radius: var(--radius-md);
-    background: var(--surface-recess-deep);
+  /* The provider picker: flat rows in the step's one container, in two
+     groups under their headings. */
+  .sec :global(.search) {
+    margin-block-end: var(--space-4);
+  }
+  .ghead {
+    padding: var(--space-4) var(--space-3) var(--space-1);
+    font: var(--type-label);
     color: var(--ink-muted);
   }
-  .search:focus-within {
-    outline: var(--focus-ring-width) solid var(--focus-ring);
-    outline-offset: var(--focus-ring-inset);
-  }
-  .search :global(svg) {
-    flex: none;
-    width: 16px;
-    height: 16px;
-  }
-  .search input {
-    flex: 1 1 auto;
-    min-width: 0;
-    border: 0;
-    background: transparent;
-    font: var(--type-body);
-    color: var(--ink-strong);
-    outline: none;
-  }
-  .search input::placeholder {
-    color: var(--ink-subtle);
+  .ghead:first-of-type {
+    padding-block-start: 0;
   }
   .choices {
     display: flex;
@@ -906,9 +916,6 @@
     margin: 0;
     padding: 0;
     list-style: none;
-    border: 1px solid var(--border-hairline);
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
   }
   .crow + .crow {
     border-block-start: 1px solid var(--border-hairline);
@@ -926,15 +933,6 @@
     color: inherit;
     text-align: start;
     cursor: pointer;
-  }
-  /* By type, not child: the list's hover layers (spans) stand before the rows. */
-  .crow:first-of-type .choice {
-    border-start-start-radius: calc(var(--radius-lg) - 1px);
-    border-start-end-radius: calc(var(--radius-lg) - 1px);
-  }
-  .crow:last-of-type .choice {
-    border-end-start-radius: calc(var(--radius-lg) - 1px);
-    border-end-end-radius: calc(var(--radius-lg) - 1px);
   }
   .choice:active:not([aria-disabled="true"]) {
     background-color: var(--surface-fill);
@@ -1031,6 +1029,15 @@
     padding: var(--space-3) 0;
     border-block-start: 1px solid var(--border-hairline);
   }
+  /* Claude's rows: the name and its one control; asked, the link, the paste
+     field and Done open on the line under them. */
+  .mrow.paste {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "name st"
+      "controls controls"
+      "problem problem";
+  }
   .mrow.device {
     align-items: start;
   }
@@ -1053,6 +1060,9 @@
     align-items: center;
     gap: var(--space-2) var(--space-3);
     min-width: 0;
+  }
+  .mrow.paste .controls {
+    padding-block-start: var(--space-2);
   }
   .controls :global(.code) {
     flex: 1 1 140px;

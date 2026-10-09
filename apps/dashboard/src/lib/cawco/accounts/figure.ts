@@ -37,6 +37,8 @@ export interface Policy {
 export interface FigureSpec {
   board: Board;
   lanes: Lane[];
+  /** Whether CawCo reads the provider's limits: the at-the-limit policy shows below. */
+  limits?: boolean;
   /** The pinned lane, for `pinned`. */
   pin?: number;
   policy?: Policy;
@@ -210,7 +212,6 @@ interface LaneSpec {
   clock: string | ((t: number) => string);
   fill: number;
   glow?: boolean;
-  handle?: boolean;
   lane: Lane;
   pin?: boolean;
 }
@@ -249,7 +250,6 @@ const SVG = "http://www.w3.org/2000/svg";
 const PIN =
   '<g fill="currentColor"><path fill-rule="evenodd" d="M16.2188 4.83755L19.1835 7.80516C21.1954 9.81905 22.2014 10.826 21.9667 11.9115C21.7319 12.9969 20.4 13.4973 17.7362 14.4981L15.8922 15.191C15.1788 15.459 14.8221 15.593 14.5468 15.8314C14.4262 15.9358 14.3184 16.054 14.2254 16.1835C14.013 16.4795 13.9119 16.8472 13.7095 17.5825C13.2493 19.2551 13.0192 20.0914 12.4713 20.4041C12.2404 20.5358 11.9792 20.6049 11.7134 20.6045C11.0827 20.6036 10.4699 19.9902 9.24441 18.7635L7.77841 17.2961L6.69935 16.2163L5.28476 14.8C4.06698 13.581 3.45809 12.9715 3.45413 12.3446C3.45242 12.0735 3.5228 11.8069 3.65804 11.5721C3.97088 11.0289 4.80107 10.8 6.46145 10.3423C7.19811 10.1392 7.56644 10.0377 7.86251 9.82451C7.99536 9.72887 8.11619 9.61754 8.22239 9.49292C8.45908 9.2152 8.59063 8.85617 8.85373 8.1381L9.5217 6.31506C10.5086 3.62155 11.0021 2.2748 12.0904 2.03468C13.1788 1.79457 14.1921 2.8089 16.2188 4.83755Z" clip-rule="evenodd" opacity=".5"/><path d="M3.30236 21.7764L7.77841 17.2961L6.69935 16.2163L2.22345 20.6965C1.92552 20.9947 1.92552 21.4782 2.22345 21.7764C2.52138 22.0747 3.00443 22.0747 3.30236 21.7764Z"/></g>';
 
-const FORK = "Forks stay with their parent.";
 const mins = (m: number): string => {
   const whole = Math.max(0, Math.round(m));
   return whole >= 60
@@ -356,11 +356,6 @@ function layout(stage: HTMLElement, board: Board, lanes: LaneSpec[]) {
     const y = y0(i);
     const g = el("lane", `${c}inset:0;width:100%;height:100%`);
     const lb = el("ln-lbl", `left:${left}px;top:${y}px`, g);
-    if (ln.handle) {
-      lb.append(
-        Object.assign(document.createElement("span"), { className: "hdl" })
-      );
-    }
     lb.append(
       Object.assign(document.createElement("span"), { className: "dot" })
     );
@@ -506,49 +501,31 @@ function layout(stage: HTMLElement, board: Board, lanes: LaneSpec[]) {
       return { el: c, lane: i, pos: s };
     },
     /**
-     * A session's fork: the link draws under the dock row from its parent to
-     * the lane's next free slot, and the child grows there. Under the row,
-     * the link passes beneath the sessions between them and above the next
-     * lane, so it crosses no session and no lane's name.
+     * A session's fork: the child grows in its parent's lane, in the next
+     * free slot, its badge (the child mark) saying what it is. Nothing is
+     * drawn between them: the lane is the relation.
      */
     fork(par: Chip, t: number): Chip {
       const ln = L[par.lane];
       const s = dock(par.lane, ln.n);
       ln.n += 1;
-      const p = par.pos;
       const at = (scale: number) =>
         `translate(${s.x - CHIP / 2}px,${s.y - CHIP / 2}px) scale(${scale})`;
       const c = el("chip child", `--c:${ln.c};transform:${at(1)}`, dy);
-      tl.tr(c, "opacity", "0").to(t + 0.3, "1", 0.2, "ease-out");
-      tl.tr(c, "transform", at(0.6)).to(t + 0.3, at(1), 0.35, mk);
-      const svg = document.createElementNS(SVG, "svg");
-      svg.setAttribute("class", "e");
-      svg.setAttribute("width", String(W));
-      svg.setAttribute("height", String(H));
-      svg.style.overflow = "visible";
-      const path = document.createElementNS(SVG, "path");
-      const foot = CHIP / 2;
-      path.setAttribute(
-        "d",
-        `M ${p.x} ${p.y + foot} Q ${(p.x + s.x) / 2} ${p.y + foot + 14}, ${s.x} ${s.y + foot}`
-      );
-      path.setAttribute("fill", "none");
-      path.setAttribute("stroke", "var(--ink-subtle)");
-      path.setAttribute("stroke-width", "1");
-      path.setAttribute("pathLength", "1");
-      path.setAttribute("stroke-dasharray", "1");
-      svg.append(path);
-      dy.insertBefore(svg, dy.firstChild);
-      tl.tr(path, "strokeDashoffset", "1").to(t, "0", 0.3, mk);
+      tl.tr(c, "opacity", "0").to(t, "1", 0.2, "ease-out");
+      tl.tr(c, "transform", at(0.6)).to(t, at(1), 0.35, mk);
       return { el: c, lane: par.lane, pos: s };
     },
     /** The lane's blocked word takes its clock's place, and gives it back with `on` false. */
     block(i: number, t: number, on = true) {
       const o = L[i];
-      o.tblk.to(t, on ? "1" : "0", 0.25, "ease-out");
-      o.tck.to(t, on ? "0" : "1", 0.2, "ease-out");
+      // One word in the place at a time: the leaving one is gone before the
+      // arriving one shows.
+      const [leave, arrive] = on ? [o.tck, o.tblk] : [o.tblk, o.tck];
+      leave.to(t, "0", 0.15, "ease-out");
+      arrive.to(t + 0.15, "1", 0.25, "ease-out");
       if (on) {
-        o.tglow.to(t, "0", 0.2, "ease-out");
+        o.tglow.to(t, "0", 0.15, "ease-out");
       }
     },
     /** A caption fades in at a and out at b; b = 99 holds it to the seam. */
@@ -585,7 +562,7 @@ type Figure = ReturnType<typeof layout>;
 
 const BOARDS: Record<Board, (stage: HTMLElement, spec: FigureSpec) => Figure> =
   {
-    pinned(stage, { lanes, pin = 0 }) {
+    pinned(stage, { lanes, pin = 0, limits = true }) {
       const F = layout(
         stage,
         "pinned",
@@ -604,12 +581,13 @@ const BOARDS: Record<Board, (stage: HTMLElement, spec: FigureSpec) => Figure> =
       F.notch(pin, 2.55, 0.12);
       F.fork(c2, 2.8);
       F.notch(pin, 3.3, 0.1);
-      F.cap(2.8, 4.4, FORK);
       F.chip(pin, 3.5);
       F.notch(pin, 3.95, 0.14);
       F.fill(pin, 4.2, 1, 0.4);
       F.pulse(pin, 4.6);
-      F.cap(4.6, 99, "At the limit → the policy below");
+      if (limits) {
+        F.cap(4.6, 99, "At the limit → the policy below");
+      }
       F.seam(5.6);
       return F;
     },
@@ -620,7 +598,6 @@ const BOARDS: Record<Board, (stage: HTMLElement, spec: FigureSpec) => Figure> =
         lanes.map((lane, i) => ({
           lane,
           fill: FILLS[i] ?? 0.25,
-          handle: true,
           clock: CLOCKS[i] ?? CLOCKS[0],
         }))
       );
@@ -638,7 +615,6 @@ const BOARDS: Record<Board, (stage: HTMLElement, spec: FigureSpec) => Figure> =
       F.chip(1, 3.5);
       F.notch(1, 3.95, 0.14);
       F.fork(c2, 4.2);
-      F.cap(4.2, 99, "Forks stay with their parent, even when it’s blocked.");
       F.chip(1, 5.0);
       F.notch(1, 5.45, 0.14);
       F.seam(6.0);
@@ -679,7 +655,6 @@ const BOARDS: Record<Board, (stage: HTMLElement, spec: FigureSpec) => Figure> =
         F.fork(forkFrom, tf);
         F.notch(forkFrom.lane, tf + 0.5, 0.08);
       }
-      F.cap(tf, 99, FORK);
       F.seam(tf + 1.0);
       return F;
     },
@@ -739,7 +714,6 @@ const BOARDS: Record<Board, (stage: HTMLElement, spec: FigureSpec) => Figure> =
         F.notch(1, 4.25, 0.2);
       }
       F.fork(c1, 4.6);
-      F.cap(4.6, 99, FORK);
       F.seam(5.4);
       return F;
     },

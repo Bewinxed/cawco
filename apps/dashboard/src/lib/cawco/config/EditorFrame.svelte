@@ -54,7 +54,7 @@
   }: {
     /** The document title. */
     title: string;
-    /** The thing's own tile in place of its section's (an account's), landing as the section's does. */
+    /** What the header's tile holds in place of its section's glyph (a provider's mark), in the same tile. */
     tile?: Snippet;
     header: Snippet;
     children: Snippet;
@@ -143,7 +143,7 @@
       <header class="head">
         {#if tile}
           <span
-            class="own"
+            class="tile"
             data-share="icon:{page.url.pathname}"
             {@attach land(() => `icon:${page.url.pathname}`)}
           >
@@ -228,7 +228,18 @@
     flex-direction: column;
     min-height: 0;
     overflow-y: auto;
-    padding: var(--space-2) var(--space-5);
+    padding: var(--space-2) var(--space-5) var(--space-5);
+  }
+  /* On a phone the commit row stands over the page's foot (EditorFooter is
+     sticky there): the last section scrolls clear of it. */
+  @media (max-width: 640px) {
+    .scroll {
+      padding-block-end: calc(
+        var(--c-btn-h-sm) +
+        var(--space-8) +
+        env(safe-area-inset-bottom)
+      );
+    }
   }
   /* The section's card: an inset panel on the recess, filling the pane's
      height above the commit row. */
@@ -292,11 +303,6 @@
   .tile :global(svg) {
     width: 16px;
     height: 16px;
-  }
-  /* An own tile stands at the title's line, at its own size. */
-  .own {
-    display: flex;
-    flex: none;
   }
   .lead {
     display: flex;

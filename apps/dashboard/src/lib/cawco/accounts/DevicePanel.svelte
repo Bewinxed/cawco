@@ -92,9 +92,8 @@
           target="_blank"
           variant="outline"
         />
-      {:else}
+      {:else if online}
         <Button
-          disabled={!online}
           label={flow.phase === "idle" || flow.phase === "starting"
             ? "Start sign-in"
             : "Start again"}
@@ -119,8 +118,6 @@
           again.</span
         >
       </p>
-    {:else if !online && flow.phase === "idle"}
-      <p class="line">{machine} is offline.</p>
     {/if}
     {#if flow.problem}
       <p class="error" role="alert">{flow.problem}</p>

@@ -168,7 +168,7 @@ import {
   type NeutralSystemMessage,
   namedAccount,
   PLACEMENT_STRATEGIES,
-  type PlacementExplain,
+  type PlacementPreview,
   PREVIEW_START,
   PREVIEW_START_PATH,
   PREVIEW_STOP,
@@ -15118,13 +15118,12 @@ export const createServer = (
                 }
               : undefined
           );
+          // pi's `default` (asked in the directory above) or a bare id, as
+          // the session would start on it: the screen names the session's
+          // provider by it.
+          const resolved =
+            resolvedModel(query.machineId, query.harness, asked.model) ?? null;
           if (!input) {
-            // pi's `default` or a bare id, named by what pi resolves it to.
-            const resolved = resolvedModel(
-              query.machineId,
-              query.harness,
-              asked.model
-            );
             const named =
               resolved && resolved !== query.model
                 ? `${query.model ?? "default"} (${resolved})`
@@ -15135,14 +15134,15 @@ export const createServer = (
               why: named
                 ? `${named} is no account's model on ${machineName(query.machineId)}: it runs from the machine's own ${query.harness} store.`
                 : `A ${query.harness} session with no model named runs from the machine's own ${query.harness} store.`,
-            } satisfies PlacementExplain;
+              model: resolved,
+            } satisfies PlacementPreview;
           }
           const placed = placeAccount(input);
           if (!placed.ok) {
             return status(400, placed.refusal);
           }
           const { ok: _ok, ...explain } = placed;
-          return explain satisfies PlacementExplain;
+          return { ...explain, model: resolved } satisfies PlacementPreview;
         }
       )
       // Signs an account in on a machine, into the account's own store there.
