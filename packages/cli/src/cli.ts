@@ -53,6 +53,9 @@ Usage
                                           call one, under the same role checks as MCP
                                           (session: --session or CAWCO_INSTANCE_ID;
                                           credential: CAWCO_SESSION_CREDENTIAL)
+  cawco git-credential <get|store|erase>  git's credential helper for the hub's git
+                                          remote, as this session; set up for every
+                                          session, not run by hand
 
 Services
   ${SERVICE_IDS.join(", ")} — each its own per-user service, started by systemd or
@@ -488,6 +491,31 @@ const runBinaryApply = async (args: Args): Promise<number> => {
   return 0;
 };
 
+/**
+ * `cawco git-credential <get|store|erase>`: git's credential helper for the
+ * hub's git remote (git-credential(1), "custom helpers"), which each session
+ * is configured with through env-only git config (agent git-credential.ts).
+ * `get` answers with the session's own identity, its instance id and session
+ * credential, from the environment the session's shell runs in; `store` and
+ * `erase` keep nothing. git hands the request on stdin and closes it.
+ */
+const gitCredential = async (args: Args): Promise<number> => {
+  await Bun.stdin.text();
+  if (args.action !== "get") {
+    return 0;
+  }
+  const instanceId = readEnv(CAWCO_ENV.instanceId);
+  const credential = readEnv(CAWCO_ENV.sessionCredential);
+  if (!(instanceId && credential)) {
+    console.error(
+      "cawco: this shell is no CawCo session's, so it has no credential for the hub's git remote."
+    );
+    return 1;
+  }
+  process.stdout.write(`username=${instanceId}\npassword=${credential}\n`);
+  return 0;
+};
+
 /** `cawco tools` and `cawco tool <name> [json]`: the session's MCP tools, under its role. */
 const runTool = async (args: Args): Promise<number> => {
   const found = await resolve(args);
@@ -598,6 +626,8 @@ const run = async (argv: string[]): Promise<number> => {
     case "tools":
     case "tool":
       return runTool(args);
+    case "git-credential":
+      return gitCredential(args);
     case "service":
       return runService(args);
     default:

@@ -257,9 +257,22 @@ export interface MoveSnapshotRequest {
   branch: string;
   hub: MoveHubRemote;
   jobId: string;
-  /** Large files go to the hub's LFS too (a project the hub is the remote of). */
-  lfsToHub: boolean;
   path: string;
+  /**
+   * Whose LFS the project uses. `hub`: the hub is its remote and LFS server,
+   * and the snapshot's large files go there with their history. `outside`:
+   * its own remote keeps its LFS, and only the large files the snapshot adds
+   * (not in what `origin` already has) go to the hub, for the target to fetch
+   * from there ({@link MoveSnapshotResult.hubLfs}).
+   */
+  remote: "hub" | "outside";
+}
+
+/** A large file by its LFS object: id, size, and a path it is checked out at. */
+export interface MoveLfsObject {
+  oid: string;
+  path: string;
+  size: number;
 }
 
 /** {@link CONTROL_MOVE_SNAPSHOT}'s answer. */
@@ -270,6 +283,12 @@ export interface MoveSnapshotResult {
   /** The snapshot commit pushed; equals `base` when nothing was uncommitted. */
   commit: string;
   files: number;
+  /**
+   * An outside remote's project: the large files the snapshot adds, uploaded
+   * to the hub's LFS store; the target fetches these from the hub and the
+   * rest from the project's own remote. Absent for the hub's own projects.
+   */
+  hubLfs?: MoveLfsObject[];
   /** The source's branch, which the target checks out by name; null when detached. */
   sourceBranch: string | null;
 }

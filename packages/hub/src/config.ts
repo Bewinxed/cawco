@@ -31,8 +31,9 @@ export const GIT_ROOT = resolve(dirname(DB_PATH), "git");
 export const LFS_ROOT = resolve(dirname(DB_PATH), "lfs");
 
 /**
- * The largest request body the hub takes: a pack pushed to its git remote or
- * a large file to its LFS store streams through, and Bun's own default
- * (128 MiB) would refuse both.
+ * The server-wide body cap (Bun's `maxRequestBodySize`), which only the git
+ * remote's routes reach: a pack pushed to it or a large file to its LFS store
+ * streams through, and Bun's own default (128 MiB) would refuse both. Every
+ * other route is held to its own, smaller cap first (body-limits.ts).
  */
 export const MAX_REQUEST_BYTES = 64 * 1024 ** 3;

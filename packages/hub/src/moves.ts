@@ -851,7 +851,7 @@ export const createMoves = (deps: MovesDeps) => {
               path: state.sourcePath,
               branch: state.snapshotBranch,
               hub,
-              lfsToHub: state.from.kind === "hub",
+              remote: state.from.kind,
             },
           ],
           STEP_TIMEOUT_MS
@@ -939,17 +939,24 @@ export const createMoves = (deps: MovesDeps) => {
     if (added) {
       deps.placesChanged(place.machineId, row.projectId);
     }
-    // A retry after the session came up late starts nothing twice.
+    // Every Start spawns, and only the machine's answer says the session is
+    // in place: a row's status is not that (a try that timed out may have
+    // come up after, or not). A session that already began its conversation
+    // is resumed, which a machine still carrying it answers at once; one
+    // that has none starts fresh under its id.
     const [existing] = db.getInstancesByIds([state.targetInstanceId]);
-    if (existing?.status !== "running") {
-      await deps.spawn(state.targetMachineId, {
-        instanceId: state.targetInstanceId,
-        requestId: crypto.randomUUID(),
-        cwd: state.targetPath,
-        projectId: row.projectId,
-        ...request.spawn,
-      });
-    }
+    const sessionKey = existing?.sessionId;
+    console.log(
+      `[moves] ${row.id}: start spawns ${state.targetInstanceId}${sessionKey ? ` resuming ${sessionKey}` : ""}`
+    );
+    await deps.spawn(state.targetMachineId, {
+      instanceId: state.targetInstanceId,
+      requestId: crypto.randomUUID(),
+      cwd: state.targetPath,
+      projectId: row.projectId,
+      ...request.spawn,
+      ...(sessionKey ? { resume: { sessionKey } } : {}),
+    });
     sendPrompt(row);
     return readyWords(row);
   };

@@ -145,6 +145,7 @@ import {
   readSkillFiles,
   syncFleetConfig,
 } from "../fleet";
+import { sessionGitEnv } from "../git-credential";
 import {
   type Harness,
   type HarnessContext,
@@ -928,6 +929,8 @@ const sessionEnv = (
   ...sessionEnvironment(process.env),
   CLAUDE_CHROME_CLASSIFIER_FLOOR: "0",
   ...specEnv,
+  // The session's git reaches the hub's remote as this session (git-credential.ts).
+  ...sessionGitEnv({ ...process.env, ...specEnv }),
   ...(model && { CAWCO_MODEL: model }),
   // The session's shell acts as this session and no other: `cawco tool`
   // there sends the credential its CawCo MCP sends.

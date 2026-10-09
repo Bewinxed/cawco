@@ -35,6 +35,7 @@ import {
   type MoveInspection,
   type MoveInstallRequest,
   type MoveLargeFile,
+  type MoveLfsObject,
   type MoveLfsRequest,
   type MoveLfsResult,
   type MovePrepareRequest,
@@ -313,6 +314,8 @@ const exec = async (
   argv: string[],
   options: {
     cwd: string;
+    /** What the command writes is not wanted (a smudge writes a whole large file). */
+    discardStdout?: boolean;
     env?: Record<string, string>;
     input?: string;
     onStderr?: (text: string) => void;
@@ -325,7 +328,7 @@ const exec = async (
     cwd: options.cwd,
     env: options.env ?? plainEnv(),
     stdin: options.input === undefined ? "ignore" : new Blob([options.input]),
-    stdout: "pipe",
+    stdout: options.discardStdout ? "ignore" : "pipe",
     stderr: "pipe",
   });
   run?.children.add(child);
@@ -338,7 +341,7 @@ const exec = async (
       options.onStderr?.(text);
     }
   })();
-  const stdout = await new Response(child.stdout).text();
+  const stdout = child.stdout ? await new Response(child.stdout).text() : "";
   await reading;
   const code = await child.exited;
   run?.children.delete(child);
@@ -472,7 +475,8 @@ const blobsOf = async (cwd: string, shas: string[]): Promise<string[]> => {
       decoder.decode(bytes.subarray(at, newline)).split(" ")[2]
     );
     if (!Number.isSafeInteger(size)) {
-      // `<sha> missing`: no content follows.
+      // `<sha> missing`: no content follows; its place in the answer stays.
+      contents.push("");
       at = newline + 1;
       continue;
     }
@@ -484,11 +488,17 @@ const blobsOf = async (cwd: string, shas: string[]): Promise<string[]> => {
   return contents;
 };
 
-/** The LFS objects `treeish`'s tree points at, each once, with their sizes. */
+/** A large file a tree points at: its size, and a path it is checked out at. */
+interface Pointed {
+  path: string;
+  size: number;
+}
+
+/** The LFS objects `treeish`'s tree points at, each once by oid. */
 const pointersIn = async (
   cwd: string,
   treeish: string
-): Promise<Map<string, number>> => {
+): Promise<Map<string, Pointed>> => {
   const listed = await must(
     undefined,
     cwd,
@@ -496,26 +506,35 @@ const pointersIn = async (
     "git could not list the tree"
   );
   const small = entries(listed).flatMap((entry) => {
-    const [meta] = entry.split("\t");
+    const [meta, path] = entry.split("\t");
     const [, type, sha, size] = meta.split(WHITESPACE);
-    return type === "blob" && Number(size) <= POINTER_MAX ? [sha] : [];
+    return type === "blob" && Number(size) <= POINTER_MAX
+      ? [{ sha, path }]
+      : [];
   });
-  const found = new Map<string, number>();
+  const found = new Map<string, Pointed>();
   if (small.length === 0) {
     return found;
   }
-  for (const content of await blobsOf(cwd, small)) {
+  const contents = await blobsOf(
+    cwd,
+    small.map((blob) => blob.sha)
+  );
+  contents.forEach((content, index) => {
     const pointer = POINTER.exec(content);
-    if (pointer) {
-      found.set(pointer[1], Number(pointer[2]));
+    if (pointer && !found.has(pointer[1])) {
+      found.set(pointer[1], {
+        size: Number(pointer[2]),
+        path: small[index].path,
+      });
     }
-  }
+  });
   return found;
 };
 
-const total = (pointed: Map<string, number>): MoveLfsResult => ({
+const total = (pointed: Map<string, Pointed>): MoveLfsResult => ({
   files: pointed.size,
-  bytes: [...pointed.values()].reduce((sum, size) => sum + size, 0),
+  bytes: [...pointed.values()].reduce((sum, one) => sum + one.size, 0),
 });
 
 // ── Inspect ────────────────────────────────────────────────────────────────
@@ -760,7 +779,7 @@ export const moveInspect = async (asked: string): Promise<MoveInspection> => {
   );
   const committed = head
     ? await pointersIn(path, head)
-    : new Map<string, number>();
+    : new Map<string, Pointed>();
   const bigFiles: MoveLargeFile[] = big.filter(
     (file) => !tracked.has(file.path)
   );
@@ -932,6 +951,37 @@ const snapshotCommit = async (
   return { commit, files: entries(changed).length };
 };
 
+/**
+ * The large files `commit` points at that its folder's `origin` does not
+ * have: those not in the tree of the newest commit `origin` holds of this
+ * history (`git merge-base HEAD <origin's refs>`: the best common ancestor
+ * of HEAD and every branch of `origin`, git-merge-base(1)). Every one, when
+ * `origin` holds none of it.
+ */
+const outsideNewLfs = async (
+  path: string,
+  commit: string
+): Promise<MoveLfsObject[]> => {
+  const refs = entries(
+    (await maybe(path, [
+      "for-each-ref",
+      "--format=%(objectname)%00",
+      "refs/remotes/origin/",
+    ])) ?? ""
+  ).map((ref) => ref.trim());
+  const pushed =
+    refs.length > 0 ? await maybe(path, ["merge-base", "HEAD", ...refs]) : null;
+  const [mine, theirs] = await Promise.all([
+    pointersIn(path, commit),
+    pushed
+      ? pointersIn(path, pushed)
+      : Promise.resolve(new Map<string, Pointed>()),
+  ]);
+  return [...mine]
+    .filter(([oid]) => !theirs.has(oid))
+    .map(([oid, { size, path: file }]) => ({ oid, size, path: file }));
+};
+
 export const moveSnapshot = (
   request: MoveSnapshotRequest
 ): Promise<MoveSnapshotResult> =>
@@ -953,11 +1003,24 @@ export const moveSnapshot = (
       }
       const remote = hubRepo(request.hub.projectId);
       const auth = hubEnv(request.hub.projectId, LFS_FILTERS);
-      if (request.lfsToHub) {
-        const pushed = await exec(run, ["git", "lfs", "push", remote, commit], {
-          cwd: path,
-          env: auth,
-        });
+      const hubLfs =
+        request.remote === "outside"
+          ? await outsideNewLfs(path, commit)
+          : undefined;
+      // The hub's own project: its large files with their history. An
+      // outside remote's: only the ones the snapshot adds.
+      const lfsPush = hubLfs
+        ? [
+            "git",
+            "lfs",
+            "push",
+            "--object-id",
+            remote,
+            ...hubLfs.map((object) => object.oid),
+          ]
+        : ["git", "lfs", "push", remote, commit];
+      if (!hubLfs || hubLfs.length > 0) {
+        const pushed = await exec(run, lfsPush, { cwd: path, env: auth });
         if (pushed.code !== 0) {
           throw new StepFailed(
             "The large files could not go to the hub",
@@ -979,7 +1042,14 @@ export const moveSnapshot = (
         "The snapshot could not be pushed to the hub",
         auth
       );
-      return { base, branch, commit, files, sourceBranch };
+      return {
+        base,
+        branch,
+        commit,
+        files,
+        sourceBranch,
+        ...(hubLfs ? { hubLfs } : {}),
+      };
     } finally {
       await rm(scratch, { recursive: true, force: true });
     }
@@ -1204,7 +1274,7 @@ export const moveClone = (request: MoveCloneRequest): Promise<MoveLfsResult> =>
 /** Bytes of `oids` already in the clone's LFS store. */
 const fetchedBytes = async (
   cwd: string,
-  wanted: Map<string, number>
+  wanted: Map<string, Pointed>
 ): Promise<number> => {
   const lfsDir = (
     await must(
@@ -1215,7 +1285,7 @@ const fetchedBytes = async (
     )
   ).trim();
   const present = await Promise.all(
-    [...wanted].map(async ([oid, size]) =>
+    [...wanted].map(async ([oid, { size }]) =>
       (await exists(join(lfsDir, oid.slice(0, 2), oid.slice(2, 4), oid)))
         ? size
         : 0
@@ -1276,12 +1346,46 @@ const largestInFlight = (
 };
 
 /**
+ * One large file fetched from the hub's LFS store into the clone's own:
+ * `git lfs smudge` of its pointer with the hub as the LFS server (`lfs.url`,
+ * env-only), which downloads the object into the clone's store, resuming a
+ * partial one with `Range` as any git-lfs download does. The content it
+ * writes out is not wanted; the pull after checks the file out.
+ */
+const fromHubLfs = async (
+  run: Run,
+  cwd: string,
+  projectId: string,
+  object: MoveLfsObject,
+  progressFile: string
+): Promise<void> => {
+  const ran = await exec(run, ["git", "lfs", "smudge", "--", object.path], {
+    cwd,
+    discardStdout: true,
+    input: `version https://git-lfs.github.com/spec/v1\noid sha256:${object.oid}\nsize ${object.size}\n`,
+    env: {
+      ...hubEnv(projectId, [["lfs.url", `${hubRepo(projectId)}/info/lfs`]]),
+      GIT_LFS_PROGRESS: progressFile,
+    },
+  });
+  if (ran.code !== 0) {
+    throw new StepFailed(
+      `Downloading ${object.path} from the hub failed`,
+      lastLine(ran.stderr)
+    );
+  }
+};
+
+/**
  * The large files: free space checked against what is still to fetch, then
  * `git lfs pull` with `GIT_LFS_PROGRESS` pointed at a file in the job's
  * scratch folder, tailed and forwarded as bytes. Objects already fetched
  * stay, and a file cut off part way resumes where it stopped (git-lfs asks
  * with `Range`). The snapshot is checked out for the pull, so its new large
- * files come too, and the clone is left as the source stood after.
+ * files come too, and the clone is left as the source stood after. For an
+ * outside remote's project, the files its snapshot added are on the hub,
+ * not on that remote: they come from the hub first, and the pull from the
+ * remote finds them already here.
  */
 export const moveLfs = (request: MoveLfsRequest): Promise<MoveLfsResult> =>
   runStep(request.jobId, "lfs", async (run) => {
@@ -1328,6 +1432,16 @@ export const moveLfs = (request: MoveLfsRequest): Promise<MoveLfsResult> =>
         "git reset failed",
         { ...plainEnv(), GIT_LFS_SKIP_SMUDGE: "1" }
       );
+      for (const object of snapshot.hubLfs ?? []) {
+        // biome-ignore lint/performance/noAwaitInLoops: one download after another, each resumable on its own
+        await fromHubLfs(
+          run,
+          path,
+          request.hub.projectId,
+          object,
+          progressFile
+        );
+      }
       const pulled = await exec(run, ["git", "lfs", "pull"], {
         cwd: path,
         env,

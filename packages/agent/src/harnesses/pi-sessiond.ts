@@ -17,6 +17,7 @@ import {
 import { standalone } from "@cawco/core/runtime";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
 import { gateForm } from "../gate-form";
+import { sessionGitEnv } from "../git-credential";
 import {
   type HarnessContext,
   type HarnessSession,
@@ -348,6 +349,8 @@ export async function spawnPi(
       ...(process.env[CAWCO_ENV.hubUrl]
         ? { [CAWCO_ENV.hubUrl]: process.env[CAWCO_ENV.hubUrl] as string }
         : {}),
+      // Its shells' git reaches the hub's remote as this session (git-credential.ts).
+      ...sessionGitEnv(),
     },
   });
   const proc = (await client.list()).procs.find(

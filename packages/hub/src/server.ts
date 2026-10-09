@@ -270,6 +270,7 @@ import {
   type Summarised,
 } from "./at-limit";
 import { createBinaryUpdates } from "./binary-updates";
+import { bodyLimitRefusal } from "./body-limits";
 import { type Caw, cawRoutes, createCaw, withCawDenials } from "./caw";
 import {
   DB_PATH,
@@ -341,7 +342,6 @@ import { basicCaller, createMachineCredentials } from "./machine-credentials";
 import { MeaningJudge } from "./meaning";
 import {
   externalizeImages,
-  FILE_LIMIT_BYTES,
   mediaBase64,
   mediaContentType,
   mediaFilePath,
@@ -13957,6 +13957,9 @@ export const createServer = (
 
   return (
     new Elysia()
+      // Each route's body cap, met before a request is routed or its body
+      // read (body-limits.ts).
+      .request(({ request }) => bodyLimitRefusal(request))
       // Every route's large JSON answer is written as it is sent.
       .mapResponse("global", streamLargeJson)
       .use(websocket())
@@ -15035,15 +15038,9 @@ export const createServer = (
             },
           },
         },
-        async ({ request, headers, status }) => {
-          const declared = Number(request.headers.get("content-length") ?? 0);
-          if (declared > FILE_LIMIT_BYTES) {
-            return status(413, "Files up to 100 MB.");
-          }
+        async ({ request, headers }) => {
+          // Held to FILE_LIMIT_BYTES before this reads it (body-limits.ts).
           const bytes = new Uint8Array(await request.arrayBuffer());
-          if (bytes.byteLength > FILE_LIMIT_BYTES) {
-            return status(413, "Files up to 100 MB.");
-          }
           const hash = await storeFile(bytes);
           return {
             ref: `/api/files/${hash}`,

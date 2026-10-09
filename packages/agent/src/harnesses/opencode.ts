@@ -137,6 +137,7 @@ import {
   sessionFleetDenials,
 } from "../denied-tools";
 import { GATE_FORM_ENV, gateForm } from "../gate-form";
+import { sessionGitEnv } from "../git-credential";
 import type { Harness, HarnessContext, HarnessSession } from "../harness";
 import { HarnessRecoveryRefused, SessionAddressRefused } from "../harness";
 import { isMachineAgent } from "../machine-agent";
@@ -464,6 +465,10 @@ const serverSpec = (config: Record<string, unknown>) => ({
     OPENCODE_EXPERIMENTAL_CODE_MODE: "true",
     OPENCODE_CONFIG_CONTENT: JSON.stringify(config),
     [GATE_FORM_ENV]: gateForm("opencode", buildHandoffPluginSource()),
+    // Its sessions' git reaches the hub's remote as each session: the
+    // helper reads the instance and credential the bridge puts in each
+    // shell (git-credential.ts).
+    ...sessionGitEnv(),
   },
 });
 

@@ -9062,16 +9062,6 @@
               }
             }
           },
-          "413": {
-            "description": "postApiFiles 413",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
           "422": {
             "description": "postApiFiles 422",
             "content": {
