@@ -282,7 +282,11 @@ import { checkoutOf, hashHookMaterial } from "./db";
 import type { LoginMove } from "./db/accounts";
 import { buildDecisionPage, type PageSources } from "./decision-page";
 import { delegateTypesRoutes, makeDelegateTypes } from "./delegate-types";
-import { hubHttpUrl } from "./delegation-actions";
+import {
+  hubHttpUrl,
+  type SendDelivery,
+  type SendHold,
+} from "./delegation-actions";
 import { createDelegationMcp } from "./delegation-mcp";
 import { createDelegationTree } from "./delegation-tree";
 import { createDispatcher, dispatchRoutes } from "./dispatch";
@@ -4776,7 +4780,7 @@ export const createServer = (
     });
     if (owed) {
       console.log(
-        `[hub] send ${message.uuid} to ${instanceId} queued: ${away ? "its machine is reconnecting" : "its session cannot take it yet"}`
+        `[hub] send ${message.uuid} to ${instanceId} queued: ${holdOf(record)}`
       );
     }
     // The send it retries goes first, so a screen folds that row away as
@@ -4803,19 +4807,83 @@ export const createServer = (
     db.owesSpawn(instanceId) || db.owedSends({ instanceId }).length > 0;
 
   /**
-   * Machines whose agent is away within its reconnect grace: from the moment
-   * its socket closes, or this hub starts, until it registers or
+   * Machines whose agent is away within its reconnect grace, and why: its
+   * socket closed (`agent`, restarting) or this hub has just started and not
+   * heard it yet (`hub`); from then until it registers or
    * {@link RECONNECT_GRACE_MS} runs out. A send to one of their sessions is
-   * owed ({@link deliverSend}).
+   * owed ({@link deliverSend}). Each grace is its own: the timer of one that
+   * ended (the machine came back and went again) leaves a newer one alone.
    */
-  const awaitingMachine = new Set<string>();
-  const awaitGrace = (machineId: string): void => {
-    awaitingMachine.add(machineId);
+  const awaitingMachine = new Map<
+    string,
+    { why: "agent" | "hub"; grace: symbol }
+  >();
+  const awaitGrace = (machineId: string, why: "agent" | "hub"): void => {
+    const grace = Symbol(machineId);
+    awaitingMachine.set(machineId, { why, grace });
     setTimeout(() => {
-      if (awaitingMachine.delete(machineId) && !registry.agent(machineId)) {
+      if (awaitingMachine.get(machineId)?.grace !== grace) {
+        return;
+      }
+      awaitingMachine.delete(machineId);
+      if (!registry.agent(machineId)) {
         failOwedAway(machineId);
       }
     }, RECONNECT_GRACE_MS).unref?.();
+  };
+
+  /**
+   * Why an owed send waits, in {@link SendHold}'s terms: its machine away
+   * within its grace, else its session's start held by an update, else sends
+   * owed before it. Undefined for a send its machine has.
+   */
+  const holdOf = (record: SentMessageRow): SendHold | undefined => {
+    if (!record.owed) {
+      return;
+    }
+    const [row] = db.getInstancesByIds([record.instanceId]);
+    const away = row ? awaitingMachine.get(row.machineId) : undefined;
+    if (row && away && !registry.agent(row.machineId)) {
+      return away.why;
+    }
+    return db.owesSpawn(record.instanceId) ? "update" : "behind";
+  };
+
+  /**
+   * A session's send, from its CawCo tools (`handoff`, `start_session`'s
+   * opening, a report): checked as a session's send must be, then the one
+   * send path ({@link deliverSend}), and what became of it. A send that
+   * failed is refused with why.
+   */
+  const sessionSend = (
+    envelope: Envelope<SendPayload>,
+    requester: InstanceRow
+  ): SendDelivery => {
+    const { payload } = envelope;
+    const malformed = normalizeRelayMessage(payload);
+    if (malformed) {
+      throw new WorkItemRefusal(400, malformed);
+    }
+    downgradeNonDelegateUrgent(
+      db.listInstances(),
+      payload,
+      envelope.instanceId ?? ""
+    );
+    const { instanceId } = payload;
+    const [before] = db.getInstancesByIds([instanceId]);
+    const record = deliverSend({
+      ...envelope,
+      machineId: envelope.machineId || requester.machineId,
+    });
+    if (record.state === "failed") {
+      throw new WorkItemRefusal(404, record.reason ?? "the send failed");
+    }
+    const hold = holdOf(record);
+    return {
+      ...(hold ? { hold } : {}),
+      woke: !hold && before !== undefined && wakesForSend(before),
+      busy: pulses.get(instanceId)?.busy === true,
+    };
   };
 
   /**
@@ -4871,7 +4939,7 @@ export const createServer = (
   };
   // A hub that just started has heard no machine yet: each gets the grace a
   // restarting agent gets, so a send to it waits for its register.
-  db.listAgents().map((machine) => awaitGrace(machine.machineId));
+  db.listAgents().map((machine) => awaitGrace(machine.machineId, "hub"));
   /**
    * Each session's final message of the turn in flight: the text frames that
    * followed its last tool call. A tool call empties it, so what came before
@@ -11215,6 +11283,13 @@ export const createServer = (
         }
       });
     },
+    deliver: (envelope, actor) => {
+      const [requester] = db.getInstancesByIds([actor.id]);
+      if (!requester) {
+        throw new WorkItemRefusal(400, "Unknown calling CawCo instanceId");
+      }
+      return Promise.resolve(sessionSend(envelope, requester));
+    },
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one in-process dispatcher replaces six relay routes, retaining their ordered ownership and settlement checks.
     forward: async (envelope, actor) => {
       // The MCP resolver supplies the caller separately, never from provenance
@@ -11237,23 +11312,7 @@ export const createServer = (
         return;
       }
       if (envelope.verb === "send") {
-        const payload = envelope.payload as SendPayload;
-        const malformed = normalizeRelayMessage(payload);
-        if (malformed) {
-          throw new WorkItemRefusal(400, malformed);
-        }
-        downgradeNonDelegateUrgent(
-          db.listInstances(),
-          payload,
-          instanceId ?? ""
-        );
-        const record = deliverSend({
-          ...envelope,
-          machineId,
-        } as Envelope<SendPayload>);
-        if (record.state === "failed") {
-          throw new WorkItemRefusal(404, record.reason ?? "the send failed");
-        }
+        sessionSend(envelope as Envelope<SendPayload>, requester);
         return;
       }
       const control = envelope.payload as ControlPayload;
@@ -17701,7 +17760,7 @@ export const createServer = (
             return;
           }
           // Sends to it wait for its next register, within the grace.
-          awaitGrace(machineId);
+          awaitGrace(machineId, "agent");
           for (const [requestId, machine] of waitingMachines) {
             if (machine === machineId) {
               waiting.get(requestId)?.({

@@ -31,6 +31,7 @@ import { dirname } from "node:path";
 import { type BuildInfo, SessionRing } from "@cawco/core";
 import { LineSplitter } from "@cawco/core/lines";
 import { PacedWriter } from "@cawco/core/paced-write";
+import { processTable as readProcessTable } from "@cawco/core/process-identity";
 // The protocol lives behind its own subpath: `sessiond.ts` reaches for `node:os`
 // to derive the endpoint, and the core barrel is imported by the browser bundle.
 import {
@@ -98,18 +99,9 @@ export const SWEEP_GRACE_MS = 2000;
 export const SURVEY_INTERVAL_MS = 30_000;
 
 /**
- * How long one reading of the process table may take before its `ps` is
- * killed and the reading fails. Our choice: `ps -A` answers in 0.07 s on a Mac
- * running ~1,000 processes; ten seconds is room for a machine deep in swap,
- * and the bound means a `ps` that never ends costs one failed reading rather
- * than every reading after it.
- */
-export const PROCESS_TABLE_TIMEOUT_MS = 10_000;
-
-/**
  * One process as the operating system lists it. `started` is its start time
- * as `ps` prints it: with the pid, what says a pid seen later is still the
- * same process and not another that was since given its number.
+ * as `ps -o lstart=` prints it: with the pid, what says a pid seen later is
+ * still the same process and not another that was since given its number.
  */
 interface Listed {
   pgid: number;
@@ -118,70 +110,30 @@ interface Listed {
   started: string;
 }
 
-const COLUMN_GAP = /\s+/;
-
-const parseTable = (text: string): Listed[] =>
-  text.split("\n").flatMap((line) => {
-    const [pid, ppid, pgid, ...started] = line.trim().split(COLUMN_GAP);
-    return pid && ppid && pgid
-      ? [
-          {
-            pid: Number(pid),
-            ppid: Number(ppid),
-            pgid: Number(pgid),
-            started: started.join(" "),
-          },
-        ]
-      : [];
-  });
-
 /**
- * Every process on the machine. `ps` is the one reading Linux and macOS both
- * give: neither has a call that lists a process's descendants, and `/proc` is
- * Linux alone.
+ * Every process on the machine, read from the kernel (core's process
+ * reader: libproc on macOS, `/proc` on Linux), as `ps -A -o
+ * pid=,ppid=,pgid=,lstart=` listed it. Neither system has a call that lists
+ * a process's descendants, so the whole table is read.
  *
- * ASYNC, AND IT MUST STAY SO. This was `spawnSync`, and on a Mac it wedged the
- * keeper: Bun's `spawnSync` waits on a private kqueue of its own and, while it
- * waits, points the runtime's loop handle at it, so polls and keep-alives
- * released or armed in that window land on the wrong loop (oven-sh/bun#34069,
- * the fix still open as oven-sh/bun#40078). The keeper of 8 Oct held that
- * second kqueue (lsof fd 8), sat in `kevent64` with its socket open, and sent
- * no `welcome` to anyone for 35 minutes. Nothing on this daemon's loop may
- * wait synchronously on another process.
+ * NOTHING HERE WAITS ON ANOTHER PROCESS. This was a synchronous spawn of the
+ * process lister, and on a Mac it wedged the keeper: Bun's `spawnSync` waits on a private kqueue
+ * of its own and, while it waits, points the runtime's loop handle at it, so
+ * polls and keep-alives released or armed in that window land on the wrong
+ * loop (oven-sh/bun#34069, the fix still open as oven-sh/bun#40078). The
+ * keeper of 8 Oct held that second kqueue (lsof fd 8), sat in `kevent64` with
+ * its socket open, and sent no `welcome` to anyone for 35 minutes.
  */
-const processTable = (): Promise<Listed[]> =>
-  new Promise((resolve, reject) => {
-    const ps = spawn("ps", ["-A", "-o", "pid=,ppid=,pgid=,lstart="], {
-      stdio: ["ignore", "pipe", "ignore"],
-    });
-    let text = "";
-    ps.stdout.setEncoding("utf8");
-    ps.stdout.on("data", (chunk: string) => {
-      text += chunk;
-    });
-    const timer = setTimeout(
-      () => ps.kill("SIGKILL"),
-      PROCESS_TABLE_TIMEOUT_MS
-    );
-    ps.once("error", (error) => {
-      clearTimeout(timer);
-      reject(error);
-    });
-    ps.once("close", (code, signal) => {
-      clearTimeout(timer);
-      if (code === 0) {
-        resolve(parseTable(text));
-        return;
-      }
-      reject(
-        new Error(
-          signal
-            ? `ps was killed (${signal}) after ${PROCESS_TABLE_TIMEOUT_MS}ms`
-            : `ps exited ${code}`
-        )
-      );
-    });
-  });
+const processTable = async (): Promise<Listed[]> =>
+  (await readProcessTable()).map(({ pid, ppid, pgid, started }) => ({
+    pid,
+    ppid,
+    pgid,
+    // As this daemon always held it: the columns split on runs of spaces and
+    // joined by one (`Thu Oct 1 20:26:18 2026`).
+    started: started.split(SPACES).join(" "),
+  }));
+const SPACES = /\s+/;
 
 const reasonOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);

@@ -24,6 +24,12 @@ import {
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { BinaryUpdateState } from "@cawco/core/binary-updates";
+import {
+  commandLine,
+  cpuTimeText,
+  etimeText,
+  processTable as readProcessTable,
+} from "@cawco/core/process-identity";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
 import { dialKeeper } from "./sessiond-client";
 
@@ -166,28 +172,36 @@ interface Row {
   started: string;
 }
 
-const PS_ROW =
-  /^\s*(\d+)\s+(\d+)\s+(\w{3}\s+\w{3}\s+\d+\s+[\d:]+\s+\d{4})\s(.*)$/;
+/**
+ * Every process, with its start time (what says a pid seen later is the same
+ * process) and its command line: as `ps -A -o pid=,ppid=,lstart=,args=`
+ * listed them, read from the kernel (core's process reader).
+ */
+const processTable = async (): Promise<Row[]> =>
+  Promise.all(
+    (await readProcessTable()).map(async ({ pid, ppid, started }) => ({
+      pid,
+      ppid,
+      started,
+      args: (await commandLine(pid)) ?? "",
+    }))
+  );
 
-/** Every process, with its start time: what says a pid seen later is the same process. */
-const processTable = async (): Promise<Row[]> => {
-  const listed = await run(["ps", "-A", "-o", "pid=,ppid=,lstart=,args="]);
-  if (listed.code !== 0) {
-    throw new Error(`ps exited ${listed.code}: ${listed.stderr.trim()}`);
-  }
-  return listed.stdout.split("\n").flatMap((line) => {
-    const row = PS_ROW.exec(line);
-    return row
-      ? [
-          {
-            pid: Number(row[1]),
-            ppid: Number(row[2]),
-            started: row[3] as string,
-            args: row[4] as string,
-          },
-        ]
-      : [];
-  });
+/**
+ * The process table for the diagnostics, each value as `ps -A -o
+ * pid,ppid,pgid,lstart,stat,etime,time,args` printed it (core's process
+ * reader), in tab-separated columns. CPU time another user's process will not
+ * show is `-`.
+ */
+const tableText = async (): Promise<string> => {
+  const rows = await readProcessTable();
+  const lines = await Promise.all(
+    rows.map(
+      async (row) =>
+        `${row.pid}\t${row.ppid}\t${row.pgid}\t${row.started}\t${row.state}\t${etimeText(row.elapsed)}\t${row.cpuMicroseconds === undefined ? "-" : cpuTimeText(row.cpuMicroseconds)}\t${(await commandLine(row.pid)) ?? ""}`
+    )
+  );
+  return `PID\tPPID\tPGID\tSTARTED\tSTAT\tELAPSED\tTIME\tARGS\n${lines.join("\n")}\n`;
 };
 
 /** Everything below `root` by parentage, root excluded. */
@@ -239,18 +253,7 @@ const shown = (ran: Run): string =>
  */
 const saveDiagnostics = async (dir: string, pid: number): Promise<void> => {
   await mkdir(dir, { recursive: true });
-  const saves: Promise<void>[] = [
-    settled(join(dir, "ps.txt"), async () =>
-      shown(
-        await run([
-          "ps",
-          "-A",
-          "-o",
-          "pid,ppid,pgid,lstart,stat,etime,time,args",
-        ])
-      )
-    ),
-  ];
+  const saves: Promise<void>[] = [settled(join(dir, "ps.txt"), tableText)];
   if (process.platform === "darwin") {
     saves.push(
       settled(join(dir, "sample.txt"), async () =>

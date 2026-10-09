@@ -52,6 +52,10 @@ import type { WorkspaceRef } from "@cawco/core";
 import { WORKSPACE_BOUNDARY_START_TIMEOUT_MS } from "@cawco/core";
 import { binaryRoot } from "@cawco/core/binary-installation";
 import { sessionIdentityDir } from "@cawco/core/paths";
+import {
+  commandLine as commandLineOf,
+  commandLines,
+} from "@cawco/core/process-identity";
 import { embeddedFile, standalone } from "@cawco/core/runtime";
 import { type ProcSpec, sessiondEndpoint } from "@cawco/core/sessiond";
 import { cloneInPlace } from "./clone";
@@ -531,7 +535,7 @@ export const launchedHook = async (
   const commandLine =
     process.platform === "linux"
       ? (await readFile(`/proc/${pid}/cmdline`, "utf8")).replaceAll("\0", " ")
-      : (await Bun.$`ps -ww -o args= -p ${pid}`.quiet()).text();
+      : ((await commandLineOf(pid)) ?? "");
   const quoted = LAUNCHED_HOOK.exec(commandLine)?.[1];
   if (!quoted) {
     return;
@@ -722,18 +726,12 @@ const gateOf = (id: string): string => join(stateDir(id), "replacing");
  */
 const busy = async (id: string, runner: number): Promise<boolean> => {
   const exec = join(stateDir(id), "exec");
-  const listing = await Bun.$`ps -axwwE -o pid=,command=`.quiet();
-  return listing
-    .text()
-    .split("\n")
-    .some((line) => {
-      const pid = Number.parseInt(line.trim(), 10);
-      return (
-        pid !== runner &&
-        pid !== process.pid &&
-        (line.includes(`CAWCO_WORKSPACE=${id}`) || line.includes(exec))
-      );
-    });
+  return (await commandLines({ environment: true })).some(
+    ({ pid, command }) =>
+      pid !== runner &&
+      pid !== process.pid &&
+      (command.includes(`CAWCO_WORKSPACE=${id}`) || command.includes(exec))
+  );
 };
 
 /**
@@ -1271,13 +1269,9 @@ const kill = (pid: number, signal: NodeJS.Signals): void => {
 
 /** Every process a macOS workspace started, found by the marker its runner handed them all. */
 const killMarked = async (id: string): Promise<void> => {
-  const listing = await Bun.$`ps -axwwE -o pid=,command=`.quiet().nothrow();
-  for (const line of listing.text().split("\n")) {
-    if (line.includes(`CAWCO_WORKSPACE=${id}`)) {
-      const pid = Number.parseInt(line.trim(), 10);
-      if (pid && pid !== process.pid) {
-        kill(pid, "SIGKILL");
-      }
+  for (const { pid, command } of await commandLines({ environment: true })) {
+    if (command.includes(`CAWCO_WORKSPACE=${id}`) && pid !== process.pid) {
+      kill(pid, "SIGKILL");
     }
   }
 };

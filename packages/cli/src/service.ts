@@ -10,6 +10,7 @@ import {
   readEnv,
 } from "@cawco/core";
 import { holdPhrases, type RestartReadiness } from "@cawco/core/binary-updates";
+import { processStart } from "@cawco/core/process-identity";
 import { standalone } from "@cawco/core/runtime";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
 
@@ -2007,46 +2008,14 @@ export const writeSessiondLedger = async (
 };
 
 /**
- * Field 22 of `/proc/<pid>/stat`, which cannot be had by splitting the line on
- * spaces: field 2 is the executable name in parentheses and may contain both
- * spaces and `)`. Everything up to the *last* `)` is therefore dropped first,
- * after which field 3 is token 0 and field 22 is token 19.
- */
-const PROC_STAT_FIELD_SEP = /\s+/;
-
-export const parseProcStartTicks = (stat: string): string | undefined => {
-  const close = stat.lastIndexOf(")");
-  if (close < 0) {
-    return undefined;
-  }
-  const fields = stat
-    .slice(close + 1)
-    .trim()
-    .split(PROC_STAT_FIELD_SEP);
-  return fields[19];
-};
-
-/**
  * The start-time marker for a live pid, or `undefined` if nothing is running
- * under it. Reading it is the whole point of the ledger: a pid alone is a
- * number the kernel hands out again, and killing a recycled one is killing a
- * stranger's process.
+ * under it: core's process reader, which gives the field 22 of
+ * `/proc/<pid>/stat` on linux and the `ps -o lstart=` string on darwin, the
+ * forms every ledger entry holds. Reading it is the whole point of the ledger:
+ * a pid alone is a number the kernel hands out again, and killing a recycled
+ * one is killing a stranger's process.
  */
-export const processStartMarker = async (
-  pid: number
-): Promise<string | undefined> => {
-  if (platform() === "darwin") {
-    const shown = await run(["ps", "-o", "lstart=", "-p", `${pid}`]);
-    if (shown.exitCode !== 0) {
-      return undefined;
-    }
-    return shown.stdout.toString().trim() || undefined;
-  }
-  const stat = await Bun.file(`/proc/${pid}/stat`)
-    .text()
-    .catch(() => undefined);
-  return stat === undefined ? undefined : parseProcStartTicks(stat);
-};
+export const processStartMarker = processStart;
 
 /**
  * Which ledger entries are still the process they were written for. An entry

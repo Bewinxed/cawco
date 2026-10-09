@@ -1,6 +1,11 @@
 import { createHash } from "node:crypto";
 import { unwatchFile, watchFile } from "node:fs";
-import type { Envelope, InstanceRow, LandsMode } from "@cawco/core";
+import type {
+  Envelope,
+  InstanceRow,
+  LandsMode,
+  SendPayload,
+} from "@cawco/core";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import {
@@ -10,6 +15,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { adminTools, isAdminWrite } from "./admin-tools";
 import type { Caw } from "./caw";
+import type { SendDelivery } from "./delegation-actions";
 import { handoffInstructions, handoffTools } from "./delegation-tools";
 import type { DelegateListInclude, DelegateNode } from "./delegation-tree";
 import type { AttemptStart } from "./dispatch";
@@ -84,6 +90,14 @@ export function createDelegationMcp(options: {
   /** Whether `leadId` leads the project of the work item `instanceId` runs (work-items.ts `ledBy`). */
   ledBy?: (instanceId: string, leadId: string) => boolean;
   forward: (envelope: Envelope, actor: InstanceRow) => Promise<void>;
+  /**
+   * Hands a session's send to the hub's one send path now, and answers what
+   * became of it (`handoff` words its reply from this); a refused send throws.
+   */
+  deliver: (
+    envelope: Envelope<SendPayload>,
+    actor: InstanceRow
+  ) => Promise<SendDelivery>;
   credentialActor: (authorization: string | null) => InstanceRow | undefined;
   /** Whether `token` is a session credential the hub holds (by its hash). */
   knownCredential: (token: string) => boolean;
@@ -202,6 +216,9 @@ export function createDelegationMcp(options: {
         workItem: !actor || !!actor.parentInstanceId,
         workflowStepId,
         workflowRunId: workflowStepId ? "" : undefined,
+        deliver: () => {
+          throw new Error("Discovery cannot execute tools");
+        },
         emit: () => {
           throw new Error("Discovery cannot execute tools");
         },
@@ -378,6 +395,9 @@ export function createDelegationMcp(options: {
         instanceById: options.instanceById,
         cwd: "",
         projectId,
+        deliver: () => {
+          throw new Error("Reading the catalog sends nothing");
+        },
         emit: () => {
           throw new Error("Reading the catalog emits nothing");
         },
@@ -546,6 +566,7 @@ export function createDelegationMcp(options: {
       sendToUser: toUser
         ? (message, attachments) => toUser(actor, message, attachments)
         : undefined,
+      deliver: (envelope) => options.deliver(envelope, actor),
       emit: (envelope) => emitted.push(envelope),
     }).find((tool) => tool.name === name);
     if (!entry) {
@@ -675,6 +696,9 @@ export function createDelegationMcp(options: {
           cwd: bound?.cwd ?? "",
           harness: bound?.harness as "claude" | "opencode" | "pi" | undefined,
           canDelegate,
+          deliver: () => {
+            throw new Error("Instructions send nothing");
+          },
           emit: () => undefined,
         }),
       }

@@ -5,11 +5,12 @@
  * a hook under `versions/<v>/` needs that folder for as long as it lives), and
  * the agent, which names the process holding a port it cannot bind.
  *
- * macOS is read with `ps` and `lsof`, always through an async spawn: both run
- * on the agent's loop (prune at a confirmed trial, the gateway's bind), and a
- * synchronous spawn under Bun waits on a private loop whose handle swap
- * misplaces the process's own polls (oven-sh/bun#34069): the session keeper
- * sat wedged on one for 35 minutes.
+ * macOS command lines come from the kernel (the process reader), its text
+ * segments from `lsof` through an async spawn: it runs on the agent's loop
+ * (prune at a confirmed trial, the gateway's bind), and a synchronous spawn
+ * under Bun waits on a private loop whose handle swap misplaces the process's
+ * own polls (oven-sh/bun#34069): the session keeper sat wedged on one for 35
+ * minutes.
  */
 import {
   existsSync,
@@ -19,6 +20,7 @@ import {
   realpathSync,
 } from "node:fs";
 import { join } from "node:path";
+import { commandLine, commandLines } from "./process-identity";
 
 interface LiveProcess {
   /** Its command line, arguments joined by spaces. */
@@ -33,8 +35,6 @@ interface LiveProcess {
 const NUMERIC = /^\d+$/;
 /** `--settings <file>`, as `ps` joins it on macOS: the file ends where the argument does. */
 const SETTINGS_FILE = /--settings\s+(\/\S+)/;
-/** One `ps -o pid=,command=` row. */
-const PS_ROW = /^\s*(\d+)\s+(.*)$/;
 /** A build's folder name, up to the separator or quote that ends it inside a path or a JSON string. */
 const VERSION_NAME = /^[^/\s'"\\]+/;
 const BLANKS = /\s+/;
@@ -92,7 +92,7 @@ const printed = async (argv: string[]): Promise<string> => {
 
 async function macProcesses(): Promise<LiveProcess[]> {
   const [listed, texts] = await Promise.all([
-    printed(["ps", "-axww", "-o", "pid=,command="]),
+    commandLines(),
     // Every process's text segments at once: the executable is the first, and a
     // build started through a link shows here by the folder it really lives in.
     printed(["lsof", "-nP", "-w", "-d", "txt", "-Fpn"]),
@@ -106,21 +106,14 @@ async function macProcesses(): Promise<LiveProcess[]> {
       images.set(pid, [...(images.get(pid) ?? []), line.slice(1)]);
     }
   }
-  return listed.split("\n").flatMap((line) => {
-    const match = PS_ROW.exec(line);
-    if (!match) {
-      return [];
-    }
-    const command = match[2] ?? "";
+  return listed.map(({ pid: listedPid, command }) => {
     const file = SETTINGS_FILE.exec(command)?.[1];
-    return [
-      {
-        pid: Number(match[1]),
-        command,
-        images: images.get(Number(match[1])) ?? [],
-        settingsFile: file && existsSync(file) ? file : undefined,
-      },
-    ];
+    return {
+      pid: listedPid,
+      command,
+      images: images.get(listedPid) ?? [],
+      settingsFile: file && existsSync(file) ? file : undefined,
+    };
   });
 }
 
@@ -205,9 +198,7 @@ const commandOf = async (pid: number): Promise<string> =>
         .split("\0")
         .filter((arg) => arg !== "")
         .join(" ")
-    : (
-        await printed(["ps", "-ww", "-o", "command=", "-p", String(pid)])
-      ).trim();
+    : ((await commandLine(pid)) ?? "").trim();
 
 /**
  * Who listens on TCP `port` here, in words: each holder's pid and command

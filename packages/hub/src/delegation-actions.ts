@@ -456,6 +456,55 @@ export const SPAWNING_TOOLS: ReadonlySet<string> = new Set([
   "set_item_checks",
 ]);
 
+/**
+ * Why the hub keeps a send queued instead of handing it to its session now
+ * (server.ts `deliverSend`): its machine is installing an update, so the
+ * session's start waits for it (`update`); its machine's agent is restarting
+ * (`agent`); the hub has just started and the machine has not reconnected
+ * (`hub`); or sends before it to the same session are still queued
+ * (`behind`).
+ */
+export type SendHold = "agent" | "behind" | "hub" | "update";
+
+/** What the hub did with a send, as `handoff` tells its sender. */
+export interface SendDelivery {
+  /** The session was mid-turn when the send reached it. */
+  busy: boolean;
+  /** Queued at the hub, and why; absent when the session has it. */
+  hold?: SendHold;
+  /** It was asleep, and the send woke it. */
+  woke: boolean;
+}
+
+/** Each hold, in the words `handoff` answers with: queued at the hub, and until when. */
+const HOLD_WORDS: Record<SendHold, string> = {
+  update:
+    "Its machine is installing an update and restarting, so the message is queued at the hub and goes to the session as soon as the update is done.",
+  agent:
+    "Its machine's agent is restarting, so the message is queued at the hub and goes to the session when the agent is back; it fails if the agent is not back within a minute.",
+  hub: "The hub has just started and the session's machine has not reconnected yet, so the message is queued at the hub and goes to the session when it does; it fails if the machine is not back within a minute.",
+  behind:
+    "Messages sent to it earlier are still queued at the hub, so this one is queued behind them and goes right after them.",
+};
+
+/** What the hub did with a hand-off, as its sender is told. */
+const deliveryWords = (delivery: SendDelivery, urgent: boolean): string => {
+  if (delivery.hold) {
+    return HOLD_WORDS[delivery.hold];
+  }
+  if (delivery.woke) {
+    return "It was asleep; it is being woken to read it.";
+  }
+  if (urgent) {
+    return delivery.busy
+      ? "Its current turn was interrupted to read it now; a claude delegate reads it mid-turn instead."
+      : "It was idle, so it reads it now.";
+  }
+  return delivery.busy
+    ? "It is queued there and will be picked up when that session finishes its current turn; it was not interrupted."
+    : "It was idle, so it reads it now.";
+};
+
 export interface HandoffDeps {
   /** This invocation's session credential; never a tool argument or persisted metadata. */
   readonly authorization?: string;
@@ -477,6 +526,11 @@ export interface HandoffDeps {
    */
   readonly delegateTypes?: DelegateType[];
   readonly delegateTypesError?: string;
+  /**
+   * Hands a send to the hub's one send path now, and answers what became of
+   * it: refused sends throw with the hub's reason.
+   */
+  readonly deliver: (envelope: Envelope<SendPayload>) => Promise<SendDelivery>;
   /** Puts an envelope on the daemon's hub socket. */
   readonly emit: (envelope: Envelope) => void;
   readonly harness?: "claude" | "opencode" | "pi";
@@ -875,6 +929,7 @@ export const handoffActions = ({
   workflowRunId,
   workflowStepId,
   cwd,
+  deliver,
   emit,
   authorization,
   projectId,
@@ -1168,7 +1223,6 @@ export const handoffActions = ({
     if (peer.row.id !== own?.parentInstanceId) {
       await checkCold(peer.row.id, undefined, instanceId);
     }
-    const woken = asleep.includes(peer);
     const whose =
       peer.row.id === own?.parentInstanceId ? ", your parent session" : "";
     const from = senderName(own, cwd);
@@ -1190,31 +1244,18 @@ export const handoffActions = ({
       },
       ...(urgent ? { urgent: true, from: instanceId } : {}),
     };
-    emit({
+    // Delivered now, so the answer says what the hub did with it, not what
+    // the roster suggested before it went.
+    const delivery = await deliver({
       verb: "send",
       machineId: peer.row.machineId,
       instanceId: peer.row.id,
       payload,
     });
-    if (urgent) {
-      return (
-        `Delivered urgently to your delegate ${peer.label}. Its current turn was interrupted to ` +
-        "read it now — a claude delegate reads it mid-turn instead."
-      );
-    }
-    if (woken) {
-      return `Handed to ${peer.label} (${peer.dir} on ${peer.host}${whose}). It was asleep; it is being woken to read it.`;
-    }
-    if (peer.row.status === "unknown") {
-      return (
-        `Handed to ${peer.label} (${peer.dir} on ${peer.host}${whose}). Its machine is not connected ` +
-        "right now; the message goes to it when the machine registers again, and fails if it is not back within a minute."
-      );
-    }
-    return (
-      `Handed to ${peer.label} (${peer.dir} on ${peer.host}${whose}). It is queued there and will be ` +
-      "picked up when that session finishes its current turn — it was not interrupted."
-    );
+    const handed = urgent
+      ? `Delivered urgently to your delegate ${peer.label}.`
+      : `Handed to ${peer.label} (${peer.dir} on ${peer.host}${whose}).`;
+    return `${handed} ${deliveryWords(delivery, urgent)}`;
   },
 
   async startSession(

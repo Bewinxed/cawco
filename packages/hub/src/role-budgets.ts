@@ -72,6 +72,7 @@ export const measureRoles = (): RoleSize[] => {
     instances: () => rows,
     instanceById: (id) => rows.find((row) => row.id === id),
     forward: () => Promise.resolve(),
+    deliver: () => Promise.reject(new Error("measuring")),
     credentialActor: () => undefined,
     knownCredential: () => false,
     toolListing: () => undefined,

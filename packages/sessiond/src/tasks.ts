@@ -24,7 +24,7 @@ import { dirname, join } from "node:path";
  * Tasks kept free for the keeper itself. Ours: the keeper runs about 20
  * threads, the runtime starts more on demand (three JIT worklists, two DFG
  * and seven FTL compilers, a GC marker per core, the aligned-memory and
- * scavenger threads), and reading a child's tree spawns `ps`. Sixty-four
+ * scavenger threads), and reading a child's tree reads the process table. Sixty-four
  * covers all of them on a machine of 32 cores.
  */
 export const TASK_RESERVE = 64;
