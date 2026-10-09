@@ -661,11 +661,32 @@ const jsonlNames = async (dir: string): Promise<string[]> => {
 };
 
 /** A session's info, read from its transcript wherever it is stored. */
-const sessionInfoAt = (
+const sessionInfoAt = async (
   file: string,
-  sessionId: string
-): Promise<SDKSessionInfo | undefined> =>
-  getSessionInfo(sessionId, { sessionStore: transcriptStore(file) });
+  sessionId: string,
+  read: (file: string) => Promise<SessionStoreEntry[]> = wholeTranscript
+): Promise<SDKSessionInfo | undefined> => {
+  let modified: number;
+  try {
+    modified = (await stat(file)).mtimeMs;
+  } catch (error) {
+    if (missing(error)) {
+      return;
+    }
+    throw error;
+  }
+  const info = await getSessionInfo(sessionId, {
+    sessionStore: transcriptStore(file, read),
+  });
+  // A store has no modification time to give, so the SDK's answer says when
+  // it was read: the transcript's own is what the SDK's listing reports.
+  // And a copy in strings of its own: each field the SDK read off the
+  // transcript shares the decoded text it was parsed from, so keeping a field
+  // kept that text (130 MB across 1,500 listed sessions, measured).
+  return (
+    info && { ...structuredClone(info), lastModified: Math.floor(modified) }
+  );
+};
 
 /** The session's transcript file, or an error naming the session when none exists. */
 const requireSessionFile = async (
@@ -2825,15 +2846,9 @@ export class ClaudeHarness implements Harness {
         }
       }
     }
-    const read = await listingRead(files, async ({ file, sessionId }) => {
-      const info = await getSessionInfo(sessionId, {
-        sessionStore: transcriptStore(file, transcriptEnds),
-      });
-      // A copy in strings of its own. Each field the SDK read off the
-      // transcript's ends shares the decoded 64 KiB end it was parsed from, so
-      // keeping a field kept that end: 130 MB across 1,500 sessions (measured).
-      return info && structuredClone(info);
-    });
+    const read = await listingRead(files, ({ file, sessionId }) =>
+      sessionInfoAt(file, sessionId, transcriptEnds)
+    );
     return [
       ...own,
       ...read.filter((info): info is SDKSessionInfo => info !== undefined),

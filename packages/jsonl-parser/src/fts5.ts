@@ -102,6 +102,37 @@ export function toMatchQuery(text: string): string {
   return terms.map((t) => `"${t}"*`).join(" ");
 }
 
+/**
+ * How many transcript bytes a full parse takes on at once. A parse returns
+ * every doc of every file it was given, and those are held until indexed: a
+ * first sync handed the whole corpus to one parse took an agent to 4.8 GB RSS
+ * on a 7 GB corpus. Batches of this size are parsed and indexed in turn.
+ */
+const FULL_PARSE_BATCH_BYTES = 128 * 1024 * 1024;
+
+/**
+ * `files` in order, as consecutive batches of at most `limit` bytes each; a
+ * file larger than `limit` is a batch of its own.
+ */
+function byteBatches(files: { path: string; size: number }[], limit: number): string[][] {
+  const batches: string[][] = [];
+  let batch: string[] = [];
+  let bytes = 0;
+  for (const { path, size } of files) {
+    if (batch.length > 0 && bytes + size > limit) {
+      batches.push(batch);
+      batch = [];
+      bytes = 0;
+    }
+    batch.push(path);
+    bytes += size;
+  }
+  if (batch.length > 0) {
+    batches.push(batch);
+  }
+  return batches;
+}
+
 export class TranscriptIndex {
   readonly db: Database;
 
@@ -179,7 +210,7 @@ export class TranscriptIndex {
       errors: [],
     };
 
-    const fullFiles: string[] = [];
+    const fullFiles: { path: string; size: number }[] = [];
     const tailFiles: { path: string; checkpoint: Checkpoint }[] = [];
     const { stat } = await import("node:fs/promises");
     await Promise.all(
@@ -196,7 +227,7 @@ export class TranscriptIndex {
           return;
         }
         if (!checkpoint || checkpoint.offset > size) {
-          fullFiles.push(path);
+          fullFiles.push({ path, size });
         } else if (checkpoint.offset < size) {
           tailFiles.push({ path, checkpoint });
         } else {
@@ -205,9 +236,11 @@ export class TranscriptIndex {
       }),
     );
 
-    // New (or reset) files: parallel full parse in workers.
-    if (fullFiles.length > 0) {
-      const parsed = await parseMany(fullFiles, {
+    // New (or reset) files: parallel full parse in workers, a batch at a time,
+    // each batch indexed before the next is parsed (FULL_PARSE_BATCH_BYTES).
+    for (const batch of byteBatches(fullFiles, FULL_PARSE_BATCH_BYTES)) {
+      // biome-ignore lint/performance/noAwaitInLoops: one batch's docs in memory at a time is the point
+      const parsed = await parseMany(batch, {
         mode: "docs",
         types: ["user", "assistant"],
         extract: options.extract,
