@@ -150,8 +150,9 @@ MIN_REGION = 40
 # how far (RGB distance) its measurement may sit from the master ink before it is ignored.
 MIN_INK_PIXELS = 50
 DRIFT = 60
-# How much finer than the stills' 512 px refine() measures drawing 00 against its still.
-SUPERSAMPLE = 4
+# register()'s search: per round, the offset step (artboard units) and the scale step (a share),
+# halved from two units down to a sixty-fourth.
+REGISTER_STEPS = [(2 / 2**k, 0.004 / 2**k) for k in range(8)]
 # vtracer's spline fit: a corner above CORNER degrees, segments of at least LENGTH take pixels,
 # and splices at SPLICE degrees. Coarser than its defaults (60, 4, 45) to keep each status's
 # file small: about a third fewer path points. Measured against the defaults' fit on ready-
@@ -162,6 +163,12 @@ LENGTH = 8.0
 SPLICE = 60
 # Red minus blue a pixel needs to read as yellow (the ink measures 135; neutral greys about 5).
 WARM = 60
+# Red minus blue a pixel needs to read as vermilion. Neutral mid-greys (a soft frame's blend of
+# his black into an eye white) sit nearer vermilion than black or white, and in head-unsmile's
+# blurred wink 1,011 px of them survived as a vermilion tuft: they measure 25 at most (median
+# (136, 136, 135)), vermilion's core 144 or more (1st percentile, five loops), and a fifth of
+# vermilion blended into his black 33.
+VERMILION_CHROMA = 30
 # Green minus blue a pixel also needs to read as yellow. The ink's core measures 74-120 (median
 # 106) in the takes' effect marks; the soft edge of vermilion against paper is warm too but
 # measures -3 to 62 (95% at 25 or under), and was traced as a yellow ring round loading-feather's
@@ -306,6 +313,10 @@ def inks(rgb: np.ndarray, centres: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         px[..., 1] - px[..., 2] >= YELLOW_CHROMA
     )
     distance[..., yellow] = np.where(is_yellow, distance[..., yellow], np.inf)
+    vermilion = list(INKS).index("vermilion") + 1
+    distance[..., vermilion] = np.where(
+        px[..., 0] - px[..., 2] >= VERMILION_CHROMA, distance[..., vermilion], np.inf
+    )
     if "tan" in INKS:
         # No pixel is tan by colour alone (vermilion's soft edge against paper sits nearer tan
         # than vermilion): tan_outline() gives it the faces of tan runs.
@@ -362,10 +373,22 @@ def tan_outline(label: np.ndarray, px: np.ndarray) -> None:
         label[ndimage.binary_opening(runs, structure=x * x + y * y <= r * r)] = list(INKS).index("tan") + 1
 
 
+def his_black(label: np.ndarray) -> np.ndarray:
+    """His body's black: his black with every run thinner than HIS_BLACK opened away, so a prop's
+    or a note's thin black outline is not his."""
+    r = HIS_BLACK // 2
+    y, x = np.ogrid[-r : r + 1, -r : r + 1]
+    return ndimage.binary_opening(label == list(INKS).index("black") + 1, structure=x * x + y * y <= r * r)
+
+
 def warm_eye_whites(label: np.ndarray, px: np.ndarray) -> None:
-    """Gives back to the eye white the cream pixels of a warm eye white (see EYE_WARM), in place."""
+    """Gives back to the eye white the cream pixels of a warm eye white (see EYE_WARM), in place.
+    An eye is ringed by his body's black (his_black): the cream note, enclosed by its own thin
+    outline where it meets the beak, once read as a warm eye (head-beat's stretch drawing: warmth 18,
+    its ring 0.52 black but 0.13 his body's, against 0.69-0.72 round his eyes) and traced as eye
+    white, then vermilion."""
     cream = list(INKS).index("cream") + 1
-    black = list(INKS).index("black") + 1
+    his = his_black(label)
     lightish = (label == 0) | (label == WHITE) | (label == cream)
     regions, n = ndimage.label(lightish)
     edge = np.unique(np.concatenate([regions[0], regions[-1], regions[:, 0], regions[:, -1]]))
@@ -381,7 +404,7 @@ def warm_eye_whites(label: np.ndarray, px: np.ndarray) -> None:
         )
         region = regions[box] == k
         ring = ndimage.binary_dilation(region, iterations=2) & ~region
-        if (label[box][ring] == black).mean() < EYE_RING:
+        if his[box][ring].mean() < EYE_RING:
             continue
         if np.median(warmth[box][region]) >= EYE_WARM:
             continue
@@ -592,9 +615,7 @@ def eye_whites_in_black(label: np.ndarray) -> np.ndarray:
     blank, _ = ndimage.label(label == 0)
     edge = np.unique(np.concatenate([blank[0], blank[-1], blank[:, 0], blank[:, -1]]))
     page = np.isin(blank, edge[edge > 0])
-    r = HIS_BLACK // 2
-    y, x = np.ogrid[-r : r + 1, -r : r + 1]
-    his = ndimage.binary_opening(label == black, structure=x * x + y * y <= r * r)
+    his = his_black(label)
     regions, _ = ndimage.label(label == WHITE)
     h, w = label.shape
     for k, box in enumerate(ndimage.find_objects(regions), start=1):
@@ -636,53 +657,56 @@ def placement(label0: np.ndarray, still: Path) -> tuple[float, float, float]:
     return scale, tx, ty
 
 
-def extent(alpha: np.ndarray, sample: int) -> tuple[float, float, float, float]:
-    """Left, top, right and bottom of the largest opaque part, in artboard units."""
-    ys, xs = np.nonzero(largest(alpha > 127))
-    return (
-        xs.min() / sample,
-        ys.min() / sample,
-        (xs.max() + 1) / sample,
-        (ys.max() + 1) / sample,
-    )
-
-
-def refine(
-    silhouette: str, place: tuple[float, float, float], still: Path
+def register(
+    label0: np.ndarray, place: tuple[float, float, float], still: Path
 ) -> tuple[float, float, float]:
-    """Corrects the placement so the traced drawing 00 sits on the still to a fraction of a pixel.
+    """Moves and sizes drawing 00 from placement()'s whole-pixel estimate to where it overlaps its
+    still most: overlap(), the share every gate and timing.json report, searched over scale (about
+    the artboard's centre) and offset, each step halved down to REGISTER_STEPS' finest, a move
+    kept only where it raises the overlap, so the result never overlaps less than the estimate.
 
-    The first placement compares extents in whole take pixels (each about 0.6 artboard units, a
-    pixel or two on a phone), and tracing rounds tips like the head tuft a little. Drawing 00's
-    traced silhouette is rendered SUPERSAMPLE times larger than the stills, its extent measured
-    against the still's at the same resolution, and the scale, bottom line and centre corrected.
-    """
-    size = ARTBOARD * SUPERSAMPLE
-    alpha = np.asarray(
-        Image.open(still)
-        .convert("RGBA")
-        .getchannel("A")
-        .resize((size, size), Image.Resampling.BILINEAR)
-    )
-    sl, st, sr, sb = extent(alpha, SUPERSAMPLE)
-    for _ in range(2):
-        drawn = svg(silhouette, place).replace(
-            f'viewBox="0 0 {ARTBOARD} {ARTBOARD}"',
-            f'viewBox="0 0 {ARTBOARD} {ARTBOARD}" width="{size}" height="{size}"',
+    It replaced matching the two silhouettes' extents, which one pixel decided: after 36e12988
+    stopped tracing vermilion's half-covered edge as yellow, idle-preen's leftmost column of
+    drawing 00 went to paper, its left extent moved a pixel, and every drawing of the loop moved
+    0.43 units (overlap 0.9886 to 0.9832); matching heights shrank landings 0.5% to fit one tuft
+    tip a take drew 1.75 units higher than its still."""
+    mask = Image.fromarray(((label0 > 0) * 255).astype(np.uint8))
+    target = np.asarray(Image.open(still).convert("RGBA"))[..., 3] > 127
+    centre = ARTBOARD / 2
+
+    def iou(p: tuple[float, float, float]) -> float:
+        scale, tx, ty = p
+        moved = mask.transform(
+            (ARTBOARD, ARTBOARD),
+            Image.Transform.AFFINE,
+            (1 / scale, 0, -tx / scale, 0, 1 / scale, -ty / scale),
+            Image.Resampling.BILINEAR,
         )
-        png = bytes(resvg_py.svg_to_bytes(svg_string=drawn))
-        traced = np.asarray(Image.open(io.BytesIO(png)).convert("RGBA"))[..., 3]
-        tl, tt, tr, tb = extent(traced, SUPERSAMPLE)
-        scale, tx, ty = place
-        k = (sb - st) / (tb - tt)
-        # A traced point sits at p = scale * u + t; scaling by k about the origin of take pixels
-        # gives k * (p - t) + t', and t' puts the bottom and the centre back on the still's.
-        place = (
-            scale * k,
-            (sl + sr) / 2 - k * ((tl + tr) / 2 - tx),
-            sb - k * (tb - ty),
-        )
-    return place
+        m = np.asarray(moved) > 127
+        return float((m & target).sum() / (m | target).sum())
+
+    def sized(p: tuple[float, float, float], k: float) -> tuple[float, float, float]:
+        scale, tx, ty = p
+        return (scale * k, centre + k * (tx - centre), centre + k * (ty - centre))
+
+    best, score = place, iou(place)
+    for shift, grow in REGISTER_STEPS:
+        moved = True
+        while moved:
+            moved = False
+            scale, tx, ty = best
+            for candidate in (
+                (scale, tx + shift, ty),
+                (scale, tx - shift, ty),
+                (scale, tx, ty + shift),
+                (scale, tx, ty - shift),
+                sized(best, 1 + grow),
+                sized(best, 1 - grow),
+            ):
+                s = iou(candidate)
+                if s > score:
+                    best, score, moved = candidate, s, True
+    return best
 
 
 def overlap(
@@ -855,7 +879,7 @@ def trace(
     labels = [
         finish(label, rgb, paper) for (label, _), rgb, paper in zip(found, rgbs, papers)
     ]
-    place = refine(trace_mask(labels[0] > 0, INKS["black"]), place, still)
+    place = register(labels[0], place, still)
     # A drawing the take comes back to (a tremble between two drawings, a return to a held pose)
     # is the same drawing: it reuses the earlier one's shapes instead of being traced again.
     shown = []

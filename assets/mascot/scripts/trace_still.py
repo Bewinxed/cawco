@@ -14,9 +14,8 @@ made the way every other one is.
 The picture is laid on white paper and drawn at the takes' own scale first, TAKE_SCALE px a unit
 (a take's 1024 px frame shows 640 units). The tracer's spline fit works in pixels, so it rounds a
 tip such as his head tuft by scale: traced at 2 px a unit the tuft came out 1.75 units lower than
-in a take of the same drawing, and trace.py's refine(), which sizes a take by its extent against
-the still, drew every landing 0.5% small (a ring of black missing all round, and a failed landing
-gate at 97.7% of pixels). At the takes' scale the two are traced alike.
+in a take of the same drawing, and a clip's landing measured against it lost pixels all round
+its outline. At the takes' scale the two are traced alike.
 
 usage (from assets/mascot/scripts): uv run trace_still.py <status>
 """

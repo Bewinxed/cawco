@@ -81,7 +81,7 @@ enclosed = [e for _, e in found]
 papers = T.see_through(enclosed, [label for label, _ in found], T.paper_of(still, place, shape), None)
 first = T.finish(found[0][0], rgbs[0], papers[0])
 held = T.finish(found[-1][0], rgbs[-1], papers[-1])
-place = T.refine(T.trace_mask(first > 0, T.INKS["black"]), place, still)
+place = T.register(first, place, still)
 still_overlap = round(T.overlap(first, still, place), 4)
 
 # Placed by its own ink: his body centred across the box, then moved only as far as the ink must

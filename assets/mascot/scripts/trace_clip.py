@@ -35,6 +35,7 @@ usage (from assets/mascot/scripts):
 """
 import io
 import json
+import re
 import shutil
 import sys
 import tempfile
@@ -51,8 +52,11 @@ import trace as T  # noqa: E402
 LOOPS_REPO = T.LOOPS
 CLIPS = LOOPS_REPO.parent / "clips"
 SIZE = 512
-STILL_HOLD = 0.95  # share inked the same as a still, at or above which a drawing holds it
-LANDING = 0.98  # share of a landing's inked pixels that carry its still's ink
+# Share of a landing's (or an opening's) inked pixels that carry its still's ink: a drawing that
+# alike is the still, folded into its two-frame snap, and the landing gate. One threshold for
+# both: folded at 0.95 while gated at 0.98, the bar's smile folded the drawing its head rises back
+# out of its dip on (0.951) into the landing, and the gate then failed on it.
+LANDING = 0.98
 # The most ink an enter's first drawing may carry, as a share of its still's: an empty page, or
 # him far off (a take that has him in its first frame at a ninth of his size measures 0.013).
 OPENS_SMALL = 0.05
@@ -60,10 +64,6 @@ INK_SHOWS = 300  # px of one ink at the stills' scale from which a drawing visib
 HEAD_FORMED = 0.9  # share of his landed black from which a drawing reads as him at size
 SPECK = 200  # opaque px at 512: a drawing with less is dust traced off the take's paper
 INKS = np.array([[20, 20, 20], [230, 80, 50], [244, 240, 230], [245, 200, 40]])
-WHITE = np.array([244, 240, 230])
-# Summed |RGB| under which a rendered pixel is a status's own ink's fill, not an eye white (the
-# cream fill sits 20 from the eye white's; a fill renders exactly, its soft edge is see-through).
-OWN_INK = 8
 
 # The artboard the apps draw, in the stills' units: 592 square, the still box 43 right, 40 down.
 ARTBOARD = (-43.0, -40.0, 592.0)
@@ -106,16 +106,21 @@ def out_of_order(folder: Path, own: list[str]) -> dict[str, list[int]]:
     Either is enough: a bird far off has his eyes long before his size, a head that swells from
     a drop has its size before its eyes. `ownBy` says which of the two let each drawing that
     shows his own ink through. Pixels are counted over the take's whole frame at the stills'
-    scale."""
+    scale, each ink by its own paths (black, the base, is his silhouette): read by colour off the
+    picture, the anti-aliased edge between the note and his black counted 406 px of yellow on the
+    compacted Caw, who has none."""
     timing = json.loads((folder / "timing.json").read_text())
     names = ["black", "vermilion", "white", "yellow", *own]
-    colours = np.array([T.INKS.get(n, T.EXTRA_INKS.get(n)) for n in names])
+    fills = {n: "#{:02x}{:02x}{:02x}".format(*T.INKS.get(n, T.EXTRA_INKS.get(n))) for n in names}
 
     def counts(drawing: int) -> dict[str, int]:
         text = (folder / f"body-{drawing:02d}.svg").read_text().replace('viewBox="0 0 512 512"', 'viewBox="-48 -32 608 608"')
-        p = np.asarray(Image.open(io.BytesIO(bytes(resvg_py.svg_to_bytes(svg_string=text, width=608, height=608)))).convert("RGBA")).astype(int)
-        nearest = np.abs(p[..., None, :3] - colours).sum(-1).argmin(-1)
-        return {n: int(((p[..., 3] > 127) & (nearest == k)).sum()) for k, n in enumerate(names)}
+        out = {}
+        for n, fill in fills.items():
+            only = re.sub(rf'<path [^>]*fill="(?!{fill})[^"]*"[^>]*/>', "", text)
+            png = resvg_py.svg_to_bytes(svg_string=only, width=608, height=608)
+            out[n] = int((np.asarray(Image.open(io.BytesIO(bytes(png))).convert("RGBA"))[..., 3] > 127).sum())
+        return out
 
     per = [counts(slot["drawing"]) for slot in timing["drawings"]]
     carried = {n for n, px in per[-1].items() if px >= INK_SHOWS}
@@ -129,6 +134,12 @@ def out_of_order(folder: Path, own: list[str]) -> dict[str, list[int]]:
         "ownEarly": [k for k, how in by.items() if how is None],
         "ownBy": {str(k): how for k, how in by.items() if how},
     }
+
+
+def rest_of(rests: dict, still: str) -> dict:
+    """A still's entry in rests.json: keyed by its file's name (`head-beat`), or by its status's
+    (`needs_you`)."""
+    return rests.get(still, rests.get(still.replace("-", "_"), {}))
 
 
 if sys.argv[1:2] in (["--safe"], ["--inks"]):
@@ -146,7 +157,7 @@ if sys.argv[1:2] in (["--safe"], ["--inks"]):
             broken |= bool(unsafe)
             print(f"{clip}: {slots} drawings, " + (f"outside the safe line: {unsafe}" if unsafe else "all inside the safe line"))
         else:
-            own = own_of.get(clip.removesuffix("-enter").replace("-", "_"), {}).get("inks", [])
+            own = rest_of(own_of, clip.removesuffix("-enter")).get("inks", [])
             order = out_of_order(folder / clip, own)
             bad = bool(order["foreign"] or order["ownEarly"])
             broken |= bad
@@ -158,11 +169,18 @@ if sys.argv[1:2] in (["--safe"], ["--inks"]):
             )
     sys.exit(1 if broken else 0)
 
-name, take = sys.argv[1:3]
+args = sys.argv[1:]
+opts = {}
+for flag in ("--opens", "--closed-eyes"):
+    if flag in args:
+        at = args.index(flag)
+        opts[flag] = args[at + 1]
+        del args[at : at + 2]
+name, take = args[:2]
 if not name.endswith("-enter"):
-    sys.exit(f"{name}: a clip is a status's enter, <status>-enter")
-if sys.argv[3:]:
-    CLIPS = Path(sys.argv[3]).resolve()
+    sys.exit(f"{name}: a clip is a file's enter, <file>-enter")
+if args[2:]:
+    CLIPS = Path(args[2]).resolve()
 variants = json.loads((LOOPS_REPO / "takes.json").read_text())
 rests = json.loads((LOOPS_REPO / "rests.json").read_text())
 # Each status's still: the loop it is drawn in and the drawing's number there.
@@ -175,8 +193,11 @@ for status, rest in rests.items():
 for status, v in first.items():
     v["still"] = status
 end = first[name.removesuffix("-enter")]
+# The drawing a clip that opens on a still opens on (--opens <file or status>), else None: an
+# enter opens on an empty page.
+opens = first[opts["--opens"]] if "--opens" in opts else None
 # A status's own inks (rests.json "inks": the compacted Caw's cream note) are traced in its enter.
-own_inks = sorted(rests.get(end["still"].replace("-", "_"), {}).get("inks", []))
+own_inks = sorted(rest_of(rests, end["still"]).get("inks", []))
 T.use_inks(own_inks)
 out = CLIPS / name
 if out.exists():
@@ -244,14 +265,6 @@ def body_without_white_marks(label: np.ndarray) -> str:
 
 T.trace_body = body_without_white_marks
 original, grouped, decided = T.frames_of, T.drawings_of, T.decide
-if end["loop"] not in {x["loop"] for vs in variants.values() for x in vs}:
-    # trace.py's refine() sizes a take by the extent of its traced outline against the still's.
-    # That holds when the still was traced from a take too: the tracer rounds both the same. A
-    # still traced from its picture (trace_still.py: the compacted Caw) keeps its tips where the
-    # picture has them, while a take's tuft tip came out 1.75 units higher, and refine() shrank
-    # the whole landing by 0.5% to fit it (scale 0.6213 where the frame's is 0.625): a ring of
-    # black missing all round. So such an enter keeps placement()'s whole-pixel registration.
-    T.refine = lambda silhouette, place, still: place
 
 
 # trace.py tells an eye white from a see-through gap by where the stills have paper. A bird
@@ -267,7 +280,9 @@ def no_evidence(enclosed: list, seed_paper: np.ndarray) -> list:
 
 
 def reversed_pairs(state: str, take_id: str) -> np.ndarray:
-    f = original(state, take_id)
+    # A clip shot as two windows (`tkA+tkB`: one ending on the drawing the next opens on) is
+    # their frames in order.
+    f = np.concatenate([original(state, t) for t in take_id.split("+")])
     n, h, w, c = f.shape
     return f.reshape(n // 2, 2, h, w, c)[::-1].reshape(n, h, w, c).copy()
 
@@ -284,7 +299,81 @@ def last_pair_alone(frames: np.ndarray) -> list:
     return groups
 
 
-T.decide, T.frames_of, T.drawings_of = no_evidence, reversed_pairs, last_pair_alone
+# A clip that opens on a still never leaves his place: like a loop, its eye whites are told from
+# both ends' stills (traced from its landing back to its opening). Without them, his ^^ eyes, thin
+# arcs, read as see-through by their shape alone and were cut out of every drawing of the bar's
+# smile.
+T.frames_of, T.drawings_of = reversed_pairs, last_pair_alone
+if opens is None:
+    T.decide = no_evidence
+
+# A blink the take drew as a blank head (--closed-eyes <file>). His closed eye is drawn: white
+# arcs in his black, as idle-preen's closed eyes and the bar's smile draw it. beat-b2's blink was
+# drawn as nothing at all: in the take, frames 4 and 5 hold 100 and 176 light pixels inside his
+# black, the brightest 51 and 58, under LID_LINE's 90 and no brighter than his sheen. A drawing
+# whose head is formed (its black HEAD_FORMED of the landing's or more) with under BLANK_EYES of
+# the landing's eye white takes the closed eyes of the named file's drawing: its eye white, laid
+# into his black where it falls, the drawing moved onto this one's silhouette first (the head
+# dips and stretches through a beat).
+BLANK_EYES = 0.05
+blinks = []
+if "--closed-eyes" in opts:
+    from scipy.signal import fftconvolve
+
+    closed = first[opts["--closed-eyes"]]
+    closed_svg = (LOOPS_REPO / closed["loop"] / f"body-{closed['drawing']:02d}.svg").read_text()
+    placed = {}
+    landing_inks = {}
+    real_placement, real_finish = T.placement, T.finish
+    BLACK_INK = list(T.INKS).index("black") + 1
+
+    def placement_kept(label0: np.ndarray, still: Path) -> tuple[float, float, float]:
+        placed["at"] = real_placement(label0, still)
+        return placed["at"]
+
+    def closed_eyes(shape: tuple[int, int]) -> tuple[np.ndarray, np.ndarray]:
+        """The closed-eye drawing in take pixels at drawing 00's placement: its silhouette and its
+        eye white."""
+        scale, tx, ty = placed["at"]
+        h, w = shape
+        text = closed_svg.replace(
+            'viewBox="0 0 512 512"', f'viewBox="{tx} {ty} {w * scale} {h * scale}" preserveAspectRatio="none"'
+        )
+        p = np.asarray(
+            Image.open(io.BytesIO(bytes(resvg_py.svg_to_bytes(svg_string=text, width=w, height=h)))).convert("RGBA")
+        ).astype(int)
+        body = p[..., 3] > 127
+        # Eye white by its own fill: the cream note's sits 12 from it, so both are tested.
+        white = np.abs(p[..., :3] - np.array(T.INKS["white"])).sum(-1)
+        cream = np.abs(p[..., :3] - np.array(T.EXTRA_INKS["cream"])).sum(-1)
+        return body, body & (white < 10) & (cream >= 10)
+
+    def finish_with_closed_eyes(label: np.ndarray, rgb: np.ndarray, paper: np.ndarray) -> np.ndarray:
+        done = real_finish(label, rgb, paper)
+        black, white = int((done == BLACK_INK).sum()), int((done == WHITE_INK).sum())
+        if not landing_inks:  # drawing 00: the landing, traced first
+            landing_inks.update(black=black, white=white)
+            return done
+        if black < HEAD_FORMED * landing_inks["black"] or white >= BLANK_EYES * landing_inks["white"]:
+            return done
+        body, eyes = closed_eyes(done.shape)
+        # The shift that best lays the closed-eye drawing's silhouette on this one's, found at a
+        # quarter of the size and refined at full size.
+        q = 4
+        a, b = (done > 0)[::q, ::q].astype(float), body[::q, ::q].astype(float)
+        c = fftconvolve(a, b[::-1, ::-1], mode="same")
+        cy, cx = np.unravel_index(np.argmax(c), c.shape)
+        dy, dx = (cy - a.shape[0] // 2) * q, (cx - a.shape[1] // 2) * q
+        best = max(
+            ((y, x) for y in range(dy - q, dy + q + 1) for x in range(dx - q, dx + q + 1)),
+            key=lambda s: ((done > 0) & np.roll(body, s, (0, 1))).sum(),
+        )
+        lids = np.roll(eyes, best, (0, 1)) & (done == BLACK_INK)
+        done[lids] = WHITE_INK
+        blinks.append({"shift": [int(best[1]), int(best[0])], "eyePx": int(lids.sum())})
+        return done
+
+    T.placement, T.finish = placement_kept, finish_with_closed_eyes
 T.LOOPS = CLIPS
 # The still trace.py registers the landing onto, rendered from its drawing.
 stills = Path(tempfile.mkdtemp())
@@ -292,10 +381,21 @@ body00 = LOOPS_REPO / end["loop"] / f"body-{end['drawing']:02d}.svg"
 (stills / f"light-{end['still']}.png").write_bytes(
     bytes(resvg_py.svg_to_bytes(svg_string=body00.read_text(), width=SIZE, height=SIZE))
 )
+if opens is not None:
+    (stills / f"light-{opens['still']}.png").write_bytes(
+        bytes(
+            resvg_py.svg_to_bytes(
+                svg_string=(LOOPS_REPO / opens["loop"] / f"body-{opens['drawing']:02d}.svg").read_text(),
+                width=SIZE,
+                height=SIZE,
+            )
+        )
+    )
 T.STILLS = stills
-timing = T.trace(name, take, end["still"], None)
+timing = T.trace(name, take, end["still"], opens["still"] if opens else None)
+blinks_closed = list(blinks)
 # Eyes, on the fresh trace (trace.py's own timing and drawings): eye whites shown see-through.
-eyes_cut = T.cut_eyes(name, take, end["still"], None)
+eyes_cut = T.cut_eyes(name, take, end["still"], opens["still"] if opens else None)
 frames = timing["frames"]
 slots = [{**s, "start": frames - s["start"] - s["length"]} for s in reversed(timing["drawings"])]
 
@@ -322,19 +422,19 @@ report = {
 }
 
 
-def measure(d: int) -> dict:
-    """How drawing `d` sits against the still."""
-    target_mask = target[..., 3] > 127
+def measure(d: int, against: np.ndarray = target, still: dict = end) -> dict:
+    """How drawing `d` sits against a still: the landing's, or the opening's."""
+    target_mask = against[..., 3] > 127
     dmax, d99 = displacement(masks[d], target_mask)
     # Where it differs: the largest regions inked differently from the target (size, centre).
-    differ, k = ndimage.label(ink_classes(pictures[d]) != ink_classes(target))
+    differ, k = ndimage.label(ink_classes(pictures[d]) != ink_classes(against))
     sizes = ndimage.sum(np.ones_like(differ), differ, range(1, k + 1))
     top = [int(i) + 1 for i in np.argsort(sizes)[::-1][:3]]
     centres = ndimage.center_of_mass(np.ones_like(differ), differ, top)
     return {
-        "against": f"{end['loop']}/body-{end['drawing']:02d}",
+        "against": f"{still['loop']}/body-{still['drawing']:02d}",
         "iou": round(iou(masks[d], target_mask), 4),
-        "sameInks": round(same_inks(pictures[d], target), 4),
+        "sameInks": round(same_inks(pictures[d], against), 4),
         "outlineMaxPx": round(dmax, 2),
         "outlineP99Px": round(d99, 2),
         "largestDiffs": [{"px": int(sizes[i - 1]), "at": [round(c[1]), round(c[0])]} for i, c in zip(top, centres)],
@@ -351,25 +451,43 @@ def retime(held: list[dict]) -> list[dict]:
 
 # The landing: the trailing run inked as the still, one two-frame drawing.
 tail = len(slots) - 1
-while tail - 1 > 0 and like[slots[tail - 1]["drawing"]] >= STILL_HOLD:
+while tail - 1 > 0 and like[slots[tail - 1]["drawing"]] >= LANDING:
     tail -= 1
-# The opening: the leading run of empty pages, one two-frame drawing.
-lead = 0
-while lead + 1 < tail and ink_px[slots[lead + 1]["drawing"]] == 0:
-    lead += 1
-report["trimmedLeadingFrames"] = slots[lead]["start"]
-report["trimmedTrailingFrames"] = frames - (slots[tail]["start"] + 2)
-report["last"] = measure(slots[tail]["drawing"])
-report["firstInkPx"] = ink_px[slots[lead]["drawing"]]
 snap_id = max(pictures) + 1
 shutil.copy(body00, out / f"body-{snap_id:02d}.svg")
+report["trimmedTrailingFrames"] = frames - (slots[tail]["start"] + 2)
+report["last"] = measure(slots[tail]["drawing"])
+gates = {"landing": report["last"]["sameInks"] >= LANDING}
+if opens is None:
+    # An enter's opening: the leading run of empty pages, one two-frame drawing.
+    lead = 0
+    while lead + 1 < tail and ink_px[slots[lead + 1]["drawing"]] == 0:
+        lead += 1
+    report["firstInkPx"] = ink_px[slots[lead]["drawing"]]
+    gates["opensSmall"] = report["firstInkPx"] <= OPENS_SMALL * int((target[..., 3] > 127).sum())
+    opening = slots[lead]["drawing"]
+else:
+    # A clip that opens on a still: its leading run inked as that still, one two-frame drawing,
+    # measured against the still's drawing and replaced by it, as the landing is.
+    open_svg = LOOPS_REPO / opens["loop"] / f"body-{opens['drawing']:02d}.svg"
+    open_target = render(open_svg)
+    like_open = {d: same_inks(p, open_target) for d, p in pictures.items()}
+    lead = 0
+    while lead + 1 < tail and like_open[slots[lead + 1]["drawing"]] >= LANDING:
+        lead += 1
+    report["first"] = measure(slots[0]["drawing"], open_target, opens)
+    gates["opens"] = report["first"]["sameInks"] >= LANDING
+    if open_svg == body00:
+        opening = snap_id
+    else:
+        opening = snap_id + 1
+        shutil.copy(open_svg, out / f"body-{opening:02d}.svg")
+report["trimmedLeadingFrames"] = slots[lead]["start"]
+if blinks_closed:
+    report["blinksClosed"] = blinks_closed
 slots = retime(
-    [{**slots[lead], "length": 2}, *slots[lead + 1 : tail], {**slots[tail], "drawing": snap_id, "length": 2}]
+    [{**slots[lead], "drawing": opening, "length": 2}, *slots[lead + 1 : tail], {**slots[tail], "drawing": snap_id, "length": 2}]
 )
-gates = {
-    "landing": report["last"]["sameInks"] >= LANDING,
-    "opensSmall": report["firstInkPx"] <= OPENS_SMALL * int((target[..., 3] > 127).sum()),
-}
 
 # Drawings no slot shows any more go.
 used = {s["drawing"] for s in slots}
@@ -382,18 +500,24 @@ twos = all(s["start"] % 2 == 0 and s["length"] % 2 == 0 and s["length"] >= 2 for
 # few anti-aliased pixels aside.
 FULL = (-48, -32, 608)
 white_marks = {}
+EYE_FILL = "#{:02x}{:02x}{:02x}".format(*T.INKS["white"])
+
+
+def alpha_of(text: str) -> np.ndarray:
+    png = resvg_py.svg_to_bytes(svg_string=text, width=FULL[2], height=FULL[2])
+    return np.asarray(Image.open(io.BytesIO(bytes(png))).convert("RGBA"))[..., 3] > 127
+
+
 for d in sorted(used):
     text = (out / f"body-{d:02d}.svg").read_text().replace(
         'viewBox="0 0 512 512"', f'viewBox="{FULL[0]} {FULL[1]} {FULL[2]} {FULL[2]}"'
     )
-    p = np.asarray(
-        Image.open(io.BytesIO(bytes(resvg_py.svg_to_bytes(svg_string=text, width=FULL[2], height=FULL[2])))).convert("RGBA")
-    ).astype(int)
-    opaque = p[..., 3] > 127
-    white = opaque & (np.abs(p[..., :3] - WHITE).sum(-1) < 60)
-    # A status's own light ink (the note) is meant to touch the page: only eye white is a mark.
-    for ink in own_inks:
-        white &= np.abs(p[..., :3] - np.array(T.INKS[ink])).sum(-1) >= OWN_INK
+    opaque = alpha_of(text)
+    # Eye white is the eye white's own paths, not a colour read off the picture: a status's own
+    # light ink (the note) is meant to touch the page, and its anti-aliased edge renders within a
+    # few levels of the eye white's (head-beat's note: 5 px read as eye white, no eye-white path
+    # within 3 px).
+    white = alpha_of(re.sub(rf'<path [^>]*fill="(?!{EYE_FILL})[^"]*"[^>]*/>', "", text))
     regions, n = ndimage.label(white)
     touching = [
         int((regions == r).sum())
@@ -408,13 +532,22 @@ for d in sorted(used):
 T.LOOPS = LOOPS_REPO
 T.frames_of, T.drawings_of, T.decide = original, grouped, decided
 takes = {v["loop"]: v["take"] for vs in variants.values() for v in vs}
-halos = {f"{d:02d}": timing["halo"][f"{d:02d}"] for d in sorted(used) if d != snap_id}
-# A rest traced from its picture (trace_still.py) has no take: its halo was measured there.
-halos[f"{snap_id:02d}"] = (
-    T.measure_halo(end["loop"], takes[end["loop"]])[f"{end['drawing']:02d}"]
-    if end["loop"] in takes
-    else json.loads((LOOPS_REPO / end["loop"] / "timing.json").read_text())["halo"][f"{end['drawing']:02d}"]
-)
+# The stills' drawings a clip snaps to are copies, not traced here.
+copies = {snap_id} | ({opening} if opens is not None else set())
+halos = {f"{d:02d}": timing["halo"][f"{d:02d}"] for d in sorted(used) if d not in copies}
+
+
+def still_halo(still: dict) -> int:
+    """A still's drawing's halo, measured where it was traced. A rest traced from its picture
+    (trace_still.py) has no take: its halo was measured there."""
+    if still["loop"] in takes:
+        return T.measure_halo(still["loop"], takes[still["loop"]])[f"{still['drawing']:02d}"]
+    return json.loads((LOOPS_REPO / still["loop"] / "timing.json").read_text())["halo"][f"{still['drawing']:02d}"]
+
+
+halos[f"{snap_id:02d}"] = still_halo(end)
+if opening != snap_id and opens is not None:
+    halos[f"{opening:02d}"] = still_halo(opens)
 eyes = {k: v for k, v in eyes_cut.items() if int(k) in used and v >= T.CUT_EYE}
 
 report.update(

@@ -283,6 +283,45 @@ window.run = async (b64, job) => {
     m.delete();
     a.delete();
   }
+  // His rim on a fresh file's first frame in dark: whole, as on his settled still, never fading
+  // in at load (the bar plays a clip over a face drawn with it). The rim is what dark draws and
+  // light does not; its mean alpha on the first frame against the still's, held a second.
+  {
+    const fresh = (dark, seconds) => {
+      const a = file.artboardByName("Caw");
+      const m = new rive.StateMachineInstance(a.stateMachineByName("CawStates"), a);
+      const v = file.defaultArtboardViewModel(a).instanceByName("Default");
+      m.bindViewModelInstance(v);
+      v.boolean("dark").value = dark;
+      v.boolean("reducedMotion").value = seconds > 0;
+      m.advanceAndApply(0);
+      for (let t = 0; t < seconds - 1e-9; t += 1 / 60) m.advanceAndApply(1 / 60);
+      renderer.clear();
+      renderer.save();
+      renderer.align(rive.Fit.contain, rive.Alignment.center, { minX: 0, minY: 0, maxX: job.size, maxY: job.size }, a.bounds);
+      a.draw(renderer);
+      renderer.restore();
+      rive.resolveAnimationFrame();
+      const data = ctx.getImageData(0, 0, job.size, job.size).data;
+      m.delete();
+      a.delete();
+      return data;
+    };
+    const rim = (dark, light) => {
+      let count = 0;
+      let sum = 0;
+      let ink = 0;
+      for (let i = 3; i < dark.length; i += 4) {
+        ink += light[i] > 127 ? 1 : 0;
+        if (dark[i] > light[i] + 10) {
+          count += 1;
+          sum += dark[i] - light[i];
+        }
+      }
+      return { ink, count, mean: count ? sum / count : 0 };
+    };
+    report.rimAtLoad = { first: rim(fresh(true, 0), fresh(false, 0)), settled: rim(fresh(true, 1), fresh(false, 1)) };
+  }
   // \`pixel\` sizes the rim: his still, held, on a fresh state machine per value, in dark and in
   // light. The rim's reach in canvas px: how far its pixels (half covered or more in dark, less
   // than half in light) lie from his body's (half covered or more in light), the 99th
@@ -477,6 +516,7 @@ const totals = {
   plain: 0,
   there: 0,
   rim: 0,
+  rimAtLoad: 0,
 };
 const failures = [];
 for (const status of FILES) {
@@ -717,6 +757,17 @@ for (const status of FILES) {
     fail(f);
   }
   totals.rim += rimFaults.length === 0 ? 1 : 0;
+  // Loaded in dark, his first frame carries his rim whole: 90% of the settled still's mean rim
+  // alpha or more (a first frame with nothing of him drawn, an enter from an empty page, has
+  // nothing to ring).
+  const { first: loadRim, settled: stillRim } = now.rimAtLoad;
+  const loadsWhole = loadRim.ink === 0 || loadRim.mean >= 0.9 * stillRim.mean;
+  if (!loadsWhole) {
+    fail(
+      `loaded in dark his rim is at ${loadRim.mean.toFixed(0)} of ${stillRim.mean.toFixed(0)} alpha: it fades in`
+    );
+  }
+  totals.rimAtLoad += loadsWhole ? 1 : 0;
   const rimLine = `rim ${sized.map((r) => `${r.width.toFixed(1)}/${(r.pixel * CANVAS_PER_ARTBOARD).toFixed(1)}`).join(", ")} px`;
   const steady = [...now.timings.slice(1)].sort((a, b) => a - b);
   const median = steady[Math.floor(steady.length / 2)];
@@ -741,6 +792,7 @@ console.log(`reducedMotion holds still: ${totals.held}/${totals.files}`);
 console.log(`drawn enters play and land: ${totals.enter}/${totals.drawn}`);
 console.log(`no drawn enter, simply there: ${totals.there}/${totals.plain}`);
 console.log(`pixel sizes the dark rim: ${totals.rim}/${totals.files}`);
+console.log(`rim whole at load: ${totals.rimAtLoad}/${totals.files}`);
 console.log(`files proven: ${totals.ok}/${totals.files}`);
 if (failures.length === 0 && totals.ok === FILES.length) {
   console.log("Caw view model drives the state machine in every file");
