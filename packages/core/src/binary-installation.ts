@@ -118,11 +118,18 @@ export interface TrialMarker {
 export const trialPath = (): string => join(binaryRoot(), "trial.json");
 export const readTrial = (): Promise<TrialMarker | undefined> =>
   readJson<TrialMarker>(trialPath());
-/** The services an update restarts, and its rollback restarts again: every one that runs from `current`. */
+/**
+ * The services an update restarts, and its rollback restarts again: every one
+ * that runs from `current`, one at a time in this order. The agent first: it
+ * writes every held workspace's boundary hook again as it starts
+ * (boundary.ts `rearmHooks`), and until it does, a CLI it holds runs the hook
+ * an earlier build wrote against the build `current` now names. The agent
+ * meets the hub it had for a moment, then reconnects when the hub restarts.
+ */
 export const trialUnits = (
   role: BinaryInstallation["role"]
 ): ("hub" | "dashboard" | "agent")[] =>
-  role === "hub" ? ["hub", "dashboard", "agent"] : ["agent"];
+  role === "hub" ? ["agent", "hub", "dashboard"] : ["agent"];
 
 /**
  * The session keeper's pin: a relative link `<root>/keeper` -> `versions/<v>`,
