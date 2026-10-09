@@ -111,14 +111,22 @@ const homeToolchains = (home: string): string[] =>
  * `/run/user`): srt's seccomp layer, which would refuse every unix socket,
  * cannot start under Ubuntu's `bwrap-userns-restrict` AppArmor profile (srt
  * #429), so hiding them by path is the control (artifacts/srt-eval/REPORT.md
- * §5b). The journal holds what services print, a crashed hub's tokens
- * among it.
+ * §5b). The logs hold what services print, a crashed hub's tokens among it:
+ * the journal, and rsyslog's copies of it in `/var/log` (`syslog`,
+ * `auth.log`), which the `adm` group reads. Crash reports and core dumps hold
+ * a crashed process's memory, a browser's cookies among it. `journalctl` and
+ * `coredumpctl` do not run: with nothing to read they would still report
+ * success, as if a workspace could read the journal and found it empty.
  */
 const LINUX_HOST_PRIVATE = [
   "/run",
   "/var/run",
-  "/var/log/journal",
-  "/run/log/journal",
+  "/var/log",
+  "/var/crash",
+  "/var/lib/apport",
+  "/var/lib/systemd/coredump",
+  "/usr/bin/journalctl",
+  "/usr/bin/coredumpctl",
 ];
 
 /** The workspace's policy on this machine as it stands now, every path a real path. */

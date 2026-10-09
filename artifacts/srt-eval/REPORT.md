@@ -122,7 +122,7 @@ S = supported as is, C = supported by config or by CawCo's executor, G = gap.
 |---|---|---|
 | Write scope | S | `allowWrite` allow-only (`sandbox-config.ts:948`) |
 | Read scope (new: today reads everything) | C | `denyRead: [$HOME, /run, /var/run, /tmp]` + `allowRead` carve-outs (`sandbox-config.ts:938-947`) |
-| Scratch as `/tmp` | G→C | srt cannot mount a dir at another path. `TMPDIR` is the scratch dir via `CLAUDE_CODE_TMPDIR` (`sandbox-utils.ts:753`); the host's `/tmp` is denied. A tool that writes the literal `/tmp/x` fails (`/tmp` is read-only), as srt #294 reports |
+| Scratch as `/tmp` | G→C | srt cannot mount a dir at another path. `TMPDIR` is the scratch dir via `CLAUDE_CODE_TMPDIR` (`sandbox-utils.ts:753`); the host's `/tmp` is denied. A tool that writes the literal `/tmp/x` writes the sandbox's own empty tmpfs: nothing reaches the host, and it is gone when the sandbox restarts (srt #294; §9) |
 | Bus, sessiond, host daemon sockets | C (Linux), S (macOS) | Linux: path denies, because the seccomp `AF_UNIX` block cannot start under AppArmor (#429); abstract sockets are cut off by srt's netns. macOS: unix sockets refused unless listed (`macos-sandbox-utils.ts:1219-1249`) |
 | Sign-ins, `~/.cawco/accounts`, other repos, `~/.ssh` | C | all under the `$HOME` deny |
 | ssh includes copy | dropped | ssh needs keys and they are hidden; pushes are https with `GH_TOKEN` as today |

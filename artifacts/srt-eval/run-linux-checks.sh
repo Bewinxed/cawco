@@ -66,11 +66,15 @@ reads "read stray home secrets" ~/cawco.db ~/anbar-reviewer-credential.txt ~/fre
 reads "read ~/.ssh key" ~/.ssh/id_ed25519
 try "SSH_AUTH_SOCK set" test -n "${SSH_AUTH_SOCK:-}"
 reads "read the hub's database and env" ~/.local/share/cawco/cawco.db ~/.config/cawco/hub.env
-# journalctl exits 0 when it finds no journal ("No journal files were found"):
-# what counts is an entry.
+# The parent's literal check: journalctl must not run at all (with nothing to
+# read it would still exit 0), and no entry may come out either way.
+try "journalctl --user -u cawco-hub -n 1" journalctl --user -u cawco-hub -n 1
 try "journalctl --user prints an entry" test -n "$(journalctl --user -n 1 -q --no-pager -o cat 2>/dev/null)"
 try "journalctl (system) prints an entry" test -n "$(journalctl -n 1 -q --no-pager -o cat 2>/dev/null)"
 try "read /var/log/journal" test -n "$(ls -A /var/log/journal 2>/dev/null)"
+reads "read rsyslog's copies (adm group)" /var/log/syslog /var/log/auth.log /var/log/kern.log
+try "list crash reports and core dumps" test -n "$(ls -A /var/crash /var/lib/systemd/coredump /var/lib/apport/coredump 2>/dev/null)"
+try "coredumpctl list" coredumpctl list --no-pager
 if [ -n "$other_clone" ]; then
   reads "read another workspace's clone" "$other_clone/package.json" "$other_clone/.git/HEAD"
 fi

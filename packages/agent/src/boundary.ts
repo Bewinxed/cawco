@@ -121,17 +121,24 @@ interface Held extends Boundary {
    * none, is replaced once it is idle ({@link ensure}).
    */
   readonly form?: string;
-  /**
-   * Linux: every process of the sandbox when its runner was ready (its init,
-   * srt's shell and socat bridges, the runner): anything else in the
-   * sandbox's pid namespace is the workspace's work ({@link busy}).
-   */
-  readonly idle?: readonly number[];
-  /** Linux: the sandbox's init, whose mount table the executor checks before each command. */
-  readonly inner?: number;
   readonly path: string;
-  /** Linux: the outer bwrap; killing it ends the sandbox with everything in it. */
-  readonly sandbox?: number;
+}
+
+/**
+ * Linux: the sandbox the srt host runs now, as it writes `<state>/sandbox`
+ * each time it starts one (`boundary-host.ts`).
+ */
+interface Place {
+  /**
+   * Every process of the sandbox when its runner was ready (its init, srt's
+   * shell and socat bridges, the runner): anything else in the sandbox's pid
+   * namespace is the workspace's work ({@link busy}).
+   */
+  readonly idle: readonly number[];
+  /** The sandbox's init, whose mount table the executor checks before each command. */
+  readonly inner: number;
+  /** The outer bwrap; killing it ends the sandbox with everything in it. */
+  readonly outer: number;
 }
 
 const stateDir = workspaceStateDir;
@@ -152,9 +159,22 @@ const WHITESPACE = /\s+/;
 
 /** The line the runner prints once a command can be handed to it. */
 const READY = "cawco-boundary-ready";
-/** The line the srt host prints with the outer bwrap's pid (`boundary-host.ts`). */
-const SANDBOX_LINE = "cawco-boundary-sandbox";
 const STOP_TIMEOUT_MS = 5000;
+
+/** Linux: where the srt host names the sandbox it runs now ({@link Place}). */
+const placeOf = (id: string): string => join(stateDir(id), "sandbox");
+
+const readPlace = async (id: string): Promise<Place | undefined> => {
+  const text = await readFile(placeOf(id), "utf8").catch(() => "");
+  const [outer, inner, ...idle] = text
+    .trim()
+    .split(WHITESPACE)
+    .map((pid) => Number.parseInt(pid, 10));
+  if (!(outer && inner) || idle.some(Number.isNaN)) {
+    return;
+  }
+  return { outer, inner, idle };
+};
 
 export const shellQuote = (value: string): string =>
   `'${value.replaceAll("'", "'\\''")}'`;
@@ -874,10 +894,12 @@ const gateOf = (id: string): string => join(stateDir(id), "replacing");
 const RUNNER = `fifo=$1
 CAWCO_SANDBOX_ENV=$(export -p | grep -E '^declare -x (HTTPS?_PROXY|https?_proxy|ALL_PROXY|all_proxy|NO_PROXY|no_proxy|GIT_SSH_COMMAND|SANDBOX_RUNTIME|JAVA_TOOL_OPTIONS|GIT_CONFIG_[A-Z0-9_]+|DOCKER_HTTPS?_PROXY|CLOUDSDK_PROXY_[A-Z_]+|GRPC_PROXY|grpc_proxy|RSYNC_PROXY|FTP_PROXY|ftp_proxy|CLAUDE_CODE_HOST_[A-Z_]+)=')
 export CAWCO_SANDBOX_ENV
+sandbox=$(readlink /proc/self/ns/pid 2>/dev/null)
 echo ${READY}
 while :; do
   while IFS= read -r req; do
     (
+      printf '%s\\n' "$sandbox" > "$req/sandbox"
       /usr/bin/perl -e 'setpgrp(0, 0); exec @ARGV' /bin/bash --norc --noprofile -c '. "$1/env" >/dev/null 2>&1; eval "$CAWCO_SANDBOX_ENV"; cd "$(cat "$1/cwd")" || exit 1; eval "$(cat "$1/cmd")"; status=$?; pwd -P > "$1/cwd-out"; exit $status' cawco "$req" > "$req/out" 2> "$req/err" < /dev/null &
       echo $! > "$req/pid"
       wait $!
@@ -1017,7 +1039,7 @@ const planOf = async (ref: WorkspaceRef): Promise<Plan> => {
       .slice(0, 16),
     spec: {
       command: runtime,
-      args: [host, files.settings, files.runner, fifoOf(id), policy.clone],
+      args: [host, files.settings, files.runner, fifoOf(id), policy.clone, READY],
       // The host starts here, never in the clone: Bun reads bunfig.toml and
       // .env from where it starts (boundary-host.ts).
       cwd: stateDir(id),
@@ -1073,7 +1095,11 @@ const inSandbox = (seen: Seen[], inner: number | undefined): Seen[] => {
  * left — on Linux anything in the sandbox's pid namespace that was not there
  * when its runner was ready, on macOS anything carrying the runner's marker.
  */
-const busy = (seen: Seen[], id: string, held: Held): boolean => {
+const busy = async (
+  seen: Seen[],
+  id: string,
+  held: Held
+): Promise<boolean> => {
   const exec = join(stateDir(id), "exec");
   if (
     seen.some((one) => one.pid !== process.pid && one.command.includes(exec))
@@ -1081,8 +1107,9 @@ const busy = (seen: Seen[], id: string, held: Held): boolean => {
     return true;
   }
   if (process.platform === "linux") {
-    const idle = new Set(held.idle ?? []);
-    return inSandbox(seen, held.inner).some((one) => !idle.has(one.pid));
+    const place = await readPlace(id);
+    const idle = new Set(place?.idle);
+    return inSandbox(seen, place?.inner).some((one) => !idle.has(one.pid));
   }
   return seen.some(
     (one) =>
@@ -1107,7 +1134,7 @@ const replaceIfIdle = async (
   const gate = gateOf(ref.id);
   await writeFile(gate, String(process.pid));
   try {
-    if (busy(await snapshot(), ref.id, held)) {
+    if (await busy(await snapshot(), ref.id, held)) {
       return;
     }
     const replaced = await start(client, ref);
@@ -1147,7 +1174,7 @@ const lookAtStale = async (): Promise<void> => {
         forgetStale(ref.id);
         continue;
       }
-      if (!busy(seen, ref.id, held)) {
+      if (!(await busy(seen, ref.id, held))) {
         await ensureBoundary(ref);
       }
     } catch (error) {
@@ -1291,30 +1318,56 @@ const commandEnv = (id: string, scratch: string): string[] => [
 const stoppedLine = (id: string): string =>
   `cawco: workspace ${id}'s boundary is not running, so this command did not run. The workspace's next session starts it again.`;
 
+/** How long an executor waits for the srt host to start a sandbox again, in tenths of a second. */
+const RESTART_WAIT_TENTHS = WORKSPACE_BOUNDARY_START_TIMEOUT_MS / 100;
+
 /**
  * Linux: srt protects the clone's `.git/config` and `.git/hooks` with
  * read-only binds, and the kernel drops such a bind in every other mount
  * namespace when the host renames or unlinks what it covers (a host-side
- * `git config` does: lock, then rename). So before every command the
- * sandbox's own mount table must still hold both; when it does not, the whole
- * sandbox is killed, background processes too, and the command refused
- * (REPORT.md §5d). CawCo never writes a live clone's config: it writes
- * `branch.*` only before the boundary starts (`cloneInPlace`).
+ * `git config` does: lock, then rename). The srt host watches for that and
+ * starts the sandbox again (`boundary-host.ts`); this is the executor's own
+ * look before every command: the running sandbox's mount table must still
+ * hold both. When it does not, it asks the host to start a new sandbox
+ * (SIGUSR1), and runs the command through that one (REPORT.md §5d). CawCo
+ * never writes a live clone's config: it writes `branch.*` only before the
+ * boundary starts (`cloneInPlace`).
  */
-const mountCheck = (
-  id: string,
-  held: Pick<Held, "inner" | "path" | "sandbox">
-): string => {
+const mountCheck = (id: string, held: Pick<Held, "path" | "pid">): string => {
   const clone = held.path;
-  return `table=/proc/${held.inner ?? 0}/mountinfo
+  return `place=${shellQuote(placeOf(id))}
+read -r outer inner _ < "$place" 2>/dev/null
 for protected in ${shellQuote(join(clone, ".git", "config"))} ${shellQuote(join(clone, ".git", "hooks"))}; do
-  if ! awk -v p="$protected" '$5 == p { found = 1 } END { exit !found }' "$table" 2>/dev/null; then
-    kill -KILL ${held.sandbox ?? 0} 2>/dev/null
-    echo "cawco: $protected lost its protection in workspace ${id}'s boundary (it was changed on the host), so the boundary was stopped and this command did not run. The workspace's next session starts it again." >&2
+  if ! awk -v p="$protected" '$5 == p { found = 1 } END { exit !found }' "/proc/\${inner:-0}/mountinfo" 2>/dev/null; then
+    kill -USR1 ${held.pid} 2>/dev/null
+    for _ in $(seq ${RESTART_WAIT_TENTHS}); do
+      read -r now _ < "$place" 2>/dev/null
+      if [ -n "$now" ] && [ "$now" != "\${outer:-}" ]; then PATH=$caller_path exec "$0" "$@"; fi
+      kill -0 ${held.pid} 2>/dev/null || break
+      sleep 0.1
+    done
+    echo ${shellQuote(stoppedLine(id))} >&2
     exit 126
   fi
 done`;
 };
+
+/**
+ * Linux: which sandbox runs the command. The srt host may start a new one
+ * while a command waits to be taken ({@link mountCheck}), and the runner
+ * stamps each request with its sandbox's pid namespace as it takes it; the
+ * request is the current sandbox's when the current init is in that
+ * namespace, and was taken by one already gone when not (`gone`, which no
+ * `kill -0` finds). Until a sandbox takes it, the host's being alive is what
+ * counts: it runs one or exits.
+ */
+const followTaker = (id: string): string => `taker=
+take() {
+  local taken outer inner
+  read -r taken < "$req/sandbox"
+  read -r outer inner _ < ${shellQuote(placeOf(id))}
+  if [ "$(readlink "/proc/\${inner:-0}/ns/pid" 2>/dev/null)" = "$taken" ]; then taker=$outer; else taker=gone; fi
+}`;
 
 /**
  * The executor: hands a command, the caller's directory and environment to
@@ -1324,7 +1377,7 @@ done`;
  */
 const execScript = (
   id: string,
-  held: Pick<Held, "exec" | "inner" | "path" | "pid" | "sandbox" | "scratch">,
+  held: Pick<Held, "exec" | "path" | "pid" | "scratch">,
   gh: string | undefined
 ): string => {
   const linux = process.platform === "linux";
@@ -1368,7 +1421,17 @@ printf '%s\\n' "$req" > "$fifo"
 cat "$req/out" & out=$!
 cat "$req/err" >&2 & err=$!
 wait "$out" "$err"
-until [ -s "$req/status" ]; do sleep 0.01; done
+${linux ? followTaker(id) : `taker=${held.pid}`}
+# A sandbox stopped mid-command leaves no status: the command is cut off.
+until [ -s "$req/status" ]; do
+${linux ? "  [ -z \"$taker\" ] && [ -s \"$req/sandbox\" ] && take" : ""}
+  if ! kill -0 "\${taker:-${held.pid}}" 2>/dev/null; then
+    echo ${shellQuote(`cawco: workspace ${id}'s boundary stopped while this command ran, so it was cut off.`)} >&2
+    rm -rf "$req"
+    exit 137
+  fi
+  sleep 0.01
+done
 status=$(cat "$req/status")
 if [ -n "$cwd_out" ] && [ -s "$req/cwd-out" ]; then cp "$req/cwd-out" "$cwd_out"; fi
 rm -rf "$req"
@@ -1459,12 +1522,12 @@ const killMarked = async (id: string): Promise<void> => {
  */
 const stopBoundary = async (
   client: SessiondClient,
-  id: string,
-  held: Held | undefined
+  id: string
 ): Promise<void> => {
   const procId = procIdFor("boundary", id);
-  if (held?.sandbox && (await isBwrap(held.sandbox))) {
-    kill(held.sandbox, "SIGKILL");
+  const place = await readPlace(id);
+  if (place && (await isBwrap(place.outer))) {
+    kill(place.outer, "SIGKILL");
     const deadline = Date.now() + STOP_TIMEOUT_MS;
     while (
       // biome-ignore lint/performance/noAwaitInLoops: polls one process until its host has cleaned up, or the deadline passes
@@ -1482,13 +1545,6 @@ const stopBoundary = async (
   }
 };
 
-/** The outer bwrap's pid, from the line the srt host said before its runner was ready. */
-const sandboxPid = (said: string[]): number | undefined => {
-  const line = said.find((one) => one.startsWith(`${SANDBOX_LINE} `));
-  const pid = Number.parseInt(line?.split(WHITESPACE)[1] ?? "", 10);
-  return Number.isNaN(pid) ? undefined : pid;
-};
-
 /** Starts the workspace's boundary under sessiond and writes its executor. */
 const start = async (
   client: SessiondClient,
@@ -1499,7 +1555,8 @@ const start = async (
   const procId = procIdFor("boundary", ref.id);
   // One this machine can no longer vouch for, or one of another form, is
   // stopped first, never joined.
-  await stopBoundary(client, ref.id, await readHeld(ref.id));
+  await stopBoundary(client, ref.id);
+  await rm(placeOf(ref.id), { force: true });
   if (linux) {
     const split = await ownInodes(ref.path);
     if (split > 0) {
@@ -1524,7 +1581,7 @@ const start = async (
     throw refusal(ref.id, `mkfifo failed: ${made.stderr.toString().trim()}`);
   }
   await client.spawnProc(procId, plan.spec);
-  const said = await ready(client, procId).catch((error: Error) => {
+  await ready(client, procId).catch((error: Error) => {
     throw refusal(ref.id, error.message);
   });
   const proc = (await client.list()).procs.find(
@@ -1533,38 +1590,22 @@ const start = async (
   if (!proc?.alive) {
     throw refusal(ref.id, "the boundary exited right after it started");
   }
+  // The host names its sandbox before it passes the ready line on.
+  if (linux && !(await readPlace(ref.id))) {
+    throw refusal(
+      ref.id,
+      "its sandbox's processes could not be found as it started"
+    );
+  }
   const held: Omit<Held, "hook" | "policy"> = {
     exec: join(stateDir(ref.id), "exec"),
     pid: proc.pid,
     scratch: scratchOf(ref.id),
     path: ref.path,
     form: plan.form,
-    ...(linux ? await sandboxOf(ref.id, said) : {}),
   };
   // armHook writes the executor.
   return armHook(ref.id, held);
-};
-
-/** Linux: the outer bwrap, the sandbox's init beneath it, and what runs in the sandbox while its runner is idle. */
-const sandboxOf = async (
-  id: string,
-  said: string[]
-): Promise<Pick<Held, "idle" | "inner" | "sandbox">> => {
-  const sandbox = sandboxPid(said);
-  const children = sandbox
-    ? await readFile(`/proc/${sandbox}/task/${sandbox}/children`, "utf8").catch(
-        () => ""
-      )
-    : "";
-  const inner = Number.parseInt(children.trim().split(WHITESPACE)[0] ?? "", 10);
-  if (!sandbox || Number.isNaN(inner)) {
-    throw refusal(
-      id,
-      "its sandbox's processes could not be found as it started"
-    );
-  }
-  const idle = inSandbox(await snapshot(), inner).map((one) => one.pid);
-  return { sandbox, inner, idle };
 };
 
 /**
@@ -1575,7 +1616,7 @@ const sandboxOf = async (
 export const closeBoundary = async (ref: WorkspaceRef): Promise<void> => {
   forgetStale(ref.id);
   await closeToolDoor(ref.id);
-  await stopBoundary(await sessiond(), ref.id, await readHeld(ref.id));
+  await stopBoundary(await sessiond(), ref.id);
   if (process.platform === "linux" && process.env.XDG_RUNTIME_DIR) {
     await rm(srtTmpOf(ref.id), { recursive: true, force: true });
   }

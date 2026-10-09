@@ -69,6 +69,13 @@ export const openToolDoor = async (id: string): Promise<string> => {
     id,
     Bun.serve({
       unix: path,
+      // No idle limit: a call answers when its tool does, and an admin write
+      // waits for the person to approve it. Bun cuts a unix socket's request
+      // at its 10 s default too ("Bun.serve() timed out a request after 10
+      // seconds", measured on Bun 1.4.2; `server.timeout(request, 0)` does not
+      // lift it), while bun-types 1.4.2 declares `idleTimeout` for host:port
+      // servers alone, so it goes in untyped.
+      ...({ idleTimeout: 0 } as object),
       fetch: (request) =>
         forward(request).catch(
           (error: unknown) =>
