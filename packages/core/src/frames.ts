@@ -295,15 +295,17 @@ export interface ProjectCapFrame {
 /**
  * Hub-originated: one session a project's forget asked to stop
  * (`POST /api/projects/:id/stop`) has stopped, as its machine confirmed, or
- * could not be stopped, with the hub's reason. Never sent for the request
- * itself: a session is stopped only once its machine says so.
+ * could not be stopped, with the hub's reason, or (`deferred`) its machine is
+ * away: its stop is recorded and is carried out when the machine registers
+ * again. Never sent `stopped` for the request itself: a session is stopped
+ * only once its machine says so.
  */
 export interface ProjectStopFrame {
   /** Why it could not be stopped (`failed` only). */
   error?: string;
   instanceId: string;
   kind: "project.stop";
-  outcome: "stopped" | "failed";
+  outcome: "stopped" | "failed" | "deferred";
   projectId: string;
 }
 

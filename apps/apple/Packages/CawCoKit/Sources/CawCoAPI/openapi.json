@@ -28046,6 +28046,10 @@
           "machineId": {
             "type": "string"
           },
+          "offline": {
+            "description": "Its machine is not connected: it cannot be stopped now, and stops when\nits machine is back.",
+            "type": "boolean"
+          },
           "parentId": {
             "description": "The nearest running session it is a delegate of; null for a lead.",
             "type": [
@@ -28065,6 +28069,7 @@
           "cwd",
           "id",
           "machineId",
+          "offline",
           "parentId",
           "title"
         ]
@@ -32094,7 +32099,7 @@
         ]
       },
       "ProjectStopFrame": {
-        "description": "Hub-originated: one session a project's forget asked to stop\n(`POST /api/projects/:id/stop`) has stopped, as its machine confirmed, or\ncould not be stopped, with the hub's reason. Never sent for the request\nitself: a session is stopped only once its machine says so.",
+        "description": "Hub-originated: one session a project's forget asked to stop\n(`POST /api/projects/:id/stop`) has stopped, as its machine confirmed, or\ncould not be stopped, with the hub's reason, or (`deferred`) its machine is\naway: its stop is recorded and is carried out when the machine registers\nagain. Never sent `stopped` for the request itself: a session is stopped\nonly once its machine says so.",
         "type": "object",
         "properties": {
           "error": {
@@ -32112,6 +32117,7 @@
           },
           "outcome": {
             "enum": [
+              "deferred",
               "failed",
               "stopped"
             ],

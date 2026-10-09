@@ -5288,6 +5288,8 @@ export interface RunningSession {
   cwd: string;
   id: string;
   machineId: string;
+  /** Its machine is not connected: it stops when its machine is back. */
+  offline: boolean;
   /** The nearest running session it is a delegate of; null for a lead. */
   parentId: string | null;
   title: string | null;

@@ -21,6 +21,13 @@
    * refuses the delete while anything of the project runs, so a failure keeps
    * the project: the row says why, and Try again stops what is left.
    *
+   * A session whose machine is away cannot be stopped now: its row says
+   * "Stops when <machine> is back" from the start. The second press has the
+   * hub record its stop, which the machine's next register carries out; once
+   * it is recorded (`deferred`) the ring counts it, and it neither flies nor
+   * folds. A lead that keeps such a delegate stays with it. The project is
+   * forgotten once every session on a connected machine has stopped.
+   *
    * Each state has its own height (the body's morph): the list, one line
    * shorter armed, a row shorter per landing, the short "Stopped 3
    * sessions." at the end, a line taller for a failure.
@@ -35,6 +42,7 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import Failed from "~icons/solar/close-circle-bold-duotone";
+  import Away from "~icons/solar/cloud-cross-bold-duotone";
   import Attention from "~icons/solar/hand-shake-bold-duotone";
   import Pause from "~icons/solar/pause-circle-bold-duotone";
   import Working from "~icons/solar/refresh-circle-bold-duotone";
@@ -48,7 +56,7 @@
     stopProjectSessions,
   } from "./client.svelte";
   import { forgetHost } from "./forget.svelte";
-  import { span } from "./home/home-state.svelte";
+  import { machineName, span } from "./home/home-state.svelte";
   import { resolveSessionTitle } from "./links";
   import { markHue, sessionSprite } from "./mark";
   import { nestFrom } from "./motion/branch.svelte";
@@ -84,8 +92,11 @@
     error: string | null;
     /** The row has folded shut and is drawn no more. */
     gone: boolean;
+    /** Its machine is away and the hub has recorded its stop for when it is back. */
+    owed: boolean;
     s: RunningSession;
-    state: "running" | "stopping" | "stopped" | "failed";
+    /** `away`: its machine is not connected; it stops when it is back. */
+    state: "running" | "away" | "stopping" | "stopped" | "failed";
   }
 
   /** A tile copy in the button's slot, flying in from its row. */
@@ -136,7 +147,12 @@
   const stopped = $derived(
     rows.filter((row) => row.state === "stopped").length
   );
-  const left = $derived(total - stopped);
+  /** Left to stop: neither stopped nor recorded for its machine's return. */
+  const left = $derived(
+    total -
+      stopped -
+      rows.filter((row) => row.owed && row.state === "away").length
+  );
   const arrivedCount = $derived(rows.filter((row) => row.arrived).length);
   const plural = (n: number, one: string, many: string) =>
     n === 1 ? one : many;
@@ -174,7 +190,8 @@
   const asRows = (sessions: RunningSession[]): Row[] =>
     sessions.map((s) => ({
       s,
-      state: "running",
+      state: s.offline ? "away" : "running",
+      owed: false,
       at: null,
       departed: false,
       arrived: false,
@@ -268,7 +285,8 @@
       now = Date.now();
     }, 1000);
     for (const row of rows) {
-      if (ids.includes(row.s.id)) {
+      // A row whose machine is away keeps saying so; the hub records its stop.
+      if (ids.includes(row.s.id) && row.state !== "away") {
         row.state = "stopping";
         row.error = null;
       }
@@ -330,14 +348,21 @@
 
   function heard(
     id: string,
-    outcome: "stopped" | "failed",
+    outcome: "stopped" | "failed" | "deferred",
     error: string | null
   ): void {
     const row = rows.find((each) => each.s.id === id);
     if (!row || row.state === "stopped") {
       return;
     }
-    if (outcome === "failed") {
+    if (outcome === "deferred") {
+      // Its machine is away (or went away before it answered): the stop is
+      // recorded for its return. Counted now; it stays where it is.
+      row.state = "away";
+      row.owed = true;
+      row.error = null;
+      arrive(row);
+    } else if (outcome === "failed") {
       if (row.state === "stopping") {
         row.state = "failed";
         row.error = error;
@@ -376,7 +401,13 @@
       return;
     }
     const kids = rows.filter((each) => each.s.parentId === row.s.id);
+    if (kids.some((kid) => !(kid.departed || kid.arrived))) {
+      return;
+    }
     if (kids.some((kid) => !kid.departed)) {
+      // A delegate stays (its machine is away): its lead stays with it,
+      // counted, so the tree under it is never folded away.
+      arrive(row);
       return;
     }
     const at = performance.now();
@@ -432,8 +463,12 @@
 
   /** The tile has landed: it fades into the ring, which takes its share. */
   function arrive(row: Row): void {
-    row.arrived = true;
     arrivals = arrivals.filter((each) => each.id !== row.s.id);
+    // Counted already: it was away, and its machine came back and stopped it.
+    if (row.arrived) {
+      return;
+    }
+    row.arrived = true;
     const parent = rows.find((each) => each.s.id === row.s.parentId);
     if (parent) {
       after(dur("--dur-stagger"), () => leaveRow(parent));
@@ -448,7 +483,7 @@
 
   async function forget(): Promise<void> {
     const asked = project;
-    if (!asked) {
+    if (!asked || phase === "forgetting" || phase === "done") {
       return;
     }
     clearInterval(ticker);
@@ -511,9 +546,27 @@
       case "fail":
         return refusal ?? `${name} is kept until every session is stopped.`;
       default:
-        return `Stopped ${total} ${plural(total, "session", "sessions")}.`;
+        return done();
     }
   });
+
+  /** What the forget did: "Stopped 2 sessions. 1 stops when obelisk is back." */
+  function done(): string {
+    const away = rows.filter((row) => row.state === "away");
+    const ended = `Stopped ${stopped} ${plural(stopped, "session", "sessions")}.`;
+    if (away.length === 0) {
+      return ended;
+    }
+    const machines = [
+      ...new Set(away.map((row) => machineName(row.s.machineId))),
+    ];
+    const back =
+      machines.length === 1
+        ? `when ${machines[0]} is back`
+        : "when their machines are back";
+    const later = `${away.length} ${plural(away.length, "stops", "stop")} ${back}.`;
+    return stopped > 0 ? `${ended} ${later}` : later;
+  }
   const confirmLabel = $derived.by(() => {
     switch (phase) {
       case "none":
@@ -566,6 +619,13 @@
     }
     if (row.state === "failed") {
       return { word: "Couldn't stop", icon: Failed, tone: "failed" } as const;
+    }
+    if (row.state === "away") {
+      return {
+        word: `Stops when ${machineName(row.s.machineId)} is back`,
+        icon: Away,
+        tone: "quiet",
+      } as const;
     }
     const activity = cawco.activityOf(row.s.id);
     if (activity === "blocked") {
@@ -641,7 +701,7 @@
     {@const Sprite = sessionSprite(row.s.id)}
     <li data-row={row.s.id} {@attach item(row.s.id)}>
       <div class="rin">
-        <div class="row">
+        <div class="row" data-away={row.state === "away" || undefined}>
           <TreeMark
             count={kids.length}
             faceAlways
@@ -882,6 +942,21 @@
     }
     .stat {
       min-inline-size: 13ch;
+    }
+    /* "Stops when <machine> is back" left the title a few letters: the row
+       stands on two lines, the word under the title, where the title starts. */
+    .row[data-away] {
+      flex-wrap: wrap;
+    }
+    .row[data-away] .stat {
+      order: 1;
+      flex-basis: 100%;
+      min-inline-size: 0;
+      padding-inline-start: calc(
+        var(--mark-size, 18px) +
+        var(--row-compact-gap)
+      );
+      padding-block-end: var(--space-1);
     }
   }
 

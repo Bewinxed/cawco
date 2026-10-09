@@ -5865,10 +5865,16 @@ export const createServer = (
     const row = db.ownedInstance(instanceId);
     lifecycle.endSession(instanceId, intent, requestId);
     if (row) {
-      workItems.cancelled(row);
-      forgetPending(instanceId, UNREAD.stopped);
-      closePreview(instanceId).catch(console.error);
+      sessionEnding(row);
     }
+  };
+  /** What a session's work leaves behind as its end is decided. */
+  const sessionEnding = (
+    row: { id: string } & Parameters<typeof workItems.cancelled>[0]
+  ) => {
+    workItems.cancelled(row);
+    forgetPending(row.id, UNREAD.stopped);
+    closePreview(row.id).catch(console.error);
   };
   // A project's running sessions, stopped before it is forgotten, each
   // reported to the dashboard as its machine confirms the end (project-stops.ts).
@@ -5876,6 +5882,15 @@ export const createServer = (
     db,
     pulse: (id) => pulses.get(id),
     stop: (id) => endSession(id, "stop"),
+    // A machine that is away: the stop is stored, and its next register's
+    // reconcile sends it (session-lifecycle `reconcile`).
+    owe: (id) => {
+      const row = db.ownedInstance(id);
+      lifecycle.oweEndSession(id, "stop");
+      if (row) {
+        sessionEnding(row);
+      }
+    },
     online: (machineId) => !!registry.agent(machineId),
     publish: (payload) =>
       registry.broadcast({ verb: "frames", machineId: "hub", payload }),
@@ -15822,6 +15837,8 @@ export const createServer = (
           machineCustody.delete(machineId);
           addressProtocolMachines.delete(machineId);
           lifecycle.disconnect(machineId);
+          // A forget waiting on its stops: they are owed to its next register.
+          projectStops.machineGone(machineId);
           // Its leads' turns are over: their threads stop reading `working`.
           caw.machineGone(machineId);
           db.reconcileInstances(machineId, []);
