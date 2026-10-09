@@ -7,6 +7,7 @@
  * validation, fan-out and persistence the dashboard uses. The tools are
  * read/write over fleet config — not session-scoped, not delegation-scoped.
  */
+import { CLAUDE_JSON_LABEL, userLayerLabel } from "@cawco/core/claude-dirs";
 import { z } from "zod";
 import { hubHttpUrl } from "./delegation-actions";
 
@@ -237,7 +238,7 @@ export function adminTools() {
     ...admin(
       "skills",
       "the fleet's skills: the slash-command skill directories synced to every " +
-        "machine under ~/.claude/skills/.",
+        `machine under ${userLayerLabel("skills")}/.`,
       ["list"],
       ["install", "enable", "disable", "remove"],
       {
@@ -245,7 +246,7 @@ export function adminTools() {
           .string()
           .optional()
           .describe(
-            "The skill name (its directory name under ~/.claude/skills/). Required for all " +
+            `The skill name (its directory name under ${userLayerLabel("skills")}/). Required for all ` +
               "actions except list."
           ),
         source: z
@@ -297,7 +298,7 @@ export function adminTools() {
     ...admin(
       "plugins",
       "the fleet's Claude Code plugins: whole marketplace bundles synced to " +
-        "every machine under ~/.claude/plugins/. A plugin is the unit to reach for when " +
+        `every machine under ${userLayerLabel("plugins")}/. A plugin is the unit to reach for when ` +
         "a repo ships MANY skills, or skills that read shared files beside them " +
         "(references/, agents/, commands/); a skill copies one directory and " +
         "cannot carry those.",
@@ -364,7 +365,7 @@ export function adminTools() {
     // ── MCP servers ──────────────────────────────────────────────────────
     ...admin(
       "mcp_servers",
-      "the fleet's MCP servers: the servers synced to every machine's ~/.claude.json.",
+      `the fleet's MCP servers: the servers synced to every machine's ${CLAUDE_JSON_LABEL}.`,
       ["list"],
       ["put", "remove"],
       {
@@ -372,7 +373,7 @@ export function adminTools() {
           .string()
           .optional()
           .describe(
-            "The MCP server name (as it appears in ~/.claude.json). Required for put and remove."
+            `The MCP server name (as it appears in ${CLAUDE_JSON_LABEL}). Required for put and remove.`
           ),
         config: z
           .record(z.string(), z.unknown())
@@ -679,7 +680,7 @@ export function adminTools() {
     ...admin(
       "memory",
       "the fleet's user-scope CLAUDE.md, the instructions every session loads, and " +
-        "its linked documents under ~/.claude/memories/ (e.g. model-specific guidance " +
+        `its linked documents under ${userLayerLabel("memories")}/ (e.g. model-specific guidance ` +
         "files). 'get' answers the CLAUDE.md, 'list_docs' the documents.",
       ["get", "list_docs"],
       ["set", "set_doc", "remove_doc"],
@@ -694,7 +695,7 @@ export function adminTools() {
           .string()
           .optional()
           .describe(
-            "The document path under ~/.claude/memories/ (e.g. 'models/claude-opus-5.md'). " +
+            `The document path under ${userLayerLabel("memories")}/ (e.g. 'models/claude-opus-5.md'). ` +
               "Required for 'set_doc' and 'remove_doc'."
           ),
         expectedHash: z

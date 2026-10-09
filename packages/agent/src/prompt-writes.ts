@@ -1,4 +1,8 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import {
+  CLAUDE_JSON_NAME,
+  projectClaudeRelative,
+} from "@cawco/core/claude-dirs";
 
 export interface PromptWriteNotice {
   at: number;
@@ -7,7 +11,11 @@ export interface PromptWriteNotice {
 }
 
 const observers = new AsyncLocalStorage<(notice: PromptWriteNotice) => void>();
-const PROJECT_SETTINGS = /\/\.claude\/settings(?:\.local)?\.json$/;
+/** A Claude Code settings file, whose hooks a session reads. */
+const PROJECT_SETTINGS = [
+  `/${projectClaudeRelative("settings.json")}`,
+  `/${projectClaudeRelative("settings.local.json")}`,
+];
 
 /** The agent supplies this for managed prompt writes; private stacks use the same seam. */
 export const withPromptWrites = <T>(
@@ -40,11 +48,24 @@ export const promptWrite = async <T>(
   }
 };
 
+/** `/.claude/<dir>/`: a dir inside a Claude Code dir, the user's or a project's. */
+const inClaudeDir = (dir: string): string => `/${projectClaudeRelative(dir)}/`;
+
+/** What a write under each Claude Code dir entry changes in a prompt. */
+const CLAUDE_DIR_REASONS: readonly [string, string][] = [
+  [inClaudeDir("memories"), "memory docs"],
+  [inClaudeDir("skills"), "skills"],
+  [inClaudeDir("agents"), "agent definitions"],
+  [inClaudeDir("plugins"), "plugins"],
+  [inClaudeDir("cawco-marketplace"), "plugins"],
+  [inClaudeDir("cawco-hooks"), "hooks"],
+];
+
 /** The fs RPC also carries managed agent docs and project-bound prompt settings. */
 export const promptWriteReason = (path: string): string | undefined => {
   const normalized = path.replaceAll("\\", "/");
   if (
-    normalized.endsWith("/.claude.json") ||
+    normalized.endsWith(`/${CLAUDE_JSON_NAME}`) ||
     normalized.endsWith("/.mcp.json")
   ) {
     return "MCP servers";
@@ -52,25 +73,13 @@ export const promptWriteReason = (path: string): string | undefined => {
   if (normalized.endsWith("/CLAUDE.md") || normalized.endsWith("/AGENTS.md")) {
     return "instructions";
   }
-  if (normalized.includes("/.claude/memories/")) {
-    return "memory docs";
+  const reason = CLAUDE_DIR_REASONS.find(([dir]) =>
+    normalized.includes(dir)
+  )?.[1];
+  if (reason) {
+    return reason;
   }
-  if (normalized.includes("/.claude/skills/")) {
-    return "skills";
-  }
-  if (normalized.includes("/.claude/agents/")) {
-    return "agent definitions";
-  }
-  if (
-    normalized.includes("/.claude/plugins/") ||
-    normalized.includes("/.claude/cawco-marketplace/")
-  ) {
-    return "plugins";
-  }
-  if (
-    normalized.includes("/.claude/cawco-hooks/") ||
-    PROJECT_SETTINGS.test(normalized)
-  ) {
+  if (PROJECT_SETTINGS.some((file) => normalized.endsWith(file))) {
     return "hooks";
   }
   return undefined;

@@ -24,6 +24,7 @@
     "./install-script": "./src/install-script.ts",
     "./preview-proxy": "./src/preview-proxy.ts",
     "./paths": "./src/paths.ts",
+    "./claude-dirs": "./src/claude-dirs.ts",
     "./tool-presentation": "./src/tool-presentation.ts",
     ".": {
       "types": "./src/index.ts",

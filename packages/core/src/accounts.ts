@@ -479,7 +479,9 @@ export interface PlacementPreview extends PlacementExplain {
  * (args: account id, kind) and answers `{ url }`; complete types the pasted
  * code into it (args: code, account id, the identity the account already has
  * or null) and answers an {@link AccountSigninResult}; forget runs
- * `claude auth logout` there and deletes the dir (args: account id).
+ * `claude auth logout` there and deletes the dir (args: account id, and the
+ * account it joins or null), each session that ran there carried first into
+ * the joined account's dir, else into the dir of a session on no account.
  */
 export const CONTROL_BEGIN_ACCOUNT_LOGIN = "beginAccountLogin";
 export const CONTROL_COMPLETE_ACCOUNT_LOGIN = "completeAccountLogin";

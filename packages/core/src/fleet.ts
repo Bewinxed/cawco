@@ -7,6 +7,7 @@
  * a code catalog — the entries are the user's own rows.
  */
 
+import { userLayerLabel } from "./claude-dirs";
 import type {
   HarnessKind,
   McpHttpServerConfig,
@@ -432,7 +433,7 @@ export const memoryDocProblem = (path: string): string | undefined => {
     return "a linked document is markdown — its path has to end in .md";
   }
   if (path.startsWith("/") || WINDOWS_DRIVE_PREFIX.test(path)) {
-    return `“${path}” is absolute — a document's path is relative to ~/.claude/memories/`;
+    return `“${path}” is absolute — a document's path is relative to ${userLayerLabel("memories")}/`;
   }
   if (path.includes("\\")) {
     return `“${path}” uses backslashes — the path is the same string on every machine, so it is forward-slashed`;

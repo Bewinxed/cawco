@@ -9,6 +9,7 @@ import { lstat, mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import type { SkillFile } from "@cawco/core";
+import { projectClaudeRelative } from "@cawco/core/claude-dirs";
 import { hashFiles } from "@cawco/core/file-hash";
 import { $ } from "bun";
 
@@ -74,7 +75,7 @@ const CONTAINERS = [
   "skills/.curated",
   "skills/.experimental",
   "skills/.system",
-  ".claude/skills",
+  projectClaudeRelative("skills"),
   ".agents/skills",
   ".cursor/skills",
 ];

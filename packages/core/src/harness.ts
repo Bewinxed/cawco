@@ -1137,8 +1137,46 @@ export const CONTROL_DELETE_SESSION = "deleteSession";
 /** Full-text search across all transcripts on a machine (daemon-scoped). */
 export const CONTROL_SEARCH_TRANSCRIPTS = "searchTranscripts";
 
-/** A session's plan, answered by whichever harness owns it (`NeutralTask[]`). */
+/**
+ * A session's plan, answered by whichever harness owns it (`NeutralTask[]`).
+ * Args: the harness's session id, the session's directory, and for Claude the
+ * account its row runs on (null for none): Claude Code's task list is read
+ * from that account's dir alone.
+ */
 export const CONTROL_GET_TODOS = "getTodos";
+
+/** One Claude session the hub has a machine carry into the dir its row names. */
+export interface CarrySessionRequest {
+  /** The account it is to run on; null for none (the machine's own Claude Code dir). */
+  accountId: string | null;
+  /** Its row, whose process the carry stops first when `stop` is set. */
+  instanceId: string;
+  sessionId: string;
+  /**
+   * End the session's process first, if it runs: what a move to another
+   * account does before it relaunches the session there. Without it, a
+   * session whose process runs is left where it is (`live`).
+   */
+  stop?: boolean;
+}
+
+/** What one {@link CONTROL_CARRY_SESSIONS} request came to on its machine. */
+export type CarrySessionOutcome =
+  /** Its data is all in the dir the request named; `entries` were moved there now. */
+  | { state: "carried"; entries: number }
+  /** Its process runs, so nothing moved. */
+  | { state: "live" }
+  | { state: "failed"; error: string };
+
+/**
+ * Machine control (arg: {@link CarrySessionRequest}[]): carries each Claude
+ * session's own data into the dir of the account named (core paths.ts
+ * `sessionConfigDir`), nothing left in any other. Answered by the machine's
+ * supervisor, which knows which sessions run. Answers
+ * `Record<instanceId, CarrySessionOutcome>`. The hub sends it before a row
+ * says another account, and changes the row only for `carried`.
+ */
+export const CONTROL_CARRY_SESSIONS = "carrySessions";
 
 /**
  * The models a harness can run on this machine, each with the context window

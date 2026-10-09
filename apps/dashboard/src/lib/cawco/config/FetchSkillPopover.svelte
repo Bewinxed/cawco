@@ -4,7 +4,7 @@
    * then — when the repo holds several — which one. The hub downloads the
    * files once and every machine writes them into ~/.claude/skills.
    */
-  import type { FleetSkillMeta } from "@cawco/core";
+  import { type FleetSkillMeta, userLayerLabel } from "@cawco/core";
   import { tick } from "svelte";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { closeInto } from "#lib/cawco/motion/share.svelte.js";
@@ -169,7 +169,9 @@
       >
         {#snippet hint()}
           The directory it lands in —
-          <span class="font-mono">~/.claude/skills/{skillName || "name"}</span>
+          <span class="font-mono"
+            >{userLayerLabel("skills", skillName || "name")}</span
+          >
         {/snippet}
         <Input
           aria-invalid={skillName !== "" && nameProblem ? "true" : undefined}

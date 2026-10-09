@@ -9,6 +9,7 @@ import { homedir } from "node:os";
 import { extname, join, resolve } from "node:path";
 import type { FsEntry, FsMedia, FsPayload } from "@cawco/core";
 import { MEDIA_LIMIT_BYTES } from "@cawco/core";
+import { claudeHome } from "@cawco/core/paths";
 import { promptWrite, promptWriteReason } from "./prompt-writes";
 
 /**
@@ -150,12 +151,24 @@ const write = async (
   return reason ? await promptWrite(reason, mutate) : await mutate();
 };
 
+/** A path under the user layer, kept inside it. */
+const userLayerTarget = (path: string): string => {
+  const root = claudeHome();
+  const target = resolve(root, path);
+  if (target !== root && !target.startsWith(`${root}/`)) {
+    throw new Error(`${path} is not under ${root}`);
+  }
+  return target;
+};
+
 export const runFs = async ({
   op,
   path,
   content,
+  root,
 }: FsPayload): Promise<unknown> => {
-  const target = safePath(expandHome(path));
+  const target =
+    root === "claude-home" ? userLayerTarget(path) : safePath(expandHome(path));
   switch (op) {
     case "list":
       return await list(target);

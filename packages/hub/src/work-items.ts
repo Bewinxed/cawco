@@ -64,6 +64,7 @@ import type {
   WorkItemCheck,
   WorkItemSubmission,
 } from "./db/schema";
+import { type HarnessPlanDeps, harnessTasks } from "./harness-plans";
 import { leafOf, sessionLabel } from "./labels";
 import {
   type BranchOutcome,
@@ -417,6 +418,8 @@ export interface WorkItemDeps {
     timeoutMs?: number,
     workspace?: WorkspaceRef
   ) => Promise<CommandResult>;
+  /** A machine control answered by a session's harness: its task list (harness-plans.ts). */
+  readonly control: HarnessPlanDeps["control"];
   readonly db: DbShape;
   /** Store stop intent and wait for the machine's positive end confirmation. */
   readonly end: (instanceId: string) => Promise<void>;
@@ -483,7 +486,7 @@ export interface WorkItemDeps {
   readonly types: (projectId?: string | null) => DelegateType[];
 }
 
-/** One item of a Claude Code session's plan, as its ledger file on disk says. */
+/** One item of a Claude Code session's plan, as its task list says. */
 interface PlanItem {
   status: string;
   subject: string;
@@ -491,38 +494,10 @@ interface PlanItem {
 
 /** A plan item's to-do id, `[td-3] Persist the choice` → `td-3`. */
 const PLAN_TODO = /\[(td-\d{1,6})\]/;
-/** What separates the ledger's files in one read. */
-const RECORD = "\u001e";
-/** How long reading a session's plan ledger may take. */
-const PLAN_TIMEOUT_MS = 15_000;
 /** Plan items one attempt may leave behind as proposed to-dos. */
 const PROPOSALS_LIMIT = 20;
 /** How often the hub looks at every live item's budget, between turns. */
 const BUDGET_SWEEP_MS = 30_000;
-
-/**
- * The shell that prints a Claude Code session's plan ledger
- * (`~/.claude/tasks/<session>/*.json`, as the dashboard reads it), one file
- * per record; nothing when the session never planned.
- */
-const ledgerCommand = (sessionId: string): string =>
-  `d="$HOME/.claude/tasks/"${quote(sessionId)}; [ -d "$d" ] || exit 0; for f in "$d"/*.json; do [ -f "$f" ] && { cat "$f"; printf '\\n${RECORD}\\n'; }; done; exit 0`;
-
-/** The ledger's records as plan items; a half-written one is skipped. */
-const planOf = (stdout: string): PlanItem[] =>
-  stdout.split(RECORD).flatMap((record) => {
-    if (!record.trim()) {
-      return [];
-    }
-    try {
-      const raw = JSON.parse(record) as Partial<PlanItem>;
-      return typeof raw.subject === "string"
-        ? [{ subject: raw.subject, status: String(raw.status ?? "pending") }]
-        : [];
-    } catch {
-      return [];
-    }
-  });
 
 /** The last path segment — how the rail names a session. */
 /**
@@ -971,6 +946,7 @@ const TRAY_HOLD_MS = 6000;
 
 export const createWorkItems = ({
   call,
+  control,
   command,
   db,
   end,
@@ -1305,13 +1281,11 @@ export const createWorkItems = ({
     if (!(row?.sessionId && row.harness === "claude")) {
       return;
     }
-    const read = await command(
-      row.machineId,
-      "/",
-      ledgerCommand(row.sessionId),
-      PLAN_TIMEOUT_MS
-    );
-    return read.exitCode === 0 ? planOf(read.stdout) : undefined;
+    const tasks = await harnessTasks(
+      { control, online: () => true },
+      row
+    ).catch(() => undefined);
+    return tasks?.map(({ subject, status }) => ({ subject, status }));
   };
 
   /** The task an item is an attempt at, when the plan link can reach it. */

@@ -14,18 +14,14 @@ import { type Dirent, type FSWatcher, watch } from "node:fs";
 import {
   access,
   appendFile,
-  cp,
-  mkdir,
   open,
   readdir,
   readFile,
   realpath,
-  rename,
   rm,
   stat,
 } from "node:fs/promises";
-import { homedir } from "node:os";
-import { basename, dirname, join } from "node:path";
+import { dirname, join } from "node:path";
 import {
   deleteSession,
   getSessionInfo,
@@ -71,6 +67,7 @@ import {
   CONTROL_BEGIN_ACCOUNT_LOGIN,
   CONTROL_COMPLETE_ACCOUNT_LOGIN,
   CONTROL_FORGET_ACCOUNT,
+  CONTROL_GET_TODOS,
   CONTROL_JOIN_ACCOUNT_LOGIN,
   CONTROL_MOVE_HOME_LOGIN,
   CONTROL_PROBE_ACCOUNT,
@@ -100,6 +97,9 @@ import {
   accountConfigDir,
   accountIds,
   claudeConfigDirs,
+  claudeHome,
+  projectSlug,
+  sessionConfigDir,
 } from "@cawco/core/paths";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
 import {
@@ -107,7 +107,9 @@ import {
   accountReports,
   changingSignins,
   claudeAuth,
+  linkProjectMemory,
   probeAccount,
+  projectMemoryRoot,
 } from "../accounts";
 import {
   claudeExecutableOptions,
@@ -121,6 +123,7 @@ import {
   launchedHook,
   workspaceHook,
 } from "../boundary";
+import { carrySessions, readTaskList, transcriptIn } from "../claude-sessions";
 import {
   callDelegationTool,
   delegationMcp,
@@ -150,7 +153,6 @@ import {
   forgetAccount,
 } from "../login";
 import {
-  homeDir,
   homeLoginMovedInto,
   joinAccountLogin,
   moveHomeLogin,
@@ -436,21 +438,25 @@ function attachQuestionResult(
   };
 }
 
-/** The session file the CLI stores a session under, or null when it is not found. */
+/**
+ * The session file the CLI stores a session under, by its id alone, or null
+ * when it is not found: the lookup for a caller with no row to name its dir,
+ * so every config dir on the machine is searched.
+ */
 async function claudeSessionFile(
   sessionId: string,
   dir?: string
 ): Promise<string | null> {
   const projects = claudeConfigDirs().map((config) => join(config, "projects"));
   const fileName = `${sessionId}.jsonl`;
-  // The CLI names the project dir from the session's cwd: realpath, then every
-  // non-alphanumeric byte becomes '-'. Try that first — it is the exact file
-  // `getSessionMessages` reads — and only scan when the cwd is gone or the slug
-  // no longer resolves (a cwd that has since moved).
+  // The CLI names the project dir from the session's cwd: realpath, then
+  // `projectSlug`. Try that first — it is the exact file `getSessionMessages`
+  // reads — and only scan when the cwd is gone or the slug no longer resolves
+  // (a cwd that has since moved).
   let slug: string | null = null;
   if (dir) {
     try {
-      slug = (await realpath(dir)).replace(/[^a-zA-Z0-9]/g, "-");
+      slug = projectSlug(await realpath(dir));
     } catch {
       slug = null;
     }
@@ -645,55 +651,6 @@ const requireSessionFile = async (
 /** Whether `error` is the file system saying there is nothing at the path. */
 const missing = (error: unknown): boolean =>
   (error as { code?: string } | null)?.code === "ENOENT";
-
-/**
- * Brings a conversation stored under another config dir into `configDir`,
- * the one its session is about to run in: the session moved to another
- * account, and Claude Code resumes only from its own dir's `projects/`.
- *
- * The transcript is moved, not copied: a transcript is read from the first
- * config dir that holds it ({@link claudeSessionFile}), so a copy left behind
- * would be read in place of the one that goes on. The conversation's own
- * folder (subagent transcripts, tool output kept on disk), its task list and
- * its file checkpoints are copied, since the conversation names some of them
- * by their full paths and those must still answer.
- */
-async function carryConversation(
-  file: string,
-  sessionId: string,
-  configDir: string
-): Promise<void> {
-  const projectDir = dirname(file);
-  const projects = join(configDir, "projects");
-  if (dirname(projectDir) === projects) {
-    return;
-  }
-  const from = dirname(dirname(projectDir));
-  const target = join(projects, basename(projectDir));
-  await mkdir(target, { recursive: true });
-  const copies: [string, string][] = [
-    [join(projectDir, sessionId), join(target, sessionId)],
-    [join(from, "tasks", sessionId), join(configDir, "tasks", sessionId)],
-    [
-      join(from, "file-history", sessionId),
-      join(configDir, "file-history", sessionId),
-    ],
-  ];
-  for (const [source, destination] of copies) {
-    try {
-      // biome-ignore lint/performance/noAwaitInLoops: three small folders, each copied whole before the transcript moves
-      await cp(source, destination, { recursive: true, force: true });
-    } catch (error) {
-      if (!missing(error)) {
-        throw error;
-      }
-    }
-  }
-  await rename(file, join(target, basename(file)));
-  console.info(
-    `[claude] conversation ${sessionId} moved from ${from} to ${configDir}`
-  );
-}
 
 export const CLAUDE_CAPABILITIES: HarnessCapabilities = {
   interrupt: true,
@@ -2477,24 +2434,40 @@ export class ClaudeHarness implements Harness {
     const client = await this.sessiond();
     const account = await launchAccountOf(spec);
     // No account: the machine's own login, moving into one now.
-    const configDir = account ? accountConfigDir(account) : homeDir();
+    const place = { accountId: account ?? null };
+    const configDir = sessionConfigDir(place);
     if (!account) {
       console.info(
         `[claude] ${ctx.instanceId} runs on this machine's own login, which is moving into account ${spec.homeLoginMove?.accountId}`
       );
     }
+    const cwd = await realpath(ctx.cwd).catch(() => ctx.cwd);
+    // The project's auto memory is the user's, whichever account runs it.
+    await linkProjectMemory(
+      configDir,
+      projectSlug(await projectMemoryRoot(cwd))
+    );
     if (spec.resume) {
-      const file = await claudeSessionFile(spec.resume.sessionKey, ctx.cwd);
-      if (!file) {
-        throw new Error(CLAUDE_CONVERSATION_GONE);
-      }
-      // A conversation resumed in another dir (its old account reached its
-      // limit, it ran on the machine's own login before that moved, or it
-      // ran in `~/.claude` before accounts) goes on in the dir it runs in
-      // now. A fork reads its origin's where it is: it runs on its origin's
-      // account.
-      if (!spec.resume.fork) {
-        await carryConversation(file, spec.resume.sessionKey, configDir);
+      // A conversation goes on in the dir it runs in now, carried whole
+      // into it first, for the launch that places a row on its account
+      // carries it here. A fork reads its origin's where it is: it runs on
+      // its origin's account, and its origin may be running.
+      if (spec.resume.fork) {
+        if (!(await claudeSessionFile(spec.resume.sessionKey, ctx.cwd))) {
+          throw new Error(CLAUDE_CONVERSATION_GONE);
+        }
+      } else {
+        const carried = (
+          await carrySessions([{ sessionId: spec.resume.sessionKey, ...place }])
+        ).get(spec.resume.sessionKey);
+        if (carried && "error" in carried) {
+          throw new Error(
+            `Claude Code's conversation could not be brought into ${configDir}: ${carried.error}`
+          );
+        }
+        if (!(await transcriptIn(configDir, spec.resume.sessionKey, cwd))) {
+          throw new Error(CLAUDE_CONVERSATION_GONE);
+        }
       }
     }
     const fleetDenyList = await sessionFleetDenials(spec.cawcoTodos);
@@ -2759,11 +2732,10 @@ export class ClaudeHarness implements Harness {
    */
   async listSessions(dir?: string): Promise<NeutralSessionInfo[]> {
     const own = await listSessions({ ...(dir ? { dir } : {}) });
-    const slug = dir
-      ? (await realpath(dir)).replace(/[^a-zA-Z0-9]/g, "-")
-      : null;
+    const slug = dir ? projectSlug(await realpath(dir)) : null;
     const files: { file: string; sessionId: string }[] = [];
-    const sdkDir = process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude");
+    // The SDK lists the dir the agent itself was started with.
+    const sdkDir = process.env.CLAUDE_CONFIG_DIR ?? claudeHome();
     for (const accountId of accountIds()) {
       if (accountConfigDir(accountId) === sdkDir) {
         continue;
@@ -2915,8 +2887,18 @@ export class ClaudeHarness implements Harness {
       case CONTROL_FORGET_ACCOUNT:
         // An answer, not undefined: undefined tells the daemon this harness
         // does not handle the control, and the hub reads that as a refusal.
-        await changingSignins(forgetAccount(args[0] as string));
+        await changingSignins(
+          forgetAccount(
+            args[0] as string,
+            (args[1] as string | null | undefined) ?? null
+          )
+        );
         return { forgotten: true };
+      case CONTROL_GET_TODOS:
+        return readTaskList(
+          { accountId: (args[2] as string | null | undefined) ?? null },
+          args[0] as string
+        );
       case CONTROL_PROBE_ACCOUNT:
         return probeAccount(args[0] as string);
       case CONTROL_READ_HOME_LOGIN:

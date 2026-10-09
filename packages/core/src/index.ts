@@ -11,6 +11,8 @@ export * from "./accounts";
 export * from "./archive";
 // Files and texts a turn carries, and the line naming each attached file.
 export * from "./attachments";
+// Claude Code's dir names, as a screen, a message or a shell script names them (paths.ts owns the paths).
+export * from "./claude-dirs";
 export * from "./continuation";
 // Delegate types: named presets the `delegate` tool's `type` param resolves,
 // so routing is by description instead of a raw model string.
@@ -487,8 +489,15 @@ export interface FsPayload {
   /** `write` only: the text the file is replaced with. */
   content?: string;
   op: "list" | "read" | "write" | "media";
+  /** Absolute; or, with `root`, relative to that root on the machine. */
   path: string;
   requestId: string;
+  /**
+   * `claude-home`: `path` is under the machine's user layer, Claude Code's
+   * own dir (`~/.claude`), as the machine itself places it (core paths.ts
+   * `claudeHome`): no caller has to know a machine's home to reach it.
+   */
+  root?: "claude-home";
 }
 
 /**

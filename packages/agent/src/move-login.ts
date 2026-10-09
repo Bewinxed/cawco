@@ -1,5 +1,5 @@
 import { chmod, lstat, readFile, rm, writeFile } from "node:fs/promises";
-import { homedir, platform } from "node:os";
+import { platform } from "node:os";
 import { join } from "node:path";
 import {
   type AccountIdentity,
@@ -8,7 +8,12 @@ import {
   type HomeLoginMoved,
   sameIdentity,
 } from "@cawco/core";
-import { accountConfigDir } from "@cawco/core/paths";
+import {
+  accountClaudeJson,
+  accountConfigDir,
+  claudeHome,
+  claudeHomeJson,
+} from "@cawco/core/paths";
 import {
   accountEnv,
   authStatusIn,
@@ -57,11 +62,6 @@ const HOME_SERVICE = "Claude Code-credentials";
 const SEC_ITEM_NOT_FOUND = 44;
 
 const CREDENTIALS = ".credentials.json";
-/** Claude Code's own config dir: where it runs with no `CLAUDE_CONFIG_DIR`. */
-export const homeDir = (): string => join(homedir(), ".claude");
-const homeClaudeJson = (): string => join(homedir(), ".claude.json");
-const accountClaudeJson = (account: string): string =>
-  join(accountConfigDir(account), ".claude.json");
 
 const log = (line: string): void => {
   console.log(`[move-login] ${line}`);
@@ -193,7 +193,7 @@ const readText = async (path: string): Promise<string | undefined> => {
 const credentialsFile: Store = {
   name: "the credentials file",
   read: (account) => readText(join(accountConfigDir(account), CREDENTIALS)),
-  readHome: () => readText(join(homeDir(), CREDENTIALS)),
+  readHome: () => readText(join(claudeHome(), CREDENTIALS)),
   heldBy: async (account) =>
     (await readText(join(accountConfigDir(account), CREDENTIALS))) !==
     undefined,
@@ -205,7 +205,7 @@ const credentialsFile: Store = {
   },
   remove: (account) =>
     rm(join(accountConfigDir(account), CREDENTIALS), { force: true }),
-  removeHome: () => rm(join(homeDir(), CREDENTIALS), { force: true }),
+  removeHome: () => rm(join(claudeHome(), CREDENTIALS), { force: true }),
 };
 
 /** The store the default dir's login is in, and the login itself. */
@@ -220,7 +220,7 @@ const homeCredential = async (): Promise<{ secret: string; store: Store }> => {
     }
   }
   throw new Error(
-    `Claude Code reports ~/.claude signed in, but its login is in none of ${stores.map((one) => one.name).join(" or ")}; nothing was moved.`
+    `Claude Code reports ${claudeHome()} signed in, but its login is in none of ${stores.map((one) => one.name).join(" or ")}; nothing was moved.`
   );
 };
 
@@ -294,10 +294,10 @@ const take = async (
       `The account's dir already holds a login in ${store.name}; nothing was moved.`
     );
   }
-  const oauthAccount = (await readJson(homeClaudeJson()))?.oauthAccount;
+  const oauthAccount = (await readJson(claudeHomeJson()))?.oauthAccount;
   if (oauthAccount === undefined) {
     throw new Error(
-      "~/.claude.json names no oauthAccount for the login; nothing was moved."
+      `${claudeHomeJson()} names no oauthAccount for the login; nothing was moved.`
     );
   }
   return { oauthAccount, secret, store };
@@ -421,7 +421,7 @@ const moveOnce = (
       `${account}'s dir answers as ${answered.email}; deleting the original from ${store.name}`
     );
     await store.removeHome();
-    await putOauthAccount(homeClaudeJson(), undefined);
+    await putOauthAccount(claudeHomeJson(), undefined);
     log("moved; Claude Code's own login on this machine is signed out");
     return { store: store.name };
   });
@@ -455,7 +455,7 @@ export const joinAccountLogin = (
           `${into}'s dir on this machine is signed in as ${there.email}, not ${expected.email}.`
         );
       }
-      await forgetAccount(from);
+      await forgetAccount(from, into);
       log(
         `${from} joined ${into}: ${into}'s own login kept, ${from}'s signed out`
       );
@@ -476,7 +476,7 @@ const takeLogin = async (account: string): Promise<Taken> => {
         ?.oauthAccount;
       if (oauthAccount === undefined) {
         throw new Error(
-          `${account}'s .claude.json names no oauthAccount for the login.`
+          `${accountClaudeJson(account)} names no oauthAccount for the login.`
         );
       }
       return { oauthAccount, secret, store };
@@ -521,7 +521,7 @@ const moveAccountLogin = async (
   // The login is `into`'s now: `from`'s copy goes without a sign-out,
   // which would end the grant both copies are of.
   await store.remove(from);
-  await removeAccountDir(from);
+  await removeAccountDir(from, into);
   log(
     `${from} joined ${into}: its login is ${into}'s here now, in ${store.name}`
   );

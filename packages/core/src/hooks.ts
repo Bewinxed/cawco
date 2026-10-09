@@ -14,6 +14,7 @@
  * of the three readings their matcher actually got.
  */
 
+import { USER_LAYER_SHELL, userLayerLabel } from "./claude-dirs";
 import type { FleetPlacement } from "./fleet";
 
 /** Every lifecycle point a hook can attach to. */
@@ -748,11 +749,10 @@ export const HOOK_TEMPLATES: {
       handler: { type: "command", async: true },
       script: [
         "#!/bin/bash",
-        "# Appends the command Claude is about to run to ~/.claude/command-log.",
+        `# Appends the command Claude is about to run to ${userLayerLabel("command-log")}.`,
         "set -euo pipefail",
         "",
-        // biome-ignore lint/suspicious/noTemplateCurlyInString: shell syntax for bash to expand, same as above.
-        'log="${HOME}/.claude/command-log"',
+        `log="${USER_LAYER_SHELL}/command-log"`,
         "input=$(cat)",
         'printf \'%s\\t%s\\n\' "$(date -Iseconds)" "$input" >> "$log"',
       ].join("\n"),

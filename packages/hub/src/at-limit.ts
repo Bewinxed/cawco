@@ -217,8 +217,12 @@ export interface AtLimitPorts {
   idle: (row: LimitRow) => Promise<boolean>;
   /** Runs the next look and each settling session's timer until the hub closes. */
   lifetime: HubLifetimeShape;
-  /** Relaunches `row` on `accountId`, its conversation with it, and has it carry on. */
-  move: (row: LimitRow, accountId: string) => void;
+  /**
+   * Relaunches `row` on `accountId`, its conversation with it, and has it
+   * carry on. Answers why when it did not move: `row` is still on its
+   * account then.
+   */
+  move: (row: LimitRow, accountId: string) => Promise<string | undefined>;
   /** The session's machine and title, as a line names them. */
   named: (row: LimitRow) => { machine: string; session: string };
   /** Writes one line into `row`'s transcript. */
@@ -416,6 +420,26 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     plan();
   };
 
+  /**
+   * Moves `row` whole onto `target`, its line written once it has; one that
+   * did not move is held on `current` until its reset, and says why.
+   */
+  const moveWhole = async (
+    row: LimitRow,
+    current: Account,
+    target: Account,
+    oneOrganization: boolean,
+    now: number
+  ): Promise<void> => {
+    const why = await ports.move(row, target.id);
+    if (why) {
+      unmoved(row, current, target, "start", why);
+      return;
+    }
+    db.atLimit.dropSummary(row.id);
+    ports.note(row, movedNote(row, current, target, oneOrganization, now));
+  };
+
   /** Moves or continues `row` off `current`, or holds it, as {@link decideAtLimit} says. */
   const act = async (row: LimitRow, current: Account): Promise<void> => {
     if (acting.has(row.id) || ports.continuing(row)) {
@@ -447,12 +471,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       }
       db.atLimit.dropHold(row.id);
       if (decision.action === "move") {
-        db.atLimit.dropSummary(row.id);
-        ports.note(
-          row,
-          movedNote(row, current, target, decision.sameOrganization, now)
-        );
-        ports.move(row, target.id);
+        await moveWhole(row, current, target, decision.sameOrganization, now);
         return;
       }
       // The summary kept for it (ahead of the limit, or at a move that

@@ -1,7 +1,16 @@
 import { createHash } from "node:crypto";
-import { lstat, mkdir, rm, symlink } from "node:fs/promises";
-import { homedir, platform, userInfo } from "node:os";
-import { join } from "node:path";
+import {
+  lstat,
+  mkdir,
+  readdir,
+  realpath,
+  rename,
+  rm,
+  rmdir,
+  symlink,
+} from "node:fs/promises";
+import { platform, userInfo } from "node:os";
+import { basename, dirname, extname, join, resolve } from "node:path";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import {
   type AccountIdentity,
@@ -12,13 +21,25 @@ import {
   identityOf,
   type ModelInfo,
 } from "@cawco/core";
-import { accountConfigDir, accountIds } from "@cawco/core/paths";
+import {
+  accountClaudeJson,
+  accountConfigDir,
+  accountIds,
+  claudeHome,
+  projectMemoryDir,
+  sessionConfigDir,
+  USER_LAYER_DIRS,
+  USER_LAYER_FILES,
+  userLayerPath,
+} from "@cawco/core/paths";
 import { claudeExecutableOptions, idle, resolveClaudeExecutable } from "./auth";
+import { retireConfigDir } from "./claude-sessions";
 
 /**
  * An account's Claude Code on this machine: its config dir, which holds its
  * own credential (made by Claude Code's own `claude auth login`), transcripts
- * and `.claude.json`, with the fleet's user layer linked in from `~/.claude`.
+ * and `.claude.json`, with the fleet's user layer linked in from
+ * {@link claudeHome}.
  * CawCo reads none of the credential: who a dir is signed in as comes from
  * Claude Code's own `auth status` and initialize response.
  */
@@ -294,33 +315,24 @@ export const probeAccount = async (account: string): Promise<AccountProbe> => {
 };
 
 /**
- * The fleet's user layer, which Claude Code reads from its config dir: each
- * entry an account dir links to `~/.claude`, where fleet sync writes it. Per
- * dir and never linked: the credential, transcripts, history and
- * `.claude.json`.
- */
-const USER_LAYER = [
-  "CLAUDE.md",
-  "memories",
-  "skills",
-  "agents",
-  "commands",
-  "plugins",
-  "settings.json",
-];
-
-/**
- * Links the fleet's user layer into an account's dir: each entry `~/.claude`
- * has, the dir does not, becomes a symlink to it. An entry the dir already
- * has as a file of its own is left alone and said in the log.
+ * Links the fleet's user layer (core paths.ts) into an account's dir: each
+ * of its dirs ({@link USER_LAYER_DIRS}, made in {@link claudeHome} when it is
+ * not there yet, so an account never starts a copy of its own) and each of
+ * its files `claudeHome` has ({@link USER_LAYER_FILES}) becomes a symlink to
+ * the user's one copy; and so does each project's auto memory `claudeHome`
+ * has ({@link linkProjectMemory}). A dir the account already has of its own
+ * is moved into the user's copy first ({@link shareDir}); a file of its own
+ * is left alone and said in the log.
  */
 export const linkUserLayer = async (account: string): Promise<void> => {
   const dir = accountConfigDir(account);
   await mkdir(dir, { recursive: true, mode: 0o700 });
-  const home = join(homedir(), ".claude");
-  await Promise.all(
-    USER_LAYER.map(async (entry) => {
-      const target = join(home, entry);
+  await Promise.all([
+    ...USER_LAYER_DIRS.map((entry) =>
+      shareDir(join(dir, entry), userLayerPath(entry), account)
+    ),
+    ...USER_LAYER_FILES.map(async (entry) => {
+      const target = userLayerPath(entry);
       const path = join(dir, entry);
       if (!(await lstat(target).catch(() => undefined))) {
         return;
@@ -336,16 +348,147 @@ export const linkUserLayer = async (account: string): Promise<void> => {
         return;
       }
       await symlink(target, path);
-    })
+    }),
+  ]);
+  const projects = await readdir(userLayerPath("projects"), {
+    withFileTypes: true,
+  }).catch(() => []);
+  for (const project of projects) {
+    if (
+      project.isDirectory() &&
+      // biome-ignore lint/performance/noAwaitInLoops: one project at a time, each a handful of syscalls
+      (await lstat(projectMemoryDir(claudeHome(), project.name)).catch(
+        () => undefined
+      ))
+    ) {
+      await linkProjectMemory(dir, project.name);
+    }
+  }
+};
+
+/**
+ * The folder Claude Code keys a project's auto memory by: the canonical git
+ * root (the dir holding `--git-common-dir`'s `.git`, so every worktree of a
+ * repo shares its main checkout's memory), else the dir itself, each by its
+ * real path. Found by a rig run of Claude Code 2.1.289: a linked worktree's
+ * memory went under the main repo's slug.
+ */
+export const projectMemoryRoot = async (cwd: string): Promise<string> => {
+  const common =
+    await Bun.$`git rev-parse --path-format=absolute --git-common-dir`
+      .cwd(cwd)
+      .quiet()
+      .nothrow();
+  const dir = common.exitCode === 0 ? common.stdout.toString().trim() : "";
+  const root = dir.endsWith("/.git") ? dirname(dir) : cwd;
+  return await realpath(root).catch(() => root);
+};
+
+/** Two files with the same bytes; never two dirs. */
+const sameFile = async (a: string, b: string): Promise<boolean> => {
+  const [one, two] = await Promise.all([lstat(a), lstat(b)]);
+  return (
+    one.isFile() &&
+    two.isFile() &&
+    one.size === two.size &&
+    Buffer.from(await Bun.file(a).arrayBuffer()).equals(
+      Buffer.from(await Bun.file(b).arrayBuffer())
+    )
+  );
+};
+
+/**
+ * Makes `path`, a dir in an account's config dir, a symlink to `target`, the
+ * user's one copy in {@link claudeHome}, made there if it is not yet. What
+ * the account's dir already holds of its own there is moved into the copy
+ * entry by entry first: one the copy already has with the same bytes goes,
+ * one with other bytes is kept beside it as `<base>.account-<id8><ext>`, so
+ * neither is lost. A file where the dir should be is left alone and said in
+ * the log.
+ */
+const shareDir = async (
+  path: string,
+  target: string,
+  /** The account `path` is in, whose first 8 characters mark a copy kept beside. */
+  account: string
+): Promise<void> => {
+  const there = await lstat(path).catch(() => undefined);
+  if (there?.isSymbolicLink()) {
+    return;
+  }
+  if (there && !there.isDirectory()) {
+    console.warn(`[accounts] ${path} is a file, not a dir; left as it is`);
+    return;
+  }
+  await mkdir(target, { recursive: true });
+  if (there) {
+    const id8 = account.slice(0, 8);
+    for (const name of await readdir(path)) {
+      const from = join(path, name);
+      const into = join(target, name);
+      // biome-ignore lint/performance/noAwaitInLoops: each entry moved whole before the dir it leaves is removed
+      if (!(await lstat(into).catch(() => undefined))) {
+        await rename(from, into);
+      } else if (await sameFile(from, into)) {
+        await rm(from, { force: true });
+      } else {
+        const ext = extname(name);
+        await rename(
+          from,
+          join(target, `${basename(name, ext)}.account-${id8}${ext}`)
+        );
+      }
+    }
+    await rmdir(path);
+    console.info(`[accounts] ${path}'s own entries moved into ${target}`);
+  }
+  await mkdir(dirname(path), { recursive: true });
+  await symlink(target, path);
+};
+
+/**
+ * Links a project's auto memory (`projects/<slug>/memory`) in a config dir to
+ * the user's one copy in {@link claudeHome} ({@link shareDir}): every
+ * account's session in the project reads and writes that one memory.
+ */
+export const linkProjectMemory = async (
+  configDir: string,
+  slug: string
+): Promise<void> => {
+  if (resolve(configDir) === resolve(claudeHome())) {
+    return;
+  }
+  await shareDir(
+    projectMemoryDir(configDir, slug),
+    projectMemoryDir(claudeHome(), slug),
+    basename(dirname(resolve(configDir)))
   );
 };
 
 /** Every account dir's own `.claude.json`, where its MCP servers live. */
 export const accountClaudeJsons = (): string[] =>
-  accountIds().map((account) =>
-    join(accountConfigDir(account), ".claude.json")
-  );
+  accountIds().map(accountClaudeJson);
 
-/** The account's dir, gone: its credential with it, after Claude Code signed it out. */
-export const removeAccountDir = (account: string): Promise<void> =>
-  rm(join(accountConfigDir(account), ".."), { recursive: true, force: true });
+/**
+ * The account's dir, gone: its credential with it, after Claude Code signed
+ * it out. Each session that ran there is carried out first ({@link
+ * retireConfigDir}): into `into`'s dir when the account is joined into
+ * another, else into {@link claudeHome}, the dir of a session on no account,
+ * which is what each of their rows says once the account is gone.
+ */
+export const removeAccountDir = async (
+  account: string,
+  into: string | null = null
+): Promise<void> => {
+  const dir = accountConfigDir(account);
+  if (await lstat(dir).catch(() => undefined)) {
+    const target = sessionConfigDir({ accountId: into });
+    const moved = await retireConfigDir(dir, target);
+    if (moved > 0) {
+      console.info(
+        `[accounts] ${account}: ${moved} session(s) carried into ${target} before its dir goes`
+      );
+    }
+  }
+  await rm(join(dir, ".."), { recursive: true, force: true });
+};

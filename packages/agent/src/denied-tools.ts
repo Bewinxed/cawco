@@ -24,13 +24,13 @@
  */
 import { rename } from "node:fs/promises";
 import { cawcoTodosDenied, opencodeToolsFor } from "@cawco/core";
-import { expandHome } from "./fs";
+import { userLayerPath } from "@cawco/core/paths";
 
 /** Every `claude` this user starts reads it, daemon-spawned or not. */
-const SETTINGS = expandHome("~/.claude/settings.json");
+const SETTINGS = userLayerPath("settings.json");
 
 /** The sidecar the fleet sync writes after every converge. */
-const SIDECAR = expandHome("~/.claude/cawco-fleet.json");
+const SIDECAR = userLayerPath("cawco-fleet.json");
 
 /**
  * Compiled bootstrap defaults — what a machine uses when it has never synced
@@ -181,7 +181,7 @@ export const convergeDeniedTools = async (
       } catch (error) {
         return {
           state: "failed",
-          detail: `could not parse ~/.claude/settings.json: ${said(error)}`,
+          detail: `could not parse ${SETTINGS}: ${said(error)}`,
         };
       }
     }
@@ -200,7 +200,7 @@ export const convergeDeniedTools = async (
   } catch (error) {
     return {
       state: "failed",
-      detail: `could not write ~/.claude/settings.json: ${said(error)}`,
+      detail: `could not write ${SETTINGS}: ${said(error)}`,
     };
   }
 };

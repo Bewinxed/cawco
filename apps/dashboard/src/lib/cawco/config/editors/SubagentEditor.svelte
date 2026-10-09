@@ -3,6 +3,7 @@
     agentProblem,
     type FleetAgent,
     parseAgentFrontMatter,
+    userLayerLabel,
   } from "@cawco/core";
   import { untrack } from "svelte";
   import { appear } from "#lib/cawco/motion/curves.svelte.js";
@@ -159,7 +160,9 @@ You are a <role>, working in one repository at a time.
     <h1 class="title">{agent ? agent.name : front.name || "New subagent"}</h1>
     <p class="note">
       The file is the definition. It lands at
-      <span class="font-mono">~/.claude/agents/{target ?? "name"}.md</span>
+      <span class="font-mono"
+        >{userLayerLabel("agents", `${target ?? "name"}.md`)}</span
+      >
       on every machine, and Claude Code picks it up within seconds.
     </p>
     {#if refused}

@@ -11,13 +11,14 @@
 
 import { readdirSync, statSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
+import { userLayerPath } from "@cawco/core/paths";
 import {
   readSessionEnd,
   readSessionFull,
 } from "../src/harnesses/claude-transcript";
 
 const N = 160;
-const root = `${process.env.HOME}/.claude/projects`;
+const root = userLayerPath("projects");
 const files = readdirSync(root, { recursive: true })
   .map(String)
   .filter((f) => f.endsWith(".jsonl") && !dirname(f).endsWith("subagents"))

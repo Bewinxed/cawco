@@ -46,8 +46,14 @@ import type {
   SkillFile,
 } from "@cawco/core";
 import { hookProblem, memoryDocProblem } from "@cawco/core";
+import { USER_LAYER_SHELL, userLayerLabel } from "@cawco/core/claude-dirs";
 import { hashFiles } from "@cawco/core/file-hash";
-import { accountIds } from "@cawco/core/paths";
+import {
+  accountIds,
+  claudeHomeJson,
+  projectClaudeDir,
+  userLayerPath,
+} from "@cawco/core/paths";
 import { accountClaudeJsons, linkUserLayer } from "./accounts";
 import { excludeFromCheckout } from "./checkout-exclude";
 import {
@@ -69,33 +75,33 @@ import {
  * `~/.claude/settings.json`, and not in anything under `~/.claude/`. Every
  * project loads them, and the SDK reads them whatever its `settingSources` say.
  */
-const CLAUDE_JSON = expandHome("~/.claude.json");
+const CLAUDE_JSON = claudeHomeJson();
 
 /** What cawco manages here. Anything this does not name is never touched. */
-const SIDECAR = expandHome("~/.claude/cawco-fleet.json");
+const SIDECAR = userLayerPath("cawco-fleet.json");
 
 /** Where a plain skill's files land — one directory per skill, all of it cawco's. */
-const SKILLS_DIR = expandHome("~/.claude/skills");
+const SKILLS_DIR = userLayerPath("skills");
 
 /**
  * The fleet's OWN marketplace, written from the bytes the hub resolved. All of
  * it cawco's, like a skill's directory — rewritten whole whenever the set
  * changes, and never edited by anything else.
  */
-export const VENDOR_DIR = expandHome("~/.claude/cawco-marketplace");
+export const VENDOR_DIR = userLayerPath("cawco-marketplace");
 
 /** What that marketplace is called once linked, and the half after every `@`. */
 const VENDOR_NAME = "cawco";
 
 /** The user-scope memory every session on this machine reads (NEW.md §11). */
-const MEMORY_PATH = expandHome("~/.claude/CLAUDE.md");
+const MEMORY_PATH = userLayerPath("CLAUDE.md");
 
 /**
  * The documents the main memory links, one file per path the set names. All of
  * it cawco's, like a skill's directory — nothing under here was ever written
  * by anything else, so a file the set stops carrying is a file that goes.
  */
-const MEMORIES_DIR = expandHome("~/.claude/memories");
+const MEMORIES_DIR = userLayerPath("memories");
 
 /**
  * The hook that puts a model's own document in front of the session running
@@ -103,10 +109,10 @@ const MEMORIES_DIR = expandHome("~/.claude/memories");
  * it lives beside the sidecar and is written whenever it is not what this
  * version of cawco generates.
  */
-const MEMORY_HOOK_PATH = expandHome("~/.claude/cawco-model-memory.sh");
+const MEMORY_HOOK_PATH = userLayerPath("cawco-model-memory.sh");
 
 /** Where Claude Code reads a user's hooks; the same file the user's own are in. */
-const SETTINGS_PATH = expandHome("~/.claude/settings.json");
+const SETTINGS_PATH = userLayerPath("settings.json");
 
 /**
  * Where a fleet hook's own script lands, one file per hook id. Named by id
@@ -114,9 +120,9 @@ const SETTINGS_PATH = expandHome("~/.claude/settings.json");
  * registration but never orphans a script under an old name, and a hand edit
  * survives a hash bump to the same file it was made in.
  */
-const HOOKS_DIR = expandHome("~/.claude/cawco-hooks");
+const HOOKS_DIR = userLayerPath("cawco-hooks");
 
-const PLUGINS_DIR = expandHome("~/.claude/plugins");
+const PLUGINS_DIR = userLayerPath("plugins");
 /** The CLI's own account of what is linked and what is installed. */
 const KNOWN_MARKETPLACES = join(PLUGINS_DIR, "known_marketplaces.json");
 const INSTALLED_PLUGINS = join(PLUGINS_DIR, "installed_plugins.json");
@@ -124,7 +130,7 @@ const INSTALLED_PLUGINS = join(PLUGINS_DIR, "installed_plugins.json");
 const MARKETPLACES_DIR = join(PLUGINS_DIR, "marketplaces");
 
 /** Where the local installer puts the CLI when it is not on any PATH. */
-const LOCAL_CLAUDE = expandHome("~/.claude/local/claude");
+const LOCAL_CLAUDE = userLayerPath("local", "claude");
 
 /** How long one `claude plugin …` gets: a first clone of a marketplace is slow. */
 const CLI_TIMEOUT_MS = 120_000;
@@ -1783,10 +1789,10 @@ const syncMemoryDocs = async (
  */
 export const MEMORY_HOOK = `#!/bin/sh
 # Written by cawco. Edits are overwritten — the fleet's documents are in
-# ~/.claude/memories/, and this only decides which one a session is shown.
+# ${userLayerLabel("memories")}/, and this only decides which one a session is shown.
 set -u
 
-dir="\${HOME}/.claude/memories/models"
+dir="${USER_LAYER_SHELL}/memories/models"
 [ -d "$dir" ] || exit 0
 
 # Claude Code's SessionStart input carries no model, so the harness that
@@ -1882,7 +1888,7 @@ const syncMemoryHook = async (
   if (stored === undefined && (await Bun.file(SETTINGS_PATH).exists())) {
     report.memoryHook = {
       state: "failed",
-      detail: "could not parse ~/.claude/settings.json",
+      detail: `could not parse ${SETTINGS_PATH}`,
     };
     return managed;
   }
@@ -2016,7 +2022,7 @@ const scriptParseError = async (
  * checkout actually reads for its hooks. */
 const settingsPathFor = (hook: Pick<FleetHook, "scope" | "cwd">): string =>
   hook.scope && hook.scope !== "user" && hook.cwd
-    ? join(hook.cwd, ".claude", "settings.json")
+    ? projectClaudeDir(hook.cwd, "settings.json")
     : SETTINGS_PATH;
 
 /**
@@ -2336,7 +2342,7 @@ const converge = async (config: FleetConfig): Promise<FleetSyncReport> => {
   // `permissions.deny`, what it now denies goes in.
   const settings = await convergeDeniedTools(deniedBefore);
   if (settings.state === "failed") {
-    console.warn(`[fleet] ~/.claude/settings.json: ${settings.detail}`);
+    console.warn(`[fleet] ${SETTINGS_PATH}: ${settings.detail}`);
   }
   // Every account's Claude Code reads its user layer from its own dir: the
   // entries `~/.claude` gained this sync are linked in there too.
@@ -2721,7 +2727,7 @@ const discoverSkills = async (
     )
   );
   const project = cwd
-    ? await skillsIn(join(cwd, ".claude", "skills"), "project")
+    ? await skillsIn(projectClaudeDir(cwd, "skills"), "project")
     : [];
   const user = await skillsIn(SKILLS_DIR, "user");
   return [

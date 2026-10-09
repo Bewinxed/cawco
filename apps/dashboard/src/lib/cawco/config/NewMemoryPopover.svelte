@@ -4,7 +4,7 @@
    * ~/.claude/memories/, then the editor. A write to a path the hub has never
    * seen is how a document comes into being.
    */
-  import { memoryDocProblem } from "@cawco/core";
+  import { memoryDocProblem, userLayerLabel } from "@cawco/core";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
@@ -101,7 +101,11 @@
     class="w-[360px] max-w-[calc(100vw-2rem)] gap-3 p-3"
   >
     <form class="form" onsubmit={create}>
-      <Field id="memory-path" label="Path under ~/.claude/memories/" {problem}>
+      <Field
+        id="memory-path"
+        label="Path under {userLayerLabel("memories")}/"
+        {problem}
+      >
         {#snippet hint()}
           A <span class="font-mono">models/&lt;model&gt;.md</span> is put in
           front of the session running that model.

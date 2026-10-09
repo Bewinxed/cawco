@@ -6,6 +6,8 @@ import type {
   AgentRow,
   ArchiveView,
   BuildInfo,
+  CarrySessionOutcome,
+  CarrySessionRequest,
   CommandResult,
   ContinuationJob,
   ContinueStep,
@@ -105,6 +107,7 @@ import {
   CONFIGURE_BINARY_UPDATES,
   CONTROL_BEGIN_ACCOUNT_LOGIN,
   CONTROL_BEGIN_PROVIDER_LOGIN,
+  CONTROL_CARRY_SESSIONS,
   CONTROL_COMPLETE_ACCOUNT_LOGIN,
   CONTROL_COMPLETE_PROVIDER_LOGIN,
   CONTROL_CONTEXT_USAGE,
@@ -294,6 +297,7 @@ import { faviconRoutes } from "./favicon";
 import { fleetChoicesRoutes } from "./fleet-choices";
 import { FleetMcp } from "./fleet-mcp";
 import { accountForecasts, carrySequence } from "./forecast";
+import type { HarnessPlanDeps } from "./harness-plans";
 import { hidden } from "./hidden";
 import { joinRoutes } from "./join";
 import { streamLargeJson } from "./json-response";
@@ -579,6 +583,9 @@ const UPDATE_TIMEOUT_MS = 10 * 60_000;
 
 /** Reading one file off a machine: it answers about as fast as a disk does. */
 const READ_TIMEOUT_MS = 10_000;
+
+/** Why a carry left a session's data where it was: its process runs there. */
+const PROCESS_RUNS = "its process runs";
 /**
  * An account sign-in step on a machine: Claude Code printing its link (the
  * agent waits up to 30 s), or exchanging the code (up to 60 s) and reading
@@ -837,7 +844,8 @@ const HUB_EPOCH = crypto.randomUUID();
 const registerAck = (
   envelope: Envelope,
   ingested: Record<string, IngestMark>,
-  unknownAccounts: string[] | undefined
+  unknownAccounts: string[] | undefined,
+  sessions: CarrySessionRequest[]
 ): Envelope<RegisterAckPayload> => ({
   verb: envelope.verb,
   machineId: envelope.machineId,
@@ -847,6 +855,7 @@ const registerAck = (
     addressContract: true,
     hubEpoch: HUB_EPOCH,
     ...(unknownAccounts ? { unknownAccounts } : {}),
+    sessions,
   },
 });
 
@@ -1541,9 +1550,6 @@ const mcpProblem = (
 
 /** What a skill may be called: it names a directory under `~/.claude/skills`. */
 const SKILL_NAME = /^[A-Za-z0-9._-]+$/;
-
-/** `/home/<user>` or `/Users/<user>` — the prefix every path on a machine shares. */
-const HOME_PREFIX = /^(\/(?:home|Users)\/[^/]+)/;
 
 /** Whether a machine's last report says it still has anything of the fleet's on it. */
 const holdsFleet = (report: FleetSyncReport | undefined): boolean =>
@@ -2441,6 +2447,21 @@ export const createServer = (
       projectId?: string | null;
     }
   ): { accountId?: string } | { refusal: string } => {
+    // One that ran from the machine's own login, which has moved into an
+    // account since, runs on that account ({@link repinMovedFrom}); the
+    // launch carries its data there.
+    const moved =
+      (row.harness ?? "claude") === "claude" && movedFrom().has(row.id)
+        ? homeMovedAccountOn(machineId)
+        : undefined;
+    if (moved) {
+      db.patchInstance(row.id, { accountId: moved });
+      db.accounts.removeMovedFrom(row.id);
+      console.log(
+        `[hub] ${row.id} ran on ${machineName(machineId)}'s own login; it runs on ${moved}, where that login moved, from now on`
+      );
+      return { accountId: moved };
+    }
     const input = placementInput(
       machineId,
       {
@@ -4430,8 +4451,7 @@ export const createServer = (
   /**
    * The sessions that run from a moving credential whose process still runs:
    * the ones a move waits on to be at rest, as account dirs never share the
-   * credential (`USER_LAYER` in the agent's accounts.ts: "never linked: the
-   * credential").
+   * credential (core paths.ts: per account, "never linked or carried").
    */
   const liveFrom = (move: LoginMove): string[] =>
     db
@@ -4453,11 +4473,11 @@ export const createServer = (
    * from the pending ones only after that, so a hub that stops in between
    * asks the machine again, and the machine answers a move it already made.
    */
-  const settleMove = (
+  const settleMove = async (
     move: LoginMove,
     answer: Awaited<ReturnType<typeof callAgent>>,
     ranFrom: string[]
-  ): void => {
+  ): Promise<void> => {
     const at = Date.now();
     const { machineId, store } = move;
     const machine = machineName(machineId);
@@ -4482,42 +4502,129 @@ export const createServer = (
       return;
     }
     const kept = (answer.result as HomeLoginMoved).store;
-    // Every Claude session there on an account CawCo never placed there ran
-    // on the machine's own login, so it is the moved account's from now on,
-    // in the same step that signs that account in there.
-    const repinned =
-      store === "claude"
-        ? db
-            .listInstances()
-            .filter(
-              (row) =>
-                row.machineId === machineId &&
-                (row.harness ?? "claude") === "claude" &&
-                row.accountId !== move.accountId &&
-                !(row.accountId && placedOn(machineId, row.accountId))
-            )
-        : [];
+    const repinned = store === "claude" ? ranOnHomeLogin(move) : [];
     db.accounts.putSignin({
       accountId: move.accountId,
       machineId,
       state: "signed-in",
       moved: { at, from: store },
     });
-    for (const row of repinned) {
-      db.patchInstance(row.id, { accountId: move.accountId });
-    }
-    db.accounts.putMovedFrom(ranFrom, machineId);
+    // Each one to re-pin is kept with the ones that ran from the login until
+    // it is: a hub that stops in between re-pins it at its next tick.
+    db.accounts.putMovedFrom(
+      [...new Set([...ranFrom, ...repinned.map((row) => row.id)])],
+      machineId
+    );
     db.accounts.removeMove(move);
     moveResults.set(key, { ...done, kept });
+    const { moved, running } = await repinOnto(move, repinned, ranFrom);
     console.log(
-      `[hub] moved ${what} (${move.identity.email}) into account ${move.accountId}, kept in ${kept}; ${repinned.length} session(s) that ran on it re-pinned to it`
+      `[hub] moved ${what} (${move.identity.email}) into account ${move.accountId}, kept in ${kept}; ${moved} session(s) that ran on it re-pinned to it, ${running} when their process ends`
     );
     publishUsage(machineId);
   };
 
   /**
+   * Every Claude session on a machine whose own login moved, on an account
+   * CawCo never placed there: it ran on that login, so it is the moved
+   * account's from now on.
+   */
+  const ranOnHomeLogin = (move: LoginMove) =>
+    db
+      .listInstances()
+      .filter(
+        (row) =>
+          row.machineId === move.machineId &&
+          (row.harness ?? "claude") === "claude" &&
+          row.accountId !== move.accountId &&
+          !(row.accountId && placedOn(move.machineId, row.accountId))
+      );
+
+  /**
+   * Re-pins what ran on a moved login to the account it moved into: each
+   * one's data carried into that account's dir, then its row. One whose
+   * process still runs from the machine's own dir stays in
+   * {@link movedFrom}, carried when that process is gone
+   * ({@link sleepMovedFrom}); the rest leave it.
+   */
+  const repinOnto = async (
+    move: LoginMove,
+    rows: ReturnType<typeof ranOnHomeLogin>,
+    ranFrom: string[]
+  ): Promise<{ moved: number; running: number }> => {
+    const { moved, kept } = await moveRowsToAccount(
+      move.machineId,
+      rows,
+      move.accountId
+    );
+    const running = [...kept]
+      .filter(([, why]) => why === PROCESS_RUNS)
+      .map(([id]) => id);
+    for (const row of rows) {
+      if (!(running.includes(row.id) || ranFrom.includes(row.id))) {
+        db.accounts.removeMovedFrom(row.id);
+      }
+    }
+    return { moved: moved.length, running: running.length };
+  };
+
+  /**
+   * The account a machine's own Claude Code login moved into, if it has:
+   * the one its sessions from before the move are re-pinned to.
+   */
+  const homeMovedAccountOn = (machineId: string): string | undefined =>
+    db.accounts
+      .signins()
+      .filter(
+        (one) =>
+          one.machineId === machineId &&
+          one.movedFrom === "claude" &&
+          db.accounts.get(one.accountId)?.provider === CLAUDE_PROVIDER
+      )
+      .sort((a, b) => (b.movedAt ?? 0) - (a.movedAt ?? 0))[0]?.accountId;
+
+  /** The sessions {@link sleepMovedFrom} is carrying now, so no tick starts a second carry of one. */
+  const repinning = new Set<string>();
+
+  /**
+   * A Claude session that ran from a machine's own login, whose process is
+   * gone: re-pinned now to the account the login moved into, its data
+   * carried first. Done with once moved, or once it cannot be.
+   */
+  const repinMovedFrom = async (
+    instanceId: string,
+    machineId: string
+  ): Promise<void> => {
+    const [row] = db.getInstancesByIds([instanceId]);
+    const into = homeMovedAccountOn(machineId);
+    if (
+      !(row && into) ||
+      (row.harness ?? "claude") !== "claude" ||
+      row.accountId === into
+    ) {
+      db.accounts.removeMovedFrom(instanceId);
+      return;
+    }
+    if (repinning.has(instanceId) || !registry.agent(machineId)) {
+      return;
+    }
+    repinning.add(instanceId);
+    try {
+      const { kept } = await moveRowsToAccount(machineId, [row], into);
+      // A process that came back is carried when it is gone again.
+      if (kept.get(instanceId) !== PROCESS_RUNS) {
+        db.accounts.removeMovedFrom(instanceId);
+      }
+      publishInstances(machineId);
+    } finally {
+      repinning.delete(instanceId);
+    }
+  };
+
+  /**
    * Each session in {@link movedFrom} is asked to sleep, which its machine
-   * does only at rest; one whose process is gone is done with.
+   * does only at rest; one whose process is gone is done with, a Claude one
+   * once it is re-pinned ({@link repinMovedFrom}).
    */
   const sleepMovedFrom = (): void => {
     const moved = movedFrom();
@@ -4527,7 +4634,8 @@ export const createServer = (
     for (const [instanceId, machineId] of moved) {
       const now = status.get(instanceId);
       if (!(now && mayRun(now))) {
-        db.accounts.removeMovedFrom(instanceId);
+        // biome-ignore lint/complexity/noVoid: each re-pin runs on its own; one not done is tried at the next tick
+        void repinMovedFrom(instanceId, machineId);
         continue;
       }
       // Not known yet (a hub just started): asked once its machine says.
@@ -4612,7 +4720,7 @@ export const createServer = (
             [move.accountId, move.store, move.storeProvider, move.identity],
             MOVE_TIMEOUT_MS
           );
-    settleMove(move, answer, ranFrom);
+    await settleMove(move, answer, ranFrom);
     sleepMovedFrom();
     publishInstances(machineId);
   };
@@ -5066,6 +5174,168 @@ export const createServer = (
     });
   };
 
+  /** How long a machine gets to carry sessions' data: a few folders moved within one disk. */
+  const CARRY_TIMEOUT_MS = 120_000;
+
+  /**
+   * Puts `rows`, all on `machineId`, on `accountId` (null: on none). A Claude
+   * session's own data lives in its account's dir (core paths.ts
+   * `sessionConfigDir`), so each one's machine carries it there first
+   * ({@link CONTROL_CARRY_SESSIONS}) and its row says the new account only
+   * once the machine answers that it all is: a reader with the row reads
+   * that one dir. `stop` ends a session's process first when it is at rest,
+   * for a move that relaunches it; without it a session whose process runs
+   * stays where it is. A row with no conversation yet, or of another
+   * harness, has nothing of Claude's to carry. Answers the rows that moved,
+   * and why each other did not.
+   */
+  const moveRowsToAccount = async (
+    machineId: string,
+    rows: readonly {
+      harness?: string | null;
+      id: string;
+      sessionId?: string | null;
+    }[],
+    accountId: string | null,
+    stop = false
+  ): Promise<{ kept: Map<string, string>; moved: string[] }> => {
+    const requests: CarrySessionRequest[] = rows.flatMap((row) =>
+      (row.harness ?? "claude") === "claude" && row.sessionId
+        ? [
+            {
+              instanceId: row.id,
+              sessionId: row.sessionId,
+              accountId,
+              ...(stop ? { stop: true } : {}),
+            },
+          ]
+        : []
+    );
+    const outcomes = await askCarry(machineId, requests);
+    const kept = new Map<string, string>();
+    const moved: string[] = [];
+    for (const row of rows) {
+      const why = requests.some((one) => one.instanceId === row.id)
+        ? keptBecause(machineId, outcomes.get(row.id))
+        : undefined;
+      if (why) {
+        kept.set(row.id, why);
+        console.warn(
+          `[accounts] ${row.id} stays on its account; its data could not be carried to ${accountId ?? "no account"}: ${why}`
+        );
+        continue;
+      }
+      db.patchInstance(row.id, { accountId });
+      moved.push(row.id);
+    }
+    return { moved, kept };
+  };
+
+  /** Why a carry left a row's data where it was ({@link moveRowsToAccount}); undefined when it is all in the new dir. */
+  const keptBecause = (
+    machineId: string,
+    outcome: CarrySessionOutcome | undefined
+  ): string | undefined => {
+    if (!outcome) {
+      return `${machineName(machineId)} said nothing of it`;
+    }
+    if (outcome.state === "carried") {
+      return;
+    }
+    return outcome.state === "live" ? PROCESS_RUNS : outcome.error;
+  };
+
+  /** The machine's word on each carry asked of it; one it never gave is a failure with its reason. */
+  const askCarry = async (
+    machineId: string,
+    requests: CarrySessionRequest[]
+  ): Promise<Map<string, CarrySessionOutcome>> => {
+    if (requests.length === 0) {
+      return new Map();
+    }
+    const answer = await callAgent(
+      machineId,
+      CONTROL_CARRY_SESSIONS,
+      [requests],
+      CARRY_TIMEOUT_MS
+    );
+    if (answer === "offline" || answer === "timeout" || !answer.ok) {
+      const error =
+        typeof answer === "string"
+          ? awayWords(machineId, answer)
+          : (answer.error ?? `${machineName(machineId)} gave no reason`);
+      return new Map(
+        requests.map((one) => [
+          one.instanceId,
+          { state: "failed", error } as const,
+        ])
+      );
+    }
+    return new Map(
+      Object.entries(answer.result as Record<string, CarrySessionOutcome>)
+    );
+  };
+
+  /**
+   * Every Claude session with a conversation on `machineId`, with the
+   * account its row runs on, for the machine to carry into that account's
+   * dir as its agent starts ({@link RegisterAckPayload.sessions}). Rows that
+   * share one conversation and disagree on its account are left out: their
+   * data cannot be in both dirs.
+   */
+  const claudeSessionsOn = (machineId: string): CarrySessionRequest[] => {
+    const bySession = new Map<string, CarrySessionRequest | null>();
+    for (const row of db.listInstances()) {
+      if (
+        row.machineId !== machineId ||
+        (row.harness ?? "claude") !== "claude" ||
+        !row.sessionId
+      ) {
+        continue;
+      }
+      const accountId = row.accountId ?? null;
+      const seen = bySession.get(row.sessionId);
+      if (seen === undefined) {
+        bySession.set(row.sessionId, {
+          instanceId: row.id,
+          sessionId: row.sessionId,
+          accountId,
+        });
+      } else if (seen && seen.accountId !== accountId) {
+        console.warn(
+          `[accounts] conversation ${row.sessionId} has rows on ${seen.accountId ?? "no account"} and ${accountId ?? "no account"}; its data is left where it is`
+        );
+        bySession.set(row.sessionId, null);
+      }
+    }
+    return [...bySession.values()].filter(
+      (one): one is CarrySessionRequest => one !== null
+    );
+  };
+
+  /** A session's list as its harness keeps it, asked of its machine (harness-plans.ts). */
+  const planControl: HarnessPlanDeps["control"] = async (
+    machineId,
+    method,
+    args,
+    harness
+  ) => {
+    const response = await callAgent(
+      machineId,
+      method,
+      args,
+      READ_TIMEOUT_MS,
+      harness
+    );
+    if (typeof response === "string") {
+      throw new Error(`The plan could not be read: machine ${response}.`);
+    }
+    if (response.error) {
+      throw new Error(String(response.error));
+    }
+    return response.result;
+  };
+
   /**
    * A row from before `cwd` was pinned to the launch directory may hold a
    * folder its CLI wandered into. Its conversation names where it started —
@@ -5102,12 +5372,23 @@ export const createServer = (
    * would have, and the caller is told why in a sentence.
    */
   /** Has `machineId` forget an account's store: a Claude dir through Claude Code, any other through the agent. */
-  const forgetOn = (account: Account, machineId: string) =>
+  /**
+   * Signs `account` out of a machine and drops its store there. A Claude
+   * account's dir carries each session that ran there out first: into
+   * `into`'s dir when it is joined into that account, else into the dir of a
+   * session on no account, which is what those rows then say
+   * ({@link rowsLeave}).
+   */
+  const forgetOn = (
+    account: Account,
+    machineId: string,
+    into: string | null = null
+  ) =>
     account.provider === CLAUDE_PROVIDER
       ? callAgent(
           machineId,
           CONTROL_FORGET_ACCOUNT,
-          [account.id],
+          [account.id, into],
           SIGNIN_TIMEOUT_MS,
           "claude"
         )
@@ -5117,6 +5398,36 @@ export const createServer = (
           [account.id],
           SIGNIN_TIMEOUT_MS
         );
+
+  /**
+   * The rows on an account that is gone (from every machine, or from
+   * `machineId` alone) say where their sessions' data went with its dir
+   * ({@link forgetOn}): the account it joined, else none. A machine that was
+   * away carries the data out when it next connects (its account sweep, then
+   * the carry of every session into its row's dir).
+   */
+  const rowsLeave = (
+    accountId: string,
+    into: string | null,
+    machineId?: string
+  ): void => {
+    const rows = db
+      .listInstances()
+      .filter(
+        (row) =>
+          row.accountId === accountId &&
+          (machineId === undefined || row.machineId === machineId)
+      );
+    for (const row of rows) {
+      db.patchInstance(row.id, { accountId: into });
+    }
+    if (rows.length > 0) {
+      console.log(
+        `[accounts] ${rows.length} session(s) on ${accountId} are on ${into ?? "no account"} now`
+      );
+      publishInstances("");
+    }
+  };
 
   const undoRemovedSignin = async (
     account: Account,
@@ -5376,9 +5687,10 @@ export const createServer = (
         (one) => one.accountId === account.id && one.machineId !== machineId
       )) {
       // biome-ignore lint/performance/noAwaitInLoops: one machine at a time; an offline one forgets its empty store when it next connects (`unknownAccountsOf`)
-      await forgetOn(account, signin.machineId);
+      await forgetOn(account, signin.machineId, existing.id);
     }
     db.accounts.remove(account.id, "joined");
+    rowsLeave(account.id, existing.id);
     joinedInto.set(account.id, existing.id);
     publishUsage();
     return joined;
@@ -9382,28 +9694,6 @@ export const createServer = (
   const unpushable = new Map<string, string>();
 
   /**
-   * Where this machine's home directory is, taken off the directories its
-   * sessions are open in — a session running in `/home/x/repo` has already said
-   * what the home is.
-   *
-   * A heuristic, and knowingly so: until register carries `home` — see the
-   * parked daemon batch — the instance rows are the only thing on the hub's
-   * side that has ever named a real path on that machine.
-   */
-  const homeOf = (machineId: string): string | undefined => {
-    for (const row of db.listInstances()) {
-      if (row.machineId !== machineId) {
-        continue;
-      }
-      const match = HOME_PREFIX.exec(row.cwd);
-      if (match) {
-        return match[1];
-      }
-    }
-    return undefined;
-  };
-
-  /**
    * Writes one file on a machine over the `fs` verb. The daemon answers a write
    * with a `control_result` frame, exactly as it answers a control call, so the
    * same `waiting` map routes the reply and no dashboard is broadcast a write
@@ -9425,14 +9715,6 @@ export const createServer = (
       } satisfies Envelope<FsPayload>)
     );
   };
-
-  const writeMachineFile = (
-    machineId: string,
-    agent: HubSocket,
-    path: string,
-    content: string
-  ): Promise<ControlResult | "timeout"> =>
-    callFs(machineId, agent, { op: "write", path, content });
 
   /**
    * One picture or video off a machine's disk, read the moment someone looks
@@ -9464,7 +9746,7 @@ export const createServer = (
   telegram?.setMediaReader(readMachineMedia);
 
   /**
-   * Writes every fleet subagent into `<home>/.claude/agents/` on one machine
+   * Writes every fleet subagent into the user layer's `agents/` on one machine
    * (NEW.md §11). Claude Code re-scans that directory within seconds, so a
    * definition saved here is delegatable out there without anything being
    * restarted.
@@ -9482,23 +9764,14 @@ export const createServer = (
       return;
     }
 
-    const home = homeOf(machineId);
-    if (!home) {
-      unpushable.set(
-        machineId,
-        "no session on this machine has said where its home directory is"
-      );
-      return;
-    }
-
     for (const file of files) {
       // biome-ignore lint/performance/noAwaitInLoops: each write is a control round-trip to the same machine over one socket; concurrent writes would race the daemon's own file handling.
-      const answer = await writeMachineFile(
-        machineId,
-        agent,
-        `${home}/.claude/agents/${file.name}.md`,
-        file.content
-      );
+      const answer = await callFs(machineId, agent, {
+        op: "write",
+        root: "claude-home",
+        path: `agents/${file.name}.md`,
+        content: file.content,
+      });
       if (answer === "timeout" || !answer.ok) {
         unpushable.set(
           machineId,
@@ -9935,21 +10208,27 @@ export const createServer = (
 
   /**
    * Moves `row` to `account` because a person asked, the line "Moved to …"
-   * written as it moves. A session at rest relaunches on it now; one not
-   * running resumes on it when it next starts, its conversation carried
-   * then; both rows name it now. One mid-turn goes on reading its old
-   * account until the turn ends, so its row names that one until then
-   * ({@link relaunchAtTurnEnd}). A hold at its old account's limit ends:
-   * the person chose.
+   * written as it moves. Its data is carried into the account's dir first
+   * ({@link moveRowsToAccount}) and only then does its row name the account:
+   * one at rest has its process ended for that and relaunches on it now; one
+   * not running resumes on it when it next starts. One mid-turn goes on
+   * reading its old account until the turn ends, so its row names that one
+   * until then ({@link relaunchAtTurnEnd}); so does one whose machine is
+   * away, whose next launch carries it. A hold at its old account's limit
+   * ends: the person chose. A carry that cannot happen is refused, the row
+   * left as it was.
    */
   const moveByHand = async (
     row: StoredRow,
     account: Account
-  ): Promise<{
-    accountId: string;
-    state: "moved" | "pending";
-    why: string;
-  }> => {
+  ): Promise<
+    | {
+        accountId: string;
+        state: "moved" | "pending";
+        why: string;
+      }
+    | { refusal: string }
+  > => {
     const from = row.accountId ? db.accounts.get(row.accountId) : undefined;
     const move: AccountMove | null = from
       ? {
@@ -9964,17 +10243,42 @@ export const createServer = (
         }
       : null;
     const running = !["sleeping", "stopped", "error"].includes(row.status);
-    if (running && !(await sessionIdle(row))) {
+    const pending = () => {
       relaunchAtTurnEnd.set(row.id, { to: account.id, move });
       return {
-        state: "pending",
+        state: "pending" as const,
         accountId: account.id,
-        why: `${sessionName(row)} moves to ${accountName(account)} when its turn ends.`,
+        why: running
+          ? `${sessionName(row)} moves to ${accountName(account)} when its turn ends.`
+          : `${sessionName(row)} moves to ${accountName(account)} when it next starts.`,
       };
+    };
+    if (
+      (running && !(await sessionIdle(row))) ||
+      !registry.agent(row.machineId)
+    ) {
+      return pending();
     }
     // A move it still owed (asked mid-turn, to another account) is over.
     relaunchAtTurnEnd.delete(row.id);
-    db.patchInstance(row.id, { accountId: account.id });
+    if (running) {
+      transcripts.noteRelaunch(row.id);
+    }
+    const { kept } = await moveRowsToAccount(
+      row.machineId,
+      [row],
+      account.id,
+      running
+    );
+    const why = kept.get(row.id);
+    if (why === PROCESS_RUNS) {
+      return pending();
+    }
+    if (why) {
+      return {
+        refusal: `${sessionName(row)} stays on its account: its conversation could not be carried to ${accountName(account)} (${why}).`,
+      };
+    }
     db.atLimit.dropHold(row.id);
     publishInstances(row.machineId);
     if (running) {
@@ -9996,10 +10300,38 @@ export const createServer = (
    * Relaunches a session on the account its row now names (or on none), its
    * conversation whole: Claude Code's is carried into that account's dir; pi
    * reopens its session file on that account's runtime; OpenCode carries it
-   * into that account's server.
+   * into that account's server. A person's move it owes ({@link
+   * relaunchAtTurnEnd}) is carried first, its process ended at rest for it,
+   * and its row names the account only once its data is there; one whose
+   * carry cannot happen stays on its account and in place.
    */
   const relaunchOnAccount = (instanceId: string): void => {
     const [stored] = db.getInstancesByIds([instanceId]);
+    const owed = stored ? relaunchAtTurnEnd.get(stored.id) : undefined;
+    if (stored && owed?.to !== undefined && registry.agent(stored.machineId)) {
+      const to = owed.to;
+      relaunchAtTurnEnd.delete(stored.id);
+      transcripts.noteRelaunch(stored.id);
+      // biome-ignore lint/complexity/noVoid: the carry runs on its own; the relaunch follows it
+      void moveRowsToAccount(stored.machineId, [stored], to, true).then(
+        ({ kept }) => {
+          const why = kept.get(stored.id);
+          if (why) {
+            if (why === PROCESS_RUNS) {
+              relaunchAtTurnEnd.set(stored.id, owed);
+            }
+            return;
+          }
+          db.atLimit.dropHold(stored.id);
+          publishInstances(stored.machineId);
+          if (owed.move) {
+            noteAtLimit(stored, owed.move);
+          }
+          relaunchOnAccount(stored.id);
+        }
+      );
+      return;
+    }
     const row = stored && takeOwedMove(stored);
     const agent = row ? registry.agent(row.machineId) : undefined;
     if (!(row?.sessionId && agent)) {
@@ -10799,6 +11131,7 @@ export const createServer = (
   const workItems = createWorkItems({
     db,
     lifetime,
+    control: planControl,
     pauses: (projectId) => caps.pauses(projectId),
     end: async (instanceId) => {
       endSession(instanceId, "stop");
@@ -11114,6 +11447,7 @@ export const createServer = (
   const projectOffers = createProjectOffers({
     db,
     tasks,
+    control: planControl,
     run: runOnMachine,
     online: (machineId) => Boolean(registry.agent(machineId)),
     createProject: createOrJoinProject,
@@ -11142,24 +11476,8 @@ export const createServer = (
     db,
     lifetime,
     tasks,
-    run: runOnMachine,
     online: (machineId) => Boolean(registry.agent(machineId)),
-    control: async (machineId, method, args, harness) => {
-      const response = await callAgent(
-        machineId,
-        method,
-        args,
-        READ_TIMEOUT_MS,
-        harness
-      );
-      if (typeof response === "string") {
-        throw new Error(`The plan could not be read: machine ${response}.`);
-      }
-      if (response.error) {
-        throw new Error(String(response.error));
-      }
-      return response.result;
-    },
+    control: planControl,
     typeTodos: (projectId, type) =>
       projectTypes.resolveTypeFor(projectId, type)?.cawcoTodos === true,
     publish: (instanceId, message) =>
@@ -11826,24 +12144,40 @@ export const createServer = (
     }),
     target: limitTarget,
     idle: sessionIdle,
-    move: (row, accountId) => {
-      const agent = registry.agent(row.machineId);
-      if (!(agent && row.sessionId)) {
-        console.warn(
-          `[at-limit] ${row.id}: cannot move to ${accountId}: ${agent ? "it has no conversation" : "its machine is away"}`
-        );
-        return;
+    move: async (row, accountId) => {
+      if (!(registry.agent(row.machineId) && row.sessionId)) {
+        return row.sessionId
+          ? awayWords(row.machineId, "offline")
+          : "it has no conversation";
       }
-      db.patchInstance(row.id, { accountId });
+      // Its process ends at rest and its data goes into the account's dir,
+      // and only then does its row say the account; it starts again there.
+      // One that did not move stays on its account, held until its reset;
+      // a process the carry ended there is asleep, woken at that reset.
       transcripts.noteRelaunch(row.id);
+      const { kept } = await moveRowsToAccount(
+        row.machineId,
+        [row],
+        accountId,
+        true
+      );
+      const why = kept.get(row.id);
+      if (why) {
+        return why;
+      }
+      const agent = registry.agent(row.machineId);
+      const [now] = db.getInstancesByIds([row.id]);
+      if (!(agent && now?.sessionId)) {
+        return awayWords(row.machineId, "offline");
+      }
       resumeSpawn(
         agent,
         row.machineId,
-        { ...row, sessionId: row.sessionId },
+        { ...now, sessionId: now.sessionId },
         false,
         true
       );
-      carryOn(row);
+      carryOn(now);
     },
     resume: carryOn,
     continueOn: continueOnAccount,
@@ -12764,7 +13098,8 @@ export const createServer = (
               why: `${sessionName(row)} already runs on ${accountName(account)}.`,
             };
           }
-          return await moveByHand(row, account);
+          const moved = await moveByHand(row, account);
+          return "refusal" in moved ? status(409, moved.refusal) : moved;
         }
       )
       .post(
@@ -15353,6 +15688,7 @@ export const createServer = (
           );
         }
         db.accounts.remove(account.id, "removed");
+        rowsLeave(account.id, null);
         publishUsage();
         // Machines offline now, which sign it out when they next connect.
         return { ok: true, later };
@@ -15410,6 +15746,7 @@ export const createServer = (
             );
           }
           db.accounts.removeSignin(account.id, params.machineId);
+          rowsLeave(account.id, null, params.machineId);
           publishUsage();
           return { ok: true };
         }
@@ -16326,8 +16663,6 @@ export const createServer = (
                 );
               }
               publishInstances(message.machineId);
-              // After `settleInstances`, so the rows this reads the machine's home
-              // out of are the ones the returning daemon just accounted for.
               // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — nothing here is waiting on it, and register must not stall on it.
               void pushAgents(message.machineId);
               // And what its stored conversations are called, for the ones nobody
@@ -16349,7 +16684,8 @@ export const createServer = (
                 registerAck(
                   message,
                   streams.ingestedFor(reattaching),
-                  unknownAccountsOf(message.machineId, message.payload)
+                  unknownAccountsOf(message.machineId, message.payload),
+                  claudeSessionsOn(message.machineId)
                 )
               );
               for (const row of toEnd) {

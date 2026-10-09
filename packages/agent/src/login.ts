@@ -348,9 +348,14 @@ export const completeAccountLogin = async (
 /**
  * Signs an account out of this machine with Claude Code itself, and drops its
  * dir. A `claude auth login` it began there and that still waits for a code
- * is ended first, and gone before the dir is: nothing of the account stays.
+ * is ended first, and gone before the dir is: nothing of the account stays
+ * but its sessions, carried into `into`'s dir (an account it joins), else
+ * into the dir of a session on no account ({@link removeAccountDir}).
  */
-export const forgetAccount = async (account: string): Promise<void> => {
+export const forgetAccount = async (
+  account: string,
+  into: string | null = null
+): Promise<void> => {
   const waiting = inFlight.get(account);
   if (waiting) {
     inFlight.delete(account);
@@ -358,5 +363,5 @@ export const forgetAccount = async (account: string): Promise<void> => {
     await waiting.child.exited;
   }
   await logout(account);
-  await removeAccountDir(account);
+  await removeAccountDir(account, into);
 };

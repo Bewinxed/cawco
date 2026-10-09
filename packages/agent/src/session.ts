@@ -12,6 +12,8 @@ import { homedir, hostname } from "node:os";
 import { basename, dirname, join } from "node:path";
 import type {
   AgentBusyReport,
+  CarrySessionOutcome,
+  CarrySessionRequest,
   ControlPayload,
   DaemonPermissionRequestFrame,
   Envelope,
@@ -42,6 +44,7 @@ import {
   alreadyIngested,
   BOUNDARY_RELAUNCH,
   CAWCO_SCRATCH_TAG,
+  CONTROL_CARRY_SESSIONS,
   CONTROL_GIT_CHANGES,
   CONTROL_QUERIES,
   CONTROL_RESTLESS,
@@ -85,6 +88,7 @@ import {
 import { Effect } from "effect";
 import { withFiles } from "./attachments";
 import { type Boundary, boundaryFor } from "./boundary";
+import { carrySessions } from "./claude-sessions";
 import { fetchDefaultBranch } from "./clone";
 import { harnessMcpUrl } from "./delegation";
 import { expandHome, runFs } from "./fs";
@@ -1353,6 +1357,67 @@ export class SessionSupervisor {
       }
     }
     return restless;
+  }
+
+  /**
+   * Carries each Claude session's own data into the dir its row is to say
+   * ({@link CONTROL_CARRY_SESSIONS}). A session whose process runs is left
+   * where it is, `live`, unless the request says `stop` and it is at rest:
+   * then its process ends first, the way a relaunch ends it, and the hub
+   * starts it again on the account it moved to. A process sessiond still
+   * holds that no session here has taken back is live too.
+   */
+  async carrySessions(
+    requests: CarrySessionRequest[]
+  ): Promise<Record<string, CarrySessionOutcome>> {
+    const outcomes: Record<string, CarrySessionOutcome> = {};
+    const adapter = this.#adapter("claude") as Harness &
+      Partial<SessiondAdoption>;
+    const held = new Set(
+      ((await adapter.custodyCandidates?.())?.procs ?? []).flatMap((proc) => {
+        const identity = parseProcId(proc.procId);
+        return proc.alive && identity.kind === "claude"
+          ? [identity.instanceId]
+          : [];
+      })
+    );
+    const go: CarrySessionRequest[] = [];
+    for (const request of requests) {
+      const { instanceId } = request;
+      const running = this.#sessions.get(instanceId);
+      if (running && request.stop) {
+        // biome-ignore lint/performance/noAwaitInLoops: one session at a time, each at rest and stopped before its data moves
+        const awake = await this.#awake(instanceId, running, undefined, true);
+        if (awake || this.#queues.has(instanceId)) {
+          outcomes[instanceId] = { state: "live" };
+          continue;
+        }
+        this.#sessions.delete(instanceId);
+        this.#forgetPulse(instanceId);
+        await running.stop();
+        go.push(request);
+        continue;
+      }
+      if (
+        running ||
+        this.#adopting.has(instanceId) ||
+        this.#queues.has(instanceId) ||
+        held.has(instanceId)
+      ) {
+        outcomes[instanceId] = { state: "live" };
+        continue;
+      }
+      go.push(request);
+    }
+    const carried = await carrySessions(go);
+    for (const request of go) {
+      const result = carried.get(request.sessionId);
+      outcomes[request.instanceId] =
+        result && "error" in result
+          ? { state: "failed", error: result.error }
+          : { state: "carried", entries: result?.entries ?? 0 };
+    }
+    return outcomes;
   }
 
   /** Every carried session at rest for {@link IDLE_SLEEP_MS} is put to sleep. */
@@ -3591,6 +3656,9 @@ export class SessionSupervisor {
 
       if (method === CONTROL_RESTLESS) {
         return await this.#restless(args[0] as string[]);
+      }
+      if (method === CONTROL_CARRY_SESSIONS) {
+        return await this.carrySessions(args[0] as CarrySessionRequest[]);
       }
       if (method === "listRepos") {
         return await listRepos();

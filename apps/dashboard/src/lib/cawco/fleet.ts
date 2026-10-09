@@ -29,7 +29,6 @@ import {
 import { CONTROL_TIMEOUT_MS } from "#lib/config.js";
 import { type Machine, machineControl, machineFs } from "./client.svelte";
 import type { ListedVersion } from "./config/PreviousVersions.svelte";
-import { homeOf } from "./tasks.svelte";
 
 /** The fleet's user-scope CLAUDE.md, as the hub stores it (NEW.md §11). */
 export interface FleetMemoryRow {
@@ -685,6 +684,7 @@ export interface DiscoveredAgent {
   description?: string;
   /** The front matter's `name` — the identity, whatever the file is called. */
   name: string;
+  /** Its file, under the machine's user layer: `agents/<file>.md`. */
   path: string;
 }
 
@@ -692,27 +692,29 @@ export interface DiscoveredAgent {
 const markdown = (entry: FsEntry): boolean =>
   entry.kind === "file" && entry.name.endsWith(".md");
 
+/** A listing or read under a machine's user layer, which the machine itself places. */
+const userLayerFs = <T>(
+  machineId: string,
+  op: "list" | "read",
+  path: string
+): Promise<T> => machineFs<T>(machineId, op, path, undefined, "claude-home");
+
 /**
- * The subagent files a machine really has under `~/.claude/agents`. Claude Code
- * scans that directory recursively; one level down is as deep as anybody files
- * them, and a walk that goes deeper over a socket is a walk that keeps the page
- * waiting.
+ * The subagent files a machine really has under its user layer's `agents`.
+ * Claude Code scans that directory recursively; one level down is as deep as
+ * anybody files them, and a walk that goes deeper over a socket is a walk
+ * that keeps the page waiting.
  *
- * A machine whose home cannot be worked out, or which has no such directory,
- * answers with nothing at all — absence over placeholder.
+ * A machine which has no such directory answers with nothing at all —
+ * absence over placeholder.
  */
 export async function discoverAgents(
   machineId: string
 ): Promise<DiscoveredAgent[]> {
-  const home = await homeOf(machineId);
-  if (!home) {
-    return [];
-  }
-
-  const root = `${home}/.claude/agents`;
+  const root = "agents";
   let entries: FsEntry[];
   try {
-    entries = await machineFs<FsEntry[]>(machineId, "list", root);
+    entries = await userLayerFs<FsEntry[]>(machineId, "list", root);
   } catch {
     return [];
   }
@@ -723,7 +725,7 @@ export async function discoverAgents(
   for (const dir of entries.filter((entry) => entry.kind === "dir")) {
     try {
       // biome-ignore lint/performance/noAwaitInLoops: one control call in flight per machine socket at a time
-      const nested = await machineFs<FsEntry[]>(
+      const nested = await userLayerFs<FsEntry[]>(
         machineId,
         "list",
         `${root}/${dir.name}`
@@ -741,7 +743,7 @@ export async function discoverAgents(
   const read = await Promise.all(
     paths.map(async (path) => {
       try {
-        const content = await machineFs<string>(machineId, "read", path);
+        const content = await userLayerFs<string>(machineId, "read", path);
         const front = parseAgentFrontMatter(content);
         // A markdown file with no `name` is not a subagent — it is a note
         // somebody left in the directory, and Claude Code ignores it too.

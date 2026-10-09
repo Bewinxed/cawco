@@ -31,7 +31,7 @@ import { Elysia, t } from "elysia";
 import { z } from "zod";
 import { tool } from "./admin-tools";
 import type { DbShape, ProjectOfferRow, ProjectRow } from "./db";
-import { readClaudeLedger } from "./harness-plans";
+import { type HarnessPlanDeps, harnessTasks } from "./harness-plans";
 import { leafOf, sessionLabel } from "./labels";
 import { FolderRefusal, refused } from "./project-folder";
 import { normaliseRemote, placePath } from "./projects";
@@ -73,6 +73,8 @@ export interface AcceptResult {
 type InstanceShape = ReturnType<DbShape["listInstances"]>[number];
 
 export interface ProjectOffersDeps {
+  /** A machine control, answered by the session's harness: its task list. */
+  control: HarnessPlanDeps["control"];
   /** Makes the project with Caw, or joins the one that has the folder's remote (server.ts, POST /api/projects). */
   createProject: (asked: {
     name: string;
@@ -178,14 +180,16 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
     return reading;
   };
 
-  /** Claude Code's ledger for the session, open items only, in id order. */
+  /** Claude Code's task list for the session, open items only, in id order. */
   const readLedger = async (row: InstanceShape): Promise<PlanItem[]> =>
-    (await readClaudeLedger(deps, row))
-      .filter((task) => task.status !== "completed")
-      .map(({ subject, description }) => ({
-        subject,
-        ...(description ? { description } : {}),
-      }));
+    (row.harness ?? "claude") === "claude"
+      ? (await harnessTasks(deps, row).catch(() => []))
+          .filter((task) => task.status !== "completed")
+          .map(({ subject, description }) => ({
+            subject,
+            ...(description ? { description } : {}),
+          }))
+      : [];
 
   /** The session's open plan: its ledger, else the TodoWrite list it last wrote. */
   const planOf = async (row: InstanceShape): Promise<PlanItem[]> => {

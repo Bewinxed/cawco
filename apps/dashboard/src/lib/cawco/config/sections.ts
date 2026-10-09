@@ -1,3 +1,4 @@
+import { userLayerLabel } from "@cawco/core";
 import type { Component } from "svelte";
 import {
   IconAccounts,
@@ -76,7 +77,7 @@ export const SECTIONS: ConfigSection[] = [
     counted: true,
     group: "Agents",
     label: "Subagents",
-    purpose: "Agent files written to ~/.claude/agents on every machine",
+    purpose: `Agent files written to ${userLayerLabel("agents")} on every machine`,
     icon: IconSubagent,
     hue: "var(--hue-orange-500)",
   },

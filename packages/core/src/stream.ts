@@ -15,6 +15,8 @@
  * together, so there is no older dialect to negotiate.
  */
 
+import type { CarrySessionRequest } from "./harness";
+
 /**
  * The dashboard wire's version, raised only when the wire breaks: when a
  * client built for the version before would misread what the hub now sends.
@@ -212,6 +214,15 @@ export interface RegisterAckPayload {
    */
   ingested?: Record<string, IngestMark>;
   ok: true;
+  /**
+   * Every Claude session this hub has a row for on the machine, each with
+   * the account its row runs on (null for none). The machine carries each
+   * one's data into that account's dir (core paths.ts `sessionConfigDir`)
+   * once its account sweep is done, leaving any whose process runs: data a
+   * row's account change left in another dir is where its row says after
+   * every start of the machine's agent.
+   */
+  sessions?: CarrySessionRequest[];
   /**
    * Of the account stores the machine named at register (`accountStores`),
    * the ids of accounts this hub removed: removed while the machine was

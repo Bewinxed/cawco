@@ -42,6 +42,7 @@ import {
   type BinaryUpdateState,
 } from "@cawco/core/binary-updates";
 import { machineId } from "@cawco/core/machine-id";
+import { userLayerPath } from "@cawco/core/paths";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
 import { fetchOpenCodeGoLimits } from "@cawco/core/usage/opencode-go";
 import { announcingParts, clientLine } from "@cawco/core/wire";
@@ -1313,19 +1314,45 @@ const attach = (
       supervisor.receivedStop(stop.stopSequence ?? 0);
     };
 
-    /** The machine agent forgets the stores its hub named as no account of its own. */
+    /**
+     * The machine agent forgets the stores its hub named as no account of
+     * its own, and then carries each Claude session the hub named into the
+     * dir its row says (its sessions' data, once the stores that go have
+     * carried theirs out).
+     */
     const sweepAccounts = (ack: RegisterAckPayload): void => {
-      const unknown = ack.unknownAccounts;
-      if (!(machineAgent && unknown?.length)) {
+      if (!machineAgent) {
         return;
       }
-      forgetUnknownAccounts(unknown)
-        .then(() => providerAccountsChanged())
-        .catch((error: unknown) =>
-          console.warn(
-            `[accounts] forgetting removed accounts failed: ${error instanceof Error ? error.message : String(error)}`
-          )
-        );
+      const unknown = ack.unknownAccounts ?? [];
+      const named = ack.sessions ?? [];
+      (async () => {
+        if (unknown.length > 0) {
+          await forgetUnknownAccounts(unknown);
+          providerAccountsChanged();
+        }
+        if (named.length > 0) {
+          const outcomes = Object.values(await supervisor.carrySessions(named));
+          const moved = outcomes.filter(
+            (one) => one.state === "carried" && one.entries > 0
+          ).length;
+          const failed = outcomes.filter((one) => one.state === "failed");
+          console.info(
+            `[claude] ${moved} of ${named.length} session(s) carried into the dir their row names; ${outcomes.filter((one) => one.state === "live").length} left running${
+              failed.length > 0
+                ? `; ${failed.length} failed, first: ${failed
+                    .slice(0, 5)
+                    .map((one) => (one.state === "failed" ? one.error : ""))
+                    .join("; ")}`
+                : ""
+            }`
+          );
+        }
+      })().catch((error: unknown) =>
+        console.warn(
+          `[accounts] the start's account sweep failed: ${error instanceof Error ? error.message : String(error)}`
+        )
+      );
     };
 
     /** What arrives ahead of the register ack: custody, taken on the ack. Whether it was taken. */
@@ -1543,7 +1570,7 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
     const denied = yield* Effect.promise(() => convergeDeniedTools());
     if (denied.state === "applied") {
       yield* Effect.logInfo(
-        "converged fleet denied-tools into ~/.claude/settings.json"
+        `converged fleet denied-tools into ${userLayerPath("settings.json")}`
       );
     } else if (denied.state === "failed") {
       yield* Effect.logWarning(denied.detail);

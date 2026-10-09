@@ -8,8 +8,8 @@
  */
 
 import { readFileSync, unlinkSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
+import { userLayerPath } from "@cawco/core/paths";
 import { readTranscript } from "@cawco/jsonl-parser";
 import {
   CHAIN_TYPES,
@@ -18,9 +18,10 @@ import {
 } from "../src/harnesses/claude-transcript";
 import { TranscriptCache } from "../src/harnesses/transcript-cache";
 
-const BIG_SESSION = join(
-  homedir(),
-  ".claude/projects/-home-bewinxed-cockpit/300c7b00-dd82-492d-9a69-b3bece69eb50.jsonl"
+const BIG_SESSION = userLayerPath(
+  "projects",
+  "-home-bewinxed-cockpit",
+  "300c7b00-dd82-492d-9a69-b3bece69eb50.jsonl"
 );
 
 // ---------------------------------------------------------------------------
@@ -72,7 +73,7 @@ if (hotEndMs > 5) {
 console.log("\n=== 3b. Append-incrementality ===");
 
 // Pick a mid-size transcript (~1-10MB)
-const root = `${process.env.HOME}/.claude/projects`;
+const root = userLayerPath("projects");
 const { readdirSync, statSync } = await import("node:fs");
 const { dirname } = await import("node:path");
 const allFiles = readdirSync(root, { recursive: true })

@@ -19524,9 +19524,15 @@
             "type": "string"
           },
           "path": {
+            "description": "Absolute; or, with `root`, relative to that root on the machine.",
             "type": "string"
           },
           "requestId": {
+            "type": "string"
+          },
+          "root": {
+            "description": "`claude-home`: `path` is under the machine's user layer, Claude Code's\nown dir (`~/.claude`), as the machine itself places it (core paths.ts\n`claudeHome`): no caller has to know a machine's home to reach it.",
+            "const": "claude-home",
             "type": "string"
           }
         },

@@ -5021,11 +5021,19 @@ export async function machineFs<T>(
   machineId: string,
   op: FsPayload["op"],
   path: string,
-  content?: string
+  content?: string,
+  /** `path` is relative to this root, as the machine places it (`FsPayload.root`). */
+  root?: FsPayload["root"]
 ): Promise<T> {
   await waitForOpen();
   const requestId = newId();
-  const payload: FsPayload = { requestId, op, path, content };
+  const payload: FsPayload = {
+    requestId,
+    op,
+    path,
+    content,
+    ...(root ? { root } : {}),
+  };
   return ask<T>(requestId, `fs ${op} ${path}`, CONTROL_TIMEOUT_MS, () =>
     send({ verb: "fs", machineId, requestId, payload })
   );

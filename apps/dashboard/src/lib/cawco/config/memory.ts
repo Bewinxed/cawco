@@ -1,3 +1,4 @@
+import { userLayerLabel } from "@cawco/core";
 import type { Machine } from "../client.svelte";
 
 /**
@@ -7,7 +8,7 @@ import type { Machine } from "../client.svelte";
 export const MAIN = "CLAUDE.md";
 
 export const fileLabel = (path: string): string =>
-  path === MAIN ? "~/.claude/CLAUDE.md" : `~/.claude/memories/${path}`;
+  path === MAIN ? userLayerLabel(MAIN) : userLayerLabel("memories", path);
 
 export const fileHref = (path: string): string => `/config/memory/${path}`;
 

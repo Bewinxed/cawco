@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { chromium } from "playwright-core";
+import { userLayerPath } from "../packages/core/src/paths.ts";
 
 const anySocket = /.*/;
 const browser = await chromium.launch({ headless: true });
@@ -160,7 +161,7 @@ try {
     assert.equal(await header.getAttribute("aria-expanded"), "true");
     await page.addScriptTag({
       content: await readFile(
-        `${process.env.HOME}/.claude/skills/ui-observer/observer.browser.js`,
+        userLayerPath("skills", "ui-observer", "observer.browser.js"),
         "utf8"
       ),
     });
