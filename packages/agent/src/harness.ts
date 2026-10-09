@@ -212,8 +212,17 @@ export interface Harness {
   /** Abort a server-held turn without adopting or waking its session. */
   // biome-ignore lint/style/useConsistentMethodSignatures: matches the other adapter methods
   abortSession?(sessionKey: string, dir: string): Promise<boolean>;
+  /**
+   * The machine's provider accounts changed (one signed in, keyed, moved in
+   * or forgotten): the harness takes the change into what it runs. Absent
+   * from a harness that reads the accounts afresh on its own.
+   */
+  // biome-ignore lint/style/useConsistentMethodSignatures: matches the other adapter methods
+  accountsChanged?(): Promise<void>;
   /** What `register` reports as this harness's auth, cached from {@link detect}. */
   auth: AuthState;
+  /** Why {@link auth} is what it is, when the harness can say, cached beside it. */
+  readonly authReason?: string;
   /** Authoritative server activity, when the runtime owns turns outside this daemon. */
   // biome-ignore lint/style/useConsistentMethodSignatures: matches the other adapter methods
   busyInstances?(): Promise<string[]>;
@@ -275,6 +284,13 @@ export interface Harness {
   /** A machine-scoped control this harness owns; `undefined` when it is not its word. */
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
   machine?(method: string, args: unknown[]): Promise<unknown> | undefined;
+  /**
+   * Every provider the harness's own catalog names, by id and name: the
+   * providers an account can be for through it. Absent from a harness with
+   * no catalog of providers of its own.
+   */
+  // biome-ignore lint/style/useConsistentMethodSignatures: matches the other adapter methods
+  providerList?(): Promise<{ id: string; name: string }[]>;
   /** Reopen surviving custody, or leave the instance sleeping if it is gone. */
   // biome-ignore lint/style/useConsistentMethodSignatures: matches the other adapter methods
   reattach?(

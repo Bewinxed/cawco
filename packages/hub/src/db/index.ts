@@ -705,6 +705,15 @@ export interface DbShape {
     instances: (typeof instances.$inferSelect)[];
     runs: WorkflowRunRow[];
   };
+  /**
+   * What each harness on the machine can do, as its daemon's report beat
+   * said: every harness the beat names is replaced, and one it leaves out
+   * keeps its last report, since its daemon could not read it this time.
+   */
+  readonly mergeAgentHarnesses: (
+    machineId: string,
+    harnesses: HarnessReport[]
+  ) => void;
   /** A whole report: every id it names is replaced, every other cell survives. */
   readonly mergeAgentTools: (machineId: string, statuses: ToolStatus[]) => void;
   /**
@@ -1290,11 +1299,6 @@ export interface DbShape {
   readonly sessionPlan: (instanceId: string) => SessionPlanRow | undefined;
   /** A machine's own account of what it came to, from the sync it just answered. */
   readonly setAgentFleet: (machineId: string, report: FleetSyncReport) => void;
-  /** What each harness on the machine can do, as its daemon's report beat said. */
-  readonly setAgentHarnesses: (
-    machineId: string,
-    harnesses: HarnessReport[]
-  ) => void;
   readonly setAgentToolCell: (machineId: string, status: ToolStatus) => void;
   /** Stores the document and the hash the machines compare against. */
   readonly setFleetMemory: (content: string) => {
@@ -3527,9 +3531,17 @@ const make = async (path: string): Promise<DbShape> => {
         ...Object.fromEntries(statuses.map((status) => [status.id, status])),
       });
     },
-    setAgentHarnesses: (machineId, harnesses) => {
+    mergeAgentHarnesses: (machineId, reports) => {
+      const named = new Set(reports.map((report) => report.harness));
+      const kept = (
+        db
+          .select({ harnesses: agents.harnesses })
+          .from(agents)
+          .where(eq(agents.machineId, machineId))
+          .get()?.harnesses ?? []
+      ).filter((report) => !named.has(report.harness));
       db.update(agents)
-        .set({ harnesses })
+        .set({ harnesses: [...kept, ...reports] })
         .where(eq(agents.machineId, machineId))
         .run();
     },

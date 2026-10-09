@@ -8,24 +8,30 @@
  * `reattach`/`adopt`/`custodyCandidates` contract after the agent restarts.
  * No model. Claude's sign-ins are read as the real harness reads them
  * ({@link detected}), so the hub places the proof's sessions on an account.
+ *
+ * Every adapter is a {@link Harness}, checked as one: an ability the daemon
+ * reaches that the real adapters have and this stub does not is an optional
+ * member of the interface, which this stub simply has none of (no provider
+ * list, no account changes to take).
  */
 
 import { accountReports, claudeAuth } from "../../packages/agent/src/accounts";
+import type {
+  Harness,
+  HarnessContext,
+  HarnessSession,
+} from "../../packages/agent/src/harness";
 import { parseProcId, procIdFor } from "../../packages/agent/src/proc-id";
+import type { SessiondAdoption } from "../../packages/agent/src/session";
 import {
   endProc,
   ensureSessiond,
   SessiondClient,
 } from "../../packages/agent/src/sessiond-client";
 import { CONTROL_PROBE_ACCOUNT } from "../../packages/core/src/accounts";
+import { CAPABILITIES_NONE } from "../../packages/core/src/harness";
+import type { HarnessKind, HarnessReport } from "../../packages/core/src/index";
 import { sessiondEndpoint } from "../../packages/core/src/sessiond";
-
-type Kind = "claude" | "opencode" | "pi";
-interface Context {
-  closed?: () => void;
-  cwd: string;
-  instanceId: string;
-}
 
 let connection: Promise<SessiondClient> | undefined;
 /** The machine's one session-holder connection, dialled lazily and re-dialled when it drops. */
@@ -42,11 +48,15 @@ async function holder(): Promise<SessiondClient> {
   return connection;
 }
 
-function session(kind: Kind, instanceId: string, ctx: Context) {
-  const procId = procIdFor(kind as "claude" | "pi", instanceId);
+function session(
+  kind: "claude" | "pi",
+  instanceId: string,
+  ctx: HarnessContext
+): HarnessSession {
+  const procId = procIdFor(kind, instanceId);
   return {
     harness: kind,
-    sessionId: null as string | null,
+    sessionId: null,
     attached: () => undefined,
     control: () => Promise.resolve(undefined),
     // Shutdown of the agent leaves the child with its holder, as a real session's is.
@@ -59,6 +69,7 @@ function session(kind: Kind, instanceId: string, ctx: Context) {
       await endProc(await holder(), procId);
       ctx.closed?.();
     },
+    withdrawPermission: () => undefined,
   };
 }
 
@@ -70,13 +81,13 @@ function session(kind: Kind, instanceId: string, ctx: Context) {
  * an account dir holding a credential and `oauthAccount`, as `claude auth
  * login` would leave it. The other harnesses report no sign-in.
  */
-const detected = async (kind: Kind) => {
+const detected = async (kind: HarnessKind): Promise<HarnessReport> => {
   if (kind !== "claude") {
     return {
       harness: kind,
       installed: false,
       auth: "unauthenticated",
-      capabilities: {},
+      capabilities: CAPABILITIES_NONE,
     };
   }
   const accounts = await accountReports();
@@ -84,18 +95,18 @@ const detected = async (kind: Kind) => {
     harness: kind,
     installed: false,
     auth: await claudeAuth(accounts),
-    capabilities: {},
+    capabilities: CAPABILITIES_NONE,
     accounts,
   };
 };
 
-const registry = new Map();
+const registry = new Map<HarnessKind, Harness>();
 for (const kind of ["claude", "opencode", "pi"] as const) {
   const held = kind === "opencode" ? undefined : kind;
-  registry.set(kind, {
+  const adapter: Harness & SessiondAdoption = {
     kind,
     auth: "unauthenticated",
-    capabilities: {},
+    capabilities: CAPABILITIES_NONE,
     detect: () => detected(kind),
     listSessions: async () => [],
     getSessionMessages: async () => [],
@@ -118,7 +129,7 @@ for (const kind of ["claude", "opencode", "pi"] as const) {
     },
     // The child is spawned under the session holder, under the id the real
     // harnesses use, unconditionally.
-    spawn: async (_payload: unknown, ctx: Context) => {
+    spawn: async (_payload, ctx) => {
       if (!held) {
         throw new Error("The proof harness holds no opencode sessions");
       }
@@ -131,7 +142,7 @@ for (const kind of ["claude", "opencode", "pi"] as const) {
       return session(held, ctx.instanceId, ctx);
     },
     // The agent came back: the child is still there, and is taken over, not started again.
-    reattach: async (_payload: unknown, ctx: Context) => {
+    reattach: async (_payload, ctx) => {
       if (!held) {
         return;
       }
@@ -141,7 +152,7 @@ for (const kind of ["claude", "opencode", "pi"] as const) {
       );
       return child ? session(held, ctx.instanceId, ctx) : undefined;
     },
-    adopt: (instanceId: string, ctx: Context) =>
+    adopt: (instanceId, ctx) =>
       Promise.resolve(session(held ?? "claude", instanceId, ctx)),
     custodyCandidates: async () => {
       const welcome = await (await holder()).list();
@@ -156,9 +167,12 @@ for (const kind of ["claude", "opencode", "pi"] as const) {
     deleteSession: () => Promise.resolve(),
     renameSession: () => Promise.resolve(),
     tagSession: () => Promise.resolve(),
-  });
+  };
+  registry.set(kind, adapter);
 }
-export const harnesses = () => [...registry.values()];
-export const harness = (kind: string) => registry.get(kind);
-export const registerHarness = (adapter: { kind: string }) =>
+export const harnesses = (): Harness[] => [...registry.values()];
+export const harness = (kind: HarnessKind): Harness | undefined =>
+  registry.get(kind);
+export const registerHarness = (adapter: Harness): void => {
   registry.set(adapter.kind, adapter);
+};

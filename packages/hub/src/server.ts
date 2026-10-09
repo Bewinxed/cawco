@@ -17287,7 +17287,7 @@ export const createServer = (
               // off the report it reads.
               const reported = peekHarnesses(message.payload);
               if (reported) {
-                db.setAgentHarnesses(message.machineId, reported);
+                db.mergeAgentHarnesses(message.machineId, reported);
                 capabilityReports.delete(message.machineId);
                 // Where each Claude account is signed in on this machine, as
                 // its Claude Code config dirs say.

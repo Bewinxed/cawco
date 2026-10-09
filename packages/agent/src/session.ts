@@ -126,7 +126,7 @@ import { workspaceHolding } from "./workspace-records";
  * harness-agnostic, and an adapter that cannot keep processes simply does not
  * satisfy this shape. Claude and pi share custody; OpenCode owns its server.
  */
-interface SessiondAdoption {
+export interface SessiondAdoption {
   // biome-ignore lint/style/useConsistentMethodSignatures: a property signature changes parameter variance here and would break the claude adapter's implementation
   adopt(
     instanceId: string,

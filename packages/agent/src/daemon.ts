@@ -71,9 +71,8 @@ import { convertWorktrees } from "./clone";
 import { readConfig } from "./config";
 import { convergeDeniedTools } from "./denied-tools";
 import { rediscoverHub, toWsUrl } from "./discovery";
-import { harnesses } from "./harnesses";
-import type { OpencodeHarness } from "./harnesses/opencode";
-import type { PiHarness } from "./harnesses/pi";
+import type { Harness } from "./harness";
+import { harness, harnesses } from "./harnesses";
 import { PI_AUTH_CHECK_INTERVAL_MS } from "./harnesses/pi-auth";
 import { cache as transcriptCache } from "./harnesses/transcript-cache";
 import { KeeperWatchdog, machineKeeper } from "./keeper-watchdog";
@@ -138,36 +137,60 @@ const CLAUDE_LOGIN_CHECK_INTERVAL_MS = 60_000;
 /** How often every provider account's OAuth sign-in is checked for a refresh it needs. */
 const ACCOUNT_REFRESH_INTERVAL = Duration.seconds(60);
 
-/** The OpenCode harness, for its accounts' servers and its provider list. */
-const opencodeAdapter = (): OpencodeHarness | undefined =>
-  harnesses().find((adapter) => adapter.kind === "opencode") as
-    | OpencodeHarness
-    | undefined;
+/** The words of an error a log line says, its name when it carries no message. */
+const errorWords = (error: unknown): string =>
+  error instanceof Error ? error.message || error.name : String(error);
+
+/** OpenCode, told the machine's provider accounts changed, when it takes such a change. */
+const tellOpencodeAccountsChanged = (): void => {
+  harness("opencode")
+    ?.accountsChanged?.()
+    .catch((error: unknown) =>
+      console.warn(
+        `[accounts] OpenCode did not take the accounts' change: ${errorWords(error)}`
+      )
+    );
+};
 
 /**
  * Called whenever this machine's provider accounts changed; the connection
  * fills it in, so the hub hears it and OpenCode takes it.
  */
-let providerAccountsChanged: () => void = () => {
-  opencodeAdapter()
-    ?.accountsChanged()
-    .catch((error: unknown) =>
-      console.warn(
-        `[accounts] OpenCode did not take the accounts' change: ${String(error)}`
-      )
-    );
-};
+let providerAccountsChanged: () => void = tellOpencodeAccountsChanged;
 
-/** The providers an account can be for here: pi-ai's joined with OpenCode's. */
+/**
+ * The providers an account can be for here: pi-ai's joined with OpenCode's.
+ * Rejects when either list could not be read: a list read in part is not the
+ * machine's list.
+ */
 const machineProviders = async (): Promise<ProviderInfo[]> => {
   const [pi, opencode] = await Promise.all([
-    piProviders().catch(() => []),
-    opencodeAdapter()
-      ?.providerList()
-      .catch(() => []) ?? [],
+    piProviders(),
+    harness("opencode")?.providerList?.() ?? [],
   ]);
   return joinProviders(pi, opencode);
 };
+
+/**
+ * One part of what the machine reports, read on its own: what it read, or,
+ * when it could not be read, nothing, said once under the part's name. One
+ * part failing never keeps the others from being sent.
+ */
+const readPart = async <T>(
+  part: string,
+  read: () => Promise<T>
+): Promise<T | undefined> => {
+  try {
+    return await read();
+  } catch (error) {
+    console.warn(`[agent] ${part} could not be read: ${errorWords(error)}`);
+    return undefined;
+  }
+};
+
+/** A harness's report, read on its own ({@link readPart}). */
+const readHarness = (adapter: Harness): Promise<HarnessReport | undefined> =>
+  readPart(`the ${adapter.kind} harness's report`, () => adapter.detect());
 
 /** The provider-account controls, each telling the machine's harnesses when the accounts moved. */
 const registerProviderAccounts = (supervisor: SessionSupervisor): void => {
@@ -884,11 +907,18 @@ const attach = (
     // showed between `Connection ended` and `registered with` on every hub
     // restart.
     let reportedHarnesses: HarnessReport[] = [];
+    /** Whether this connection's harnesses have been read once ({@link supervisor.reannounce}). */
+    let announced = false;
     let lastPiCheck = Date.now();
-    const pi = harnesses().find((adapter) => adapter.kind === "pi") as
-      | PiHarness
-      | undefined;
+    const pi = harness("pi");
     let reportedProviderAccounts = providerAccountReports();
+    /** `report` in place of the one of its harness this connection last read, or beside the others. */
+    const keepReport = (report: HarnessReport): void => {
+      reportedHarnesses = [
+        ...reportedHarnesses.filter((one) => one.harness !== report.harness),
+        report,
+      ];
+    };
     /**
      * pi's report read again and sent: its catalog and its resolution of
      * `default` and bare ids follow the machine's accounts and pi's own
@@ -899,10 +929,7 @@ const attach = (
         return;
       }
       lastPiCheck = Date.now();
-      const report = await pi.detect();
-      reportedHarnesses = reportedHarnesses.map((one) =>
-        one.harness === "pi" ? report : one
-      );
+      keepReport(await pi.detect());
       if (socket.readyState === WebSocket.OPEN) {
         send(socket, {
           verb: "heartbeat",
@@ -941,17 +968,27 @@ const attach = (
         piWatch?.close();
       })
     );
+    // Each part settles on its own (`readPart`): a part that could not be
+    // read is left out of the beat, and the hub keeps what it last read of
+    // it. A harness left out of `harnesses` keeps its last report there
+    // (`mergeAgentHarnesses`), absent `tools` merge nothing, absent
+    // `providers` leave the machine's last list.
     supervisor.reannounce = () => {
       // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — reannounce doesn't await its own send
-      void Promise.all([
-        Promise.all(harnesses().map((adapter) => adapter.detect())),
-        probeTools(),
-        machineProviders(),
-      ]).then(([detected, tools, providers]) => {
+      void (async () => {
+        const [detected, tools, providers] = await Promise.all([
+          Promise.all(harnesses().map(readHarness)),
+          readPart("tools", probeTools),
+          readPart("providers", machineProviders),
+        ]);
         if (socket.readyState !== WebSocket.OPEN) {
           return;
         }
-        reportedHarnesses = detected;
+        const read = detected.filter(
+          (report): report is HarnessReport => report !== undefined
+        );
+        reportedHarnesses = read;
+        announced = true;
         reportedProviderAccounts = providerAccountReports();
         send(socket, {
           verb: "heartbeat",
@@ -962,13 +999,17 @@ const attach = (
             ...(latestBinaryUpdate()
               ? { binaryUpdate: latestBinaryUpdate() }
               : {}),
-            harnesses: detected,
-            tools,
+            ...(read.length > 0 ? { harnesses: read } : {}),
+            ...(tools ? { tools } : {}),
             providerAccounts: reportedProviderAccounts,
-            providers,
+            ...(providers ? { providers } : {}),
           } satisfies HeartbeatPayload,
         });
-      });
+      })().catch((error: unknown) =>
+        console.warn(
+          `[agent] the machine's report could not be sent: ${errorWords(error)}`
+        )
+      );
     };
     // An account signed in, keyed, moved in or forgotten here: the hub hears
     // it on the next beat, and each account's OpenCode server is squared with
@@ -986,13 +1027,7 @@ const attach = (
           } satisfies HeartbeatPayload,
         });
       }
-      opencodeAdapter()
-        ?.accountsChanged()
-        .catch((error: unknown) =>
-          console.warn(
-            `[accounts] OpenCode did not take the accounts' change: ${error instanceof Error ? error.message : String(error)}`
-          )
-        );
+      tellOpencodeAccountsChanged();
       reportPiSoon();
     };
     supervisor.reannounce();
@@ -1005,11 +1040,35 @@ const attach = (
           if (Date.now() - lastPiCheck < PI_AUTH_CHECK_INTERVAL_MS) {
             return;
           }
-          await reportPi();
+          // A read that fails is said and tried again next time, never the end of the checks.
+          await readPart("the pi harness's report", reportPi);
         }),
         Schedule.spaced(Duration.millis(PI_AUTH_CHECK_INTERVAL_MS))
       )
     );
+
+    /**
+     * Claude's report with its sign-ins read again, when they moved since the
+     * last one this connection sent; the whole report read again when the
+     * announce could not read it, so its sign-ins still reach the hub.
+     * Nothing when there is nothing new to send.
+     */
+    const rereadClaude = async (): Promise<HarnessReport | undefined> => {
+      const old = reportedHarnesses.find(
+        (report) => report.harness === "claude"
+      );
+      if (!old) {
+        const claude = harness("claude");
+        return claude ? await readHarness(claude) : undefined;
+      }
+      const accounts = await readPart(
+        "the claude harness's sign-ins",
+        accountReports
+      );
+      return accounts && !Bun.deepEquals(accounts, old.accounts ?? [])
+        ? { ...old, accounts }
+        : undefined;
+    };
 
     // Who each account dir is signed in as, read again on a cadence
     // (`claude auth status`, which reads and refreshes nothing): an account
@@ -1023,19 +1082,14 @@ const attach = (
           ) {
             providerAccountsChanged();
           }
-          const old = reportedHarnesses.find(
-            (report) => report.harness === "claude"
-          );
-          if (!old) {
+          if (!announced) {
             return;
           }
-          const accounts = await accountReports();
-          if (Bun.deepEquals(accounts, old.accounts ?? [])) {
+          const claude = await rereadClaude();
+          if (!claude) {
             return;
           }
-          reportedHarnesses = reportedHarnesses.map((report) =>
-            report.harness === "claude" ? { ...report, accounts } : report
-          );
+          keepReport(claude);
           if (socket.readyState === WebSocket.OPEN) {
             send(socket, {
               verb: "heartbeat",
