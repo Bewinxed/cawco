@@ -15,14 +15,10 @@
     ],
     "deniedDomains": [],
     "allowLocalBinding": true,
-    "allowMachLookup": [
-      "*"
-    ]
+    "allowMachLookup": ["*"]
   },
   "filesystem": {
-    "denyRead": [
-      "/Users/bewinxed"
-    ],
+    "denyRead": ["/Users/bewinxed"],
     "allowRead": [
       "/private/var/folders/wt/03qhc4bd7dgfq232vr28hp500000gn/T/cawco-srt-eval/ws",
       "/private/var/folders/wt/03qhc4bd7dgfq232vr28hp500000gn/T/cawco-srt-eval/state/ro",

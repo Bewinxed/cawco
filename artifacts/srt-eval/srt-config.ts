@@ -39,7 +39,10 @@ const real = (p: string): string => {
 // readable, never writable.
 const alternates = (() => {
   try {
-    return readFileSync(join(clone, ".git", "objects", "info", "alternates"), "utf8")
+    return readFileSync(
+      join(clone, ".git", "objects", "info", "alternates"),
+      "utf8"
+    )
       .split("\n")
       .filter((line) => line.startsWith("/"));
   } catch {
@@ -55,7 +58,14 @@ const appleWrites = mac
       join(home, "Library", "Developer", "Xcode", "DerivedData"),
       join(home, ".swiftpm"),
       join(home, "Library", "org.swift.swiftpm"),
-      join(home, "Library", "Developer", "Xcode", "UserData", "Provisioning Profiles"),
+      join(
+        home,
+        "Library",
+        "Developer",
+        "Xcode",
+        "UserData",
+        "Provisioning Profiles"
+      ),
       join(home, "Library", "MobileDevice", "Provisioning Profiles"),
       ...["DARWIN_USER_TEMP_DIR", "DARWIN_USER_CACHE_DIR"].map((name) =>
         execFileSync("getconf", [name], { encoding: "utf8" }).trim()
@@ -75,7 +85,9 @@ const homeReads = [
   join(home, ".rustup"),
   join(home, ".gitconfig"),
   join(home, ".config", "git"),
-  mac ? join(home, "Library", "Caches", "ms-playwright") : join(home, ".cache", "ms-playwright"),
+  mac
+    ? join(home, "Library", "Caches", "ms-playwright")
+    : join(home, ".cache", "ms-playwright"),
   ...(mac
     ? [
         join(home, "Library", "Developer"),
@@ -185,7 +197,11 @@ const settings = {
     ],
     allowGitConfig: true,
   },
-  ripgrep: { command: mac ? "/opt/homebrew/bin/rg" : join(home, ".cache", "srt-eval", "bin", "rg") },
+  ripgrep: {
+    command: mac
+      ? "/opt/homebrew/bin/rg"
+      : join(home, ".cache", "srt-eval", "bin", "rg"),
+  },
   mandatoryDenySearchDepth: 3,
 };
 

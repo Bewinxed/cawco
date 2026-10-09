@@ -18,12 +18,7 @@
     "allowAllUnixSockets": true
   },
   "filesystem": {
-    "denyRead": [
-      "/home/bewinxed",
-      "/run",
-      "/var/run",
-      "/tmp"
-    ],
+    "denyRead": ["/home/bewinxed", "/run", "/var/run", "/tmp"],
     "allowRead": [
       "/tmp/proto/ws",
       "/tmp/proto/st2/ro",

@@ -19,7 +19,10 @@ if (!(clone && state)) {
   process.exit(64);
 }
 const protectedNames = new Set(["config", "hooks"]);
-const sandbox = Number.parseInt(readFileSync(join(state, "sandbox.pid"), "utf8"), 10);
+const sandbox = Number.parseInt(
+  readFileSync(join(state, "sandbox.pid"), "utf8"),
+  10
+);
 const watcher = watch(join(clone, ".git"), (_event, name) => {
   if (name && protectedNames.has(String(name))) {
     try {
