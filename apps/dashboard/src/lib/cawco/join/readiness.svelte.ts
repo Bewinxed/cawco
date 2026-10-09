@@ -30,22 +30,26 @@ export type Readiness =
 
 export type ReadinessKind = Readiness["kind"];
 
-/** The row's tint: the Alert recipe's success, warning (attn) or default (recess). */
-export type ReadinessTone = "success" | "warning" | "default";
+/**
+ * The glyph's hue, the one place a state is tinted: done only for the
+ * verdict Ready, attn when the Mac needs a hand, none otherwise.
+ */
+export type ReadinessHue = "done" | "attn" | null;
 
 export interface ReadinessLine {
   /** A Solar duotone glyph, or the spinner while a check outlasts its grace. */
   glyph: Component | "spinner";
+  hue: ReadinessHue;
   /** What the Mac needs done there, in muted meta under the sentence. */
   instruction?: string;
   /** The sentence after the machine's name; it ends in the verdict. */
   rest: string;
-  tone: ReadinessTone;
 }
 
+/** The plain joined line: no verdict yet, or none to give. */
 const JOINED: ReadinessLine = {
   glyph: IconSuccess,
-  tone: "success",
+  hue: null,
   rest: "joined the fleet.",
 };
 
@@ -61,21 +65,21 @@ export function readinessLine(
       return waited
         ? {
             glyph: "spinner",
-            tone: "default",
-            rest: "joined the fleet. Checking it's ready for agents.",
+            hue: null,
+            rest: "joined. Checking it's ready for agents.",
             instruction: "It keeps checking if you close this.",
           }
         : JOINED;
     case "ready":
       return {
         glyph: IconSuccess,
-        tone: "success",
+        hue: "done",
         rest: "joined the fleet. Ready for agents.",
       };
     case "allow":
       return {
         glyph: IconNeedsYou,
-        tone: "warning",
+        hue: "attn",
         rest: "joined. One thing to allow on the Mac.",
         instruction:
           "A prompt is on its screen. Click Allow; this updates by itself.",
@@ -83,15 +87,15 @@ export function readinessLine(
     case "said-no":
       return {
         glyph: IconNeedsYou,
-        tone: "warning",
+        hue: "attn",
         rest: "joined. The Mac said no to Xcode.",
         instruction:
-          "Allow it under System Settings › Privacy & Security › Automation. This updates by itself.",
+          "Allow it in Privacy & Security › Automation. This updates by itself.",
       };
     case "xcode-terms":
       return {
         glyph: IconNeedsYou,
-        tone: "warning",
+        hue: "attn",
         rest: "joined. One thing to do on the Mac.",
         instruction:
           "Open Xcode once and accept its terms. This updates by itself.",
@@ -99,24 +103,24 @@ export function readinessLine(
     case "locked":
       return {
         glyph: IconLock,
-        tone: "default",
+        hue: null,
         rest: "joined. Its screen is locked.",
         instruction: "Unlock the Mac to see what to allow.",
       };
     case "offline":
       return {
         glyph: IconToolQuestion,
-        tone: "default",
+        hue: null,
         rest: "joined, but it's offline now.",
         instruction: "The check runs again when it's back.",
       };
     case "no-xcode":
       return {
         glyph: IconInfo,
-        tone: "default",
+        hue: null,
         rest: "joined. It has no Xcode.",
         instruction:
-          "Agents can work on it now. Install Xcode from the App Store before they build Apple apps.",
+          "Agents can work on it now. Apple apps need Xcode from the App Store.",
       };
     default:
       return readiness satisfies never;

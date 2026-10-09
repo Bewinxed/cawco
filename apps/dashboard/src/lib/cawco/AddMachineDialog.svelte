@@ -12,11 +12,14 @@
    */
   import type { SshJoinJob } from "@cawco/core";
   import { INSTALL_STEP_PREFIX, machineLabel } from "@cawco/core";
+  import { MediaQuery } from "svelte/reactivity";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Alert from "#lib/components/ui/alert/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Dialog from "#lib/components/ui/dialog/index.js";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
+  import * as Drawer from "#lib/components/ui/drawer/index.js";
   import {
     TabItem,
     Tabs,
@@ -44,6 +47,8 @@
   } from "./join/join.svelte";
   import { macReadiness } from "./join/readiness.svelte";
 
+  /** Under 640px the dialog is a bottom sheet (DESIGN.md, Breakpoints). */
+  const phone = new MediaQuery("(max-width: 640px)");
   /** The way in shown, which every entry can name as it opens the dialog. */
   const tab = $derived(addMachine.way);
   let target = $state("");
@@ -254,199 +259,241 @@
   </div>
 {/snippet}
 
-<Dialog.Root
-  bind:open={
-    () => addMachine.open,
-    (value) => {
+<!-- What the dialog and the phone's sheet both hold. -->
+{#snippet body()}
+  {#if joined}
+    <JoinedRow
+      name={joined.name}
+      readiness={macReadiness.of(joined.machineId)}
+    />
+  {:else}
+    <Tabs
+      onValueChange={(value) => {
+        addMachine.way = value as JoinWay;
+      }}
+      value={tab}
+    >
+      <TabsList aria-label="How to connect the machine">
+        {#each JOIN_WAYS as way (way.way)}
+          <TabItem icon={way.icon} label={way.name} value={way.way} />
+        {/each}
+      </TabsList>
+    </Tabs>
+
+    {#if joinInfo.error}
+      <Alert.Root variant="destructive">
+        <Alert.Description>{joinInfo.error}</Alert.Description>
+      </Alert.Root>
+    {/if}
+
+    {#if tab === "ssh"}
+      {#if view === "running" && job}
+        {@const steps = stepsOf(job)}
+        <div class="flex flex-col gap-[var(--space-3)]">
+          <p class="text-body text-[var(--ink-muted)]">
+            Adding {job.target}. It keeps installing if you close this.
+          </p>
+          <ol aria-live="polite" class="steps">
+            {#each steps as step, index (index)}
+              <li class:current={index === steps.length - 1}>
+                {#if index === steps.length - 1}
+                  <Spinner class="size-4" />
+                {:else}
+                  <IconSuccess aria-hidden="true" class="size-4 done" />
+                {/if}
+                <span>{step}</span>
+              </li>
+            {:else}
+              <li class="current">
+                <Spinner class="size-4" /><span>Connecting over SSH</span>
+              </li>
+            {/each}
+          </ol>
+          <details class="output">
+            <summary>
+              <IconChevronRight aria-hidden="true" class="chev size-4" />Output
+            </summary>
+            <pre {@attach followTail()}>{job.lines.join("\n")}</pre>
+          </details>
+        </div>
+      {:else}
+        <form
+          class="flex flex-col gap-[var(--space-4)]"
+          id="ssh-join"
+          onsubmit={start}
+        >
+          <div class="grid grid-cols-[minmax(0,1fr)_6rem] gap-[var(--space-3)]">
+            <div class="field">
+              <Label for="join-target">SSH target</Label>
+              <Input
+                autocapitalize="off"
+                autocomplete="off"
+                id="join-target"
+                placeholder="user@host or SSH alias"
+                spellcheck="false"
+                bind:value={target}
+              />
+            </div>
+            <div class="field">
+              <Label for="join-port">Port</Label>
+              <Input
+                aria-invalid={portValid ? undefined : "true"}
+                id="join-port"
+                inputmode="numeric"
+                placeholder="22"
+                bind:value={port}
+              />
+            </div>
+          </div>
+          {@render addressField("join-address-ssh")}
+
+          {#if failure}
+            <div class="flex flex-col gap-[var(--space-2)]" role="alert">
+              <Alert.Root variant="destructive">
+                <IconError aria-hidden="true" />
+                <Alert.Description>{failure.text}</Alert.Description>
+              </Alert.Root>
+              {#if failure.tail.length > 0}
+                <pre class="tail">{failure.tail.join("\n")}</pre>
+              {/if}
+            </div>
+          {:else if sshJoin.refused}
+            <Alert.Root role="alert" variant="destructive">
+              <IconError aria-hidden="true" />
+              <Alert.Description>{sshJoin.refused}</Alert.Description>
+            </Alert.Root>
+          {/if}
+
+          <details class="output" bind:open={keyOpen}>
+            <summary>
+              <IconChevronRight aria-hidden="true" class="chev size-4" />
+              This hub's SSH key
+            </summary>
+            <div class="flex flex-col gap-[var(--space-2)] pt-[var(--space-2)]">
+              {#if joinInfo.value?.sshPublicKey}
+                <p class="hint">
+                  The machine has to accept this key: it goes in
+                  ~/.ssh/authorized_keys for the user you sign in as.
+                </p>
+                <CopyBox
+                  label="This hub's SSH public key"
+                  text={joinInfo.value.sshPublicKey}
+                />
+              {:else if joinInfo.value}
+                <p class="hint">
+                  This hub has no SSH key yet. Create one on
+                  {joinInfo.value.hubHostname}
+                  with ssh-keygen -t ed25519, then reopen this.
+                </p>
+              {/if}
+            </div>
+          </details>
+        </form>
+      {/if}
+    {:else}
+      <div class="flex flex-col gap-[var(--space-3)]">
+        {@render addressField("join-address-command")}
+        <p class="text-body text-[var(--ink-muted)]">
+          Run this on the machine you want to add. It installs Bun if needed,
+          clones CawCo and starts the agent.
+        </p>
+        {#if hubUrl}
+          <CopyBox label="Install command" text={installCommand(hubUrl)} />
+        {/if}
+        <CheckInStatus />
+      </div>
+    {/if}
+  {/if}
+{/snippet}
+
+<!-- Close dismisses; it is never the task's act, so it is never coral. -->
+{#snippet actions()}
+  {#if tab === "ssh" && view === "form" && !joined}
+    <Button onclick={close} variant="outline">Cancel</Button>
+    <Button disabled={!canStart} form="ssh-join" type="submit">
+      {#if starting}
+        <Spinner class="size-4" />
+      {/if}
+      {job?.state === "failed" ? "Retry" : "Add machine"}
+    </Button>
+  {:else}
+    <Button onclick={close} variant="outline">Close</Button>
+  {/if}
+{/snippet}
+
+{#snippet description()}
+  Install the CawCo agent on a machine and it joins this fleet.
+{/snippet}
+
+{#if phone.current}
+  <!-- On a phone the dialog is the kit's bottom sheet. -->
+  <Drawer.Root
+    noBodyStyles
+    onOpenChange={(value) => {
+      if (value) {
+        addMachine.open = true;
+      } else {
+        close();
+      }
+    }}
+    open={addMachine.open}
+    shouldScaleBackground={false}
+  >
+    <Drawer.Content aria-label="Connect a machine">
+      <!-- Leading, as the dialog's title is, so the title, row and Close share one edge. -->
+      <Drawer.Header
+        class="group-data-[vaul-drawer-direction=bottom]/drawer-content:text-left"
+      >
+        <Drawer.Title class="text-title">Connect a machine</Drawer.Title>
+        {#if !joined}
+          <Drawer.Description>{@render description()}</Drawer.Description>
+        {/if}
+      </Drawer.Header>
+      <div class="sheet-body">{@render body()}</div>
+      <Drawer.Footer class="flex-col-reverse">
+        {@render actions()}
+      </Drawer.Footer>
+    </Drawer.Content>
+  </Drawer.Root>
+{:else}
+  <Dialog.Root
+    bind:open={
+      () => addMachine.open,
+      (value) => {
     if (value) {
       addMachine.open = true;
     } else {
       close();
     }
   }
-  }
->
-  <!-- Joined, Close is the one act the dialog offers, so it is the one button. -->
-  <Dialog.Content class="sm:max-w-lg" showCloseButton={!joined}>
-    <Dialog.Header>
-      <Dialog.Title>Connect a machine</Dialog.Title>
-      {#if !joined}
-        <Dialog.Description>
-          Install the CawCo agent on a machine and it joins this fleet.
-        </Dialog.Description>
-      {/if}
-    </Dialog.Header>
-
-    {#if joined}
-      <JoinedRow
-        name={joined.name}
-        readiness={macReadiness.of(joined.machineId)}
-      />
-    {:else}
-      <Tabs
-        onValueChange={(value) => {
-          addMachine.way = value as JoinWay;
-        }}
-        value={tab}
-      >
-        <TabsList aria-label="How to connect the machine">
-          {#each JOIN_WAYS as way (way.way)}
-            <TabItem icon={way.icon} label={way.name} value={way.way} />
-          {/each}
-        </TabsList>
-      </Tabs>
-
-      {#if joinInfo.error}
-        <Alert.Root variant="destructive">
-          <Alert.Description>{joinInfo.error}</Alert.Description>
-        </Alert.Root>
-      {/if}
-
-      {#if tab === "ssh"}
-        {#if view === "running" && job}
-          {@const steps = stepsOf(job)}
-          <div class="flex flex-col gap-[var(--space-3)]">
-            <p class="text-body text-[var(--ink-muted)]">
-              Adding {job.target}. It keeps installing if you close this.
-            </p>
-            <ol aria-live="polite" class="steps">
-              {#each steps as step, index (index)}
-                <li class:current={index === steps.length - 1}>
-                  {#if index === steps.length - 1}
-                    <Spinner class="size-4" />
-                  {:else}
-                    <IconSuccess aria-hidden="true" class="size-4 done" />
-                  {/if}
-                  <span>{step}</span>
-                </li>
-              {:else}
-                <li class="current">
-                  <Spinner class="size-4" /><span>Connecting over SSH</span>
-                </li>
-              {/each}
-            </ol>
-            <details class="output">
-              <summary>
-                <IconChevronRight
-                  aria-hidden="true"
-                  class="chev size-4"
-                />Output
-              </summary>
-              <pre {@attach followTail()}>{job.lines.join("\n")}</pre>
-            </details>
-          </div>
-        {:else}
-          <form
-            class="flex flex-col gap-[var(--space-4)]"
-            id="ssh-join"
-            onsubmit={start}
-          >
-            <div
-              class="grid grid-cols-[minmax(0,1fr)_6rem] gap-[var(--space-3)]"
-            >
-              <div class="field">
-                <Label for="join-target">SSH target</Label>
-                <Input
-                  autocapitalize="off"
-                  autocomplete="off"
-                  id="join-target"
-                  placeholder="user@host or SSH alias"
-                  spellcheck="false"
-                  bind:value={target}
-                />
-              </div>
-              <div class="field">
-                <Label for="join-port">Port</Label>
-                <Input
-                  aria-invalid={portValid ? undefined : "true"}
-                  id="join-port"
-                  inputmode="numeric"
-                  placeholder="22"
-                  bind:value={port}
-                />
-              </div>
-            </div>
-            {@render addressField("join-address-ssh")}
-
-            {#if failure}
-              <div class="flex flex-col gap-[var(--space-2)]" role="alert">
-                <Alert.Root variant="destructive">
-                  <IconError aria-hidden="true" />
-                  <Alert.Description>{failure.text}</Alert.Description>
-                </Alert.Root>
-                {#if failure.tail.length > 0}
-                  <pre class="tail">{failure.tail.join("\n")}</pre>
-                {/if}
-              </div>
-            {:else if sshJoin.refused}
-              <Alert.Root role="alert" variant="destructive">
-                <IconError aria-hidden="true" />
-                <Alert.Description>{sshJoin.refused}</Alert.Description>
-              </Alert.Root>
-            {/if}
-
-            <details class="output" bind:open={keyOpen}>
-              <summary>
-                <IconChevronRight aria-hidden="true" class="chev size-4" />
-                This hub's SSH key
-              </summary>
-              <div
-                class="flex flex-col gap-[var(--space-2)] pt-[var(--space-2)]"
-              >
-                {#if joinInfo.value?.sshPublicKey}
-                  <p class="hint">
-                    The machine has to accept this key: it goes in
-                    ~/.ssh/authorized_keys for the user you sign in as.
-                  </p>
-                  <CopyBox
-                    label="This hub's SSH public key"
-                    text={joinInfo.value.sshPublicKey}
-                  />
-                {:else if joinInfo.value}
-                  <p class="hint">
-                    This hub has no SSH key yet. Create one on
-                    {joinInfo.value.hubHostname}
-                    with ssh-keygen -t ed25519, then reopen this.
-                  </p>
-                {/if}
-              </div>
-            </details>
-          </form>
+    }
+  >
+    <!-- Joined, Close is the one act the dialog offers, so it is the one button. -->
+    <Dialog.Content class="sm:max-w-lg" showCloseButton={!joined}>
+      <Dialog.Header>
+        <Dialog.Title>Connect a machine</Dialog.Title>
+        {#if !joined}
+          <Dialog.Description>{@render description()}</Dialog.Description>
         {/if}
-      {:else}
-        <div class="flex flex-col gap-[var(--space-3)]">
-          {@render addressField("join-address-command")}
-          <p class="text-body text-[var(--ink-muted)]">
-            Run this on the machine you want to add. It installs Bun if needed,
-            clones CawCo and starts the agent.
-          </p>
-          {#if hubUrl}
-            <CopyBox label="Install command" text={installCommand(hubUrl)} />
-          {/if}
-          <CheckInStatus />
-        </div>
-      {/if}
-    {/if}
-
-    <Dialog.Footer>
-      {#if joined}
-        <Button onclick={close}>Close</Button>
-      {:else if tab === "ssh" && view === "form"}
-        <Button onclick={close} variant="outline">Cancel</Button>
-        <Button disabled={!canStart} form="ssh-join" type="submit">
-          {#if starting}
-            <Spinner class="size-4" />
-          {/if}
-          {job?.state === "failed" ? "Retry" : "Add machine"}
-        </Button>
-      {:else}
-        <Button onclick={close} variant="outline">Close</Button>
-      {/if}
-    </Dialog.Footer>
-  </Dialog.Content>
-</Dialog.Root>
+      </Dialog.Header>
+      {@render body()}
+      <Dialog.Footer>{@render actions()}</Dialog.Footer>
+    </Dialog.Content>
+  </Dialog.Root>
+{/if}
 
 <style>
+  /* The sheet's body keeps the dialog body's rhythm and scrolls under its
+     header and footer when the install output grows. */
+  .sheet-body {
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--spacing) * 6);
+    min-height: 0;
+    padding-inline: 16px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
   .field {
     display: flex;
     flex-direction: column;
