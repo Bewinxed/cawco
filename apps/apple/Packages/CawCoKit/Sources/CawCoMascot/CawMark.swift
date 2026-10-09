@@ -1,5 +1,10 @@
+import CawCoDesign
 import RiveRuntime
 import UIKit
+
+/// A question's minimized bar shows him again after hiding him
+/// (PromptCardView `PromptBar`), and asks for the paint `redraw` gives.
+extension CawMark: RedrawsOnReveal {}
 
 /// Caw as a mark (CawMark.svelte): his still at a few points, beside a word,
 /// on a row of a list. At rest he is his status's file holding its one

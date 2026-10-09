@@ -110,9 +110,19 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
 
     /// The row standing on the composer, outside its box (Composer.svelte
     /// `.lift`): the delegate tray's fixed row. Prompts stand on top of it.
-    /// Its host puts the row in and shows it; it is kept clear at every
-    /// transcript's foot with the rest of the composer's height.
+    /// Its host puts the row in and says whether it is wanted (`trayWanted`);
+    /// it is kept clear at every transcript's foot with the rest of the
+    /// composer's height.
     public let lift = UIView()
+    /// The host has a tray for this conversation (ComposerDock).
+    public var trayWanted = false {
+        didSet { if trayWanted != oldValue { syncLift() } }
+    }
+    /// A minimized question's bar stands at the prompts' foot: it takes the
+    /// tray row's place and the tray steps aside (Composer.svelte `.asked`,
+    /// `.dock.minimized`), so the bar costs the transcript nothing the row
+    /// did not already keep clear.
+    private var barInRow = false
 
     /// The parked permission and question cards, standing on the pill.
     private let prompts = UIStackView()
@@ -501,11 +511,26 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
             card.alpha = 1
             prompts.insertArrangedSubview(card, at: min(index, prompts.arrangedSubviews.count))
         }
+        for case let card as PromptCardView in cards {
+            card.onFold = { [weak self] in self?.syncLift() }
+        }
+        syncLift()
         let empty = cards.isEmpty
         if prompts.isHidden != empty {
             prompts.isHidden = empty
             onHeight()
         }
+    }
+
+    /// The tray row shown when the host wants it and no minimized bar has
+    /// its place; the bar stands the tray's gap off the pill, where the
+    /// tray's chips stand (`--c-tray-gap` under a finger).
+    private func syncLift() {
+        let foot = binding?.prompts.last as? PromptCardView
+        barInRow = foot?.minimized == true
+        let hidden = !trayWanted || barInRow
+        if lift.isHidden != hidden { lift.isHidden = hidden }
+        column.setCustomSpacing(barInRow ? Space.space3 : Space.space3 + Space.space4 - Space.space2, after: prompts)
     }
 
     private func leave(_ card: UIView) {

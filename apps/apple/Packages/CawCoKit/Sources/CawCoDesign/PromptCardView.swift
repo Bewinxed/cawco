@@ -8,6 +8,12 @@ import UIKit
 /// as chips led by keycaps, then
 /// Answer and Dismiss. The pressed button pends with its own label while its
 /// peers dim; a refusal stops it and says why under the buttons.
+///
+/// A question can be minimized, by the chevron in its head or a swipe down
+/// on the card: the card folds to a one-line bar, the tray row's chip
+/// (`TrayChipView`), Caw's needs-you face, what it asks and a chevron, so the
+/// transcript reads behind it. A tap on the bar brings the card back.
+/// Minimizing answers nothing; the ask stays parked (MinimizedAsks).
 @MainActor
 public final class PromptCardView: UIView {
     public enum Choice: Sendable {
@@ -19,6 +25,9 @@ public final class PromptCardView: UIView {
     public var onAnswer: (Choice, [String: [String]]) -> Void = { _, _ in }
     /// The card changed height (a disclosure, a wait line).
     public var onHeight: () -> Void = {}
+    /// The card folded to its bar or opened again: the composer gives the
+    /// bar the tray row's place, or the row back (ComposerView `syncLift`).
+    var onFold: () -> Void = {}
 
     private var picks: [String: [String]] = [:]
     /// Which question the digits answer: the first one still unanswered.
@@ -29,34 +38,49 @@ public final class PromptCardView: UIView {
     private var chips: [[OptionChip]] = []
     private var buttons: [Choice: UIButton] = [:]
     private let wait = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
+    /// The card in full: everything but the minimized bar.
+    private let column = UIStackView()
+    /// The minimized question's bar; a permission has none.
+    private var bar: PromptBar?
+    /// Folded to its bar: what the reader set on this device (MinimizedAsks).
+    public private(set) var minimized = false
 
-    /// `diff` draws one change a permission makes: the transcript's diff,
-    /// which lives above this module.
-    public init(_ ask: ParkedAsk, arriving: Bool, diff: (PermissionChange) -> UIView) {
+    /// `face` draws Caw's needs-you face for a question's minimized bar, and
+    /// `diff` one change a permission makes: both live above this module.
+    public init(_ ask: ParkedAsk, arriving: Bool, face: () -> UIView, diff: (PermissionChange) -> UIView) {
         self.ask = ask
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
-        backgroundColor = Palette.surfaceRaised
         layer.cornerRadius = Radius.radiusLg
         layer.cornerCurve = .continuous
-        layer.borderWidth = 1
-        boxShadow = Shadow.shadowHairline
         isAccessibilityElement = false
         accessibilityLabel = ask.isQuestion ? "Question from the agent" : "Permission request from \(ask.presentation.asker)"
-        let column = UIStackView()
+        // The card in full and its bar are one column's two rows, one shown.
+        let faces = UIStackView()
+        faces.axis = .vertical
+        faces.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(faces)
+        NSLayoutConstraint.activate([
+            faces.leadingAnchor.constraint(equalTo: leadingAnchor),
+            faces.trailingAnchor.constraint(equalTo: trailingAnchor),
+            faces.topAnchor.constraint(equalTo: topAnchor),
+            faces.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
         column.axis = .vertical
-        column.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(column)
         // `.hitl`: its padding starts inside its 1px border.
         let inset = Space.space3 + 1
-        NSLayoutConstraint.activate([
-            column.leadingAnchor.constraint(equalTo: leadingAnchor, constant: inset),
-            column.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -inset),
-            column.topAnchor.constraint(equalTo: topAnchor, constant: inset),
-            column.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -inset),
-        ])
+        column.isLayoutMarginsRelativeArrangement = true
+        column.directionalLayoutMargins = NSDirectionalEdgeInsets(top: inset, leading: inset, bottom: inset, trailing: inset)
+        faces.addArrangedSubview(column)
         if ask.isQuestion {
             buildQuestion(column)
+            let made = PromptBar(face: face(), words: ask.questions.first?.question ?? "Question from the agent")
+            made.addAction(UIAction { [weak self] _ in self?.setMinimized(false) }, for: .touchUpInside)
+            faces.addArrangedSubview(made)
+            bar = made
+            let swipe = UISwipeGestureRecognizer(target: self, action: #selector(swiped))
+            swipe.direction = .down
+            addGestureRecognizer(swipe)
         } else {
             buildPermission(column, diff: diff)
         }
@@ -66,9 +90,10 @@ public final class PromptCardView: UIView {
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (card: PromptCardView, _: UITraitCollection) in
             card.paint()
         }
-        paint()
+        minimized = ask.isQuestion && MinimizedAsks.contains(ask.requestId)
+        showFace()
         render()
-        if arriving { settle() }
+        if arriving, !minimized { settle() }
     }
 
     @available(*, unavailable)
@@ -78,6 +103,50 @@ public final class PromptCardView: UIView {
 
     private func paint() {
         layer.borderColor = Palette.borderControl.resolvedColor(with: traitCollection).cgColor
+    }
+
+    // MARK: Minimized
+
+    @objc private func swiped() {
+        if !minimized { setMinimized(true) }
+    }
+
+    /// Folds the question to its bar or opens it again; answers nothing.
+    private func setMinimized(_ on: Bool) {
+        guard ask.isQuestion, on != minimized else { return }
+        minimized = on
+        MinimizedAsks.set(ask.requestId, on)
+        let apply = {
+            self.showFace()
+            self.onFold()
+            // The card, the tray row it hands over and the composer's place
+            // over the transcript all move in the one pass.
+            self.window?.layoutIfNeeded()
+        }
+        if window != nil, !UIAccessibility.isReduceMotionEnabled {
+            // Put down fast; brought back over the card's own arrival
+            // (`settle`, two `durControl`): exits run quicker than entrances.
+            let duration = on ? Motion.durControl : Motion.durControl * 2
+            Motion.easeOut.animator(duration) { apply() }.startAnimation()
+        } else {
+            apply()
+        }
+        onHeight()
+        // The keys follow what the reader is now looking at.
+        UIAccessibility.post(notification: .layoutChanged, argument: on ? bar : column)
+    }
+
+    /// The card's surface in full; minimized, the bar draws its own.
+    private func showFace() {
+        column.isHidden = minimized
+        column.alpha = minimized ? 0 : 1
+        bar?.isHidden = !minimized
+        bar?.alpha = minimized ? 1 : 0
+        if minimized { bar?.revealed() }
+        backgroundColor = minimized ? .clear : Palette.surfaceRaised
+        layer.borderWidth = minimized ? 0 : 1
+        boxShadow = minimized ? [] : Shadow.shadowHairline
+        paint()
     }
 
     /// The one settle when it comes in while its session is watched: up 8pt
@@ -94,7 +163,7 @@ public final class PromptCardView: UIView {
 
     // MARK: Head
 
-    private func head(_ words: String) -> UIView {
+    private func head(_ words: String, minimizes: Bool = false) -> UIView {
         let pill = UIStackView()
         pill.axis = .horizontal
         pill.spacing = Space.space1
@@ -120,7 +189,24 @@ public final class PromptCardView: UIView {
         row.isAccessibilityElement = true
         row.accessibilityLabel = "Needs you. \(words)"
         row.accessibilityTraits = .header
-        return row
+        guard minimizes else { return row }
+        // The question's minimize chevron ends the head (Prompt.svelte
+        // `.minimize`): muted ink in a 24pt box; the window gives it its 44pt
+        // reach (TouchReach).
+        let minimize = UIButton(type: .system)
+        minimize.setImage(Glyph.chevronDown.image.resized(to: 16), for: .normal)
+        minimize.tintColor = Palette.inkMuted
+        minimize.accessibilityLabel = "Minimize question"
+        minimize.addAction(UIAction { [weak self] _ in self?.setMinimized(true) }, for: .touchUpInside)
+        NSLayoutConstraint.activate([
+            minimize.widthAnchor.constraint(equalToConstant: 24),
+            minimize.heightAnchor.constraint(equalToConstant: 24),
+        ])
+        minimize.setContentHuggingPriority(.required, for: .horizontal)
+        let line = UIStackView(arrangedSubviews: [row, minimize])
+        line.spacing = Space.space2
+        line.alignment = .center
+        return line
     }
 
     private func lede(_ text: String) -> KitLabel {
@@ -134,7 +220,7 @@ public final class PromptCardView: UIView {
     // MARK: Question
 
     private func buildQuestion(_ column: UIStackView) {
-        let top = head("Question from the agent")
+        let top = head("Question from the agent", minimizes: true)
         column.addArrangedSubview(top)
         column.setCustomSpacing(Space.space2, after: top)
         for (qi, question) in ask.questions.enumerated() {
@@ -311,7 +397,8 @@ public final class PromptCardView: UIView {
     /// them: a question is put down only by its own Dismiss button.
     @discardableResult
     public func key(_ input: String) -> Bool {
-        guard answerable else { return false }
+        // A minimized question takes no keys: nothing hidden is answered.
+        guard answerable, !minimized else { return false }
         if ask.isQuestion, let digit = Int(input), (1 ... 9).contains(digit),
            current < ask.questions.count, digit <= ask.questions[current].options.count {
             toggle(current, ask.questions[current].options[digit - 1].label)
@@ -450,6 +537,94 @@ extension SpinnerView {
             ctx.addArc(center: CGPoint(x: rect.midX, y: rect.midY), radius: radius, startAngle: -.pi / 2, endAngle: 0, clockwise: false)
             ctx.strokePath()
         }.withRenderingMode(.alwaysTemplate)
+    }
+}
+
+/// A drawing that must be painted again when the view it stands in is shown:
+/// Caw's mark (CawCoMascot `CawMark`) pauses after its first second, and one
+/// loaded while hidden has never been painted.
+@MainActor
+public protocol RedrawsOnReveal: UIView {
+    func redraw()
+}
+
+/// A minimized question (Composer.svelte `.asked-chip`): the tray row's chip
+/// in its needs tone (`TrayChipView`), the card's whole width, a coarse tray
+/// chip's height. Caw's needs-you face, what the question asks on one line,
+/// and the chevron it comes back up by.
+final class PromptBar: UIControl {
+    private let surface = UIView()
+    private let face: UIView
+
+    /// The bar is on screen again: Caw's face is painted, not left as it
+    /// paused while the bar was hidden.
+    func revealed() {
+        (face as? RedrawsOnReveal)?.redraw()
+    }
+
+    init(face: UIView, words: String) {
+        self.face = face
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        surface.isUserInteractionEnabled = false
+        surface.layer.cornerRadius = Radius.radiusSm
+        surface.layer.cornerCurve = .continuous
+        surface.layer.borderWidth = 1
+        surface.boxShadow = Shadow.shadowTile
+        surface.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(surface)
+        face.translatesAutoresizingMaskIntoConstraints = false
+        let title = KitLabel(TypeScale.typeLabel, ink: Palette.statusAttnInk)
+        title.text = words
+        title.lineBreakMode = .byTruncatingTail
+        title.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        let chevron = GlyphView(.chevronUp, size: 16, tint: Palette.statusAttnInk)
+        chevron.setContentHuggingPriority(.required, for: .horizontal)
+        let line = UIStackView(arrangedSubviews: [face, title, chevron])
+        line.spacing = Size.cPillGap
+        line.alignment = .center
+        line.isUserInteractionEnabled = false
+        line.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(line)
+        NSLayoutConstraint.activate([
+            surface.leadingAnchor.constraint(equalTo: leadingAnchor),
+            surface.trailingAnchor.constraint(equalTo: trailingAnchor),
+            surface.topAnchor.constraint(equalTo: topAnchor),
+            surface.bottomAnchor.constraint(equalTo: bottomAnchor),
+            face.widthAnchor.constraint(equalToConstant: 16),
+            face.heightAnchor.constraint(equalToConstant: 16),
+            line.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Space.space2),
+            line.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Space.space2),
+            line.centerYAnchor.constraint(equalTo: centerYAnchor),
+            heightAnchor.constraint(equalToConstant: Size.cTrayChipCoarse),
+        ])
+        isAccessibilityElement = true
+        accessibilityTraits = .button
+        accessibilityLabel = "Show the question from the agent: \(words)"
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (bar: PromptBar, _: UITraitCollection) in bar.paint() }
+        paint()
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        fatalError("PromptBar is built in code")
+    }
+
+    /// The kit's press (`.kit-tray-chip:active`): `pressScale` over
+    /// `durControl`, none with Reduce Motion.
+    override var isHighlighted: Bool {
+        didSet {
+            guard isHighlighted != oldValue else { return }
+            let to = isHighlighted && !UIAccessibility.isReduceMotionEnabled ? Motion.pressScale : 1
+            Motion.easeOut.animator(Motion.durControl) {
+                self.transform = CGAffineTransform(scaleX: to, y: to)
+            }.startAnimation()
+        }
+    }
+
+    private func paint() {
+        surface.backgroundColor = Palette.statusAttnBg
+        surface.layer.borderColor = Palette.borderHairline.resolvedColor(with: traitCollection).cgColor
     }
 }
 

@@ -1,5 +1,6 @@
 import CawCoCore
 import CawCoDesign
+import CawCoMascot
 import CawCoTranscript
 import OSLog
 import PhotosUI
@@ -484,7 +485,8 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
             let card = cards[ask.requestId] ?? {
                 // Each change stands at most the token's share of the screen, scrolling inside.
                 let cap = (view.window?.bounds.height ?? view.bounds.height) * Size.cAskDiffShare
-                let made = PromptCardView(ask, arriving: shownOnce && composerBinding.composer != nil) { change in
+                let made = PromptCardView(ask, arriving: shownOnce && composerBinding.composer != nil,
+                                          face: { CawMark(status: .needsYou, side: 16) }) { change in
                     DiffView(path: change.path, old: change.before, new: change.after, cap: cap)
                 }
                 made.onAnswer = { [weak self] choice, picks in self?.answer(ask, choice, picks) }

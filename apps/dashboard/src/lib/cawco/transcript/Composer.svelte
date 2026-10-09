@@ -41,7 +41,7 @@
 </script>
 
 <script lang="ts">
-  import type { AvailableCommand } from "@cawco/core";
+  import { type AvailableCommand, questionsOf } from "@cawco/core";
   /**
    * The floating composer — a lifted shell holding the text input, the attach
    * and send controls. A parked permission or question is the composer
@@ -82,7 +82,12 @@
   import * as Command from "#lib/components/ui/command/index.js";
   import { Kbd } from "#lib/components/ui/kbd/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
-  import { IconHistory, IconSend, IconStop } from "#lib/icons.js";
+  import {
+    IconChevronUp,
+    IconHistory,
+    IconSend,
+    IconStop,
+  } from "#lib/icons.js";
   import {
     cawco,
     readOlderPage,
@@ -95,6 +100,7 @@
   import { mcpSignInIntent, signInToMcp } from "../fleet";
   import CawFace from "../home/CawFace.svelte";
   import { newId } from "../id";
+  import { minimizedAsks } from "../minimized-asks.svelte";
   import SelectionChip from "../preview/SelectionChip.svelte";
   import SelectionPopover from "../preview/SelectionPopover.svelte";
   import {
@@ -402,6 +408,34 @@
   function fade(_node: Element): TransitionConfig {
     return {
       duration: dur("--dur-control"),
+      easing: easeOut,
+      css: (t) => `opacity: ${t}`,
+    };
+  }
+  /**
+   * A minimized question's bar comes into the tray row once the card's
+   * fold (--dur-grow-exit) has landed, so the two never stand in one place
+   * at once: the fold speeds up as it goes and only crosses the tray row in
+   * its last frames (measured at 390: 210 of its 220ms). It comes up 8px
+   * out of a 4px blur over --dur-control, as the card's own parts come up
+   * (Prompt `.part`). Reduced motion keeps the fade, with no wait.
+   */
+  function askedIn(_node: Element): TransitionConfig {
+    const still = !motionOk.current;
+    return {
+      delay: still ? 0 : dur("--dur-grow-exit"),
+      duration: dur("--dur-control"),
+      easing: easeOut,
+      css: (t, u) =>
+        still
+          ? `opacity: ${t}`
+          : `opacity: ${t}; translate: 0 ${u * 8}px; filter: blur(${u * 4}px)`,
+    };
+  }
+  /** The bar gives way to the card growing over it: a fade over --dur-exit. */
+  function askedOut(_node: Element): TransitionConfig {
+    return {
+      duration: dur("--dur-exit"),
       easing: easeOut,
       css: (t) => `opacity: ${t}`,
     };
@@ -1990,7 +2024,53 @@
    * were;
    * the next ask waiting takes its place in the grown shape without folding,
    * its parts staggering in again.
+   *
+   * A question the reader has minimized (minimized-asks.svelte.ts) is not
+   * grown: the shape folds back into the pill exactly as for an answer, the
+   * tray row and the pill's controls come back, and the question stands as a
+   * one-line bar over the tray row (`asked`) until the bar is pressed, when
+   * the composer grows into it again. Nothing is answered either way: the
+   * ask stays parked on the hub, as it does on iOS, where the pill stays
+   * writable under a parked card.
    */
+  /** The questions the parked ask puts, if it is a question. */
+  const askQuestions = $derived(
+    ask
+      ? questionsOf(
+          ask.request.toolName,
+          ask.request.input as Record<string, unknown>
+        )
+      : null
+  );
+  /** The parked ask is a question the reader minimized here. */
+  const minimized = $derived(
+    !!(ask && askQuestions && minimizedAsks.has(ask.request.requestId))
+  );
+  /** The ask the composer grows into: the parked one, unless it is minimized. */
+  const grownAsk = $derived(minimized ? null : ask);
+  /** The minimized question's bar. */
+  let askedChip = $state<HTMLButtonElement>();
+
+  async function minimizeAsk(): Promise<void> {
+    if (!ask) {
+      return;
+    }
+    // Keys that were in the card follow it onto its bar; a finger's swipe
+    // leaves focus where it was, so no ring is drawn under a touch.
+    const keys = !!askPanel?.contains(document.activeElement);
+    minimizedAsks.set(ask.request.requestId, true);
+    await tick();
+    if (keys) {
+      askedChip?.focus();
+    }
+  }
+
+  function restoreAsk(): void {
+    if (ask) {
+      minimizedAsks.set(ask.request.requestId, false);
+    }
+  }
+
   /** The ask the shape holds: it trails `ask` while one changes into the next. */
   let drawnAsk = $state<ComposerAsk | null>(null);
   /** The composer is an ask, from its growth until its fold has landed. */
@@ -2020,10 +2100,10 @@
   let askTurn = 0;
   /** The field had the keys when the ask came up: it has them back after. */
   let askRefocus = false;
-  const askId = $derived(ask?.request.requestId ?? null);
+  const askId = $derived(grownAsk?.request.requestId ?? null);
   const askPlace = $derived(
-    ask && drawnAsk?.request.requestId === ask.request.requestId
-      ? { at: askRun + 1, of: askRun + 1 + ask.more }
+    grownAsk && drawnAsk?.request.requestId === grownAsk.request.requestId
+      ? { at: askRun + 1, of: askRun + 1 + grownAsk.more }
       : null
   );
 
@@ -2184,12 +2264,17 @@
         return;
       }
       askTurn += 1;
-      if (!ask) {
+      if (!grownAsk) {
+        // Minimized, the question folds away but is still parked: the
+        // keys stay where the reader put them, on the bar.
+        if (minimized) {
+          askRefocus = false;
+        }
         foldAsk(askTurn);
       } else if (drawnAsk) {
-        switchAsk(ask, askTurn);
+        switchAsk(grownAsk, askTurn);
       } else {
-        growAsk(ask, askTurn);
+        growAsk(grownAsk, askTurn);
       }
     });
   });
@@ -2323,6 +2408,7 @@
   bind:this={dockEl}
   style:--perch-rise={perch && perchHeight ? `${perchHeight}px` : null}
   class:asking={askRaised}
+  class:minimized={minimized}
 >
   {#if prompts}
     <div class="prompts" inert={askRaised} {@attach reflow()}>
@@ -2334,6 +2420,32 @@
        flow). Both rows are kept clear at every transcript's foot (app.css
        `--c-tray-row`, `--c-suggest-room`). An offer stands on top of both. -->
   <div class="lift" inert={askRaised} bind:clientHeight={lift}>
+    {#if minimized && ask && askQuestions}
+      <!-- The minimized question, in the tray row's place: Caw's needs-you
+           face, what it asks, and the chevron it comes back up by. The
+           tray's chips and the plan's ring step aside meanwhile, as they do
+           while the card is up, so the bar costs the transcript nothing the
+           row did not already keep clear. -->
+      {@const [first] = askQuestions}
+      <div class="asked" in:askedIn out:askedOut>
+        <button
+          aria-label={`Show the question from ${ask.asker}: ${first?.question ?? ""}`}
+          class="asked-chip kit-tray-chip touch-hit"
+          onclick={restoreAsk}
+          type="button"
+          bind:this={askedChip}
+        >
+          <span aria-hidden="true" class="asked-face">
+            <CawFace size={16} status="needs-you" />
+          </span>
+          <span class="asked-text">{first?.question ?? first?.header}</span>
+          {#if ask.more > 0}
+            <span class="asked-more num">+{ask.more}</span>
+          {/if}
+          <IconChevronUp aria-hidden="true" />
+        </button>
+      </div>
+    {/if}
     {#if suggest && suggestions.enabled}
       <!-- Keyed by conversation: the ranking is of one chat's words, and the
            shared phone composer must not carry it into the next chat. -->
@@ -2476,6 +2588,7 @@
             <Prompt
               asker={drawnAsk.asker}
               onanswer={drawnAsk.onanswer}
+              onminimize={askQuestions ? minimizeAsk : undefined}
               place={askPlace}
               request={drawnAsk.request}
               shown={askShown}
@@ -2733,6 +2846,61 @@
     justify-content: flex-end;
     pointer-events: none;
     transition: var(--step-aside);
+  }
+  /* A minimized question's bar: the tray row's chip (app.css
+     .kit-tray-chip) in its needs tone (DelegateTray `.chip.needs`: a
+     session asking for something is the one loud colour), across the
+     composer's width, standing in the tray row as the tray's chips do: a
+     tray chip high, a tray gap off the pill. The row is kept clear at
+     every transcript's foot, so the bar covers no line the row did not.
+     The tray and the plan's ring step aside under it (`.dock.minimized`)
+     and come back as it goes. It stands under the grown shape (`.grown-halo`,
+     z 1): brought back, the card grows over the bar as it fades. */
+  .asked {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: flex-end;
+    padding-block-end: var(--c-tray-gap);
+    pointer-events: none;
+  }
+  .tray-slot,
+  .progress-slot {
+    transition: var(--step-aside);
+  }
+  .dock.minimized :is(.tray-slot, .progress-slot) {
+    opacity: 0;
+    visibility: hidden;
+    transition:
+      opacity var(--dur-fade) var(--ease-out),
+      visibility 0s linear var(--dur-fade);
+  }
+  .asked-chip {
+    inline-size: 100%;
+    min-inline-size: 0;
+    color: var(--status-attn-ink);
+    pointer-events: auto;
+
+    &::before {
+      background-color: var(--status-attn-bg);
+    }
+  }
+  .asked-face {
+    display: inline-grid;
+    flex: none;
+    place-items: center;
+  }
+  .asked-text {
+    flex: 1 1 auto;
+    min-inline-size: 0;
+    overflow: hidden;
+    text-align: start;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .asked-more {
+    flex: none;
+    font-weight: var(--weight-body);
   }
   /* The delegate tray's row, on the composer's width and left edge. It is
      the positioned box the suggestion chips stand on. */

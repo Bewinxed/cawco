@@ -37,6 +37,7 @@
   import {
     IconAsk,
     IconCheck,
+    IconChevronDown,
     IconClose,
     IconShield,
     IconTick,
@@ -58,7 +59,14 @@
     asker = "the agent",
     place = null,
     shown = false,
+    onminimize,
   }: {
+    /**
+     * Folds a question down to its bar over the composer, answering nothing
+     * (minimized-asks.svelte.ts). Given only for a question; a card without
+     * it has no minimize control and no swipe.
+     */
+    onminimize?: () => void;
     request: PendingPermission;
     /** Where this ask stands among the ones waiting ("2 of 3"); none when it is alone. */
     place?: { at: number; of: number } | null;
@@ -404,6 +412,46 @@
   const refuse = `${peer} !text-[var(--ink-muted)]`;
   const primary = `${btnBase} px-[var(--space-4)]`;
   const dismiss = btnBase;
+
+  /**
+   * A swipe down on a question's card minimizes it, as its chevron does. It
+   * is read off the touch's start and end, not tracked: the body scrolls
+   * under the finger, so a touch that starts in the body counts only when
+   * the body is at its top, where a downward pull has nothing to scroll.
+   * The title and the foot always count. Mostly downward, and far enough to
+   * be meant: a tap on a chip, or a scroll, never minimizes.
+   */
+  const SWIPE = 56;
+  const SWIPE_SLOPE = 0.7;
+  let swipe: { x: number; y: number } | null = null;
+
+  function swipeStart(event: TouchEvent): void {
+    swipe = null;
+    if (!onminimize || event.touches.length !== 1) {
+      return;
+    }
+    const body =
+      event.target instanceof Element ? event.target.closest(".body") : null;
+    if (body && body.scrollTop > 0) {
+      return;
+    }
+    const [touch] = event.touches;
+    swipe = { x: touch.clientX, y: touch.clientY };
+  }
+
+  function swipeEnd(event: TouchEvent): void {
+    const start = swipe;
+    swipe = null;
+    const [touch] = event.changedTouches;
+    if (!(start && touch && onminimize)) {
+      return;
+    }
+    const down = touch.clientY - start.y;
+    const across = Math.abs(touch.clientX - start.x);
+    if (down >= SWIPE && across <= down * SWIPE_SLOPE) {
+      onminimize();
+    }
+  }
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
@@ -439,6 +487,19 @@
     {#if place && place.of > 1}
       <Kbd class="place num">{place.at} of {place.of}</Kbd>
     {/if}
+    {#if questions && onminimize}
+      <!-- Folds the card to its bar over the composer; answers nothing. -->
+      <Button
+        aria-label="Minimize question"
+        class="minimize touch-hit"
+        onclick={onminimize}
+        size="icon-xs"
+        title="Minimize"
+        variant="ghost"
+      >
+        <IconChevronDown />
+      </Button>
+    {/if}
   </h2>
 {/snippet}
 
@@ -447,6 +508,11 @@
     ? `Question from ${asker}`
     : `Permission request from ${presentation.asker}`}
   class="hitl"
+  ontouchcancel={() => {
+    swipe = null;
+  }}
+  ontouchend={swipeEnd}
+  ontouchstart={swipeStart}
   bind:this={card}
   class:shown={shown}
 >
@@ -717,6 +783,17 @@
   }
   h2 :global(.place) {
     margin-inline-start: auto;
+  }
+  /* The minimize chevron ends the title row, in the title's muted ink; it
+     keeps the row's own height (its 24px box overhangs the label line). */
+  h2 :global(.minimize) {
+    flex: none;
+    margin-block: calc(var(--space-1) * -1);
+    margin-inline-start: auto;
+    color: var(--ink-muted);
+  }
+  h2 :global(.place + .minimize) {
+    margin-inline-start: 0;
   }
   /* The reader's own answer (the kit's field), on the step under the choices. */
   .body :global(.other) {

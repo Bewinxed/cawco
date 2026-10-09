@@ -100,7 +100,7 @@ final class ComposerDock {
         composer.bind(binding, direction: direction, landing: landing)
         // One conversation's tray hands its place to the next.
         tray?.parentId = binding?.sessionId
-        composer.lift.isHidden = tray == nil || binding == nil
+        composer.trayWanted = tray != nil && binding != nil
         show(binding != nil)
     }
 
