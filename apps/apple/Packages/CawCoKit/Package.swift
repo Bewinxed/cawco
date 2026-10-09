@@ -28,6 +28,7 @@ let package = Package(
         .package(url: "https://github.com/rive-app/rive-ios", from: "6.28.0"),
         .package(url: "https://github.com/apple/swift-markdown", from: "0.7.3"),
         .package(url: "https://github.com/raspu/Highlightr", from: "2.3.0"),
+        .package(url: "https://github.com/square/Valet", from: "5.1.1"),
     ],
     targets: [
         // The hub's wire types and client, generated at build time from
@@ -40,8 +41,12 @@ let package = Package(
         ),
         // The pairing and push key in the Keychain group the app shares with its
         // Notification Service Extension, and the opening of a sealed push.
-        // Extension-safe: Foundation, Security and CryptoKit only.
-        .target(name: "CawCoPush", swiftSettings: concurrency),
+        // Extension-safe: Valet (the Keychain) and CryptoKit.
+        .target(
+            name: "CawCoPush",
+            dependencies: [.product(name: "Valet", package: "Valet")],
+            swiftSettings: concurrency
+        ),
         .target(
             name: "CawCoCore",
             dependencies: [

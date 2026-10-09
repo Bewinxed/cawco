@@ -1,5 +1,4 @@
 import CawCoPush
-import CryptoKit
 import os
 import UserNotifications
 
@@ -48,17 +47,12 @@ final class NotificationService: UNNotificationServiceExtension {
                 return nil
             }
             alert = try SealedAlert.open(sealed, key: key)
-        } catch let error as KeychainFailure {
-            log.error("push \(request.identifier, privacy: .public) not opened: keychain \(String(describing: error), privacy: .public)")
-            return nil
-        } catch let error as SealedAlert.Failure {
-            log.error("push \(request.identifier, privacy: .public) not opened: \(String(describing: error), privacy: .public)")
-            return nil
-        } catch let error as CryptoKitError {
-            log.error("push \(request.identifier, privacy: .public) not opened: \(String(describing: error), privacy: .public)")
+        } catch is DecodingError {
+            log.error("push \(request.identifier, privacy: .public) not opened: its alert is not v1 JSON")
             return nil
         } catch {
-            log.error("push \(request.identifier, privacy: .public) not opened: \(String(describing: type(of: error)), privacy: .public)")
+            // Valet's KeychainError, CryptoKitError, SealedAlert.Failure: none carries the key or the words.
+            log.error("push \(request.identifier, privacy: .public) not opened: \(String(describing: error), privacy: .public)")
             return nil
         }
         guard let content = request.content.mutableCopy() as? UNMutableNotificationContent else { return nil }
