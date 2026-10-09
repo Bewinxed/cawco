@@ -212,6 +212,14 @@ export interface RegisterAckPayload {
    */
   ingested?: Record<string, IngestMark>;
   ok: true;
+  /**
+   * Of the account stores the machine named at register (`accountStores`),
+   * the ids this hub has no account for: a removed account (removed while
+   * the machine was offline, or joined into another). The machine signs each
+   * out with its harness's own logout and deletes it. An id the hub has is
+   * never named.
+   */
+  unknownAccounts?: string[];
 }
 
 const record = (value: unknown): Record<string, unknown> | undefined =>

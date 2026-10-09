@@ -11,6 +11,7 @@ import type {
   HeartbeatAckPayload,
   HeartbeatPayload,
   ProviderInfo,
+  RegisterAckPayload,
   SessionCustody,
   SpawnPayload,
 } from "@cawco/core";
@@ -46,6 +47,7 @@ import { fetchOpenCodeGoLimits } from "@cawco/core/usage/opencode-go";
 import { announcingParts, clientLine } from "@cawco/core/wire";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { Data, Duration, Effect, Fiber, Schedule } from "effect";
+import { accountStoreIds, forgetUnknownAccounts } from "./account-sweep";
 import { accountReports, claudeAuthNote } from "./accounts";
 import {
   BinaryUpdater,
@@ -66,6 +68,7 @@ import { PI_AUTH_CHECK_INTERVAL_MS } from "./harnesses/pi-auth";
 import { cache as transcriptCache } from "./harnesses/transcript-cache";
 import { KeeperWatchdog, machineKeeper } from "./keeper-watchdog";
 import { endOrphanedSignIns, endSignIns } from "./login";
+import { isMachineAgent } from "./machine-agent";
 import {
   setAccountFreshener,
   setOpencodeLimitSink,
@@ -247,6 +250,15 @@ interface MachineIdentity {
  * {@link HeartbeatPayload}.
  */
 export interface RegisterPayload extends MachineIdentity {
+  /**
+   * The machine agent's account stores: every id under `~/.cawco/accounts/`,
+   * Claude dirs and provider credential stores alike. The hub's ack names
+   * the ones it has no account for ({@link RegisterAckPayload.unknownAccounts}),
+   * which the machine forgets. Absent from an agent that is not the
+   * machine's: it shares the machine's stores with the machine's own hub,
+   * and another hub's accounts are not its to judge.
+   */
+  accountStores?: string[];
   /** This machine's binary update state at register, as the updater last saw it. */
   binaryUpdate?: BinaryUpdateState;
   /**
@@ -750,10 +762,12 @@ const attach = (
     // synchronous spawn (capabilities.ts).
     const capabilities = () => probeCapabilities();
     let machineCapabilities = yield* Effect.promise(capabilities);
+    const machineAgent = yield* Effect.promise(isMachineAgent);
     const registerPayload = (
       snapshot: Awaited<ReturnType<typeof readSessions>>
     ): RegisterPayload => ({
       ...identity,
+      ...(machineAgent ? { accountStores: accountStoreIds() } : {}),
       sessionAddresses: supervisor.sessionAddresses,
       machineCapabilities,
       instances: supervisor.instanceIds,
@@ -1303,6 +1317,21 @@ const attach = (
       supervisor.receivedStop(stop.stopSequence ?? 0);
     };
 
+    /** The machine agent forgets the stores its hub named as no account of its own. */
+    const sweepAccounts = (ack: RegisterAckPayload): void => {
+      const unknown = ack.unknownAccounts;
+      if (!(machineAgent && unknown?.length)) {
+        return;
+      }
+      forgetUnknownAccounts(unknown)
+        .then(() => providerAccountsChanged())
+        .catch((error: unknown) =>
+          console.warn(
+            `[accounts] forgetting removed accounts failed: ${error instanceof Error ? error.message : String(error)}`
+          )
+        );
+    };
+
     /** What arrives ahead of the register ack: custody, taken on the ack. Whether it was taken. */
     const beforeAck = (envelope: Envelope): boolean => {
       if (envelope.verb === "register") {
@@ -1313,6 +1342,7 @@ const attach = (
         awaitingRegisterAck = false;
         const spawns = heldSpawns.splice(0);
         takeCustody(envelope.payload, spawns);
+        sweepAccounts(envelope.payload as RegisterAckPayload);
         return true;
       }
       if (envelope.verb !== "spawn") {

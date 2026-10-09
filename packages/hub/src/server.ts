@@ -797,11 +797,18 @@ const HUB_EPOCH = crypto.randomUUID();
 
 const registerAck = (
   envelope: Envelope,
-  ingested: Record<string, IngestMark>
+  ingested: Record<string, IngestMark>,
+  unknownAccounts: string[] | undefined
 ): Envelope<RegisterAckPayload> => ({
   verb: envelope.verb,
   machineId: envelope.machineId,
-  payload: { ok: true, ingested, addressContract: true, hubEpoch: HUB_EPOCH },
+  payload: {
+    ok: true,
+    ingested,
+    addressContract: true,
+    hubEpoch: HUB_EPOCH,
+    ...(unknownAccounts ? { unknownAccounts } : {}),
+  },
 });
 
 /** Sent back as a frame, the only verb a dashboard renders. */
@@ -5055,6 +5062,28 @@ export const createServer = (
    */
   const joinedInto = new Map<string, string>();
 
+  /**
+   * Of the account stores a connecting machine named (`accountStores` on its
+   * register), the ids this hub has no account for: the machine forgets
+   * each ({@link RegisterAckPayload.unknownAccounts}). Undefined when it
+   * named none, as an agent that is not the machine's does.
+   */
+  const unknownAccountsOf = (payload: unknown): string[] | undefined => {
+    const stores = (payload as { accountStores?: unknown }).accountStores;
+    if (!Array.isArray(stores)) {
+      return undefined;
+    }
+    const unknown = stores.filter(
+      (id): id is string => typeof id === "string" && !db.accounts.get(id)
+    );
+    if (unknown.length > 0) {
+      console.log(
+        `[accounts] a machine holds stores of ${unknown.length} account${unknown.length === 1 ? "" : "s"} this hub does not have (${unknown.join(", ")}); it forgets them`
+      );
+    }
+    return unknown;
+  };
+
   /** The other account of `account`'s provider that already is `identity`. */
   const existingAs = (
     account: Account,
@@ -5143,7 +5172,7 @@ export const createServer = (
       .filter(
         (one) => one.accountId === account.id && one.machineId !== machineId
       )) {
-      // biome-ignore lint/performance/noAwaitInLoops: one machine at a time; an offline one keeps its empty store until asked
+      // biome-ignore lint/performance/noAwaitInLoops: one machine at a time; an offline one forgets its empty store when it next connects (`unknownAccountsOf`)
       await forgetOn(account, signin.machineId);
     }
     db.accounts.remove(account.id);
@@ -14857,24 +14886,30 @@ export const createServer = (
         }
         // Each machine signed in to it signs it out (Claude Code itself for a
         // Claude dir, the agent for any other) and drops the account's store
-        // there; one that is offline keeps it until asked.
-        const away: string[] = [];
+        // there. One that is offline does so when it next connects: it names
+        // its stores, and this hub answers the ones it no longer has
+        // (`unknownAccountsOf`). One that is online and fails says why.
+        const failed: string[] = [];
+        const later: string[] = [];
         for (const signin of signins) {
           // biome-ignore lint/performance/noAwaitInLoops: one machine at a time, each told and answered before the next
           const answer = await forgetOn(account, signin.machineId);
-          if (answer === "offline" || answer === "timeout" || !answer.ok) {
-            away.push(machineName(signin.machineId));
+          if (answer === "offline") {
+            later.push(machineName(signin.machineId));
+          } else if (answer === "timeout" || !answer.ok) {
+            failed.push(machineName(signin.machineId));
           }
         }
-        if (away.length > 0) {
+        if (failed.length > 0) {
           return status(
             409,
-            `${away.join(", ")} did not sign ${accountName(account)} out; try again when ${away.length === 1 ? "it is" : "they are"} online.`
+            `${failed.join(", ")} did not sign ${accountName(account)} out; try again.`
           );
         }
         db.accounts.remove(account.id);
         publishUsage();
-        return { ok: true };
+        // Machines offline now, which sign it out when they next connect.
+        return { ok: true, later };
       })
       // Signs an account out on one machine and drops that sign-in: the same
       // sign-out the account's removal runs on each of its machines, here on
@@ -15864,7 +15899,11 @@ export const createServer = (
               );
               sendFrame(
                 ws,
-                registerAck(message, streams.ingestedFor(reattaching))
+                registerAck(
+                  message,
+                  streams.ingestedFor(reattaching),
+                  unknownAccountsOf(message.payload)
+                )
               );
               for (const row of toEnd) {
                 if (addressProtocolMachines.has(message.machineId)) {
