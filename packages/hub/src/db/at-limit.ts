@@ -41,8 +41,6 @@ export interface LimitEvent {
 }
 
 export interface AtLimitDb {
-  /** Every "Continued on" line (move `continued`), in any session, oldest first. */
-  readonly continued: () => LimitEvent[];
   readonly dropHold: (instanceId: string) => void;
   readonly dropSummary: (instanceId: string) => void;
   /** The lines written into these sessions' transcripts, oldest first. */
@@ -181,14 +179,6 @@ export const atLimitDb = (db: BunSQLiteDatabase): AtLimitDb => ({
       .values({ id, instanceId, at: new Date(at), move })
       .run();
   },
-  continued: () =>
-    db
-      .select()
-      .from(limitEvents)
-      .orderBy(asc(limitEvents.at))
-      .all()
-      .map(toEvent)
-      .filter((event) => event.move.kind === "continued"),
   events: (instanceIds) =>
     instanceIds.length === 0
       ? []

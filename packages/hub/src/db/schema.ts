@@ -631,6 +631,14 @@ export const instances = sqliteTable("instances", {
    * session's cache, so it never moves to another account on its own.
    */
   forkedFrom: text("forked_from"),
+  /**
+   * The session that took this one's place when it was continued on another
+   * account at its limit: set as this one is ended for it, cleared only if
+   * that continuation failed and this one goes on. Once set, this session
+   * never runs again, and everything addressed to it reaches the end of the
+   * chain (db `successorOf`).
+   */
+  continuedInto: text("continued_into"),
   /** The instance this one is a delegate of (nested under it in every rail). */
   parentInstanceId: text("parent_instance_id"),
   /** The delegating tool call, so the parent transcript can render the round trip. */

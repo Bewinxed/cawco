@@ -91,6 +91,8 @@ export function createDelegationMcp(options: {
   lifetime: HubLifetimeShape;
   instances: () => InstanceRow[];
   instanceById: (id: string) => InstanceRow | undefined;
+  /** The session that runs in `id`'s place now (db `successorOf`). */
+  successorOf: (id: string) => string;
   /** Whether `leadId` leads the project of the work item `instanceId` runs (work-items.ts `ledBy`). */
   ledBy?: (instanceId: string, leadId: string) => boolean;
   forward: (envelope: Envelope, actor: InstanceRow) => Promise<void>;
@@ -170,6 +172,7 @@ export function createDelegationMcp(options: {
           const definitions = module.handoffTools({
             instanceId: "",
             instanceById: options.instanceById,
+            successorOf: options.successorOf,
             cwd: "",
             emit: () => {
               throw new Error("Discovery cannot execute tools");
@@ -217,6 +220,7 @@ export function createDelegationMcp(options: {
       ...tools({
         instanceId: "",
         instanceById: options.instanceById,
+        successorOf: options.successorOf,
         cwd: "",
         canDelegate: actor?.canDelegate ?? undefined,
         lands: landsOf(actor),
@@ -400,6 +404,7 @@ export function createDelegationMcp(options: {
       const entry = tools({
         instanceId: "",
         instanceById: options.instanceById,
+        successorOf: options.successorOf,
         cwd: "",
         projectId,
         deliver: () => {
@@ -559,6 +564,7 @@ export function createDelegationMcp(options: {
     const entry = tools({
       instanceId: actor.id,
       instanceById: options.instanceById,
+      successorOf: options.successorOf,
       authorization,
       cwd: actor.cwd,
       harness: actor.harness as "claude" | "opencode" | "pi",
@@ -699,6 +705,7 @@ export function createDelegationMcp(options: {
         instructions: handoffInstructions({
           instanceId: binding ?? "",
           instanceById: options.instanceById,
+          successorOf: options.successorOf,
           cwd: bound?.cwd ?? "",
           harness: bound?.harness as "claude" | "opencode" | "pi" | undefined,
           canDelegate,

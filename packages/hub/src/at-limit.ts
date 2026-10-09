@@ -8,6 +8,7 @@ import {
   type ContinueStep,
   type LimitWindow,
   modelScope,
+  type NeutralOrigin,
   namedAccount,
   type WaitReason,
   windowWords,
@@ -231,6 +232,11 @@ export interface AtLimitPorts {
   /** Has `row` carry on where its limit stopped it, on the account it is on. */
   resume: (row: LimitRow) => void;
   /**
+   * Who sent what `row`'s last turn read: the newest message it was handed.
+   * Undefined when it was handed none.
+   */
+  startedBy: (row: LimitRow) => NeutralOrigin | undefined;
+  /**
    * A summary of `row` written on `accountId`, its own while it has room.
    * Undefined when nothing comes before its last turns.
    */
@@ -246,9 +252,27 @@ export interface AtLimitPorts {
 const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
-/** A session past caring: its process will not be woken by anything the hub does here. */
+/**
+ * A session past caring: its process will not be woken by anything the hub
+ * does here. One another took the place of is never acted on again: a
+ * session is continued once, ever.
+ */
 const over = (row: LimitRow | undefined): boolean =>
-  !row || ["stopped", "discarded", "error"].includes(row.status);
+  !row ||
+  ["stopped", "discarded", "error"].includes(row.status) ||
+  row.continuedInto !== null;
+
+/** The carry-on the hub sends at a reset: a turn the limit itself resumed. */
+const CARRY_ON_ORIGIN = "limit";
+
+/**
+ * Whether a turn its account refused was started by the hub's own word
+ * rather than a person's or a session's: such a turn asked nothing of the
+ * session that is worth another account, so it is neither moved nor
+ * continued, and waits for a person or its parent to write.
+ */
+const noticeTurn = (origin: NeutralOrigin | undefined): boolean =>
+  origin?.kind === "system" && origin.name !== CARRY_ON_ORIGIN;
 
 export const createAtLimit = (ports: AtLimitPorts) => {
   const { db, lifetime } = ports;
@@ -443,7 +467,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
 
   /** Moves or continues `row` off `current`, or holds it, as {@link decideAtLimit} says. */
   const act = async (row: LimitRow, current: Account): Promise<void> => {
-    if (acting.has(row.id) || ports.continuing(row)) {
+    if (acting.has(row.id) || ports.continuing(row) || over(row)) {
       return;
     }
     acting.add(row.id);
@@ -677,6 +701,19 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       console.info(
         `[at-limit] ${instanceId}: turn refused at ${accountName(current)}'s limit`
       );
+      if (row.continuedInto !== null) {
+        console.info(
+          `[at-limit] ${instanceId}: it was continued as ${row.continuedInto} already; it is never continued again`
+        );
+        return;
+      }
+      const origin = ports.startedBy(row);
+      if (origin?.kind === "system" && noticeTurn(origin)) {
+        console.info(
+          `[at-limit] ${instanceId}: the hub's own word (${origin.name ?? "a notice"}) started that turn; it is left for a person or its parent`
+        );
+        return;
+      }
       await act(row, current);
     },
     /** A turn of `instanceId` ended as any turn does: maybe write a summary ahead of the limit. */

@@ -15772,6 +15772,12 @@
                   "string"
                 ]
               },
+              "continuedInto": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
               "parentInstanceId": {
                 "type": [
                   "null",
@@ -15876,6 +15882,7 @@
             "required": [
               "accountId",
               "canDelegate",
+              "continuedInto",
               "createdAt",
               "cwd",
               "delegateType",
@@ -16062,6 +16069,12 @@
                     "string"
                   ]
                 },
+                "continuedInto": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
                 "parentInstanceId": {
                   "type": [
                     "null",
@@ -16166,6 +16179,7 @@
               "required": [
                 "accountId",
                 "canDelegate",
+                "continuedInto",
                 "createdAt",
                 "cwd",
                 "delegateType",
@@ -32981,6 +32995,13 @@
             "type": [
               "null",
               "boolean"
+            ]
+          },
+          "continuedInto": {
+            "description": "The session that took this one's place when it was continued on another\naccount at its limit. Set: this one never runs again, every listing\nleaves it out, and whatever names it reaches the session at the end of\nthe chain. Null on every session nothing took the place of.",
+            "type": [
+              "null",
+              "string"
             ]
           },
           "cwd": {

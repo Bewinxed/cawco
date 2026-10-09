@@ -386,12 +386,33 @@
      the app already uses. Until then the pane and its details cannot tell the
      conversation is running, so nothing that only a live session answers is
      ever asked. The list arrives over the socket after the first paint, so
-     this follows the list rather than checking once. */
+     this follows the list rather than checking once. A tab on a session the
+     hub continued in another's place (its row's `continuedInto`) becomes the
+     tab of the session at the end of that chain, which runs in its place. */
+  /** The session at the end of `id`'s `continuedInto` chain, as the list names it. */
+  function successorIn(index: typeof cawco.instanceIndex, id: string): string {
+    const seen = new Set<string>();
+    let current = id;
+    for (;;) {
+      seen.add(current);
+      const next = index.byId.get(current)?.continuedInto;
+      if (!next || seen.has(next)) {
+        return current;
+      }
+      current = next;
+    }
+  }
+
   $effect(() => {
     const index = cawco.instanceIndex;
     untrack(() => {
       for (const id of workspace.openIds) {
-        if (index.byId.has(id)) {
+        const known = index.byId.get(id);
+        if (known?.continuedInto) {
+          workspace.retarget(id, successorIn(index, id));
+          continue;
+        }
+        if (known) {
           continue;
         }
         const row = instanceForSession(index, id);

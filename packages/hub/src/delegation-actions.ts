@@ -272,10 +272,16 @@ async function roster(exceptInstanceId: string): Promise<{
   peers: Peer[];
   asleep: Peer[];
   own: InstanceRow | undefined;
+  /** Sessions another took the place of: never listed, only followed. */
+  superseded: InstanceRow[];
+  hosts: Map<string, string>;
 }> {
   const { rows, hosts } = await fetchInstances();
   const own = rows.find((row) => row.id === exceptInstanceId);
-  const others = rows.filter((row) => row.id !== exceptInstanceId);
+  const superseded = rows.filter((row) => row.continuedInto);
+  const others = rows.filter(
+    (row) => row.id !== exceptInstanceId && !row.continuedInto
+  );
   // `unknown` is a live session whose machine is not connected right now —
   // an agent restart, the two seconds between its socket closing and its
   // register — and a send to it waits for that register at the hub.
@@ -299,8 +305,37 @@ async function roster(exceptInstanceId: string): Promise<{
           row.status === "stopped")
     )
     .map((row) => toPeer(row, hosts));
-  return { peers, asleep, own };
+  return { peers, asleep, own, superseded, hosts };
 }
+
+/**
+ * The session a target names when another took its place: the session in
+ * its place now (the hub's `successorOf`), and the id it was named by. By its
+ * full id, or a short id of six or more characters that names only it.
+ * Undefined when the target names no such session.
+ */
+function supersededBy(
+  superseded: InstanceRow[],
+  target: string,
+  successorOf: (id: string) => string
+): { successor: string; continues: string } | undefined {
+  const needle = needleOf(target);
+  const idPart = needle.includes("#")
+    ? (needle.split("#").pop() ?? "")
+    : needle;
+  const matches = superseded.filter(
+    (row) =>
+      row.id === needle || (idPart.length >= 6 && row.id.startsWith(idPart))
+  );
+  if (matches.length !== 1) {
+    return;
+  }
+  return { successor: successorOf(matches[0].id), continues: matches[0].id };
+}
+
+/** How a tool's answer names the session a target was followed from. */
+const continuesWords = (followed: { continues: string } | undefined): string =>
+  followed ? ` (continues ${followed.continues.slice(0, 8)})` : "";
 
 /** An `@` prefix on a target name, optional. */
 const AT_PREFIX = /^@/;
@@ -472,10 +507,11 @@ export const SPAWNING_TOOLS: ReadonlySet<string> = new Set([
  * (server.ts `deliverSend`): its machine is installing an update, so the
  * session's start waits for it (`update`); its machine's agent is restarting
  * (`agent`); the hub has just started and the machine has not reconnected
- * (`hub`); or sends before it to the same session are still queued
- * (`behind`).
+ * (`hub`); sends before it to the same session are still queued
+ * (`behind`); or the session has no process and this sender may not wake it
+ * (`resting`: a stopped session is woken only by a person or its parent).
  */
-export type SendHold = "agent" | "behind" | "hub" | "update";
+export type SendHold = "agent" | "behind" | "hub" | "resting" | "update";
 
 /** What the hub did with a send, as `handoff` tells its sender. */
 export interface SendDelivery {
@@ -500,6 +536,8 @@ const HOLD_WORDS: Record<SendHold, string> = {
   hub: "The hub has just started and the session's machine has not reconnected yet, so the message is queued at the hub and goes to the session when it does; it fails if the machine is not back within a minute.",
   behind:
     "Messages sent to it earlier are still queued at the hub, so this one is queued behind them and goes right after them.",
+  resting:
+    "It is stopped, and only a person or its parent starts it again, so the message is kept at the hub and goes to it when one of them next writes to it.",
 };
 
 /** What the hub did with a hand-off, as its sender is told. */
@@ -570,6 +608,12 @@ export interface HandoffDeps {
     message: string,
     attachments: string[]
   ) => Promise<string[]>;
+  /**
+   * The session that runs in `id`'s place now, at the end of its
+   * `continuedInto` chain; `id` itself when nothing took its place (the
+   * hub's one resolver, db `successorOf`).
+   */
+  readonly successorOf: (id: string) => string;
   readonly workflowRunId?: string;
   readonly workflowStepId?: string;
   /** Delegate role: finish_item is available even before an item has checks. */
@@ -944,6 +988,7 @@ export function coldRefusalText(
 export const handoffActions = ({
   instanceId,
   instanceById,
+  successorOf,
   workflowRunId,
   workflowStepId,
   cwd,
@@ -967,10 +1012,12 @@ export const handoffActions = ({
     let source = instanceId;
     const { rows, hosts } = await fetchInstances();
     if (input.session) {
-      source = resolve(
-        rows.map((row) => toPeer(row, hosts)),
-        input.session
-      ).row.id;
+      source = successorOf(
+        resolve(
+          rows.map((row) => toPeer(row, hosts)),
+          input.session
+        ).row.id
+      );
     }
     // The new session answers permissions as the caller does, where its
     // harness has modes; the hub settles it, never the machine's default.
@@ -1224,10 +1271,18 @@ export const handoffActions = ({
     message: string,
     urgent = false
   ): Promise<string> {
-    const { peers, asleep, own } = await roster(instanceId);
+    const { peers, asleep, own, superseded, hosts } = await roster(instanceId);
+    // A session another took the place of is reached where it runs now.
+    const followed = supersededBy(superseded, target, successorOf);
+    const addressed = followed?.successor ?? target;
+    const unlisted =
+      followed && ![...peers, ...asleep].some((p) => p.row.id === addressed)
+        ? instanceById(addressed)
+        : undefined;
+    const sleeping = unlisted ? [...asleep, toPeer(unlisted, hosts)] : asleep;
     const peer = urgent
-      ? resolveDelegate(peers, target, instanceId, ledBy)
-      : resolveHandoff(peers, asleep, target, own);
+      ? resolveDelegate(peers, addressed, instanceId, ledBy)
+      : resolveHandoff(peers, sleeping, addressed, own);
     if (peer.row.id !== own?.parentInstanceId) {
       await checkCold(peer.row.id, undefined, instanceId);
     }
@@ -1260,9 +1315,10 @@ export const handoffActions = ({
       instanceId: peer.row.id,
       payload,
     });
+    const continues = continuesWords(followed);
     const handed = urgent
-      ? `Delivered urgently to your delegate ${peer.label}.`
-      : `Handed to ${peer.label} (${peer.dir} on ${peer.host}${whose}).`;
+      ? `Delivered urgently to your delegate ${peer.label}${continues}.`
+      : `Handed to ${peer.label}${continues} (${peer.dir} on ${peer.host}${whose}).`;
     return `${handed} ${deliveryWords(delivery, urgent)}`;
   },
 
@@ -1432,8 +1488,14 @@ export const handoffActions = ({
   },
 
   async setItemChecks(target, checks) {
-    const { peers } = await roster(instanceId);
-    const peer = resolveDelegate(peers, target, instanceId, ledBy);
+    const { peers, superseded } = await roster(instanceId);
+    const followed = supersededBy(superseded, target, successorOf);
+    const peer = resolveDelegate(
+      peers,
+      followed?.successor ?? target,
+      instanceId,
+      ledBy
+    );
     const response = await fetch(`${hubHttpUrl()}/api/work-items/checks`, {
       method: "POST",
       headers: {
@@ -1452,8 +1514,10 @@ export const handoffActions = ({
     return ((await response.json()) as { text: string }).text;
   },
 
-  async stopDelegate(target: string): Promise<string> {
-    const { peers, asleep } = await roster(instanceId);
+  async stopDelegate(asked: string): Promise<string> {
+    const { peers, asleep, superseded } = await roster(instanceId);
+    const followed = supersededBy(superseded, asked, successorOf);
+    const target = followed?.successor ?? asked;
     const ended =
       instanceById(needleOf(target)) ?? resolveById(asleep, target)?.row;
     const peer = resolveDelegate(
@@ -1469,7 +1533,7 @@ export const handoffActions = ({
       payload: { instanceId: peer.row.id, from: instanceId },
     });
     if (!peer.row.workItemId) {
-      return `Stopped your delegate ${peer.label}.`;
+      return `Stopped your delegate ${peer.label}${continuesWords(followed)}.`;
     }
     const response = await fetch(
       `${hubHttpUrl()}/api/work-items/${encodeURIComponent(peer.row.workItemId)}`
@@ -1480,7 +1544,7 @@ export const handoffActions = ({
     const item = (await response.json()) as WorkItemView;
     const live = item.state === "starting" || item.state === "running";
     return (
-      `Stopped your delegate ${peer.label}. Its work item ${item.id} ` +
+      `Stopped your delegate ${peer.label}${continuesWords(followed)}. Its work item ${item.id} ` +
       (live ? "is cancelled" : `was already ${item.state}`) +
       `, and its workspace ${item.workspaceId} keeps the checkout. To carry the work on, handoff to it, ` +
       `or delegate(..., workspace: "${item.workspaceId}"): either continues its own session.`
@@ -1488,8 +1552,14 @@ export const handoffActions = ({
   },
 
   async interruptDelegate(target: string): Promise<string> {
-    const { peers } = await roster(instanceId);
-    const peer = resolveDelegate(peers, target, instanceId, ledBy);
+    const { peers, superseded } = await roster(instanceId);
+    const followed = supersededBy(superseded, target, successorOf);
+    const peer = resolveDelegate(
+      peers,
+      followed?.successor ?? target,
+      instanceId,
+      ledBy
+    );
     emit({
       verb: "control",
       machineId: peer.row.machineId,
@@ -1503,7 +1573,7 @@ export const handoffActions = ({
       },
     });
     return (
-      `Interrupted your delegate ${peer.label}. Its current turn stopped; it keeps all state. ` +
+      `Interrupted your delegate ${peer.label}${continuesWords(followed)}. Its current turn stopped; it keeps all state. ` +
       `Resume or redirect it with handoff("${peer.row.id}", ...).`
     );
   },
@@ -1514,8 +1584,14 @@ export const handoffActions = ({
     answers?: Record<string, string>,
     deny = false
   ): Promise<string> {
-    const { peers } = await roster(instanceId);
-    const peer = resolveDelegate(peers, target, instanceId, ledBy);
+    const { peers, superseded } = await roster(instanceId);
+    const followed = supersededBy(superseded, target, successorOf);
+    const peer = resolveDelegate(
+      peers,
+      followed?.successor ?? target,
+      instanceId,
+      ledBy
+    );
     // The answers alone are all this side has: the delegate's tool call never
     // came here, only the question text and its options did. A question's
     // `updatedInput` has to carry the whole call back or the harness refuses it
@@ -1545,8 +1621,8 @@ export const handoffActions = ({
       },
     });
     return deny
-      ? `Denied your delegate ${peer.label}'s ask (${requestId}).`
-      : `Answered your delegate ${peer.label}'s ask (${requestId}).`;
+      ? `Denied your delegate ${peer.label}${continuesWords(followed)}'s ask (${requestId}).`
+      : `Answered your delegate ${peer.label}${continuesWords(followed)}'s ask (${requestId}).`;
   },
 
   async sendToUser(message: string, attachments?: string[]): Promise<string> {

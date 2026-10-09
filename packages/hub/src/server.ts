@@ -712,11 +712,8 @@ const WORKSPACE_TIMEOUT_MS = 60_000;
  * hear how it ended, and keeps the table to the few jobs of the moment.
  */
 const CONTINUATION_KEPT_MS = 5 * 60_000;
-/**
- * How far apart the two "Continued on" lines of one move can be: written one
- * after the other in one step ({@link tookPlace}), milliseconds apart. Ours.
- */
-const ONE_MOVE_MS = 5000;
+/** The origin of the hub's word to a sender that its message did not arrive. */
+const UNDELIVERED_ORIGIN = "undelivered";
 /** The words a continuation stopped by its Cancel ends with. */
 const CONTINUATION_CANCELLED = "the continuation was cancelled";
 /** What a request a machine was answering gets when its socket closes. */
@@ -2434,6 +2431,59 @@ export const createServer = (
       row.status === "error" ||
       row.status === "stopped");
   /**
+   * Whether a send from `origin` may start a turn in `row` when its process
+   * is gone ({@link wakesForSend}). A stopped session, ended by its person,
+   * its parent or the hub, is woken only by a person or by its own parent:
+   * a delegate's report, another session's hand-off and every hub notice
+   * wait for one of them. A sleeping or failed one is woken by anything but
+   * the hub's word that a message did not arrive, which asks nothing of it.
+   * A send that may not wake its session is kept at the hub, owed, and goes
+   * to it in order when a send that may wake it arrives
+   * ({@link deliverSend}, {@link releaseOwed}).
+   */
+  const startsTurnIn = (
+    row: { status: string; parentInstanceId?: string | null },
+    origin: NeutralOrigin
+  ): boolean => {
+    if (
+      origin.kind === "human" ||
+      (origin.kind === "peer" &&
+        !!row.parentInstanceId &&
+        origin.fromSession === row.parentInstanceId)
+    ) {
+      return true;
+    }
+    if (row.status === "stopped") {
+      return false;
+    }
+    return !(origin.kind === "system" && origin.name === UNDELIVERED_ORIGIN);
+  };
+  /** Whether the sends owed to `instanceId` include one that may wake it ({@link startsTurnIn}). */
+  const owedWakes = (row: {
+    id: string;
+    status: string;
+    parentInstanceId?: string | null;
+  }): boolean =>
+    db
+      .owedSends({ instanceId: row.id })
+      .some((send) =>
+        startsTurnIn(
+          row,
+          (JSON.parse(send.owed ?? "{}") as Envelope<SendPayload>).payload
+            .message.origin
+        )
+      );
+  /**
+   * Whether `row` has no process and what is owed to it is only what may not
+   * wake it: those sends stay kept until something that may wake it writes.
+   */
+  const keptAsleep = (
+    row: Parameters<typeof wakesForSend>[0] & {
+      id: string;
+      parentInstanceId?: string | null;
+    }
+  ): boolean => wakesForSend(row) && !owedWakes(row);
+  /**
    * The provider whose account a session on `machineId` runs on, if any:
    * Claude Code's always Claude's; a pi or OpenCode model's provider
    * ({@link accountProvidersOf}: OpenCode's `openai` is ChatGPT's, else an
@@ -3095,12 +3145,22 @@ export const createServer = (
     // may hold it still: custody decides that ({@link decideCustody}).
     if (!outlived) {
       inCustody.delete(instanceId);
+      // What is kept for the session at rest ({@link startsTurnIn}) never
+      // reached a process: no process's end fails it. It waits for a person
+      // or its parent.
+      const [row] = db.getInstancesByIds([instanceId]);
+      const keptAtRest = (send: SentMessageRow): boolean =>
+        !!(send.owed && row) &&
+        !startsTurnIn(
+          { ...row, status: "stopped" },
+          (send.body as SentMessage).origin
+        );
       if (keep !== "all") {
         settlePending(
           instanceId,
           why,
           "fail",
-          keep === "owed" ? (send) => !send.owed : undefined
+          keep === "owed" ? (send) => !send.owed : (send) => !keptAtRest(send)
         );
       }
     }
@@ -3463,7 +3523,7 @@ export const createServer = (
             content: undeliveredNotice(sessionLabel(to).tag, reason),
           },
           parent_tool_use_id: null,
-          origin: { kind: "system", name: "undelivered" },
+          origin: { kind: "system", name: UNDELIVERED_ORIGIN },
           shouldQuery: false,
         },
       },
@@ -4560,11 +4620,12 @@ export const createServer = (
     // Nothing wakes a session for a keep-alive ping: its machine refuses one
     // that crossed, and the record fails as any refused ping's does.
     const agent = registry.agent(machineId);
+    // What the hub keeps owed is no crossing: it goes when its hold ends.
     if (
       agent &&
       db
         .sendsIn(instanceId, ["pending"])
-        .some((send) => !isKeepAlive(send.body))
+        .some((send) => !(isKeepAlive(send.body) || send.owed))
     ) {
       wakeForSend(agent, machineId, instanceId, true);
     }
@@ -4987,6 +5048,33 @@ export const createServer = (
   carryOnMoves();
 
   /**
+   * An envelope addressed to a session another took the place of, addressed
+   * instead to the one that runs in its place now (db `successorOf`): its
+   * machine, and its id on the envelope and in the payload. Unchanged when
+   * nothing took its place. Every send, control and stop that names a
+   * session by id passes here, so a superseded session is never reached.
+   */
+  const toSuccessor = <P extends { instanceId?: string }>(
+    envelope: Envelope<P>
+  ): Envelope<P> => {
+    const named = envelope.payload.instanceId ?? envelope.instanceId;
+    const successor = named ? db.successorOf(named) : undefined;
+    if (!(named && successor) || successor === named) {
+      return envelope;
+    }
+    const [row] = db.getInstancesByIds([successor]);
+    console.info(
+      `[hub] ${named} was continued as ${successor}: its ${envelope.verb} goes there`
+    );
+    return {
+      ...envelope,
+      instanceId: successor,
+      machineId: row?.machineId ?? envelope.machineId,
+      payload: { ...envelope.payload, instanceId: successor },
+    };
+  };
+
+  /**
    * What taking a send means beyond the send itself, whoever sent it — the
    * one place it is done. The reader's hand clears a supervisor's mute; a
    * session's first words name it; a queued hand-off is work the target now
@@ -5051,7 +5139,12 @@ export const createServer = (
    * which it never overtakes.
    */
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the single send transaction orders refusal, recovery, delivery and persistence.
-  const deliverSend = (envelope: Envelope<SendPayload>): SentMessageRow => {
+  const deliverSend = (asked: Envelope<SendPayload>): SentMessageRow => {
+    // A keep-alive ping keeps one process's cache warm: it is that row's or
+    // nobody's. Everything else is for the conversation, wherever it runs now.
+    const envelope = isKeepAlive(asked.payload.message)
+      ? asked
+      : toSuccessor(asked);
     const { instanceId, message } = envelope.payload;
     const { machineId } = envelope;
     const keepAlive = isKeepAlive(message);
@@ -5066,10 +5159,18 @@ export const createServer = (
     if (refused === CLAUDE_CONVERSATION_GONE) {
       throw new WorkItemRefusal(409, refused);
     }
+    const [target] = db.getInstancesByIds([instanceId]);
+    // Kept, not woken: the session has no process and this sender may not
+    // start a turn in it ({@link startsTurnIn}).
+    const kept =
+      !(refused || keepAlive) &&
+      !!target &&
+      wakesForSend(target) &&
+      !startsTurnIn(target, message.origin);
     const agent = refused ? undefined : registry.agent(machineId);
     const away =
       !(refused || agent || keepAlive) && awaitingMachine.has(machineId);
-    const accepted = Boolean(agent) || away;
+    const accepted = Boolean(agent) || away || kept;
     const from =
       message.origin.kind === "peer" ? message.origin.fromSession : undefined;
     const waitSummary =
@@ -5081,7 +5182,7 @@ export const createServer = (
           ? `${content}${waitSummary}`
           : [...content, { type: "text", text: waitSummary }];
     }
-    if (agent) {
+    if (agent && !kept) {
       if (keepAlive) {
         db.updateKeepAlive(instanceId, { keepAliveTurn: message.uuid });
       } else {
@@ -5089,7 +5190,9 @@ export const createServer = (
       }
     }
     const owed =
-      away || (agent !== undefined && !keepAlive && sendWaits(instanceId));
+      away ||
+      kept ||
+      (agent !== undefined && !keepAlive && sendWaits(instanceId));
     if (agent && !owed) {
       sendFrame(agent, envelope);
     }
@@ -5125,6 +5228,10 @@ export const createServer = (
       replaceSend(message.replaces, record.uuid);
     }
     publishSend(record);
+    // A send that woke its session goes out behind what was kept for it.
+    if (agent && owed && !(kept || away)) {
+      releaseOwed({ instanceId });
+    }
     if (accepted) {
       if (from) {
         workItems.delivered(from, instanceId);
@@ -5178,6 +5285,9 @@ export const createServer = (
       return;
     }
     const [row] = db.getInstancesByIds([record.instanceId]);
+    if (row && keptAsleep(row)) {
+      return "resting";
+    }
     const away = row ? awaitingMachine.get(row.machineId) : undefined;
     if (row && away && !registry.agent(row.machineId)) {
       return away.why;
@@ -5192,9 +5302,10 @@ export const createServer = (
    * failed is refused with why.
    */
   const sessionSend = (
-    envelope: Envelope<SendPayload>,
+    asked: Envelope<SendPayload>,
     requester: InstanceRow
   ): SendDelivery => {
+    const envelope = toSuccessor(asked);
     const { payload } = envelope;
     const malformed = normalizeRelayMessage(payload);
     if (malformed) {
@@ -5239,7 +5350,8 @@ export const createServer = (
     for (const send of db.owedSends(of)) {
       const [row] = db.getInstancesByIds([send.instanceId]);
       const agent = row ? registry.agent(row.machineId) : undefined;
-      if (!(row && agent)) {
+      // Kept for a session nothing owed may wake: it waits for a send that may.
+      if (!(row && agent) || keptAsleep(row)) {
         continue;
       }
       const envelope = JSON.parse(send.owed ?? "{}") as Envelope<SendPayload>;
@@ -5267,7 +5379,9 @@ export const createServer = (
   /** A machine past its grace: what it was owed fails as any send to an absent machine does, but for a start an update still holds. */
   const failOwedAway = (machineId: string): void => {
     for (const send of db.owedSends({ machineId })) {
-      if (db.owesSpawn(send.instanceId)) {
+      const [row] = db.getInstancesByIds([send.instanceId]);
+      // A send kept for a session at rest never waited on its machine.
+      if (db.owesSpawn(send.instanceId) || (row && keptAsleep(row))) {
         continue;
       }
       if (db.takeOwedSend(send.uuid) !== undefined) {
@@ -6966,12 +7080,18 @@ export const createServer = (
    * in, whatever directory the caller sent: the harness keeps the conversation
    * under that directory, and a folder the CLI later wandered into may be gone.
    * A row whose launch directory is unknown (its machine had no record of its
-   * conversation) is refused: there is nothing there to resume.
+   * conversation) is refused: there is nothing there to resume. So is a row
+   * another session took the place of ({@link supersededRefusal}): every
+   * start, wake, resume and restore of an existing row is decided here.
    */
   const atLaunchDir = <P extends { cwd: string }>(
     instanceId: string | undefined,
     payload: P
   ): { payload: P } | { refusal: string } => {
+    const superseded = instanceId ? supersededRefusal(instanceId) : undefined;
+    if (superseded) {
+      return { refusal: superseded };
+    }
     const launched = instanceId ? db.launchDirOf(instanceId) : undefined;
     if (!launched) {
       return { payload };
@@ -6987,6 +7107,16 @@ export const createServer = (
       };
     }
     return { payload: { ...payload, cwd: launched.cwd } };
+  };
+  /**
+   * Why `instanceId` never runs again: another session took its place at
+   * its account's limit (db `successorOf`). Nothing when none did.
+   */
+  const supersededRefusal = (instanceId: string): string | undefined => {
+    const successor = db.successorOf(instanceId);
+    return successor === instanceId
+      ? undefined
+      : `${instanceId} was continued as ${successor} and never runs again; ${successor} runs in its place.`;
   };
   /** {@link atLaunchDir}'s refusal for a row, if it would refuse one. */
   const launchRefusal = (instanceId: string): string | undefined => {
@@ -7222,13 +7352,16 @@ export const createServer = (
    * the source as its parent answers to it ({@link handOverChildren}). The
    * work item names it as its session from here, so the source's end is not
    * the item's end. Done as the source is ended, never sooner: until then
-   * the source is the item's.
+   * the source is the item's. The source's row names the target from here
+   * (`continuedInto`): it never runs again, and whatever is addressed to it
+   * reaches the target (db `successorOf`).
    */
   const takePlaceOf = (sourceId: string, targetId: string): void => {
     const [source] = db.getInstancesByIds([sourceId]);
     if (!source) {
       return;
     }
+    db.patchInstance(sourceId, { continuedInto: targetId });
     db.patchInstance(targetId, {
       ...(source.parentInstanceId
         ? { parentInstanceId: source.parentInstanceId }
@@ -7251,6 +7384,7 @@ export const createServer = (
    * it is its own.
    */
   const giveBack = (targetId: string, sourceId: string): void => {
+    db.patchInstance(sourceId, { continuedInto: null });
     const [target] = db.getInstancesByIds([targetId]);
     if (target?.workItemId) {
       db.patchInstance(sourceId, { workItemId: target.workItemId });
@@ -8567,10 +8701,16 @@ export const createServer = (
    */
   const tookPlace = (row: ContinuationRow): void => {
     const move = continuedMove(row.request);
+    // Told by this job: a source that was itself a continuation's new
+    // session already has that one's line, and is told its own.
     const told = (instanceId: string): boolean =>
       db.atLimit
         .events([instanceId])
-        .some((event) => event.move.kind === "continued");
+        .some(
+          (event) =>
+            event.move.kind === "continued" &&
+            event.at >= row.createdAt.getTime()
+        );
     const [source] = db.getInstancesByIds([row.sourceInstanceId]);
     const [target] = db.getInstancesByIds([row.targetInstanceId]);
     if (move && source && !told(source.id)) {
@@ -8587,52 +8727,23 @@ export const createServer = (
   };
 
   /**
-   * Every session that took another's place at the other's account's limit,
-   * read from what {@link tookPlace} leaves on record, which outlives its job
-   * (deleted {@link CONTINUATION_KEPT_MS} after it settles): the "Continued
-   * on" line it wrote into each transcript, the same move within a moment,
-   * and the opening the new session was sent from the old one, which is how
-   * the one is told from the other.
+   * At start, before any machine is heard: every session another took the
+   * place of (`continuedInto`) is ended if anything brought it back since
+   * (a hub from before the link was kept woke it for a send), and whatever
+   * still answers to it as its parent answers to the session at the end of
+   * its chain. Nothing is left that reaches it, or that it runs.
    */
-  const successions = (): { sourceId: string; targetId: string }[] => {
-    const lines = db.atLimit.continued();
-    const sameMove = (
-      a: (typeof lines)[number],
-      b: (typeof lines)[number]
-    ): boolean =>
-      a.instanceId !== b.instanceId &&
-      Math.abs(a.at - b.at) <= ONE_MOVE_MS &&
-      JSON.stringify(a.move) === JSON.stringify(b.move);
-    return lines.flatMap((target) => {
-      const senders = new Set(
-        db
-          .sendsIn(target.instanceId, ["pending", "read", "failed"])
-          .flatMap(({ body }) =>
-            body?.origin?.kind === "peer" && body.origin.fromSession
-              ? [body.origin.fromSession]
-              : []
-          )
-      );
-      const source = lines.find(
-        (line) => sameMove(line, target) && senders.has(line.instanceId)
-      );
-      return source
-        ? [{ sourceId: source.instanceId, targetId: target.instanceId }]
-        : [];
-    });
-  };
-
-  /**
-   * At start: a session that took another's place before its children
-   * followed it (on a hub from before they did) has them follow it now,
-   * before any machine is heard, so nothing reaches the ended one. Once:
-   * an ended source has nothing left to hand over the next time.
-   */
-  const followSuccessions = (): void => {
-    for (const { sourceId, targetId } of successions()) {
-      if (db.ownedInstance(sourceId)?.endIntent) {
-        handOverChildren(sourceId, targetId, true);
+  const settleSuperseded = (): void => {
+    for (const { id, ended } of db.supersededInstances()) {
+      const successor = db.successorOf(id);
+      if (!ended) {
+        console.log(
+          `[hub] ${id} was continued as ${successor} but was running again: it is ended`
+        );
+        lifecycle.oweEndSession(id, "stop");
+        db.noteEndReason(id, `continued as ${successor}`);
       }
+      handOverChildren(id, successor, true);
     }
   };
 
@@ -10917,11 +11028,12 @@ export const createServer = (
   };
 
   const relayControl = (
-    message: Envelope<ControlPayload>,
+    asked: Envelope<ControlPayload>,
     dashboard: HubSocket,
     remember = true
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: transcript deletion shares the control receipt path but records intent before machine delivery
   ): boolean => {
+    const message = toSuccessor(asked);
     if (relayModelCrossing(message, dashboard, remember)) {
       return true;
     }
@@ -11684,7 +11796,7 @@ export const createServer = (
       workItems.cancelled(row);
     }
   }
-  followSuccessions();
+  settleSuperseded();
   const workflowRuntime = createWorkflowRuntime({
     lifetime,
     custodyPending: (machineId, instanceId) => {
@@ -12047,6 +12159,7 @@ export const createServer = (
       : undefined,
     instances: () => withKeepAlive(db.listInstances()),
     instanceById: (id) => db.getInstancesByIds([id])[0],
+    successorOf: db.successorOf,
     ledBy: (id, leadId) => workItems.ledBy(id, leadId),
     credentialActor: (authorization) => {
       const identity = identities.resolve(authorization);
@@ -12132,8 +12245,9 @@ export const createServer = (
       ) {
         throw new Error(`Unsupported delegation operation ${envelope.verb}`);
       }
+      // A delegate another took the place of is acted on where it runs now.
       const row = instanceId
-        ? db.getInstancesByIds([instanceId])[0]
+        ? db.getInstancesByIds([db.successorOf(instanceId)])[0]
         : undefined;
       // Its parent, or its project's lead: a co-parent of every work item of
       // the project, which may answer, steer and stop it.
@@ -12188,8 +12302,9 @@ export const createServer = (
       }
       sendFrame(agent, {
         ...envelope,
+        instanceId: row.id,
         machineId: row.machineId,
-        payload: { ...control, from: requester.id },
+        payload: { ...control, instanceId: row.id, from: requester.id },
       });
       if (control.method === CONTROL_INTERRUPT) {
         noteInterrupt(row.id);
@@ -12930,6 +13045,13 @@ export const createServer = (
       carryOn(now);
     },
     resume: carryOn,
+    // What its process was last handed: what it kept for later never reached
+    // it. A turn the limit refused fails the send that started it.
+    startedBy: (row) =>
+      db
+        .sendsIn(row.id, ["read", "pending", "failed"])
+        .filter((send) => !(send.owed || isKeepAlive(send.body)))
+        .at(-1)?.body?.origin,
     continueOn: continueOnAccount,
     summarise: summariseOn,
     note: noteAtLimit,
@@ -12937,6 +13059,53 @@ export const createServer = (
   });
 
   workItems.resumeWaits();
+
+  /**
+   * A dashboard's start of a session another took the place of: the one in
+   * its place is woken on its own conversation and settings when its process
+   * is gone, and the dashboard told it is up. True when the start named such
+   * a session; nothing of the old one runs.
+   */
+  const resumeSuccessor = (ws: HubSocket, message: Envelope): boolean => {
+    const named = message.instanceId;
+    const successor = named ? db.successorOf(named) : undefined;
+    if (!(named && successor) || successor === named) {
+      return false;
+    }
+    const [row] = db.getInstancesByIds([successor]);
+    const agent = row ? registry.agent(row.machineId) : undefined;
+    if (!(row && agent)) {
+      sendFrame(
+        ws,
+        failure(
+          message,
+          `${named} was continued as ${successor}, whose machine is not connected.`
+        )
+      );
+      return true;
+    }
+    console.info(
+      `[hub] ${named} was continued as ${successor}: its resume goes there`
+    );
+    if (wakesForSend(row)) {
+      resumeSpawn(agent, row.machineId, row, false);
+      // A person brought it back: what was kept for it goes behind the start.
+      releaseOwed({ instanceId: successor });
+    }
+    const requestId =
+      message.requestId ??
+      peek(message.payload, "requestId") ??
+      crypto.randomUUID();
+    sendFrame(ws, {
+      ...message,
+      instanceId: successor,
+      machineId: row.machineId,
+      verb: "frames",
+      requestId,
+      payload: { kind: "control_result", requestId, ok: true },
+    } satisfies Envelope<ControlResult>);
+    return true;
+  };
 
   /**
    * A dashboard's start, from its permission mode on: launch directory,
@@ -19159,6 +19328,10 @@ export const createServer = (
 
           switch (message.verb) {
             case "spawn": {
+              // A resume of a session another took the place of resumes that one.
+              if (resumeSuccessor(ws, message)) {
+                break;
+              }
               // The row's key, not the client's — see `enforceRowSessionKey`.
               const refusal = enforceRowSessionKey(
                 message.instanceId

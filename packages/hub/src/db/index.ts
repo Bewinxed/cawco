@@ -927,6 +927,8 @@ export interface DbShape {
       forkedFrom?: string;
       threadId?: string;
       projectId?: string;
+      /** The session that takes its place at its account's limit; null: it goes on after all. */
+      continuedInto?: string | null;
     }
   ) => PublicInstanceRow | undefined;
   /** A project with its places, or undefined for an id the hub does not hold. */
@@ -1426,6 +1428,19 @@ export interface DbShape {
   /** What reaching a cap does where a project sets nothing; its default before any is set. */
   readonly spendOnCap: () => OnCap;
   readonly stageSessionIdentity: (instanceId: string, hash: string) => void;
+  /**
+   * THE ONE RESOLVER of a session id: the session at the end of its
+   * `continuedInto` chain, the one that runs in its place now; `id` itself
+   * when nothing took its place. Every path that addresses a session by id
+   * (a send, a wake, a resume, a control, a stop, a listing) reads it here.
+   */
+  readonly successorOf: (id: string) => string;
+  /** Every session another took the place of, and whether its end is decided. */
+  readonly supersededInstances: () => {
+    id: string;
+    continuedInto: string;
+    ended: boolean;
+  }[];
   /**
    * The one-time reclassification a taxonomy change needs when the column is
    * plain text and there is no SQL migration to hang it on. Idempotent by
@@ -2862,6 +2877,12 @@ const make = async (path: string): Promise<DbShape> => {
           `Instance ${id} is being deleted and cannot be reopened.`
         );
       }
+      // A session another took the place of never runs again, whoever asks.
+      if (existing?.continuedInto) {
+        throw new Error(
+          `Instance ${id} was continued as ${existing.continuedInto} and never runs again.`
+        );
+      }
 
       // Same refusal as noteInstanceSession below: a spawn whose resume key is
       // the instance id itself carries confusion, not identity. Treat it as
@@ -3088,6 +3109,43 @@ const make = async (path: string): Promise<DbShape> => {
         .where(eq(instances.id, id))
         .returning(publicColumns)
         .get(),
+    successorOf: (id) => {
+      const seen = new Set<string>();
+      let current = id;
+      for (;;) {
+        seen.add(current);
+        const next = db
+          .select({ continuedInto: instances.continuedInto })
+          .from(instances)
+          .where(eq(instances.id, current))
+          .get()?.continuedInto;
+        if (!next || seen.has(next)) {
+          return current;
+        }
+        current = next;
+      }
+    },
+    supersededInstances: () =>
+      db
+        .select({
+          id: instances.id,
+          continuedInto: instances.continuedInto,
+          endIntent: instances.endIntent,
+        })
+        .from(instances)
+        .where(isNotNull(instances.continuedInto))
+        .all()
+        .flatMap((row) =>
+          row.continuedInto
+            ? [
+                {
+                  id: row.id,
+                  continuedInto: row.continuedInto,
+                  ended: row.endIntent !== null,
+                },
+              ]
+            : []
+        ),
     markSeen: (instanceIds, runIds, at) => ({
       instances:
         instanceIds.length > 0

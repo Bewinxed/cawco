@@ -784,6 +784,13 @@ export interface InstanceRow {
    * session nobody delegated, which may.
    */
   canDelegate?: boolean | null;
+  /**
+   * The session that took this one's place when it was continued on another
+   * account at its limit. Set: this one never runs again, every listing
+   * leaves it out, and whatever names it reaches the session at the end of
+   * the chain. Null on every session nothing took the place of.
+   */
+  continuedInto?: string | null;
   /** The directory the session was launched in; see `launchDir`. */
   cwd: string;
   /** The delegate type its spawn named; null: none. */
