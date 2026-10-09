@@ -12816,6 +12816,61 @@
         }
       }
     },
+    "/api/accounts/{id}/machines/{machineId}": {
+      "delete": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "machineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "deleteApiAccountsByIdMachinesByMachineId",
+        "responses": {
+          "200": {
+            "description": "deleteApiAccountsByIdMachinesByMachineId 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deleteApiAccountsByIdMachinesByMachineId200"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "deleteApiAccountsByIdMachinesByMachineId 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "deleteApiAccountsByIdMachinesByMachineId 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/accounts/routing/{provider}": {
       "put": {
         "parameters": [
@@ -17598,6 +17653,17 @@
         }
       },
       "deleteApiAccountsById200": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
+      "deleteApiAccountsByIdMachinesByMachineId200": {
         "type": "object",
         "properties": {
           "ok": {
@@ -25093,6 +25159,10 @@
           "installed": {
             "type": "boolean"
           },
+          "modelNames": {
+            "type": "object",
+            "description": "pi only: the model each name a session may be started with resolves to,\nby pi's own resolver (`resolveCliModel`) with this machine's accounts\ncounted as signed in: `default` and every bare model id pi offers, each\nto `provider/id`. A name pi cannot resolve is absent. The hub reads the\nprovider, and so the account, of a session started on one of them here."
+          },
           "models": {
             "description": "The models this harness offers on this machine.\n\nIt rides the machine's report for the same reason {@link * HarnessCapabilities.permissionModes} does, and not the {@link * CONTROL_SUPPORTED_MODELS} control beside it: the catalog is a property of\nthe installed CLI and the account behind it, identical for every session on\nthe machine and knowable with none running. Asking a session for it made a\nfleet-wide fact inherit one session's lifecycle — a machine with nothing\nrunning had no catalog at all, so its model picker was empty and no session\ncould be named or shown an effort scale.\n\nAbsent (not empty) from a machine whose agent predates the field, and from\na harness that could not be probed; empty means it was asked and offered\nnothing.",
             "type": "array",
@@ -30620,6 +30690,10 @@
           "cacheReusable": {
             "description": "Claude's real turn began after every known prompt write had finished.",
             "type": "boolean"
+          },
+          "contextTokens": {
+            "description": "pi and OpenCode: the tokens the turn's last request sent (uncached input\nplus cache reads and writes, as the harness reports that request's\nusage), which is the session's context as it stood. Claude's is read off\n{@link promptCacheUsage}.",
+            "type": "number"
           },
           "errors": {
             "type": "array",

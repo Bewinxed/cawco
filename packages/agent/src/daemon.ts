@@ -1,3 +1,4 @@
+import { existsSync, watch } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { arch, hostname, platform } from "node:os";
 import { dirname, join } from "node:path";
@@ -42,6 +43,7 @@ import { machineId } from "@cawco/core/machine-id";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
 import { fetchOpenCodeGoLimits } from "@cawco/core/usage/opencode-go";
 import { announcingParts, clientLine } from "@cawco/core/wire";
+import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { Data, Duration, Effect, Fiber, Schedule } from "effect";
 import { accountReports, claudeAuthNote } from "./accounts";
 import {
@@ -837,6 +839,58 @@ const attach = (
       | PiHarness
       | undefined;
     let reportedProviderAccounts = providerAccountReports();
+    /**
+     * pi's report read again and sent: its catalog and its resolution of
+     * `default` and bare ids follow the machine's accounts and pi's own
+     * settings, models and sign-ins, so placement reads them as they are.
+     */
+    const reportPi = async (): Promise<void> => {
+      if (!pi) {
+        return;
+      }
+      lastPiCheck = Date.now();
+      const report = await pi.detect();
+      reportedHarnesses = reportedHarnesses.map((one) =>
+        one.harness === "pi" ? report : one
+      );
+      if (socket.readyState === WebSocket.OPEN) {
+        send(socket, {
+          verb: "heartbeat",
+          machineId: identity.machineId,
+          payload: {
+            at: Date.now(),
+            instances: supervisor.instanceIds,
+            harnesses: reportedHarnesses,
+          } satisfies HeartbeatPayload,
+        });
+      }
+    };
+    // A burst of changes (a write and its rename) is read once, a second on.
+    let piSoon: ReturnType<typeof setTimeout> | undefined;
+    const reportPiSoon = (): void => {
+      clearTimeout(piSoon);
+      piSoon = setTimeout(() => {
+        reportPi().catch((error: unknown) =>
+          console.warn(
+            `[pi] report failed: ${error instanceof Error ? error.message : String(error)}`
+          )
+        );
+      }, 1000);
+    };
+    const piFiles = new Set(["settings.json", "models.json", "auth.json"]);
+    const piWatch = existsSync(getAgentDir())
+      ? watch(getAgentDir(), (_event, file) => {
+          if (file && piFiles.has(file)) {
+            reportPiSoon();
+          }
+        })
+      : undefined;
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        clearTimeout(piSoon);
+        piWatch?.close();
+      })
+    );
     supervisor.reannounce = () => {
       // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — reannounce doesn't await its own send
       void Promise.all([
@@ -889,6 +943,7 @@ const attach = (
             `[accounts] OpenCode did not take the accounts' change: ${error instanceof Error ? error.message : String(error)}`
           )
         );
+      reportPiSoon();
     };
     supervisor.reannounce();
 
@@ -897,25 +952,10 @@ const attach = (
     yield* Effect.forkScoped(
       Effect.repeat(
         Effect.promise(async () => {
-          if (!pi || Date.now() - lastPiCheck < PI_AUTH_CHECK_INTERVAL_MS) {
+          if (Date.now() - lastPiCheck < PI_AUTH_CHECK_INTERVAL_MS) {
             return;
           }
-          lastPiCheck = Date.now();
-          const report = await pi.detect();
-          reportedHarnesses = reportedHarnesses.map((one) =>
-            one.harness === "pi" ? report : one
-          );
-          if (socket.readyState === WebSocket.OPEN) {
-            send(socket, {
-              verb: "heartbeat",
-              machineId: identity.machineId,
-              payload: {
-                at: Date.now(),
-                instances: supervisor.instanceIds,
-                harnesses: reportedHarnesses,
-              } satisfies HeartbeatPayload,
-            });
-          }
+          await reportPi();
         }),
         Schedule.spaced(Duration.millis(PI_AUTH_CHECK_INTERVAL_MS))
       )

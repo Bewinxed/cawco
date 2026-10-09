@@ -135,6 +135,7 @@ import {
   writeJson,
 } from "./fleet-common";
 import { managedMcpMismatches } from "./managed-mcp";
+import { OPENCODE_ACCOUNT_PLUGIN } from "./opencode-account-plugin";
 import { OpencodeActivity } from "./opencode-activity";
 import {
   opencodeCredentialFile,
@@ -863,8 +864,10 @@ const announceOpencodeServer = async (
  * OpenCode's own `auth.json` has an entry for the provider, which the agent
  * keeps: {@link syncOpencodeMarkers}). The fetch reads the stamp's session's
  * account, its credential from the account's store (asking the agent to
- * refresh one near its expiry), puts it where the SDK put the placeholder
- * and sets the provider's own auth headers, and strips the stamp.
+ * refresh one near its expiry), sends it as OpenCode's own code for the
+ * provider would ({@link OPENCODE_ACCOUNT_PLUGIN}), and strips the stamp.
+ * With a Copilot account it also lists Copilot's models and its title model
+ * with the account's token, as OpenCode's Copilot plugin does with its own.
  */
 export const buildHandoffPluginSource = (
   served: readonly string[]
@@ -878,69 +881,14 @@ const cawcoAccountsOfSessions = ${JSON.stringify(opencodeAccountsFile())};
 const cawcoAccountsRoot = ${JSON.stringify(accountsRoot())};
 const cawcoGateway = ${JSON.stringify(`http://127.0.0.1:${mcpGatewayPort()}`)};
 const cawcoServed = new Set(${JSON.stringify(served)});
-const CAWCO_STAMP = "x-cawco-session";
-const CAWCO_PLACEHOLDER = "cawco-account-placeholder";
-const accountOfSession = (sessionID) => {
-  try { return JSON.parse(readFileSync(cawcoAccountsOfSessions, "utf8"))[sessionID]; } catch { return undefined; }
-};
-const heldOf = (account) => {
-  try {
-    const [entry] = Object.entries(JSON.parse(readFileSync(cawcoAccountsRoot + "/" + account + "/credential.json", "utf8")));
-    return entry ? { provider: entry[0], credential: entry[1] } : undefined;
-  } catch { return undefined; }
-};
-// The agent alone refreshes a sign-in: one within two minutes of its expiry
-// is asked for again, and read back once the agent has written it.
-const freshHeld = async (account) => {
-  const held = heldOf(account);
-  if (held?.credential.type !== "oauth" || held.credential.expires - Date.now() > 120000) return held;
-  const asked = await fetch(cawcoGateway + "/accounts/" + encodeURIComponent(account) + "/fresh", { method: "POST" });
-  if (!asked.ok) throw new Error("cawco: the agent did not refresh this account's sign-in: " + (await asked.text()));
-  return heldOf(account);
-};
-const chatgptAccountOf = (token) => {
-  try { return JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString())["https://api.openai.com/auth"]?.chatgpt_account_id; } catch { return undefined; }
-};
-const accountFetch = (opencodeProvider) => async (input, init) => {
-  const headers = new Headers(init?.headers);
-  const sessionID = headers.get(CAWCO_STAMP);
-  headers.delete(CAWCO_STAMP);
-  const account = sessionID ? accountOfSession(sessionID) : undefined;
-  if (!account) throw new Error("cawco: this OpenCode session runs on no CawCo account for " + opencodeProvider + "; CawCo places it on one when it starts or wakes.");
-  const held = await freshHeld(account);
-  if (!held) throw new Error("cawco: CawCo account " + account + " holds no sign-in on this machine.");
-  const { provider, credential } = held;
-  const secret = credential.type === "api_key" ? credential.key : provider === "github-copilot" ? credential.refresh : credential.access;
-  for (const [name, value] of [...headers]) {
-    if (value.includes(CAWCO_PLACEHOLDER)) headers.set(name, value.replaceAll(CAWCO_PLACEHOLDER, secret));
-  }
-  let url = input instanceof URL ? input : new URL(typeof input === "string" ? input : input.url);
-  // ChatGPT: what OpenCode's own codex plugin does with its token.
-  if (provider === "openai-codex") {
-    headers.set("authorization", "Bearer " + secret);
-    const chatgpt = credential.accountId ?? chatgptAccountOf(secret);
-    if (chatgpt) headers.set("ChatGPT-Account-Id", chatgpt);
-    if (url.pathname.includes("/v1/responses") || url.pathname.includes("/chat/completions")) url = new URL("https://chatgpt.com/backend-api/codex/responses");
-  }
-  // Copilot: what OpenCode's own copilot plugin does with the GitHub token.
-  if (provider === "github-copilot") {
-    headers.set("authorization", "Bearer " + secret);
-    headers.set("Openai-Intent", "conversation-edits");
-    if (!headers.has("x-initiator")) headers.set("x-initiator", "user");
-  }
-  return fetch(url, { ...init, headers });
-};
-export const CawcoAccountStamp = async () => ({
-  "chat.headers": async (input, output) => {
-    if (cawcoServed.has(input.model.providerID)) output.headers[CAWCO_STAMP] = input.sessionID;
-  },
-});
+${OPENCODE_ACCOUNT_PLUGIN}
 ${served
   .map(
     (id, index) =>
-      `export const CawcoAccount${index} = async () => ({ auth: { provider: ${JSON.stringify(id)}, loader: async () => ({ apiKey: CAWCO_PLACEHOLDER, fetch: accountFetch(${JSON.stringify(id)}) }), methods: [] } });`
+      `export const CawcoAccount${index} = async (input) => ({ auth: { provider: ${JSON.stringify(id)}, loader: async () => ({ apiKey: CAWCO_PLACEHOLDER, fetch: accountFetch(${JSON.stringify(id)}, input) }), methods: [] } });`
   )
   .join("\n")}
+${served.includes("github-copilot") ? "export const CawcoCopilot = cawcoCopilotPlugin;" : ""}
 // The workspace whose clone \`directory\` is, by the records the agent keeps
 // for it outside the clone: \`create.json\`, written before the clone is cut and
 // removed only with it, and the running boundary's \`boundary.json\`.
@@ -1767,6 +1715,8 @@ export class OpencodeSession implements HarnessSession {
   #model: string | undefined;
   #effort: EffortLevel | undefined;
   #lastTokens = EMPTY_TOKENS;
+  /** The tokens the session's last answered request sent: its context then. */
+  #lastSent: number | undefined;
   readonly #roles = new Map<string, "user" | "assistant">();
   /**
    * The assistant messages opencode wrote as a compaction's summary
@@ -2078,6 +2028,16 @@ export class OpencodeSession implements HarnessSession {
           };
           this.#costs.set(info.id, info.cost);
           this.#lastTokens = info.tokens;
+          // The tokens this message's request sent: OpenCode's `input` leaves
+          // out the cached ones (session/session.ts 361-375), so they are
+          // added back. A request that failed sent none that counted.
+          const sent =
+            info.tokens.input +
+            info.tokens.cache.read +
+            info.tokens.cache.write;
+          if (sent > 0) {
+            this.#lastSent = sent;
+          }
           if (!info.time.completed) {
             this.#answering = info.id;
           } else if (this.#answering === info.id) {
@@ -2980,6 +2940,9 @@ export class OpencodeSession implements HarnessSession {
         read: this.#lastTokens.cache.read,
         write: this.#lastTokens.cache.write,
       },
+      ...(this.#lastSent === undefined
+        ? {}
+        : { contextTokens: this.#lastSent }),
     });
     this.#costBase += turnCost;
     this.#costs.clear();
@@ -5455,14 +5418,6 @@ export class OpencodeHarness implements Harness {
     );
   }
 
-  /**
-   * The accounts on this machine changed (one signed in, keyed, moved in or
-   * forgotten): OpenCode's own store gets the markers its plugin loaders need,
-   * and the plugin its auth hook per served provider. OpenCode reads both when
-   * a server starts, so the server is replaced the way a config change
-   * replaces it: a verified candidate, sessions handed over as they come to
-   * rest ({@link #attemptConfigApply}).
-   */
   /** Every provider OpenCode's models list names (configured ones included), by id and name. */
   async providerList(): Promise<{ id: string; name: string }[]> {
     if (resolveBin("opencode") === undefined) {
@@ -5481,6 +5436,14 @@ export class OpencodeHarness implements Harness {
     }));
   }
 
+  /**
+   * The accounts on this machine changed (one signed in, keyed, moved in or
+   * forgotten): OpenCode's own store gets the markers its plugin loaders need,
+   * and the plugin its auth hook per served provider. OpenCode reads both when
+   * a server starts, so the server is replaced the way a config change
+   * replaces it: a verified candidate, sessions handed over as they come to
+   * rest ({@link #attemptConfigApply}).
+   */
   async accountsChanged(): Promise<void> {
     await syncOpencodeMarkers();
     if (!this.#client) {

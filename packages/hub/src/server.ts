@@ -2149,12 +2149,49 @@ export const createServer = (
    * machine. A model of no such provider runs from the machine's own stores,
    * as it always has.
    */
+  /** What a machine last reported of each harness, kept until its next report. */
+  const capabilityReports = new Map<string, HarnessReport[]>();
+  const harnessReportOf = (
+    machineId: string,
+    harness: string
+  ): HarnessReport | undefined => {
+    let reports = capabilityReports.get(machineId);
+    if (!reports) {
+      reports = db.agentHarnesses(machineId);
+      if (reports) {
+        capabilityReports.set(machineId, reports);
+      }
+    }
+    return reports?.find((report) => report.harness === harness);
+  };
+  /**
+   * A pi session's model as pi itself resolves it on `machineId`: no model
+   * (pi's `default`) and a bare id become `provider/id` by the machine's
+   * report of pi's own resolution ({@link HarnessReport.modelNames}). Any
+   * other harness's, and a name pi does not resolve, as it is.
+   */
+  const resolvedModel = (
+    machineId: string,
+    harness: string,
+    model: string | null | undefined
+  ): string | null | undefined => {
+    if (harness !== "pi" || model?.includes("/")) {
+      return model;
+    }
+    return (
+      harnessReportOf(machineId, "pi")?.modelNames?.[model || "default"] ??
+      model
+    );
+  };
   const accountProviderFor = (
     machineId: string,
     harness: string,
     model: string | null | undefined
   ): AccountProvider | undefined => {
-    const candidates = accountProvidersOf(harness, model);
+    const candidates = accountProvidersOf(
+      harness,
+      resolvedModel(machineId, harness, model)
+    );
     if (harness === "claude") {
       return candidates[0];
     }
@@ -3697,21 +3734,11 @@ export const createServer = (
   };
 
   /** The permission modes a machine's harness reported, or undefined when it has not reported that harness. */
-  const capabilityReports = new Map<string, HarnessReport[]>();
   const harnessModes = (
     machineId: string,
     harness: string
-  ): readonly string[] | undefined => {
-    let reports = capabilityReports.get(machineId);
-    if (!reports) {
-      reports = db.agentHarnesses(machineId);
-      if (reports) {
-        capabilityReports.set(machineId, reports);
-      }
-    }
-    return reports?.find((report) => report.harness === harness)?.capabilities
-      .permissionModes;
-  };
+  ): readonly string[] | undefined =>
+    harnessReportOf(machineId, harness)?.capabilities.permissionModes;
 
   /**
    * The one rule for the permission mode a spawn runs in and records, applied
@@ -14196,6 +14223,63 @@ export const createServer = (
         publishUsage();
         return { ok: true };
       })
+      // Signs an account out on one machine and drops that sign-in: the same
+      // sign-out the account's removal runs on each of its machines, here on
+      // one, the account and its other machines left as they are.
+      .delete(
+        "/api/accounts/:id/machines/:machineId",
+        { params: t.Object({ id: t.String(), machineId: t.String() }) },
+        async ({ params, status }) => {
+          const account = db.accounts.get(params.id);
+          if (!account) {
+            return status(404, `There is no account ${params.id}.`);
+          }
+          const machine = machineName(params.machineId);
+          const signin = db.accounts
+            .signins()
+            .find(
+              (one) =>
+                one.accountId === account.id &&
+                one.machineId === params.machineId
+            );
+          if (!signin) {
+            return status(
+              404,
+              `${accountName(account)} is not signed in on ${machine}.`
+            );
+          }
+          const live = db
+            .listInstances()
+            .filter(
+              (row) =>
+                row.accountId === account.id &&
+                row.machineId === params.machineId &&
+                ["starting", "running", "sleeping"].includes(row.status)
+            );
+          if (live.length > 0) {
+            return status(
+              409,
+              `${live.length} session${live.length === 1 ? "" : "s"} still run on ${accountName(account)} on ${machine}; stop them first.`
+            );
+          }
+          const answer = await forgetOn(account, params.machineId);
+          if (answer === "offline") {
+            return status(
+              409,
+              `${machine} is offline, so ${accountName(account)} was not signed out there; try again when it is online.`
+            );
+          }
+          if (answer === "timeout" || !answer.ok) {
+            return status(
+              409,
+              `${machine} did not sign ${accountName(account)} out${answer === "timeout" ? "; it did not answer in time" : `: ${answer.error ?? "it gave no reason"}`}. Try again.`
+            );
+          }
+          db.accounts.removeSignin(account.id, params.machineId);
+          publishUsage();
+          return { ok: true };
+        }
+      )
       .put(
         "/api/accounts/routing/:provider",
         {
@@ -14322,11 +14406,21 @@ export const createServer = (
               : undefined
           );
           if (!input) {
+            // pi's `default` or a bare id, named by what pi resolves it to.
+            const resolved = resolvedModel(
+              query.machineId,
+              query.harness,
+              query.model
+            );
+            const named =
+              resolved && resolved !== query.model
+                ? `${query.model ?? "default"} (${resolved})`
+                : query.model;
             return {
               accountId: null,
               strategy: "none",
-              why: query.model
-                ? `${query.model} is no account's model on ${machineName(query.machineId)}: it runs from the machine's own ${query.harness} store.`
+              why: named
+                ? `${named} is no account's model on ${machineName(query.machineId)}: it runs from the machine's own ${query.harness} store.`
                 : `A ${query.harness} session with no model named runs from the machine's own ${query.harness} store.`,
             } satisfies PlacementExplain;
           }
@@ -16060,14 +16154,23 @@ export const createServer = (
                         `[at-limit] ${cacheRow.id}: ${error instanceof Error ? error.message : String(error)}`
                       );
                     });
-                  } else if (cacheRow?.accountId) {
-                    // A pi or OpenCode session on a ChatGPT account: the
-                    // same summary ahead of its limit.
-                    atLimit.turnEnded(cacheRow.id).catch((error: unknown) => {
-                      console.error(
-                        `[at-limit] ${cacheRow.id}: ${error instanceof Error ? error.message : String(error)}`
-                      );
-                    });
+                  } else if (cacheRow) {
+                    // A pi or OpenCode session's context, as its harness
+                    // reported its last request.
+                    if (neutral.contextTokens !== undefined) {
+                      db.updateKeepAlive(cacheRow.id, {
+                        contextTokens: neutral.contextTokens,
+                        contextReadAt: new Date(),
+                      });
+                    }
+                    // On an account: the same summary ahead of its limit.
+                    if (cacheRow.accountId) {
+                      atLimit.turnEnded(cacheRow.id).catch((error: unknown) => {
+                        console.error(
+                          `[at-limit] ${cacheRow.id}: ${error instanceof Error ? error.message : String(error)}`
+                        );
+                      });
+                    }
                   }
                   // Its model was changed across an account provider during
                   // the turn: it moves now, at the turn's end.

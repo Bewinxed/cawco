@@ -24,7 +24,7 @@ import type {
 import {
   type AgentSessionServices,
   createAgentSessionServices,
-  ModelRuntime,
+  type ModelRuntime,
   resolveCliModel,
   SessionManager,
 } from "@earendil-works/pi-coding-agent";
@@ -37,6 +37,7 @@ import {
   syncSkillFiles,
   writeJson,
 } from "./fleet-common";
+import { machineWithAccountsRuntime } from "./pi-accounts";
 import { checkPiProxyCredential, type PiCredentialState } from "./pi-auth";
 import { piOpenTurns } from "./pi-sessiond";
 
@@ -204,11 +205,51 @@ export const resolvePiModel = async (
   return model;
 };
 
-/** The models `runtime` (the machine's own, unless an account's is given) can run. */
+/**
+ * pi's own resolution of each name a session may start with, on this machine
+ * with its accounts ({@link HarnessReport.modelNames}). `default`, which a
+ * session asks for by naming no model, is pi's pick for a new session from
+ * its saved default (`findInitialModel`, core/model-resolver.js 503-515: the
+ * settings' provider and model when that provider has auth configured). When
+ * it has none, pi picks among the machine's own providers, which needs no
+ * account, so `default` is left out. Each bare id of a model pi can run here
+ * is `resolveCliModel`'s answer for it.
+ */
+export const modelNames = async (): Promise<Record<string, string>> => {
+  const { modelRuntime, settingsManager } = await PiProfile.services();
+  // The saved default as pi reads it for a session it starts now.
+  await settingsManager.reload();
+  const available = await modelRuntime.getAvailable();
+  const names: Record<string, string> = {};
+  const provider = settingsManager.getDefaultProvider();
+  const id = settingsManager.getDefaultModel();
+  const saved =
+    provider && id ? modelRuntime.getModel(provider, id) : undefined;
+  if (saved && modelRuntime.hasConfiguredAuth(saved.provider)) {
+    names.default = piModelValue(saved);
+  }
+  for (const model of available) {
+    const bare = modelIdOf(model);
+    if (bare === "default" || bare in names) {
+      continue;
+    }
+    const resolved = resolveCliModel({
+      cliModel: bare,
+      modelRuntime,
+    }).model;
+    if (resolved) {
+      names[bare] = piModelValue(resolved);
+    }
+  }
+  return names;
+};
+
+/** The models `runtime` (the machine's own with its accounts, unless a session's is given) can run. */
 export const modelCatalog = async (
   runtime?: ModelRuntime
 ): Promise<ModelInfo[]> => {
   const { modelRuntime, settingsManager } = await PiProfile.services();
+  await settingsManager.reload();
   const available = await (runtime ?? modelRuntime).getAvailable();
   const rows: ModelInfo[] = available.map((model) => ({
     value: piModelValue(model),
@@ -340,17 +381,18 @@ export class PiProfile {
   auth: AuthState = "authenticated";
   authReason: string | undefined;
 
-  static async runtime(): Promise<ModelRuntime> {
-    return (await PiProfile.services()).modelRuntime;
-  }
-
-  /** Load extensions too: registered providers must appear in the model picker. */
+  /**
+   * Load extensions too: registered providers must appear in the model
+   * picker. Its runtime is the machine's with its accounts
+   * ({@link machineWithAccountsRuntime}): a provider whose sign-in moved into
+   * an account is still one pi offers here.
+   */
   static services(): Promise<AgentSessionServices> {
     if (!servicesPromise) {
       servicesPromise = (async () => {
         const services = await createAgentSessionServices({
           cwd: homedir(),
-          modelRuntime: await ModelRuntime.create({ refreshOnCreate: false }),
+          modelRuntime: await machineWithAccountsRuntime(),
         });
         for (const diagnostic of services.diagnostics) {
           console.warn(`[pi] ${diagnostic.type}: ${diagnostic.message}`);
@@ -371,6 +413,11 @@ export class PiProfile {
           console.warn(`[pi] model catalog unavailable: ${error}`);
         })
       : undefined;
+    const names = installed
+      ? await modelNames().catch((error: unknown) => {
+          console.warn(`[pi] model names unavailable: ${error}`);
+        })
+      : undefined;
     const credential = installed ? await this.checkCredential() : undefined;
     this.#setCredential(credential);
     if (!installed) {
@@ -383,6 +430,7 @@ export class PiProfile {
       ...(credential?.reason ? { authReason: credential.reason } : {}),
       capabilities: PI_CAPABILITIES,
       ...(models ? { models } : {}),
+      ...(names ? { modelNames: names } : {}),
     };
   }
 

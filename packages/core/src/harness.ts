@@ -759,6 +759,13 @@ export interface NeutralResultMessage {
   cache?: { read: number; write: number; write5m?: number; write1h?: number };
   /** Claude's real turn began after every known prompt write had finished. */
   cacheReusable?: boolean;
+  /**
+   * pi and OpenCode: the tokens the turn's last request sent (uncached input
+   * plus cache reads and writes, as the harness reports that request's
+   * usage), which is the session's context as it stood. Claude's is read off
+   * {@link promptCacheUsage}.
+   */
+  contextTokens?: number;
   errors?: string[];
   /**
    * The sends this error failed, set by the hub: read, and answered by nothing
@@ -965,6 +972,14 @@ export interface HarnessReport {
   capabilities: HarnessCapabilities;
   harness: HarnessKind;
   installed: boolean;
+  /**
+   * pi only: the model each name a session may be started with resolves to,
+   * by pi's own resolver (`resolveCliModel`) with this machine's accounts
+   * counted as signed in: `default` and every bare model id pi offers, each
+   * to `provider/id`. A name pi cannot resolve is absent. The hub reads the
+   * provider, and so the account, of a session started on one of them here.
+   */
+  modelNames?: Record<string, string>;
   /**
    * The models this harness offers on this machine.
    *

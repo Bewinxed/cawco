@@ -21,6 +21,7 @@ import {
   type AccountReport,
   type HomeCredential,
   type HomeLoginMoved,
+  OPENCODE_UNSERVED,
   type ProviderSigninChallenge,
   type ProviderSigninResult,
   sameIdentity,
@@ -501,8 +502,11 @@ export const forgetProviderAccount = async (
  * The entry OpenCode's own store holds for a provider CawCo serves, so that
  * OpenCode runs the CawCo plugin's auth loader for it (OpenCode 1.18
  * provider.ts runs a plugin's loader only when `auth.json` has an entry for
- * the provider). Never a credential: the plugin's loader replaces it on
- * every request with the session's account's.
+ * the provider). Never a credential. It is also the placeholder the plugin's
+ * loader hands the SDK as the key: wherever OpenCode's own code puts the
+ * stored key or the loader's (a header, the query, `AWS_BEARER_TOKEN_BEDROCK`),
+ * the plugin's fetch finds this one value and puts the session's account's
+ * credential there.
  */
 export const OPENCODE_MARKER = "cawco-account";
 
@@ -585,7 +589,12 @@ export const readHomeCredentials = (): HomeCredential[] =>
     Object.entries(
       readJson(store === "pi" ? piStorePath() : opencodeStorePath())
     ).flatMap(([storeProvider, entry]) => {
-      if (storeProvider === "anthropic") {
+      // OpenCode's sign-in of a provider it cannot run per session on an
+      // account stays in OpenCode: moving it would leave OpenCode without it.
+      if (
+        storeProvider === "anthropic" ||
+        (store === "opencode" && storeProvider in OPENCODE_UNSERVED)
+      ) {
         return [];
       }
       const credential = credentialOf(store, entry);
@@ -745,14 +754,25 @@ const opencodeMarker = (provider: string): Record<string, unknown> =>
       }
     : { type: "api", key: OPENCODE_MARKER };
 
-/** The OpenCode providers CawCo serves on this machine: one per provider of a signed-in account. */
-export const servedOpencodeProviders = (): string[] => [
-  ...new Set(
+/**
+ * The OpenCode providers CawCo serves on this machine, each with its account
+ * provider: one per provider of a signed-in account, but none OpenCode cannot
+ * run per session ({@link OPENCODE_UNSERVED}).
+ */
+const servedOpencode = (): Map<string, string> =>
+  new Map(
     credentialAccountIds().flatMap((account) => {
       const held = readHeld(account);
-      return held ? [opencodeProviderOf(held.provider)] : [];
+      const id = held ? opencodeProviderOf(held.provider) : undefined;
+      return held && id && !(id in OPENCODE_UNSERVED)
+        ? [[id, held.provider] as const]
+        : [];
     })
-  ),
+  );
+
+/** OpenCode's ids of the providers CawCo serves on this machine. */
+export const servedOpencodeProviders = (): string[] => [
+  ...servedOpencode().keys(),
 ];
 
 /**
@@ -764,12 +784,7 @@ export const servedOpencodeProviders = (): string[] => [
 export const syncOpencodeMarkers = async (): Promise<boolean> => {
   const path = opencodeStorePath();
   const store = readJson(path);
-  const served = new Map(
-    credentialAccountIds().flatMap((account) => {
-      const held = readHeld(account);
-      return held ? [[opencodeProviderOf(held.provider), held.provider]] : [];
-    })
-  );
+  const served = servedOpencode();
   let changed = false;
   for (const [id, provider] of served) {
     if (!store[id]) {

@@ -306,7 +306,11 @@
    * starts from a session's menu and runs on its parent's account.
    */
   const accountTool = $derived.by((): AccountTool | null => {
-    const provider = providerOf(harness, model);
+    // pi's `default` names its model by the catalog's resolution of it.
+    const provider = providerOf(
+      harness,
+      offered.find((row) => row.value === model)?.resolvedModel ?? model
+    );
     const own = (cawco.accounts?.accounts ?? [])
       .filter((one) => one.provider === provider)
       .sort((a, b) => a.order - b.order);

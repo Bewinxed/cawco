@@ -28,7 +28,7 @@ import {
   type ExtensionAPI,
   type ExtensionFactory,
   getAgentDir,
-  type ModelRuntime,
+  ModelRuntime,
   SessionManager,
   SettingsManager,
   type ToolDefinition,
@@ -42,7 +42,6 @@ import {
   compactBoundaryId,
   contentOf,
   modelCatalog,
-  PiProfile,
   piModelValue,
   piSessionPath,
   resolvePiModel,
@@ -149,6 +148,26 @@ class PiSession implements HarnessSession {
       timestamp: string;
     };
     return { uuid: entry.id, timestamp: entry.timestamp };
+  }
+
+  /**
+   * The tokens the session's last answered request sent: its last assistant
+   * message's usage, whose `input` pi-ai reports without the cached tokens
+   * (api/openai-completions.js 1175), so they are added back. A request that
+   * failed reports none and is passed over.
+   */
+  #contextTokens(): number | undefined {
+    for (const message of [...this.#session.messages].reverse()) {
+      const { role, usage } = message as {
+        role?: string;
+        usage?: { cacheRead: number; cacheWrite: number; input: number };
+      };
+      const sent = usage ? usage.input + usage.cacheRead + usage.cacheWrite : 0;
+      if (role === "assistant" && sent > 0) {
+        return sent;
+      }
+    }
+    return undefined;
   }
 
   #setBusy(active: boolean): void {
@@ -321,6 +340,7 @@ class PiSession implements HarnessSession {
           ) ?? [];
         const failed = errors.length > 0;
         const leaf = this.#leaf();
+        const context = this.#contextTokens();
         this.#ctx.frame({
           type: "result",
           uuid: leaf.uuid,
@@ -328,6 +348,7 @@ class PiSession implements HarnessSession {
           subtype: failed ? "error_during_execution" : "success",
           is_error: failed,
           ...(failed ? { errors } : {}),
+          ...(context === undefined ? {} : { contextTokens: context }),
         });
         break;
       }
@@ -482,16 +503,78 @@ class PiSession implements HarnessSession {
   }
 }
 
+/**
+ * The providers the session's extensions register, put on its runtime before
+ * its model is chosen, as pi's own services do
+ * (core/agent-session-services.js 69-97): a session's own runner registers
+ * them only once the session exists, after pi has picked its model.
+ */
+const registerExtensionProviders = (
+  runtime: ModelRuntime,
+  loader: DefaultResourceLoader
+): void => {
+  const { runtime: extensions } = loader.getExtensions();
+  for (const {
+    name,
+    config,
+    extensionPath,
+  } of extensions.pendingProviderRegistrations) {
+    try {
+      runtime.registerProvider(name, config);
+    } catch (error) {
+      console.error(
+        `[pi] extension ${extensionPath}: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+  extensions.pendingProviderRegistrations = [];
+  for (const {
+    provider,
+    extensionPath,
+  } of extensions.pendingNativeProviderRegistrations) {
+    try {
+      runtime.registerNativeProvider(provider);
+    } catch (error) {
+      console.error(
+        `[pi] extension ${extensionPath}: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+  extensions.pendingNativeProviderRegistrations = [];
+};
+
 export async function startPiHost(
   spec: SpawnPayload,
   ctx: HarnessContext
 ): Promise<HarnessSession> {
-  // A session on an account runs on the account's runtime: its ChatGPT
+  // A session on an account runs on the account's runtime: its provider's
   // sign-in from the account's own store, every other provider from the
   // machine's. One without runs on the machine's own, as pi always has.
   const runtime = spec.accountDir
     ? await accountRuntime(spec.accountDir.accountId)
-    : await PiProfile.runtime();
+    : await ModelRuntime.create({ refreshOnCreate: false });
+  const credential = { value: ctx.sessionCredential };
+  process.env[CAWCO_ENV.instanceId] = ctx.instanceId;
+  // The SDK's own default loader (sdk.js: `new DefaultResourceLoader({ cwd,
+  // agentDir, settingsManager })`), plus the CawCo tools as an inline
+  // extension, so the hub can have them replaced on the live session.
+  const tools = new CawcoTools(ctx.instanceId, credential);
+  const agentDir = getAgentDir();
+  const settingsManager = SettingsManager.create(ctx.cwd, agentDir);
+  const resourceLoader = new DefaultResourceLoader({
+    cwd: ctx.cwd,
+    agentDir,
+    settingsManager,
+    extensionFactories: [
+      tools.extension(await piHandoffTools(ctx.instanceId, credential)),
+    ],
+  });
+  await resourceLoader.reload();
+  registerExtensionProviders(runtime, resourceLoader);
+  // pi picks a session's model by which providers have auth configured
+  // (`hasConfiguredAuth`, read off the runtime's availability snapshot), so
+  // the snapshot is taken before the session is made.
+  await runtime.getAvailable();
   const model =
     spec.model && spec.model !== "default"
       ? await resolvePiModel(runtime, spec.model)
@@ -510,23 +593,6 @@ export async function startPiHost(
   } else {
     manager = SessionManager.create(ctx.cwd);
   }
-  const credential = { value: ctx.sessionCredential };
-  process.env[CAWCO_ENV.instanceId] = ctx.instanceId;
-  // The SDK's own default loader (sdk.js: `new DefaultResourceLoader({ cwd,
-  // agentDir, settingsManager })`), plus the CawCo tools as an inline
-  // extension, so the hub can have them replaced on the live session.
-  const tools = new CawcoTools(ctx.instanceId, credential);
-  const agentDir = getAgentDir();
-  const settingsManager = SettingsManager.create(ctx.cwd, agentDir);
-  const resourceLoader = new DefaultResourceLoader({
-    cwd: ctx.cwd,
-    agentDir,
-    settingsManager,
-    extensionFactories: [
-      tools.extension(await piHandoffTools(ctx.instanceId, credential)),
-    ],
-  });
-  await resourceLoader.reload();
   const { session } = await createAgentSession({
     cwd: ctx.cwd,
     agentDir,

@@ -16,7 +16,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { mcpGatewayPort } from "@cawco/core";
-import { accountCredentialPath } from "@cawco/core/paths";
+import { accountCredentialPath, credentialAccountIds } from "@cawco/core/paths";
 import type {
   AuthOperationOptions,
   Credential,
@@ -147,6 +147,82 @@ class AccountCredentials implements CredentialStore {
     );
   }
 }
+
+/** Each provider an account on this machine holds, with the account that holds it (the first, by id). */
+const accountProviders = (): Map<string, string> => {
+  const found = new Map<string, string>();
+  for (const account of credentialAccountIds()) {
+    const held = readAccount(account);
+    if (held && !found.has(held.provider)) {
+      found.set(held.provider, account);
+    }
+  }
+  return found;
+};
+
+/**
+ * The machine's store with every account provider on the machine read from
+ * its account: what pi can run here, accounts included. It lists models and
+ * resolves names for the picker and for placement; no session runs on it.
+ */
+class MachineWithAccounts implements CredentialStore {
+  readonly #machine: CredentialStore;
+
+  constructor(machine: CredentialStore) {
+    this.#machine = machine;
+  }
+
+  read(providerId: string, options?: AuthOperationOptions) {
+    const account = accountProviders().get(providerId);
+    return account
+      ? Promise.resolve(readAccount(account)?.credential)
+      : this.#machine.read(providerId, options);
+  }
+
+  async list(
+    options?: AuthOperationOptions
+  ): Promise<readonly CredentialInfo[]> {
+    const accounts = accountProviders();
+    const machine = await this.#machine.list(options);
+    return [
+      ...machine.filter((one) => !accounts.has(one.providerId)),
+      ...[...accounts].flatMap(([providerId, account]) => {
+        const held = readAccount(account);
+        return held ? [{ providerId, type: held.credential.type }] : [];
+      }),
+    ];
+  }
+
+  async modify(
+    providerId: string,
+    fn: (current: Credential | undefined) => Promise<Credential | undefined>,
+    options?: AuthOperationOptions
+  ): Promise<Credential | undefined> {
+    const account = accountProviders().get(providerId);
+    if (!account) {
+      return await this.#machine.modify(providerId, fn, options);
+    }
+    await askFresh(account);
+    return readAccount(account)?.credential;
+  }
+
+  delete(providerId: string, options?: AuthOperationOptions): Promise<void> {
+    return accountProviders().has(providerId)
+      ? Promise.reject(
+          new Error(
+            "A CawCo account's sign-in is forgotten in Configure → Accounts."
+          )
+        )
+      : this.#machine.delete(providerId, options);
+  }
+}
+
+/** pi's runtime over the machine's store and its accounts ({@link MachineWithAccounts}). */
+export const machineWithAccountsRuntime = async (): Promise<ModelRuntime> =>
+  await ModelRuntime.create({
+    refreshOnCreate: false,
+    credentials: new MachineWithAccounts(await machineStore()),
+  });
 
 /**
  * The runtime a session on the account runs on: its provider's credential
