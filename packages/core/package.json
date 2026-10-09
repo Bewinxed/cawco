@@ -33,6 +33,10 @@
       "types": "./src/usage/opencode-go.ts",
       "default": "./src/usage/opencode-go.ts"
     },
+    "./usage/chatgpt": {
+      "types": "./src/usage/chatgpt.ts",
+      "default": "./src/usage/chatgpt.ts"
+    },
     "./usage/observed": {
       "types": "./src/usage/observed.ts",
       "default": "./src/usage/observed.ts"

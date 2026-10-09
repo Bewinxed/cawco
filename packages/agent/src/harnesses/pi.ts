@@ -2,20 +2,44 @@
 import { resumeCursor, type SpawnPayload } from "@cawco/core";
 import type { Harness, HarnessContext, HarnessSession } from "../harness";
 import { parseProcId, procIdFor } from "../proc-id";
+import { readAccountSoon } from "../provider-usage";
 import { procEpoch } from "../sessiond-client";
 import { PiProfile } from "./pi-services";
 import { adoptPi, piSessiond, piSnapshot, spawnPi } from "./pi-sessiond";
+
+/** A session on an account: each turn's end reads the account's windows shortly after. */
+const withAccountReads = (
+  spec: SpawnPayload,
+  ctx: HarnessContext
+): HarnessContext => {
+  const account = spec.accountDir?.accountId;
+  return account
+    ? {
+        ...ctx,
+        busy: (active) => {
+          ctx.busy(active);
+          if (!active) {
+            readAccountSoon(account);
+          }
+        },
+      }
+    : ctx;
+};
 
 export class PiHarness extends PiProfile implements Harness {
   async spawn(
     spec: SpawnPayload,
     ctx: HarnessContext
   ): Promise<HarnessSession> {
-    const credential = await this.checkCredential(spec.model);
-    if (credential?.state === "dead") {
-      throw new Error(credential.reason);
+    // The proxy's credential check is the machine's store's; a session on an
+    // account runs its provider from the account's one credential.
+    if (!spec.accountDir) {
+      const credential = await this.checkCredential(spec.model);
+      if (credential?.state === "dead") {
+        throw new Error(credential.reason);
+      }
     }
-    return await spawnPi(spec, ctx);
+    return await spawnPi(spec, withAccountReads(spec, ctx));
   }
 
   async custodyCandidates() {
@@ -49,7 +73,7 @@ export class PiHarness extends PiProfile implements Harness {
       (one) => one.alive && one.procId === procIdFor("pi", spec.instanceId)
     );
     return proc
-      ? await this.adopt(spec.instanceId, ctx, {
+      ? await this.adopt(spec.instanceId, withAccountReads(spec, ctx), {
           head: proc.head,
           afterSeq: resumeCursor(
             procEpoch(welcome.epoch, proc.pid),

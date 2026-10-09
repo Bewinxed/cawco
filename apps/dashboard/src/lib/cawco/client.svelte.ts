@@ -1956,10 +1956,13 @@ export function followAccounts(follower: () => void): void {
   accountsFollower = follower;
 }
 
-/** Reads the hub's accounts, their sign-ins and catalogs; a failed read keeps what was there. */
+/**
+ * Reads the hub's Claude accounts, their sign-ins and catalogs; a failed read
+ * keeps what was there. ChatGPT accounts have no screens here yet.
+ */
 export async function readAccounts(): Promise<void> {
   accountsFollower?.();
-  const view = await load<AccountsView>("/api/accounts");
+  const view = await load<AccountsView>("/api/accounts?provider=anthropic");
   if (view && !equal(state.accounts, view)) {
     state.accounts = view;
   }

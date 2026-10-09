@@ -28,6 +28,7 @@ import {
   type ExtensionAPI,
   type ExtensionFactory,
   getAgentDir,
+  type ModelRuntime,
   SessionManager,
   SettingsManager,
   type ToolDefinition,
@@ -36,13 +37,15 @@ import { type Boundary, boundaryCommand } from "../boundary";
 import { callDelegationTool, delegationTools } from "../delegation";
 import type { HarnessContext, HarnessSession, TurnExtras } from "../harness";
 import { acknowledgeSessionCredential } from "../session-identity";
+import { accountRuntime } from "./pi-accounts";
 import {
   compactBoundaryId,
   contentOf,
   modelCatalog,
-  modelIdOf,
   PiProfile,
+  piModelValue,
   piSessionPath,
+  resolvePiModel,
   textOf,
   toBlocks,
 } from "./pi-services";
@@ -134,6 +137,8 @@ class PiSession implements HarnessSession {
   readonly #session: AgentSession;
   readonly #credential: { value?: string };
   readonly #tools: CawcoTools;
+  /** The runtime the session runs on: its account's, or the machine's own. */
+  readonly #runtime: ModelRuntime;
   #busy = false;
   readonly #unread: string[] = [];
   #reading: string | undefined;
@@ -160,12 +165,14 @@ class PiSession implements HarnessSession {
     ctx: HarnessContext,
     session: AgentSession,
     credential: { value?: string },
-    tools: CawcoTools
+    tools: CawcoTools,
+    runtime: ModelRuntime
   ) {
     this.#ctx = ctx;
     this.#session = session;
     this.#credential = credential;
     this.#tools = tools;
+    this.#runtime = runtime;
     this.sessionId = session.sessionId;
     session.subscribe((event) => this.#handle(event));
     ctx.session(session.sessionId);
@@ -174,7 +181,7 @@ class PiSession implements HarnessSession {
       subtype: "init",
       session_id: session.sessionId,
       cwd: ctx.cwd,
-      ...(session.model ? { model: modelIdOf(session.model) } : {}),
+      ...(session.model ? { model: piModelValue(session.model) } : {}),
     });
   }
 
@@ -422,17 +429,13 @@ class PiSession implements HarnessSession {
         await this.#session.abort();
         return undefined;
       case CONTROL_SET_MODEL: {
-        const model = (await (await PiProfile.runtime()).getAvailable()).find(
-          (one) => modelIdOf(one) === args[0]
+        await this.#session.setModel(
+          await resolvePiModel(this.#runtime, String(args[0]))
         );
-        if (!model) {
-          throw new Error(`pi does not know model ${args[0]}`);
-        }
-        await this.#session.setModel(model);
         return undefined;
       }
       case CONTROL_SUPPORTED_MODELS:
-        return await modelCatalog();
+        return await modelCatalog(this.#runtime);
       case CONTROL_SUPPORTED_COMMANDS:
         return [] satisfies SupportedCommands;
       case CONTROL_CONTEXT_USAGE: {
@@ -483,17 +486,16 @@ export async function startPiHost(
   spec: SpawnPayload,
   ctx: HarnessContext
 ): Promise<HarnessSession> {
-  const runtime = await PiProfile.runtime();
-  const model = spec.model
-    ? (await runtime.getAvailable()).find(
-        (one) => modelIdOf(one) === spec.model
-      )
-    : undefined;
-  if (spec.model && !model) {
-    throw new Error(
-      `pi cannot use model ${spec.model}: it is not available with the configured provider credentials.`
-    );
-  }
+  // A session on an account runs on the account's runtime: its ChatGPT
+  // sign-in from the account's own store, every other provider from the
+  // machine's. One without runs on the machine's own, as pi always has.
+  const runtime = spec.accountDir
+    ? await accountRuntime(spec.accountDir.accountId)
+    : await PiProfile.runtime();
+  const model =
+    spec.model && spec.model !== "default"
+      ? await resolvePiModel(runtime, spec.model)
+      : undefined;
   let manager: SessionManager;
   if (spec.resume) {
     const source = await piSessionPath(spec.resume.sessionKey, ctx.cwd);
@@ -535,5 +537,5 @@ export async function startPiHost(
     resourceLoader,
     customTools: ctx.boundary ? [boundedBash(ctx.cwd, ctx.boundary)] : [],
   });
-  return new PiSession(ctx, session, credential, tools);
+  return new PiSession(ctx, session, credential, tools, runtime);
 }

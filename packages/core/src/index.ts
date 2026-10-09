@@ -124,11 +124,16 @@ export interface SpawnPayload {
    */
   account?: string;
   /**
-   * The account the hub placed the session on: its Claude Code runs in that
-   * account's own `~/.cawco/accounts/<id>/claude` on the machine, never in the
-   * machine's `~/.claude`. Set by the hub on every launch of a Claude session
-   * — the first and every revive, restore and relaunch — and never by a
-   * client. A Claude launch without one is refused on the machine.
+   * The account the hub placed the session on, and so the store it runs
+   * from on the machine: Claude Code in the account's own
+   * `~/.cawco/accounts/<id>/claude`, never the machine's `~/.claude`; pi on a
+   * runtime whose `openai-codex` sign-in is the account's
+   * `~/.cawco/accounts/<id>/pi/auth.json`; OpenCode on the account's own
+   * server, whose `XDG_DATA_HOME` is `~/.cawco/accounts/<id>/opencode-data`.
+   * Set by the hub on every launch of a session on an account — the first and
+   * every revive, restore and relaunch — and never by a client. A Claude
+   * launch without one is refused on the machine; a pi or OpenCode launch
+   * without one runs from the machine's own stores.
    */
   accountDir?: { accountId: string };
   /**
@@ -351,6 +356,20 @@ export interface HeartbeatPayload {
    */
   harnesses?: HarnessReport[];
   instances: string[];
+  /**
+   * Every account of a provider other than Claude's with a store on the
+   * machine (`~/.cawco/accounts/<id>/credential.json`), and who it is signed
+   * in as there: the one credential every harness on the machine uses for
+   * that provider. Rides the beat `harnesses` rides, and again whenever one
+   * changed.
+   */
+  providerAccounts?: import("./accounts").AccountReport[];
+  /**
+   * The providers an account can be for on this machine: pi-ai's joined with
+   * OpenCode's ({@link import("./accounts").joinProviders}). Rides the beat
+   * `harnesses` rides.
+   */
+  providers?: import("./accounts").ProviderInfo[];
   /** Exact server-session addresses; an empty array also declares the acknowledgement contract. */
   sessionAddresses?: SessionAddress[];
   /**

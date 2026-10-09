@@ -1,0 +1,863 @@
+/**
+ * Accounts of every provider other than Claude's, on this machine.
+ *
+ * An account is one sign-in or one key for one provider, held once per
+ * machine in `~/.cawco/accounts/<id>/credential.json`, in pi-ai's credential
+ * format (`{ "<provider>": { "type": "oauth" | "api_key", … } }`). The agent
+ * is its only writer: it signs in through pi-ai's own login, writes a key the
+ * hub relayed, and refreshes an OAuth credential through pi-ai's own refresh
+ * (`ModelRuntime.getAuth`, which refreshes under the store's `modify`).
+ * Every harness on the machine that speaks the provider uses this one
+ * credential: pi sessions read it through their runtime's store, OpenCode's
+ * server through the CawCo plugin. Nothing holds a second copy of a grant:
+ * refresh tokens rotate, so copies sign each other out.
+ */
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
+import { chmod, mkdir, rename, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import {
+  type AccountIdentity,
+  type AccountReport,
+  type HomeCredential,
+  type HomeLoginMoved,
+  type ProviderSigninChallenge,
+  type ProviderSigninResult,
+  sameIdentity,
+} from "@cawco/core";
+import {
+  accountCredentialPath,
+  credentialAccountIds,
+  removeAccountRoot,
+  sessionIdentityDir,
+} from "@cawco/core/paths";
+import { chatgptClaims, readChatgptUsage } from "@cawco/core/usage/chatgpt";
+import {
+  fetchOpenCodeGoLimits,
+  opencodeDataDir,
+} from "@cawco/core/usage/opencode-go";
+import type {
+  AuthOperationOptions,
+  Credential,
+  CredentialInfo,
+  CredentialStore,
+} from "@earendil-works/pi-ai";
+import { getAgentDir, ModelRuntime } from "@earendil-works/pi-coding-agent";
+import { delegationHubUrl } from "./delegation";
+
+// ── The store ────────────────────────────────────────────────────────────
+
+/** What an account's store holds: its provider and its one credential. */
+export interface Held {
+  credential: Credential;
+  provider: string;
+}
+
+/** The account's credential as it is on disk now; undefined when it holds none. */
+export const readHeld = (accountId: string): Held | undefined => {
+  try {
+    const stored = JSON.parse(
+      readFileSync(accountCredentialPath(accountId), "utf8")
+    ) as Record<string, Credential>;
+    const [entry] = Object.entries(stored);
+    return entry ? { provider: entry[0], credential: entry[1] } : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+/** Written whole and moved into place, owner-only. */
+const writeHeld = async (
+  accountId: string,
+  held: Held | undefined
+): Promise<void> => {
+  const path = accountCredentialPath(accountId);
+  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+  const staged = `${path}.${process.pid}.tmp`;
+  await writeFile(
+    staged,
+    JSON.stringify(held ? { [held.provider]: held.credential } : {}, null, 2),
+    { mode: 0o600 }
+  );
+  await chmod(staged, 0o600);
+  await rename(staged, path);
+};
+
+/** One write at a time per account, in this process: the only writer. */
+const writing = new Map<string, Promise<unknown>>();
+const serial = <T>(accountId: string, work: () => Promise<T>): Promise<T> => {
+  const next = (writing.get(accountId) ?? Promise.resolve()).then(work, work);
+  writing.set(
+    accountId,
+    next.catch(() => undefined)
+  );
+  return next;
+};
+
+/** pi-ai's store over one account's file: the account's provider only. */
+class AccountStore implements CredentialStore {
+  readonly #account: string;
+  readonly #provider: string;
+
+  constructor(account: string, provider: string) {
+    this.#account = account;
+    this.#provider = provider;
+  }
+
+  read(providerId: string, _options?: AuthOperationOptions) {
+    const held = readHeld(this.#account);
+    return Promise.resolve(
+      providerId === this.#provider && held?.provider === providerId
+        ? held.credential
+        : undefined
+    );
+  }
+
+  list(_options?: AuthOperationOptions): Promise<readonly CredentialInfo[]> {
+    const held = readHeld(this.#account);
+    return Promise.resolve(
+      held ? [{ providerId: held.provider, type: held.credential.type }] : []
+    );
+  }
+
+  modify(
+    providerId: string,
+    fn: (current: Credential | undefined) => Promise<Credential | undefined>,
+    _options?: AuthOperationOptions
+  ): Promise<Credential | undefined> {
+    if (providerId !== this.#provider) {
+      return Promise.reject(
+        new Error(
+          `Account ${this.#account} holds ${this.#provider}, not ${providerId}.`
+        )
+      );
+    }
+    return serial(this.#account, async () => {
+      const current = readHeld(this.#account);
+      const next = await fn(
+        current?.provider === providerId ? current.credential : undefined
+      );
+      if (next !== undefined) {
+        await writeHeld(this.#account, {
+          provider: providerId,
+          credential: next,
+        });
+      }
+      return next ?? current?.credential;
+    });
+  }
+
+  delete(providerId: string, _options?: AuthOperationOptions): Promise<void> {
+    return serial(this.#account, async () => {
+      if (readHeld(this.#account)?.provider === providerId) {
+        await writeHeld(this.#account, undefined);
+      }
+    });
+  }
+}
+
+const runtimes = new Map<string, Promise<ModelRuntime>>();
+
+/** The agent's pi-ai runtime over one account's store: its login, refresh and request auth. */
+const runtimeOf = (accountId: string, provider: string) => {
+  const key = `${accountId}\u0000${provider}`;
+  let runtime = runtimes.get(key);
+  if (!runtime) {
+    runtime = ModelRuntime.create({
+      refreshOnCreate: false,
+      credentials: new AccountStore(accountId, provider),
+    });
+    runtime.catch(() => runtimes.delete(key));
+    runtimes.set(key, runtime);
+  }
+  return runtime;
+};
+
+/** How long before its expiry an OAuth credential is refreshed. */
+const FRESH_FOR_MS = 15 * 60_000;
+
+/**
+ * Refreshes the account's OAuth credential through pi-ai's own refresh when
+ * it has less than {@link FRESH_FOR_MS} left; a key, or a credential with
+ * time left, is left as it is. Every refresh of every account goes through
+ * here, one at a time per account.
+ */
+export const freshen = async (accountId: string): Promise<void> => {
+  const held = readHeld(accountId);
+  if (held?.credential.type !== "oauth") {
+    return;
+  }
+  if (held.credential.expires - Date.now() > FRESH_FOR_MS) {
+    return;
+  }
+  const runtime = await runtimeOf(accountId, held.provider);
+  await runtime.getAuth(held.provider, { minOAuthValidityMs: FRESH_FOR_MS });
+};
+
+/** Keeps every OAuth credential on the machine fresh; a failure is said and tried again next time. */
+export const freshenAll = async (): Promise<void> => {
+  for (const account of credentialAccountIds()) {
+    // biome-ignore lint/performance/noAwaitInLoops: one refresh at a time keeps the providers' token endpoints calm
+    await freshen(account).catch((error: unknown) =>
+      console.warn(
+        `[accounts] ${account}: refresh failed: ${error instanceof Error ? error.message : String(error)}`
+      )
+    );
+  }
+};
+
+// ── Who a credential is ──────────────────────────────────────────────────
+
+/** A key as an identity: its last four characters, and a fingerprint of it. */
+export const keyIdentity = (key: string): AccountIdentity => ({
+  email: `…${key.slice(-4)}`,
+  organization: `key:${createHash("sha256").update(key).digest("hex").slice(0, 16)}`,
+});
+
+/** Who a credential is, as far as it says. */
+export const identityOf = (
+  provider: string,
+  credential: Credential
+): AccountIdentity | undefined => {
+  if (credential.type === "api_key") {
+    return credential.key ? keyIdentity(credential.key) : undefined;
+  }
+  const claims = chatgptClaims(credential.access);
+  const accountId =
+    (typeof credential.accountId === "string" ? credential.accountId : null) ??
+    claims.accountId;
+  const email =
+    claims.email ??
+    (typeof credential.email === "string" ? credential.email : null);
+  return email ? { email, organization: accountId ?? provider } : undefined;
+};
+
+/** Every provider account's store on this machine and who it is signed in as. */
+export const providerAccountReports = (): AccountReport[] =>
+  credentialAccountIds().map((account) => {
+    const held = readHeld(account);
+    const identity = held
+      ? identityOf(held.provider, held.credential)
+      : undefined;
+    return {
+      account,
+      loggedIn: held !== undefined,
+      ...(held
+        ? {
+            provider: held.provider,
+            kind: held.credential.type === "oauth" ? "oauth" : "api_key",
+          }
+        : {}),
+      ...(identity ? { identity } : {}),
+    } satisfies AccountReport;
+  });
+
+/** The plan a ChatGPT token's account is on: the usage endpoint's word, else the token's claim. */
+const planOf = async (held: Held): Promise<string | null> => {
+  if (held.provider !== "openai-codex" || held.credential.type !== "oauth") {
+    return null;
+  }
+  const claims = chatgptClaims(held.credential.access);
+  if (!claims.accountId) {
+    return claims.plan;
+  }
+  const read = await readChatgptUsage(held.credential.access, claims.accountId);
+  return read.ok && read.plan ? read.plan : claims.plan;
+};
+
+// ── Signing in ───────────────────────────────────────────────────────────
+
+const COMPLETE_WAIT_MS = 60_000;
+/** A sign-in method that asks for a device code, by its id or its label. */
+const DEVICE_OPTION = /device/i;
+const DEVICE_LABEL = /device|headless/i;
+/** A pi key resolved at request time (`!command`, `$VAR`): not a key to move. */
+const RESOLVED_KEY = /^[!$]/;
+const DEVICE_FLOW_TIMED_OUT = /Device flow timed out|expired/i;
+
+interface SignIn {
+  readonly abort: AbortController;
+  /** A code the sign-in asked to have pasted, when it asks for one. */
+  code?: (code: string) => void;
+  readonly done: Promise<"done" | "expired" | Error>;
+  readonly expiresAt: number | null;
+  readonly provider: string;
+}
+
+const signIns = new Map<string, SignIn>();
+
+/**
+ * Starts pi-ai's own OAuth sign-in for `provider` into the account's store:
+ * its device-code method where it has one, so the person can finish it on
+ * any device; else its link, after which they paste the code it ends on.
+ */
+export const beginProviderLogin = async (
+  accountId: string,
+  provider: string
+): Promise<ProviderSigninChallenge> => {
+  signIns.get(accountId)?.abort.abort();
+  signIns.delete(accountId);
+  const held = readHeld(accountId);
+  if (held && held.provider !== provider) {
+    throw new Error(
+      `This account holds ${held.provider} on this machine, not ${provider}.`
+    );
+  }
+  const runtime = await runtimeOf(accountId, provider);
+  const abort = new AbortController();
+  let shown: (challenge: ProviderSigninChallenge) => void = () => undefined;
+  const challenge = new Promise<ProviderSigninChallenge>((resolve) => {
+    shown = resolve;
+  });
+  const signIn: { code?: (code: string) => void } = {};
+  const login = runtime.login(provider, "oauth", {
+    signal: abort.signal,
+    prompt: (prompt) => {
+      if (prompt.type === "select") {
+        const device = prompt.options.find(
+          (option) =>
+            DEVICE_OPTION.test(option.id) || DEVICE_LABEL.test(option.label)
+        );
+        return Promise.resolve((device ?? prompt.options[0])?.id ?? "");
+      }
+      if (prompt.type === "manual_code") {
+        return new Promise<string>((resolve) => {
+          signIn.code = resolve;
+        });
+      }
+      // A question the sign-in asks with a default (Copilot's enterprise
+      // domain): the default.
+      return Promise.resolve("");
+    },
+    notify: (event) => {
+      if (event.type === "device_code") {
+        shown({
+          verificationUrl: event.verificationUri,
+          userCode: event.userCode,
+          expiresAt: Date.now() + (event.expiresInSeconds ?? 900) * 1000,
+        });
+      } else if (event.type === "auth_url") {
+        shown({ url: event.url });
+      }
+    },
+  });
+  const done = login.then(
+    () => "done" as const,
+    (error: unknown) => {
+      const failed = error instanceof Error ? error : new Error(String(error));
+      return DEVICE_FLOW_TIMED_OUT.test(failed.message)
+        ? ("expired" as const)
+        : failed;
+    }
+  );
+  const first = await Promise.race([
+    challenge,
+    done.then((ended) => ({ ended })),
+  ]);
+  if ("ended" in first) {
+    throw first.ended instanceof Error
+      ? first.ended
+      : new Error(`${provider}'s sign-in ended before it showed anything.`);
+  }
+  signIns.set(accountId, {
+    abort,
+    done,
+    provider,
+    expiresAt: "expiresAt" in first ? first.expiresAt : null,
+    get code() {
+      return signIn.code;
+    },
+  });
+  return first;
+};
+
+/** A sign-in finished: who it is, kept or signed straight out as someone else's. */
+const settled = async (
+  accountId: string,
+  expected: AccountIdentity | null
+): Promise<ProviderSigninResult> => {
+  const held = readHeld(accountId);
+  if (!held) {
+    throw new Error(
+      "The sign-in finished but the account's store holds nothing."
+    );
+  }
+  const identity = identityOf(held.provider, held.credential);
+  if (expected && identity && !sameIdentity(expected, identity)) {
+    await (await runtimeOf(accountId, held.provider)).logout(held.provider);
+    return { state: "mismatch", email: identity.email };
+  }
+  return {
+    state: "signed-in",
+    email: identity?.email ?? null,
+    identity: identity ?? null,
+    plan: await planOf(held),
+  };
+};
+
+/**
+ * Feeds a pasted code to a sign-in that asked for one, or waits up to a
+ * minute for the person to enter the device code, and says how it stands.
+ */
+export const completeProviderLogin = async (
+  code: string | null,
+  accountId: string,
+  expected: AccountIdentity | null
+): Promise<ProviderSigninResult> => {
+  const signIn = signIns.get(accountId);
+  if (!signIn) {
+    return { state: "expired" };
+  }
+  if (code) {
+    signIn.code?.(code.trim());
+  }
+  const outcome = await Promise.race([
+    signIn.done,
+    Bun.sleep(COMPLETE_WAIT_MS).then(() => "waiting" as const),
+  ]);
+  if (outcome === "waiting") {
+    return signIn.expiresAt === null || Date.now() < signIn.expiresAt
+      ? { state: "pending" }
+      : { state: "expired" };
+  }
+  signIns.delete(accountId);
+  if (outcome === "expired") {
+    return { state: "expired" };
+  }
+  if (outcome instanceof Error) {
+    throw outcome;
+  }
+  return await settled(accountId, expected);
+};
+
+/** Ends every sign-in still waiting, for the daemon's exit. */
+export const endProviderSignIns = (): void => {
+  for (const signIn of signIns.values()) {
+    signIn.abort.abort();
+  }
+  signIns.clear();
+};
+
+/**
+ * A key the person typed in the dashboard, relayed by the hub for this
+ * machine: written into the account's store. A key other than the one the
+ * account already is is refused as someone else's.
+ */
+export const setProviderKey = async (
+  accountId: string,
+  provider: string,
+  key: string,
+  expected: AccountIdentity | null
+): Promise<ProviderSigninResult> => {
+  const trimmed = key.trim();
+  if (!trimmed) {
+    throw new Error("The key is empty.");
+  }
+  const identity = keyIdentity(trimmed);
+  if (expected && !sameIdentity(expected, identity)) {
+    return { state: "mismatch", email: identity.email };
+  }
+  const held = readHeld(accountId);
+  if (held && held.provider !== provider) {
+    throw new Error(
+      `This account holds ${held.provider} on this machine, not ${provider}.`
+    );
+  }
+  await serial(accountId, () =>
+    writeHeld(accountId, {
+      provider,
+      credential: { type: "api_key", key: trimmed },
+    })
+  );
+  return {
+    state: "signed-in",
+    email: identity.email,
+    identity,
+    plan: null,
+  };
+};
+
+/** Signs the account's store out (pi-ai's logout) and deletes its dir. */
+export const forgetProviderAccount = async (
+  accountId: string
+): Promise<void> => {
+  signIns.get(accountId)?.abort.abort();
+  signIns.delete(accountId);
+  const held = readHeld(accountId);
+  if (held) {
+    await (await runtimeOf(accountId, held.provider)).logout(held.provider);
+  }
+  for (const key of runtimes.keys()) {
+    if (key.startsWith(`${accountId}\u0000`)) {
+      runtimes.delete(key);
+    }
+  }
+  await removeAccountRoot(accountId);
+};
+
+// ── The machine's own stores, and the one-time move out of them ──────────
+
+/**
+ * The entry OpenCode's own store holds for a provider CawCo serves, so that
+ * OpenCode runs the CawCo plugin's auth loader for it (OpenCode 1.18
+ * provider.ts runs a plugin's loader only when `auth.json` has an entry for
+ * the provider). Never a credential: the plugin's loader replaces it on
+ * every request with the session's account's.
+ */
+export const OPENCODE_MARKER = "cawco-account";
+
+const piStorePath = (): string => join(getAgentDir(), "auth.json");
+const opencodeStorePath = (): string => join(opencodeDataDir(), "auth.json");
+
+type Json = Record<string, Record<string, unknown>>;
+
+const readJson = (path: string): Json => {
+  try {
+    return JSON.parse(readFileSync(path, "utf8")) as Json;
+  } catch {
+    return {};
+  }
+};
+
+const writeJson = async (path: string, value: Json): Promise<void> => {
+  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+  const staged = `${path}.cawco-${process.pid}.tmp`;
+  await writeFile(staged, JSON.stringify(value, null, 2), { mode: 0o600 });
+  await chmod(staged, 0o600);
+  await rename(staged, path);
+};
+
+/** One store's entry as pi-ai's credential, or undefined for one CawCo does not hold. */
+const credentialOf = (
+  store: "pi" | "opencode",
+  entry: Record<string, unknown>
+): Credential | undefined => {
+  if (store === "pi") {
+    if (entry.type === "api_key" && typeof entry.key === "string") {
+      // A `!command` or `$VAR` key is resolved by pi at request time: not a key to move.
+      return RESOLVED_KEY.test(entry.key)
+        ? undefined
+        : { type: "api_key", key: entry.key };
+    }
+    return entry.type === "oauth" &&
+      typeof entry.access === "string" &&
+      typeof entry.refresh === "string"
+      ? (entry as unknown as Credential)
+      : undefined;
+  }
+  if (entry.type === "api" && typeof entry.key === "string") {
+    return entry.key === OPENCODE_MARKER
+      ? undefined
+      : { type: "api_key", key: entry.key };
+  }
+  if (
+    entry.type === "oauth" &&
+    typeof entry.access === "string" &&
+    typeof entry.refresh === "string" &&
+    entry.access !== OPENCODE_MARKER
+  ) {
+    const { type: _type, ...rest } = entry;
+    return { ...rest, type: "oauth" } as unknown as Credential;
+  }
+  return undefined;
+};
+
+/** The account provider an entry in a store is for. */
+const providerOfEntry = (
+  store: "pi" | "opencode",
+  storeProvider: string,
+  credential: Credential
+): string =>
+  store === "opencode" &&
+  storeProvider === "openai" &&
+  credential.type === "oauth"
+    ? "openai-codex"
+    : storeProvider;
+
+/**
+ * Every credential in pi's and OpenCode's own stores on this machine a CawCo
+ * account can hold. A Claude subscription's OAuth there (`anthropic`) is
+ * never listed: Anthropic's terms keep it in Claude Code alone, and it stays
+ * where it is.
+ */
+export const readHomeCredentials = (): HomeCredential[] =>
+  (["pi", "opencode"] as const).flatMap((store) =>
+    Object.entries(
+      readJson(store === "pi" ? piStorePath() : opencodeStorePath())
+    ).flatMap(([storeProvider, entry]) => {
+      if (storeProvider === "anthropic") {
+        return [];
+      }
+      const credential = credentialOf(store, entry);
+      if (!credential) {
+        return [];
+      }
+      const provider = providerOfEntry(store, storeProvider, credential);
+      const identity = identityOf(provider, credential);
+      return identity
+        ? [
+            {
+              store,
+              storeProvider,
+              provider,
+              kind:
+                credential.type === "oauth"
+                  ? ("oauth" as const)
+                  : ("api_key" as const),
+              identity,
+            },
+          ]
+        : [];
+    })
+  );
+
+const moveLog = (line: string): void => {
+  console.log(`[move-login] ${line}`);
+};
+
+/**
+ * Whether the account answers with the credential just written: ChatGPT's
+ * usage endpoint for a ChatGPT sign-in, OpenCode Go's for its key, pi-ai's
+ * own request auth for any other OAuth sign-in (refreshed by it if it has
+ * run out), and the store giving the key back for any other key (no
+ * provider-neutral endpoint answers for a key without spending it).
+ * Undefined when it answers; else why not.
+ */
+const answers = async (accountId: string): Promise<string | undefined> => {
+  const held = readHeld(accountId);
+  if (!held) {
+    return "the account's store holds nothing";
+  }
+  if (held.provider === "openai-codex" && held.credential.type === "oauth") {
+    await freshen(accountId);
+    const now = readHeld(accountId);
+    if (now?.credential.type !== "oauth") {
+      return "the refreshed sign-in is gone";
+    }
+    const claims = chatgptClaims(now.credential.access);
+    const read = claims.accountId
+      ? await readChatgptUsage(now.credential.access, claims.accountId)
+      : { ok: false as const, error: "the token names no ChatGPT account" };
+    return read.ok ? undefined : read.error;
+  }
+  if (held.credential.type === "api_key") {
+    if (held.provider === "opencode-go") {
+      const go = await fetchOpenCodeGoLimits(held.credential.key ?? null);
+      return go?.error ?? undefined;
+    }
+    return held.credential.key ? undefined : "the store gave no key back";
+  }
+  const auth = await (await runtimeOf(accountId, held.provider))
+    .getAuth(held.provider)
+    .catch(() => undefined);
+  return auth
+    ? undefined
+    : `pi-ai gives no request auth for ${held.provider} from it`;
+};
+
+/**
+ * Moves one credential out of pi's or OpenCode's own store into an account:
+ * written into the account's store, checked to answer, and only then removed
+ * from the store it came from (OpenCode's keeps the marker the CawCo plugin
+ * needs in its place), if that entry is still the one moved. Any failure
+ * before that empties the account's store and leaves the original as it was.
+ */
+export const moveHomeCredential = async (
+  accountId: string,
+  store: "pi" | "opencode",
+  storeProvider: string,
+  expected: AccountIdentity
+): Promise<HomeLoginMoved> => {
+  const path = store === "pi" ? piStorePath() : opencodeStorePath();
+  const entry = readJson(path)[storeProvider];
+  const credential = entry ? credentialOf(store, entry) : undefined;
+  if (!credential) {
+    throw new Error(
+      `${store}'s own store on this machine holds no ${storeProvider} credential CawCo can hold; nothing was moved.`
+    );
+  }
+  const provider = providerOfEntry(store, storeProvider, credential);
+  const identity = identityOf(provider, credential);
+  if (!(identity && sameIdentity(identity, expected))) {
+    throw new Error(
+      `${store}'s ${storeProvider} credential on this machine is not ${expected.email} any more; nothing was moved.`
+    );
+  }
+  if (readHeld(accountId)) {
+    throw new Error(
+      "The account already holds a credential on this machine; nothing was moved."
+    );
+  }
+  moveLog(`writing ${store}'s ${storeProvider} into account ${accountId}`);
+  await serial(accountId, () => writeHeld(accountId, { provider, credential }));
+  const undo = async (why: string): Promise<never> => {
+    await serial(accountId, () => writeHeld(accountId, undefined));
+    moveLog(`not moved, the account's copy removed: ${why}`);
+    throw new Error(
+      `${why} Nothing was moved; ${store}'s own ${storeProvider} on this machine is as it was.`
+    );
+  };
+  const refused = await answers(accountId).catch((error: unknown) =>
+    error instanceof Error ? error.message : String(error)
+  );
+  if (refused) {
+    return undo(`The account did not answer: ${refused}.`);
+  }
+  const now = readJson(path);
+  const still = now[storeProvider];
+  const unchanged =
+    still &&
+    (credential.type === "oauth"
+      ? still.refresh === credential.refresh
+      : (still.key ?? null) === credential.key);
+  if (!unchanged) {
+    return undo(`${store} changed its own ${storeProvider} during the move.`);
+  }
+  const { [storeProvider]: _moved, ...rest } = now;
+  await writeJson(
+    path,
+    store === "opencode"
+      ? { ...rest, [storeProvider]: opencodeMarker(provider) }
+      : rest
+  );
+  moveLog(`moved; ${store}'s own store no longer holds ${storeProvider}`);
+  return { store: "the account's credential file" };
+};
+
+// ── OpenCode: the markers, and which account each session runs on ───────
+
+/** OpenCode's id for an account provider: ChatGPT is its `openai`. */
+export const opencodeProviderOf = (provider: string): string =>
+  provider === "openai-codex" ? "openai" : provider;
+
+/**
+ * The marker entry for a provider in OpenCode's own store: an OAuth one for
+ * ChatGPT, so OpenCode's own codex plugin lists ChatGPT's models (it filters
+ * them only for `type: "oauth"`), a key one for anything else.
+ */
+const opencodeMarker = (provider: string): Record<string, unknown> =>
+  provider === "openai-codex"
+    ? {
+        type: "oauth",
+        access: OPENCODE_MARKER,
+        refresh: OPENCODE_MARKER,
+        expires: 4_102_444_800_000,
+      }
+    : { type: "api", key: OPENCODE_MARKER };
+
+/** The OpenCode providers CawCo serves on this machine: one per provider of a signed-in account. */
+export const servedOpencodeProviders = (): string[] => [
+  ...new Set(
+    credentialAccountIds().flatMap((account) => {
+      const held = readHeld(account);
+      return held ? [opencodeProviderOf(held.provider)] : [];
+    })
+  ),
+];
+
+/**
+ * Squares OpenCode's own store with the accounts on this machine: a marker
+ * for each provider CawCo serves where the store has no entry, and no marker
+ * left for one it does not. A real entry is never touched. True when it
+ * changed anything.
+ */
+export const syncOpencodeMarkers = async (): Promise<boolean> => {
+  const path = opencodeStorePath();
+  const store = readJson(path);
+  const served = new Map(
+    credentialAccountIds().flatMap((account) => {
+      const held = readHeld(account);
+      return held ? [[opencodeProviderOf(held.provider), held.provider]] : [];
+    })
+  );
+  let changed = false;
+  for (const [id, provider] of served) {
+    if (!store[id]) {
+      store[id] = opencodeMarker(provider);
+      changed = true;
+    }
+  }
+  for (const [id, entry] of Object.entries(store)) {
+    const marker =
+      entry.key === OPENCODE_MARKER || entry.access === OPENCODE_MARKER;
+    if (marker && !served.has(id)) {
+      delete store[id];
+      changed = true;
+    }
+  }
+  if (changed) {
+    await writeJson(path, store);
+  }
+  return changed;
+};
+
+/** One file per hub, beside the session credentials and as hidden from every workspace. */
+export const opencodeAccountsFile = (): string =>
+  join(
+    sessionIdentityDir(),
+    `opencode-accounts-${new URL(delegationHubUrl()).host.replaceAll(":", "_")}.json`
+  );
+
+let mapping: Promise<unknown> = Promise.resolve();
+
+/**
+ * Records which account an OpenCode session runs on, by OpenCode's own
+ * session id, for the CawCo plugin to read on each request; none clears it.
+ */
+export const noteOpencodeAccount = (
+  sessionId: string,
+  accountId: string | null
+): Promise<void> => {
+  const next = mapping.then(async () => {
+    const file = opencodeAccountsFile();
+    const held = existsSync(file)
+      ? (JSON.parse(readFileSync(file, "utf8")) as Record<string, string>)
+      : {};
+    if (accountId) {
+      held[sessionId] = accountId;
+    } else {
+      delete held[sessionId];
+    }
+    await mkdir(sessionIdentityDir(), { recursive: true, mode: 0o700 });
+    const staged = `${file}.${process.pid}.tmp`;
+    await writeFile(staged, JSON.stringify(held), { mode: 0o600 });
+    await rename(staged, file);
+  });
+  mapping = next.catch(() => undefined);
+  return next;
+};
+
+// ── The providers an account can be for ─────────────────────────────────
+
+/**
+ * pi-ai's OAuth sign-ins that ask for a device code, in pi-ai 1.0.1
+ * (dist/auth/oauth/*.js notify `device_code`): finishable from any device.
+ * openrouter's is a localhost callback; pi-ai's `openai` OAuth is a second
+ * ChatGPT flow, and ChatGPT is `openai-codex` here.
+ */
+const DEVICE_CODE = new Set([
+  "openai-codex",
+  "github-copilot",
+  "xai",
+  "kimi-coding",
+  "meta",
+  "radius",
+]);
+
+/** pi-ai's providers on this machine (its own and those models.json adds), with how each signs in. */
+export const piProviders = async () => {
+  const runtime = await ModelRuntime.create({ refreshOnCreate: false });
+  return runtime.getProviders().map((provider) => {
+    const { auth } = provider as {
+      auth?: { oauth?: unknown; apiKey?: unknown };
+    };
+    const oauth = Boolean(auth?.oauth) && provider.id !== "openai";
+    return {
+      id: provider.id,
+      name: String((provider as { name?: unknown }).name ?? provider.id),
+      oauth,
+      deviceCode: oauth && DEVICE_CODE.has(provider.id),
+      key: Boolean(auth?.apiKey),
+    };
+  });
+};

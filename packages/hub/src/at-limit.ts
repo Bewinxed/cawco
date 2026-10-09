@@ -646,7 +646,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     /** Whether a refused turn of `instanceId` is this controller's to answer. */
     manages(instanceId: string): boolean {
       const row = rowOf(instanceId);
-      return !!row && row.harness === "claude" && !!currentOf(row);
+      return !!row && !!currentOf(row);
     },
     /** A turn of `instanceId` was refused at its account's limit, and has ended. */
     async turnRefused(instanceId: string): Promise<void> {
@@ -664,7 +664,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     async turnEnded(instanceId: string): Promise<void> {
       const row = rowOf(instanceId);
       const current = row ? currentOf(row) : undefined;
-      if (row?.harness === "claude" && current) {
+      if (row && current) {
         await prepare(row, current);
       }
     },

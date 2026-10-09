@@ -72,12 +72,14 @@ import {
   MESSAGES_READ,
   MESSAGES_STORED,
   mcpFleetState,
+  mcpGatewayPort,
   PROVIDER_RETRY,
   REPEATED_FAILURE,
   REPEATED_FAILURE_LIMIT,
   VERIFY_SESSION_CREDENTIAL,
 } from "@cawco/core";
 import type { RestartHold } from "@cawco/core/binary-updates";
+import { accountsRoot } from "@cawco/core/paths";
 // The protocol subpath, never the `@cawco/core` barrel: `sessiond.ts` reaches
 // for `node:os` and the barrel is imported by the browser bundle (see f2e1c4c).
 import { type ProcSpec, sessiondEndpoint } from "@cawco/core/sessiond";
@@ -114,6 +116,13 @@ import type { Harness, HarnessContext, HarnessSession } from "../harness";
 import { HarnessRecoveryRefused, SessionAddressRefused } from "../harness";
 import { isMachineAgent } from "../machine-agent";
 import { OPENCODE_SERVER_PROC_ID, parseProcId } from "../proc-id";
+import {
+  noteOpencodeAccount,
+  opencodeAccountsFile,
+  servedOpencodeProviders,
+  syncOpencodeMarkers,
+} from "../provider-accounts";
+import { readAccountSoon } from "../provider-usage";
 import { fenced, holdRestart, withRestartHold } from "../restart";
 import { acknowledgeSessionCredential } from "../session-identity";
 import { ensureSessiond, SessiondClient } from "../sessiond-client";
@@ -394,6 +403,25 @@ const STATIC_POLICY = {
 const CODE_MODE_TOOL = "execute";
 
 /** The `opencode serve` this agent launches, under its launch config. */
+/** A session on an account: each turn's end reads the account's windows shortly after. */
+const withAccountReads = (
+  spec: SpawnPayload,
+  ctx: HarnessContext
+): HarnessContext => {
+  const account = spec.accountDir?.accountId;
+  return account
+    ? {
+        ...ctx,
+        busy: (active) => {
+          ctx.busy(active);
+          if (!active) {
+            readAccountSoon(account);
+          }
+        },
+      }
+    : ctx;
+};
+
 const serverSpec = (config: Record<string, unknown>) => ({
   command: resolveBin("opencode") ?? "opencode",
   args: ["serve", "--hostname=127.0.0.1", "--port=0"],
@@ -821,14 +849,98 @@ const announceOpencodeServer = async (
  * anything the model wrote: the model's own `__cawco` is overwritten.
  * The plugin is set up once per directory, which is the workspace's clone
  * for every session a work item runs there.
+ *
+ * It also runs every request of a provider CawCo serves (`served`: OpenCode's
+ * ids of the providers of the accounts on this machine) on the request's
+ * session's account. `chat.headers` stamps each such request with its
+ * session (the hook gets `sessionID`; packages/plugin/src/index.ts), and one
+ * plugin per provider names an `auth` hook whose loader answers
+ * `{ apiKey: <placeholder>, fetch }` — the shape OpenCode's own ChatGPT
+ * plugin uses (packages/opencode/src/plugin/openai/codex.ts). OpenCode 1.18
+ * runs every plugin's loader for the provider, internal ones first and then
+ * these, and merges each into the provider's options, so this `fetch` is the
+ * one the provider's SDK calls (provider.ts; a loader runs only while
+ * OpenCode's own `auth.json` has an entry for the provider, which the agent
+ * keeps: {@link syncOpencodeMarkers}). The fetch reads the stamp's session's
+ * account, its credential from the account's store (asking the agent to
+ * refresh one near its expiry), puts it where the SDK put the placeholder
+ * and sets the provider's own auth headers, and strips the stamp.
  */
-export const buildHandoffPluginSource =
-  (): string => `import { spawn } from "node:child_process";
+export const buildHandoffPluginSource = (
+  served: readonly string[]
+): string => `import { spawn } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { tool } from "@opencode-ai/plugin";
 const cawcoBase = ${JSON.stringify(harnessMcpUrl(""))};
 const cawcoWorkspaces = ${JSON.stringify(workspacesDir())};
 const cawcoCredentials = ${JSON.stringify(opencodeCredentialFile())};
+const cawcoAccountsOfSessions = ${JSON.stringify(opencodeAccountsFile())};
+const cawcoAccountsRoot = ${JSON.stringify(accountsRoot())};
+const cawcoGateway = ${JSON.stringify(`http://127.0.0.1:${mcpGatewayPort()}`)};
+const cawcoServed = new Set(${JSON.stringify(served)});
+const CAWCO_STAMP = "x-cawco-session";
+const CAWCO_PLACEHOLDER = "cawco-account-placeholder";
+const accountOfSession = (sessionID) => {
+  try { return JSON.parse(readFileSync(cawcoAccountsOfSessions, "utf8"))[sessionID]; } catch { return undefined; }
+};
+const heldOf = (account) => {
+  try {
+    const [entry] = Object.entries(JSON.parse(readFileSync(cawcoAccountsRoot + "/" + account + "/credential.json", "utf8")));
+    return entry ? { provider: entry[0], credential: entry[1] } : undefined;
+  } catch { return undefined; }
+};
+// The agent alone refreshes a sign-in: one within two minutes of its expiry
+// is asked for again, and read back once the agent has written it.
+const freshHeld = async (account) => {
+  const held = heldOf(account);
+  if (held?.credential.type !== "oauth" || held.credential.expires - Date.now() > 120000) return held;
+  const asked = await fetch(cawcoGateway + "/accounts/" + encodeURIComponent(account) + "/fresh", { method: "POST" });
+  if (!asked.ok) throw new Error("cawco: the agent did not refresh this account's sign-in: " + (await asked.text()));
+  return heldOf(account);
+};
+const chatgptAccountOf = (token) => {
+  try { return JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString())["https://api.openai.com/auth"]?.chatgpt_account_id; } catch { return undefined; }
+};
+const accountFetch = (opencodeProvider) => async (input, init) => {
+  const headers = new Headers(init?.headers);
+  const sessionID = headers.get(CAWCO_STAMP);
+  headers.delete(CAWCO_STAMP);
+  const account = sessionID ? accountOfSession(sessionID) : undefined;
+  if (!account) throw new Error("cawco: this OpenCode session runs on no CawCo account for " + opencodeProvider + "; CawCo places it on one when it starts or wakes.");
+  const held = await freshHeld(account);
+  if (!held) throw new Error("cawco: CawCo account " + account + " holds no sign-in on this machine.");
+  const { provider, credential } = held;
+  const secret = credential.type === "api_key" ? credential.key : provider === "github-copilot" ? credential.refresh : credential.access;
+  for (const [name, value] of [...headers]) {
+    if (value.includes(CAWCO_PLACEHOLDER)) headers.set(name, value.replaceAll(CAWCO_PLACEHOLDER, secret));
+  }
+  let url = input instanceof URL ? input : new URL(typeof input === "string" ? input : input.url);
+  // ChatGPT: what OpenCode's own codex plugin does with its token.
+  if (provider === "openai-codex") {
+    headers.set("authorization", "Bearer " + secret);
+    const chatgpt = credential.accountId ?? chatgptAccountOf(secret);
+    if (chatgpt) headers.set("ChatGPT-Account-Id", chatgpt);
+    if (url.pathname.includes("/v1/responses") || url.pathname.includes("/chat/completions")) url = new URL("https://chatgpt.com/backend-api/codex/responses");
+  }
+  // Copilot: what OpenCode's own copilot plugin does with the GitHub token.
+  if (provider === "github-copilot") {
+    headers.set("authorization", "Bearer " + secret);
+    headers.set("Openai-Intent", "conversation-edits");
+    if (!headers.has("x-initiator")) headers.set("x-initiator", "user");
+  }
+  return fetch(url, { ...init, headers });
+};
+export const CawcoAccountStamp = async () => ({
+  "chat.headers": async (input, output) => {
+    if (cawcoServed.has(input.model.providerID)) output.headers[CAWCO_STAMP] = input.sessionID;
+  },
+});
+${served
+  .map(
+    (id, index) =>
+      `export const CawcoAccount${index} = async () => ({ auth: { provider: ${JSON.stringify(id)}, loader: async () => ({ apiKey: CAWCO_PLACEHOLDER, fetch: accountFetch(${JSON.stringify(id)}) }), methods: [] } });`
+  )
+  .join("\n")}
 // The workspace whose clone \`directory\` is, by the records the agent keeps
 // for it outside the clone: \`create.json\`, written before the clone is cut and
 // removed only with it, and the running boundary's \`boundary.json\`.
@@ -5343,8 +5455,56 @@ export class OpencodeHarness implements Harness {
     );
   }
 
+  /**
+   * The accounts on this machine changed (one signed in, keyed, moved in or
+   * forgotten): OpenCode's own store gets the markers its plugin loaders need,
+   * and the plugin its auth hook per served provider. OpenCode reads both when
+   * a server starts, so the server is replaced the way a config change
+   * replaces it: a verified candidate, sessions handed over as they come to
+   * rest ({@link #attemptConfigApply}).
+   */
+  /** Every provider OpenCode's models list names (configured ones included), by id and name. */
+  async providerList(): Promise<{ id: string; name: string }[]> {
+    if (resolveBin("opencode") === undefined) {
+      return [];
+    }
+    const listed = await (await this.#ensure()).provider.list({});
+    if (listed.error) {
+      throw new Error(errorText(listed.error));
+    }
+    const data = listed.data as unknown as {
+      all?: { id: string; name?: string }[];
+    };
+    return (data.all ?? []).map((one) => ({
+      id: one.id,
+      name: one.name ?? one.id,
+    }));
+  }
+
+  async accountsChanged(): Promise<void> {
+    await syncOpencodeMarkers();
+    if (!this.#client) {
+      return;
+    }
+    // An apply already under way started before this change: this one waits
+    // for it and applies again, so no change is lost behind its gate.
+    while (this.#applyGate) {
+      // biome-ignore lint/performance/noAwaitInLoops: each apply must finish before the next is started
+      await this.#applyGate.promise;
+    }
+    await this.installDelegationTools();
+    // The config file's hash has not moved, so the watcher sees nothing to
+    // apply: the running server is marked as on no known revision, and the
+    // apply starts now. Until it is replaced, the old server still holds
+    // OpenCode's own copy of whatever it read at start.
+    this.#appliedHash = null;
+    this.#configState = "pending";
+    this.#configError = null;
+    await this.#attemptConfigApply();
+  }
+
   async installDelegationTools(): Promise<void> {
-    const source = buildHandoffPluginSource();
+    const source = buildHandoffPluginSource(servedOpencodeProviders());
     if (await isMachineAgent()) {
       await retireLegacyHandoffPlugin();
       await Bun.$`mkdir -p ${OPENCODE_PLUGINS}`.quiet();
@@ -6032,7 +6192,11 @@ export class OpencodeHarness implements Harness {
     const wave: RecoveryWave = this.#recoveryWave ?? { pending: 0 };
     this.#recoveryWave = wave;
     wave.pending += 1;
-    const recovery = this.#recover(spec, ctx, wave).finally(() => {
+    const recovery = this.#recover(
+      spec,
+      withAccountReads(spec, ctx),
+      wave
+    ).finally(() => {
       this.#pendingRecoveries.delete(ctx.instanceId);
       wave.pending -= 1;
       if (wave.pending === 0 && this.#recoveryWave === wave) {
@@ -6213,9 +6377,11 @@ export class OpencodeHarness implements Harness {
       });
     }
     this.#opening += 1;
-    return this.#spawnResolved(spec, ctx).finally(() => {
-      this.#opening -= 1;
-    });
+    return this.#spawnResolved(spec, withAccountReads(spec, ctx)).finally(
+      () => {
+        this.#opening -= 1;
+      }
+    );
   }
 
   async #spawnResolved(
@@ -6440,6 +6606,10 @@ export class OpencodeHarness implements Harness {
       denied.tools
     );
     this.#sessionOwners.set(ctx.instanceId, identity);
+    // The account its requests run on from now: the CawCo plugin reads it on
+    // each request by OpenCode's session id. A move to another account (or
+    // off one) is this launch with another account, at a turn boundary.
+    await noteOpencodeAccount(sessionId, spec.accountDir?.accountId ?? null);
     // A session an earlier agent left mid-turn: the hub still waits on that
     // turn's end, which the reconcile after its subscription comes up pays.
     if (spec.resume && !spec.resume.fork && turnWasOpen(sessionId)) {

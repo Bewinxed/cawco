@@ -822,8 +822,11 @@ export interface DbShape {
       model?: string;
       workItemId?: string | null;
       parentInstanceId?: string;
-      /** The account it moves to at its old one's limit. */
-      accountId?: string;
+      /**
+       * The account it moves to at its old one's limit, or as its model
+       * changes provider; null when its new model runs on no account.
+       */
+      accountId?: string | null;
       forkedFrom?: string;
       threadId?: string;
       projectId?: string;

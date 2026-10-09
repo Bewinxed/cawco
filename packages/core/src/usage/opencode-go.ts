@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { LimitWindow, OpenCodeGoLimits } from "./types";
@@ -13,10 +12,10 @@ import type { LimitWindow, OpenCodeGoLimits } from "./types";
  *     {"usage":{"rolling":{"status":"ok","percent":0,"resetsAt":"…"},
  *               "weekly":{…},"monthly":{…}}}
  *
- * The key is the one `opencode providers` stored for `opencode-go` in
- * opencode's `auth.json`, read at call time for one request and never logged,
- * persisted or returned. The request goes only to that canonical host and
- * follows no redirect, so the key cannot be handed anywhere else.
+ * The key is an OpenCode Go account's, from its store on the machine, read at
+ * call time for one request and never logged, persisted or returned. The
+ * request goes only to that canonical host and follows no redirect, so the
+ * key cannot be handed anywhere else.
  */
 
 const USAGE_URL = "https://opencode.ai/zen/go/v1/usage";
@@ -46,27 +45,28 @@ const MAPPED = [
   { key: "monthly", kind: "monthly", group: "monthly" },
 ] as const;
 
-/** `$OPENCODE_DATA_DIR` else `~/.local/share/opencode`, where opencode keeps `auth.json`. */
-const dataDir = (): string =>
-  process.env.OPENCODE_DATA_DIR ??
-  join(homedir(), ".local", "share", "opencode");
+/**
+ * The machine's own OpenCode data dir, where it keeps `auth.json`:
+ * `$XDG_DATA_HOME/opencode`, else `~/.local/share/opencode`. OpenCode 1.18
+ * reads `path.join(Global.Path.data, "auth.json")`, its data dir from
+ * xdg-basedir; it has no `OPENCODE_DATA_DIR` (anomalyco/opencode#8963 is
+ * still open).
+ */
+export const opencodeDataDir = (): string =>
+  join(
+    process.env.XDG_DATA_HOME || join(homedir(), ".local", "share"),
+    "opencode"
+  );
 
-let cached: { at: number; value: OpenCodeGoLimits | null } | null = null;
-let lastGood: OpenCodeGoLimits | null = null;
-let coolingUntil = 0;
-let failed: OpenCodeGoLimits | null = null;
-
-/** The machine's OpenCode Go key, or null when it has none. */
-async function goKey(): Promise<string | null> {
-  try {
-    const auth = JSON.parse(
-      await readFile(join(dataDir(), "auth.json"), "utf8")
-    ) as Record<string, { key?: string } | undefined>;
-    return auth["opencode-go"]?.key ?? null;
-  } catch {
-    return null;
-  }
+/** What one key's reads came to: the last answer, the last good one, and a failure cooling down. */
+interface KeyState {
+  cached: { at: number; value: OpenCodeGoLimits } | null;
+  coolingUntil: number;
+  failed: OpenCodeGoLimits | null;
+  lastGood: OpenCodeGoLimits | null;
 }
+
+const states = new Map<string, KeyState>();
 
 /** The answer's windows; a window not `ok` is the one doing the limiting. */
 function windowsOf(body: GoUsageResponse): LimitWindow[] {
@@ -91,23 +91,30 @@ function windowsOf(body: GoUsageResponse): LimitWindow[] {
 }
 
 /**
- * The Go windows, or null on a machine with no `opencode-go` key: no plan, so
- * nothing to meter. A failed read is served as the last good windows marked
- * stale, with the error attached, and is not retried for two minutes.
+ * The Go windows for one OpenCode Go key (an account's, held by the agent);
+ * null for no key: no plan, so nothing to meter. A failed read is served as
+ * the last good windows marked stale, with the error attached, and is not
+ * retried for two minutes.
  */
-export async function fetchOpenCodeGoLimits(): Promise<OpenCodeGoLimits | null> {
-  const now = Date.now();
-  if (failed && now < coolingUntil) {
-    return failed;
-  }
-  if (cached && now - cached.at < CACHE_TTL_MS) {
-    return cached.value;
-  }
-
-  const key = await goKey();
+export async function fetchOpenCodeGoLimits(
+  key: string | null
+): Promise<OpenCodeGoLimits | null> {
   if (!key) {
-    cached = { at: now, value: null };
     return null;
+  }
+  const state: KeyState = states.get(key) ?? {
+    cached: null,
+    coolingUntil: 0,
+    failed: null,
+    lastGood: null,
+  };
+  states.set(key, state);
+  const now = Date.now();
+  if (state.failed && now < state.coolingUntil) {
+    return state.failed;
+  }
+  if (state.cached && now - state.cached.at < CACHE_TTL_MS) {
+    return state.cached.value;
   }
 
   let error: string;
@@ -123,9 +130,9 @@ export async function fetchOpenCodeGoLimits(): Promise<OpenCodeGoLimits | null> 
         fetchedAt: Date.now(),
         windows: windowsOf((await res.json()) as GoUsageResponse),
       };
-      cached = { at: value.fetchedAt, value };
-      lastGood = value;
-      failed = null;
+      state.cached = { at: value.fetchedAt, value };
+      state.lastGood = value;
+      state.failed = null;
       return value;
     }
     error = `HTTP ${res.status}`;
@@ -133,9 +140,9 @@ export async function fetchOpenCodeGoLimits(): Promise<OpenCodeGoLimits | null> 
     error = cause instanceof Error ? cause.message : String(cause);
   }
 
-  failed = lastGood
-    ? { ...lastGood, stale: true, error }
+  state.failed = state.lastGood
+    ? { ...state.lastGood, stale: true, error }
     : { error, fetchedAt: Date.now(), windows: [] };
-  coolingUntil = Date.now() + FAILURE_BACKOFF_MS;
-  return failed;
+  state.coolingUntil = Date.now() + FAILURE_BACKOFF_MS;
+  return state.failed;
 }

@@ -18,6 +18,7 @@ import type {
   FleetScope,
   FleetSyncReport,
   HarnessReport,
+  HomeStore,
   HookEvent,
   HookHandler,
   LandsMode,
@@ -1393,8 +1394,10 @@ export const accountSignins = sqliteTable(
       .references(() => accounts.id, { onDelete: "cascade" }),
     machineId: text("machine_id").notNull(),
     state: text("state").$type<SigninState>().notNull(),
-    /** When the machine's own Claude Code login was moved into this account's dir there; null for a sign-in made in CawCo. */
+    /** When a credential from one of the machine's own stores was moved into this account there; null for a sign-in made in CawCo. */
     movedAt: timestamp("moved_at"),
+    /** The store it was moved from: `claude` (`~/.claude`), `pi` or `opencode` (their own `auth.json`). */
+    movedFrom: text("moved_from").$type<HomeStore>(),
     checkedAt: timestamp("checked_at")
       .notNull()
       .$defaultFn(() => new Date()),

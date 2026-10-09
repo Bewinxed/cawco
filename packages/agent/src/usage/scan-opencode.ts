@@ -1,21 +1,18 @@
 import { Database } from "bun:sqlite";
 import { readdir } from "node:fs/promises";
-import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import type { RawOpenCodeMessage, UsageTokens } from "@cawco/core";
 import { costForUsage, totalTokens } from "@cawco/core";
+import { opencodeDataDir } from "@cawco/core/usage/opencode-go";
 import type { ScannedRecord } from "./types";
 
 /**
  * opencode scanner (USAGE-SPEC.md §2.3, §5.2). Reads the live SQLite database
  * **read-only** — the running opencode process owns it (573 MB, WAL mode), so
- * this must never write, open read-write, or checkpoint it.
+ * this must never write, open read-write, or checkpoint it. The database is
+ * in OpenCode's data dir, `$XDG_DATA_HOME/opencode` else
+ * `~/.local/share/opencode` ({@link opencodeDataDir}).
  */
-
-/** `$OPENCODE_DATA_DIR` else `~/.local/share/opencode`. */
-export const opencodeDataDir = (): string =>
-  process.env.OPENCODE_DATA_DIR ??
-  join(homedir(), ".local", "share", "opencode");
 
 /** `opencode.db` else the first `opencode-*.db`; null when neither exists. */
 export const openDbPath = async (): Promise<string | null> => {

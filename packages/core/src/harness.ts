@@ -958,7 +958,7 @@ export interface HarnessReport {
    * it there. The hub reads it as where each account is signed in. The
    * machine's own `~/.claude` is never read.
    */
-  accounts?: import("./accounts").ClaudeAccountReport[];
+  accounts?: import("./accounts").AccountReport[];
   auth: AuthState;
   /** Why sign-in is unavailable or could not be checked, without credential data. */
   authReason?: string;

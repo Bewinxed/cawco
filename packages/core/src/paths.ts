@@ -1,5 +1,5 @@
-import { type Dirent, readdirSync } from "node:fs";
-import { readdir } from "node:fs/promises";
+import { type Dirent, existsSync, readdirSync } from "node:fs";
+import { readdir, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { sessiondEndpoint } from "./sessiond";
@@ -9,7 +9,7 @@ import { sessiondEndpoint } from "./sessiond";
  * the dashboard bundles for the browser.
  */
 
-/** Where every account's Claude Code config dir lives on a machine. */
+/** Where every account's stores live on a machine, one dir per account. */
 export const accountsRoot = (): string => join(homedir(), ".cawco", "accounts");
 
 /**
@@ -19,16 +19,38 @@ export const accountsRoot = (): string => join(homedir(), ".cawco", "accounts");
 export const accountConfigDir = (accountId: string): string =>
   join(accountsRoot(), accountId, "claude");
 
-/** The ids of the accounts that have a config dir on this machine. */
-export const accountIds = (): string[] => {
+/**
+ * The one store of an account of any provider other than Claude's on this
+ * machine: its credential in pi-ai's credential format, keyed by the
+ * provider's id (`{ "<provider>": { "type": "oauth" | "api_key", … } }`),
+ * owner-only, written and refreshed by the agent alone.
+ */
+export const accountCredentialPath = (accountId: string): string =>
+  join(accountsRoot(), accountId, "credential.json");
+
+const accountsHaving = (entry: string): string[] => {
   try {
     return readdirSync(accountsRoot(), { withFileTypes: true })
-      .filter((entry) => entry.isDirectory())
-      .map((entry) => entry.name);
+      .filter(
+        (dir) =>
+          dir.isDirectory() && existsSync(join(accountsRoot(), dir.name, entry))
+      )
+      .map((dir) => dir.name);
   } catch {
     return [];
   }
 };
+
+/** The ids of the Claude accounts that have a config dir on this machine. */
+export const accountIds = (): string[] => accountsHaving("claude");
+
+/** The ids of the provider accounts that have a credential store on this machine. */
+export const credentialAccountIds = (): string[] =>
+  accountsHaving("credential.json");
+
+/** The account's dir on this machine, gone with everything in it. */
+export const removeAccountRoot = (accountId: string): Promise<void> =>
+  rm(join(accountsRoot(), accountId), { recursive: true, force: true });
 
 /**
  * Every Claude Code config dir on this machine: `$CLAUDE_CONFIG_DIR`

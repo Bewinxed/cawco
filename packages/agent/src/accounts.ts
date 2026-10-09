@@ -7,8 +7,8 @@ import {
   type AccountIdentity,
   type AccountKind,
   type AccountProbe,
+  type AccountReport,
   type AuthState,
-  type ClaudeAccountReport,
   identityOf,
   type ModelInfo,
 } from "@cawco/core";
@@ -114,7 +114,7 @@ export const kindOf = (
 };
 
 /** Every account dir on this machine and whether it is signed in. */
-export const accountReports = (): Promise<ClaudeAccountReport[]> =>
+export const accountReports = (): Promise<AccountReport[]> =>
   Promise.all(
     accountIds().map(async (account) => {
       const status = await authStatusIn(envFor(account));
@@ -180,7 +180,7 @@ const keychainRefused = async (account: string): Promise<boolean> => {
  * else unauthenticated. The machine's own `~/.claude` has no say.
  */
 export const claudeAuth = async (
-  reports: readonly ClaudeAccountReport[]
+  reports: readonly AccountReport[]
 ): Promise<AuthState> => {
   if (reports.some((report) => report.loggedIn)) {
     return "authenticated";

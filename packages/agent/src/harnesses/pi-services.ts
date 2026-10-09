@@ -25,6 +25,7 @@ import {
   type AgentSessionServices,
   createAgentSessionServices,
   ModelRuntime,
+  resolveCliModel,
   SessionManager,
 } from "@earendil-works/pi-coding-agent";
 import { heldSkills, skillDrift } from "../fleet";
@@ -162,11 +163,55 @@ export const contentOf = (content: unknown): string | NeutralContentBlock[] => {
 export const modelIdOf = (model: Model<any>): string =>
   String((model as { id?: unknown }).id ?? "");
 
-export const modelCatalog = async (): Promise<ModelInfo[]> => {
+/**
+ * How CawCo names a pi model: `provider/id`, pi's own `--model` grammar. A
+ * bare id is ambiguous once a proxy and a subscription offer the same model
+ * (`gpt-5.5` from `openai-codex` and from a proxy), and only the provider says
+ * which account, if any, a session runs on.
+ */
+// biome-ignore lint/suspicious/noExplicitAny: pi's model configuration varies across providers; only provider and id are read
+export const piModelValue = (model: Model<any>): string =>
+  `${model.provider}/${modelIdOf(model)}`;
+
+/**
+ * The model a CawCo model value names, by pi's own resolver
+ * (`resolveCliModel`: `provider/id` first, then an id unique among the
+ * providers signed in), and only when `runtime` can run it.
+ */
+export const resolvePiModel = async (
+  runtime: ModelRuntime,
+  value: string
+  // biome-ignore lint/suspicious/noExplicitAny: pi's model configuration varies across providers
+): Promise<Model<any>> => {
+  const resolved = resolveCliModel({ cliModel: value, modelRuntime: runtime });
+  const { model } = resolved;
+  if (!model) {
+    throw new Error(
+      `pi cannot use model ${value}: ${resolved.error ?? "pi knows no such model."}`
+    );
+  }
+  const available = await runtime.getAvailable();
+  if (
+    !available.some(
+      (one) =>
+        one.provider === model.provider && modelIdOf(one) === modelIdOf(model)
+    )
+  ) {
+    throw new Error(
+      `pi cannot use model ${value}: it is not available with the configured provider credentials.`
+    );
+  }
+  return model;
+};
+
+/** The models `runtime` (the machine's own, unless an account's is given) can run. */
+export const modelCatalog = async (
+  runtime?: ModelRuntime
+): Promise<ModelInfo[]> => {
   const { modelRuntime, settingsManager } = await PiProfile.services();
-  const available = await modelRuntime.getAvailable();
+  const available = await (runtime ?? modelRuntime).getAvailable();
   const rows: ModelInfo[] = available.map((model) => ({
-    value: modelIdOf(model),
+    value: piModelValue(model),
     displayName: String((model as { name?: unknown }).name ?? modelIdOf(model)),
     contextWindow: model.contextWindow,
   }));
@@ -179,7 +224,7 @@ export const modelCatalog = async (): Promise<ModelInfo[]> => {
       )
     : undefined;
   const row = resolved
-    ? rows.find((entry) => entry.value === modelIdOf(resolved))
+    ? rows.find((entry) => entry.value === piModelValue(resolved))
     : undefined;
   return row
     ? [...rows, { ...row, value: "default", resolvedModel: row.value }]
@@ -346,18 +391,16 @@ export class PiProfile {
   ): Promise<PiCredentialState | undefined> {
     try {
       const { modelRuntime, settingsManager } = await PiProfile.services();
-      const id =
-        modelId && modelId !== "default"
-          ? modelId
-          : settingsManager.getDefaultModel();
-      const provider =
-        modelId && modelId !== "default"
-          ? undefined
-          : settingsManager.getDefaultProvider();
-      const model = (await modelRuntime.getAvailable()).find(
-        (one) =>
-          modelIdOf(one) === id && (!provider || one.provider === provider)
-      );
+      const defaultId = settingsManager.getDefaultModel();
+      const defaultProvider = settingsManager.getDefaultProvider();
+      const defaultValue =
+        defaultId && defaultProvider
+          ? `${defaultProvider}/${defaultId}`
+          : defaultId;
+      const asked = modelId && modelId !== "default" ? modelId : defaultValue;
+      const model = asked
+        ? await resolvePiModel(modelRuntime, asked).catch(() => undefined)
+        : undefined;
       const credential: PiCredentialState | undefined = model
         ? await checkPiProxyCredential(model)
         : {
@@ -367,8 +410,9 @@ export class PiProfile {
       if (
         !modelId ||
         modelId === "default" ||
-        (modelId === settingsManager.getDefaultModel() &&
-          model?.provider === settingsManager.getDefaultProvider())
+        (model !== undefined &&
+          modelIdOf(model) === defaultId &&
+          model.provider === defaultProvider)
       ) {
         this.#setCredential(credential);
       }

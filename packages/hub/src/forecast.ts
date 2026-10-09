@@ -238,6 +238,7 @@ class Walk {
           machineId: "fleet",
           state: "signed-in" as const,
           movedAt: null,
+          movedFrom: null,
           checkedAt: t,
         })),
     });

@@ -11,6 +11,7 @@ import {
   type AccountReading,
   type AccountSignin,
   DEFAULT_AT_LIMIT,
+  type HomeStore,
   type LimitWindow,
   type ModelInfo,
   type ProviderRouting,
@@ -83,12 +84,12 @@ export interface AccountsDb {
     at?: number
   ) => void;
   /**
-   * Whether the row changed. `movedAt` left out keeps what the row says; a
-   * new row says null.
+   * Whether the row changed. `moved` left out keeps what the row says about
+   * a move (when, and from which store); null clears it; a new row says none.
    */
   readonly putSignin: (
-    signin: Omit<AccountSignin, "checkedAt" | "movedAt"> & {
-      movedAt?: number | null;
+    signin: Omit<AccountSignin, "checkedAt" | "movedAt" | "movedFrom"> & {
+      moved?: { at: number; from: HomeStore } | null;
     }
   ) => boolean;
   readonly readings: () => AccountReading[];
@@ -226,8 +227,9 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
           ...row,
           checkedAt: row.checkedAt.getTime(),
           movedAt: row.movedAt?.getTime() ?? null,
+          movedFrom: row.movedFrom ?? null,
         })),
-    putSignin: ({ accountId, machineId, state, movedAt }) => {
+    putSignin: ({ accountId, machineId, state, moved }) => {
       if (!get(accountId)) {
         return false;
       }
@@ -242,20 +244,22 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
         )
         .get();
       const checkedAt = new Date();
-      let moved = before?.movedAt ?? null;
-      if (movedAt !== undefined) {
-        moved = movedAt === null ? null : new Date(movedAt);
+      let movedAt = before?.movedAt ?? null;
+      let movedFrom = before?.movedFrom ?? null;
+      if (moved !== undefined) {
+        movedAt = moved ? new Date(moved.at) : null;
+        movedFrom = moved?.from ?? null;
       }
       db.insert(accountSignins)
-        .values({ accountId, machineId, state, movedAt: moved, checkedAt })
+        .values({ accountId, machineId, state, movedAt, movedFrom, checkedAt })
         .onConflictDoUpdate({
           target: [accountSignins.accountId, accountSignins.machineId],
-          set: { state, movedAt: moved, checkedAt },
+          set: { state, movedAt, movedFrom, checkedAt },
         })
         .run();
       return (
         before?.state !== state ||
-        (before.movedAt?.getTime() ?? null) !== (moved?.getTime() ?? null)
+        (before.movedAt?.getTime() ?? null) !== (movedAt?.getTime() ?? null)
       );
     },
     removeSignin: (accountId, machineId) =>

@@ -12548,6 +12548,18 @@
     },
     "/api/accounts": {
       "get": {
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "minLength": 1,
+              "pattern": "^[a-z0-9][a-z0-9._-]*$",
+              "type": "string"
+            }
+          }
+        ],
         "operationId": "getApiAccounts",
         "responses": {
           "200": {
@@ -12556,6 +12568,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/getApiAccounts200"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiAccounts 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -12571,14 +12593,17 @@
                 "type": "object",
                 "properties": {
                   "provider": {
-                    "type": "string",
-                    "const": "anthropic"
+                    "minLength": 1,
+                    "pattern": "^[a-z0-9][a-z0-9._-]*$",
+                    "type": "string"
                   },
                   "kind": {
                     "type": "string",
                     "enum": [
                       "subscription",
-                      "console"
+                      "console",
+                      "oauth",
+                      "api_key"
                     ]
                   },
                   "label": {
@@ -12616,12 +12641,39 @@
               }
             }
           },
+          "400": {
+            "description": "postApiAccounts 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
           "422": {
             "description": "postApiAccounts 422",
             "content": {
               "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/accounts/providers": {
+      "get": {
+        "operationId": "getApiAccountsProviders",
+        "responses": {
+          "200": {
+            "description": "getApiAccountsProviders 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiAccountsProviders200"
                 }
               }
             }
@@ -12772,8 +12824,9 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "string",
-              "const": "anthropic"
+              "minLength": 1,
+              "pattern": "^[a-z0-9][a-z0-9._-]*$",
+              "type": "string"
             }
           }
         ],
@@ -12904,8 +12957,9 @@
             "in": "query",
             "required": true,
             "schema": {
-              "type": "string",
-              "const": "anthropic"
+              "minLength": 1,
+              "pattern": "^[a-z0-9][a-z0-9._-]*$",
+              "type": "string"
             }
           }
         ],
@@ -13081,6 +13135,16 @@
               }
             }
           },
+          "400": {
+            "description": "postApiAccountsByIdMachinesByMachineIdSignin 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
           "404": {
             "description": "postApiAccountsByIdMachinesByMachineIdSignin 404",
             "content": {
@@ -13144,10 +13208,7 @@
                   "code": {
                     "type": "string"
                   }
-                },
-                "required": [
-                  "code"
-                ]
+                }
               }
             }
           }
@@ -13159,7 +13220,17 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AccountSigninResult"
+                  "$ref": "#/components/schemas/postApiAccountsByIdMachinesByMachineIdSigninComplete200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiAccountsByIdMachinesByMachineIdSigninComplete 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -13202,6 +13273,142 @@
         }
       }
     },
+    "/api/accounts/{id}/key": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "machineIds": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "key",
+                  "machineIds"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiAccountsByIdKey",
+        "responses": {
+          "200": {
+            "description": "postApiAccountsByIdKey 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiAccountsByIdKey200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiAccountsByIdKey 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiAccountsByIdKey 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiAccountsByIdKey 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/accounts/home-credentials": {
+      "get": {
+        "parameters": [
+          {
+            "name": "machineId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiAccountsHomeCredentials",
+        "responses": {
+          "200": {
+            "description": "getApiAccountsHomeCredentials 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiAccountsHomeCredentials200"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiAccountsHomeCredentials 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "getApiAccountsHomeCredentials 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/accounts/move-login": {
       "post": {
         "requestBody": {
@@ -13213,10 +13420,22 @@
                 "properties": {
                   "machineId": {
                     "type": "string"
+                  },
+                  "store": {
+                    "type": "string",
+                    "enum": [
+                      "claude",
+                      "pi",
+                      "opencode"
+                    ]
+                  },
+                  "provider": {
+                    "type": "string"
                   }
                 },
                 "required": [
-                  "machineId"
+                  "machineId",
+                  "store"
                 ]
               }
             }
@@ -17372,6 +17591,12 @@
           "signins"
         ]
       },
+      "getApiAccountsProviders200": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/ProviderChoice"
+        }
+      },
       "deleteApiAccountsById200": {
         "type": "object",
         "properties": {
@@ -17426,10 +17651,7 @@
             }
           },
           "provider": {
-            "type": "string",
-            "enum": [
-              "anthropic"
-            ]
+            "type": "string"
           }
         },
         "required": [
@@ -17473,14 +17695,187 @@
         ]
       },
       "postApiAccountsByIdMachinesByMachineIdSignin200": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "url": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "url"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "expiresAt": {
+                "type": "number"
+              },
+              "userCode": {
+                "type": "string"
+              },
+              "verificationUrl": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "expiresAt",
+              "userCode",
+              "verificationUrl"
+            ]
+          }
+        ]
+      },
+      "postApiAccountsByIdMachinesByMachineIdSigninComplete200": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/AccountSigninResult"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "state": {
+                "type": "string",
+                "enum": [
+                  "signed-in"
+                ]
+              },
+              "email": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "identity": {
+                "description": "Null when the provider's credential names nobody.",
+                "$ref": "#/components/schemas/AccountIdentity"
+              },
+              "plan": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              }
+            },
+            "required": [
+              "email",
+              "plan",
+              "state"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "state": {
+                "type": "string",
+                "enum": [
+                  "mismatch"
+                ]
+              },
+              "email": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              }
+            },
+            "required": [
+              "email",
+              "state"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "state": {
+                "type": "string",
+                "enum": [
+                  "expired"
+                ]
+              }
+            },
+            "required": [
+              "state"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "state": {
+                "type": "string",
+                "enum": [
+                  "pending"
+                ]
+              }
+            },
+            "required": [
+              "state"
+            ]
+          }
+        ]
+      },
+      "postApiAccountsByIdKey200": {
         "type": "object",
         "properties": {
-          "url": {
-            "type": "string"
+          "machines": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "machineId": {
+                      "type": "string"
+                    },
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "machineId"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "machineId": {
+                      "type": "string"
+                    },
+                    "result": {
+                      "$ref": "#/components/schemas/ProviderSigninResult"
+                    }
+                  },
+                  "required": [
+                    "machineId",
+                    "result"
+                  ]
+                }
+              ]
+            }
           }
         },
         "required": [
-          "url"
+          "machines"
+        ]
+      },
+      "getApiAccountsHomeCredentials200": {
+        "type": "object",
+        "properties": {
+          "claude": {
+            "$ref": "#/components/schemas/HomeLogin"
+          },
+          "credentials": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HomeCredential"
+            }
+          }
+        },
+        "required": [
+          "credentials"
         ]
       },
       "postApiAccountsMoveLogin202": {
@@ -17492,6 +17887,17 @@
           "email": {
             "type": "string"
           },
+          "store": {
+            "enum": [
+              "claude",
+              "opencode",
+              "pi"
+            ],
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
           "waitingFor": {
             "type": "number"
           }
@@ -17499,6 +17905,8 @@
         "required": [
           "accountId",
           "email",
+          "provider",
+          "store",
           "waitingFor"
         ]
       },
@@ -17513,6 +17921,15 @@
                 "machineId": {
                   "type": "string"
                 },
+                "store": {
+                  "$ref": "#/components/schemas/HomeStore"
+                },
+                "storeProvider": {
+                  "type": "string"
+                },
+                "provider": {
+                  "type": "string"
+                },
                 "accountId": {
                   "type": "string"
                 },
@@ -17523,7 +17940,10 @@
               "required": [
                 "accountId",
                 "machineId",
-                "since"
+                "provider",
+                "since",
+                "store",
+                "storeProvider"
               ]
             }
           },
@@ -17541,17 +17961,31 @@
                 "error": {
                   "type": "string"
                 },
-                "store": {
+                "machineId": {
                   "type": "string"
                 },
-                "machineId": {
+                "provider": {
+                  "description": "Who bills the account: a provider id. `anthropic` is a Claude subscription\nor Console organization, for Claude Code alone: Anthropic's terms keep its\nOAuth tokens out of every other product. Any other is a provider pi or\nOpenCode speaks, by pi-ai's id for it (`openai-codex` for a ChatGPT\nsubscription, `github-copilot`, `opencode-go`, `zai`…), or OpenCode's own\nid for one pi-ai has no provider for (`zai-coding-plan`, a configured\n`litellm`) — see {@link ProviderInfo}.",
+                  "type": "string"
+                },
+                "kept": {
+                  "description": "Where the moved credential is kept now, as its owner names it.",
+                  "type": "string"
+                },
+                "store": {
+                  "$ref": "#/components/schemas/HomeStore"
+                },
+                "storeProvider": {
                   "type": "string"
                 }
               },
               "required": [
                 "accountId",
                 "at",
-                "machineId"
+                "machineId",
+                "provider",
+                "store",
+                "storeProvider"
               ]
             }
           }
@@ -18429,7 +18863,7 @@
             "type": "string"
           },
           "accountDir": {
-            "description": "The account the hub placed the session on: its Claude Code runs in that\naccount's own `~/.cawco/accounts/<id>/claude` on the machine, never in the\nmachine's `~/.claude`. Set by the hub on every launch of a Claude session\n— the first and every revive, restore and relaunch — and never by a\nclient. A Claude launch without one is refused on the machine.",
+            "description": "The account the hub placed the session on, and so the store it runs\nfrom on the machine: Claude Code in the account's own\n`~/.cawco/accounts/<id>/claude`, never the machine's `~/.claude`; pi on a\nruntime whose `openai-codex` sign-in is the account's\n`~/.cawco/accounts/<id>/pi/auth.json`; OpenCode on the account's own\nserver, whose `XDG_DATA_HOME` is `~/.cawco/accounts/<id>/opencode-data`.\nSet by the hub on every launch of a session on an account — the first and\nevery revive, restore and relaunch — and never by a client. A Claude\nlaunch without one is refused on the machine; a pi or OpenCode launch\nwithout one runs from the machine's own stores.",
             "type": "object",
             "properties": {
               "accountId": {
@@ -24640,7 +25074,7 @@
             "description": "Claude only: every account's config dir on the machine\n(`~/.cawco/accounts/<id>/claude`) and what `claude auth status` said of\nit there. The hub reads it as where each account is signed in. The\nmachine's own `~/.claude` is never read.",
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/ClaudeAccountReport"
+              "$ref": "#/components/schemas/AccountReport"
             }
           },
           "auth": {
@@ -24678,28 +25112,34 @@
           "installed"
         ]
       },
-      "ClaudeAccountReport": {
-        "description": "What `claude auth status` said about one config dir on a machine: whether\nit is signed in, how, and as whom. Read on every connect and again every\nminute, so a dir signed in as someone else since is seen within a minute.\nThe models it offers are the hub's to ask ({@link CONTROL_PROBE_ACCOUNT}),\nonce per account.",
+      "AccountReport": {
+        "description": "What one account's store on a machine says: whether it is signed in, how,\nand as whom. Claude: `claude auth status` in the account's config dir.\nAny other provider: the credential in the account's `credential.json`, its\nidentity read there (a ChatGPT token's claims, a key's fingerprint). Read\non every connect and again every minute, so a store signed in as someone\nelse since is seen within a minute. A Claude account's models are the\nhub's to ask ({@link CONTROL_PROBE_ACCOUNT}), once per account.",
         "type": "object",
         "properties": {
           "account": {
-            "description": "The account whose dir this is, `~/.cawco/accounts/<id>/claude`.",
+            "description": "The account whose store this is, under `~/.cawco/accounts/<id>/`.",
             "type": "string"
           },
           "identity": {
             "$ref": "#/components/schemas/AccountIdentity",
-            "description": "Who the dir is signed in as: `auth status`'s email and organization name,\nthe same fields its initialize response reports. Absent when it names\nnobody (signed out, an API key, a third-party provider)."
+            "description": "Who the store is signed in as. Absent when it names nobody."
           },
           "kind": {
-            "description": "`console` when `authMethod` says the dir signed in with a Console account.",
+            "description": "`console` for a Claude Console login; `oauth` or `api_key` for any other provider's credential.",
             "enum": [
+              "api_key",
               "console",
+              "oauth",
               "subscription"
             ],
             "type": "string"
           },
           "loggedIn": {
             "type": "boolean"
+          },
+          "provider": {
+            "description": "The provider of the credential held; absent for a Claude dir.",
+            "type": "string"
           }
         },
         "required": [
@@ -24708,7 +25148,7 @@
         ]
       },
       "AccountIdentity": {
-        "description": "Who an account is, as Claude Code's initialize response reports it\n(`account.email`, `account.organization` — the organization's name).",
+        "description": "Who an account is. Claude: as Claude Code's initialize response reports it\n(`account.email`, `account.organization` — the organization's name).\nChatGPT: the access token's claims, read on the machine — the email\n(`https://api.openai.com/profile`.email) and, as `organization`, the ChatGPT\naccount id (`https://api.openai.com/auth`.chatgpt_account_id), the\nworkspace the subscription bills. Another OAuth provider: the email its\ncredential names, if any, and its provider id. A key: its last four\ncharacters (`…a1b2`) and, as `organization`, a fingerprint of it\n(`key:` and the first 16 hex of its SHA-256), so the same key on two\nmachines is one account and the key itself never leaves them.",
         "type": "object",
         "properties": {
           "email": {
@@ -28128,11 +28568,8 @@
             "type": "number"
           },
           "provider": {
-            "description": "Who bills the account. One provider for now; the column is generic.",
-            "type": "string",
-            "enum": [
-              "anthropic"
-            ]
+            "description": "Who bills the account: a provider id. `anthropic` is a Claude subscription\nor Console organization, for Claude Code alone: Anthropic's terms keep its\nOAuth tokens out of every other product. Any other is a provider pi or\nOpenCode speaks, by pi-ai's id for it (`openai-codex` for a ChatGPT\nsubscription, `github-copilot`, `opencode-go`, `zai`…), or OpenCode's own\nid for one pi-ai has no provider for (`zai-coding-plan`, a configured\n`litellm`) — see {@link ProviderInfo}.",
+            "type": "string"
           },
           "reservePct": {
             "description": "New sessions stop being placed on it once its weekly window passes this\npercentage; null: no reserve.",
@@ -28156,14 +28593,17 @@
         ]
       },
       "AccountKind": {
-        "description": "How the account signs in: a Claude subscription (`claude auth login`), or a\nConsole organization billed by API usage (`claude auth login --console`).",
+        "description": "How the account signs in. Claude: a subscription (`claude auth login`) or a\nConsole organization (`claude auth login --console`). Any other provider:\nits own OAuth sign-in through pi-ai (`oauth`), or a key (`api_key`).",
         "enum": [
+          "api_key",
           "console",
+          "oauth",
           "subscription"
         ],
         "type": "string"
       },
       "AccountSignin": {
+        "description": "One account signed in (or not) on one machine: its one credential there,\nwhich every harness on the machine that speaks its provider uses.",
         "type": "object",
         "properties": {
           "accountId": {
@@ -28176,11 +28616,20 @@
             "type": "string"
           },
           "movedAt": {
-            "description": "When the machine's own Claude Code login was moved into this account's\ndir there ({@link CONTROL_MOVE_HOME_LOGIN}), epoch ms; null for a sign-in\nmade in Configure → Accounts.",
+            "description": "When a credential from one of the machine's own stores was moved into\nthis account there ({@link CONTROL_MOVE_HOME_LOGIN},\n{@link CONTROL_MOVE_HOME_CREDENTIAL}), epoch ms; null for a sign-in made\nin Configure → Accounts.",
             "type": [
               "null",
               "number"
             ]
+          },
+          "movedFrom": {
+            "description": "The store it was moved from: `~/.claude`, pi's own `auth.json`, OpenCode's own; null when not moved.",
+            "enum": [
+              "claude",
+              "opencode",
+              "pi"
+            ],
+            "type": "string"
           },
           "state": {
             "$ref": "#/components/schemas/SigninState"
@@ -28214,11 +28663,8 @@
             "$ref": "#/components/schemas/StrategyChoice"
           },
           "provider": {
-            "description": "Who bills the account. One provider for now; the column is generic.",
-            "type": "string",
-            "enum": [
-              "anthropic"
-            ]
+            "description": "Who bills the account: a provider id. `anthropic` is a Claude subscription\nor Console organization, for Claude Code alone: Anthropic's terms keep its\nOAuth tokens out of every other product. Any other is a provider pi or\nOpenCode speaks, by pi-ai's id for it (`openai-codex` for a ChatGPT\nsubscription, `github-copilot`, `opencode-go`, `zai`…), or OpenCode's own\nid for one pi-ai has no provider for (`zai-coding-plan`, a configured\n`litellm`) — see {@link ProviderInfo}.",
+            "type": "string"
           },
           "yours": {
             "$ref": "#/components/schemas/StrategyChoice"
@@ -28441,6 +28887,54 @@
           "readAt"
         ]
       },
+      "ProviderChoice": {
+        "description": "One row of the account picker: a provider and one way its accounts sign\nin. A provider that takes both OAuth and a key is two rows, as Claude is\n(a subscription, and a Console organization).",
+        "type": "object",
+        "properties": {
+          "harnesses": {
+            "description": "The harnesses that use an account of it.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HarnessKind"
+            }
+          },
+          "kind": {
+            "$ref": "#/components/schemas/AccountKind",
+            "description": "The account kind this row adds."
+          },
+          "limits": {
+            "description": "Whether CawCo reads its limits ({@link LIMITED_PROVIDERS}).",
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "provider": {
+            "description": "Who bills the account: a provider id. `anthropic` is a Claude subscription\nor Console organization, for Claude Code alone: Anthropic's terms keep its\nOAuth tokens out of every other product. Any other is a provider pi or\nOpenCode speaks, by pi-ai's id for it (`openai-codex` for a ChatGPT\nsubscription, `github-copilot`, `opencode-go`, `zai`…), or OpenCode's own\nid for one pi-ai has no provider for (`zai-coding-plan`, a configured\n`litellm`) — see {@link ProviderInfo}.",
+            "type": "string"
+          },
+          "signin": {
+            "$ref": "#/components/schemas/SigninKind"
+          }
+        },
+        "required": [
+          "harnesses",
+          "kind",
+          "limits",
+          "name",
+          "provider",
+          "signin"
+        ]
+      },
+      "SigninKind": {
+        "description": "How an account of a kind signs in on a machine. `paste-code`: a link to\nauthorise at, and a code pasted back (Claude Code's `claude auth login`).\n`device-code`: a code entered on any device at the provider's page while\nthe machine waits. `api-key`: a key typed once in the dashboard and relayed\nto the machines picked.",
+        "enum": [
+          "api-key",
+          "device-code",
+          "paste-code"
+        ],
+        "type": "string"
+      },
       "ProviderForecast": {
         "description": "A provider's accounts as a forecast: each account's windows, and which\naccount carries a person's new sessions (`yours`) and a session's\n(`delegates`) from now to the 5-hour horizon.",
         "type": "object",
@@ -28458,11 +28952,8 @@
             }
           },
           "provider": {
-            "description": "Who bills the account. One provider for now; the column is generic.",
-            "type": "string",
-            "enum": [
-              "anthropic"
-            ]
+            "description": "Who bills the account: a provider id. `anthropic` is a Claude subscription\nor Console organization, for Claude Code alone: Anthropic's terms keep its\nOAuth tokens out of every other product. Any other is a provider pi or\nOpenCode speaks, by pi-ai's id for it (`openai-codex` for a ChatGPT\nsubscription, `github-copilot`, `opencode-go`, `zai`…), or OpenCode's own\nid for one pi-ai has no provider for (`zai-coding-plan`, a configured\n`litellm`) — see {@link ProviderInfo}.",
+            "type": "string"
           },
           "yours": {
             "type": "array",
@@ -28591,7 +29082,7 @@
         ]
       },
       "AccountSigninResult": {
-        "description": "How a sign-in ended, and what the dir's Claude Code said once it had.\n`mismatch`: the dir signed in as someone other than the account already\nis, so the machine logged that dir out again.",
+        "description": "How a Claude sign-in ended, and what the dir's Claude Code said once it\nhad. `mismatch`: the dir signed in as someone other than the account\nalready is, so the machine logged that dir out again.",
         "type": "object",
         "properties": {
           "probe": {
@@ -28612,7 +29103,7 @@
         "properties": {
           "identity": {
             "$ref": "#/components/schemas/AccountIdentity",
-            "description": "Who an account is, as Claude Code's initialize response reports it\n(`account.email`, `account.organization` — the organization's name)."
+            "description": "Who an account is. Claude: as Claude Code's initialize response reports it\n(`account.email`, `account.organization` — the organization's name).\nChatGPT: the access token's claims, read on the machine — the email\n(`https://api.openai.com/profile`.email) and, as `organization`, the ChatGPT\naccount id (`https://api.openai.com/auth`.chatgpt_account_id), the\nworkspace the subscription bills. Another OAuth provider: the email its\ncredential names, if any, and its provider id. A key: its last four\ncharacters (`…a1b2`) and, as `organization`, a fingerprint of it\n(`key:` and the first 16 hex of its SHA-256), so the same key on two\nmachines is one account and the key itself never leaves them."
           },
           "models": {
             "type": "array",
@@ -28627,6 +29118,168 @@
         "required": [
           "models"
         ]
+      },
+      "ProviderSigninResult": {
+        "description": "How a provider sign-in (or a key) ended. `signed-in`: as `identity` (its\n`email` said again for a screen; null when the provider names nobody), on\n`plan` (ChatGPT's usage endpoint's `plan_type`, else the token's own claim;\nnull when nothing said). `mismatch`: it signed in as someone other than the\naccount already is, so the machine signed that store out again. `expired`:\nthe code lapsed before it was entered. `pending`: not entered yet; ask\nagain.",
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "state": {
+                "type": "string",
+                "enum": [
+                  "signed-in"
+                ]
+              },
+              "email": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "identity": {
+                "description": "Null when the provider's credential names nobody.",
+                "$ref": "#/components/schemas/AccountIdentity"
+              },
+              "plan": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              }
+            },
+            "required": [
+              "email",
+              "plan",
+              "state"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "state": {
+                "type": "string",
+                "enum": [
+                  "mismatch"
+                ]
+              },
+              "email": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              }
+            },
+            "required": [
+              "email",
+              "state"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "state": {
+                "type": "string",
+                "enum": [
+                  "expired"
+                ]
+              }
+            },
+            "required": [
+              "state"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "state": {
+                "type": "string",
+                "enum": [
+                  "pending"
+                ]
+              }
+            },
+            "required": [
+              "state"
+            ]
+          }
+        ]
+      },
+      "HomeLogin": {
+        "description": "Who a machine's own `~/.claude` is signed in as, by its `claude auth status`.",
+        "type": "object",
+        "properties": {
+          "identity": {
+            "$ref": "#/components/schemas/AccountIdentity",
+            "description": "Who an account is. Claude: as Claude Code's initialize response reports it\n(`account.email`, `account.organization` — the organization's name).\nChatGPT: the access token's claims, read on the machine — the email\n(`https://api.openai.com/profile`.email) and, as `organization`, the ChatGPT\naccount id (`https://api.openai.com/auth`.chatgpt_account_id), the\nworkspace the subscription bills. Another OAuth provider: the email its\ncredential names, if any, and its provider id. A key: its last four\ncharacters (`…a1b2`) and, as `organization`, a fingerprint of it\n(`key:` and the first 16 hex of its SHA-256), so the same key on two\nmachines is one account and the key itself never leaves them."
+          },
+          "kind": {
+            "description": "How the account signs in. Claude: a subscription (`claude auth login`) or a\nConsole organization (`claude auth login --console`). Any other provider:\nits own OAuth sign-in through pi-ai (`oauth`), or a key (`api_key`).",
+            "enum": [
+              "api_key",
+              "console",
+              "oauth",
+              "subscription"
+            ],
+            "type": "string"
+          },
+          "loggedIn": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "loggedIn"
+        ]
+      },
+      "HomeCredential": {
+        "description": "One credential in a harness's own store a CawCo account can hold.",
+        "type": "object",
+        "properties": {
+          "identity": {
+            "$ref": "#/components/schemas/AccountIdentity"
+          },
+          "kind": {
+            "enum": [
+              "api_key",
+              "oauth"
+            ],
+            "type": "string"
+          },
+          "provider": {
+            "description": "The account provider it is for.",
+            "type": "string"
+          },
+          "store": {
+            "$ref": "#/components/schemas/Exclude"
+          },
+          "storeProvider": {
+            "description": "The provider's id in that store, as the store names it (`openai` in OpenCode's for ChatGPT).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "identity",
+          "kind",
+          "provider",
+          "store",
+          "storeProvider"
+        ]
+      },
+      "Exclude": {
+        "enum": [
+          "opencode",
+          "pi"
+        ],
+        "type": "string"
+      },
+      "HomeStore": {
+        "description": "Where a credential moved into an account came from: a harness's own store on the machine.",
+        "enum": [
+          "claude",
+          "opencode",
+          "pi"
+        ],
+        "type": "string"
       },
       "UsageLimitsResponse": {
         "description": "What `/api/usage/limits` returns: every machine's latest readings. A\nmachine's Claude limits are those of the account it runs Claude Code on by\ndefault (its `~/.claude` login), else of the first account signed in there.",

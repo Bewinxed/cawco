@@ -4,11 +4,14 @@ import {
   type AccountKind,
   type AccountOverage,
   type AccountProbe,
+  type AccountProvider,
   type AccountReading,
+  type AccountReport,
   type AccountSignin,
-  type ClaudeAccountReport,
+  CLAUDE_PROVIDER,
   type ClaudeExtraUsage,
   type ClaudeLimits,
+  type ProviderAccountReading,
   type SigninState,
   sameIdentity,
 } from "@cawco/core";
@@ -55,19 +58,24 @@ interface Squared {
 }
 
 /**
- * The account of `identity`: the one already signed in as it, else one made
- * now with no nickname (it goes by its email). Machines signed in as the
- * same email and organization share one account.
+ * The provider's account of `identity`: the one already signed in as it,
+ * else one made now with no nickname (it goes by its email). Machines signed
+ * in as the same identity share one account.
  */
 export const accountOfIdentity = (
   db: DbShape,
   identity: AccountIdentity,
-  kind: AccountKind
+  kind: AccountKind,
+  provider: AccountProvider
 ): Account =>
   db.accounts
     .list()
-    .find((one) => one.identity && sameIdentity(one.identity, identity)) ??
-  db.accounts.create({ provider: "anthropic", kind, identity });
+    .find(
+      (one) =>
+        one.provider === provider &&
+        one.identity &&
+        sameIdentity(one.identity, identity)
+    ) ?? db.accounts.create({ provider, kind, identity });
 
 /**
  * The account's models, read through a probe of its dir on the machine when
@@ -105,8 +113,16 @@ const catalogFor = async (
 const dirState = (
   db: DbShape,
   account: Account,
-  report: ClaudeAccountReport
+  report: AccountReport
 ): SigninState => {
+  if (report.provider && report.provider !== account.provider) {
+    return "mismatch";
+  }
+  // A provider's credential that names nobody (a sign-in with no email) is
+  // signed in as whoever it is; only one that names someone can mismatch.
+  if (report.loggedIn && !report.identity && report.provider) {
+    return "signed-in";
+  }
   if (!(report.loggedIn && report.identity)) {
     return "signed-out";
   }
@@ -121,38 +137,48 @@ const dirState = (
 
 /**
  * Squares the account sign-ins on `machineId` with what its agent just read
- * from every account dir there: who each dir is signed in as decides its
- * sign-in, every time. True when anything changed; `failed` when a catalog
- * probe it needed could not be read, which the caller retries.
+ * from every account store there of one kind: Claude's config dirs
+ * (`claude`), or every other provider's credential stores (`providers`). Who
+ * each store is signed in as decides its sign-in, every time. True when
+ * anything changed; `failed` when a Claude catalog probe it needed could not
+ * be read, which the caller retries.
  */
 export const reconcileAccounts = async (
   db: DbShape,
   machineId: string,
-  reports: ClaudeAccountReport[],
+  scope: "claude" | "providers",
+  reports: AccountReport[],
   probe: AccountProber
 ): Promise<Squared> => {
   const store = db.accounts;
-  const mine = store.signins().filter((one) => one.machineId === machineId);
+  const ofScope = (account: Account | undefined): account is Account =>
+    account !== undefined &&
+    (account.provider === CLAUDE_PROVIDER) === (scope === "claude");
+  const mine = store
+    .signins()
+    .filter(
+      (one) => one.machineId === machineId && ofScope(store.get(one.accountId))
+    );
   let changed = false;
   let failed = false;
 
   for (const report of reports) {
     const found = store.get(report.account);
-    if (!found) {
+    if (!ofScope(found)) {
       continue;
     }
     const state = dirState(db, found, report);
     const account = store.get(found.id) ?? found;
     changed =
       store.putSignin({ accountId: account.id, machineId, state }) || changed;
-    if (state === "signed-in") {
+    if (state === "signed-in" && scope === "claude") {
       // biome-ignore lint/performance/noAwaitInLoops: one dir's Claude Code at a time on the machine
       const read = await catalogFor(db, machineId, account, probe);
       failed = failed || !read;
     }
   }
 
-  // An account dir the machine no longer has is an account it is not signed in to.
+  // An account store the machine no longer has is an account it is not signed in to.
   for (const signin of mine) {
     const gone =
       signin.state !== "signed-out" &&
@@ -244,17 +270,31 @@ export const limitsOf = (
  */
 const speakerAmong = (
   signins: readonly AccountSignin[],
+  claude: ReadonlySet<string>,
   machineId: string
 ): string | undefined =>
   signins.find(
-    (one) => one.machineId === machineId && one.state === "signed-in"
+    (one) =>
+      one.machineId === machineId &&
+      one.state === "signed-in" &&
+      claude.has(one.accountId)
   )?.accountId;
+
+/** The ids of the Claude accounts. */
+const claudeAccounts = (db: DbShape): Set<string> =>
+  new Set(
+    db.accounts
+      .list()
+      .filter((account) => account.provider === CLAUDE_PROVIDER)
+      .map((account) => account.id)
+  );
 
 /** {@link speakerAmong}, reading the sign-ins for one machine's answer. */
 export const machineAccount = (
   db: DbShape,
   machineId: string
-): string | undefined => speakerAmong(db.accounts.signins(), machineId);
+): string | undefined =>
+  speakerAmong(db.accounts.signins(), claudeAccounts(db), machineId);
 
 /** A session as its account is read off it. */
 interface SessionOnAccount {
@@ -284,11 +324,18 @@ const accountsView = (db: DbShape) => {
       return id ? [id] : [];
     })
   );
+  const claude = claudeAccounts(db);
+  // Any other provider's windows are read by its machines every 5 minutes,
+  // whatever runs on it: current while the last read is that recent.
+  const current = (accountId: string, now: number): boolean =>
+    watched.has(accountId) ||
+    (!claude.has(accountId) &&
+      now - (readings.get(accountId)?.lastSeenAt ?? 0) < PROVIDER_CURRENT_MS);
   return {
     accountOf,
-    speakerFor: (machineId: string) => speakerAmong(signins, machineId),
+    speakerFor: (machineId: string) => speakerAmong(signins, claude, machineId),
     limits: (accountId: string, now: number): ClaudeLimits =>
-      limitsOf(readings.get(accountId), watched.has(accountId), now),
+      limitsOf(readings.get(accountId), current(accountId, now), now),
   };
 };
 
@@ -346,6 +393,64 @@ export const machineReadings = (db: DbShape, now = Date.now()) => {
     ];
   });
 };
+
+/** Two of a machine's 5-minute reads: a provider reading younger than this is current. */
+const PROVIDER_CURRENT_MS = 10 * 60_000;
+
+/**
+ * An account's windows as one of its machines just read them from the
+ * provider's own usage endpoint. Kept only while the account is signed in
+ * there; a failed read keeps the last reading as it was, with its time. A
+ * window at its limit benches the account until it resets, as a refused
+ * Claude request does. True when the reading moved.
+ */
+export const noteProviderReading = (
+  db: DbShape,
+  machineId: string,
+  reading: ProviderAccountReading
+): boolean => {
+  const signedIn = db.accounts
+    .signins()
+    .some(
+      (one) =>
+        one.accountId === reading.accountId &&
+        one.machineId === machineId &&
+        one.state === "signed-in"
+    );
+  if (!signedIn) {
+    return false;
+  }
+  if (reading.error) {
+    console.warn(
+      `[accounts] ${reading.accountId}'s windows were not read on ${machineId}: ${reading.error}; the last reading stays`
+    );
+    return false;
+  }
+  db.accounts.putReading(
+    reading.accountId,
+    { windows: reading.windows, subscription: reading.plan },
+    reading.readAt
+  );
+  for (const window of reading.windows) {
+    const until = window.resetsAt ? Date.parse(window.resetsAt) : Number.NaN;
+    if (window.percent >= 100 && Number.isFinite(until) && until > Date.now()) {
+      db.accounts.setBench(reading.accountId, null, until);
+    }
+  }
+  return true;
+};
+
+/**
+ * Whether a pi or OpenCode turn ended on its account's usage limit, by the
+ * error it ended on: ChatGPT answers `usage_limit_reached` ("You've hit your
+ * usage limit"), OpenCode Go a `GoUsageLimitError`, which pi and OpenCode
+ * pass on in their own words.
+ */
+export const providerLimitRefused = (errors: readonly string[]): boolean =>
+  errors.some((error) => PROVIDER_LIMIT.test(error));
+
+const PROVIDER_LIMIT =
+  /usage_limit_reached|usage limit|GoUsageLimitError|rate_limit_exceeded|rate limit reached/i;
 
 /**
  * A `rate_limit_event` from a session on `accountId`: the account's windows

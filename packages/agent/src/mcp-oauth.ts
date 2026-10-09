@@ -209,6 +209,42 @@ async function restartRoute(request: Request): Promise<Response> {
 }
 
 /** One stable loopback endpoint every harness reaches the hub's tools through. */
+/** What refreshes a provider account's sign-in; set by the daemon. */
+let freshener: ((accountId: string) => Promise<void>) | undefined;
+
+export const setAccountFreshener = (
+  fresh: (accountId: string) => Promise<void>
+): void => {
+  freshener = fresh;
+};
+
+/**
+ * `POST /accounts/<id>/fresh`: a pi session or OpenCode's CawCo plugin found
+ * the account's sign-in near its expiry and asks the agent, its only writer,
+ * to refresh it. Answers once it has, with nothing secret: the asker reads
+ * the store again.
+ */
+const ACCOUNT_FRESH_PATH = /^\/accounts\/([^/]+)\/fresh$/;
+
+const freshRoute = async (accountId: string): Promise<Response> => {
+  if (!freshener) {
+    return new Response("The agent is not ready to refresh sign-ins yet.", {
+      status: 503,
+    });
+  }
+  try {
+    await freshener(decodeURIComponent(accountId));
+    return new Response(null, { status: 204 });
+  } catch (error) {
+    return new Response(
+      error instanceof Error ? error.message : String(error),
+      {
+        status: 502,
+      }
+    );
+  }
+};
+
 export const startMcpGateway = async (hubUrl: () => string) => {
   // The one setting every session's config names too: a different port on a
   // live machine leaves its running sessions dialling the old one.
@@ -222,6 +258,10 @@ export const startMcpGateway = async (hubUrl: () => string) => {
         const url = new URL(request.url);
         if (url.pathname === "/restart" || url.pathname === "/restart/fence") {
           return await restartRoute(request);
+        }
+        const fresh = url.pathname.match(ACCOUNT_FRESH_PATH);
+        if (fresh?.[1] && request.method === "POST") {
+          return await freshRoute(fresh[1]);
         }
         if (
           !(

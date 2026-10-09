@@ -306,7 +306,7 @@
    * starts from a session's menu and runs on its parent's account.
    */
   const accountTool = $derived.by((): AccountTool | null => {
-    const provider = providerOf(harness);
+    const provider = providerOf(harness, model);
     const own = (cawco.accounts?.accounts ?? [])
       .filter((one) => one.provider === provider)
       .sort((a, b) => a.order - b.order);

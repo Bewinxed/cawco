@@ -2,12 +2,14 @@ import { readFile, writeFile } from "node:fs/promises";
 import { arch, hostname, platform } from "node:os";
 import { dirname, join } from "node:path";
 import type {
+  AccountIdentity,
   AuthState,
   BuildInfo,
   Envelope,
   HarnessReport,
   HeartbeatAckPayload,
   HeartbeatPayload,
+  ProviderInfo,
   SessionCustody,
   SpawnPayload,
 } from "@cawco/core";
@@ -16,12 +18,19 @@ import {
   CAWCO_ENV,
   CAWCO_HUB_PORT,
   CONFIGURE_BINARY_UPDATES,
+  CONTROL_BEGIN_PROVIDER_LOGIN,
+  CONTROL_COMPLETE_PROVIDER_LOGIN,
+  CONTROL_FORGET_PROVIDER_ACCOUNT,
+  CONTROL_MOVE_HOME_CREDENTIAL,
+  CONTROL_READ_HOME_CREDENTIALS,
   CONTROL_RUN_COMMAND,
   CONTROL_SEARCH_TRANSCRIPTS,
+  CONTROL_SET_PROVIDER_KEY,
   CONTROL_WORKSPACE_ARCHIVE,
   CONTROL_WORKSPACE_BOUNDARY,
   CONTROL_WORKSPACE_CREATE,
   CONTROL_WORKSPACE_MIGRATE,
+  joinProviders,
   UPDATE_CAWCO,
 } from "@cawco/core";
 import { readInstallation } from "@cawco/core/binary-installation";
@@ -48,14 +57,34 @@ import { readConfig } from "./config";
 import { convergeDeniedTools } from "./denied-tools";
 import { rediscoverHub, toWsUrl } from "./discovery";
 import { harnesses } from "./harnesses";
+import type { OpencodeHarness } from "./harnesses/opencode";
 import type { PiHarness } from "./harnesses/pi";
 import { PI_AUTH_CHECK_INTERVAL_MS } from "./harnesses/pi-auth";
 import { cache as transcriptCache } from "./harnesses/transcript-cache";
 import { KeeperWatchdog, machineKeeper } from "./keeper-watchdog";
 import { endOrphanedSignIns, endSignIns } from "./login";
-import { startMcpGateway } from "./mcp-oauth";
+import { setAccountFreshener, startMcpGateway } from "./mcp-oauth";
 import { servingPreviews } from "./preview";
 import { parseProcId, SESSION_PROC_KINDS } from "./proc-id";
+import {
+  beginProviderLogin,
+  completeProviderLogin,
+  endProviderSignIns,
+  forgetProviderAccount,
+  freshen,
+  freshenAll,
+  moveHomeCredential,
+  piProviders,
+  providerAccountReports,
+  readHomeCredentials,
+  setProviderKey,
+  syncOpencodeMarkers,
+} from "./provider-accounts";
+import {
+  machineGoKey,
+  readDueProviderAccounts,
+  setProviderReadingSink,
+} from "./provider-usage";
 import { outbound, redactConsole } from "./redaction";
 import { fenced, setRestartSource } from "./restart";
 import { TranscriptSearchService } from "./search";
@@ -76,6 +105,101 @@ const USAGE_INTERVAL = Duration.seconds(60);
 const USAGE_FULL_REBUILD_MS = 30 * 60 * 1000;
 /** How often every CawCo account dir's `auth status` is read again. */
 const CLAUDE_LOGIN_CHECK_INTERVAL_MS = 60_000;
+/** How often every provider account's OAuth sign-in is checked for a refresh it needs. */
+const ACCOUNT_REFRESH_INTERVAL = Duration.seconds(60);
+
+/** The OpenCode harness, for the accounts' plugin and markers and its provider list. */
+const opencodeAdapter = (): OpencodeHarness | undefined =>
+  harnesses().find((adapter) => adapter.kind === "opencode") as
+    | OpencodeHarness
+    | undefined;
+
+/**
+ * Called whenever this machine's provider accounts changed; the connection
+ * fills it in, so the hub hears it and OpenCode takes it.
+ */
+let providerAccountsChanged: () => void = () => {
+  opencodeAdapter()
+    ?.accountsChanged()
+    .catch((error: unknown) =>
+      console.warn(
+        `[accounts] OpenCode did not take the accounts' change: ${String(error)}`
+      )
+    );
+};
+
+/** The providers an account can be for here: pi-ai's joined with OpenCode's. */
+const machineProviders = async (): Promise<ProviderInfo[]> => {
+  const [pi, opencode] = await Promise.all([
+    piProviders().catch(() => []),
+    opencodeAdapter()
+      ?.providerList()
+      .catch(() => []) ?? [],
+  ]);
+  return joinProviders(pi, opencode);
+};
+
+/** The provider-account controls, each telling the machine's harnesses when the accounts moved. */
+const registerProviderAccounts = (supervisor: SessionSupervisor): void => {
+  const changing =
+    <T>(work: () => Promise<T>) =>
+    async (): Promise<T> => {
+      const result = await work();
+      providerAccountsChanged();
+      return result;
+    };
+  supervisor.registerDaemonFunction(
+    CONTROL_BEGIN_PROVIDER_LOGIN,
+    (id, provider) => beginProviderLogin(id as string, provider as string)
+  );
+  supervisor.registerDaemonFunction(
+    CONTROL_COMPLETE_PROVIDER_LOGIN,
+    async (code, id, expected) => {
+      const result = await completeProviderLogin(
+        (code as string | null) ?? null,
+        id as string,
+        (expected as AccountIdentity | null) ?? null
+      );
+      if (result.state === "signed-in" || result.state === "mismatch") {
+        providerAccountsChanged();
+      }
+      return result;
+    }
+  );
+  supervisor.registerDaemonFunction(
+    CONTROL_SET_PROVIDER_KEY,
+    (id, provider, key, expected) =>
+      changing(() =>
+        setProviderKey(
+          id as string,
+          provider as string,
+          key as string,
+          (expected as AccountIdentity | null) ?? null
+        )
+      )()
+  );
+  supervisor.registerDaemonFunction(CONTROL_FORGET_PROVIDER_ACCOUNT, (id) =>
+    changing(async () => {
+      await forgetProviderAccount(id as string);
+      return { forgotten: true };
+    })()
+  );
+  supervisor.registerDaemonFunction(CONTROL_READ_HOME_CREDENTIALS, () =>
+    readHomeCredentials()
+  );
+  supervisor.registerDaemonFunction(
+    CONTROL_MOVE_HOME_CREDENTIAL,
+    (id, store, storeProvider, expected) =>
+      changing(() =>
+        moveHomeCredential(
+          id as string,
+          store as "pi" | "opencode",
+          storeProvider as string,
+          expected as AccountIdentity
+        )
+      )()
+  );
+};
 
 /** How the hub identifies this machine in its registry. */
 interface MachineIdentity {
@@ -712,16 +836,19 @@ const attach = (
     const pi = harnesses().find((adapter) => adapter.kind === "pi") as
       | PiHarness
       | undefined;
+    let reportedProviderAccounts = providerAccountReports();
     supervisor.reannounce = () => {
       // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — reannounce doesn't await its own send
       void Promise.all([
         Promise.all(harnesses().map((adapter) => adapter.detect())),
         probeTools(),
-      ]).then(([detected, tools]) => {
+        machineProviders(),
+      ]).then(([detected, tools, providers]) => {
         if (socket.readyState !== WebSocket.OPEN) {
           return;
         }
         reportedHarnesses = detected;
+        reportedProviderAccounts = providerAccountReports();
         send(socket, {
           verb: "heartbeat",
           machineId: identity.machineId,
@@ -733,9 +860,35 @@ const attach = (
               : {}),
             harnesses: detected,
             tools,
+            providerAccounts: reportedProviderAccounts,
+            providers,
           } satisfies HeartbeatPayload,
         });
       });
+    };
+    // An account signed in, keyed, moved in or forgotten here: the hub hears
+    // it on the next beat, and OpenCode's server is given its plugin and
+    // markers for the providers the machine's accounts now cover.
+    providerAccountsChanged = () => {
+      reportedProviderAccounts = providerAccountReports();
+      if (socket.readyState === WebSocket.OPEN) {
+        send(socket, {
+          verb: "heartbeat",
+          machineId: identity.machineId,
+          payload: {
+            at: Date.now(),
+            instances: supervisor.instanceIds,
+            providerAccounts: reportedProviderAccounts,
+          } satisfies HeartbeatPayload,
+        });
+      }
+      opencodeAdapter()
+        ?.accountsChanged()
+        .catch((error: unknown) =>
+          console.warn(
+            `[accounts] OpenCode did not take the accounts' change: ${error instanceof Error ? error.message : String(error)}`
+          )
+        );
     };
     supervisor.reannounce();
 
@@ -775,6 +928,11 @@ const attach = (
     yield* Effect.forkScoped(
       Effect.repeat(
         Effect.promise(async () => {
+          if (
+            !Bun.deepEquals(providerAccountReports(), reportedProviderAccounts)
+          ) {
+            providerAccountsChanged();
+          }
           const old = reportedHarnesses.find(
             (report) => report.harness === "claude"
           );
@@ -1192,6 +1350,18 @@ const attach = (
       )
     );
 
+    // A turn on an account reads its windows shortly after; they go to the
+    // hub on this connection as they come.
+    setProviderReadingSink((accounts) => {
+      if (socket.readyState === WebSocket.OPEN) {
+        send(socket, {
+          verb: "usage",
+          machineId: identity.machineId,
+          payload: { accounts },
+        });
+      }
+    });
+
     // Usage, cost & limits (USAGE-SPEC.md §5): scan the machine's transcripts
     // and opencode DB, then report absolute bucket totals with OpenCode Go's
     // windows. A scan failure must never kill the daemon — it hosts the user's
@@ -1207,13 +1377,18 @@ const attach = (
           // The OpenCode Go plan's windows, when this machine holds a Go key.
           // Claude's limits are its accounts', which each session's Claude
           // Code reports as it runs.
+          // The machine's OpenCode Go windows, from its Go account's key, and
+          // every metered account's windows, each every 5 minutes.
           const openCodeGo = yield* Effect.promise(() =>
-            fetchOpenCodeGoLimits()
+            fetchOpenCodeGoLimits(machineGoKey())
+          );
+          const accounts = yield* Effect.promise(() =>
+            readDueProviderAccounts()
           );
           send(socket, {
             verb: "usage",
             machineId: identity.machineId,
-            payload: { buckets, openCodeGo },
+            payload: { buckets, openCodeGo, accounts },
           });
         }).pipe(
           Effect.catchDefect((error) =>
@@ -1362,6 +1537,19 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
     );
     yield* Effect.addFinalizer(() => Effect.sync(() => updater.stop()));
     yield* Effect.forkScoped(Effect.promise(() => updater.start()));
+
+    // Provider accounts: their controls, the agent's own refresh of every
+    // OAuth sign-in (the store's only writer), the refresh pi sessions and
+    // OpenCode's plugin ask for, and OpenCode's markers for them.
+    registerProviderAccounts(supervisor);
+    setAccountFreshener(freshen);
+    yield* Effect.promise(() => syncOpencodeMarkers().catch(() => false));
+    yield* Effect.forkScoped(
+      Effect.repeat(
+        Effect.promise(() => freshenAll()),
+        Schedule.spaced(ACCOUNT_REFRESH_INTERVAL)
+      )
+    );
 
     // A keeper that is alive and answers nobody is restarted through the
     // service manager, which is the only thing that runs it on a managed
@@ -1512,7 +1700,10 @@ export const runDaemon = (auth?: AuthState, rediscover = false): void => {
   };
   process.on("SIGINT", drain).on("SIGTERM", drain);
   // However the daemon ends, a `claude auth login` it holds ends with it.
-  process.on("exit", endSignIns);
+  process.on("exit", () => {
+    endSignIns();
+    endProviderSignIns();
+  });
   process.on("unhandledRejection", (reason: unknown) => {
     Effect.runFork(
       Effect.logError(
