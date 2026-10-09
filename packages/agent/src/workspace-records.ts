@@ -3,7 +3,7 @@
  * outside its clone (`~/.cawco/workspaces/<id>/`): `create.json`, written
  * before the clone is cut, and the running boundary's `boundary.json`.
  */
-import { readdir, readFile } from "node:fs/promises";
+import { readdir, readFile, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { WorkspaceRef } from "@cawco/core";
@@ -31,10 +31,28 @@ export const workspaceRefs = async (): Promise<WorkspaceRef[]> => {
   return refs.filter((ref): ref is WorkspaceRef => Boolean(ref));
 };
 
-/** The workspace whose clone holds `path`, if one does. */
+/** `path` at its real path, links followed; as given when it does not exist. */
+const realOf = (path: string): Promise<string> =>
+  realpath(path).catch(() => path);
+
+/**
+ * The workspace whose clone holds `path`, if one does: the clone itself or
+ * any directory inside it, both at their real paths, whole path segments
+ * only (`/ws/abc` never holds `/ws/abcd`). Of clones inside one another,
+ * the deepest. The bridge plugin's `workspaceOf` (harnesses/opencode.ts)
+ * answers by the same rule inside OpenCode's server.
+ */
 export const workspaceHolding = async (
   path: string
-): Promise<WorkspaceRef | undefined> =>
-  (await workspaceRefs()).find(
-    (ref) => path === ref.path || path.startsWith(`${ref.path}/`)
+): Promise<WorkspaceRef | undefined> => {
+  const at = await realOf(path);
+  const clones = await Promise.all(
+    (await workspaceRefs()).map(async (ref) => ({
+      ref,
+      root: await realOf(ref.path),
+    }))
   );
+  return clones
+    .filter(({ root }) => at === root || at.startsWith(`${root}/`))
+    .sort((a, b) => b.root.length - a.root.length)[0]?.ref;
+};

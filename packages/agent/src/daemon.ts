@@ -73,6 +73,7 @@ import { convergeDeniedTools } from "./denied-tools";
 import { rediscoverHub, toWsUrl } from "./discovery";
 import type { Harness } from "./harness";
 import { harness, harnesses } from "./harnesses";
+import { removeCawcoSessionConfigs } from "./harnesses/opencode";
 import { PI_AUTH_CHECK_INTERVAL_MS } from "./harnesses/pi-auth";
 import { cache as transcriptCache } from "./harnesses/transcript-cache";
 import { KeeperWatchdog, machineKeeper } from "./keeper-watchdog";
@@ -1986,6 +1987,8 @@ export const runDaemon = (auth?: AuthState, rediscover = false): void => {
     // waiting; nothing else could ever end them. Ended before the daemon
     // starts, so no login of this one is mistaken for one of those.
     Effect.promise(() => endOrphanedSignIns()).pipe(
+      // Never rejects: what it cannot judge it leaves and says.
+      Effect.andThen(Effect.promise(() => removeCawcoSessionConfigs())),
       Effect.andThen(startDaemon(auth, rediscover)),
       Effect.catchDefect((error) =>
         Effect.logError(

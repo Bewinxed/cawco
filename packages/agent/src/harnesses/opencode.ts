@@ -24,9 +24,19 @@
 
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { lstat, mkdir, readdir, rename, rm, symlink } from "node:fs/promises";
+import {
+  lstat,
+  mkdir,
+  readdir,
+  readFile,
+  realpath,
+  rename,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { homedir } from "node:os";
-import { isAbsolute, join, relative } from "node:path";
+import { isAbsolute, join } from "node:path";
 import type {
   EffortLevel,
   FleetConfig,
@@ -49,6 +59,7 @@ import type {
   UserAnswers,
   UserQuestion,
   UserQuestionResult,
+  WorkspaceRef,
 } from "@cawco/core";
 import {
   ASK_USER_QUESTION,
@@ -84,6 +95,7 @@ import type { RestartHold } from "@cawco/core/binary-updates";
 import {
   credentialAccountIds,
   WORKSPACE_POLICY_NAME,
+  workspaceScratchDir,
   workspaceStateDir,
   workspacesDir,
 } from "@cawco/core/paths";
@@ -112,6 +124,7 @@ import {
   type Todo,
 } from "@opencode-ai/sdk/v2";
 import { JUDGE_SCRIPT } from "../boundary";
+import { gitIn } from "../checkout-exclude";
 import { delegationHubUrl, harnessMcpUrl } from "../delegation";
 import {
   type OpencodeDenySettings,
@@ -138,6 +151,7 @@ import { fenced, holdRestart, withRestartHold } from "../restart";
 import { acknowledgeSessionCredential } from "../session-identity";
 import { ensureSessiond, SessiondClient } from "../sessiond-client";
 import { resolveBin } from "../tools";
+import { workspaceHolding, workspaceRefs } from "../workspace-records";
 import {
   readJson,
   readSidecar,
@@ -1006,7 +1020,7 @@ const SAVED_OUTPUTS = "opencode-saved-outputs";
  * The plugin is set up once per directory, which is the workspace's clone
  * for every session a work item runs there.
  *
- * In a workspace's clone it also judges every other call before it runs, by
+ * Anywhere inside a workspace's clone it also judges every other call before it runs, by
  * the workspace's policy (`workspace-policy.ts`): OpenCode's file tools
  * (read, edit, write, apply_patch, glob, grep, list, lsp) and MCP calls run
  * in its server, on the host, outside any boundary. A path the policy
@@ -1028,7 +1042,7 @@ const SAVED_OUTPUTS = "opencode-saved-outputs";
  */
 export const buildHandoffPluginSource =
   (): string => `import { spawn } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { tool } from "@opencode-ai/plugin";
@@ -1044,24 +1058,38 @@ if (process.env.CAWCO_XDG_DATA_HOME !== undefined) {
 const cawcoBase = ${JSON.stringify(harnessMcpUrl(""))};
 const cawcoWorkspaces = ${JSON.stringify(workspacesDir())};
 const cawcoCredentials = ${JSON.stringify(opencodeCredentialFile())};
-// The workspace whose clone \`directory\` is, by the records the agent keeps
+const realOf = (path) => { try { return realpathSync(path); } catch { return path; } };
+// The workspace whose clone holds \`directory\`, by the records the agent keeps
 // for it outside the clone: \`create.json\`, written before the clone is cut and
-// removed only with it, and the running boundary's \`boundary.json\`.
+// removed only with it, and the running boundary's \`boundary.json\`, the first
+// that names a path. The clone itself or any directory inside it, both at
+// their real paths, whole path segments only; of clones inside one another,
+// the deepest (the agent's workspaceHolding, workspace-records.ts).
 const workspaceOf = (directory) => {
   let ids = [];
   try { ids = readdirSync(cawcoWorkspaces); } catch { return undefined; }
-  return ids.find((id) => ["create.json", "boundary.json"].some((name) => {
-    try { return JSON.parse(readFileSync(cawcoWorkspaces + "/" + id + "/" + name, "utf8")).path === directory; } catch { return false; }
-  }));
+  const at = realOf(directory);
+  let found;
+  for (const id of ids) {
+    let path;
+    for (const name of ["create.json", "boundary.json"]) {
+      try { path = JSON.parse(readFileSync(cawcoWorkspaces + "/" + id + "/" + name, "utf8")).path; } catch {}
+      if (typeof path === "string") break;
+    }
+    if (typeof path !== "string") continue;
+    const root = realOf(path);
+    if ((at === root || at.startsWith(root + "/")) && !(found && found.root.length >= root.length)) found = { id, root };
+  }
+  return found;
 };
 // The workspace's boundary as it stands at the call. None means the command
 // does not run: never the built-in bash, which would run it outside.
-const boundaryOf = (id, directory) => {
+const boundaryOf = (id, root) => {
   let held;
   try { held = JSON.parse(readFileSync(cawcoWorkspaces + "/" + id + "/boundary.json", "utf8")); } catch (error) {
     throw new Error("cawco: workspace " + id + "'s boundary could not be read (" + error.message + "), so this command did not run. The workspace's next session starts it again.");
   }
-  if (held.path !== directory || typeof held.exec !== "string") {
+  if (typeof held.path !== "string" || realOf(held.path) !== root || typeof held.exec !== "string") {
     throw new Error("cawco: workspace " + id + "'s boundary record does not name this clone, so this command did not run.");
   }
   return held;
@@ -1125,16 +1153,16 @@ const sessionEnv = (sessionID) => {
   const held = sessionHeld(sessionID);
   return held ? { ${JSON.stringify(CAWCO_ENV.instanceId)}: held.instanceId, ${JSON.stringify(CAWCO_ENV.sessionCredential)}: held.credential } : {};
 };
-const boundedBash = (id, directory) => tool({
-  description: "Runs a bash command inside this workspace's boundary, in the workspace's clone unless workdir says otherwise. The command can write only the clone, /tmp (the workspace's own) and the workspaces' own package cache; it reads none of the credentials CawCo, the harnesses and the machine's tools keep; it sees and signals only this workspace's processes, and cannot reach the service manager. Each call is a fresh shell. The output is stdout and stderr together, cut at 30000 characters.",
+const boundedBash = (id, root) => tool({
+  description: "Runs a bash command inside this workspace's boundary, in the session's directory unless workdir says otherwise. The command can write only the clone, /tmp (the workspace's own) and the workspaces' own package cache; it reads none of the credentials CawCo, the harnesses and the machine's tools keep; it sees and signals only this workspace's processes, and cannot reach the service manager. Each call is a fresh shell. The output is stdout and stderr together, cut at 30000 characters.",
   args: {
     command: tool.schema.string().describe("The command to run"),
     timeout: tool.schema.number().optional().describe("Milliseconds before the command is killed: 120000 unless given, at most 600000"),
-    workdir: tool.schema.string().optional().describe("The directory to run in; the workspace's clone unless given"),
+    workdir: tool.schema.string().optional().describe("The directory to run in; the session's directory unless given"),
     description: tool.schema.string().describe("What the command does, in 5-10 words"),
   },
   async execute(args, context) {
-    const held = boundaryOf(id, directory);
+    const held = boundaryOf(id, root);
     const timeout = Math.min(args.timeout ?? 120000, 600000);
     const child = spawn(held.exec, [args.command], { cwd: args.workdir ?? context.directory, env: { ...process.env, ...sessionEnv(context.sessionID) }, detached: true, stdio: ["ignore", "pipe", "pipe"] });
     let output = "";
@@ -1157,7 +1185,9 @@ const boundedBash = (id, directory) => tool({
   },
 });
 export const CawcoContext = async ({ directory, serverUrl }) => {
-const workspace = workspaceOf(directory);
+// A session anywhere inside a workspace's clone is that workspace's.
+const holding = workspaceOf(directory);
+const workspace = holding?.id;
 // Each session's parent, as its server keeps it (\`parentID\`, GET
 // /session/:sessionID): a subagent reads back what its parents saved too,
 // the files OpenCode's hint hands it. A session's parent never changes.
@@ -1219,7 +1249,7 @@ return ({
         return written.text();
       }
     }),
-    ...(workspace ? { bash: boundedBash(workspace, directory) } : {})
+    ...(holding ? { bash: boundedBash(holding.id, holding.root) } : {})
   },
   // A workspace's own config, given to its directory's instance as OpenCode
   // loads it, never written into the clone: plugins run before anything
@@ -1233,10 +1263,11 @@ return ({
   config: async (cfg) => {
     if (!workspace) return;
     const state = cawcoWorkspaces + "/" + workspace;
-    const { scratch } = JSON.parse(readFileSync(state + "/" + ${JSON.stringify(WORKSPACE_POLICY_NAME)}, "utf8"));
+    // The clone too: in a directory inside it, roots/list names that directory alone.
+    const { clone, scratch } = JSON.parse(readFileSync(state + "/" + ${JSON.stringify(WORKSPACE_POLICY_NAME)}, "utf8"));
     const devtools = cfg.mcp?.[${JSON.stringify(CHROME_DEVTOOLS)}];
-    if (devtools?.type === "local" && Array.isArray(devtools.command) && typeof scratch === "string") {
-      cfg.mcp[${JSON.stringify(CHROME_DEVTOOLS)}] = { ...devtools, command: [...devtools.command, "--filesystem-root=" + scratch] };
+    if (devtools?.type === "local" && Array.isArray(devtools.command) && typeof scratch === "string" && typeof clone === "string") {
+      cfg.mcp[${JSON.stringify(CHROME_DEVTOOLS)}] = { ...devtools, command: [...devtools.command, "--filesystem-root=" + scratch, "--filesystem-root=" + clone] };
     }
     if (existsSync(state + "/" + ${JSON.stringify(PLAN_AGENT_OFF)})) {
       cfg.agent = { ...cfg.agent, plan: { ...cfg.agent?.plan, disable: true } };
@@ -1531,8 +1562,9 @@ const syncPlanAgent = async (
  * off machine-wide, `syncPlanAgent`): a {@link PLAN_AGENT_OFF} mark in its
  * workspace's state dir, which the bridge plugin's `config` hook reads as
  * the clone's instance loads and turns into `agent.plan.disable` there.
- * Nothing is written into the clone. A session that runs anywhere but its
- * own workspace's clone is said in the log and left as it is.
+ * Nothing is written into the clone. The workspace is the one whose clone
+ * holds the session's directory, as the plugin finds it; a session outside
+ * every clone is said in the log and left as it is.
  */
 const disablePlanAgentFor = async (
   spec: SpawnPayload,
@@ -1541,14 +1573,125 @@ const disablePlanAgentFor = async (
   if (!spec.cawcoTodos || (await resolvedFleetDenials()).cawcoTodos) {
     return;
   }
-  const { workspace } = spec;
-  if (!workspace || relative(workspace.path, cwd) !== "") {
+  const workspace = await workspaceHolding(cwd);
+  if (!workspace) {
     console.warn(
-      `[opencode] ${spec.instanceId}: its delegate type turns CawCo's to-dos on, but it runs in ${cwd}, not in a workspace's clone, so OpenCode's plan agent is left as it is there.`
+      `[opencode] ${spec.instanceId}: its delegate type turns CawCo's to-dos on, but it runs in ${cwd}, inside no workspace's clone, so OpenCode's plan agent is left as it is there.`
     );
     return;
   }
   await Bun.write(join(workspaceStateDir(workspace.id), PLAN_AGENT_OFF), "");
+};
+
+/** A line CawCo's `excludeFromCheckout` added for an `opencode.jsonc` it wrote into a clone, at its root or in a directory inside it. */
+const CAWCO_CONFIG_LINE = /^\/(?:.+\/)?opencode\.jsonc$/;
+
+/**
+ * Every `opencode.jsonc` CawCo's earlier writers could have left in a
+ * workspace's clone (e1ab8f11's `capturesToScratch` and the clone-config
+ * `disablePlanAgentFor` before it), exactly as `writeJson` wrote it
+ * (`JSON.stringify(value, null, 2)`): `agent.plan.disable`, an `mcp` holding
+ * the fleet's chrome-devtools entry with the scratch as a filesystem root,
+ * or the empty `mcp` left once the fleet dropped that server, alone or
+ * together, in the order the writes came.
+ */
+const cawcoSessionConfigs = (
+  root: Record<string, unknown> | undefined
+): Buffer[] => {
+  const agent = { plan: { disable: true } };
+  const shapes: Record<string, unknown>[] = [{ agent }];
+  for (const mcp of [{}, ...(root ? [{ [CHROME_DEVTOOLS]: root }] : [])]) {
+    shapes.push({ mcp }, { agent, mcp }, { mcp, agent });
+  }
+  return shapes.map((shape) => Buffer.from(JSON.stringify(shape, null, 2)));
+};
+
+/** The CawCo-written `opencode.jsonc` files {@link removeCawcoSessionConfigs} removes from one clone, and their exclude lines; how many. */
+const removeCawcoSessionConfigsIn = async (
+  ref: WorkspaceRef,
+  fleet: Record<string, unknown>
+): Promise<number> => {
+  const exclude = await gitIn(ref.path, [
+    "rev-parse",
+    "--path-format=absolute",
+    "--git-path",
+    "info/exclude",
+  ]);
+  if (!exclude) {
+    return 0;
+  }
+  const lines = (await readFile(exclude, "utf8").catch(() => "")).split("\n");
+  const top = await realpath(ref.path);
+  const known = cawcoSessionConfigs(
+    fleet.type === "local" && Array.isArray(fleet.command)
+      ? {
+          ...fleet,
+          command: [
+            ...fleet.command,
+            `--filesystem-root=${workspaceScratchDir(ref.id)}`,
+          ],
+        }
+      : undefined
+  );
+  const gone: string[] = [];
+  for (const line of lines.filter((one) => CAWCO_CONFIG_LINE.test(one))) {
+    const inside = line.slice(1);
+    const file = join(top, inside);
+    // biome-ignore lint/performance/noAwaitInLoops: one clone's few lines, each read and judged in turn
+    const bytes = await readFile(file).catch(() => undefined);
+    if (
+      bytes &&
+      known.some((one) => one.equals(bytes)) &&
+      (await gitIn(top, ["ls-files", "--error-unmatch", "--", inside])) ===
+        undefined
+    ) {
+      await rm(file);
+      gone.push(line);
+    }
+  }
+  if (gone.length > 0) {
+    await writeFile(
+      exclude,
+      lines.filter((line) => !gone.includes(line)).join("\n")
+    );
+  }
+  return gone.length;
+};
+
+/**
+ * At the agent's start: the `opencode.jsonc` files CawCo once wrote into
+ * workspace clones (the bridge plugin's `config` hook gives an instance that
+ * config now, and nothing is written into a clone), each removed with its
+ * `info/exclude` line only when it is byte for byte what CawCo's writer made
+ * for that workspace ({@link cawcoSessionConfigs}) and untracked; every
+ * other file is left as it is. Says how many it removed.
+ */
+export const removeCawcoSessionConfigs = async (): Promise<void> => {
+  let removed = 0;
+  try {
+    const fleet = recordOf(
+      recordOf((await readJson<{ mcp?: unknown }>(OPENCODE_CONFIG))?.mcp)[
+        CHROME_DEVTOOLS
+      ]
+    );
+    for (const ref of await workspaceRefs()) {
+      try {
+        // biome-ignore lint/performance/noAwaitInLoops: clones are judged one at a time, at start, off the hot path
+        removed += await removeCawcoSessionConfigsIn(ref, fleet);
+      } catch (error) {
+        console.warn(
+          `[opencode] workspace ${ref.id}: its clone's opencode.jsonc is left as it is: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    }
+  } catch (error) {
+    console.warn(
+      `[opencode] the opencode.jsonc files CawCo once wrote into clones were not looked for: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+  console.log(
+    `[opencode] start: removed ${removed} opencode.jsonc file(s) CawCo once wrote into workspace clones`
+  );
 };
 
 const EFFORT_LEVELS: EffortLevel[] = ["low", "medium", "high", "xhigh", "max"];

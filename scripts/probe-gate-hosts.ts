@@ -6,8 +6,11 @@
  * workspace session's chrome-devtools-mcp writes captures to the workspace's
  * scratch and refuses a path outside the clone and the scratch; two
  * workspaces' sessions on one OpenCode server each read back the output it
- * was told it saved and are refused the other's; and neither clone (each a
- * `git clone --shared` of this repository) shows anything CawCo wrote.
+ * was told it saved and are refused the other's; a session in a directory
+ * inside a clone is judged and bounded as that clone's; the opencode.jsonc
+ * CawCo once wrote into clones is removed at the agent's start and nothing
+ * else is; and neither clone (each a `git clone --shared` of this
+ * repository) shows anything CawCo wrote.
  *
  *   bun scripts/probe-gate-hosts.ts
  *
@@ -18,7 +21,7 @@
  * relaunch — stop the session at its turn boundary, spawn it again on its
  * conversation — is played here as the hub's `relaunchOntoHook` plays it.
  */
-import { chmod, copyFile, mkdir, readdir, rm } from "node:fs/promises";
+import { chmod, copyFile, mkdir, readdir, rm, symlink } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -115,6 +118,7 @@ for (const level of ["log", "info", "warn"] as const) {
 //   READ <path>       call the harness's `read` on <path>
 //   SHOT <path>       call chrome-devtools' take_screenshot with filePath <path>
 //   LONG              call `bash` on a command whose output OpenCode cuts
+//   BOUNDED           call `bash` on a command that names its boundary
 // A request whose last message is a tool result is answered in text.
 interface Item {
   content?: unknown;
@@ -219,6 +223,9 @@ const LONG = /\bLONG\b/;
 const SAVED = /Full output saved to: ([^\s"\\]+)/;
 /** 5000 lines: past OpenCode's 2000-line cut (tool/truncate.ts MAX_LINES), under the bash tool's own 30000 characters. */
 const LONG_COMMAND = "seq 1 5000";
+const BOUNDED = /\bBOUNDED\b/;
+/** What the probe's boundary runner sets; OpenCode's own bash never has it. */
+const BOUNDED_COMMAND = 'echo "boundary=$CAWCO_PROBE_BOUNDARY pwd=$PWD"';
 const mock = Bun.serve({
   hostname: "127.0.0.1",
   port: 0,
@@ -247,6 +254,12 @@ const mock = Bun.serve({
     const holding = text.match(HOLD)?.[1];
     if (holding) {
       return answer(`released ${holding}`, undefined, hold(holding));
+    }
+    if (BOUNDED.test(text)) {
+      return answer("", {
+        name: "bash",
+        args: { command: BOUNDED_COMMAND, description: "Name the boundary" },
+      });
     }
     if (LONG.test(text)) {
       return answer("", {
@@ -408,7 +421,12 @@ const workspaceAt = async (id: string, dir: string) => {
     join(state, JUDGE_SCRIPT)
   );
   const exec = join(state, "exec");
-  await Bun.write(exec, '#!/bin/sh\nexec /bin/sh -c "$1"\n');
+  // The probe's boundary runner: it tags the command's environment with its
+  // workspace, so a command's output says which boundary ran it.
+  await Bun.write(
+    exec,
+    `#!/bin/sh\nCAWCO_PROBE_BOUNDARY=${id} exec /bin/sh -c "$1"\n`
+  );
   await chmod(exec, 0o755);
   const record = {
     exec,
@@ -901,7 +919,151 @@ try {
     }
   );
 
-  // ── 5. Nothing CawCo wrote shows in either clone ───────────────────────
+  // ── 5. A session in a directory inside a clone is that clone's ─────────
+  // Its spawn names no workspace: the clone that holds its directory does.
+  // Beside it, the agent's own lookup on that directory, a link into it,
+  // and the clone whose path extends this one's (`clone` and `clone-b`).
+  const inside = join(clone, "packages", "agent");
+  const SUB = "gate-probe-opencode-sub";
+  const seenSub = watch(SUB, { boundary, clone: inside });
+  const { workspace: _named, ...unnamed } = ocSpec;
+  const sub = await opencode.spawn(
+    { ...unnamed, instanceId: SUB, cwd: inside },
+    seenSub.ctx
+  );
+  sub.attached?.();
+  const subRead = await turn(sub, seenSub, `READ ${secret}`);
+  const subBash = await turn(sub, seenSub, "BOUNDED");
+  const siblingBash = await turn(sessionB, seenB, "BOUNDED");
+  await sub.dispose();
+  const { workspaceHolding } = await import(
+    "../packages/agent/src/workspace-records"
+  );
+  const link = join(sandbox, "into-clone");
+  await symlink(inside, link);
+  const holding = {
+    inside: (await workspaceHolding(inside))?.id,
+    link: (await workspaceHolding(link))?.id,
+    sibling: (await workspaceHolding(join(other.clone, "packages")))?.id,
+    outside: (await workspaceHolding(sandbox))?.id ?? null,
+  };
+  check(
+    "opencode: a session in a directory inside a clone is judged and its bash runs in that clone's boundary; the agent finds the clone the same way",
+    refusedRead(subRead) &&
+      subBash.some(
+        (one) =>
+          one.text.includes(`boundary=${WS} `) &&
+          one.text.includes(`pwd=${inside}`)
+      ) &&
+      siblingBash.some((one) => one.text.includes(`boundary=${other.id} `)) &&
+      holding.inside === WS &&
+      holding.link === WS &&
+      holding.sibling === other.id &&
+      holding.outside === null,
+    { subRead, subBash, siblingBash, holding }
+  );
+
+  // ── 6. The opencode.jsonc CawCo once wrote goes at the agent's start ───
+  // As e1ab8f11 wrote it (capturesToScratch through mergeSessionConfig and
+  // writeJson): `{ ...stored, mcp: { ...others, [CHROME_DEVTOOLS]: { ...entry,
+  // command: [...entry.command, `--filesystem-root=${boundary.scratch}`] } } }`,
+  // `JSON.stringify(value, null, 2)`, `entry` the fleet's chrome-devtools,
+  // `stored` `{}` or what disablePlanAgentFor wrote first. Beside them, two
+  // that are not byte for byte what the writer made for their workspace.
+  const { excludeFromCheckout } = await import(
+    "../packages/agent/src/checkout-exclude"
+  );
+  const { removeCawcoSessionConfigs } = await import(
+    "../packages/agent/src/harnesses/opencode"
+  );
+  const fleetEntry = (
+    JSON.parse(
+      await Bun.file(join(home, ".config", "opencode", "opencode.json")).text()
+    ) as { mcp: Record<string, { command: string[] }> }
+  ).mcp["chrome-devtools"] as { command: string[] };
+  const e1ab8f11 = (stored: object, root: string) =>
+    JSON.stringify(
+      {
+        ...stored,
+        mcp: {
+          "chrome-devtools": {
+            ...fleetEntry,
+            command: [...fleetEntry.command, `--filesystem-root=${root}`],
+          },
+        },
+      },
+      null,
+      2
+    );
+  const excludeOf = (dir: string) => join(dir, ".git", "info", "exclude");
+  const pristine = {
+    a: await Bun.file(excludeOf(clone)).text(),
+    b: await Bun.file(excludeOf(other.clone)).text(),
+  };
+  const written = [
+    {
+      file: join(clone, "opencode.jsonc"),
+      text: e1ab8f11({}, paths.workspaceScratchDir(WS)),
+      ours: true,
+    },
+    {
+      file: join(inside, "opencode.jsonc"),
+      text: e1ab8f11(
+        { agent: { plan: { disable: true } } },
+        paths.workspaceScratchDir(WS)
+      ),
+      ours: true,
+    },
+    // Another workspace's scratch: not what the writer made for this one.
+    {
+      file: join(other.clone, "opencode.jsonc"),
+      text: e1ab8f11({}, paths.workspaceScratchDir(WS)),
+      ours: false,
+    },
+    // One byte past what the writer made.
+    {
+      file: join(other.clone, "packages", "core", "opencode.jsonc"),
+      text: `${e1ab8f11({}, paths.workspaceScratchDir(other.id))}\n`,
+      ours: false,
+    },
+  ];
+  for (const one of written) {
+    // biome-ignore lint/performance/noAwaitInLoops: each exclude line is appended to its clone's file in turn
+    await Bun.write(one.file, one.text);
+    await excludeFromCheckout(one.file);
+  }
+  const startedAt = said.length;
+  await removeCawcoSessionConfigs();
+  const left = await Promise.all(
+    written.map(async (one) => ({
+      file: one.file,
+      ours: one.ours,
+      present: await Bun.file(one.file).exists(),
+    }))
+  );
+  const excludeB = await Bun.file(excludeOf(other.clone)).text();
+  const excludeA = await Bun.file(excludeOf(clone)).text();
+  const startLine = said
+    .slice(startedAt)
+    .find((line) => line.includes("[opencode] start: removed"));
+  check(
+    "agent start: the opencode.jsonc CawCo wrote is removed with its exclude line; any other is left",
+    left.every((one) => one.present === !one.ours) &&
+      excludeA === pristine.a &&
+      excludeB.includes("\n/opencode.jsonc\n") &&
+      excludeB.includes("\n/packages/core/opencode.jsonc\n") &&
+      startLine?.includes("removed 2 ") === true,
+    { left, excludeA, excludeB, startLine }
+  );
+  // What the probe itself left in the other clone goes before git status.
+  await Promise.all(
+    written
+      .filter((each) => !each.ours)
+      .map((one) => rm(one.file, { force: true }))
+  );
+  await Bun.write(excludeOf(other.clone), pristine.b);
+
+  // ── 7. Nothing CawCo wrote shows in either clone ───────────────────────
   const statusOf = async (dir: string) => ({
     status: (await Bun.$`git -C ${dir} status --porcelain`.text()).trim(),
     ignored: (

@@ -1966,7 +1966,11 @@ export class SessionSupervisor {
 
       // A work item's session runs every shell command inside its workspace's
       // boundary, and does not start without one: the refusal is the spawn's.
-      const boundary = await boundaryFor(payload.workspace);
+      // A spawn that names no workspace but runs anywhere inside a
+      // workspace's clone runs inside that clone's.
+      const boundary = await boundaryFor(
+        payload.workspace ?? (await workspaceHolding(workdir))
+      );
       if (payload.ingested) {
         this.#ingested.set(instanceId, payload.ingested);
       }
