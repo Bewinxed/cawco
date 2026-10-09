@@ -378,6 +378,8 @@ const repoLeaf = (repo: string): string =>
 
 const URL_SCHEME_RE = /^[a-z][a-z0-9+.-]*:\/\//i;
 const SCP_LIKE_RE = /^[^/]+@[^:]+:/;
+/** A reason's own full stop, dropped where a sentence carries on after it. */
+const FINAL_STOP = /\.$/;
 /** Trailing slashes, but never the one that alone makes the path `/`. */
 const TRAILING_SLASHES_RE = /(?!^)\/+$/;
 
@@ -931,7 +933,7 @@ export class SessionSupervisor {
     this.#custodyState = "failed";
     this.#custodyError =
       problem instanceof Error ? problem.message : String(problem);
-    const message = `Machine custody recovery failed: ${this.#custodyError}. Recovery retries while connected; idle-gated operations remain held.`;
+    const message = `Machine custody recovery failed: ${this.#custodyError.replace(FINAL_STOP, "")}. Recovery retries while connected; idle-gated operations remain held.`;
     const ids = [...this.#custodyInstances];
     for (const instanceId of ids) {
       this.sink({ kind: "error", instanceId, verb: "register", message });
