@@ -56,6 +56,9 @@ final class PaywallController: ObservedViewController {
     private let close: GhostIconButton
     /// The close button's leading inset, set from the still's leading rail once the band is laid out.
     private let closeLeading: NSLayoutConstraint
+    /// The band's edge in the sheet's appearance, and the disc the × stands on over the film.
+    private let bandEdge = BandEdge()
+    private let closeScrim = CloseScrim()
     let scroll = UIScrollView()
     private let panel = UIStackView()
     private var screen: Screen
@@ -138,6 +141,8 @@ final class PaywallController: ObservedViewController {
             if closeLeading.constant != inset { closeLeading.constant = inset }
         }
         view.addSubview(hero)
+        view.addSubview(bandEdge)
+        view.addSubview(closeScrim)
         view.addSubview(close)
         panel.axis = .vertical
         panel.spacing = Space.space3
@@ -158,6 +163,12 @@ final class PaywallController: ObservedViewController {
             hero.heightAnchor.constraint(lessThanOrEqualToConstant: 300),
             close.topAnchor.constraint(equalTo: hero.topAnchor, constant: Space.space2),
             closeLeading,
+            bandEdge.topAnchor.constraint(equalTo: hero.topAnchor),
+            bandEdge.leadingAnchor.constraint(equalTo: hero.leadingAnchor),
+            bandEdge.trailingAnchor.constraint(equalTo: hero.trailingAnchor),
+            bandEdge.bottomAnchor.constraint(equalTo: hero.bottomAnchor),
+            closeScrim.centerXAnchor.constraint(equalTo: close.centerXAnchor),
+            closeScrim.centerYAnchor.constraint(equalTo: close.centerYAnchor),
             scroll.topAnchor.constraint(equalTo: hero.bottomAnchor, constant: Space.space4),
             scroll.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: view.trailingAnchor),
@@ -287,8 +298,10 @@ final class PaywallController: ObservedViewController {
             // P1c: the App Store didn't answer; Caw alone, awake and still (the owner's
             // "Neutral/concerned face": trying's furrowed loop read as blame here).
             if Pro.shared.catalog == .failed, Pro.shared.canMakePayments == true { return .stage(.ready) }
-            // P1e: the scene stays, Caw over the card, idle. P1 is the film alone.
-            return .scene(form == .ended ? .idle : nil)
+            // P1e: the scene stays, Caw over the card, awake and looking out: idle's
+            // loops sleep, and a sleeping near-black bird read as nothing on the band.
+            // P1 is the film alone.
+            return .scene(form == .ended ? .ready : nil)
         case .buying: return .stage(.working)
         // S1, and S2 (S1 unchanged under iOS's prompt).
         case .started, .asking: return .scene(.done)
@@ -487,6 +500,7 @@ final class PaywallController: ObservedViewController {
         // A sheet that opened on the stage (P1c) plays the film once the scene first shows.
         if case .scene = hero.mode, viewIfLoaded?.window != nil { hero.settleIn() }
         close.isHidden = screen == .asking
+        closeScrim.isHidden = close.isHidden
         turnOnButton?.busy = screen == .asking
         turnOnButton?.isEnabled = screen != .asking
         switch screen {
@@ -972,6 +986,57 @@ private final class TimelineDisc: UIView {
 
     private func paint() {
         layer.borderColor = Palette.imageOutline.resolvedColor(with: traitCollection).cgColor
+    }
+}
+
+/// The band's 1pt edge, DESIGN.md's image-outline: a raster band keeps its shape on any surface.
+/// It sits over the band as a sibling so it takes the sheet's appearance, not the band's night:
+/// at night it is the white edge that parts the film's near-black (and the stage's field) from
+/// the raised sheet.
+private final class BandEdge: UIView {
+    init() {
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        isUserInteractionEnabled = false
+        isAccessibilityElement = false
+        layer.borderWidth = 1
+        layer.cornerRadius = Radius.radiusMd
+        layer.cornerCurve = .continuous
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (edge: BandEdge, _: UITraitCollection) in edge.paint() }
+        paint()
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        fatalError("BandEdge is built in code")
+    }
+
+    private func paint() {
+        layer.borderColor = Palette.imageOutline.resolvedColor(with: traitCollection).cgColor
+    }
+}
+
+/// The disc the close glyph stands on over the band: the night scrim, so the white × reads
+/// over the film's lit laptop screen as well as over the dark rest frame.
+private final class CloseScrim: UIView {
+    init() {
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        isUserInteractionEnabled = false
+        isAccessibilityElement = false
+        // The band is night whatever the appearance, so the disc is too.
+        overrideUserInterfaceStyle = .dark
+        backgroundColor = Palette.scrim
+        layer.cornerRadius = Size.cBarItem / 2
+        NSLayoutConstraint.activate([
+            widthAnchor.constraint(equalToConstant: Size.cBarItem),
+            heightAnchor.constraint(equalToConstant: Size.cBarItem),
+        ])
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        fatalError("CloseScrim is built in code")
     }
 }
 
