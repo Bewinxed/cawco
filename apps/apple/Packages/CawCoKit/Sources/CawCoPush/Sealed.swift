@@ -1,5 +1,5 @@
 public import CryptoKit
-public import Foundation
+import Foundation
 
 /// What a push says on the lock screen, as the hub sealed it: the push's
 /// top-level `"e"` is base64 of `IV(12) ‖ ciphertext ‖ tag(16)`, AES-256-GCM
