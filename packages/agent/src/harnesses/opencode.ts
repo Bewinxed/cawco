@@ -4528,6 +4528,8 @@ const ACCOUNT_CATALOGS = join(OPENCODE_DIR, "cawco-account-catalogs.json");
 
 export class OpencodeHarness implements Harness {
   readonly kind = "opencode" as const;
+  /** Its catalog is the server's: {@link listSessions} starts one. */
+  readonly catalogFromServer = true as const;
   readonly capabilities = OPENCODE_CAPABILITIES;
   auth: import("@cawco/core").AuthState = "authenticated";
 

@@ -738,12 +738,44 @@ const reconnectAfterHubRestart = async (
   );
 };
 
+/**
+ * The register's sessions: custody, and the catalogs read from disk. Never a
+ * harness's server catalog, whose read starts the server (a cold OpenCode
+ * kept a first register waiting 72s); that one follows on a beat
+ * ({@link reportServedCatalog}). Custody is read first all the same, so an
+ * OpenCode server that beat starts is never taken for one that survived.
+ */
 const readSessions = async () => {
-  // Read before the catalog: listing OpenCode conversations may start a new
-  // server, which must not be mistaken for one that survived this restart.
   const custody = await readCustody();
-  const catalog = await resumableSessions();
+  const catalog = await resumableSessions("disk");
   return { custody, catalog };
+};
+
+/**
+ * The catalogs a harness's server answers, read once a connection has
+ * registered, and their dates sent on a beat of their own. A read that fails
+ * is logged and sends nothing: the hub judges no row by this catalog.
+ */
+const reportServedCatalog = async (
+  socket: WebSocket,
+  machine: string,
+  carried: () => string[]
+): Promise<void> => {
+  const catalog = await resumableSessions("server");
+  if (!catalog || socket.readyState !== WebSocket.OPEN) {
+    return;
+  }
+  send(socket, {
+    verb: "heartbeat",
+    machineId: machine,
+    payload: {
+      at: Date.now(),
+      instances: carried(),
+      resumableAt: Object.fromEntries(
+        catalog.map((entry) => [entry.sessionId, entry.lastModified])
+      ),
+    } satisfies HeartbeatPayload,
+  });
 };
 
 /**
@@ -900,6 +932,15 @@ const attach = (
     send(socket, { verb: "register", machineId: identity.machineId, payload });
     yield* Effect.logInfo(`registered with ${url}`);
     markLive();
+    reportServedCatalog(
+      socket,
+      identity.machineId,
+      () => supervisor.instanceIds
+    ).catch((error: unknown) =>
+      Effect.runFork(
+        Effect.logWarning(`server catalog not reported: ${String(error)}`)
+      )
+    );
 
     // What the machine can do goes out once its probes finish, on a beat of
     // its own, and not inside the register above. The probes spawn processes

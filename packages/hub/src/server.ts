@@ -17701,7 +17701,16 @@ export const createServer = (
               if (providers) {
                 machineProviders.set(message.machineId, providers);
               }
+              // When the conversations a harness's server lists last moved,
+              // read after the register so the register never waits on that
+              // server's start.
+              const dated = db.dateStoredSessions(
+                message.machineId,
+                beatIds,
+                peekResumableAt(message.payload)
+              );
               if (
+                dated > 0 ||
                 reported ||
                 moved ||
                 beat.promoted.length > 0 ||

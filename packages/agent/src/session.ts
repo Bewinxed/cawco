@@ -470,13 +470,22 @@ const dirOf = (arg: unknown): string | undefined => {
  * been asleep since Tuesday can only say when the *bookkeeping* last touched
  * it. The catalog knows when the session itself last moved; sending it is what
  * lets a rail draw ages that differ from each other.
+ *
+ * `from` picks the catalogs: `disk`, the ones read from files, which the
+ * register carries; `server`, the ones a harness's server answers
+ * ({@link Harness.catalogFromServer}), read after the register because the
+ * read starts that server. The hub judges no row by a server's catalog
+ * (OpenCode's rows resume whatever it lists), so the register's is complete
+ * without it.
  */
-export const resumableSessions = async (): Promise<
-  { lastModified: number; sessionId: string }[] | undefined
-> => {
+export const resumableSessions = async (
+  from: "disk" | "server"
+): Promise<{ lastModified: number; sessionId: string }[] | undefined> => {
   const found: { lastModified: number; sessionId: string }[] = [];
   let sawAny = false;
-  for (const adapter of harnesses()) {
+  for (const adapter of harnesses().filter(
+    (one) => (one.catalogFromServer === true) === (from === "server")
+  )) {
     try {
       for (const info of await adapter.listSessions()) {
         found.push({

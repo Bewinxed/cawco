@@ -443,6 +443,15 @@ export interface DbShape {
   readonly createWorkspace: (
     workspace: typeof workspaces.$inferInsert
   ) => WorkspaceRow;
+  /**
+   * A machine's catalog's word on when each stored conversation last changed,
+   * written onto its rows that are not live. Returns how many rows it moved.
+   */
+  readonly dateStoredSessions: (
+    machineId: string,
+    liveIds: string[],
+    resumableAt?: Record<string, number>
+  ) => number;
   /** The ask a `requestId` opened, so its answer is filed under the same parent. */
   readonly delegateAsk: (requestId: string) => DelegateEvent | undefined;
   readonly deleteContinuation: (id: string) => void;
@@ -2200,16 +2209,19 @@ const make = async (path: string): Promise<DbShape> => {
    * instant and made every age in the rail read `1m` alike. The daemon's
    * catalog knows better: a conversation's mtime is when the session itself last
    * said something. Only rows that disagree are written, so a register that
-   * changes nothing costs one select.
+   * changes nothing costs one select. A catalog read from a harness's server
+   * (OpenCode's) arrives on a beat after the register and is written the same
+   * way.
    */
   const dateStoredSessions = (
     machineId: string,
     liveIds: string[],
     resumableAt?: Record<string, number>
-  ): void => {
+  ): number => {
     if (!resumableAt) {
-      return;
+      return 0;
     }
+    let moved = 0;
     const dated = db
       .select({
         id: instances.id,
@@ -2251,11 +2263,14 @@ const make = async (path: string): Promise<DbShape> => {
         .set({ updatedAt: new Date(at) })
         .where(eq(instances.id, row.id))
         .run();
+      moved += 1;
     }
+    return moved;
   };
 
   return {
     close: () => db.$client.close(),
+    dateStoredSessions,
     clearEndConfirmation: (id) => {
       db.update(instances)
         .set({ endConfirmedAt: null })

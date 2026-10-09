@@ -234,6 +234,12 @@ export interface Harness {
   // biome-ignore lint/style/useConsistentMethodSignatures: matches the other adapter methods
   busyInstances?(): Promise<string[]>;
   readonly capabilities: HarnessCapabilities;
+  /**
+   * `true` when {@link listSessions} asks the harness's own server, which a
+   * read starts (OpenCode). The register carries only the catalogs read from
+   * disk; this one follows on a beat, so no register waits on a server start.
+   */
+  readonly catalogFromServer?: true;
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
   deleteSession(sessionKey: string, dir?: string): Promise<void>;
   /** What this machine can do with the harness — install, version, auth. */

@@ -393,6 +393,14 @@ export interface HeartbeatPayload {
    * `harnesses` rides.
    */
   providers?: import("./accounts").ProviderInfo[];
+  /**
+   * When each conversation in a catalog read from a harness's server
+   * (OpenCode's) last changed, ms epoch, by session id. Rides one beat per
+   * connection, once that catalog is read: reading it starts the server, and
+   * a cold OpenCode start took 72s with no internet, so the register carries
+   * only the catalogs read from disk.
+   */
+  resumableAt?: Record<string, number>;
   /** Exact server-session addresses; an empty array also declares the acknowledgement contract. */
   sessionAddresses?: SessionAddress[];
   /**
