@@ -239,6 +239,8 @@ public final class Pro {
             if catalog == .failed {
                 let missing = Set(ProProduct.allCases).subtracting(byId.keys).map(\.rawValue)
                 log.error("App Store catalogue is missing \(missing.joined(separator: ","), privacy: .public)")
+            } else {
+                log.notice("App Store catalogue loaded")
             }
         } catch {
             log.error("App Store catalogue failed: \(String(describing: error), privacy: .public)")
