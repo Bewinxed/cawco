@@ -26,9 +26,10 @@ struct Dialog {
     texts.contains { $0.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix(sentence) }
   }
 
-  /// Whether it names the subject at all: what a refusal may describe.
+  /// Whether it names the subject at all, quoted or not: what a refusal may
+  /// describe, so a prompt worded differently still shows up.
   func mentions(_ name: String) -> Bool {
-    texts.contains { $0.contains("“\(name)”") || $0.contains("\"\(name)\"") }
+    texts.contains { $0.contains(name) }
   }
 
   /// A forbidden word anywhere in the window, if there is one.
@@ -82,8 +83,15 @@ enum Dialogs {
     kAXCloseButtonSubrole, kAXMinimizeButtonSubrole, kAXZoomButtonSubrole, kAXFullScreenButtonSubrole,
   ]
 
-  /// Reads the windows of every OS process that owns an on-screen window, or
-  /// only of `pids` when given. Needs Accessibility trust.
+  /// Whether this login session's screen is locked. While it is, macOS keeps
+  /// its prompts off screen, so there is nothing to read or press.
+  static var screenLocked: Bool {
+    let session = CGSessionCopyCurrentDictionary() as? [String: Any]
+    return session?["CGSSessionScreenIsLocked"] as? Bool ?? false
+  }
+
+  /// Reads the windows of every OS process that owns an on-screen window and
+  /// is not a regular app, or only of `pids` when given. Needs Accessibility trust.
   static func scan(pids only: Set<pid_t>? = nil) -> Scan {
     // Any one Accessibility call waits at most this long for a busy app.
     AXUIElementSetMessagingTimeout(AXUIElementCreateSystemWide(), 1.0)
@@ -91,6 +99,10 @@ enum Dialogs {
     var hosts: [[String: Any]] = []
     for owner in onScreenOwners() where only?.contains(owner.pid) ?? true {
       guard owner.pid != getpid() else { continue }
+      // A consent prompt is hosted by an agent of the OS, never by a regular
+      // app with a Dock icon; those (Messages, Notes, …) hold the user's own
+      // content and are not read.
+      guard NSRunningApplication(processIdentifier: owner.pid)?.activationPolicy != .regular else { continue }
       guard case .satisfied = Signing.check(.pid(owner.pid), against: Signing.apple) else { continue }
       let application = AXUIElementCreateApplication(owner.pid)
       let windows: [AXUIElement] = value(application, kAXWindowsAttribute) ?? []

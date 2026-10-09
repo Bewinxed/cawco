@@ -83,6 +83,7 @@ final class HelperApp: NSObject, NSApplicationDelegate {
       "version": Bundle.main.version,
       "pid": Int(getpid()),
       "trusted": trust.trusted,
+      "screen_locked": Dialogs.screenLocked,
       "login_item": LoginItem.status,
       "peer_check": PeerCheck.enforced ? "enforced" : "log-only",
       "policy": Policy.load().described,

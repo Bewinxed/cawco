@@ -37,6 +37,9 @@ final class Approver {
     case .success(let made): rule = made
     case .failure(let refusal): return refuse(ask, refusal.reason)
     }
+    guard !Dialogs.screenLocked else {
+      return refuse(ask, "the screen is locked: macOS shows no prompt until it is unlocked", ["screen_locked": true])
+    }
 
     let scan = Dialogs.scan()
     let matches = scan.dialogs.filter { $0.shows(rule.sentence) }
@@ -143,6 +146,7 @@ final class Approver {
     return .ok([
       "prompt": rule.sentence,
       "prompt_pending": pending,
+      "screen_locked": Dialogs.screenLocked,
       "tcc_create": orNull(created),
       "preflight": "the subject reads its own grant: AEDeterminePermissionToAutomateTarget runs as the code it asks about",
     ])
