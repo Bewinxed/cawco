@@ -25,6 +25,7 @@ import {
 } from "@cawco/core";
 import { RELEASE_REPOSITORY } from "@cawco/core/binary-distribution";
 import { readInstallation } from "@cawco/core/binary-installation";
+import { detach } from "@cawco/core/detach";
 import { generateInstallScript } from "@cawco/core/install-script";
 import { LineSplitter } from "@cawco/core/lines";
 import { RELEASE_PUBLIC_KEY } from "@cawco/core/release-key";
@@ -277,18 +278,21 @@ export const joinRoutes = ({ lifetime, online }: JoinDeps) => {
       ],
       { stdin: "ignore", stdout: "pipe", stderr: "pipe" }
     );
-    Promise.all([
-      collect(job, child.stdout),
-      collect(job, child.stderr),
-      child.exited,
-    ])
-      .then(([, , code]) => {
-        job.exitCode = code;
-        return settle(job);
-      })
-      .finally(() => {
-        lifetime.after(JOB_TTL_MS, () => jobs.delete(job.id));
-      });
+    detach(
+      Promise.all([
+        collect(job, child.stdout),
+        collect(job, child.stderr),
+        child.exited,
+      ])
+        .then(([, , code]) => {
+          job.exitCode = code;
+          return settle(job);
+        })
+        .finally(() => {
+          lifetime.after(JOB_TTL_MS, () => jobs.delete(job.id));
+        }),
+      "machine join"
+    );
     return job;
   };
 

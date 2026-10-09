@@ -4,6 +4,7 @@
  * future Windows port has to touch (design §11, §12).
  */
 
+import { detach } from "@cawco/core/detach";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
 import { placeChildren } from "./cgroup";
 import { SessiondServer } from "./server";
@@ -37,10 +38,8 @@ const main = async (): Promise<void> => {
     await server.close();
     process.exit(0);
   };
-  // biome-ignore lint/complexity/noVoid: signal handlers are sync callbacks; shutdown() is fire-and-forget by design
-  process.on("SIGTERM", () => void shutdown("SIGTERM"));
-  // biome-ignore lint/complexity/noVoid: signal handlers are sync callbacks; shutdown() is fire-and-forget by design
-  process.on("SIGINT", () => void shutdown("SIGINT"));
+  process.on("SIGTERM", () => detach(shutdown("SIGTERM"), "sessiond drain"));
+  process.on("SIGINT", () => detach(shutdown("SIGINT"), "sessiond drain"));
 };
 
 await main();

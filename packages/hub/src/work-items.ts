@@ -1007,7 +1007,7 @@ export const createWorkItems = ({
   /** The filed and unfiled cases use the same machine archive, acknowledged before forgetting it. */
   const discardCreate = (id: string, machineId: string): Promise<void> => {
     const pending = discarding.get(id);
-    if (pending) {
+    if (pending !== undefined) {
       return pending;
     }
     const discarded = call(machineId, CONTROL_WORKSPACE_ARCHIVE, [{ id }])

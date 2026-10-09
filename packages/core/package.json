@@ -14,6 +14,7 @@
     "./binary-wrapper": "./src/binary-wrapper.ts",
     "./process-identity": "./src/process-identity.ts",
     "./live-processes": "./src/live-processes.ts",
+    "./detach": "./src/detach.ts",
     "./lines": "./src/lines.ts",
     "./paced-write": "./src/paced-write.ts",
     "./wire": "./src/wire.ts",

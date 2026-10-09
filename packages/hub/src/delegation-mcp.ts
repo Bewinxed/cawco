@@ -6,6 +6,7 @@ import type {
   LandsMode,
   SendPayload,
 } from "@cawco/core";
+import { detach } from "@cawco/core/detach";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import {
@@ -163,9 +164,9 @@ export function createDelegationMcp(options: {
   if (typeof __CAWCO_RELEASE__ !== "boolean") {
     // Reload source definitions for the next request, without client notifications.
     watchFile(moduleUrl, { interval: 1000, persistent: false }, () => {
-      // biome-ignore lint/complexity/noVoid: the watcher reports a reload failure and preserves the registry.
-      void import(`${moduleUrl.href}?revision=${Date.now()}`)
-        .then((module) => {
+      // A failed reload is logged and the registry keeps what it had.
+      detach(
+        import(`${moduleUrl.href}?revision=${Date.now()}`).then((module) => {
           const definitions = module.handoffTools({
             instanceId: "",
             instanceById: options.instanceById,
@@ -179,21 +180,20 @@ export function createDelegationMcp(options: {
             throw new Error("Duplicate delegation tool names");
           }
           tools = module.handoffTools;
-        })
-        .catch((error) =>
-          console.error("[delegation-mcp] tool reload failed", error)
-        );
+        }),
+        "delegation-mcp tool reload"
+      );
     });
     watchFile(adminModuleUrl, { interval: 1000, persistent: false }, () => {
-      // biome-ignore lint/complexity/noVoid: the watcher reports a reload failure and preserves the registry.
-      void import(`${adminModuleUrl.href}?revision=${Date.now()}`)
-        .then((module) => {
-          admin = module.adminTools();
-          adminNames = new Set(admin.map((tool) => tool.name));
-        })
-        .catch((error) =>
-          console.error("[delegation-mcp] admin reload failed", error)
-        );
+      detach(
+        import(`${adminModuleUrl.href}?revision=${Date.now()}`).then(
+          (module) => {
+            admin = module.adminTools();
+            adminNames = new Set(admin.map((tool) => tool.name));
+          }
+        ),
+        "delegation-mcp admin reload"
+      );
     });
     options.lifetime.onClose(() => {
       unwatchFile(moduleUrl);
@@ -733,17 +733,20 @@ export function createDelegationMcp(options: {
         doing && token !== undefined
           ? options.lifetime.every(15_000, () => {
               elapsed += 15;
-              // biome-ignore lint/complexity/noVoid: progress is fire-and-forget; a disconnected client cannot receive it.
-              void extra
-                .sendNotification({
-                  method: "notifications/progress",
-                  params: {
-                    progressToken: token,
-                    progress: elapsed,
-                    message: `${doing} (${elapsed}s elapsed).`,
-                  },
-                })
-                .catch(() => undefined);
+              // A disconnected client cannot receive progress; that is no failure.
+              detach(
+                extra
+                  .sendNotification({
+                    method: "notifications/progress",
+                    params: {
+                      progressToken: token,
+                      progress: elapsed,
+                      message: `${doing} (${elapsed}s elapsed).`,
+                    },
+                  })
+                  .catch(() => undefined),
+                "delegation-mcp progress"
+              );
             })
           : undefined;
       try {

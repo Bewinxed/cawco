@@ -395,7 +395,7 @@ const inFlight = new Map<string, Promise<Icon | null>>();
 
 const iconFor = (host: string): Promise<Icon | null> => {
   const running = inFlight.get(host);
-  if (running) {
+  if (running !== undefined) {
     return running;
   }
   const read = (async () => {

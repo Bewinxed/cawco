@@ -29,6 +29,7 @@ import {
 } from "node:net";
 import { dirname } from "node:path";
 import { type BuildInfo, SessionRing } from "@cawco/core";
+import { detach } from "@cawco/core/detach";
 import { LineSplitter } from "@cawco/core/lines";
 import { PacedWriter } from "@cawco/core/paced-write";
 import { processLineage } from "@cawco/core/process-identity";
@@ -435,9 +436,11 @@ export class SessiondServer {
         return;
       }
       const running = this.#running.get(commandId);
-      if (running) {
-        // biome-ignore lint/complexity/noVoid: the settlement never rejects (see #settleLater)
-        void running.then((settled) => this.#send(conn, settled));
+      if (running !== undefined) {
+        detach(
+          running.then((settled) => this.#send(conn, settled)),
+          "sessiond settlement"
+        );
         return;
       }
     }
@@ -513,11 +516,13 @@ export class SessiondServer {
     if (commandId) {
       this.#running.set(commandId, settled);
     }
-    // biome-ignore lint/complexity/noVoid: `settled` never rejects
-    void settled.then((settlement) => {
-      this.#running.delete(commandId);
-      this.#settle(conn, commandId, settlement);
-    });
+    detach(
+      settled.then((settlement) => {
+        this.#running.delete(commandId);
+        this.#settle(conn, commandId, settlement);
+      }),
+      "sessiond settlement"
+    );
   }
 
   #lookupSettled(commandId: string): SessiondAck | undefined {

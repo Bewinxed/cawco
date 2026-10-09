@@ -21,6 +21,7 @@
  * `gh`, or finds the one already open ({@link openPullRequest}).
  */
 import type { CommandResult } from "@cawco/core";
+import { detach } from "@cawco/core/detach";
 
 /** What a landing came to. `F` is how the caller describes failing checks. */
 export type LandingOutcome<F> =
@@ -62,12 +63,15 @@ export function landingQueue(): LandingQueue {
       () => undefined
     );
     tails.set(key, tail);
-    // biome-ignore lint/complexity/noVoid: cleanup only; the caller awaits `result`.
-    void tail.then(() => {
-      if (tails.get(key) === tail) {
-        tails.delete(key);
-      }
-    });
+    // Cleanup only; the caller awaits `result`.
+    detach(
+      tail.then(() => {
+        if (tails.get(key) === tail) {
+          tails.delete(key);
+        }
+      }),
+      "landing queue"
+    );
     return result;
   };
 }

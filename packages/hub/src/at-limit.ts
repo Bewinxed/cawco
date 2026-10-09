@@ -12,6 +12,7 @@ import {
   type WaitReason,
   windowWords,
 } from "@cawco/core";
+import { detach } from "@cawco/core/detach";
 import type { DbShape } from "./db";
 import type { LimitHold } from "./db/at-limit";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
@@ -642,12 +643,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       ...summaries.map((one) => Date.parse(one.resetsAt))
     );
     timer = lifetime.after(Math.max(1000, at - now), () => {
-      // biome-ignore lint/complexity/noVoid: the look reports its own failures
-      void tick()
-        .catch((error) => {
-          console.error("[at-limit] look failed:", error);
-        })
-        .finally(plan);
+      detach(tick().finally(plan), "at-limit look");
     });
   };
 

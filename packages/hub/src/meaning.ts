@@ -59,7 +59,7 @@ export class MeaningJudge {
     text: string
   ): Promise<Set<string>> {
     const asked = this.#turns.get(frame);
-    if (asked) {
+    if (asked !== undefined) {
       return asked;
     }
     const rules = this.#db

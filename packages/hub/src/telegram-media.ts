@@ -1,5 +1,6 @@
 import type { SendPayload } from "@cawco/core";
 import { CAWCO_ENV, readEnv } from "@cawco/core";
+import { detach } from "@cawco/core/detach";
 
 /** Telegram's own ceiling on what a bot may fetch, and how long fetching may take. */
 const FILE_LIMIT = 20 * 1024 * 1024;
@@ -89,6 +90,8 @@ export type Intake =
 export interface MediaServices {
   /** The bridge's own Bot API caller, for `getFile`. */
   readonly call: <T>(method: string, body: unknown) => Promise<T | undefined>;
+  /** The bridge's logger for a transport failure, which keeps the token out of the log. */
+  readonly failed: (what: string, error: unknown) => void;
   /** Where a `file_path` is fetched from, bot token already in it. */
   readonly filesBase: string;
 }
@@ -127,6 +130,7 @@ const catalogued = (models: { id: string }[]): string =>
  */
 export const createMediaIntake = ({
   call,
+  failed,
   filesBase,
 }: MediaServices): MediaIntake => {
   /** The handle's exact model name, so every voice note is not two round trips. */
@@ -144,15 +148,21 @@ export const createMediaIntake = ({
     if (!found?.file_path) {
       return { error: "Telegram would not hand that file over." };
     }
-    const response = await fetch(`${filesBase}/${found.file_path}`, {
-      signal: AbortSignal.timeout(FILE_TIMEOUT_MS),
-    });
-    if (!response.ok) {
-      return {
-        error: `Telegram would not hand that file over (${response.status}).`,
-      };
+    let bytes: Uint8Array;
+    try {
+      const response = await fetch(`${filesBase}/${found.file_path}`, {
+        signal: AbortSignal.timeout(FILE_TIMEOUT_MS),
+      });
+      if (!response.ok) {
+        return {
+          error: `Telegram would not hand that file over (${response.status}).`,
+        };
+      }
+      bytes = new Uint8Array(await response.arrayBuffer());
+    } catch (error) {
+      failed("file download", error);
+      return { error: "Telegram did not answer while sending that file over." };
     }
-    const bytes = new Uint8Array(await response.arrayBuffer());
     if (bytes.byteLength > FILE_LIMIT) {
       return { error: TOO_BIG };
     }
@@ -242,17 +252,21 @@ export const createMediaIntake = ({
     name: string
   ): Promise<string | undefined> => {
     let refused: string | undefined;
-    // biome-ignore lint/complexity/noVoid: watched, not awaited — the poll loop below is what actually reports readiness
-    void fetch(`${url}/manager/start/${encodeURIComponent(name)}`, {
-      method: "POST",
-      signal: AbortSignal.timeout(WARM_LIMIT_MS),
-    })
-      .then(async (response) => {
-        if (!response.ok) {
-          refused = await refusal(url, response, name);
-        }
+    // Watched, not awaited: the poll loop below is what reports readiness, so
+    // a start call that never answers is left to it.
+    detach(
+      fetch(`${url}/manager/start/${encodeURIComponent(name)}`, {
+        method: "POST",
+        signal: AbortSignal.timeout(WARM_LIMIT_MS),
       })
-      .catch(() => undefined);
+        .then(async (response) => {
+          if (!response.ok) {
+            refused = await refusal(url, response, name);
+          }
+        })
+        .catch(() => undefined),
+      "transcription warm-up"
+    );
 
     const deadline = Date.now() + WARM_LIMIT_MS;
     for (;;) {

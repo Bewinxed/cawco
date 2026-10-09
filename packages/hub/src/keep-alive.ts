@@ -8,6 +8,7 @@ import {
   resolveRates,
   type SendPayload,
 } from "@cawco/core";
+import { detach } from "@cawco/core/detach";
 import type { DbShape } from "./db";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 
@@ -276,8 +277,7 @@ export const createKeepAliveScheduler = (ports: KeepAlivePorts) => {
       }
     }
     timer = lifetime.after(Math.max(0, at - now), () => {
-      // biome-ignore lint/complexity/noVoid: wake catches and reports a failed machine read
-      void wake();
+      detach(wake(), "keepalive wake");
     });
   };
   const wake = async () => {
@@ -298,7 +298,7 @@ export const createKeepAliveScheduler = (ports: KeepAlivePorts) => {
   };
   // Boot and reconnect use this same path: an overdue warm schedule runs as
   // soon as its machine can supply an idle receipt, not after another margin.
-  // biome-ignore lint/complexity/noVoid: startup must not wait for machines to reconnect
-  void wake();
+  // Startup does not wait for machines to reconnect.
+  detach(wake(), "keepalive wake");
   return { wake };
 };

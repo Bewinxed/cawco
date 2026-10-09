@@ -228,6 +228,7 @@ import {
   type BinaryUpdatePolicy,
   type BinaryUpdateState,
 } from "@cawco/core/binary-updates";
+import { detach } from "@cawco/core/detach";
 import { hashFiles } from "@cawco/core/file-hash";
 import { machineId as hostMachineId } from "@cawco/core/machine-id";
 import { WIRE_MESSAGE_LIMIT_BYTES } from "@cawco/core/wire";
@@ -3462,24 +3463,27 @@ export const createServer = (
     for (const send of sends) {
       deciding.add(send.uuid);
     }
-    // biome-ignore lint/complexity/noVoid: the callers are frame handlers that must not wait on a machine round trip
-    void storedIn(instanceId)
-      .then((answer) => {
-        if (!answer && unstored === "unheld") {
-          return;
-        }
-        for (const send of sends) {
-          settleSend(send, answer ?? new Map(), unstored, why);
-        }
-        if (whole) {
-          decided();
-        }
-      })
-      .finally(() => {
-        for (const send of sends) {
-          deciding.delete(send.uuid);
-        }
-      });
+    // The callers are frame handlers that do not wait on a machine round trip.
+    detach(
+      storedIn(instanceId)
+        .then((answer) => {
+          if (!answer && unstored === "unheld") {
+            return;
+          }
+          for (const send of sends) {
+            settleSend(send, answer ?? new Map(), unstored, why);
+          }
+          if (whole) {
+            decided();
+          }
+        })
+        .finally(() => {
+          for (const send of sends) {
+            deciding.delete(send.uuid);
+          }
+        }),
+      "pending sends"
+    );
   };
 
   /** One send {@link settlePending} decides, against what `stored` says was taken up. */
@@ -3597,13 +3601,15 @@ export const createServer = (
       failSend(row, reason);
       return;
     }
-    // biome-ignore lint/complexity/noVoid: a frame handler must not wait on a machine round trip
-    void storedIn(row.instanceId).then(() => {
-      const now = db.sendRecord(row.uuid);
-      if (now?.state === "pending" || now?.state === "read") {
-        failSend(now, reason);
-      }
-    });
+    detach(
+      storedIn(row.instanceId).then(() => {
+        const now = db.sendRecord(row.uuid);
+        if (now?.state === "pending" || now?.state === "read") {
+          failSend(now, reason);
+        }
+      }),
+      "failed send"
+    );
   };
 
   /**
@@ -4475,14 +4481,18 @@ export const createServer = (
     ) {
       return;
     }
-    // biome-ignore lint/complexity/noVoid: the machine's `asleep` frame carries the outcome; a refusal means the session is not at rest
-    void callAgent(
-      row.machineId,
-      CONTROL_SLEEP,
-      [],
-      SLEEP_TIMEOUT_MS,
-      undefined,
-      row.id
+    // The machine's `asleep` frame carries the outcome; a refusal means the
+    // session is not at rest.
+    detach(
+      callAgent(
+        row.machineId,
+        CONTROL_SLEEP,
+        [],
+        SLEEP_TIMEOUT_MS,
+        undefined,
+        row.id
+      ),
+      "sleep request"
     );
   };
 
@@ -4703,22 +4713,26 @@ export const createServer = (
     for (const [instanceId, machineId] of moved) {
       const now = status.get(instanceId);
       if (!(now && mayRun(now))) {
-        // biome-ignore lint/complexity/noVoid: each re-pin runs on its own; one not done is tried at the next tick
-        void repinMovedFrom(instanceId, machineId);
+        // Each re-pin runs on its own; one not done is tried at the next tick.
+        detach(repinMovedFrom(instanceId, machineId), "login move re-pin");
         continue;
       }
       // Not known yet (a hub just started): asked once its machine says.
       if (now === "unknown") {
         continue;
       }
-      // biome-ignore lint/complexity/noVoid: the machine's `asleep` frame files the row; a refusal is a session not at rest yet, asked again next tick
-      void callAgent(
-        machineId,
-        CONTROL_SLEEP,
-        [],
-        SLEEP_TIMEOUT_MS,
-        undefined,
-        instanceId
+      // The machine's `asleep` frame files the row; a refusal is a session not
+      // at rest yet, asked again next tick.
+      detach(
+        callAgent(
+          machineId,
+          CONTROL_SLEEP,
+          [],
+          SLEEP_TIMEOUT_MS,
+          undefined,
+          instanceId
+        ),
+        "sleep request"
       );
     }
   };
@@ -6053,12 +6067,10 @@ export const createServer = (
       };
     }
     const stopLate = () =>
-      callAgent(
-        machineId,
-        PREVIEW_STOP,
-        [{ instanceId }],
-        BUSY_TIMEOUT_MS
-      ).catch(console.error);
+      detach(
+        callAgent(machineId, PREVIEW_STOP, [{ instanceId }], BUSY_TIMEOUT_MS),
+        "late preview stop"
+      );
     const answer = await callAgent(
       machineId,
       PREVIEW_START,
@@ -7257,63 +7269,66 @@ export const createServer = (
       // A transcript read, tens of MB, arrives as parts, read in order
       // through the socket's inbox (`wire-socket.ts`).
       receiveFrame(ws, incoming, (message) => {
-        // biome-ignore lint/complexity/noVoid: a failure is answered by the catch below; nothing awaits a frame
-        void handle(ws, message).catch(
-          // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: acknowledgement failures and correlated request failures share one socket error policy with explicit traces
-          (error: unknown) => {
-            const reason =
-              error instanceof Error ? error.message : String(error);
-            if (!isEnvelope(message)) {
-              console.error(`[hub] malformed agent frame failed: ${reason}`);
-              return;
-            }
-            console.error(
-              `[hub] ${message.verb} for ${message.instanceId ?? "the machine"} failed: ${reason}`
-            );
-            const awaitsAddress =
-              message.verb === "frames" &&
-              peek(message.payload, "kind") === "session_address";
-            const replaysAddresses =
-              message.verb === "heartbeat" &&
-              !!addressClaims(message.payload)?.length;
-            if (
-              message.verb === "register" ||
-              awaitsAddress ||
-              replaysAddresses
-            ) {
-              ws.close(
-                1011,
-                "Session acknowledgement failed. Reconnect to retry custody."
+        // A failure is answered by the catch below; nothing awaits a frame.
+        detach(
+          handle(ws, message).catch(
+            // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: acknowledgement failures and correlated request failures share one socket error policy with explicit traces
+            (error: unknown) => {
+              const reason =
+                error instanceof Error ? error.message : String(error);
+              if (!isEnvelope(message)) {
+                console.error(`[hub] malformed agent frame failed: ${reason}`);
+                return;
+              }
+              console.error(
+                `[hub] ${message.verb} for ${message.instanceId ?? "the machine"} failed: ${reason}`
               );
-              return;
-            }
-            const requestId =
-              message.requestId ?? peek(message.payload, "requestId");
-            if (requestId) {
-              const frame: ControlResult = {
-                kind: "control_result",
-                requestId,
-                ok: false,
-                error: reason,
-              };
-              const waitingReply = waiting.get(requestId);
-              if (waitingReply) {
-                waitingReply(frame);
+              const awaitsAddress =
+                message.verb === "frames" &&
+                peek(message.payload, "kind") === "session_address";
+              const replaysAddresses =
+                message.verb === "heartbeat" &&
+                !!addressClaims(message.payload)?.length;
+              if (
+                message.verb === "register" ||
+                awaitsAddress ||
+                replaysAddresses
+              ) {
+                ws.close(
+                  1011,
+                  "Session acknowledgement failed. Reconnect to retry custody."
+                );
+                return;
               }
-              const commandAnswered = streams.settleCommand(requestId, frame);
-              const requester = registry.takeRequester(requestId);
-              if (requester) {
-                sendFrame(requester, {
-                  ...message,
-                  verb: "frames",
+              const requestId =
+                message.requestId ?? peek(message.payload, "requestId");
+              if (requestId) {
+                const frame: ControlResult = {
+                  kind: "control_result",
                   requestId,
-                  payload: frame,
-                });
-              } else if (!(waitingReply || commandAnswered)) {
-                logUnroutedReply({ ...message, payload: frame });
+                  ok: false,
+                  error: reason,
+                };
+                const waitingReply = waiting.get(requestId);
+                if (waitingReply) {
+                  waitingReply(frame);
+                }
+                const commandAnswered = streams.settleCommand(requestId, frame);
+                const requester = registry.takeRequester(requestId);
+                if (requester) {
+                  sendFrame(requester, {
+                    ...message,
+                    verb: "frames",
+                    requestId,
+                    payload: frame,
+                  });
+                } else if (!(waitingReply || commandAnswered)) {
+                  logUnroutedReply({ ...message, payload: frame });
+                }
               }
             }
-          }
+          ),
+          "agent frame"
         );
       });
   const recoveringRemoved = new Set<string>();
@@ -7360,8 +7375,7 @@ export const createServer = (
       // A continuation waiting on its source's end takes its place now.
       for (const job of db.continuationRows()) {
         if (job.stage === "ending" && job.sourceInstanceId === row.id) {
-          // biome-ignore lint/complexity/noVoid: the job runs on its own; its record is what anyone follows
-          void advanceContinuation(job.id);
+          detach(advanceContinuation(job.id), "continuation");
         }
       }
     },
@@ -7531,17 +7545,20 @@ export const createServer = (
         return;
       }
       refreshingCustody.add(machineId);
-      callAgent(machineId, "sessionCustody", [], READ_TIMEOUT_MS)
-        .then((answer) => {
-          if (typeof answer !== "string" && answer.ok && answer.result) {
-            const snapshot = answer.result as {
-              custody: SessionCustody;
-              attached: string[];
-            };
-            lifecycle.reconcile(machineId, snapshot);
-          }
-        })
-        .finally(() => refreshingCustody.delete(machineId));
+      detach(
+        callAgent(machineId, "sessionCustody", [], READ_TIMEOUT_MS)
+          .then((answer) => {
+            if (typeof answer !== "string" && answer.ok && answer.result) {
+              const snapshot = answer.result as {
+                custody: SessionCustody;
+                attached: string[];
+              };
+              lifecycle.reconcile(machineId, snapshot);
+            }
+          })
+          .finally(() => refreshingCustody.delete(machineId)),
+        "custody refresh"
+      );
     },
   });
   const endSession = (
@@ -8156,8 +8173,8 @@ export const createServer = (
       error: null,
     });
     publishInstances(prepared.source.machineId);
-    // biome-ignore lint/complexity/noVoid: the job runs on its own; its record is what anyone follows
-    void advanceContinuation(row.id);
+    // The job runs on its own; its record is what anyone follows.
+    detach(advanceContinuation(row.id), "continuation");
     return row;
   };
 
@@ -8190,8 +8207,7 @@ export const createServer = (
       // was unwinding; its register found the job busy, so it goes on here.
       const row = away ? db.continuationRow(id) : undefined;
       if (row && registry.agent(machineFor(row))) {
-        // biome-ignore lint/complexity/noVoid: see advanceContinuation
-        void advanceContinuation(id);
+        detach(advanceContinuation(id), "continuation");
       }
     }
   };
@@ -9604,82 +9620,87 @@ export const createServer = (
     config: FleetConfig
   ): void => {
     // Startup discovery finishes before any harness can see a remote fleet URL.
-    // biome-ignore lint/complexity/noVoid: the control result arrives through pendingFleet
-    void mcpReady.then(async () => {
-      await fleetMcp.ready();
-      const current = new Map(
-        db.fleetConfig().mcp.map((row) => [row.name, row])
-      );
-      // A directory on the hub's disk names nothing on any other machine, so
-      // only the hub's own machine links it; every other one is told which
-      // marketplaces those are and installs their plugins from the bytes.
-      const hubOnly = (await isHubMachine(machineId))
-        ? new Set<string>()
-        : new Set(
-            config.marketplaces
-              .filter(({ source }) => isHubDirectory(source))
-              .map(({ name }) => name)
-          );
-      const hubErrors = new Map(
-        hubOnly.size
-          ? db
-              .listPlugins()
-              .flatMap(({ id, error }) => (error ? [[id, error] as const] : []))
-          : []
-      );
-      // What the machine holds is read off its disk now, and only those bytes
-      // are left out: a copy that was wiped or edited since its last report is
-      // carried in this same sync. A read that fails or does not answer holds
-      // nothing, so every byte goes — heavier, never wrong.
-      const held = await readHoldings(machineId);
-      const outbound = fleetMcp.syncConfig(
-        {
-          ...config,
-          skills: config.skills?.map((skill) =>
-            held.skills?.[skill.name] === skill.hash
-              ? { ...skill, files: undefined }
-              : skill
-          ),
-          pluginPayloads: config.pluginPayloads?.map((plugin) =>
-            held.plugins?.[plugin.name] === plugin.hash
-              ? { ...plugin, files: undefined }
-              : plugin
-          ),
-          hubOnlyMarketplaces: [...hubOnly],
-          // What the hub could not carry of a hub-only marketplace reaches that
-          // machine no other way, so the hub's reason goes with the row.
-          plugins: config.plugins.map((plugin) => {
-            const error = hubErrors.get(plugin.id);
-            return error && hubOnly.has(pluginMarketplace(plugin.id))
-              ? { ...plugin, error }
-              : plugin;
-          }),
-          mcp: config.mcp.flatMap((row) =>
-            current.has(row.name) ? [current.get(row.name) as typeof row] : []
-          ),
-          // A project-bound hook once per place of its project on this
-          // machine, with that place as its cwd (project-placements.ts).
-          hooks: placedHooks(
-            config.hooks,
-            db.listProjects().flatMap((project) => project.places),
-            machineId
-          ),
-        },
-        hubHttpUrl()
-      );
-      const requestId = crypto.randomUUID();
-      const payload: ControlPayload = {
-        requestId,
-        method: FLEET_SYNC,
-        args: [outbound],
-      };
-      pendingFleet.set(requestId, machineId);
-      sendFrame(agent, {
-        verb: "control",
-        machineId,
-        payload,
-      } satisfies Envelope<ControlPayload>);
-    });
+    // The control result arrives through pendingFleet.
+    detach(
+      mcpReady.then(async () => {
+        await fleetMcp.ready();
+        const current = new Map(
+          db.fleetConfig().mcp.map((row) => [row.name, row])
+        );
+        // A directory on the hub's disk names nothing on any other machine, so
+        // only the hub's own machine links it; every other one is told which
+        // marketplaces those are and installs their plugins from the bytes.
+        const hubOnly = (await isHubMachine(machineId))
+          ? new Set<string>()
+          : new Set(
+              config.marketplaces
+                .filter(({ source }) => isHubDirectory(source))
+                .map(({ name }) => name)
+            );
+        const hubErrors = new Map(
+          hubOnly.size
+            ? db
+                .listPlugins()
+                .flatMap(({ id, error }) =>
+                  error ? [[id, error] as const] : []
+                )
+            : []
+        );
+        // What the machine holds is read off its disk now, and only those bytes
+        // are left out: a copy that was wiped or edited since its last report is
+        // carried in this same sync. A read that fails or does not answer holds
+        // nothing, so every byte goes — heavier, never wrong.
+        const held = await readHoldings(machineId);
+        const outbound = fleetMcp.syncConfig(
+          {
+            ...config,
+            skills: config.skills?.map((skill) =>
+              held.skills?.[skill.name] === skill.hash
+                ? { ...skill, files: undefined }
+                : skill
+            ),
+            pluginPayloads: config.pluginPayloads?.map((plugin) =>
+              held.plugins?.[plugin.name] === plugin.hash
+                ? { ...plugin, files: undefined }
+                : plugin
+            ),
+            hubOnlyMarketplaces: [...hubOnly],
+            // What the hub could not carry of a hub-only marketplace reaches that
+            // machine no other way, so the hub's reason goes with the row.
+            plugins: config.plugins.map((plugin) => {
+              const error = hubErrors.get(plugin.id);
+              return error && hubOnly.has(pluginMarketplace(plugin.id))
+                ? { ...plugin, error }
+                : plugin;
+            }),
+            mcp: config.mcp.flatMap((row) =>
+              current.has(row.name) ? [current.get(row.name) as typeof row] : []
+            ),
+            // A project-bound hook once per place of its project on this
+            // machine, with that place as its cwd (project-placements.ts).
+            hooks: placedHooks(
+              config.hooks,
+              db.listProjects().flatMap((project) => project.places),
+              machineId
+            ),
+          },
+          hubHttpUrl()
+        );
+        const requestId = crypto.randomUUID();
+        const payload: ControlPayload = {
+          requestId,
+          method: FLEET_SYNC,
+          args: [outbound],
+        };
+        pendingFleet.set(requestId, machineId);
+        sendFrame(agent, {
+          verb: "control",
+          machineId,
+          payload,
+        } satisfies Envelope<ControlPayload>);
+      }),
+      "fleet sync"
+    );
   };
 
   /**
@@ -10017,8 +10038,7 @@ export const createServer = (
   /** A definition changed: every machine that is online takes it now. */
   const fanOutAgents = (): void => {
     for (const machineId of registry.machineIds()) {
-      // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — each machine's push runs independently and nothing here waits on any of them.
-      void pushAgents(machineId);
+      detach(pushAgents(machineId), "agent push");
     }
   };
 
@@ -10130,8 +10150,8 @@ export const createServer = (
   // tried again so the sentence on it is this hub's, in this hub's words, and a
   // source that came back heals with nobody pressing refresh. An adopted
   // skill's source is a machine, which is not fetched from here.
-  // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — boot must not stall on network fetches for rows that were already unresolved.
-  void (async () => {
+  // Boot does not stall on network fetches for rows that were already unresolved.
+  const reresolveFailed = async (): Promise<void> => {
     let moved = await resolvePlugins(db.unresolvedPlugins());
     const failedSkills = db
       .listSkills()
@@ -10144,7 +10164,8 @@ export const createServer = (
     if (moved) {
       fanOutFleet();
     }
-  })();
+  };
+  detach(reresolveFailed(), "fleet source re-resolve");
 
   /** Each place's path by its id, for a folded hook report to say which place a copy failed in. */
   const placePathById = (): ((placeId: string) => string | undefined) => {
@@ -10566,23 +10587,26 @@ export const createServer = (
       const { to } = owed;
       relaunchAtTurnEnd.delete(stored.id);
       transcripts.noteRelaunch(stored.id);
-      // biome-ignore lint/complexity/noVoid: the carry runs on its own; the relaunch follows it
-      void moveRowsToAccount(stored.machineId, [stored], to, true).then(
-        ({ kept }) => {
-          const why = kept.get(stored.id);
-          if (why) {
-            if (why === PROCESS_RUNS) {
-              relaunchAtTurnEnd.set(stored.id, owed);
+      // The carry runs on its own; the relaunch follows it.
+      detach(
+        moveRowsToAccount(stored.machineId, [stored], to, true).then(
+          ({ kept }) => {
+            const why = kept.get(stored.id);
+            if (why) {
+              if (why === PROCESS_RUNS) {
+                relaunchAtTurnEnd.set(stored.id, owed);
+              }
+              return;
             }
-            return;
+            db.atLimit.dropHold(stored.id);
+            publishInstances(stored.machineId);
+            if (owed.move) {
+              noteAtLimit(stored, owed.move);
+            }
+            relaunchOnAccount(stored.id);
           }
-          db.atLimit.dropHold(stored.id);
-          publishInstances(stored.machineId);
-          if (owed.move) {
-            noteAtLimit(stored, owed.move);
-          }
-          relaunchOnAccount(stored.id);
-        }
+        ),
+        "account move"
       );
       return;
     }
@@ -10675,24 +10699,27 @@ export const createServer = (
       return false;
     }
     const requestId = message.requestId ?? payload.requestId;
-    // biome-ignore lint/complexity/noVoid: the receipt is sent when the move is decided
-    void crossModel(instanceId, asked).then((crossed) => {
-      const frame: ControlResult =
-        crossed && crossed !== "crossed"
-          ? {
-              kind: "control_result",
-              requestId,
-              ok: false,
-              error: crossed.refusal,
-            }
-          : { kind: "control_result", requestId, ok: true };
-      if (remember) {
-        sendFrame(dashboard, { ...message, verb: "frames", payload: frame });
-      } else {
-        streams.settleCommand(requestId, frame);
-      }
-      publishInstances(row.machineId);
-    });
+    // The receipt is sent when the move is decided.
+    detach(
+      crossModel(instanceId, asked).then((crossed) => {
+        const frame: ControlResult =
+          crossed && crossed !== "crossed"
+            ? {
+                kind: "control_result",
+                requestId,
+                ok: false,
+                error: crossed.refusal,
+              }
+            : { kind: "control_result", requestId, ok: true };
+        if (remember) {
+          sendFrame(dashboard, { ...message, verb: "frames", payload: frame });
+        } else {
+          streams.settleCommand(requestId, frame);
+        }
+        publishInstances(row.machineId);
+      }),
+      "model move"
+    );
     return true;
   };
 
@@ -11593,8 +11620,7 @@ export const createServer = (
   // Schema generation needs the route types, not restored workflow attempts
   // and parked questions accessing its scratch database after it is removed.
   if (resumeWorkflows) {
-    // biome-ignore lint/complexity/noVoid: startup resumes asynchronously and reports its own failure
-    void workflowRuntime.resume().catch(console.error);
+    detach(workflowRuntime.resume(), "workflow resume");
   }
   // A project's tasks: files in its hub folder, indexed here (tasks.ts).
   const tasks = createTasks({
@@ -11802,8 +11828,7 @@ export const createServer = (
     // The dispatcher's safety net: a slow look at every dispatching project.
     dispatcher.watch();
     // Off the boot path: a folder edited while the hub was down is re-read once.
-    // biome-ignore lint/complexity/noVoid: the catch-up logs its own failures
-    void tasks.syncAll().catch(console.error);
+    detach(tasks.syncAll(), "task catch-up");
   }
   const delegationMcp = createDelegationMcp({
     lifetime,
@@ -11843,27 +11868,30 @@ export const createServer = (
         return;
       }
       const requestId = crypto.randomUUID();
-      // biome-ignore lint/complexity/noVoid: the host's refresh is the session's; the hub only logs how it went
-      void awaitReply(row.machineId, requestId, 60_000, () =>
-        sendFrame(agent, {
-          verb: "control",
-          machineId: row.machineId,
-          instanceId: row.id,
-          requestId,
-          payload: {
+      // The host's refresh is the session's; the hub only logs how it went.
+      detach(
+        awaitReply(row.machineId, requestId, 60_000, () =>
+          sendFrame(agent, {
+            verb: "control",
+            machineId: row.machineId,
             instanceId: row.id,
             requestId,
-            method: CONTROL_REFRESH_CAWCO_TOOLS,
-            args: [],
-          },
-        } satisfies Envelope<ControlPayload>)
-      ).then((reply) => {
-        if (reply === "timeout" || !reply.ok) {
-          console.warn(
-            `[delegation-mcp] ${row.id} (pi) did not refresh its tools: ${reply === "timeout" ? "no answer" : (reply.error ?? "refused")}`
-          );
-        }
-      });
+            payload: {
+              instanceId: row.id,
+              requestId,
+              method: CONTROL_REFRESH_CAWCO_TOOLS,
+              args: [],
+            },
+          } satisfies Envelope<ControlPayload>)
+        ).then((reply) => {
+          if (reply === "timeout" || !reply.ok) {
+            console.warn(
+              `[delegation-mcp] ${row.id} (pi) did not refresh its tools: ${reply === "timeout" ? "no answer" : (reply.error ?? "refused")}`
+            );
+          }
+        }),
+        "pi tool refresh"
+      );
     },
     deliver: (envelope, actor) => {
       const [requester] = db.getInstancesByIds([actor.id]);
@@ -13750,8 +13778,8 @@ export const createServer = (
             return status(404, `no session ${params.id}`);
           }
           publishInstances(row.machineId);
-          // biome-ignore lint/complexity/noVoid: the stored toggle re-arms through the scheduler's one path
-          void keepAliveScheduler.wake();
+          // The stored toggle re-arms through the scheduler's one path.
+          detach(keepAliveScheduler.wake(), "keepalive wake");
           return withKeepAlive([row])[0];
         }
       )
@@ -14412,8 +14440,11 @@ export const createServer = (
           // reaches them already carries the files rather than a name to go and
           // resolve. A fetch that fails leaves its sentence on the row and the
           // fan-out still happens — the fleet is not held up by one plugin.
-          // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — the route returns immediately and the resolve/fan-out continues after the response is sent.
-          void resolvePlugins([params.id]).finally(() => fanOutFleet());
+          // The route answers now; the resolve and fan-out finish after it.
+          detach(
+            resolvePlugins([params.id]).finally(() => fanOutFleet()),
+            "plugin resolve"
+          );
           return plugin;
         }
       )
@@ -16920,12 +16951,13 @@ export const createServer = (
                 );
               }
               publishInstances(message.machineId);
-              // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — nothing here is waiting on it, and register must not stall on it.
-              void pushAgents(message.machineId);
+              detach(pushAgents(message.machineId), "agent push");
               // And what its stored conversations are called, for the ones nobody
               // has ever named — off the catalog the daemon just read anyway.
-              // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — nothing here is waiting on it, and register must not stall on it.
-              void nameStoredSessions(message.machineId);
+              detach(
+                nameStoredSessions(message.machineId),
+                "stored session names"
+              );
               // The ledger the returning agent reattaches against: what this hub
               // has already ingested of each session the daemon is about to hold.
               // Computed AFTER `settleInstances` and after the restores above, so
@@ -16962,8 +16994,8 @@ export const createServer = (
               // after the spawn it waits on.
               awaitingMachine.delete(message.machineId);
               releaseOwed({ machineId: message.machineId });
-              // biome-ignore lint/complexity/noVoid: reconnect immediately retries overdue stored schedules after the register ACK
-              void keepAliveScheduler.wake();
+              // Reconnect retries overdue stored schedules right after the register ACK.
+              detach(keepAliveScheduler.wake(), "keepalive wake");
               workflowRuntime.recover(message.machineId);
               // Continuations waiting on this machine — for their summary, or
               // for their new session — go on from where their record says.
@@ -16972,8 +17004,7 @@ export const createServer = (
                   !SETTLED.has(job.stage) &&
                   machineFor(job) === message.machineId
                 ) {
-                  // biome-ignore lint/complexity/noVoid: each job runs on its own; its record is what anyone follows
-                  void advanceContinuation(job.id);
+                  detach(advanceContinuation(job.id), "continuation");
                 }
               }
               break;
@@ -16983,8 +17014,8 @@ export const createServer = (
                 recordSessionAddress(ws, message.machineId, claim);
               }
               db.touchAgent(message.machineId);
-              // biome-ignore lint/complexity/noVoid: a recovered machine can now answer an idle receipt for an overdue schedule
-              void keepAliveScheduler.wake();
+              // A recovered machine can now answer an idle receipt for an overdue schedule.
+              detach(keepAliveScheduler.wake(), "keepalive wake");
               if ((message.payload as HeartbeatPayload).custody !== undefined) {
                 const custody = peekCustody(message.payload);
                 machineCustody.set(message.machineId, custody);
@@ -17454,8 +17485,8 @@ export const createServer = (
                       console.info(
                         `[keepalive] ${row.id}: result ${neutral.uuid} input=${usage.input} read=${usage.read} write=${usage.write} at ${new Date().toISOString()}`
                       );
-                      // biome-ignore lint/complexity/noVoid: a refreshed request establishes the next original deadline
-                      void keepAliveScheduler.wake();
+                      // A refreshed request establishes the next original deadline.
+                      detach(keepAliveScheduler.wake(), "keepalive wake");
                       publishInstances(row.machineId);
                     }
                     streams.sequence(row.id, { ...frame, keepAlive: true });
@@ -17695,8 +17726,8 @@ export const createServer = (
                   );
                   pending.remember(message.requestId, message);
                   pending.resolve(message.requestId, "cancelled", refusal);
-                  // biome-ignore lint/complexity/noVoid: the withdrawal says its own outcome in the log; admission does not wait on the machine
-                  void withdrawUnshown(message, refusal);
+                  // Admission does not wait on the machine.
+                  detach(withdrawUnshown(message, refusal), "ask withdrawal");
                   break;
                 }
                 // A replayed ask (the daemon re-announces unresolved asks after
@@ -17966,8 +17997,8 @@ export const createServer = (
                       cacheRow.id,
                       keepAliveResult(cacheRow, neutral, false)
                     );
-                    // biome-ignore lint/complexity/noVoid: real turns re-arm from their own request clock
-                    void keepAliveScheduler.wake();
+                    // Real turns re-arm from their own request clock.
+                    detach(keepAliveScheduler.wake(), "keepalive wake");
                     if (cacheRow.keepAliveEnabled) {
                       publishInstances(cacheRow.machineId);
                     }
@@ -18123,8 +18154,8 @@ export const createServer = (
                     if (delegate) {
                       handBack(delegate);
                     }
-                    // biome-ignore lint/complexity/noVoid: nothing waits on whether a rule answered a turn that is not held
-                    void answered();
+                    // Nothing waits on whether a rule answered a turn that is not held.
+                    detach(answered(), "rule answer");
                   }
                   // A plain session past one conversation is offered a project, once.
                   if (row && !failed) {
@@ -18474,18 +18505,21 @@ export const createServer = (
           // REST snapshot lands.
           sendFrame(ws, instancesFrame(""));
           // A reconnected dashboard earns the current sign-in state again.
-          // biome-ignore lint/complexity/noVoid: snapshot follows startup discovery on this socket
-          void mcpReady.then(async () => {
-            await fleetMcp.ready();
-            if (ws.readyState !== 1) {
-              return;
-            }
-            sendFrame(ws, {
-              verb: "frames",
-              machineId: "",
-              payload: { kind: "fleet_mcp", servers: db.fleetConfig().mcp },
-            } satisfies Envelope<FramePayload>);
-          });
+          // The snapshot follows startup discovery on this socket.
+          detach(
+            mcpReady.then(async () => {
+              await fleetMcp.ready();
+              if (ws.readyState !== 1) {
+                return;
+              }
+              sendFrame(ws, {
+                verb: "frames",
+                machineId: "",
+                payload: { kind: "fleet_mcp", servers: db.fleetConfig().mcp },
+              } satisfies Envelope<FramePayload>);
+            }),
+            "fleet snapshot"
+          );
         },
         // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: dispatches every dashboard socket message shape (stream protocol, control, send, ack) through one handler; splitting it would scatter the ordering guarantees across several functions.
         message: guardedDashboardMessage((ws, message) => {

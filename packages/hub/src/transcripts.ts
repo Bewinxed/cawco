@@ -238,7 +238,7 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
 
   const ingest = (instanceId: string, payload: TranscriptPayload): void => {
     const entry = entryFor(instanceId);
-    if (entry.loading) {
+    if (entry.loading !== null) {
       entry.held.push(payload);
       return;
     }
@@ -247,7 +247,7 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
 
   const page: TranscriptsShape["page"] = async (instanceId, limit, before) => {
     const entry = entryFor(instanceId);
-    if (entry.loading) {
+    if (entry.loading !== null) {
       const read = await entry.loading;
       if ("fault" in read) {
         return read;
@@ -273,7 +273,7 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
 
   const reread = (instanceId: string, at?: string): void => {
     const entry = entries.get(instanceId);
-    if (!entry || entry.loading) {
+    if (!entry || entry.loading !== null) {
       return;
     }
     load(instanceId, entry, true, at).catch((error) =>

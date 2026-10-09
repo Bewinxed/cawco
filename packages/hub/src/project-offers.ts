@@ -163,7 +163,7 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
   ): Promise<string | null | undefined> => {
     const key = `${machineId}:${placePath(cwd)}`;
     const known = remotes.get(key);
-    if (known) {
+    if (known !== undefined) {
       return known;
     }
     if (!deps.online(machineId)) {

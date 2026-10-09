@@ -14,6 +14,7 @@ import {
   commandOf,
   readEnv,
 } from "@cawco/core";
+import { detach, failureOf } from "@cawco/core/detach";
 import type { DbShape } from "./db";
 import { sessionLabel } from "./labels";
 import type { HubLifetimeShape } from "./lifetime";
@@ -277,24 +278,45 @@ export const createTelegramBridge = ({
   const closing = new AbortController();
   lifetime.onClose(() => closing.abort());
 
+  /**
+   * A transport failure, in words safe to log. The bot URL holds the token,
+   * and a fetch error carries that URL in its other fields, so only the
+   * error's name and message are read, with the token cut out of those too.
+   */
+  const failed = (what: string, error: unknown): void => {
+    if (closing.signal.aborted) {
+      return;
+    }
+    console.warn(
+      `[telegram] ${what} failed: ${failureOf(error).replaceAll(token, "<token>")}`
+    );
+  };
+
+  /**
+   * One Bot API call. Never throws: a refusal and a transport failure both
+   * answer `undefined`, each logged once here.
+   */
   const call = async <T>(
     method: string,
     body: unknown
   ): Promise<T | undefined> => {
-    const response = await fetch(`${API_BASE}/bot${token}/${method}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-      signal: AbortSignal.any([
-        AbortSignal.timeout(POLL_TIMEOUT_MS),
-        closing.signal,
-      ]),
-    });
-    const answer = (await response.json()) as {
-      ok?: boolean;
-      result?: T;
-      description?: string;
-    };
+    let response: Response;
+    let answer: { ok?: boolean; result?: T; description?: string };
+    try {
+      response = await fetch(`${API_BASE}/bot${token}/${method}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+        signal: AbortSignal.any([
+          AbortSignal.timeout(POLL_TIMEOUT_MS),
+          closing.signal,
+        ]),
+      });
+      answer = (await response.json()) as typeof answer;
+    } catch (error) {
+      failed(method, error);
+      return undefined;
+    }
     if (!answer.ok) {
       console.warn(
         `[telegram] ${method} refused: ${answer.description ?? response.status}`
@@ -307,23 +329,31 @@ export const createTelegramBridge = ({
   const media = createMediaIntake({
     call,
     filesBase: `${API_BASE}/file/bot${token}`,
+    failed,
   });
 
-  /** `call`, for a method that carries bytes: multipart, not JSON. */
+  /** `call`, for a method that carries bytes: multipart, not JSON. Never throws. */
   const upload = async (
     method: string,
     form: FormData
   ): Promise<{ message: TelegramMessage } | { refused: string }> => {
-    const response = await fetch(`${API_BASE}/bot${token}/${method}`, {
-      method: "POST",
-      body: form,
-      signal: AbortSignal.timeout(POLL_TIMEOUT_MS * 3),
-    });
-    const answer = (await response.json()) as {
+    let response: Response;
+    let answer: {
       ok?: boolean;
       result?: TelegramMessage;
       description?: string;
     };
+    try {
+      response = await fetch(`${API_BASE}/bot${token}/${method}`, {
+        method: "POST",
+        body: form,
+        signal: AbortSignal.timeout(POLL_TIMEOUT_MS * 3),
+      });
+      answer = (await response.json()) as typeof answer;
+    } catch (error) {
+      failed(method, error);
+      return { refused: `Telegram did not answer ${method}.` };
+    }
     if (!(answer.ok && answer.result)) {
       const refused = `Telegram refused ${method}: ${answer.description ?? `HTTP ${response.status}`}`;
       console.warn(`[telegram] ${refused}`);
@@ -637,20 +667,22 @@ export const createTelegramBridge = ({
     }
 
     const text = fit(lines);
-    // biome-ignore lint/complexity/noVoid: fire-and-forget; onAsk has nothing to return to and a failed send is not this handler's business
-    void send(text, buttons).then((message) => {
-      if (!message) {
-        return;
-      }
-      track(message.message_id, {
-        instanceId: request.instanceId,
-        machineId: envelope.machineId,
-        // A multi-question ask keeps no `requestId`: nothing sent from here can
-        // settle it, so a reply to it should talk to the session instead.
-        ...(buttons && { requestId }),
-        text,
-      });
-    });
+    detach(
+      send(text, buttons).then((message) => {
+        if (!message) {
+          return;
+        }
+        track(message.message_id, {
+          instanceId: request.instanceId,
+          machineId: envelope.machineId,
+          // A multi-question ask keeps no `requestId`: nothing sent from here can
+          // settle it, so a reply to it should talk to the session instead.
+          ...(buttons && { requestId }),
+          text,
+        });
+      }),
+      "telegram ask"
+    );
   };
 
   const onSettled = (requestId: string): void => {
@@ -660,8 +692,7 @@ export const createTelegramBridge = ({
     if (!asked.has(requestId)) {
       return;
     }
-    // biome-ignore lint/complexity/noVoid: fire-and-forget; onSettled has nothing to return to and a failed close is not this handler's business
-    void close(requestId, "☑️ Answered in the dashboard");
+    detach(close(requestId, "☑️ Answered in the dashboard"), "telegram settle");
   };
 
   const onError = (instanceId: string, message: string): void => {
@@ -677,12 +708,18 @@ export const createTelegramBridge = ({
     const text = fit([
       `${header(instanceId, "💥")} — <code>${esc(clip(message, 900))}</code>`,
     ]);
-    // biome-ignore lint/complexity/noVoid: fire-and-forget; onError has nothing to return to and a failed send is not this handler's business
-    void send(text).then((sent) => {
-      if (sent) {
-        track(sent.message_id, { instanceId, machineId: row.machineId, text });
-      }
-    });
+    detach(
+      send(text).then((sent) => {
+        if (sent) {
+          track(sent.message_id, {
+            instanceId,
+            machineId: row.machineId,
+            text,
+          });
+        }
+      }),
+      "telegram error"
+    );
   };
 
   const onSupervisor = (instanceId: string, message: string): void => {
@@ -701,12 +738,18 @@ export const createTelegramBridge = ({
       `→ ${esc(dashboardUrl(registry))}/session/${instanceId}`,
     ];
     const text = fit(lines);
-    // biome-ignore lint/complexity/noVoid: fire-and-forget; onSupervisor has nothing to return to and a failed send is not this handler's business
-    void send(text).then((sent) => {
-      if (sent) {
-        track(sent.message_id, { instanceId, machineId: row.machineId, text });
-      }
-    });
+    detach(
+      send(text).then((sent) => {
+        if (sent) {
+          track(sent.message_id, {
+            instanceId,
+            machineId: row.machineId,
+            text,
+          });
+        }
+      }),
+      "telegram supervisor"
+    );
   };
 
   const onUserMessage = (envelope: Envelope): void => {
@@ -714,13 +757,15 @@ export const createTelegramBridge = ({
       return;
     }
     const { instanceId, text, attachments } = envelope.payload as UserMessage;
-    // biome-ignore lint/complexity/noVoid: fire-and-forget; no caller waits on this frame, so what failed is logged
-    void deliver(envelope.machineId, instanceId, text, attachments ?? []).then(
-      (problems) => {
-        for (const problem of problems) {
-          console.warn(`[telegram] not sent for ${instanceId}: ${problem}`);
+    detach(
+      deliver(envelope.machineId, instanceId, text, attachments ?? []).then(
+        (problems) => {
+          for (const problem of problems) {
+            console.warn(`[telegram] not sent for ${instanceId}: ${problem}`);
+          }
         }
-      }
+      ),
+      "telegram message"
     );
   };
 
@@ -901,42 +946,61 @@ export const createTelegramBridge = ({
     }
   };
 
-  const start = (): void => {
-    // biome-ignore lint/complexity/noVoid: fire-and-forget; the poll loop below runs for the hub's whole lifetime and reports its own failures via console.warn
-    void (async () => {
-      let offset = 0;
-      let backoff = BACKOFF_FLOOR_MS;
-      console.log(
-        `[telegram] bridge on${chatId === undefined ? " — waiting to be pinned" : ""}`
-      );
-      // Until the hub's lifetime closes: its close aborts the poll in flight.
-      while (!lifetime.closed()) {
-        try {
-          const updates =
-            // biome-ignore lint/performance/noAwaitInLoops: long-polls Telegram until the hub closes; the next getUpdates must start from the offset the previous one returned
-            (await call<TelegramUpdate[]>("getUpdates", {
-              offset,
-              timeout: POLL_SECONDS,
-            })) ?? [];
-          backoff = BACKOFF_FLOOR_MS;
-          for (const update of updates) {
-            offset = update.update_id + 1;
-            // biome-ignore lint/performance/noAwaitInLoops: updates must be handled in Telegram's own order — offset only advances after each one settles
-            await onUpdate(update);
-          }
-        } catch (error) {
-          if (lifetime.closed()) {
-            return;
-          }
-          console.warn(
-            `[telegram] poll failed, retrying in ${backoff}ms:`,
-            error
-          );
-          await lifetime.sleep(backoff);
-          backoff = Math.min(backoff * 2, BACKOFF_CEILING_MS);
-        }
+  /** Where the next `getUpdates` starts: one past the last update handled. */
+  let offset = 0;
+
+  /**
+   * One `getUpdates` and the updates it brought, in Telegram's order. Answers
+   * why the round failed, or nothing when it did not. A getUpdates that
+   * answered nothing has had its reason logged by `call`, so that one
+   * answers an empty reason.
+   */
+  const pollOnce = async (): Promise<string | undefined> => {
+    try {
+      const updates = await call<TelegramUpdate[]>("getUpdates", {
+        offset,
+        timeout: POLL_SECONDS,
+      });
+      if (!updates) {
+        return "";
       }
-    })();
+      for (const update of updates) {
+        offset = update.update_id + 1;
+        // biome-ignore lint/performance/noAwaitInLoops: updates must be handled in Telegram's own order — offset only advances after each one settles
+        await onUpdate(update);
+      }
+      return undefined;
+    } catch (error) {
+      return `: ${failureOf(error).replaceAll(token, "<token>")}`;
+    }
+  };
+
+  const poll = async (): Promise<void> => {
+    let backoff = BACKOFF_FLOOR_MS;
+    console.log(
+      `[telegram] bridge on${chatId === undefined ? " — waiting to be pinned" : ""}`
+    );
+    // Until the hub's lifetime closes: its close aborts the poll in flight.
+    while (!lifetime.closed()) {
+      // biome-ignore lint/performance/noAwaitInLoops: long-polls Telegram until the hub closes; the next getUpdates must start from the offset the previous one returned
+      const failure = await pollOnce();
+      if (failure === undefined) {
+        backoff = BACKOFF_FLOOR_MS;
+        continue;
+      }
+      if (lifetime.closed()) {
+        return;
+      }
+      console.warn(
+        `[telegram] poll failed, retrying in ${backoff}ms${failure}`
+      );
+      await lifetime.sleep(backoff);
+      backoff = Math.min(backoff * 2, BACKOFF_CEILING_MS);
+    }
+  };
+
+  const start = (): void => {
+    detach(poll(), "telegram poll");
   };
 
   return {

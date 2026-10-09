@@ -23,6 +23,7 @@ import type {
   WorkflowStep,
 } from "@cawco/core";
 import { workflowNoticeMarker } from "@cawco/core";
+import { detach } from "@cawco/core/detach";
 import type { StepSpecJson } from "@cawco/core/workflow-program";
 import {
   failureOf,
@@ -1792,7 +1793,7 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
           notify(run, `Stop remains held: ${reason(error)}`)
         );
       } else {
-        steps.recoverRun(runId);
+        detach(steps.recoverRun(runId), "workflow recovery");
       }
     },
     /** A run whose row changed outside the engine (seen, archived): every dashboard hears it. */

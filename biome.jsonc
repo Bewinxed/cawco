@@ -48,6 +48,21 @@
   },
   "overrides": [
     {
+      // A rejection nobody handles ends the hub or sessiond (Bun's default),
+      // so every promise there is awaited, returned, or handed to detach()
+      // from @cawco/core/detach. `void` is not handling: noFloatingPromises
+      // accepts it, so it is not used for promises in these packages.
+      "includes": ["packages/hub/**", "packages/sessiond/**"],
+      "linter": {
+        "rules": {
+          "nursery": {
+            "noFloatingPromises": "error",
+            "noMisusedPromises": "error"
+          }
+        }
+      }
+    },
+    {
       "includes": ["**/*.svelte"],
       "linter": {
         "rules": {

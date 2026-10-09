@@ -606,7 +606,7 @@ export const createCaw = ({
       return { row: current, started: false };
     }
     const pending = starting.get(projectId);
-    if (pending) {
+    if (pending !== undefined) {
       return { row: await pending, started: false };
     }
     const start = startLead(project, event).finally(() =>

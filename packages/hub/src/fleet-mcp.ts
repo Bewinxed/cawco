@@ -71,7 +71,7 @@ export class FleetMcp {
 
   probe(name: string): Promise<void> {
     const running = this.#probing.get(name);
-    if (running) {
+    if (running !== undefined) {
       return running.then(() => this.probe(name));
     }
     const probing = this.#probe(name).finally(() => this.#probing.delete(name));
@@ -201,7 +201,7 @@ export class FleetMcp {
 
   start(name: string, redirectUri: string): Promise<SignInStart> {
     const running = this.#signingIn.get(name);
-    if (running) {
+    if (running !== undefined) {
       return running;
     }
     const starting = this.#start(name, redirectUri).finally(() =>

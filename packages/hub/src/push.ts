@@ -31,6 +31,7 @@ import {
   machineLabel,
   type PermissionRequestFrame,
 } from "@cawco/core";
+import { detach } from "@cawco/core/detach";
 import { Elysia, t } from "elysia";
 import type { DbShape, PushDeviceRow, WorkItemRow } from "./db";
 import { hidden } from "./hidden";
@@ -541,7 +542,7 @@ export const createPush = ({ db, task }: PushServices) => {
       if (item.state !== "failed" || !taskId || !projectId) {
         return;
       }
-      task(projectId, taskId)
+      const alerted = task(projectId, taskId)
         .catch(() => undefined)
         .then((view) => {
           const project = projectName(projectId);
@@ -567,6 +568,7 @@ export const createPush = ({ db, task }: PushServices) => {
             },
           });
         });
+      detach(alerted, "attempt push");
     },
 
     /** A test: a push to the devices given, quiet ones too. */

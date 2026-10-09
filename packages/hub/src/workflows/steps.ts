@@ -25,6 +25,7 @@ import type {
   WorkflowFailure,
 } from "@cawco/core";
 import { workflowNoticeMarker, workflowStepMarker } from "@cawco/core";
+import { detach } from "@cawco/core/detach";
 import type { StepSpecJson } from "@cawco/core/workflow-program";
 import Ajv from "ajv";
 import type {
@@ -870,7 +871,7 @@ export function createSteps(ctx: StepContext) {
       for (const run of db
         .listWorkflowRuns()
         .filter((row) => active(row) && row.machineId === machineId)) {
-        recoverRun(run.id);
+        detach(recoverRun(run.id), "workflow recovery");
       }
     },
     /**

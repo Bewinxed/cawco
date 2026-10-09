@@ -1,3 +1,4 @@
+import { detach } from "@cawco/core/detach";
 import { Effect, Layer } from "effect";
 import { buildInfo } from "./build";
 import { DB_PATH, HUB_PORT, HUB_VERSION } from "./config";
@@ -39,8 +40,7 @@ const main = Effect.gen(function* () {
   // is already able to receive.
   telegram?.start();
   // Off the boot path: a month of transcripts is read once, then never again.
-  // biome-ignore lint/complexity/noVoid: fire-and-forget; the backfill logs its own outcome
-  void backfillUsage(db);
+  detach(backfillUsage(db), "usage backfill");
 });
 
 /** Boots the hub: what running this file does, and what `cawco hub` calls. */

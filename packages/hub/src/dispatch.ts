@@ -53,6 +53,7 @@
  * again as a safety net and starts nothing when nothing is ready.
  */
 import type { InstanceRow, LandsMode } from "@cawco/core";
+import { detach } from "@cawco/core/detach";
 import { Elysia, status, t } from "elysia";
 import type { DbShape, PlaceRow, ProjectRow, WorkItemRow } from "./db";
 import type { WorkBudget, WorkItemCheck } from "./db/schema";
@@ -974,7 +975,7 @@ export const createDispatcher = ({
       return;
     }
     looking.add(projectId);
-    (async () => {
+    const look = async (): Promise<void> => {
       do {
         again.delete(projectId);
         try {
@@ -985,12 +986,16 @@ export const createDispatcher = ({
           console.warn(`[dispatch] ${projectId}: ${failure(error).message}`);
         }
       } while (again.has(projectId));
-    })().finally(() => {
-      looking.delete(projectId);
-      if (again.has(projectId)) {
-        evaluate(projectId);
-      }
-    });
+    };
+    detach(
+      look().finally(() => {
+        looking.delete(projectId);
+        if (again.has(projectId)) {
+          evaluate(projectId);
+        }
+      }),
+      "dispatch look"
+    );
   };
 
   /**
