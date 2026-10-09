@@ -180,6 +180,7 @@ import {
   namedAccount,
   PLACEMENT_STRATEGIES,
   type PlacementPreview,
+  type PlacementStrategy,
   PREVIEW_START,
   PREVIEW_START_PATH,
   PREVIEW_STOP,
@@ -203,9 +204,11 @@ import {
   READ_SKILL_FILES,
   RESOLVE_PERMISSION,
   RESTART_RESUMABLE,
+  type RebalanceNotice,
   type Relaunch,
   RULE_TEMPLATES,
   readProvenance,
+  rebalanceWords,
   relaunchOf,
   reportMarker,
   ruleProblem,
@@ -261,10 +264,10 @@ import {
   createAskPresenter,
 } from "./ask-presentation";
 import {
+  cacheCarries,
   createAtLimit,
   type KeptSummary,
   type Summarised,
-  sameOrganization,
 } from "./at-limit";
 import { createBinaryUpdates } from "./binary-updates";
 import { type Caw, cawRoutes, createCaw, withCawDenials } from "./caw";
@@ -400,6 +403,12 @@ import {
 import { createProjectStops } from "./project-stops";
 import { placePath, readRemote } from "./projects";
 import { createPush, pushRoutes } from "./push";
+import {
+  type ForecastRead,
+  kindBurn,
+  readForecast,
+  sessionBurn,
+} from "./rebalance";
 import { envelopeFault, type RegistryShape, refusalFrame } from "./registry";
 import { RuleEngine } from "./rules";
 import { createSessionIdentities } from "./session-identity";
@@ -3035,7 +3044,17 @@ export const createServer = (
       .catch(console.error);
   };
   /** Every screen's limits and spend, said again after a reading or a sign-in moved. */
+  /**
+   * What rebalancing makes of the accounts as they stand now (at-limit's
+   * `accountsChanged`): an account newly signed in, or back from its bench,
+   * puts its provider's sessions on the move. Set once the controller exists.
+   */
+  let accountsMoved = (): void => undefined;
+  /** What adding an account set moving, newest first, for the Accounts page (core `RebalanceNotice`). */
+  const rebalanceNotices: RebalanceNotice[] = [];
+  const REBALANCE_NOTICES_KEPT = 20;
   const publishUsage = (machineId = ""): void => {
+    accountsMoved();
     registry.broadcast({
       verb: "frames",
       machineId,
@@ -4533,6 +4552,8 @@ export const createServer = (
     if (!(row && wakesForSend(row))) {
       return;
     }
+    // Moving a session whose cache is cold is free: it is re-placed first.
+    replaceAtWake(row);
     resumeSpawn(agent, machineId, row, crossed);
   };
 
@@ -7040,6 +7061,9 @@ export const createServer = (
     if (!provider) {
       return undefined;
     }
+    const asks = spawnAsks(payload, task);
+    const routing = db.accounts.routing(provider);
+    const now = Date.now();
     return {
       accounts: db.accounts
         .list()
@@ -7047,16 +7071,57 @@ export const createServer = (
       signins: db.accounts.signins(),
       readings: db.accounts.readings(),
       bench: db.accounts.bench(),
-      routing: db.accounts.routing(provider),
+      routing,
       machineId,
       machineName: db
         .listAgents()
         .find((agent) => agent.machineId === machineId)?.hostname,
       model: payload.model,
-      ...spawnAsks(payload, task),
+      ...asks,
       ...(fork ? { fork } : {}),
-      now: Date.now(),
+      ...carryTestFor(provider, routing[asks.kind].strategy, (forecast) =>
+        kindBurn(forecast, isOfKind(forecast, asks.kind), now)
+      ),
+      now,
     };
+  };
+
+  /**
+   * What soonest-reset's carry test reads (placement `paces` and `burn`):
+   * each of `provider`'s accounts' paces, and the burn the session brings.
+   * Read only for soonest-reset, which alone asks.
+   */
+  const carryTestFor = (
+    provider: AccountProvider,
+    strategy: PlacementStrategy,
+    burnOf: (forecast: ForecastRead) => number | null
+  ): Pick<PlacementInput, "burn" | "paces"> => {
+    if (strategy !== "soonest-reset") {
+      return {};
+    }
+    const forecast = readForecast(db, provider, Date.now());
+    return { paces: forecast.paces, burn: burnOf(forecast) };
+  };
+
+  /** Whether a session with turns in `forecast` is of `kind`: a person's, or a session's delegate. */
+  const isOfKind = (
+    forecast: ForecastRead,
+    kind: "yours" | "delegates"
+  ): ((instanceId: string) => boolean) => {
+    const ids = [
+      ...new Set(
+        [...forecast.turns.values()].flatMap((turns) =>
+          turns.map((turn) => turn.instanceId)
+        )
+      ),
+    ];
+    const delegates = new Set(
+      db
+        .getInstancesByIds(ids)
+        .filter((row) => row.parentInstanceId)
+        .map((row) => row.id)
+    );
+    return (instanceId) => delegates.has(instanceId) === (kind === "delegates");
   };
 
   /**
@@ -11129,7 +11194,7 @@ export const createServer = (
           asked: true,
           from: namedAccount(from),
           to: namedAccount(account),
-          sameOrganization: sameOrganization(from, account),
+          sameOrganization: cacheCarries(from, account),
           tokens: row.contextTokens,
           window: null,
           resetsAt: null,
@@ -13195,13 +13260,56 @@ export const createServer = (
   const limitTarget = (
     row: ReturnType<typeof db.getInstancesByIds>[number],
     accountId: string
+  ): string | null => replaceRow(row, accountId, accountId);
+
+  /**
+   * Where placement puts a session that runs on `accountId` now, for the
+   * kind of session it is, on its machine, within its project's and task's
+   * lists and its type's preference, its own burn in the carry test:
+   * never `exclude` when one is named (then only an account with room).
+   */
+  const replaceRow = (
+    row: ReturnType<typeof db.getInstancesByIds>[number],
+    accountId: string,
+    exclude?: string
   ): string | null => {
-    // The provider of the account it leaves: it moves only among that
+    // The provider of the account it is on: it moves only among that
     // provider's accounts signed in for its harness on its machine.
     const provider = db.accounts.get(accountId)?.provider;
     if (!provider) {
       return null;
     }
+    const routing = db.accounts.routing(provider);
+    const asks = rowAsks(row);
+    const now = Date.now();
+    const placed = placeAccount({
+      accounts: db.accounts
+        .list()
+        .filter((account) => account.provider === provider),
+      signins: db.accounts.signins(),
+      readings: db.accounts.readings(),
+      bench: db.accounts.bench(),
+      routing,
+      machineId: row.machineId,
+      machineName: machineName(row.machineId),
+      ...(row.model ? { model: row.model } : {}),
+      ...asks,
+      ...carryTestFor(provider, routing[asks.kind].strategy, (forecast) =>
+        sessionBurn(forecast.turns.get(accountId) ?? [], row.id, now)
+      ),
+      ...(exclude ? { exclude } : {}),
+      now,
+    });
+    return placed.ok ? placed.accountId : null;
+  };
+
+  /** What a running session asks of placement: its kind, its project's and task's lists, its type's account. */
+  const rowAsks = (
+    row: ReturnType<typeof db.getInstancesByIds>[number]
+  ): Pick<
+    PlacementInput,
+    "kind" | "projectAccounts" | "taskAccounts" | "typeAccount"
+  > => {
     const item = row.workItemId ? db.workItem(row.workItemId) : undefined;
     const projectId = row.projectId ?? item?.projectId ?? null;
     const typeAccount = row.delegateType
@@ -13210,27 +13318,86 @@ export const createServer = (
           row.delegateType
         )?.account
       : undefined;
-    const placed = placeAccount({
-      accounts: db.accounts
-        .list()
-        .filter((account) => account.provider === provider),
-      signins: db.accounts.signins(),
-      readings: db.accounts.readings(),
-      bench: db.accounts.bench(),
-      routing: db.accounts.routing(provider),
-      machineId: row.machineId,
-      machineName: machineName(row.machineId),
-      ...(row.model ? { model: row.model } : {}),
+    return {
       kind: row.parentInstanceId ? "delegates" : "yours",
       projectAccounts: projectId
         ? (db.project(projectId)?.accounts ?? null)
         : null,
       taskAccounts: taskAccounts(projectId, item?.taskId),
       ...(typeAccount ? { typeAccount } : {}),
-      exclude: accountId,
-      now: Date.now(),
+    };
+  };
+
+  /**
+   * Whether a session's prompt cache is still warm, as the cold check reads
+   * it: mid-turn, never measured, or not yet expired. One the hub found
+   * cold (a keep-alive that missed) is cold.
+   */
+  const cacheWarm = (
+    row: ReturnType<typeof db.getInstancesByIds>[number]
+  ): boolean => {
+    if (row.cacheCold) {
+      return false;
+    }
+    const state = followupState(row);
+    const expires = promptCacheExpiresAt(row, state.lastTurnAt);
+    return state.midTurn || expires === null || expires > Date.now();
+  };
+
+  /**
+   * A Claude session woken for a send with its cache cold is re-placed
+   * first, by its kind's strategy: its first request re-reads its whole
+   * context wherever it runs, so moving it costs nothing extra (fleet
+   * history, at-limit check 3: own-account cold re-writes median 1.0 of the
+   * prompt, cross-organization 0.94). The move is owed to its launch
+   * ({@link relaunchAtTurnEnd}), which carries its conversation into the
+   * new account's dir; its line is written once that has. A fork stays with
+   * its origin, a session a person moved stays where they put it, and only
+   * Claude's conversations are carried this way.
+   */
+  const replaceAtWake = (
+    row: ReturnType<typeof db.getInstancesByIds>[number]
+  ): void => {
+    const from = row.accountId ? db.accounts.get(row.accountId) : undefined;
+    if (
+      !from ||
+      (row.harness ?? "claude") !== "claude" ||
+      !LIMITED_PROVIDERS.includes(from.provider) ||
+      row.forkedFrom !== null ||
+      relaunchAtTurnEnd.has(row.id) ||
+      db.atLimit.hold(row.id) ||
+      cacheWarm(row) ||
+      !db.accounts.routing(from.provider).atLimit.move
+    ) {
+      return;
+    }
+    const last = db.atLimit
+      .events([row.id])
+      .findLast((one) => one.move.kind === "moved")?.move;
+    if (last?.kind === "moved" && last.asked) {
+      return;
+    }
+    const toId = replaceRow(row, from.id);
+    const to = toId ? db.accounts.get(toId) : undefined;
+    if (!to || to.id === from.id) {
+      return;
+    }
+    console.info(
+      `[rebalance] ${row.id}: woken with its cache cold; re-placed from ${accountName(from)} to ${accountName(to)}`
+    );
+    relaunchAtTurnEnd.set(row.id, {
+      to: to.id,
+      move: {
+        kind: "moved",
+        from: namedAccount(from),
+        to: namedAccount(to),
+        sameOrganization: cacheCarries(from, to),
+        tokens: row.contextTokens,
+        window: null,
+        resetsAt: null,
+        because: { kind: "cold", wake: true },
+      },
     });
-    return placed.ok ? placed.accountId : null;
   };
 
   /**
@@ -13354,7 +13521,17 @@ export const createServer = (
     }),
     target: limitTarget,
     idle: sessionIdle,
-    move: async (row, accountId) => {
+    warm: cacheWarm,
+    machineName,
+    noticed: (notice) => {
+      rebalanceNotices.unshift(notice);
+      rebalanceNotices.splice(REBALANCE_NOTICES_KEPT);
+      console.info(
+        `[rebalance] ${rebalanceWords(notice).title}: ${rebalanceWords(notice).lines.join(" · ")}`
+      );
+      publishUsage();
+    },
+    move: async (row, accountId, resume) => {
       if (!(registry.agent(row.machineId) && row.sessionId)) {
         return row.sessionId
           ? awayWords(row.machineId, "offline")
@@ -13387,7 +13564,9 @@ export const createServer = (
         false,
         true
       );
-      carryOn(now);
+      if (resume) {
+        carryOn(now);
+      }
     },
     resume: carryOn,
     // What its process was last handed: what it kept for later never reached
@@ -13402,6 +13581,7 @@ export const createServer = (
     note: noteAtLimit,
     changed: () => publishInstances(""),
   });
+  accountsMoved = atLimit.accountsChanged;
 
   workItems.resumeWaits();
 
@@ -16923,6 +17103,9 @@ export const createServer = (
             readings: mine(db.accounts.readings()),
             bench: mine(db.accounts.bench()),
             catalogs: mine(db.accounts.catalogs()),
+            rebalances: rebalanceNotices.filter((notice) =>
+              notice.came.some((one) => ids.has(one.account.id))
+            ),
           };
         }
       )

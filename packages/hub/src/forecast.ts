@@ -127,6 +127,144 @@ export const bindingWindow = (windows: WindowForecast[]): WindowRef | null => {
   );
 };
 
+/** One turn's tokens, as `turn_usage` keeps them. */
+export interface TurnTokens {
+  at: Date;
+  cacheReadTokens: number;
+  /** The part of {@link cacheWriteTokens} written for an hour; null when not split. */
+  cacheWrite1hTokens: number | null;
+  /** Every cache write, whatever its lifetime. */
+  cacheWriteTokens: number;
+  inputTokens: number;
+  outputTokens: number;
+}
+
+/**
+ * A turn's tokens weighted as Claude prices them against uncached input:
+ * 5-minute cache writes 1.25×, 1-hour writes 2×, cache reads 0.1×, output
+ * 5× (platform.claude.com/docs/en/build-with-claude/prompt-caching: Opus
+ * 5.5 "$4 / MTok | $5 / MTok | $8 / MTok | $0.20 / MTok | $20 / MTok";
+ * every current Claude model keeps the same ratios). A write not split by
+ * lifetime counts as 5-minute. A subscription's window is spent in
+ * proportion to these, as far as anything says.
+ */
+export const weightedTokens = (turn: TurnTokens): number => {
+  const hour = turn.cacheWrite1hTokens ?? 0;
+  return (
+    turn.inputTokens +
+    1.25 * (turn.cacheWriteTokens - hour) +
+    2 * hour +
+    0.1 * turn.cacheReadTokens +
+    5 * turn.outputTokens
+  );
+};
+
+/** A re-read of `tokens` uncached on an account: written to its cache at the 5-minute or 1-hour rate. */
+export const reReadWeight = (
+  tokens: number,
+  ttl: string | null | undefined
+): number => tokens * (ttl === "1h" ? 2 : 1.25);
+
+/** One window's pace for placement and rebalancing, and what one percent of it costs. */
+export interface WindowPace {
+  kind: string;
+  /** Percent per hour since the window opened; null when not measured or nothing runs there. */
+  pace: number | null;
+  scopeLabel: string | null;
+  /** Weighted tokens ({@link weightedTokens}) one percent of the window took; null when unmeasured. */
+  tokensPerPct: number | null;
+}
+
+/** Each account's window paces, by account id. */
+export type AccountPaces = ReadonlyMap<string, WindowPace[]>;
+
+/**
+ * The fewest percent a window must have moved, summed over its readings,
+ * before what a percent costs is taken from it: a reading rounds to whole
+ * percents, so one or two of them say little.
+ */
+const MIN_PCT_MEASURED = 3;
+
+/**
+ * What one percent of an account's window costs in weighted tokens, from the
+ * readings it moved across (the history) laid beside the turns CawCo saw on
+ * it in the same spans. Use CawCo never saw (another client on the account)
+ * makes a percent look cheaper than it is, so re-reads priced from it are
+ * priced high. Null until the window has moved {@link MIN_PCT_MEASURED}
+ * percent across spans with turns recorded.
+ */
+export const tokensPerPercent = (
+  window: { kind: string; scopeLabel: string | null },
+  history: HistoryPoint[],
+  turns: TurnTokens[],
+  accountId: string
+): number | null => {
+  const series = new Map<string, HistoryPoint[]>();
+  for (const point of history) {
+    if (
+      point.accountId === accountId &&
+      point.kind === window.kind &&
+      point.scopeLabel === window.scopeLabel
+    ) {
+      const key = point.resetsAt ?? "";
+      series.set(key, [...(series.get(key) ?? []), point]);
+    }
+  }
+  let pct = 0;
+  let tokens = 0;
+  for (const points of series.values()) {
+    points.sort((a, b) => a.fetchedAt - b.fetchedAt);
+    const [first] = points;
+    const last = points.at(-1);
+    if (!(first && last) || last.percent <= first.percent) {
+      continue;
+    }
+    const spent = turns
+      .filter((turn) => {
+        const at = turn.at.getTime();
+        return at > first.fetchedAt && at <= last.fetchedAt;
+      })
+      .reduce((sum, turn) => sum + weightedTokens(turn), 0);
+    if (spent > 0) {
+      pct += last.percent - first.percent;
+      tokens += spent;
+    }
+  }
+  return pct >= MIN_PCT_MEASURED ? tokens / pct : null;
+};
+
+/**
+ * Each account's windows as placement and rebalancing read them: the pace
+ * of each (null on an account nothing runs on, as {@link accountForecasts}
+ * has it) and what one percent of it costs.
+ */
+export const accountPaces = (
+  accounts: Account[],
+  readings: AccountReading[],
+  history: HistoryPoint[],
+  turns: ReadonlyMap<string, TurnTokens[]>,
+  running: ReadonlySet<string>,
+  now: number
+): Map<string, WindowPace[]> =>
+  new Map(
+    accountForecasts(accounts, readings, history, running, now).map(
+      (forecast) => [
+        forecast.accountId,
+        forecast.windows.map((window) => ({
+          kind: window.kind,
+          scopeLabel: window.scopeLabel,
+          pace: window.pace,
+          tokensPerPct: tokensPerPercent(
+            window,
+            history,
+            turns.get(forecast.accountId) ?? [],
+            forecast.accountId
+          ),
+        })),
+      ]
+    )
+  );
+
 /** Every account's windows as a forecast. `running`: accounts with a live session. */
 export const accountForecasts = (
   accounts: Account[],

@@ -18327,6 +18327,12 @@
             "items": {
               "$ref": "#/components/schemas/AccountCatalog"
             }
+          },
+          "rebalances": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RebalanceNotice"
+            }
           }
         },
         "required": [
@@ -18334,6 +18340,7 @@
           "bench",
           "catalogs",
           "readings",
+          "rebalances",
           "routing",
           "signins"
         ]
@@ -27174,6 +27181,63 @@
                       "null",
                       "number"
                     ]
+                  },
+                  "because": {
+                    "description": "Why it moved before any limit refused it: its account was forecast\nto run out at `runsOutAt` (a rebalance between turns), or its cache\nwas cold at its wake, so the move re-read nothing extra. Absent: its\naccount's limit refused a turn, or a person asked.",
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "forecast"
+                            ]
+                          },
+                          "runsOutAt": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "runsOutAt"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "cold"
+                            ]
+                          },
+                          "wake": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "wake"
+                        ]
+                      }
+                    ]
+                  },
+                  "cost": {
+                    "description": "What the re-read cost on `to`: a percent of its window; absent when unpriced.",
+                    "type": "object",
+                    "properties": {
+                      "pct": {
+                        "type": "number"
+                      },
+                      "window": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "pct",
+                      "window"
+                    ]
                   }
                 },
                 "required": [
@@ -30151,6 +30215,169 @@
           "readAt"
         ]
       },
+      "RebalanceNotice": {
+        "description": "What adding an account (or one coming back from its bench) set moving on\none machine, for the Accounts page: the running sessions moved between\nturns off accounts forecast to run out, and the held sessions re-decided\nat once. Kept by the hub until acknowledged (`id` is its notice id).",
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "number"
+          },
+          "came": {
+            "description": "The accounts that came: `added`, newly signed in there; `back`, their bench ended.",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "account": {
+                  "$ref": "#/components/schemas/NamedAccount"
+                },
+                "how": {
+                  "enum": [
+                    "added",
+                    "back"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "account",
+                "how"
+              ]
+            }
+          },
+          "held": {
+            "description": "The held sessions looked at again, by the account each was held on.",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "from": {
+                  "$ref": "#/components/schemas/NamedAccount"
+                },
+                "moved": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "to": {
+                        "$ref": "#/components/schemas/NamedAccount"
+                      },
+                      "tokens": {
+                        "type": [
+                          "null",
+                          "number"
+                        ]
+                      },
+                      "cacheKept": {
+                        "description": "One organization: nothing was re-read.",
+                        "type": "boolean"
+                      },
+                      "cost": {
+                        "type": "object",
+                        "properties": {
+                          "pct": {
+                            "type": "number"
+                          },
+                          "window": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "pct",
+                          "window"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "cacheKept",
+                      "to",
+                      "tokens"
+                    ]
+                  }
+                },
+                "continued": {
+                  "description": "Continued from a summary on another account.",
+                  "type": "number"
+                },
+                "waiting": {
+                  "description": "Still waiting: each one's context.",
+                  "type": "array",
+                  "items": {
+                    "type": [
+                      "null",
+                      "number"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "continued",
+                "from",
+                "moved",
+                "waiting"
+              ]
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "machine": {
+            "type": "string"
+          },
+          "running": {
+            "description": "Running sessions moved off an account forecast to run out, by account and target.",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "from": {
+                  "$ref": "#/components/schemas/NamedAccount"
+                },
+                "organization": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "runsOutAt": {
+                  "type": "number"
+                },
+                "to": {
+                  "$ref": "#/components/schemas/NamedAccount"
+                },
+                "cacheKept": {
+                  "description": "The cache came along (one organization, and a carry there keeps it).",
+                  "type": "boolean"
+                },
+                "moved": {
+                  "type": "number"
+                },
+                "left": {
+                  "description": "Planned but not moved: mid-turn or failed when looked at.",
+                  "type": "number"
+                }
+              },
+              "required": [
+                "cacheKept",
+                "from",
+                "left",
+                "moved",
+                "organization",
+                "runsOutAt",
+                "to"
+              ]
+            }
+          }
+        },
+        "required": [
+          "at",
+          "came",
+          "held",
+          "id",
+          "machine",
+          "running"
+        ]
+      },
       "ProviderChoice": {
         "description": "One row of the account picker: a provider and one way its accounts sign\nin. A provider that takes both OAuth and a key is two rows, as Claude is\n(a subscription, and a Console organization).",
         "type": "object",
@@ -32173,6 +32400,63 @@
                     "type": [
                       "null",
                       "number"
+                    ]
+                  },
+                  "because": {
+                    "description": "Why it moved before any limit refused it: its account was forecast\nto run out at `runsOutAt` (a rebalance between turns), or its cache\nwas cold at its wake, so the move re-read nothing extra. Absent: its\naccount's limit refused a turn, or a person asked.",
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "forecast"
+                            ]
+                          },
+                          "runsOutAt": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "runsOutAt"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "cold"
+                            ]
+                          },
+                          "wake": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "wake"
+                        ]
+                      }
+                    ]
+                  },
+                  "cost": {
+                    "description": "What the re-read cost on `to`: a percent of its window; absent when unpriced.",
+                    "type": "object",
+                    "properties": {
+                      "pct": {
+                        "type": "number"
+                      },
+                      "window": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "pct",
+                      "window"
                     ]
                   }
                 },

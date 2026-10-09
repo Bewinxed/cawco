@@ -4,23 +4,32 @@ import {
   type AccountReading,
   type AccountSignin,
   accountName,
+  clockWords,
   type LimitWindow,
   modelScope,
   type PlacementExplain,
   type PlacementStrategy,
   type ProviderRouting,
 } from "@cawco/core";
+import type { AccountPaces } from "./forecast";
 
 /**
- * Which account a new session runs on (core `PlacementExplain`), decided once,
- * when it starts: prompt caches are per organization, so a running session is
- * moved only at its limit. Pure: every input is read by the caller.
+ * Which account a session runs on (core `PlacementExplain`): decided when it
+ * starts, and again when moving it is free or staying would fail: at its
+ * limit, when its account is forecast to run out (at-limit's rebalance), and
+ * at a wake with its cache cold. Pure: every input is read by the caller.
  */
 
 export interface PlacementInput {
   /** Every account of the session's provider. */
   accounts: Account[];
   bench: AccountBench[];
+  /**
+   * The session's expected burn in weighted tokens an hour (a running one's
+   * own, a new one's kind's recent average), which soonest-reset adds to an
+   * account's pace in its carry test; null or absent when unmeasured.
+   */
+  burn?: number | null;
   /**
    * The account a running session leaves at its limit. Placement then looks
    * for another to carry it: never this one, only one with headroom, and none
@@ -38,6 +47,11 @@ export interface PlacementInput {
   machineName?: string;
   model?: string;
   now: number;
+  /**
+   * Each account's window paces (forecast.ts `accountPaces`), for
+   * soonest-reset's carry test; absent: no forecast, the order alone decides.
+   */
+  paces?: AccountPaces;
   /** The project's allow-list; null or absent: every account. */
   projectAccounts?: string[] | null;
   readings: AccountReading[];
@@ -72,6 +86,10 @@ const used = (window: LimitWindow | undefined, now: number): number => {
 };
 
 const pct = (value: number): string => `${Math.round(value)}%`;
+
+const HOUR_MS = 3_600_000;
+/** A 5-hour window's length: one not open yet opens at the session's first use. */
+export const SESSION_WINDOW_MS = 5 * HOUR_MS;
 
 /** An explicit pick: the account it names by id, nickname or email. */
 const picked = (accounts: Account[], asked: string): Account | undefined => {
@@ -128,11 +146,68 @@ class Usage {
 
   headroom = (account: Account): boolean => this.binding(account.id) < 100;
 
-  /** When its 5-hour window resets; never, for one with no window open. */
+  /** Whether its 5-hour window is open: it has a reset still ahead. */
+  opened(id: string): boolean {
+    const window = this.#window(id, "session");
+    return !!window?.resetsAt && Date.parse(window.resetsAt) > this.#input.now;
+  }
+
+  /**
+   * When its 5-hour window resets. One with no window open counts as opening
+   * now, so as resetting {@link SESSION_WINDOW_MS} from now: that is when it
+   * would, since the window starts at its first use.
+   */
   resetOf(id: string): number {
     const window = this.#window(id, "session");
+    return this.opened(id) && window?.resetsAt
+      ? Date.parse(window.resetsAt)
+      : this.#input.now + SESSION_WINDOW_MS;
+  }
+
+  /**
+   * When the account runs out before a window of it resets, at its pace with
+   * the session's burn added (`burn` over what a percent of that window
+   * costs); null when it lasts to every reset, or nothing measures it. A
+   * window not open yet resets {@link SESSION_WINDOW_MS} from now if it is
+   * the 5-hour one, and is no limit otherwise.
+   */
+  runsOut(id: string): number | null {
+    const { paces } = this.#input;
+    if (!paces) {
+      return null;
+    }
+    const outs = [
+      this.#runsOutOf(id, "session", null),
+      this.#runsOutOf(id, "weekly_all", null),
+      this.#scope ? this.#runsOutOf(id, "weekly_scoped", this.#scope) : null,
+    ].filter((out): out is number => out !== null);
+    return outs.length > 0 ? Math.min(...outs) : null;
+  }
+
+  /** {@link runsOut} for one window of the account. */
+  #runsOutOf(
+    id: string,
+    kind: string,
+    scopeLabel: string | null
+  ): number | null {
+    const { paces, burn, now } = this.#input;
+    const window = this.#window(id, kind);
     const at = window?.resetsAt ? Date.parse(window.resetsAt) : null;
-    return at !== null && at > this.#input.now ? at : Number.POSITIVE_INFINITY;
+    const open = at !== null && at > now;
+    if (!open && kind !== "session") {
+      return null;
+    }
+    const reset = open && at !== null ? at : now + SESSION_WINDOW_MS;
+    const pace = paces
+      ?.get(id)
+      ?.find((one) => one.kind === kind && one.scopeLabel === scopeLabel);
+    const added = burn && pace?.tokensPerPct ? burn / pace.tokensPerPct : 0;
+    const rate = (pace?.pace ?? 0) + added;
+    if (rate <= 0) {
+      return null;
+    }
+    const out = now + (Math.max(100 - used(window, now), 0) / rate) * HOUR_MS;
+    return out < reset ? out : null;
   }
 
   benched(id: string): boolean {
@@ -204,24 +279,45 @@ const spread = (candidates: Account[], usage: Usage): Choice => {
     : undefined;
 };
 
-/** Soonest-reset: among those with headroom, the earliest 5-hour reset; no window last; ties to most headroom. */
+/**
+ * Soonest-reset: among those with headroom, by 5-hour reset (one with no
+ * window open as resetting 5 hours from now), ties to most headroom, the
+ * first that can carry the load to its reset ({@link Usage.runsOut}). When
+ * none can, the first anyway. Without paces, the order alone decides.
+ */
 const soonestReset = (candidates: Account[], usage: Usage): Choice => {
-  const [account] = candidates
+  const ranked = candidates
     .filter(usage.headroom)
     .sort(
       (a, b) =>
         usage.resetOf(a.id) - usage.resetOf(b.id) ||
         usage.binding(a.id) - usage.binding(b.id)
     );
+  const carrier = ranked.find((one) => usage.runsOut(one.id) === null);
+  const account = carrier ?? ranked[0];
   if (!account) {
     return undefined;
   }
-  const reset = usage.resetOf(account.id);
+  const named = accountName(account);
+  const head = usage.opened(account.id)
+    ? `${named}'s 5-hour window resets soonest (${clockWords(usage.resetOf(account.id))}) and it has headroom (${usage.said(account.id)})`
+    : `${named} has headroom and no window open yet (counts as resetting in 5h; ${usage.said(account.id)})`;
+  if (!carrier) {
+    const out = usage.runsOut(account.id);
+    return {
+      account,
+      why: `${head}; it would run out at ${out === null ? "?" : clockWords(out)} at this pace, but no account with headroom lasts to its reset.`,
+    };
+  }
+  const passed = ranked
+    .slice(0, ranked.indexOf(account))
+    .map(
+      (one) =>
+        `${accountName(one)} resets sooner but would run out at ${clockWords(usage.runsOut(one.id) ?? 0)} first`
+    );
   return {
     account,
-    why: Number.isFinite(reset)
-      ? `${accountName(account)}'s 5-hour window resets soonest (${new Date(reset).toISOString()}) and it has headroom (${usage.said(account.id)}).`
-      : `${accountName(account)} has headroom and no account has a 5-hour window open (${usage.said(account.id)}).`,
+    why: `${head}${passed.length > 0 ? `; ${passed.join("; ")}` : ""}.`,
   };
 };
 

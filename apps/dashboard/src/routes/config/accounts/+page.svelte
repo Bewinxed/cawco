@@ -7,12 +7,17 @@
    * account. Groups and rows arriving or leaving reflow (motion/rows).
    */
   import AccountListRow from "#lib/cawco/accounts/AccountListRow.svelte";
-  import { groupsOf } from "#lib/cawco/accounts/model.svelte.js";
+  import {
+    groupsOf,
+    rebalancesUnseen,
+  } from "#lib/cawco/accounts/model.svelte.js";
   import ProviderMark from "#lib/cawco/accounts/ProviderMark.svelte";
+  import RebalanceNotices from "#lib/cawco/accounts/RebalanceNotices.svelte";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
+  import { notices } from "#lib/cawco/notices.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
@@ -20,6 +25,10 @@
 
   const section = sectionOf("accounts");
   const groups = $derived(groupsOf());
+  /** What an account that came set moving, until the ✕ acknowledges it. */
+  const rebalanced = $derived(
+    notices.known ? rebalancesUnseen(notices.seen) : []
+  );
 </script>
 
 <SectionFrame ready={cawco.accounts !== null} title={section.label}>
@@ -49,6 +58,15 @@
     </EmptyState>
   {:else}
     <div class="groups" {@attach reflow()}>
+      {#if rebalanced.length > 0}
+        <RebalanceNotices
+          notices={rebalanced}
+          ondismiss={() => {
+            // biome-ignore lint/complexity/noVoid: the hub's record comes back on the next board frame
+            void notices.acknowledge(rebalanced.map((one) => one.id));
+          }}
+        />
+      {/if}
       {#each groups as group (group.provider)}
         <section
           aria-labelledby="provider-{group.provider}"

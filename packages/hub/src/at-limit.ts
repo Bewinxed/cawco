@@ -2,6 +2,7 @@ import {
   type Account,
   type AccountBench,
   type AccountMove,
+  type AccountProvider,
   type AccountReading,
   type AtLimit,
   accountName,
@@ -10,6 +11,7 @@ import {
   modelScope,
   type NeutralOrigin,
   namedAccount,
+  type RebalanceNotice,
   type WaitReason,
   windowWords,
 } from "@cawco/core";
@@ -17,6 +19,7 @@ import { detach } from "@cawco/core/detach";
 import type { DbShape } from "./db";
 import type { LimitHold } from "./db/at-limit";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
+import { createRebalancer, readForecast, reReadCost } from "./rebalance";
 
 /**
  * A running Claude session whose account reached its limit: its turn was
@@ -30,6 +33,12 @@ import type { HubLifetimeShape, HubTimer } from "./lifetime";
  * written ahead of the limit, on the account that is about to run out, while
  * it still has room. Every outcome is one line in its transcript saying what
  * it cost (core `AccountMove`). Moves happen only between turns.
+ *
+ * The same controller rebalances before any limit: when an account signs in
+ * or comes back from its bench, and at every look, running sessions on
+ * accounts forecast to run out move to where placement would carry them,
+ * when moving is free (their cache carries, or is cold) or cheap (under the
+ * floor and affordable), and held sessions are looked at again at once.
  */
 
 export type LimitRow = ReturnType<DbShape["getInstancesByIds"]>[number];
@@ -68,8 +77,28 @@ export const sameOrganization = (a: Account, b: Account): boolean =>
   a.identity.organization === b.identity?.organization;
 
 /**
+ * The share of its prompt a session's first request reads from cache after
+ * it moves between two accounts of one organization, as measured: the
+ * fleet's own transcripts (Claude Code 2.1.289, SDK), requests over 60k sent
+ * under 50 minutes after the last, a new process on another account of the
+ * same organization: 12 hits of 14, e.g. 305,611 prompt tokens with 294,539
+ * read and 11,070 written (at-limit check 1, 2026-10-09). Measured again,
+ * the new figure goes here and nothing else changes: below
+ * {@link CACHE_KEPT_AT}, a move within one organization costs what one
+ * across organizations does, and is decided as one.
+ */
+const SAME_ORGANIZATION_CARRY_CACHE_READ = 294_539 / 305_611;
+/** A request reads its cache when nearly all its prompt comes from it (keep-alive's own test). */
+const CACHE_KEPT_AT = 0.9;
+
+/** Whether moving a session from `a` to `b` keeps its prompt cache: one organization, whose carries read it. */
+export const cacheCarries = (a: Account, b: Account): boolean =>
+  sameOrganization(a, b) && SAME_ORGANIZATION_CARRY_CACHE_READ >= CACHE_KEPT_AT;
+
+/**
  * The policy's steps in order: a fork or the policy off waits; nothing to
- * move to waits; one organization moves whole whatever the size; a reset
+ * move to waits; a move that keeps the cache ({@link cacheCarries}: one
+ * organization) moves whole whatever the size; a reset
  * within `waitMinutes` waits; a context under `moveWholeUnderK` moves whole;
  * anything larger continues from a summary. A context never reported moves
  * whole: there is nothing to say a summary would be cheaper.
@@ -86,7 +115,7 @@ export const decideAtLimit = (input: DecideInput): AtLimitDecision => {
   if (!target) {
     return { action: "wait", until, why: "full" };
   }
-  if (sameOrganization(current, target)) {
+  if (cacheCarries(current, target)) {
     return { action: "move", targetId: target.id, sameOrganization: true };
   }
   if (resetAt !== null && resetAt - now <= policy.waitMinutes * MINUTE_MS) {
@@ -219,16 +248,25 @@ export interface AtLimitPorts {
   idle: (row: LimitRow) => Promise<boolean>;
   /** Runs the next look and each settling session's timer until the hub closes. */
   lifetime: HubLifetimeShape;
+  /** A machine as a sentence names it. */
+  machineName: (machineId: string) => string;
   /**
-   * Relaunches `row` on `accountId`, its conversation with it, and has it
-   * carry on. Answers why when it did not move: `row` is still on its
-   * account then.
+   * Relaunches `row` on `accountId`, its conversation with it, and, when
+   * its limit stopped it (`carryOn`), has it carry on; a session moved
+   * between turns before any limit waits for its next message. Answers why
+   * when it did not move: `row` is still on its account then.
    */
-  move: (row: LimitRow, accountId: string) => Promise<string | undefined>;
+  move: (
+    row: LimitRow,
+    accountId: string,
+    carryOn: boolean
+  ) => Promise<string | undefined>;
   /** The session's machine and title, as a line names them. */
   named: (row: LimitRow) => { machine: string; session: string };
   /** Writes one line into `row`'s transcript. */
   note: (row: LimitRow, move: AccountMove) => void;
+  /** What adding an account set moving, for the Accounts page. */
+  noticed: (notice: RebalanceNotice) => void;
   /** Has `row` carry on where its limit stopped it, on the account it is on. */
   resume: (row: LimitRow) => void;
   /**
@@ -246,6 +284,8 @@ export interface AtLimitPorts {
   ) => Promise<Summarised | undefined>;
   /** Who would carry `row` off `accountId`: placement for its kind, excluding that account. */
   target: (row: LimitRow, accountId: string) => string | null;
+  /** Whether `row`'s prompt cache is still warm: a move off its account then re-reads it. */
+  warm: (row: LimitRow) => boolean;
 }
 
 /** What a failure said, as a line quotes it. */
@@ -376,11 +416,15 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     now: number
   ): AccountMove => {
     const full = fullWindow(readingOf(current.id), row.model, now);
+    const cost = sameOrg
+      ? undefined
+      : reReadCost(readForecast(db, target.provider, now), row, target);
     return {
       kind: "moved",
       from: namedAccount(current),
       to: namedAccount(target),
       sameOrganization: sameOrg,
+      ...(cost ? { cost } : {}),
       tokens: row.contextTokens,
       window: full ? windowWords(full) : null,
       resetsAt: refusedUntil(
@@ -456,7 +500,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     oneOrganization: boolean,
     now: number
   ): Promise<void> => {
-    const why = await ports.move(row, target.id);
+    const why = await ports.move(row, target.id, true);
     if (why) {
       unmoved(row, current, target, "start", why);
       return;
@@ -561,7 +605,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     }
     const targetId = ports.target(row, current.id);
     const target = targetId ? db.accounts.get(targetId) : undefined;
-    if (target && sameOrganization(current, target)) {
+    if (target && cacheCarries(current, target)) {
       return;
     }
     if (
@@ -688,7 +732,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
   };
 
   /** One look at every kept summary and hold. */
-  const tick = async (): Promise<void> => {
+  const lookAtHolds = async (): Promise<void> => {
     const now = Date.now();
     discardSummaries(now);
     for (const held of db.atLimit.holds()) {
@@ -697,7 +741,23 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     }
   };
 
-  /** Arms the next look: the earliest reset, else the recheck, while anything is held or kept. */
+  const rebalancer = createRebalancer({
+    db,
+    lifetime,
+    ports,
+    acting,
+    cacheCarries,
+    lookAtHolds,
+    replan: () => plan(),
+  });
+
+  /** One look: every hold and kept summary, then every provider on every machine rebalanced. */
+  const tick = async (): Promise<void> => {
+    await lookAtHolds();
+    await rebalancer.everyPair();
+  };
+
+  /** Arms the next look: the earliest reset, else the recheck, while anything is held or kept or two accounts could balance. */
   const plan = (): void => {
     lifetime.cancel(timer);
     timer = undefined;
@@ -707,7 +767,11 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     const now = Date.now();
     const holds = db.atLimit.holds();
     const summaries = db.atLimit.summaries();
-    if (holds.length === 0 && summaries.length === 0) {
+    if (
+      holds.length === 0 &&
+      summaries.length === 0 &&
+      rebalancer.pairs().length === 0
+    ) {
       return;
     }
     const at = Math.min(
@@ -720,7 +784,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     });
   };
 
-  plan();
+  rebalancer.accountsChanged();
 
   return {
     /**
@@ -795,7 +859,16 @@ export const createAtLimit = (ports: AtLimitPorts) => {
         unmoved(row, current, target, failure.step, failure.reason);
       }
     },
-    /** Looks at every hold and kept summary now. */
+    /** Looks at every hold and kept summary now, then rebalances every provider on every machine. */
     look: () => tick().finally(plan),
+    /**
+     * The hub says an account moved (a sign-in, a reading, a bench): an
+     * account newly signed in on a machine, or back from its bench, sets
+     * its provider rebalancing there.
+     */
+    accountsChanged: rebalancer.accountsChanged,
+    /** Rebalances `provider`'s accounts on `machineId` now, then looks at every hold. */
+    rebalance: (provider: AccountProvider, machineId: string) =>
+      rebalancer.rebalance(provider, machineId),
   };
 };

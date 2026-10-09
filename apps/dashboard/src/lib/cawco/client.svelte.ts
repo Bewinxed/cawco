@@ -52,6 +52,7 @@ import type {
   ProviderRouting,
   ProviderSigninChallenge,
   ProviderSigninResult,
+  RebalanceNotice,
   SendAttachment,
   SendPayload,
   SendRecord,
@@ -1956,6 +1957,8 @@ export interface AccountsView {
   catalogs: AccountCatalog[];
   /** Each account's freshest reading: its windows, plan and extra usage. */
   readings: AccountReading[];
+  /** What adding an account (or one back from its bench) set moving, newest first. */
+  rebalances: RebalanceNotice[];
   /** How each provider's new sessions choose among its accounts. */
   routing: ProviderRouting[];
   signins: AccountSignin[];

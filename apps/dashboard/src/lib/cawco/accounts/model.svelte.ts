@@ -20,6 +20,7 @@ import {
   type PlacementStrategy,
   type ProviderChoice,
   type ProviderRouting,
+  type RebalanceNotice,
   type SigninState,
 } from "@cawco/core";
 import { cawco } from "../client.svelte";
@@ -269,6 +270,12 @@ export function movedLogins(seen: ReadonlySet<string>): MovedLogin[] {
     })
     .sort((a, b) => b.at - a.at);
 }
+
+/** What adding an account set moving, nobody has acknowledged yet, newest first. */
+export const rebalancesUnseen = (
+  seen: ReadonlySet<string>
+): RebalanceNotice[] =>
+  (cawco.accounts?.rebalances ?? []).filter((one) => !seen.has(one.id));
 
 /** "obelisk", "obelisk and mac", "a, b and c": names as a sentence lists them. */
 const machineList = (names: readonly string[]): string =>

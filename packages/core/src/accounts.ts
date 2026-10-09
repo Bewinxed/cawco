@@ -825,6 +825,17 @@ export type AccountMove =
       window: string | null;
       /** When that window resets, epoch ms; null when nothing said. */
       resetsAt: number | null;
+      /**
+       * Why it moved before any limit refused it: its account was forecast
+       * to run out at `runsOutAt` (a rebalance between turns), or its cache
+       * was cold at its wake, so the move re-read nothing extra. Absent: its
+       * account's limit refused a turn, or a person asked.
+       */
+      because?:
+        | { kind: "forecast"; runsOutAt: number }
+        | { kind: "cold"; wake: boolean };
+      /** What the re-read cost on `to`: a percent of its window; absent when unpriced. */
+      cost?: { pct: number; window: string };
     }
   | {
       kind: "waiting";
@@ -904,6 +915,14 @@ export const spanWords = (ms: number): string => {
   return `${Math.floor(hours / 24)}d ${hours % 24}h`;
 };
 
+/** "20:10": a moment as a clock shows it, in the reader's own time. */
+export const clockWords = (at: number): string =>
+  new Date(at).toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+
 /** "412k tokens"; a context never reported is "its whole context". */
 export const tokenWords = (tokens: number | null): string =>
   tokens === null
@@ -933,6 +952,42 @@ const stoppedWords = (
   };
 };
 
+/** A move's line and detail: at a cold wake, ahead of a forecast run-out, at a limit, or as a person asked. */
+const movedWords = (
+  move: Extract<AccountMove, { kind: "moved" }>,
+  now: number
+): { line: string; detail: string } => {
+  if (move.because?.kind === "cold") {
+    return {
+      line: `Moved to ${move.to.name}${move.because.wake ? " at wake" : " between turns"} · cache was cold, so nothing extra was re-read`,
+      detail: `Moved here from ${move.from.name}`,
+    };
+  }
+  const cost = move.cost
+    ? ` (≈${Math.max(1, Math.round(move.cost.pct))}% of ${move.to.name}'s ${move.cost.window} window)`
+    : "";
+  const line = move.sameOrganization
+    ? `Moved to ${move.to.name} · same organization, cache kept`
+    : `Moved to ${move.to.name} · re-read ${tokenWords(move.tokens)}${cost}`;
+  if (move.because?.kind === "forecast") {
+    return {
+      line,
+      detail: `${move.from.name} was forecast to run out at ${clockWords(move.because.runsOutAt)}`,
+    };
+  }
+  if (move.asked) {
+    return { line, detail: `Moved here from ${move.from.name}, as asked` };
+  }
+  const left = move.resetsAt === null ? 0 : move.resetsAt - now;
+  return {
+    line,
+    detail: [
+      `${move.from.name} hit its ${move.window ? `${move.window} ` : ""}limit`,
+      ...(left > 0 ? [`resets in ${spanWords(left)}`] : []),
+    ].join(" · "),
+  };
+};
+
 /**
  * An account line in words at `now`: its line, and the second line drawn on
  * hover, focus, or at wide widths. A wait counts down to its reset and, once
@@ -943,20 +998,8 @@ export const accountMoveWords = (
   now: number
 ): { line: string; detail: string } => {
   switch (move.kind) {
-    case "moved": {
-      const left = move.resetsAt === null ? 0 : move.resetsAt - now;
-      return {
-        line: move.sameOrganization
-          ? `Moved to ${move.to.name} · same organization, cache kept`
-          : `Moved to ${move.to.name} · re-read ${tokenWords(move.tokens)}`,
-        detail: move.asked
-          ? `Moved here from ${move.from.name}, as asked`
-          : [
-              `${move.from.name} hit its ${move.window ? `${move.window} ` : ""}limit`,
-              ...(left > 0 ? [`resets in ${spanWords(left)}`] : []),
-            ].join(" · "),
-      };
-    }
+    case "moved":
+      return movedWords(move, now);
     case "waiting": {
       const left = move.until - now;
       return {
@@ -988,6 +1031,128 @@ export const accountMoveWords = (
             : `Summary written at ${Math.round(move.preparedAtPct)}%, before the move`,
       };
   }
+};
+
+/**
+ * What adding an account (or one coming back from its bench) set moving on
+ * one machine, for the Accounts page: the running sessions moved between
+ * turns off accounts forecast to run out, and the held sessions re-decided
+ * at once. Kept by the hub until acknowledged (`id` is its notice id).
+ */
+export interface RebalanceNotice {
+  at: number;
+  /** The accounts that came: `added`, newly signed in there; `back`, their bench ended. */
+  came: { account: NamedAccount; how: "added" | "back" }[];
+  /** The held sessions looked at again, by the account each was held on. */
+  held: {
+    from: NamedAccount;
+    moved: {
+      to: NamedAccount;
+      tokens: number | null;
+      /** One organization: nothing was re-read. */
+      cacheKept: boolean;
+      cost?: { pct: number; window: string };
+    }[];
+    /** Continued from a summary on another account. */
+    continued: number;
+    /** Still waiting: each one's context. */
+    waiting: (number | null)[];
+  }[];
+  id: string;
+  machine: string;
+  /** Running sessions moved off an account forecast to run out, by account and target. */
+  running: {
+    from: NamedAccount;
+    organization: string | null;
+    runsOutAt: number;
+    to: NamedAccount;
+    /** The cache came along (one organization, and a carry there keeps it). */
+    cacheKept: boolean;
+    moved: number;
+    /** Planned but not moved: mid-turn or failed when looked at. */
+    left: number;
+  }[];
+}
+
+/** "2 sessions", "1 session". */
+const sessionsWords = (n: number): string =>
+  `${n} session${n === 1 ? "" : "s"}`;
+
+const thousands = (tokens: number | null): string =>
+  tokens === null ? "its whole context" : `${Math.round(tokens / 1000)}k`;
+
+/** "3 sessions on pm@ (Petralab) forecast to run out at 20:10; 3 moved to design@ between turns (cache shared)". */
+const runningLine = (group: RebalanceNotice["running"][number]): string => {
+  const on = group.organization
+    ? `${group.from.name} (${group.organization})`
+    : group.from.name;
+  const why = group.cacheKept ? "cache shared" : "re-read on the move";
+  const left = group.left > 0 ? `; ${group.left} not yet (mid-turn)` : "";
+  return `${sessionsWords(group.moved + group.left)} on ${on} forecast to run out at ${clockWords(group.runsOutAt)}; ${group.moved} moved to ${group.to.name} between turns (${why})${left}`;
+};
+
+/** One held session moved: "180k re-read ≈ 2% of design@'s 5-hour window". */
+const heldMoveWords = (
+  one: RebalanceNotice["held"][number]["moved"][number]
+): string => {
+  if (one.cacheKept) {
+    return `${thousands(one.tokens)} to ${one.to.name}, cache kept`;
+  }
+  return one.cost
+    ? `${thousands(one.tokens)} re-read ≈ ${Math.max(1, Math.round(one.cost.pct))}% of ${one.to.name}'s ${one.cost.window} window`
+    : `${thousands(one.tokens)} re-read on ${one.to.name}`;
+};
+
+/** "2 held sessions on gmail re-decided: 1 moved (…), 1 kept waiting (612k; shrink at the limit)". */
+const heldLine = (group: RebalanceNotice["held"][number]): string => {
+  const total = group.moved.length + group.continued + group.waiting.length;
+  const parts: string[] = [];
+  if (group.moved.length > 0) {
+    parts.push(
+      `${group.moved.length} moved (${group.moved.map(heldMoveWords).join("; ")})`
+    );
+  }
+  if (group.continued > 0) {
+    parts.push(`${group.continued} continued from a summary`);
+  }
+  if (group.waiting.length > 0) {
+    parts.push(
+      `${group.waiting.length} kept waiting (${group.waiting.map(thousands).join(", ")}; shrink at the limit)`
+    );
+  }
+  return `${total} held ${total === 1 ? "session" : "sessions"} on ${group.from.name} re-decided: ${parts.join(", ")}`;
+};
+
+/**
+ * A rebalance notice in words: its headline ("design@ added"), then one line
+ * per thing it did, as the Accounts page lists them.
+ */
+export const rebalanceWords = (
+  notice: RebalanceNotice
+): { title: string; lines: string[] } => {
+  const lines = [
+    ...notice.running.map(runningLine),
+    ...notice.held.map(heldLine),
+  ];
+  return { title: `${cameWords(notice.came)} on ${notice.machine}`, lines };
+};
+
+/** "design@ and marketing@ added", "pm@ back from its bench", "design@ added, pm@ back from its bench". */
+const cameWords = (came: RebalanceNotice["came"]): string => {
+  const named = (how: "added" | "back") =>
+    came.filter((one) => one.how === how).map((one) => one.account.name);
+  const list = (names: string[]) =>
+    names.length < 2
+      ? (names[0] ?? "")
+      : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+  const added = named("added");
+  const back = named("back");
+  return [
+    ...(added.length > 0 ? [`${list(added)} added`] : []),
+    ...(back.length > 0
+      ? [`${list(back)} back from ${back.length === 1 ? "its" : "their"} bench`]
+      : []),
+  ].join(", ");
 };
 
 /** Whether two identities are the same account: same email in the same organization. */
