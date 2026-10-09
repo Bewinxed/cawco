@@ -163,10 +163,10 @@ final class PaywallController: ObservedViewController {
             hero.heightAnchor.constraint(lessThanOrEqualToConstant: 300),
             close.topAnchor.constraint(equalTo: hero.topAnchor, constant: Space.space2),
             closeLeading,
-            bandEdge.topAnchor.constraint(equalTo: hero.topAnchor),
-            bandEdge.leadingAnchor.constraint(equalTo: hero.leadingAnchor),
-            bandEdge.trailingAnchor.constraint(equalTo: hero.trailingAnchor),
-            bandEdge.bottomAnchor.constraint(equalTo: hero.bottomAnchor),
+            bandEdge.topAnchor.constraint(equalTo: hero.topAnchor, constant: -BandEdge.width),
+            bandEdge.leadingAnchor.constraint(equalTo: hero.leadingAnchor, constant: -BandEdge.width),
+            bandEdge.trailingAnchor.constraint(equalTo: hero.trailingAnchor, constant: BandEdge.width),
+            bandEdge.bottomAnchor.constraint(equalTo: hero.bottomAnchor, constant: BandEdge.width),
             closeScrim.centerXAnchor.constraint(equalTo: close.centerXAnchor),
             closeScrim.centerYAnchor.constraint(equalTo: close.centerYAnchor),
             scroll.topAnchor.constraint(equalTo: hero.bottomAnchor, constant: Space.space4),
@@ -989,18 +989,22 @@ private final class TimelineDisc: UIView {
     }
 }
 
-/// The band's 1pt edge, DESIGN.md's image-outline: a raster band keeps its shape on any surface.
-/// It sits over the band as a sibling so it takes the sheet's appearance, not the band's night:
-/// at night it is the white edge that parts the film's near-black (and the stage's field) from
-/// the raised sheet.
+/// The band's 1pt edge in DESIGN.md's image-outline, so the band keeps its shape on any surface.
+/// It is a sibling of the band, taking the sheet's appearance rather than the band's night, and
+/// it runs just outside the band: drawn inside, its 10% white over the film's near-black edge
+/// (13, 11, 9) comes out the raised sheet's own colour (35, 33, 30) and parts nothing; on the
+/// sheet it is a light hairline against both the sheet and the band (and the stage's field).
 private final class BandEdge: UIView {
+    static let width = 1.0
+
     init() {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         isUserInteractionEnabled = false
         isAccessibilityElement = false
-        layer.borderWidth = 1
-        layer.cornerRadius = Radius.radiusMd
+        layer.borderWidth = Self.width
+        // Concentric with the band's corners, one width out.
+        layer.cornerRadius = Radius.radiusMd + Self.width
         layer.cornerCurve = .continuous
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (edge: BandEdge, _: UITraitCollection) in edge.paint() }
         paint()
