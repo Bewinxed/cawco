@@ -95,7 +95,7 @@
       {:else}
         <p class="pair-line">Reading this hub's addresses…</p>
       {/if}
-      <CheckInStatus checkIn={pairing}>
+      <CheckInStatus>
         {#snippet trail()}
           <button
             class="ns-btn sm touch-hit"

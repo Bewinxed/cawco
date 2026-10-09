@@ -207,6 +207,11 @@ export const sshJoin = {
         "The hub restarted during the install and lost track of it. If the machine shows up in the fleet, it joined; if not, Retry.";
     }
   },
+  /** A run shown as given, with no hub behind it: the motion bench's finished join. */
+  stage(job: SshJoinJob): void {
+    ssh.job = job;
+    ssh.refused = null;
+  },
   /** Back to the form: a finished run is dropped, a running one cannot be. */
   reset(): void {
     if (ssh.job?.state !== "running") {

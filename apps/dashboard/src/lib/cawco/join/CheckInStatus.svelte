@@ -1,26 +1,18 @@
 <script lang="ts">
-  import { machineLabel } from "@cawco/core";
   /**
-   * The line under an install command: waiting while no new machine has
-   * checked in, and which machine joined once one has. Reads one CheckIn —
-   * the watcher both join surfaces share — so the popover and the dialog
-   * flip on the same frame for the same machine.
+   * The line under an install command while no new machine has checked in.
+   * A check-in ends it: the dialog moves to its joined row and the machines
+   * popover back to its list, where the machine now is.
    */
   import type { Snippet } from "svelte";
-  import type { CheckIn } from "./join.svelte";
 
-  let { checkIn, trail }: { checkIn: CheckIn; trail?: Snippet } = $props();
+  let { trail }: { trail?: Snippet } = $props();
 </script>
 
 <div class="status">
   <span aria-live="polite" class="said">
-    <span class="dot" class:online={checkIn.joined !== undefined}></span>
-    {#if checkIn.joined}
-      {machineLabel(checkIn.joined.hostname)}
-      joined the fleet.
-    {:else}
-      Waiting for check-in…
-    {/if}
+    <span class="dot"></span>
+    Waiting for check-in…
   </span>
   {#if trail}
     {@render trail()}
@@ -48,9 +40,5 @@
     height: 6px;
     border-radius: var(--radius-pill);
     background: var(--hue-orange-500);
-    transition: background-color var(--dur-control) var(--ease-out);
-  }
-  .dot.online {
-    background: var(--hue-green-500);
   }
 </style>
