@@ -127,6 +127,7 @@ import {
   CONTROL_READ_SESSION_CONTEXT,
   CONTROL_REFRESH_CAWCO_TOOLS,
   CONTROL_RELOAD_SKILLS,
+  CONTROL_RESTLESS,
   CONTROL_RUN_COMMAND,
   CONTROL_SEARCH_TRANSCRIPTS,
   CONTROL_SET_MODEL,
@@ -2338,7 +2339,9 @@ export const createServer = (
   /**
    * The account a session launches on, on `machineId`, or why it can't
    * launch there. A Claude session always runs in its account's own dir and
-   * never in the machine's `~/.claude`: one whose account has no signed-in
+   * never in the machine's `~/.claude`, but for one that runs on the
+   * machine's own login while that moves into CawCo ({@link homeLoginMoveOf}),
+   * which launches on it there until it lands: one whose account has no signed-in
    * sign-in there is refused (nothing moves it to another account on its
    * own), and so is one with no account at all once placement finds none. A
    * Claude row with no account (it ran in `~/.claude` before accounts) is
@@ -2388,6 +2391,21 @@ export const createServer = (
     return { accountId };
   };
   const launchAccount = (
+    machineId: string,
+    row: Parameters<typeof accountLaunch>[1],
+    session: string
+  ):
+    | { accountId?: string; homeLoginMove?: { accountId: string } }
+    | { refusal: string } => {
+    // The machine's own Claude login is moving into an account and has not
+    // yet: a session that runs on it runs on it until it lands.
+    const move = homeLoginMoveOf(machineId, row);
+    return move
+      ? { homeLoginMove: { accountId: move.accountId } }
+      : accountLaunch(machineId, row, session);
+  };
+  /** {@link launchAccount} for a session on a CawCo account, or to be placed on one. */
+  const accountLaunch = (
     machineId: string,
     row: {
       accountId?: string | null;
@@ -2441,9 +2459,9 @@ export const createServer = (
    * The credentials moving out of a machine's own stores into CawCo now
    * (`POST /api/accounts/move-login`), with the account each moves into, by
    * {@link moveKey}. While one is, the sessions that run from it
-   * ({@link movingFor}) are put to sleep as each comes to rest, a send to one
-   * waits instead of waking it, and the move itself runs once none is left
-   * running.
+   * ({@link movingFor}) go on running from it, woken and started as ever,
+   * and the move itself runs at the first moment every one of them is at
+   * rest ({@link advanceMove}).
    */
   const movingLogins = new Map<
     string,
@@ -2453,7 +2471,7 @@ export const createServer = (
       machineId: string;
       /** The account provider it is for; Claude's for `~/.claude`'s login. */
       provider: AccountProvider;
-      /** The machine is moving it now. */
+      /** A step of it is under way: its sessions asked whether they are at rest, or the machine moving it. */
       running?: true;
       since: number;
       store: HomeStore;
@@ -2467,9 +2485,71 @@ export const createServer = (
     storeProvider: string
   ): string => `${machineId}\u0000${store}\u0000${storeProvider}`;
   /**
-   * The move under way that holds `row` back, while the row would run from
-   * the credential moving: every Claude session for `~/.claude`'s login
-   * (Claude Code re-reads its store before each request); a pi or OpenCode
+   * The sessions whose process still runs from a credential that has moved
+   * out of its machine's store, by instance id → machine id. Each was at
+   * rest when it moved; each is put to sleep at rest, so its next wake
+   * launches it where the credential is now. Claude Code keeps the access
+   * token it read until that expires, and never refreshes it once its store
+   * no longer holds it: 2.1.289 clears its cache before every refresh
+   * (`ZT()` → `DI()`, `cache={data:null}`) and reads the store again.
+   */
+  const movedFrom = new Map<string, string>();
+  /**
+   * Whether `accountId` has a sign-in row on `machineId`, in any state: an
+   * account CawCo placed there. A Claude session on one with none ran on the
+   * machine's own login.
+   */
+  const placedOn = (machineId: string, accountId: string): boolean =>
+    db.accounts
+      .signins()
+      .some(
+        (one) => one.accountId === accountId && one.machineId === machineId
+      );
+  /** Whether any Claude account is signed in on `machineId`. */
+  const claudeSignedInOn = (machineId: string): boolean =>
+    db.accounts
+      .signins()
+      .some(
+        (one) =>
+          one.machineId === machineId &&
+          one.state === "signed-in" &&
+          db.accounts.get(one.accountId)?.provider === CLAUDE_PROVIDER
+      );
+  /**
+   * The Claude move pending on `machineId` whose login a session there runs
+   * on until it lands ({@link SpawnPayload.homeLoginMove}): one on the
+   * account it moves into, on no account, or on an account CawCo never
+   * placed there ({@link placedOn}).
+   */
+  const homeLoginMoveOf = (
+    machineId: string,
+    row: { accountId?: string | null; harness?: string | null }
+  ) =>
+    (row.harness ?? "claude") === "claude"
+      ? [...movingLogins.values()].find(
+          (move) =>
+            move.store === "claude" &&
+            move.machineId === machineId &&
+            (!row.accountId ||
+              row.accountId === move.accountId ||
+              !placedOn(machineId, row.accountId))
+        )
+      : undefined;
+  /**
+   * Whether a start nobody put on an account runs on the machine's own
+   * Claude login: it is moving into CawCo, and no Claude account is signed
+   * in there yet. A fork runs where its origin ran.
+   */
+  const startsOnHomeLogin = (
+    machineId: string,
+    payload: SpawnPayload
+  ): boolean =>
+    !(payload.account || payload.resume?.fork) &&
+    homeLoginMoveOf(machineId, payload) !== undefined &&
+    !claudeSignedInOn(machineId);
+  /**
+   * The move under way of the credential `row` runs from: a Claude session
+   * on the machine's own login ({@link homeLoginMoveOf}); a pi or OpenCode
    * session on no account whose model is the moving provider's, which runs
    * from the machine's own store.
    */
@@ -2480,13 +2560,15 @@ export const createServer = (
     model?: string | null;
   }) => {
     const harness = row.harness ?? "claude";
+    if (harness === "claude") {
+      return homeLoginMoveOf(row.machineId, row);
+    }
     return [...movingLogins.values()].find(
       (move) =>
         move.machineId === row.machineId &&
         move.store === harness &&
-        (harness === "claude" ||
-          (!row.accountId &&
-            accountProvidersOf(harness, row.model).includes(move.provider)))
+        !row.accountId &&
+        accountProvidersOf(harness, row.model).includes(move.provider)
     );
   };
   /** {@link launchAccount}'s refusal, or undefined when the session can launch. */
@@ -2615,9 +2697,7 @@ export const createServer = (
     }
     // A send to a session whose process is gone wakes it ({@link wakeForSend});
     // one whose account can't run on its machine is not woken, and says why.
-    // While its machine's login moves into CawCo the send waits: the move
-    // wakes it once the account is signed in there.
-    if (row && wakesForSend(row) && !movingFor(row)) {
+    if (row && wakesForSend(row)) {
       const refused = accountStartRefusal(row.machineId, row, sessionName(row));
       if (refused) {
         return refused;
@@ -3782,20 +3862,27 @@ export const createServer = (
    * its credential are. Every launch asked {@link launchAccount} before its
    * row opened; one that did not is refused here rather than run anywhere
    * else. A reattach launches nothing: its process already runs where it
-   * runs.
+   * runs. A Claude session on the machine's own login while that moves into
+   * CawCo gets no account dir but the move it waits on (`homeLoginMove`),
+   * which only this sets.
    */
   const accountDirOf = (
     row: ReturnType<typeof db.getInstancesByIds>[number],
     reattachOnly: SpawnPayload["reattachOnly"]
-  ): SpawnPayload["accountDir"] => {
+  ): Pick<SpawnPayload, "accountDir" | "homeLoginMove"> => {
     if (reattachOnly) {
-      return row.accountId ? { accountId: row.accountId } : undefined;
+      return row.accountId ? { accountDir: { accountId: row.accountId } } : {};
     }
     const launch = launchAccount(row.machineId, row, sessionName(row));
     if ("refusal" in launch) {
       throw new WorkItemRefusal(409, launch.refusal);
     }
-    return launch.accountId ? { accountId: launch.accountId } : undefined;
+    if (launch.homeLoginMove) {
+      return { homeLoginMove: launch.homeLoginMove };
+    }
+    return launch.accountId
+      ? { accountDir: { accountId: launch.accountId } }
+      : {};
   };
   /**
    * A fork reads its origin's cache: it never moves to another account on
@@ -3822,6 +3909,7 @@ export const createServer = (
       scratchWorktree: _callerWorktree,
       account: _pick,
       accountDir: _callerDir,
+      homeLoginMove: _callerMove,
       ...asked
     } = payload;
     const owned = db.ownedInstance(payload.instanceId);
@@ -3841,7 +3929,12 @@ export const createServer = (
       : identities.mint(payload.instanceId);
     noteEffortAsked(payload);
     noteFork(payload, stored);
-    const accountDir = accountDirOf(stored, payload.reattachOnly);
+    const launchesIn = accountDirOf(stored, payload.reattachOnly);
+    // A process launched now runs where this launch says, whatever the one
+    // before it ran from.
+    if (!payload.reattachOnly) {
+      movedFrom.delete(payload.instanceId);
+    }
     return {
       // A project's Caw never has edit or shell tools: every spawn of its
       // row — the first, and each revive, restore and relaunch — denies them.
@@ -3853,7 +3946,7 @@ export const createServer = (
       ...(stored.keepAliveTurn ? { keepAliveTurn: stored.keepAliveTurn } : {}),
       ...(workspace ? { workspace } : {}),
       ...(sessionCredential ? { sessionCredential } : {}),
-      ...(accountDir ? { accountDir } : {}),
+      ...launchesIn,
     };
   };
 
@@ -3989,14 +4082,6 @@ export const createServer = (
     if (!(row?.sessionId && wakesForSend(row))) {
       return;
     }
-    // Its machine's own login is moving into CawCo: what it was sent waits,
-    // and the move wakes it once the account is signed in there.
-    if (movingFor(row)) {
-      console.log(
-        `[hub] not waking ${instanceId} yet: ${machineName(machineId)}'s login is moving into CawCo`
-      );
-      return;
-    }
     resumeSpawn(
       agent,
       machineId,
@@ -4089,6 +4174,7 @@ export const createServer = (
    * holds those, and the process this wakes for them reads them.
    */
   const sessionAsleep = (machineId: string, instanceId: string): void => {
+    movedFrom.delete(instanceId);
     if (!db.sleepInstance(instanceId)) {
       return;
     }
@@ -4120,14 +4206,11 @@ export const createServer = (
    * is waiting out a usage limit to. A ping needs the session's process and is
    * never sent to a sleeping one, so its machine keeps these awake
    * (`HeartbeatAckPayload.keepAwake`). One whose cache has gone cold, or whose
-   * keep-alive reached its cap, sleeps like any other.
+   * keep-alive reached its cap, sleeps like any other, and so does one whose
+   * process runs from a credential that has since moved ({@link movedFrom}).
    */
   const keptWarm = (machineId: string, ids: string[]): string[] => {
-    // A machine whose login is moving puts its sessions to sleep at rest.
-    if (
-      ids.length === 0 ||
-      [...movingLogins.values()].some((move) => move.machineId === machineId)
-    ) {
+    if (ids.length === 0) {
       return [];
     }
     const now = Date.now();
@@ -4135,6 +4218,9 @@ export const createServer = (
     return db
       .getInstancesByIds(ids)
       .filter((row) => {
+        if (movedFrom.has(row.id)) {
+          return false;
+        }
         const { state } = keepAliveState(row, limits(row), now);
         return (
           row.machineId === machineId &&
@@ -4181,7 +4267,9 @@ export const createServer = (
 
   /** How long a machine gets to move its login: two `claude auth status` runs and the store's own tool, or a usage read. */
   const MOVE_TIMEOUT_MS = 120_000;
-  /** How often a moving machine's sessions are asked to sleep, and the move tried. */
+  /** How long a machine gets to say which of its sessions are at rest. */
+  const RESTLESS_TIMEOUT_MS = 20_000;
+  /** How often a pending move is tried, and what ran from a moved credential is asked to sleep. */
   const MOVE_TICK_MS = 5000;
   /** What the last move of each credential came to, for `GET /api/accounts/move-login`, by {@link moveKey}. */
   const moveResults = new Map<
@@ -4200,18 +4288,6 @@ export const createServer = (
   >();
   let moveTicker: ReturnType<typeof setInterval> | undefined;
 
-  /**
-   * One step of a credential's move out of a machine's own store
-   * ({@link movingLogins}). While any session that runs from it
-   * ({@link movingFor}) still runs, each is asked to sleep, which its machine
-   * does only once it is at rest (no turn, no ask, no subagent running): a
-   * running harness re-reads its credential store before each request, so
-   * the credential must not leave it under a turn. With none running, the
-   * machine moves it; the account's sign-in there is recorded as moved from
-   * that store, and every session with a send waiting is woken onto the
-   * account. A move that fails is said in the log and in its result, and the
-   * original is as it was.
-   */
   /** The sessions that run from a moving credential whose process still runs. */
   const liveFrom = (move: { machineId: string }) =>
     db
@@ -4222,6 +4298,24 @@ export const createServer = (
           movingFor(row) === move &&
           (row.status === "running" || row.status === "starting")
       );
+  /**
+   * The sessions with a process whose rest a move waits for: for
+   * `~/.claude`'s login every Claude session on its machine, so it moves at
+   * the first moment none has a turn running there; for a pi or OpenCode
+   * credential, the sessions that run from it.
+   */
+  const restOf = (move: NonNullable<ReturnType<typeof movingLogins.get>>) =>
+    move.store === "claude"
+      ? db
+          .listInstances()
+          .filter(
+            (row) =>
+              row.machineId === move.machineId &&
+              (row.harness ?? "claude") === "claude" &&
+              (row.status === "running" || row.status === "starting")
+          )
+          .map((row) => row.id)
+      : liveFrom(move).map((row) => row.id);
 
   /** What one move came to: the sign-in recorded as moved, or why not. */
   const settleMove = (
@@ -4254,47 +4348,53 @@ export const createServer = (
       return;
     }
     const kept = (answer.result as HomeLoginMoved).store;
+    // Every Claude session there on an account CawCo never placed there ran
+    // on the machine's own login, so it is the moved account's from now on,
+    // in the same step that signs that account in there.
+    const repinned =
+      store === "claude"
+        ? db
+            .listInstances()
+            .filter(
+              (row) =>
+                row.machineId === machineId &&
+                (row.harness ?? "claude") === "claude" &&
+                row.accountId !== move.accountId &&
+                !(row.accountId && placedOn(machineId, row.accountId))
+            )
+        : [];
     db.accounts.putSignin({
       accountId: move.accountId,
       machineId,
       state: "signed-in",
       moved: { at, from: store },
     });
+    for (const row of repinned) {
+      db.patchInstance(row.id, { accountId: move.accountId });
+    }
     moveResults.set(key, { ...done, kept });
     console.log(
-      `[hub] moved ${what} (${move.identity.email}) into account ${move.accountId}, kept in ${kept}`
+      `[hub] moved ${what} (${move.identity.email}) into account ${move.accountId}, kept in ${kept}; ${repinned.length} session(s) that ran on it re-pinned to it`
     );
     publishUsage(machineId);
   };
 
   /**
-   * What waited for a machine's move is woken: into the account's dir, or,
-   * the move having failed, refused with why.
+   * Each session in {@link movedFrom} is asked to sleep, which its machine
+   * does only at rest; one whose process is gone is done with.
    */
-  const wakeAfterMove = (machineId: string): void => {
-    const agent = registry.agent(machineId);
-    if (!agent) {
-      return;
-    }
-    for (const row of db.listInstances()) {
-      const waiting =
-        row.machineId === machineId &&
-        wakesForSend(row) &&
-        db.sendsIn(row.id, ["pending"]).some((send) => !isKeepAlive(send.body));
-      if (waiting) {
-        wakeForSend(agent, machineId, row.id, true);
+  const sleepMovedFrom = (): void => {
+    const rows = db.getInstancesByIds([...movedFrom.keys()]);
+    const live = new Set(
+      rows
+        .filter((row) => row.status === "running" || row.status === "starting")
+        .map((row) => row.id)
+    );
+    for (const [instanceId, machineId] of movedFrom) {
+      if (!live.has(instanceId)) {
+        movedFrom.delete(instanceId);
+        continue;
       }
-    }
-  };
-
-  const advanceMove = async (key: string): Promise<void> => {
-    const move = movingLogins.get(key);
-    if (!move || move.running) {
-      return;
-    }
-    const { machineId } = move;
-    const live = liveFrom(move);
-    for (const row of live) {
       // biome-ignore lint/complexity/noVoid: the machine's `asleep` frame files the row; a refusal is a session not at rest yet, asked again next tick
       void callAgent(
         machineId,
@@ -4302,13 +4402,52 @@ export const createServer = (
         [],
         SLEEP_TIMEOUT_MS,
         undefined,
-        row.id
+        instanceId
       );
     }
-    if (live.length > 0) {
+  };
+
+  /**
+   * One step of a credential's move out of a machine's own store
+   * ({@link movingLogins}). Nothing is held and nothing is asked to sleep:
+   * the sessions that run from it ({@link movingFor}) go on running from it,
+   * and the step asks the machine whether every session the move waits for
+   * ({@link restOf}) is at rest ({@link CONTROL_RESTLESS}: no turn, no ask,
+   * no subagent, nothing on its way to it). At the first step that finds
+   * them all at rest the machine moves it, so the move never lands under a
+   * turn. The account's sign-in there is then recorded as moved from that
+   * store, and each session whose process ran from it goes into
+   * {@link movedFrom}, to be put to sleep at rest so that its next wake runs
+   * where the credential is now. A move that fails is said in the log and in
+   * its result, and the original is as it was.
+   */
+  const advanceMove = async (key: string): Promise<void> => {
+    const move = movingLogins.get(key);
+    if (!move || move.running) {
       return;
     }
+    const { machineId } = move;
     move.running = true;
+    const waited = restOf(move);
+    if (waited.length > 0) {
+      const restless = await callAgent(
+        machineId,
+        CONTROL_RESTLESS,
+        [waited],
+        RESTLESS_TIMEOUT_MS
+      );
+      if (
+        typeof restless === "string" ||
+        !restless.ok ||
+        Object.keys(restless.result as Record<string, string>).length > 0 ||
+        restOf(move).some((id) => !waited.includes(id))
+      ) {
+        // Asked again at the next tick.
+        move.running = undefined;
+        return;
+      }
+    }
+    const ranFrom = liveFrom(move).map((row) => row.id);
     const answer =
       move.store === "claude"
         ? await callAgent(
@@ -4326,20 +4465,30 @@ export const createServer = (
           );
     movingLogins.delete(key);
     settleMove(move, answer);
-    wakeAfterMove(machineId);
-    publishInstances(machineId);
-    if (movingLogins.size === 0 && moveTicker) {
-      clearInterval(moveTicker);
-      moveTicker = undefined;
+    if (typeof answer !== "string" && answer.ok) {
+      for (const id of ranFrom) {
+        movedFrom.set(id, machineId);
+      }
+      sleepMovedFrom();
     }
+    publishInstances(machineId);
   };
 
-  /** Starts the ticks that carry every moving machine's login move along. */
+  /**
+   * Starts the ticks that carry every pending move along and put what ran
+   * from a moved credential to sleep; they stop when neither is left.
+   */
   const tickMoves = (): void => {
     moveTicker ??= setInterval(() => {
+      if (movingLogins.size === 0 && movedFrom.size === 0 && moveTicker) {
+        clearInterval(moveTicker);
+        moveTicker = undefined;
+        return;
+      }
       for (const key of movingLogins.keys()) {
         advanceMove(key).catch(console.error);
       }
+      sleepMovedFrom();
     }, MOVE_TICK_MS);
     moveTicker.unref?.();
   };
@@ -5869,11 +6018,28 @@ export const createServer = (
           }
         : {};
     }
+    const placed = placedStart(machineId, payload, input);
+    return "refusal" in placed ? placed : runsOn(placed);
+  };
+
+  /**
+   * The account a start goes on, by placement, or none: on the machine's own
+   * Claude login while it moves into CawCo ({@link startsOnHomeLogin}), or
+   * on no account where its model is none's.
+   */
+  const placedStart = (
+    machineId: string,
+    payload: SpawnPayload,
+    input: Parameters<typeof placeAccount>[0]
+  ): { accountId?: string } | { refusal: string } => {
+    if (startsOnHomeLogin(machineId, payload)) {
+      return {};
+    }
     const placed = placeAccount(input);
     if (!placed.ok) {
       return { refusal: `${placed.refusal} Nothing was started.` };
     }
-    return runsOn(placed.accountId ? { accountId: placed.accountId } : {});
+    return placed.accountId ? { accountId: placed.accountId } : {};
   };
 
   /** A start as the placement explain query describes it, for placement to read. */
@@ -15092,9 +15258,9 @@ export const createServer = (
       // in that account's store on the machine, so it works in CawCo without
       // a second sign-in. `store` `claude` is `~/.claude`'s login; `pi` and
       // `opencode` name their own `auth.json`, and `provider` the entry there.
-      // The sessions that run from it are put to sleep as each comes to rest,
-      // then the machine moves it; the answer says how many it waits for, and
-      // GET says how it came out.
+      // The sessions that run from it go on running from it, and the machine
+      // moves it at the first moment all of them are at rest; the answer says
+      // how many run from it now, and GET says how it came out.
       .post(
         "/api/accounts/move-login",
         {
@@ -15147,9 +15313,9 @@ export const createServer = (
           movingLogins.set(key, move);
           moveResults.delete(key);
           tickMoves();
-          const waitingFor = liveFrom(move).length;
+          const waitingFor = restOf(move).length;
           console.log(
-            `[hub] moving ${machine}'s own ${store} ${storeProvider} (${identity.email}) into account ${account.id}; waiting for ${waitingFor} session(s) to come to rest`
+            `[hub] moving ${machine}'s own ${store} ${storeProvider} (${identity.email}) into account ${account.id}; it moves at the first moment its ${waitingFor} live session(s) are at rest`
           );
           await advanceMove(key);
           return status(202, {

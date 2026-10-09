@@ -18965,7 +18965,7 @@
             "type": "string"
           },
           "accountDir": {
-            "description": "The account the hub placed the session on, and so the store it runs\nfrom on the machine: Claude Code in the account's own\n`~/.cawco/accounts/<id>/claude`, never the machine's `~/.claude`; pi on a\nruntime whose `openai-codex` sign-in is the account's\n`~/.cawco/accounts/<id>/pi/auth.json`; OpenCode on the account's own\nserver, whose `XDG_DATA_HOME` is `~/.cawco/accounts/<id>/opencode-data`.\nSet by the hub on every launch of a session on an account — the first and\nevery revive, restore and relaunch — and never by a client. A Claude\nlaunch without one is refused on the machine; a pi or OpenCode launch\nwithout one runs from the machine's own stores.",
+            "description": "The account the hub placed the session on, and so the store it runs\nfrom on the machine: Claude Code in the account's own\n`~/.cawco/accounts/<id>/claude`, never the machine's `~/.claude`; pi on a\nruntime whose `openai-codex` sign-in is the account's\n`~/.cawco/accounts/<id>/pi/auth.json`; OpenCode on the account's own\nserver, whose `XDG_DATA_HOME` is `~/.cawco/accounts/<id>/opencode-data`.\nSet by the hub on every launch of a session on an account — the first and\nevery revive, restore and relaunch — and never by a client. A Claude\nlaunch without one (or a {@link homeLoginMove}) is refused on the\nmachine; a pi or OpenCode launch without one runs from the machine's own\nstores.",
             "type": "object",
             "properties": {
               "accountId": {
@@ -19044,6 +19044,18 @@
               "pi"
             ],
             "type": "string"
+          },
+          "homeLoginMove": {
+            "description": "The machine's own Claude Code login is moving into this account\n(`POST /api/accounts/move-login`) and has not moved yet, so this Claude\nsession runs on that login: Claude Code with no `CLAUDE_CONFIG_DIR`, in\nthe machine's own store, where the credential still is. Set by the hub\nalone, on a Claude launch with no {@link accountDir}, and only while\nthat move is pending. A machine that has moved the login by the time the\nlaunch starts runs the session in the account's dir instead.",
+            "type": "object",
+            "properties": {
+              "accountId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "accountId"
+            ]
           },
           "ingested": {
             "$ref": "#/components/schemas/IngestMark",

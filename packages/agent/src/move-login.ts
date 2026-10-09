@@ -57,7 +57,8 @@ const HOME_SERVICE = "Claude Code-credentials";
 const SEC_ITEM_NOT_FOUND = 44;
 
 const CREDENTIALS = ".credentials.json";
-const homeDir = (): string => join(homedir(), ".claude");
+/** Claude Code's own config dir: where it runs with no `CLAUDE_CONFIG_DIR`. */
+export const homeDir = (): string => join(homedir(), ".claude");
 const homeClaudeJson = (): string => join(homedir(), ".claude.json");
 const accountClaudeJson = (account: string): string =>
   join(accountConfigDir(account), ".claude.json");
@@ -314,12 +315,40 @@ const priorOf = async (path: string): Promise<Buffer | undefined> =>
 const said = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
+/** The move this agent runs now, if one runs: a launch on the login waits for it. */
+let moving: Promise<unknown> | undefined;
+/** The accounts this agent has moved `~/.claude`'s login into. */
+const movedInto = new Set<string>();
+
+/**
+ * Where a session launched on `~/.claude`'s login while it moves into
+ * `account` runs: once any move this agent runs now is over, in the
+ * account's dir when the login has moved there, else on the login where it
+ * still is. A launch never reads the credential while it is moving.
+ */
+export const homeLoginMovedInto = async (account: string): Promise<boolean> => {
+  await moving?.catch(() => undefined);
+  return movedInto.has(account);
+};
+
 /**
  * Moves `~/.claude`'s login into `account`'s dir, the original deleted only
  * once the dir answers as `expected`; any failure before that removes what
  * was written and leaves the original as it was.
  */
 export const moveHomeLogin = (
+  account: string,
+  expected: AccountIdentity
+): Promise<HomeLoginMoved> => {
+  const move = moveOnce(account, expected).then((moved) => {
+    movedInto.add(account);
+    return moved;
+  });
+  moving = move;
+  return move;
+};
+
+const moveOnce = (
   account: string,
   expected: AccountIdentity
 ): Promise<HomeLoginMoved> =>

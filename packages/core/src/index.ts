@@ -132,8 +132,9 @@ export interface SpawnPayload {
    * server, whose `XDG_DATA_HOME` is `~/.cawco/accounts/<id>/opencode-data`.
    * Set by the hub on every launch of a session on an account — the first and
    * every revive, restore and relaunch — and never by a client. A Claude
-   * launch without one is refused on the machine; a pi or OpenCode launch
-   * without one runs from the machine's own stores.
+   * launch without one (or a {@link homeLoginMove}) is refused on the
+   * machine; a pi or OpenCode launch without one runs from the machine's own
+   * stores.
    */
   accountDir?: { accountId: string };
   /**
@@ -178,6 +179,16 @@ export interface SpawnPayload {
   effort?: import("./harness").EffortLevel;
   /** Which harness runs the session. Absent = `claude`. */
   harness?: import("./harness").HarnessKind;
+  /**
+   * The machine's own Claude Code login is moving into this account
+   * (`POST /api/accounts/move-login`) and has not moved yet, so this Claude
+   * session runs on that login: Claude Code with no `CLAUDE_CONFIG_DIR`, in
+   * the machine's own store, where the credential still is. Set by the hub
+   * alone, on a Claude launch with no {@link accountDir}, and only while
+   * that move is pending. A machine that has moved the login by the time the
+   * launch starts runs the session in the account's dir instead.
+   */
+  homeLoginMove?: { accountId: string };
   /** Hub ingest cursor for a recovery sent after the registration handover. */
   ingested?: import("./stream").IngestMark;
   instanceId: string;

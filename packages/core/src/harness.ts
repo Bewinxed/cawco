@@ -1069,6 +1069,14 @@ export const CONTROL_MCP_TOGGLE = "toggleMcpServer";
  * `{ asleep: boolean; awake?: string }`, `awake` being what kept it up.
  */
 export const CONTROL_SLEEP = "sleep";
+/**
+ * Machine control: which of the sessions named (arg: instance ids) are not
+ * at rest by {@link CONTROL_SLEEP}'s own test, leaving out the hub's
+ * keep-alive, which is the hub's to drop. Stops nothing and asks nothing of
+ * any session. Answers `Record<instanceId, why>`, one entry for each session
+ * that is not at rest; a session the machine does not carry is at rest.
+ */
+export const CONTROL_RESTLESS = "restless";
 
 /**
  * The live-session controls that only answer a question: nothing sent after

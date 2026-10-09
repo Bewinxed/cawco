@@ -43,6 +43,7 @@ import {
   CAWCO_SCRATCH_TAG,
   CONTROL_GIT_CHANGES,
   CONTROL_QUERIES,
+  CONTROL_RESTLESS,
   CONTROL_RUN_COMMAND,
   CONTROL_SET_PERMISSION_MODE,
   CONTROL_SLEEP,
@@ -1187,7 +1188,9 @@ export class SessionSupervisor {
   async #awake(
     instanceId: string,
     session: HarnessSession,
-    serverBusy?: string[]
+    serverBusy?: string[],
+    /** The hub's keep-alive is left out: {@link CONTROL_RESTLESS} asks for the rest alone. */
+    keepAliveAside = false
   ): Promise<{ why: string; unsure?: true } | undefined> {
     if (this.#adopting.has(instanceId)) {
       return { why: "its custody is still being decided", unsure: true };
@@ -1206,13 +1209,13 @@ export class SessionSupervisor {
     if (!session.sessionId) {
       return { why: "it has no conversation to wake from yet" };
     }
-    if (!this.#keptAwake) {
+    if (!(keepAliveAside || this.#keptAwake)) {
       return {
         why: "the hub has not yet said which sessions it keeps awake",
         unsure: true,
       };
     }
-    if (this.#keptAwake.has(instanceId)) {
+    if (!keepAliveAside && this.#keptAwake?.has(instanceId)) {
       return { why: "the hub is keeping its prompt cache warm" };
     }
     const held = session.holding?.();
@@ -1292,6 +1295,39 @@ export class SessionSupervisor {
       )
     );
     return { asleep: true };
+  }
+
+  /**
+   * The sessions among `ids` that are not at rest, each with why
+   * ({@link CONTROL_RESTLESS}): {@link #awake}'s test with the hub's
+   * keep-alive left out, and a session with a spawn or a send still on its
+   * way to it counted as not at rest too. One this machine neither carries
+   * nor has anything on its way to is at rest. Stops nothing.
+   */
+  async #restless(ids: string[]): Promise<Record<string, string>> {
+    const restless: Record<string, string> = {};
+    const serverBusy =
+      (await this.#adapter("opencode").busyInstances?.()) ?? [];
+    for (const instanceId of ids) {
+      if (this.#queues.has(instanceId)) {
+        restless[instanceId] = "something sent to it is still on its way";
+        continue;
+      }
+      if (this.#adopting.has(instanceId)) {
+        restless[instanceId] = "its custody is still being decided";
+        continue;
+      }
+      const session = this.#sessions.get(instanceId);
+      if (!session) {
+        continue;
+      }
+      // biome-ignore lint/performance/noAwaitInLoops: one session at a time; only opencode's read is awaited, and it was taken above
+      const awake = await this.#awake(instanceId, session, serverBusy, true);
+      if (awake) {
+        restless[instanceId] = awake.why;
+      }
+    }
+    return restless;
   }
 
   /** Every carried session at rest for {@link IDLE_SLEEP_MS} is put to sleep. */
@@ -3380,6 +3416,9 @@ export class SessionSupervisor {
         return await daemonFn(...args);
       }
 
+      if (method === CONTROL_RESTLESS) {
+        return await this.#restless(args[0] as string[]);
+      }
       if (method === "listRepos") {
         return await listRepos();
       }

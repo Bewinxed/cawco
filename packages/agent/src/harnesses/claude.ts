@@ -137,7 +137,13 @@ import {
   completeAccountLogin,
   forgetAccount,
 } from "../login";
-import { joinAccountLogin, moveHomeLogin, readHomeLogin } from "../move-login";
+import {
+  homeDir,
+  homeLoginMovedInto,
+  joinAccountLogin,
+  moveHomeLogin,
+  readHomeLogin,
+} from "../move-login";
 import { parseProcId, procIdFor } from "../proc-id";
 // Type-only, and deliberately so: `session.ts` imports the harness registry
 // this file is part of, so a value import here would close a module cycle.
@@ -472,6 +478,32 @@ async function claudeSessionFile(
     }
   }
   return null;
+}
+
+/**
+ * The account whose dir a Claude launch runs in, or undefined for the
+ * machine's own login: the session's account ({@link SpawnPayload.accountDir}),
+ * always, and never `~/.claude`, except while the hub says the machine's own
+ * login is moving into an account and has not yet ({@link
+ * SpawnPayload.homeLoginMove}). Then it runs where that credential is once any
+ * move running now is over: the account's dir when this agent moved it
+ * there, else `~/.claude`.
+ */
+async function launchAccountOf(
+  spec: SpawnPayload
+): Promise<string | undefined> {
+  if (spec.accountDir) {
+    return spec.accountDir.accountId;
+  }
+  const move = spec.homeLoginMove;
+  if (!move) {
+    throw new Error(
+      "This Claude session has no account to run on. Add one in Configure → Accounts and sign it in on this machine."
+    );
+  }
+  return (await homeLoginMovedInto(move.accountId))
+    ? move.accountId
+    : undefined;
 }
 
 /** Whether `error` is the file system saying there is nothing at the path. */
@@ -2304,30 +2336,26 @@ export class ClaudeHarness implements Harness {
     // across agent restarts, which is what lets the returning agent match a
     // surviving child to the row it belongs to.
     const client = await this.sessiond();
-    // The session's account: its Claude Code runs in that account's config
-    // dir, where its credential and transcripts are, and never in the
-    // machine's own `~/.claude`.
-    if (!spec.accountDir) {
-      throw new Error(
-        "This Claude session has no account to run on. Add one in Configure → Accounts and sign it in on this machine."
+    const account = await launchAccountOf(spec);
+    // No account: the machine's own login, moving into one now.
+    const configDir = account ? accountConfigDir(account) : homeDir();
+    if (!account) {
+      console.info(
+        `[claude] ${ctx.instanceId} runs on this machine's own login, which is moving into account ${spec.homeLoginMove?.accountId}`
       );
     }
-    const account = spec.accountDir.accountId;
     if (spec.resume) {
       const file = await claudeSessionFile(spec.resume.sessionKey, ctx.cwd);
       if (!file) {
         throw new Error(CLAUDE_CONVERSATION_GONE);
       }
       // A conversation resumed in another dir (its old account reached its
-      // limit, or it ran in `~/.claude` before accounts) goes on in its
-      // account's dir. A fork reads its origin's where it is: it runs on its
-      // origin's account.
+      // limit, it ran on the machine's own login before that moved, or it
+      // ran in `~/.claude` before accounts) goes on in the dir it runs in
+      // now. A fork reads its origin's where it is: it runs on its origin's
+      // account.
       if (!spec.resume.fork) {
-        await carryConversation(
-          file,
-          spec.resume.sessionKey,
-          accountConfigDir(account)
-        );
+        await carryConversation(file, spec.resume.sessionKey, configDir);
       }
     }
     const fleetDenyList = await sessionFleetDenials(spec.cawcoTodos);
@@ -2338,7 +2366,18 @@ export class ClaudeHarness implements Harness {
       ctx.instanceId,
       ctx,
       ctx.cwd,
-      { ...options, env: { ...options?.env, ...accountEnv(account) } },
+      {
+        ...options,
+        env: {
+          ...options?.env,
+          ...(account
+            ? accountEnv(account)
+            : {
+                CLAUDE_CONFIG_DIR: undefined,
+                CLAUDE_SECURESTORAGE_CONFIG_DIR: undefined,
+              }),
+        },
+      },
       spec.permissionMode,
       spec.model,
       spec.effort,
