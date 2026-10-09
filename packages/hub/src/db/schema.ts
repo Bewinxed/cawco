@@ -1692,6 +1692,39 @@ export const usageLimitHistory = sqliteTable(
 );
 
 /**
+ * The tokens each completed turn spent, on the account it ran on: laid beside
+ * {@link usageLimitHistory}, how much a percent of an account's window costs
+ * is measurable. One row per turn the hub claims (`completed_turns`), keep-alive
+ * pings included, since they spend the same window. Kept 14 days.
+ */
+export const turnUsage = sqliteTable(
+  "turn_usage",
+  {
+    instanceId: text("instance_id").notNull(),
+    /** The harness's result identity, the one `completed_turns` claims. */
+    resultId: text("result_id").notNull(),
+    /** Null: the machine's own sign-in, which is no account. */
+    accountId: text("account_id"),
+    /** The turn's main model as its harness named it; null when it named none. */
+    model: text("model"),
+    inputTokens: integer("input_tokens").notNull(),
+    cacheReadTokens: integer("cache_read_tokens").notNull(),
+    cacheWrite5mTokens: integer("cache_write_5m_tokens").notNull(),
+    cacheWrite1hTokens: integer("cache_write_1h_tokens").notNull(),
+    outputTokens: integer("output_tokens").notNull(),
+    /** Priced from the model's list rates; null when the model has none. */
+    costUsd: real("cost_usd"),
+    keepAlive: integer("keep_alive", { mode: "boolean" }).notNull(),
+    at: timestamp("at").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.instanceId, table.resultId] }),
+    index("turn_usage_account_at_idx").on(table.accountId, table.at),
+    index("turn_usage_at_idx").on(table.at),
+  ]
+);
+
+/**
  * Standing instructions the hub enforces on every session it watches: a phrase
  * to look for in what a session says, and a reply to send back when it shows
  * up. The hub is the only component that sees every frame from every machine,

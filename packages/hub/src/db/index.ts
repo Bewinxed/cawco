@@ -144,6 +144,7 @@ import {
   workspaceCreates,
   workspaces,
 } from "./schema";
+import { type TurnUsageDb, turnUsageDb } from "./turn-usage";
 
 /** Ids looked up per statement (bound twice), well under SQLite's variable limit. */
 const SENDS_FOR_BATCH = 500;
@@ -1468,6 +1469,8 @@ export interface DbShape {
     ledProjectIds: string[],
     endedSince: Date
   ) => WorkItemRow[];
+  /** Each completed turn's tokens, on the account it ran on. */
+  readonly turnUsage: TurnUsageDb;
   /**
    * The machine's sessions that nothing has ever put a name to, however old
    * they are — a stored conversation the hub could name off the machine's own
@@ -5648,6 +5651,7 @@ const make = async (path: string): Promise<DbShape> => {
     },
     listUsageLimits: () => db.select().from(usageLimits).all(),
     accounts: accountsDb(db),
+    turnUsage: turnUsageDb(db),
     atLimit: atLimitDb(db),
     usageSpend: ({ harness, todayStart, weekStart }) => {
       const since = (start: number) =>

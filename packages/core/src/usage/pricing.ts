@@ -43,6 +43,9 @@ const MODEL_ALIASES: Record<string, string> = {
   "gpt-5.3-spark": "gpt-5.3-codex-spark",
 };
 
+/** Claude Code's context-window suffix on a model id: `[1m]`. */
+const CONTEXT_SUFFIX = /\[[^\]]*\]$/;
+
 const RATES: Map<string, ModelRates> = new Map();
 let lastRefreshAttempt = 0;
 
@@ -75,8 +78,12 @@ export const missingPricing = new Set<string>();
 /**
  * Resolution order (USAGE-SPEC.md §4.3): exact → alias table → normalized
  * (`claude-sonnet-4.5` → `claude-sonnet-4-5`) → `provider/model` → give up.
+ * Claude Code's context suffix (`claude-opus-5-5[1m]`) is dropped first: "Claude
+ * 4.6 and later models … include the full 1M token context window at standard
+ * pricing" (https://platform.claude.com/docs/en/about-claude/pricing).
  */
-export function resolveRates(modelId: string): ModelRates | null {
+export function resolveRates(id: string): ModelRates | null {
+  const modelId = id.replace(CONTEXT_SUFFIX, "");
   const exact = RATES.get(modelId);
   if (exact) {
     return exact;
@@ -125,6 +132,34 @@ export function costForUsage(modelId: string, tokens: UsageTokens): number {
     tokens.output * rates.output +
     tokens.cacheCreation * rates.cacheWrite +
     tokens.cacheRead * rates.cacheRead
+  );
+}
+
+/** One turn's tokens, cache writes split by their lifetime. */
+export interface TurnTokens {
+  cacheRead: number;
+  cacheWrite1h: number;
+  cacheWrite5m: number;
+  input: number;
+  output: number;
+}
+
+/** A turn at the model's list rates; null when the model has none. */
+export function costForTurn(
+  modelId: string,
+  tokens: TurnTokens
+): number | null {
+  const rates = resolveRates(modelId);
+  if (!rates) {
+    missingPricing.add(modelId);
+    return null;
+  }
+  return (
+    tokens.input * rates.input +
+    tokens.output * rates.output +
+    tokens.cacheRead * rates.cacheRead +
+    tokens.cacheWrite5m * rates.cacheWrite +
+    tokens.cacheWrite1h * rates.cacheWrite1h
   );
 }
 

@@ -419,6 +419,7 @@ import {
   type HistoryRead,
   type TranscriptPayload,
 } from "./transcripts";
+import { turnUsageOf } from "./turn-usage";
 import { unwatchedMode } from "./unwatched-mode";
 import { UsageCounter } from "./usage-count";
 import { createViews, viewRoutes } from "./views";
@@ -12290,6 +12291,34 @@ export const createServer = (
     );
   };
 
+  /** A claimed turn's tokens, on the account the session runs on. */
+  const recordTurnUsage = (
+    session: { accountId: string | null; id: string },
+    result: NeutralResultMessage,
+    keepAlive: boolean
+  ) => {
+    if (!result.uuid) {
+      return;
+    }
+    const turn = turnUsageOf(
+      session,
+      { ...result, uuid: result.uuid },
+      keepAlive,
+      result.timestamp ? Date.parse(result.timestamp) : Date.now()
+    );
+    if (turn) {
+      db.turnUsage.put(turn);
+    }
+  };
+  const pruneTurnUsage = () => {
+    const gone = db.turnUsage.prune();
+    if (gone > 0) {
+      console.info(`[usage] pruned ${gone} turns past retention`);
+    }
+  };
+  pruneTurnUsage();
+  lifetime.every(86_400_000, pruneTurnUsage);
+
   const keepAliveScheduler = createKeepAliveScheduler({
     lifetime,
     rows: db.listInstances,
@@ -17670,6 +17699,7 @@ export const createServer = (
                       ) {
                         break;
                       }
+                      recordTurnUsage(row, neutral, true);
                       db.updateKeepAlive(
                         row.id,
                         keepAliveResult(row, neutral, true)
@@ -17718,6 +17748,10 @@ export const createServer = (
                   ) {
                     finalMessage.delete(message.instanceId);
                     break;
+                  }
+                  const [claimed] = db.getInstancesByIds([message.instanceId]);
+                  if (claimed) {
+                    recordTurnUsage(claimed, neutral, false);
                   }
                   // Claimed once: a lead's turn books its cost to its thread.
                   if (typeof neutral.total_cost_usd === "number") {

@@ -20,11 +20,6 @@ export const isKeepAlive = (
   message?.origin?.kind === "system" && message.origin.name === "keepalive";
 
 export const keepAliveCap = (row: KeepAliveRow): number => {
-  // Claude's documented 0.05x read multiplier; the bundled price catalog
-  // predates this model. The cap is a ratio and needs no guessed USD rate.
-  if (row.model?.replaceAll(".", "-") === "claude-opus-5-5") {
-    return row.cacheTtl === "1h" ? 40 : 25;
-  }
   const rates = row.model ? resolveRates(row.model) : null;
   if (!rates || rates.cacheRead <= 0) {
     return row.cacheTtl === "1h" ? 20 : 12;
