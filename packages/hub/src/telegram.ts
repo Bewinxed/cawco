@@ -16,6 +16,7 @@ import {
 } from "@cawco/core";
 import type { DbShape } from "./db";
 import { sessionLabel } from "./labels";
+import type { HubLifetimeShape } from "./lifetime";
 import type { PendingShape } from "./pending";
 import { answerPermission } from "./pending";
 import type { RegistryShape } from "./registry";
@@ -104,6 +105,7 @@ const uploadOf = (
 
 export interface TelegramServices {
   readonly db: DbShape;
+  readonly lifetime: HubLifetimeShape;
   readonly pending: PendingShape;
   readonly registry: RegistryShape;
 }
@@ -240,6 +242,7 @@ export const createTelegramBridge = ({
   registry,
   db,
   pending,
+  lifetime,
 }: TelegramServices): TelegramBridge | null => {
   const token = readEnv(CAWCO_ENV.telegramToken);
   if (!token) {
@@ -257,7 +260,7 @@ export const createTelegramBridge = ({
   /** Asks this bridge answered itself, so `onSettled` does not overwrite them. */
   const settledHere = new Set<string>();
 
-  const sweep = setInterval(() => {
+  lifetime.every(SWEEP_INTERVAL_MS, () => {
     const cutoff = Date.now() - TRACK_TTL_MS;
     for (const [messageId, entry] of tracked) {
       if (entry.at >= cutoff) {
@@ -269,8 +272,10 @@ export const createTelegramBridge = ({
         settledHere.delete(entry.requestId);
       }
     }
-  }, SWEEP_INTERVAL_MS);
-  sweep.unref();
+  });
+  /** Aborts every Telegram call in flight, the long poll among them, when the hub closes. */
+  const closing = new AbortController();
+  lifetime.onClose(() => closing.abort());
 
   const call = async <T>(
     method: string,
@@ -280,7 +285,10 @@ export const createTelegramBridge = ({
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(POLL_TIMEOUT_MS),
+      signal: AbortSignal.any([
+        AbortSignal.timeout(POLL_TIMEOUT_MS),
+        closing.signal,
+      ]),
     });
     const answer = (await response.json()) as {
       ok?: boolean;
@@ -894,17 +902,18 @@ export const createTelegramBridge = ({
   };
 
   const start = (): void => {
-    // biome-ignore lint/complexity/noVoid: fire-and-forget; the poll loop below runs for the process's whole life and reports its own failures via console.warn
+    // biome-ignore lint/complexity/noVoid: fire-and-forget; the poll loop below runs for the hub's whole lifetime and reports its own failures via console.warn
     void (async () => {
       let offset = 0;
       let backoff = BACKOFF_FLOOR_MS;
       console.log(
         `[telegram] bridge on${chatId === undefined ? " — waiting to be pinned" : ""}`
       );
-      for (;;) {
+      // Until the hub's lifetime closes: its close aborts the poll in flight.
+      while (!lifetime.closed()) {
         try {
           const updates =
-            // biome-ignore lint/performance/noAwaitInLoops: long-polls Telegram in an infinite loop; the next getUpdates must start from the offset the previous one returned
+            // biome-ignore lint/performance/noAwaitInLoops: long-polls Telegram until the hub closes; the next getUpdates must start from the offset the previous one returned
             (await call<TelegramUpdate[]>("getUpdates", {
               offset,
               timeout: POLL_SECONDS,
@@ -916,11 +925,14 @@ export const createTelegramBridge = ({
             await onUpdate(update);
           }
         } catch (error) {
+          if (lifetime.closed()) {
+            return;
+          }
           console.warn(
             `[telegram] poll failed, retrying in ${backoff}ms:`,
             error
           );
-          await new Promise<void>((wake) => setTimeout(wake, backoff).unref());
+          await lifetime.sleep(backoff);
           backoff = Math.min(backoff * 2, BACKOFF_CEILING_MS);
         }
       }

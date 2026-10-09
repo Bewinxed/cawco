@@ -26,6 +26,7 @@ import {
   type TranscriptStreamFrame,
   type TranscriptWhere,
 } from "@cawco/core";
+import type { HubLifetimeShape } from "./lifetime";
 
 /** A stored transcript as its machine answered, or why it could not. */
 export type HistoryRead =
@@ -50,6 +51,8 @@ export interface TranscriptPorts {
   readonly followed: (instanceId: string) => boolean;
   /** The session's stream head: the seq a page is consistent with. */
   readonly head: (instanceId: string) => number;
+  /** Runs the idle sweep until the hub closes. */
+  readonly lifetime: HubLifetimeShape;
   /** Whether the session has a process the hub believes is running. */
   readonly live: (instanceId: string) => boolean;
   /** The session's whole stored transcript and the records of its sends, cut after `at` when given. */
@@ -128,7 +131,6 @@ export interface TranscriptsShape {
    * under it — cut after the entry `at` when given (a rewind).
    */
   readonly reread: (instanceId: string, at?: string) => void;
-  readonly stop: () => void;
 }
 
 export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
@@ -298,8 +300,7 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
       }
     });
   };
-  const timer = setInterval(sweep, SWEEP_MS);
-  timer.unref?.();
+  ports.lifetime.every(SWEEP_MS, sweep);
 
   return {
     ingest,
@@ -309,7 +310,6 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
     noteRelaunch: (instanceId) =>
       entries.get(instanceId)?.builder.noteRelaunch(),
     reread,
-    stop: () => clearInterval(timer),
     machineRegistered: async (machineId, instanceIds) => {
       const build = ports.build(machineId);
       // One transcript's read failing is that transcript's: the rest of the

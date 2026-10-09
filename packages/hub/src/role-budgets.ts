@@ -14,6 +14,7 @@ import {
 } from "@cawco/core";
 import { createCaw } from "./caw";
 import { createDelegationMcp } from "./delegation-mcp";
+import { makeLifetime } from "./lifetime";
 import type { Tasks } from "./tasks";
 
 /**
@@ -68,7 +69,10 @@ export const measureRoles = (): RoleSize[] => {
       ...SAMPLES[role],
     })
   );
+  // The server's sweeps start with it; closed below, through the one path.
+  const lifetime = makeLifetime();
   const mcp = createDelegationMcp({
+    lifetime,
     instances: () => rows,
     instanceById: (id) => rows.find((row) => row.id === id),
     forward: () => Promise.resolve(),
@@ -116,6 +120,6 @@ export const measureRoles = (): RoleSize[] => {
       };
     });
   } finally {
-    mcp.close();
+    lifetime.close();
   }
 };

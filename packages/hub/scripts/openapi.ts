@@ -92,6 +92,7 @@ const { toOpenAPISchema } = await import("@elysia/openapi");
 const { CAWCO_HUB_PORT } = await import("@cawco/core");
 const { HUB_VERSION } = await import("../src/config");
 const { Db, DbLayer } = await import("../src/db");
+const { HubLifetime, HubLifetimeLayer } = await import("../src/lifetime");
 const { Pending, PendingLayer } = await import("../src/pending");
 const { Registry, RegistryLayer } = await import("../src/registry");
 const { createServer } = await import("../src/server");
@@ -103,22 +104,28 @@ interface Operation {
   responses?: Record<string, unknown>;
 }
 
-const hub = await Effect.runPromise(
+const { hub, lifetime } = await Effect.runPromise(
   Effect.provide(
     Effect.gen(function* () {
-      return createServer(
-        {
-          build: { version: HUB_VERSION, startedAt: 0 },
-          registry: yield* Registry,
-          db: yield* Db,
-          pending: yield* Pending,
-          telegram: undefined,
-        },
-        { resumeWorkflows: false }
-      );
+      const life = yield* HubLifetime;
+      return {
+        lifetime: life,
+        hub: createServer(
+          {
+            build: { version: HUB_VERSION, startedAt: 0 },
+            registry: yield* Registry,
+            db: yield* Db,
+            pending: yield* Pending,
+            telegram: undefined,
+            lifetime: life,
+          },
+          { resumeWorkflows: false }
+        ),
+      };
     }),
     PendingLayer.pipe(
-      Layer.provideMerge(Layer.mergeAll(RegistryLayer, DbLayer))
+      Layer.provideMerge(Layer.mergeAll(RegistryLayer, DbLayer)),
+      Layer.provideMerge(HubLifetimeLayer)
     )
   )
 );
@@ -166,6 +173,10 @@ const optionalBodies = new Set(
         `${route.method.toLowerCase()} ${route.path.replace(/:([^/]+)/g, "{$1}")}`
     )
 );
+
+// Everything the hub is read for has been read: its timers stop and its
+// database closes now, before the type work below and the scratch's removal.
+lifetime.close();
 
 const ids = operations.map(({ op }) => op.operationId);
 const repeated = ids.filter((id, i) => ids.indexOf(id) !== i);

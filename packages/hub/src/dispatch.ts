@@ -57,6 +57,7 @@ import { Elysia, status, t } from "elysia";
 import type { DbShape, PlaceRow, ProjectRow, WorkItemRow } from "./db";
 import type { WorkBudget, WorkItemCheck } from "./db/schema";
 import { quote, statusCommand } from "./landing";
+import type { HubLifetimeShape } from "./lifetime";
 import { FolderRefusal, type FolderRefusalStatus } from "./project-folder";
 import type { Stage } from "./stages";
 import {
@@ -99,6 +100,8 @@ export interface DispatchDeps {
    * none (caw.ts `lead`); undefined while Caw is off.
    */
   readonly lead: (projectId: string) => Promise<InstanceRow | undefined>;
+  /** Runs the safety net until the hub closes. */
+  readonly lifetime: HubLifetimeShape;
   /** Whether a machine is connected now. */
   readonly online: (machineId: string) => boolean;
   /**
@@ -474,6 +477,7 @@ const failure = (
 export const createDispatcher = ({
   db,
   lead,
+  lifetime,
   online,
   pauses,
   start,
@@ -487,7 +491,8 @@ export const createDispatcher = ({
   /** Projects being looked at now, and the ones to look at again after. */
   const looking = new Set<string>();
   const again = new Set<string>();
-  let safety: ReturnType<typeof setInterval> | undefined;
+  /** Whether the safety net runs: started once, stopped with the hub. */
+  let watching = false;
 
   const keyOf = (projectId: string, taskId: string): string =>
     `${projectId}\0${taskId}`;
@@ -1320,7 +1325,11 @@ export const createDispatcher = ({
 
     /** Starts the safety net: a look at every dispatching project every few minutes. */
     watch(): void {
-      safety ??= setInterval(() => {
+      if (watching) {
+        return;
+      }
+      watching = true;
+      lifetime.every(SAFETY_MS, () => {
         for (const project of db.listProjects()) {
           if (
             (project.dispatch && project.caw) ||
@@ -1329,13 +1338,7 @@ export const createDispatcher = ({
             evaluate(project.id);
           }
         }
-      }, SAFETY_MS);
-      safety.unref?.();
-    },
-
-    stop(): void {
-      clearInterval(safety);
-      safety = undefined;
+      });
     },
   };
 };

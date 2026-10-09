@@ -76,6 +76,8 @@ export async function askJev<
       throw new Error(failure);
     }
     await new Promise<void>((resolve, reject) => {
+      // Not on the hub's lifetime (lifetime.ts): a wait inside one request,
+      // ended by the request's own deadline, like the fetch it sits between.
       const timer = setTimeout(resolve, wait);
       deadline.addEventListener(
         "abort",

@@ -48,6 +48,7 @@ import {
   type StreamReset,
   type StreamSubscribe,
 } from "@cawco/core";
+import type { HubLifetimeShape } from "./lifetime";
 import { refusalFrame } from "./registry";
 import { type HubSocket, sendFrame } from "./wire-socket";
 
@@ -106,6 +107,8 @@ export type ControlResultFrame = Extract<
 export interface StreamPorts {
   /** Whether a daemon for this machine is connected right now. */
   readonly isMachineConnected: (machineId: string) => boolean;
+  /** Runs the TTL sweep until the hub closes. */
+  readonly lifetime: HubLifetimeShape;
   /**
    * The session's plan whole, handed to `send` for one socket that just
    * subscribed or asked (plans.ts `snapshotTo`).
@@ -193,8 +196,6 @@ export interface StreamHubShape {
     requestId: string,
     result: ControlResultFrame
   ) => boolean;
-  /** Stops the TTL sweep. */
-  readonly stop: () => void;
   /**
    * Runs the housekeeping the interval runs: forgets commands whose reply never
    * came and the replay windows of sessions gone quiet. Returns how many rings
@@ -271,8 +272,7 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
     return emptied;
   };
 
-  const sweep = setInterval(() => sweepStale(), SWEEP_INTERVAL_MS);
-  sweep.unref?.();
+  ports.lifetime.every(SWEEP_INTERVAL_MS, () => sweepStale());
 
   const ringOf = (sessionId: string): SessionRing => {
     const existing = rings.get(sessionId);
@@ -787,6 +787,5 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
     },
     followerCount: (sessionId) => followers.get(sessionId)?.size ?? 0,
     sweepStale,
-    stop: () => clearInterval(sweep),
   };
 };

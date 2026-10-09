@@ -19,6 +19,7 @@ import type { SendDelivery } from "./delegation-actions";
 import { handoffInstructions, handoffTools } from "./delegation-tools";
 import type { DelegateListInclude, DelegateNode } from "./delegation-tree";
 import type { AttemptStart } from "./dispatch";
+import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import {
   type AcceptResult,
   mayMakeProject,
@@ -85,6 +86,8 @@ const listed = ({
 });
 
 export function createDelegationMcp(options: {
+  /** Runs the tool-list sweeps and each long call's heartbeat, and stops the source watchers, with the hub. */
+  lifetime: HubLifetimeShape;
   instances: () => InstanceRow[];
   instanceById: (id: string) => InstanceRow | undefined;
   /** Whether `leadId` leads the project of the work item `instanceId` runs (work-items.ts `ledBy`). */
@@ -191,6 +194,10 @@ export function createDelegationMcp(options: {
         .catch((error) =>
           console.error("[delegation-mcp] admin reload failed", error)
         );
+    });
+    options.lifetime.onClose(() => {
+      unwatchFile(moduleUrl);
+      unwatchFile(adminModuleUrl);
     });
   }
 
@@ -671,16 +678,15 @@ export function createDelegationMcp(options: {
   /** The list each pi session's host was last told to fetch again. */
   const hostTold = new Map<string, string>();
 
-  let reconcileTimer: ReturnType<typeof setTimeout> | undefined;
+  let reconcileTimer: HubTimer | undefined;
   /** Something a tool list depends on may have moved: one look, debounced. */
   const toolsMayHaveChanged = () => {
-    clearTimeout(reconcileTimer);
-    reconcileTimer = setTimeout(reconcileLists, LIST_DEBOUNCE_MS);
+    options.lifetime.cancel(reconcileTimer);
+    reconcileTimer = options.lifetime.after(LIST_DEBOUNCE_MS, reconcileLists);
   };
   // What no event names (a role toolset read on its own schedule) is found
   // by the next sweep.
-  const sweep = setInterval(reconcileLists, LIST_SWEEP_MS);
-  sweep.unref?.();
+  options.lifetime.every(LIST_SWEEP_MS, reconcileLists);
 
   /** Every request carries its own actor; no connection state outlives it but its GET stream. */
   const open = async (binding: string | null) => {
@@ -725,7 +731,7 @@ export function createDelegationMcp(options: {
         (isAdminWrite(message.params.name) ? ASKING : undefined);
       const heartbeat =
         doing && token !== undefined
-          ? setInterval(() => {
+          ? options.lifetime.every(15_000, () => {
               elapsed += 15;
               // biome-ignore lint/complexity/noVoid: progress is fire-and-forget; a disconnected client cannot receive it.
               void extra
@@ -738,7 +744,7 @@ export function createDelegationMcp(options: {
                   },
                 })
                 .catch(() => undefined);
-            }, 15_000)
+            })
           : undefined;
       try {
         return await call(
@@ -750,7 +756,7 @@ export function createDelegationMcp(options: {
             : undefined
         );
       } finally {
-        clearInterval(heartbeat);
+        options.lifetime.cancel(heartbeat);
       }
     });
     await server.connect(transport);
@@ -922,11 +928,5 @@ export function createDelegationMcp(options: {
     }
     return { tools: answered };
   };
-  const close = () => {
-    unwatchFile(moduleUrl);
-    unwatchFile(adminModuleUrl);
-    clearInterval(sweep);
-    clearTimeout(reconcileTimer);
-  };
-  return { handle, call, list, close, toolsMayHaveChanged };
+  return { handle, call, list, toolsMayHaveChanged };
 }

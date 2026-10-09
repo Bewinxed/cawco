@@ -30,6 +30,7 @@ import { LineSplitter } from "@cawco/core/lines";
 import { RELEASE_PUBLIC_KEY } from "@cawco/core/release-key";
 import { Elysia, t } from "elysia";
 import { HUB_PORT } from "./config";
+import type { HubLifetimeShape } from "./lifetime";
 
 /** Runs a short command and answers its stdout, or undefined when it failed or hung. */
 const output = async (argv: string[]): Promise<string | undefined> => {
@@ -191,11 +192,13 @@ const problemOf = (
 };
 
 interface JoinDeps {
+  /** Runs each finished job's forgetting until the hub closes. */
+  readonly lifetime: HubLifetimeShape;
   /** Whether the hub holds a live socket from this machine right now. */
   readonly online: (machineId: string) => boolean;
 }
 
-export const joinRoutes = ({ online }: JoinDeps) => {
+export const joinRoutes = ({ lifetime, online }: JoinDeps) => {
   const jobs = new Map<string, SshJoinJob>();
 
   const settle = async (job: SshJoinJob): Promise<void> => {
@@ -284,7 +287,7 @@ export const joinRoutes = ({ online }: JoinDeps) => {
         return settle(job);
       })
       .finally(() => {
-        setTimeout(() => jobs.delete(job.id), JOB_TTL_MS);
+        lifetime.after(JOB_TTL_MS, () => jobs.delete(job.id));
       });
     return job;
   };

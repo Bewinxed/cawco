@@ -74,6 +74,7 @@ import { Context, Effect, Layer } from "effect";
 import { bundledSkills } from "../bundled-skills";
 import { DB_PATH } from "../config";
 import { sessionLabel } from "../labels";
+import { HubLifetime } from "../lifetime";
 import { workflowSkill } from "../workflows/skills";
 import { type AccountsDb, accountsDb } from "./accounts";
 import { type AtLimitDb, atLimitDb } from "./at-limit";
@@ -383,6 +384,8 @@ export interface DbShape {
   readonly clearFleetMemory: () => void;
   /** Forget the OpenRouter key. */
   readonly clearOpenRouterConnection: () => void;
+  /** Closes the connection: the hub's lifetime's last release (lifetime.ts). */
+  readonly close: () => void;
   /** A receipt for the current row's decision; deletes are finalized here. */
   readonly confirmInstanceEnd: (id: string, reason?: string) => void;
   readonly continuationRow: (id: string) => ContinuationRow | undefined;
@@ -2148,6 +2151,7 @@ const make = async (path: string): Promise<DbShape> => {
   };
 
   return {
+    close: () => db.$client.close(),
     clearEndConfirmation: (id) => {
       db.update(instances)
         .set({ endConfirmedAt: null })
@@ -6010,4 +6014,16 @@ const make = async (path: string): Promise<DbShape> => {
   };
 };
 
-export const DbLayer = Layer.effect(Db)(Effect.promise(() => make(DB_PATH)));
+/**
+ * The hub's database, opened before anything that reads it: its close is the
+ * first release its lifetime holds, so it runs last, after every timer and
+ * every other release.
+ */
+export const DbLayer = Layer.effect(Db)(
+  Effect.gen(function* () {
+    const lifetime = yield* HubLifetime;
+    const db = yield* Effect.promise(() => make(DB_PATH));
+    lifetime.onClose(db.close);
+    return db;
+  })
+);

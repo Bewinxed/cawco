@@ -2,6 +2,7 @@ import { Effect, Layer } from "effect";
 import { buildInfo } from "./build";
 import { DB_PATH, HUB_PORT, HUB_VERSION } from "./config";
 import { Db, DbLayer } from "./db";
+import { HubLifetime, HubLifetimeLayer } from "./lifetime";
 import { advertise } from "./mdns";
 import { migrateLegacyDb } from "./migrate-db";
 import { Pending, PendingLayer } from "./pending";
@@ -15,7 +16,9 @@ const main = Effect.gen(function* () {
   const registry = yield* Registry;
   const db = yield* Db;
   const pending = yield* Pending;
-  const telegram = createTelegramBridge({ registry, db, pending }) ?? undefined;
+  const lifetime = yield* HubLifetime;
+  const telegram =
+    createTelegramBridge({ registry, db, pending, lifetime }) ?? undefined;
   // `idleTimeout` past Bun's 10s default: a skill refresh re-downloads and
   // hashes the whole skill before it says anything (impeccable is 3.2MB /
   // 147 files), and the socket is silent that whole time. 120s clears the
@@ -24,7 +27,7 @@ const main = Effect.gen(function* () {
   // Before `listen`: every dashboard's first frame names this commit (see
   // `HubServices.build`), and two git calls are not worth a socket without it.
   const build = yield* Effect.promise(buildInfo);
-  createServer({ build, registry, db, pending, telegram }).listen({
+  createServer({ build, registry, db, pending, telegram, lifetime }).listen({
     hostname,
     port: HUB_PORT,
     idleTimeout: 120,
@@ -46,9 +49,11 @@ export const startHub = async (): Promise<void> => {
   await Effect.runPromise(
     Effect.provide(
       main,
-      // The parked asks a restarted hub still holds are read from its database.
+      // The parked asks a restarted hub still holds are read from its
+      // database. Never closed here: SIGTERM stays the kernel's (lifetime.ts).
       PendingLayer.pipe(
-        Layer.provideMerge(Layer.mergeAll(RegistryLayer, DbLayer))
+        Layer.provideMerge(Layer.mergeAll(RegistryLayer, DbLayer)),
+        Layer.provideMerge(HubLifetimeLayer)
       )
     )
   );

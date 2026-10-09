@@ -33,6 +33,7 @@ import {
   topsIn,
 } from "@cawco/core";
 import { checkoutOf, type DbShape } from "./db";
+import type { HubLifetimeShape, HubTimer } from "./lifetime";
 
 type Row = ReturnType<DbShape["sessionOwnership"]>[number];
 
@@ -58,6 +59,8 @@ const NO_ANSWER =
 
 export const createProjectStops = (ports: {
   db: DbShape;
+  /** Runs each stop's deadline until the hub closes. */
+  lifetime: HubLifetimeShape;
   /** The session's live pulse, if its daemon has sent one. */
   pulse: (id: string) => SessionPulse | undefined;
   /** Asks for the session's stop (stored first, then sent); throws the hub's refusal. */
@@ -76,7 +79,7 @@ export const createProjectStops = (ports: {
     {
       machineId: string;
       projectId: string;
-      timer: ReturnType<typeof setTimeout> | undefined;
+      timer: HubTimer | undefined;
       /** Reported deferred: owed to its machine's next register. */
       deferred?: boolean;
     }
@@ -179,7 +182,7 @@ export const createProjectStops = (ports: {
     ports.publish({ kind: "project.stop", ...frame });
     const entry = asked.get(id);
     if (entry && frame.outcome !== "failed") {
-      clearTimeout(entry.timer);
+      ports.lifetime.cancel(entry.timer);
       entry.timer = undefined;
       entry.deferred = frame.outcome === "deferred";
     }
@@ -191,7 +194,7 @@ export const createProjectStops = (ports: {
   const fail = (id: string, error: string) => {
     const entry = asked.get(id);
     if (entry) {
-      clearTimeout(entry.timer);
+      ports.lifetime.cancel(entry.timer);
       settle(id, {
         projectId: entry.projectId,
         instanceId: id,
@@ -208,7 +211,7 @@ export const createProjectStops = (ports: {
    */
   const defer = (projectId: string, row: Row): void => {
     const { id } = row;
-    clearTimeout(asked.get(id)?.timer);
+    ports.lifetime.cancel(asked.get(id)?.timer);
     asked.set(id, { machineId: row.machineId, projectId, timer: undefined });
     if (!row.endIntent) {
       ports.owe(id);
@@ -219,11 +222,11 @@ export const createProjectStops = (ports: {
   /** Asks one running session's stop, and reports what is already known. */
   const stopOne = (projectId: string, row: Row): void => {
     const { id } = row;
-    clearTimeout(asked.get(id)?.timer);
+    ports.lifetime.cancel(asked.get(id)?.timer);
     asked.set(id, {
       machineId: row.machineId,
       projectId,
-      timer: setTimeout(() => fail(id, NO_ANSWER), ports.timeoutMs),
+      timer: ports.lifetime.after(ports.timeoutMs, () => fail(id, NO_ANSWER)),
     });
     try {
       ports.stop(id);

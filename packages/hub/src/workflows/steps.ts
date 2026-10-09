@@ -33,6 +33,7 @@ import type {
   WorkflowRunRow,
   WorkflowStepRow,
 } from "../db";
+import type { HubLifetimeShape, HubTimer } from "../lifetime";
 import { unwatchedMode } from "../unwatched-mode";
 import { failureText, receiptOf } from "./refs";
 
@@ -51,6 +52,8 @@ export interface StepContext {
     hold: number,
     ms: number
   ) => void;
+  /** Runs each attempt's deadline until the hub closes. */
+  readonly lifetime: HubLifetimeShape;
   readonly nameOf: (run: WorkflowRunRow) => string;
   readonly notify: (run: WorkflowRunRow, body: string) => void;
   readonly send: (
@@ -148,7 +151,7 @@ export function durationText(ms: number): string {
 export function createSteps(ctx: StepContext) {
   const { db } = ctx;
   const ajv = new Ajv({ allErrors: true, strict: false });
-  const timers = new Map<string, ReturnType<typeof setTimeout>>();
+  const timers = new Map<string, HubTimer>();
   /** Each armed attempt's deadline (ms epoch), by step, beside its timer. */
   const deadlines = new Map<string, number>();
 
@@ -175,7 +178,7 @@ export function createSteps(ctx: StepContext) {
   const latest = (step: WorkflowStepRow) =>
     db.listWorkflowAttempts(step.id).at(-1);
   const clearTimer = (id: string) => {
-    clearTimeout(timers.get(id));
+    ctx.lifetime.cancel(timers.get(id));
     timers.delete(id);
     deadlines.delete(id);
   };
@@ -332,34 +335,31 @@ export function createSteps(ctx: StepContext) {
     deadlines.set(step.id, deadline);
     timers.set(
       step.id,
-      setTimeout(
-        () => {
-          ctx
-            .serial(run.id, async () => {
-              const current = runOf(run.id);
-              const currentStep = stepOf(step.id);
-              if (!(active(current) && currentStep.status === "running")) {
-                return;
-              }
-              if (currentStep.instanceId) {
-                await haltAttempt(
-                  current,
-                  currentStep,
-                  deadline,
-                  "attempt-timeout"
-                );
-                return;
-              }
-              await ended(current, currentStep, "attempt-timeout");
-            })
-            .catch((error) => {
-              console.error(
-                `[workflows] step ${step.id} timeout: ${reason(error)}`
+      ctx.lifetime.after(Math.max(1, deadline - Date.now()), () => {
+        ctx
+          .serial(run.id, async () => {
+            const current = runOf(run.id);
+            const currentStep = stepOf(step.id);
+            if (!(active(current) && currentStep.status === "running")) {
+              return;
+            }
+            if (currentStep.instanceId) {
+              await haltAttempt(
+                current,
+                currentStep,
+                deadline,
+                "attempt-timeout"
               );
-            });
-        },
-        Math.max(1, deadline - Date.now())
-      )
+              return;
+            }
+            await ended(current, currentStep, "attempt-timeout");
+          })
+          .catch((error) => {
+            console.error(
+              `[workflows] step ${step.id} timeout: ${reason(error)}`
+            );
+          });
+      })
     );
   };
 

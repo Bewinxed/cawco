@@ -32,6 +32,7 @@ import {
   IMAGE_GENERATION_TIMEOUT_MS,
   machineLabel,
   QUESTION_DISMISSED,
+  relaunchOf,
 } from "@cawco/core";
 import type {
   WorkBudget,
@@ -41,7 +42,7 @@ import type {
 import type { DelegateListInclude, DelegateNode } from "./delegation-tree";
 import { type KeepAliveRow, promptCacheExpiresAt } from "./keep-alive";
 import { leafOf, sessionLabel } from "./labels";
-import { neverStarted, resolveSpawnType } from "./work-items";
+import { resolveSpawnType } from "./work-items";
 
 const WS_SCHEME = /^ws/;
 const WS_PATH_SUFFIX = /\/ws$/;
@@ -286,12 +287,13 @@ async function roster(exceptInstanceId: string): Promise<{
         row.status === "unknown"
     )
     .map((row) => toPeer(row, hosts));
-  // What a send wakes (the hub's `wakeForSend`): no process, a conversation
-  // on record.
+  // What a send wakes (the hub's `wakesForSend`, by core `relaunchOf`): no
+  // process, and a conversation to resume or none begun yet, so it starts
+  // fresh under its id.
   const asleep = others
     .filter(
       (row) =>
-        row.sessionId &&
+        relaunchOf(row).kind !== "refused" &&
         (row.status === "sleeping" ||
           row.status === "error" ||
           row.status === "stopped")
@@ -338,6 +340,14 @@ function named(peers: Peer[], target: string): Peer[] {
  */
 const LISTED_AT_MOST = 12;
 
+/** How a session with no process is listed: asleep on its conversation, or never started. */
+const restingWords = (peer: Peer, asleep: ReadonlySet<Peer>): string => {
+  if (!asleep.has(peer)) {
+    return "";
+  }
+  return peer.row.sessionId ? "asleep, " : "never started, ";
+};
+
 /**
  * The refusal of a name more than one session answers to: the sessions by
  * id, in the order given, and how many more there are.
@@ -351,7 +361,7 @@ function ambiguous(
     .slice(0, LISTED_AT_MOST)
     .map(
       (peer) =>
-        `${peer.label} on ${peer.host} (${asleep.has(peer) ? "asleep, " : ""}${ageOf(peer.row.updatedAt)})`
+        `${peer.label} on ${peer.host} (${restingWords(peer, asleep)}${ageOf(peer.row.updatedAt)})`
     )
     .join(", ");
   const more = candidates.length - LISTED_AT_MOST;
@@ -366,12 +376,13 @@ const movedAt = (peer: Peer) =>
   peer.row.updatedAt ? new Date(peer.row.updatedAt).getTime() || 0 : 0;
 
 /**
- * A hand-off's target, running or asleep. An id — full, or a short id of six
- * or more characters — names one session. A bare name is looked up among
- * both: the caller's own parent when it answers to the name, else the one
- * session that does. A name more than one session answers to is refused with
- * every one of them by id; it is never guessed. The hub wakes a sleeping
- * target to read it.
+ * A hand-off's target, running or asleep (a never-started session counts as
+ * asleep). An id — full, or a short id of six or more characters — names one
+ * session. A bare name is looked up among both: the caller's own parent when
+ * it answers to the name, else the one session that does. A name more than
+ * one session answers to is refused with every one of them by id; it is never
+ * guessed. The hub wakes a sleeping target to read it, and starts a
+ * never-started one fresh under its id.
  */
 function resolveHandoff(
   peers: Peer[],
@@ -472,8 +483,12 @@ export interface SendDelivery {
   busy: boolean;
   /** Queued at the hub, and why; absent when the session has it. */
   hold?: SendHold;
-  /** It was asleep, and the send woke it. */
-  woke: boolean;
+  /**
+   * It had no process, and the send started one (core `relaunchOf`): on its
+   * conversation (`resume`), or fresh under its id because it never began
+   * one (`fresh`). Absent when it had a process or the send is held.
+   */
+  woke?: "fresh" | "resume";
 }
 
 /** Each hold, in the words `handoff` answers with: queued at the hub, and until when. */
@@ -492,8 +507,11 @@ const deliveryWords = (delivery: SendDelivery, urgent: boolean): string => {
   if (delivery.hold) {
     return HOLD_WORDS[delivery.hold];
   }
-  if (delivery.woke) {
+  if (delivery.woke === "resume") {
     return "It was asleep; it is being woken to read it.";
+  }
+  if (delivery.woke === "fresh") {
+    return "It never started; it is being started fresh under its id to read it.";
   }
   if (urgent) {
     return delivery.busy
@@ -1206,16 +1224,6 @@ export const handoffActions = ({
     message: string,
     urgent = false
   ): Promise<string> {
-    // A session that never started has no process and no conversation to
-    // wake, so it is in no roster: the caller hears why, not "no match".
-    const stillborn = instanceById(needleOf(target));
-    if (stillborn && neverStarted(stillborn)) {
-      throw new Error(
-        `${sessionLabel(stillborn).tag} never started, so nothing can read a message${
-          stillborn.lastError ? `: ${stillborn.lastError}` : "."
-        }`
-      );
-    }
     const { peers, asleep, own } = await roster(instanceId);
     const peer = urgent
       ? resolveDelegate(peers, target, instanceId, ledBy)

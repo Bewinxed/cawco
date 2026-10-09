@@ -1,5 +1,6 @@
 import type { Envelope, ErrorFrame, Verb } from "@cawco/core";
 import { Context, Effect, Layer } from "effect";
+import { HubLifetime, type HubLifetimeShape } from "./lifetime";
 import { type HubSocket, sendFrame } from "./wire-socket";
 
 /**
@@ -126,7 +127,7 @@ export class Registry extends Context.Service<Registry, RegistryShape>()(
   "Registry"
 ) {}
 
-const make = (): RegistryShape => {
+const make = (lifetime: HubLifetimeShape): RegistryShape => {
   const agents = new Map<string, HubSocket>();
   const addresses = new Map<string, string>();
   /** One entry per dashboard socket. A session's own frames reach it through `stream.ts`. */
@@ -142,15 +143,14 @@ const make = (): RegistryShape => {
    */
   let lastDashboardOrigin: string | undefined;
 
-  const sweep = setInterval(() => {
+  lifetime.every(SWEEP_INTERVAL_MS, () => {
     const cutoff = Date.now() - REQUESTER_TTL_MS;
     for (const [requestId, entry] of requesters) {
       if (entry.at < cutoff) {
         requesters.delete(requestId);
       }
     }
-  }, SWEEP_INTERVAL_MS);
-  sweep.unref();
+  });
 
   return {
     registerAgent: (machineId, socket, address) => {
@@ -220,4 +220,8 @@ const make = (): RegistryShape => {
   };
 };
 
-export const RegistryLayer = Layer.effect(Registry)(Effect.sync(make));
+export const RegistryLayer = Layer.effect(Registry)(
+  Effect.gen(function* () {
+    return make(yield* HubLifetime);
+  })
+);

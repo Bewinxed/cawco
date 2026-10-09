@@ -307,6 +307,7 @@ import {
   promptCacheExpiresAt,
 } from "./keep-alive";
 import { type LabelledRow, leafOf, sessionLabel } from "./labels";
+import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import { probe } from "./llm";
 import { MeaningJudge } from "./meaning";
 import {
@@ -804,6 +805,8 @@ export interface HubServices {
    */
   readonly build: BuildInfo;
   readonly db: DbShape;
+  /** Every timer the hub starts, and the one path that stops them all (lifetime.ts). */
+  readonly lifetime: HubLifetimeShape;
   readonly pending: PendingShape;
   readonly registry: RegistryShape;
   /** Absent unless the hub was given a bot token; every call site guards for it. */
@@ -1918,7 +1921,7 @@ export const normalizeRelayMessage = (body: unknown): string | undefined => {
 };
 
 export const createServer = (
-  { build: hubBuild, registry, db, pending, telegram }: HubServices,
+  { build: hubBuild, registry, db, pending, telegram, lifetime }: HubServices,
   { resumeWorkflows = true }: { resumeWorkflows?: boolean } = {}
 ) => {
   // Honest ground, before anything is served. A fresh process holds no agent
@@ -2688,7 +2691,7 @@ export const createServer = (
       /** When `reports` came in: a sign-in settled since is not theirs to undo. */
       receivedAt: number;
       running: Promise<void>;
-      timer?: ReturnType<typeof setTimeout>;
+      timer?: HubTimer;
     }
   >();
   /** A machine's new connection: its first report of each kind is taken. */
@@ -2719,7 +2722,7 @@ export const createServer = (
       sync.reports = reports;
       sync.receivedAt = Date.now();
       sync.attempt = 0;
-      clearTimeout(sync.timer);
+      lifetime.cancel(sync.timer);
     }
     accountSyncs.set(key, sync);
     sync.running = sync.running
@@ -2743,11 +2746,9 @@ export const createServer = (
         if (failed && registry.agent(machineId)) {
           const delay = Math.min(30 * 60_000, 30_000 * 2 ** sync.attempt);
           sync.attempt += 1;
-          sync.timer = setTimeout(
-            () => syncAccounts(machineId, harness),
-            delay
+          sync.timer = lifetime.after(delay, () =>
+            syncAccounts(machineId, harness)
           );
-          sync.timer.unref?.();
         }
       })
       .catch(console.error);
@@ -4416,7 +4417,7 @@ export const createServer = (
       storeProvider: string;
     }
   >();
-  let moveTicker: ReturnType<typeof setInterval> | undefined;
+  let moveTicker: HubTimer | undefined;
 
   /**
    * Whether a session in `status` may have a process: running, starting, or
@@ -4622,10 +4623,10 @@ export const createServer = (
    * that starts with either in its database starts them at once.
    */
   const tickMoves = (): void => {
-    moveTicker ??= setInterval(() => {
+    moveTicker ??= lifetime.every(MOVE_TICK_MS, () => {
       const moves = movingLogins();
-      if (moves.length === 0 && movedFrom().size === 0 && moveTicker) {
-        clearInterval(moveTicker);
+      if (moves.length === 0 && movedFrom().size === 0) {
+        lifetime.cancel(moveTicker);
         moveTicker = undefined;
         return;
       }
@@ -4633,8 +4634,7 @@ export const createServer = (
         advanceMove(move).catch(console.error);
       }
       sleepMovedFrom();
-    }, MOVE_TICK_MS);
-    moveTicker.unref?.();
+    });
   };
   /** What a hub that just started finds in its database it carries on with. */
   const carryOnMoves = (): void => {
@@ -4821,7 +4821,7 @@ export const createServer = (
   const awaitGrace = (machineId: string, why: "agent" | "hub"): void => {
     const grace = Symbol(machineId);
     awaitingMachine.set(machineId, { why, grace });
-    setTimeout(() => {
+    lifetime.after(RECONNECT_GRACE_MS, () => {
       if (awaitingMachine.get(machineId)?.grace !== grace) {
         return;
       }
@@ -4829,7 +4829,7 @@ export const createServer = (
       if (!registry.agent(machineId)) {
         failOwedAway(machineId);
       }
-    }, RECONNECT_GRACE_MS).unref?.();
+    });
   };
 
   /**
@@ -4879,9 +4879,11 @@ export const createServer = (
       throw new WorkItemRefusal(404, record.reason ?? "the send failed");
     }
     const hold = holdOf(record);
+    const plan =
+      !hold && before && wakesForSend(before) ? relaunchOf(before) : undefined;
     return {
       ...(hold ? { hold } : {}),
-      woke: !hold && before !== undefined && wakesForSend(before),
+      ...(plan && plan.kind !== "refused" ? { woke: plan.kind } : {}),
       busy: pulses.get(instanceId)?.busy === true,
     };
   };
@@ -5043,14 +5045,14 @@ export const createServer = (
       ...(instanceId && { instanceId }),
     };
     return new Promise((resolve) => {
-      const timer = setTimeout(() => {
+      const timer = lifetime.after(timeoutMs, () => {
         waiting.delete(requestId);
         waitingMachines.delete(requestId);
         resolve("timeout");
-      }, timeoutMs);
+      });
       waitingMachines.set(requestId, machineId);
       waiting.set(requestId, (frame) => {
-        clearTimeout(timer);
+        lifetime.cancel(timer);
         waiting.delete(requestId);
         waitingMachines.delete(requestId);
         resolve(frame);
@@ -6120,14 +6122,14 @@ export const createServer = (
     send: () => void
   ): Promise<ControlResult | "timeout"> =>
     new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
+      const timer = lifetime.after(timeoutMs, () => {
         waiting.delete(requestId);
         waitingMachines.delete(requestId);
         resolve("timeout");
-      }, timeoutMs);
+      });
       waitingMachines.set(requestId, machineId);
       waiting.set(requestId, (frame) => {
-        clearTimeout(timer);
+        lifetime.cancel(timer);
         waiting.delete(requestId);
         waitingMachines.delete(requestId);
         resolve(frame);
@@ -6136,7 +6138,7 @@ export const createServer = (
         send();
       } catch (error) {
         // Refused before it went: nothing will answer, so nothing waits.
-        clearTimeout(timer);
+        lifetime.cancel(timer);
         waiting.delete(requestId);
         waitingMachines.delete(requestId);
         reject(error);
@@ -6831,7 +6833,7 @@ export const createServer = (
       machineId: string;
       requestId: string | undefined;
       at: number;
-      timer: ReturnType<typeof setTimeout>;
+      timer: HubTimer;
     }
   >();
   const finishStopDispatch = (key: string, outcome: string): void => {
@@ -6839,7 +6841,7 @@ export const createServer = (
     if (!sent) {
       return;
     }
-    clearTimeout(sent.timer);
+    lifetime.cancel(sent.timer);
     stopDispatches.delete(key);
     console.info(
       `[hub] stop session=${sent.instanceId} request=${sent.requestId ?? "none"} machine=${sent.machineId} outcome=${outcome} elapsedMs=${Date.now() - sent.at}`
@@ -6964,9 +6966,8 @@ export const createServer = (
         machineId,
         requestId: payload.requestId,
         at,
-        timer: setTimeout(
-          () => finishStopDispatch(key, "timed-out"),
-          payload.discard ? 30_000 : READ_TIMEOUT_MS
+        timer: lifetime.after(payload.discard ? 30_000 : READ_TIMEOUT_MS, () =>
+          finishStopDispatch(key, "timed-out")
         ),
       });
       return true;
@@ -7075,6 +7076,7 @@ export const createServer = (
   // reported to the dashboard as its machine confirms the end (project-stops.ts).
   const projectStops = createProjectStops({
     db,
+    lifetime,
     pulse: (id) => pulses.get(id),
     stop: (id) => endSession(id, "stop"),
     // A machine that is away: the stop is stored, and its next register's
@@ -7105,7 +7107,7 @@ export const createServer = (
             )
           );
         } else {
-          setTimeout(observe, 100).unref();
+          lifetime.after(100, observe);
         }
       };
       observe();
@@ -7128,7 +7130,7 @@ export const createServer = (
     const discard = peekDiscard(message.payload);
     const at = Date.now();
     const reply = (frame: ControlResult, outcome = "failed"): void => {
-      clearTimeout(timer);
+      lifetime.cancel(timer);
       waiting.delete(requestId);
       lifecycle.answered(requestId, frame.ok);
       if (!frame.ok) {
@@ -7147,19 +7149,17 @@ export const createServer = (
         payload: frame,
       });
     };
-    const timer = setTimeout(
-      () =>
-        reply(
-          {
-            kind: "control_result",
-            requestId,
-            ok: false,
-            error:
-              "Stop got no answer in time. The machine may be offline. Check the machine, then retry.",
-          },
-          "timed-out"
-        ),
-      discard ? 30_000 : READ_TIMEOUT_MS
+    const timer = lifetime.after(discard ? 30_000 : READ_TIMEOUT_MS, () =>
+      reply(
+        {
+          kind: "control_result",
+          requestId,
+          ok: false,
+          error:
+            "Stop got no answer in time. The machine may be offline. Check the machine, then retry.",
+        },
+        "timed-out"
+      )
     );
     waiting.set(requestId, reply);
     try {
@@ -7588,12 +7588,12 @@ export const createServer = (
 
   /** Deletes a settled job once it has been kept {@link CONTINUATION_KEPT_MS}. */
   const forgetContinuationLater = (row: ContinuationRow): void => {
-    setTimeout(
+    lifetime.after(
+      Math.max(0, row.updatedAt.getTime() + CONTINUATION_KEPT_MS - Date.now()),
       () => {
         db.deleteContinuation(row.id);
         publishInstances(row.prepared.source.machineId);
-      },
-      Math.max(0, row.updatedAt.getTime() + CONTINUATION_KEPT_MS - Date.now())
+      }
     );
   };
 
@@ -7829,7 +7829,7 @@ export const createServer = (
         return "late";
       }
       // biome-ignore lint/performance/noAwaitInLoops: one look a beat until the new session runs or its machine goes
-      await new Promise((resolve) => setTimeout(resolve, 250));
+      await lifetime.sleep(250);
     }
   };
 
@@ -10211,6 +10211,7 @@ export const createServer = (
    * past them.
    */
   const streams = createStreamHub({
+    lifetime,
     // A follower's plan whole (plans.ts), built below with the tasks it reads.
     planSnapshot: (instanceId, send) => plans.snapshotTo(instanceId, send),
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: validates ownership and settles the send once against the harness's atomic withdrawal receipt, including concurrent recalls
@@ -10508,6 +10509,7 @@ export const createServer = (
 
   /** Every session's blocks, built here once, whether or not anyone watches. */
   const transcripts = createTranscripts({
+    lifetime,
     readHistory,
     build: (machineId) =>
       db.listAgents().find((agent) => agent.machineId === machineId)?.build
@@ -10796,6 +10798,7 @@ export const createServer = (
   });
   const workItems = createWorkItems({
     db,
+    lifetime,
     pauses: (projectId) => caps.pauses(projectId),
     end: async (instanceId) => {
       endSession(instanceId, "stop");
@@ -10873,6 +10876,7 @@ export const createServer = (
     }
   }
   const workflowRuntime = createWorkflowRuntime({
+    lifetime,
     custodyPending: (machineId, instanceId) => {
       const custody = machineCustody.get(machineId);
       return (
@@ -10921,7 +10925,7 @@ export const createServer = (
               )
             );
           } else {
-            setTimeout(observe, 100).unref();
+            lifetime.after(100, observe);
           }
         };
         observe();
@@ -11087,6 +11091,7 @@ export const createServer = (
   lead = caw;
   const dispatcher = createDispatcher({
     db,
+    lifetime,
     tasks,
     lead: (projectId) => caw.lead(projectId),
     online: (machineId) => Boolean(registry.agent(machineId)),
@@ -11135,6 +11140,7 @@ export const createServer = (
   // live to the session's followers (plans.ts).
   const plans = createPlans({
     db,
+    lifetime,
     tasks,
     run: runOnMachine,
     online: (machineId) => Boolean(registry.agent(machineId)),
@@ -11225,6 +11231,7 @@ export const createServer = (
     void tasks.syncAll().catch(console.error);
   }
   const delegationMcp = createDelegationMcp({
+    lifetime,
     tasks,
     workItemTask: (id) => db.workItem(id)?.taskId,
     workItemLands: (id) => db.workItem(id)?.lands,
@@ -11574,10 +11581,7 @@ export const createServer = (
     }
     const { sessionId } = row;
     relaunching.add(instanceId);
-    setTimeout(
-      () => relaunching.delete(instanceId),
-      RELAUNCH_SETTLE_MS
-    ).unref?.();
+    lifetime.after(RELAUNCH_SETTLE_MS, () => relaunching.delete(instanceId));
     transcripts.noteRelaunch(instanceId);
     resumeSpawn(agent, machineId, { ...row, sessionId }, false, true);
     console.info(
@@ -11586,6 +11590,7 @@ export const createServer = (
   };
 
   const keepAliveScheduler = createKeepAliveScheduler({
+    lifetime,
     rows: db.listInstances,
     limits: () => sessionLimitsReader(db),
     idle: sessionIdle,
@@ -11807,6 +11812,7 @@ export const createServer = (
 
   const atLimit = createAtLimit({
     db,
+    lifetime,
     accountOf: (row) => row.accountId ?? undefined,
     continuing: (row) =>
       db
@@ -12012,6 +12018,7 @@ export const createServer = (
       .use(noticesSeen.routes)
       .use(
         joinRoutes({
+          lifetime,
           online: (machineId) => Boolean(registry.agent(machineId)),
         })
       )

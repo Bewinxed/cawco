@@ -9,6 +9,7 @@ import {
   type SendPayload,
 } from "@cawco/core";
 import type { DbShape } from "./db";
+import type { HubLifetimeShape, HubTimer } from "./lifetime";
 
 export type KeepAliveRow = ReturnType<DbShape["getInstancesByIds"]>[number];
 
@@ -168,6 +169,8 @@ export const keepAliveResult = (
 interface KeepAlivePorts {
   changed: () => void;
   idle: (row: KeepAliveRow) => boolean | Promise<boolean>;
+  /** Runs the scheduler's one timer until the hub closes. */
+  lifetime: HubLifetimeShape;
   /**
    * Reads the accounts once and answers the limits each session runs under
    * (its account's). Taken once per pass over the rows, not once per row.
@@ -252,16 +255,11 @@ export const tickKeepAlive = async (
 
 /** Timers are disposable; every deadline is re-derived from the stored request. */
 export const createKeepAliveScheduler = (ports: KeepAlivePorts) => {
-  let timer: ReturnType<typeof setTimeout> | undefined;
+  const { lifetime } = ports;
+  let timer: HubTimer | undefined;
   let running = false;
-  let stopped = false;
   const plan = () => {
-    if (timer) {
-      clearTimeout(timer);
-    }
-    if (stopped) {
-      return;
-    }
+    lifetime.cancel(timer);
     const now = Date.now();
     // Retry due-but-busy/unreachable sessions, while a future due time gets an
     // exact wake even when it falls between those retry ticks.
@@ -277,23 +275,17 @@ export const createKeepAliveScheduler = (ports: KeepAlivePorts) => {
         at = Math.min(at, state.nextAt);
       }
     }
-    timer = setTimeout(
-      () => {
-        // biome-ignore lint/complexity/noVoid: wake catches and reports a failed machine read
-        void wake();
-      },
-      Math.max(0, at - now)
-    );
-    timer.unref?.();
+    timer = lifetime.after(Math.max(0, at - now), () => {
+      // biome-ignore lint/complexity/noVoid: wake catches and reports a failed machine read
+      void wake();
+    });
   };
   const wake = async () => {
-    if (running || stopped) {
+    if (running || lifetime.closed()) {
       return;
     }
     running = true;
-    if (timer) {
-      clearTimeout(timer);
-    }
+    lifetime.cancel(timer);
     try {
       await tickKeepAlive(ports);
       ports.changed();
@@ -308,13 +300,5 @@ export const createKeepAliveScheduler = (ports: KeepAlivePorts) => {
   // soon as its machine can supply an idle receipt, not after another margin.
   // biome-ignore lint/complexity/noVoid: startup must not wait for machines to reconnect
   void wake();
-  return {
-    wake,
-    stop: () => {
-      stopped = true;
-      if (timer) {
-        clearTimeout(timer);
-      }
-    },
-  };
+  return { wake };
 };

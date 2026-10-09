@@ -39,6 +39,7 @@ import type {
   WorkflowStepRow,
 } from "../db";
 import { askJev } from "../jev";
+import type { HubLifetimeShape } from "../lifetime";
 import { WorkItemRefusal } from "../work-items";
 import { createWorkflowEngine, type Outcome } from "./engine";
 import {
@@ -76,6 +77,8 @@ export interface WorkflowRuntimeDeps {
   dbPath: string;
   emit: (envelope: Envelope) => void;
   halt: (machineId: string, instanceId: string) => Promise<void>;
+  /** Runs each step attempt's deadline until the hub closes (steps.ts). */
+  lifetime: HubLifetimeShape;
   notifyUser: (text: string) => void;
   online: (machineId: string) => boolean;
   park: (envelope: Envelope) => void;
@@ -619,6 +622,7 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
     db,
     expand,
     halt: deps.halt,
+    lifetime: deps.lifetime,
     hold: (run, step, hold, ms) => {
       engine.hold(run.id, step.seq, hold, ms).catch((error) => {
         finish(

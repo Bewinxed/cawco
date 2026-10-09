@@ -73,6 +73,7 @@ import {
   pushBranch,
   quote,
 } from "./landing";
+import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import {
   FOLDER_FILE_LIMIT,
   FolderRefusal,
@@ -111,16 +112,6 @@ const LIVE: ReadonlySet<WorkItemRow["state"]> = new Set([
   "starting",
   "running",
 ]);
-
-/**
- * A session with no process and no conversation a revive could resume: it
- * never started, so nothing will ever read a message sent to it.
- */
-export const neverStarted = (row: InstanceRow): boolean =>
-  !row.sessionId &&
-  (row.status === "error" ||
-    row.status === "stopped" ||
-    row.status === "sleeping");
 
 /** Whether an item in `state` is live work: starting or running. */
 export const isLive = (state: WorkItemRow["state"]): boolean => LIVE.has(state);
@@ -436,6 +427,8 @@ export interface WorkItemDeps {
    * written. Called in the same step; whoever listens defers its own work.
    */
   readonly itemEnded?: (item: WorkItemRow) => void;
+  /** Runs the budget sweep and every wait's timer until the hub closes. */
+  readonly lifetime: HubLifetimeShape;
   /** Tells every dashboard an item moved: its parent's delegate tray follows it. */
   /**
    * Why an attempt at one of the project's tasks may not start now: its spend
@@ -982,6 +975,7 @@ export const createWorkItems = ({
   db,
   end,
   itemEnded,
+  lifetime,
   pauses,
   publish,
   report,
@@ -995,11 +989,11 @@ export const createWorkItems = ({
 }: WorkItemDeps) => {
   /** Turns in a row each live item's session ended without `finish_item`, by item. */
   const quiet = new Map<string, number>();
-  const waitTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const waitTimers = new Map<string, HubTimer>();
   /** Waits whose declaring turn ended: the next busy transition resumes them. */
   const waitsAtRest = new Set<string>();
   const disarmWait = (id: string): void => {
-    clearTimeout(waitTimers.get(id));
+    lifetime.cancel(waitTimers.get(id));
     waitTimers.delete(id);
     waitsAtRest.delete(id);
     quiet.delete(id);
@@ -1241,14 +1235,13 @@ export const createWorkItems = ({
     );
   };
 
-  const budgetSweep = setInterval(() => {
+  lifetime.every(BUDGET_SWEEP_MS, () => {
     for (const item of db.liveWorkItems()) {
       if (item.budget) {
         enforceBudget(item);
       }
     }
-  }, BUDGET_SWEEP_MS);
-  budgetSweep.unref?.();
+  });
 
   // --- groups ---------------------------------------------------------------------
 
@@ -2217,12 +2210,13 @@ export const createWorkItems = ({
           );
         }
       };
-      const timer = setTimeout(
-        missed,
-        Math.max(0, item.waitResumeBy.getTime() - Date.now())
+      waitTimers.set(
+        item.id,
+        lifetime.after(
+          Math.max(0, item.waitResumeBy.getTime() - Date.now()),
+          missed
+        )
       );
-      timer.unref?.();
-      waitTimers.set(item.id, timer);
       return;
     }
     if (!item.waitUntil) {
@@ -2233,9 +2227,10 @@ export const createWorkItems = ({
       endWait(item.id);
       return;
     }
-    const timer = setTimeout(() => endWait(item.id), remaining);
-    timer.unref?.();
-    waitTimers.set(item.id, timer);
+    waitTimers.set(
+      item.id,
+      lifetime.after(remaining, () => endWait(item.id))
+    );
   };
   const waitingTurn = (item: WorkItemRow): boolean => {
     if (!item.waitUntil) {
@@ -2809,10 +2804,6 @@ export const createWorkItems = ({
       return !!item && leadFor(item)?.id === leadId;
     },
 
-    stop(): void {
-      clearInterval(budgetSweep);
-    },
-
     /** The one send path adds this to reports, handoffs and asks alike. */
     waitSummary(instanceId: string, parentInstanceId: string): string {
       const [row] = db.getInstancesByIds([instanceId]);
@@ -2965,8 +2956,8 @@ export const createWorkItems = ({
      * process has read it: the item runs again, in the same session, and ends
      * again the usual way — on a turn nothing answers — with a new report to
      * its parent. Called on the read, never on the send: a send nothing takes
-     * up (a revive that failed, a session that never started) leaves the item
-     * as it ended, with its reason.
+     * up (a revive or fresh start that failed) leaves the item as it ended,
+     * with its reason.
      */
     reopen(instanceId: string, sentAt: Date): void {
       const [row] = db.getInstancesByIds([instanceId]);

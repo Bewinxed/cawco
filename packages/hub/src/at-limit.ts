@@ -14,6 +14,7 @@ import {
 } from "@cawco/core";
 import type { DbShape } from "./db";
 import type { LimitHold } from "./db/at-limit";
+import type { HubLifetimeShape, HubTimer } from "./lifetime";
 
 /**
  * A running Claude session whose account reached its limit: its turn was
@@ -214,6 +215,8 @@ export interface AtLimitPorts {
   db: DbShape;
   /** Whether `row` is between turns: nothing running and nothing waiting on it. */
   idle: (row: LimitRow) => Promise<boolean>;
+  /** Runs the next look and each settling session's timer until the hub closes. */
+  lifetime: HubLifetimeShape;
   /** Relaunches `row` on `accountId`, its conversation with it, and has it carry on. */
   move: (row: LimitRow, accountId: string) => void;
   /** The session's machine and title, as a line names them. */
@@ -243,18 +246,14 @@ const over = (row: LimitRow | undefined): boolean =>
   !row || ["stopped", "discarded", "error"].includes(row.status);
 
 export const createAtLimit = (ports: AtLimitPorts) => {
-  const { db } = ports;
+  const { db, lifetime } = ports;
   const rowOf = (id: string): LimitRow | undefined =>
     db.getInstancesByIds([id])[0];
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  let stopped = false;
+  let timer: HubTimer | undefined;
   /** Sessions being moved or continued right now: each is acted on once at a time. */
   const acting = new Set<string>();
   /** Refused sessions still mid-turn on their machine, by when they stop being looked at. */
-  const settling = new Map<
-    string,
-    { timer: ReturnType<typeof setTimeout>; until: number }
-  >();
+  const settling = new Map<string, { timer: HubTimer; until: number }>();
 
   const readingOf = (accountId: string): AccountReading | undefined =>
     db.accounts.readings().find((one) => one.accountId === accountId);
@@ -315,16 +314,16 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     const was = settling.get(row.id);
     const until = was?.until ?? Date.now() + SETTLE_FOR_MS;
     if (was) {
-      clearTimeout(was.timer);
+      lifetime.cancel(was.timer);
     }
-    if (stopped || Date.now() >= until) {
+    if (lifetime.closed() || Date.now() >= until) {
       settling.delete(row.id);
       console.info(
         `[at-limit] ${row.id}: still mid-turn after ${SETTLE_FOR_MS / 1000}s; its next refusal is looked at then`
       );
       return;
     }
-    const next = setTimeout(() => {
+    const next = lifetime.after(SETTLE_MS, () => {
       const fresh = rowOf(row.id);
       if (over(fresh) || !fresh) {
         settling.delete(row.id);
@@ -335,8 +334,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
           `[at-limit] ${row.id}: ${error instanceof Error ? error.message : String(error)}`
         );
       });
-    }, SETTLE_MS);
-    next.unref?.();
+    });
     settling.set(row.id, { timer: next, until });
   };
 
@@ -440,7 +438,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       }
       const was = settling.get(row.id);
       if (was) {
-        clearTimeout(was.timer);
+        lifetime.cancel(was.timer);
         settling.delete(row.id);
       }
       const target = db.accounts.get(decision.targetId);
@@ -608,11 +606,9 @@ export const createAtLimit = (ports: AtLimitPorts) => {
 
   /** Arms the next look: the earliest reset, else the recheck, while anything is held or kept. */
   const plan = (): void => {
-    if (timer) {
-      clearTimeout(timer);
-      timer = undefined;
-    }
-    if (stopped) {
+    lifetime.cancel(timer);
+    timer = undefined;
+    if (lifetime.closed()) {
       return;
     }
     const now = Date.now();
@@ -626,18 +622,14 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       ...holds.map((one) => one.until ?? Number.POSITIVE_INFINITY),
       ...summaries.map((one) => Date.parse(one.resetsAt))
     );
-    timer = setTimeout(
-      () => {
-        // biome-ignore lint/complexity/noVoid: the look reports its own failures
-        void tick()
-          .catch((error) => {
-            console.error("[at-limit] look failed:", error);
-          })
-          .finally(plan);
-      },
-      Math.max(1000, at - now)
-    );
-    timer.unref?.();
+    timer = lifetime.after(Math.max(1000, at - now), () => {
+      // biome-ignore lint/complexity/noVoid: the look reports its own failures
+      void tick()
+        .catch((error) => {
+          console.error("[at-limit] look failed:", error);
+        })
+        .finally(plan);
+    });
   };
 
   plan();
@@ -690,15 +682,5 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     },
     /** Looks at every hold and kept summary now. */
     look: () => tick().finally(plan),
-    stop(): void {
-      stopped = true;
-      if (timer) {
-        clearTimeout(timer);
-      }
-      for (const { timer: each } of settling.values()) {
-        clearTimeout(each);
-      }
-      settling.clear();
-    },
   };
 };

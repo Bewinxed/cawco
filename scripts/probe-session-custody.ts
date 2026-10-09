@@ -144,6 +144,9 @@ if (role === "migration-main") {
     "../packages/hub/src/registry"
   );
   const { Pending, PendingLayer } = await import("../packages/hub/src/pending");
+  const { HubLifetime, HubLifetimeLayer } = await import(
+    "../packages/hub/src/lifetime"
+  );
   const { createServer } = await import("../packages/hub/src/server");
   const { Database } = await import("bun:sqlite");
   const app = await Effect.runPromise(
@@ -177,6 +180,7 @@ if (role === "migration-main") {
             db: faultDb,
             registry,
             pending: yield* Pending,
+            lifetime: yield* HubLifetime,
             build: { version: "private", startedAt: Date.now() },
           },
           { resumeWorkflows: false }
@@ -383,7 +387,9 @@ if (role === "migration-main") {
             ),
           }));
       }),
-      Layer.mergeAll(DbLayer, RegistryLayer, PendingLayer)
+      Layer.mergeAll(DbLayer, RegistryLayer, PendingLayer).pipe(
+        Layer.provideMerge(HubLifetimeLayer)
+      )
     )
   );
   app.listen({ hostname: "127.0.0.1", port: Number(portText) });

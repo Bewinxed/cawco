@@ -28,6 +28,7 @@ import { Elysia, t } from "elysia";
 import { createPatch } from "rfc6902";
 import type { DbShape } from "./db";
 import { type HarnessPlanDeps, harnessSteps } from "./harness-plans";
+import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import { FolderRefusal, refused } from "./project-folder";
 import type { TaskEvent, Tasks } from "./tasks";
 
@@ -47,6 +48,8 @@ export interface PlansDeps extends HarnessPlanDeps {
     | "sessionPlan"
     | "workItem"
   >;
+  /** Runs each session's settle timer until the hub closes. */
+  lifetime: HubLifetimeShape;
   /** Fans a plan frame out to the session's followers (stream.ts). */
   publish: (instanceId: string, message: PlanSnapshot | PlanDelta) => void;
   tasks: Pick<Tasks, "get">;
@@ -68,7 +71,7 @@ export const createPlans = (deps: PlansDeps) => {
   const queues = new Map<string, Promise<unknown>>();
   /** Harness list tool calls not answered yet, by tool_use id → instance. */
   const listCalls = new Map<string, string>();
-  const settling = new Map<string, ReturnType<typeof setTimeout>>();
+  const settling = new Map<string, HubTimer>();
 
   const inTurn = <T>(
     instanceId: string,
@@ -264,10 +267,10 @@ export const createPlans = (deps: PlansDeps) => {
         ) {
           settling.set(
             instanceId,
-            setTimeout(() => {
+            deps.lifetime.after(SETTLE_MS, () => {
               settling.delete(instanceId);
               settleQuietly(instanceId);
-            }, SETTLE_MS)
+            })
           );
         }
       }

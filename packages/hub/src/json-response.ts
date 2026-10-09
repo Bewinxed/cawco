@@ -42,7 +42,9 @@ const jsonStream = (value: object): ReadableStream<Uint8Array> => {
     async pull(controller) {
       if (sinceYield >= YIELD_EVERY_CHARS) {
         // Pulls chain as microtasks: without a macrotask between them the
-        // whole body is written before the loop turns again.
+        // whole body is written before the loop turns again. Not on the hub's
+        // lifetime (lifetime.ts): a turn of the loop inside one response
+        // body, which reads nothing of the hub.
         await new Promise((resolve) => setTimeout(resolve, 0));
         sinceYield = 0;
       }
