@@ -83,6 +83,7 @@ import type { RestartHold } from "@cawco/core/binary-updates";
 import {
   credentialAccountIds,
   WORKSPACE_POLICY_NAME,
+  workspaceStateDir,
   workspacesDir,
 } from "@cawco/core/paths";
 // The protocol subpath, never the `@cawco/core` barrel: `sessiond.ts` reaches
@@ -110,7 +111,6 @@ import {
   type Todo,
 } from "@opencode-ai/sdk/v2";
 import { JUDGE_SCRIPT } from "../boundary";
-import { excludeFromCheckout, gitIn } from "../checkout-exclude";
 import { delegationHubUrl, harnessMcpUrl } from "../delegation";
 import {
   type OpencodeDenySettings,
@@ -962,6 +962,31 @@ const announceOpencodeServer = async (
 };
 
 /**
+ * The fleet's Chrome DevTools MCP server, by its fleet name
+ * (`mcp-launcher.ts`). A workspace session's writes captures to the
+ * workspace's scratch as well as its clone. It writes a `filePath` only
+ * inside its roots: the ones its client answers `roots/list` with, those
+ * named by `--filesystem-root` ("A directory that filesystem tools are
+ * allowed to access. May be specified more than once.", chrome-devtools-mcp
+ * 1.10.1 build/src/config/mcp-options.js) and its own temp dir. OpenCode
+ * answers `roots/list` with the session's directory alone (1.18.34:
+ * `roots:[{uri:<directory>}]`) and starts a local server per directory, so
+ * the bridge plugin gives the clone's instance the scratch as a filesystem
+ * root. Its temp dir stays the machine's: Chromium refuses a temp dir as
+ * deep as a workspace's scratch ("Socket path too long",
+ * process_singleton_posix.cc), and the plugin's judge refuses a capture
+ * there anyway, as it refuses every write outside the clone, the scratch and
+ * the workspace caches.
+ */
+const CHROME_DEVTOOLS = "chrome-devtools";
+
+/** The mark in a workspace's state dir that turns OpenCode's plan agent off in its clone ({@link disablePlanAgentFor}). */
+const PLAN_AGENT_OFF = "opencode-plan-agent-off";
+
+/** The dir in a workspace's state dir where the bridge plugin records each session's saved outputs, a file per session. */
+const SAVED_OUTPUTS = "opencode-saved-outputs";
+
+/**
  * Supplies each `cawco_*` call its session's credential, the workflow-only
  * tool enabled by each session's tool mask, and — in a delegation
  * workspace's clone — the `bash` that runs every command through the
@@ -1001,13 +1026,14 @@ const announceOpencodeServer = async (
  */
 export const buildHandoffPluginSource =
   (): string => `import { spawn } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
+import { dirname, join } from "node:path";
 import { tool } from "@opencode-ai/plugin";
 // Where this server saves a truncated tool output for the model to read back:
 // \`tool-output\` in the data dir OpenCode read as it started, before the
-// swap below (tool/truncation-dir.ts at 1.18.34).
-const cawcoToolOutput = (process.env.XDG_DATA_HOME || homedir() + "/.local/share") + "/opencode/tool-output";
+// swap below (tool/truncation-dir.ts, core/src/global.ts 11 at 1.18.34).
+const cawcoToolOutput = join(process.env.XDG_DATA_HOME || join(homedir(), ".local", "share"), "opencode", "tool-output");
 if (process.env.CAWCO_XDG_DATA_HOME !== undefined) {
   if (process.env.CAWCO_XDG_DATA_HOME) process.env.XDG_DATA_HOME = process.env.CAWCO_XDG_DATA_HOME;
   else delete process.env.XDG_DATA_HOME;
@@ -1040,7 +1066,8 @@ const boundaryOf = (id, directory) => {
 };
 // Judges a call of workspace \`id\`'s session by the workspace's policy, and
 // throws its refusal. A judge or policy that cannot be read refuses it too.
-const judgeIn = async (id, tool, args, directory) => {
+// \`saved\` is every output the session may read back (\`savedOutputs\`).
+const judgeIn = async (id, tool, args, directory, saved) => {
   const state = cawcoWorkspaces + "/" + id;
   let judge;
   let policy;
@@ -1050,8 +1077,39 @@ const judgeIn = async (id, tool, args, directory) => {
   } catch (error) {
     throw new Error("cawco: " + tool + " was refused: workspace " + id + "'s file policy could not be read (" + (error instanceof Error ? error.message : String(error)) + ").");
   }
-  const verdict = judge.judgeCall(policy, { harness: "opencode", tool, input: args, cwd: directory, toolOutput: cawcoToolOutput });
+  const verdict = judge.judgeCall(policy, { harness: "opencode", tool, input: args, cwd: directory, toolOutput: cawcoToolOutput, savedOutputs: saved });
   if (!verdict.ok) throw new Error(verdict.reason);
+};
+// The outputs this server saved for each session of workspace \`id\`, one
+// file per session in the workspace's state dir, which the session's tools
+// never write: the server's tool-output dir holds every session's, by
+// tool-call id alone, so a session reads back only what it was told it saved.
+const SESSION_ID = /^[A-Za-z0-9_-]+$/;
+const savedFile = (id, sessionID) => {
+  if (!SESSION_ID.test(sessionID)) throw new Error("session id " + JSON.stringify(sessionID) + " names no file");
+  return cawcoWorkspaces + "/" + id + "/" + ${JSON.stringify(SAVED_OUTPUTS)} + "/" + sessionID;
+};
+// The file a call's result says this server saved: OpenCode's own hint
+// names it ("Full output saved to: <file>", tool/truncate.ts and
+// tool/shell.ts at 1.18.34) and its metadata carries it as \`outputPath\`,
+// in this server's tool-output dir. Text the tool printed alone names none.
+const savedOutputOf = (output) => {
+  const file = output?.metadata?.outputPath;
+  if (output?.metadata?.truncated !== true || typeof file !== "string" || dirname(file) !== cawcoToolOutput) return undefined;
+  return typeof output.output === "string" && output.output.includes("Full output saved to: " + file) ? file : undefined;
+};
+const recordSaved = (id, sessionID, file) => {
+  const record = savedFile(id, sessionID);
+  mkdirSync(dirname(record), { recursive: true });
+  appendFileSync(record, file + "\\n");
+};
+const savedBy = (id, sessionID) => {
+  try {
+    return readFileSync(savedFile(id, sessionID), "utf8").split("\\n").filter(Boolean);
+  } catch (error) {
+    if (error?.code === "ENOENT") return [];
+    throw error;
+  }
 };
 const OUTPUT_LIMIT = 30000;
 // What each code-mode program's calls answered, by session and the program's
@@ -1098,6 +1156,25 @@ const boundedBash = (id, directory) => tool({
 });
 export const CawcoContext = async ({ directory, serverUrl }) => {
 const workspace = workspaceOf(directory);
+// Each session's parent, as its server keeps it (\`parentID\`, GET
+// /session/:sessionID): a subagent reads back what its parents saved too,
+// the files OpenCode's hint hands it. A session's parent never changes.
+const parents = new Map();
+const parentOf = async (sessionID) => {
+  if (parents.has(sessionID)) return parents.get(sessionID);
+  const url = new URL("/session/" + encodeURIComponent(sessionID), serverUrl);
+  url.searchParams.set("directory", directory);
+  const response = await fetch(url);
+  if (!response.ok) throw new Error("session " + sessionID + " could not be read: " + response.status + " " + await response.text());
+  const parent = (await response.json()).parentID;
+  parents.set(sessionID, typeof parent === "string" ? parent : undefined);
+  return parents.get(sessionID);
+};
+const savedFor = async (id, sessionID) => {
+  const lineage = [];
+  for (let at = sessionID; at && !lineage.includes(at); at = await parentOf(at)) lineage.push(at);
+  return lineage.flatMap((one) => savedBy(id, one));
+};
 const cawcoStep = async (context) => {
   const response = await fetch(cawcoBase + "/api/instances");
   if (!response.ok) throw new Error(await response.text());
@@ -1142,9 +1219,36 @@ return ({
     }),
     ...(workspace ? { bash: boundedBash(workspace, directory) } : {})
   },
+  // A workspace's own config, given to its directory's instance as OpenCode
+  // loads it, never written into the clone: plugins run before anything
+  // else and are handed the instance's loaded config to change
+  // (project/bootstrap.ts 37-38, plugin/index.ts 244-250 at 1.18.34), after
+  // every file and OPENCODE_CONFIG_CONTENT were merged (config/config.ts
+  // 415-489). The workspace's scratch is a root of its chrome-devtools-mcp
+  // (CHROME_DEVTOOLS in the agent says why). OpenCode's plan agent is
+  // off for a workspace whose delegate type turns CawCo's to-dos on
+  // (disablePlanAgentFor).
+  config: async (cfg) => {
+    if (!workspace) return;
+    const state = cawcoWorkspaces + "/" + workspace;
+    const { scratch } = JSON.parse(readFileSync(state + "/" + ${JSON.stringify(WORKSPACE_POLICY_NAME)}, "utf8"));
+    const devtools = cfg.mcp?.[${JSON.stringify(CHROME_DEVTOOLS)}];
+    if (devtools?.type === "local" && Array.isArray(devtools.command) && typeof scratch === "string") {
+      cfg.mcp[${JSON.stringify(CHROME_DEVTOOLS)}] = { ...devtools, command: [...devtools.command, "--filesystem-root=" + scratch] };
+    }
+    if (existsSync(state + "/" + ${JSON.stringify(PLAN_AGENT_OFF)})) {
+      cfg.agent = { ...cfg.agent, plan: { ...cfg.agent?.plan, disable: true } };
+    }
+  },
   "tool.execute.before": async (input, output) => {
     if (workspace) {
-      await judgeIn(workspace, input.tool, output.args, directory);
+      let saved;
+      try {
+        saved = await savedFor(workspace, input.sessionID);
+      } catch (error) {
+        throw new Error("cawco: " + input.tool + " was refused: the outputs this session saved could not be read (" + (error instanceof Error ? error.message : String(error)) + ").");
+      }
+      await judgeIn(workspace, input.tool, output.args, directory, saved);
     }
     if (input.tool.startsWith("cawco_")) {
       const credential = sessionHeld(input.sessionID)?.credential;
@@ -1159,6 +1263,12 @@ return ({
   // \`metadata.calls\` when it ends, so the transcript shows each call as the
   // row it would be when made directly — live, and read back alike.
   "tool.execute.after": async (input, output) => {
+    // Every tool OpenCode cuts runs through here with its cut already made
+    // (tool/tool.ts and tool/registry.ts truncate inside the call, before
+    // this hook); an MCP tool reached directly is cut after it, but the
+    // fleet's servers run code mode, where it is reached through \`execute\`.
+    const saved = workspace ? savedOutputOf(output) : undefined;
+    if (saved) recordSaved(workspace, input.sessionID, saved);
     const slash = input.callID.indexOf("/");
     if (slash > 0) {
       const key = input.sessionID + " " + input.callID.slice(0, slash);
@@ -1413,17 +1523,14 @@ const syncPlanAgent = async (
   return todosOn;
 };
 
-/** The project-scope config OpenCode merges beside a project's own `opencode.json` (`ConfigPaths.projectFiles` finds both, up to the worktree root). */
-const SESSION_CONFIG = "opencode.jsonc";
-
 /**
  * OpenCode's `plan` agent for one session whose own delegate type turns
  * "CawCo's to-dos" on while the fleet's choice is off (the fleet's turns it
- * off machine-wide, `syncPlanAgent`): `agent.plan.disable` in an
- * `opencode.jsonc` in the session's directory, which OpenCode reads as that
- * directory's project config, kept out of git through the checkout's
- * `info/exclude`. Written only inside the session's own workspace; a shared
- * checkout is said in the log and left as it is.
+ * off machine-wide, `syncPlanAgent`): a {@link PLAN_AGENT_OFF} mark in its
+ * workspace's state dir, which the bridge plugin's `config` hook reads as
+ * the clone's instance loads and turns into `agent.plan.disable` there.
+ * Nothing is written into the clone. A session that runs anywhere but its
+ * own workspace's clone is said in the log and left as it is.
  */
 const disablePlanAgentFor = async (
   spec: SpawnPayload,
@@ -1432,126 +1539,14 @@ const disablePlanAgentFor = async (
   if (!spec.cawcoTodos || (await resolvedFleetDenials()).cawcoTodos) {
     return;
   }
-  const workspace = spec.workspace?.path;
-  const inside = workspace ? relative(workspace, cwd) : undefined;
-  if (inside === undefined || inside.startsWith("..") || isAbsolute(inside)) {
+  const { workspace } = spec;
+  if (!workspace || relative(workspace.path, cwd) !== "") {
     console.warn(
-      `[opencode] ${spec.instanceId}: its delegate type turns CawCo's to-dos on, but it runs in ${cwd}, not in a workspace of its own, so OpenCode's plan agent is left as it is there (a shared checkout is never written).`
+      `[opencode] ${spec.instanceId}: its delegate type turns CawCo's to-dos on, but it runs in ${cwd}, not in a workspace's clone, so OpenCode's plan agent is left as it is there.`
     );
     return;
   }
-  await mergeSessionConfig(
-    spec.instanceId,
-    cwd,
-    "OpenCode's plan agent is left as it is there",
-    (stored) => {
-      const agent = recordOf(stored.agent);
-      return {
-        ...stored,
-        agent: { ...agent, plan: { ...recordOf(agent.plan), disable: true } },
-      };
-    }
-  );
-};
-
-/**
- * Writes `change` of the session directory's {@link SESSION_CONFIG}, kept
- * out of git through the checkout's `info/exclude`; nothing when `change`
- * returns nothing. A file that is the project's own, or not plain JSON, is
- * said in the log (`leftAs`) and left as it is.
- */
-const mergeSessionConfig = async (
-  instanceId: string,
-  cwd: string,
-  leftAs: string,
-  change: (
-    stored: Record<string, unknown>
-  ) => Record<string, unknown> | undefined
-): Promise<void> => {
-  const path = join(cwd, SESSION_CONFIG);
-  if (
-    existsSync(path) &&
-    (await gitIn(cwd, ["ls-files", "--error-unmatch", SESSION_CONFIG])) !==
-      undefined
-  ) {
-    console.warn(
-      `[opencode] ${instanceId}: ${path} is the project's own, so ${leftAs}.`
-    );
-    return;
-  }
-  const stored = existsSync(path)
-    ? await readJson<Record<string, unknown>>(path)
-    : {};
-  if (!stored) {
-    console.warn(
-      `[opencode] ${instanceId}: ${path} is not plain JSON cawco can merge into, so ${leftAs}.`
-    );
-    return;
-  }
-  const changed = change(stored);
-  if (!changed) {
-    return;
-  }
-  await writeJson(path, changed);
-  await excludeFromCheckout(path);
-};
-
-/** The fleet's Chrome DevTools MCP server, by its fleet name (`mcp-launcher.ts`). */
-const CHROME_DEVTOOLS = "chrome-devtools";
-
-/**
- * A workspace session's chrome-devtools-mcp writes captures to the
- * workspace's scratch as well as its clone. It writes a `filePath` only
- * inside its roots: the ones its client answers `roots/list` with, those
- * named by `--filesystem-root` ("A directory that filesystem tools are
- * allowed to access. May be specified more than once.", chrome-devtools-mcp
- * 1.10.1 build/src/config/mcp-options.js) and its own temp dir. OpenCode
- * answers `roots/list` with the session's directory alone (1.18.34:
- * `roots:[{uri:<directory>}]`) and starts a local server per directory, so
- * the clone's own config runs the fleet's server with the scratch as a
- * filesystem root. Its temp dir stays the machine's: Chromium refuses a
- * temp dir as deep as a workspace's scratch ("Socket path too long",
- * process_singleton_posix.cc), and the plugin's judge refuses a capture
- * there anyway, as it refuses every write outside the clone, the scratch
- * and the workspace caches. Rewritten at each session's start, and dropped
- * once the fleet no longer runs the server.
- */
-const capturesToScratch = async (
-  spec: SpawnPayload,
-  ctx: HarnessContext
-): Promise<void> => {
-  const { boundary } = ctx;
-  if (!boundary) {
-    return;
-  }
-  const fleet = recordOf(
-    (await readJson<{ mcp?: unknown }>(OPENCODE_CONFIG))?.mcp
-  )[CHROME_DEVTOOLS];
-  const entry = recordOf(fleet);
-  await mergeSessionConfig(
-    spec.instanceId,
-    ctx.cwd,
-    "its Chrome DevTools server writes captures only in the clone",
-    (stored) => {
-      const { [CHROME_DEVTOOLS]: held, ...others } = recordOf(stored.mcp);
-      if (!(entry.type === "local" && Array.isArray(entry.command))) {
-        return held === undefined ? undefined : { ...stored, mcp: others };
-      }
-      return {
-        ...stored,
-        mcp: {
-          ...others,
-          [CHROME_DEVTOOLS]: {
-            ...entry,
-            command: [
-              ...entry.command,
-              `--filesystem-root=${boundary.scratch}`,
-            ],
-          },
-        },
-      };
-    }
-  );
+  await Bun.write(join(workspaceStateDir(workspace.id), PLAN_AGENT_OFF), "");
 };
 
 const EFFORT_LEVELS: EffortLevel[] = ["low", "medium", "high", "xhigh", "max"];
@@ -7163,7 +7158,6 @@ export class OpencodeHarness implements Harness {
   ): Promise<OpencodeSession> {
     // Before the server first reads the directory's config.
     await disablePlanAgentFor(spec, ctx.cwd);
-    await capturesToScratch(spec, ctx);
     // The account a session runs on is the server it runs in: the account's
     // own, where OpenCode's own sign-in code sends its requests with that
     // account's credential; on no account, the machine's.

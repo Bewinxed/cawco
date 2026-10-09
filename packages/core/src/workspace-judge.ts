@@ -51,12 +51,21 @@ export interface Call {
   readonly cwd: string;
   readonly harness: "claude" | "opencode" | "pi";
   readonly input: unknown;
+  /**
+   * OpenCode: the saved outputs this session may read back, each a file its
+   * server named in the hint it gave the session ("Full output saved to:
+   * <file>", tool/truncate.ts at 1.18.34) — the session's own and its parent
+   * sessions' (the hint can hand the file to a subagent: "Use the Task tool
+   * to have explore agent process this file"). The bridge plugin records
+   * them as each call ends.
+   */
+  readonly savedOutputs?: readonly string[];
   readonly tool: string;
   /**
-   * OpenCode: the dir its server saves a truncated tool output to, and tells
-   * the model to read it back from (`<data>/opencode/tool-output`, tool/
-   * truncation-dir.ts at 1.18.34). It lies in OpenCode's store and holds
-   * every session's on that server, by tool-call id alone.
+   * OpenCode: the dir its server saves a truncated tool output to
+   * (`<data>/opencode/tool-output`, tool/truncation-dir.ts at 1.18.34). It
+   * holds every session's on that server, named by tool-call id alone, so
+   * the session reads none of it but {@link savedOutputs}.
    */
   readonly toolOutput?: string;
   /** Claude Code: the session's transcript, which says which `projects/<slug>/` dir is the session's own. */
@@ -218,20 +227,36 @@ const claudeSession = (
 };
 
 /**
+ * The policy an OpenCode session judges by: the workspace's, with its
+ * server's saved-output dir denied ({@link Call.toolOutput}) and each output
+ * it was told it saved ({@link Call.savedOutputs}) read back, a file deeper
+ * than the dir. Every other file there is another session's.
+ */
+const opencodeSession = (policy: Policy, call: Call): Policy => ({
+  ...policy,
+  denyRead: call.toolOutput
+    ? [...policy.denyRead, resolveReal(call.toolOutput)]
+    : policy.denyRead,
+  allowRead: [
+    ...policy.allowRead,
+    ...(call.savedOutputs ?? [])
+      .filter((path) => isAbsolute(path))
+      .map(resolveReal),
+  ],
+});
+
+/**
  * The policy a call is judged by: the workspace's, with what the harness
  * itself keeps for the session to read back. Claude: {@link claudeSession}.
- * OpenCode: its server's saved tool output ({@link Call.toolOutput}). pi
- * keeps its own in the host's temp dir, which the policy already reads.
+ * OpenCode: {@link opencodeSession}. pi keeps its own in the host's temp dir,
+ * which the policy already reads.
  */
 const sessionPolicy = (policy: Policy, call: Call): Policy => {
   if (call.harness === "claude") {
     return claudeSession(policy, call.transcript);
   }
-  if (call.harness === "opencode" && call.toolOutput) {
-    return {
-      ...policy,
-      allowRead: [...policy.allowRead, resolveReal(call.toolOutput)],
-    };
+  if (call.harness === "opencode") {
+    return opencodeSession(policy, call);
   }
   return policy;
 };

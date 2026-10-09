@@ -35,7 +35,7 @@ export const gitIn = async (
 
 /**
  * Keeps a file cawco wrote into a checkout out of its status (a project
- * hook's `.claude/settings.json`, a workspace's `opencode.jsonc`): one line
+ * hook's `.claude/settings.json`): one line
  * in that checkout's `.git/info/exclude` (the common one for a linked
  * worktree), added once. Without it the file is untracked work, and the
  * hub's landing refuses a delegate workspace that carries any. A directory

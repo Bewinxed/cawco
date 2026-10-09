@@ -2,9 +2,12 @@
  * Real isolated probe of the file-tool gate on hosts that outlive a build:
  * a pi host and an OpenCode server started on an older gate form are
  * relaunched onto the current one the first moment they are idle, never
- * mid-turn, and then refuse what the workspace's policy denies; and a
+ * mid-turn, and then refuse what the workspace's policy denies; a
  * workspace session's chrome-devtools-mcp writes captures to the workspace's
- * scratch and refuses a path outside the clone and the scratch.
+ * scratch and refuses a path outside the clone and the scratch; two
+ * workspaces' sessions on one OpenCode server each read back the output it
+ * was told it saved and are refused the other's; and neither clone (each a
+ * `git clone --shared` of this repository) shows anything CawCo wrote.
  *
  *   bun scripts/probe-gate-hosts.ts
  *
@@ -111,6 +114,7 @@ for (const level of ["log", "info", "warn"] as const) {
 //   HOLD <tag>        answer only once the probe releases <tag>
 //   READ <path>       call the harness's `read` on <path>
 //   SHOT <path>       call chrome-devtools' take_screenshot with filePath <path>
+//   LONG              call `bash` on a command whose output OpenCode cuts
 // A request whose last message is a tool result is answered in text.
 interface Item {
   content?: unknown;
@@ -210,6 +214,11 @@ const PI_LINE = /\[pi\] .* relaunched between turns/;
 const GATE_LINE = /\[opencode\] gate: .* relaunched from gate form/;
 const READ = /READ (\S+)/;
 const SHOT = /SHOT (\S+)/;
+const LONG = /\bLONG\b/;
+/** OpenCode's hint naming the file it saved a cut output to (tool/truncate.ts at 1.18.34), as a tool result's JSON text carries it. */
+const SAVED = /Full output saved to: ([^\s"\\]+)/;
+/** 5000 lines: past OpenCode's 2000-line cut (tool/truncate.ts MAX_LINES), under the bash tool's own 30000 characters. */
+const LONG_COMMAND = "seq 1 5000";
 const mock = Bun.serve({
   hostname: "127.0.0.1",
   port: 0,
@@ -238,6 +247,12 @@ const mock = Bun.serve({
     const holding = text.match(HOLD)?.[1];
     if (holding) {
       return answer(`released ${holding}`, undefined, hold(holding));
+    }
+    if (LONG.test(text)) {
+      return answer("", {
+        name: "bash",
+        args: { command: LONG_COMMAND, description: "Count to five thousand" },
+      });
     }
     const read = text.match(READ)?.[1];
     if (read) {
@@ -369,42 +384,55 @@ await Bun.write(
   })
 );
 
-// ── The workspace: a clone, its policy, judge and boundary record ──────
+// ── The workspaces: each a clone, its policy, judge and boundary record ─
+// Each clone is a `git clone --shared` of this repository, as a delegate's
+// workspace is cut.
 const paths = await import("../packages/core/src/paths");
 const { workspacePolicy } = await import(
   "../packages/core/src/workspace-policy"
 );
 const { JUDGE_SCRIPT } = await import("../packages/agent/src/boundary");
-const WS = "gate-probe-ws";
-const clone = join(sandbox, "clone");
-await mkdir(clone, { recursive: true });
-await Bun.$`git -C ${clone} init -q && git -C ${clone} -c user.email=p@p -c user.name=p commit -q --allow-empty -m init`;
-const state = paths.workspaceStateDir(WS);
-const scratch = paths.workspaceScratchDir(WS);
-await mkdir(scratch, { recursive: true });
 await mkdir(paths.workspaceCacheDir(), { recursive: true });
-const policyFile = paths.workspacePolicyFile(WS);
-await Bun.write(
-  policyFile,
-  JSON.stringify(await workspacePolicy({ id: WS, path: clone }), null, 2)
-);
-await copyFile(
-  join(ROOT, "packages", "core", "src", "workspace-judge.ts"),
-  join(state, JUDGE_SCRIPT)
-);
-const exec = join(state, "exec");
-await Bun.write(exec, '#!/bin/sh\nexec /bin/sh -c "$1"\n');
-await chmod(exec, 0o755);
-const boundary = {
-  exec,
-  hook: join(state, "hook"),
-  pid: process.pid,
-  policy: policyFile,
-  scratch,
+const workspaceAt = async (id: string, dir: string) => {
+  await Bun.$`git clone -q --shared ${ROOT} ${dir}`.quiet();
+  const state = paths.workspaceStateDir(id);
+  const tmp = paths.workspaceScratchDir(id);
+  await mkdir(tmp, { recursive: true });
+  const policy = paths.workspacePolicyFile(id);
+  await Bun.write(
+    policy,
+    JSON.stringify(await workspacePolicy({ id, path: dir }), null, 2)
+  );
+  await copyFile(
+    join(ROOT, "packages", "core", "src", "workspace-judge.ts"),
+    join(state, JUDGE_SCRIPT)
+  );
+  const exec = join(state, "exec");
+  await Bun.write(exec, '#!/bin/sh\nexec /bin/sh -c "$1"\n');
+  await chmod(exec, 0o755);
+  const record = {
+    exec,
+    hook: join(state, "hook"),
+    pid: process.pid,
+    policy,
+    scratch: tmp,
+  };
+  await Bun.write(
+    join(state, "boundary.json"),
+    JSON.stringify({
+      ...record,
+      path: dir,
+      identity: "probe",
+      form: "probe",
+    })
+  );
+  return { id, clone: dir, scratch: tmp, policyFile: policy, boundary: record };
 };
-await Bun.write(
-  join(state, "boundary.json"),
-  JSON.stringify({ ...boundary, path: clone, identity: "probe", form: "probe" })
+const WS = "gate-probe-ws";
+const other = await workspaceAt("gate-probe-ws-b", join(sandbox, "clone-b"));
+const { clone, scratch, policyFile, boundary } = await workspaceAt(
+  WS,
+  join(sandbox, "clone")
 );
 // A file the policy denies: in the home dir, outside every path it reads back.
 const secret = join(home, "secret.txt");
@@ -418,7 +446,9 @@ const { BOUNDARY_RELAUNCH, mcpGatewayPort, CAWCO_ENV } = await import(
   "../packages/core/src/index"
 );
 const { gateForm } = await import("../packages/agent/src/gate-form");
-const { procIdFor } = await import("../packages/agent/src/proc-id");
+const { parseProcId, procIdFor } = await import(
+  "../packages/agent/src/proc-id"
+);
 const { PiRemoteSession } = await import(
   "../packages/agent/src/harnesses/pi-sessiond"
 );
@@ -465,14 +495,17 @@ interface Watch {
   ctx: Context;
   frames: Neutral[];
 }
-const watch = (instanceId: string): Watch => {
+const watch = (
+  instanceId: string,
+  at: { boundary: typeof boundary; clone: string } = { boundary, clone }
+): Watch => {
   const seen: Watch = {
     busy: false,
     frames: [],
     ctx: {
       instanceId,
-      cwd: clone,
-      boundary,
+      cwd: at.clone,
+      boundary: at.boundary,
       busy: (active) => {
         seen.busy = active;
         wake();
@@ -806,6 +839,83 @@ try {
       !hookTmp.ok,
     { ...claudeShot, hookOnScratch: hookScratch, hookOnTmp: hookTmp }
   );
+
+  // ── 4. Saved outputs: two workspaces' sessions on one OpenCode server ─
+  // Each runs a command whose output OpenCode cuts and saves, then reads
+  // back its own saved output and the other session's.
+  const B = "gate-probe-opencode-b";
+  const seenB = watch(B, other);
+  const sessionB = await opencode.spawn(
+    {
+      ...ocSpec,
+      instanceId: B,
+      cwd: other.clone,
+      workspace: { id: other.id, path: other.clone },
+    },
+    seenB.ctx
+  );
+  sessionB.attached?.();
+  const longA = await turn(ocSession, back, "LONG");
+  const longB = await turn(sessionB, seenB, "LONG");
+  const savedIn = (results: { text: string }[]) =>
+    results.map((one) => one.text.match(SAVED)?.[1]).find(Boolean);
+  const savedA = savedIn(longA);
+  const savedB = savedIn(longB);
+  if (!(savedA && savedB)) {
+    throw new Error(
+      `OpenCode named no saved output: ${JSON.stringify({ longA, longB })}`
+    );
+  }
+  const servers = (await keeper.list()).procs.filter(
+    (proc) => proc.alive && parseProcId(proc.procId).kind === "opencode-server"
+  );
+  const ownA = await turn(ocSession, back, `READ ${savedA}`);
+  const ownB = await turn(sessionB, seenB, `READ ${savedB}`);
+  const crossA = await turn(ocSession, back, `READ ${savedB}`);
+  const crossB = await turn(sessionB, seenB, `READ ${savedA}`);
+  const readBack = (results: { error: boolean; text: string }[]) =>
+    results.length > 0 &&
+    results.every((one) => !(one.error || one.text.includes("was refused"))) &&
+    results.some((one) => one.text.includes("1999"));
+  const refusedRead = (results: { text: string }[]) =>
+    results.some(
+      (one) =>
+        one.text.includes("was refused") && one.text.includes("does not read")
+    );
+  check(
+    "opencode: on one server, each workspace session reads its own saved output and is refused the other's",
+    servers.length === 1 &&
+      savedA !== savedB &&
+      readBack(ownA) &&
+      readBack(ownB) &&
+      refusedRead(crossA) &&
+      refusedRead(crossB),
+    {
+      servers: servers.map((proc) => proc.procId),
+      savedA,
+      savedB,
+      ownA: ownA.map((one) => one.text.slice(0, 160)),
+      ownB: ownB.map((one) => one.text.slice(0, 160)),
+      crossA,
+      crossB,
+    }
+  );
+
+  // ── 5. Nothing CawCo wrote shows in either clone ───────────────────────
+  const statusOf = async (dir: string) => ({
+    status: (await Bun.$`git -C ${dir} status --porcelain`.text()).trim(),
+    ignored: (
+      await Bun.$`git -C ${dir} status --porcelain --ignored`.text()
+    ).trim(),
+  });
+  const statusA = await statusOf(clone);
+  const statusB = await statusOf(other.clone);
+  check(
+    "git: neither workspace clone shows anything CawCo wrote, ignored files included",
+    [statusA, statusB].every((one) => one.status === "" && one.ignored === ""),
+    { [clone]: statusA, [other.clone]: statusB }
+  );
+  await sessionB.dispose();
 } finally {
   await earlier?.dispose();
   await opencode.dispose();
@@ -919,7 +1029,7 @@ const failed = checks.filter((one) => !one.ok);
 console.log(`${checks.length - failed.length}/${checks.length} checks passed`);
 if (failed.length === 0) {
   console.log(
-    "gate hosts probe: pi relaunched idle, opencode relaunched idle, capture to scratch ok, outside refused"
+    "gate hosts probe: pi relaunched idle, opencode relaunched idle, capture to scratch ok, outside refused, saved outputs read only by their session, clones clean"
   );
 }
 process.exit(failed.length ? 1 : 0);
