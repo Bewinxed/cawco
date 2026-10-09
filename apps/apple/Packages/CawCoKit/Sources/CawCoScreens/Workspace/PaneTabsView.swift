@@ -111,8 +111,10 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
     }
 
     /// The bar row's ends, pt: the toggle's glyph and Caw's glass float over them.
-    /// The strip starts after the toggle's glyph and its gap, so a scrolled tab never draws under the glyph.
-    private var barLead: Double { Size.cBarPhoneEdge + Size.cBarToggleGlyph + Size.cBarPhoneGap }
+    /// The strip starts where the toggle's glyph ends, so a scrolled tab never
+    /// draws under it; the track's flare of room puts the first tab a flare
+    /// further in, and a chosen first tab's foot spreads into that room whole.
+    private var barLead: Double { Size.cBarPhoneEdge + Size.cBarToggleGlyph }
     private var barTrail: Double { Size.cBarPhoneGap + NeedsCawButton.side + Size.cBarPhoneEdge }
 
     /// `padding-block: 4px 0` over the 32pt tabs, in a group; hosted, the bar sizes it.
@@ -422,13 +424,11 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
     /// each steps back over its leading neighbour by this much.
     static let overlap = Radius.radiusSm
 
-    /// The tabs laid along the track, each overlapping the one before it.
-    /// On the phone's row the first starts at the strip's own start (the
-    /// strip itself starts after the toggle's glyph); elsewhere the track
-    /// keeps a flare of room at each end for the chosen sheet's foot.
+    /// The tabs laid along the track, each overlapping the one before it,
+    /// with a flare of room at each end for the chosen sheet's foot.
     private func layoutTrack() {
         recede()
-        var x = barRow ? 0 : flare
+        var x = flare
         var end = x
         for id in order {
             guard let view = views[id] else { continue }

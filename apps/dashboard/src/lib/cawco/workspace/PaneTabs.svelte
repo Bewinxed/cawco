@@ -1397,19 +1397,17 @@
   /* On a phone this row is the app's only bar (Shell, `.top.floating`): the
      bar's height, and its two ends left to the sidebar toggle and to Caw's
      glass (Shell). The toggle's glyph stands c-bar-phone-edge in, and the
-     strip starts c-bar-phone-gap after it, so a scrolled tab never draws
-     under the glyph. Caw's 36px glass stands c-bar-phone-edge from the
-     other edge, and the strip stops c-bar-phone-gap short of it, so the
-     tabs scroll between them and never under. */
+     strip starts where the glyph ends, so a scrolled tab never draws under
+     it; the track's own flare of room puts the first tab a flare further
+     in, and a chosen first tab's foot spreads into that room whole. Caw's
+     36px glass stands c-bar-phone-edge from the other edge, and the strip
+     stops c-bar-phone-gap short of it, so the tabs scroll between them and
+     never under. */
   @media (max-width: 899px) {
     :global(.session-tabs:not(.hosted)) {
       min-block-size: var(--c-top-bar-h);
       padding-block-start: 0;
-      padding-inline: calc(
-          var(--c-bar-phone-edge) +
-          var(--c-bar-toggle-glyph) +
-          var(--c-bar-phone-gap)
-        )
+      padding-inline: calc(var(--c-bar-phone-edge) + var(--c-bar-toggle-glyph))
         calc(var(--c-bar-phone-gap) + var(--c-btn-h) + var(--c-bar-phone-edge));
     }
   }
@@ -1435,10 +1433,10 @@
      rims' glow is not cut off. Its tabs take a rounder top than the
      desktop's, the next radius up (owner: "round the tabs more on
      mobile"), and their flared foot follows it; they still overlap by the
-     desktop's 8px. The first tab starts at the strip's own start (its
-     leading pad only takes the overlap back). Where tabs run past an end,
-     that end fades over 16px on an eased curve, so a tab dissolves into
-     the bar rather than being cut. */
+     desktop's 8px. Where tabs run past an end, that end fades over 16px
+     on an eased curve, so a tab dissolves into the bar rather than being
+     cut; at rest the strip's start does not fade, so a first tab is drawn
+     whole, its foot and all. */
   @media (max-width: 899px) {
     :global(
       .session-tabs:not(.hosted)[data-slot="tabs"] .ff-tabs-list.scrollable
@@ -1449,7 +1447,6 @@
       --radius: var(--radius-lg);
       --overlap: var(--radius-sm);
       padding-block-start: calc(var(--c-top-bar-h) - var(--c-tab-row-h));
-      padding-inline-start: var(--overlap);
       margin-block-start: 0;
       mask-image: linear-gradient(
         to right,
