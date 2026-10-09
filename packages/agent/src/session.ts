@@ -88,7 +88,7 @@ import {
 import { Effect } from "effect";
 import { withFiles } from "./attachments";
 import { type Boundary, boundaryFor } from "./boundary";
-import { carrySessions } from "./claude-sessions";
+import { carryRefusal, carrySessions } from "./claude-sessions";
 import { fetchDefaultBranch } from "./clone";
 import { harnessMcpUrl } from "./delegation";
 import { expandHome, runFs } from "./fs";
@@ -1384,9 +1384,16 @@ export class SessionSupervisor {
     const go: CarrySessionRequest[] = [];
     for (const request of requests) {
       const { instanceId } = request;
+      // Refused before anything is done to it: a carry that cannot happen
+      // never ends a session's process.
+      // biome-ignore lint/performance/noAwaitInLoops: one session at a time, each checked before its process is touched
+      const refused = await carryRefusal(request);
+      if (refused) {
+        outcomes[instanceId] = { state: "failed", error: refused };
+        continue;
+      }
       const running = this.#sessions.get(instanceId);
       if (running && request.stop) {
-        // biome-ignore lint/performance/noAwaitInLoops: one session at a time, each at rest and stopped before its data moves
         const awake = await this.#awake(instanceId, running, undefined, true);
         if (awake || this.#queues.has(instanceId)) {
           outcomes[instanceId] = { state: "live" };

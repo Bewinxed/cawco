@@ -14,9 +14,8 @@ import {
   accountConfigDir,
   accountCredentialPath,
   accountsRoot,
-  removeAccountRoot,
 } from "@cawco/core/paths";
-import { changingSignins } from "./accounts";
+import { changingSignins, removeAccountDir } from "./accounts";
 import { forgetAccount } from "./login";
 import { forgetProviderAccount } from "./provider-accounts";
 
@@ -47,7 +46,7 @@ export const forgetUnknownAccounts = async (ids: string[]): Promise<void> => {
       if (existsSync(accountCredentialPath(id))) {
         await forgetProviderAccount(id);
       }
-      await removeAccountRoot(id);
+      await removeAccountDir(id);
       console.log(
         `[accounts] ${id}: the hub removed this account; signed out and removed here`
       );

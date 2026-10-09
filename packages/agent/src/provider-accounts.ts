@@ -31,7 +31,6 @@ import {
 import {
   accountCredentialPath,
   credentialAccountIds,
-  removeAccountRoot,
   sessionIdentityDir,
 } from "@cawco/core/paths";
 import { chatgptClaims, readChatgptUsage } from "@cawco/core/usage/chatgpt";
@@ -46,6 +45,7 @@ import type {
   CredentialStore,
 } from "@earendil-works/pi-ai";
 import { getAgentDir, ModelRuntime } from "@earendil-works/pi-coding-agent";
+import { removeAccountDir } from "./accounts";
 
 // ── The store ────────────────────────────────────────────────────────────
 
@@ -90,9 +90,12 @@ const writeHeld = async (
   await writeOpencodeAuth(accountId, held);
 };
 
-/** The account's store here gone, and its OpenCode server's data with it. */
+/**
+ * The account's store here gone (any Claude session in it carried out
+ * first, {@link removeAccountDir}), and its OpenCode server's data with it.
+ */
 const removeAccount = async (accountId: string): Promise<void> => {
-  await removeAccountRoot(accountId);
+  await removeAccountDir(accountId);
   await rm(opencodeAccountHome(accountId), { recursive: true, force: true });
 };
 

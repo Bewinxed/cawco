@@ -27,6 +27,7 @@ import {
   accountIds,
   claudeHome,
   projectMemoryDir,
+  removeAccountRoot,
   sessionConfigDir,
   USER_LAYER_DIRS,
   USER_LAYER_FILES,
@@ -470,9 +471,11 @@ export const accountClaudeJsons = (): string[] =>
   accountIds().map(accountClaudeJson);
 
 /**
- * The account's dir, gone: its credential with it, after Claude Code signed
- * it out. Each session that ran there is carried out first ({@link
- * retireConfigDir}): into `into`'s dir when the account is joined into
+ * The account's store on this machine (`~/.cawco/accounts/<id>`), gone: its
+ * credential with it, once its harness signed it out. The one way any
+ * account's store is deleted, so no session's data goes with one: each
+ * Claude session that ran in its dir is carried out first ({@link
+ * retireConfigDir}), into `into`'s dir when the account is joined into
  * another, else into {@link claudeHome}, the dir of a session on no account,
  * which is what each of their rows says once the account is gone.
  */
@@ -490,5 +493,5 @@ export const removeAccountDir = async (
       );
     }
   }
-  await rm(join(dir, ".."), { recursive: true, force: true });
+  await removeAccountRoot(account);
 };

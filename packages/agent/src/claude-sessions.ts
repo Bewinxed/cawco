@@ -208,6 +208,29 @@ export type Carried =
   | { entries: number; from: string[] }
   | { error: string; entries: number; from: string[] };
 
+/**
+ * Why a session cannot be carried as asked, before anything is done to it:
+ * an id that is no plain token, or an account this machine has no dir for
+ * (an account's dir is made by its sign-in here, never by a carry). The
+ * caller asks before it ends a session's process for a carry.
+ */
+export const carryRefusal = async (
+  request: CarryRequest
+): Promise<string | undefined> => {
+  if (
+    !(
+      TOKEN.test(request.sessionId) &&
+      (!request.accountId || TOKEN.test(request.accountId))
+    )
+  ) {
+    return "not a session and account id to carry";
+  }
+  const into = resolve(sessionConfigDir(request));
+  return (await lstat(into).catch(() => undefined))
+    ? undefined
+    : `${into} is not on this machine: its account was never signed in here`;
+};
+
 /** The dirs the sessions in `requests` may be in, each indexed once. */
 const indexAll = async (
   requests: readonly CarryRequest[]
@@ -249,33 +272,18 @@ export const carrySessions = async (
   requests: readonly CarryRequest[]
 ): Promise<Map<string, Carried>> => {
   const results = new Map<string, Carried>();
-  const valid = requests.filter((request) => {
-    const ok =
-      TOKEN.test(request.sessionId) &&
-      (!request.accountId || TOKEN.test(request.accountId));
-    if (!ok) {
-      results.set(request.sessionId, {
-        entries: 0,
-        from: [],
-        error: "not a session and account id to carry",
-      });
+  const refusals = await Promise.all(requests.map(carryRefusal));
+  const valid = requests.filter((request, at) => {
+    const error = refusals[at];
+    if (error) {
+      results.set(request.sessionId, { entries: 0, from: [], error });
     }
-    return ok;
+    return !error;
   });
   const indexes = await indexAll(valid);
   for (const request of valid) {
     const into = resolve(sessionConfigDir(request));
     const carried = { entries: 0, from: [] as string[] };
-    // An account's dir is made by its sign-in here, never by a carry: a
-    // session cannot run on an account this machine has no dir for.
-    // biome-ignore lint/performance/noAwaitInLoops: one stat per request, in the order they are carried
-    if (!(await lstat(into).catch(() => undefined))) {
-      results.set(request.sessionId, {
-        ...carried,
-        error: `${into} is not on this machine: its account was never signed in here`,
-      });
-      continue;
-    }
     try {
       for (const [dir, index] of indexes) {
         const entries = dir === into ? undefined : index.get(request.sessionId);
