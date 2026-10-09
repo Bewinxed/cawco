@@ -111,7 +111,8 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
     }
 
     /// The bar row's ends, pt: the toggle's glyph and Caw's glass float over them.
-    private var barLead: Double { Size.cBarPhoneEdge + Size.cBarToggleGlyph + Size.cBarPhoneGap - flare }
+    /// The strip starts after the toggle's glyph and its gap, so a scrolled tab never draws under the glyph.
+    private var barLead: Double { Size.cBarPhoneEdge + Size.cBarToggleGlyph + Size.cBarPhoneGap }
     private var barTrail: Double { Size.cBarPhoneGap + NeedsCawButton.side + Size.cBarPhoneEdge }
 
     /// `padding-block: 4px 0` over the 32pt tabs, in a group; hosted, the bar sizes it.
@@ -357,7 +358,7 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
         }
         active = id
         for (tab, view) in views { view.setChosen(tab == id, wipe: nil) }
-        recede()
+        layoutTrack()
         accessibilityValue = views[id]?.accessibilityLabel
     }
 
@@ -406,6 +407,9 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
         // leading edge. A new width shows it again where it now fits.
         if abs(scroll.bounds.width - revealedWidth) > 0.5 {
             revealedWidth = scroll.bounds.width
+            // From the strip's start, so a chosen tab that fits from there
+            // leaves the strip at its start, as the web's does.
+            scroll.contentOffset.x = -scroll.contentInset.left
             reveal(active, animated: false)
         }
         edges()
@@ -414,30 +418,59 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
     /// The strip's width when the chosen tab was last revealed for it.
     private var revealedWidth = 0.0
 
+    /// Folder tabs overlap like a drawer of real folders (TabsList.svelte):
+    /// each steps back over its leading neighbour by this much.
+    static let overlap = Radius.radiusSm
+
+    /// The tabs laid along the track, each overlapping the one before it.
+    /// On the phone's row the first starts at the strip's own start (the
+    /// strip itself starts after the toggle's glyph); elsewhere the track
+    /// keeps a flare of room at each end for the chosen sheet's foot.
     private func layoutTrack() {
-        var x = flare
+        recede()
+        var x = barRow ? 0 : flare
+        var end = x
         for id in order {
             guard let view = views[id] else { continue }
             let width = min(Self.maxTab, view.fittingWidth)
             view.bounds = CGRect(x: 0, y: 0, width: width, height: item)
             view.center = CGPoint(x: x + width / 2, y: headroom + item / 2)
-            x += width + Self.gap
+            end = x + width
+            x += width - Self.overlap
         }
-        let content = x - Self.gap + flare
+        let content = end + flare
         track.frame = CGRect(x: 0, y: 0, width: max(content, 1), height: headroom + item)
         scroll.contentSize = track.frame.size
         scroll.contentInset = UIEdgeInsets(top: 0, left: leadingInset, bottom: 0, right: hosted || barRow ? 0 : Space.space4)
-        recede()
+        stack()
     }
 
-    /// Each tab's distance from the chosen one, to three: on the phone's row
-    /// an unchosen tab recedes a step toward the shelf for each. With none
-    /// chosen every tab is one step back.
+    /// Each tab's distance from the chosen one, to three (on the phone's row
+    /// an unchosen tab recedes a step toward the shelf for each; with none
+    /// chosen every tab is one step back), and which side of it it stands.
     private func recede() {
         let chosen = active.flatMap { order.firstIndex(of: $0) }
         for (index, id) in order.enumerated() {
-            views[id]?.distance = chosen.map { min(abs(index - $0), 3) } ?? 1
+            guard let view = views[id] else { continue }
+            view.distance = chosen.map { min(abs(index - $0), 3) } ?? 1
+            view.side = chosen.map { index < $0 ? .before : (index > $0 ? .after : .chosen) } ?? .chosen
         }
+    }
+
+    /// The chosen tab on top, then each tab above the ones farther from it,
+    /// so every edge tucks under its neighbour toward the chosen tab; with
+    /// none chosen, the first on top. A touch on an overlap is the tab drawn there.
+    private func stack() {
+        let chosen = active.flatMap { order.firstIndex(of: $0) } ?? 0
+        let farthestFirst = order.enumerated().sorted { a, b in
+            let da = abs(a.offset - chosen)
+            let db = abs(b.offset - chosen)
+            return da == db ? a.offset < b.offset : da > db
+        }
+        for (_, id) in farthestFirst {
+            if let view = views[id] { track.bringSubviewToFront(view) }
+        }
+        track.bringSubviewToFront(caret)
     }
 
     func scrollViewDidScroll(_: UIScrollView) { edges() }
@@ -598,6 +631,7 @@ final class TabView: UIView {
         didSet {
             guard phoneRow != oldValue else { return }
             rimHost.isHidden = !phoneRow
+            pad()
             setNeedsLayout()
             paint()
         }
@@ -606,6 +640,32 @@ final class TabView: UIView {
     /// How far from the chosen tab, 0 for the chosen one, at most 3.
     var distance = 1 {
         didSet { if distance != oldValue { paint() } }
+    }
+
+    /// Which side of the chosen tab this one stands: before it, its trailing
+    /// end is tucked under its neighbour; after it, its leading end is.
+    enum Side { case chosen, before, after }
+    var side = Side.chosen {
+        didSet { if side != oldValue { pad() } }
+    }
+
+    /// The tab's two ends. On the phone's row its title's trailing room
+    /// clears the overlap and the chosen sheet's flare, so a neighbour tucked
+    /// over its end never touches its last glyph; the room comes out of the
+    /// pad before the status glyph, which takes the overlap back only where
+    /// its own leading end is tucked (PaneTabs.svelte, `--px-start`/`--px-end`).
+    private func pad() {
+        let coarse = traitCollection.userInterfaceIdiom != .mac
+        let leading: Double
+        let trailing: Double
+        if phoneRow {
+            leading = side == .after ? PaneTabsView.overlap + Size.cTabLead : Size.cTabLead
+            trailing = PaneTabsView.overlap + Radius.radiusLg
+        } else {
+            leading = PaneTabsView.px
+            trailing = coarse ? PaneTabsView.px : PaneTabsView.px - 6
+        }
+        row.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: leading, bottom: 0, trailing: trailing)
     }
 
     private var radius: Double { phoneRow ? Radius.radiusLg : Radius.radiusSm }
@@ -693,7 +753,7 @@ final class TabView: UIView {
         close.isHidden = coarse
         row.setCustomSpacing(4, after: details)
         row.isLayoutMarginsRelativeArrangement = true
-        row.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: PaneTabsView.px, bottom: 0, trailing: coarse ? PaneTabsView.px : PaneTabsView.px - 6)
+        pad()
         row.translatesAutoresizingMaskIntoConstraints = false
         addSubview(row)
         // The row stays inside the tab by truncating its label, so this gives

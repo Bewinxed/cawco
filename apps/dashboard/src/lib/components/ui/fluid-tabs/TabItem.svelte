@@ -185,7 +185,8 @@
     gap: calc(var(--gap) + 4px);
     min-inline-size: 0;
     padding-block: 0;
-    padding-inline-start: var(--px);
+    /* A host may set a tab's two ends apart (PaneTabs' phone row). */
+    padding-inline-start: var(--px-start, var(--px));
     border: 0;
     border-radius: inherit;
     background: transparent;
@@ -228,7 +229,7 @@
     /* The trailing pad is the full pad: an edge tucked under a neighbour
        by the overlap still leaves the close control clear of it. */
     &:not(:has(.hit:last-child)) {
-      padding-inline-end: var(--px);
+      padding-inline-end: var(--px-end, var(--px));
     }
     /* Under the pointer the tab lights its own card in the hover tint (the
        track's ghost cannot glide between overlapping stacks). */

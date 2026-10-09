@@ -113,13 +113,14 @@ final class NeedsCawButton: UIControl {
         }
     }
 
-    /// The arcs on his circle's rim: `space1` of clear glass in from his
-    /// circle's edge, so the ring never reads as the capsule's border, half
-    /// the stroke in; arc k from k × (arc + arcGap)° clockwise from 12 o'clock.
+    /// The arcs ON his glass's rim, a dial's ticks on its edge (owner: "lines
+    /// along the rim of the circle … just like a dial thing"): the stroke's
+    /// outer edge on the glass's edge, half the stroke in; arc k from
+    /// k × (arc + arcGap)° clockwise from 12 o'clock.
     override func layoutSubviews() {
         super.layoutSubviews()
         let centre = CGPoint(x: bounds.midX, y: bounds.midY)
-        let rim = CGFloat(Self.side) / 2 - Space.space1 - Size.cCawRing / 2
+        let rim = CGFloat(Self.side) / 2 - Size.cCawRing / 2
         if standing {
             layoutOutline(centre: centre, rim: rim)
             return

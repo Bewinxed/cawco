@@ -2280,6 +2280,11 @@
       "$value": "8px",
       "$description": "On the phone bar, the first tab starts this far after the toggle glyph, and the strip stops this far short of Caw's glass."
     },
+    "c-tab-lead": {
+      "$type": "dimension",
+      "$value": "8px",
+      "$description": "A phone tab's pad before its status glyph. Its title's trailing room is the folder overlap plus the chosen sheet's flare, so a neighbour tucked over its end or the sheet's foot never touches the title; a tab whose leading end is tucked under its neighbour adds the overlap before its glyph."
+    },
     "c-tab-row-h": {
       "$type": "dimension",
       "$value": "36px",

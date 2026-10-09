@@ -210,7 +210,9 @@ final class PaneGroupController: UIViewController, UIDropInteractionDelegate {
         let tabsBefore = shownTabs
         shownTabs = leaf.tabs
         strip.configure(leaf.tabs.map { tab(for: $0) }, active: leaf.active, animated: animated)
-        let focused = workspace.focusedLeaf == leafId
+        // Which group the keyboard is in only means something beside another
+        // group: one alone (a phone's) draws no rail (PaneLeaf.svelte `railShown`).
+        let focused = workspace.focusedLeaf == leafId && workspace.leaves.count > 1
         Motion.easeOut.animator(Motion.durControl) { self.rail.alpha = focused ? 0.5 : 0 }.startAnimation()
         if let id = leaf.active, !mounted.contains(id) { mount(id) }
         for id in mounted where !leaf.tabs.contains(id) { unmount(id) }

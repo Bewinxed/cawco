@@ -213,6 +213,16 @@
    */
   const distanceOf = (i: number) =>
     chosenAt < 0 ? 1 : Math.min(Math.abs(i - chosenAt), 3);
+  /**
+   * Which side of the chosen tab a tab stands: a tab before it has its
+   * trailing end tucked under its neighbour, one after it its leading end.
+   */
+  const sideOf = (i: number) => {
+    if (chosenAt < 0 || i === chosenAt) {
+      return;
+    }
+    return i < chosenAt ? "before" : "after";
+  };
 
   const otherLeaves = $derived(
     workspace.leaves.filter((other) => other.id !== leaf.id)
@@ -625,18 +635,39 @@
   const PULL_RESIST = 0.35;
   const PULL_RESIST_MAX = 0.2;
 
-  /** Opens tab's menu hanging from its foot, as a held finger or a right click would. */
+  /** Room past the menu's sides and foot for its whole overlay shadow, px. */
+  const SHADOW_ROOM = 120;
+
+  /** The menu openings this strip made itself, already at the tab's foot. */
+  const anchored = new WeakSet<Event>();
+
+  /** Opens tab's menu hanging from its foot, under the row. */
   function openMenu(tabNode: HTMLElement) {
     const hit = tabNode.querySelector("[data-session-tab]") ?? tabNode;
     const box = tabNode.getBoundingClientRect();
-    hit.dispatchEvent(
-      new MouseEvent("contextmenu", {
-        bubbles: true,
-        cancelable: true,
-        clientX: box.left,
-        clientY: box.bottom,
-      })
-    );
+    const event = new MouseEvent("contextmenu", {
+      bubbles: true,
+      cancelable: true,
+      clientX: box.left,
+      clientY: box.bottom,
+    });
+    anchored.add(event);
+    hit.dispatchEvent(event);
+  }
+
+  /**
+   * Under a finger the menu has one place, whatever opened it: hanging from
+   * the tab's foot under the row, where a pull brings it, never over the
+   * row at the finger. A long press's menu is moved there; a mouse's right
+   * click opens where it was clicked.
+   */
+  function anchorMenu(event: MouseEvent) {
+    if (!touch.current || anchored.has(event)) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    openMenu(event.currentTarget as HTMLElement);
   }
 
   /** The open menu's surface, once bits-ui has mounted it. */
@@ -655,8 +686,10 @@
     el.style.opacity = "1";
     el.style.scale = "1";
     el.style.translate = `0 ${stretch - hidden}px`;
-    // Cut at the tab's foot; its shadow still falls past the other edges.
-    el.style.clipPath = `inset(${hidden}px -32px -32px -32px)`;
+    // Cut at the tab's foot only. Its overlay shadow (0 18px 48px) reaches
+    // past the other edges by more than its blur: cut any closer, the cut
+    // shows as a square patch round the card's rounded corners.
+    el.style.clipPath = `inset(${hidden}px ${-SHADOW_ROOM}px ${-SHADOW_ROOM}px)`;
   }
 
   /** Hands the menu back to its own rules, at rest. */
@@ -884,7 +917,9 @@
       <div
         class="tab"
         data-d={distanceOf(i)}
+        data-side={sideOf(i)}
         data-tone={tab.tone}
+        oncontextmenucapture={anchorMenu}
         onpointerdown={(event) => pullMenu(tab.id, event)}
         onpointerenter={(event) => {
           rebuildScheduler.prepare(tab.id);
@@ -997,7 +1032,14 @@
               {/snippet}
             </TabItem>
           </ContextMenu.Trigger>
-          <ContextMenu.Content>
+          <!-- Under a finger it hangs below the tab's foot, from its
+               leading edge, shifted to stay on screen; a mouse's opens
+               beside the pointer. -->
+          <ContextMenu.Content
+            align="start"
+            collisionPadding={8}
+            side={touch.current ? "bottom" : "right"}
+          >
             {#if !(runIdOf(tab.id) || isThreadTab(tab.id))}
               <ContextMenu.Item
                 onSelect={() => {
@@ -1355,11 +1397,10 @@
   /* On a phone this row is the app's only bar (Shell, `.top.floating`): the
      bar's height, and its two ends left to the sidebar toggle and to Caw's
      glass (Shell). The toggle's glyph stands c-bar-phone-edge in, and the
-     first tab starts c-bar-phone-gap after it: the strip starts a flare
-     short of that, its own room for the chosen sheet's foot. Caw's 36px
-     glass stands c-bar-phone-edge from the other edge, and the strip stops
-     c-bar-phone-gap short of it, so the tabs scroll between them and never
-     under. */
+     strip starts c-bar-phone-gap after it, so a scrolled tab never draws
+     under the glyph. Caw's 36px glass stands c-bar-phone-edge from the
+     other edge, and the strip stops c-bar-phone-gap short of it, so the
+     tabs scroll between them and never under. */
   @media (max-width: 899px) {
     :global(.session-tabs:not(.hosted)) {
       min-block-size: var(--c-top-bar-h);
@@ -1367,8 +1408,7 @@
       padding-inline: calc(
           var(--c-bar-phone-edge) +
           var(--c-bar-toggle-glyph) +
-          var(--c-bar-phone-gap) -
-          var(--radius-lg)
+          var(--c-bar-phone-gap)
         )
         calc(var(--c-bar-phone-gap) + var(--c-btn-h) + var(--c-bar-phone-edge));
     }
@@ -1395,7 +1435,10 @@
      rims' glow is not cut off. Its tabs take a rounder top than the
      desktop's, the next radius up (owner: "round the tabs more on
      mobile"), and their flared foot follows it; they still overlap by the
-     desktop's 8px. */
+     desktop's 8px. The first tab starts at the strip's own start (its
+     leading pad only takes the overlap back). Where tabs run past an end,
+     that end fades over 16px on an eased curve, so a tab dissolves into
+     the bar rather than being cut. */
   @media (max-width: 899px) {
     :global(
       .session-tabs:not(.hosted)[data-slot="tabs"] .ff-tabs-list.scrollable
@@ -1406,7 +1449,21 @@
       --radius: var(--radius-lg);
       --overlap: var(--radius-sm);
       padding-block-start: calc(var(--c-top-bar-h) - var(--c-tab-row-h));
+      padding-inline-start: var(--overlap);
       margin-block-start: 0;
+      mask-image: linear-gradient(
+        to right,
+        transparent,
+        rgb(0 0 0 / 0.1) calc(var(--fade-start) * 0.25),
+        rgb(0 0 0 / 0.5) calc(var(--fade-start) * 0.5),
+        rgb(0 0 0 / 0.9) calc(var(--fade-start) * 0.75),
+        #000 var(--fade-start),
+        #000 calc(100% - var(--fade-end)),
+        rgb(0 0 0 / 0.9) calc(100% - var(--fade-end) * 0.75),
+        rgb(0 0 0 / 0.5) calc(100% - var(--fade-end) * 0.5),
+        rgb(0 0 0 / 0.1) calc(100% - var(--fade-end) * 0.25),
+        transparent
+      );
     }
   }
 
@@ -1475,6 +1532,17 @@
       --tab-fill: var(--tab-recede-1);
       --tone: var(--ink-muted);
       --rim-mix: var(--tab-rim-mix);
+    }
+    /* A title's trailing room clears the overlap and the chosen sheet's
+       flare, so a neighbour tucked over its end never touches its last
+       glyph; the room comes out of the pad before the status glyph, which
+       takes the overlap back only where its own leading end is tucked. */
+    .tab {
+      --px-start: var(--c-tab-lead);
+      --px-end: calc(var(--overlap) + var(--radius-lg));
+    }
+    .tab[data-side="after"] {
+      --px-start: calc(var(--overlap) + var(--c-tab-lead));
     }
     .tab[data-d="0"] {
       --rim-mix: var(--tab-rim-mix-chosen);

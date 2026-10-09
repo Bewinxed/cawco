@@ -128,15 +128,15 @@
   const ARCS = 9;
   /** The ring's box: his circle, in px (`--c-btn-h`). */
   const RING_BOX = 36;
-  /**
-   * Clear glass between the arcs and his circle's edge, px (`--space-1`),
-   * so the ring reads as his count and never as the capsule's border.
-   */
-  const RIM_INSET = 4;
   /** The arcs' stroke, px (`--c-caw-ring`). */
   const RIM_STROKE = 2;
-  /** The rim's radius: the inset in from his circle's edge, half the stroke in. */
-  const RIM = RING_BOX / 2 - RIM_INSET - RIM_STROKE / 2;
+  /**
+   * The arcs lie ON the glass's rim, a dial's ticks on its edge (owner:
+   * "lines along the rim of the circle … just like a dial thing"): the
+   * stroke's outer edge on the glass's outer edge, half the stroke in, so
+   * even one arc reads as a tick on the rim and not a mark inside it.
+   */
+  const RIM = RING_BOX / 2 - RIM_STROKE / 2;
   /** The first lap's arcs, the second lap's on top of them, and past both the closed ring. */
   const ringClosed = $derived(count > 2 * ARCS);
   const arcCount = $derived(ringClosed ? 0 : Math.min(count, ARCS));
