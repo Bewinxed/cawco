@@ -1062,7 +1062,8 @@ export interface DbShape {
   readonly queuedWorkItems: () => QueuedWorkItemRow[];
   /** Queues a hook's start, or replaces the one its task already had. */
   readonly queueTaskStart: (
-    row: Omit<QueuedTaskStartRow, "queuedAt" | "why"> & {
+    row: Omit<QueuedTaskStartRow, "queuedAt" | "retry" | "why"> & {
+      retry?: boolean;
       why?: QueuedTaskStartRow["why"];
     }
   ) => QueuedTaskStartRow;
@@ -1441,11 +1442,14 @@ export interface DbShape {
    */
   readonly touchInstanceActivity: (id: string) => void;
   /**
-   * What a parent's delegate tray can still show, oldest first: live and
-   * undismissed failed items, and any other that ended at or after `endedSince`.
+   * What a session's delegate tray can still show, oldest first: of the
+   * items it delegated and the items of the projects in `ledProjectIds` (it
+   * leads them), the live and undismissed failed ones, and any other that
+   * ended at or after `endedSince`.
    */
   readonly trayItemsOf: (
-    parentInstanceId: string,
+    sessionId: string,
+    ledProjectIds: string[],
     endedSince: Date
   ) => WorkItemRow[];
   /**
@@ -4760,6 +4764,7 @@ const make = async (path: string): Promise<DbShape> => {
             stage: row.stage,
             parentInstanceId: row.parentInstanceId,
             why: row.why ?? "cap",
+            retry: row.retry ?? false,
             queuedAt: new Date(),
           },
         })
@@ -5327,13 +5332,18 @@ const make = async (path: string): Promise<DbShape> => {
             .where(inArray(workItems.parentInstanceId, parentInstanceIds))
             .orderBy(desc(workItems.createdAt))
             .all(),
-    trayItemsOf: (parentInstanceId, endedSince) =>
+    trayItemsOf: (sessionId, ledProjectIds, endedSince) =>
       db
         .select()
         .from(workItems)
         .where(
           and(
-            eq(workItems.parentInstanceId, parentInstanceId),
+            ledProjectIds.length > 0
+              ? or(
+                  eq(workItems.parentInstanceId, sessionId),
+                  inArray(workItems.projectId, ledProjectIds)
+                )
+              : eq(workItems.parentInstanceId, sessionId),
             isNull(workItems.dismissedAt),
             or(
               inArray(workItems.state, ["starting", "running", "failed"]),

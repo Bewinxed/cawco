@@ -40,7 +40,9 @@
  *   failed.
  * - **A retry** of a task whose last attempt failed runs a fresh session in
  *   that attempt's workspace when its clone is still there (else a new one),
- *   briefed with the failure and the to-dos as they stand.
+ *   briefed with the failure and the to-dos as they stand; the failed
+ *   attempt's session is stopped first (work-items.ts). Queued for owned
+ *   files, it is still a retry when it starts.
  * - **Groups, owned files, budgets** (slice 7b). A task's `group:` puts its
  *   attempts in that group under their parent (one combined report); its
  *   `owns:` globs keep an attempt from running beside a live item that owns
@@ -721,7 +723,7 @@ export const createDispatcher = ({
         if (!(error instanceof OwnsOverlap)) {
           throw error;
         }
-        return queuedForOwns(project, task, parent, stage, error);
+        return queuedForOwns(project, task, parent, stage, error, retry);
       }
       // Asked for now: a hook's start that waited for a slot is not needed.
       db.dropQueuedTaskStart(projectId, task.id);
@@ -749,14 +751,16 @@ export const createDispatcher = ({
   /**
    * An attempt that waits for files a live item owns: queued, why `owns`,
    * under the stage the task is in (a hook's own), to start as items end
-   * ({@link drainQueued}) while it is still there; the task stays put.
+   * ({@link drainQueued}) while it is still there; the task stays put. A
+   * retry stays a retry: it starts as one, in the last attempt's workspace.
    */
   const queuedForOwns = (
     project: ProjectRow,
     task: TaskView,
     parent: InstanceRow,
     active: Stage | undefined,
-    overlap: OwnsOverlap
+    overlap: OwnsOverlap,
+    retry: boolean
   ): AttemptStart => {
     db.queueTaskStart({
       projectId: project.id,
@@ -764,9 +768,10 @@ export const createDispatcher = ({
       stage: task.stage,
       parentInstanceId: parent.id,
       why: "owns",
+      retry,
     });
     console.log(
-      `[dispatch] ${project.name}: ${task.id} waits for owned files: ${overlap.message}`
+      `[dispatch] ${project.name}: ${task.id}${retry ? "'s retry" : ""} waits for owned files: ${overlap.message}`
     );
     return {
       task: task.id,
@@ -781,7 +786,7 @@ export const createDispatcher = ({
       workItemId: null,
       workspaceId: null,
       instanceId: null,
-      text: `Queued an attempt at ${task.id}: ${overlap.message} The hub starts it, reporting to you, when the files are free.`,
+      text: `Queued ${retry ? "a retry of" : "an attempt at"} ${task.id}: ${overlap.message} The hub starts it, reporting to you, when the files are free.`,
     };
   };
 
@@ -930,7 +935,8 @@ export const createDispatcher = ({
    * One queued start, taken off the queue: run when its task is still in the
    * stage it waited in, with no live attempt, and someone to report to — a
    * hook's from its `runs:` stage, one that waited for owned files from
-   * wherever it was asked. Still overlapping, it queues again.
+   * wherever it was asked, a retry as a retry. Still overlapping, it queues
+   * again.
    */
   const runQueued = async (
     project: ProjectRow,
@@ -960,7 +966,8 @@ export const createDispatcher = ({
       project.id,
       task.id,
       parent,
-      stage?.kind === "active" ? stage : undefined
+      stage?.kind === "active" ? stage : undefined,
+      queued.retry
     );
   };
 

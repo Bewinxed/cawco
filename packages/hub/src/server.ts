@@ -3026,28 +3026,38 @@ export const createServer = (
   };
 
   /**
-   * A parent session just died while a routed ask was still parked for one of
-   * its delegates. The user is the fallback: re-broadcast the ask untagged so
-   * it returns to the attention queue, and let Telegram hear it like any other.
-   * A routed ask must never sit unanswerable and invisible.
+   * The session a parked ask was routed to: its parent, or its project's
+   * lead (work-items.ts `reportees`), as the ask's record names it
+   * ({@link deliverDelegateAsk}; a session taking another's place takes its
+   * records, `moveChildren`). Undefined for an ask not routed.
    */
-  const escalateRoutedAsks = (parentInstanceId: string): void => {
+  const routedRecipient = (parked: Envelope): string | undefined => {
+    const payload = parked.payload as { kind?: unknown; routedTo?: unknown };
+    return payload.kind === "permission_request" &&
+      payload.routedTo === "parent" &&
+      parked.requestId
+      ? db.delegateAsk(parked.requestId)?.parentInstanceId
+      : undefined;
+  };
+
+  /**
+   * A session just died — a parent, or a project's lead — while an ask routed
+   * to it was still parked. The user is the fallback: re-broadcast the ask
+   * untagged so it returns to the attention queue, and let Telegram and push
+   * hear it like any other. A routed ask must never sit unanswerable and
+   * invisible.
+   */
+  const escalateRoutedAsks = (recipientId: string): void => {
     for (const parked of pending.list()) {
-      const payload = parked.payload as { kind?: unknown; routedTo?: unknown };
-      if (
-        payload.kind !== "permission_request" ||
-        payload.routedTo !== "parent"
-      ) {
+      if (routedRecipient(parked) !== recipientId) {
         continue;
       }
-      const delegate = parked.instanceId
-        ? db.listInstances().find((r) => r.id === parked.instanceId)
-        : undefined;
-      if (delegate?.parentInstanceId !== parentInstanceId) {
-        continue;
-      }
+      const payload = parked.payload as { routedTo?: unknown };
       // biome-ignore lint/performance/noDelete: an undefined assignment would leave the key present on `payload`, which is broadcast verbatim — the field must be genuinely absent, not present-but-undefined.
       delete payload.routedTo;
+      console.log(
+        `[hub] ask ${parked.requestId} of ${parked.instanceId} was routed to ${recipientId}, which ended: it is the person's now`
+      );
       registry.broadcast(clientCopy(parked));
       telegram?.onAsk(parked);
       push.onAsk(parked);
@@ -7116,23 +7126,19 @@ export const createServer = (
   };
 
   /**
-   * The asks `parentId`'s delegates routed to it that nobody has answered,
-   * each with the delegate that asked.
+   * The asks routed to `recipientId` (as its delegates' parent, or as their
+   * project's lead) that nobody has answered, each with the delegate that
+   * asked.
    */
   const routedAsksTo = (
-    parentId: string
+    recipientId: string
   ): { delegate: InstanceRow; ask: Envelope }[] =>
     pending.list().flatMap((parked) => {
-      const payload = parked.payload as { kind?: unknown; routedTo?: unknown };
       const [delegate] =
-        payload.kind === "permission_request" &&
-        payload.routedTo === "parent" &&
-        parked.instanceId
+        routedRecipient(parked) === recipientId && parked.instanceId
           ? db.getInstancesByIds([parked.instanceId])
           : [];
-      return delegate?.parentInstanceId === parentId
-        ? [{ delegate, ask: parked }]
-        : [];
+      return delegate ? [{ delegate, ask: parked }] : [];
     });
 
   /**
@@ -7178,7 +7184,7 @@ export const createServer = (
     for (const { delegate, ask } of routed) {
       tellDelegateAsk(delegate, to, clientCopy(ask));
     }
-    workItems.reparented(moved.items);
+    workItems.reparented([...moved.items, ...moved.queued]);
     for (const send of sends) {
       publishSend(send);
     }

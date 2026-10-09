@@ -51,7 +51,10 @@
     parentId,
     held = false,
   }: {
-    /** The session whose own delegates the tray shows. */
+    /**
+     * The session whose delegates the tray shows: its own, and as its
+     * project's lead the ones it co-parents.
+     */
     parentId: string;
     /** A swipe is carrying the conversation: the chips wait. */
     held?: boolean;
@@ -445,7 +448,13 @@
     }
     return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m`;
   };
+  /** Why a queued delegate waits, as its chip says it: the files it owns. */
+  const queuedWords = (item: WorkItemSummary): string =>
+    item.queued ? `queued: owns ${item.queued.owns.join(", ")}` : "";
   const stateWords = (chip: Chip): string => {
+    if (chip.item.queued) {
+      return queuedWords(chip.item);
+    }
     switch (chip.tone) {
       case "needs":
         return `needs you, ${questionWords(chip.questions)}`;
@@ -954,7 +963,9 @@
     {@render mark(item, flies)}
     <span aria-hidden="true" class="words">
       <span class="title">{item.title}</span>
-      {#if tone === "needs"}
+      {#if item.queued}
+        <span class="note">{queuedWords(item)}</span>
+      {:else if tone === "needs"}
         <span class="note">{questionWords(chip.questions)}</span>
       {:else if tone === "failed" || tone === "cancelled"}
         <span class="note">{tone}</span>
@@ -1110,14 +1121,17 @@
               <span class="elapsed"
                 >{span(item.createdAt, item.endedAt ?? minute)}</span
               >
-              <a
-                aria-label="Open {item.title} in its own view"
-                class="jump touch-hit"
-                href={hrefOf(item)}
-                title="Open {item.title} in its own view"
-              >
-                <IconExternal />
-              </a>
+              <!-- A queued delegate has no session to open until it starts. -->
+              {#if !item.queued}
+                <a
+                  aria-label="Open {item.title} in its own view"
+                  class="jump touch-hit"
+                  href={hrefOf(item)}
+                  title="Open {item.title} in its own view"
+                >
+                  <IconExternal />
+                </a>
+              {/if}
             </div>
             <DelegateTail
               instanceId={item.instanceId}

@@ -63,7 +63,12 @@ import {
   withWorkspaceLine,
 } from "@cawco/core";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
-import type { DbShape, WorkItemRow, WorkspaceRow } from "./db";
+import type {
+  DbShape,
+  QueuedWorkItemRow,
+  WorkItemRow,
+  WorkspaceRow,
+} from "./db";
 import type {
   WorkBudget,
   WorkItemCheck,
@@ -377,9 +382,17 @@ export interface WorkItemRequest {
   parentInstanceId: string;
   prompt: string;
   /**
+   * The ids a queued `delegate` stood under in its parent's tray while it
+   * waited (the queued row's id, and a session id made then): its item and
+   * its session take them when it starts, so its chip carries on. Set by the
+   * hub when it queues the request, never by a caller.
+   */
+  queuedAs?: { id: string; instanceId: string };
+  /**
    * The workspace of an earlier attempt at the same task (a retry): the item
    * runs in a fresh session there when its clone is still on its machine,
-   * else in a new workspace as though this were not given.
+   * else in a new workspace as though this were not given. Either way, the
+   * sessions of that workspace's earlier items are stopped first.
    */
   reuse?: string;
   skills?: string[];
@@ -398,6 +411,10 @@ export interface WorkItemRequest {
    */
   workspace?: string;
 }
+
+/** A request as `queued_work_items` keeps it: with the ids it stands under while it waits. */
+type QueuedRequest = WorkItemRequest &
+  Required<Pick<WorkItemRequest, "queuedAs">>;
 
 export interface WorkItemStart {
   item: WorkItemRow;
@@ -893,25 +910,6 @@ const findingsBlock = (findings: WorkItemSubmission["findings"]): string =>
     ? `\n\nFindings:\n${findings.map((finding, index) => `${index + 1}. ${finding.title}: ${finding.detail}`).join("\n")}`
     : "";
 
-/** An item as its parent's delegate tray reads it. */
-export const summaryOf = (item: WorkItemRow): WorkItemSummary => ({
-  id: item.id,
-  parentInstanceId: item.parentInstanceId,
-  instanceId: item.instanceId,
-  title: item.title,
-  state: item.state,
-  createdAt: item.createdAt.getTime(),
-  endedAt: item.endedAt?.getTime() ?? null,
-  dismissedAt: item.dismissedAt?.getTime() ?? null,
-  waitUntil: item.waitUntil?.getTime() ?? null,
-  waitReason: item.waitReason,
-  firstLines: {
-    brief: firstLine(item.brief),
-    result: firstLine(item.result),
-    error: firstLine(item.error),
-  },
-});
-
 /**
  * What landing a checked item came to: done (with the pull request it opened
  * or found, landing `pr`), back to its session, or refused.
@@ -1063,13 +1061,76 @@ export const createWorkItems = ({
 
   // --- the project's lead: co-parent of its project's items -----------------
 
-  /** The item's project's lead, when it has one that is not the item's own session. */
-  const leadFor = (item: WorkItemRow): InstanceRow | undefined => {
-    const id = item.projectId
-      ? db.project(item.projectId)?.leadInstanceId
-      : undefined;
+  /** A project's lead, when it has one that is none of `not`. */
+  const projectLead = (
+    projectId: string | null,
+    ...not: string[]
+  ): InstanceRow | undefined => {
+    const id = projectId ? db.project(projectId)?.leadInstanceId : undefined;
     const [lead] = id ? db.getInstancesByIds([id]) : [];
-    return lead && lead.id !== item.instanceId ? lead : undefined;
+    return lead && !not.includes(lead.id) ? lead : undefined;
+  };
+
+  /** The item's project's lead, when it has one that is not the item's own session. */
+  const leadFor = (item: WorkItemRow): InstanceRow | undefined =>
+    projectLead(item.projectId, item.instanceId);
+
+  /**
+   * An item as its parent's delegate tray reads it, and its lead's: the lead
+   * named when it co-parents the item from another session.
+   */
+  const summaryOf = (item: WorkItemRow): WorkItemSummary => ({
+    id: item.id,
+    parentInstanceId: item.parentInstanceId,
+    leadInstanceId:
+      projectLead(item.projectId, item.instanceId, item.parentInstanceId)?.id ??
+      null,
+    instanceId: item.instanceId,
+    title: item.title,
+    state: item.state,
+    queued: null,
+    createdAt: item.createdAt.getTime(),
+    endedAt: item.endedAt?.getTime() ?? null,
+    dismissedAt: item.dismissedAt?.getTime() ?? null,
+    waitUntil: item.waitUntil?.getTime() ?? null,
+    waitReason: item.waitReason,
+    firstLines: {
+      brief: firstLine(item.brief),
+      result: firstLine(item.result),
+      error: firstLine(item.error),
+    },
+  });
+
+  /**
+   * A queued `delegate` as the trays read it: starting, under the ids its
+   * item takes, with the files it owns; `dismissedAt` once it leaves the
+   * queue without starting.
+   */
+  const queuedSummaryOf = (
+    queued: QueuedWorkItemRow,
+    dismissedAt: Date | null = null
+  ): WorkItemSummary => {
+    const request = queued.request as QueuedRequest;
+    const [parent] = db.getInstancesByIds([queued.parentInstanceId]);
+    return {
+      id: queued.id,
+      parentInstanceId: queued.parentInstanceId,
+      leadInstanceId:
+        projectLead(
+          request.task?.projectId ?? parent?.projectId ?? null,
+          queued.parentInstanceId
+        )?.id ?? null,
+      instanceId: request.queuedAs.instanceId,
+      title: queued.title,
+      state: "starting",
+      queued: { owns: [...new Set((request.owns ?? []).map(globOf))] },
+      createdAt: queued.queuedAt.getTime(),
+      endedAt: null,
+      dismissedAt: dismissedAt?.getTime() ?? null,
+      waitUntil: null,
+      waitReason: null,
+      firstLines: { brief: firstLine(request.prompt), result: "", error: "" },
+    };
   };
 
   /** Whether a message from `origin` may reopen `item`: {@link reopens}, its lead counting. */
@@ -1448,8 +1509,10 @@ export const createWorkItems = ({
 
   /**
    * Starts the `delegate` calls that waited for owned files, oldest first,
-   * each once no live item overlaps it; its parent is told it started, or why
-   * it could not. One drain at a time; an end during one runs it again.
+   * each once no live item overlaps it: its chip in the trays becomes its
+   * item's, and its parent hears from it as from any delegate, or is told
+   * why it could not start. One drain at a time; an end during one runs it
+   * again.
    */
   const drainQueued = async (): Promise<void> => {
     if (draining) {
@@ -1470,14 +1533,28 @@ export const createWorkItems = ({
     }
   };
 
-  /** One queued delegate: started when its files are free, its parent told either way. */
-  const startQueued = async (
-    queued: ReturnType<DbShape["queuedWorkItems"]>[number]
-  ): Promise<void> => {
-    const request = queued.request as WorkItemRequest;
+  /**
+   * A queued delegate leaves the queue without starting: its chip leaves the
+   * trays, unless an item was filed under its id and failed, whose own chip
+   * stands.
+   */
+  const unqueue = (queued: QueuedWorkItemRow): void => {
+    db.dropQueuedWorkItem(queued.id);
+    if (!db.workItem(queued.id)) {
+      publish(queuedSummaryOf(queued, new Date()));
+    }
+  };
+
+  /**
+   * One queued delegate, started when its files are free under the ids its
+   * chip stood under; a start that fails takes the chip off and tells the
+   * parent why, as it waits for a report that will not come.
+   */
+  const startQueued = async (queued: QueuedWorkItemRow): Promise<void> => {
+    const request = queued.request as QueuedRequest;
     const [parent] = db.getInstancesByIds([queued.parentInstanceId]);
     if (!parent) {
-      db.dropQueuedWorkItem(queued.id);
+      unqueue(queued);
       return;
     }
     const repo = repoOfRequest(
@@ -1489,17 +1566,13 @@ export const createWorkItems = ({
       return;
     }
     try {
-      const started = await start(request);
+      await start(request);
       db.dropQueuedWorkItem(queued.id);
-      tell(
-        parent,
-        `Your queued delegate “${queued.title}” has started: the files it owns are free. ${started.text}`
-      );
     } catch (error) {
       if (error instanceof OwnsOverlap) {
         return;
       }
-      db.dropQueuedWorkItem(queued.id);
+      unqueue(queued);
       tell(
         parent,
         `Your queued delegate “${queued.title}” could not start: ${error instanceof Error ? error.message : String(error)}`
@@ -1755,7 +1828,8 @@ export const createWorkItems = ({
     request: WorkItemRequest
   ): WorkItemStart => {
     const item = db.createWorkItem({
-      id: crypto.randomUUID(),
+      // A queued follow-up's item takes the id its chip stood under.
+      id: request.queuedAs?.id ?? crypto.randomUUID(),
       workspaceId: workspace.id,
       parentInstanceId: parent.id,
       instanceId: session.id,
@@ -1840,11 +1914,50 @@ export const createWorkItems = ({
   };
 
   /**
+   * The sessions of a workspace's items that have not ended (a failed
+   * attempt's session stays up after its item fails).
+   */
+  const sessionsUpIn = (workspaceId: string): InstanceRow[] =>
+    db
+      .getInstancesByIds([
+        ...new Set(db.workItemsIn(workspaceId).map((item) => item.instanceId)),
+      ])
+      .filter((row) => !ENDED.has(row.status));
+
+  /**
+   * Stops the sessions of a workspace's earlier items as `stop_delegate`
+   * does (`end`: the stored stop, then the machine's confirmation), so a
+   * retry's fresh session is the only one there. Refused when a machine does
+   * not confirm: no fresh session starts beside one still running.
+   */
+  const endEarlierSessions = async (workspace: WorkspaceRow): Promise<void> => {
+    const up = sessionsUpIn(workspace.id);
+    const stops = await Promise.allSettled(up.map((row) => end(row.id)));
+    const unconfirmed = stops.find(
+      (stop): stop is PromiseRejectedResult => stop.status === "rejected"
+    );
+    if (unconfirmed) {
+      const { reason } = unconfirmed;
+      throw new WorkItemRefusal(
+        409,
+        `The last attempt's session in workspace ${workspace.id} was told to stop and has not confirmed it, so no fresh session starts beside it: ${reason instanceof Error ? reason.message : String(reason)} Retry once its machine has ended it.`
+      );
+    }
+    if (up.length > 0) {
+      console.log(
+        `[work-items] workspace ${workspace.id}: stopped ${up.map((row) => row.id).join(", ")} before a retry's fresh session`
+      );
+    }
+  };
+
+  /**
    * The workspace of an earlier attempt a retry runs in again, when its clone
-   * is still on its machine: its boundary started again (and the workspace
-   * filed as active again, should it have been archived with the clone left
-   * behind). Undefined when the clone is gone or its machine cannot say, and
-   * the retry cuts a new workspace. Refused while an item there is live.
+   * is still on its machine: its earlier sessions stopped
+   * ({@link endEarlierSessions}) and its boundary started again (and the
+   * workspace filed as active again, should it have been archived with the
+   * clone left behind). Undefined when the clone is gone or its machine
+   * cannot say, and the retry cuts a new workspace. Refused while an item
+   * there is live.
    */
   const reusable = async (
     id: string,
@@ -1876,6 +1989,7 @@ export const createWorkItems = ({
       if (there.exitCode !== 0) {
         return;
       }
+      await endEarlierSessions(workspace);
       const boundaryPid = (await call(
         workspace.machineId,
         CONTROL_WORKSPACE_BOUNDARY,
@@ -1981,6 +2095,16 @@ export const createWorkItems = ({
       if (again) {
         return spawnIn(again, settingsOf(request, parent), parent, request);
       }
+      // Its clone is gone: the retry runs in a new workspace, and the old
+      // one's sessions are stopped all the same, the stop stored for a
+      // machine that is away.
+      for (const row of sessionsUpIn(request.reuse)) {
+        end(row.id).catch((error: unknown) =>
+          console.warn(
+            `[work-items] ${row.id}, an earlier attempt's session, is told to stop and has not confirmed it: ${error instanceof Error ? error.message : String(error)}`
+          )
+        );
+      }
     }
     if (!request.workspace) {
       const machineId = targetMachine(request, parent);
@@ -2066,11 +2190,12 @@ export const createWorkItems = ({
     request: WorkItemRequest
   ): WorkItemStart => {
     const { harness, canDelegate } = settings;
-    const instanceId = crypto.randomUUID();
+    // A queued delegate's session and item take the ids its chip stood under.
+    const instanceId = request.queuedAs?.instanceId ?? crypto.randomUUID();
     // Not a row yet: it is launched in the workspace's root.
     const label = `${leafOf(workspace.path)}#${instanceId.slice(0, 8)}`;
     const item = db.createWorkItem({
-      id: crypto.randomUUID(),
+      id: request.queuedAs?.id ?? crypto.randomUUID(),
       workspaceId: workspace.id,
       parentInstanceId: parent.id,
       instanceId,
@@ -2954,8 +3079,9 @@ export const createWorkItems = ({
 
     /**
      * `delegate`: {@link start}, or, while a live item owns files this one
-     * owns too, the request queued until no live item overlaps it (its
-     * parent is told when it starts). Every other refusal is the caller's.
+     * owns too, the request queued until no live item overlaps it, a chip in
+     * its parent's tray from now on under the ids its item and session take
+     * when it starts. Every other refusal is the caller's.
      */
     async delegate(
       asked: WorkItemRequest
@@ -2966,15 +3092,21 @@ export const createWorkItems = ({
         if (!(error instanceof OwnsOverlap)) {
           throw error;
         }
+        const id = crypto.randomUUID();
+        const request: QueuedRequest = {
+          ...asked,
+          queuedAs: { id, instanceId: crypto.randomUUID() },
+        };
         const queued = db.queueWorkItem({
-          id: crypto.randomUUID(),
+          id,
           parentInstanceId: asked.parentInstanceId,
-          request: asked,
+          request,
           title: asked.title.trim(),
         });
+        publish(queuedSummaryOf(queued));
         return {
           queued: queued.id,
-          text: `Queued “${queued.title}” (${queued.id}): ${error.message} The hub starts it when no live item owns its files any more, and tells you then.`,
+          text: `Queued “${queued.title}” (${queued.id}): ${error.message} It waits in your delegate tray and starts when no live item owns its files any more; its report reaches you as any delegate's does.`,
         };
       }
     },
@@ -3497,24 +3629,50 @@ export const createWorkItems = ({
     },
 
     /**
-     * What a parent's delegate tray shows when it opens: live work, failures
-     * nobody has dismissed yet, and what finished within the tray's hold.
-     */
-    /**
      * Items whose parent changed under them (a session took another's
      * place, server.ts `handOverChildren`): every dashboard hears each as it
      * now stands, so it leaves one tray for the other.
      */
     reparented(ids: string[]): void {
+      const queued = new Map(db.queuedWorkItems().map((row) => [row.id, row]));
       for (const id of ids) {
-        published(db.workItem(id));
+        const row = queued.get(id);
+        if (row) {
+          publish(queuedSummaryOf(row));
+        } else {
+          published(db.workItem(id));
+        }
       }
     },
 
-    trayOf: (parentInstanceId: string): WorkItemSummary[] =>
-      db
-        .trayItemsOf(parentInstanceId, new Date(Date.now() - TRAY_HOLD_MS))
-        .map(summaryOf),
+    /**
+     * What a session's delegate tray shows when it opens: the items it
+     * delegated and, as its projects' lead, the ones it co-parents from
+     * another session — live work, failures nobody has dismissed yet, what
+     * finished within the tray's hold — and the delegations of either kind
+     * still queued for owned files.
+     */
+    trayOf: (sessionId: string): WorkItemSummary[] => {
+      const led = db
+        .listProjects()
+        .filter((project) => project.leadInstanceId === sessionId)
+        .map((project) => project.id);
+      const items = db
+        .trayItemsOf(sessionId, led, new Date(Date.now() - TRAY_HOLD_MS))
+        .filter((item) => item.instanceId !== sessionId)
+        .map(summaryOf);
+      const queued = db
+        .queuedWorkItems()
+        // One that has filed its item is that item, just before it leaves the queue.
+        .filter((row) => !db.workItem(row.id))
+        .map((row) => queuedSummaryOf(row))
+        .filter(
+          (summary) =>
+            summary.parentInstanceId === sessionId ||
+            summary.leadInstanceId === sessionId
+        );
+      return [...items, ...queued].sort((a, b) => a.createdAt - b.createdAt);
+    },
 
     /** The reader dismissed its chip: gone from the tray on every screen. */
     dismiss(id: string): WorkItemSummary | undefined {

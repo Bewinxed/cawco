@@ -882,7 +882,9 @@ export interface KeepAlive {
  * One delegate's work item as its parent's delegate tray reads it: the hub's
  * `work_items` row cut to what a chip and its panel say, pushed as a
  * `work_item` frame on every change and read back over
- * `GET /api/work-items?parent=`. Times are epoch ms.
+ * `GET /api/work-items?parent=`. Times are epoch ms. A `delegate` call that
+ * waits for files a live item owns is one too, `starting` with `queued` set,
+ * under the ids its item takes when it starts.
  */
 export interface WorkItemSummary {
   createdAt: number;
@@ -892,7 +894,18 @@ export interface WorkItemSummary {
   firstLines: { brief: string; result: string; error: string };
   id: string;
   instanceId: string;
+  /**
+   * Its project's lead, a co-parent of the item, whose tray lists it beside
+   * its parent's; null when the project has none, or the lead is its parent
+   * or its own session.
+   */
+  leadInstanceId: string | null;
   parentInstanceId: string;
+  /**
+   * While it waits to start: the files it owns, which a live item owns too
+   * (`src/theme/**`); null once it has started.
+   */
+  queued: { owns: string[] } | null;
   state: "starting" | "running" | "done" | "failed" | "cancelled";
   title: string;
   waitReason: string | null;

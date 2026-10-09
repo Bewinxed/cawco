@@ -6801,10 +6801,17 @@ export const cawco = {
    */
   delegateEventsOf: (instanceId: string): DelegateEvent[] =>
     state.delegateEvents[instanceId] ?? [],
-  /** The work items a session delegated that its tray knows of, oldest first. */
-  workItemsOf: (parentInstanceId: string): WorkItemSummary[] =>
+  /**
+   * The work items a session's tray knows of, oldest first: the ones it
+   * delegated, and as its project's lead the ones it co-parents.
+   */
+  workItemsOf: (instanceId: string): WorkItemSummary[] =>
     Object.values(state.workItems)
-      .filter((item) => item.parentInstanceId === parentInstanceId)
+      .filter(
+        (item) =>
+          item.parentInstanceId === instanceId ||
+          item.leadInstanceId === instanceId
+      )
       .sort((a, b) => a.createdAt - b.createdAt),
   /** A followed session's plan, live: its steps, its spec, an attempt's to-dos. */
   planOf: (instanceId: string): SessionPlan | undefined =>

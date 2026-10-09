@@ -383,6 +383,11 @@ export const queuedTaskStarts = sqliteTable(
      * a live work item owns files this attempt's task owns too.
      */
     why: text("why").$type<"cap" | "owns">().notNull().default("cap"),
+    /**
+     * A retry (`task_retry`): it starts as one, a fresh session in the last
+     * attempt's workspace briefed with its failure (dispatch.ts).
+     */
+    retry: integer("retry", { mode: "boolean" }).notNull().default(false),
     queuedAt: timestamp("queued_at")
       .notNull()
       .$defaultFn(() => new Date()),
@@ -1038,13 +1043,17 @@ export const workItems = sqliteTable(
 
 /**
  * A `delegate` call that waits because a live work item owns files it owns
- * too (work-items.ts): it starts, oldest first, when no live item overlaps
- * it any more, and its parent is told. Kept here across a hub restart.
+ * too (work-items.ts): a chip in its parent's tray while it waits, it starts,
+ * oldest first, when no live item overlaps it any more, its item taking this
+ * row's id. Kept here across a hub restart.
  */
 export const queuedWorkItems = sqliteTable("queued_work_items", {
   id: text("id").primaryKey(),
   parentInstanceId: text("parent_instance_id").notNull(),
-  /** The request as `delegate` made it (work-items.ts `WorkItemRequest`). */
+  /**
+   * The request as `delegate` made it, with the ids it stands under while it
+   * waits (work-items.ts `WorkItemRequest`, `queuedAs`).
+   */
   request: text("request", { mode: "json" }).$type<unknown>().notNull(),
   title: text("title").notNull(),
   queuedAt: timestamp("queued_at")

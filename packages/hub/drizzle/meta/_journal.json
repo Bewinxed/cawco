@@ -827,6 +827,13 @@
       "when": 1791549966032,
       "tag": "0117_project_repositories",
       "breakpoints": true
+    },
+    {
+      "idx": 118,
+      "version": "6",
+      "when": 1791557044067,
+      "tag": "0118_queued_retry_and_chips",
+      "breakpoints": true
     }
   ]
 }

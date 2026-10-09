@@ -27443,7 +27443,7 @@
         ]
       },
       "WorkItemSummary": {
-        "description": "One delegate's work item as its parent's delegate tray reads it: the hub's\n`work_items` row cut to what a chip and its panel say, pushed as a\n`work_item` frame on every change and read back over\n`GET /api/work-items?parent=`. Times are epoch ms.",
+        "description": "One delegate's work item as its parent's delegate tray reads it: the hub's\n`work_items` row cut to what a chip and its panel say, pushed as a\n`work_item` frame on every change and read back over\n`GET /api/work-items?parent=`. Times are epoch ms. A `delegate` call that\nwaits for files a live item owns is one too, `starting` with `queued` set,\nunder the ids its item takes when it starts.",
         "type": "object",
         "properties": {
           "createdAt": {
@@ -27487,8 +27487,30 @@
           "instanceId": {
             "type": "string"
           },
+          "leadInstanceId": {
+            "description": "Its project's lead, a co-parent of the item, whose tray lists it beside\nits parent's; null when the project has none, or the lead is its parent\nor its own session.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "parentInstanceId": {
             "type": "string"
+          },
+          "queued": {
+            "description": "While it waits to start: the files it owns, which a live item owns too\n(`src/theme/**`); null once it has started.",
+            "type": "object",
+            "properties": {
+              "owns": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "owns"
+            ]
           },
           "state": {
             "enum": [
@@ -27524,6 +27546,7 @@
           "firstLines",
           "id",
           "instanceId",
+          "leadInstanceId",
           "parentInstanceId",
           "state",
           "title",
