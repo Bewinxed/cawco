@@ -13,14 +13,18 @@
 import { type Dirent, type FSWatcher, watch } from "node:fs";
 import {
   access,
+  appendFile,
   cp,
   mkdir,
   open,
   readdir,
+  readFile,
   realpath,
   rename,
+  rm,
   stat,
 } from "node:fs/promises";
+import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import {
   deleteSession,
@@ -33,7 +37,10 @@ import {
   query,
   renameSession,
   type SDKMessage,
+  type SDKSessionInfo,
   type SDKUserMessage,
+  type SessionStore,
+  type SessionStoreEntry,
   tagSession,
 } from "@anthropic-ai/claude-agent-sdk";
 import type {
@@ -89,7 +96,11 @@ import {
   VERIFY_SESSION_CREDENTIAL,
 } from "@cawco/core";
 import { LineSplitter } from "@cawco/core/lines";
-import { accountConfigDir, claudeConfigDirs } from "@cawco/core/paths";
+import {
+  accountConfigDir,
+  accountIds,
+  claudeConfigDirs,
+} from "@cawco/core/paths";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
 import {
   accountEnv,
@@ -505,6 +516,95 @@ async function launchAccountOf(
     ? move.accountId
     : undefined;
 }
+
+/**
+ * The SDK's own session readers and writers (getSessionInfo, listSessions,
+ * tagSession, renameSession, deleteSession) look only in the config dir the
+ * agent started with: it reads CLAUDE_CONFIG_DIR once and keeps it. A session
+ * that runs on an account keeps its transcript under that account's dir, so
+ * each of those calls is handed this store over the one file the session has,
+ * wherever {@link claudeSessionFile} found it.
+ */
+const transcriptStore = (file: string): SessionStore => ({
+  async load(key) {
+    if (key.subpath) {
+      return null;
+    }
+    const text = await readFile(file, "utf8");
+    // A live session may be mid-write: only whole lines are entries.
+    return text
+      .slice(0, text.lastIndexOf("\n") + 1)
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as SessionStoreEntry);
+  },
+  async append(key, entries) {
+    if (key.subpath) {
+      throw new Error(`cawco writes no subagent transcript (${key.subpath})`);
+    }
+    await appendFile(
+      file,
+      entries.map((entry) => `${JSON.stringify(entry)}\n`).join("")
+    );
+  },
+  async delete(key) {
+    if (key.subpath) {
+      return;
+    }
+    await rm(join(dirname(file), key.sessionId), {
+      recursive: true,
+      force: true,
+    });
+    await rm(file);
+  },
+});
+
+/** The folders directly inside `dir`; none when it does not exist. */
+const subdirectories = async (dir: string): Promise<string[]> => {
+  try {
+    return (await readdir(dir, { withFileTypes: true }))
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name);
+  } catch (error) {
+    if (missing(error)) {
+      return [];
+    }
+    throw error;
+  }
+};
+
+/** The transcripts directly inside a project folder; none when it does not exist. */
+const jsonlNames = async (dir: string): Promise<string[]> => {
+  try {
+    return (await readdir(dir, { withFileTypes: true }))
+      .filter((entry) => entry.isFile() && entry.name.endsWith(".jsonl"))
+      .map((entry) => entry.name);
+  } catch (error) {
+    if (missing(error)) {
+      return [];
+    }
+    throw error;
+  }
+};
+
+/** A session's info, read from its transcript wherever it is stored. */
+const sessionInfoAt = (
+  file: string,
+  sessionId: string
+): Promise<SDKSessionInfo | undefined> =>
+  getSessionInfo(sessionId, { sessionStore: transcriptStore(file) });
+
+/** The session's transcript file, or an error naming the session when none exists. */
+const requireSessionFile = async (
+  sessionId: string,
+  dir?: string
+): Promise<string> => {
+  const file = await claudeSessionFile(sessionId, dir);
+  if (!file) {
+    throw new Error(`Session ${sessionId} has no transcript on this machine`);
+  }
+  return file;
+};
 
 /** Whether `error` is the file system saying there is nothing at the path. */
 const missing = (error: unknown): boolean =>
@@ -2614,17 +2714,51 @@ export class ClaudeHarness implements Harness {
     };
   }
 
-  listSessions(dir?: string): Promise<NeutralSessionInfo[]> {
-    return listSessions({ ...(dir ? { dir } : {}) }).then((rows) =>
-      rows.map(toInfo)
+  /**
+   * Every stored session: the SDK lists the agent's own config dir, and each
+   * account's dir is read here, since the SDK never looks there.
+   */
+  async listSessions(dir?: string): Promise<NeutralSessionInfo[]> {
+    const own = await listSessions({ ...(dir ? { dir } : {}) });
+    const slug = dir
+      ? (await realpath(dir)).replace(/[^a-zA-Z0-9]/g, "-")
+      : null;
+    const files: { file: string; sessionId: string }[] = [];
+    const sdkDir = process.env.CLAUDE_CONFIG_DIR ?? join(homedir(), ".claude");
+    for (const accountId of accountIds()) {
+      if (accountConfigDir(accountId) === sdkDir) {
+        continue;
+      }
+      const projects = join(accountConfigDir(accountId), "projects");
+      // biome-ignore lint/performance/noAwaitInLoops: a handful of account dirs, each listed into the shared `files`
+      const projectDirs = slug ? [slug] : await subdirectories(projects);
+      for (const project of projectDirs) {
+        for (const name of await jsonlNames(join(projects, project))) {
+          files.push({
+            file: join(projects, project, name),
+            sessionId: name.slice(0, -".jsonl".length),
+          });
+        }
+      }
+    }
+    const accounts = await Promise.all(
+      files.map(({ file, sessionId }) => sessionInfoAt(file, sessionId))
     );
+    return [
+      ...own,
+      ...accounts.filter((info): info is SDKSessionInfo => info !== undefined),
+    ].map(toInfo);
   }
 
   async getSessionInfo(
     sessionKey: string,
     dir?: string
   ): Promise<NeutralSessionInfo | undefined> {
-    const info = await getSessionInfo(sessionKey, { ...(dir ? { dir } : {}) });
+    const file = await claudeSessionFile(sessionKey, dir);
+    if (!file) {
+      return;
+    }
+    const info = await sessionInfoAt(file, sessionKey);
     return info ? toInfo(info) : undefined;
   }
 
@@ -2675,24 +2809,29 @@ export class ClaudeHarness implements Harness {
     });
   }
 
-  renameSession(
+  async renameSession(
     sessionKey: string,
     title: string,
     dir?: string
   ): Promise<void> {
-    return renameSession(sessionKey, title, { ...(dir ? { dir } : {}) });
+    const file = await requireSessionFile(sessionKey, dir);
+    await renameSession(sessionKey, title, {
+      sessionStore: transcriptStore(file),
+    });
   }
 
-  tagSession(
+  async tagSession(
     sessionKey: string,
     tag: string | null,
     dir?: string
   ): Promise<void> {
-    return tagSession(sessionKey, tag, { ...(dir ? { dir } : {}) });
+    const file = await requireSessionFile(sessionKey, dir);
+    await tagSession(sessionKey, tag, { sessionStore: transcriptStore(file) });
   }
 
-  deleteSession(sessionKey: string, dir?: string): Promise<void> {
-    return deleteSession(sessionKey, { ...(dir ? { dir } : {}) });
+  async deleteSession(sessionKey: string, dir?: string): Promise<void> {
+    const file = await requireSessionFile(sessionKey, dir);
+    await deleteSession(sessionKey, { sessionStore: transcriptStore(file) });
   }
 
   async machine(method: string, args: unknown[]): Promise<unknown> {
