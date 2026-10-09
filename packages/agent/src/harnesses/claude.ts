@@ -1060,6 +1060,31 @@ const modeFrame = (
 const scratchDirectory = (boundary: HarnessContext["boundary"]) =>
   boundary ? { additionalDirectories: [boundary.scratch] } : {};
 
+/**
+ * Flag settings every session launches with, merged with a workspace's
+ * boundary hook into the one `--settings` the CLI is given.
+ *
+ * `totalTokensReminder: "off"`: Claude Code puts the request's last cache
+ * breakpoint on the trailing `<total_tokens>` system message, and the entry
+ * written there is never matched by the next request, so every tool-less turn
+ * re-writes the whole conversation (anthropics/claude-code#96101, open on
+ * 2.1.296: "`--settings '{"totalTokensReminder":"off"}'` … none [cache
+ * misses] from turn 3 on"). Remove this once #96101 is fixed upstream.
+ */
+const SESSION_SETTINGS = { totalTokensReminder: "off" } as const;
+
+/** {@link claudeBoundaryOptions} with {@link SESSION_SETTINGS} in its `settings`. */
+const sessionSettingsOptions = (boundary: HarnessContext["boundary"]) => {
+  const bounded = claudeBoundaryOptions(boundary);
+  return {
+    ...bounded,
+    settings: {
+      ...SESSION_SETTINGS,
+      ...("settings" in bounded ? bounded.settings : {}),
+    },
+  };
+};
+
 class ClaudeSession implements HarnessSession {
   readonly harness = "claude" as const;
   sessionId: string | null = null;
@@ -1292,7 +1317,7 @@ class ClaudeSession implements HarnessSession {
         includePartialMessages: true,
         // A work item's session runs every shell command inside its
         // workspace's boundary: a hook the CLI itself runs rewrites each one.
-        ...claudeBoundaryOptions(ctx.boundary),
+        ...sessionSettingsOptions(ctx.boundary),
         ...scratchDirectory(ctx.boundary),
         // THE SEAM (design §4.1). The SDK builds the CLI's command line and
         // hands it here instead of spawning it; we forward it to sessiond and
@@ -2124,7 +2149,7 @@ class ClaudeSession implements HarnessSession {
     await this.#delivery.get(uuid)?.promise;
     // https://raw.githubusercontent.com/anthropics/claude-agent-sdk-typescript/main/CHANGELOG.md
     // 0.2.76: cancel_async_message drops a queued user message by UUID.
-    // Query has no public typed method (0.3.289); use its own correlated
+    // Query has no public typed method (0.3.296); use its own correlated
     // control request path. The CLI removes atomically with its dequeue.
     const reply = await (
       this.#handle as unknown as {
@@ -2147,7 +2172,11 @@ class ClaudeSession implements HarnessSession {
    * connect timeout each, then marks it `failed` for good and never dials it
    * again (2.1.289, the slot's own `mcp-logs-cawco`: "Reconnect gave up after
    * 5 attempts: failed", 2026-10-08 10:30:46, two seconds before the rollback
-   * brought a hub that answered back). A `failed` slot is dialled once more
+   * brought a hub that answered back). 2.1.295 and on keep dialling after
+   * those five: "Reconnect attempts spent; retrying in the background, up to
+   * 8 more times" (2.1.296 on a scratch rig: a 30 s hub outage, back on the
+   * slot's sixth attempt, 15 s after the hub was). A slot that outlasts those
+   * too still reads `failed`. A `failed` slot is dialled once more
    * with the header it was launched with, so no credential changes: one the
    * hub no longer knows is refused by that dial, or reads `needs-auth`,
    * which is not redialled. A slot still connecting is left to finish.

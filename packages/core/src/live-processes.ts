@@ -33,8 +33,14 @@ interface LiveProcess {
 }
 
 const NUMERIC = /^\d+$/;
-/** `--settings <file>`, as `ps` joins it on macOS: the file ends where the argument does. */
-const SETTINGS_FILE = /--settings\s+(\/\S+)/;
+/**
+ * `--settings <file>` or `--settings=<file>`, as `ps` joins it on macOS: the
+ * file ends where the argument does. The Agent SDK sends `--flag=value` since
+ * 0.3.295 ("the values of its named options are now sent in the same argument
+ * as their flag").
+ */
+const SETTINGS_FILE = /--settings[=\s]+(\/\S+)/;
+const SETTINGS_FLAG = "--settings";
 /** A build's folder name, up to the separator or quote that ends it inside a path or a JSON string. */
 const VERSION_NAME = /^[^/\s'"\\]+/;
 const BLANKS = /\s+/;
@@ -49,12 +55,15 @@ const readOr = (read: () => string): string | undefined => {
 
 /** A `--settings` argument that is a file on disk, not an inline object. */
 const settingsFileIn = (args: readonly string[]): string | undefined => {
-  const value = args[args.indexOf("--settings") + 1];
-  return args.includes("--settings") &&
-    value?.startsWith("/") &&
-    existsSync(value)
-    ? value
-    : undefined;
+  const at = args.findIndex(
+    (arg) => arg === SETTINGS_FLAG || arg.startsWith(`${SETTINGS_FLAG}=`)
+  );
+  const flag = args[at];
+  const value =
+    flag === SETTINGS_FLAG
+      ? args[at + 1]
+      : flag?.slice(SETTINGS_FLAG.length + 1);
+  return value?.startsWith("/") && existsSync(value) ? value : undefined;
 };
 
 function linuxProcesses(): LiveProcess[] {

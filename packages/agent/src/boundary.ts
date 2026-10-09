@@ -580,7 +580,8 @@ const EVERY_TOOL = "*";
  * holds while the agent that started the session restarts; a local settings
  * file cannot turn it off, because flag settings outrank it. `|| exit 2`
  * refuses the call when the hook script itself is gone (the shell's 127
- * would let it through).
+ * would let it through). The adapter merges these settings with the ones
+ * every session carries into the CLI's one `--settings`.
  */
 export const claudeBoundaryOptions = (boundary: Boundary | undefined) =>
   boundary
