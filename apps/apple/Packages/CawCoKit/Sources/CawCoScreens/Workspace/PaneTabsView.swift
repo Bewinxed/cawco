@@ -619,6 +619,12 @@ final class TabView: UIView {
     private let rimHost = CALayer()
     private let rim = CAShapeLayer()
     private let rimFade = CAGradientLayer()
+    /// The glow: the outline's own shadow (`0 0 6px`, half the rim's
+    /// strength), kept outside the tab as the web's box shadow is, so it
+    /// never deepens the stroke or the tab under it.
+    private let glowHost = CALayer()
+    private let glow = CALayer()
+    private let glowOutside = CAShapeLayer()
     /// Room round the outline for the glow, inside the fade.
     private static let spill = 6.0
     private let status = SessionStatusView(.idle, compact: true)
@@ -650,8 +656,12 @@ final class TabView: UIView {
         sheet.mask = sheetMask
         layer.addSublayer(sheet)
         rim.fillRule = .evenOdd
-        rim.shadowOffset = .zero
-        rim.shadowRadius = 3
+        glow.shadowOffset = .zero
+        glow.shadowRadius = 3
+        glowOutside.fillRule = .evenOdd
+        glowHost.mask = glowOutside
+        glowHost.addSublayer(glow)
+        rimHost.addSublayer(glowHost)
         rimHost.addSublayer(rim)
         rimFade.colors = [UIColor.black.cgColor, UIColor.black.cgColor, UIColor.clear.cgColor]
         rimHost.isHidden = true
@@ -919,9 +929,9 @@ final class TabView: UIView {
         CATransaction.setAnimationDuration(Motion.durPanel)
         CATransaction.setAnimationTimingFunction(Motion.easeOut.function)
         rim.fillColor = (solid ? resolved : resolved.withAlphaComponent(mix)).cgColor
-        // The glow's strength is the rim's alpha times this: half of it.
-        rim.shadowColor = resolved.cgColor
-        rim.shadowOpacity = solid ? 0 : 0.5
+        // The glow at half the rim's strength; none when the rim is solid.
+        glow.shadowColor = resolved.cgColor
+        glow.shadowOpacity = solid ? 0 : Float(mix / 2)
         CATransaction.commit()
     }
 
@@ -959,6 +969,15 @@ final class TabView: UIView {
         let innerRadius = max(0, radius - side)
         path.append(UIBezierPath(roundedRect: inner, byRoundingCorners: [.topLeft, .topRight], cornerRadii: CGSize(width: innerRadius, height: innerRadius)))
         rim.path = path.cgPath
+        // The glow is the outline's shadow, shown only outside the outline.
+        let shape = UIBezierPath(roundedRect: outline, byRoundingCorners: [.topLeft, .topRight], cornerRadii: CGSize(width: radius, height: radius))
+        glowHost.frame = rimHost.bounds
+        glow.frame = rimHost.bounds
+        glow.shadowPath = shape.cgPath
+        let outside = UIBezierPath(rect: rimHost.bounds)
+        outside.append(shape)
+        glowOutside.frame = rimHost.bounds
+        glowOutside.path = outside.cgPath
         let height = rimHost.bounds.height
         rimFade.frame = rimHost.bounds
         rimFade.locations = [0, NSNumber(value: spill / height), NSNumber(value: (spill + 0.9 * bounds.height) / height)]
