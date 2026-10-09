@@ -164,41 +164,42 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
 
     private static var warmed = false
 
-    /// The list's cell types, one per row view (`makeDataSource`), built once
-    /// off the main thread as the app starts. The first registration of each
-    /// asked the runtime to find its type by name and check its row view's
-    /// conformance, scanning every image: 42 ms of the first session's mount,
-    /// on the main thread, in a Release build. Both answers are cached for the
-    /// process, so asking them here first leaves the mount only the lookups.
-    public nonisolated static func prepareCells() {
-        // The task's value holds each type, so each is built: a type read and dropped is not.
-        Task.detached(priority: .utility) { () -> [ObjectIdentifier] in
-            [
-                ObjectIdentifier(UICollectionView.CellRegistration<HostCell<PieceView>, String>.self),
-                ObjectIdentifier(UICollectionView.CellRegistration<HostCell<UserTurnView>, String>.self),
-                ObjectIdentifier(UICollectionView.CellRegistration<HostCell<ToolLineView>, String>.self),
-                ObjectIdentifier(UICollectionView.CellRegistration<HostCell<ThinkingView>, String>.self),
-                ObjectIdentifier(UICollectionView.CellRegistration<HostCell<SystemLineView>, String>.self),
-                ObjectIdentifier(UICollectionView.CellRegistration<HostCell<PeerView>, String>.self),
-                ObjectIdentifier(UICollectionView.CellRegistration<HostCell<QuestionCardView>, String>.self),
-                ObjectIdentifier(UICollectionView.CellRegistration<HostCell<SubagentView>, String>.self),
-                ObjectIdentifier(UICollectionView.CellRegistration<HostCell<DelegateView>, String>.self),
-                ObjectIdentifier(UICollectionView.CellRegistration<HostCell<RunView>, String>.self),
-                ObjectIdentifier(UICollectionView.CellRegistration<HostCell<LiveToolView>, String>.self),
-                ObjectIdentifier(UICollectionView.CellRegistration<HostCell<NoticeView>, String>.self),
-                ObjectIdentifier(UICollectionView.CellRegistration<HostCell<CompactionDividerView>, String>.self),
-            ]
-        }
+    /// What the transcript costs once an app's life, done off the main thread
+    /// on the launch's own task (CawCoScreens `Launch`), before any session's
+    /// list is built: the code grammars (`Highlight.warm`), and the list's
+    /// cell types, one per row view (`makeDataSource`). The first registration
+    /// of each asked the runtime to find its type by name and check its row
+    /// view's conformance, scanning every image: 42 ms of the first session's
+    /// mount on the main thread in a Release build. Both answers are cached for
+    /// the process. Returns the types, so the caller holds each: a type read
+    /// and dropped is not built.
+    public nonisolated static func prepare() -> [ObjectIdentifier] {
+        Highlight.warm()
+        return [
+            ObjectIdentifier(UICollectionView.CellRegistration<HostCell<PieceView>, String>.self),
+            ObjectIdentifier(UICollectionView.CellRegistration<HostCell<UserTurnView>, String>.self),
+            ObjectIdentifier(UICollectionView.CellRegistration<HostCell<ToolLineView>, String>.self),
+            ObjectIdentifier(UICollectionView.CellRegistration<HostCell<ThinkingView>, String>.self),
+            ObjectIdentifier(UICollectionView.CellRegistration<HostCell<SystemLineView>, String>.self),
+            ObjectIdentifier(UICollectionView.CellRegistration<HostCell<PeerView>, String>.self),
+            ObjectIdentifier(UICollectionView.CellRegistration<HostCell<QuestionCardView>, String>.self),
+            ObjectIdentifier(UICollectionView.CellRegistration<HostCell<SubagentView>, String>.self),
+            ObjectIdentifier(UICollectionView.CellRegistration<HostCell<DelegateView>, String>.self),
+            ObjectIdentifier(UICollectionView.CellRegistration<HostCell<RunView>, String>.self),
+            ObjectIdentifier(UICollectionView.CellRegistration<HostCell<LiveToolView>, String>.self),
+            ObjectIdentifier(UICollectionView.CellRegistration<HostCell<NoticeView>, String>.self),
+            ObjectIdentifier(UICollectionView.CellRegistration<HostCell<CompactionDividerView>, String>.self),
+        ]
     }
 
     /// What the first row of the first transcript otherwise pays for under the
-    /// reader, once an app's life: the code grammars, and the text system (its
-    /// classes, the faces, the Markdown parser). Each takes a turn of the main
-    /// thread of its own while the first page is still on its way.
+    /// reader, once an app's life: the text system (its classes, the faces,
+    /// the Markdown parser), in a turn of the main thread of its own while the
+    /// first page is still on its way. The code grammars are the launch's
+    /// (`prepare`).
     private static func warm() {
         guard !warmed else { return }
         warmed = true
-        Highlight.warm()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
             for block in MarkdownRender.blocks("Warm **up** `code`") {
                 let view = blockView(block)

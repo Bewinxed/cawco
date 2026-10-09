@@ -457,7 +457,7 @@ final class MachineCell: HomeCell {
         config.imagePadding = Space.space1
         config.imageColorTransformer = UIConfigurationColorTransformer { _ in Palette.inkMuted }
         config.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: Space.space1, bottom: 0, trailing: Space.space1)
-        config.attributedTitle = AttributedString("Archive all", attributes: AttributeContainer(TypeScale.typeMeta.attributes(color: Palette.inkMuted)))
+        config.attributedTitle = AttributedString("Archive all", attributes: TypeScale.typeMeta.container(color: Palette.inkMuted))
         archiveAll.configuration = config
         archiveAll.houseStyle()
         archiveAll.pressTint()
@@ -976,9 +976,9 @@ final class MoreCell: HomeCell {
     }
 
     func configure(words: String, failed: Int) {
-        var title = AttributedString(words, attributes: AttributeContainer(TypeScale.typeMeta.attributes(color: Palette.inkMuted)))
+        var title = AttributedString(words, attributes: TypeScale.typeMeta.container(color: Palette.inkMuted))
         if failed > 0 {
-            title += AttributedString(" · \(failed) failed", attributes: AttributeContainer(TypeScale.typeMeta.attributes(color: Palette.statusFailInk)))
+            title += AttributedString(" · \(failed) failed", attributes: TypeScale.typeMeta.container(color: Palette.statusFailInk))
         }
         button.configuration?.attributedTitle = title
     }

@@ -86,6 +86,26 @@ public struct TypeRole: Sendable {
         return attributes
     }
 
+    /// `attributes` as an AttributedString's container (a button's title),
+    /// set key by key in UIKit's scope. Built from the dictionary instead,
+    /// a container reads the attribute scopes of every framework loaded, by
+    /// reflection: the first one was 83 ms of the launch's main thread
+    /// (Release, simulator), under the board's first button.
+    public func container(color: UIColor, tracking: Double? = nil, alignment: NSTextAlignment = .natural) -> AttributeContainer {
+        let font = font
+        let line = LineBox.label(font, height: font.pointSize * leading)
+        line.paragraph.alignment = alignment
+        line.paragraph.lineBreakMode = .byTruncatingTail
+        var container = AttributeContainer()
+        container.uiKit.font = font
+        container.uiKit.foregroundColor = color
+        container.uiKit.paragraphStyle = line.paragraph
+        container.uiKit.baselineOffset = line.baselineOffset
+        let kern = (tracking ?? self.tracking) * font.pointSize
+        if kern != 0 { container.uiKit.kern = kern }
+        return container
+    }
+
     private var textStyle: UIFont.TextStyle {
         switch points {
         case ..<12.5: .caption1
@@ -113,7 +133,7 @@ public struct TypeRole: Sendable {
     /// `wght`, the variation axis tag, as CoreText numbers it.
     private static let weightAxis = 0x7767_6874
 
-    private static func register(_ file: String, family: String) -> String {
+    private nonisolated static func register(_ file: String, family: String) -> String {
         if let url = Bundle.module.url(forResource: file, withExtension: "ttf", subdirectory: "Fonts")
             ?? Bundle.module.url(forResource: file, withExtension: "ttf")
         {
@@ -122,10 +142,18 @@ public struct TypeRole: Sendable {
         return family
     }
 
-    private static let sans = register("Figtree", family: "Figtree")
-    private static let wordmarkFamily = register("Nunito", family: "Nunito")
+    private nonisolated static let sans = register("Figtree", family: "Figtree")
+    private nonisolated static let wordmarkFamily = register("Nunito", family: "Nunito")
     /// JetBrains Mono, the mono stack's first choice; its ligatures (`calt`) off.
-    private static let monoFamily = register("JetBrainsMono", family: "JetBrains Mono")
+    private nonisolated static let monoFamily = register("JetBrainsMono", family: "JetBrains Mono")
+
+    /// Registers the bundled faces with CoreText, on whichever thread calls
+    /// (CawCoScreens `Launch`): under the first label it was 9 ms of the
+    /// launch's main thread (Release, simulator). CoreText's font manager is
+    /// thread-safe, and each family's registration runs once.
+    public nonisolated static func registerFaces() {
+        _ = (sans, wordmarkFamily, monoFamily)
+    }
 
     private static func descriptor(weight: UIFont.Weight, mono: Bool, wordmark: Bool) -> UIFontDescriptor {
         var attributes: [UIFontDescriptor.AttributeName: Any] = [

@@ -11,7 +11,7 @@ public extension KitButton {
         let coarse = !inDialog && UITraitCollection.current.userInterfaceIdiom != .mac
         let button = make(title, variant: primary ? .action : .outline, height: coarse ? .lg : .standard, action: action)
         var config = button.configuration
-        config?.attributedTitle = AttributedString(title, attributes: AttributeContainer(TypeScale.typeLabel.attributes(color: primary ? Palette.onBrand : Palette.inkStrong)))
+        config?.attributedTitle = AttributedString(title, attributes: TypeScale.typeLabel.container(color: primary ? Palette.onBrand : Palette.inkStrong))
         config?.contentInsets = NSDirectionalEdgeInsets(top: Space.space2 + 1, leading: Space.space3 + 1, bottom: Space.space2 + 1, trailing: Space.space3 + 1)
         config?.background.cornerRadius = Radius.radiusSm
         config?.background.customView?.layer.cornerRadius = Radius.radiusSm
@@ -25,7 +25,7 @@ public extension KitButton {
     static func destructive(_ title: String, action: @escaping () -> Void) -> UIButton {
         let button = make(title, variant: .outline, height: .lg, action: action)
         var config = button.configuration
-        config?.attributedTitle = AttributedString(title, attributes: AttributeContainer(TypeScale.typeButton.attributes(color: Palette.error11, tracking: -0.01)))
+        config?.attributedTitle = AttributedString(title, attributes: TypeScale.typeButton.container(color: Palette.error11, tracking: -0.01))
         config?.background.strokeColor = Palette.error9
         config?.background.backgroundColor = .clear
         button.configuration = config

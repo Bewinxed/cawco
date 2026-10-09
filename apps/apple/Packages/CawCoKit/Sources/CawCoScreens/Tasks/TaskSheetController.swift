@@ -675,7 +675,7 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
     private func pick(_ label: String, edge: ProjectTasks.Edge, others: [TaskSummary]) -> UIView? {
         guard !others.isEmpty else { return nil }
         let select = KitSelect(small: true)
-        select.configuration?.attributedTitle = AttributedString(label, attributes: AttributeContainer(TypeScale.typeLabel.withWeight(.regular).attributes(color: Palette.mutedForeground)))
+        select.configuration?.attributedTitle = AttributedString(label, attributes: TypeScale.typeLabel.withWeight(.regular).container(color: Palette.mutedForeground))
         select.accessibilityLabel = label
         select.menu = UIMenu(children: others.map { other in
             UIAction(title: other.title, subtitle: other.id) { [weak self] _ in self?.link(edge, to: other.id) }

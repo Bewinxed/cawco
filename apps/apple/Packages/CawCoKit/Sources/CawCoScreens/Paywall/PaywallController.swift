@@ -234,7 +234,7 @@ final class PaywallController: ObservedViewController {
         switch screen {
         case .offer:
             let price = pro.displayPrice(.pro) ?? "-"
-            return "offer|\(form)|\(pro.catalog)|\(pro.canMakePayments)|\(price)"
+            return "offer|\(form)|\(pro.catalog)|\(pro.canMakePayments.map { "\($0)" } ?? "unread")|\(price)"
         case .late:
             return "late|\(PushRegistry.shared.testProblem ?? "")"
         case .asking:
@@ -268,7 +268,7 @@ final class PaywallController: ObservedViewController {
         switch screen {
         case .offer:
             if restoring { return .stage(.loading) }
-            return Pro.shared.catalog == .failed && Pro.shared.canMakePayments ? .stage(.reconnecting) : .scene(.ready)
+            return Pro.shared.catalog == .failed && Pro.shared.canMakePayments == true ? .stage(.reconnecting) : .scene(.ready)
         case .buying: return .stage(.working)
         case .started: return .scene(.done)
         case .asking: return .scene(.ready)
@@ -365,7 +365,7 @@ final class PaywallController: ObservedViewController {
     /// P1b, P1c, P1a, or the two buttons.
     private func storeBlock(price: String?) -> UIView {
         let pro = Pro.shared
-        if !pro.canMakePayments {
+        if pro.canMakePayments == false {
             return muted(PaywallCopy.Store.restricted(price))
         }
         if pro.catalog == .failed {
@@ -834,7 +834,7 @@ final class LinkButton: UIButton {
     }
 
     private func paint() {
-        configuration?.attributedTitle = AttributedString(title, attributes: AttributeContainer(TypeScale.typeMeta.attributes(color: Palette.inkMuted)))
+        configuration?.attributedTitle = AttributedString(title, attributes: TypeScale.typeMeta.container(color: Palette.inkMuted))
         accessibilityLabel = title
     }
 }

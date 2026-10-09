@@ -254,7 +254,7 @@ final class ProjectDocsView: UIStackView {
             let select = KitSelect()
             select.setValue(open?.name ?? "Select a document")
             select.configuration?.attributedTitle = AttributedString(open?.name ?? "Select a document",
-                                                                     attributes: AttributeContainer(TypeScale.typeCode.with(points: TypeScale.typeLabel.points).attributes(color: Palette.foreground)))
+                                                                     attributes: TypeScale.typeCode.with(points: TypeScale.typeLabel.points).container(color: Palette.foreground))
             select.menu = UIMenu(options: .singleSelection, children: docs.map { doc in
                 UIAction(title: doc.name, state: doc == open ? .on : .off) { [weak self] _ in self?.choose(doc) }
             })
@@ -468,7 +468,7 @@ final class ProjectDocsView: UIStackView {
                 ])
             }
             var config = UIButton.Configuration.plain()
-            config.attributedTitle = AttributedString(expanded ? "Show less" : "Read more", attributes: AttributeContainer(TypeScale.typeLabel.attributes(color: Palette.inkStrong)))
+            config.attributedTitle = AttributedString(expanded ? "Show less" : "Read more", attributes: TypeScale.typeLabel.container(color: Palette.inkStrong))
             let more = UIButton(configuration: config, primaryAction: UIAction { [weak self] _ in
                 guard let self else { return }
                 expanded.toggle()

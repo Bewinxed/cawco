@@ -580,8 +580,8 @@ final class NsSegmented: UIControl {
 
     private func label(_ cell: UIButton, _ text: String, on: Bool) {
         if let off = items[cell.tag].off { cell.configuration?.image = on ? items[cell.tag].glyph : off }
-        cell.configuration?.attributedTitle = AttributedString(text, attributes: AttributeContainer(
-            TypeScale.typeLabel.with(weight: .medium).attributes(color: on ? Palette.inkStrong : Palette.inkMuted)))
+        cell.configuration?.attributedTitle = AttributedString(text, attributes:
+            TypeScale.typeLabel.with(weight: .medium).container(color: on ? Palette.inkStrong : Palette.inkMuted))
         cell.accessibilityTraits = on ? [.button, .selected] : .button
     }
 

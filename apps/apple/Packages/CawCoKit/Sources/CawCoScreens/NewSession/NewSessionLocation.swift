@@ -404,7 +404,7 @@ final class LocationPopover: NsPopoverController, UITextFieldDelegate {
     private func crumb(_ label: String, action: @escaping () -> Void) -> UIButton {
         var config = UIButton.Configuration.plain()
         config.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 6, bottom: 0, trailing: 6)
-        config.attributedTitle = AttributedString(label, attributes: AttributeContainer(mono.attributes(color: Palette.inkMuted)))
+        config.attributedTitle = AttributedString(label, attributes: mono.container(color: Palette.inkMuted))
         let button = UIButton(configuration: config)
         button.widthAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
         button.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
@@ -426,7 +426,7 @@ final class LocationPopover: NsPopoverController, UITextFieldDelegate {
         var config = UIButton.Configuration.plain()
         config.contentInsets = NSDirectionalEdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8)
         config.titleLineBreakMode = .byCharWrapping
-        config.attributedTitle = AttributedString(trail.last?.label ?? "", attributes: AttributeContainer(mono.with(weight: .medium).attributes(color: Palette.inkStrong)))
+        config.attributedTitle = AttributedString(trail.last?.label ?? "", attributes: mono.with(weight: .medium).container(color: Palette.inkStrong))
         current.configuration = config
         current.accessibilityLabel = "\(trail.last?.label ?? ""), current folder"
         usePath.text = path

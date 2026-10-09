@@ -390,7 +390,7 @@ public final class PromptCardView: UIView {
         }
         let button = KitButton.make(title, glyph: glyph, glyphTint: ink, variant: variant, height: .lg, action: action)
         var config = button.configuration
-        config?.attributedTitle = AttributedString(title, attributes: AttributeContainer(TypeScale.typeLabel.attributes(color: ink, tracking: -0.01)))
+        config?.attributedTitle = AttributedString(title, attributes: TypeScale.typeLabel.container(color: ink, tracking: -0.01))
         config?.image = glyph?.image.resized(to: 12)
         config?.imagePadding = Space.space2
         // The web button's 1px border is part of its box, as in `KitButton`.

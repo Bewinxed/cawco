@@ -2,7 +2,6 @@ public import UIKit
 public import CawCoCore
 import CawCoDesign
 import CawCoMascot
-import CawCoTranscript
 import OSLog
 
 /// One window's interface: Connect until a hub is known and read, then the
@@ -28,8 +27,6 @@ public final class RootViewController: ObservedViewController {
     public init(sessionId: String? = nil, boardTab: String? = nil) {
         initialSession = sessionId
         super.init(nibName: nil, bundle: nil)
-        // While the hub is read, before any session's list is built.
-        TranscriptView.prepareCells()
         if let boardTab, let tab = HomeModel.Tab(rawValue: boardTab) { home.tab = tab }
     }
 

@@ -174,8 +174,8 @@ private final class ToastView: UIView {
             // sonner's action: a small solid button at the toast's end.
             var config = UIButton.Configuration.plain()
             config.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8)
-            config.attributedTitle = AttributedString(action.label, attributes: AttributeContainer(
-                TypeScale.typeLabel.withWeight(.medium).attributes(color: Palette.onInk)))
+            config.attributedTitle = AttributedString(action.label, attributes:
+                TypeScale.typeLabel.withWeight(.medium).container(color: Palette.onInk))
             let button = UIButton(configuration: config)
             button.backgroundColor = Palette.inkSolid
             button.layer.cornerRadius = Radius.radiusSm

@@ -330,7 +330,7 @@ final class AddMachineController: KitDialogController {
         config.image = Glyph.chevronRight.image.resized(to: 16)
         config.imagePadding = 6
         config.contentInsets = .zero
-        config.attributedTitle = AttributedString(title, attributes: AttributeContainer(TypeScale.typeLabel.attributes(color: Palette.inkMuted)))
+        config.attributedTitle = AttributedString(title, attributes: TypeScale.typeLabel.container(color: Palette.inkMuted))
         config.imageColorTransformer = UIConfigurationColorTransformer { _ in Palette.inkMuted }
         let button = UIButton(configuration: config, primaryAction: UIAction { _ in action() })
         button.houseStyle()

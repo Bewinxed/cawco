@@ -672,7 +672,10 @@ nonisolated enum MarkdownRender {
 /// (Highlightr's own themes are its bundled CSS only). One context, shared.
 @MainActor
 enum Highlight {
-    private static let hljs: JSValue? = {
+    /// Built once, on whichever thread first asks (the launch's own task,
+    /// `warm`): JavaScriptCore serialises every call into one virtual
+    /// machine on its lock, and a static's first read is atomic.
+    nonisolated(unsafe) private static let hljs: JSValue? = {
         guard let context = JSContext(),
               let bundle = Bundle.main.url(forResource: "Highlightr_Highlightr", withExtension: "bundle").flatMap(Bundle.init(url:))
               ?? Bundle.allBundles.first(where: { $0.path(forResource: "highlight.min", ofType: "js") != nil }),
@@ -684,11 +687,13 @@ enum Highlight {
         return hljs?.isUndefined == false ? hljs : nil
     }()
 
-    /// Reads the grammars in a turn of the main thread of their own, ahead of
-    /// the first listing: read under the first row that has one, they were
-    /// 50 ms on top of what that row takes to build.
-    static func warm() {
-        DispatchQueue.main.async { _ = hljs }
+    /// Reads the grammars ahead of the first listing, off the main thread:
+    /// read under the first row that has one they were 50 ms on top of what
+    /// that row takes to build, and in a turn of the main thread of their
+    /// own, 49 ms of the launch's (Release, simulator). Called from the
+    /// launch's task (TranscriptView `prepare`).
+    nonisolated static func warm() {
+        _ = hljs
     }
 
     private static var cache: [String: [(NSRange, String)]] = [:]

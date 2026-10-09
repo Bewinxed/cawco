@@ -359,6 +359,26 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
 
     // MARK: Cells
 
+    /// The board's cell types (`makeDataSource`), for the launch to build off
+    /// the main thread (`Launch`): found by name and checked at the first
+    /// registration, they were 25 ms of the first board's on it (Release).
+    nonisolated static func cellTypes() -> [ObjectIdentifier] {
+        [
+            ObjectIdentifier(UICollectionViewDiffableDataSource<Section, Item>.self),
+            ObjectIdentifier(UICollectionView.CellRegistration<UsageCell, Item>.self),
+            ObjectIdentifier(UICollectionView.CellRegistration<StatusCell, Item>.self),
+            ObjectIdentifier(UICollectionView.CellRegistration<HeadlineCell, Item>.self),
+            ObjectIdentifier(UICollectionView.CellRegistration<NeedsCardCell, Item>.self),
+            ObjectIdentifier(UICollectionView.CellRegistration<TabsCell, Item>.self),
+            ObjectIdentifier(UICollectionView.CellRegistration<CawCell, Item>.self),
+            ObjectIdentifier(UICollectionView.CellRegistration<MachineCell, Item>.self),
+            ObjectIdentifier(UICollectionView.CellRegistration<MoreCell, Item>.self),
+            ObjectIdentifier(UICollectionView.CellRegistration<RecentHeadCell, Item>.self),
+            ObjectIdentifier(UICollectionView.CellRegistration<RowCell, Item>.self),
+            ObjectIdentifier(UICollectionView.CellRegistration<SearchCell, Item>.self),
+        ]
+    }
+
     private func makeDataSource() -> UICollectionViewDiffableDataSource<Section, Item> {
         let usage = UICollectionView.CellRegistration<UsageCell, Item> { [weak self] cell, _, _ in
             guard let self else { return }

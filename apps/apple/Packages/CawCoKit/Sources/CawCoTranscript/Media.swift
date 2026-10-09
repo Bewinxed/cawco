@@ -422,7 +422,7 @@ final class Lightbox: UIViewController, UIScrollViewDelegate {
         }
         // A picture carried in the transcript itself has no page to open: it is offered as a file.
         let inline = shown.url.scheme == "data"
-        var words = AttributeContainer(TypeScale.typeMeta.attributes(color: Palette.inkMuted))
+        var words = TypeScale.typeMeta.container(color: Palette.inkMuted)
         words.underlineStyle = .single
         var config = UIButton.Configuration.plain()
         config.attributedTitle = AttributedString(inline ? "Save original" : "Open original", attributes: words)

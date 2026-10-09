@@ -79,7 +79,7 @@ public final class ConfirmDialog: KitDialogController {
     /// A destructive confirm: the error border and ink on no fill (button.svelte `destructive`).
     private static func destructiveStyle(_ title: String) -> UIButton.Configuration {
         var config = UIButton.Configuration.plain()
-        config.attributedTitle = AttributedString(title, attributes: AttributeContainer(TypeScale.typeButton.attributes(color: Palette.error11, tracking: -0.01)))
+        config.attributedTitle = AttributedString(title, attributes: TypeScale.typeButton.container(color: Palette.error11, tracking: -0.01))
         config.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: Space.space4, bottom: 0, trailing: Space.space4)
         config.background.cornerRadius = Radius.radiusMd
         config.background.backgroundColor = .clear
@@ -94,7 +94,7 @@ public final class ConfirmDialog: KitDialogController {
     /// warning tint, its ink and edge, the same under the finger.
     private static func grantStyle(_ title: String) -> UIButton.Configuration {
         var config = UIButton.Configuration.plain()
-        config.attributedTitle = AttributedString(title, attributes: AttributeContainer(TypeScale.typeButton.attributes(color: Palette.statusAttnInk, tracking: -0.01)))
+        config.attributedTitle = AttributedString(title, attributes: TypeScale.typeButton.container(color: Palette.statusAttnInk, tracking: -0.01))
         config.image = Glyph.shield.image
         config.imageColorTransformer = UIConfigurationColorTransformer { _ in Palette.statusAttnInk }
         config.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: Space.space4, bottom: 0, trailing: Space.space4)
@@ -111,7 +111,7 @@ public final class ConfirmDialog: KitDialogController {
     private func pending(_ on: Bool) {
         let label = on ? (pendingLabel ?? confirmLabel) : confirmLabel
         let ink = grant ? Palette.statusAttnInk : (destructive ? Palette.error11 : Palette.onAction)
-        confirm.configuration?.attributedTitle = AttributedString(label, attributes: AttributeContainer(TypeScale.typeButton.attributes(color: ink, tracking: -0.01)))
+        confirm.configuration?.attributedTitle = AttributedString(label, attributes: TypeScale.typeButton.container(color: ink, tracking: -0.01))
         confirm.configuration?.showsActivityIndicator = on
         confirm.configuration?.imagePadding = 8
         confirm.configuration?.activityIndicatorColorTransformer = UIConfigurationColorTransformer { _ in ink }

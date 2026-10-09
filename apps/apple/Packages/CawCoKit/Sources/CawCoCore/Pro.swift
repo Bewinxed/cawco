@@ -83,8 +83,17 @@ public final class Pro {
     /// Nil until the entitlements were read once on this launch: no gate fires before then.
     public private(set) var access: ProAccess?
     public private(set) var catalog: ProCatalog = .loading
-    /// `AppStore.canMakePayments`: Screen Time or a management profile can turn purchases off.
-    public private(set) var canMakePayments = AppStore.canMakePayments
+    /// `AppStore.canMakePayments`: Screen Time or a management profile can turn
+    /// purchases off. Nil until StoreKit answered, which it does before the
+    /// catalogue can load (`loadProducts`). Read off the main thread: the first
+    /// read sets StoreKit up, 11 ms of the launch's main thread when this
+    /// property's initial value read it (Release, simulator).
+    public private(set) var canMakePayments: Bool?
+
+    /// StoreKit's word on purchases, asked off the main thread.
+    private nonisolated static func readCanMakePayments() async -> Bool {
+        await Task.detached(priority: .userInitiated) { AppStore.canMakePayments }.value
+    }
     /// An Ask to Buy request still with a family organizer, kept across launches.
     public private(set) var pending: ProProduct? {
         didSet { UserDefaults.standard.set(pending?.rawValue, forKey: Self.pendingKey) }
@@ -132,7 +141,7 @@ public final class Pro {
     /// Reads the catalogue again (P1c's Try again).
     public func loadProducts() async {
         catalog = .loading
-        canMakePayments = AppStore.canMakePayments
+        canMakePayments = await Self.readCanMakePayments()
         do {
             let found = try await Product.products(for: ProProduct.allCases.map(\.rawValue))
             var byId: [ProProduct: Product] = [:]
@@ -247,7 +256,6 @@ public final class Pro {
         trialStart = start
         proof = pro?.jws ?? (next.entitled ? trial?.jws : nil)
         if next.entitled { pending = nil }
-        canMakePayments = AppStore.canMakePayments
         let changed = access != next
         access = next
         // Bought, restored to Pro, or over: the day-6 reminder has nothing left to say.
@@ -257,6 +265,8 @@ public final class Pro {
             log.notice("access \(String(describing: next), privacy: .public)")
             PushRegistry.shared.entitlementChanged()
         }
+        // After the entitlement is settled: nothing above waits on StoreKit.
+        canMakePayments = await Self.readCanMakePayments()
         return unverified
     }
 

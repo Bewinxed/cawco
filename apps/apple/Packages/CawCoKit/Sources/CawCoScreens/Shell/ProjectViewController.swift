@@ -148,7 +148,7 @@ final class ProjectViewController: ObservedViewController {
             context.forgetProject(project)
         }
         // `class="text-muted-foreground"`.
-        forget.configuration?.attributedTitle = AttributedString("Forget project…", attributes: AttributeContainer(TypeScale.typeButton.attributes(color: Palette.mutedForeground, tracking: -0.01)))
+        forget.configuration?.attributedTitle = AttributedString("Forget project…", attributes: TypeScale.typeButton.container(color: Palette.mutedForeground, tracking: -0.01))
         // New session opens its popover from the button's end; Spin off starts one at once.
         // With no checkout yet, New session is the New Session form, which asks for the machine and folder.
         startButton = KitButton.make("New session", variant: .action) { [weak self] in
@@ -405,7 +405,7 @@ final class ProjectViewController: ObservedViewController {
         moreRow.isHidden = showMore || more <= 0
         if more > 0 {
             moreButton.configuration?.attributedTitle = AttributedString(
-                "Show \(more) more", attributes: AttributeContainer(TypeScale.typeLabel.attributes(color: Palette.mutedForeground, tracking: -0.01))
+                "Show \(more) more", attributes: TypeScale.typeLabel.container(color: Palette.mutedForeground, tracking: -0.01)
             )
         }
     }

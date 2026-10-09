@@ -233,7 +233,7 @@ final class DirectoryPickerView: UIStackView {
         config.image = Glyph.folder.image.resized(to: Size.iconMd)
         config.imagePadding = 6
         config.contentInsets = .zero
-        config.attributedTitle = AttributedString("Browse", attributes: AttributeContainer(TypeScale.typeMeta.attributes(color: Palette.mutedForeground)))
+        config.attributedTitle = AttributedString("Browse", attributes: TypeScale.typeMeta.container(color: Palette.mutedForeground))
         config.imageColorTransformer = UIConfigurationColorTransformer { _ in Palette.mutedForeground }
         trigger.configuration = config
         trigger.addAction(UIAction { [weak self] _ in self?.toggle() }, for: .primaryActionTriggered)
@@ -380,7 +380,7 @@ final class DirectoryPickerView: UIStackView {
             config.image = Glyph.folder.image.resized(to: Size.iconMd)
             config.imagePadding = Space.space2
             config.imageColorTransformer = UIConfigurationColorTransformer { _ in Palette.inkStrong.withAlphaComponent(0.7) }
-            config.attributedTitle = AttributedString(dir.name, attributes: AttributeContainer(TypeScale.typeCode.with(points: TypeScale.typeLabel.points).attributes(color: Palette.inkStrong)))
+            config.attributedTitle = AttributedString(dir.name, attributes: TypeScale.typeCode.with(points: TypeScale.typeLabel.points).container(color: Palette.inkStrong))
             config.titleLineBreakMode = .byTruncatingTail
             // The kit's `sm` button: `px-[11px]` inside its 1pt border.
             config.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 12, bottom: 0, trailing: 12)

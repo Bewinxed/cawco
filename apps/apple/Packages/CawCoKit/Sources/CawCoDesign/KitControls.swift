@@ -392,7 +392,7 @@ public final class CopyBox: UIView {
     }
 
     private func say(_ word: String) {
-        button.configuration?.attributedTitle = AttributedString(word, attributes: AttributeContainer(TypeScale.typeLabel.attributes(color: Palette.inkStrong)))
+        button.configuration?.attributedTitle = AttributedString(word, attributes: TypeScale.typeLabel.container(color: Palette.inkStrong))
         button.accessibilityLabel = word
     }
 

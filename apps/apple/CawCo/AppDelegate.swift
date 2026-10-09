@@ -20,6 +20,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
     /// support multiple scenes"), so a window scene that connects with any
     /// other delegate is handed this app's own, which builds its window.
     func application(_: UIApplication, didFinishLaunchingWithOptions _: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+        Launch.prepare()
         UINavigationBar.appearance().titleTextAttributes = [.font: TypeScale.typeTitle.font, .foregroundColor: Palette.inkStrong]
         NotificationCenter.default.addObserver(self, selector: #selector(sceneWillConnect(_:)), name: UIScene.willConnectNotification, object: nil)
         // Pushes: the delegate is set before launch ends, so a tap that

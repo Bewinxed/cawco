@@ -84,7 +84,7 @@ public final class KitSelect: UIButton {
     }
 
     public func setValue(_ text: String) {
-        configuration?.attributedTitle = AttributedString(text, attributes: AttributeContainer(TypeScale.typeLabel.withWeight(.regular).attributes(color: Palette.foreground)))
+        configuration?.attributedTitle = AttributedString(text, attributes: TypeScale.typeLabel.withWeight(.regular).container(color: Palette.foreground))
         configuration?.titleLineBreakMode = .byTruncatingTail
         accessibilityValue = text
     }

@@ -1318,6 +1318,8 @@ final class SwapGlyph: UIView {
     private let sharp = UIImageView()
     private let soft = UIImageView()
     private let spinner = SpinnerView()
+    /// The sharp glyph and the scale its blurred face is drawn at.
+    private var blur: (image: UIImage, scale: CGFloat)?
 
     init(_ face: Face, tint: UIColor) {
         self.face = face
@@ -1332,7 +1334,18 @@ final class SwapGlyph: UIView {
             }
             let image = glyph.image.resized(to: Size.iconMd)
             sharp.image = image
-            soft.image = image.blurredGlyph()
+            // The blurred face is only seen when a swap animates in, never in
+            // the frame the glyph is first drawn: drawn off the main thread as
+            // the glyph is made (its first render was 14 ms of the launch's
+            // main thread under the composer's send glyph), or by the swap that
+            // needs it first.
+            let scale = UITraitCollection.current.displayScale
+            blur = (image, scale)
+            Task { [weak self] in
+                let drawn = await Task.detached(priority: .userInitiated) { image.blurredGlyph(scale: scale) }.value
+                guard let self, soft.image == nil else { return }
+                soft.image = drawn
+            }
         case .spinner:
             spinner.frame = bounds
             spinner.tintColor = tint
@@ -1351,6 +1364,7 @@ final class SwapGlyph: UIView {
             soft.alpha = 0
             return
         }
+        if soft.image == nil, let blur { soft.image = blur.image.blurredGlyph(scale: blur.scale) }
         alpha = 0
         soft.alpha = 1
         sharp.alpha = 0

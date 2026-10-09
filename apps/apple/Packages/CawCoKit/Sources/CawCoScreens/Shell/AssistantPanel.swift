@@ -341,7 +341,7 @@ final class AssistantPanelView: UIView {
             let button = KitCutButton(type: .system)
             var config = UIButton.Configuration.plain()
             config.contentInsets = .zero
-            config.attributedTitle = AttributedString(row.title ?? leaf, attributes: AttributeContainer(TypeScale.typeMeta.attributes(color: Palette.inkStrong)))
+            config.attributedTitle = AttributedString(row.title ?? leaf, attributes: TypeScale.typeMeta.container(color: Palette.inkStrong))
             config.titleLineBreakMode = .byTruncatingTail
             button.configuration = config
             button.contentHorizontalAlignment = .leading

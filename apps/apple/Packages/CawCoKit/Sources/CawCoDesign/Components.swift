@@ -131,12 +131,12 @@ public enum KitButton {
     }
 
     public static func setTitle(_ title: String, of button: UIButton, variant: Variant, height: Height) {
-        button.configuration?.attributedTitle = AttributedString(title, attributes: AttributeContainer(height.role.attributes(color: ink(variant), tracking: -0.01)))
+        button.configuration?.attributedTitle = AttributedString(title, attributes: height.role.container(color: ink(variant), tracking: -0.01))
     }
 
     static func configuration(_ title: String, glyph: Glyph?, glyphTint: UIColor?, variant: Variant, height: Height) -> UIButton.Configuration {
         var config = UIButton.Configuration.plain()
-        config.attributedTitle = AttributedString(title, attributes: AttributeContainer(height.role.attributes(color: ink(variant), tracking: -0.01)))
+        config.attributedTitle = AttributedString(title, attributes: height.role.container(color: ink(variant), tracking: -0.01))
         config.titleLineBreakMode = .byTruncatingTail
         if let glyph {
             // `--btn-icon`: 12 on the xs button, 16 on the rest.
@@ -236,11 +236,22 @@ extension UIImage {
         }.withRenderingMode(renderingMode)
     }
 
-    /// A template glyph under a 4pt blur, drawn once at its own size: the far
-    /// end of a glyph that comes in clearing its blur (`icon-swap`, a
-    /// compaction's chevron), crossfaded with the sharp one.
-    public func blurredGlyph() -> UIImage? {
-        let scale = UITraitCollection.current.displayScale
+    /// The one Core Image context every soft glyph renders in. Core Image's
+    /// contexts are immutable and shared across threads; one made per glyph
+    /// was 11 ms of the launch's main thread under the composer's first send
+    /// glyph (Release, simulator). Made off it at launch (`prepareBlur`).
+    nonisolated private static let blurContext = CIContext()
+
+    /// Makes the shared context, on whichever thread calls (CawCoScreens `Launch`).
+    public nonisolated static func prepareBlur() {
+        _ = blurContext
+    }
+
+    /// A template glyph under a 4pt blur at `scale` (the screen's), drawn once
+    /// at its own size: the far end of a glyph that comes in clearing its blur
+    /// (`icon-swap`, a compaction's chevron), crossfaded with the sharp one.
+    /// Drawn on any thread: image renderers and Core Image are thread-safe.
+    public nonisolated func blurredGlyph(scale: CGFloat) -> UIImage? {
         let padded = CGSize(width: size.width + 16, height: size.height + 16)
         let drawn = UIGraphicsImageRenderer(size: padded).image { _ in
             withTintColor(.black).draw(at: CGPoint(x: 8, y: 8))
@@ -250,7 +261,7 @@ extension UIImage {
         filter.inputImage = input
         filter.radius = Float(4 * scale)
         guard let output = filter.outputImage?.cropped(to: input.extent),
-              let cg = CIContext().createCGImage(output, from: input.extent)
+              let cg = Self.blurContext.createCGImage(output, from: input.extent)
         else { return nil }
         let soft = UIImage(cgImage: cg, scale: drawn.scale, orientation: .up).withRenderingMode(.alwaysTemplate)
         return UIGraphicsImageRenderer(size: size).image { _ in
@@ -295,9 +306,9 @@ public final class TreeCountButton: UIButton {
         self.count = count
         self.failed = failed
         self.open = open
-        var title = AttributedString("\(count)", attributes: AttributeContainer(TypeScale.typeMeta.attributes(color: open ? Palette.inkStrong : Palette.inkMuted)))
+        var title = AttributedString("\(count)", attributes: TypeScale.typeMeta.container(color: open ? Palette.inkStrong : Palette.inkMuted))
         if failed > 0 {
-            title += AttributedString(" · \(failed)", attributes: AttributeContainer(TypeScale.typeMeta.attributes(color: Palette.statusFailInk)))
+            title += AttributedString(" · \(failed)", attributes: TypeScale.typeMeta.container(color: Palette.statusFailInk))
         }
         configuration?.attributedTitle = title
         configuration?.background.backgroundColor = open ? Palette.surfaceFillStrong : Palette.surfaceFill

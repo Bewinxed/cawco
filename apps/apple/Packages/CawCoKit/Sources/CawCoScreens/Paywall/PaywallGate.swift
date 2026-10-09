@@ -344,7 +344,7 @@ final class GateBar: UIView {
         includedLink.isHidden = form == .askToBuy
         linksRow.arrangedSubviews.first { !($0 is LinkButton) }?.isHidden = form == .askToBuy
         for button in buttons.arrangedSubviews.compactMap({ $0 as? UIButton }) {
-            button.isEnabled = Pro.shared.catalog == .loaded && Pro.shared.canMakePayments
+            button.isEnabled = Pro.shared.catalog == .loaded && Pro.shared.canMakePayments == true
         }
     }
 

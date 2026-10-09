@@ -177,7 +177,7 @@ final class CompactionButton: UIControl {
         mid.addSubview(word)
         let image = Glyph.chevronBold.image.resized(to: Size.iconSm)
         sharp.image = image
-        soft.image = image.blurredGlyph()
+        soft.image = image.blurredGlyph(scale: UITraitCollection.current.displayScale)
         for view in [soft, sharp] {
             view.frame = CGRect(x: 0, y: 0, width: Size.iconSm, height: Size.iconSm)
             turn.addSubview(view)

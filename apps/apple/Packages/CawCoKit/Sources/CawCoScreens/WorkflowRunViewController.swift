@@ -288,7 +288,7 @@ final class WorkflowRunViewController: ObservedViewController, UIGestureRecogniz
             let button = KitButton.make(option.label, variant: .outline, height: .sm) { [weak self] in self?.submit(choice: option.label) }
             if let description = option.description {
                 var config = button.configuration
-                config?.attributedSubtitle = AttributedString(description, attributes: AttributeContainer(TypeScale.typeMeta.attributes(color: Palette.inkMuted)))
+                config?.attributedSubtitle = AttributedString(description, attributes: TypeScale.typeMeta.container(color: Palette.inkMuted))
                 config?.titleAlignment = .leading
                 // The kit's side insets stay: only the block grows to hold the second line.
                 config?.contentInsets.top = Space.space3
@@ -846,7 +846,7 @@ final class RunLogView: UIView {
     required init?(coder: NSCoder) { fatalError("RunLogView is built in code") }
 
     func configure(_ log: [WorkflowRunDetail.LogLine]) {
-        summary.configuration?.attributedTitle = AttributedString("Log · \(log.count)", attributes: AttributeContainer(TypeScale.typeLabel.attributes(color: Palette.inkMuted)))
+        summary.configuration?.attributedTitle = AttributedString("Log · \(log.count)", attributes: TypeScale.typeLabel.container(color: Palette.inkMuted))
         guard log != shown else { return }
         let atEnd = scroll.contentOffset.y >= scroll.contentSize.height - scroll.bounds.height - 4
         for line in log.dropFirst(shown.count) where shown.count <= log.count {

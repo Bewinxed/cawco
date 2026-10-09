@@ -154,7 +154,7 @@ final class WorkflowSelect: UIButton {
         options = next
         value = chosen
         let shown = next.first { $0.value == chosen }?.label ?? ""
-        configuration?.attributedTitle = AttributedString(shown, attributes: AttributeContainer(WorkflowForm.role().attributes(color: Palette.inkStrong)))
+        configuration?.attributedTitle = AttributedString(shown, attributes: WorkflowForm.role().container(color: Palette.inkStrong))
         accessibilityValue = shown
         menu = UIMenu(options: .singleSelection, children: next.map { option in
             UIAction(title: option.label, attributes: option.disabled ? .disabled : [], state: option.value == chosen ? .on : .off) { [weak self] _ in
