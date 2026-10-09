@@ -140,6 +140,8 @@ interface Args {
   autoUpdate: boolean;
   channel?: "stable" | "nightly";
   command?: string;
+  /** `binary-apply --commanded`: a person's Install now asked for this build. */
+  commanded: boolean;
   dev: boolean;
   follow: boolean;
   force: boolean;
@@ -167,6 +169,7 @@ const parseArgs = (argv: string[]): Args => {
     rest: [],
     ask: false,
     keeperOnly: false,
+    commanded: false,
     resume: false,
     autoUpdate: false,
     dev: false,
@@ -195,6 +198,9 @@ const parseArgs = (argv: string[]): Args => {
         break;
       case "--keeper-only":
         args.keeperOnly = true;
+        break;
+      case "--commanded":
+        args.commanded = true;
         break;
       case "--resume":
         args.resume = true;
@@ -478,7 +484,7 @@ const runBinaryApply = async (args: Args): Promise<number> => {
     );
   }
   const { applyBinary } = await import("./binary-apply");
-  await applyBinary(args.action, args.held, args.keeperOnly);
+  await applyBinary(args.action, args.held, args.keeperOnly, args.commanded);
   return 0;
 };
 

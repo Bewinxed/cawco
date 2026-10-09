@@ -849,8 +849,11 @@ export class BinaryUpdater {
       });
       return;
     }
-    // On the hub's machine the update restarts the hub as well.
+    // On the hub's machine the update restarts the hub as well. Read before
+    // the replace, which spends the command: the helper hears whether a person
+    // asked for this build, and so whether its keeper is owed the move.
     const installation = await readInstallation();
+    const { commanded } = this.#flags;
     await this.#replace(
       installation?.role === "hub" ? installation.hubUrl : undefined,
       () =>
@@ -859,6 +862,7 @@ export class BinaryUpdater {
           release.manifest.version,
           "--held",
           String(keeper.held),
+          ...(commanded ? ["--commanded"] : []),
         ])
     );
   }
@@ -871,9 +875,10 @@ export class BinaryUpdater {
    */
   async #replace(
     hub: string | undefined,
-    launch: () => Promise<void>
+    launch: () => Promise<void>,
+    owed = false
   ): Promise<void> {
-    const cut = await this.#drain(hub);
+    const cut = await this.#drain(hub, owed);
     if (!cut) {
       return;
     }
@@ -914,12 +919,15 @@ export class BinaryUpdater {
    * outlasted a drain gets no new fence until it has ended
    * ({@link #outlasted}): a long call is waited out, not fenced every minute.
    */
-  async #drain(hub: string | undefined): Promise<RestartHold[] | undefined> {
+  async #drain(
+    hub: string | undefined,
+    owed: boolean
+  ): Promise<RestartHold[] | undefined> {
     const before = this.#state.phase;
     const capped = (): boolean =>
       this.#state.waitingSince !== undefined &&
       Date.now() - this.#state.waitingSince >= UPDATE_WAIT_CAP_MS;
-    if (await this.#cancelled(before)) {
+    if (await this.#cancelled(before, owed)) {
       return undefined;
     }
     if (!(this.#flags.commanded || capped())) {
@@ -948,7 +956,7 @@ export class BinaryUpdater {
         await Bun.sleep(DRAIN_POLL_MS);
         reading = await readReadiness(hub);
       }
-      if (await this.#cancelled(before)) {
+      if (await this.#cancelled(before, owed)) {
         return undefined;
       }
       if (reading.ready || this.#flags.commanded || capped()) {
@@ -971,10 +979,15 @@ export class BinaryUpdater {
   /**
    * A person's cancel came in during the pass (or the drain): nothing is
    * installed, a fence raised for it comes down, and a ready build goes back
-   * to `available`. Never with auto-update on, which a cancel does not stop.
+   * to `available`. Never with auto-update on, which a cancel does not stop,
+   * nor for a keeper move a confirmed install is owed (`owed`): a cancel takes
+   * back an install not yet applied, and that one was.
    */
-  async #cancelled(before: BinaryUpdateState["phase"]): Promise<boolean> {
-    if (this.#flags.commanded || this.#policy.autoUpdate) {
+  async #cancelled(
+    before: BinaryUpdateState["phase"],
+    owed: boolean
+  ): Promise<boolean> {
+    if (owed || this.#flags.commanded || this.#policy.autoUpdate) {
       return false;
     }
     const fenced = this.#fence !== undefined;
@@ -1028,16 +1041,34 @@ export class BinaryUpdater {
    * The session keeper advances only once it holds nothing, and only under the
    * same policy as any update: auto-update on, or a person's Install now. Not
    * to a build it already could not start on.
+   *
+   * A person's Install now reaches the keeper after the agent that heard it is
+   * gone (the trial restarts it): the confirmed install leaves `keeperOwed`,
+   * the build, never the command. It moves the keeper to that build only, the
+   * one this agent runs, and is cleared as the move starts, so it is acted on
+   * once; a keeper that cannot start there is not moved there again
+   * (`keeperFailedVersion`, checked first).
    */
   async #advanceKeeper(): Promise<void> {
     const keeperVersion = await readKeeperVersion();
     if (keeperVersion === runtimeVersion) {
-      if (this.#state.phase === "waiting-sessions") {
-        await this.#set({ phase: "installed", heldChildren: undefined });
+      if (
+        this.#state.phase === "waiting-sessions" ||
+        this.#state.keeperOwed !== undefined
+      ) {
+        await this.#set({
+          ...(this.#state.phase === "waiting-sessions"
+            ? { phase: "installed", heldChildren: undefined }
+            : {}),
+          keeperOwed: undefined,
+        });
       }
       return;
     }
     if (this.#state.keeperFailedVersion === runtimeVersion) {
+      if (this.#state.keeperOwed !== undefined) {
+        await this.#set({ keeperOwed: undefined });
+      }
       return;
     }
     const keeper = await readKeeper();
@@ -1056,18 +1087,26 @@ export class BinaryUpdater {
       }
       return;
     }
-    if (!(this.#flags.commanded || this.#policy.autoUpdate)) {
+    const owed = this.#state.keeperOwed === runtimeVersion;
+    if (!(this.#flags.commanded || this.#policy.autoUpdate || owed)) {
       return;
     }
     // The keeper moves with this agent alone; the hub stays up.
-    await this.#replace(undefined, () =>
-      launchApplyHelper([
-        "binary-apply",
-        runtimeVersion,
-        "--held",
-        "0",
-        "--keeper-only",
-      ])
+    await this.#replace(
+      undefined,
+      async () => {
+        await launchApplyHelper([
+          "binary-apply",
+          runtimeVersion,
+          "--held",
+          "0",
+          "--keeper-only",
+        ]);
+        if (this.#state.keeperOwed !== undefined) {
+          await this.#set({ keeperOwed: undefined });
+        }
+      },
+      owed
     );
   }
 }

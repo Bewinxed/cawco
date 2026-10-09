@@ -91,6 +91,11 @@ export async function readRunningManifest(): Promise<ReleaseManifest> {
  * crash loop). Nothing but a decider acts on it.
  */
 export interface TrialMarker {
+  /**
+   * A person's Install now asked for this build: once it is confirmed, the
+   * keeper is owed the move to it (`BinaryUpdateState.keeperOwed`).
+   */
+  commanded?: boolean;
   /** The hub database copy a rollback restores, when the schema changed. */
   dbBackup?: string;
   dbPath?: string;

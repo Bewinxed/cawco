@@ -219,6 +219,14 @@ export interface BinaryUpdateState {
   /** The build the session keeper could not start on; not retried by itself. */
   keeperFailedVersion?: string;
   /**
+   * The build the keeper is owed a move to: a person's Install now of it was
+   * confirmed while the keeper held children. Not a command: the agent moves
+   * the keeper to this build alone, once it holds nothing, whatever the
+   * auto-update setting, and clears it as it does. A newer install or a
+   * rollback clears it too.
+   */
+  keeperOwed?: string;
+  /**
    * The last time the agent found the session keeper wedged (alive, socket
    * open, no welcome) and restarted it, which ended every session it held.
    * The event a notice announces, as `keeper:<machineId>:<at>`; the next

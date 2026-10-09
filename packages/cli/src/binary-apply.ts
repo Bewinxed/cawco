@@ -231,19 +231,27 @@ async function writeState(state: Partial<BinaryUpdateState>): Promise<void> {
   });
 }
 
-/** Applies a staged build, or (`keeperOnly`) moves the session keeper to the running one. */
+/**
+ * Applies a staged build, or (`keeperOnly`) moves the session keeper to the
+ * running one. `commanded`: a person's Install now asked for the build.
+ */
 export async function applyBinary(
   version: string,
   held: number,
-  keeperOnly: boolean
+  keeperOnly: boolean,
+  commanded: boolean
 ): Promise<void> {
   if (!(await takeLock(version))) {
     console.log("update: another update helper is running; nothing to do");
     return;
   }
   try {
-    await say(`start ${version} held=${held} keeperOnly=${keeperOnly}`);
-    await (keeperOnly ? moveKeeperAlone(version) : applyBuild(version));
+    await say(
+      `start ${version} held=${held} keeperOnly=${keeperOnly}${commanded ? " commanded" : ""}`
+    );
+    await (keeperOnly
+      ? moveKeeperAlone(version)
+      : applyBuild(version, commanded));
     await say(`end ${version}`);
   } catch (error) {
     // Refused before anything changed: say so rather than leave the state at `installing`.
@@ -500,7 +508,7 @@ function backUpDatabase(db: string, previous: string): string {
   return copy;
 }
 
-async function applyBuild(version: string): Promise<void> {
+async function applyBuild(version: string, commanded: boolean): Promise<void> {
   const installed = await readInstallation();
   if (!installed) {
     throw new Error("This machine has no binary installation");
@@ -522,7 +530,12 @@ async function applyBuild(version: string): Promise<void> {
   const db = installed.role === "hub" ? hubDbPath() : undefined;
   const schemaChange =
     db !== undefined && manifest.schemaVersion !== running.schemaVersion;
-  await writeState({ phase: "installing", heldChildren: undefined });
+  // A newer install supersedes a keeper move an earlier one was owed.
+  await writeState({
+    phase: "installing",
+    heldChildren: undefined,
+    keeperOwed: undefined,
+  });
   const backup = schemaChange && db ? backUpDatabase(db, previous) : undefined;
   if (backup) {
     await say(`database copy ${backup}`);
@@ -536,6 +549,7 @@ async function applyBuild(version: string): Promise<void> {
     decideBy: swappedAt + TRIAL_WINDOW_S,
     keeper: await readKeeperVersion(),
     ...(backup && db ? { dbBackup: backup, dbPath: db } : {}),
+    ...(commanded ? { commanded: true } : {}),
   };
   // From here the trial is open, and only a decision closes it.
   await writeJsonAtomic(trialPath(), trial);
@@ -817,8 +831,17 @@ class TrialWatch {
 /**
  * The build stays: its landing and its keeper's outcome were written when it
  * answered ({@link settle}); the trial ends, and what nothing needs is pruned.
+ * A person's Install now installs the whole build: a keeper it left holding
+ * children is owed the move to it, recorded before the trial ends so a decider
+ * that resumes here records it again rather than not at all.
  */
 async function confirm(trial: TrialMarker): Promise<void> {
+  if (trial.commanded && (await readKeeperVersion()) !== trial.version) {
+    await writeState({ keeperOwed: trial.version });
+    await say(
+      `keeper ${trial.version}: owed the move, once it holds nothing (Install now)`
+    );
+  }
   await rm(trialPath(), { force: true });
   await say(`confirmed ${trial.version}`);
   if (trial.dbPath && trial.dbBackup) {
@@ -888,6 +911,8 @@ async function rollBack(start: TrialMarker): Promise<void> {
     sessiondVersion: await readKeeperVersion(),
     failedVersion: trial.version,
     availableVersion: trial.version,
+    // Nothing is owed a move to a build that was rolled back.
+    keeperOwed: undefined,
     ...(manifest ? { channel: manifest.channel, notes: manifest.notes } : {}),
     error: trial.reason ?? "The new build did not become healthy",
     landed: { at: Date.now(), outcome: "rolled-back", version: trial.version },

@@ -24296,6 +24296,10 @@
             "description": "The build the session keeper could not start on; not retried by itself.",
             "type": "string"
           },
+          "keeperOwed": {
+            "description": "The build the keeper is owed a move to: a person's Install now of it was\nconfirmed while the keeper held children. Not a command: the agent moves\nthe keeper to this build alone, once it holds nothing, whatever the\nauto-update setting, and clears it as it does. A newer install or a\nrollback clears it too.",
+            "type": "string"
+          },
           "keeperRestart": {
             "description": "The last time the agent found the session keeper wedged (alive, socket\nopen, no welcome) and restarted it, which ended every session it held.\nThe event a notice announces, as `keeper:<machineId>:<at>`; the next\nrestart replaces it.",
             "type": "object",
