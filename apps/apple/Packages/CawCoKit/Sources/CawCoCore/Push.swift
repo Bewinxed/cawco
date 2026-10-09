@@ -579,8 +579,28 @@ public final class PushRegistry {
 /// only while the week is live, notifications are allowed and H5 is on.
 @MainActor
 public enum TrialReminder {
-    static let kind = "trial-ending"
-    private static let identifier = "cawco-trial-ending"
+    nonisolated static let kind = "trial-ending"
+    private nonisolated static let identifier = "cawco-trial-ending"
+
+    /// One change asked of the notification centre.
+    private enum Change: Sendable {
+        case add(title: String, body: String, at: DateComponents)
+        case remove
+    }
+
+    /// The changes, applied off the main actor one at a time in the order they
+    /// were asked, so a cancel after a schedule still wins. The centre answers
+    /// over XPC, and a slow notifications daemon kept the main thread waiting
+    /// on `removePendingNotificationRequests` for minutes: the UI never waits on it.
+    private static let changes: AsyncStream<Change>.Continuation = {
+        let (stream, continuation) = AsyncStream.makeStream(of: Change.self)
+        Task.detached(priority: .utility) {
+            for await change in stream {
+                await apply(change)
+            }
+        }
+        return continuation
+    }()
 
     /// Schedules the reminder for a live week, or takes it down for anything else.
     /// One identifier, so scheduling again replaces it; a time already past schedules nothing.
@@ -590,24 +610,35 @@ public enum TrialReminder {
             cancel()
             return
         }
-        let center = UNUserNotificationCenter.current()
-        let content = UNMutableNotificationContent()
-        content.title = title
-        content.body = body
-        content.sound = .default
-        content.userInfo = ["cawco": ["kind": kind]]
         let parts = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: fire)
-        let request = UNNotificationRequest(identifier: identifier, content: content, trigger: UNCalendarNotificationTrigger(dateMatching: parts, repeats: false))
-        do {
-            try await center.add(request)
-        } catch {
-            Logger(subsystem: "dev.cawco.app", category: "Push").error("trial reminder not scheduled: \(String(describing: error), privacy: .public)")
-        }
+        changes.yield(.add(title: title, body: body, at: parts))
     }
 
     /// Takes the scheduled reminder down: H5 off, Pro bought or restored, the week over.
     public static func cancel() {
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [identifier])
+        changes.yield(.remove)
+    }
+
+    /// The notification centre's own calls, on the concurrent pool.
+    @concurrent
+    private nonisolated static func apply(_ change: Change) async {
+        let center = UNUserNotificationCenter.current()
+        switch change {
+        case .remove:
+            center.removePendingNotificationRequests(withIdentifiers: [identifier])
+        case let .add(title, body, parts):
+            let content = UNMutableNotificationContent()
+            content.title = title
+            content.body = body
+            content.sound = .default
+            content.userInfo = ["cawco": ["kind": kind]]
+            let request = UNNotificationRequest(identifier: identifier, content: content, trigger: UNCalendarNotificationTrigger(dateMatching: parts, repeats: false))
+            do {
+                try await center.add(request)
+            } catch {
+                Logger(subsystem: "dev.cawco.app", category: "Push").error("trial reminder not scheduled: \(String(describing: error), privacy: .public)")
+            }
+        }
     }
 
     /// The first 10:00 local at or after 48 h before the end: inside the week's
