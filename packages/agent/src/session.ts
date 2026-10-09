@@ -72,6 +72,7 @@ import {
   readIngested,
   repoPath,
   resumeCursor,
+  SESSION_DIR_READ,
   VERIFY_SESSION_CREDENTIAL,
   WITHDRAW_PERMISSION,
   withWorktreeLine,
@@ -222,7 +223,9 @@ export type FrameSink = (
  */
 const accountReading = (message: NeutralMessage): boolean =>
   message.type === "system" &&
-  (message.subtype === ACCOUNT_READ || message.subtype === RATE_LIMIT_READ);
+  (message.subtype === ACCOUNT_READ ||
+    message.subtype === RATE_LIMIT_READ ||
+    message.subtype === SESSION_DIR_READ);
 
 const warn = (message: string): void => {
   Effect.runFork(Effect.logWarning(message));

@@ -89,6 +89,7 @@ import {
   READ_MEMORY_FILE,
   READ_SKILL_FILES,
   resumeCursor,
+  SESSION_DIR_READ,
   settledQuestionResult,
   VERIFY_SESSION_CREDENTIAL,
 } from "@cawco/core";
@@ -2477,6 +2478,13 @@ export class ClaudeHarness implements Harness {
         }
       }
     }
+    // The session's data is in this dir now: the hub's row says its account
+    // from here on, never before the data is there.
+    ctx.frame({
+      type: "system",
+      subtype: SESSION_DIR_READ,
+      account_id: place.accountId,
+    } as NeutralMessage);
     const fleetDenyList = await sessionFleetDenials(spec.cawcoTodos);
     const options = spec.options as
       | { env?: Record<string, string | undefined> }

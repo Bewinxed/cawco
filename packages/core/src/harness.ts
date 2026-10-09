@@ -146,6 +146,16 @@ export const RATE_LIMIT_READ = "rate_limit";
 export const ACCOUNT_READ = "account";
 
 /**
+ * The `system` subtype an agent says, at every Claude launch once its data is
+ * in place and before its CLI starts, which account's dir the session's own
+ * data is in now (`account_id`, null for the machine's own `~/.claude`): the
+ * launch carried it there. The hub's row says that account only from this
+ * word on, so no reader with the row looks in a dir before the data arrives;
+ * it never reaches a screen.
+ */
+export const SESSION_DIR_READ = "session_dir";
+
+/**
  * The `system` subtype of the line the hub writes into a session's transcript
  * when its account reached its limit and the hub moved it, held it until the
  * reset, or continued it from a summary: `move` says which, on what account,
@@ -844,6 +854,9 @@ export interface NeutralSystemMessage {
   // account ({@link ACCOUNT_READ}) — what the session's Claude Code said at
   // initialize: who it is signed in as, its plan, and its models
   account?: import("./accounts").AccountProbe;
+  // session_dir ({@link SESSION_DIR_READ}) — the account whose dir the
+  // session's data is in now; null for the machine's own
+  account_id?: string | null;
   // commands_changed
   commands?: SlashCommand[];
   compact_error?: string;

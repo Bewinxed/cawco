@@ -206,6 +206,7 @@ import {
   reportMarker,
   ruleProblem,
   runDoing,
+  SESSION_DIR_READ,
   SUMMARISER_OUTPUT_RESERVE_TOKENS,
   SUMMARY_CAP_TOKENS,
   sameIdentity,
@@ -2443,8 +2444,54 @@ export const createServer = (
    * opens, and {@link bounded} refuses any that did not.
    */
   /**
+   * The account a launch placed a Claude row with a conversation on, by row:
+   * its data is carried there by that launch, and its row names the account
+   * only once the launch's agent says the data is there
+   * ({@link SESSION_DIR_READ}). Held meanwhile so every look at that launch
+   * (its refusal check, its mode, its payload) agrees, for as long as a
+   * launch takes to say; a launch that never does leaves the row as it was.
+   */
+  const launchClaims = new Map<string, { accountId: string; at: number }>();
+  /** How long a launch's placement is held for its agent's word. */
+  const CLAIM_HOLD_MS = 120_000;
+
+  /** The placement a launch of `rowId` holds, while it holds one. */
+  const heldClaim = (rowId: string): string | undefined => {
+    const held = launchClaims.get(rowId);
+    if (held && Date.now() - held.at > CLAIM_HOLD_MS) {
+      launchClaims.delete(rowId);
+      return;
+    }
+    return held?.accountId;
+  };
+
+  /**
+   * Places a row on `accountId` for its launch. A Claude row with a
+   * conversation has data to carry, so its row waits for the launch's word
+   * ({@link launchClaims}); any other has none, and its row names the account
+   * now.
+   */
+  const placeForLaunch = (
+    rowId: string,
+    accountId: string,
+    why: string
+  ): void => {
+    const [row] = db.getInstancesByIds([rowId]);
+    if (row && (row.harness ?? "claude") === "claude" && row.sessionId) {
+      launchClaims.set(rowId, { accountId, at: Date.now() });
+      console.log(
+        `[hub] ${rowId} launches on ${accountId} (${why}); its row says so once its conversation is there`
+      );
+      return;
+    }
+    db.patchInstance(rowId, { accountId });
+    console.log(`[hub] ${rowId} runs on ${accountId} from now on (${why})`);
+  };
+
+  /**
    * A row with no account, placed now like a new session: its row names the
-   * account from here on. Nothing when placement finds none.
+   * account from its launch on ({@link placeForLaunch}). Nothing when
+   * placement finds none.
    */
   const claimAccount = (
     machineId: string,
@@ -2455,6 +2502,10 @@ export const createServer = (
       projectId?: string | null;
     }
   ): { accountId?: string } | { refusal: string } => {
+    const held = heldClaim(row.id);
+    if (held) {
+      return { accountId: held };
+    }
     // One that ran from the machine's own login, which has moved into an
     // account since, runs on that account ({@link repinMovedFrom}); the
     // launch carries its data there.
@@ -2463,10 +2514,11 @@ export const createServer = (
         ? homeMovedAccountOn(machineId)
         : undefined;
     if (moved) {
-      db.patchInstance(row.id, { accountId: moved });
       db.accounts.removeMovedFrom(row.id);
-      console.log(
-        `[hub] ${row.id} ran on ${machineName(machineId)}'s own login; it runs on ${moved}, where that login moved, from now on`
+      placeForLaunch(
+        row.id,
+        moved,
+        `it ran on ${machineName(machineId)}'s own login, which moved there`
       );
       return { accountId: moved };
     }
@@ -2489,10 +2541,7 @@ export const createServer = (
     if (!accountId) {
       return {};
     }
-    db.patchInstance(row.id, { accountId });
-    console.log(
-      `[hub] ${row.id} ran on no account; it runs on ${accountId} from now on (${placed.why})`
-    );
+    placeForLaunch(row.id, accountId, `it ran on no account; ${placed.why}`);
     return { accountId };
   };
   const launchAccount = (
@@ -6611,6 +6660,36 @@ export const createServer = (
   };
 
   /**
+   * The account a row opened for a launch names now. A Claude conversation
+   * resumed onto an account it is not on yet (one placed now, its origin on
+   * none) has its data carried there by that launch, so the row names the
+   * account only once the launch says so ({@link launchClaims}); meanwhile
+   * it names the account the conversation is on.
+   */
+  const openedAccount = (
+    payload: SpawnPayload,
+    placed: { accountId?: string }
+  ): { accountId?: string } => {
+    if (
+      (payload.harness ?? "claude") !== "claude" ||
+      !payload.resume ||
+      payload.resume.fork ||
+      !placed.accountId
+    ) {
+      return placed;
+    }
+    const held = accountHeld(payload);
+    if (held?.accountId === placed.accountId) {
+      return placed;
+    }
+    launchClaims.set(payload.instanceId, {
+      accountId: placed.accountId,
+      at: Date.now(),
+    });
+    return held ?? {};
+  };
+
+  /**
    * The account a session about to open runs on: its row's, when it has one
    * (an account is for the session's whole life); a resumed conversation's
    * stays where its transcript is; a fork takes its origin's; anything else
@@ -6819,7 +6898,7 @@ export const createServer = (
       ...(payload.role ? { role: payload.role } : {}),
       ...(payload.delegateType ? { delegateType: payload.delegateType } : {}),
       ...threadOfSpawn(peekParent(payload).parentInstanceId, workItemId),
-      ...placed,
+      ...openedAccount(payload, placed),
     });
     sendSpawn(agent, machineId, {
       verb: "spawn",
@@ -6952,7 +7031,7 @@ export const createServer = (
       kind,
       permissionMode: settled.permissionMode,
       model: payload.model,
-      ...placed,
+      ...openedAccount(payload, placed),
     });
     publishInstances(machineId);
     const reply = await awaitReply(
@@ -10290,26 +10369,51 @@ export const createServer = (
 
   /**
    * The row a launch of `row` runs as: on the account a person moved it to
-   * mid-turn, now that its process is being replaced, the move's line
-   * written. Every launch takes it (`bounded`), so one that comes before the
-   * turn's end (a restart, a wake after a crash) runs on it too.
+   * (mid-turn, or while its machine was away), now that its process is being
+   * replaced. Every launch takes it (`bounded`), so one that comes before the
+   * turn's end (a restart, a wake after a crash, its machine's return) runs
+   * on it too. The row itself names the account, and the move is over with
+   * its line written, only once that launch's agent says the session's data
+   * is in the account's dir ({@link landSessionDir}).
    */
   const takeOwedMove = (row: StoredRow): StoredRow => {
     const owed = relaunchAtTurnEnd.get(row.id);
     if (!owed) {
       return row;
     }
-    relaunchAtTurnEnd.delete(row.id);
     if (owed.to === undefined) {
+      relaunchAtTurnEnd.delete(row.id);
       return row;
     }
-    db.patchInstance(row.id, { accountId: owed.to });
-    db.atLimit.dropHold(row.id);
-    publishInstances(row.machineId);
-    if (owed.move) {
-      noteAtLimit(row, owed.move);
-    }
     return { ...row, accountId: owed.to };
+  };
+
+  /**
+   * A Claude launch's word that its session's data is in `accountId`'s dir
+   * (null: the machine's own), said once the launch carried it there and
+   * before its CLI starts ({@link SESSION_DIR_READ}). The row names that
+   * account from now on; a placement held for it ({@link launchClaims}) and
+   * a move owed to it ({@link relaunchAtTurnEnd}) are over, the move's line
+   * written and any hold at its old account's limit ended.
+   */
+  const landSessionDir = (row: StoredRow, accountId: string | null): void => {
+    launchClaims.delete(row.id);
+    const owed = relaunchAtTurnEnd.get(row.id);
+    if (owed?.to !== undefined && owed.to === accountId) {
+      relaunchAtTurnEnd.delete(row.id);
+      db.atLimit.dropHold(row.id);
+      if (owed.move) {
+        noteAtLimit(row, owed.move);
+      }
+    }
+    if ((row.accountId ?? null) === accountId) {
+      return;
+    }
+    db.patchInstance(row.id, { accountId });
+    console.log(
+      `[hub] ${row.id}'s conversation is in ${accountId ?? "the machine's own"} dir now; its row says so`
+    );
+    publishInstances(row.machineId);
   };
 
   /** A session's row as the hub stores it. */
@@ -12416,7 +12520,7 @@ export const createServer = (
       permissionMode: settled.permissionMode,
       model: payload.model,
       ...peekParent(message.payload),
-      ...placed,
+      ...openedAccount(payload, placed),
     });
     if (holdingStarts(message.machineId)) {
       // The row says starting; the start goes out when the machine can take it.
@@ -17440,6 +17544,23 @@ export const createServer = (
                 const signal = peekSendSignal(frame);
                 if (signal) {
                   takeSendSignal(message.instanceId, signal);
+                  break;
+                }
+                // A launch's word that its session's data is in place: the
+                // row names that dir's account from now on. Only the row's
+                // own launch says it; a process since replaced does not.
+                if (
+                  frame.message.type === "system" &&
+                  frame.message.subtype === SESSION_DIR_READ
+                ) {
+                  const [row] = db.getInstancesByIds([message.instanceId]);
+                  if (
+                    row &&
+                    peek(message.payload, "processGeneration") ===
+                      processGeneration(row)
+                  ) {
+                    landSessionDir(row, frame.message.account_id ?? null);
+                  }
                   break;
                 }
                 // A session whose boundary hook fails open, at a turn
