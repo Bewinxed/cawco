@@ -402,8 +402,8 @@ final class TopBarCluster: UIView {
     /// The cluster's width changed: the crumb beside it is measured again.
     var onResize: () -> Void = {}
 
-    private let phoneCaw = NeedsCawButton(ownGlass: true)
-    private let groupCaw = NeedsCawButton(ownGlass: false)
+    private let phoneCaw = NeedsCawButton(standing: true)
+    private let groupCaw = NeedsCawButton(standing: false)
     private let group = GlassCapsule()
     private let groupRow = UIStackView()
     private let jump = GlassItem(.search, counted: false)
@@ -459,7 +459,6 @@ final class TopBarCluster: UIView {
                 onCawPan(pan, head)
             }
         }
-        phoneCaw.standing = true
         groupRow.axis = .horizontal
         groupRow.alignment = .center
         groupRow.spacing = 0
@@ -485,8 +484,16 @@ final class TopBarCluster: UIView {
     private func arrange() {
         for view in stack.arrangedSubviews { stack.removeArrangedSubview(view); view.removeFromSuperview() }
         stack.addArrangedSubview(compact ? phoneCaw : group)
-        // A phone's Caw stands on the bar's floor, in line with the tabs.
+        // A phone's Caw is centred on the tabs' centre line, half the tab
+        // row up from the bar's floor, which leaves the bar's inset between
+        // his glass and the transcript.
         stack.alignment = compact ? .bottom : .center
+        stack.isLayoutMarginsRelativeArrangement = compact
+        stack.directionalLayoutMargins = NSDirectionalEdgeInsets(
+            top: 0, leading: 0,
+            bottom: compact ? Size.cTabRowH / 2 - NeedsCawButton.standingSide / 2 : 0,
+            trailing: 0
+        )
     }
 
     private var lastWidth = 0.0

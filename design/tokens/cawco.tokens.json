@@ -2308,17 +2308,7 @@
     "c-bar-symbol": {
       "$type": "dimension",
       "$value": "20px",
-      "$description": "A symbol in the top bar's icon group: the machines glyph and Caw's head."
-    },
-    "c-bar-chip": {
-      "$type": "dimension",
-      "$value": "14px",
-      "$description": "A count chip in the top bar's glass (the machines down or in trouble): a circle for one digit, a short capsule for more."
-    },
-    "c-bar-chip-ring": {
-      "$type": "dimension",
-      "$value": "1.5px",
-      "$description": "The ring round a count chip, in the glass's surface, that parts it from what it sits on."
+      "$description": "A symbol in the top bar's glass group: the machines glyph and Caw's head."
     },
     "c-caw-ring": {
       "$type": "dimension",
@@ -2328,7 +2318,7 @@
     "c-bar-search-w": {
       "$type": "dimension",
       "$value": "180px",
-      "$description": "The top bar's Jump field: wide enough to read as a field, not a button."
+      "$description": "Jump, the first item of the top bar's glass group: wide enough to read as a place to type, not a button."
     },
     "c-page-head-h": {
       "$type": "dimension",

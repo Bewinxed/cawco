@@ -939,36 +939,34 @@
           {/if}
         </div>
 
-        <!-- The trailing edge, two groups (Apple HIG, Toolbars): Jump's
-             search field, then one group of icon controls with Caw's head
-             last, at the edge. A phone keeps Search and the machines in its
-             sidebar, so its group holds Caw alone. -->
+        <!-- The trailing edge, one glass group (Apple HIG, Toolbars): Jump,
+             the machines, then Caw's head last, at the edge. A phone keeps
+             Jump and the machines in its sidebar, so its group holds Caw
+             alone. -->
         <div class="right">
-          {#if railed}
-            <Tip keys="⌘K" label="Jump to session">
-              {#snippet children(
-                tip
-              )}
-                <button
-                  {...tip}
-                  aria-label="Jump to session"
-                  class="jump-field focus-inset press-tint"
-                  data-share="jump"
-                  onclick={(event: MouseEvent) => {
-                    jumpOpener = event.currentTarget as HTMLElement;
-                    jumpOpen = true;
-                  }}
-                  type="button"
-                >
-                  <IconSearch />
-                  <span class="jump-word">Jump</span>
-                  <kbd>⌘K</kbd>
-                </button>
-              {/snippet}
-            </Tip>
-          {/if}
           <div class="tools" data-bar-group>
             {#if railed}
+              <Tip keys="⌘K" label="Jump to session">
+                {#snippet children(
+                  tip
+                )}
+                  <button
+                    {...tip}
+                    aria-label="Jump to session"
+                    class="bar-item jump touch-hit"
+                    data-share="jump"
+                    onclick={(event: MouseEvent) => {
+                      jumpOpener = event.currentTarget as HTMLElement;
+                      jumpOpen = true;
+                    }}
+                    type="button"
+                  >
+                    <IconSearch aria-hidden="true" />
+                    <span class="jump-word">Jump</span>
+                    <kbd>⌘K</kbd>
+                  </button>
+                {/snippet}
+              </Tip>
               <MachinesButton />
             {/if}
             <!-- Caw's head: what needs you, and its drawer. -->
@@ -1301,23 +1299,13 @@
     width: 20px;
     height: 20px;
   }
-  /* The trailing edge (Apple HIG, Toolbars): two groups, a --space-3 gap
-     apart, every control on the bar's one control height (`--c-btn-h`) so
-     their tops and bottoms meet one line. On a coarse pointer the gaps open
-     to 16px (DESIGN.md, The 44 Touch Rule) and each touch area stops at
-     the gap's middle. */
+  /* The trailing edge (Apple HIG, Toolbars): the one glass group, on the
+     bar's control height (`--c-btn-h`). */
   .right {
-    --hit-gap-x: var(--space-3);
     position: relative;
     margin-left: auto;
     display: flex;
     align-items: center;
-    gap: var(--space-3);
-
-    @media (pointer: coarse) {
-      --hit-gap-x: 16px;
-      gap: 16px;
-    }
     min-width: 0;
   }
   .top.hosting .right {
@@ -1359,43 +1347,11 @@
       display: none;
     }
   }
-  /* Jump, a search field (Apple HIG, Toolbars: "an optional search field"
-     on the trailing edge), kept apart from the icon group because it has a
-     text label: the field's height and radius (DESIGN.md, Inputs), its
-     recessed groove for a surface and no edge, the search glyph leading,
-     "Jump" in the placeholder's ink and ⌘K a trailing hint. */
-  .jump-field {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    inline-size: var(--c-bar-search-w);
-    block-size: var(--c-input-h);
-    padding-inline: var(--space-3);
-    border: 0;
-    border-radius: var(--radius-md);
-    background: var(--surface-recess-deep);
-    font: var(--type-body);
-    color: var(--ink-muted);
-    text-align: start;
-    cursor: text;
-    transition: var(--transition-control);
-  }
-  .jump-field :global(svg) {
-    flex: none;
-    inline-size: 16px;
-    block-size: 16px;
-  }
-  .jump-word {
-    flex: 1 1 auto;
-  }
-  .jump-field kbd {
-    font: var(--type-meta);
-  }
-  /* The one icon group: one container of the panel's glass, a capsule on
-     the bar's control height whose items sit concentric inside it, as
-     Liquid Glass draws grouped toolbar items. The glass is drawn by a layer
-     under the items, never by the group itself: a backdrop filter on the
-     group would make it the box Caw's fixed drawer is laid out in. */
+  /* The one group: one container of the panel's glass, a capsule on the
+     bar's control height whose items sit concentric inside it, as Liquid
+     Glass draws grouped toolbar items. The glass is drawn by a layer under
+     the items, never by the group itself: a backdrop filter on the group
+     would make it the box Caw's fixed drawer is laid out in. */
   .tools {
     --hit-gap-x: var(--c-bar-group-pad);
     position: relative;
@@ -1461,41 +1417,35 @@
     background: var(--surface-fill);
   }
   @media (hover: hover) and (pointer: fine) {
-    .jump-field:hover {
-      background: light-dark(var(--surface-recess), var(--surface-hover));
-    }
     .tools :global(.bar-item:hover) {
       background: var(--surface-hover);
     }
   }
-  /* The bar's badge: a count chip inside the glass, in a status pair, a
-     circle for one digit and a short capsule for more, ringed in the
-     glass's surface: the machines down or in trouble, at the glyph's
-     corner (MachinesButton places it). (What needs you is the arcs on
-     Caw's rim, NeedsCaw.) */
-  .tools :global(.bar-badge) {
-    position: absolute;
-    display: grid;
-    place-items: center;
-    min-inline-size: var(--c-bar-chip);
-    block-size: var(--c-bar-chip);
-    padding-inline: calc(var(--c-bar-chip) / 4);
-    border-radius: var(--radius-pill);
-    box-shadow: 0 0 0 var(--c-bar-chip-ring) var(--surface-raised);
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    line-height: 1;
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-    pointer-events: none;
+  /* Jump, the group's search (Apple HIG, Toolbars: "an optional search
+     field" on the trailing edge): an item of the glass like the others,
+     `c-bar-search-w` wide so it reads as a place to type, a 16px search
+     glyph leading (a field's, lighter than the icons' 20px symbols so the
+     word leads), "Jump" in the placeholder's ink and ⌘K a trailing hint. */
+  .tools .jump {
+    justify-content: flex-start;
+    gap: var(--space-2);
+    inline-size: var(--c-bar-search-w);
+    padding-inline: var(--space-2);
+    font: var(--type-body);
+    color: var(--ink-muted);
+    cursor: text;
   }
-  .tools :global(.bar-badge[data-tone="attn"]) {
-    background: var(--status-attn-bg);
-    color: var(--status-attn-ink);
+  .jump :global(svg) {
+    flex: none;
+    inline-size: 16px;
+    block-size: 16px;
   }
-  .tools :global(.bar-badge[data-tone="fail"]) {
-    background: var(--status-fail-bg);
-    color: var(--status-fail-ink);
+  .jump-word {
+    flex: 1 1 auto;
+    text-align: start;
+  }
+  .jump kbd {
+    font: var(--type-meta);
   }
 
   @media (hover: hover) and (pointer: fine) {
@@ -1550,16 +1500,26 @@
       width: var(--glyph);
       height: var(--glyph);
     }
-    /* Caw stands on the bar's floor, in line with the tabs, his glass
-       round but for its bottom-right corner, which meets the floor square
-       (owner: "caw just remove the bottom right roundness"). His rim's
-       arcs follow it (NeedsCaw). */
+    /* Caw's glass is his item's own box, centred on the tabs' centre line
+       as the toggle is, which leaves the bar's inset (`c-bar-group-pad`)
+       between its foot and the transcript under the row. Round at its
+       leading corners, square at its trailing two (owner: "it's top right
+       doesn't need to be rounded"); his rim's arcs follow it (NeedsCaw). */
     .right {
       align-self: stretch;
     }
     .tools {
-      align-self: flex-end;
-      border-radius: 50% 50% 0 50%;
+      align-self: flex-start;
+      block-size: var(--c-bar-item);
+      margin-block-start: calc(
+        var(--c-top-bar-h) -
+        var(--c-tab-row-h) /
+        2 -
+        var(--c-bar-item) /
+        2
+      );
+      padding: 0;
+      border-radius: calc(var(--c-bar-item) / 2) 0 0 calc(var(--c-bar-item) / 2);
     }
     .top.floating {
       position: absolute;

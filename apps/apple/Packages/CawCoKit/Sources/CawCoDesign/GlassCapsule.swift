@@ -75,17 +75,17 @@ public final class GlassCapsule: UIView {
         layer.borderColor = edge.resolvedColor(with: traits).cgColor
     }
 
-    /// Round but for the bottom-right corner, which is square: Caw's glass
-    /// standing on the phone bar's floor (Shell.svelte, variant B).
-    public var squaredCorner = false {
-        didSet { if squaredCorner != oldValue { setNeedsLayout() } }
+    /// Round at the leading corners only, square at the trailing two: Caw's
+    /// own glass on the phone bar (Shell.svelte, the phone's one row).
+    public var squaredTrailing = false {
+        didSet { if squaredTrailing != oldValue { setNeedsLayout() } }
     }
 
     override public func layoutSubviews() {
         super.layoutSubviews()
         let radius = min(bounds.width, bounds.height) / 2
-        let corners: CACornerMask = squaredCorner
-            ? [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner]
+        let corners: CACornerMask = squaredTrailing
+            ? [.layerMinXMinYCorner, .layerMinXMaxYCorner]
             : [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMaxYCorner]
         for part in [layer, tint.layer] {
             part.cornerRadius = radius
@@ -94,7 +94,8 @@ public final class GlassCapsule: UIView {
         // The system glass draws its own shape: it is told its corners.
         if #available(iOS 26.0, macCatalyst 26.0, *) {
             let round = UICornerRadius.fixed(radius)
-            glass.cornerConfiguration = .corners(topLeftRadius: round, topRightRadius: round, bottomLeftRadius: round, bottomRightRadius: squaredCorner ? .fixed(0) : round)
+            let trailing = squaredTrailing ? UICornerRadius.fixed(0) : round
+            glass.cornerConfiguration = .corners(topLeftRadius: round, topRightRadius: trailing, bottomLeftRadius: round, bottomRightRadius: trailing)
         } else {
             glass.layer.cornerRadius = radius
             glass.layer.maskedCorners = corners

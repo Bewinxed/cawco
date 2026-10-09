@@ -119,8 +119,9 @@
    * leaves the screen. The number itself is in his label, his tooltip and
    * the drawer's head. His circle is the bar's control height across,
    * round his item's centre: the wide group's trailing end. On the phone
-   * his glass stands on the bar's floor with its bottom-right corner square
-   * (Shell), and the arcs run along that outline instead (`outlinePath`).
+   * his glass is his item's box, round at its leading corners and square at
+   * its trailing two (Shell), and the arcs run along that outline instead
+   * (`outlinePath`).
    * Apple's NeedsCawButton draws the same arcs.
    */
   const ARC = 30;
@@ -172,34 +173,33 @@
   };
 
   /*
-   * The phone's glass: round at three corners, square at the bottom right.
-   * The arcs' path is that outline drawn the same inset in as the circle's
-   * rim: clockwise from 12 o'clock round the top-right quarter, down the
-   * square corner's right edge, along its bottom edge, then round the
-   * bottom-left and top-left quarters back to 12. Each arc is ARC/360 of the
-   * outline's length and ARC_GAP/360 from the next, as on the circle.
+   * The phone's glass: his item's box (`--c-bar-item`), a half circle at
+   * its leading side and square at its trailing corners, centred in the
+   * rim's box. The arcs' path is that outline drawn half the stroke in:
+   * clockwise from 12 o'clock along the top edge, down the trailing edge,
+   * back along the bottom edge, then round the half circle back to 12. Each
+   * arc is ARC/360 of the outline's length and ARC_GAP/360 from the next,
+   * as on the circle.
    */
   const MID = RING_BOX / 2;
-  /** The square corner's point on the path. */
-  const CORNER = MID + RIM;
-  const QUARTER = (Math.PI * RIM) / 2;
-  const OUTLINE_LENGTH = 3 * QUARTER + 2 * RIM;
+  /** The phone's glass, px (`--c-bar-item`). */
+  const STAND_BOX = 28;
+  /** The outline's half height on the path, half the stroke in from the glass's edge. */
+  const STAND = STAND_BOX / 2 - RIM_STROKE / 2;
+  const OUTLINE_LENGTH = (4 + Math.PI) * STAND;
   /** The point `s` px along the outline from 12 o'clock. */
   function onOutline(s: number): [number, number] {
-    const arcPoint = (rad: number): [number, number] => [
-      MID + RIM * Math.sin(rad),
-      MID - RIM * Math.cos(rad),
-    ];
-    if (s < QUARTER) {
-      return arcPoint(s / RIM);
+    if (s < STAND) {
+      return [MID + s, MID - STAND];
     }
-    if (s < QUARTER + RIM) {
-      return [CORNER, MID + (s - QUARTER)];
+    if (s < 3 * STAND) {
+      return [MID + STAND, MID - STAND + (s - STAND)];
     }
-    if (s < QUARTER + 2 * RIM) {
-      return [CORNER - (s - QUARTER - RIM), CORNER];
+    if (s < 4 * STAND) {
+      return [MID + STAND - (s - 3 * STAND), MID + STAND];
     }
-    return arcPoint(Math.PI + (s - QUARTER - 2 * RIM) / RIM);
+    const rad = Math.PI + (s - 4 * STAND) / STAND;
+    return [MID + STAND * Math.sin(rad), MID - STAND * Math.cos(rad)];
   }
   /** Arc `k` on the outline: caps and all, ARC/360 of it long. */
   const outlinePath = (k: number) => {
@@ -222,12 +222,11 @@
   };
   /** The whole outline, from 12 o'clock: the ring closed past two laps. */
   const OUTLINE = [
-    `M ${MID} ${MID - RIM}`,
-    `A ${RIM} ${RIM} 0 0 1 ${CORNER} ${MID}`,
-    `L ${CORNER} ${CORNER}`,
-    `L ${MID} ${CORNER}`,
-    `A ${RIM} ${RIM} 0 0 1 ${MID - RIM} ${MID}`,
-    `A ${RIM} ${RIM} 0 0 1 ${MID} ${MID - RIM}`,
+    `M ${MID} ${MID - STAND}`,
+    `L ${MID + STAND} ${MID - STAND}`,
+    `L ${MID + STAND} ${MID + STAND}`,
+    `L ${MID} ${MID + STAND}`,
+    `A ${STAND} ${STAND} 0 0 1 ${MID} ${MID - STAND}`,
   ].join(" ");
 
   /**

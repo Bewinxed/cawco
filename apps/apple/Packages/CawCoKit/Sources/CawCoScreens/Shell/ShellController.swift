@@ -193,8 +193,8 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     /// The phone's session row (variant B), over the strip's ends: the bare
     /// toggle glyph's leading edge `cBarPhoneEdge` from the screen's, its
     /// centre on the tabs' centre line (they stand on the row's floor), in a
-    /// 44pt touch area reaching into the screen's edge; Caw's glass standing
-    /// on the floor `cBarPhoneEdge` from the other edge.
+    /// 44pt touch area reaching into the screen's edge; Caw's glass on the
+    /// same centre line `cBarPhoneEdge` from the other edge (TopBarCluster).
     private func placeSessionRow() {
         let row = workspaceController.barOverlay
         for part in [sessionBurger, sessionCluster] as [UIView] { row.addSubview(part) }

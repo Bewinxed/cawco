@@ -1,24 +1,25 @@
 <script lang="ts" module>
   import { cawco } from "./client.svelte";
 
-  /** How many machines are online: the button's number, and the phone sidebar's. */
+  /** How many machines are online: the phone sidebar's count. */
   export const machinesOnline = (): number =>
     cawco.machines.filter((machine) => machine.status === "online").length;
 </script>
 
 <script lang="ts">
   /**
-   * The machines, one click away in the wide bar's icon group rather than
+   * The machines, one click away in the wide bar's glass group rather than
    * always on screen: an item of the group (Shell's `.bar-item`), its glyph
-   * and the number online in the bar's one ink (Apple HIG, Toolbars: "Reduce
-   * the use of toolbar backgrounds and tinted controls"). A machine down, or
-   * one that needs a hand (behind the hub, a stuck sync), is a badge at the
-   * glyph's top-trailing corner, the bar's badge in the fail or attention pair, saying
-   * how many, so it is still seen without the list and never by hue alone.
-   * The popover is the machines' list (MachinesList). The home's Check
-   * machines opens it too (join `machinesPopover`). A phone has no room for
-   * it in the bar: the machines are in its sidebar.
+   * and the number of machines. The number is said once. Machines in
+   * trouble (down, behind the hub, a stuck sync) tint the glyph in the
+   * status hue, fail when any is down and attention otherwise; which ones
+   * and what is wrong are words in the tooltip, the label and the popover
+   * (DESIGN.md, The Glyph, Word, Hue Rule). The popover is the machines'
+   * list (MachinesList). The home's Check machines opens it too (join
+   * `machinesPopover`). A phone has no room for it in the bar: the machines
+   * are in its sidebar.
    */
+  import { machineLabel } from "@cawco/core";
   import { mergeProps } from "bits-ui";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Popover from "#lib/components/ui/popover/index.js";
@@ -35,25 +36,44 @@
    */
   let byPointer = false;
 
-  const online = $derived(machinesOnline());
-  /** What the badge says at a glance: machines down, ones in trouble, or nothing. */
-  const trouble = $derived.by(() => {
-    const down = cawco.machines.filter(
-      (machine) => machine.status !== "online"
-    ).length;
-    if (down > 0) {
-      return { tone: "fail", count: down, words: `${down} offline` } as const;
+  const count = $derived(cawco.machines.length);
+  /** The glyph's hue: fail when a machine is down, attention when one is in trouble. */
+  const tone = $derived.by(() => {
+    if (home.exceptions.length === 0) {
+      return;
     }
+    return cawco.machines.some((machine) => machine.status !== "online")
+      ? "fail"
+      : "attn";
+  });
+  const label = $derived.by(() => {
+    const machines = `${count} ${count === 1 ? "machine" : "machines"}`;
     const stuck = home.exceptions.length;
     return stuck > 0
-      ? ({ tone: "attn", count: stuck, words: `${stuck} need a hand` } as const)
-      : null;
+      ? `${machines}, ${stuck} ${stuck === 1 ? "needs" : "need"} attention`
+      : machines;
   });
-  const label = $derived(
-    trouble
-      ? `Machines, ${online} online, ${trouble.words}`
-      : `Machines, ${online} online`
-  );
+  const names = new Intl.ListFormat("en", { type: "conjunction" });
+  /**
+   * The machines in trouble by name, those with the same fault said
+   * together ("Machines: mini and studio sync failed; air unreachable").
+   */
+  const tip = $derived.by(() => {
+    if (home.exceptions.length === 0) {
+      return "Machines";
+    }
+    const byFault = Map.groupBy(home.exceptions, ({ text }) => text);
+    const clauses = [...byFault].map(([text, entries]) => {
+      const who = entries.map(({ machineId }) => {
+        const machine = cawco.machines.find(
+          (entry) => entry.machineId === machineId
+        );
+        return machine ? machineLabel(machine.hostname) : machineId;
+      });
+      return `${names.format(who)} ${text}`;
+    });
+    return `Machines: ${clauses.join("; ")}`;
+  });
 </script>
 
 <svelte:window
@@ -73,29 +93,23 @@
   }
   }
 >
-  <Tip label="Machines">
+  <Tip label={tip}>
     {#snippet children(
-      tip
+      tipProps
     )}
       <Popover.Trigger>
         {#snippet child({
           props,
         })}
           <button
-            {...mergeProps(props, tip)}
+            {...mergeProps(props, tipProps)}
             aria-label={label}
             class="bar-item machines touch-hit"
+            data-tone={tone}
             type="button"
           >
-            <span class="glyph">
-              <IconServer aria-hidden="true" class="bar-symbol" />
-              {#if trouble}
-                <span class="bar-badge" data-tone={trouble.tone}
-                  >{trouble.count}</span
-                >
-              {/if}
-            </span>
-            <span class="num">{online}</span>
+            <IconServer aria-hidden="true" class="bar-symbol" />
+            <span class="num">{count}</span>
           </button>
         {/snippet}
       </Popover.Trigger>
@@ -137,22 +151,12 @@
     gap: var(--space-2);
     padding-inline: var(--space-2) calc(var(--space-2) - var(--c-bar-group-pad));
   }
-  .glyph {
-    display: flex;
-    align-items: flex-start;
+  /* Named under `.machines` to outrank Shell's `.tools .bar-symbol` ink. */
+  .machines[data-tone="attn"] :global(.bar-symbol) {
+    color: var(--status-attn-glyph);
   }
-  /* At the glyph's top-trailing corner, beside its ink, never on it: in
-     the glyph's row after the symbol's box, its top on the item's own top
-     less its ring, so the chip and its ring stay inside the item and the
-     number moves over to make room. (Named under `.machines` to outrank
-     Shell's `.tools .bar-badge`, which places a badge absolutely.) */
-  .machines .glyph > .bar-badge {
-    position: relative;
-    margin-block-start: calc(
-      var(--c-bar-chip-ring) -
-      (var(--c-bar-item) - var(--c-bar-symbol)) /
-      2
-    );
+  .machines[data-tone="fail"] :global(.bar-symbol) {
+    color: var(--status-fail-glyph);
   }
   .num {
     font: var(--type-label);

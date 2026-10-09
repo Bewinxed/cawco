@@ -115,7 +115,7 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
     /// draws under it; the track's flare of room puts the first tab a flare
     /// further in, and a chosen first tab's foot spreads into that room whole.
     private var barLead: Double { Size.cBarPhoneEdge + Size.cBarToggleGlyph }
-    private var barTrail: Double { Size.cBarPhoneGap + NeedsCawButton.side + Size.cBarPhoneEdge }
+    private var barTrail: Double { Size.cBarPhoneGap + NeedsCawButton.standingSide + Size.cBarPhoneEdge }
 
     /// `padding-block: 4px 0` over the 32pt tabs, in a group; hosted, the bar sizes it.
     private lazy var ownHeight = heightAnchor.constraint(equalToConstant: Self.item + 4)

@@ -636,15 +636,11 @@
     --c-bar-group-pad: 4px;
     /* An item in the top bar's icon group: the group's height, the bar's control height, less its inset on both sides. */
     --c-bar-item: calc(var(--c-btn-h) - 2 * var(--c-bar-group-pad));
-    /* A symbol in the top bar's icon group: the machines glyph and Caw's head. */
+    /* A symbol in the top bar's glass group: the machines glyph and Caw's head. */
     --c-bar-symbol: 20px;
-    /* A count chip in the top bar's glass (the machines down or in trouble): a circle for one digit, a short capsule for more. */
-    --c-bar-chip: 14px;
-    /* The ring round a count chip, in the glass's surface, that parts it from what it sits on. */
-    --c-bar-chip-ring: 1.5px;
     /* The stroke of the arcs on Caw's rim in the top bar, one for each thing waiting on the operator. */
     --c-caw-ring: 2px;
-    /* The top bar's Jump field: wide enough to read as a field, not a button. */
+    /* Jump, the first item of the top bar's glass group: wide enough to read as a place to type, not a button. */
     --c-bar-search-w: 180px;
     /* A page head under the top bar. */
     --c-page-head-h: 96px;

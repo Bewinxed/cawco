@@ -494,15 +494,11 @@ public enum Size {
     public static let cBarGroupPad: Double = 4
     /// An item in the top bar's icon group: the group's height, the bar's control height, less its inset on both sides.
     public static let cBarItem: Double = 28
-    /// A symbol in the top bar's icon group: the machines glyph and Caw's head.
+    /// A symbol in the top bar's glass group: the machines glyph and Caw's head.
     public static let cBarSymbol: Double = 20
-    /// A count chip in the top bar's glass (the machines down or in trouble): a circle for one digit, a short capsule for more.
-    public static let cBarChip: Double = 14
-    /// The ring round a count chip, in the glass's surface, that parts it from what it sits on.
-    public static let cBarChipRing: Double = 1.5
     /// The stroke of the arcs on Caw's rim in the top bar, one for each thing waiting on the operator.
     public static let cCawRing: Double = 2
-    /// The top bar's Jump field: wide enough to read as a field, not a button.
+    /// Jump, the first item of the top bar's glass group: wide enough to read as a place to type, not a button.
     public static let cBarSearchW: Double = 180
     /// A page head under the top bar.
     public static let cPageHeadH: Double = 96

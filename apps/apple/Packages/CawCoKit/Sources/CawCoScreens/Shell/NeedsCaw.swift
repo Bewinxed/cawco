@@ -9,8 +9,8 @@ import UIKit
 // MARK: Head
 
 /// His compacted head (assets/mascot/README.md, `compacted`: a head that
-/// fills its box, built for 18 pt) on a glass capsule (`GlassCapsule`), or
-/// on the bar's glass group where he shares one. What waits is arcs on his
+/// fills its box, built for 18 pt) on his own glass on a phone (`standing`),
+/// or on the bar's glass group where he shares one. What waits is arcs on his
 /// circle's rim, one for each; past nine a second lap refills them on top in
 /// the fail glyph's ink, and past two laps the ring closes whole in it; no
 /// digit is drawn on him. His head is `CawBeat`: when something new arrives
@@ -20,12 +20,21 @@ import UIKit
 final class NeedsCawButton: UIControl {
     /// His head's side, pt.
     static let head = 22.0
-    /// The capsule's side on a phone; in the wide bar's group the group's height rules.
+    /// His side in the wide bar's group: the group's height.
     static let side = 36.0
+    /// His own glass's side on a phone: an item's box (`cBarItem`), centred
+    /// on the tabs' centre line, which leaves the bar's inset between its
+    /// foot and the transcript.
+    static let standingSide = Size.cBarItem
 
     var onTap: () -> Void = {}
     var onPan: (UIPanGestureRecognizer) -> Void = { _ in }
 
+    /// On a phone his glass is his own, round at its leading corners and
+    /// square at its trailing two (owner: "it's top right doesn't need to be
+    /// rounded"), and the arcs run along that outline instead of his circle.
+    let standing: Bool
+    private var glassSide: Double { standing ? Self.standingSide : Self.side }
     private let capsule: GlassCapsule?
     private let face = CawBeat(side: NeedsCawButton.head)
     /// What waits, on his circle's rim (NeedsCaw.svelte, The count): an arc
@@ -44,11 +53,13 @@ final class NeedsCawButton: UIControl {
     private let wholeRing = CAShapeLayer()
     private(set) var count = 0
 
-    init(ownGlass: Bool) {
-        capsule = ownGlass ? GlassCapsule() : nil
+    init(standing: Bool) {
+        self.standing = standing
+        capsule = standing ? GlassCapsule() : nil
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         if let capsule {
+            capsule.squaredTrailing = true
             capsule.isUserInteractionEnabled = false
             addSubview(capsule)
             NSLayoutConstraint.activate([
@@ -71,8 +82,8 @@ final class NeedsCawButton: UIControl {
             button.inkRing()
         }
         NSLayoutConstraint.activate([
-            widthAnchor.constraint(equalToConstant: Self.side),
-            heightAnchor.constraint(equalToConstant: Self.side),
+            widthAnchor.constraint(equalToConstant: glassSide),
+            heightAnchor.constraint(equalToConstant: glassSide),
             // His head's optical centre at the centre, not his box (`CawMark.headCentre`).
             face.centerXAnchor.constraint(equalTo: centerXAnchor, constant: (0.5 - CawMark.headCentre.x) * Self.head),
             face.centerYAnchor.constraint(equalTo: centerYAnchor, constant: (0.5 - CawMark.headCentre.y) * Self.head),
@@ -96,21 +107,15 @@ final class NeedsCawButton: UIControl {
         fatalError("NeedsCawButton is built in code")
     }
 
+    /// A finger's 44pt round his glass, whatever its drawn size (DESIGN.md, The 44 Touch Rule).
+    override func point(inside point: CGPoint, with _: UIEvent?) -> Bool {
+        bounds.insetBy(dx: min(0, (bounds.width - 44) / 2), dy: min(0, (bounds.height - 44) / 2)).contains(point)
+    }
+
     @objc private func tapped() { onTap() }
     @objc private func panned(_ pan: UIPanGestureRecognizer) { onPan(pan) }
     @objc private func hovered(_ hover: UIHoverGestureRecognizer) {
         face.hover(hover.state == .began || hover.state == .changed)
-    }
-
-    /// On the phone his glass stands on the bar's floor, round but for its
-    /// bottom-right corner (NeedsCaw.svelte, variant B), and the arcs run
-    /// along that outline instead of his circle.
-    var standing = false {
-        didSet {
-            guard standing != oldValue else { return }
-            capsule?.squaredCorner = standing
-            setNeedsLayout()
-        }
     }
 
     /// The arcs ON his glass's rim, a dial's ticks on its edge (owner: "lines
@@ -120,7 +125,7 @@ final class NeedsCawButton: UIControl {
     override func layoutSubviews() {
         super.layoutSubviews()
         let centre = CGPoint(x: bounds.midX, y: bounds.midY)
-        let rim = CGFloat(Self.side) / 2 - Size.cCawRing / 2
+        let rim = CGFloat(glassSide) / 2 - Size.cCawRing / 2
         if standing {
             layoutOutline(centre: centre, rim: rim)
             return
@@ -139,23 +144,19 @@ final class NeedsCawButton: UIControl {
         wholeRing.path = UIBezierPath(arcCenter: centre, radius: rim, startAngle: top, endAngle: top + 2 * .pi, clockwise: true).cgPath
     }
 
-    /// The standing glass's arcs: the outline drawn the circle's rim's inset
-    /// in, clockwise from 12 o'clock round the top-right quarter, down the
-    /// square corner's right edge, along its bottom edge, then round the
-    /// bottom-left and top-left quarters. Each arc is `arc`/360 of its
-    /// length and `arcGap`/360 from the next, caps and all.
+    /// The standing glass's arcs (NeedsCaw.svelte `outlinePath`): the outline
+    /// drawn half the stroke in, clockwise from 12 o'clock along the top
+    /// edge, down the trailing edge, back along the bottom edge, then round
+    /// the leading half circle. Each arc is `arc`/360 of its length and
+    /// `arcGap`/360 from the next, caps and all.
     private func layoutOutline(centre: CGPoint, rim: CGFloat) {
-        let quarter = CGFloat.pi * rim / 2
-        let length = 3 * quarter + 2 * rim
-        let corner = CGPoint(x: centre.x + rim, y: centre.y + rim)
+        let length = (4 + CGFloat.pi) * rim
         func point(_ s: CGFloat) -> CGPoint {
-            func onArc(_ angle: CGFloat) -> CGPoint {
-                CGPoint(x: centre.x + rim * sin(angle), y: centre.y - rim * cos(angle))
-            }
-            if s < quarter { return onArc(s / rim) }
-            if s < quarter + rim { return CGPoint(x: corner.x, y: centre.y + (s - quarter)) }
-            if s < quarter + 2 * rim { return CGPoint(x: corner.x - (s - quarter - rim), y: corner.y) }
-            return onArc(.pi + (s - quarter - 2 * rim) / rim)
+            if s < rim { return CGPoint(x: centre.x + s, y: centre.y - rim) }
+            if s < 3 * rim { return CGPoint(x: centre.x + rim, y: centre.y - rim + (s - rim)) }
+            if s < 4 * rim { return CGPoint(x: centre.x + rim - (s - 3 * rim), y: centre.y + rim) }
+            let angle = CGFloat.pi + (s - 4 * rim) / rim
+            return CGPoint(x: centre.x + rim * sin(angle), y: centre.y - rim * cos(angle))
         }
         let cap = Size.cCawRing / 2
         for (k, (ring, lap)) in zip(arcLayers, lapLayers).enumerated() {
@@ -174,9 +175,9 @@ final class NeedsCawButton: UIControl {
         }
         let whole = UIBezierPath()
         whole.move(to: CGPoint(x: centre.x, y: centre.y - rim))
-        whole.addArc(withCenter: centre, radius: rim, startAngle: -.pi / 2, endAngle: 0, clockwise: true)
-        whole.addLine(to: corner)
-        whole.addLine(to: CGPoint(x: centre.x, y: corner.y))
+        whole.addLine(to: CGPoint(x: centre.x + rim, y: centre.y - rim))
+        whole.addLine(to: CGPoint(x: centre.x + rim, y: centre.y + rim))
+        whole.addLine(to: CGPoint(x: centre.x, y: centre.y + rim))
         whole.addArc(withCenter: centre, radius: rim, startAngle: .pi / 2, endAngle: -.pi / 2, clockwise: true)
         wholeRing.path = whole.cgPath
     }
@@ -245,7 +246,7 @@ final class NeedsCawButton: UIControl {
 
 extension NeedsCawButton: UIPointerInteractionDelegate {
     func pointerInteraction(_: UIPointerInteraction, styleFor _: UIPointerRegion) -> UIPointerStyle? {
-        UIPointerStyle(shape: .roundedRect(bounds, radius: bounds.height / 2))
+        UIPointerStyle(shape: standing ? .path(UIBezierPath(roundedRect: bounds, byRoundingCorners: [.topLeft, .bottomLeft], cornerRadii: CGSize(width: bounds.height / 2, height: bounds.height / 2))) : .roundedRect(bounds, radius: bounds.height / 2))
     }
 }
 

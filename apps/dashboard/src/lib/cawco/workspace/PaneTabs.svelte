@@ -1406,15 +1406,19 @@
      strip starts where the glyph ends, so a scrolled tab never draws under
      it; the track's own flare of room puts the first tab a flare further
      in, and a chosen first tab's foot spreads into that room whole. Caw's
-     36px glass stands c-bar-phone-edge from the other edge, and the strip
-     stops c-bar-phone-gap short of it, so the tabs scroll between them and
-     never under. */
+     glass (`c-bar-item` across) stands c-bar-phone-edge from the other
+     edge, and the strip stops c-bar-phone-gap short of it, so the tabs
+     scroll between them and never under. */
   @media (max-width: 899px) {
     :global(.session-tabs:not(.hosted)) {
       min-block-size: var(--c-top-bar-h);
       padding-block-start: 0;
       padding-inline: calc(var(--c-bar-phone-edge) + var(--c-bar-toggle-glyph))
-        calc(var(--c-bar-phone-gap) + var(--c-btn-h) + var(--c-bar-phone-edge));
+        calc(
+          var(--c-bar-phone-gap) +
+          var(--c-bar-item) +
+          var(--c-bar-phone-edge)
+        );
     }
   }
 
