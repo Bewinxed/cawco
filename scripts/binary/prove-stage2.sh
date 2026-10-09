@@ -1175,5 +1175,95 @@ agent_cannot_start_whole_recovery() {
 export -f agent_cannot_start_whole_recovery
 check "a helper killed after the swap of a build whose agent cannot start is put back whole, though its hub runs" agent_cannot_start_whole_recovery 900 "Install now applies the newer build"
 
+# ---------------------------------------------------------------- the keeper's children cgroup
+# The keeper's unit delegates the pids controller (Delegate=pids, DelegateSubgroup=keeper): systemd starts the
+# keeper in …/cawco-sessiond.service/keeper, and the keeper puts every child in …/children, whose pids.max is the
+# tightest task limit above it less the 64 tasks it keeps for itself (packages/sessiond/src/cgroup.ts).
+#
+# The limit is a known one, set before the keeper starts: TasksMax on the keeper's own unit, in an administrator's
+# drop-in (/etc/systemd/user/cawco-sessiond.service.d), not on the user's whole tree (user-1000.slice or
+# user@1000.service). The children's cap is derived from the tightest limit above them, and a limit on the
+# keeper's unit binds only the keeper and its children; one on the user's tree is shared with the hub, the agent
+# and the dashboard, and a forker allowed that limit less 64 would take the threads they need (Bun aborts when it
+# cannot start one), leaving the machine broken for the checks after. /etc is also out of reach of the proof's
+# own clean-ups, which remove ~/.config/systemd/user/cawco-sessiond.service.d. This check runs last, so the
+# limit changes nothing for the checks before it; the keeper is restarted after the limit is set, holding nothing.
+export KEEPER_TASKS=200
+export PLACED_RE='^\[sessiond\] children run in (/sys/fs/cgroup/.+/cawco-sessiond\.service/children) under pids\.max ([0-9]+) \(([0-9]+), less 64 kept for the keeper\)$'
+# The keeper's last word on where its children run, since a moment (unix seconds): one of the lines cgroup.ts says.
+keeper_said() { as_user "$1" journalctl --user --no-pager -o cat -u cawco-sessiond.service --since "@$2" | grep '^\[sessiond\] ' | grep -v '^\[sessiond\] listening on \|^\[sessiond\] SIGTERM' | tail -n 1; }
+# Asks the keeper to start a child (container, procId, command, JSON args) and prints its ack for it.
+keeper_spawn() {
+  as_user "$1" sh -c 'printf "%s\n" "$1" | socat -t3 - UNIX-CONNECT:/run/user/1000/cawco/sessiond.sock' sh \
+    "{\"type\":\"spawn\",\"commandId\":\"$2-$(date +%s%N)\",\"procId\":\"$2\",\"spec\":{\"command\":\"$3\",\"args\":$4}}" | grep '"type":"ack"'
+}
+# A process's cgroup, as /proc says it, under the container's /sys/fs/cgroup.
+cgroup_of() { as_user "$1" sed -n 's/^0:://p' "/proc/$2/cgroup"; }
+# The highest pids.current a cgroup shows over about ten seconds, read with the shell's own `read` so the
+# reading itself forks almost nothing.
+highest_pids() {
+  as_user "$1" sh -c 'top=0; n=0; while [ $n -lt 200 ]; do i=0; while [ $i -lt 50 ]; do read v < "$1/pids.current"; [ "$v" -gt "$top" ] && top=$v; i=$((i + 1)); done; sleep 0.05; n=$((n + 1)); done; echo $top' sh "$2"
+}
+keeper_children_capped_on() {
+  local c=$1 since said group max limit keeper pid forker ack top events
+  echo "======== $c"
+  $P exec "$c" sh -c "mkdir -p /etc/systemd/user/cawco-sessiond.service.d && printf '[Service]\nTasksMax=%s\n' $KEEPER_TASKS > /etc/systemd/user/cawco-sessiond.service.d/proof-tasks.conf"
+  as_user "$c" systemctl --user daemon-reload
+  end_all_sessions "$c"
+  since=$(as_user "$c" date +%s)
+  as_user "$c" systemctl --user restart cawco-sessiond.service
+  wait_until 60 '[[ -n "$(keeper_said "$c" "$since")" ]] && as_user "$c" test -S /run/user/1000/cawco/sessiond.sock'
+  # 1. The keeper says its children run in its delegated cgroup, under the limit set above less 64; any other
+  # line (not delegated, could not be asked, no task limit, could not be set up) is the failure, printed.
+  said=$(keeper_said "$c" "$since")
+  echo "the keeper said: $said"
+  [[ $said =~ $PLACED_RE ]] || { echo "FAIL: the keeper did not place its children in a capped cgroup: $said"; return 1; }
+  group=${BASH_REMATCH[1]} max=${BASH_REMATCH[2]} limit=${BASH_REMATCH[3]}
+  [[ $limit == "$KEEPER_TASKS" && $max == $((KEEPER_TASKS - 64)) ]] || { echo "FAIL: the cap is $max of $limit, not $((KEEPER_TASKS - 64)) of $KEEPER_TASKS"; return 1; }
+  [[ "$(as_user "$c" cat "$group/pids.max")" == "$max" ]]
+  # 2. A child it starts is in children; the keeper itself is in keeper.
+  keeper=$(keeper_pid "$c")
+  echo "keeper $keeper is in $(cgroup_of "$c" "$keeper")"
+  [[ "$(cgroup_of "$c" "$keeper")" == */cawco-sessiond.service/keeper ]]
+  ack=$(keeper_spawn "$c" cg-child sleep '["3000"]')
+  echo "spawn cg-child: $ack"
+  [[ $ack == *'"stage":"applied"'* ]]
+  pid=$(child_pids "$c" cg-child)
+  echo "child $pid is in $(cgroup_of "$c" "$pid")"
+  [[ "$(cgroup_of "$c" "$pid")" == */cawco-sessiond.service/children && "/sys/fs/cgroup$(cgroup_of "$c" "$pid")" == "$group" ]]
+  # 3. A child that forks without end stops at the cap: children never holds more than pids.max, and the kernel
+  # refused its forks there (pids.events counts each refusal).
+  ack=$(keeper_spawn "$c" cg-forker /bin/sh '["-c","while :; do sleep 600 & done"]')
+  echo "spawn cg-forker: $ack"
+  [[ $ack == *'"stage":"applied"'* ]]
+  forker=$(child_pids "$c" cg-forker)
+  top=$(highest_pids "$c" "$group")
+  events=$(as_user "$c" cat "$group/pids.events")
+  echo "children's highest pids.current over ten seconds: $top, pids.max $max; pids.events: $events"
+  (( top <= max ))
+  (( ${events#max } > 0 ))
+  # The keeper still answers, is the same process, and refuses a further child in a sentence.
+  keeper_list "$c" | json 'd => `the keeper answers list: ${d.procs.filter(p => p.alive).length} live children`'
+  [[ "$(keeper_pid "$c")" == "$keeper" ]]
+  ack=$(keeper_spawn "$c" cg-refused sleep '["3000"]')
+  echo "spawn cg-refused: $ack"
+  [[ $ack == *'"stage":"failed"'* && $ack == *'"reason":"process-limit: '* ]]
+  # Once the forker and all it started are gone, a child starts again.
+  as_user "$c" kill -KILL -- "-$forker"
+  wait_until 60 '(( $(as_user "$c" cat "$group/pids.current") <= 2 ))'
+  ack=$(keeper_spawn "$c" cg-after sleep '["3000"]')
+  echo "spawn cg-after: $ack"
+  [[ $ack == *'"stage":"applied"'* ]]
+  [[ "$(keeper_pid "$c")" == "$keeper" ]]
+  end_all_sessions "$c"
+}
+keeper_children_capped() {
+  need_hub
+  keeper_children_capped_on "$hubc"
+  keeper_children_capped_on "$joinerc"
+}
+export -f keeper_said keeper_spawn cgroup_of highest_pids keeper_children_capped_on keeper_children_capped
+check "the keeper's children run in its delegated pids cgroup, capped below the keeper's reserve" keeper_children_capped 600 "a second container joins the hub"
+
 echo "Evidence: $out"
 exit $status
