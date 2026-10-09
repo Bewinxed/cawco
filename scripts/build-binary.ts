@@ -358,17 +358,6 @@ export async function buildBinary(options: {
                 loader: "ts",
               })
             );
-            build.onLoad(
-              { filter: /packages\/agent\/src\/accounts\.ts$/ },
-              async ({ path }) => ({
-                contents: (await Bun.file(path).text()).replace(
-                  /export const machineClaudeAuth = [^;]*;/,
-                  'export const machineClaudeAuth = async (): Promise<AuthState> => "unauthenticated";'
-                ),
-                loader: "ts",
-                resolveDir: dirname(path),
-              })
-            );
           }
         },
       },

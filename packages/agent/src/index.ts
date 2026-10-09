@@ -1,5 +1,5 @@
 // biome-ignore lint/performance/noBarrelFile: this is the package's public entrypoint, re-exported by consumers across the monorepo
-export { machineClaudeAuth } from "./accounts";
+export { claudeAuthNote, machineClaudeAuth } from "./accounts";
 export { buildInfo } from "./build";
 export { type CliConfig, CONFIG_PATH, readConfig, writeConfig } from "./config";
 export {

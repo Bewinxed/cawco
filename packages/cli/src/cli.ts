@@ -355,36 +355,21 @@ const status = async (args: Args): Promise<number> => {
 };
 
 /**
- * What a machine that cannot reach its credentials should be told, and how it
- * differs by why. The macOS case is the one worth spelling out: the credentials
- * are there and correct, but this process cannot open the keychain they are in.
- */
-const authNote = (state: Exclude<AuthState, "authenticated">): string =>
-  state === "unreadable-credentials"
-    ? `cawco: a Claude account is signed in on this machine, but this process cannot read its login.
-It lives in your login keychain, and the keychain only opens for a process
-inside your desktop session — a daemon started over SSH is not one. Running the
-daemon as a service — \`cawco service install\` — is enough on its own.`
-    : "cawco: no Claude account is signed in on this machine, so Claude sessions can't start here.";
-
-/**
- * Asked before registering, because a machine that cannot start a session should
- * say so rather than sit in the fleet looking ready. It prints the fix and
+ * Asked before registering, because a machine that cannot start a Claude
+ * session should say so rather than sit in the fleet looking ready. It reads
+ * only the CawCo account dirs here (`~/.cawco/accounts/<id>/claude`), says
+ * nothing while one is signed in, and otherwise prints the one sentence and
  * carries on: the fix is signing an account in from the dashboard, once this
- * daemon is up.
+ * daemon is up. The daemon is handed the answer and does not say it again.
  */
 const preflight = async (): Promise<AuthState> => {
   // Loaded here rather than at the top so `status` never pays for the agent SDK.
-  const { machineClaudeAuth } = await import("@cawco/agent");
+  const { claudeAuthNote, machineClaudeAuth } = await import("@cawco/agent");
   const state = await machineClaudeAuth();
-  if (state === "authenticated") {
-    return state;
+  const said = claudeAuthNote(state);
+  if (said) {
+    console.error(`cawco: ${said}`);
   }
-
-  console.error(authNote(state));
-  console.error(`
-Add one in Configure → Accounts and sign it in there. Starting anyway; the
-fleet will show this machine as needing sign-in.`);
   return state;
 };
 

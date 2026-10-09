@@ -34,7 +34,7 @@ import { sessiondEndpoint } from "@cawco/core/sessiond";
 import { fetchOpenCodeGoLimits } from "@cawco/core/usage/opencode-go";
 import { clientLine } from "@cawco/core/wire";
 import { Data, Duration, Effect, Fiber, Schedule } from "effect";
-import { accountReports } from "./accounts";
+import { accountReports, claudeAuthNote } from "./accounts";
 import {
   BinaryUpdater,
   latestBinaryUpdate,
@@ -74,7 +74,7 @@ const DEFAULT_HUB_URL = `ws://localhost:${CAWCO_HUB_PORT}/ws`;
 const HEARTBEAT_INTERVAL = Duration.seconds(15);
 const USAGE_INTERVAL = Duration.seconds(60);
 const USAGE_FULL_REBUILD_MS = 30 * 60 * 1000;
-/** How often every Claude Code config dir's `auth status` is read again. */
+/** How often every CawCo account dir's `auth status` is read again. */
 const CLAUDE_LOGIN_CHECK_INTERVAL_MS = 60_000;
 
 /** How the hub identifies this machine in its registry. */
@@ -1300,10 +1300,11 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
           ).then((r) => r.auth)
         )),
     };
-    if (identity.auth !== "authenticated") {
-      yield* Effect.logWarning(
-        `Claude Code credentials are ${identity.auth} on this machine`
-      );
+    // `cawco up` read the account dirs and said what it found before this;
+    // a daemon started any other way says it here, in the same words.
+    const note = auth ? undefined : claudeAuthNote(identity.auth);
+    if (note) {
+      yield* Effect.logWarning(note);
     }
 
     // Outlives any one connection: a hub restart must not kill running sessions.

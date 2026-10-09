@@ -200,6 +200,22 @@ export const claudeAuth = async (
 export const machineClaudeAuth = async (): Promise<AuthState> =>
   claudeAuth(await accountReports());
 
+/**
+ * What a machine's start says about its Claude accounts, in the one place
+ * both `cawco up` and the daemon read it from: nothing while a CawCo account
+ * is signed in here; with none, the sentence pointing at Configure →
+ * Accounts; on a Mac whose keychain refuses this process an account's login,
+ * that.
+ */
+export const claudeAuthNote = (state: AuthState): string | undefined => {
+  if (state === "authenticated") {
+    return;
+  }
+  return state === "unreadable-credentials"
+    ? "A Claude account is signed in on this machine, but this process can't read its login: it is in the login keychain, which opens only inside the desktop session. Run the daemon as a service (`cawco service install`)."
+    : "No Claude account is signed in on this machine. Add one in Configure → Accounts and sign it in there.";
+};
+
 /** How long a probe may take to be answered at initialize. */
 const PROBE_TIMEOUT_MS = 60_000;
 
