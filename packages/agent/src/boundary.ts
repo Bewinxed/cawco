@@ -32,6 +32,7 @@
  * token on the host side and hands it in as `GH_TOKEN`: pushes and `gh` keep
  * working inside.
  */
+import { createHash } from "node:crypto";
 import { accessSync, constants } from "node:fs";
 import {
   access,
@@ -72,11 +73,14 @@ export interface Boundary {
 
 /** What `boundary.json` keeps: the boundary, and what proves it is still the one this machine started. */
 interface Held extends Boundary {
+  /**
+   * macOS: the form the runner was started in ({@link darwinForm}). A runner
+   * of another form, or of none, is replaced once it is idle ({@link ensure}).
+   */
+  readonly form?: string;
   /** Linux: the anchor's user namespace, as `/proc/<pid>/ns/user` names it. macOS: `runner`. */
   readonly identity: string;
   readonly path: string;
-  /** macOS runners from before session credentials must be replaced while shell-idle. */
-  readonly secretsMasked?: boolean;
 }
 
 /** Where a workspace's boundary keeps its executor and state; read-only inside the boundary. */
@@ -379,7 +383,12 @@ const writeWhole = async (
   await rename(temporary, path);
 };
 
-/** Writes the workspace's hook for `held`, and the record of it. */
+/**
+ * Writes the workspace's hook for `held`, and the record of it. On macOS also
+ * its shims and its executor, in this build's form, for the runner `held`
+ * names: an executor only hands commands to the runner, so it is current from
+ * the next command on, whatever form the runner is.
+ */
 const armHook = async (id: string, held: Omit<Held, "hook">): Promise<Held> => {
   const hook = join(stateDir(id), "hook");
   const runner = await hookRunner(id);
@@ -390,6 +399,11 @@ const armHook = async (id: string, held: Omit<Held, "hook">): Promise<Held> => {
   );
   if (process.platform === "darwin") {
     await writeShims(id, runner);
+    await writeWhole(
+      held.exec,
+      darwinExec(id, held.pid, fifoOf(id), held.scratch, shimsOf(id)),
+      0o755
+    );
   }
   const armed: Held = { ...held, hook };
   await writeWhole(
@@ -404,7 +418,8 @@ const armHook = async (id: string, held: Omit<Held, "hook">): Promise<Held> => {
  * Writes every held workspace's hook and its script again, in this build's
  * form. The agent does this as it starts, before it adopts or launches a
  * session: a running CLI reads its workspace's hook on every shell call, so
- * one an earlier build wrote must not outlive that build's runtime.
+ * one an earlier build wrote must not outlive that build's runtime. A macOS
+ * runner of an older form is replaced once it is idle ({@link replaceWhenIdle}).
  */
 export const rearmHooks = async (): Promise<void> => {
   const ids = await readdir(workspacesDir()).catch(
@@ -423,6 +438,14 @@ export const rearmHooks = async (): Promise<void> => {
       if (held) {
         await armHook(id, held);
         armed += 1;
+        if (process.platform === "darwin") {
+          // A gate an agent left as it died names no process this one waits for.
+          await rm(gateOf(id), { force: true });
+          const ref = { id, path: held.path };
+          if (held.form !== (await darwinForm(ref)).form) {
+            replaceWhenIdle(ref);
+          }
+        }
       }
     } catch (error) {
       console.warn(
@@ -662,31 +685,125 @@ const ensure = async (ref: WorkspaceRef): Promise<Boundary> => {
   }
   const client = await sessiond();
   const held = await readHeld(ref.id);
-  if (held && (await running(client, ref.id, held))) {
-    if (process.platform !== "darwin" || held.secretsMasked) {
-      // Written again each time: one an earlier agent started may have no
-      // hook yet, or one that reaches cawco another way.
-      return armHook(ref.id, held);
-    }
-    const listing = await Bun.$`ps -axwwE -o pid=,command=`.quiet();
-    const active = listing
-      .text()
-      .split("\n")
-      .some(
-        (line) =>
-          line.includes(`CAWCO_WORKSPACE=${ref.id}`) &&
-          Number.parseInt(line.trim(), 10) !== held.pid
-      );
-    if (active) {
-      throw refusal(
-        ref.id,
-        "secret masking waits for every old shell command and background process to finish"
-      );
-    }
-    // Only the idle runner remains; retaining the harness does not retain a shell with old read access.
-    await client.signal(procIdFor("boundary", ref.id), "SIGKILL");
+  if (!(held && (await running(client, ref.id, held)))) {
+    return start(client, ref);
   }
-  return start(client, ref);
+  // Written again each time: one an earlier agent started may have no hook
+  // yet, or one that reaches cawco another way.
+  const armed = await armHook(ref.id, held);
+  if (
+    process.platform !== "darwin" ||
+    held.form === (await darwinForm(ref)).form
+  ) {
+    forgetStale(ref.id);
+    return armed;
+  }
+  const replaced = await replaceIfIdle(client, ref, held);
+  if (replaced) {
+    forgetStale(ref.id);
+    return replaced;
+  }
+  replaceWhenIdle(ref);
+  return armed;
+};
+
+/**
+ * Where the agent marks that it is replacing a macOS workspace's runner: the
+ * agent's pid, in the state dir, which nothing inside the boundary writes.
+ * The executor waits while it names a live process, then runs through the
+ * new runner ({@link darwinExec}).
+ */
+const gateOf = (id: string): string => join(stateDir(id), "replacing");
+
+/**
+ * Whether anything bounded is running in a macOS workspace: a command or a
+ * process it left, each carrying the runner's marker, or an executor on its
+ * way in (its own path is on its command line), of any form.
+ */
+const busy = async (id: string, runner: number): Promise<boolean> => {
+  const exec = join(stateDir(id), "exec");
+  const listing = await Bun.$`ps -axwwE -o pid=,command=`.quiet();
+  return listing
+    .text()
+    .split("\n")
+    .some((line) => {
+      const pid = Number.parseInt(line.trim(), 10);
+      return (
+        pid !== runner &&
+        pid !== process.pid &&
+        (line.includes(`CAWCO_WORKSPACE=${id}`) || line.includes(exec))
+      );
+    });
+};
+
+/**
+ * Replaces a macOS workspace's runner with one of this build's form, when
+ * nothing bounded is running in it; nothing when something is. The gate goes
+ * up before the look, and an executor checks the gate after it is already a
+ * process: so either the look sees the executor, or the executor sees the
+ * gate and waits for the new runner. No command is cut off.
+ */
+const replaceIfIdle = async (
+  client: SessiondClient,
+  ref: WorkspaceRef,
+  held: Held
+): Promise<Boundary | undefined> => {
+  const gate = gateOf(ref.id);
+  await writeFile(gate, String(process.pid));
+  try {
+    if (await busy(ref.id, held.pid)) {
+      return;
+    }
+    await client.signal(procIdFor("boundary", ref.id), "SIGKILL");
+    const replaced = await start(client, ref);
+    console.info(
+      `[workspace] ${ref.id}: its boundary runner ${held.pid} (form ${held.form ?? "none"}) was idle and is replaced by ${replaced.pid}`
+    );
+    return replaced;
+  } finally {
+    await rm(gate, { force: true });
+  }
+};
+
+/** How often a macOS boundary of an older form is looked at until it is idle. */
+const STALE_LOOK_MS = 5000;
+const stale = new Map<string, ReturnType<typeof setInterval>>();
+
+/**
+ * Looks at a running macOS boundary of an older form every
+ * {@link STALE_LOOK_MS} and replaces it the first time it is idle
+ * ({@link ensureBoundary}). Stops once it is replaced, current, or no longer
+ * running.
+ */
+const replaceWhenIdle = (ref: WorkspaceRef): void => {
+  if (stale.has(ref.id)) {
+    return;
+  }
+  const look = async (): Promise<void> => {
+    if (starting.has(ref.id)) {
+      return;
+    }
+    const held = await readHeld(ref.id);
+    if (!(held && (await running(await sessiond(), ref.id, held)))) {
+      forgetStale(ref.id);
+      return;
+    }
+    await ensureBoundary(ref);
+  };
+  const timer = setInterval(() => {
+    look().catch((error: unknown) => {
+      console.warn(
+        `[workspace] ${ref.id}: its older boundary could not be replaced yet: ${error instanceof Error ? error.message : String(error)}`
+      );
+    });
+  }, STALE_LOOK_MS);
+  timer.unref();
+  stale.set(ref.id, timer);
+};
+
+const forgetStale = (id: string): void => {
+  clearInterval(stale.get(id));
+  stale.delete(id);
 };
 
 /**
@@ -899,20 +1016,45 @@ const profileOf = async (
   ].join("\n");
 };
 
+/** The macOS runner's FIFO, in the state dir. */
+const fifoOf = (id: string): string => join(stateDir(id), "runner.fifo");
+
+/**
+ * The form a macOS boundary of this workspace takes in this build: its
+ * profile, and a hash of that profile with the runner and executor scripts.
+ * A runner started in another form is replaced ({@link ensure}), so a change
+ * to any of the three reaches every running boundary.
+ */
+const darwinForm = async (
+  ref: WorkspaceRef
+): Promise<{ readonly form: string; readonly profile: string }> => {
+  await makeDirs(ref.id);
+  const scratch = scratchOf(ref.id);
+  const profile = await profileOf(ref.path, scratch, cachesOf());
+  const form = createHash("sha256")
+    .update(profile)
+    .update("\0")
+    .update(RUNNER)
+    .update("\0")
+    .update(darwinExec(ref.id, 0, fifoOf(ref.id), scratch, shimsOf(ref.id)))
+    .digest("hex")
+    .slice(0, 16);
+  return { form, profile };
+};
+
 const darwinSpec = async (
   ref: WorkspaceRef,
-  dir: string,
   scratch: string,
-  caches: string[]
+  profileText: string
 ): Promise<ProcSpec> => {
-  const fifo = join(dir, "runner.fifo");
+  const fifo = fifoOf(ref.id);
   await rm(fifo, { force: true });
   const made = await Bun.$`mkfifo ${fifo}`.quiet().nothrow();
   if (made.exitCode !== 0) {
     throw refusal(ref.id, `mkfifo failed: ${made.stderr.toString().trim()}`);
   }
-  const profile = join(dir, "boundary.sb");
-  await writeFile(profile, await profileOf(ref.path, scratch, caches));
+  const profile = join(stateDir(ref.id), "boundary.sb");
+  await writeFile(profile, profileText);
   return {
     command: "/usr/bin/sandbox-exec",
     args: [
@@ -1012,6 +1154,12 @@ const darwinExec = (
 ): string => `#!/bin/bash
 # CawCo workspace ${id}: runs one shell command inside the workspace's boundary.
 # exec [--cwd-out FILE] COMMAND — FILE gets the directory COMMAND ended in.
+# While the agent replaces the runner, wait, then run through the new one.
+gate=${shellQuote(gateOf(id))}
+if [ -e "$gate" ]; then
+  while [ -e "$gate" ] && kill -0 "$(cat "$gate" 2>/dev/null)" 2>/dev/null; do sleep 0.1; done
+  [ -e "$gate" ] || exec "$0" "$@"
+fi
 fifo=${shellQuote(fifo)}
 if ! [ -p "$fifo" ] || ! kill -0 ${pid} 2>/dev/null; then
   echo ${shellQuote(stoppedLine(id))} >&2
@@ -1037,6 +1185,19 @@ rm -rf "$req"
 exit "$status"
 `;
 
+/** The folders a boundary needs before it starts: its state, scratch and run dirs, and the caches it writes. */
+const makeDirs = async (id: string): Promise<void> => {
+  await mkdir(sessionIdentityDir(), { recursive: true, mode: 0o700 });
+  await Promise.all(
+    [
+      stateDir(id),
+      scratchOf(id),
+      ...(process.platform === "linux" ? [runOf(id)] : []),
+      ...cachesOf(),
+    ].map((path) => mkdir(path, { recursive: true }))
+  );
+};
+
 /** Starts the workspace's boundary under sessiond and writes its executor. */
 const start = async (
   client: SessiondClient,
@@ -1047,21 +1208,17 @@ const start = async (
   const linux = process.platform === "linux";
   const run = runOf(ref.id);
   const caches = cachesOf();
-  await mkdir(sessionIdentityDir(), { recursive: true, mode: 0o700 });
-  await Promise.all(
-    [dir, scratch, ...(linux ? [run] : []), ...caches].map((path) =>
-      mkdir(path, { recursive: true })
-    )
-  );
+  await makeDirs(ref.id);
   const procId = procIdFor("boundary", ref.id);
   // One this machine can no longer vouch for (its record is gone or names
   // another process) is replaced, never joined.
   if (await holding(client, procId)) {
     await client.signal(procId, "SIGKILL");
   }
-  const spec = linux
-    ? await linuxSpec(ref, scratch, run, await copySshIncludes(ref.id), caches)
-    : await darwinSpec(ref, dir, scratch, caches);
+  const darwin = linux ? undefined : await darwinForm(ref);
+  const spec = darwin
+    ? await darwinSpec(ref, scratch, darwin.profile)
+    : await linuxSpec(ref, scratch, run, await copySshIncludes(ref.id), caches);
   await client.spawnProc(procId, spec);
   await ready(client, procId).catch((error: Error) => {
     throw refusal(ref.id, error.message);
@@ -1088,35 +1245,18 @@ const start = async (
         `the anchor under ${proc.pid} is not in a namespace of its own`
       );
     }
-    held = {
-      exec,
-      pid,
-      scratch,
-      identity,
-      path: ref.path,
-      secretsMasked: true,
-    };
+    held = { exec, pid, scratch, identity, path: ref.path };
     await writeWhole(exec, linuxExec(ref.id, pid, identity), 0o755);
   } else {
+    // armHook writes the executor.
     held = {
       exec,
       pid: proc.pid,
       scratch,
       identity: "runner",
       path: ref.path,
-      secretsMasked: true,
+      form: darwin?.form,
     };
-    await writeWhole(
-      exec,
-      darwinExec(
-        ref.id,
-        proc.pid,
-        join(dir, "runner.fifo"),
-        scratch,
-        shimsOf(ref.id)
-      ),
-      0o755
-    );
   }
   return armHook(ref.id, held);
 };
@@ -1149,6 +1289,7 @@ const killMarked = async (id: string): Promise<void> => {
  * workspace's marker. Then its state goes.
  */
 export const closeBoundary = async (ref: WorkspaceRef): Promise<void> => {
+  forgetStale(ref.id);
   const client = await sessiond();
   const held = await readHeld(ref.id);
   if (

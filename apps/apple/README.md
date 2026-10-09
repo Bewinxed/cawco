@@ -80,3 +80,6 @@ Mac: the existing `~/asc.py` and `~/.appstoreconnect/anbar.env` supply API
 access; the existing `anbar-ci.keychain-db` is unlocked using the mode 600
 `~/.appstoreconnect/ci-keychain` file in the same invocation that signs.
 The scripts never create certificates or modify keychain configuration.
+Any device build over SSH, inside a workspace boundary or not, unlocks
+`anbar-ci.keychain-db` first as `scripts/testflight.py` does (`signed()`): over
+SSH the login keychain refuses codesign with `errSecInternalComponent`.
