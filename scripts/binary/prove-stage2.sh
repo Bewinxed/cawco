@@ -248,10 +248,12 @@ start_loop() {
 # side), and the machine's endpoint sessiond.sock is a symlink naming the current one, which every new start goes to.
 # What the current keeper holds, read from the machine's endpoint: the first line it answers a list with.
 keeper_list() { as_user "$1" sh -c 'printf "{\"type\":\"list\"}\n" | socat -t1 - UNIX-CONNECT:/run/user/1000/cawco/sessiond.sock | head -n 1'; }
-# What every keeper holds, current and retiring: one listing per line, each with the endpoint it answered on.
+# What every keeper holds, current and retiring: one listing per line, each with the endpoint it answered on. The
+# machine's endpoint is listed when it is a keeper's own socket (a legacy keeper not yet handed over, as build 1
+# runs); as a symlink it names a keeper listed by its own endpoint.
 keeper_lists() {
-  as_user "$1" sh -c 'for s in /run/user/1000/cawco/sessiond-*.sock /run/user/1000/cawco/legacy-sessiond-*.sock; do
-    [ -S "$s" ] || continue
+  as_user "$1" sh -c 'for s in /run/user/1000/cawco/sessiond.sock /run/user/1000/cawco/sessiond-*.sock /run/user/1000/cawco/legacy-sessiond-*.sock; do
+    [ -S "$s" ] && [ ! -L "$s" ] || continue
     printf "{\"type\":\"list\"}\n" | socat -t1 - UNIX-CONNECT:"$s" 2> /dev/null | head -n 1 | sed "s|^{|{\"endpoint\":\"$(basename "$s")\",|"
   done'
 }
