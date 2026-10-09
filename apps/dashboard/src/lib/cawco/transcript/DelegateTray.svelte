@@ -72,6 +72,25 @@
   const CHIP = 120;
   const GAP = 7;
   const MORE = 59;
+  /**
+   * The fewest characters of its title a chip in the row shows: a title cut
+   * shorter than this reads as noise, so the chip goes into "+N" instead.
+   */
+  const TITLE_FLOOR = 8;
+  let ruler: CanvasRenderingContext2D | null = null;
+  /** The title's floor as drawn: its first TITLE_FLOOR characters and the ellipsis, in its own face. */
+  function titleFloor(title: HTMLElement): number {
+    const text = title.textContent ?? "";
+    const style = getComputedStyle(title);
+    ruler ??= document.createElement("canvas").getContext("2d");
+    if (!ruler) {
+      return 0;
+    }
+    ruler.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+    const shown =
+      text.length > TITLE_FLOOR ? `${text.slice(0, TITLE_FLOOR)}…` : text;
+    return Math.ceil(ruler.measureText(shown).width) + 1;
+  }
 
   type Tone =
     | "starting"
@@ -354,8 +373,8 @@
   let rowWidth = $state(0);
   /**
    * Each chip's floor as drawn, by item: what does not give way in it (its
-   * mark, its note, its state, its padding and gaps) and a title of two
-   * letters' width, never under CHIP. The fit counts these, and each chip is
+   * mark, its note, its state, its padding and gaps) and its title's floor
+   * (`titleFloor`), never under CHIP. The fit counts these, and each chip is
    * held to its own, so the count and the row cannot disagree: a chip whose
    * fixed parts outgrow CHIP no longer spills over the next one.
    */
@@ -366,9 +385,7 @@
       const title = node.querySelector<HTMLElement>(".title");
       const take = () => {
         const fixed = node.scrollWidth - (title?.clientWidth ?? 0);
-        const least = title
-          ? Number.parseFloat(getComputedStyle(title).fontSize) * 2
-          : 0;
+        const least = title ? titleFloor(title) : 0;
         const floor = Math.max(CHIP, Math.ceil(fixed + least));
         if (floors.get(id) !== floor) {
           floors.set(id, floor);

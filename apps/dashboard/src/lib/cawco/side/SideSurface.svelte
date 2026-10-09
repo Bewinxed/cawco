@@ -131,10 +131,11 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  /* What is on show, in the title role, as every sheet's title is. */
   .title {
     color: var(--ink-strong);
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
+    font: var(--type-title);
+    letter-spacing: -0.01em;
   }
   .subtitle {
     color: var(--ink-muted);
