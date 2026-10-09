@@ -726,24 +726,71 @@ export interface ProcessRow {
   state: string;
 }
 
+/** Linux: every process's id, from `/proc`'s numbered entries. */
+const linuxPids = async (): Promise<number[]> =>
+  (await readdir("/proc")).filter((name) => NUMERIC.test(name)).map(Number);
+
+/** One process's place in the process tree, and who it is: as `ps -A -o pid=,ppid=,pgid=,lstart=` lists it. */
+export interface ProcessLineage {
+  pgid: number;
+  pid: number;
+  ppid: number;
+  /** Its start, as `ps -o lstart=` prints it on both systems. */
+  started: string;
+}
+
+/**
+ * Every process's place in the tree and its start, and nothing else: the
+ * read for a caller that walks the tree. On macOS it is the one
+ * `kern.proc.all` sysctl, under a millisecond for 1,400 processes, where
+ * {@link processTable} also asks every process for its task and every thread
+ * for its state, each call synchronous on the caller's loop (70 to 460ms
+ * a read on a Mac at load 550); on Linux each process's `stat` alone.
+ */
+export async function processLineage(): Promise<ProcessLineage[]> {
+  if (process.platform === "linux") {
+    const boot = (await linuxBootSeconds()) ?? 0;
+    const rows = await Promise.all(
+      (await linuxPids()).map(
+        async (pid): Promise<ProcessLineage | undefined> => {
+          const fields = (await linuxStat(pid))?.fields;
+          return fields?.[19]
+            ? {
+                pid,
+                ppid: Number(fields[1]),
+                pgid: Number(fields[2]),
+                started: lstart(linuxStartSeconds(boot, fields[19])),
+              }
+            : undefined;
+        }
+      )
+    );
+    return rows.filter((row): row is ProcessLineage => row !== undefined);
+  }
+  return darwinKinfos().map((info) => ({
+    pid: info.pid,
+    ppid: info.ppid,
+    pgid: info.pgid,
+    started: lstart(info.startSeconds),
+  }));
+}
+
 /**
  * Every process on the machine that this process may read, as `ps -A`
  * lists it: pid, parent, process group, start, state, age and CPU time.
+ * A caller that only walks the tree reads {@link processLineage} instead.
  */
 export async function processTable(): Promise<ProcessRow[]> {
   const now = Date.now() / 1000;
   if (process.platform === "linux") {
     const boot = (await linuxBootSeconds()) ?? 0;
-    const names = (await readdir("/proc")).filter((name) => NUMERIC.test(name));
     const rows = await Promise.all(
-      names.map(async (name): Promise<ProcessRow | undefined> => {
-        const stat = await linuxStat(Number(name));
-        const fields = stat?.fields;
+      (await linuxPids()).map(async (pid): Promise<ProcessRow | undefined> => {
+        const fields = (await linuxStat(pid))?.fields;
         if (!fields?.[19]) {
           return;
         }
         const started = linuxStartSeconds(boot, fields[19]);
-        const pid = Number(name);
         return {
           pid,
           ppid: Number(fields[1]),
@@ -819,11 +866,8 @@ export async function commandLines({
       command: darwinCommand(info, environment),
     }));
   }
-  const pids = (await readdir("/proc"))
-    .filter((name) => NUMERIC.test(name))
-    .map(Number);
   const lines = await Promise.all(
-    pids.map(async (pid) => {
+    (await linuxPids()).map(async (pid) => {
       const command = await commandLine(pid, { environment });
       return command === undefined ? undefined : { pid, command };
     })

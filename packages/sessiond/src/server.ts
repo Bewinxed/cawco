@@ -31,7 +31,7 @@ import { dirname } from "node:path";
 import { type BuildInfo, SessionRing } from "@cawco/core";
 import { LineSplitter } from "@cawco/core/lines";
 import { PacedWriter } from "@cawco/core/paced-write";
-import { processTable as readProcessTable } from "@cawco/core/process-identity";
+import { processLineage } from "@cawco/core/process-identity";
 // The protocol lives behind its own subpath: `sessiond.ts` reaches for `node:os`
 // to derive the endpoint, and the core barrel is imported by the browser bundle.
 import {
@@ -112,9 +112,9 @@ interface Listed {
 
 /**
  * Every process on the machine, read from the kernel (core's process
- * reader: libproc on macOS, `/proc` on Linux), as `ps -A -o
- * pid=,ppid=,pgid=,lstart=` listed it. Neither system has a call that lists
- * a process's descendants, so the whole table is read.
+ * reader: one `kern.proc.all` sysctl on macOS, `/proc` on Linux), as `ps -A
+ * -o pid=,ppid=,pgid=,lstart=` listed it. Neither system has a call that
+ * lists a process's descendants, so the whole table is read.
  *
  * NOTHING HERE WAITS ON ANOTHER PROCESS. This was a synchronous spawn of the
  * process lister, and on a Mac it wedged the keeper: Bun's `spawnSync` waits on a private kqueue
@@ -123,16 +123,32 @@ interface Listed {
  * loop (oven-sh/bun#34069, the fix still open as oven-sh/bun#40078). The
  * keeper of 8 Oct held that second kqueue (lsof fd 8), sat in `kevent64` with
  * its socket open, and sent no `welcome` to anyone for 35 minutes.
+ *
+ * AND NOTHING HERE HOLDS THE LOOP. The read is synchronous on macOS, and the
+ * welcome waits behind it. It reads the tree and the start times alone
+ * (`processLineage`, under a millisecond), never every thread's state: that
+ * read took 70 to 460ms on a Mac at load 550, once per child asked to end, and
+ * twenty stopped at once held the loop 580ms. Asks made in the same turn of
+ * the loop share one reading, which is the same moment for each of them.
  */
-const processTable = async (): Promise<Listed[]> =>
-  (await readProcessTable()).map(({ pid, ppid, pgid, started }) => ({
-    pid,
-    ppid,
-    pgid,
-    // As this daemon always held it: the columns split on runs of spaces and
-    // joined by one (`Thu Oct 1 20:26:18 2026`).
-    started: started.split(SPACES).join(" "),
-  }));
+let reading: Promise<Listed[]> | undefined;
+const processTable = (): Promise<Listed[]> => {
+  reading ??= processLineage()
+    .then((rows) =>
+      rows.map(({ pid, ppid, pgid, started }) => ({
+        pid,
+        ppid,
+        pgid,
+        // As this daemon always held it: the columns split on runs of spaces
+        // and joined by one (`Thu Oct 1 20:26:18 2026`).
+        started: started.split(SPACES).join(" "),
+      }))
+    )
+    .finally(() => {
+      reading = undefined;
+    });
+  return reading;
+};
 const SPACES = /\s+/;
 
 const reasonOf = (error: unknown): string =>
