@@ -75,6 +75,12 @@
     }
     let slide: Animation | undefined;
     const frame = requestAnimationFrame(() => {
+      // A gesture carries this switch (the root's `travel`): its sheets ride
+      // the gesture between the two tabs, and nothing slides.
+      if (tabs.travel) {
+        leap = null;
+        return;
+      }
       const tab = (i: number) =>
         track.querySelector<HTMLElement>(`[data-tab-index="${i}"]`);
       const from = tab(jump.from);
@@ -138,12 +144,21 @@
    * behind its neighbour toward the chosen tab. With none chosen the first
    * is on top. Each tab is its own stack, ranked here on the item the track
    * lays out (a host may wrap the tab), and the focus ring rides above them
-   * all. A tap on an overlap goes to the tab drawn there.
+   * all. A tap on an overlap goes to the tab drawn there. Under a gesture
+   * the tab it is heading to takes the top once it is more than half way
+   * there, as its sheet is by then more chosen than the one it is leaving.
    */
+  const stackAt = $derived.by(() => {
+    const { travel } = tabs;
+    const toward = travel ? tabs.order.indexOf(travel.toward) : -1;
+    return toward >= 0 && travel && travel.fraction > 0.5
+      ? toward
+      : (list.optimisticIndex ?? -1);
+  });
   $effect(() => {
     const track = node;
     const { items } = rects;
-    const chosen = list.optimisticIndex ?? -1;
+    const chosen = stackAt;
     if (!track?.closest('[data-variant="folder"]')) {
       return;
     }
@@ -239,32 +254,63 @@
     items[to].click();
   }
 
-  // Keep the chosen item in view — or, mid-gesture, the segment on its way
-  // to the next one. The rect, not the element: it is re-read as items
-  // resize, so the scroll lands on where the item ends up. The scroll is
-  // read and written in the next frame's callbacks, never in the task that
-  // moved the choice: reading it there lays the page out mid-task, and a
-  // swipe's release paid 30ms for it. The callbacks run before that frame's
-  // layout, so it paints already scrolled.
+  // Keep the chosen item in view. The rect, not the element: it is re-read
+  // as items resize, so the scroll lands on where the item ends up. The
+  // scroll is read and written in the next frame's callbacks, never in the
+  // task that moved the choice: reading it there lays the page out mid-task,
+  // and a swipe's release paid 30ms for it. The callbacks run before that
+  // frame's layout, so it paints already scrolled.
+  //
+  // Mid-gesture the track stands between where it rests for the chosen
+  // item and where it rests for the one the gesture is heading to, by the
+  // fraction travelled, both read from where the track stood as the
+  // gesture began: it moves with the finger and is already at the new
+  // item's resting place when the gesture lands, so landing moves nothing.
+  // A release that hands the choice over mid-gesture swaps the two ends
+  // and the fraction with it, and the track does not move for it either.
   //
   // Every tab's box is read here, not only the chosen one's: a tab beside it
   // settling to its width (a title arriving) moves where a whole leading
   // tab starts, and the scroll is placed again for it.
+  //
+  // One frame is asked for at a time, and it places the track by whatever
+  // was last asked of it. A frame cancelled and asked for again on every
+  // change never came while a gesture's settle ran: the settle moves its
+  // fraction in a frame callback queued ahead of this one, and the change
+  // cancelled this one in the very frame it was due, every frame, so the
+  // track stood still until the settle landed and then jumped.
+  let rideFrom: number | null = null;
+  let place: (() => void) | null = null;
+  let placeFrame: number | null = null;
   $effect(() => {
-    const rect = segmentRect;
+    const rect = selectedRect;
+    const { travel } = tabs;
+    const toward = travel && rects.at(tabs.order.indexOf(travel.toward));
     const boxes = [...rects.rects.values()];
     const { width } = rects.viewport;
     const track = node;
     const room = endRoom;
     if (!(scrollable && track && room && rect && width > 0)) {
+      place = null;
       return;
     }
-    const frame = requestAnimationFrame(() => {
+    place = () => {
       // An instant write, not a smooth one: a smooth scroll is an animation
       // the browser abandons when the track's content changes under it, and
-      // the segment sliding into place is the motion here.
+      // the tabs' own motion is the motion here.
       const at = track.scrollLeft;
-      const to = inView(at, rect, boxes, width);
+      let to: number;
+      if (travel && toward) {
+        rideFrom ??= at;
+        to = lerp(
+          inView(rideFrom, rect, boxes, width),
+          inView(rideFrom, toward, boxes, width),
+          Math.min(1, Math.max(0, travel.fraction))
+        );
+      } else {
+        rideFrom = null;
+        to = inView(at, rect, boxes, width);
+      }
       // The end room is what the track lacks to reach `to`: written before
       // the scroll, which is clamped to the track's width as laid out.
       const max = track.scrollWidth - track.clientWidth - room.offsetWidth;
@@ -273,8 +319,16 @@
         stopGlide();
         track.scrollLeft = to;
       }
+    };
+    placeFrame ??= requestAnimationFrame(() => {
+      placeFrame = null;
+      place?.();
     });
-    return () => cancelAnimationFrame(frame);
+  });
+  $effect(() => () => {
+    if (placeFrame !== null) {
+      cancelAnimationFrame(placeFrame);
+    }
   });
 
   /**

@@ -110,6 +110,11 @@
     stale: boolean;
     /** What the badge says, or '' for a tab with nothing to say. */
     status: string;
+    /**
+     * What the tab says its status is to a screen reader, whatever it is:
+     * the badge's words where it has any, else the status glyph's own label.
+     */
+    statusLabel: string;
     /** The session's status on the rail's scale: the phone tab's rim wears it. */
     tone: StatusTone;
   }
@@ -120,6 +125,12 @@
     "needs-you": "attention",
     ready: "quiet",
   } as const satisfies Record<string, StatusTone>;
+  /** A thread's status in words, as Caw's face for it would be read. */
+  const THREAD_LABEL = {
+    working: "Working",
+    "needs-you": "Needs you",
+    ready: "Ready",
+  } as const;
 
   function resolve(id: string): Tab {
     const row = cawco.instanceIndex.byId.get(id);
@@ -144,6 +155,7 @@
           ? `${ACTIVITY_LABEL.working} — ${tool}`
           : ACTIVITY_LABEL[activity];
     }
+    const state = isThreadTab(id) ? null : sessionStatus(id);
     return {
       id,
       key: `${id}:${arrivals.get(id) ?? 0}`,
@@ -158,9 +170,8 @@
       failed,
       stale,
       status,
-      tone: isThreadTab(id)
-        ? THREAD_TONE[threadFace(id)]
-        : sessionStatus(id).tone,
+      statusLabel: status || (state?.label ?? THREAD_LABEL[threadFace(id)]),
+      tone: state?.tone ?? THREAD_TONE[threadFace(id)],
     };
   }
 
@@ -208,21 +219,42 @@
   /** Where the chosen tab stands, -1 with the board showing. */
   const chosenAt = $derived(tabs.findIndex((tab) => tab.id === leaf.active));
   /**
-   * How far a tab stands from the chosen one, 0 for the chosen tab and at
-   * most 3: on the phone's row each step recedes its fill one more toward
-   * the shelf. With none chosen every tab is one step back.
+   * A swipe carrying the choice (`travel`): the tab it is heading to and how
+   * far, 0 to 1. At rest the choice is all on the chosen tab (`f` 0).
    */
-  const distanceOf = (i: number) =>
-    chosenAt < 0 ? 1 : Math.min(Math.abs(i - chosenAt), 3);
-  /**
-   * Which side of the chosen tab a tab stands: a tab before it has its
-   * trailing end tucked under its neighbour, one after it its leading end.
-   */
-  const sideOf = (i: number) => {
-    if (chosenAt < 0 || i === chosenAt) {
-      return;
+  const scrub = $derived.by(() => {
+    const to = travel ? tabs.findIndex((tab) => tab.id === travel.toward) : -1;
+    if (!travel || chosenAt < 0 || to < 0 || to === chosenAt) {
+      return { to: chosenAt, f: 0 };
     }
-    return i < chosenAt ? "before" : "after";
+    return { to, f: Math.min(1, Math.max(0, travel.fraction)) };
+  });
+  /**
+   * How a tab on the phone's row is drawn, between how it is drawn with the
+   * choice on the chosen tab and with it on the one a swipe is heading to,
+   * by how far the swipe has gone, so every tab moves with the finger and
+   * the landing changes nothing. At rest it is the chosen tab's alone.
+   * - `pick`: how chosen it is, 0 to 1 (its rim's strength, its title's ink).
+   * - `fillFrom`/`fillTo`: its card's recede step either way, mixed by `f`.
+   *   A tab steps back toward the shelf for each tab between it and the
+   *   chosen one, to three; the chosen tab's own card, under its sheet, is
+   *   one step back. With none chosen every tab is one step back.
+   * - `after`: how much its leading end is tucked under its neighbour,
+   *   which it is when it stands after the chosen tab, 0 to 1.
+   */
+  const look = (i: number) => {
+    const { to, f } = scrub;
+    const step = (at: number) =>
+      at < 0 ? 1 : Math.max(1, Math.min(Math.abs(i - at), 3));
+    const pick = (at: number) => (i === at ? 1 : 0);
+    const after = (at: number) => (at >= 0 && i > at ? 1 : 0);
+    return {
+      pick: pick(chosenAt) + (pick(to) - pick(chosenAt)) * f,
+      fillFrom: `var(--tab-recede-${step(chosenAt)})`,
+      fillTo: `var(--tab-recede-${step(to)})`,
+      f,
+      after: after(chosenAt) + (after(to) - after(chosenAt)) * f,
+    };
   };
 
   const otherLeaves = $derived(
@@ -909,6 +941,7 @@
   <TabsList aria-label="Open sessions in this group" scrollable>
     {#each tabs as tab, i (tab.key)}
       {@const chosen = leaf.active === tab.id}
+      {@const drawn = look(i)}
       <!-- The caret marks where a drop would land, drawn on the side the
            pointer is nearest. Graphite, like every structural mark here:
            the one loud colour belongs to a session asking for something. -->
@@ -917,8 +950,6 @@
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
         class="tab"
-        data-d={distanceOf(i)}
-        data-side={sideOf(i)}
         data-tone={tab.tone}
         oncontextmenucapture={anchorMenu}
         onpointerdown={(event) => pullMenu(tab.id, event)}
@@ -927,6 +958,11 @@
           hoverTab(tab.id, event);
         }}
         onpointerleave={leaveDetails}
+        style:--after={drawn.after}
+        style:--f={drawn.f}
+        style:--fill-from={drawn.fillFrom}
+        style:--fill-to={drawn.fillTo}
+        style:--pick={drawn.pick}
         class:drop-after={dropHint.tabIndexIn(leaf.id) === i + 1 &&
           i === tabs.length - 1}
         class:drop-before={dropHint.tabIndexIn(leaf.id) === i}
@@ -944,7 +980,7 @@
             <TabItem
               aria-expanded={detailsOpen && detailId === tab.id}
               aria-haspopup="dialog"
-              aria-label={`${tab.label}${tab.status ? ` — ${tab.status}` : ""}${chosen ? " — open session details" : ""}`}
+              aria-label={`${tab.label}, ${tab.statusLabel}${chosen ? " — open session details" : ""}`}
               data-session-tab={tab.id}
               href={tab.href}
               label={tab.label}
@@ -960,12 +996,18 @@
               value={tab.id}
             >
               {#snippet lead()}
-                {#if isThreadTab(tab.id)}
-                  <!-- A thread's mark is Caw, at what the thread is doing. -->
-                  <CawFace size={18} status={threadFace(tab.id)} />
-                {:else}
-                  <SessionStatus compact sessionId={tab.id} />
-                {/if}
+                <!-- The status glyph, where no rim wears the status: the
+                     phone's row draws none (owner: "why does it still have
+                     the icon if the rim is there"); the tab's label says
+                     the status in words either way. -->
+                <span class="tglyph">
+                  {#if isThreadTab(tab.id)}
+                    <!-- A thread's mark is Caw, at what the thread is doing. -->
+                    <CawFace size={18} status={threadFace(tab.id)} />
+                  {:else}
+                    <SessionStatus compact sessionId={tab.id} />
+                  {/if}
+                </span>
               {/snippet}
               {#snippet trail()}
                 <!-- Every tab keeps the details slot, so choosing one never
@@ -1527,40 +1569,65 @@
 
   /* ── The phone's row: receding tabs and the status rim ─────────────
      The chosen tab is the page it opens; every other tab recedes one step
-     toward the shelf per tab of distance from it, to three (`data-d`). Each
-     tab's rim wears its session's status (`data-tone`, the rail's scale):
-     the tab's own outline, a 1.5px stroke across the top tapering to 0.5px
-     down the sides, gone by 90% of its height, with a soft glow outside at
-     half its strength. A status change cross-fades it. Increase Contrast
-     and Reduce Transparency draw it a solid 1px rim. */
+     toward the shelf per tab of distance from it, to three. Each tab's rim
+     wears its session's status (`data-tone`, the rail's scale): the tab's
+     own outline, a 1.5px stroke across the top and round both shoulders,
+     tapering to 0.5px down the sides, gone by 90% of its height, with a
+     soft glow outside at half its strength. The rim is the status: the row
+     draws no status glyph. A status change cross-fades it. Increase
+     Contrast and Reduce Transparency draw it a solid 1px rim.
+
+     A swipe carries the choice from tab to tab with the finger (`look`):
+     how chosen a tab is (`--pick`) sets its rim's strength and its title's
+     ink, its card mixes between its recede steps either side of the swipe
+     (`--fill-from`, `--fill-to`, by `--f`), and its leading room follows
+     how far its leading end is tucked (`--after`). At rest they are the
+     chosen tab's alone. */
   .rim {
     display: none;
   }
   @media (max-width: 899px) {
     .tab {
-      --tab-fill: var(--tab-recede-1);
+      --tab-fill: color-mix(
+        in oklab,
+        var(--fill-to) calc(var(--f) * 100%),
+        var(--fill-from)
+      );
       --tone: var(--ink-muted);
-      --rim-mix: var(--tab-rim-mix);
+      --rim-mix: calc(
+        var(--tab-rim-mix) +
+        (var(--tab-rim-mix-chosen) - var(--tab-rim-mix)) *
+        var(--pick)
+      );
     }
-    /* A title's trailing room clears the overlap and the chosen sheet's
-       flare, so a neighbour tucked over its end never touches its last
-       glyph; the room comes out of the pad before the status glyph, which
-       takes the overlap back only where its own leading end is tucked. */
+    /* The rim is the status: no glyph beside the title. */
+    .tglyph {
+      display: none;
+    }
+    /* The title stands a lead in from the tab's start. Its trailing room
+       clears the overlap and the chosen sheet's flare, so a neighbour
+       tucked over its end never touches its last glyph; a tab whose
+       leading end is tucked under its neighbour adds the overlap before
+       its title. */
     .tab {
-      --px-start: var(--c-tab-lead);
+      --px-start: calc(var(--c-tab-lead) + var(--overlap) * var(--after));
       --px-end: calc(var(--overlap) + var(--radius-lg));
     }
-    .tab[data-side="after"] {
-      --px-start: calc(var(--overlap) + var(--c-tab-lead));
+    /* The title's ink follows how chosen its tab is; parked on you, it
+       stays strong (`.needs`). */
+    .tab:not(.needs) :global(.ff-tab) {
+      color: color-mix(
+        in oklab,
+        var(--ink-strong) calc(var(--pick) * 100%),
+        var(--ink-muted)
+      );
     }
-    .tab[data-d="0"] {
-      --rim-mix: var(--tab-rim-mix-chosen);
-    }
-    .tab[data-d="2"] {
-      --tab-fill: var(--tab-recede-2);
-    }
-    .tab[data-d="3"] {
-      --tab-fill: var(--tab-recede-3);
+    /* Under a swipe every one of these is where its fraction puts it,
+       frame by frame: no transition lags the finger. */
+    :global([data-ride]) .tab :global(.ff-tab),
+    :global([data-ride]) .rim::before,
+    :global([data-ride]) .rim::after {
+      transition: none;
     }
     .tab[data-tone="working"] {
       --tone: var(--status-live-glyph);
@@ -1587,33 +1654,64 @@
         transparent calc(var(--spill) + 0.9 * var(--item))
       );
 
-      &::before {
-        --rim: color-mix(in oklab, var(--tone) var(--rim-mix), transparent);
-        --glow: color-mix(
-          in oklab,
-          var(--tone) calc(var(--rim-mix) / 2),
-          transparent
-        );
+      /* Both on the tab's own outline: the glow outside it (a box shadow
+         is drawn only outside its box), the stroke inside it. */
+      &::before,
+      &::after {
         content: "";
         position: absolute;
         inset: var(--spill) var(--spill) 0;
+      }
+      &::before {
         border-radius: var(--radius) var(--radius) 0 0;
-        box-shadow:
-          inset 0 1.5px 0 var(--rim),
-          inset 0.5px 0 0 var(--rim),
-          inset -0.5px 0 0 var(--rim),
-          0 0 6px var(--glow);
+        box-shadow: 0 0 6px
+          color-mix(in oklab, var(--tone) calc(var(--rim-mix) / 2), transparent);
         transition: box-shadow var(--dur-panel) var(--ease-out);
+      }
+      /* The stroke as a shape, so it holds its full width across the top
+         and round both shoulders, where a shadow's would thin with the
+         corner's radius, and only then tapers, over the next --spill down
+         each side, to its side width. */
+      &::after {
+        --top: 1.5px;
+        --side: 0.5px;
+        background: color-mix(
+          in oklab,
+          var(--tone) var(--rim-mix),
+          transparent
+        );
+        clip-path: shape(
+          from 0 100%,
+          line to 0 var(--radius),
+          arc to var(--radius) 0 of var(--radius) cw,
+          line to calc(100% - var(--radius)) 0,
+          arc to 100% var(--radius) of var(--radius) cw,
+          line to 100% 100%,
+          line to calc(100% - var(--side)) 100%,
+          line to calc(100% - var(--side)) calc(var(--radius) + var(--spill)),
+          line to calc(100% - var(--top)) var(--radius),
+          arc to calc(100% - var(--radius)) var(--top) of
+            calc(var(--radius) - var(--top)) ccw,
+          line to var(--radius) var(--top),
+          arc to var(--top) var(--radius) of calc(var(--radius) - var(--top))
+            ccw,
+          line to var(--side) calc(var(--radius) + var(--spill)),
+          line to var(--side) 100%,
+          close
+        );
+        transition: background-color var(--dur-panel) var(--ease-out);
       }
 
       @media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
         mask-image: none;
 
         &::before {
-          box-shadow:
-            inset 0 1px 0 var(--tone),
-            inset 1px 0 0 var(--tone),
-            inset -1px 0 0 var(--tone);
+          box-shadow: none;
+        }
+        &::after {
+          --top: 1px;
+          --side: 1px;
+          background: var(--tone);
         }
       }
     }

@@ -145,6 +145,7 @@ final class PaneGroupController: UIViewController, UIDropInteractionDelegate {
             if let tab = strip.tabView(id) { tabDetails.click(id, tab: tab, chosen: false) }
             guard let at = shownTabs.firstIndex(of: id) else { return }
             if !mounted.contains(id) { mount(id) }
+            chosenPage = at
             stack.choose(at, animated: swipeable)
         }
         strip.onClose = { [weak self] id in
@@ -177,7 +178,9 @@ final class PaneGroupController: UIViewController, UIDropInteractionDelegate {
         stack.onEnd = { [weak self] in self?.dock.held = false }
         stack.onScroll = { [weak self] position in self?.pagingMoved(position) }
         stack.onLand = { [weak self] page in
-            guard let self, shownTabs.indices.contains(page) else { return }
+            guard let self else { return }
+            chosenPage = nil
+            guard shownTabs.indices.contains(page) else { return }
             let id = shownTabs[page]
             // Where the group swipes, the pages drew the sheet's way over and
             // it stands where they brought it: the switch is not drawn again.
@@ -413,13 +416,22 @@ final class PaneGroupController: UIViewController, UIDropInteractionDelegate {
 
     // MARK: System paging progress
 
+    /// The page a tap on the strip sent the pages to, until they land.
+    private var chosenPage: Int?
+
+    /// The pages' position carries the strip's choice: toward the page a tap
+    /// chose, however far, or the neighbour a finger is uncovering, by the
+    /// share of the way there. One path for both. With Reduce Motion the
+    /// strip does not scrub: the choice moves when the pages land.
     private func pagingMoved(_ position: Double) {
         guard stack.active, let from = activeIndex, !shownTabs.isEmpty else { return }
-        let target = position > Double(from) ? Int(position.rounded(.up)) : Int(position.rounded(.down))
+        // A finger taking the pages mid-way takes the choice with them.
+        if stack.isDragging { chosenPage = nil }
+        let target = chosenPage ?? (position > Double(from) ? Int(position.rounded(.up)) : Int(position.rounded(.down)))
         for (id, slot) in slots {
             if let at = shownTabs.firstIndex(of: id) { slot.isHidden = abs(Double(at) - position) > 1 }
         }
-        if shownTabs.indices.contains(target), target != from {
+        if !UIAccessibility.isReduceMotionEnabled, shownTabs.indices.contains(target), target != from {
             strip.ride(toward: shownTabs[target], fraction: min(1, abs(position - Double(from)) / Double(abs(target - from))))
         } else { strip.ride(toward: nil, fraction: 0) }
     }

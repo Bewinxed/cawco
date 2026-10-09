@@ -467,9 +467,9 @@ export function createSwipe(
       panes.push({ el: out, delta: -dir });
     }
     offset = (now?.x ?? 0) + dir * width;
-    // The strip's sheet rides the settle to a neighbour, as after a swipe; a
-    // jump further along keeps the strip's own slide across the tabs between.
-    toward = Math.abs(at - was) === 1 ? from : null;
+    // The strip's choice rides the settle, as after a swipe, whether the tab
+    // is the next one or further along: one path for a finger and a tap.
+    toward = from;
     fraction = travelled();
     moving = true;
     paint(offset);
@@ -644,7 +644,9 @@ export function createSwipe(
           targetId = offset > 0 ? prev : null;
         }
         past = width > 0 && Math.abs(offset) / width > COMMIT;
-        toward = targetId;
+        // With less motion the strip does not scrub under the finger: the
+        // choice moves when the swipe lets go.
+        toward = reduced() ? null : targetId;
         fraction = travelled();
       };
 

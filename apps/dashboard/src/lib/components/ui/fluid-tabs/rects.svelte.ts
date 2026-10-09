@@ -166,11 +166,15 @@ export class TabRects {
     this.#onOrder(next.map((el) => this.#values.get(el) as string));
   }
 
+  /**
+   * One measure per frame, at the frame's own time, however many changes
+   * ask for it. A pending frame is kept, never cancelled and asked for
+   * again: a gesture restyles the tabs from a frame callback queued ahead
+   * of this one, so cancelling on every change put the measure off in the
+   * very frame it was due, every frame, for as long as the gesture ran.
+   */
   #schedule(): void {
-    if (this.#frame !== null) {
-      cancelAnimationFrame(this.#frame);
-    }
-    this.#frame = requestAnimationFrame(() => {
+    this.#frame ??= requestAnimationFrame(() => {
       this.#frame = null;
       this.#measure();
     });

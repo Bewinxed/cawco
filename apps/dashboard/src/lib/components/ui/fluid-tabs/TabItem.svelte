@@ -54,25 +54,23 @@
   const selected = $derived(tabs.value === value);
   /**
    * A folder sheet carried by a gesture (the root's `travel`): the chosen
-   * tab's sheet gives up the fraction the gesture has travelled, on the side
-   * away from the tab it is heading to, and that tab's sheet takes it on the
-   * side facing the chosen one, so the two meet where the sheet has got to
-   * and land with the pane on the same frame. The track's `data-ride` holds
-   * their transitions off while it does.
+   * tab's sheet fades by the fraction the gesture has travelled and the
+   * sheet of the tab it is heading to fades in by as much, each over its own
+   * tint, so the choice crosses between the two with the finger and lands
+   * with the pane on the same frame. The track's `data-ride` holds their
+   * transitions off while it does.
    */
   const ride = $derived.by(() => {
     const { travel } = tabs;
     if (!travel || travel.toward === tabs.value) {
       return null;
     }
-    const from = tabs.order.indexOf(tabs.value ?? "");
-    const to = tabs.order.indexOf(travel.toward);
     const f = Math.min(1, Math.max(0, travel.fraction));
     if (selected) {
-      return { size: 1 - f, at: to > from ? "right" : "left" };
+      return 1 - f;
     }
     if (value === travel.toward) {
-      return { size: f, at: to > from ? "left" : "right" };
+      return f;
     }
     return null;
   });
@@ -97,11 +95,15 @@
 </script>
 
 <span
-  class={cn("ff-tab", selected && "selected", ride && "riding", className)}
+  class={cn(
+    "ff-tab",
+    selected && "selected",
+    ride !== null && "riding",
+    className
+  )}
   data-tab-index={index}
   bind:this={node}
-  style:--ride={ride ? `${ride.size * 100}%` : undefined}
-  style:--ride-at={ride?.at}
+  style:--ride={ride ?? undefined}
 >
   <svelte:element
     aria-selected={selected}
@@ -322,8 +324,8 @@
       opacity: 1;
     }
     &.riding::after {
-      mask-size: var(--ride) 100%;
-      mask-position: var(--ride-at);
+      mask-size: 100% 100%;
+      opacity: var(--ride);
     }
     /* Pressed: the tab's own shapes take the tint — the card, and the sheet
        with its shoulders and flared foot — so it fills the whole tab and its
