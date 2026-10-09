@@ -226,7 +226,7 @@ them (the editor cannot import `.riv` files). From `assets/mascot/scripts` (`bun
 - `uv run trace_pose.py <pose> <take> <still the take opens on>` traces a template pose into
   `assets/mascot/loops/<pose>/body-00.svg` with the same tracer, in the inks `rests.json` names
   for it: the take's end hold, registered onto the still it opens on (no still has the pose, so
-  its eye whites are told forward from that still and, past the evidence, by shape), then placed
+  its eye whites are told forward from that still and, past the evidence, by that pass's guess), then placed
   by its own ink (see the Contract). Gates: drawing 00 on its still (0.9 overlap or more), an end
   hold of a second or more, halo 0, no eye white see-through, no white marks, no shards (no cream
   or white region under MIN_REGION inside a tan face), and the safe area.
@@ -283,10 +283,32 @@ them (the editor cannot import `.riv` files). From `assets/mascot/scripts` (`bun
   px, the share of the first ring of pixels round his body at 3:1 or more against the page,
   and that ring's tenth-percentile contrast. `--light` adds a digest of each light picture, to
   show a change left light alone.
+- `uv run regress.py [--old <git ref>] [--mascot <folder>] [--only name,…]` runs every source the
+  pipeline traces (the loops, the clips, the ledges, every still) through a ref's `trace.py`
+  (default `origin/main`) and the working one, down to the final labels vtracer traces, and
+  prints per source the pixels that differ and each ink's count before and after. A change to a
+  tracing rule is run over every source this way before it ships: a rule fenced to one kind of
+  take hides what it does to the rest.
+- `uv run ink_gate.py [--base <git ref>] [--all] [folder …]` holds every drawing under `loops/`
+  and `clips/` to the art on the base ref (default `origin/main`): each drawing and the base's
+  drawing at the same frame are drawn on the dashboard's dark page (`--background` at night,
+  sRGB 20, 18, 17) and their eye white and vermilion counted by colour on it, so an eye traced
+  as a hole (the page shows through) or a white path drawn under his black counts as lost. A
+  drawing fails when it shows less of either ink than the base by more than 15% and 40 px of
+  512, or more eye white by as much (a speck or scribble where the base has none), judged by
+  its nearest match among the frames it holds. A failure stands unless `ink_gate.json` lists it
+  as `"<folder>/<drawing>/<ink>/<loss|gain>": "<why the change is right>"`; a listing that no
+  longer occurs fails too. `node build.mjs` runs it first and writes nothing when it fails. A
+  re-trace once turned 519 eye whites into holes while `--eyes` passed: `--eyes` asks the
+  tracer's own rule which regions are eyes, so it cannot see an eye that rule calls paper.
 - `uv run head_circle.py` draws every drawing of every head file as the bar draws his head (the
   dashboard's 20 px head at 1x and 3x, Apple's 22 pt at 2x and 3x, in each app's 36 glass
-  circle), in light and in dark with his rim, and fails if any ink comes within two device
-  pixels of the circle's inner edge; it prints each file's least clearance.
+  circle, moved by whole device pixels as each app moves it), in light and in dark with his
+  one-device-pixel rim, measured to his outline at eight samples a device pixel. It fails if
+  any ink comes within four device pixels of the circle's inner edge, or if the apps' head
+  centre (`CAW_HEAD_CENTRE`, `CawMark.headCentre`) is not his optical centre, the centroid of
+  his rest's silhouette, body, beak and note together; it prints both and each file's least
+  clearance.
 
 ## What the files hold today
 
@@ -336,18 +358,24 @@ reused rather than traced again.
    vermilion, eye white, yellow; and cream, the note, where a status names it). Thin fringes go, closed eyes' lid lines stay, and gaps in his
    silhouette (between a raised wing and his beak) are told from eye whites from both ends of the
    take: forward from the opening still and backward from the closing one, evidence over guesses,
-   and where neither end has evidence, by shape (a pupil always bites into an eye white), except
-   that nothing inside an eye is a gap: a region guessed paper inside an eye's hull is its
+   and where neither end has evidence, by the guesses the passes carry from the drawings next to
+   it (a region either guesses eye is an eye). Only where no pass knows anything (an enter
+   crossing the page) do shape and ring decide (a gap is too solid or too ragged for an eye, and
+   an eye is ringed by his black); deciding every guessed region, they cut out 638 eye whites of
+   the shipped loops. Nothing inside an eye is a gap: a region guessed paper inside an eye's hull is its
    pupil's catchlight. Eye white stays only inside his body's black; white elsewhere (a slit's
    pinched end, a speck in his vermilion, a sliver on a prop's lit edge) takes the ink it sits
    on, so no eye white touches the page round him. A pixel is vermilion or yellow only with
    that ink's chroma (neutral greys, a soft frame's blend of black into white, sit nearer either
-   than black or white). It registers drawing 00 onto the status's still where the two overlap
+   than black or white), and an orange blend of the two takes whichever is nearer in Lab, as
+   `--halo` judges it (in RGB it sat nearer yellow, and traced yellow over a take with none). It registers drawing 00 onto the status's still where the two overlap
    most (`register()`: scale and offset searched from the extents' whole-pixel estimate, so no
    single tip or edge pixel decides where a loop sits) and traces each ink with vtracer (spline, holes
    kept) into `body-NN.svg`, with `timing.json`. `trace.py --halo` reports yellow traced where
    the take has none, and `trace.py --eyes` reports any eye white a drawing on disk shows as
-   see-through (a hole in dark); it ends "eyes: N/22 loops intact" and fails if any loop has one.
+   see-through (a hole in dark), by the tracer's own call of which regions are eyes; it ends
+   "eyes: N/22 loops intact" and fails if any loop has one. `ink_gate.py` checks that call
+   against the art on main.
 3. **Build.** `scene.mjs` imports the SVGs with rive-mcp-server's `importSvg`, one shape per ink
    per drawing, then `build.mjs` writes the files, and `prove-viewmodel.mjs` proves them.
 

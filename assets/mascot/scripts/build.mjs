@@ -22,6 +22,7 @@
 //   template cards, so no pose) and the dashboard's src/lib/assets/caw/ (all of them), the same
 //   bytes in each; any other .riv there is removed. Each app keeps its own copy because each is
 //   built from its own directories. With an argument it writes every file there.
+import { spawnSync } from "node:child_process";
 import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -456,6 +457,18 @@ function completeTransition(object, at) {
   ];
 }
 
+// No file is written from drawings that lost eye white or vermilion against the art on main
+// (ink_gate.py): a re-trace once turned 519 eye whites into holes and every other check passed.
+const gate = spawnSync("uv", ["run", "-q", "ink_gate.py"], {
+  cwd: here("."),
+  stdio: "inherit",
+});
+if (gate.status !== 0) {
+  console.error(
+    "build.mjs: ink_gate.py failed; fix the trace, or list the change with its reason in ink_gate.json"
+  );
+  process.exit(1);
+}
 for (const { dir, files } of outDirs) {
   mkdirSync(dir, { recursive: true });
   const keep = new Set(files.map((s) => `${fileName(s)}.riv`));

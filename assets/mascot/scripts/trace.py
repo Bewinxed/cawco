@@ -177,9 +177,9 @@ YELLOW_CHROMA = 50
 # How far (512 px artboard pixels) a traced yellow pixel may sit from yellow in the take's own frame
 # before it counts as halo (see halo()): the trace's outlines move about that much.
 HALO_REACH = 2
-# An enclosed white region decided by neither end's evidence is an eye only with a solidity in
-# this band (see see_through()): eyes measure 0.74-0.92; gaps between a raised wing and the beak
-# 0.98-1.03, and the ragged gaps among splayed feathers or inside an impact burst 0.40-0.64.
+# An enclosed white region no pass knows anything about (no evidence, no guess: an enter crossing
+# the page) is an eye only with a solidity in this band (see see_through()): eyes measure 0.74-0.92;
+# gaps between a raised wing and the beak 0.98-1.03, and the ragged gaps among splayed feathers or inside an impact burst 0.40-0.64.
 EYE_SOLIDITY = (0.70, 0.95)
 # See-through pixels (512 px artboard) on an eye white from which a drawing's eye counts as cut out
 # (--eyes); fewer are the trace's outline sitting a pixel off the take's region.
@@ -332,6 +332,15 @@ def inks(rgb: np.ndarray, centres: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         distance[..., 0] = np.where(is_cream, np.inf, distance[..., 0])
         distance[..., WHITE] = np.where(is_cream, np.inf, distance[..., WHITE])
     label = distance.argmin(-1)
+    # Between yellow and vermilion the choice is made as halo() judges it, by nearness in Lab: an
+    # orange blend of the two sits nearer yellow in RGB and nearer vermilion to the eye, and was
+    # traced as yellow over a take with none there (trying-stumble drawing 11: 112 px of
+    # (238, 152, 94); done-dust-off drawing 26: 12 px).
+    blend = np.flatnonzero(label == yellow)
+    if blend.size:
+        seen = lab(px.reshape(-1, 3)[blend])
+        nearer = ((seen - lab(centres[vermilion])) ** 2).sum(-1) < ((seen - lab(centres[yellow])) ** 2).sum(-1)
+        label.flat[blend[nearer]] = vermilion
     if "cream" in INKS:
         tan_outline(label, px)
         warm_eye_whites(label, px)
@@ -415,7 +424,8 @@ def warm_eye_whites(label: np.ndarray, px: np.ndarray) -> None:
 def decide(
     enclosed: list[np.ndarray], seed_paper: np.ndarray
 ) -> list[dict[int, tuple[bool, bool]]]:
-    """One pass over the drawings in the order given: per drawing, {region: (is_paper, evidenced)}.
+    """One pass over the drawings in the order given: per drawing, {region: (is_paper, how)}, `how`
+    being "evidence", "guess" or "none".
 
     The first drawing's regions take the seed still's answer (transparent there = paper); each
     later drawing's regions take the answer of the last decided drawing's regions they overlap.
@@ -441,26 +451,26 @@ def decide(
             m = regions == r
             centre = np.array(ndimage.center_of_mass(m))
             if previous is None:
-                is_paper, evidenced = bool(seed_paper[m].mean() > 0.5), True
+                is_paper, how = bool(seed_paper[m].mean() > 0.5), "evidence"
             else:
                 was, was_marks = previous
                 sure = (m & was["paper_ev"]).sum(), (m & was["eye_ev"]).sum()
                 loose = (m & was["paper"]).sum(), (m & was["eye"]).sum()
                 if any(sure):
-                    is_paper, evidenced = bool(sure[0] > sure[1]), True
+                    is_paper, how = bool(sure[0] > sure[1]), "evidence"
                 elif any(loose):
-                    is_paper, evidenced = bool(loose[0] > loose[1]), False
+                    is_paper, how = bool(loose[0] > loose[1]), "guess"
                 else:
                     nearest = (
                         min(was_marks, key=lambda w: np.linalg.norm(w[0] - centre))
                         if was_marks
                         else None
                     )
-                    is_paper, evidenced = (nearest[1] if nearest else False), False
-            decided[int(r)] = (is_paper, evidenced)
+                    is_paper, how = (nearest[1], "guess") if nearest else (False, "none")
+            decided[int(r)] = (is_paper, how)
             kind = "paper" if is_paper else "eye"
             masks[kind][m] = True
-            if evidenced:
+            if how == "evidence":
                 masks[f"{kind}_ev"][m] = True
             marks.append((centre, is_paper))
         out.append(decided)
@@ -503,13 +513,32 @@ def see_through(
     Decided from one end only, the answer drifts as Caw moves away from that still: on two
     loading-feather to ready takes the far eye was cut out as "paper" from the middle of the take
     on, a hole that only shows on dark. So per region: evidence beats a guess, and between two
-    pieces of evidence, the pass from the nearer end. Where both passes only guess, the region's
-    shape decides, since an eye white always has its pupil cut into it (enclosed, or biting in from
-    the side in profile): measured, eyes 0.74-0.92 solidity, while a gap that opens mid-move is a
-    solid wedge (0.98-1.03) or a ragged hole among splayed feathers or inside an impact burst
-    (0.40-0.64). And his eyes sit only in the black, so a region ringed mostly by any other ink (a
-    slit in a feather, the inside of a yellow burst) is paper; an eye's ring is black with a third
-    or less of vermilion bled in by the video.
+    pieces of evidence, the pass from the nearer end. Without evidence, the guesses decide, each
+    pass's taken from the regions of the drawings next to it: a region either pass guesses eye is
+    an eye, and one is paper only when every pass that guesses calls it paper (a template pose's
+    take ends on no still, so its backward pass knows nothing and its forward guess decides).
+    Scored against the shipped loops, the art the owner approved, over the 1,481 regions no
+    evidence decides: they filled 1,404 with eye white and left 1 a hole (the other 76 are greys
+    traced in another ink); where the two guesses disagree they filled 87 of 89 with eye white,
+    the nearer end's guess right only 43 times. A region ringed mostly by a prop's ink (cream,
+    tan) is paper whatever the guesses say, since no eye sits in a prop: template-seo's magnifier
+    glass, ringed by its tan rim and guessed eye forward from the still, was a 6,811 px eye white
+    touching the page.
+
+    Only where neither pass knows anything (an enter crossing the page, trace_clip.py, which has
+    no stills to chain from) do shape and ring decide, the rules two takes of loading's enter
+    needed: there the inside of a yellow impact burst and the ragged gaps among splayed feathers
+    were filled with eye white. His eyes sit in his black, so a region ringed mostly by any other
+    ink (a slit in a feather, the inside of a yellow burst) is paper, and a guessed eye has the
+    solidity of the measured band: a gap that opens mid-move is a solid wedge (0.98-1.03) or a
+    ragged hole (0.40-0.64), the eyes measured 0.74-0.92. Neither is a test for an eye where the
+    guesses know better: deciding every region both passes only guessed (39a8bdd6:
+    `is_paper = not low <= solidity(region) < high`, and the ring rule after it), they cut out
+    638 of the 1,404 eye whites the shipped loops filled, in 420 drawings (his wide eyes round a small enclosed pupil at
+    0.96-0.98, closed eyes' thin lid lines, crescents looking up, 0.32-1.35 in all; working-idea's
+    crescents ringed by the idea's yellow glow, trying-rally's and trying-headwind's eyes ringed
+    more by his vermilion than his black; 81 drawings lost every eye, hollow rings on dark), and
+    template-launch's eye (0.69).
 
     A pupil's catchlight is its own small round region inside the pupil's black, and both guesses
     call it paper: its shape is too solid for an eye, and the vermilion the video bleeds into its
@@ -521,32 +550,39 @@ def see_through(
 
     A take that ends on no still (a template pose, trace_pose.py: he ends holding a prop no still
     has) passes end_paper None: there is no evidence from its end, so every region the forward pass
-    cannot evidence is told by its shape and ring."""
+    cannot evidence takes its guess."""
     forward = decide(enclosed, start_paper)
     backward = (
         decide(enclosed[::-1], end_paper)[::-1]
         if end_paper is not None
-        else [{r: (False, False) for r in d} for d in forward]
+        else [{r: (False, "none") for r in d} for d in forward]
     )
     black = list(INKS).index("black") + 1
+    props = {list(INKS).index(ink) + 1 for ink in ("cream", "tan") if ink in INKS}
     low, high = EYE_SOLIDITY
     papers = []
     for i, regions in enumerate(enclosed):
         paper = np.zeros(regions.shape, bool)
         eyes, guessed = [], []
-        for r, (fwd, fwd_seen) in forward[i].items():
-            bwd, bwd_seen = backward[i][r]
+        for r, (fwd, fwd_how) in forward[i].items():
+            bwd, bwd_how = backward[i][r]
+            fwd_seen, bwd_seen = fwd_how == "evidence", bwd_how == "evidence"
+            guesses = {p for p, how in ((fwd, fwd_how), (bwd, bwd_how)) if how == "guess"}
             region = regions == r
             if fwd_seen and bwd_seen:
                 is_paper = fwd if i < len(enclosed) / 2 else bwd
             elif fwd_seen or bwd_seen:
                 is_paper = fwd if fwd_seen else bwd
             else:
-                is_paper = not low <= solidity(region) < high
-            around = labels[i][ndimage.binary_dilation(region, iterations=2) & ~region]
-            around = around[around > 0]
-            if around.size and np.bincount(around).argmax() != black:
-                is_paper = True
+                around = labels[i][ndimage.binary_dilation(region, iterations=2) & ~region]
+                around = around[around > 0]
+                ring = int(np.bincount(around).argmax()) if around.size else black
+                if ring in props:
+                    is_paper = True
+                elif guesses:
+                    is_paper = all(guesses)
+                else:
+                    is_paper = ring != black or not low <= solidity(region) < high
             if not is_paper:
                 eyes.append(region)
             elif not (fwd_seen or bwd_seen):
@@ -565,6 +601,10 @@ def finish(label: np.ndarray, rgb: np.ndarray, paper: np.ndarray) -> np.ndarray:
     """The drawing's final inks: see-through paper cut out, false fringes dropped, lid lines kept."""
     label = label.copy()
     label[paper] = 0
+    # The regions see_through() kept as eyes (every enclosed region it decides is MIN_REGION or more).
+    parts, n = ndimage.label(label == WHITE)
+    sizes = ndimage.sum(label == WHITE, parts, index=np.arange(1, n + 1))
+    eyes = np.isin(parts, np.flatnonzero(sizes >= MIN_REGION) + 1)
     px = rgb.astype(np.float64)
     white = WHITE
     bright = px.mean(-1)
@@ -595,14 +635,19 @@ def finish(label: np.ndarray, rgb: np.ndarray, paper: np.ndarray) -> np.ndarray:
         (label == 0) | (label == 1) | lines | coloured
     )  # black is the base every ink sits on
     _, (iy, ix) = ndimage.distance_transform_edt(~keep, return_indices=True)
-    return eye_whites_in_black(label[iy, ix])
+    return eye_whites_in_black(label[iy, ix], eyes)
 
 
-def eye_whites_in_black(label: np.ndarray) -> np.ndarray:
+def eye_whites_in_black(label: np.ndarray, eyes: np.ndarray) -> np.ndarray:
     """Eye white only inside his black, in place and returned. His eye whites and lid lines sit
     in his black body: a region of white whose ring (two pixels round it) is EYE_RING or more his
     body's black and touches no page is one (paper seen through a gap inside him is not the page:
-    an eye beside one stays). His body's black is his black with every run thinner than HIS_BLACK
+    an eye beside one stays). So is one see_through() decided is an eye (`eyes`, mostly within
+    it): it was enclosed in the take, and its ring can be another ink where the take tints his
+    eye's edge (working-idea's eyes ringed by the idea's yellow glow, trying-rally's more
+    vermilion than black round them), or the page where dropping a thin outline's fringe opened
+    it (working-idea's bulb, its white inside traced yellow, 795 px of halo); taking that ink cut
+    whites the shipped loops filled out of 61 drawings of those two loops and search. His body's black is his black with every run thinner than HIS_BLACK
     opened away: a prop's black outline is not his (a magnifier's glass, ringed by its black rim,
     once traced as an eye white). Any other region of white is a light patch on whatever it sits
     on (a sliver along a prop's lit edge once traced as eye white beside the page): it takes the
@@ -628,7 +673,9 @@ def eye_whites_in_black(label: np.ndarray) -> np.ndarray:
         region = regions[box] == k
         around = ndimage.binary_dilation(region, iterations=2) & ~region
         counts = np.bincount(label[box][around], minlength=len(INKS) + 1)
-        if not page[box][around].any() and his[box][around].mean() >= EYE_RING:
+        if eyes[box][region].mean() >= 0.5 or (
+            not page[box][around].any() and his[box][around].mean() >= EYE_RING
+        ):
             continue
         counts[[black, WHITE]] = 0
         if counts.any():

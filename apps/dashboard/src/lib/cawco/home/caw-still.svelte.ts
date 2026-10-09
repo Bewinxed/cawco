@@ -25,15 +25,17 @@ import { deviceRatio } from "./device-ratio.svelte";
 export const CAW_STILL_BLEED = 2;
 
 /**
- * Where his head's circle is centred in the `compacted` still's box, as
- * shares of its side. His beak and note reach out to the right of his head,
- * so the box's own centre is not the head's: a place that sits his head in a
- * circle moves him by (0.5 − this) × his side, and his head, not his box, is
- * what stands centred. Measured on `loops/compacted/body-00.svg`: a circle
- * fitted to his crown and the back of his head, with the beak, the note and
- * the tufts opened away (radius 0.304 of the box).
+ * His head's optical centre in the `compacted` still's box, as shares of its
+ * side: the centroid of his silhouette, body, beak and note together. His
+ * beak and note reach out to the right, so the box's own centre is not the
+ * head's: a place that sits his head in a circle moves him by (0.5 − this)
+ * × his side, and his head, not his box, stands centred. A circle fitted to
+ * his crown alone (0.35, 0.496) left the beak's whole reach on one side, a
+ * pixel or two off the bar's circle in his smile (owner: "caw is still not
+ * centered"). Measured on `loops/compacted/body-00.svg`; head_circle.py
+ * fails when the drawing's centroid moves from this.
  */
-export const CAW_HEAD_CENTRE = { x: 0.35, y: 0.496 } as const;
+export const CAW_HEAD_CENTRE = { x: 0.403, y: 0.522 } as const;
 
 /** Each look's picture once it is drawn, and its drawing while it is on its way. */
 const pictures = new Map<string, HTMLCanvasElement>();

@@ -73,7 +73,7 @@ final class NeedsCawButton: UIControl {
         NSLayoutConstraint.activate([
             widthAnchor.constraint(equalToConstant: Self.side),
             heightAnchor.constraint(equalToConstant: Self.side),
-            // His head's circle at the centre, not his box (`CawMark.headCentre`).
+            // His head's optical centre at the centre, not his box (`CawMark.headCentre`).
             face.centerXAnchor.constraint(equalTo: centerXAnchor, constant: (0.5 - CawMark.headCentre.x) * Self.head),
             face.centerYAnchor.constraint(equalTo: centerYAnchor, constant: (0.5 - CawMark.headCentre.y) * Self.head),
             face.widthAnchor.constraint(equalToConstant: Self.head),

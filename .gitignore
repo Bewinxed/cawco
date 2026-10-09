@@ -67,3 +67,7 @@ build.bak.*/
 
 # Probe captures and scratch hubs/agents for live checks
 .probe/
+
+# The mascot tracers: Python bytecode, and regress.py's scratch (the old tracer, its last report).
+assets/mascot/scripts/__pycache__/
+assets/mascot/scripts/.regress/

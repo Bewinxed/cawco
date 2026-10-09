@@ -275,7 +275,7 @@ def no_evidence(enclosed: list, seed_paper: np.ndarray) -> list:
     out = []
     for regions in enclosed:
         ids, sizes = np.unique(regions[regions > 0], return_counts=True)
-        out.append({int(r): (False, False) for r in ids[sizes >= T.MIN_REGION]})
+        out.append({int(r): (False, "none") for r in ids[sizes >= T.MIN_REGION]})
     return out
 
 

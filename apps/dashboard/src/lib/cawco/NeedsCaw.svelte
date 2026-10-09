@@ -8,8 +8,8 @@
    * He is his compacted head (assets/mascot/README.md, `compacted`: a head
    * that fills its box, built for 18 px), the last item of the bar's icon
    * group, on the group's glass (Shell): borderless, as every item in it is.
-   * His head's circle, not his drawing's box, stands at the item's centre
-   * (CAW_HEAD_CENTRE), since his beak and note reach out to one side. The
+   * His head's optical centre, not his drawing's box, stands at the item's
+   * centre (CAW_HEAD_CENTRE), since his beak and note reach out to one side. The
    * count rides his corner in the bar's badge, morphing digit by digit,
    * while anything waits. When something new arrives he plays his needs-you
    * beat once (`head-beat`: he blinks, stretches up into his alert face,
@@ -1142,7 +1142,7 @@
       transform: scale(var(--press-scale));
     }
   }
-  /* His head's circle at the centre, not his box (CAW_HEAD_CENTRE): moved
+  /* His head's optical centre at the centre, not his box (CAW_HEAD_CENTRE): moved
      in layout, not by a transform, so his picture stays on whole pixels. */
   .face {
     position: relative;
