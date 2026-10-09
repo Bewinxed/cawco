@@ -348,6 +348,154 @@ class ProseView: UITextView, NSTextLayoutManagerDelegate {
     }
 }
 
+/// A table cell's words (TableBlock), laid out by a ProseView's container and
+/// fragments and drawn by them, in a plain view. A text view per cell was most
+/// of what a table cost to build: a 4×4 table's sixteen UITextViews were 40 ms
+/// of its row's 80–97 ms frame in a Release build. Where a reader acts on the
+/// cell (its first touch, or the first ask for its accessibility) a ProseView
+/// with the same words stands in its place before that touch is delivered, so
+/// selecting, a link and VoiceOver are the text view's own, as they were.
+final class CellText: UIView, NSTextLayoutManagerDelegate {
+    /// Links drawn as a text view draws them (ProseView `linkTextAttributes`).
+    nonisolated private final class Layout: NSTextLayoutManager {
+        override func renderingAttributes(forLink _: Any, at _: any NSTextLocation) -> [NSAttributedString.Key: Any] {
+            [.foregroundColor: Palette.linkInk, .underlineStyle: NSUnderlineStyle.single.rawValue]
+        }
+    }
+
+    private let text: NSAttributedString
+    private let wrap = LineWrap.Container(size: .zero)
+    private let layout = Layout()
+    /// The layout manager holds its content manager weakly.
+    private let content = NSTextContentStorage()
+    /// The leading below the last line, which TextKit leaves off (ProseView `closeLastLine`).
+    private let below: CGFloat
+    /// The text view standing in for the cell once a reader acted on it.
+    private(set) var prose: ProseView?
+    /// The width the lines' widths were last chosen for.
+    private var wrappedFor: CGFloat?
+    /// The text's height at the width it was last laid out at.
+    private var fitted: CGFloat = 0
+    private var laidWidth: CGFloat?
+
+    /// The width the cell's words stand at, where the table knows it (ProseView `fitWidth`).
+    var fitWidth: CGFloat? {
+        didSet {
+            guard fitWidth != oldValue else { return }
+            prose?.fitWidth = fitWidth
+            invalidateIntrinsicContentSize()
+            setNeedsDisplay()
+        }
+    }
+
+    init(_ text: NSAttributedString) {
+        self.text = text
+        let style = text.length > 0 ? text.attribute(.paragraphStyle, at: text.length - 1, effectiveRange: nil) as? NSParagraphStyle : nil
+        below = style?.lineSpacing ?? 0
+        super.init(frame: .zero)
+        layout.textContainer = wrap
+        wrap.lineFragmentPadding = 0
+        content.addTextLayoutManager(layout)
+        content.primaryTextLayoutManager = layout
+        layout.delegate = self
+        content.textStorage?.setAttributedString(text)
+        translatesAutoresizingMaskIntoConstraints = false
+        backgroundColor = .clear
+        isOpaque = false
+        contentMode = .redraw
+        setContentCompressionResistancePriority(.required, for: .vertical)
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (cell: CellText, _: UITraitCollection) in cell.setNeedsDisplay() }
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) { fatalError("built in code") }
+
+    nonisolated func textLayoutManager(_: NSTextLayoutManager, textLayoutFragmentFor _: any NSTextLocation,
+                                       in textElement: NSTextElement) -> NSTextLayoutFragment {
+        ProseFragment(textElement: textElement, range: textElement.elementRange)
+    }
+
+    /// Lays the words out `width` wide, the lines' widths chosen as a
+    /// ProseView chooses them (`rewrap`), and keeps their height.
+    private func lay(at width: CGFloat) {
+        guard width > 0 else { return }
+        if abs(wrap.size.width - width) > 0.01 { wrap.size = CGSize(width: width, height: 0) }
+        if wrappedFor.map({ abs($0 - width) >= 0.5 }) ?? true {
+            wrappedFor = width
+            let widths = LineWrap.widths(for: text, width: width)
+            let starts = LineWrap.codeStarts(in: text)
+            if widths != wrap.widths || starts != wrap.codeStarts {
+                wrap.widths = widths
+                wrap.codeStarts = starts
+                layout.invalidateLayout(for: layout.documentRange)
+            }
+        }
+        layout.ensureLayout(for: layout.documentRange)
+        fitted = layout.usageBoundsForTextContainer.height + below
+    }
+
+    /// The words' height at the width they stand at: `fitWidth`, else the one
+    /// layout gave the cell. Once a text view stands in, it is the one measured.
+    override var intrinsicContentSize: CGSize {
+        let width = fitWidth ?? laidWidth ?? 0
+        guard prose == nil, width > 0, text.length > 0 else { return CGSize(width: UIView.noIntrinsicMetric, height: prose == nil ? 0 : UIView.noIntrinsicMetric) }
+        lay(at: width)
+        return CGSize(width: UIView.noIntrinsicMetric, height: fitted)
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        guard prose == nil, bounds.width > 0 else { return }
+        if let fit = fitWidth, abs(bounds.width - fit) > 0.5 { fitWidth = nil }
+        if fitWidth == nil, abs(bounds.width - (laidWidth ?? -1)) > 0.5 {
+            laidWidth = bounds.width
+            invalidateIntrinsicContentSize()
+            remeasureRow()
+        }
+    }
+
+    override func draw(_ rect: CGRect) {
+        guard prose == nil, let context = UIGraphicsGetCurrentContext() else { return }
+        lay(at: bounds.width)
+        layout.enumerateTextLayoutFragments(from: layout.documentRange.location, options: [.ensuresLayout]) { fragment in
+            let frame = fragment.layoutFragmentFrame
+            guard frame.minY <= rect.maxY else { return false }
+            if frame.maxY >= rect.minY { fragment.draw(at: frame.origin, in: context) }
+            return true
+        }
+    }
+
+    /// The text view the cell becomes where a reader acts on it: its words, at its width.
+    @discardableResult
+    private func promote() -> ProseView {
+        if let prose { return prose }
+        let view = ProseView()
+        view.attributedText = text
+        view.fitWidth = fitWidth ?? laidWidth
+        prose = view
+        pin(view)
+        invalidateIntrinsicContentSize()
+        setNeedsDisplay()
+        layoutIfNeeded()
+        return view
+    }
+
+    /// A touch on the cell is the text view's from its start: it stands in
+    /// before the touch is delivered. A pointer only hovering leaves it be.
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        guard isUserInteractionEnabled, !isHidden, alpha > 0.01, self.point(inside: point, with: event) else { return nil }
+        guard prose != nil || event?.type == .touches else { return self }
+        let view = promote()
+        return view.hitTest(convert(point, to: view), with: event) ?? view
+    }
+
+    /// What assistive technology reads is the text view's, as before.
+    override var accessibilityElements: [Any]? {
+        get { [promote()] }
+        set {}
+    }
+}
+
 /// The one code surface (OutputBlock.svelte): a recessed well, --radius-sm,
 /// 10/12 padding, the mono face at the label size on the body's leading,
 /// scrolling sideways rather than wrapping.
@@ -447,7 +595,7 @@ final class TableBlock: UIView {
     /// Every cell's width, by column.
     private var columnWidths: [[NSLayoutConstraint]] = []
     /// Every cell's text, by column, with the padding either side of it.
-    private var columnTexts: [[(text: ProseView, padding: Double)]] = []
+    private var columnTexts: [[(text: CellText, padding: Double)]] = []
     private var laidWidth: CGFloat = -1
     /// The width the table will stand at, where its row knows it (ProseView `fitWidth`).
     var fitWidth: CGFloat?
@@ -567,8 +715,7 @@ final class TableBlock: UIView {
             row.axis = .horizontal
             row.alignment = .top
             for i in 0 ..< columns {
-                let label = ProseView()
-                label.attributedText = i < cells.count ? cells[i] : NSAttributedString()
+                let label = CellText(i < cells.count ? cells[i] : NSAttributedString())
                 let box = UIView()
                 let padding = (i == 0 ? 0 : Self.cellInline) + (i == columns - 1 ? 0 : Self.cellInline)
                 if known != nil { label.fitWidth = start[i] - padding }
