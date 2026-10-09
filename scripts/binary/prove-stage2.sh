@@ -77,6 +77,13 @@ check() {
   local name=$1 fn=$2 limit=${3:-600} needs=${4:-} good=${5:-} log rc=0
   log="$out/logs/$(echo "$name" | tr -cs 'A-Za-z0-9' '-').log"
   LAST_LOG=$log
+  # PROOF_ONLY (an extended regex) runs only the checks whose names match it: a check being worked on, with the
+  # checks it builds on. Every other check says SKIPPED, never PASS, so a partial run never reads as a whole one.
+  if [[ -n ${PROOF_ONLY:-} ]] && ! [[ $name =~ $PROOF_ONLY ]]; then
+    echo "$name: SKIPPED (PROOF_ONLY)"
+    VERDICT[$name]=SKIPPED
+    return
+  fi
   if [[ -n $needs && ${VERDICT[$needs]:-} != PASS ]]; then
     echo "$name: NOT RUN (depends on \"$needs\", which did not pass)"
     echo "not run: depends on \"$needs\", which did not pass" > "$log"
@@ -1192,10 +1199,12 @@ export KEEPER_TASKS=200
 export PLACED_RE='^\[sessiond\] children run in (/sys/fs/cgroup/.+/cawco-sessiond\.service/children) under pids\.max ([0-9]+) \(([0-9]+), less 64 kept for the keeper\)$'
 # The keeper's last word on where its children run, since a moment (unix seconds): one of the lines cgroup.ts says.
 keeper_said() { as_user "$1" journalctl --user --no-pager -o cat -u cawco-sessiond.service --since "@$2" | grep '^\[sessiond\] ' | grep -v '^\[sessiond\] listening on \|^\[sessiond\] SIGTERM' | tail -n 1; }
-# Asks the keeper to start a child (container, procId, command, JSON args) and prints its ack for it.
+# Asks the keeper to start a child (container, procId, command, JSON args) and prints its ack for it. The keeper
+# acks a spawn only once the child has started or been refused, after a process-table read, and its socket does
+# not stay half-open: socat's shut-none keeps the request side open, and -t5 waits up to 5s for the ack.
 keeper_spawn() {
-  as_user "$1" sh -c 'printf "%s\n" "$1" | socat -t3 - UNIX-CONNECT:/run/user/1000/cawco/sessiond.sock' sh \
-    "{\"type\":\"spawn\",\"commandId\":\"$2-$(date +%s%N)\",\"procId\":\"$2\",\"spec\":{\"command\":\"$3\",\"args\":$4}}" | grep '"type":"ack"'
+  as_user "$1" sh -c 'printf "%s\n" "$1" | socat -t5 - UNIX-CONNECT:/run/user/1000/cawco/sessiond.sock,shut-none | grep -m1 "\"type\":\"ack\""' sh \
+    "{\"type\":\"spawn\",\"commandId\":\"$2-$(date +%s%N)\",\"procId\":\"$2\",\"spec\":{\"command\":\"$3\",\"args\":$4}}"
 }
 # A process's cgroup, as /proc says it, under the container's /sys/fs/cgroup.
 cgroup_of() { as_user "$1" sed -n 's/^0:://p' "/proc/$2/cgroup"; }
@@ -1233,10 +1242,15 @@ keeper_children_capped_on() {
   [[ "$(cgroup_of "$c" "$pid")" == */cawco-sessiond.service/children && "/sys/fs/cgroup$(cgroup_of "$c" "$pid")" == "$group" ]]
   # 3. A child that forks without end stops at the cap: children never holds more than pids.max, and the kernel
   # refused its forks there (pids.events counts each refusal).
-  ack=$(keeper_spawn "$c" cg-forker /bin/sh '["-c","while :; do sleep 600 & done"]')
+  # A forker that never gives up: dash exits at its first refused fork and bash after a few retries, and the
+  # keeper then reaps the tree, emptying the group before the next spawn is tried. perl's fork() answers undef
+  # at the cap and the loop goes on, holding the group full.
+  ack=$(keeper_spawn "$c" cg-forker /usr/bin/perl '["-e","while (1) { my $p = fork(); if (defined $p && $p == 0) { sleep 600; exit 0 } select(undef, undef, undef, 0.01) unless defined $p }"]')
   echo "spawn cg-forker: $ack"
   [[ $ack == *'"stage":"applied"'* ]]
   forker=$(child_pids "$c" cg-forker)
+  echo "forker: $forker"
+  [[ -n $forker ]]
   top=$(highest_pids "$c" "$group")
   events=$(as_user "$c" cat "$group/pids.events")
   echo "children's highest pids.current over ten seconds: $top, pids.max $max; pids.events: $events"
