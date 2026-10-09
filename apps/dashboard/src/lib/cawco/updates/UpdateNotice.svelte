@@ -338,9 +338,13 @@
     {#if (notice.configure && !view.onPage) || notice.action}
       <div class="buttons">
         {#if notice.configure && !view.onPage}
-          <Button class="quiet" href="/config/updates" size="sm" variant="ghost"
-            >Configure update behaviour</Button
-          >
+          <Button
+            class="quiet"
+            href="/config/updates"
+            label="Configure update behaviour"
+            size="sm"
+            variant="ghost"
+          />
         {/if}
         {#if notice.action === "retry"}
           <Button
@@ -371,13 +375,20 @@
 
 <style>
   .notice {
+    --pad-block: 12px;
+    --pad-inline: 14px;
+    --caw: 48px;
     position: relative;
     display: grid;
-    grid-template-columns: 48px 1fr;
+    grid-template-columns: var(--caw) 1fr;
     column-gap: var(--space-3);
-    row-gap: 2px;
+    row-gap: var(--space-row);
+    /* The rows stack from the top at their own heights; the box's floor
+       (Caw's height, as he stands out of the rows) never stretches them. */
+    align-content: start;
     inline-size: 100%;
-    padding: 12px 14px;
+    min-block-size: calc(var(--caw) + var(--pad-block) * 2 + 2px);
+    padding: var(--pad-block) var(--pad-inline);
     border: 1px solid var(--border-hairline);
     border-radius: var(--radius-lg);
     background: var(--surface-raised);
@@ -391,11 +402,15 @@
       inline-size: 356px;
     }
   }
+  /* Caw holds the leading column's top and sizes no row: a short text
+     column (a title and its act) is not pushed down to his height, so no
+     empty band opens above the actions. */
   .caw {
-    grid-row: 1 / 4;
-    grid-column: 1;
-    inline-size: 48px;
-    block-size: 48px;
+    position: absolute;
+    inset-block-start: var(--pad-block);
+    inset-inline-start: var(--pad-inline);
+    inline-size: var(--caw);
+    block-size: var(--caw);
   }
   .leaving {
     position: absolute;
@@ -404,9 +419,10 @@
   }
   /* The goodbye's one line, beside Caw and centred on him. */
   .bye {
-    grid-row: 1 / 4;
     grid-column: 2;
-    align-self: center;
+    display: flex;
+    align-items: center;
+    min-block-size: var(--caw);
     font: var(--type-label);
     color: var(--ink-strong);
   }
@@ -509,15 +525,16 @@
   .closing {
     color: var(--ink-muted);
   }
-  /* One footer row under Caw and the words, the whole width: the quiet way
-     to the settings at the leading edge, the act at the trailing edge (also
-     when it is the only one), both on one baseline at every width. */
+  /* One action row in the text column, packed to its trailing edge: the
+     quiet way to the settings just before the act, on one baseline, and
+     alone at that same edge when there is no act. */
   .buttons {
-    grid-column: 1 / -1;
+    grid-column: 2;
     display: flex;
     align-items: center;
-    gap: 8px;
-    margin-top: 8px;
+    justify-content: flex-end;
+    gap: var(--space-1);
+    margin-top: var(--space-2);
   }
   .buttons > :global(*) {
     flex: none;
@@ -532,8 +549,5 @@
     .buttons > :global(.quiet:hover) {
       color: var(--ink-strong);
     }
-  }
-  .buttons > :global(.primary) {
-    margin-inline-start: auto;
   }
 </style>
