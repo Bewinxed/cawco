@@ -63,7 +63,7 @@
 
   /** A picture or video on the session's machine, read through the hub when looked at. */
   const machineMedia = (machineId: string, path: string): string =>
-    `/api/agents/${encodeURIComponent(machineId)}/image?path=${encodeURIComponent(path)}`;
+    `/api/agents/${encodeURIComponent(machineId)}/media?path=${encodeURIComponent(path)}`;
 
   /** The clips the machine's file reader serves (agent fs.ts `MEDIA_TYPES`). */
   const VIDEO_FILE = /\.(mp4|mov|webm)$/i;

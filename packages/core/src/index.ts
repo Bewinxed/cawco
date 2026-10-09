@@ -476,21 +476,21 @@ export const ASK_USER_QUESTION = "AskUserQuestion";
 /**
  * `fs`: the machine's files, for the cwd picker and light markdown editing
  * (NEW.md §6) — not a file transfer. `list` answers with {@link FsEntry}[],
- * `read` with the file's text, `write` with the byte count it wrote, `image`
- * with an {@link FsImage} — the one binary the tunnel carries, so a picture or
+ * `read` with the file's text, `write` with the byte count it wrote, `media`
+ * with an {@link FsMedia} — the one binary the tunnel carries, so a picture or
  * video an agent pointed at can be looked at without the agent spending tokens
  * on it.
  */
 export interface FsPayload {
   /** `write` only: the text the file is replaced with. */
   content?: string;
-  op: "list" | "read" | "write" | "image";
+  op: "list" | "read" | "write" | "media";
   path: string;
   requestId: string;
 }
 
 /**
- * The most an `fs image` read carries: the Telegram Bot API's ceiling on what
+ * The most an `fs media` read carries: the Telegram Bot API's ceiling on what
  * a bot uploads, so a file read for `send_to_user` is one Telegram takes
  * (https://core.telegram.org/bots/api, sendVideo: "Bots can currently send
  * video files of up to 50 MB in size"; sendAnimation and sendDocument say the
@@ -498,8 +498,8 @@ export interface FsPayload {
  */
 export const MEDIA_LIMIT_BYTES = 50 * 1024 * 1024;
 
-/** What an `fs image` answers with: the file's bytes, base64, and what they are (a picture or a video). */
-export interface FsImage {
+/** What an `fs media` read answers with: the file's bytes, base64, and what they are (a picture or a video). */
+export interface FsMedia {
   base64: string;
   mediaType: string;
 }

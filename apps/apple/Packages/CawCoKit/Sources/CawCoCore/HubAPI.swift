@@ -30,7 +30,7 @@ public struct HubAPI: Sendable {
         public func list(_ input: Operations.GetApiAgents.Input = .init()) async throws -> Operations.GetApiAgents.Output { try await client.getApiAgents(input) }
         public func remove(_ input: Operations.DeleteApiAgentsByMachineId.Input) async throws -> Operations.DeleteApiAgentsByMachineId.Output { try await client.deleteApiAgentsByMachineId(input) }
         public func inspect(_ input: Operations.PostApiAgentsByMachineIdInspect.Input) async throws -> Operations.PostApiAgentsByMachineIdInspect.Output { try await client.postApiAgentsByMachineIdInspect(input) }
-        public func image(_ input: Operations.GetApiAgentsByMachineIdImage.Input) async throws -> Operations.GetApiAgentsByMachineIdImage.Output { try await client.getApiAgentsByMachineIdImage(input) }
+        public func media(_ input: Operations.GetApiAgentsByMachineIdMedia.Input) async throws -> Operations.GetApiAgentsByMachineIdMedia.Output { try await client.getApiAgentsByMachineIdMedia(input) }
         public func busy(_ input: Operations.GetApiAgentsByMachineIdBusy.Input) async throws -> Operations.GetApiAgentsByMachineIdBusy.Output { try await client.getApiAgentsByMachineIdBusy(input) }
         public func update(_ input: Operations.PostApiAgentsByMachineIdUpdate.Input) async throws -> Operations.PostApiAgentsByMachineIdUpdate.Output { try await client.postApiAgentsByMachineIdUpdate(input) }
         public func join(_ input: Operations.GetApiJoin.Input = .init()) async throws -> Operations.GetApiJoin.Output { try await client.getApiJoin(input) }

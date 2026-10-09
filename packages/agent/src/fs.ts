@@ -7,7 +7,7 @@
 import { lstat, readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { extname, join, resolve } from "node:path";
-import type { FsEntry, FsImage, FsPayload } from "@cawco/core";
+import type { FsEntry, FsMedia, FsPayload } from "@cawco/core";
 import { MEDIA_LIMIT_BYTES } from "@cawco/core";
 import { promptWrite, promptWriteReason } from "./prompt-writes";
 
@@ -110,7 +110,7 @@ const MEDIA_TYPES: Record<string, string> = {
 const megabytes = (bytes: number): string =>
   `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 
-const image = async (path: string): Promise<FsImage> => {
+const media = async (path: string): Promise<FsMedia> => {
   const mediaType = MEDIA_TYPES[extname(path).toLowerCase()];
   if (!mediaType) {
     throw new Error(
@@ -163,8 +163,8 @@ export const runFs = async ({
       return await read(target);
     case "write":
       return await write(target, content ?? "");
-    case "image":
-      return await image(target);
+    case "media":
+      return await media(target);
     default:
       throw new Error(`unknown fs op: ${op}`);
   }

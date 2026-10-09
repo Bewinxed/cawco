@@ -317,7 +317,7 @@ final class ToolLineView: RailRow, RowContent, Disclosing {
         if renderer == .image, let machine = env.machineId,
            let path = block.toolInput["path"] as? String {
             var parts = URLComponents()
-            parts.path = "/api/agents/\(machine)/image"
+            parts.path = "/api/agents/\(machine)/media"
             parts.queryItems = [URLQueryItem(name: "path", value: path)]
             if let url = parts.string.flatMap(env.url) {
                 let shot = ShotView(env: env, thumb: false)

@@ -56,7 +56,7 @@ const FRAMES: Record<string, string[]> = {
     "ControlPayload",
     "FsPayload",
     "FsEntry",
-    "FsImage",
+    "FsMedia",
     "SendPayload",
     "ReposResult",
     "UpdateReport",

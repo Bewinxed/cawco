@@ -4170,33 +4170,43 @@ function connect(): void {
     announcingParts(`${hubSocketUrl()}?protocol=${WIRE_PROTOCOL}`)
   );
 
-  socket.onopen = () => {
-    state.status = "connected";
-    state.retryAt = null;
-    state.failed = false;
-    clearTimeout(outageTimer);
-    outageTimer = undefined;
-    state.outage = false;
-    globalThis.__cawcoReconnectAttempts = 0;
-    readFleet();
-    // Re-state the subscription on every (re)connect — the hub's registry forgot
-    // this dashboard the moment the socket dropped.
-    lastSubscriptionKey = "";
-    syncSubscriptions();
-    lastPlanFollowKey = "";
-    syncPlanFollows();
-    resumePendingSends(streamState, streamHost);
-    // biome-ignore lint/complexity/noVoid: fire-and-forget — the update notice says it when the served build is newer
-    void checkServedBuild();
-    // biome-ignore lint/complexity/noVoid: fire-and-forget — the settings page and the notice read the policy once it lands
-    void updates.loadPolicy();
-  };
+  // The hub is reached when it speaks, not when the upgrade opens: a proxy in
+  // front of it (the dashboard's own server, a preview's relay) accepts the
+  // upgrade before it knows whether the hub is there. Counted on open, each
+  // such socket reset the backoff to one second and reread the fleet, the
+  // build and the policy, every second for as long as the hub was down. The
+  // hub's board is the first message on every socket (`olderThanHub`), so the
+  // first frame is the proof.
+  socket.addEventListener("message", () => hubReached(), { once: true });
 
   bind(socket);
   // This module made it, so it already owns it: `ensureConnected` has nothing
-  // left to adopt, and `onopen` above is what refreshes.
+  // left to adopt, and `hubReached` above is what refreshes.
   claimed = true;
   globalThis.__cawcoSocket = socket;
+}
+
+/** The hub answered on the socket `connect` opened: everything a connection is owed. */
+function hubReached(): void {
+  state.status = "connected";
+  state.retryAt = null;
+  state.failed = false;
+  clearTimeout(outageTimer);
+  outageTimer = undefined;
+  state.outage = false;
+  globalThis.__cawcoReconnectAttempts = 0;
+  readFleet();
+  // Re-state the subscription on every (re)connect — the hub's registry forgot
+  // this dashboard the moment the socket dropped.
+  lastSubscriptionKey = "";
+  syncSubscriptions();
+  lastPlanFollowKey = "";
+  syncPlanFollows();
+  resumePendingSends(streamState, streamHost);
+  // biome-ignore lint/complexity/noVoid: fire-and-forget — the update notice says it when the served build is newer
+  void checkServedBuild();
+  // biome-ignore lint/complexity/noVoid: fire-and-forget — the settings page and the notice read the policy once it lands
+  void updates.loadPolicy();
 }
 
 /**
@@ -4319,9 +4329,9 @@ export function ensureConnected(): void {
     if (claimed) {
       return;
     }
-    // Adopt it rather than assume somebody else is still listening: `onopen`
-    // has already fired for an open socket and will never fire again, so the
-    // status has to be read off the socket instead of waited for.
+    // Adopt it rather than assume somebody else is still listening: the
+    // `hubReached` it was made with belongs to the module that made it, so
+    // the status has to be read off the socket instead of waited for.
     claimed = true;
     bind(socket);
     if (socket.readyState === WebSocket.OPEN) {

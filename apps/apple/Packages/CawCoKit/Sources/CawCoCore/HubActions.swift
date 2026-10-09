@@ -98,9 +98,6 @@ extension HubConnection {
     public func writeFile(machineId: String, path: String, content: String) async throws -> FileWriteResult {
         try await fileRequest(machineId: machineId, op: .write, path: path, content: content)
     }
-    public func readImage(machineId: String, path: String) async throws -> Components.Schemas.FsImage {
-        try await fileRequest(machineId: machineId, op: .image, path: path)
-    }
     private func fileRequest<T: Decodable & Sendable>(machineId: String, op: Components.Schemas.FsPayload.OpPayload,
                                            path: String, content: String? = nil) async throws -> T {
         let requestId = UUID().uuidString.lowercased()

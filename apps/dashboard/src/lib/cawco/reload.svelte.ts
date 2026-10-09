@@ -235,10 +235,37 @@ const nextLook = () =>
   });
 
 /**
+ * The version change this tab last reloaded for (`<this build>→<served
+ * build>`), kept in the tab's session storage so it outlives the reload. A
+ * tab that comes back still on this build, with the server still naming that
+ * same other build, has already been reloaded once for it: the reload handed
+ * back the old build (a cache, a server still restarting, a preview whose
+ * version check another server answered), and reloading again would only
+ * loop. One reload per actual version change.
+ */
+const RELOADED_FOR = "cawco:reloaded-for";
+
+const reloadedFor = (): string | null => {
+  try {
+    return sessionStorage.getItem(RELOADED_FOR);
+  } catch {
+    return null;
+  }
+};
+
+const markReloadFor = (change: string): void => {
+  try {
+    sessionStorage.setItem(RELOADED_FOR, change);
+  } catch {
+    // No storage (a locked-down frame): the reload still goes, unguarded.
+  }
+};
+
+/**
  * Reloads this tab once the dashboard runs another build and the operator
- * isn't using it. Called again on every socket open and every snapshot, so
- * a dashboard that did not serve the other build yet is asked again; one
- * reload is ever on its way.
+ * isn't using it, once per version change ({@link RELOADED_FOR}). Called
+ * again on every socket open and every snapshot, so a dashboard that did not
+ * serve the other build yet is asked again; one reload is ever on its way.
  */
 export async function reloadWhenIdle(
   held?: (hold: ReloadHold) => void
@@ -250,7 +277,8 @@ export async function reloadWhenIdle(
     return;
   }
   const running = await runningBuild();
-  if (running === null || running === version) {
+  const change = `${version}→${running}`;
+  if (running === null || running === version || reloadedFor() === change) {
     for (const listener of listeners) {
       listener("build");
     }
@@ -274,5 +302,6 @@ export async function reloadWhenIdle(
     ...[...flushes].map((flush) => flush()),
     notices.acknowledge(farewell?.acks(running) ?? []),
   ]);
+  markReloadFor(change);
   location.reload();
 }

@@ -20,7 +20,7 @@ import type {
   FleetSkillMeta,
   FleetSyncReport,
   FramePayload,
-  FsImage,
+  FsMedia,
   FsPayload,
   GeneratedImage,
   GitChanges,
@@ -9237,14 +9237,14 @@ export const createServer = (
     if (!agent) {
       return "offline";
     }
-    const answer = await callFs(machineId, agent, { op: "image", path });
+    const answer = await callFs(machineId, agent, { op: "media", path });
     if (answer === "timeout") {
       return "timeout";
     }
     if (!answer.ok) {
       return { refused: answer.error ?? `${path} could not be read` };
     }
-    const { base64, mediaType } = answer.result as FsImage;
+    const { base64, mediaType } = answer.result as FsMedia;
     // Copied into a fresh ArrayBuffer-backed view: a Buffer's `ArrayBufferLike`
     // backing is not what `Response` and `Blob` accept as a body.
     const bytes = Uint8Array.from(Buffer.from(base64, "base64"));
@@ -12093,7 +12093,7 @@ export const createServer = (
       // caching: the file is the agent's working state and may be rewritten or
       // removed between two looks.
       .get(
-        "/api/agents/:machineId/image",
+        "/api/agents/:machineId/media",
         { query: t.Object({ path: t.String() }) },
         async ({ params, query, request, status }) => {
           const answer = await readMachineMedia(params.machineId, query.path);

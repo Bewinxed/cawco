@@ -7789,7 +7789,7 @@
         }
       }
     },
-    "/api/agents/{machineId}/image": {
+    "/api/agents/{machineId}/media": {
       "get": {
         "parameters": [
           {
@@ -7809,10 +7809,10 @@
             }
           }
         ],
-        "operationId": "getApiAgentsByMachineIdImage",
+        "operationId": "getApiAgentsByMachineIdMedia",
         "responses": {
           "200": {
-            "description": "getApiAgentsByMachineIdImage 200",
+            "description": "getApiAgentsByMachineIdMedia 200",
             "content": {
               "application/octet-stream": {
                 "schema": {
@@ -7823,7 +7823,7 @@
             }
           },
           "404": {
-            "description": "getApiAgentsByMachineIdImage 404",
+            "description": "getApiAgentsByMachineIdMedia 404",
             "content": {
               "text/plain": {
                 "schema": {
@@ -7833,7 +7833,7 @@
             }
           },
           "422": {
-            "description": "getApiAgentsByMachineIdImage 422",
+            "description": "getApiAgentsByMachineIdMedia 422",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7843,7 +7843,7 @@
             }
           },
           "503": {
-            "description": "getApiAgentsByMachineIdImage 503",
+            "description": "getApiAgentsByMachineIdMedia 503",
             "content": {
               "text/plain": {
                 "schema": {
@@ -7853,7 +7853,7 @@
             }
           },
           "504": {
-            "description": "getApiAgentsByMachineIdImage 504",
+            "description": "getApiAgentsByMachineIdMedia 504",
             "content": {
               "text/plain": {
                 "schema": {
@@ -19323,7 +19323,7 @@
         ]
       },
       "FsPayload": {
-        "description": "`fs`: the machine's files, for the cwd picker and light markdown editing\n(NEW.md §6) — not a file transfer. `list` answers with {@link FsEntry}[],\n`read` with the file's text, `write` with the byte count it wrote, `image`\nwith an {@link FsImage} — the one binary the tunnel carries, so a picture or\nvideo an agent pointed at can be looked at without the agent spending tokens\non it.",
+        "description": "`fs`: the machine's files, for the cwd picker and light markdown editing\n(NEW.md §6) — not a file transfer. `list` answers with {@link FsEntry}[],\n`read` with the file's text, `write` with the byte count it wrote, `media`\nwith an {@link FsMedia} — the one binary the tunnel carries, so a picture or\nvideo an agent pointed at can be looked at without the agent spending tokens\non it.",
         "type": "object",
         "properties": {
           "content": {
@@ -19332,8 +19332,8 @@
           },
           "op": {
             "enum": [
-              "image",
               "list",
+              "media",
               "read",
               "write"
             ],
@@ -19376,8 +19376,8 @@
           "size"
         ]
       },
-      "FsImage": {
-        "description": "What an `fs image` answers with: the file's bytes, base64, and what they are (a picture or a video).",
+      "FsMedia": {
+        "description": "What an `fs media` read answers with: the file's bytes, base64, and what they are (a picture or a video).",
         "type": "object",
         "properties": {
           "base64": {
