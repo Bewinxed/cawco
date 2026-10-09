@@ -18663,16 +18663,12 @@
           "email": {
             "type": "string"
           },
-          "store": {
-            "enum": [
-              "claude",
-              "opencode",
-              "pi"
-            ],
+          "provider": {
+            "description": "Who bills the account: a provider id. `anthropic` is a Claude subscription\nor Console organization, for Claude Code alone: Anthropic's terms keep its\nOAuth tokens out of every other product. Any other is a provider pi or\nOpenCode speaks, by pi-ai's id for it (`openai-codex` for a ChatGPT\nsubscription, `github-copilot`, `opencode-go`, `zai`…), or OpenCode's own\nid for one pi-ai has no provider for (`zai-coding-plan`, a configured\n`litellm`) — see {@link ProviderInfo}.",
             "type": "string"
           },
-          "provider": {
-            "type": "string"
+          "store": {
+            "$ref": "#/components/schemas/HomeStore"
           },
           "waitingFor": {
             "type": "number"
@@ -20354,7 +20350,7 @@
         "type": "object",
         "properties": {
           "contextWindow": {
-            "description": "The model's context window in tokens, exactly as the harness reports it\n(opencode's provider `limit.context`, pi's `Model.contextWindow`, and for\nclaude the `modelUsage` window the hub last observed). Absent means\nunknown — never a guess.",
+            "description": "The tokens one request to the model may send, as the harness reports it:\nopencode's provider `limit.input` where it gives one, else its\n`limit.context`; pi's `Model.contextWindow`; and for claude the\n`modelUsage` window the hub last observed. Absent means unknown — never a\nguess.",
             "type": "number"
           },
           "defaultEffort": {

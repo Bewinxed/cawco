@@ -207,6 +207,9 @@ class CawcoTools {
   }
 }
 
+/** A send that is pi's `/compact`, with its optional focus text. */
+const COMPACT_COMMAND = /^\/compact(?:\s+([\s\S]*))?$/;
+
 class PiSession implements HarnessSession {
   readonly harness = "pi" as const;
   sessionId: string | null = null;
@@ -463,8 +466,57 @@ class PiSession implements HarnessSession {
     }
   }
 
+  /**
+   * `/compact [focus]`: pi's own compaction (`AgentSession.compact`, the
+   * entry point its TUI's `/compact` calls, interactive-mode.js 2608-2611),
+   * never a prompt. It runs once the turn under way has ended, since pi's
+   * compact aborts whatever runs. pi stores no user message for it, so the
+   * send is said read here; its `compaction_end` gives the boundary and the
+   * summary ({@link #handle}), and a result closes it with what the summary
+   * cost and the context it leaves.
+   */
+  async #compact(uuid: string, focus: string | undefined): Promise<void> {
+    await this.#session.waitForIdle();
+    this.#setBusy(true);
+    this.#ctx.frame({
+      type: "system",
+      subtype: MESSAGES_READ,
+      read: [uuid],
+      session_id: this.sessionId ?? undefined,
+    });
+    try {
+      const done = await this.#session.compact(focus);
+      const leaf = this.#leaf();
+      const turnUsage = usageByModel(this.#turnUsage);
+      this.#turnUsage = [];
+      this.#setBusy(false);
+      this.#ctx.frame({
+        type: "result",
+        uuid: leaf.uuid,
+        timestamp: leaf.timestamp,
+        subtype: "success",
+        is_error: false,
+        turnUsage,
+        ...(done.estimatedTokensAfter === undefined
+          ? {}
+          : { contextTokens: done.estimatedTokensAfter }),
+      });
+    } catch (error) {
+      this.#turnUsage = [];
+      this.#setBusy(false);
+      this.#ctx.rejected(uuid, error);
+    }
+  }
+
   send(message: SentMessage, extras: TurnExtras): void {
     const text = textOf(message.message.content);
+    const compact = COMPACT_COMMAND.exec(text.trim());
+    if (compact) {
+      this.#compact(message.uuid, compact[1]?.trim() || undefined).catch(
+        (error: unknown) => this.#refused(message.uuid, error)
+      );
+      return;
+    }
     const images = (extras.images ?? []).map((image) => ({
       type: "image" as const,
       data: image.data,
@@ -572,10 +624,19 @@ class PiSession implements HarnessSession {
         const usage = (last as { usage?: { totalTokens?: number } } | undefined)
           ?.usage;
         const total = usage?.totalTokens ?? 0;
+        // The model's window in pi-ai's catalog is what a request may send:
+        // its input limit where that is below the context (gpt-5.5: 272000,
+        // providers/data/openai.json).
+        const window = this.#session.model?.contextWindow;
+        if (!window) {
+          throw new Error(
+            "The pi session has no model, so it has no context window."
+          );
+        }
         return {
           totalTokens: total,
-          maxTokens: 200_000,
-          percentage: Math.min(100, Math.round((total / 200_000) * 100)),
+          maxTokens: window,
+          percentage: Math.min(100, Math.round((total / window) * 100)),
           categories: [],
         };
       }

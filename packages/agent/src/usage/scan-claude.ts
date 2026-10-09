@@ -74,7 +74,7 @@ const parseClaudeRecord = (
     model: message.model,
     provider: null,
     tokens,
-    costUsd: costForUsage(message.model, tokens),
+    costUsd: costForUsage(message.model, tokens, ts),
     messageId: message.id,
     requestId,
     isSidechain: line.isSidechain === true,

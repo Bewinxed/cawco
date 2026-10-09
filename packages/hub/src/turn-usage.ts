@@ -62,7 +62,8 @@ interface Session {
  * conversation's cost-state), the result only sets the baseline.
  *
  * OpenCode and pi: the per-model sums their result frame carries
- * ({@link NeutralResultMessage.turnUsage}), priced at list rates.
+ * ({@link NeutralResultMessage.turnUsage}), each `provider/model`, priced at
+ * that provider's rates when the turn ended (`at`).
  */
 export const turnUsageOf = (
   session: Session,
@@ -124,13 +125,17 @@ export const turnUsageOf = (
         cacheReadTokens: usage.cacheRead,
         cacheWriteTokens: usage.cacheWrite,
         cacheWrite1hTokens: usage.cacheWrite1h ?? null,
-        costUsd: costForTurn(usage.model, {
-          input: usage.input,
-          output: usage.output,
-          cacheRead: usage.cacheRead,
-          cacheWrite5m: usage.cacheWrite - (usage.cacheWrite1h ?? 0),
-          cacheWrite1h: usage.cacheWrite1h ?? 0,
-        }),
+        costUsd: costForTurn(
+          usage.model,
+          {
+            input: usage.input,
+            output: usage.output,
+            cacheRead: usage.cacheRead,
+            cacheWrite5m: usage.cacheWrite - (usage.cacheWrite1h ?? 0),
+            cacheWrite1h: usage.cacheWrite1h ?? 0,
+          },
+          at
+        ),
       })
     ),
   };

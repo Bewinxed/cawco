@@ -248,10 +248,11 @@ export interface McpServerStatus {
 /** One model a harness offers. `value` is the wire id; `resolvedModel` the alias. */
 export interface ModelInfo {
   /**
-   * The model's context window in tokens, exactly as the harness reports it
-   * (opencode's provider `limit.context`, pi's `Model.contextWindow`, and for
-   * claude the `modelUsage` window the hub last observed). Absent means
-   * unknown — never a guess.
+   * The tokens one request to the model may send, as the harness reports it:
+   * opencode's provider `limit.input` where it gives one, else its
+   * `limit.context`; pi's `Model.contextWindow`; and for claude the
+   * `modelUsage` window the hub last observed. Absent means unknown — never a
+   * guess.
    */
   contextWindow?: number;
   /**

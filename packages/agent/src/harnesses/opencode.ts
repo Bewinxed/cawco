@@ -2153,7 +2153,15 @@ export async function opencodeCatalog(
     : models;
 }
 
-/** Every model the connected providers offer, with its effort scale and context window. */
+/**
+ * How many tokens one request to the model may send: its input limit where
+ * the catalog gives one below its context (OpenCode's `limit.input`; gpt-5.5:
+ * context 400000, input 272000), else its context.
+ */
+const requestWindow = (limit: { context: number; input?: number }): number =>
+  limit.input ? Math.min(limit.input, limit.context) : limit.context;
+
+/** Every model the connected providers offer, with its effort scale and the tokens a request may send. */
 function modelCatalog(
   providers: Pick<Provider, "id" | "models">[]
 ): ModelInfo[] {
@@ -2177,7 +2185,9 @@ function modelCatalog(
         ...(supportedEffortLevels.length
           ? { supportsEffort: true, supportedEffortLevels }
           : {}),
-        ...(model.limit?.context ? { contextWindow: model.limit.context } : {}),
+        ...(model.limit && requestWindow(model.limit)
+          ? { contextWindow: requestWindow(model.limit) }
+          : {}),
       });
     }
   }
@@ -4305,7 +4315,7 @@ export class OpencodeSession implements HarnessSession {
       }
       const model = ref.modelID ? provider.models?.[ref.modelID] : undefined;
       if (model) {
-        return model.limit.context;
+        return requestWindow(model.limit);
       }
     }
     return 200_000;

@@ -2808,7 +2808,9 @@ export const createServer = (
   };
   /**
    * The credentials moving out of a machine's own stores into CawCo now
-   * (`POST /api/accounts/move-login`), with the account each moves into,
+   * (pi's and OpenCode's each when its machine connects,
+   * {@link adoptHomeCredentials}; any by `POST /api/accounts/move-login`),
+   * with the account each moves into,
    * kept in the database (`login_moves`) so a hub restart carries each on.
    * While one is, the sessions that run from it ({@link movingFor}) go on
    * running from it, woken and started as ever, and the move itself runs at
@@ -5927,6 +5929,125 @@ export const createServer = (
     `${machineName(machineId)} is ${answer === "offline" ? "not connected" : "not answering"}.`;
 
   /**
+   * Starts moving one credential out of a machine's own store into the
+   * account of the identity it is (made now when there is none): the move is
+   * kept until the machine has made it, and tried at once. Refused when it is
+   * already moving, or the account already has a sign-in there or one moving
+   * there.
+   */
+  const startMove = async (
+    machineId: string,
+    store: HomeStore,
+    found: {
+      identity: AccountIdentity;
+      kind: AccountKind;
+      provider: AccountProvider;
+      storeProvider: string;
+    }
+  ): Promise<
+    | { error: string; status: 409 }
+    | {
+        accountId: string;
+        email: string;
+        provider: AccountProvider;
+        store: HomeStore;
+        waitingFor: number;
+      }
+  > => {
+    const machine = machineName(machineId);
+    const { identity, kind, provider, storeProvider } = found;
+    const key = moveKey({ machineId, store, storeProvider });
+    if (movingLogins().some((one) => moveKey(one) === key)) {
+      return {
+        status: 409,
+        error: `${machine}'s own ${store} ${storeProvider} is already moving into CawCo.`,
+      };
+    }
+    const account = accountOfIdentity(db, identity, kind, provider);
+    if (
+      db.accounts
+        .signins()
+        .some(
+          (one) =>
+            one.accountId === account.id &&
+            one.machineId === machineId &&
+            one.state === "signed-in"
+        )
+    ) {
+      return {
+        status: 409,
+        error: `${accountName(account)} is already signed in on ${machine} in CawCo; nothing was moved.`,
+      };
+    }
+    if (
+      movingLogins().some(
+        (one) => one.accountId === account.id && one.machineId === machineId
+      )
+    ) {
+      return {
+        status: 409,
+        error: `Another of ${machine}'s own stores is already moving ${accountName(account)} into CawCo.`,
+      };
+    }
+    const move: LoginMove = {
+      accountId: account.id,
+      identity,
+      machineId,
+      provider,
+      since: Date.now(),
+      store,
+      storeProvider,
+    };
+    db.accounts.putMove(move);
+    moveResults.delete(key);
+    tickMoves();
+    const waitingFor = liveFrom(move).length;
+    console.log(
+      `[hub] moving ${machine}'s own ${store} ${storeProvider} (${identity.email}) into account ${account.id}; it moves at the first moment its ${waitingFor} live session(s) are at rest`
+    );
+    await advanceMove(move);
+    return {
+      accountId: account.id,
+      email: identity.email,
+      store,
+      provider,
+      waitingFor,
+    };
+  };
+
+  /**
+   * Every credential in a connecting machine's own pi and OpenCode stores
+   * moved into CawCo, so every provider login its harnesses use is an
+   * account the hub places sessions on and reads limits for (OpenCode Go's
+   * windows, ChatGPT's). Asked once per connection, when its first beat
+   * reports what it can do; a credential already moved is gone from its
+   * store, and one whose account is already signed in there stays where it
+   * is. A move that fails leaves the original as it was and is asked again
+   * at the machine's next connection.
+   */
+  const adoptHomeCredentials = async (machineId: string): Promise<void> => {
+    const read = await callAgent(
+      machineId,
+      CONTROL_READ_HOME_CREDENTIALS,
+      [],
+      SIGNIN_TIMEOUT_MS
+    );
+    if (typeof read === "string" || !read.ok) {
+      console.warn(
+        `[hub] ${machineName(machineId)} did not say what its own pi and OpenCode stores hold: ${typeof read === "string" ? read : (read.error ?? "no answer")}`
+      );
+      return;
+    }
+    for (const found of read.result as HomeCredential[]) {
+      // biome-ignore lint/performance/noAwaitInLoops: one move at a time per machine, as each may wait on its sessions
+      const started = await startMove(machineId, found.store, found);
+      if ("error" in started) {
+        console.log(`[hub] ${started.error}`);
+      }
+    }
+  };
+
+  /**
    * Accounts removed because a sign-in to them came out as an account that
    * already was ({@link joinExisting}), and the account each is now: a
    * sign-in still waiting on another machine for the removed one finishes
@@ -8142,6 +8263,86 @@ export const createServer = (
       ?.contextWindow;
   };
 
+  /**
+   * The context a session's last real request sent, as it last reported it:
+   * the row's `context_tokens` (every result writes it), else for a Claude
+   * session its stored transcript's last request, read on its machine and
+   * kept on the row. A reason when it never reported one.
+   */
+  const reportedContextOf = async (
+    row: KeepAliveRow
+  ): Promise<{ tokens: number; readAt: number } | { reason: string }> => {
+    if (row.contextTokens !== null) {
+      return {
+        tokens: row.contextTokens,
+        readAt: (row.contextReadAt as Date).getTime(),
+      };
+    }
+    if (row.harness !== "claude" || !row.sessionId) {
+      return { reason: "no stored Claude conversation" };
+    }
+    const answer = await callAgent(
+      row.machineId,
+      CONTROL_READ_SESSION_CONTEXT,
+      [row.sessionId, row.cwd],
+      2000,
+      "claude"
+    );
+    if (answer === "offline" || answer === "timeout") {
+      return { reason: answer };
+    }
+    if (!answer.ok) {
+      return { reason: answer.error ?? "transcript read failed" };
+    }
+    const reading = answer.result as
+      | { tokens: number; readAt: number }
+      | { reason: string }
+      | undefined;
+    if (!reading) {
+      return { reason: "agent has no context reader" };
+    }
+    if (!("tokens" in reading)) {
+      return reading;
+    }
+    // A live result that arrived during this read is newer than the stored transcript.
+    const [current] = db.getInstancesByIds([row.id]);
+    if (current.contextTokens === null) {
+      db.updateKeepAlive(row.id, {
+        contextTokens: reading.tokens,
+        contextReadAt: new Date(reading.readAt),
+      });
+    }
+    const [measured] = db.getInstancesByIds([row.id]);
+    return {
+      tokens: measured.contextTokens as number,
+      readAt: (measured.contextReadAt as Date).getTime(),
+    };
+  };
+
+  /**
+   * How many tokens a continuation's source holds: a running session's, as
+   * its harness reads it now; one at rest, the context its last real request
+   * sent ({@link reportedContextOf}), which holds what its transcript cannot
+   * show (the system prompt, attachments, a model's encrypted thinking: 508k
+   * for a session whose text estimates at 199k). The transcript's estimate
+   * only for one that never reported.
+   */
+  const contextTokensOf = async (
+    row: KeepAliveRow | undefined,
+    scope: Parameters<typeof scopeChars>[0]
+  ): Promise<number> => {
+    if (!row) {
+      return estimateTokens(scopeChars(scope));
+    }
+    if (row.status === "running" && registry.agent(row.machineId)) {
+      return await liveContextTokensOf(row);
+    }
+    const reported = await reportedContextOf(row);
+    return "tokens" in reported
+      ? reported.tokens
+      : estimateTokens(scopeChars(scope));
+  };
+
   /** How many tokens a running session holds right now, as its harness reads it. */
   const liveContextTokensOf = async (row: InstanceRow): Promise<number> => {
     const requestId = crypto.randomUUID();
@@ -8308,16 +8509,11 @@ export const createServer = (
     const prompt = extracted.middle.length
       ? summariserPrompt(extracted.middle, note)
       : undefined;
-    const running =
-      row?.status === "running" && registry.agent(row.machineId) !== undefined;
     return {
       source,
       extracted,
       prompt,
-      liveContextTokens:
-        row && running
-          ? await liveContextTokensOf(row)
-          : estimateTokens(scopeChars(scope)),
+      liveContextTokens: await contextTokensOf(row, scope),
       summariseInputTokens: prompt ? estimateTokens(prompt.length) : 0,
       openingTokens:
         estimateTokens(openingMessage(source, "", extracted, note).length) +
@@ -14263,51 +14459,7 @@ export const createServer = (
           if (!row) {
             return status(404, "Session not found");
           }
-          if (row.contextTokens !== null) {
-            return {
-              tokens: row.contextTokens,
-              readAt: (row.contextReadAt as Date).getTime(),
-            };
-          }
-          if (row.harness !== "claude" || !row.sessionId) {
-            return { reason: "no stored Claude conversation" };
-          }
-          const answer = await callAgent(
-            row.machineId,
-            CONTROL_READ_SESSION_CONTEXT,
-            [row.sessionId, row.cwd],
-            2000,
-            "claude"
-          );
-          if (answer === "offline" || answer === "timeout") {
-            return { reason: answer };
-          }
-          if (!answer.ok) {
-            return { reason: answer.error ?? "transcript read failed" };
-          }
-          const reading = answer.result as
-            | { tokens: number; readAt: number }
-            | { reason: string }
-            | undefined;
-          if (!reading) {
-            return { reason: "agent has no context reader" };
-          }
-          if ("tokens" in reading) {
-            // A live result that arrived during this read is newer than the stored transcript.
-            const [current] = db.getInstancesByIds([row.id]);
-            if (current.contextTokens === null) {
-              db.updateKeepAlive(row.id, {
-                contextTokens: reading.tokens,
-                contextReadAt: new Date(reading.readAt),
-              });
-            }
-            const [measured] = db.getInstancesByIds([row.id]);
-            return {
-              tokens: measured.contextTokens,
-              readAt: (measured.contextReadAt as Date).getTime(),
-            };
-          }
-          return reading;
+          return await reportedContextOf(row);
         }
       )
       // What these conversations are called — *whether or not the board still
@@ -17351,59 +17503,14 @@ export const createServer = (
         },
         async ({ body, status }) => {
           const { machineId, store } = body;
-          const machine = machineName(machineId);
           const found = await homeCredentialOf(machineId, store, body.provider);
           if ("error" in found) {
             return status(found.status, found.error);
           }
-          const { identity, kind, provider, storeProvider } = found;
-          const key = moveKey({ machineId, store, storeProvider });
-          if (movingLogins().some((one) => moveKey(one) === key)) {
-            return status(
-              409,
-              `${machine}'s own ${store} ${storeProvider} is already moving into CawCo.`
-            );
-          }
-          const account = accountOfIdentity(db, identity, kind, provider);
-          if (
-            db.accounts
-              .signins()
-              .some(
-                (one) =>
-                  one.accountId === account.id &&
-                  one.machineId === machineId &&
-                  one.state === "signed-in"
-              )
-          ) {
-            return status(
-              409,
-              `${accountName(account)} is already signed in on ${machine} in CawCo; nothing was moved.`
-            );
-          }
-          const move: LoginMove = {
-            accountId: account.id,
-            identity,
-            machineId,
-            provider,
-            since: Date.now(),
-            store,
-            storeProvider,
-          };
-          db.accounts.putMove(move);
-          moveResults.delete(key);
-          tickMoves();
-          const waitingFor = liveFrom(move).length;
-          console.log(
-            `[hub] moving ${machine}'s own ${store} ${storeProvider} (${identity.email}) into account ${account.id}; it moves at the first moment its ${waitingFor} live session(s) are at rest`
-          );
-          await advanceMove(move);
-          return status(202, {
-            accountId: account.id,
-            email: identity.email,
-            store,
-            provider,
-            waitingFor,
-          });
+          const started = await startMove(machineId, store, found);
+          return "error" in started
+            ? status(started.status, started.error)
+            : status(202, started);
         }
       )
       .get("/api/accounts/move-login", () => ({
@@ -18029,6 +18136,7 @@ export const createServer = (
                 );
                 autoInstall(message.machineId, ws);
                 sendFleetSync(message.machineId, ws);
+                adoptHomeCredentials(message.machineId).catch(console.error);
               }
               // Every other provider's accounts on this machine, as their
               // stores there say, and the providers it knows.
@@ -18875,6 +18983,17 @@ export const createServer = (
                     message.instanceId,
                     neutral.retry
                   );
+                  // A summariser whose provider refuses it at its usage
+                  // limit is refused: its harness would retry until the
+                  // limit resets (OpenCode answers Go's monthly limit with a
+                  // `retry` status, never an error). Its wait ends on the
+                  // provider's words and the run stops its scratch session,
+                  // so the continuation's caller decides what is next.
+                  if (providerLimitRefused([neutral.retry.message])) {
+                    turnWaiters
+                      .get(message.instanceId)
+                      ?.reject(new Error(neutral.retry.message));
+                  }
                 }
               }
               // A turn's end, in this order: the standing instructions answer

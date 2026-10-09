@@ -20,7 +20,8 @@ export const isKeepAlive = (
   message?.origin?.kind === "system" && message.origin.name === "keepalive";
 
 export const keepAliveCap = (row: KeepAliveRow): number => {
-  const rates = row.model ? resolveRates(row.model) : null;
+  // A ratio of two rates of one moment: the provider's clock cancels out.
+  const rates = row.model ? resolveRates(row.model, Date.now()) : null;
   if (!rates || rates.cacheRead <= 0) {
     return row.cacheTtl === "1h" ? 20 : 12;
   }

@@ -6291,10 +6291,17 @@ const make = async (path: string): Promise<DbShape> => {
       // rather than inferring from a $0 total: a genuinely free model (say
       // `deepseek-v4-flash-free`, published at 0/0/0) also totals $0, and
       // calling that "no published price" is a lie. `resolveRates` returns null
-      // only on a real miss. Scoped by harness/machine but not by time — a
-      // model's missing price does not come and go.
+      // only on a real miss, for the model on its provider. One its harness
+      // priced itself (OpenCode's own cost) has a price. Scoped by
+      // harness/machine but not by time — a model's missing price does not
+      // come and go.
+      const now = Date.now();
       const missingPricing = db
-        .select({ model: usageBuckets.model })
+        .select({
+          model: usageBuckets.model,
+          provider: usageBuckets.provider,
+          costUsd: sql<number>`sum(${usageBuckets.costUsd})`,
+        })
         .from(usageBuckets)
         .where(
           and(
@@ -6307,10 +6314,13 @@ const make = async (path: string): Promise<DbShape> => {
               : eq(usageBuckets.machineId, machineId)
           )
         )
-        .groupBy(usageBuckets.model)
+        .groupBy(usageBuckets.model, usageBuckets.provider)
         .all()
-        .map((row) => row.model)
-        .filter((model) => resolveRates(model) === null);
+        .filter((row) => row.costUsd === 0)
+        .map((row) =>
+          row.provider ? `${row.provider}/${row.model}` : row.model
+        )
+        .filter((model) => resolveRates(model, now) === null);
 
       return { rows, totals, missingPricing };
     },

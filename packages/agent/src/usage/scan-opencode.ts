@@ -2,7 +2,7 @@ import { Database } from "bun:sqlite";
 import { readdir } from "node:fs/promises";
 import { basename, join } from "node:path";
 import type { RawOpenCodeMessage, UsageTokens } from "@cawco/core";
-import { costForUsage, totalTokens } from "@cawco/core";
+import { clockFactor, costForUsage, totalTokens } from "@cawco/core";
 import { opencodeDataDir } from "@cawco/core/usage/opencode-go";
 import type { ScannedRecord } from "./types";
 
@@ -56,8 +56,9 @@ const projectOf = (
  * maxTimeCreated`, a row at a time, in read-only mode, and answers the highest
  * `time_created` seen: the next incremental watermark. Rows whose
  * `role !== 'assistant'` or whose every token field is zero are skipped.
- * `data.cost` is authoritative; computed pricing is only the fallback when
- * cost is absent/zero and tokens are non-zero.
+ * `data.cost` (it knows the catalog's long-context tiers) times the
+ * provider's clock ({@link clockFactor}) is the message's cost; CawCo's own
+ * pricing applies only when cost is absent/zero and tokens are non-zero.
  */
 export const scanOpencode = (
   dbPath: string,
@@ -124,18 +125,23 @@ export const scanOpencode = (
         reasoning,
       };
 
-      let cost =
+      const ts = data.time?.created ?? row.time_created;
+      const priced = provider ? `${provider}/${model}` : model;
+      const own =
         typeof data.cost === "number" && !Number.isNaN(data.cost)
           ? data.cost
           : 0;
-      if ((data.cost === undefined || cost === 0) && totalTokens(tokens) > 0) {
-        cost = costForUsage(provider ? `${provider}/${model}` : model, tokens);
-      }
+      // OpenCode prices a message at its catalog's rates (models.dev's, the
+      // off-peak ones for DeepSeek), so the provider's clock is applied to it.
+      const cost =
+        own === 0 && totalTokens(tokens) > 0
+          ? costForUsage(priced, tokens, ts)
+          : own * clockFactor(priced, ts);
 
       const { project, projectPath } = projectOf(data);
       onRecord({
         harness: "opencode",
-        ts: data.time?.created ?? row.time_created,
+        ts,
         sessionId,
         project,
         projectPath,

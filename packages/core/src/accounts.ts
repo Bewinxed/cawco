@@ -585,7 +585,8 @@ export const CONTROL_FORGET_PROVIDER_ACCOUNT = "forgetProviderAccount";
 
 /**
  * The one-time move of the machine's own pi and OpenCode credentials into
- * accounts. Read (no args) answers every entry in pi's own `auth.json` and
+ * accounts, which the hub starts for each one when the machine connects
+ * (and `POST /api/accounts/move-login` for one). Read (no args) answers every entry in pi's own `auth.json` and
  * OpenCode's own `auth.json` a CawCo account can hold, a {@link
  * HomeCredential} each (a Claude subscription's OAuth there is never listed).
  * Move (args: account id, store, provider in that store, the identity read)
