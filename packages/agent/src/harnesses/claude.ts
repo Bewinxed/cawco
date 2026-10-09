@@ -126,6 +126,12 @@ import {
   launchedHook,
   workspaceHook,
 } from "../boundary";
+import {
+  mcpConfigOffArgv,
+  removeMcpConfig,
+  removeMcpConfigsOf,
+  sweepMcpConfigs,
+} from "../claude-mcp-config";
 import { carrySessions, readTaskList, transcriptIn } from "../claude-sessions";
 import { delegationMcp, MCP_SERVER_NAME } from "../delegation";
 import { sessionFleetDenials } from "../denied-tools";
@@ -1073,16 +1079,97 @@ const scratchDirectory = (boundary: HarnessContext["boundary"]) =>
  */
 const SESSION_SETTINGS = { totalTokensReminder: "off" } as const;
 
-/** {@link claudeBoundaryOptions} with {@link SESSION_SETTINGS} in its `settings`. */
-const sessionSettingsOptions = (boundary: HarnessContext["boundary"]) => {
+/**
+ * Flag settings a project's Caw launches with besides: no claude.ai account
+ * connectors. `strictMcpConfig` keeps every other MCP source out ("Only use
+ * MCP servers passed via the `mcpServers` option … ignoring all other MCP
+ * configurations: project `.mcp.json`, user settings, plugins, and on-disk
+ * agent frontmatter", sdk.d.ts 0.3.296), but the connectors are fetched from
+ * the account, not read from a config: "When true in any settings source,
+ * claude.ai MCP cloud connectors are not auto-fetched or connected"
+ * (`disableClaudeAiConnectors`, sdk.d.ts 0.3.296). The CLI's fetch returns
+ * none on it: `w=jue();if(S||w)return t(\`[claudeai-mcp] Disabled via
+ * ${S?"env var":"disableClaudeAiConnectors setting"}\`)…{}` (2.1.296).
+ */
+const LEAD_SETTINGS = { disableClaudeAiConnectors: true } as const;
+
+/**
+ * {@link claudeBoundaryOptions} with {@link SESSION_SETTINGS} in its
+ * `settings`, and a lead's {@link LEAD_SETTINGS} over them.
+ */
+const sessionSettingsOptions = (
+  boundary: HarnessContext["boundary"],
+  lead: boolean
+) => {
   const bounded = claudeBoundaryOptions(boundary);
   return {
     ...bounded,
     settings: {
       ...SESSION_SETTINGS,
       ...("settings" in bounded ? bounded.settings : {}),
+      ...(lead ? LEAD_SETTINGS : {}),
     },
   };
+};
+
+/**
+ * The MCP servers a session launches with: the caller's and CawCo's, or
+ * CawCo's alone for a project's Caw.
+ */
+const sessionMcpServers = (
+  instanceId: string,
+  ctx: HarnessContext,
+  options: unknown,
+  lead: boolean
+): Record<string, McpServerConfig> => ({
+  ...(lead
+    ? {}
+    : ((options as { mcpServers?: Record<string, McpServerConfig> } | undefined)
+        ?.mcpServers ?? {})),
+  [MCP_SERVER_NAME]: delegationMcp(instanceId, ctx.sessionCredential),
+});
+
+/**
+ * The SDK's command line, handed to sessiond with its MCP servers in a file
+ * rather than inline ({@link mcpConfigOffArgv}): CawCo's carries the
+ * session's bearer, and argv is every local user's to read. The file goes
+ * when the child does. An attach launches nothing; the files its child was
+ * launched with go when that child ends.
+ */
+const launchUnderSessiond = (
+  instanceId: string,
+  ctx: HarnessContext,
+  sessiond: {
+    client: SessiondClient;
+    procId: string;
+    attach?: BridgeRing["attach"];
+  },
+  seqs: Map<string, number>,
+  spawnOptions: import("@anthropic-ai/claude-agent-sdk").SpawnOptions
+): import("@anthropic-ai/claude-agent-sdk").SpawnedProcess => {
+  const attachedAt = Date.now();
+  const launch = sessiond.attach
+    ? undefined
+    : mcpConfigOffArgv(instanceId, spawnOptions.args, ctx.sessionCredential);
+  const file = launch?.file;
+  try {
+    return sessiondBridge(
+      sessiond.client,
+      sessiond.procId,
+      launch ? { ...spawnOptions, args: launch.args } : spawnOptions,
+      { seqs, attach: sessiond.attach },
+      (refusal) => ctx.keeperRefused(refusal),
+      () =>
+        file
+          ? removeMcpConfig(file)
+          : removeMcpConfigsOf(instanceId, attachedAt)
+    );
+  } catch (error) {
+    if (file) {
+      removeMcpConfig(file);
+    }
+    throw error;
+  }
 };
 
 class ClaudeSession implements HarnessSession {
@@ -1180,6 +1267,11 @@ class ClaudeSession implements HarnessSession {
     /** What the fleet denies this session, resolved once by `spawn()` via {@link sessionFleetDenials}. */
     fleetDenyList: readonly string[] = [],
     /**
+     * A project's Caw ({@link SpawnPayload.lead}): CawCo's MCP server is the
+     * only one it has, from no source but this launch.
+     */
+    lead = false,
+    /**
      * The sessiond connection this session's CLI child lives under. Not
      * optional in practice — `spawn()` always supplies it, and there is no
      * in-process fallback (PLAN.md C7: full cutover, rollback is a revert).
@@ -1202,12 +1294,7 @@ class ClaudeSession implements HarnessSession {
     const cliMode = this.#mode.cli;
     this.#launchCredential = ctx.sessionCredential;
     this.#boundaryHook = workspaceHook(ctx.boundary);
-    const mcpServers: Record<string, McpServerConfig> = {
-      ...((
-        options as { mcpServers?: Record<string, McpServerConfig> } | undefined
-      )?.mcpServers ?? {}),
-      [MCP_SERVER_NAME]: delegationMcp(instanceId, ctx.sessionCredential),
-    };
+    const mcpServers = sessionMcpServers(instanceId, ctx, options, lead);
     this.#sessiond = sessiond;
     this.#stored = persistSession !== false;
     const seqs = this.#seqs;
@@ -1244,6 +1331,10 @@ class ClaudeSession implements HarnessSession {
         ...claudeExecutableOptions(),
         extraArgs,
         mcpServers,
+        // A lead's servers are these and no others: the CLI's
+        // `--strict-mcp-config`, set after the caller's options so none of
+        // them turns it off.
+        ...(lead ? { strictMcpConfig: true } : {}),
         // What the CLI holds for later, said at each turn's end: the SDK's
         // `Stop` hook input lists the wake-ups the session has scheduled
         // ("Lets hooks distinguish 'session is done' from 'session is paused
@@ -1317,7 +1408,7 @@ class ClaudeSession implements HarnessSession {
         includePartialMessages: true,
         // A work item's session runs every shell command inside its
         // workspace's boundary: a hook the CLI itself runs rewrites each one.
-        ...sessionSettingsOptions(ctx.boundary),
+        ...sessionSettingsOptions(ctx.boundary, lead),
         ...scratchDirectory(ctx.boundary),
         // THE SEAM (design §4.1). The SDK builds the CLI's command line and
         // hands it here instead of spawning it; we forward it to sessiond and
@@ -1329,18 +1420,19 @@ class ClaudeSession implements HarnessSession {
         //
         // Placed AFTER the caller's `options` spread on purpose: a spawn
         // payload may not opt out of it. There is no flag and no in-process
-        // fallback (PLAN.md C7).
+        // fallback (PLAN.md C7). Its MCP servers go in a file, not on argv
+        // ({@link launchUnderSessiond}).
         ...(sessiond
           ? {
               spawnClaudeCodeProcess: (
                 spawnOptions: import("@anthropic-ai/claude-agent-sdk").SpawnOptions
               ) =>
-                sessiondBridge(
-                  sessiond.client,
-                  sessiond.procId,
-                  spawnOptions,
-                  { seqs, attach: sessiond.attach },
-                  (refusal) => ctx.keeperRefused(refusal)
+                launchUnderSessiond(
+                  instanceId,
+                  ctx,
+                  sessiond,
+                  seqs,
+                  spawnOptions
                 ),
             }
           : {}),
@@ -2534,9 +2626,39 @@ export class ClaudeHarness implements Harness {
     // sessiond exists to provide.
     this.#sessiond = (async () => {
       await ensureSessiond(endpoint);
-      return SessiondClient.connect(endpoint);
+      const client = await SessiondClient.connect(endpoint);
+      this.#swept ??= this.#sweepMcpConfigs(client);
+      await this.#swept;
+      return client;
     })();
     return this.#sessiond;
+  }
+
+  /** This agent's one removal of the MCP configs of children that are gone. */
+  #swept: Promise<void> | undefined;
+
+  /**
+   * The MCP config files ({@link mcpConfigOffArgv}) of Claude children that
+   * no longer exist: an agent that stopped before its child did never saw
+   * that child end. Done on the first connection, before this agent writes a
+   * file of its own; a failure is said and left to the next agent's start.
+   */
+  async #sweepMcpConfigs(client: SessiondClient): Promise<void> {
+    try {
+      const { procs } = await client.list();
+      sweepMcpConfigs(
+        new Set(
+          procs.flatMap((proc) => {
+            const id = parseProcId(proc.procId);
+            return proc.alive && id.kind === "claude" ? [id.instanceId] : [];
+          })
+        )
+      );
+    } catch (error) {
+      console.warn(
+        `[claude] removing the MCP configs of ended children failed: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
   }
 
   async spawn(
@@ -2621,6 +2743,7 @@ export class ClaudeHarness implements Harness {
       spec.skills,
       spec.denyTools,
       fleetDenyList,
+      spec.lead === true,
       { client, procId: procIdFor("claude", ctx.instanceId) }
     );
   }
@@ -2816,6 +2939,7 @@ export class ClaudeHarness implements Harness {
       undefined,
       undefined,
       [],
+      false,
       {
         client,
         procId,

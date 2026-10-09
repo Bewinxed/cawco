@@ -826,10 +826,23 @@ export const sessiondBridge = (
   },
   ring: BridgeRing,
   /** The keeper refused the child its input ({@link KeeperRefused}): told once. */
-  refused: (error: KeeperRefused) => void
+  refused: (error: KeeperRefused) => void,
+  /**
+   * The child is gone: sessiond reported its end, or the spawn never started
+   * one. Told once. A host that detaches (closes its `Query`) is not told:
+   * the child goes on.
+   */
+  ended: () => void
 ): import("@anthropic-ai/claude-agent-sdk").SpawnedProcess => {
   const { attach } = ring;
   const events = new EventEmitter();
+  let isEnded = false;
+  const end = (): void => {
+    if (!isEnded) {
+      isEnded = true;
+      ended();
+    }
+  };
   let killed = false;
   /** The spawn itself failed: that error is the report, not a refusal after it. */
   let spawnFailed = false;
@@ -962,6 +975,7 @@ export const sessiondBridge = (
       exitCode = code;
       signalCode = sig;
       stdout.push(null);
+      end();
       // An `exit` with neither a code nor a signal is not one a process can
       // emit, and the SDK reads it as still running: its `waitForExit` waits
       // for another `exit` and never returns. A child whose end sessiond
@@ -1027,6 +1041,10 @@ export const sessiondBridge = (
           .then(() => client.subscribe(procId, listener, 0))
   ).catch((error: unknown) => {
     spawnFailed = true;
+    // An attach that could not subscribe leaves the child as it was.
+    if (!attach) {
+      end();
+    }
     events.emit(
       "error",
       error instanceof Error ? error : new Error(String(error))

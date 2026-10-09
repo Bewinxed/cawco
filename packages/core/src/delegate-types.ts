@@ -132,13 +132,30 @@ export type SessionRole = (typeof SESSION_ROLES)[number];
 
 /**
  * What a project's Caw may never call, in Claude's names, per harness: no
- * edit and no shell tools, so the lead coordinates through the board and
- * delegates. pi cannot deny tools ({@link denyToolsProblem}), so Caw does not
- * run on pi.
+ * edit, shell or subagent tools, so the lead coordinates through the board
+ * and delegates, and no subagent holds a tool the lead lacks. Claude's
+ * `Monitor` runs a script and `EnterWorktree`/`ExitWorktree` make and remove
+ * git worktrees; `Agent` (its old name `Task`) and `Workflow` start
+ * subagents. OpenCode's `Agent` is its `task`. Every MCP server but CawCo's
+ * is held off by the spawn itself (`SpawnPayload.lead`), not by a name
+ * here. pi cannot deny tools ({@link denyToolsProblem}), so Caw does not run
+ * on pi.
  */
 export const CAW_DENIED_TOOLS = {
-  claude: ["Bash", "Edit", "Write", "MultiEdit", "NotebookEdit"],
-  opencode: ["Bash", "Edit", "Write", "patch"],
+  claude: [
+    "Bash",
+    "Edit",
+    "Write",
+    "MultiEdit",
+    "NotebookEdit",
+    "Monitor",
+    "EnterWorktree",
+    "ExitWorktree",
+    "Agent",
+    "Task",
+    "Workflow",
+  ],
+  opencode: ["Bash", "Edit", "Write", "patch", "Agent"],
 } as const satisfies Partial<Record<HarnessKind, readonly string[]>>;
 
 /** The harnesses a project's Caw can run on: the ones that deny its edit and shell tools. */

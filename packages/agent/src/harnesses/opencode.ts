@@ -1940,6 +1940,42 @@ async function reached<T extends { response?: Response; error?: unknown }>(
   return result;
 }
 
+/** What OpenCode makes of a server's name in its tools' ids (`McpCatalog.sanitize`, mcp/catalog.ts 117 at 1.18.34). */
+const MCP_NAME_UNSAFE = /[^a-zA-Z0-9_-]/g;
+
+/**
+ * A project's Caw on OpenCode: every tool of every MCP server the directory's
+ * server has, but CawCo's, switched off. One OpenCode server runs every
+ * session in a directory and loads every server its config names, so the
+ * fence is the session's own: OpenCode names an MCP tool
+ * `<server>_<tool>` (`toolName`, mcp/catalog.ts 119), and a `<server>_*`
+ * switched off is a deny rule its permission set matches by wildcard
+ * (permission/index.ts 204-219), which hides the tool from the turn and from
+ * code mode's catalog alike (`Permission.visibleTools(yield* mcp.tools(),
+ * ruleset)`, tool/code-mode.ts 210) and refuses a call to it (`ctx.ask`, 147).
+ * The list is the server's MCP status (every server it was configured with,
+ * and any the agent added since: `client.mcp.add`), read each time a turn is
+ * about to run, so a server added later is fenced too.
+ */
+const leadMcpFence = async (
+  client: OpencodeClient,
+  directory: string
+): Promise<Record<string, false>> => {
+  const status = await reached(
+    client.mcp.status({ directory }, { signal: AbortSignal.timeout(65_000) })
+  );
+  if (status.error || !status.data) {
+    throw new Error(
+      `A project's Caw takes no turn without its MCP server list, which OpenCode did not give: ${errorText(status.error)}`
+    );
+  }
+  return Object.fromEntries(
+    Object.keys(status.data)
+      .filter((name) => name !== "cawco")
+      .map((name) => [`${name.replace(MCP_NAME_UNSAFE, "_")}_*`, false])
+  );
+};
+
 /**
  * Boots the server's OpenCode instance for `directory` (the server's own
  * working directory when undefined) on its boot budget, before any request
@@ -2321,6 +2357,10 @@ export class OpencodeSession implements HarnessSession {
   readonly #canDelegate?: boolean;
   /** Tools denied to this session (fleet, type and spawn), switched off on every prompt. */
   readonly #deniedTools: OpencodeDenySettings["tools"];
+  /** A project's Caw ({@link SpawnPayload.lead}): it has CawCo's MCP server and no other ({@link leadMcpFence}). */
+  readonly #lead: boolean;
+  /** A lead's {@link leadMcpFence}, as last read before a turn; none for any other session. */
+  #mcpFence: Record<string, false> = {};
   /** The CawCo account this session runs on, whose own server it runs in; undefined: the machine's. */
   readonly account: string | undefined;
 
@@ -2343,10 +2383,12 @@ export class OpencodeSession implements HarnessSession {
     workflowStepId?: string,
     canDelegate?: boolean,
     deniedTools: OpencodeDenySettings["tools"] = {},
-    account?: string
+    account?: string,
+    lead = false
   ) {
     this.instanceId = instanceId;
     this.account = account;
+    this.#lead = lead;
     this.#ctx = ctx;
     this.#client = client;
     this.sessionId = sessionId;
@@ -2377,6 +2419,7 @@ export class OpencodeSession implements HarnessSession {
     this.#prepareDispatch = async () => {
       await admitted;
       await prepareDispatch();
+      await this.#readFence();
     };
     this.#liveSessions = liveSessions;
     this.#workflowStepId = workflowStepId;
@@ -2395,6 +2438,50 @@ export class OpencodeSession implements HarnessSession {
       subtype: EFFORT_READ,
       effort: this.#effort ?? null,
     });
+  }
+
+  /** A lead's fence, read again before a turn ({@link leadMcpFence}). */
+  async #readFence(): Promise<void> {
+    if (this.#lead) {
+      this.#mcpFence = await leadMcpFence(this.#client, this.#directory);
+    }
+  }
+
+  /**
+   * Before a lead's turn that carries no tool switches: a command (a skill
+   * the spawn loads, a slash command). A prompt's switches become the
+   * session's whole permission set (`session.permission = permissions`,
+   * session/prompt.ts 1060-1067 at 1.18.34), and a command runs its prompt
+   * with none (1465-1472), so it runs on the set the last prompt left, or
+   * the one the session was created with. This session's denials and its
+   * fence are given to that set first: the server adds them after what it
+   * holds (`Permission.merge(current.permission ?? [], …)`,
+   * handlers/session.ts 197), and the last matching rule decides.
+   */
+  async fenceCommandTurn(): Promise<void> {
+    if (!this.#lead) {
+      return;
+    }
+    await this.#readFence();
+    const updated = await reached(
+      this.#client.session.update({
+        sessionID: this.#opencodeSessionId(),
+        directory: this.#directory,
+        permission: Object.keys({
+          ...this.#deniedTools,
+          ...this.#mcpFence,
+        }).map((permission) => ({
+          permission,
+          pattern: "*",
+          action: "deny" as const,
+        })),
+      })
+    );
+    if (updated.error) {
+      throw new Error(
+        `A project's Caw takes no command turn its MCP fence was not given: ${errorText(updated.error)}`
+      );
+    }
   }
 
   /**
@@ -4054,6 +4141,7 @@ export class OpencodeSession implements HarnessSession {
           ),
           // Denied last, so a denial is never switched back on above.
           ...this.#deniedTools,
+          ...this.#mcpFence,
         },
         ...(this.#effort ? { variant: this.#effort } : {}),
         // A bare model id (no provider) is left to opencode's default; never send `providerID: ''`.
@@ -4177,6 +4265,7 @@ export class OpencodeSession implements HarnessSession {
     }
     try {
       await this.#prepareDispatch();
+      await this.fenceCommandTurn();
     } catch (error) {
       this.#ctx.rejected(uuid, error);
       return;
@@ -7657,7 +7746,8 @@ export class OpencodeHarness implements Harness {
       spec.workflowStepId,
       spec.canDelegate,
       denied.tools,
-      account
+      account,
+      spec.lead === true
     );
     this.#sessionOwners.set(ctx.instanceId, identity);
     // A session an earlier agent left mid-turn: the hub still waits on that
@@ -7732,6 +7822,8 @@ export class OpencodeHarness implements Harness {
     // Load skills natively: send each as a /command before the first prompt.
     // The opencode server queues them in order, so skills load before work.
     if (!existing?.running && spec.skills?.length) {
+      // Each is a command turn: a lead's fence goes to the session first.
+      await session.fenceCommandTurn();
       for (const skill of spec.skills) {
         // biome-ignore lint/performance/noAwaitInLoops: skills must load in order, before the first prompt
         await reached(

@@ -119,21 +119,27 @@ export const cawDenied = (harness: string): readonly string[] => {
 
 /**
  * A spawn as it reaches a machine: a lead row's (a project's Caw) also denies
- * Caw's edit and shell tools on `harness`, whatever else it denies.
+ * Caw's edit, shell and subagent tools on `harness`, whatever else it denies,
+ * and says it is a lead ({@link SpawnPayload.lead}), so the machine gives it
+ * CawCo's MCP server and no other. Any other row's spawn says it is none,
+ * whatever its caller sent.
  */
 export const withCawDenials = (
   payload: SpawnPayload,
   row: Pick<InstanceRow, "role">,
   harness: string
-): SpawnPayload =>
-  row.role === "lead"
+): SpawnPayload => {
+  const { lead: _callerLead, ...asked } = payload;
+  return row.role === "lead"
     ? {
-        ...payload,
+        ...asked,
+        lead: true,
         denyTools: [
-          ...new Set([...(payload.denyTools ?? []), ...cawDenied(harness)]),
+          ...new Set([...(asked.denyTools ?? []), ...cawDenied(harness)]),
         ],
       }
-    : payload;
+    : asked;
+};
 
 /**
  * What wakes Caw: the words it reads, the thread the event belongs to, and
