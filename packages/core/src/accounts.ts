@@ -678,46 +678,14 @@ export interface ProviderAccountReading {
 }
 
 /**
- * OpenCode providers whose sign-in OpenCode 1.18 does not put on each
- * request, so a session cannot run on its own account in OpenCode: the
- * credential, or something tied to it, is the whole server's. Each reason
- * cites OpenCode v1.18.34's own code (packages/opencode/src/…). Their
- * OpenCode sessions run from OpenCode's own store, and pi sessions of the
- * same provider still run on accounts.
- */
-export const OPENCODE_UNSERVED: Readonly<Record<string, string>> = {
-  azure:
-    "the Azure resource is the server's (provider/provider.ts 284-291: options.resourceName from the stored sign-in's metadata or AZURE_RESOURCE_NAME)",
-  "azure-cognitive-services":
-    "the resource is the server's (provider/provider.ts 323-332: AZURE_COGNITIVE_SERVICES_RESOURCE_NAME)",
-  "cloudflare-workers-ai":
-    "the Cloudflare account is the server's base URL (provider/provider.ts 781, 805-808)",
-  "cloudflare-ai-gateway":
-    "the gateway is the server's base URL and its binding rebuilds every request's headers from the server's options (provider/provider.ts 818-820, 884-893)",
-  "google-vertex":
-    "OpenCode signs Vertex requests with Google application-default credentials through its own fetch, which replaces a plugin's (provider/provider.ts 577-587)",
-  "google-vertex-anthropic":
-    "OpenCode signs with Google application-default credentials (provider/provider.ts 595-613)",
-  "sap-ai-core":
-    "the service key is the server's AICORE_SERVICE_KEY, exchanged for tokens by the SDK itself (provider/provider.ts 619-627)",
-  gitlab:
-    "gitlab-ai-provider exchanges the token for a direct-access token it caches for the server (provider/provider.ts 659-681; gitlab-ai-provider 6.18.0 dist/index.js 564, 729)",
-  "snowflake-cortex":
-    "OpenCode installs its own fetch for a key, which replaces a plugin's (provider/provider.ts 988-996)",
-  digitalocean:
-    "the router models are listed from the stored sign-in's metadata (plugin/digitalocean.ts 226-254)",
-  modal:
-    "the models are listed with the stored key when the server starts (plugin/modal/modal.ts 6-13)",
-};
-
-/**
  * The account providers a session's model could bill to, by harness, in the
  * order they are tried: Claude Code's models are Claude accounts'; a pi model
  * `provider/id` is that pi-ai provider's; an OpenCode model `provider/id` is
  * that provider's, and OpenCode's `openai` is a ChatGPT subscription's
  * (`openai-codex`) or an OpenAI key's (`openai`). A pi or OpenCode
- * `anthropic/…` model is none: Claude subscriptions run in Claude Code alone,
- * and nor is an OpenCode model of a provider in {@link OPENCODE_UNSERVED}.
+ * `anthropic/…` model is none: Claude subscriptions run in Claude Code alone.
+ * An OpenCode session on an account runs in that account's own OpenCode
+ * server, so every provider OpenCode signs in to can be an account's.
  * A bare id or `default` names no provider: the hub qualifies a pi one by
  * pi's own resolution first. Whether the session runs on one also needs a
  * signed-in account of it on its machine, which only the hub knows.
@@ -732,9 +700,6 @@ export const accountProvidersOf = (
   const slash = model?.indexOf("/") ?? -1;
   const prefix = model && slash > 0 ? model.slice(0, slash) : undefined;
   if (!prefix || prefix === CLAUDE_PROVIDER) {
-    return [];
-  }
-  if (harness === "opencode" && prefix in OPENCODE_UNSERVED) {
     return [];
   }
   if (harness === "opencode" && prefix === "openai") {
@@ -776,19 +741,14 @@ export const joinProviders = (
         // pi-ai calls it "OpenAI Codex (legacy)"; it is a ChatGPT subscription.
         name: chatgpt ? "ChatGPT" : one.name,
         pi: one.id,
-        ...(opencodeIds.has(alias) && !(alias in OPENCODE_UNSERVED)
-          ? { opencode: alias }
-          : {}),
+        ...(opencodeIds.has(alias) ? { opencode: alias } : {}),
       };
     });
   const named = new Set(
     joined.map((one) => (one.id === "openai-codex" ? "openai" : one.id))
   );
   for (const one of opencode) {
-    if (
-      !(named.has(one.id) || one.id in OPENCODE_UNSERVED) &&
-      one.id !== CLAUDE_PROVIDER
-    ) {
+    if (!named.has(one.id) && one.id !== CLAUDE_PROVIDER) {
       joined.push({
         id: one.id,
         name: one.name,

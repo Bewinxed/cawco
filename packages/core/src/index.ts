@@ -128,8 +128,10 @@ export interface SpawnPayload {
    * from on the machine: Claude Code in the account's own
    * `~/.cawco/accounts/<id>/claude`, never the machine's `~/.claude`; pi on a
    * runtime whose `openai-codex` sign-in is the account's
-   * `~/.cawco/accounts/<id>/pi/auth.json`; OpenCode on the account's own
-   * server, whose `XDG_DATA_HOME` is `~/.cawco/accounts/<id>/opencode-data`.
+   * `~/.cawco/accounts/<id>/pi/auth.json`; OpenCode in the account's own
+   * server, whose `XDG_DATA_HOME` (and so OpenCode's own store, holding the
+   * account's credential alone) is `opencode-accounts/<id>` beside the
+   * session credentials, hidden from every workspace boundary.
    * Set by the hub on every launch of a session on an account — the first and
    * every revive, restore and relaunch — and never by a client. A Claude
    * launch without one (or a {@link homeLoginMove}) is refused on the

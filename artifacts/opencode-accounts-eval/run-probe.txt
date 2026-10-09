@@ -1,0 +1,108 @@
+[move-login] writing pi's xai into account acct-a
+[move-login] moved; pi's own store no longer holds xai
+[move-login] writing pi's xai into account acct-b
+[move-login] moved; pi's own store no longer holds xai
+[opencode] config written by delegation tools hash=697a4216
+{"type":"config-convergence","event":"runtime-verify","fields":["agent","disabled_providers","enabled_providers","model","plugin","provider","small_model"],"mismatched":[],"at":1791546656798}
+{"type":"config-convergence","event":"mcp-config","managed":["cawco"],"mismatched":[],"at":1791546656798}
+{"type":"config-convergence","state":"applied","detail":"active generation opencode-server-9a7308b2-22ac-42f2-85ae-15cb7c3233cc/3078533, verified baseline 697a4216…","at":1791546656798}
+{"type":"config-convergence","event":"runtime-verify","fields":["agent","disabled_providers","enabled_providers","model","plugin","provider","small_model"],"mismatched":[],"at":1791546658303}
+{"type":"config-convergence","event":"mcp-config","managed":["cawco"],"mismatched":[],"at":1791546658303}
+[opencode] account acct-a: its server is opencode-server-account-acct-a-765ed9a1-7c9c-40f6-801a-630e77e2087d/3079845
+[opencode] /tmp/accounts-probe-S1yhRT/project: subscribe ready
+[opencode] recovery concurrency high-water 1
+[opencode] probe-move: permission snapshot
+[opencode] probe-move: question snapshot
+[opencode] /tmp/accounts-probe-S1yhRT/project: MCP status {"cawco":{"status":"connected"}}
+[opencode] probe-move: discarded stale turn snapshot revision=1 current=2 busy=false open=true
+turn "turn-1 on A: WRITE note.txt fromA": answered
+turn "turn-2 on A": answered
+[opencode] /tmp/accounts-probe-S1yhRT/project: instance disposed by directory release, nothing attached and no turn running
+{"type":"config-convergence","event":"runtime-verify","fields":["agent","disabled_providers","enabled_providers","model","plugin","provider","small_model"],"mismatched":[],"at":1791546661401}
+{"type":"config-convergence","event":"mcp-config","managed":["cawco"],"mismatched":[],"at":1791546661401}
+[opencode] account acct-b: its server is opencode-server-account-acct-b-1a3c65f7-199c-4145-acce-3d89850397c5/3080488
+[opencode] /tmp/accounts-probe-S1yhRT/project: subscribe ready
+[opencode] probe-move: permission snapshot
+[opencode] probe-move: question snapshot
+[opencode] /tmp/accounts-probe-S1yhRT/project: MCP status {"cawco":{"status":"connected"}}
+turn "turn-3 on B": answered
+[opencode] /tmp/accounts-probe-S1yhRT/project: instance disposed by directory release, nothing attached and no turn running
+[opencode] /tmp/accounts-probe-S1yhRT/project: subscribe ready
+[opencode] probe-move: permission snapshot
+[opencode] probe-move: question snapshot
+[opencode] /tmp/accounts-probe-S1yhRT/project: MCP status {"cawco":{"status":"connected"}}
+turn "turn-4 back on A": answered
+PASS each account's credential reached the mock from its own server: ["turn-1 on A: WRITE → Bearer xai-A1","turn-1 on A: WRITE (tool result) → Bearer xai-A1","turn-2 on A → Bearer xai-A1","turn-3 on B → Bearer xai-B1","turn-4 back on A → Bearer xai-A1"]
+PASS history read back on B: {"userEntriesOnB":3}
+[opencode] /tmp/accounts-probe-S1yhRT/project: instance disposed by directory release, nothing attached and no turn running
+[opencode] /tmp/accounts-probe-S1yhRT/project: MCP status {"cawco":{"status":"connected"}}
+PASS an edit made on A is undone from B: {"writtenOnA":true,"afterRevertOnB":false}
+PASS A's OpenCode store holds its token and a marker for the refresh token: {"type":"oauth","access":"xai-A1","refresh":"cawco-account","expires":1791550245963}
+[opencode] /tmp/accounts-probe-S1yhRT/project: subscribe ready
+[opencode] /tmp/accounts-probe-S1yhRT/project: instance disposed by directory release, nothing attached and no turn running
+[opencode] /tmp/accounts-probe-S1yhRT/project: subscribe ready
+[opencode] probe-move: permission snapshot
+[opencode] probe-move: question snapshot
+[opencode] /tmp/accounts-probe-S1yhRT/project: MCP status {"cawco":{"status":"connected"}}
+turn "turn-5 on A after refresh": answered
+PASS a pi-ai refresh reached A's server on its next request: ["Bearer xai-A2"]
+{"type":"config-convergence","event":"runtime-verify","fields":["agent","disabled_providers","enabled_providers","model","plugin","provider","small_model"],"mismatched":[],"at":1791546665134}
+{"type":"config-convergence","event":"mcp-config","managed":["cawco"],"mismatched":[],"at":1791546665134}
+[opencode] account acct-limited: its server is opencode-server-account-acct-limited-32a73b04-ca92-4eb9-a852-e3132a1b9e66/3081029
+[opencode] /tmp/accounts-probe-S1yhRT/project: subscribe ready
+[opencode] probe-limit: permission snapshot
+[opencode] probe-limit: question snapshot
+[opencode] /tmp/accounts-probe-S1yhRT/project: MCP status {"cawco":{"status":"connected"}}
+[opencode] probe-limit: its account's usage limit refused the request; ending the turn on it
+turn "turn-L at the limit": error ["The usage limit has been reached"]
+PASS the 429 ended the turn on the provider's own words, which the hub's at-limit rule reads: {"errors":["The usage limit has been reached"],"msToRefusal":657}
+[opencode] /tmp/accounts-probe-S1yhRT/project: instance disposed by directory release, nothing attached and no turn running
+{"type":"config-convergence","event":"runtime-verify","fields":["agent","disabled_providers","enabled_providers","model","plugin","provider","small_model"],"mismatched":[],"at":1791546667587}
+{"type":"config-convergence","event":"mcp-config","managed":["cawco"],"mismatched":[],"at":1791546667587}
+[opencode] account acct-m: its server is opencode-server-account-acct-m-375acaa6-fc3c-4561-b168-69a4d18a7b88/3081585
+[opencode] /tmp/accounts-probe-S1yhRT/project: subscribe ready
+[opencode] probe-limit: permission snapshot
+[opencode] probe-limit: question snapshot
+[opencode] /tmp/accounts-probe-S1yhRT/project: MCP status {"cawco":{"status":"connected"}}
+turn "turn-L continued on M": answered
+PASS the session moved to another account and carried on within seconds: {"auth":["Bearer key-M"],"secondsFrom429ToAnswer":3.1}
+[opencode] /tmp/accounts-probe-S1yhRT/project: subscribe ready
+[opencode] probe-plain: permission snapshot
+[opencode] probe-plain: question snapshot
+[opencode] /tmp/accounts-probe-S1yhRT/project: MCP status {"cawco":{"status":"connected"}}
+turn "turn-P on no account": answered
+PASS a model on no account ran on the machine's server with its own key: ["Bearer machine-key","Bearer machine-key"]
+[opencode] /tmp/accounts-probe-S1yhRT/project: instance disposed by directory release, nothing attached and no turn running
+[opencode] /tmp/accounts-probe-S1yhRT/project: instance disposed by directory release, nothing attached and no turn running
+[opencode] /tmp/accounts-probe-S1yhRT/project: instance disposed by directory release, nothing attached and no turn running
+[opencode] account acct-b: no session on its server for 5 minutes
+[opencode] account acct-b's server opencode-server-account-acct-b-1a3c65f7-199c-4145-acce-3d89850397c5/3080488: retiring
+[opencode] account acct-limited: no session on its server for 5 minutes
+[opencode] account acct-limited's server opencode-server-account-acct-limited-32a73b04-ca92-4eb9-a852-e3132a1b9e66/3081029: retiring
+[opencode] account acct-a: no session on its server for 5 minutes
+[opencode] account acct-a's server opencode-server-account-acct-a-765ed9a1-7c9c-40f6-801a-630e77e2087d/3079845: retiring
+[opencode] account acct-m: no session on its server for 5 minutes
+[opencode] account acct-m's server opencode-server-account-acct-m-375acaa6-fc3c-4561-b168-69a4d18a7b88/3081585: retiring
+[opencode] retire opencode-server-account-acct-b-1a3c65f7-199c-4145-acce-3d89850397c5/3080488 start=9341690: SIGTERM
+[opencode] retire opencode-server-account-acct-limited-32a73b04-ca92-4eb9-a852-e3132a1b9e66/3081029 start=9342065: SIGTERM
+[opencode] retired opencode-server-account-acct-b-1a3c65f7-199c-4145-acce-3d89850397c5/3080488: exit confirmed
+[opencode] retired opencode-server-account-acct-limited-32a73b04-ca92-4eb9-a852-e3132a1b9e66/3081029: exit confirmed
+[opencode] retire opencode-server-account-acct-m-375acaa6-fc3c-4561-b168-69a4d18a7b88/3081585 start=9342310: SIGTERM
+[opencode] retire opencode-server-account-acct-a-765ed9a1-7c9c-40f6-801a-630e77e2087d/3079845 start=9341379: SIGTERM
+[opencode] retired opencode-server-account-acct-m-375acaa6-fc3c-4561-b168-69a4d18a7b88/3081585: exit confirmed
+[opencode] retired opencode-server-account-acct-a-765ed9a1-7c9c-40f6-801a-630e77e2087d/3079845: exit confirmed
+PASS accounts' servers stopped once idle; the machine's kept running: {"runningBefore":["opencode-server-9a7308b2-22ac-42f2-85ae-15cb7c3233cc","opencode-server-account-acct-a-765ed9a1-7c9c-40f6-801a-630e77e2087d","opencode-server-account-acct-b-1a3c65f7-199c-4145-acce-3d89850397c5","opencode-server-account-acct-limited-32a73b04-ca92-4eb9-a852-e3132a1b9e66","opencode-server-account-acct-m-375acaa6-fc3c-4561-b168-69a4d18a7b88"],"runningAfter":["opencode-server-9a7308b2-22ac-42f2-85ae-15cb7c3233cc"],"minutesToStop":5.1}
+{
+  "firstOpenWithMachineAndAccountServerStartMs": 13271,
+  "moveOntoAnAccountServerStartedForItMs": 2035,
+  "memoryAfterFirstStart": {
+    "opencode-server-9a7308b2-22ac-42f2-85ae-15cb7c3233cc": "407 MiB",
+    "opencode-server-account-acct-a-765ed9a1-7c9c-40f6-801a-630e77e2087d": "775 MiB"
+  },
+  "memoryAfterTurns": {
+    "opencode-server-9a7308b2-22ac-42f2-85ae-15cb7c3233cc": "411 MiB",
+    "opencode-server-account-acct-a-765ed9a1-7c9c-40f6-801a-630e77e2087d": "827 MiB",
+    "opencode-server-account-acct-b-1a3c65f7-199c-4145-acce-3d89850397c5": "690 MiB"
+  }
+}
+9/9 checks passed

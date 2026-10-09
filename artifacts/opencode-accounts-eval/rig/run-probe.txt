@@ -1,0 +1,28 @@
+mock provider on 37433
+server A (pid 1933) healthy after 1.014489 s, idle RSS 368 MiB
+server B (pid 1954) healthy after 1.011806 s, idle RSS 369 MiB
+session ses_edfb008c2ffeqHNz1Yv6iGtjwv created on A
+turn 1 on A: answered with Bearer fake-key-A
+B lists the session: ses_edfb008c2ffeqHNz1Yv6iGtjwv
+B sees 2 messages before its turn
+turn 2 on B: answered with Bearer fake-key-B
+A sees 4 messages after B's turn
+turn 3 back on A: answered with Bearer fake-key-A
+-- mock provider log (path, Authorization):
+/v1/chat/completions Bearer fake-key-A probe=fake-key-A
+/v1/chat/completions Bearer fake-key-A probe=fake-key-A
+/v1/chat/completions Bearer fake-key-B probe=fake-key-B
+/v1/chat/completions Bearer fake-key-A probe=fake-key-A
+-- auth.json rewritten under live server A (fake-key-A2):
+turn 4 on A: answered with Bearer fake-key-A
+instance dispose: HTTP 200
+turn 5 on A after dispose: answered with Bearer fake-key-A2
+-- usage-limit refusal: B's key becomes a limited one, B's instance reloads it
+first retry status event: {"id":"evt_120500564001kr75wgseS4YQGk","type":"session.status","properties":{"sessionID":"ses_edfb008c2ffeqHNz1Yv6iGtjwv","status":{"type":"retry","attempt":1,"message":"The usage limit has been reached","next":1791543479996}}}
+-- mock provider log since the key change:
+/v1/chat/completions Bearer fake-key-A probe=fake-key-A2
+/v1/chat/completions Bearer fake-key-A2 probe=fake-key-A2
+/v1/chat/completions Bearer fake-key-limited probe=fake-key-limited
+server A RSS after turns: 685 MiB
+server B RSS after turns: 780 MiB
+snapshot gitdirs (shared): 1; per-server snapshot entries: 2 via symlink

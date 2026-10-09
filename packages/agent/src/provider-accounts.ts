@@ -8,13 +8,15 @@
  * hub relayed, and refreshes an OAuth credential through pi-ai's own refresh
  * (`ModelRuntime.getAuth`, which refreshes under the store's `modify`).
  * Every harness on the machine that speaks the provider uses this one
- * credential: pi sessions read it through their runtime's store, OpenCode's
- * server through the CawCo plugin. Nothing holds a second copy of a grant:
- * refresh tokens rotate, so copies sign each other out.
+ * credential: pi sessions read it through their runtime's store, and the
+ * account's own OpenCode server through the store the agent writes for it
+ * from this one ({@link opencodeAuthOf}). Nothing holds a second copy of a
+ * grant: refresh tokens rotate, so copies sign each other out, and OpenCode's
+ * copy carries a marker where a rotating refresh token would be.
  */
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
-import { chmod, mkdir, rename, writeFile } from "node:fs/promises";
+import { readFileSync } from "node:fs";
+import { chmod, mkdir, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
   type AccountIdentity,
@@ -22,7 +24,6 @@ import {
   type AccountReport,
   type HomeCredential,
   type HomeLoginMoved,
-  OPENCODE_UNSERVED,
   type ProviderSigninChallenge,
   type ProviderSigninResult,
   sameIdentity,
@@ -45,7 +46,6 @@ import type {
   CredentialStore,
 } from "@earendil-works/pi-ai";
 import { getAgentDir, ModelRuntime } from "@earendil-works/pi-coding-agent";
-import { delegationHubUrl } from "./delegation";
 
 // ── The store ────────────────────────────────────────────────────────────
 
@@ -68,7 +68,11 @@ export const readHeld = (accountId: string): Held | undefined => {
   }
 };
 
-/** Written whole and moved into place, owner-only. */
+/**
+ * Written whole and moved into place, owner-only; then the account's OpenCode
+ * store, so a sign-in, a key, a refresh and a sign-out reach its OpenCode
+ * server the moment they are made.
+ */
 const writeHeld = async (
   accountId: string,
   held: Held | undefined
@@ -83,6 +87,13 @@ const writeHeld = async (
   );
   await chmod(staged, 0o600);
   await rename(staged, path);
+  await writeOpencodeAuth(accountId, held);
+};
+
+/** The account's store here gone, and its OpenCode server's data with it. */
+const removeAccount = async (accountId: string): Promise<void> => {
+  await removeAccountRoot(accountId);
+  await rm(opencodeAccountHome(accountId), { recursive: true, force: true });
 };
 
 /** One write at a time per account, in this process: the only writer. */
@@ -599,22 +610,10 @@ export const forgetProviderAccount = async (
       runtimes.delete(key);
     }
   }
-  await removeAccountRoot(accountId);
+  await removeAccount(accountId);
 };
 
 // ── The machine's own stores, and the one-time move out of them ──────────
-
-/**
- * The entry OpenCode's own store holds for a provider CawCo serves, so that
- * OpenCode runs the CawCo plugin's auth loader for it (OpenCode 1.18
- * provider.ts runs a plugin's loader only when `auth.json` has an entry for
- * the provider). Never a credential. It is also the placeholder the plugin's
- * loader hands the SDK as the key: wherever OpenCode's own code puts the
- * stored key or the loader's (a header, the query, `AWS_BEARER_TOKEN_BEDROCK`),
- * the plugin's fetch finds this one value and puts the session's account's
- * credential there.
- */
-export const OPENCODE_MARKER = "cawco-account";
 
 const piStorePath = (): string => join(getAgentDir(), "auth.json");
 const opencodeStorePath = (): string => join(opencodeDataDir(), "auth.json");
@@ -656,15 +655,18 @@ const credentialOf = (
       : undefined;
   }
   if (entry.type === "api" && typeof entry.key === "string") {
-    return entry.key === OPENCODE_MARKER
-      ? undefined
-      : { type: "api_key", key: entry.key };
+    // What OpenCode keeps beside a key (an Azure resource, a Cloudflare
+    // account) moves with it, into the account's own OpenCode store.
+    return {
+      type: "api_key",
+      key: entry.key,
+      ...(isRecord(entry.metadata) ? { metadata: entry.metadata } : {}),
+    } as Credential;
   }
   if (
     entry.type === "oauth" &&
     typeof entry.access === "string" &&
-    typeof entry.refresh === "string" &&
-    entry.access !== OPENCODE_MARKER
+    typeof entry.refresh === "string"
   ) {
     const { type: _type, ...rest } = entry;
     return { ...rest, type: "oauth" } as unknown as Credential;
@@ -696,12 +698,7 @@ export const readHomeCredentials = async (): Promise<HomeCredential[]> => {
     Object.entries(
       readJson(store === "pi" ? piStorePath() : opencodeStorePath())
     ).flatMap(([storeProvider, entry]) => {
-      // OpenCode's sign-in of a provider it cannot run per session on an
-      // account stays in OpenCode: moving it would leave OpenCode without it.
-      if (
-        storeProvider === "anthropic" ||
-        (store === "opencode" && storeProvider in OPENCODE_UNSERVED)
-      ) {
+      if (storeProvider === "anthropic") {
         return [];
       }
       const credential = credentialOf(store, entry);
@@ -793,9 +790,9 @@ const answers = async (accountId: string): Promise<string | undefined> => {
 /**
  * Moves one credential out of pi's or OpenCode's own store into an account:
  * written into the account's store, checked to answer, and only then removed
- * from the store it came from (OpenCode's keeps the marker the CawCo plugin
- * needs in its place), if that entry is still the one moved. Any failure
- * before that empties the account's store and leaves the original as it was.
+ * from the store it came from, if that entry is still the one moved. Any
+ * failure before that empties the account's store and leaves the original as
+ * it was.
  */
 export const moveHomeCredential = async (
   accountId: string,
@@ -861,12 +858,7 @@ export const moveHomeCredential = async (
     return undo(`${store} changed its own ${storeProvider} during the move.`);
   }
   const { [storeProvider]: _moved, ...rest } = now;
-  await writeJson(
-    path,
-    store === "opencode"
-      ? { ...rest, [storeProvider]: opencodeMarker(provider) }
-      : rest
-  );
+  await writeJson(path, rest);
   moveLog(`moved; ${store}'s own store no longer holds ${storeProvider}`);
   return { store: "the account's credential file" };
 };
@@ -880,7 +872,7 @@ const dropStore = async (accountId: string): Promise<void> => {
       runtimes.delete(key);
     }
   }
-  await removeAccountRoot(accountId);
+  await removeAccount(accountId);
 };
 
 /**
@@ -926,113 +918,205 @@ export const joinProviderAccount = async (
   return { outcome: "moved" };
 };
 
-// ── OpenCode: the markers, and which account each session runs on ───────
+// ── OpenCode: each account's own server and its store ─────────────────
 
 /** OpenCode's id for an account provider: ChatGPT is its `openai`. */
 export const opencodeProviderOf = (provider: string): string =>
   provider === "openai-codex" ? "openai" : provider;
 
 /**
- * The marker entry for a provider in OpenCode's own store: an OAuth one for
- * ChatGPT, so OpenCode's own codex plugin lists ChatGPT's models (it filters
- * them only for `type: "oauth"`), a key one for anything else.
+ * The data dir of the account's own OpenCode server, its `XDG_DATA_HOME`:
+ * OpenCode reads its store at `Global.Path.data/auth.json`, `data` being
+ * `xdgData/opencode` (v1.18.34 packages/opencode/src/auth/index.ts 10,
+ * packages/core/src/global.ts 11), so this server's store holds this
+ * account's credential and nothing else. Beside the session credentials,
+ * hidden as they are from every workspace boundary.
  */
-const opencodeMarker = (provider: string): Record<string, unknown> =>
-  provider === "openai-codex"
-    ? {
+export const opencodeAccountHome = (accountId: string): string =>
+  join(sessionIdentityDir(), "opencode-accounts", accountId);
+
+/** The account's OpenCode store, in its server's data dir. */
+export const opencodeAccountStore = (accountId: string): string =>
+  join(opencodeAccountHome(accountId), "opencode", "auth.json");
+
+/**
+ * Written in an account's OpenCode store where the refresh token of a sign-in
+ * whose refresh token rotates would be: pi-ai stays its only refresher, and
+ * the agent writes each fresh access token into the store ahead of its
+ * expiry. A refresh OpenCode tried with it would fail at the provider.
+ */
+export const OPENCODE_MARKER = "cawco-account";
+
+/**
+ * The OpenCode providers whose own sign-in plugin reads the store on every
+ * request (v1.18.34: `const currentAuth = await getAuth()` inside the
+ * loader's fetch, plugin/openai/codex.ts 363, github-copilot/copilot.ts 103,
+ * xai.ts 225; `Auth.all` reads the file on each call, auth/index.ts 58-67):
+ * a token the agent refreshes reaches their next request. Everything else
+ * OpenCode reads once, when an instance starts (`provider.key`,
+ * provider/provider.ts 1647-1656), so it is part of how the server was
+ * launched ({@link opencodeLaunchCredential}).
+ */
+const READS_EACH_REQUEST = new Set(["openai", "github-copilot", "xai"]);
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+/**
+ * The account's credential as OpenCode's own sign-in would have stored it
+ * (OpenCode's `Auth.Info` shapes, auth/index.ts 14-33), under OpenCode's id
+ * for the provider:
+ * - ChatGPT and xAI: the access token, its expiry and (ChatGPT) its account,
+ *   as their sign-ins store them, with {@link OPENCODE_MARKER} for the
+ *   refresh token they rotate;
+ * - Copilot: the GitHub token as both, expiring never, as its own sign-in
+ *   stores it (copilot.ts 294-299) and sends it (164);
+ * - a key: the key, with what OpenCode kept beside it;
+ * - any other sign-in: its access token as the key, which is how OpenCode
+ *   sends a key to a provider it has no sign-in plugin for.
+ */
+export const opencodeAuthOf = (
+  held: Held
+): Record<string, Record<string, unknown>> => {
+  const id = opencodeProviderOf(held.provider);
+  const { credential } = held;
+  if (credential.type === "api_key") {
+    const { metadata } = credential as { metadata?: unknown };
+    return credential.key
+      ? {
+          [id]: {
+            type: "api",
+            key: credential.key,
+            ...(isRecord(metadata) ? { metadata } : {}),
+          },
+        }
+      : {};
+  }
+  if (!READS_EACH_REQUEST.has(id)) {
+    return { [id]: { type: "api", key: credential.access } };
+  }
+  if (id === "github-copilot") {
+    const { enterpriseUrl } = credential as { enterpriseUrl?: unknown };
+    return {
+      [id]: {
         type: "oauth",
-        access: OPENCODE_MARKER,
-        refresh: OPENCODE_MARKER,
-        expires: 4_102_444_800_000,
-      }
-    : { type: "api", key: OPENCODE_MARKER };
-
-/**
- * The OpenCode providers CawCo serves on this machine, each with its account
- * provider: one per provider of a signed-in account, but none OpenCode cannot
- * run per session ({@link OPENCODE_UNSERVED}).
- */
-const servedOpencode = (): Map<string, string> =>
-  new Map(
-    credentialAccountIds().flatMap((account) => {
-      const held = readHeld(account);
-      const id = held ? opencodeProviderOf(held.provider) : undefined;
-      return held && id && !(id in OPENCODE_UNSERVED)
-        ? [[id, held.provider] as const]
-        : [];
-    })
-  );
-
-/** OpenCode's ids of the providers CawCo serves on this machine. */
-export const servedOpencodeProviders = (): string[] => [
-  ...servedOpencode().keys(),
-];
-
-/**
- * Squares OpenCode's own store with the accounts on this machine: a marker
- * for each provider CawCo serves where the store has no entry, and no marker
- * left for one it does not. A real entry is never touched. True when it
- * changed anything.
- */
-export const syncOpencodeMarkers = async (): Promise<boolean> => {
-  const path = opencodeStorePath();
-  const store = readJson(path);
-  const served = servedOpencode();
-  let changed = false;
-  for (const [id, provider] of served) {
-    if (!store[id]) {
-      store[id] = opencodeMarker(provider);
-      changed = true;
-    }
+        refresh: credential.refresh,
+        access: credential.refresh,
+        expires: 0,
+        ...(typeof enterpriseUrl === "string" && enterpriseUrl
+          ? { enterpriseUrl }
+          : {}),
+      },
+    };
   }
-  for (const [id, entry] of Object.entries(store)) {
-    const marker =
-      entry.key === OPENCODE_MARKER || entry.access === OPENCODE_MARKER;
-    if (marker && !served.has(id)) {
-      delete store[id];
-      changed = true;
-    }
-  }
-  if (changed) {
-    await writeJson(path, store);
-  }
-  return changed;
+  const accountId =
+    id === "openai"
+      ? ((typeof credential.accountId === "string"
+          ? credential.accountId
+          : null) ?? chatgptClaims(credential.access).accountId)
+      : null;
+  return {
+    [id]: {
+      type: "oauth",
+      access: credential.access,
+      refresh: OPENCODE_MARKER,
+      expires: credential.expires,
+      ...(accountId ? { accountId } : {}),
+    },
+  };
 };
 
-/** One file per hub, beside the session credentials and as hidden from every workspace. */
-export const opencodeAccountsFile = (): string =>
-  join(
-    sessionIdentityDir(),
-    `opencode-accounts-${new URL(delegationHubUrl()).host.replaceAll(":", "_")}.json`
-  );
-
-let mapping: Promise<unknown> = Promise.resolve();
+/**
+ * What of the account's credential its OpenCode server took when it started:
+ * a fingerprint of a key, or of a sign-in OpenCode reads only then; for a
+ * sign-in it reads on every request, only which provider. A server launched
+ * on another is replaced at its next rest (opencode.ts).
+ */
+export const opencodeLaunchCredential = (accountId: string): string => {
+  const held = readHeld(accountId);
+  if (!held) {
+    return "none";
+  }
+  const id = opencodeProviderOf(held.provider);
+  if (held.credential.type === "oauth" && READS_EACH_REQUEST.has(id)) {
+    return id;
+  }
+  const fingerprint = createHash("sha256")
+    .update(JSON.stringify(opencodeAuthOf(held)))
+    .digest("hex")
+    .slice(0, 16);
+  return `${id}:${fingerprint}`;
+};
 
 /**
- * Records which account an OpenCode session runs on, by OpenCode's own
- * session id, for the CawCo plugin to read on each request; none clears it.
+ * The provider settings a key carries (pi-ai's `ApiKeyCredential.env`: "Provider-scoped
+ * environment/config values such as Cloudflare account/gateway ids"), for its
+ * OpenCode server's environment: OpenCode reads Google Vertex's project and
+ * location, Bedrock's region and SAP's deployment only from there
+ * (provider/provider.ts 343-369, 550-598, 620-629 at v1.18.34). Each account
+ * has its own server, so two accounts' settings never meet.
  */
-export const noteOpencodeAccount = (
-  sessionId: string,
-  accountId: string | null
+export const opencodeAccountEnv = (
+  accountId: string
+): Record<string, string> => {
+  const credential = readHeld(accountId)?.credential;
+  return credential?.type === "api_key" ? { ...credential.env } : {};
+};
+
+/** The account's OpenCode store made what its credential is now; gone with it. */
+const writeOpencodeAuth = async (
+  accountId: string,
+  held: Held | undefined
 ): Promise<void> => {
-  const next = mapping.then(async () => {
-    const file = opencodeAccountsFile();
-    const held = existsSync(file)
-      ? (JSON.parse(readFileSync(file, "utf8")) as Record<string, string>)
-      : {};
-    if (accountId) {
-      held[sessionId] = accountId;
-    } else {
-      delete held[sessionId];
-    }
-    await mkdir(sessionIdentityDir(), { recursive: true, mode: 0o700 });
-    const staged = `${file}.${process.pid}.tmp`;
-    await writeFile(staged, JSON.stringify(held), { mode: 0o600 });
-    await rename(staged, file);
-  });
-  mapping = next.catch(() => undefined);
-  return next;
+  if (!held) {
+    await rm(opencodeAccountHome(accountId), { recursive: true, force: true });
+    return;
+  }
+  await writeJson(opencodeAccountStore(accountId), opencodeAuthOf(held));
+};
+
+/** The account's OpenCode store written from its credential, for a server about to start on it. */
+export const prepareOpencodeAccount = async (
+  accountId: string
+): Promise<void> => {
+  const held = readHeld(accountId);
+  if (!held) {
+    throw new Error(
+      `CawCo account ${accountId} holds no sign-in on this machine, so no OpenCode server starts on it.`
+    );
+  }
+  await serial(accountId, () => writeOpencodeAuth(accountId, held));
+};
+
+/**
+ * The entries CawCo kept in OpenCode's own store before each account had a
+ * server of its own (`cawco-account` as a key or an access token, which made
+ * OpenCode run CawCo's plugin for the provider): removed, so the machine's
+ * own OpenCode server lists only the sign-ins really there. A real entry is
+ * never touched. The file that plugin read each session's account from
+ * (`opencode-accounts-<hub>.json` beside the session credentials) goes too.
+ */
+export const dropOpencodeMarkers = async (): Promise<void> => {
+  const stale = (await readdir(sessionIdentityDir()).catch(() => [])).filter(
+    (file) => file.startsWith("opencode-accounts-") && file.endsWith(".json")
+  );
+  await Promise.all(
+    stale.map((file) => rm(join(sessionIdentityDir(), file), { force: true }))
+  );
+  const path = opencodeStorePath();
+  const store = readJson(path);
+  const kept = Object.fromEntries(
+    Object.entries(store).filter(
+      ([, entry]) =>
+        entry.key !== OPENCODE_MARKER && entry.access !== OPENCODE_MARKER
+    )
+  );
+  if (Object.keys(kept).length !== Object.keys(store).length) {
+    await writeJson(path, kept);
+    console.info(
+      "[accounts] OpenCode's own store no longer holds CawCo's account markers"
+    );
+  }
 };
 
 // ── The providers an account can be for ─────────────────────────────────

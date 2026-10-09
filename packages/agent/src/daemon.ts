@@ -69,16 +69,13 @@ import { cache as transcriptCache } from "./harnesses/transcript-cache";
 import { KeeperWatchdog, machineKeeper } from "./keeper-watchdog";
 import { endOrphanedSignIns, endSignIns } from "./login";
 import { isMachineAgent } from "./machine-agent";
-import {
-  setAccountFreshener,
-  setOpencodeLimitSink,
-  startMcpGateway,
-} from "./mcp-oauth";
+import { setAccountFreshener, startMcpGateway } from "./mcp-oauth";
 import { servingPreviews } from "./preview";
 import { parseProcId, SESSION_PROC_KINDS } from "./proc-id";
 import {
   beginProviderLogin,
   completeProviderLogin,
+  dropOpencodeMarkers,
   endProviderSignIns,
   forgetProviderAccount,
   freshen,
@@ -89,7 +86,6 @@ import {
   providerAccountReports,
   readHomeCredentials,
   setProviderKey,
-  syncOpencodeMarkers,
 } from "./provider-accounts";
 import {
   machineGoKey,
@@ -119,7 +115,7 @@ const CLAUDE_LOGIN_CHECK_INTERVAL_MS = 60_000;
 /** How often every provider account's OAuth sign-in is checked for a refresh it needs. */
 const ACCOUNT_REFRESH_INTERVAL = Duration.seconds(60);
 
-/** The OpenCode harness, for the accounts' plugin and markers and its provider list. */
+/** The OpenCode harness, for its accounts' servers and its provider list. */
 const opencodeAdapter = (): OpencodeHarness | undefined =>
   harnesses().find((adapter) => adapter.kind === "opencode") as
     | OpencodeHarness
@@ -952,8 +948,8 @@ const attach = (
       });
     };
     // An account signed in, keyed, moved in or forgotten here: the hub hears
-    // it on the next beat, and OpenCode's server is given its plugin and
-    // markers for the providers the machine's accounts now cover.
+    // it on the next beat, and each account's OpenCode server is squared with
+    // its credential.
     providerAccountsChanged = () => {
       reportedProviderAccounts = providerAccountReports();
       if (socket.readyState === WebSocket.OPEN) {
@@ -1626,14 +1622,18 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
     yield* Effect.forkScoped(Effect.promise(() => updater.start()));
 
     // Provider accounts: their controls, the agent's own refresh of every
-    // OAuth sign-in (the store's only writer), the refresh pi sessions and
-    // OpenCode's plugin ask for, and OpenCode's markers for them.
+    // OAuth sign-in (the store's only writer, which also writes each
+    // account's OpenCode store), the refresh pi sessions ask for, and
+    // OpenCode's own store cleared of the markers CawCo kept there before.
     registerProviderAccounts(supervisor);
     setAccountFreshener(freshen);
-    setOpencodeLimitSink((sessionID, error) =>
-      opencodeAdapter()?.limitRefused(sessionID, error)
+    yield* Effect.promise(() =>
+      dropOpencodeMarkers().catch((error: unknown) =>
+        console.warn(
+          `[accounts] OpenCode's own store kept CawCo's old markers: ${String(error)}`
+        )
+      )
     );
-    yield* Effect.promise(() => syncOpencodeMarkers().catch(() => false));
     yield* Effect.forkScoped(
       Effect.repeat(
         Effect.promise(() => freshenAll()),

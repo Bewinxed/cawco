@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import {
@@ -66,16 +67,39 @@ function abortable<T>(pending: Promise<T>, signal: AbortSignal): Promise<T> {
 const processStart = async (pid: number): Promise<string> =>
   (await osProcessStart(pid)) ?? "";
 
-/** The only launcher/adopter. Publish a replacement before retiring its predecessor. */
+/** The record files' common start: one keeper (sessiond endpoint), one file per server it keeps. */
+const recordStem = (): string =>
+  `opencode-server-${createHash("sha256")
+    .update(process.env.CAWCO_SESSIOND_ENDPOINT ?? sessiondEndpoint())
+    .digest("hex")
+    .slice(0, 16)}`;
+
+/** What an account's own server is recorded under: its account id, as a file name. */
+const ACCOUNT_ID = /^[A-Za-z0-9_-]+$/;
+const ACCOUNT_RECORD =
+  /^(opencode-server-[0-9a-f]{16})-account-([A-Za-z0-9_-]+)\.json$/;
+
+/**
+ * The only launcher/adopter of one OpenCode server: the machine's own
+ * (`account` undefined), or one account's. Publish a replacement before
+ * retiring its predecessor.
+ */
 export class OpencodeServerOwner {
-  readonly #path = join(
-    homedir(),
-    ".cawco",
-    `opencode-server-${createHash("sha256")
-      .update(process.env.CAWCO_SESSIOND_ENDPOINT ?? sessiondEndpoint())
-      .digest("hex")
-      .slice(0, 16)}.json`
-  );
+  /** The accounts whose servers this keeper has a record of, for an agent that starts up. */
+  static async recordedAccounts(): Promise<string[]> {
+    const stem = recordStem();
+    const files = await readdir(join(homedir(), ".cawco")).catch(
+      () => [] as string[]
+    );
+    return files.flatMap((file) => {
+      const match = file.match(ACCOUNT_RECORD);
+      return match?.[1] === stem && match[2] ? [match[2]] : [];
+    });
+  }
+
+  /** The account whose server this owner keeps; undefined for the machine's own. */
+  readonly account: string | undefined;
+  readonly #path: string;
   readonly #sessiond: () => Promise<SessiondClient>;
   readonly #attach: Attach;
   readonly #mayManage: () => Promise<boolean>;
@@ -91,8 +115,18 @@ export class OpencodeServerOwner {
     sessiond: () => Promise<SessiondClient>,
     attach: Attach,
     mayManage: () => Promise<boolean>,
-    idle: (identity: ServerIdentity) => Promise<boolean>
+    idle: (identity: ServerIdentity) => Promise<boolean>,
+    account?: string
   ) {
+    if (account !== undefined && !ACCOUNT_ID.test(account)) {
+      throw new Error(`"${account}" cannot name an OpenCode server's record.`);
+    }
+    this.account = account;
+    this.#path = join(
+      homedir(),
+      ".cawco",
+      `${recordStem()}${account === undefined ? "" : `-account-${account}`}.json`
+    );
     this.#sessiond = sessiond;
     this.#attach = attach;
     this.#mayManage = mayManage;
@@ -201,7 +235,7 @@ export class OpencodeServerOwner {
 
   async #launch(spec: ProcSpec, signal: AbortSignal): Promise<ServerIdentity> {
     const client = await this.#sessiond();
-    const procId = `${OPENCODE_SERVER_PROC_ID}-${crypto.randomUUID()}`;
+    const procId = `${OPENCODE_SERVER_PROC_ID}-${this.account === undefined ? "" : `account-${this.account}-`}${crypto.randomUUID()}`;
     const reservation = Bun.serve({
       hostname: "127.0.0.1",
       port: 0,
@@ -270,8 +304,10 @@ export class OpencodeServerOwner {
       const stale = manages ? record.active : null;
       const client = await this.#sessiond();
       const listed = await client.list();
-      // Initial cutover adopts the existing server held under the stable name.
+      // Initial cutover adopts the existing server held under the stable name,
+      // which only ever was the machine's own.
       const incumbent =
+        this.account === undefined &&
         !record.active &&
         listed.procs.some(
           (proc) => proc.procId === OPENCODE_SERVER_PROC_ID && proc.alive
@@ -365,6 +401,28 @@ export class OpencodeServerOwner {
       this.#transition = null;
     });
     return this.#transition;
+  }
+
+  /**
+   * The active server is no longer wanted: it is retired like a replaced
+   * one, ended once it is idle ({@link #retire}), and the next {@link ensure}
+   * starts a new one.
+   */
+  async retireActive(): Promise<void> {
+    if (this.#transition) {
+      return;
+    }
+    const record = await this.#load();
+    const { active } = record;
+    if (!active) {
+      return;
+    }
+    this.#record = { active: null, retired: [...record.retired, active] };
+    await this.#save();
+    console.info(
+      `[opencode] ${this.account ? `account ${this.account}'s` : "the machine's"} server ${active.procId}/${active.pid}: retiring`
+    );
+    this.maintain();
   }
 
   maintain(): void {

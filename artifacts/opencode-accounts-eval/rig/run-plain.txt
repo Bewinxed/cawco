@@ -1,0 +1,25 @@
+mock provider on 40665
+server A (pid 1074) healthy after 1.013686 s, idle RSS 371 MiB
+server B (pid 1094) healthy after 1.014012 s, idle RSS 366 MiB
+session ses_edfb10be9ffeJqiIQj9oG0ntp8 created on A
+turn 1 on A: answered with Bearer fake-key-A
+B lists the session: ses_edfb10be9ffeJqiIQj9oG0ntp8
+B sees 2 messages before its turn
+turn 2 on B: answered with Bearer fake-key-B
+A sees 4 messages after B's turn
+turn 3 back on A: answered with Bearer fake-key-A
+-- mock provider log (path, Authorization):
+/v1/chat/completions Bearer fake-key-A
+/v1/chat/completions Bearer fake-key-A
+/v1/chat/completions Bearer fake-key-B
+/v1/chat/completions Bearer fake-key-A
+-- auth.json rewritten under live server A (fake-key-A2):
+turn 4 on A: answered with Bearer fake-key-A
+instance dispose: HTTP 200
+turn 5 on A after dispose: answered with Bearer fake-key-A2
+-- mock provider log since the key change:
+/v1/chat/completions Bearer fake-key-A
+/v1/chat/completions Bearer fake-key-A2
+server A RSS after turns: 965 MiB
+server B RSS after turns: 550 MiB
+snapshot gitdirs (shared): 1; per-server snapshot entries: 2 via symlink
