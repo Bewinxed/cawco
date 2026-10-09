@@ -14768,12 +14768,6 @@
           {
             "type": "object",
             "properties": {
-              "sessionId": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
               "status": {
                 "enum": [
                   "discarded",
@@ -14785,6 +14779,12 @@
                   "unknown"
                 ],
                 "type": "string"
+              },
+              "sessionId": {
+                "type": [
+                  "null",
+                  "string"
+                ]
               },
               "machineId": {
                 "type": "string"
@@ -15058,12 +15058,6 @@
             {
               "type": "object",
               "properties": {
-                "sessionId": {
-                  "type": [
-                    "null",
-                    "string"
-                  ]
-                },
                 "status": {
                   "enum": [
                     "discarded",
@@ -15075,6 +15069,12 @@
                     "unknown"
                   ],
                   "type": "string"
+                },
+                "sessionId": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
                 },
                 "machineId": {
                   "type": "string"
