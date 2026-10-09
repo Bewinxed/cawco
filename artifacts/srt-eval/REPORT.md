@@ -481,3 +481,29 @@ Found while building it:
 - **`alternates` chain.** A clone of a clone borrows objects two levels down.
   The policy now reads the whole chain, without which git said "unable to
   normalize alternate object path".
+- **The logs were readable through `adm`.** The user is in the `adm` group, so
+  `/var/log/syslog`, `auth.log` and `kern.log` were readable, and rsyslog
+  copies the journal there (3 lines matched the bot-token pattern; counted,
+  never printed). `/var/crash` held the user's own crash dumps (a browser's,
+  96 MB of its memory). The policy now denies `/var/log`, `/var/crash`,
+  `/var/lib/apport` and `/var/lib/systemd/coredump`, and `journalctl` and
+  `coredumpctl` do not run (they exit 0 when they can read nothing).
+- **A host-side rename of `.git/config` detaches its deny** (a kernel rule for
+  file binds; srt cannot prevent it). The srt host watches `.git` from the
+  host. It kills the sandbox and everything in it 3.4–4.0 ms after the rename
+  (3 runs), then starts a new one under the same host pid and FIFO. The
+  executor checks the mount table too, before each command. A command in
+  flight is cut off (exit 137, with a sentence). The next command runs in the
+  new sandbox about 170 ms later, as its pid namespace shows, so a running
+  session never sees the boundary gone.
+- **An executor whose sandbox died waited forever** for a status that no one
+  would write. It now follows the sandbox that took its request (the runner
+  stamps it with its pid namespace), and is cut off when that one is gone.
+- **The tool door cut a call at 10 s.** Bun applies its 10 s idle default to a
+  unix-socket server too. bun-types 1.4.2, the latest, declares `idleTimeout`
+  only for host:port servers, so the door passes it untyped. Through the door,
+  a hub answering after 25 s now gives `200` after 25 s.
+- **Per-command cost:** 27 ms median through the boundary (`bash -c true`
+  alone: 4 ms). When the caller has no `GH_TOKEN`, the executor's
+  `gh auth token` on the host adds 26 ms; that lookup has been on main since
+  b1fe1c40.
