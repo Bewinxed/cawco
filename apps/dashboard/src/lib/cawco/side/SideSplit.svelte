@@ -3,9 +3,12 @@
    * A conversation and the surface beside it (PRD §5.2): the transcript in
    * one side of a resizable split, and on the other, inset on the preview
    * sheet's recipe, what the conversation has to show — its plan, its
-   * preview, or both under a switch. On a desk it is the split; under 900px
-   * the same surface rises as a sheet over the transcript. A session and a
-   * thread (whose plan is its project's lead's) draw it alike.
+   * preview, or both under a switch. On a desk it is the split. Under 900px
+   * each rises on its own: the preview as a sheet standing on the composer
+   * (SideSheet), so the reader can write while it is up; the plan as the
+   * house bottom sheet (the kit Drawer), from the screen's foot over the
+   * composer, as tall as what it holds. A session and a thread (whose plan
+   * is its project's lead's) draw it alike.
    *
    * The split opens when there is something to show and the reader or the
    * agent asked for it: an agent showing a preview opens it on Preview, the
@@ -21,6 +24,8 @@
   import type { Snippet } from "svelte";
   import { untrack } from "svelte";
   import type { TransitionConfig } from "svelte/transition";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
+  import * as Drawer from "#lib/components/ui/drawer/index.js";
   import {
     TabItem,
     Tabs,
@@ -122,7 +127,7 @@
 
   /** The plan is on show beside the conversation (its ring is pressed). */
   export function planShowing(): boolean {
-    return open && shown === "plan";
+    return planOpen && (phone || shown === "plan");
   }
 
   // --- the split ---------------------------------------------------------------
@@ -141,7 +146,7 @@
   let fromRow = $state(false);
   let sheetMounted = $state(false);
   $effect(() => {
-    if (phone && open && visible && active) {
+    if (phone && previewOpen && visible && active) {
       sheetMounted = true;
       return;
     }
@@ -257,7 +262,6 @@
       {oncapture}
       {onescape}
       {onselect}
-      sheet={phone}
       switcher={planOpen ? switcher : undefined}
       bind:this={previewPane}
     />
@@ -318,10 +322,37 @@
       content={root}
       instanceId={previewId}
       onkeyescape={(event) => previewPane?.parentEscape(event)}
-      {open}
+      open={previewOpen}
     >
-      {@render surface()}
+      <PreviewPane
+        instanceId={previewId}
+        {oncapture}
+        {onescape}
+        {onselect}
+        sheet
+        bind:this={previewPane}
+      />
     </SideSheet>
+  {/if}
+  {#if phone && visible && active && planOf && hasPlan}
+    <Drawer.Root
+      onOpenChange={(next) => {
+        planAsked = next;
+      }}
+      open={planAsked}
+    >
+      <Drawer.Content
+        class="plan-sheet pb-[calc(var(--space-4)+env(safe-area-inset-bottom))] [--drawer-max-height:85vh]"
+      >
+        <PlanPane
+          instanceId={planOf}
+          onclose={() => {
+            planAsked = false;
+          }}
+          sheet
+        />
+      </Drawer.Content>
+    </Drawer.Root>
   {/if}
 </div>
 

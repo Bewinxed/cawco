@@ -67,25 +67,26 @@
 
 <script lang="ts">
   /**
-   * A session's plan, in the side surface (PRD §5.2, "Every session's plan,
-   * in a panel"): its steps as a tree on the app's nesting lines, each ticked
-   * as it completes (the tick draws along its stroke) or breathing while it
-   * is under way; its spec, read-only, folded to its first lines; and on a
-   * task attempt the task's to-dos the same way, with the way to the
+   * A session's plan, beside the conversation (PRD §5.2, "Every session's
+   * plan, in a panel"): its steps as a tree on the app's nesting lines, each
+   * ticked as it completes (the tick draws along its stroke) or breathing
+   * while it is under way; its spec, read-only, whole, as running text; and
+   * on a task attempt the task's to-dos the same way, with the way to the
    * project's canvas. Live: the client's copy follows the hub's snapshots and
    * deltas (plan.ts), and rows that arrive or move reflow in place.
    *
-   * The card is the preview's own (SideSurface): one header, "Plan" and
-   * how far it has got, or the switch and the count while a preview is
-   * beside it; the rows in the same recess well, scrolling under an edge
-   * fade, their left edge the header's.
+   * One surface: the parts stand on it under text headings, in one column
+   * that scrolls. On a desk the surface is the side card (SideSurface, with
+   * no well); on a phone, the bottom sheet SideSplit opens it in (`sheet`),
+   * under the sheet's own title.
    */
   import type { Snippet } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
+  import * as Drawer from "#lib/components/ui/drawer/index.js";
   import { IconTick } from "#lib/icons.js";
   import { cawco } from "../client.svelte";
   import { branch, nestFrom } from "../motion/branch.svelte";
-  import { unfold } from "../motion/fold.svelte";
   import { reflow } from "../motion/rows.svelte";
   import SideSurface from "../side/SideSurface.svelte";
   import MessageBody from "../transcript/MessageBody.svelte";
@@ -93,12 +94,15 @@
   let {
     instanceId,
     switcher,
+    sheet = false,
     onclose,
   }: {
     /** The session whose plan this is (a thread's: its project's lead). */
     instanceId: string;
     /** The Plan | Preview switch, when there is a preview beside it. */
     switcher?: Snippet;
+    /** Drawn inside a phone's bottom sheet (a kit Drawer.Content). */
+    sheet?: boolean;
     onclose: () => void;
   } = $props();
 
@@ -134,74 +138,9 @@
   const projectId = $derived(
     cawco.instanceIndex.byId.get(instanceId)?.projectId ?? null
   );
-  let specOpen = $state(false);
-
-  /** The spec's lead: its first lines, folded. */
-  const LEAD_LINES = 4;
-  /**
-   * Folds a block to its first `lines` lines of text, cut on the boundary
-   * between two lines (never through one): the last text line that ends
-   * within that many of the body's lines is where the fold falls. Read off
-   * the text's own line boxes, and again whenever the content is drawn or
-   * the width changes (the markdown renders after the block mounts).
-   */
-  function foldAtLine(lines: number) {
-    return (node: HTMLElement) => {
-      let frame = 0;
-      const fold = () => {
-        node.style.maxBlockSize = "none";
-        const { top } = node.getBoundingClientRect();
-        // The text's own line boxes, by where each ends.
-        const boxes: DOMRect[] = [];
-        const texts = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
-        const range = document.createRange();
-        for (let text = texts.nextNode(); text; text = texts.nextNode()) {
-          range.selectNodeContents(text);
-          for (const box of range.getClientRects()) {
-            if (box.height > 0) {
-              boxes.push(box);
-            }
-          }
-        }
-        const ends = [
-          ...new Set(boxes.map((box) => Math.round(box.bottom))),
-        ].sort((a, b) => a - b);
-        if (ends.length <= lines) {
-          return;
-        }
-        // After the `lines`th line, halfway to the next one's top: no ink of
-        // the next line shows, and none of the last is cut.
-        const cut = ends[lines - 1];
-        const next = Math.min(
-          ...boxes.filter((box) => box.top >= cut - 0.5).map((box) => box.top)
-        );
-        node.style.maxBlockSize = `${Math.floor((cut + next) / 2 - top)}px`;
-      };
-      const soon = () => {
-        cancelAnimationFrame(frame);
-        frame = requestAnimationFrame(fold);
-      };
-      fold();
-      // Its width (the card's) and its content's own height (a face that
-      // loads late lays the same words out again).
-      const resized = new ResizeObserver(soon);
-      resized.observe(node.parentElement ?? node);
-      if (node.firstElementChild) {
-        resized.observe(node.firstElementChild);
-      }
-      const drawn = new MutationObserver(soon);
-      drawn.observe(node, {
-        childList: true,
-        subtree: true,
-        characterData: true,
-      });
-      return () => {
-        cancelAnimationFrame(frame);
-        resized.disconnect();
-        drawn.disconnect();
-      };
-    };
-  }
+  const showsTodos = $derived(todos.length > 0 && !!plan?.taskId);
+  /** The steps are named once another part stands beside them. */
+  const stepsHeaded = $derived(!!plan?.spec || showsTodos);
 </script>
 
 {#snippet mark(
@@ -240,77 +179,82 @@
   </ul>
 {/snippet}
 
-<!-- How far it has got is the ring's to say, on the composer: said once. -->
-<SideSurface
-  class="plan-pane"
-  label="Plan"
-  {onclose}
-  subtitle={onlyTodos ? (plan?.taskId ?? undefined) : undefined}
-  {switcher}
-  title={switcher ? undefined : cardTitle}
->
-  <div class="body kit-edge-fade-block">
+<!-- The parts, flat on the surface: a heading, then what it names. -->
+{#snippet body()}
+  <div class="body kit-edge-fade-block" class:sheet>
     {#if steps.length > 0}
+      {#if stepsHeaded}
+        <h3 class="part-head">Steps</h3>
+      {/if}
       {@render tree(steps, false)}
     {/if}
 
     {#if plan?.spec}
-      <section class="part">
-        <h3 class="part-head">Spec</h3>
-        {#if specOpen}
-          <div class="spec" transition:unfold>
-            <MessageBody source={plan.spec.markdown} />
-          </div>
-        {:else}
-          <div class="spec lead" {@attach foldAtLine(LEAD_LINES)}>
-            <MessageBody source={plan.spec.markdown} />
-          </div>
-        {/if}
+      <h3 class="part-head">Spec</h3>
+      <MessageBody source={plan.spec.markdown} />
+    {/if}
+
+    {#if showsTodos && plan?.taskId}
+      {#if !onlyTodos}
+        <h3 class="part-head">To-dos <span class="ref">{plan.taskId}</span></h3>
+      {/if}
+      {@render tree(todos, false)}
+      {#if projectId}
         <Button
           class="more"
-          label={specOpen ? "Fold the spec" : "Read the spec"}
-          onclick={() => {
-            specOpen = !specOpen;
-          }}
+          href="/project/{encodeURIComponent(
+            projectId
+          )}?view=canvas&task={encodeURIComponent(plan.taskId)}"
+          label="Open in canvas"
           size="sm"
           variant="link"
         />
-      </section>
-    {/if}
-
-    {#if todos.length > 0 && plan?.taskId}
-      <section class="part">
-        {#if !onlyTodos}
-          <h3 class="part-head">
-            To-dos <span class="ref">{plan.taskId}</span>
-          </h3>
-        {/if}
-        {@render tree(todos, false)}
-        {#if projectId}
-          <Button
-            class="more"
-            href="/project/{encodeURIComponent(
-              projectId
-            )}?view=canvas&task={encodeURIComponent(plan.taskId)}"
-            label="Open in canvas"
-            size="sm"
-            variant="link"
-          />
-        {/if}
-      </section>
+      {/if}
     {/if}
   </div>
-</SideSurface>
+{/snippet}
+
+<!-- How far it has got is the ring's to say, on the composer: said once. -->
+{#if sheet}
+  <Drawer.Header class="p-0 pb-3 text-left">
+    <Drawer.Title class="text-left">
+      {cardTitle}
+      {#if onlyTodos && plan?.taskId}
+        <span class="ref">{plan.taskId}</span>
+      {/if}
+    </Drawer.Title>
+  </Drawer.Header>
+  {@render body()}
+{:else}
+  <SideSurface
+    class="plan-pane"
+    label="Plan"
+    {onclose}
+    recessed={false}
+    subtitle={onlyTodos ? (plan?.taskId ?? undefined) : undefined}
+    {switcher}
+    title={switcher ? undefined : cardTitle}
+  >
+    {@render body()}
+  </SideSurface>
+{/if}
 
 <style>
+  /* One column on the surface, its left edge the header's; it scrolls, and
+     a long spec is read whole in it. */
   .body {
-    flex: 1;
+    flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
-    padding: var(--space-3) var(--space-3) var(--space-4);
+    overscroll-behavior: contain;
+    touch-action: pan-y;
+    padding-block: var(--space-1) var(--space-4);
     display: flex;
     flex-direction: column;
-    gap: var(--space-5);
+    gap: var(--space-2);
+  }
+  .body.sheet {
+    padding-block: 0;
   }
   .rows {
     display: flex;
@@ -394,33 +338,22 @@
       scale: 0.7;
     }
   }
-  .part {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
+  /* A part's heading is text on the surface: a step more above it than
+     below, so it belongs to what follows. */
   .part-head {
+    margin: 0;
     font: var(--type-label);
     font-weight: var(--weight-strong);
     color: var(--ink-muted);
+  }
+  .part-head:not(:first-child) {
+    margin-block-start: var(--space-3);
   }
   .ref {
     font: var(--type-code);
     color: var(--ink-subtle);
   }
-  /* The spec, a card on the well: the app's card (TaskCard's raised
-     surface and tile edge), which stands off the recess in both schemes. */
-  .spec {
-    padding: var(--space-2) var(--space-3);
-    border-radius: var(--radius-sm);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
-  }
-  /* Folded: its first lines, cut between two of them (`foldAtLine`). */
-  .spec.lead {
-    overflow: hidden;
-  }
-  .part :global(.more) {
+  .body :global(.more) {
     align-self: flex-start;
     padding-inline: 0;
   }

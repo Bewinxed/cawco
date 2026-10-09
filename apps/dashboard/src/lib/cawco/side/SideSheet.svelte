@@ -1,9 +1,9 @@
 <script lang="ts">
   /**
-   * The side surface on a phone (SideSplit): a sheet over the transcript,
-   * standing on the composer, at a usable middle snap or the full height. It
-   * holds whatever the conversation shows beside it — its plan, its preview
-   * — and each of those closes it from its own header.
+   * The preview on a phone (SideSplit): a sheet over the transcript,
+   * standing on the composer so the reader can write about the page while it
+   * is up (a selection lands as a chip there), at a usable middle snap or the
+   * full height. The preview closes it from its own header.
    */
   import { Portal } from "bits-ui";
   import type { Snippet } from "svelte";

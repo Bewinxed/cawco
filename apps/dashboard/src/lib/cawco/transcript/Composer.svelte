@@ -2975,15 +2975,17 @@
      none (app.css `--c-tray-row`, which every transcript keeps clear), with
      the tray standing on its foot: a chip arriving late fills room already
      there, and the suggestion row standing on the slot never moves. */
-  /* The plan's ring, at the tray row's trailing end, standing on the panel. */
+  /* The plan's chip, at the tray row's trailing end, standing on the
+     tray's line: the step off the panel the delegate chips stand on. */
   .progress-slot {
     position: absolute;
     inset-block-end: 0;
     inset-inline-end: 0;
     z-index: 1;
     display: flex;
-    align-items: center;
+    align-items: flex-end;
     block-size: var(--c-tray-row);
+    padding-block-end: var(--c-tray-gap);
     pointer-events: auto;
   }
   .tray-slot {

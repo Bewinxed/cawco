@@ -912,7 +912,7 @@
     aria-controls={panelId}
     aria-expanded={openKey === item.id}
     aria-label="{item.title}, {stateWords(chip)}"
-    class="chip touch-hit {tone}"
+    class="chip kit-tray-chip touch-hit {tone}"
     data-flip={fanned ? undefined : "pop"}
     data-flip-enter={fanned || entry === "fade" ? undefined : "own"}
     data-key={item.id}
@@ -1007,7 +1007,7 @@
               aria-controls={fanId}
               aria-expanded={fanOpen}
               aria-label="{hidden.length} more delegates"
-              class="chip more touch-hit"
+              class="chip kit-tray-chip more touch-hit"
               data-key="more"
               onclick={onmorepress}
               onfocus={() => {
@@ -1149,57 +1149,12 @@
     --hit-gap-x: var(--space-2);
   }
 
-  /* A chip: the attachment chip's surface, drawn on a layer of its own so
-     it can arrive after a mark that flew in. */
+  /* A chip: the tray row's (app.css .kit-tray-chip), its surface on a layer
+     of its own so it can arrive after a mark that flew in. */
   .chip {
-    position: relative;
-    isolation: isolate;
     flex: 0 1 auto;
     min-inline-size: 120px;
     max-inline-size: 224px;
-    block-size: var(--c-tray-chip);
-    display: inline-flex;
-    align-items: center;
-    gap: var(--c-pill-gap);
-    padding-inline: var(--space-2);
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: none;
-    color: var(--ink-strong);
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-    cursor: pointer;
-    pointer-events: auto;
-    touch-action: manipulation;
-    -webkit-touch-callout: none;
-    user-select: none;
-    transition: color var(--dur-control) var(--ease-out);
-
-    &::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      z-index: -1;
-      border: 1px solid var(--border-hairline);
-      border-radius: inherit;
-      background: var(--surface-raised);
-      box-shadow: var(--shadow-tile);
-      transition: background-color var(--dur-control) var(--ease-out);
-    }
-    @media (prefers-reduced-motion: no-preference) {
-      transition:
-        color var(--dur-control) var(--ease-out),
-        transform var(--dur-control) var(--ease-out);
-
-      &:active {
-        transform: scale(var(--press-scale));
-      }
-    }
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .chip:not(.needs, .failed):hover::before {
-      background-color: var(--surface-hover);
-    }
   }
   .chip.needs {
     color: var(--status-attn-ink);

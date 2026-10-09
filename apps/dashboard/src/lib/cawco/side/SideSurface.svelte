@@ -8,7 +8,9 @@
    *   pane's own controls (`actions`) and Close, every one in the same
    *   button recipe and press;
    * - the well is the content's ground, the recess inside a hairline, its
-   *   left edge the header's.
+   *   left edge the header's: a page's (the preview's). Text that reads on
+   *   the card itself (the plan's) stands on the card, with no well
+   *   (`recessed={false}`).
    * A pane passes its own content and controls; the frame is this one.
    */
   import type { Snippet } from "svelte";
@@ -26,6 +28,7 @@
     onclose,
     closing = false,
     closeFailed = false,
+    recessed = true,
     class: className = "",
     well = $bindable(),
     section = $bindable(),
@@ -43,6 +46,8 @@
     onclose: () => void | Promise<void>;
     closing?: boolean;
     closeFailed?: boolean;
+    /** The content stands in the well; false: on the card itself. */
+    recessed?: boolean;
     class?: string;
     well?: HTMLDivElement;
     section?: HTMLElement;
@@ -77,9 +82,13 @@
       <PendingContent failed={closeFailed} icon={IconClose} pending={closing} />
     </button>
   </header>
-  <div class="side-well" bind:this={well}>
+  {#if recessed}
+    <div class="side-well" bind:this={well}>
+      {@render children()}
+    </div>
+  {:else}
     {@render children()}
-  </div>
+  {/if}
 </section>
 
 <style>
