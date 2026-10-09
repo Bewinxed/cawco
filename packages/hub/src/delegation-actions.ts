@@ -490,6 +490,14 @@ export interface HandoffDeps {
   readonly ledBy?: (instanceId: string) => boolean;
   /** The session's project: its delegate types shadow the fleet's. */
   readonly projectId?: string;
+  /**
+   * `send_to_user`'s delivery, awaited: what did not reach the owner's
+   * Telegram and why, one line each; empty when everything did.
+   */
+  readonly sendToUser?: (
+    message: string,
+    attachments: string[]
+  ) => Promise<string[]>;
   readonly workflowRunId?: string;
   readonly workflowStepId?: string;
   /** Delegate role: finish_item is available even before an item has checks. */
@@ -872,6 +880,7 @@ export const handoffActions = ({
   projectId,
   ledBy,
   delegateList,
+  sendToUser,
 }: HandoffDeps): HandoffActions => ({
   async delegateList(include) {
     if (!delegateList) {
@@ -1080,7 +1089,7 @@ export const handoffActions = ({
     if ("page" in source) {
       return `Decision page decisions/${source.page}/ ${source.dir ? "published to your project's folder and " : ""}opened beside the transcript. The person's picks come back with read_choices, and as one message when they send them.`;
     }
-    return `Preview opened beside the transcript: ${"port" in source ? `localhost:${source.port}` : source.dir}`;
+    return `Preview opened beside the transcript: ${"port" in source ? `localhost:${source.port}` : source.dir}${source.path ?? ""}`;
   },
   async readChoices(page) {
     const query = page ? `?${new URLSearchParams({ page })}` : "";
@@ -1491,20 +1500,21 @@ export const handoffActions = ({
       : `Answered your delegate ${peer.label}'s ask (${requestId}).`;
   },
 
-  // biome-ignore lint/suspicious/useAwait: HandoffActions.sendToUser returns Promise<string>; dropping async would need the return wrapped instead
   async sendToUser(message: string, attachments?: string[]): Promise<string> {
-    emit({
-      verb: "frames",
-      machineId: "",
-      instanceId,
-      payload: {
-        kind: "user_message",
-        instanceId,
-        text: message,
-        ...(attachments?.length ? { attachments } : {}),
-      },
-    });
-    return "Sent to the user — it lands in their Telegram when the hub has a bridge, and is dropped otherwise.";
+    if (!sendToUser) {
+      throw new Error(
+        "Not sent: this hub has no Telegram bridge (CAWCO_TELEGRAM_TOKEN is unset)."
+      );
+    }
+    const problems = await sendToUser(message, attachments ?? []);
+    if (problems.length > 0) {
+      throw new Error(
+        `Not everything reached the user's Telegram. Not sent:\n${problems.map((line) => `- ${line}`).join("\n")}`
+      );
+    }
+    return attachments?.length
+      ? `Sent to the user's Telegram, with ${attachments.length} attachment${attachments.length === 1 ? "" : "s"}.`
+      : "Sent to the user's Telegram.";
   },
 
   async setTitle(title) {

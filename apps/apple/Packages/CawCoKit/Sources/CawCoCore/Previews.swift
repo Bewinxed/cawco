@@ -70,8 +70,9 @@ public extension HubConnection {
         let page = input["page"] as? String
         let port = (input["port"] as? Int) ?? (input["port"] as? Double).map(Int.init)
         let dir = page == nil ? input["dir"] as? String : nil
+        let at = page == nil ? input["path"] as? String : nil
         let output = try await client.postApiInstancesByIdPreview(path: .init(id: instanceId),
-            body: .json(.init(port: page == nil ? port : nil, dir: dir, page: page)))
+            body: .json(.init(port: page == nil ? port : nil, dir: dir, page: page, path: at)))
         guard case let .ok(ok) = output else { throw await TaskRefusal.reading(output) }
         previews.adopt(try ok.body.json)
     }
@@ -90,6 +91,14 @@ public extension HubConnection {
         parts.port = Int(frame.port)
         parts.path = "/"
         return parts.url
+    }
+
+    /// The page a preview opens at: the one its `show_preview` named
+    /// (`path`, on a dev server or folder), else the listener's root.
+    func previewStart(_ frame: PreviewFrame) -> URL? {
+        guard let origin = previewOrigin(frame) else { return nil }
+        let path = frame.source?.value1?.path ?? frame.source?.value2?.path
+        return path.flatMap { URL(string: $0, relativeTo: origin)?.absoluteURL } ?? origin
     }
 
     /// The choices bridge's three hub calls (client.svelte.ts `previewChoices`,

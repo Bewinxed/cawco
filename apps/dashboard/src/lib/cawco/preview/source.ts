@@ -3,11 +3,12 @@ import { pathLeaf } from "@cawco/core/tool-presentation";
 
 /**
  * What a `show_preview` call asked for: a dev server, a folder, or a
- * decision page by name (published from `dir` when the call gave one).
+ * decision page by name (published from `dir` when the call gave one). A
+ * dev server or folder carries the page it opens at, `path`, when it names one.
  */
 export type PreviewAsk =
-  | { port: number }
-  | { dir: string }
+  | { port: number; path?: string }
+  | { dir: string; path?: string }
   | { page: string; dir?: string };
 
 /** What opening a call's preview again asks the hub for: a decision page is shown, never published again. */

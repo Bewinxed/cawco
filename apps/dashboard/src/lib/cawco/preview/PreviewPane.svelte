@@ -122,15 +122,22 @@
       JSON.stringify({ revision: preview.revision, at: place })
     );
   }
+  /** Where a show starts: the page the agent named (`path`), else the root. */
+  const startAt = $derived.by(() => {
+    const path = source && "path" in source ? source.path : undefined;
+    return path && previewBase.endsWith("/")
+      ? `${previewBase}${path.slice(1)}`
+      : previewBase;
+  });
   /**
-   * The frame opens at the base, or where the reader was in this show; read
-   * once per show, so their going on inside it never reloads the frame.
+   * The frame opens at the start page, or where the reader was in this show;
+   * read once per show, so their going on inside it never reloads the frame.
    */
   const url = $derived.by(() => {
     if (!(preview?.revision && previewBase)) {
-      return previewBase;
+      return startAt;
     }
-    return untrack(keptAt) ?? previewBase;
+    return untrack(keptAt) ?? startAt;
   });
   let displayPath = $state("");
   /**

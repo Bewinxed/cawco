@@ -8,6 +8,7 @@ import { lstat, readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { extname, join, resolve } from "node:path";
 import type { FsEntry, FsImage, FsPayload } from "@cawco/core";
+import { MEDIA_LIMIT_BYTES } from "@cawco/core";
 import { promptWrite, promptWriteReason } from "./prompt-writes";
 
 /**
@@ -88,17 +89,12 @@ const read = async (path: string): Promise<string> => {
 };
 
 /**
- * A picture is the one file the tunnel does carry whole: a screenshot an agent
- * took, or a render it wants looked at, is worth nothing as a path. Bigger
- * than this and it is not something to glance at in a transcript.
- */
-const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
-
-/**
  * By extension, not by sniffing — a `.png` that is not one just fails to
  * render. No SVG: opened as a document it is script on the dashboard's origin.
+ * A picture or a video is the one file the tunnel does carry whole: a
+ * screenshot or a screen recording an agent made is worth nothing as a path.
  */
-const IMAGE_TYPES: Record<string, string> = {
+const MEDIA_TYPES: Record<string, string> = {
   ".png": "image/png",
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
@@ -106,20 +102,28 @@ const IMAGE_TYPES: Record<string, string> = {
   ".webp": "image/webp",
   ".avif": "image/avif",
   ".bmp": "image/bmp",
+  ".mp4": "video/mp4",
+  ".mov": "video/quicktime",
+  ".webm": "video/webm",
 };
 
+const megabytes = (bytes: number): string =>
+  `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+
 const image = async (path: string): Promise<FsImage> => {
-  const mediaType = IMAGE_TYPES[extname(path).toLowerCase()];
+  const mediaType = MEDIA_TYPES[extname(path).toLowerCase()];
   if (!mediaType) {
-    throw new Error(`${path} is not an image`);
+    throw new Error(
+      `${path} is not an image or video (${Object.keys(MEDIA_TYPES).join(", ")})`
+    );
   }
   const file = Bun.file(path);
   if (!(await file.exists())) {
     throw new Error(`${path} does not exist`);
   }
-  if (file.size > MAX_IMAGE_BYTES) {
+  if (file.size > MEDIA_LIMIT_BYTES) {
     throw new Error(
-      `${path} is ${file.size} bytes; fs image stops at ${MAX_IMAGE_BYTES}`
+      `${path} is ${megabytes(file.size)}; the Telegram Bot API takes files up to ${megabytes(MEDIA_LIMIT_BYTES)}`
     );
   }
   return {

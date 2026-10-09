@@ -29,6 +29,16 @@ type PermissionRequest = Extract<FramePayload, { kind: "permission_request" }>;
 type UserMessage = Extract<FramePayload, { kind: "user_message" }>;
 
 export interface TelegramBridge {
+  /**
+   * `send_to_user`: the words, then each attachment, in order. Answers with
+   * what did not reach the chat and why, one line each; empty when all did.
+   */
+  readonly deliver: (
+    machineId: string,
+    instanceId: string,
+    text: string,
+    attachments: string[]
+  ) => Promise<string[]>;
   /** A session is blocked on the reader; put it in their pocket. */
   readonly onAsk: (envelope: Envelope) => void;
   readonly onError: (instanceId: string, message: string) => void;
@@ -39,14 +49,14 @@ export interface TelegramBridge {
   /** A session's own words to the owner — no ask, no buttons, no answer. */
   readonly onUserMessage: (envelope: Envelope) => void;
   /**
-   * The server's machine-image reader, registered after construction like
+   * The server's machine-media reader, registered after construction like
    * {@link setSender}: a `send_to_user` attachment is a path on the
    * session's machine, and only the server holds the tunnel that reads it.
    */
-  readonly setImageReader: (read: ImageReader) => void;
+  readonly setMediaReader: (read: MediaReader) => void;
   /**
    * The server's one send path, registered after construction like
-   * {@link setImageReader}: a reply typed here is a message sent to the
+   * {@link setMediaReader}: a reply typed here is a message sent to the
    * session like any other — recorded, streamed, and the reader's hand on the
    * session to the supervisor — and only the server does those. True when the
    * machine took it.
@@ -57,18 +67,40 @@ export interface TelegramBridge {
   readonly start: () => void;
 }
 
-export type ImageReader = (
+export type MediaReader = (
   machineId: string,
   path: string
 ) => Promise<
   | { bytes: Uint8Array<ArrayBuffer>; mediaType: string }
   | "offline"
   | "timeout"
-  | "missing"
+  | { refused: string }
 >;
 
-/** Bot API `sendPhoto` stops here; a bigger picture goes as a document. */
+/**
+ * Bot API `sendPhoto`: "The photo must be at most 10 MB in size"; a bigger
+ * picture goes as a document.
+ */
 const PHOTO_LIMIT_BYTES = 10 * 1024 * 1024;
+
+/**
+ * Which Bot API method carries a file, by its media type: a GIF as an
+ * animation so it plays, a video as a video, any other picture as a photo.
+ */
+const uploadOf = (
+  mediaType: string,
+  size: number
+): { method: string; field: string } | undefined => {
+  if (mediaType === "image/gif") {
+    return { method: "sendAnimation", field: "animation" };
+  }
+  if (mediaType.startsWith("video/")) {
+    return { method: "sendVideo", field: "video" };
+  }
+  return size <= PHOTO_LIMIT_BYTES
+    ? { method: "sendPhoto", field: "photo" }
+    : undefined;
+};
 
 export interface TelegramServices {
   readonly db: DbShape;
@@ -273,7 +305,7 @@ export const createTelegramBridge = ({
   const upload = async (
     method: string,
     form: FormData
-  ): Promise<TelegramMessage | undefined> => {
+  ): Promise<{ message: TelegramMessage } | { refused: string }> => {
     const response = await fetch(`${API_BASE}/bot${token}/${method}`, {
       method: "POST",
       body: form,
@@ -284,38 +316,38 @@ export const createTelegramBridge = ({
       result?: TelegramMessage;
       description?: string;
     };
-    if (!answer.ok) {
-      console.warn(
-        `[telegram] ${method} refused: ${answer.description ?? response.status}`
-      );
-      return undefined;
+    if (!(answer.ok && answer.result)) {
+      const refused = `Telegram refused ${method}: ${answer.description ?? `HTTP ${response.status}`}`;
+      console.warn(`[telegram] ${refused}`);
+      return { refused };
     }
-    return answer.result;
+    return { message: answer.result };
   };
 
-  let readImage: ImageReader | undefined;
+  let readMedia: MediaReader | undefined;
 
   /**
-   * One attached image, read off its machine now and pushed as a photo — or as
-   * a document when Telegram's photo limits will not have it (size, a refused
-   * aspect ratio). A path that is no longer there is said so in words.
+   * One attached picture or video, read off its machine now and pushed in the
+   * form Telegram shows it: a GIF as an animation, a video as a video, a
+   * picture as a photo. A photo or a video Telegram will not take in that form
+   * (a photo's size or aspect ratio, a video format its clients do not play)
+   * goes as a document. Answers with the message it made, or why it made none.
    */
   const sendAttachment = async (
     machineId: string,
     path: string
-  ): Promise<TelegramMessage | undefined> => {
-    if (chatId === undefined || !readImage) {
-      return undefined;
+  ): Promise<{ message: TelegramMessage } | { refused: string }> => {
+    if (chatId === undefined || !readMedia) {
+      return { refused: "no Telegram chat is linked to this hub" };
     }
-    const answer = await readImage(machineId, path);
+    const answer = await readMedia(machineId, path);
     if (typeof answer === "string") {
-      const why =
-        answer === "missing"
-          ? "is not there any more"
-          : `could not be read (machine ${answer})`;
-      return send(`<code>${esc(clip(path, 512))}</code> ${why}`);
+      return { refused: `could not be read (machine ${answer})` };
     }
-    const name = path.split("/").pop() ?? "image";
+    if ("refused" in answer) {
+      return answer;
+    }
+    const name = path.split("/").pop() ?? "file";
     const form = (field: string): FormData => {
       const body = new FormData();
       body.set("chat_id", String(chatId));
@@ -325,33 +357,71 @@ export const createTelegramBridge = ({
         name
       );
       body.set("caption", clip(path, 1024));
+      if (field === "video") {
+        body.set("supports_streaming", "true");
+      }
       return body;
     };
-    const asPhoto = answer.bytes.byteLength <= PHOTO_LIMIT_BYTES;
-    const sent = asPhoto ? await upload("sendPhoto", form("photo")) : undefined;
-    return sent ?? (await upload("sendDocument", form("document")));
+    const shown = uploadOf(answer.mediaType, answer.bytes.byteLength);
+    const sent = shown && (await upload(shown.method, form(shown.field)));
+    if (sent && ("message" in sent || shown.field === "animation")) {
+      return sent;
+    }
+    return await upload("sendDocument", form("document"));
   };
 
   /**
-   * Sends and tracks one attachment, so a reply to the picture reaches the
-   * session that sent it. A failed upload is logged and skipped rather than
-   * ending the run: the ones after it are still owed.
+   * Sends and tracks one attachment, so a reply to it reaches the session
+   * that sent it. Answers with why it was not sent, or nothing when it was.
    */
   const deliverAttachment = async (
     machineId: string,
     instanceId: string,
     path: string
-  ): Promise<void> => {
+  ): Promise<string | undefined> => {
     try {
       const sent = await sendAttachment(machineId, path);
-      if (sent) {
-        track(sent.message_id, { instanceId, machineId, text: path });
+      if ("refused" in sent) {
+        // The machine's reasons name the file already; Telegram's do not.
+        return sent.refused.includes(path)
+          ? sent.refused
+          : `${path}: ${sent.refused}`;
       }
+      track(sent.message.message_id, { instanceId, machineId, text: path });
+      return undefined;
     } catch (error) {
-      console.warn(
-        `[telegram] attachment ${path} not sent: ${error instanceof Error ? error.message : String(error)}`
-      );
+      return `${path}: ${error instanceof Error ? error.message : String(error)}`;
     }
+  };
+
+  /** The words, then each attachment in order: what did not arrive, and why. */
+  const deliver = async (
+    machineId: string,
+    instanceId: string,
+    raw: string,
+    attachments: string[]
+  ): Promise<string[]> => {
+    if (chatId === undefined) {
+      return [
+        "Nothing was sent: no Telegram chat is linked to this hub yet (the owner has not messaged the bot).",
+      ];
+    }
+    const text = esc(clip(raw, MESSAGE_LIMIT));
+    const sent = await send(text);
+    const problems: string[] = [];
+    if (sent) {
+      track(sent.message_id, { instanceId, machineId, text });
+    } else {
+      problems.push("The message: Telegram refused sendMessage.");
+    }
+    for (const path of attachments) {
+      // biome-ignore lint/performance/noAwaitInLoops: each attachment is its own message, in the order they were given
+      const problem = await deliverAttachment(machineId, instanceId, path);
+      if (problem) {
+        problems.push(problem);
+      }
+    }
+    return problems;
   };
 
   // biome-ignore lint/suspicious/useAwait: the declared Promise return type is what callers await; the body is a tail call into `call`, nothing here needs its own await
@@ -635,33 +705,15 @@ export const createTelegramBridge = ({
     if (chatId === undefined) {
       return;
     }
-    const {
-      instanceId,
-      text: raw,
-      attachments,
-    } = envelope.payload as UserMessage;
-    const text = esc(clip(raw, MESSAGE_LIMIT));
-    // biome-ignore lint/complexity/noVoid: fire-and-forget; onUserMessage has nothing to return to and a failed send is not this handler's business
-    void send(text)
-      .then((sent) => {
-        if (sent) {
-          track(sent.message_id, {
-            instanceId,
-            machineId: envelope.machineId,
-            text,
-          });
+    const { instanceId, text, attachments } = envelope.payload as UserMessage;
+    // biome-ignore lint/complexity/noVoid: fire-and-forget; no caller waits on this frame, so what failed is logged
+    void deliver(envelope.machineId, instanceId, text, attachments ?? []).then(
+      (problems) => {
+        for (const problem of problems) {
+          console.warn(`[telegram] not sent for ${instanceId}: ${problem}`);
         }
-      })
-      .then(() =>
-        // After the words, in order: each attachment is its own message.
-        (attachments ?? []).reduce<Promise<unknown>>(
-          (chain, path) =>
-            chain.then(() =>
-              deliverAttachment(envelope.machineId, instanceId, path)
-            ),
-          Promise.resolve()
-        )
-      );
+      }
+    );
   };
 
   const onCallback = async (
@@ -881,12 +933,13 @@ export const createTelegramBridge = ({
     onError,
     onSupervisor,
     onUserMessage,
+    deliver,
     start,
-    setImageReader(read) {
-      readImage = read;
+    setMediaReader(read) {
+      readMedia = read;
     },
-    setSender(deliver) {
-      sendMessage = deliver;
+    setSender(sender) {
+      sendMessage = sender;
     },
   };
 };

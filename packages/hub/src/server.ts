@@ -169,6 +169,7 @@ import {
   PLACEMENT_STRATEGIES,
   type PlacementExplain,
   PREVIEW_START,
+  PREVIEW_START_PATH,
   PREVIEW_STOP,
   PROVIDER_ACCOUNT_KINDS,
   PROVIDER_RETRY,
@@ -371,7 +372,11 @@ import {
   taskRoutes,
   YOU_ACTOR,
 } from "./tasks";
-import { dashboardUrl, type TelegramBridge } from "./telegram";
+import {
+  dashboardUrl,
+  type MediaReader,
+  type TelegramBridge,
+} from "./telegram";
 import {
   createTranscripts,
   type HistoryRead,
@@ -419,6 +424,81 @@ interface SearchHitWire {
 
 /** A busy probe is polled in a loop before a restart, so it answers fast or not at all. */
 const BUSY_TIMEOUT_MS = 5000;
+
+/** What a `show_preview` ask may name, as the preview route reads it. */
+interface PreviewAsk {
+  dir?: string;
+  page?: string;
+  path?: string;
+  port?: number;
+}
+
+/** Why a preview ask names no one thing to show, or undefined when it does. */
+const previewAskRefusal = (ask: PreviewAsk): string | undefined => {
+  if (ask.page === undefined) {
+    return (ask.port === undefined) === (ask.dir === undefined)
+      ? "Pass exactly one of port or dir, or a page."
+      : undefined;
+  }
+  if (ask.port !== undefined) {
+    return "A page is shown from a folder, not a port.";
+  }
+  return ask.path === undefined
+    ? undefined
+    : "A decision page opens at its own root; path is for port or dir.";
+};
+
+/** A dev server or folder on the session's machine, opened at the page the ask names. */
+const machinePreviewSource = (ask: PreviewAsk): PreviewSource => {
+  const at = ask.path === undefined ? {} : { path: ask.path };
+  return ask.port === undefined
+    ? { dir: ask.dir as string, ...at }
+    : { port: ask.port, ...at };
+};
+
+/** A `Range: bytes=a-b` header (one range, either end open). */
+const BYTE_RANGE = /^bytes=(\d*)-(\d*)$/;
+
+/**
+ * A file's bytes as an answer to a request that may ask for a range of them:
+ * a video element asks for ranges, and Safari plays nothing from a server
+ * that answers a range with the whole file.
+ */
+const rangedResponse = (
+  bytes: Uint8Array<ArrayBuffer>,
+  mediaType: string,
+  rangeHeader: string | null
+): Response => {
+  const total = bytes.byteLength;
+  const headers = {
+    "Content-Type": mediaType,
+    "Cache-Control": "no-store",
+    "Accept-Ranges": "bytes",
+  };
+  const range = BYTE_RANGE.exec(rangeHeader ?? "");
+  if (!(range && (range[1] || range[2]))) {
+    return new Response(bytes, {
+      headers: { ...headers, "Content-Length": String(total) },
+    });
+  }
+  const [, from, to] = range;
+  const start = from ? Number(from) : Math.max(0, total - Number(to));
+  const end = from && to ? Math.min(Number(to), total - 1) : total - 1;
+  if (start > end || start >= total) {
+    return new Response(null, {
+      status: 416,
+      headers: { "Content-Range": `bytes */${total}` },
+    });
+  }
+  return new Response(bytes.slice(start, end + 1), {
+    status: 206,
+    headers: {
+      ...headers,
+      "Content-Range": `bytes ${start}-${end}/${total}`,
+      "Content-Length": String(end - start + 1),
+    },
+  });
+};
 
 /**
  * How far back a register will reach to restart a session it finds orphaned.
@@ -5276,11 +5356,13 @@ export const createServer = (
         mockup: (id) =>
           readText(posix.join(origin.dir, "mockups", `${id}.html`)),
         image: async (path) => {
-          const read = await readMachineImage(
+          const read = await readMachineMedia(
             origin.machineId,
             posix.join(origin.dir, path)
           );
-          return typeof read === "string" ? undefined : read;
+          return typeof read === "string" || "refused" in read
+            ? undefined
+            : read;
         },
       },
     };
@@ -8865,20 +8947,13 @@ export const createServer = (
     callFs(machineId, agent, { op: "write", path, content });
 
   /**
-   * One image off a machine's disk, read the moment someone looks at it: the
-   * transcript card and the Telegram bridge both point at the path an agent
-   * named, and nothing is copied anywhere in between. A file that has since
-   * moved answers `missing` — the picture is gone, which is all there is to say.
+   * One picture or video off a machine's disk, read the moment someone looks
+   * at it: the transcript card and the Telegram bridge both point at the path
+   * an agent named, and nothing is copied anywhere in between. A file the
+   * machine will not hand over (moved, not a picture or video, over the size
+   * limit) answers with the machine's own reason.
    */
-  const readMachineImage = async (
-    machineId: string,
-    path: string
-  ): Promise<
-    | { bytes: Uint8Array<ArrayBuffer>; mediaType: string }
-    | "offline"
-    | "timeout"
-    | "missing"
-  > => {
+  const readMachineMedia: MediaReader = async (machineId, path) => {
     const agent = registry.agent(machineId);
     if (!agent) {
       return "offline";
@@ -8888,7 +8963,7 @@ export const createServer = (
       return "timeout";
     }
     if (!answer.ok) {
-      return "missing";
+      return { refused: answer.error ?? `${path} could not be read` };
     }
     const { base64, mediaType } = answer.result as FsImage;
     // Copied into a fresh ArrayBuffer-backed view: a Buffer's `ArrayBufferLike`
@@ -8898,7 +8973,7 @@ export const createServer = (
   };
 
   // Registered here, after the reader exists — same shape as the answer recorder.
-  telegram?.setImageReader(readMachineImage);
+  telegram?.setMediaReader(readMachineMedia);
 
   /**
    * Writes every fleet subagent into `<home>/.claude/agents/` on one machine
@@ -10503,6 +10578,10 @@ export const createServer = (
     delegationTree: (actor, include) => delegationTree.read(actor, include),
     cawTools: (actor) => caw.tools(actor),
     askPerson: (actor, name, input) => adminAsks.ask(actor, name, input),
+    sendToUser: telegram
+      ? (actor, message, attachments) =>
+          telegram.deliver(actor.machineId, actor.id, message, attachments)
+      : undefined,
     instances: () => withKeepAlive(db.listInstances()),
     instanceById: (id) => db.getInstancesByIds([id])[0],
     ledBy: (id, leadId) => workItems.ledBy(id, leadId),
@@ -10583,13 +10662,6 @@ export const createServer = (
         if (record.state === "failed") {
           throw new WorkItemRefusal(404, record.reason ?? "the send failed");
         }
-        return;
-      }
-      if (envelope.verb === "frames") {
-        telegram?.onUserMessage({
-          ...envelope,
-          machineId: requester.machineId,
-        });
         return;
       }
       const control = envelope.payload as ControlPayload;
@@ -11700,17 +11772,14 @@ export const createServer = (
             dir: t.Optional(t.String({ minLength: 1, pattern: "^/" })),
             /** A decision page in the session's project folder, `decisions/<page>/`; with `dir`, that folder's index.html is published there first. */
             page: t.Optional(t.String({ pattern: DECISION_PAGE.source })),
+            /** With `port` or `dir`: the page inside it the preview opens at, e.g. `/motion/mac-readiness`. */
+            path: t.Optional(t.String({ pattern: PREVIEW_START_PATH.source })),
           }),
         },
         async ({ params, body, status }) => {
-          if (
-            body.page === undefined &&
-            (body.port === undefined) === (body.dir === undefined)
-          ) {
-            return status(400, "Pass exactly one of port or dir, or a page.");
-          }
-          if (body.page !== undefined && body.port !== undefined) {
-            return status(400, "A page is shown from a folder, not a port.");
+          const refused = previewAskRefusal(body);
+          if (refused) {
+            return status(400, refused);
           }
           const [row] = db.getInstancesByIds([params.id]);
           if (!row) {
@@ -11718,10 +11787,7 @@ export const createServer = (
           }
           let source: PreviewSource;
           if (body.page === undefined) {
-            source =
-              body.port === undefined
-                ? { dir: body.dir as string }
-                : { port: body.port };
+            source = machinePreviewSource(body);
           } else {
             const published = await publishDecisionPage(
               row,
@@ -11746,30 +11812,28 @@ export const createServer = (
           : status(stopped.code, stopped.error);
       })
       // What a restart polls to find a moment that cuts nothing in half.
-      // A picture on a machine's disk, for the transcript's image cards. No
+      // A picture or video on a machine's disk, for the transcript's cards. No
       // caching: the file is the agent's working state and may be rewritten or
       // removed between two looks.
       .get(
         "/api/agents/:machineId/image",
         { query: t.Object({ path: t.String() }) },
-        async ({ params, query, status }) => {
-          const answer = await readMachineImage(params.machineId, query.path);
+        async ({ params, query, request, status }) => {
+          const answer = await readMachineMedia(params.machineId, query.path);
           if (answer === "offline") {
             return status(503, `machine ${params.machineId} is not connected`);
           }
           if (answer === "timeout") {
             return status(504, `machine ${params.machineId} did not answer`);
           }
-          if (answer === "missing") {
-            return status(404, `${query.path} is not there any more`);
+          if ("refused" in answer) {
+            return status(404, answer.refused);
           }
-          return new Response(answer.bytes, {
-            headers: {
-              "Content-Type": answer.mediaType,
-              "Content-Length": String(answer.bytes.byteLength),
-              "Cache-Control": "no-store",
-            },
-          });
+          return rangedResponse(
+            answer.bytes,
+            answer.mediaType,
+            request.headers.get("range")
+          );
         }
       )
       // Forgetting a machine the fleet no longer has. Only an offline one: a

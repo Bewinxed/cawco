@@ -61,6 +61,30 @@
 
   const machine = getContext<(() => string) | undefined>("cawco:machine");
 
+  /** A picture or video on the session's machine, read through the hub when looked at. */
+  const machineMedia = (machineId: string, path: string): string =>
+    `/api/agents/${encodeURIComponent(machineId)}/image?path=${encodeURIComponent(path)}`;
+
+  /** The clips the machine's file reader serves (agent fs.ts `MEDIA_TYPES`). */
+  const VIDEO_FILE = /\.(mp4|mov|webm)$/i;
+  const isVideo = (path: string): boolean => VIDEO_FILE.test(path);
+
+  /** `send_to_user` under any harness's naming of it (`mcp__cawco__…`, `cawco_…`). */
+  const SEND_TO_USER = /(^|_)send_to_user$/;
+
+  /** What a `send_to_user` call attached, shown under its row as the owner got it. */
+  const sentAttachments = (m: Message): string[] => {
+    const name = (m.metadata?.toolName ?? "").toLowerCase();
+    if (!SEND_TO_USER.test(name)) {
+      return [];
+    }
+    const attached = (m.metadata?.toolInput as { attachments?: unknown })
+      ?.attachments;
+    return Array.isArray(attached)
+      ? attached.filter((path): path is string => typeof path === "string")
+      : [];
+  };
+
   let { messages }: { messages: Message[] } = $props();
 
   /**
@@ -470,8 +494,22 @@
                 caption={input.caption}
                 path={input.path}
                 size="card"
-                src={`/api/agents/${encodeURIComponent(machine())}/image?path=${encodeURIComponent(input.path)}`}
+                src={machineMedia(machine(), input.path)}
+                video={isVideo(input.path)}
               />
+            </div>
+          {/if}
+          {#if machine && sentAttachments(m).length}
+            <div class="shots" data-gallery>
+              {#each sentAttachments(m) as path (path)}
+                <Shot
+                  alt={pathLeaf(path)}
+                  {path}
+                  size="card"
+                  src={machineMedia(machine(), path)}
+                  video={isVideo(path)}
+                />
+              {/each}
             </div>
           {/if}
           {#if m.metadata?.resultImages?.length}

@@ -99,12 +99,15 @@
     caption,
     path,
     size = "card",
+    video = false,
   }: {
     src: string;
     alt: string;
     caption?: string;
     path?: string;
     size?: "thumb" | "card";
+    /** A clip rather than a picture: played in place, with the browser's own controls. */
+    video?: boolean;
   } = $props();
 
   let image = $state<HTMLImageElement>();
@@ -197,9 +200,23 @@
 </script>
 
 <figure class:thumb={size === "thumb"}>
-  {#if failed === src}
+  {#if video && failed !== src}
+    <div class="box">
+      <!-- biome-ignore lint/a11y/useMediaCaption: an agent's screen recording carries no caption track -->
+      <video
+        aria-label={alt}
+        controls
+        onerror={() => {
+          failed = src;
+        }}
+        playsinline
+        preload="metadata"
+        {src}
+      ></video>
+    </div>
+  {:else if failed === src}
     <div class="box missing">
-      <span>Image not available</span>
+      <span>{video ? "Video" : "Image"} not available</span>
       {#if path}
         <span class="path">{path}</span>
       {/if}
@@ -307,6 +324,13 @@
     &:not(.cached) {
       transition: opacity var(--dur-control) var(--ease-out);
     }
+  }
+  video {
+    display: block;
+    max-inline-size: 100%;
+    max-block-size: 240px;
+    block-size: 100%;
+    object-fit: contain;
   }
   .sized img {
     inline-size: 100%;

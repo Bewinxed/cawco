@@ -466,8 +466,9 @@ export const ASK_USER_QUESTION = "AskUserQuestion";
  * `fs`: the machine's files, for the cwd picker and light markdown editing
  * (NEW.md §6) — not a file transfer. `list` answers with {@link FsEntry}[],
  * `read` with the file's text, `write` with the byte count it wrote, `image`
- * with an {@link FsImage} — the one binary the tunnel carries, so a picture an
- * agent pointed at can be looked at without the agent spending tokens on it.
+ * with an {@link FsImage} — the one binary the tunnel carries, so a picture or
+ * video an agent pointed at can be looked at without the agent spending tokens
+ * on it.
  */
 export interface FsPayload {
   /** `write` only: the text the file is replaced with. */
@@ -477,7 +478,16 @@ export interface FsPayload {
   requestId: string;
 }
 
-/** What an `fs image` answers with: the file's bytes, base64, and what they are. */
+/**
+ * The most an `fs image` read carries: the Telegram Bot API's ceiling on what
+ * a bot uploads, so a file read for `send_to_user` is one Telegram takes
+ * (https://core.telegram.org/bots/api, sendVideo: "Bots can currently send
+ * video files of up to 50 MB in size"; sendAnimation and sendDocument say the
+ * same).
+ */
+export const MEDIA_LIMIT_BYTES = 50 * 1024 * 1024;
+
+/** What an `fs image` answers with: the file's bytes, base64, and what they are (a picture or a video). */
 export interface FsImage {
   base64: string;
   mediaType: string;
@@ -1011,13 +1021,21 @@ export type FramePayload =
 export const CAWCO_HUB_PORT = 3456;
 
 /**
+ * A preview's start page: a path on the previewed server, one leading slash
+ * (never `//host`, which would leave it), no whitespace.
+ */
+export const PREVIEW_START_PATH = /^\/(?!\/)\S*$/;
+
+/**
  * What a preview shows: a dev server or a folder on the session's machine, or
  * a decision page in a project's hub folder (`decisions/<page>/index.html`),
- * which the hub serves itself.
+ * which the hub serves itself. A dev server or folder may name `path`, the
+ * page inside it the preview opens at (`/motion/mac-readiness`); the root
+ * when absent.
  */
 export type PreviewSource =
-  | { port: number }
-  | { dir: string }
+  | { port: number; path?: string }
+  | { dir: string; path?: string }
   | { project: string; page: string };
 
 /**

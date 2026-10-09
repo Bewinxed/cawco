@@ -7624,6 +7624,10 @@
                   "page": {
                     "pattern": "^[a-z0-9][a-z0-9-]{0,62}$",
                     "type": "string"
+                  },
+                  "path": {
+                    "pattern": "^\\/(?!\\/)\\S*$",
+                    "type": "string"
                   }
                 }
               }
@@ -19300,7 +19304,7 @@
         ]
       },
       "FsPayload": {
-        "description": "`fs`: the machine's files, for the cwd picker and light markdown editing\n(NEW.md §6) — not a file transfer. `list` answers with {@link FsEntry}[],\n`read` with the file's text, `write` with the byte count it wrote, `image`\nwith an {@link FsImage} — the one binary the tunnel carries, so a picture an\nagent pointed at can be looked at without the agent spending tokens on it.",
+        "description": "`fs`: the machine's files, for the cwd picker and light markdown editing\n(NEW.md §6) — not a file transfer. `list` answers with {@link FsEntry}[],\n`read` with the file's text, `write` with the byte count it wrote, `image`\nwith an {@link FsImage} — the one binary the tunnel carries, so a picture or\nvideo an agent pointed at can be looked at without the agent spending tokens\non it.",
         "type": "object",
         "properties": {
           "content": {
@@ -19354,7 +19358,7 @@
         ]
       },
       "FsImage": {
-        "description": "What an `fs image` answers with: the file's bytes, base64, and what they are.",
+        "description": "What an `fs image` answers with: the file's bytes, base64, and what they are (a picture or a video).",
         "type": "object",
         "properties": {
           "base64": {
@@ -25583,13 +25587,16 @@
             "type": "string"
           },
           "source": {
-            "description": "What a preview shows: a dev server or a folder on the session's machine, or\na decision page in a project's hub folder (`decisions/<page>/index.html`),\nwhich the hub serves itself.",
+            "description": "What a preview shows: a dev server or a folder on the session's machine, or\na decision page in a project's hub folder (`decisions/<page>/index.html`),\nwhich the hub serves itself. A dev server or folder may name `path`, the\npage inside it the preview opens at (`/motion/mac-readiness`); the root\nwhen absent.",
             "anyOf": [
               {
                 "type": "object",
                 "properties": {
                   "port": {
                     "type": "number"
+                  },
+                  "path": {
+                    "type": "string"
                   }
                 },
                 "required": [
@@ -25600,6 +25607,9 @@
                 "type": "object",
                 "properties": {
                   "dir": {
+                    "type": "string"
+                  },
+                  "path": {
                     "type": "string"
                   }
                 },

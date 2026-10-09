@@ -219,8 +219,9 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         ])
         let web = web!
         guard let cookie else { return }
+        let start = hub.previewStart(frame) ?? origin
         web.configuration.websiteDataStore.httpCookieStore.setCookie(cookie) {
-            web.load(URLRequest(url: origin))
+            web.load(URLRequest(url: start))
         }
     }
 

@@ -6,6 +6,13 @@ const TRAILING_WS_PATH = /\/ws\/?$/;
 const TRAILING_SLASHES = /\/+$/;
 /** The hub's own response headers (`X-Cawco-Machine`, …), as fetch lowercases them. */
 const CAWCO_HEADER = "x-cawco-";
+/**
+ * What a ranged answer from the hub's media route carries, kept across the
+ * hop. The length only on a 206, whose bytes the hub never compresses: on
+ * any other answer it may be the encoded size of a body fetch has decoded.
+ */
+const RANGE_HEADERS = ["accept-ranges", "content-range", "content-length"];
+const PARTIAL_CONTENT = 206;
 
 /**
  * The hub's HTTP origin, derived from CAWCO_HUB_URL. That variable is a
@@ -36,6 +43,9 @@ async function proxyToHub(
   const authorization = request.headers.get("authorization");
 
   const fileName = request.headers.get("x-file-name");
+  // A video element reads a machine's clip in ranges, and Safari plays none
+  // whose server answers a range with the whole file (hub `rangedResponse`).
+  const range = request.headers.get("range");
   const hasBody = request.method !== "GET" && request.method !== "HEAD";
 
   try {
@@ -50,6 +60,7 @@ async function proxyToHub(
         ...(authorization && { Authorization: authorization }),
         ...(clientAddress && { "X-Cawco-Client-Address": clientAddress }),
         ...(fileName && { "X-File-Name": fileName }),
+        ...(range && { Range: range }),
       },
       // Streamed through as bytes: an attached file is up to 100 MB and not text.
       body: hasBody ? request.body : undefined,
@@ -83,6 +94,15 @@ async function proxyToHub(
         ...(response.headers.has("Cache-Control") && {
           "Cache-Control": response.headers.get("Cache-Control") as string,
         }),
+        ...Object.fromEntries(
+          (response.status === PARTIAL_CONTENT
+            ? RANGE_HEADERS
+            : ["accept-ranges"]
+          ).flatMap((name) => {
+            const value = response.headers.get(name);
+            return value === null ? [] : [[name, value]];
+          })
+        ),
         // The hub's word on where a transcript lives — its machine, folder,
         // key and harness, and which machine a refused read was for — rides
         // its own headers, and a reader addressed by id alone has no other.

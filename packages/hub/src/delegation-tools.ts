@@ -2,6 +2,7 @@ import {
   IMAGE_GENERATION_DESCRIPTION,
   LANDS_MODES,
   type LandsMode,
+  PREVIEW_START_PATH,
 } from "@cawco/core";
 import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
@@ -940,8 +941,10 @@ export function handoffTools(deps: HandoffDeps) {
       "send_to_user",
       "Display a message directly to the user (delivered to their Telegram). Use this for " +
         "progress updates, partial results, or content the user must see exactly as written " +
-        "before the task finishes. Attach images by absolute path — they are read off this " +
-        "machine when sent; you do not need to read them yourself.",
+        "before the task finishes. Attach image or video files by absolute path (png, jpg, gif, " +
+        "webp, avif, bmp, mp4, mov, webm; up to 50 MB each, Telegram's limit) — they are read off " +
+        "this machine when sent; you do not need to read them yourself. The call fails, naming " +
+        "each one, when anything did not reach the user.",
       {
         message: z
           .string()
@@ -950,7 +953,7 @@ export function handoffTools(deps: HandoffDeps) {
           .array(z.string())
           .optional()
           .describe(
-            "Absolute paths of image files on this machine to send with the message."
+            "Absolute paths of image or video files on this machine to send with the message."
           ),
       },
       async ({ message, attachments }) => ({
@@ -1017,7 +1020,7 @@ export function handoffTools(deps: HandoffDeps) {
       "show_preview",
       "Show a page beside your transcript so the operator sees your work: when you start a dev server, change a page " +
         "they will look at, they ask to see it, or before you say a UI change is done. `port` for a dev server, `dir` for a " +
-        "folder with an index.html. They can click any element to send you its file:line with a note. A decision page " +
+        "folder with an index.html; `path` with either opens that page (e.g. /motion/mac-readiness) instead of the root. They can click any element to send you its file:line with a note. A decision page " +
         "(decision-page skill): `page` with `dir` (your folder with its page.html), or `page` alone (decisions/<page>/page.html " +
         "in the project folder, or the page already there); the hub builds and shows it, keeping picks for ids it still has.",
       {
@@ -1030,10 +1033,22 @@ export function handoffTools(deps: HandoffDeps) {
           .describe(
             "A decision page's name, like onboarding: lowercase letters, digits and dashes."
           ),
+        path: z
+          .string()
+          .regex(PREVIEW_START_PATH)
+          .optional()
+          .describe(
+            "With port or dir: the page to open, a path from the server's root like /motion/mac-readiness (query allowed). The root when left out."
+          ),
       },
-      async ({ port, dir, page }) => {
+      async ({ port, dir, page, path }) => {
         if (page !== undefined && port !== undefined) {
           throw new Error("A page is shown from a folder, not a port.");
+        }
+        if (page !== undefined && path !== undefined) {
+          throw new Error(
+            "A decision page opens at its own root; path is for port or dir."
+          );
         }
         if (
           page === undefined &&
@@ -1041,13 +1056,15 @@ export function handoffTools(deps: HandoffDeps) {
         ) {
           throw new Error("Pass exactly one of port or dir, or a page.");
         }
+        const at = path === undefined ? {} : { path };
         let source: Parameters<typeof actions.showPreview>[0] = {
           dir: dir as string,
+          ...at,
         };
         if (page !== undefined) {
           source = { page, dir };
         } else if (port !== undefined) {
-          source = { port };
+          source = { port, ...at };
         }
         return {
           content: [

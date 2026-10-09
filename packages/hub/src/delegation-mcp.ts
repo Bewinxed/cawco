@@ -131,6 +131,12 @@ export function createDelegationMcp(options: {
     name: string,
     input: Record<string, unknown>
   ) => Promise<void>;
+  /** `send_to_user` through the Telegram bridge: what did not arrive, and why (telegram.ts `deliver`). */
+  sendToUser?: (
+    actor: InstanceRow,
+    message: string,
+    attachments: string[]
+  ) => Promise<string[]>;
 }) {
   let tools = options.tools ?? handoffTools;
   let admin = adminTools();
@@ -522,6 +528,7 @@ export function createDelegationMcp(options: {
   ): Promise<CallToolResult> => {
     const emitted: Envelope[] = [];
     const tree = options.delegationTree;
+    const toUser = options.sendToUser;
     const entry = tools({
       instanceId: actor.id,
       instanceById: options.instanceById,
@@ -536,6 +543,9 @@ export function createDelegationMcp(options: {
       workflowRunId: actor.workflowRunId ?? undefined,
       projectId: actor.projectId ?? undefined,
       delegateList: tree ? (include) => tree(actor, include) : undefined,
+      sendToUser: toUser
+        ? (message, attachments) => toUser(actor, message, attachments)
+        : undefined,
       emit: (envelope) => emitted.push(envelope),
     }).find((tool) => tool.name === name);
     if (!entry) {
