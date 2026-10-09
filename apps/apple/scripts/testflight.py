@@ -145,10 +145,11 @@ def finish(app, build, notes):
 
 
 def signed(command, log):
-    # Unlock and sign inside the same process invocation. Never print the password.
-    shell = 'security unlock-keychain -p "$(< "$HOME/.appstoreconnect/ci-keychain")" "$HOME/Library/Keychains/anbar-ci.keychain-db" && exec "$@"'
+    # Unlock and sign inside the same process invocation (scripts/signed.sh,
+    # which build-both.sh's signing builds run too). Never print the password.
+    script = ROOT / "source/apps/apple/scripts/signed.sh"
     with log.open("w") as output:
-        result = subprocess.run(["/bin/bash", "-c", shell, "--", *command], stdout=output, stderr=subprocess.STDOUT)
+        result = subprocess.run(["/bin/bash", str(script), *command], stdout=output, stderr=subprocess.STDOUT)
     if result.returncode:
         errors = [line for line in log.read_text(errors="replace").splitlines() if "error:" in line or "FAILED" in line or "errSecInternalComponent" in line]
         print("\n".join(errors), file=sys.stderr)

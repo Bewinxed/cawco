@@ -169,8 +169,14 @@ trap 'exit 143' TERM HUP
 XCODEGEN=$(command -v xcodegen || echo /opt/homebrew/bin/xcodegen)
 "$XCODEGEN" generate --quiet
 
-build() { # <destination> <label>
-  xcodebuild -project CawCo.xcodeproj -scheme CawCo -destination "$1" \
+build() { # <destination> <label> [signed]
+  # A build that signs with an identity (Mac Catalyst) runs with the CI
+  # keychain unlocked, as TestFlight's do (scripts/signed.sh); a simulator's
+  # needs no identity.
+  # (No empty-array expansion here: the Mac's bash 3.2 calls it unbound under `set -u`.)
+  local runner=env
+  [[ ${3:-} != signed ]] || runner=scripts/signed.sh
+  "$runner" xcodebuild -project CawCo.xcodeproj -scheme CawCo -destination "$1" \
     -derivedDataPath "$DD" -skipPackagePluginValidation build \
     >"$LOGS/build-$2.log" 2>&1 || {
     if grep -a -q -E "error:|BUILD FAILED" "$LOGS/build-$2.log"; then
@@ -256,7 +262,7 @@ print(best[1], best[2], best[3])
 # macOS: the same UIKit app through Mac Catalyst. Start the executable
 # directly, so its PID and stderr are ours.
 macos() {
-  build "platform=macOS,variant=Mac Catalyst" macOS
+  build "platform=macOS,variant=Mac Catalyst" macOS signed
   if [[ $COMPILE_ONLY == --compile-only ]]; then return; fi
   LOG="$LOGS/launch-macOS.log"
   "$DD/Build/Products/Debug-maccatalyst/CawCo.app/Contents/MacOS/CawCo" >"$LOG" 2>&1 &
