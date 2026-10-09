@@ -273,9 +273,9 @@ them (the editor cannot import `.riv` files). From `assets/mascot/scripts` (`bun
 
   The runtime's clocks and entropy are pinned so the random turns repeat across two runs. It
   prints one line per file (the peek's names its ledge line), the totals (`loops animate: 7/7`,
-  `stills rest: 13/13`, `reducedMotion holds still: 20/20`, `drawn enters play and land: 8/8`,
-  `no drawn enter, simply there: 12/12`, `pixel sizes the dark rim: 20/20`, `rim whole at load:
-  20/20`, `files proven: 20/20`)
+  `stills rest: 14/14`, `reducedMotion holds still: 21/21`, `drawn enters play and land: 9/9`,
+  `no drawn enter, simply there: 12/12`, `pixel sizes the dark rim: 21/21`, `rim whole at load:
+  21/21`, `files proven: 21/21`)
   and, on success, `Caw view model drives the state machine in every file`.
 - `node measure-rim.mjs [--sizes 14,18,34,48,80] [--light]` measures the dark rim as the apps
   draw him: each file's still framed as `cawStill` frames it, at each size, 1x and 2x, on the
