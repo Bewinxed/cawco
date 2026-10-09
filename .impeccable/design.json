@@ -1196,8 +1196,8 @@
       "border-button-outline": {
         "role": "neutral",
         "displayName": "Border Button Outline",
-        "canonical": "light-dark(oklch(0.89 0.013 82), color-mix(in oklab, oklch(0.52 0.016 76), oklch(0.778 0.012 78) 10%))",
-        "hex": "#dfdad1",
+        "canonical": "light-dark(color-mix(in oklab, oklch(0.735 0.017 78), oklch(0.52 0.016 76) 40%), color-mix(in oklab, oklch(0.52 0.016 76), oklch(0.778 0.012 78) 10%))",
+        "hex": "#958e84",
         "hexDark": "#766f66"
       },
       "well-edge": {
