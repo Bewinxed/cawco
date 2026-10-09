@@ -19,6 +19,7 @@
  * session's frames resume (server.ts `registerAck`).
  */
 import {
+  announcesParts,
   Inbox,
   Outbox,
   type ServerSocketLike,
@@ -63,13 +64,22 @@ const lines = new Map<string, Line>();
  * as 1.8 MB, and with it as 58 KB, half a minute of an empty board on a
  * phone's link otherwise.
  */
-export const openLine = (socket: HubSocket, compress: boolean): void => {
+export const openLine = (
+  socket: HubSocket & { query: Record<string, string | undefined> },
+  compress: boolean
+): void => {
   const raw = rawOf(socket);
   lines.set(socket.id, {
     raw,
     assembler: new WireAssembler(),
     inbox: new Inbox(),
-    outbox: new Outbox(serverTransport(raw, compress)),
+    // A client that does not announce parts runs the build before them (an
+    // agent not yet updated, a tab not yet reloaded): it is sent every
+    // message whole, as that build reads them (`WIRE_PARTS_PARAM`).
+    outbox: new Outbox(
+      serverTransport(raw, compress),
+      announcesParts(socket.query)
+    ),
   });
 };
 

@@ -38,7 +38,12 @@ struct HubSocket: Sendable {
         parts.path = "/ws/dashboard"
         // Names the wire this client reads (WIRE_PROTOCOL, 6): board deltas, not a snapshot per change.
         // Thread frames (6) are logged and skipped until the app draws threads.
-        parts.queryItems = [URLQueryItem(name: "protocol", value: "6")]
+        // And says it reads parts (`WIRE_PARTS_PARAM`): a large board then
+        // comes as parts (`Wire.Assembler`) instead of one frame.
+        parts.queryItems = [
+            URLQueryItem(name: "protocol", value: "6"),
+            URLQueryItem(name: "wire", value: "parts"),
+        ]
         let (events, continuation) = AsyncThrowingStream<Event, any Error>.makeStream()
         let delegate = Delegate(continuation)
         let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)

@@ -62,6 +62,27 @@ export const WIRE_PART_CHARS = 1024 * 1024;
  */
 export const WIRE_MESSAGE_LIMIT_BYTES = 512 * 1024 * 1024;
 
+/**
+ * The marker a client puts on its socket's URL to say it reads parts:
+ * `?wire=parts`. The hub updates first, and a machine runs the previous build
+ * until it updates itself through that very socket, as does a dashboard tab
+ * loaded before the hub moved until it reloads: to a socket without the
+ * marker the hub sends every message whole, as the wire did before parts
+ * (still in order, never dropped), and takes whole messages from it up to
+ * {@link WIRE_MESSAGE_LIMIT_BYTES}.
+ */
+export const WIRE_PARTS_PARAM = "wire";
+export const WIRE_PARTS_VALUE = "parts";
+
+/** `url` with the parts marker, for a client's socket. */
+export const announcingParts = (url: string): string =>
+  `${url}${url.includes("?") ? "&" : "?"}${WIRE_PARTS_PARAM}=${WIRE_PARTS_VALUE}`;
+
+/** Whether a socket's query says its client reads parts. */
+export const announcesParts = (
+  query: Record<string, string | undefined>
+): boolean => query[WIRE_PARTS_PARAM] === WIRE_PARTS_VALUE;
+
 /** One part of a message too long for one frame. */
 export interface WirePart {
   part: { id: string; last: boolean; seq: number };
@@ -86,7 +107,10 @@ interface Cut {
  */
 class Outgoing {
   readonly #source: JsonPieces;
-  /** A frame being relayed: sent as it is, never cut again. */
+  /**
+   * Sent as one frame, whatever its length: a frame being relayed (never cut
+   * again), or any message to a peer that does not read parts.
+   */
   readonly #relay: boolean;
   #seq = 0;
   /** Text written and not yet framed. */
@@ -116,7 +140,12 @@ class Outgoing {
       return this.#cut.frame;
     }
     const state = this.#state;
-    while (!state.written && this.#buffer.length <= WIRE_PART_CHARS) {
+    // A message sent whole is written whole: a peer one build behind reads
+    // nothing else, so it is sent as the wire sent it before parts.
+    while (
+      !state.written &&
+      (this.#relay || this.#buffer.length <= WIRE_PART_CHARS)
+    ) {
       const piece = this.#source.next();
       if (piece === undefined) {
         state.written = true;
@@ -462,8 +491,12 @@ export class Outbox {
     closed: false,
   };
 
-  constructor(to: OutboxTransport) {
+  /** Whether the peer reads parts ({@link WIRE_PARTS_PARAM}); without, every message goes whole. */
+  readonly #parts: boolean;
+
+  constructor(to: OutboxTransport, parts = true) {
     this.#to = to;
+    this.#parts = parts;
   }
 
   /**
@@ -473,13 +506,13 @@ export class Outbox {
    */
   send(value: unknown): void {
     this.#enqueue(
-      new Outgoing(encodeJson(value), jsonSizeEstimate(value), false)
+      new Outgoing(encodeJson(value), jsonSizeEstimate(value), !this.#parts)
     );
   }
 
   /** Queues a message already being written as JSON pieces, about `chars` long. */
   sendPieces(pieces: JsonPieces, chars: number): void {
-    this.#enqueue(new Outgoing(pieces, chars, false));
+    this.#enqueue(new Outgoing(pieces, chars, !this.#parts));
   }
 
   /**

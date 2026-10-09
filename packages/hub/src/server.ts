@@ -189,7 +189,7 @@ import {
 } from "@cawco/core/binary-updates";
 import { hashFiles } from "@cawco/core/file-hash";
 import { machineId as hostMachineId } from "@cawco/core/machine-id";
-import { WIRE_FRAME_LIMIT_BYTES } from "@cawco/core/wire";
+import { WIRE_MESSAGE_LIMIT_BYTES } from "@cawco/core/wire";
 import { Elysia, t, ValidationError } from "elysia";
 import { websocket } from "elysia/websocket";
 import {
@@ -250,6 +250,7 @@ import { FleetMcp } from "./fleet-mcp";
 import { accountForecasts, carrySequence } from "./forecast";
 import { hidden } from "./hidden";
 import { joinRoutes } from "./join";
+import { streamLargeJson } from "./json-response";
 import {
   createKeepAliveScheduler,
   isKeepAlive,
@@ -10360,6 +10361,8 @@ export const createServer = (
 
   return (
     new Elysia()
+      // Every route's large JSON answer is written as it is sent.
+      .mapResponse("global", streamLargeJson)
       .use(websocket())
       .use(dashboardErrorsRoutes())
       .use(delegateTypesRoutes(delegateTypes))
@@ -14090,11 +14093,13 @@ export const createServer = (
           })
       )
       .ws("/ws", {
-        // One frame is at most a part of a message (`@cawco/core/wire`): a
-        // full transcript read (tens of MB) arrives as parts and is joined in
-        // `guardedAgentMessage`. Bun has one WebSocket config per server, so
-        // both routes name the same limit.
-        maxPayloadLength: WIRE_FRAME_LIMIT_BYTES,
+        // An agent on this build sends parts of at most WIRE_FRAME_LIMIT_BYTES
+        // (`@cawco/core/wire`), joined in `guardedAgentMessage`; one on the
+        // build before sends each message whole, a transcript read tens of
+        // MB, until it updates through this very socket. So a frame is taken
+        // up to the largest message the wire carries. Bun has one WebSocket
+        // config per server, so both routes name the same limit.
+        maxPayloadLength: WIRE_MESSAGE_LIMIT_BYTES,
         open(ws) {
           openLine(ws, false);
         },
@@ -15849,7 +15854,8 @@ export const createServer = (
         // Offered to the browser; every frame to a dashboard then goes out
         // with the flag Bun compresses on (`openLine(ws, true)`).
         perMessageDeflate: true,
-        maxPayloadLength: WIRE_FRAME_LIMIT_BYTES,
+        // The same limit as the agent route: Bun's config is server-wide.
+        maxPayloadLength: WIRE_MESSAGE_LIMIT_BYTES,
         drain(ws) {
           drainLine(ws);
         },

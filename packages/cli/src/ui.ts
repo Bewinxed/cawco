@@ -2,7 +2,7 @@ import {
   clientTransport,
   Outbox,
   serverTransport,
-  WIRE_FRAME_LIMIT_BYTES,
+  WIRE_MESSAGE_LIMIT_BYTES,
 } from "@cawco/core/wire";
 import { spawn } from "bun";
 
@@ -169,7 +169,8 @@ export async function serveUi({
     },
 
     websocket: {
-      maxPayloadLength: WIRE_FRAME_LIMIT_BYTES,
+      // As the hub: a page from the build before sends whole messages.
+      maxPayloadLength: WIRE_MESSAGE_LIMIT_BYTES,
       open(browser) {
         // The hub compresses every frame to a dashboard; so does the relay.
         const toBrowser = new Outbox(serverTransport(browser, true));

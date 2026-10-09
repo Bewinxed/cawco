@@ -32,7 +32,7 @@ import {
 import { machineId } from "@cawco/core/machine-id";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
 import { fetchOpenCodeGoLimits } from "@cawco/core/usage/opencode-go";
-import { clientLine } from "@cawco/core/wire";
+import { announcingParts, clientLine } from "@cawco/core/wire";
 import { Data, Duration, Effect, Fiber, Schedule } from "effect";
 import { accountReports, claudeAuthNote } from "./accounts";
 import {
@@ -363,7 +363,9 @@ const send = (socket: WebSocket, envelope: Envelope): void => {
 /** Succeeds with an open socket; fails if the socket closes before opening. */
 const open = (url: string) =>
   Effect.callback<WebSocket, ConnectionLost>((resume) => {
-    const socket = new WebSocket(url);
+    // Says this agent reads parts; without it the hub sends whole messages,
+    // as to an agent on the build before (`WIRE_PARTS_PARAM`).
+    const socket = new WebSocket(announcingParts(url));
     const onOpen = () => {
       socket.removeEventListener("close", onClose);
       resume(Effect.succeed(socket));

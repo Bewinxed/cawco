@@ -91,7 +91,7 @@ import {
   runDoing,
   WIRE_PROTOCOL,
 } from "@cawco/core";
-import { clientLine } from "@cawco/core/wire";
+import { announcingParts, clientLine } from "@cawco/core/wire";
 import {
   CONTROL_TIMEOUT_MS,
   DISCARD_TIMEOUT_MS,
@@ -4098,7 +4098,11 @@ function connect(): void {
 
   // The page names the wire it was built for, so the hub sends a page on an
   // older one the snapshot that reloads it and no delta it would misread.
-  const socket = new WebSocket(`${hubSocketUrl()}?protocol=${WIRE_PROTOCOL}`);
+  // …and that it reads parts (`WIRE_PARTS_PARAM`), so a large board can come
+  // as parts; a tab from before parts says nothing and is sent it whole.
+  const socket = new WebSocket(
+    announcingParts(`${hubSocketUrl()}?protocol=${WIRE_PROTOCOL}`)
+  );
 
   socket.onopen = () => {
     state.status = "connected";
