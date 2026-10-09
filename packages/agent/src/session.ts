@@ -925,6 +925,14 @@ export class SessionSupervisor {
    * to every session it named and in the log, and idle-gated operations stay
    * held. Only for the epoch in progress: one that completed was recovered,
    * and losing the connection after that begins a new one (`loseCustody`).
+   *
+   * What happens next depends on the cause. An unanswered register is sent
+   * again, and a failed attempt is made again, on the same connection
+   * (daemon.ts `registrationExpired`, `takeCustody`). A refused contract is
+   * not: the hub answers every register with the contract its build has
+   * (server.ts `registerAck`), and this agent reads it once per connection,
+   * from that connection's first register ack (daemon.ts `beforeAck`), so
+   * only a new connection to a hub on a build with the contract changes it.
    */
   failCustody(epoch: number, problem: unknown): void {
     if (epoch !== this.#custodyEpoch || this.#custodyState === "ready") {
@@ -933,7 +941,11 @@ export class SessionSupervisor {
     this.#custodyState = "failed";
     this.#custodyError =
       problem instanceof Error ? problem.message : String(problem);
-    const message = `Machine custody recovery failed: ${this.#custodyError.replace(FINAL_STOP, "")}. Recovery retries while connected; idle-gated operations remain held.`;
+    const next =
+      problem instanceof HubContractRefused
+        ? "It's tried again when the hub next restarts and this machine registers"
+        : "Recovery retries while connected";
+    const message = `Machine custody recovery failed: ${this.#custodyError.replace(FINAL_STOP, "")}. ${next}; idle-gated operations remain held.`;
     const ids = [...this.#custodyInstances];
     for (const instanceId of ids) {
       this.sink({ kind: "error", instanceId, verb: "register", message });
