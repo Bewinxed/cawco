@@ -92,21 +92,25 @@ public enum PushCategories {
     public static let approve = "APPROVE"
     static let permissionOpenOnly = "CAWCO_PERMISSION_OPEN"
 
-    /// "Approve" is the only label for the grant (WORDS.md); there is no Deny.
     public static func register() {
+        NotificationCentre.setCategories { all() }
+    }
+
+    /// "Approve" is the only label for the grant (WORDS.md); there is no Deny.
+    private static func all() -> Set<UNNotificationCategory> {
         let openAction = UNNotificationAction(identifier: Self.open, title: "Open", options: [.foreground])
         let approveAction = UNNotificationAction(identifier: Self.approve, title: "Approve", options: [.authenticationRequired])
         func openOnly(_ id: String) -> UNNotificationCategory {
             UNNotificationCategory(identifier: id, actions: [openAction], intentIdentifiers: [])
         }
-        UNUserNotificationCenter.current().setNotificationCategories([
+        return [
             UNNotificationCategory(identifier: "CAWCO_PERMISSION", actions: [openAction, approveAction], intentIdentifiers: []),
             openOnly(permissionOpenOnly),
             openOnly("CAWCO_QUESTION"),
             openOnly("CAWCO_TASK"),
             openOnly("CAWCO_ATTEMPT"),
             UNNotificationCategory(identifier: "CAWCO_TEST", actions: [], intentIdentifiers: []),
-        ])
+        ]
     }
 }
 
@@ -214,7 +218,7 @@ public final class PushRegistry {
         await readAuthorization()
         if authorization == .notDetermined {
             do {
-                _ = try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
+                _ = try await NotificationCentre.requestAuthorization([.alert, .sound, .badge])
             } catch {
                 log.error("authorization request failed: \(String(describing: error), privacy: .public)")
             }
@@ -415,36 +419,22 @@ public final class PushRegistry {
     /// delivered pushes whose ask is over taken down.
     public func becameActive() async {
         await readAuthorization()
-        let center = UNUserNotificationCenter.current()
-        try? await center.setBadgeCount(0)
+        NotificationCentre.setBadge(0)
         guard let hub = HubConnection.keptAddress, let parked = await PushPending.read(hub) else { return }
         let waiting = Set(parked.map(\.requestId))
-        let gone: [String] = await withCheckedContinuation { done in
-            center.getDeliveredNotifications { notes in
-                done.resume(returning: notes.compactMap { note in
-                    let fields = PushNote.fields(note.request.content.userInfo)
-                    guard fields["kind"] == "ask", let requestId = fields["requestId"], !waiting.contains(requestId) else { return nil }
-                    return note.request.identifier
-                })
-            }
+        let gone = await NotificationCentre.delivered().compactMap { note -> String? in
+            guard note.fields["kind"] == "ask", let requestId = note.fields["requestId"], !waiting.contains(requestId) else { return nil }
+            return note.identifier
         }
         if !gone.isEmpty {
-            await Self.takeDown(delivered: gone)
+            NotificationCentre.removeDelivered(gone)
             log.notice("removed \(gone.count) delivered asks that are over")
         }
     }
 
-    /// Off the main actor, as `TrialReminder`'s changes: the removal is a
-    /// synchronous message to the notifications daemon, which a slow daemon
-    /// holds the calling thread on.
-    @concurrent
-    private nonisolated static func takeDown(delivered: [String]) async {
-        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: delivered)
-    }
-
     /// iOS's word on notifications, read again.
     public func readAuthorization() async {
-        authorization = await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
+        authorization = await NotificationCentre.authorization()
     }
 
     /// Registers the pairing with `hub`; `quiet` is sent only from the toggle,
@@ -590,63 +580,27 @@ public enum TrialReminder {
     nonisolated static let kind = "trial-ending"
     private nonisolated static let identifier = "cawco-trial-ending"
 
-    /// One change asked of the notification centre.
-    private enum Change: Sendable {
-        case add(title: String, body: String, at: DateComponents)
-        case remove
-    }
-
-    /// The changes, applied off the main actor one at a time in the order they
-    /// were asked, so a cancel after a schedule still wins. The centre answers
-    /// over XPC, and a slow notifications daemon kept the main thread waiting
-    /// on `removePendingNotificationRequests` for minutes: the UI never waits on it.
-    private static let changes: AsyncStream<Change>.Continuation = {
-        let (stream, continuation) = AsyncStream.makeStream(of: Change.self)
-        Task.detached(priority: .utility) {
-            for await change in stream {
-                await apply(change)
-            }
-        }
-        return continuation
-    }()
-
     /// Schedules the reminder for a live week, or takes it down for anything else.
-    /// One identifier, so scheduling again replaces it; a time already past schedules nothing.
+    /// One identifier, so scheduling again replaces it; a time already past
+    /// schedules nothing. Both are queued in the order asked
+    /// (`NotificationCentre`), so a cancel after a schedule still wins.
     public static func schedule(endsAt: Date?, title: String, body: String) async {
         let push = PushRegistry.shared
         guard let endsAt, push.allowed, push.trialReminder, let fire = fireDate(endsAt: endsAt), fire > .now else {
             cancel()
             return
         }
-        let parts = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: fire)
-        changes.yield(.add(title: title, body: body, at: parts))
+        var note = NotificationCentre.LocalNote(identifier: identifier, title: title, body: body, fields: ["kind": kind])
+        note.sound = true
+        note.at = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: fire)
+        NotificationCentre.add(note) { error in
+            Logger(subsystem: "dev.cawco.app", category: "Push").error("trial reminder not scheduled: \(String(describing: error), privacy: .public)")
+        }
     }
 
     /// Takes the scheduled reminder down: H5 off, Pro bought or restored, the week over.
     public static func cancel() {
-        changes.yield(.remove)
-    }
-
-    /// The notification centre's own calls, on the concurrent pool.
-    @concurrent
-    private nonisolated static func apply(_ change: Change) async {
-        let center = UNUserNotificationCenter.current()
-        switch change {
-        case .remove:
-            center.removePendingNotificationRequests(withIdentifiers: [identifier])
-        case let .add(title, body, parts):
-            let content = UNMutableNotificationContent()
-            content.title = title
-            content.body = body
-            content.sound = .default
-            content.userInfo = ["cawco": ["kind": kind]]
-            let request = UNNotificationRequest(identifier: identifier, content: content, trigger: UNCalendarNotificationTrigger(dateMatching: parts, repeats: false))
-            do {
-                try await center.add(request)
-            } catch {
-                Logger(subsystem: "dev.cawco.app", category: "Push").error("trial reminder not scheduled: \(String(describing: error), privacy: .public)")
-            }
-        }
+        NotificationCentre.removePending([identifier])
     }
 
     /// The first 10:00 local at or after 48 h before the end: inside the week's
@@ -736,14 +690,11 @@ public enum PushApproval {
 
     /// A local notification in the push's place (same identifier, same `cawco` data).
     private static func post(_ note: PushNote, title: String?, body: String, category: String?) async {
-        let content = UNMutableNotificationContent()
-        if let title { content.title = title }
-        content.body = body
-        content.categoryIdentifier = category ?? ""
-        content.threadIdentifier = note.thread
-        content.userInfo = ["cawco": note.fields]
+        var local = NotificationCentre.LocalNote(identifier: note.id, title: title, body: body, fields: note.fields)
+        local.category = category ?? ""
+        local.thread = note.thread
         do {
-            try await UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: note.id, content: content, trigger: nil))
+            try await NotificationCentre.add(local)
         } catch {
             log.error("local notification failed: \(String(describing: error), privacy: .public)")
         }
