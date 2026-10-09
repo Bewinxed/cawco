@@ -15920,7 +15920,7 @@ export const createServer = (
               const launched = atLaunchDir(message.instanceId, settled.payload);
               if ("refusal" in launched) {
                 console.warn(`[hub] refused spawn: ${launched.refusal}`);
-                toDashboard(ws, failure(message, launched.refusal));
+                sendFrame(ws, failure(message, launched.refusal));
                 break;
               }
               const { payload } = launched;
