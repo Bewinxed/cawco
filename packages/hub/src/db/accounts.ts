@@ -25,6 +25,8 @@ import {
   accountRouting,
   accountSignins,
   accounts,
+  loginMoves,
+  movedFromSessions,
   usageLimitHistory,
 } from "./schema";
 
@@ -37,6 +39,19 @@ export type AccountPatch = Partial<
 >;
 
 export type AccountHistoryRow = typeof usageLimitHistory.$inferSelect;
+
+/** A credential moving out of a machine's own store into an account (`login_moves`). */
+export interface LoginMove {
+  accountId: string;
+  identity: AccountIdentity;
+  machineId: string;
+  /** The account provider it is for; Claude's for `~/.claude`'s login. */
+  provider: AccountProvider;
+  since: number;
+  store: HomeStore;
+  /** The provider's id in the store it leaves (OpenCode's `openai` for ChatGPT). */
+  storeProvider: string;
+}
 
 export interface AccountsDb {
   readonly bench: (now?: number) => AccountBench[];
@@ -56,6 +71,10 @@ export interface AccountsDb {
     until?: number;
   }) => AccountHistoryRow[];
   readonly list: () => Account[];
+  /** The sessions still running from a moved credential, by instance id → machine id. */
+  readonly movedFrom: () => Map<string, string>;
+  /** The credentials moving now. */
+  readonly moves: () => LoginMove[];
   readonly patch: (id: string, patch: AccountPatch) => Account | undefined;
   /** The account's models as its Claude Code just answered; learned efforts stay. */
   readonly putCatalog: (
@@ -69,6 +88,8 @@ export interface AccountsDb {
     model: string,
     effort: string
   ) => void;
+  readonly putMove: (move: LoginMove) => void;
+  readonly putMovedFrom: (instanceIds: string[], machineId: string) => void;
   /**
    * Lays one report over the account's reading: windows replace the ones of
    * the same kind and scope, the rest are kept. Appends every window that
@@ -94,6 +115,10 @@ export interface AccountsDb {
   ) => boolean;
   readonly readings: () => AccountReading[];
   readonly remove: (id: string) => boolean;
+  readonly removeMove: (
+    move: Pick<LoginMove, "machineId" | "store" | "storeProvider">
+  ) => void;
+  readonly removeMovedFrom: (instanceId: string) => void;
   readonly removeSignin: (accountId: string, machineId: string) => boolean;
   /** The provider's routing; a provider with no row reads the defaults. */
   readonly routing: (provider: AccountProvider) => ProviderRouting;
@@ -261,6 +286,51 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
         before?.state !== state ||
         (before.movedAt?.getTime() ?? null) !== (movedAt?.getTime() ?? null)
       );
+    },
+    moves: () =>
+      db
+        .select()
+        .from(loginMoves)
+        .all()
+        .map((row) => ({ ...row, since: row.since.getTime() })),
+    putMove: (move) => {
+      db.insert(loginMoves)
+        .values({ ...move, since: new Date(move.since) })
+        .onConflictDoNothing()
+        .run();
+    },
+    removeMove: ({ machineId, store, storeProvider }) => {
+      db.delete(loginMoves)
+        .where(
+          and(
+            eq(loginMoves.machineId, machineId),
+            eq(loginMoves.store, store),
+            eq(loginMoves.storeProvider, storeProvider)
+          )
+        )
+        .run();
+    },
+    movedFrom: () =>
+      new Map(
+        db
+          .select()
+          .from(movedFromSessions)
+          .all()
+          .map((row) => [row.instanceId, row.machineId])
+      ),
+    putMovedFrom: (instanceIds, machineId) => {
+      if (instanceIds.length === 0) {
+        return;
+      }
+      db.insert(movedFromSessions)
+        .values(instanceIds.map((instanceId) => ({ instanceId, machineId })))
+        .onConflictDoNothing()
+        .run();
+    },
+    removeMovedFrom: (instanceId) => {
+      db.delete(movedFromSessions)
+        .where(eq(movedFromSessions.instanceId, instanceId))
+        .run();
     },
     removeSignin: (accountId, machineId) =>
       db

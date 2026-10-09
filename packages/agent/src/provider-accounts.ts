@@ -806,6 +806,15 @@ export const moveHomeCredential = async (
   const path = store === "pi" ? piStorePath() : opencodeStorePath();
   const entry = readJson(path)[storeProvider];
   const read = entry ? credentialOf(store, entry) : undefined;
+  // Already moved: a hub that stopped while the move ran asks for it again.
+  const held = read ? undefined : readHeld(accountId);
+  const heldAs = held ? identityOf(held.provider, held.credential) : undefined;
+  if (heldAs && sameIdentity(heldAs, expected)) {
+    moveLog(
+      `already moved: account ${accountId} holds ${store}'s ${storeProvider}`
+    );
+    return { store: "the account's credential file" };
+  }
   if (!read) {
     throw new Error(
       `${store}'s own store on this machine holds no ${storeProvider} credential CawCo can hold; nothing was moved.`

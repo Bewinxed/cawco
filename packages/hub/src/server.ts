@@ -269,6 +269,7 @@ import type {
   SentMessageRow,
 } from "./db";
 import { checkoutOf, hashHookMaterial } from "./db";
+import type { LoginMove } from "./db/accounts";
 import { buildDecisionPage, type PageSources } from "./decision-page";
 import { delegateTypesRoutes, makeDelegateTypes } from "./delegate-types";
 import { hubHttpUrl } from "./delegation-actions";
@@ -2457,43 +2458,34 @@ export const createServer = (
   };
   /**
    * The credentials moving out of a machine's own stores into CawCo now
-   * (`POST /api/accounts/move-login`), with the account each moves into, by
-   * {@link moveKey}. While one is, the sessions that run from it
-   * ({@link movingFor}) go on running from it, woken and started as ever,
-   * and the move itself runs at the first moment every one of them is at
-   * rest ({@link advanceMove}).
+   * (`POST /api/accounts/move-login`), with the account each moves into,
+   * kept in the database (`login_moves`) so a hub restart carries each on.
+   * While one is, the sessions that run from it ({@link movingFor}) go on
+   * running from it, woken and started as ever, and the move itself runs at
+   * the first moment every one of them is at rest ({@link advanceMove}).
    */
-  const movingLogins = new Map<
-    string,
-    {
-      accountId: string;
-      identity: AccountIdentity;
-      machineId: string;
-      /** The account provider it is for; Claude's for `~/.claude`'s login. */
-      provider: AccountProvider;
-      /** A step of it is under way: its sessions asked whether they are at rest, or the machine moving it. */
-      running?: true;
-      since: number;
-      store: HomeStore;
-      /** The provider's id in the store it leaves (OpenCode's `openai` for ChatGPT). */
-      storeProvider: string;
-    }
-  >();
-  const moveKey = (
-    machineId: string,
-    store: HomeStore,
-    storeProvider: string
-  ): string => `${machineId}\u0000${store}\u0000${storeProvider}`;
+  const movingLogins = (): LoginMove[] => db.accounts.moves();
+  const moveKey = ({
+    machineId,
+    store,
+    storeProvider,
+  }: Pick<LoginMove, "machineId" | "store" | "storeProvider">): string =>
+    `${machineId}\u0000${store}\u0000${storeProvider}`;
+  /** The moves with a step under way in this hub: their sessions asked whether they are at rest, or the machine moving it. */
+  const stepping = new Set<string>();
   /**
    * The sessions whose process still runs from a credential that has moved
-   * out of its machine's store, by instance id → machine id. Each was at
-   * rest when it moved; each is put to sleep at rest, so its next wake
-   * launches it where the credential is now. Claude Code keeps the access
-   * token it read until that expires, and never refreshes it once its store
-   * no longer holds it: 2.1.289 clears its cache before every refresh
-   * (`ZT()` → `DI()`, `cache={data:null}`) and reads the store again.
+   * out of its machine's store, by instance id → machine id, kept in the
+   * database (`moved_from_sessions`). Each was at rest when it moved; each is
+   * put to sleep at rest, so its next wake launches it where the credential
+   * is now. Claude Code keeps the access token it read until that expires,
+   * and never refreshes it once its store no longer holds it: 2.1.289 clears
+   * its cache before every refresh (`ZT()` → `DI()`, `cache={data:null}`) and
+   * reads the store again. pi and OpenCode read their `auth.json` again
+   * before a refresh too (pi-ai's `credentials.modify`, OpenCode's
+   * `Auth.get` on every request).
    */
-  const movedFrom = new Map<string, string>();
+  const movedFrom = (): Map<string, string> => db.accounts.movedFrom();
   /**
    * Whether `accountId` has a sign-in row on `machineId`, in any state: an
    * account CawCo placed there. A Claude session on one with none ran on the
@@ -2526,7 +2518,7 @@ export const createServer = (
     row: { accountId?: string | null; harness?: string | null }
   ) =>
     (row.harness ?? "claude") === "claude"
-      ? [...movingLogins.values()].find(
+      ? movingLogins().find(
           (move) =>
             move.store === "claude" &&
             move.machineId === machineId &&
@@ -2563,7 +2555,7 @@ export const createServer = (
     if (harness === "claude") {
       return homeLoginMoveOf(row.machineId, row);
     }
-    return [...movingLogins.values()].find(
+    return movingLogins().find(
       (move) =>
         move.machineId === row.machineId &&
         move.store === harness &&
@@ -3933,7 +3925,7 @@ export const createServer = (
     // A process launched now runs where this launch says, whatever the one
     // before it ran from.
     if (!payload.reattachOnly) {
-      movedFrom.delete(payload.instanceId);
+      db.accounts.removeMovedFrom(payload.instanceId);
     }
     return {
       // A project's Caw never has edit or shell tools: every spawn of its
@@ -4174,7 +4166,7 @@ export const createServer = (
    * holds those, and the process this wakes for them reads them.
    */
   const sessionAsleep = (machineId: string, instanceId: string): void => {
-    movedFrom.delete(instanceId);
+    db.accounts.removeMovedFrom(instanceId);
     if (!db.sleepInstance(instanceId)) {
       return;
     }
@@ -4215,10 +4207,11 @@ export const createServer = (
     }
     const now = Date.now();
     const limits = sessionLimitsReader(db, now);
+    const moved = movedFrom();
     return db
       .getInstancesByIds(ids)
       .filter((row) => {
-        if (movedFrom.has(row.id)) {
+        if (moved.has(row.id)) {
           return false;
         }
         const { state } = keepAliveState(row, limits(row), now);
@@ -4288,62 +4281,65 @@ export const createServer = (
   >();
   let moveTicker: ReturnType<typeof setInterval> | undefined;
 
-  /** The sessions that run from a moving credential whose process still runs. */
-  const liveFrom = (move: { machineId: string }) =>
+  /**
+   * Whether a session in `status` may have a process: running, starting, or
+   * `unknown`, which a starting hub files every one that was running as until
+   * its machine says (`sweepBootStatuses`). A move counts those too, so it
+   * never runs in the window after a hub restart before the machine reports.
+   */
+  const mayRun = (status: string): boolean =>
+    status === "running" || status === "starting" || status === "unknown";
+  /**
+   * The sessions that run from a moving credential whose process still runs:
+   * the ones a move waits on to be at rest, as account dirs never share the
+   * credential (`USER_LAYER` in the agent's accounts.ts: "never linked: the
+   * credential").
+   */
+  const liveFrom = (move: LoginMove): string[] =>
     db
       .listInstances()
-      .filter(
-        (row) =>
+      .filter((row) => {
+        const from = movingFor(row);
+        return (
           row.machineId === move.machineId &&
-          movingFor(row) === move &&
-          (row.status === "running" || row.status === "starting")
-      );
-  /**
-   * The sessions with a process whose rest a move waits for: for
-   * `~/.claude`'s login every Claude session on its machine, so it moves at
-   * the first moment none has a turn running there; for a pi or OpenCode
-   * credential, the sessions that run from it.
-   */
-  const restOf = (move: NonNullable<ReturnType<typeof movingLogins.get>>) =>
-    move.store === "claude"
-      ? db
-          .listInstances()
-          .filter(
-            (row) =>
-              row.machineId === move.machineId &&
-              (row.harness ?? "claude") === "claude" &&
-              (row.status === "running" || row.status === "starting")
-          )
-          .map((row) => row.id)
-      : liveFrom(move).map((row) => row.id);
+          from !== undefined &&
+          moveKey(from) === moveKey(move) &&
+          mayRun(row.status)
+        );
+      })
+      .map((row) => row.id);
 
-  /** What one move came to: the sign-in recorded as moved, or why not. */
+  /**
+   * What one move came to: the sign-in recorded as moved and the sessions
+   * that ran from it noted ({@link movedFrom}), or why not; the move is gone
+   * from the pending ones only after that, so a hub that stops in between
+   * asks the machine again, and the machine answers a move it already made.
+   */
   const settleMove = (
-    move: NonNullable<ReturnType<typeof movingLogins.get>>,
-    answer: Awaited<ReturnType<typeof callAgent>>
+    move: LoginMove,
+    answer: Awaited<ReturnType<typeof callAgent>>,
+    ranFrom: string[]
   ): void => {
     const at = Date.now();
-    const { machineId, store, storeProvider } = move;
+    const { machineId, store } = move;
     const machine = machineName(machineId);
-    const key = moveKey(machineId, store, storeProvider);
+    const key = moveKey(move);
     const done = {
       accountId: move.accountId,
       at,
       machineId,
       provider: move.provider,
       store,
-      storeProvider,
+      storeProvider: move.storeProvider,
     };
-    const what = `${machine}'s own ${store} ${store === "claude" ? "login" : storeProvider}`;
-    if (answer === "offline" || answer === "timeout") {
-      const error = `${machine} is ${answer === "offline" ? "not connected" : "not answering"}; nothing was moved there.`;
+    const what = `${machine}'s own ${store} ${store === "claude" ? "login" : move.storeProvider}`;
+    if (answer === "offline" || answer === "timeout" || !answer.ok) {
+      const error =
+        typeof answer === "string"
+          ? `${machine} is ${answer === "offline" ? "not connected" : "not answering"}; nothing was moved there.`
+          : (answer.error ?? "The move did not finish.");
       moveResults.set(key, { ...done, error });
-      console.warn(`[hub] moving ${what} failed: ${error}`);
-      return;
-    }
-    if (!answer.ok) {
-      const error = answer.error ?? "The move did not finish.";
-      moveResults.set(key, { ...done, error });
+      db.accounts.removeMove(move);
       console.warn(`[hub] moving ${what} failed: ${error}`);
       return;
     }
@@ -4372,6 +4368,8 @@ export const createServer = (
     for (const row of repinned) {
       db.patchInstance(row.id, { accountId: move.accountId });
     }
+    db.accounts.putMovedFrom(ranFrom, machineId);
+    db.accounts.removeMove(move);
     moveResults.set(key, { ...done, kept });
     console.log(
       `[hub] moved ${what} (${move.identity.email}) into account ${move.accountId}, kept in ${kept}; ${repinned.length} session(s) that ran on it re-pinned to it`
@@ -4384,15 +4382,18 @@ export const createServer = (
    * does only at rest; one whose process is gone is done with.
    */
   const sleepMovedFrom = (): void => {
-    const rows = db.getInstancesByIds([...movedFrom.keys()]);
-    const live = new Set(
-      rows
-        .filter((row) => row.status === "running" || row.status === "starting")
-        .map((row) => row.id)
+    const moved = movedFrom();
+    const status = new Map(
+      db.getInstancesByIds([...moved.keys()]).map((row) => [row.id, row.status])
     );
-    for (const [instanceId, machineId] of movedFrom) {
-      if (!live.has(instanceId)) {
-        movedFrom.delete(instanceId);
+    for (const [instanceId, machineId] of moved) {
+      const now = status.get(instanceId);
+      if (!(now && mayRun(now))) {
+        db.accounts.removeMovedFrom(instanceId);
+        continue;
+      }
+      // Not known yet (a hub just started): asked once its machine says.
+      if (now === "unknown") {
         continue;
       }
       // biome-ignore lint/complexity/noVoid: the machine's `asleep` frame files the row; a refusal is a session not at rest yet, asked again next tick
@@ -4411,8 +4412,8 @@ export const createServer = (
    * One step of a credential's move out of a machine's own store
    * ({@link movingLogins}). Nothing is held and nothing is asked to sleep:
    * the sessions that run from it ({@link movingFor}) go on running from it,
-   * and the step asks the machine whether every session the move waits for
-   * ({@link restOf}) is at rest ({@link CONTROL_RESTLESS}: no turn, no ask,
+   * and the step asks the machine whether every one with a process
+   * ({@link liveFrom}) is at rest ({@link CONTROL_RESTLESS}: no turn, no ask,
    * no subagent, nothing on its way to it). At the first step that finds
    * them all at rest the machine moves it, so the move never lands under a
    * turn. The account's sign-in there is then recorded as moved from that
@@ -4421,33 +4422,43 @@ export const createServer = (
    * where the credential is now. A move that fails is said in the log and in
    * its result, and the original is as it was.
    */
-  const advanceMove = async (key: string): Promise<void> => {
-    const move = movingLogins.get(key);
-    if (!move || move.running) {
+  const advanceMove = async (move: LoginMove): Promise<void> => {
+    const key = moveKey(move);
+    if (stepping.has(key)) {
       return;
     }
+    stepping.add(key);
+    try {
+      await stepMove(move);
+    } finally {
+      stepping.delete(key);
+    }
+  };
+  const stepMove = async (move: LoginMove): Promise<void> => {
     const { machineId } = move;
-    move.running = true;
-    const waited = restOf(move);
-    if (waited.length > 0) {
+    // A machine not connected (a hub just started, a machine away) is asked
+    // once it is.
+    if (!registry.agent(machineId)) {
+      return;
+    }
+    const ranFrom = liveFrom(move);
+    if (ranFrom.length > 0) {
       const restless = await callAgent(
         machineId,
         CONTROL_RESTLESS,
-        [waited],
+        [ranFrom],
         RESTLESS_TIMEOUT_MS
       );
       if (
         typeof restless === "string" ||
         !restless.ok ||
         Object.keys(restless.result as Record<string, string>).length > 0 ||
-        restOf(move).some((id) => !waited.includes(id))
+        liveFrom(move).some((id) => !ranFrom.includes(id))
       ) {
         // Asked again at the next tick.
-        move.running = undefined;
         return;
       }
     }
-    const ranFrom = liveFrom(move).map((row) => row.id);
     const answer =
       move.store === "claude"
         ? await callAgent(
@@ -4463,35 +4474,37 @@ export const createServer = (
             [move.accountId, move.store, move.storeProvider, move.identity],
             MOVE_TIMEOUT_MS
           );
-    movingLogins.delete(key);
-    settleMove(move, answer);
-    if (typeof answer !== "string" && answer.ok) {
-      for (const id of ranFrom) {
-        movedFrom.set(id, machineId);
-      }
-      sleepMovedFrom();
-    }
+    settleMove(move, answer, ranFrom);
+    sleepMovedFrom();
     publishInstances(machineId);
   };
 
   /**
    * Starts the ticks that carry every pending move along and put what ran
-   * from a moved credential to sleep; they stop when neither is left.
+   * from a moved credential to sleep; they stop when neither is left. A hub
+   * that starts with either in its database starts them at once.
    */
   const tickMoves = (): void => {
     moveTicker ??= setInterval(() => {
-      if (movingLogins.size === 0 && movedFrom.size === 0 && moveTicker) {
+      const moves = movingLogins();
+      if (moves.length === 0 && movedFrom().size === 0 && moveTicker) {
         clearInterval(moveTicker);
         moveTicker = undefined;
         return;
       }
-      for (const key of movingLogins.keys()) {
-        advanceMove(key).catch(console.error);
+      for (const move of moves) {
+        advanceMove(move).catch(console.error);
       }
       sleepMovedFrom();
     }, MOVE_TICK_MS);
     moveTicker.unref?.();
   };
+  if (movingLogins().length > 0 || movedFrom().size > 0) {
+    console.log(
+      `[hub] carrying on ${movingLogins().length} login move(s) and ${movedFrom().size} session(s) still running from a moved login`
+    );
+    tickMoves();
+  }
 
   /**
    * What taking a send means beyond the send itself, whoever sent it — the
@@ -15278,8 +15291,8 @@ export const createServer = (
             return status(found.status, found.error);
           }
           const { identity, kind, provider, storeProvider } = found;
-          const key = moveKey(machineId, store, storeProvider);
-          if (movingLogins.has(key)) {
+          const key = moveKey({ machineId, store, storeProvider });
+          if (movingLogins().some((one) => moveKey(one) === key)) {
             return status(
               409,
               `${machine}'s own ${store} ${storeProvider} is already moving into CawCo.`
@@ -15301,7 +15314,7 @@ export const createServer = (
               `${accountName(account)} is already signed in on ${machine} in CawCo; nothing was moved.`
             );
           }
-          const move = {
+          const move: LoginMove = {
             accountId: account.id,
             identity,
             machineId,
@@ -15310,14 +15323,14 @@ export const createServer = (
             store,
             storeProvider,
           };
-          movingLogins.set(key, move);
+          db.accounts.putMove(move);
           moveResults.delete(key);
           tickMoves();
-          const waitingFor = restOf(move).length;
+          const waitingFor = liveFrom(move).length;
           console.log(
             `[hub] moving ${machine}'s own ${store} ${storeProvider} (${identity.email}) into account ${account.id}; it moves at the first moment its ${waitingFor} live session(s) are at rest`
           );
-          await advanceMove(key);
+          await advanceMove(move);
           return status(202, {
             accountId: account.id,
             email: identity.email,
@@ -15328,7 +15341,7 @@ export const createServer = (
         }
       )
       .get("/api/accounts/move-login", () => ({
-        moving: [...movingLogins.values()].map((move) => ({
+        moving: movingLogins().map((move) => ({
           machineId: move.machineId,
           store: move.store,
           storeProvider: move.storeProvider,

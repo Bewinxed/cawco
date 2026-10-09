@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import {
+  processStart as osProcessStart,
+  processStartMs,
+} from "@cawco/core/process-identity";
 import { type ProcSpec, sessiondEndpoint } from "@cawco/core/sessiond";
 import { OPENCODE_SERVER_PROC_ID } from "../proc-id";
 import type { SessiondClient } from "../sessiond-client";
@@ -59,26 +63,8 @@ function abortable<T>(pending: Promise<T>, signal: AbortSignal): Promise<T> {
 }
 
 /** OS start identity plus sessiond epoch/procId/pid prevents signalling a reused PID. */
-async function processStart(pid: number): Promise<string> {
-  if (process.platform === "linux") {
-    const stat = await Bun.file(`/proc/${pid}/stat`)
-      .text()
-      .catch(() => "");
-    return stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19] ?? "";
-  }
-  if (process.platform !== "darwin") {
-    throw new Error(
-      "OpenCode generation retirement requires OS process start identity."
-    );
-  }
-  const proc = Bun.spawn(["ps", "-p", String(pid), "-o", "lstart="], {
-    env: { ...process.env, LC_ALL: "C" },
-    stdout: "pipe",
-    stderr: "ignore",
-  });
-  const value = (await new Response(proc.stdout).text()).trim();
-  return (await proc.exited) === 0 ? value : "";
-}
+const processStart = async (pid: number): Promise<string> =>
+  (await osProcessStart(pid)) ?? "";
 
 /** The only launcher/adopter. Publish a replacement before retiring its predecessor. */
 export class OpencodeServerOwner {
@@ -150,20 +136,8 @@ export class OpencodeServerOwner {
         "OpenCode generation identity changed before birth read."
       );
     }
-    const proc = Bun.spawn(
-      ["ps", "-p", String(identity.pid), "-o", "lstart="],
-      {
-        env: { ...process.env, LC_ALL: "C" },
-        stdout: "pipe",
-        stderr: "ignore",
-      }
-    );
-    const birth = Date.parse((await new Response(proc.stdout).text()).trim());
-    if (
-      (await proc.exited) !== 0 ||
-      !Number.isFinite(birth) ||
-      !(await this.#matches(identity))
-    ) {
+    const birth = await processStartMs(identity.pid);
+    if (birth === undefined || !(await this.#matches(identity))) {
       throw new Error("OpenCode generation process birth is unavailable.");
     }
     return birth;

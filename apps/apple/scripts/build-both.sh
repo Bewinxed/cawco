@@ -16,9 +16,19 @@
 # builds from different workspaces wait their turn.
 # Only processes this script starts are stopped: the Mac-side build runs in
 # its own process group, which ends (TERM, then KILL) when the SSH link drops.
+# Run on the Mac itself, the Mac side runs here through the same steps and
+# the same link, with no SSH, under ~/Library/Caches/cawco-apple: the one
+# place a CawCo workspace's boundary lets it write builds.
 set -euo pipefail
 
-SSH=(ssh -F "$HOME/.ssh/config" -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3 mac)
+if [[ $(uname -s) == Darwin ]]; then
+  MAC=(bash --norc -c)
+  APPLE_ROOT=$HOME/Library/Caches/cawco-apple
+else
+  MAC=(ssh -F "$HOME/.ssh/config" -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3 mac)
+  # Empty: the Mac side's own ~/build/cawco-apple.
+  APPLE_ROOT=
+fi
 ROOT=$(git rev-parse --show-toplevel)
 BUILD=$(basename "$ROOT")
 if [[ $ROOT == "$HOME/cockpit" ]]; then BUILD=main; fi
@@ -46,7 +56,7 @@ read -r -d '' PREPARE <<'EOF' || true
 set -euo pipefail
 BUILD=$1
 shift
-ROOT="$HOME/build/cawco-apple"
+ROOT=${APPLE_ROOT:-$HOME/build/cawco-apple}
 mkdir -p "$ROOT/.locks"
 LOCK="$ROOT/.locks/$BUILD"
 command -v shlock >/dev/null || { echo "shlock is required for Apple workspace builds" >&2; exit 2; }
@@ -137,7 +147,7 @@ echo READY
 # build. A failed sync ends the caller, and its EOF releases the locks.
 until [[ -n $GO ]]; do wait "$WAIT_PID" || true; done
 perl -e 'setpgrp(0, 0); exec @ARGV or die "exec: $!\n"' \
-  bash --norc -c "$BUILD_SCRIPT" build-both "build/cawco-apple/$BUILD/apps/apple" "$PLATFORM" "$BUILD" "$COMPILE_ONLY" </dev/null &
+  bash --norc -c "$BUILD_SCRIPT" build-both "$ROOT/$BUILD/apps/apple" "$PLATFORM" "$BUILD" "$COMPILE_ONLY" "$ROOT" </dev/null &
 BUILD_PID=$!
 status=0
 wait "$BUILD_PID" || status=$?
@@ -147,12 +157,12 @@ EOF
 
 read -r -d '' BUILD_SCRIPT <<'EOF' || true
 set -euo pipefail
-cd "$HOME/$1"
+cd "$1"
 PLATFORM=$2
 BUILD=$3
 COMPILE_ONLY=$4
-DD="$HOME/build/cawco-apple/$BUILD/DerivedData"
-LOGS="$HOME/build/cawco-apple/$BUILD/logs"
+DD="$5/$BUILD/DerivedData"
+LOGS="$5/$BUILD/logs"
 mkdir -p "$LOGS"
 SETTLE=8
 UDID=
@@ -194,6 +204,11 @@ build() { # <destination> <label> [signed]
 # destination OS already supplies them. Each launch owns its simulator.
 ios() {
   local LABEL=${1:-iOS} RUNTIME TYPE NAME LOG
+  # Compiling needs no simulator: the generic destination builds for any.
+  if [[ $COMPILE_ONLY == --compile-only ]]; then
+    build "generic/platform=iOS Simulator" "$LABEL"
+    return
+  fi
   if [[ $LABEL == 'iOS 18.5' ]]; then
     RUNTIME=com.apple.CoreSimulator.SimRuntime.iOS-18-5
     TYPE=com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro
@@ -268,8 +283,9 @@ macos() {
   "$DD/Build/Products/Debug-maccatalyst/CawCo.app/Contents/MacOS/CawCo" >"$LOG" 2>&1 &
   PID=$!
   sleep "$SETTLE"
-  STAT=$(ps -o stat= -p "$PID" || true)
-  if [[ -n $STAT && $STAT != Z* ]]; then
+  # Still running: bash reaps an exited child as it exits, so one that died
+  # answers no signal (setuid ps is refused inside a workspace's boundary).
+  if kill -0 "$PID" 2>/dev/null; then
     kill "$PID"
     wait "$PID" 2>/dev/null || true
     echo "LAUNCHED macOS"
@@ -290,34 +306,41 @@ if [[ $PLATFORM != ios ]]; then macos; fi
 if [[ $PLATFORM != macos ]]; then ios 'iOS 18.5'; fi
 EOF
 
-printf -v COMMAND 'PLATFORM=%q COMPILE_ONLY=%q BUILD_SCRIPT=%q bash --norc -c %q --' \
-  "$PLATFORM" "$COMPILE_ONLY" "$BUILD_SCRIPT" "$PREPARE"
+printf -v COMMAND 'PLATFORM=%q COMPILE_ONLY=%q APPLE_ROOT=%q BUILD_SCRIPT=%q bash --norc -c %q --' \
+  "$PLATFORM" "$COMPILE_ONLY" "$APPLE_ROOT" "$BUILD_SCRIPT" "$PREPARE"
 for argument in "$BUILD" "${LIVE[@]}"; do printf -v COMMAND '%s %q' "$COMMAND" "$argument"; done
-coproc MAC_BUILD { "${SSH[@]}" "$COMMAND"; }
-MAC_PID=$MAC_BUILD_PID
-exec {MAC_INPUT}>&"${MAC_BUILD[1]}" {MAC_OUTPUT}<&"${MAC_BUILD[0]}"
-MAC_WRITE=${MAC_BUILD[1]}
-MAC_READ=${MAC_BUILD[0]}
-exec {MAC_WRITE}>&- {MAC_READ}<&-
+# The ssh link's stdin and stdout are two FIFOs held on fds 3 (to the Mac)
+# and 4 (from it): the Mac's /bin/bash 3.2 has no coproc and no {var}>&
+# descriptors. Each FIFO is opened once and its name removed at once.
+LINK=$(mktemp -d "${TMPDIR:-/tmp}/build-both.XXXXXX")
+mkfifo "$LINK/in" "$LINK/out"
+"${MAC[@]}" "$COMMAND" <"$LINK/in" >"$LINK/out" &
+MAC_PID=$!
+exec 3>"$LINK/in" 4<"$LINK/out"
+rm -rf "$LINK"
 # The Mac side ends its build when this heartbeat stops or stdin closes.
-( while sleep 10; do printf '\n' || exit 0; done ) >&"$MAC_INPUT" &
+( exec 4<&-; while sleep 10; do printf '\n' || exit 0; done ) >&3 &
 BEAT_PID=$!
 release() {
   kill "$BEAT_PID" 2>/dev/null || true
-  exec {MAC_INPUT}>&-
+  exec 3>&-
 }
 trap release EXIT
-while IFS= read -r line <&"$MAC_OUTPUT"; do
+while IFS= read -r line <&4; do
   [[ $line != READY ]] || break
   echo "$line"
 done
 if [[ ${line:-} != READY ]]; then wait "$MAC_PID"; exit 1; fi
-echo "BUILD DIRECTORY mac:~/build/cawco-apple/$BUILD"
-rsync -rlpD --checksum --delete \
-  --exclude .build --exclude DerivedData \
-  --exclude CawCo.xcodeproj --exclude CawCo/Info.plist \
-  -e "ssh -F $HOME/.ssh/config -o BatchMode=yes" \
-  apps/apple/ "mac:$REMOTE/"
-echo GO >&"$MAC_INPUT"
-cat <&"$MAC_OUTPUT"
+SYNC=(rsync -rlpD --checksum --delete
+  --exclude .build --exclude DerivedData
+  --exclude CawCo.xcodeproj --exclude CawCo/Info.plist)
+if [[ -n $APPLE_ROOT ]]; then
+  echo "BUILD DIRECTORY $APPLE_ROOT/$BUILD"
+  "${SYNC[@]}" apps/apple/ "$APPLE_ROOT/$BUILD/apps/apple/"
+else
+  echo "BUILD DIRECTORY mac:~/build/cawco-apple/$BUILD"
+  "${SYNC[@]}" -e "ssh -F $HOME/.ssh/config -o BatchMode=yes" apps/apple/ "mac:$REMOTE/"
+fi
+echo GO >&3
+cat <&4
 wait "$MAC_PID"

@@ -348,11 +348,43 @@ export const moveHomeLogin = (
   return move;
 };
 
+/**
+ * A move already made: `~/.claude` signed out, the account's dir answering
+ * as `expected` from a store of its own. A hub that stopped while the move
+ * ran asks for it again, and is answered as if it had just run.
+ */
+const alreadyMoved = async (
+  account: string,
+  expected: AccountIdentity
+): Promise<HomeLoginMoved | undefined> => {
+  if ((await readHomeLogin()).loggedIn) {
+    return undefined;
+  }
+  const answered = await accountAnswersAs(account);
+  if (!(answered && sameIdentity(answered, expected))) {
+    return undefined;
+  }
+  const stores =
+    platform() === "darwin" ? [keychain, credentialsFile] : [credentialsFile];
+  for (const store of stores) {
+    // biome-ignore lint/performance/noAwaitInLoops: Claude Code's own order: the Keychain first, the file as its fallback
+    if (await store.heldBy(account)) {
+      log(`already moved: ${account}'s dir answers as ${answered.email}`);
+      return { store: store.name };
+    }
+  }
+  return undefined;
+};
+
 const moveOnce = (
   account: string,
   expected: AccountIdentity
 ): Promise<HomeLoginMoved> =>
   inFleetQueue(async () => {
+    const moved = await alreadyMoved(account, expected);
+    if (moved) {
+      return moved;
+    }
     const { oauthAccount, secret, store } = await take(account, expected);
     const accountJson = accountClaudeJson(account);
     const prior = await priorOf(accountJson);

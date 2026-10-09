@@ -1405,6 +1405,47 @@ export const accountSignins = sqliteTable(
   (table) => [primaryKey({ columns: [table.accountId, table.machineId] })]
 );
 
+/**
+ * A credential moving out of a machine's own store into a CawCo account
+ * (`POST /api/accounts/move-login`), from the ask until the machine has moved
+ * it or said why not. Kept here so a hub restart carries the move on.
+ */
+export const loginMoves = sqliteTable(
+  "login_moves",
+  {
+    machineId: text("machine_id").notNull(),
+    /** `claude` (`~/.claude`), `pi` or `opencode` (their own `auth.json`). */
+    store: text("store").$type<HomeStore>().notNull(),
+    /** The provider's id in the store it leaves (OpenCode's `openai` for ChatGPT). */
+    storeProvider: text("store_provider").notNull(),
+    accountId: text("account_id")
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    identity: text("identity", { mode: "json" })
+      .$type<AccountIdentity>()
+      .notNull(),
+    provider: text("provider").$type<AccountProvider>().notNull(),
+    since: timestamp("since").notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.machineId, table.store, table.storeProvider],
+    }),
+  ]
+);
+
+/**
+ * The sessions whose process still runs from a credential that has moved out
+ * of its machine's store, until each is put to sleep at rest or its process
+ * is gone. Kept here so a hub restart still puts them to sleep.
+ */
+export const movedFromSessions = sqliteTable("moved_from_sessions", {
+  instanceId: text("instance_id")
+    .primaryKey()
+    .references(() => instances.id, { onDelete: "cascade" }),
+  machineId: text("machine_id").notNull(),
+});
+
 /** Each provider's routing (core `ProviderRouting`); a provider with no row uses the defaults. */
 export const accountRouting = sqliteTable("account_routing", {
   provider: text("provider").$type<AccountProvider>().primaryKey(),
