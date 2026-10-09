@@ -1009,6 +1009,12 @@ const planOf = async (ref: WorkspaceRef): Promise<Plan> => {
           "cawco-boundary",
           fifoOf(id),
         ],
+        // In the clone, as the srt host starts its sandbox on Linux: every
+        // command's shell starts in the runner's directory before it moves to
+        // its caller's, and one the profile denies (sessiond's own, under the
+        // home dir) fails bash's getcwd ("shell-init: error retrieving current
+        // directory") on every command.
+        cwd: policy.clone,
         // The marker is how an archive finds every process the workspace started.
         env: { CAWCO_WORKSPACE: id, TMPDIR: policy.scratch },
       },

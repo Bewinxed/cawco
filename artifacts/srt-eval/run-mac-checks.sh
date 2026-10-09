@@ -64,6 +64,9 @@ r 'git config core.hooksPath /nonexistent/srt-check 2>/dev/null'
 if [ "$(git -C "$clone" config --get core.hooksPath)" = /nonexistent/srt-check ]; then row "set core.hooksPath" OPEN; git -C "$clone" config --unset core.hooksPath; else row "set core.hooksPath" BLOCKED; fi
 
 step "still working"
+noise=$(r 'pwd -P >/dev/null; cd .. && cd - >/dev/null' 2>&1 | grep -c "getcwd\|shell-init\|error retrieving current directory")
+echo "a command's shell reads its directory: $noise getcwd line(s)"
+[ "$noise" -eq 0 ] || { echo "a command's shell cannot read its directory"; open=$((open + 1)); }
 timed r 'set -o pipefail; date +%s > srt-mac-probe.txt && git add -A && git commit -qm "srt mac probe" && git log --oneline -1'
 if [ -n "$swift_package" ]; then
   timed r "set -o pipefail; cd '$swift_package' && swift build 2>&1 | tail -3"
