@@ -25,6 +25,8 @@ final class ConnectViewController: ObservedViewController, UITextFieldDelegate {
     private let field = UITextField()
     private let body = KitLabel(TypeScale.typeBody, ink: Palette.inkMuted, lines: 0)
     let scroll = UIScrollView()
+    /// The hub sheet's scroller fades at an edge its content goes on past.
+    private var scrollFade: EdgeFade?
     private let problem = KitLabel(TypeScale.typeMeta, ink: Palette.statusFailInk, lines: 0)
     private let status = StatusLineView()
     private let found = UIStackView()
@@ -192,6 +194,11 @@ final class ConnectViewController: ObservedViewController, UITextFieldDelegate {
         if mode == .change {
             // The system sheet under its navigation bar: the column stands in
             // the sheet's layout margins at its own height, and scrolls above the keyboard.
+            // With no keyboard the scroller runs to the sheet's bottom edge, the
+            // home indicator's band its content inset: a guide that stopped at the
+            // safe area cut the last line 34pt above the sheet's edge.
+            view.keyboardLayoutGuide.usesBottomSafeArea = false
+            scrollFade = EdgeFade(scroll)
             NSLayoutConstraint.activate([
                 scroll.leadingAnchor.constraint(equalTo: view.leadingAnchor),
                 scroll.trailingAnchor.constraint(equalTo: view.trailingAnchor),

@@ -268,6 +268,7 @@ final class JumpPaletteController: UIViewController, UIViewControllerTransitioni
     private let field = UITextField()
     private let chip = UIStackView()
     private let scroll = UIScrollView()
+    private var scrollFade: EdgeFade?
     private let list = UIStackView()
     private var listHeight: NSLayoutConstraint!
     private var author: JumpAuthor?
@@ -344,6 +345,8 @@ final class JumpPaletteController: UIViewController, UIViewControllerTransitioni
         scroll.translatesAutoresizingMaskIntoConstraints = false
         listHeight = scroll.heightAnchor.constraint(equalToConstant: 0)
         listHeight.priority = .defaultHigh
+        // Where the footer's rule cuts a row the list goes on past, the row fades out, as the rail's does.
+        scrollFade = EdgeFade(scroll)
 
         let footer = UIStackView(arrangedSubviews: [hint("↑↓", "navigate"), hint("↵", "open"), hint("esc", "close"), UIView()])
         footer.spacing = 16
@@ -700,8 +703,7 @@ final class JumpPaletteController: UIViewController, UIViewControllerTransitioni
         }
         for row in arriving.compactMap({ built[$0] }) where !still { row.alpha = 0 }
         paintSelection()
-        let natural = list.systemLayoutSizeFitting(CGSize(width: max(1, scroll.bounds.width - Self.listInset * 2), height: 0), withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height + Self.listInset * 2
-        listHeight.constant = natural
+        listHeight.constant = naturalHeight()
         if still {
             view.layoutIfNeeded()
             for row in arriving.compactMap({ built[$0] }) { row.alpha = 1 }
@@ -711,6 +713,30 @@ final class JumpPaletteController: UIViewController, UIViewControllerTransitioni
         Motion.easeOut.animator(Motion.durPop) {
             for row in arriving.compactMap({ built[$0] }) { row.alpha = 1 }
         }.startAnimation()
+    }
+
+    /// The list's own height at the scroller's width. A row's height follows
+    /// its width (a fact that can't stand beside the name goes under it), so
+    /// each row is fitted to the width first.
+    private func naturalHeight() -> CGFloat {
+        let width = max(1, scroll.bounds.width - Self.listInset * 2)
+        // A row stands 10pt inside its item at either side (JumpItemView).
+        func fit(_ view: UIView) {
+            if let row = view as? JumpRowView { row.fit(width - 20) }
+            view.subviews.forEach(fit)
+        }
+        fit(list)
+        return list.systemLayoutSizeFitting(CGSize(width: width, height: 0), withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height + Self.listInset * 2
+    }
+
+    private var measuredWidth: CGFloat = 0
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        // The first render ran before the panel had its width: measure again at the width it has.
+        guard abs(scroll.bounds.width - measuredWidth) > 0.5 else { return }
+        measuredWidth = scroll.bounds.width
+        listHeight.constant = naturalHeight()
     }
 
     private func go(_ target: JumpTarget) {
@@ -767,10 +793,9 @@ final class JumpPaletteController: UIViewController, UIViewControllerTransitioni
         return box
     }
 
-    /// One row: the mark in muted ink, the name, and the trailing fact, never
-    /// wider than 45% of the row (`.jump-trail`), so the name keeps the rest.
-    /// Inside that, what stands before the fact's last part (a path, a host)
-    /// gives way from its middle down to its first 48pt, and the last part (a
+    /// One row: the mark in muted ink, the name, and the trailing fact, laid
+    /// on one line or the fact under the name (JumpRowView). Inside the
+    /// fact, what stands before its last part (a path, a host) gives way from its middle down to its first 48pt, and the last part (a
     /// session's status, a machine's offer, a line's role) is said whole if
     /// the rest of the room holds it, else cut at its tail.
     private func item(glyph: Glyph, name: NSAttributedString, trail: NSAttributedString) -> UIView {
@@ -800,14 +825,8 @@ final class JumpPaletteController: UIViewController, UIViewControllerTransitioni
         tailLabel.setContentHuggingPriority(.required, for: .horizontal)
         let trailRow = UIStackView(arrangedSubviews: [headLabel, tailLabel])
         trailRow.alignment = .firstBaseline
-        // The command item's check slot (`cn-command-item-indicator`): 16pt at
-        // the row's end, drawn only on a checked item, its room always kept.
-        let tick = UIView()
-        tick.widthAnchor.constraint(equalToConstant: 16).isActive = true
-        let row = UIStackView(arrangedSubviews: [GlyphView(glyph, size: 16, tint: Palette.inkMuted), nameLabel, trailRow, tick])
-        row.spacing = 8
-        row.alignment = .center
-        trailRow.widthAnchor.constraint(lessThanOrEqualTo: row.widthAnchor, multiplier: 0.45).isActive = true
+        let row = JumpRowView(glyph: GlyphView(glyph, size: 16, tint: Palette.inkMuted), name: nameLabel, trail: trailRow,
+                          trailWidth: headLabel.intrinsicContentSize.width + (tailText == nil ? 0 : tailLabel.intrinsicContentSize.width))
         row.accessibilityLabel = "\(name.string), \(trail.string)"
         return row
     }
@@ -880,6 +899,76 @@ final class JumpPaletteController: UIViewController, UIViewControllerTransitioni
     }
 
     fileprivate var panel: UIView { frameView }
+}
+
+/// A row: the mark, the name and its trailing fact, and the command item's
+/// check slot (`cn-command-item-indicator`: 16pt at the row's end, drawn only
+/// on a checked item, its room always kept). 640pt wide and over, the fact
+/// is never wider than 45% of the row (`.jump-trail`). Under 640, the fact
+/// stays on the name's line when both stand there whole; otherwise it goes
+/// under the name, said whole (`.jump-text` wraps), and the mark stays on
+/// the name's line, as a transcript hit's does.
+private final class JumpRowView: UIView {
+    private let text: UIStackView
+    private let trailWidth: CGFloat
+    private let name: UILabel
+    private let cap: NSLayoutConstraint
+    private(set) var stacked = false
+
+    init(glyph: UIView, name: UILabel, trail: UIView, trailWidth: CGFloat) {
+        self.name = name
+        self.trailWidth = trailWidth
+        text = UIStackView(arrangedSubviews: [name, trail])
+        text.spacing = 8
+        text.alignment = .center
+        let tick = UIView()
+        cap = trail.widthAnchor.constraint(lessThanOrEqualToConstant: 0)
+        super.init(frame: .zero)
+        for view in [glyph, text, tick] {
+            view.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(view)
+        }
+        NSLayoutConstraint.activate([
+            glyph.leadingAnchor.constraint(equalTo: leadingAnchor),
+            glyph.centerYAnchor.constraint(equalTo: name.centerYAnchor),
+            glyph.topAnchor.constraint(greaterThanOrEqualTo: topAnchor),
+            glyph.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor),
+            text.leadingAnchor.constraint(equalTo: glyph.trailingAnchor, constant: 8),
+            text.topAnchor.constraint(equalTo: topAnchor),
+            text.bottomAnchor.constraint(equalTo: bottomAnchor),
+            tick.leadingAnchor.constraint(equalTo: text.trailingAnchor, constant: 8),
+            tick.trailingAnchor.constraint(equalTo: trailingAnchor),
+            tick.widthAnchor.constraint(equalToConstant: 16),
+            tick.centerYAnchor.constraint(equalTo: name.centerYAnchor),
+            cap,
+        ])
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        fatalError("JumpRowView is built in code")
+    }
+
+    /// Lays the fact on the name's line or under it, for a row this wide.
+    func fit(_ width: CGFloat) {
+        // Out of a window there is no width to judge by: the palette fits it again once it is in one.
+        guard width > 0, let window else { return }
+        // The mark, the check slot and their two 8pt gaps.
+        let room = width - 48
+        let compact = window.bounds.width < 640
+        let next = compact && ceil(name.intrinsicContentSize.width) + 8 + ceil(trailWidth) > room
+        cap.constant = compact ? room : width * 0.45
+        guard next != stacked else { return }
+        stacked = next
+        text.axis = next ? .vertical : .horizontal
+        text.alignment = next ? .leading : .center
+        text.spacing = next ? 2 : 8
+    }
+
+    override func layoutSubviews() {
+        fit(bounds.width)
+        super.layoutSubviews()
+    }
 }
 
 /// One selectable row (`kit-item`): `--radius-sm`, 32pt at a desk and 44

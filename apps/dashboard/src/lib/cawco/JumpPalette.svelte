@@ -304,9 +304,11 @@
                 onSelect={() => chooseAuthor(author.token)}
                 value={`author:${author.token}`}
               >
-                <AuthorMark class="jump-mark" height={16} width={16} />
-                <span class="jump-name">{author.label}</span>
-                <span class="jump-trail">{trail}</span>
+                <span class="jump-text">
+                  <AuthorMark class="jump-mark" height={16} width={16} />
+                  <span class="jump-name">{author.label}</span>
+                  <span class="jump-trail">{trail}</span>
+                </span>
               </Command.Item>
             </div>
           {/each}
@@ -319,28 +321,30 @@
             {@const EntryMark = MARK[entry.kind]}
             <div data-flip>
               <Command.Item onSelect={() => jump(entry.href)} value={entry.id}>
-                {#if entry.kind === "thread"}
-                  <span class="jump-mark">
-                    <CawFace
-                      size={16}
-                      status={(entry.conversation &&
-                        cawco.threadOf(entry.conversation)?.status) ||
-                        "ready"}
-                    />
-                  </span>
-                {:else if EntryMark}
-                  <EntryMark class="jump-mark" height={16} width={16} />
-                {/if}
-                <JumpMatch
-                  class="jump-name"
-                  ranges={entry.labelRanges}
-                  text={entry.label}
-                />
-                <JumpMatch
-                  class="jump-trail"
-                  ranges={entry.detailRanges}
-                  text={entry.detail}
-                />
+                <span class="jump-text">
+                  {#if entry.kind === "thread"}
+                    <span class="jump-mark">
+                      <CawFace
+                        size={16}
+                        status={(entry.conversation &&
+                          cawco.threadOf(entry.conversation)?.status) ||
+                          "ready"}
+                      />
+                    </span>
+                  {:else if EntryMark}
+                    <EntryMark class="jump-mark" height={16} width={16} />
+                  {/if}
+                  <JumpMatch
+                    class="jump-name"
+                    ranges={entry.labelRanges}
+                    text={entry.label}
+                  />
+                  <JumpMatch
+                    class="jump-trail"
+                    ranges={entry.detailRanges}
+                    text={entry.detail}
+                  />
+                </span>
               </Command.Item>
             </div>
           {/each}
@@ -396,14 +400,16 @@
                 <!-- Which conversation this line came out of. Without it a list of
                    snippets is a list of strangers. -->
                 <span class="jump-hit-head">
-                  <IconDocument class="jump-mark" height={16} width={16} />
-                  <span class="jump-name">
-                    {index.sessionTitles.get(hit.sessionId) ??
-                      (hit.cwd ? leaf(hit.cwd) : hit.sessionId.slice(0, 8))}
-                  </span>
-                  <span class="jump-trail">
-                    {hostOf.get(hit.machineId) ?? hit.machineId}
-                    · {hit.role}
+                  <span class="jump-text">
+                    <IconDocument class="jump-mark" height={16} width={16} />
+                    <span class="jump-name">
+                      {index.sessionTitles.get(hit.sessionId) ??
+                        (hit.cwd ? leaf(hit.cwd) : hit.sessionId.slice(0, 8))}
+                    </span>
+                    <span class="jump-trail">
+                      {hostOf.get(hit.machineId) ?? hit.machineId}
+                      · {hit.role}
+                    </span>
                   </span>
                 </span>
                 <!-- And the line itself, with the terms that matched marked. -->
@@ -573,6 +579,37 @@
     letter-spacing: var(--track-caps);
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  /* A row's mark, name and trail. At a desk it stands out of the way, its
+     three parts the item's own flex children. Under 640px the trail stays on
+     the name's line only when both stand there whole; otherwise it wraps
+     under the name and is said whole, the transcript hit's shape. The mark
+     rides the first line: it sits in the 24px the wrapper pads in and pulls
+     back over it, so a wrapped trail starts under the name, not the mark. */
+  .jump-text {
+    display: contents;
+  }
+  @media (max-width: 639px) {
+    .jump-text {
+      display: flex;
+      min-width: 0;
+      flex: 1;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 2px 8px;
+      padding-left: 24px;
+    }
+    .jump-text > :global(.jump-mark) {
+      margin-left: -24px;
+    }
+    /* Its own width decides the wrap; `flex: 1` would offer none. */
+    .jump-text > :global(.jump-name) {
+      flex: 1 1 auto;
+    }
+    .jump-text > :global(.jump-trail) {
+      max-width: 100%;
+      margin-left: 0;
+    }
   }
   :global(.jump-hit) {
     flex-direction: column;
