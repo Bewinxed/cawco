@@ -1160,6 +1160,15 @@ end_all_sessions() {
   done
 }
 apply_log_count() { as_user "$hubc" sh -c "grep -c '$1' /home/cawco/.local/share/cawco/binary/apply.log || true"; }
+# A keeper that exits before it answers did not start: the handover gives it up at its first exit, not after systemd
+# has started it again every RestartSec= while the handover waited (run-3: build 6's keeper started every 2 s from
+# 23:08:31 until the handover gave up at 23:09:16).
+started_at_most_twice() {
+  local n
+  n=$(as_user "$1" sh -c "journalctl --user --no-pager -o cat -u '$2' | grep -c '^Started ' || true")
+  echo "$2 was started $n times"
+  [[ $n -ge 1 && $n -le 2 ]]
+}
 # Puts a stub on build $1's verb $2 (sessiond: its keeper cannot start) the moment the update stages it, in the background.
 stub_when_staged() { as_user "$hubc" sh -c 'rm -f /tmp/stub.done; sh /shared/keeper-dropin.sh "$1" "$2" "$3" && touch /tmp/stub.done' _ "$@" > /dev/null 2>&1 & }
 # The state every keeper check starts from, made here and not left by an earlier check: nothing held, and so no
@@ -1174,7 +1183,7 @@ keeper_start_state() {
   wait_until 120 '[[ -z "$(retiring $hid)" ]]'
   put_policy nightly true
 }
-export -f nb publish_nightly keeper_dropin keeper_link current_link has_file has_version custody_of end_all_sessions apply_log_count stub_when_staged keeper_start_state
+export -f nb publish_nightly keeper_dropin keeper_link current_link has_file has_version custody_of end_all_sessions apply_log_count started_at_most_twice stub_when_staged keeper_start_state
 
 full_update_keeper_cannot_start() {
   keeper_start_state
@@ -1192,6 +1201,7 @@ full_update_keeper_cannot_start() {
   [[ "$(current_endpoint "$hubc")" == "$(endpoint_of "${before#versions/}")" ]]
   as_user "$hubc" test ! -e "/home/cawco/.config/systemd/user/$(unit_of "$(nb 4)")"
   as_user "$hubc" test ! -e "/run/user/1000/cawco/$(endpoint_of "$(nb 4)")"
+  started_at_most_twice "$hubc" "$(unit_of "$(nb 4)")"
   [[ "$(custody_of $hid)" == available ]]
   keeper_dropin remove
   start_session "$hid" keeperlive-4
@@ -1233,6 +1243,8 @@ keeper_cannot_start_with_held() {
   learn
   wait_until 400 '[[ "$(build_version $hid)" == "$(nb 6)" && "$(phase $hid)" == installed ]]'
   wait_until 60 '[[ "$(field $hid keeperFailedVersion)" == "$(nb 6)" ]]'
+  as_user "$hubc" test ! -e "/home/cawco/.config/systemd/user/$(unit_of "$(nb 6)")"
+  started_at_most_twice "$hubc" "$(unit_of "$(nb 6)")"
   # The child and its keeper are as they were, and that keeper is still the machine's.
   [[ "$(keeper_link "$hubc")" == "$before" ]]
   [[ "$(child_pids "$hubc" boundary-k1hold)" == "$held" && "$(keeper_pid "$hubc")" == "$keeper" ]]
@@ -1368,8 +1380,12 @@ handover_on_joined_machine() {
   [[ "$(holder_of "$joinerc" handover-new)" == "$(endpoint_of "$new")" ]]
   session_running handover-new
   [[ "$(phase $jid)" == installed ]]
-  # Only the new build's keeper unit is left on the machine.
-  [[ "$(as_user "$joinerc" systemctl --user list-unit-files --no-legend 'cawco-sessiond*.service' | awk '{print $1}')" == "$(unit_of "$new")" ]]
+  # A keeper unit no keeper runs from, as an earlier build's update helper leaves one (`cawco binary-units` for a keeper
+  # it then left where it was): written here, nothing started from it.
+  as_user "$joinerc" sh -c 'printf "[Unit]\nDescription=CawCo sessiond 0.0.0-stray\n[Service]\nExecStart=/bin/false\n" > ~/.config/systemd/user/cawco-sessiond-0.0.0-stray.service && systemctl --user daemon-reload'
+  # Only the new build's keeper unit is left on the machine: every other keeper's went with its keeper, and a unit no
+  # keeper runs from goes once it has been so for 20 s.
+  wait_until 90 '[[ "$(as_user "$joinerc" systemctl --user list-unit-files --no-legend "cawco-sessiond*.service" | awk "{print \$1}")" == "$(unit_of "'"$new"'")" ]]'
 }
 export -f handover_on_joined_machine
 check "a joined machine installs a build with sessions on its keeper: the new keeper takes a new session at once, the old sessions run on and answer through an agent restart, and the old keeper goes when they end" handover_on_joined_machine 1800 "Install now applies the newer build"

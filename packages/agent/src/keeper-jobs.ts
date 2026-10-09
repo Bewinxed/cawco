@@ -11,7 +11,7 @@
  * a retiring keeper's is not; on macOS a job loads at login from its plist,
  * so a retiring keeper's plist is removed while its job runs on.
  */
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { type KeeperName, keeperService } from "@cawco/core/keepers";
@@ -64,12 +64,30 @@ const systemdDir = (): string =>
     "user"
   );
 
+const launchAgentsDir = (): string =>
+  join(homedir(), "Library", "LaunchAgents");
+
 const LAUNCHD_PID = /^\s*pid = (\d+)$/m;
+const LAUNCHD_LAST_EXIT = /^\s*last exit code = (-?\d+)/m;
+const LAUNCHD_LAST_SIGNAL = /^\s*last terminating signal = (.+)$/m;
+/** A keeper's unit and its launchd label, and the service name each carries (core keepers.ts `keeperService`). */
+const KEEPER_UNIT = /^cawco-(sessiond(?:-.+)?)\.service$/;
+const KEEPER_PLIST = /^dev\.cawco\.(sessiond(?:-.+)?)\.plist$/;
+const KEEPER_LABEL = /^dev\.cawco\.(sessiond(?:-.+)?)$/;
+/** The service name of a keeper from before keepers ran side by side. */
+const LEGACY_SERVICE = "sessiond";
 
 /** One keeper's job, as the service manager runs it. */
 export interface KeeperJob {
   /** Enabled: it starts with the machine (systemd), or loads at login (its plist is there). */
   readonly enable: () => Promise<void>;
+  /**
+   * How its keeper ended, when it is not running since it was last started:
+   * a keeper that exits before it answers did not start, and a restart by
+   * the service manager would only fail again. Undefined while it runs, or
+   * starts.
+   */
+  readonly exited: () => Promise<string | undefined>;
   /** Its unit or plist, as its build writes it. */
   readonly file: string;
   /** Its name in the service manager, for a log line: `systemd (--user cawco-sessiond-x.service)`. */
@@ -88,17 +106,44 @@ export interface KeeperJob {
   readonly restart: () => Promise<void>;
   /** Not started with the machine any more; left running. */
   readonly retire: () => Promise<void>;
+  /** Its keeper's service name, as {@link keeperService} gives it. */
+  readonly service: string;
   /** Started, if it is not running. */
   readonly start: () => Promise<void>;
 }
 
-const systemdJob = (keeper: KeeperName): KeeperJob => {
-  const unit = `cawco-${keeperService(keeper)}.service`;
+const systemdJob = (service: string): KeeperJob => {
+  const unit = `cawco-${service}.service`;
   const file = join(systemdDir(), unit);
   const reload = () => must(["systemctl", "--user", "daemon-reload"]);
   return {
     name: `systemd (--user ${unit})`,
     file,
+    service,
+    async exited() {
+      const shown = await run([
+        "systemctl",
+        "--user",
+        "show",
+        "-p",
+        "ActiveState",
+        "-p",
+        "SubState",
+        "-p",
+        "ExecMainStatus",
+        unit,
+      ]);
+      const property = (name: string): string | undefined =>
+        new RegExp(`^${name}=(.*)$`, "m").exec(shown.stdout)?.[1];
+      const active = property("ActiveState");
+      // `failed`, or waiting out RestartSec= to start again (`activating
+      // (auto-restart)`), or `inactive`: it exited, by itself, since it started.
+      return active === "failed" ||
+        active === "inactive" ||
+        property("SubState") === "auto-restart"
+        ? `it exited with status ${property("ExecMainStatus") ?? "unknown"} (${active}, ${property("SubState")})`
+        : undefined;
+    },
     async pid() {
       const shown = await run([
         "systemctl",
@@ -127,7 +172,7 @@ const systemdJob = (keeper: KeeperName): KeeperJob => {
       await must(["systemctl", "--user", "restart", unit]);
     },
     async remove() {
-      if (keeper.kind === "legacy") {
+      if (service === LEGACY_SERVICE) {
         // SIGKILL to every process of the unit, and no restart of a unit
         // stopped by a signal: its drain never runs.
         const dropins = `${file}.d`;
@@ -147,11 +192,11 @@ const systemdJob = (keeper: KeeperName): KeeperJob => {
   };
 };
 
-const launchdJob = (keeper: KeeperName): KeeperJob => {
-  const label = `dev.cawco.${keeperService(keeper)}`;
+const launchdJob = (service: string): KeeperJob => {
+  const label = `dev.cawco.${service}`;
   const domain = `gui/${process.getuid?.() ?? 0}`;
   const target = `${domain}/${label}`;
-  const plist = join(homedir(), "Library", "LaunchAgents", `${label}.plist`);
+  const plist = join(launchAgentsDir(), `${label}.plist`);
   /** The job's state as launchd prints it: undefined when launchd has no such job loaded. */
   const printed = async (): Promise<string | undefined> => {
     const ran = await run(["launchctl", "print", target]);
@@ -164,7 +209,22 @@ const launchdJob = (keeper: KeeperName): KeeperJob => {
   return {
     name: `launchd (${target})`,
     file: plist,
+    service,
     pid,
+    async exited() {
+      // Loaded, with no process, and an exit code since it last ran: it ended
+      // by itself (KeepAlive starts it again only after launchd's throttle).
+      const shown = await printed();
+      if (shown === undefined || LAUNCHD_PID.test(shown)) {
+        return;
+      }
+      const code = LAUNCHD_LAST_EXIT.exec(shown)?.[1];
+      const signal = LAUNCHD_LAST_SIGNAL.exec(shown)?.[1];
+      if (signal !== undefined) {
+        return `it was ended by ${signal.trim()}`;
+      }
+      return code === undefined ? undefined : `it exited with code ${code}`;
+    },
     async start() {
       if ((await printed()) === undefined) {
         await must(["launchctl", "bootstrap", domain, plist]);
@@ -183,7 +243,7 @@ const launchdJob = (keeper: KeeperName): KeeperJob => {
       await must(["launchctl", "kickstart", "-k", target]);
     },
     async remove() {
-      if (keeper.kind === "legacy") {
+      if (service === LEGACY_SERVICE) {
         // Killed by its own pid, and gone, before launchd is asked anything:
         // `bootout` would send it SIGTERM. Should launchd start it again
         // meanwhile (a kill is not a successful exit), what starts is a keeper
@@ -228,13 +288,48 @@ const gone = async (target: number): Promise<void> => {
   }
 };
 
-/** The keeper's job on this machine's service manager; none where there is no service manager CawCo installs into. */
-export const keeperJob = (keeper: KeeperName): KeeperJob | undefined => {
+/** The job of the keeper with this service name; none where there is no service manager CawCo installs into. */
+const jobOf = (service: string): KeeperJob | undefined => {
   if (process.platform === "darwin") {
-    return launchdJob(keeper);
+    return launchdJob(service);
   }
   if (process.platform === "linux") {
-    return systemdJob(keeper);
+    return systemdJob(service);
   }
   return undefined;
 };
+
+/** The keeper's job on this machine's service manager; none where there is no service manager CawCo installs into. */
+export const keeperJob = (keeper: KeeperName): KeeperJob | undefined =>
+  jobOf(keeperService(keeper));
+
+/**
+ * Every keeper job the service manager has on this machine, whether or not a
+ * keeper runs from it: each keeper unit file (systemd), each keeper plist and
+ * each keeper label launchd has loaded (a retiring keeper's job runs on with
+ * its plist removed).
+ */
+export async function keeperJobsHere(): Promise<KeeperJob[]> {
+  const services = new Set<string>();
+  const add = (pattern: RegExp) => (name: string) => {
+    const service = pattern.exec(name)?.[1];
+    if (service) {
+      services.add(service);
+    }
+  };
+  if (process.platform === "linux") {
+    (await readdir(systemdDir()).catch(() => [] as string[])).forEach(
+      add(KEEPER_UNIT)
+    );
+  } else if (process.platform === "darwin") {
+    (await readdir(launchAgentsDir()).catch(() => [] as string[])).forEach(
+      add(KEEPER_PLIST)
+    );
+    // `launchctl list`: one job a line, PID, status and label, tab-separated.
+    const listed = await run(["launchctl", "list"]);
+    for (const line of listed.stdout.split("\n")) {
+      add(KEEPER_LABEL)(line.split("\t")[2]?.trim() ?? "");
+    }
+  }
+  return [...services].flatMap((service) => jobOf(service) ?? []);
+}

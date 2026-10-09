@@ -38,7 +38,7 @@ import {
   symlink,
 } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { keeperJob } from "@cawco/agent/keeper-jobs";
+import { type KeeperJob, keeperJob } from "@cawco/agent/keeper-jobs";
 import { SessiondClient } from "@cawco/agent/sessiond-client";
 import { probeHealth } from "@cawco/core/binary-health";
 import {
@@ -287,8 +287,12 @@ type KeeperMove =
   | { outcome: "already" | "moved" }
   | { error: string; outcome: "failed" };
 
-/** A keeper's welcome at `endpoint`, within {@link HEALTH_MS}: one that starts and answers. */
-async function awaitWelcome(endpoint: string): Promise<void> {
+/**
+ * A keeper's welcome at `endpoint`, within {@link HEALTH_MS}: one that starts
+ * and answers. One whose process exits first did not start, and is not waited
+ * on while its service manager starts it again to fail again.
+ */
+async function awaitWelcome(endpoint: string, job: KeeperJob): Promise<void> {
   const end = Date.now() + HEALTH_MS;
   let last = "it never answered";
   while (Date.now() < end) {
@@ -299,6 +303,10 @@ async function awaitWelcome(endpoint: string): Promise<void> {
       return;
     } catch (error) {
       last = message(error);
+    }
+    const exited = await job.exited();
+    if (exited) {
+      throw new Error(`its keeper did not answer at ${endpoint}: ${exited}`);
     }
     await Bun.sleep(500);
   }
@@ -377,7 +385,7 @@ async function handOverKeeper(to: string): Promise<KeeperMove> {
   try {
     await say(`keeper ${to}: units: ${await writeKeeperUnits(to, job.file)}`);
     await job.start();
-    await awaitWelcome(endpoint);
+    await awaitWelcome(endpoint, job);
   } catch (error) {
     if (!running) {
       await job
@@ -435,15 +443,27 @@ const handOver = (to: string): Promise<KeeperMove> =>
     (error): KeeperMove => ({ outcome: "failed", error: message(error) })
   );
 
-/** What the update state says about the keeper after a handover: the build it runs, and a keeper that could not start. */
+/**
+ * What the update state says about the keeper after a handover: the build it
+ * runs, and a keeper that could not start. A handover that went through
+ * clears the error only when a keeper's failure was what it said: a handover
+ * runs whatever else the state is saying (a newer build waiting, a download
+ * that failed), and that keeps its words.
+ */
 async function keeperState(
   move: KeeperMove,
   version: string
 ): Promise<Partial<BinaryUpdateState>> {
   const sessiondVersion = await readKeeperVersion();
-  return move.outcome === "failed"
-    ? { sessiondVersion, keeperFailedVersion: version, error: move.error }
-    : { sessiondVersion, keeperFailedVersion: undefined, error: undefined };
+  if (move.outcome === "failed") {
+    return { sessiondVersion, keeperFailedVersion: version, error: move.error };
+  }
+  const keeperSaid = (await readUpdateState())?.keeperFailedVersion;
+  return {
+    sessiondVersion,
+    keeperFailedVersion: undefined,
+    ...(keeperSaid ? { error: undefined } : {}),
+  };
 }
 
 /**
@@ -591,6 +611,8 @@ async function settle(start: TrialMarker): Promise<string | undefined> {
     await writeJsonAtomic(trialPath(), trial);
     const manifest = await readStaged(trial.version);
     await writeState({
+      // A build that installed says no earlier failure; a keeper that could not start says its own.
+      error: undefined,
       ...(await keeperState(move, trial.version)),
       phase: "installed",
       heldChildren: undefined,

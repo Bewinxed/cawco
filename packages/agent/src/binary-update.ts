@@ -48,14 +48,16 @@ import { BINARY_WRAPPER, writeWrapper } from "@cawco/core/binary-wrapper";
 import {
   answers,
   currentKeeper,
+  type KeeperName,
   keeperEndpoints,
+  keeperService,
   publishKeeper,
 } from "@cawco/core/keepers";
 import { machineId } from "@cawco/core/machine-id";
 import { verifyManifest } from "@cawco/core/release-manifest";
 import { runtimeVersion } from "@cawco/core/runtime";
 import { leaveRetiringKeepers } from "./boundary";
-import { keeperJob } from "./keeper-jobs";
+import { keeperJob, keeperJobsHere } from "./keeper-jobs";
 import { withKeepers } from "./keepers";
 import { lowerFence, raiseFence, restartReadiness } from "./restart";
 import { heldSessions } from "./sessiond-client";
@@ -320,6 +322,8 @@ export class BinaryUpdater {
   #trialTimer: ReturnType<typeof setInterval> | undefined;
   /** When this agent last launched a helper to resume an open trial. */
   #resumedAt = 0;
+  /** When this agent last launched a helper to hand the keeper to its build. */
+  #handedAt = 0;
   /**
    * The fence this updater raised, while it stands: on this agent, and on the
    * hub when its restart is part of the update (the hub's url then). Lowered
@@ -481,9 +485,9 @@ export class BinaryUpdater {
 
   /**
    * Every ten seconds: take up what the helper wrote, so the hub learns the
-   * phase has moved on; see that an open trial has a decider; tend the
-   * retiring session keepers; and, on a build no trial is deciding, keep the
-   * service wrapper as this build writes it.
+   * phase has moved on; see that an open trial has a decider; on a build no
+   * trial is deciding, keep the service wrapper as this build writes it; hand
+   * the session keeper to this build; and tend the retiring keepers.
    */
   async #watch(): Promise<void> {
     if (!this.#running) {
@@ -504,11 +508,14 @@ export class BinaryUpdater {
     }
     await this.#keepDecider();
     await this.#ownWrapper();
+    await this.#advanceKeeper();
     await this.#tendKeepers();
   }
 
   /** Each retiring keeper's first look at which it held nothing, by its endpoint. */
   readonly #emptySince = new Map<string, number>();
+  /** Each keeper job's first look at which no keeper ran from it, by its service name. */
+  readonly #idleJobSince = new Map<string, number>();
 
   /**
    * THE KEEPERS BESIDE THE CURRENT ONE GO WHEN THEY HOLD NOTHING. A keeper
@@ -587,6 +594,14 @@ export class BinaryUpdater {
           }
         })
     );
+    if (
+      await this.#removeIdleJobs(
+        keepers.map(({ keeper }) => keeper),
+        link
+      )
+    ) {
+      removed = true;
+    }
     if (removed) {
       await prune().catch(logFailure);
     }
@@ -598,6 +613,54 @@ export class BinaryUpdater {
           sessions: live,
         }))
     );
+  }
+
+  /**
+   * A KEEPER'S JOB GOES WITH ITS KEEPER. A unit or plist no keeper runs from,
+   * and not the machine's keeper's, says nothing true: one an earlier build's
+   * update helper wrote (`cawco binary-units`) for a keeper it then left where
+   * it was, a handover's whose keeper never started, or one whose keeper ended
+   * by itself. It is removed once it has been so for {@link RETIRING_EMPTY_MS}.
+   * Kept: every keeper that answers (`answering`), the build the `keeper` link
+   * names, and the keeper the machine's endpoint names, answering or not (one
+   * its service manager is starting again). Whether anything was removed.
+   */
+  async #removeIdleJobs(
+    answering: KeeperName[],
+    link: string | undefined
+  ): Promise<boolean> {
+    const machine = await currentKeeper();
+    const kept = new Set(
+      [
+        ...answering,
+        ...(link ? [{ kind: "build", version: link } as const] : []),
+        ...(machine ? [machine.keeper] : []),
+      ].map(keeperService)
+    );
+    let removed = false;
+    for (const job of await keeperJobsHere()) {
+      // biome-ignore lint/performance/noAwaitInLoops: keeper jobs are few, each removal said in its order
+      if (kept.has(job.service) || (await job.pid()) !== undefined) {
+        this.#idleJobSince.delete(job.service);
+        continue;
+      }
+      const since = this.#idleJobSince.get(job.service) ?? Date.now();
+      this.#idleJobSince.set(job.service, since);
+      if (Date.now() - since < RETIRING_EMPTY_MS) {
+        continue;
+      }
+      try {
+        await job.remove();
+        this.#idleJobSince.delete(job.service);
+        removed = true;
+        console.info(
+          `[update] ${job.name}: no session keeper runs from it, and it is removed`
+        );
+      } catch (error) {
+        logFailure(error);
+      }
+    }
+    return removed;
   }
 
   /** The retiring keepers in the state, written only when they changed, and never over a pass's state that only memory holds. */
@@ -784,7 +847,6 @@ export class BinaryUpdater {
     if (!(newer && schemaOk)) {
       // Never a build that is not newer, and never one older than the data.
       await this.#settleNothingNewer(this.#policy.channel !== running.channel);
-      await this.#advanceKeeper();
       return;
     }
     this.#spendCommandFor(release.manifest.version);
@@ -1163,11 +1225,22 @@ export class BinaryUpdater {
    * every new session, and the one before keeps the sessions it holds until
    * each ends or sleeps (#tendKeepers). Nothing restarts, so nothing is
    * drained, fenced or cut, and no setting holds it back: the build it
-   * follows was installed under the update policy already. Not to a build
-   * whose keeper could not start (`keeperFailedVersion`), and not while a
-   * helper runs.
+   * follows was installed under the update policy already, and a newer one
+   * on offer, or a hub that does not answer, holds nothing back: the keeper
+   * follows the build that runs, and a handover asks nothing of the hub. Not
+   * to a build whose keeper could not start (`keeperFailedVersion`), and not
+   * while an update owns the machine: a pass deciding whether to apply one,
+   * an install, or a trial (each hands the keeper to its own build), or any
+   * helper.
    */
   async #advanceKeeper(): Promise<void> {
+    if (
+      this.#running ||
+      this.#state.phase === "installing" ||
+      (await readTrial())
+    ) {
+      return;
+    }
     const current = await currentKeeper();
     const linked = await readKeeperVersion();
     if (
@@ -1192,10 +1265,12 @@ export class BinaryUpdater {
     if (
       this.#state.keeperFailedVersion === runtimeVersion ||
       !current ||
+      Date.now() - this.#handedAt < HELPER_START_MS ||
       (await helperIsLive())
     ) {
       return;
     }
+    this.#handedAt = Date.now();
     console.info(
       `[update] the session keeper ${current.keeper.version}${current.keeper.kind === "legacy" ? " (from before keepers ran side by side)" : ""} is handed over to ${runtimeVersion}'s`
     );

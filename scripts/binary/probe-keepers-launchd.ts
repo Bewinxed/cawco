@@ -16,7 +16,10 @@ import { openSync } from "node:fs";
 import { copyFile, lstat, mkdir, readlink, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { keeperJob } from "../../packages/agent/src/keeper-jobs";
+import {
+  keeperJob,
+  keeperJobsHere,
+} from "../../packages/agent/src/keeper-jobs";
 import { KeeperPool } from "../../packages/agent/src/keepers";
 import { SessiondClient } from "../../packages/agent/src/sessiond-client";
 import {
@@ -27,7 +30,8 @@ import {
 
 const VERSION = "0.0.0-probe.2";
 const LEGACY = "0.0.0-legacy";
-const LABEL = `dev.cawco.sessiond-${VERSION}`;
+const SERVICE = `sessiond-${VERSION}`;
+const LABEL = `dev.cawco.${SERVICE}`;
 const PLIST = join(homedir(), "Library", "LaunchAgents", `${LABEL}.plist`);
 const LOG = join(homedir(), "Library", "Logs", `cawco-sessiond-${VERSION}.log`);
 
@@ -208,6 +212,18 @@ try {
     "it does not take the machine's endpoint by itself while a legacy keeper holds it",
     !(await lstat(machine)).isSymbolicLink()
   );
+  const runningExit = await job.exited();
+  step(
+    "a keeper launchd runs has not exited",
+    runningExit === undefined,
+    runningExit ?? ""
+  );
+  const loaded = (await keeperJobsHere()).map((one) => one.service);
+  step(
+    "the build's keeper job is among the keeper jobs on this machine",
+    loaded.includes(SERVICE),
+    loaded.join(" ")
+  );
 
   // 4. The switch: the legacy socket moves to its legacy name (a rename on this file system), the endpoint names the build's keeper.
   await publishKeeper(own, LEGACY);
@@ -310,7 +326,8 @@ try {
       (await readlink(machine).catch(() => "")) ===
         `sessiond-${VERSION}.sock` &&
       (await launchctl("print", `gui/${process.getuid?.()}/${LABEL}`)).code !==
-        0
+        0 &&
+      !(await keeperJobsHere()).some((one) => one.service === SERVICE)
   );
 
   // 10. The legacy removal's own sequence on a launchd job (the probe's label, never the machine's): its pid, as
@@ -329,6 +346,13 @@ try {
   }
   const killedOutright =
     second !== undefined && (await until(async () => !alive(second), 10_000));
+  // Ended, and loaded still (KeepAlive waits out its throttle before it starts it again): the job says how.
+  const killedExit = await job.exited();
+  step(
+    "a launchd keeper that ended says how, as its job's exit",
+    killedExit !== undefined,
+    killedExit ?? "nothing"
+  );
   await launchctl("bootout", `gui/${process.getuid?.()}/${LABEL}`);
   step(
     "a launchd keeper killed by its pid then booted out never drains (its endpoint file stays) and its job is gone",
