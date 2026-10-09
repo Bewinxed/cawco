@@ -983,6 +983,14 @@
   :global(.work-tabs[data-slot="tabs"] .ff-tabs-list .ff-tab) {
     min-inline-size: max-content;
   }
+  /* A tab after the first tucks its start under its neighbour by the
+     overlap (TabsList), and the chosen Working sheet covered that much of
+     "Finished": its label starts past the overlap, as PaneTabs' titles do,
+     on either choice, so a choice never resizes a tab. The first tab's
+     overlap is the track's leading pad. */
+  :global(.work-tabs[data-slot="tabs"] .ff-tabs-list .ff-tab ~ .ff-tab) {
+    --px-start: calc(var(--overlap) + var(--px));
+  }
   /* A label never gives way: the header's spacing does. */
   :global(.work-tabs[data-slot="tabs"] .ff-tabs-list .hit) {
     flex-shrink: 0;
