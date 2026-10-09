@@ -421,13 +421,28 @@ export const credentialStores = (): string[] => {
     join(xdgConfigHome(), ".wrangler"),
     join(home, ".gnupg"),
     join(home, ".password-store"),
-    // macOS: the login keychain, where Claude Code keeps each account's
-    // login and `gh` its token.
+    // Shell histories, where a pasted token stays.
+    join(home, ".bash_history"),
+    join(home, ".zsh_history"),
+    join(home, ".local", "share", "fish", "fish_history"),
+    // Browser profiles: cookies, saved logins.
+    join(home, ".mozilla"),
     ...(process.platform === "darwin"
       ? [
+          // The login keychain, where Claude Code keeps each account's login
+          // and `gh` its token.
           join(home, "Library", "Keychains", "login.keychain-db"),
           join(home, "Library", "Keychains", "login.keychain"),
+          join(home, "Library", "Application Support", "Google", "Chrome"),
+          join(home, "Library", "Application Support", "Chromium"),
+          join(home, "Library", "Application Support", "Firefox"),
+          join(home, "Library", "Cookies"),
         ]
-      : []),
+      : [
+          // The desktop keyring, where `gh` and other tools keep tokens.
+          join(xdgDataHome(), "keyrings"),
+          join(xdgConfigHome(), "google-chrome"),
+          join(xdgConfigHome(), "chromium"),
+        ]),
   ];
 };
