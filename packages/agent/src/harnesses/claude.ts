@@ -102,7 +102,6 @@ import {
   unlockKeychain,
 } from "../auth";
 import {
-  BOUNDARY_HOOK_SLOW,
   claudeBoundaryOptions,
   hookMissing,
   type LaunchedHook,
@@ -1513,13 +1512,19 @@ class ClaudeSession implements HarnessSession {
   }
 
   /**
-   * The workspace's boundary hook failing, as the CLI reports it with the
-   * hook events {@link claudeBoundaryOptions} turns on: the workspace's hook
-   * script refuses the call, the form before it let the command through. A
-   * hook that fails once fails every call after it, so the turn is stopped
-   * at once and ends failed with the hook's own words ({@link #pumpMessages}).
-   * The hook is known by what names it in what was written: the script's
-   * first line names it; the shell names what it ran when that is gone.
+   * The workspace's boundary hook erroring, as the CLI reports it with the
+   * hook events {@link claudeBoundaryOptions} turns on, split by exit status.
+   * Exit 2 is a refusal: the command did not run, the model is told why, and
+   * the turn goes on — a slow hook on a loaded machine, or a live CLI whose
+   * hook names a verb the swap to the hook script removed, refuses that call
+   * and nothing else. Any other error let the command run outside the
+   * boundary (the CLI reports it as non-blocking), and a hook that fails
+   * open once does so for every call after it, so the turn is stopped at once
+   * and ends failed with the hook's own words ({@link #pumpMessages}). A
+   * transcript's `hook_non_blocking_error` ({@link #transcriptHookFailure})
+   * is always the second kind. The hook is known by what names it in what
+   * was written: the script's first line names it; the shell names what it
+   * ran when that is gone.
    */
   #watchBoundary(hook: HookFrame): void {
     const own = this.#boundaryHook;
@@ -1531,10 +1536,18 @@ class ClaudeSession implements HarnessSession {
       hook.outcome !== "error" ||
       ![hook.stderr, hook.output].some((said) =>
         own.names.some((name) => said?.includes(name))
-      ) ||
-      // A hook the loaded machine ran too slowly refused that one call (boundary.ts).
-      hook.stderr?.includes(BOUNDARY_HOOK_SLOW)
+      )
     ) {
+      return;
+    }
+    if (hook.exit_code === 2) {
+      // The hook's first line names it; the lines after it say why.
+      const said = (hook.stderr || hook.output || "")
+        .trim()
+        .replaceAll("\n", " | ");
+      console.info(
+        `[claude] ${this.instanceId}: boundary hook refused a call: ${said}`
+      );
       return;
     }
     const failure = `boundary hook failed: ${(hook.stderr || hook.output || "").trim()}`;
