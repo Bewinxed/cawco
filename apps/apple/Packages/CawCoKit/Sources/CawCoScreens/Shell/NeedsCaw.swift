@@ -13,15 +13,13 @@ import UIKit
 /// on the bar's glass group where he shares one. What waits is arcs on his
 /// circle's rim, one for each; past nine a second lap refills them on top in
 /// the fail glyph's ink, and past two laps the ring closes whole in it; no
-/// digit is drawn on him. When something new arrives he plays his needs-you beat once
-/// (`CawBeat`; his guide: "a gentle beat… never a hello") and holds still
-/// again; with less motion only the arcs change. A tap or a drag down from
-/// him moves the drawer (`NeedsDrawer`), which the shell owns.
+/// digit is drawn on him. His head is `CawBeat`: when something new arrives
+/// it plays his needs-you beat once, and it smiles back at a pointer on him
+/// or a press; with less motion only the arcs change. A tap or a drag down
+/// from him moves the drawer (`NeedsDrawer`), which the shell owns.
 final class NeedsCawButton: UIControl {
     /// His head's side, pt.
     static let head = 22.0
-    /// The beat's box: his head and raised wing (tab-icon-shots `NEEDS_YOU`).
-    static let beatBox = 32.0
     /// The capsule's side on a phone; in the wide bar's group the group's height rules.
     static let side = 36.0
 
@@ -29,8 +27,7 @@ final class NeedsCawButton: UIControl {
     var onPan: (UIPanGestureRecognizer) -> Void = { _ in }
 
     private let capsule: GlassCapsule?
-    private let face = CawMark(status: .compacted, side: NeedsCawButton.head)
-    private let beatView = UIImageView()
+    private let face = CawBeat(side: NeedsCawButton.head)
     /// What waits, on his circle's rim (NeedsCaw.svelte, The count): an arc
     /// for each, `arc`° long with `arcGap`° between, from 12 o'clock
     /// clockwise, in the attention ink; past `arcs` the count refills the
@@ -46,7 +43,6 @@ final class NeedsCawButton: UIControl {
     private let lapLayers = (0 ..< NeedsCawButton.arcs).map { _ in CAShapeLayer() }
     private let wholeRing = CAShapeLayer()
     private(set) var count = 0
-    private var beating = false
 
     init(ownGlass: Bool) {
         capsule = ownGlass ? GlassCapsule() : nil
@@ -62,13 +58,8 @@ final class NeedsCawButton: UIControl {
                 capsule.bottomAnchor.constraint(equalTo: bottomAnchor),
             ])
         }
-        for part in [face, beatView] as [UIView] {
-            part.translatesAutoresizingMaskIntoConstraints = false
-            part.isUserInteractionEnabled = false
-            addSubview(part)
-        }
-        beatView.alpha = 0
-        beatView.contentMode = .scaleAspectFit
+        face.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(face)
         for ring in arcLayers + lapLayers + [wholeRing] {
             ring.fillColor = nil
             ring.lineWidth = Size.cCawRing
@@ -87,10 +78,6 @@ final class NeedsCawButton: UIControl {
             face.centerYAnchor.constraint(equalTo: centerYAnchor, constant: (0.5 - CawMark.headCentre.y) * Self.head),
             face.widthAnchor.constraint(equalToConstant: Self.head),
             face.heightAnchor.constraint(equalToConstant: Self.head),
-            beatView.centerXAnchor.constraint(equalTo: centerXAnchor),
-            beatView.centerYAnchor.constraint(equalTo: centerYAnchor),
-            beatView.widthAnchor.constraint(equalToConstant: Self.beatBox),
-            beatView.heightAnchor.constraint(equalToConstant: Self.beatBox),
         ])
         inkRing()
         isAccessibilityElement = true
@@ -101,6 +88,7 @@ final class NeedsCawButton: UIControl {
         let pan = UIPanGestureRecognizer(target: self, action: #selector(panned(_:)))
         addGestureRecognizer(pan)
         addInteraction(UIPointerInteraction(delegate: self))
+        addGestureRecognizer(UIHoverGestureRecognizer(target: self, action: #selector(hovered(_:))))
     }
 
     @available(*, unavailable)
@@ -110,6 +98,9 @@ final class NeedsCawButton: UIControl {
 
     @objc private func tapped() { onTap() }
     @objc private func panned(_ pan: UIPanGestureRecognizer) { onPan(pan) }
+    @objc private func hovered(_ hover: UIHoverGestureRecognizer) {
+        face.hover(hover.state == .began || hover.state == .changed)
+    }
 
     /// On the phone his glass stands on the bar's floor, round but for its
     /// bottom-right corner (NeedsCaw.svelte, variant B), and the arcs run
@@ -226,6 +217,7 @@ final class NeedsCawButton: UIControl {
     override var isHighlighted: Bool {
         didSet {
             guard isHighlighted != oldValue else { return }
+            face.press(isHighlighted)
             let scale = isHighlighted && !UIAccessibility.isReduceMotionEnabled ? Motion.pressScale : 1
             Motion.easeOut.animator(Motion.durControl) { self.transform = CGAffineTransform(scaleX: scale, y: scale) }.startAnimation()
         }
@@ -247,27 +239,7 @@ final class NeedsCawButton: UIControl {
     }
 
     /// His needs-you beat, once; nothing with less motion.
-    func beat() {
-        guard !beating, !UIAccessibility.isReduceMotionEnabled, window != nil else { return }
-        beating = true
-        let dark = traitCollection.userInterfaceStyle == .dark
-        beatView.animationImages = CawBeat.drawings(dark: dark)
-        beatView.animationDuration = CawBeat.duration(dark: dark)
-        beatView.animationRepeatCount = 1
-        beatView.image = beatView.animationImages?.first
-        beatView.alpha = 1
-        face.alpha = 0
-        beatView.startAnimating()
-        DispatchQueue.main.asyncAfter(deadline: .now() + CawBeat.duration(dark: dark)) { [weak self] in
-            guard let self else { return }
-            beatView.stopAnimating()
-            beating = false
-            Motion.easeOut.animator(Motion.durFade) {
-                self.beatView.alpha = 0
-                self.face.alpha = 1
-            }.startAnimation()
-        }
-    }
+    func beat() { face.beat() }
 }
 
 extension NeedsCawButton: UIPointerInteractionDelegate {

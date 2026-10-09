@@ -12,15 +12,7 @@
  *   drawings side by side, which the icon steps through while it moves;
  * - .context/favicon/<state>-<side>.png at the repository's root, one strip
  *   per state at 32 and 64 px (the needs-you wave a drawing at a time, the
- *   stills alone), for looking at;
- * - the bar's beat: the same wave on a clear ground, in each scheme
- *   (`bar-beat-needs-you-<scheme>.png`), which Caw's head in the top bar
- *   plays once when something new needs the operator, written for the
- *   dashboard (src/lib/assets/brand/) and for the Apple apps
- *   (CawCoMascot/Resources/beat/);
- * - the bar's smile: his head going from rest into his ^^ face
- *   (`bar-beat-smile-<scheme>.png`, tab-icon-shots `SMILE`), which Caw's head
- *   in the top bar plays when the operator's pointer comes onto him.
+ *   stills alone), for looking at.
  *
  * Run it again whenever Caw's files, the shots or the tile's tokens change:
  *
@@ -29,7 +21,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { chromium } from "playwright-core";
-import { NEEDS_YOU, type Shot, SLEEPING, SMILE } from "./tab-icon-shots";
+import { NEEDS_YOU, type Shot, SLEEPING } from "./tab-icon-shots";
 import { TAB_ICON } from "./tab-icon-tile";
 
 const here = (path: string) => join(import.meta.dir, "..", path);
@@ -37,18 +29,8 @@ const RIVE = here("node_modules/@rive-app/canvas/");
 const CAW = here("src/lib/assets/caw/");
 const STILLS = here("src/lib/assets/brand/");
 const STRIPS = here("../../.context/favicon/");
-const APPLE_BEAT = here(
-  "../apple/Packages/CawCoKit/Sources/CawCoMascot/Resources/beat/"
-);
-
 /** The side the dashboard draws the icon at (tab-icon.svelte.ts `SIDE`). */
 const SIDE = 64;
-
-/**
- * The side a drawing of the bar's beat is made at: the beat's box at 32 px
- * (CawHead's `BEAT_BOX`) on a 3x display, so no screen scales it up.
- */
-const BEAT_SIDE = 96;
 
 interface Job {
   colour: string;
@@ -233,36 +215,6 @@ const art = states.flatMap(({ shot, moving }) => {
     })),
   ];
 });
-// The bar's beat: the wave, once, on no tile, in each scheme's Caw.
-const barBeat = (["light", "dark"] as const).flatMap((scheme) =>
-  [STILLS, APPLE_BEAT].map((dir) => ({
-    file: join(dir, `bar-beat-needs-you-${scheme}.png`),
-    job: {
-      shot: NEEDS_YOU,
-      colour: "transparent",
-      radius: 0,
-      scheme,
-      side: BEAT_SIDE,
-      frames: wave,
-    },
-  }))
-);
-art.push(...barBeat);
-// His smile at the operator's pointer: from rest into the ^^ face, on no
-// tile, in each scheme's Caw (`bar-beat-smile-<scheme>.png`).
-art.push(
-  ...(["light", "dark"] as const).map((scheme) => ({
-    file: join(STILLS, `bar-beat-smile-${scheme}.png`),
-    job: {
-      shot: SMILE,
-      colour: "transparent",
-      radius: 0,
-      scheme,
-      side: BEAT_SIDE,
-      frames: SMILE.frames,
-    },
-  }))
-);
 const working = [
   { file: join(STILLS, "tab-icon-working.png"), side: SIDE },
   ...[32, SIDE].map((side) => ({

@@ -18,7 +18,7 @@
 //
 // usage: node build.mjs [outDir]
 //   Without an argument it writes every file to ../caw/, and to each app's copy the files that
-//   app shows: CawCoMascot's Resources/caw/ (the statuses and the peek; the Apple apps have no
+//   app shows: CawCoMascot's Resources/caw/ (all but the template poses: the Apple apps have no
 //   template cards, so no pose) and the dashboard's src/lib/assets/caw/ (all of them), the same
 //   bytes in each; any other .riv there is removed. Each app keeps its own copy because each is
 //   built from its own directories. With an argument it writes every file there.

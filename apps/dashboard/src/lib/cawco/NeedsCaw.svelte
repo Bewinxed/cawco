@@ -12,17 +12,25 @@
    * (CAW_HEAD_CENTRE), since his beak and note reach out to one side. The
    * count rides his corner in the bar's badge, morphing digit by digit,
    * while anything waits. When something new arrives he plays his needs-you
-   * beat once (the wave of `needs-you-hey` through a box round his head,
-   * drawn ahead by `bun run tab-icon`; his guide: "a gentle beat… never a
-   * hello") and holds still again. With less motion only the badge changes.
+   * beat once (`head-beat`: he blinks, stretches up into his alert face,
+   * holds it and settles back; his guide: "a gentle beat… never a hello")
+   * and holds still again. With less motion only the badge changes.
    *
    * He smiles back at the operator's own pointer (owner: "show the smiling
    * ^^ caw's face/animation on hover and on click"): a pointer coming onto
-   * him plays his strip from rest into his ^^ face, which holds while it
-   * stays, and leaving plays it back to rest; a press, by mouse or finger,
-   * squashes his head once on --press-scale and smiles, then the drawer
-   * opens as it always has. The beat, when one plays, goes first. With less
-   * motion no drawing steps: his face cross-fades to the ^^ one and back.
+   * him plays `head-smile`, his eyes squeezing into ^^, which holds while it
+   * stays, and leaving plays `head-unsmile` back to rest; a press, by mouse or
+   * finger, squashes his head once on --press-scale and smiles, then the
+   * drawer opens as it always has. The beat, when one plays, goes first.
+   * With less motion nothing plays: his face is simply the ^^ one while the
+   * pointer is on him, and his resting one again once it leaves.
+   *
+   * Each move is a clip of the bar's own files (assets/mascot/README.md,
+   * Contract), drawn on a canvas over his face: each opens on the drawing
+   * his face shows, so the face stays up until the clip's first frame is
+   * drawn, and in the frame it lands his face becomes the drawing it landed
+   * on and the clip's Rive is gone. Every drawing keeps two device pixels
+   * inside his glass circle (assets/mascot/scripts/head_circle.py).
    *
    * A tap on him, or a drag down from him, pulls a drawer down from the top.
    * Dragged, its body grows out of the capsule under the finger 1:1, joined
@@ -37,17 +45,17 @@
    */
   import { mergeProps } from "bits-ui";
   import { untrack } from "svelte";
-  import beatDark from "#lib/assets/brand/bar-beat-needs-you-dark.png";
-  import beatLight from "#lib/assets/brand/bar-beat-needs-you-light.png";
-  import smileDark from "#lib/assets/brand/bar-beat-smile-dark.png";
-  import smileLight from "#lib/assets/brand/bar-beat-smile-light.png";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { IconDollar, IconWorkflow } from "#lib/icons.js";
-  import { theme } from "#lib/theme.svelte.js";
   import { goto } from "$app/navigation";
   import { cawco } from "./client.svelte";
+  import { type CawFile, type CawHead, stageCaw } from "./home/Caw.svelte";
   import CawFace from "./home/CawFace.svelte";
-  import { CAW_HEAD_CENTRE } from "./home/caw-still.svelte";
+  import {
+    CAW_HEAD_CENTRE,
+    CAW_STILL_BLEED,
+    cawStill,
+  } from "./home/caw-still.svelte";
   import { clock, home, type NeedsItem, span } from "./home/home-state.svelte";
   import { conversationHref } from "./links";
   import { dur, easeInOut, easeOut, motionOk } from "./motion/curves.svelte";
@@ -57,26 +65,6 @@
 
   /** His head's side, px: the compacted still fills it (`--c-bar-symbol`). */
   const HEAD = 20;
-  /**
-   * The beat's box, px: his head and raised wing (tab-icon-shots
-   * `NEEDS_YOU`), 32 to a 22px head, so his head beats at the size it rests.
-   */
-  const BEAT_BOX = 29;
-  /** The beat's drawings, and its pace: his loops are held on twos of 24. */
-  const BEAT_FRAMES = 16;
-  const BEAT_PACE = 12;
-  /**
-   * The smile's strip (tab-icon-shots `SMILE`): all of him, from rest
-   * through eyes shut to ^^, at the beat's pace. Its box is his still box,
-   * sized so his head is the size the face shows it: the head's circle is
-   * 0.304 of the compacted box and 0.244 of the still box (circles fitted
-   * to his crown, as CAW_HEAD_CENTRE), so his body hangs below his head
-   * within the glass, as it does on any page that shows him whole.
-   */
-  const SMILE_FRAMES = 5;
-  const SMILE_BOX = Math.round((HEAD * 0.304) / 0.244);
-  /** His head's centre in the smile's rest drawing, as shares of its box. */
-  const SMILE_HEAD_CENTRE = { x: 0.481, y: 0.364 } as const;
   /** Where the drawer stands under the capsule once parted, px. */
   const GAP = 8;
   /** The finger's travel by which the neck has thinned to nothing and snapped, px. */
@@ -253,12 +241,112 @@
       motionOk.current ? `stroke-dashoffset: ${1 - t}` : `opacity: ${t}`,
   });
 
-  /* ── The beat ──────────────────────────────────────────────────────── */
+  /* ── His head: the beat and the smile ─────────────────────────────── */
+  /**
+   * What his head is doing: resting, or playing one of the bar's clips
+   * (`beat`, `in` to his ^^ face, `out` of it), or holding his ^^ face
+   * (`smiled`). Each clip opens on the drawing his face shows and lands on
+   * the one he rests on after it.
+   */
+  type Phase = "rest" | "beat" | "in" | "smiled" | "out";
+  let phase = $state<Phase>("rest");
+  /** The drawing his face shows: his resting head, or his ^^ one. */
+  let face = $state<CawFile>("compacted");
+  /** The clip playing over his face, a fresh id each time. */
+  let clip = $state<{ file: CawHead; id: number } | null>(null);
+  /** The clip's first frame is drawn: it stands in for his face. */
+  let covering = $state(false);
+  let clips = 0;
+  /**
+   * A beat came while he smiled: it plays the moment he is back at rest, so
+   * every clip opens on the drawing his face shows (a cut from ^^ to the
+   * beat's resting head would jump).
+   */
+  let beatNext = false;
+  /** A fine pointer is on him. */
+  let hovered = false;
+  /** A press is down on him. */
+  let pressing = false;
+  /** A pressed head, squashed while the press lasts. */
+  let pressed = $state(false);
+
+  // His ^^ face is drawn ahead, so the frame a smile lands in can show it.
+  $effect(() => {
+    cawStill("head-smile", HEAD).drawn.catch(() => {
+      // Drawn again when he smiles.
+    });
+  });
+
+  function play(file: CawHead, next: Phase) {
+    clips += 1;
+    covering = false;
+    clip = { file, id: clips };
+    phase = next;
+  }
+
+  /** The clip landed: his face becomes the drawing it landed on, in this frame. */
+  function landed() {
+    const from = phase;
+    clip = null;
+    covering = false;
+    if (from === "in") {
+      face = "head-smile";
+      phase = "smiled";
+      // A tap's smile: in, and out again once it has landed; and out before
+      // a beat waiting on it.
+      if (beatNext || !(hovered || pressing)) {
+        smileOut();
+      }
+      return;
+    }
+    face = "compacted";
+    phase = "rest";
+    if (beatNext) {
+      beatNext = false;
+      play("head-beat", "beat");
+      return;
+    }
+    // Still under the pointer when the beat ends, or back under it while the
+    // smile went out: he smiles at it.
+    if (hovered || pressing) {
+      smileIn();
+    }
+  }
+
+  /** Plays `file` once on this canvas over his face. */
+  function playClip(file: CawHead) {
+    return (canvas: HTMLCanvasElement) => {
+      const still = untrack(() => cawStill(file, HEAD));
+      canvas.width = still.backing;
+      canvas.height = still.backing;
+      let here = true;
+      let stop: (() => void) | undefined;
+      let dispose: (() => void) | undefined;
+      stageCaw(file, canvas, still.box, still.dark)
+        .then((stage) => {
+          if (!here) {
+            stage.dispose();
+            return;
+          }
+          dispose = () => stage.dispose();
+          stop = stage.enter(landed, () => {
+            covering = true;
+          });
+        })
+        .catch((error: unknown) => {
+          console.error(`Caw ${file} did not play`, error);
+          landed();
+        });
+      return () => {
+        here = false;
+        stop?.();
+        dispose?.();
+      };
+    };
+  }
+
   /** What he has already seen, by key; null until the fleet is first read. */
   let seen: Set<string> | null = null;
-  let beating = $state(false);
-  let beatEl = $state<HTMLElement | null>(null);
-  const beatStrip = $derived(theme.resolved === "dark" ? beatDark : beatLight);
 
   $effect(() => {
     const keys = needs.map((item) => item.key);
@@ -274,118 +362,44 @@
     });
   });
 
+  /**
+   * The beat goes first: it plays now from rest, and from a smile as soon as
+   * his eyes are open again, whatever the pointer does meanwhile.
+   */
   function beat() {
-    if (beating || !beatEl) {
-      return;
+    if (phase === "rest") {
+      play("head-beat", "beat");
+    } else if (phase !== "beat") {
+      beatNext = true;
+      smileOut();
     }
-    // The beat goes first: a smile under way gives way to it at once.
-    stopSmile();
-    beating = true;
-    const run = beatEl.animate(
-      [
-        { backgroundPositionX: "0px" },
-        { backgroundPositionX: `${-BEAT_BOX * BEAT_FRAMES}px` },
-      ],
-      {
-        duration: (BEAT_FRAMES / BEAT_PACE) * 1000,
-        easing: `steps(${BEAT_FRAMES}, end)`,
-      }
-    );
-    const done = () => {
-      beating = false;
-      // Still under the pointer when it ends: he smiles at it after all.
-      if (hovered) {
-        smileIn();
-      }
-    };
-    run.finished.then(done, done);
-  }
-
-  /* ── The smile ─────────────────────────────────────────────────────── */
-  let smileEl = $state<HTMLElement | null>(null);
-  /** The strip stands in for his face. */
-  let smiling = $state(false);
-  /** His face and the strip swap as drawings do, at once, rather than fade. */
-  let cut = $state(false);
-  /** A pressed head, squashed while the press lasts. */
-  let pressed = $state(false);
-  /** A fine pointer is on him. */
-  let hovered = false;
-  /** A press is down on him. */
-  let pressing = false;
-  /** The strip's one run, played forward into the smile and back out of it. */
-  let smileRun: Animation | undefined;
-  const smileStrip = $derived(
-    theme.resolved === "dark" ? smileDark : smileLight
-  );
-  /** The ^^ drawing, the strip's last: what Reduce Motion fades to. */
-  const SMILE_LAST = -SMILE_BOX * (SMILE_FRAMES - 1);
-
-  /** The run, made the first time he smiles; one drawing a beat. */
-  function stripRun(el: HTMLElement): Animation {
-    const made = el.animate(
-      [
-        { backgroundPositionX: "0px" },
-        { backgroundPositionX: `${SMILE_LAST}px` },
-      ],
-      {
-        duration: ((SMILE_FRAMES - 1) / BEAT_PACE) * 1000,
-        easing: `steps(${SMILE_FRAMES - 1}, end)`,
-        fill: "both",
-      }
-    );
-    made.pause();
-    made.currentTime = 0;
-    made.onfinish = () => {
-      if (made.playbackRate < 0) {
-        // Back at rest: his face again.
-        smiling = false;
-      } else if (!(hovered || pressing)) {
-        // A tap's smile: in, and out again once it has landed.
-        smileOut();
-      }
-    };
-    return made;
   }
 
   function smileIn() {
-    if (beating || !smileEl) {
+    // During the beat he smiles once it lands; while the smile goes out, once
+    // he is back at rest; never ahead of a beat.
+    if (phase !== "rest" || beatNext) {
       return;
     }
     if (!motionOk.current) {
-      cut = false;
-      smiling = true;
+      face = "head-smile";
+      phase = "smiled";
       return;
     }
-    cut = true;
-    smiling = true;
-    smileRun ??= stripRun(smileEl);
-    const end = ((SMILE_FRAMES - 1) / BEAT_PACE) * 1000;
-    if (smileRun.playbackRate > 0 && Number(smileRun.currentTime) >= end) {
-      return;
-    }
-    smileRun.updatePlaybackRate(1);
-    smileRun.play();
+    play("head-smile", "in");
   }
 
   function smileOut() {
-    if (!smiling) {
+    // A smile still coming in goes out once it has landed.
+    if (phase !== "smiled") {
       return;
     }
-    if (!(motionOk.current && smileRun)) {
-      smiling = false;
+    if (!motionOk.current) {
+      face = "compacted";
+      phase = "rest";
       return;
     }
-    smileRun.updatePlaybackRate(-1);
-    smileRun.play();
-  }
-
-  /** Gone at once, wherever it was: the beat takes his place. */
-  function stopSmile() {
-    smileRun?.cancel();
-    smileRun = undefined;
-    smiling = false;
-    cut = false;
+    play("head-unsmile", "out");
   }
 
   function pointerOn(event: PointerEvent) {
@@ -419,9 +433,8 @@
       pressed = false;
       window.removeEventListener("pointerup", lift);
       window.removeEventListener("pointercancel", lift);
-      // A finger has no hover to hold the smile: it ends once it has landed,
-      // or now where nothing plays.
-      if (!hovered && smileRun?.playState !== "running") {
+      // A finger has no hover to hold the smile: it goes once it has landed.
+      if (!hovered) {
         smileOut();
       }
     };
@@ -962,38 +975,26 @@
         type="button"
         bind:this={capsule}
       >
-        <span class="mug" class:cut={cut} class:pressed={pressed}>
+        <span class="mug" class:pressed={pressed}>
           <span
             class="face"
+            data-caw-phase={phase}
+            style:--bleed="{CAW_STILL_BLEED}px"
             style:--dx={0.5 - CAW_HEAD_CENTRE.x}
             style:--dy={0.5 - CAW_HEAD_CENTRE.y}
             style:--side="{HEAD}px"
-            class:away={beating}
-            class:smiled={smiling}
+            class:covered={covering}
           >
-            <CawFace size={HEAD} status="compacted" />
+            <CawFace size={HEAD} status={face} />
+            {#if clip}
+              {#key clip.id}
+                <canvas
+                  aria-hidden="true"
+                  {@attach playClip(clip.file)}
+                ></canvas>
+              {/key}
+            {/if}
           </span>
-          <span
-            aria-hidden="true"
-            class="beat"
-            bind:this={beatEl}
-            style:--box="{BEAT_BOX}px"
-            style:--frames={BEAT_FRAMES}
-            style:background-image="url({beatStrip})"
-            class:on={beating}
-          ></span>
-          <span
-            aria-hidden="true"
-            class="smile"
-            bind:this={smileEl}
-            style:--box="{SMILE_BOX}px"
-            style:--dx={0.5 - SMILE_HEAD_CENTRE.x}
-            style:--dy={0.5 - SMILE_HEAD_CENTRE.y}
-            style:--frames={SMILE_FRAMES}
-            style:background-image="url({smileStrip})"
-            style:background-position-x="{SMILE_LAST}px"
-            class:on={smiling}
-          ></span>
         </span>
         <!-- What waits, on his rim: an arc each, a second lap on top in its
          own ink past ARCS, closed whole past two laps. -->
@@ -1126,8 +1127,8 @@
       display: inline;
     }
   }
-  /* His head: the face, the beat and the smile in one cell, squashed once
-     under a press (DESIGN.md, The Press Rule) with motion allowed. */
+  /* His head: his face and the clip playing over it in one cell, squashed
+     once under a press (DESIGN.md, The Press Rule) with motion allowed. */
   .mug {
     display: grid;
     place-items: center;
@@ -1141,48 +1142,26 @@
       transform: scale(var(--press-scale));
     }
   }
-  .face,
-  .beat,
-  .smile {
-    grid-area: 1 / 1;
-  }
   /* His head's circle at the centre, not his box (CAW_HEAD_CENTRE): moved
      in layout, not by a transform, so his picture stays on whole pixels. */
   .face {
     position: relative;
+    grid-area: 1 / 1;
     inset-inline-start: calc(var(--dx) * var(--side));
     inset-block-start: calc(var(--dy) * var(--side));
     display: grid;
-    transition: opacity var(--dur-fade) var(--ease-out);
   }
-  .face.away,
-  .face.smiled {
-    opacity: 0;
+  /* A clip's first frame is drawn over him: it stands in for his face, which
+     is drawn and ready under it for the frame the clip lands. */
+  .face.covered > :global(.face) {
+    visibility: hidden;
   }
-  /* The beat's and the smile's strips, one drawing showing. */
-  .beat,
-  .smile {
-    inline-size: var(--box);
-    block-size: var(--box);
-    background-repeat: no-repeat;
-    background-size: calc(var(--box) * var(--frames)) var(--box);
-    opacity: 0;
-  }
-  .beat.on,
-  .smile.on {
-    opacity: 1;
-  }
-  /* The smile stands where his face does: its rest drawing's head on it. */
-  .smile {
-    position: relative;
-    inset-inline-start: calc(var(--dx) * var(--box));
-    inset-block-start: calc(var(--dy) * var(--box));
-    transition: opacity var(--dur-fade) var(--ease-out);
-  }
-  /* With motion the face and the strip swap as two drawings do, at once;
-     with less of it they cross-fade, and nothing steps. */
-  .cut :is(.face, .smile) {
-    transition: none;
+  /* The clip, on his face's own canvas box: his box and its bleed. */
+  .face canvas {
+    position: absolute;
+    inset: calc(var(--bleed) * -1);
+    inline-size: calc(var(--side) + 2 * var(--bleed));
+    block-size: calc(var(--side) + 2 * var(--bleed));
   }
 
   .scrim {

@@ -54,12 +54,25 @@ that is all they do with him.
   failure. `loading` and `reconnecting` keep their loops too: they are the page saying it
   cannot show its content yet. One exception: he smiles in reply to the operator's own pointer
   on his head in the top bar (owner, 2026-10-08: "show the smiling ^^ caw's face/animation on
-  hover and on click"). His ^^ face, both eyes closed upward arcs, is the contented hold of
-  `idle-preen` (drawings 18 to 32); the bar plays that loop's tail backward, drawings 0, 34, 33,
-  32 and 31 (rest, eyes shut, ^^), drawn ahead as `bar-beat-smile-<scheme>.png` by `bun run
-  tab-icon` (`SMILE` in `tab-icon-shots.ts`): in while the pointer is on him, back out as it
-  leaves, in and out once for a press. The needs-you beat goes first. Under Reduce Motion his
-  face cross-fades to drawing 31 and back, and nothing steps.
+  hover and on click").
+- His **head in the top bar** is his compacted head, and its moves are files of their own, not
+  statuses, the owner's picks from Backlot film `UeuRv6sumFzEx_Dyz9E5Y` (head only, so nothing
+  of him leaves the bar's glass circle: the whole-body wave it replaced was cut at that circle's
+  edge): `head-beat`, his needs-you beat (beat-b2: he blinks, stretches up into his alert face,
+  holds it and settles back, 1.33 s), played once when something new needs the operator;
+  `head-smile` (smile-3's in: his eyes squeeze into ^^, 0.58 s), played when the operator's
+  pointer comes onto him or a press goes down, and held; `head-unsmile` (smile-3's out, 0.67 s),
+  played when it leaves, or once a tap's smile has landed. Each is a rest with a drawn enter
+  that opens on the drawing the bar shows before it and rests on the one it shows after
+  (`rests.json`; `head-smile` rests on his ^^ drawing, traced from its picture,
+  `stills/light-head-smile.png`, the others on `compacted`), with the compacted note's look. The
+  beat goes first: one that comes while he smiles plays as soon as his eyes are open again.
+  Under Reduce Motion nothing plays: no beat, and his face is the ^^ one while the pointer is on
+  him. The apps draw a clip over his face, which stays up until the clip's first drawing (the
+  face's own, held two frames) is on screen, and his face becomes the drawing it rests on in the
+  frame the clip lands. Every drawing of every head file keeps two device pixels or more inside
+  his item's 36 px glass circle, in light and dark, at the bar's sizes and screen scales
+  (`head_circle.py`).
 - His **still** is the drawing his enter lands on and Reduce Motion holds: a rest's drawing, or
   the first drawing of a waiting status's first loop.
 - `assets/mascot/caw/template-<name>.riv` (`code`, `launch`, `seo`, `brand`, `design`,
@@ -185,10 +198,16 @@ them (the editor cannot import `.riv` files). From `assets/mascot/scripts` (`bun
   `scene.mjs` builds from; one that fails is not. `uv run trace_clip.py --safe [--dir <clips
   folder>] [clip …]` runs the safe-area check alone over enters already traced, names the
   drawings outside the line and exits non-zero if there are any. An enter of a status with inks
-  of its own is traced in them, and its note is not a white mark. An enter that lands on a
-  still traced from a picture keeps the take's whole-pixel placement: `trace.py`'s finer fit
-  sizes a take by its traced outline's extent, and one tuft tip traced 1.75 units high drew
-  those landings 0.5% small.
+  of its own is traced in them, and its note is not a white mark (the gates read each ink from
+  its own paths, not by colour off the picture). A drawing folds into the landing's two-frame
+  snap only when it is inked as the still on 98% of its pixels, the landing gate's own share.
+  `--opens <file>` traces a clip that opens on a still instead of an empty page (the head
+  files): its opening run is snapped to that still's drawing and gated as the landing is, and
+  its eye whites are told from both stills, as a loop's are. `tkA+tkB` traces two takes as one
+  clip, the first ending on the drawing the second opens on. `--closed-eyes <file>` gives a
+  blink the take drew as a blank head (no light inside his black at all) the closed eyes of that
+  file's drawing, moved onto the blink's silhouette: his closed eye is drawn, white arcs in his
+  black, never a plain blob.
 - `uv run trace_ledge.py <clip> <take>` traces a ledge clip into `assets/mascot/clips/<clip>/`:
   Caw coming up from behind a ledge and peering over it, for a page that puts its own ledge
   under him (the landing page; `site/scripts/import-caw.mjs` copies a clip folder; the apps,
@@ -214,7 +233,7 @@ them (the editor cannot import `.riv` files). From `assets/mascot/scripts` (`bun
 - `node build.mjs` writes `caw/<status>.riv`, `caw/peek.riv` and `caw/template-<name>.riv` from
   `scene.mjs` and the traced drawings in `assets/mascot/loops/` and `assets/mascot/clips/`, and the
   same bytes to each app's copy of the files that app shows:
-  `apps/apple/Packages/CawCoKit/Sources/CawCoMascot/Resources/caw/` (the statuses and the peek),
+  `apps/apple/Packages/CawCoKit/Sources/CawCoMascot/Resources/caw/` (all but the template poses),
   which `CawView` loads, and `apps/dashboard/src/lib/assets/caw/` (all of them), which the
   dashboard's `Caw.svelte` loads. Each app keeps its own copy because each app is built from its
   own directories. It removes any other `.riv` in those folders. rive-mcp-server's exported `buildScene` and
@@ -238,7 +257,7 @@ them (the editor cannot import `.riv` files). From `assets/mascot/scripts` (`bun
   - every drawing stays on screen two frames or more (on twos), read back from the file;
   - load plus instancing (parse, artboard, state machine, bind, first frame) must take 100 ms or
     less, the median of five steady runs;
-  - a resting file (`ready`, `sleeping`, `compacted`, `peek`, each template pose) must show its one drawing, in the
+  - a resting file (`ready`, `sleeping`, `compacted`, `peek`, each template pose and head file) must show its one drawing, in the
     scheme `dark` selects, and nothing else, with motion on or reduced;
   - `enters` reads on exactly in the files with a drawn enter;
   - `pixel` sets the dark rim's width and nothing else: light renders the same at every value;
@@ -248,11 +267,15 @@ them (the editor cannot import `.riv` files). From `assets/mascot/scripts` (`bun
     each two frames or more, and lands on his still with `entered`, after as long as the enter
     lasts; a file with none shows a first drawing (its rest, or a loop's) on its first frame
     and never fires `entered`.
+  - loaded with `dark` on, his first frame carries his rim whole (its mean alpha 90% of the
+    settled still's or more): the scheme starts where the view model is, and fades only on a
+    change.
 
   The runtime's clocks and entropy are pinned so the random turns repeat across two runs. It
   prints one line per file (the peek's names its ledge line), the totals (`loops animate: 7/7`,
-  `stills rest: 10/10`, `reducedMotion holds still: 17/17`, `drawn enters play and land: 5/5`,
-  `no drawn enter, simply there: 12/12`, `pixel sizes the dark rim: 17/17`, `files proven: 17/17`)
+  `stills rest: 13/13`, `reducedMotion holds still: 20/20`, `drawn enters play and land: 8/8`,
+  `no drawn enter, simply there: 12/12`, `pixel sizes the dark rim: 20/20`, `rim whole at load:
+  20/20`, `files proven: 20/20`)
   and, on success, `Caw view model drives the state machine in every file`.
 - `node measure-rim.mjs [--sizes 14,18,34,48,80] [--light]` measures the dark rim as the apps
   draw him: each file's still framed as `cawStill` frames it, at each size, 1x and 2x, on the
@@ -260,6 +283,10 @@ them (the editor cannot import `.riv` files). From `assets/mascot/scripts` (`bun
   px, the share of the first ring of pixels round his body at 3:1 or more against the page,
   and that ring's tenth-percentile contrast. `--light` adds a digest of each light picture, to
   show a change left light alone.
+- `uv run head_circle.py` draws every drawing of every head file as the bar draws his head (the
+  dashboard's 20 px head at 1x and 3x, Apple's 22 pt at 2x and 3x, in each app's 36 glass
+  circle), in light and in dark with his rim, and fails if any ink comes within two device
+  pixels of the circle's inner edge; it prints each file's least clearance.
 
 ## What the files hold today
 
@@ -277,7 +304,9 @@ reused rather than traced again.
   twice in a row; a resting status sits on `rest`.
 - **Scheme** layer: `dark` fades in the thin cream rim the owner picked (Ivory #F4F0E6, the kit's
   dark-rim-cream recipe: 5.31 px at the stills' scale, or one device pixel where that is wider,
-  by `pixel`) around every drawing over 200 ms. The rim
+  by `pixel`) around every drawing over 200 ms when the scheme changes; a file starts in the
+  scheme its view model holds, with its rim already drawn, so a clip played over a face the
+  app has drawn never fades its rim in. The rim
   is the silhouette's own stroke, drawn under its fill, so it costs no extra shapes. Light and
   dark share every drawing, so switching mid-loop never jumps. The kit has no light-mode line:
   light Caw has none, as in the stills.
@@ -291,7 +320,16 @@ reused rather than traced again.
    adapter (huggingface.co/alvdansen/h3-keyframe-animation; `h3_seq_step12000` at 1.0, both
    references the status's still so the loop returns to its pose, 124 frames at 24 fps), with the
    caption in the adapter's sequence dialect. The chosen takes are listed in `loops/takes.json`;
-   Backlot film `UhDXc9y9Goj-yn2sUU9A5`.
+   Backlot film `UhDXc9y9Goj-yn2sUU9A5`. The adapter takes exactly two subject pictures (the
+   window's first drawing and its natural end), so a key drawing that lives only on this
+   machine (a still, a picture made by image edit) goes into Backlot as a cast image first.
+   `backlot_save_cast` takes an https or `data:` URL, which is too large to pass for a 1024 px
+   picture, so create the prop with `backlot_save_cast` and upload each picture to Backlot's own
+   route: `curl -X POST -H 'Origin: https://backlot.bewinxed.com' -F 'file=@key.png' -F tag=study
+   https://backlot.bewinxed.com/api/cast/<entityId>/images` (the Origin header is SvelteKit's
+   cross-site check; the reply carries the new imageId). The head files' keys are cast "Caw bar
+   head keys", framed as compacted-enter's take (the still box at 0.6248 box units a take pixel,
+   its corner at take pixel (102, 132) of a 1024 frame).
 2. **Trace.** `trace.py` reads each take's frames and holds them on twos: each frame pair shows
    its first frame's drawing, and pairs showing the same drawing are one longer hold. It cuts Caw
    from the paper, snapping every pixel to his inks as measured across the take's drawings (black,
@@ -302,8 +340,11 @@ reused rather than traced again.
    that nothing inside an eye is a gap: a region guessed paper inside an eye's hull is its
    pupil's catchlight. Eye white stays only inside his body's black; white elsewhere (a slit's
    pinched end, a speck in his vermilion, a sliver on a prop's lit edge) takes the ink it sits
-   on, so no eye white touches the page round him. It
-   registers drawing 00 onto the status's still and traces each ink with vtracer (spline, holes
+   on, so no eye white touches the page round him. A pixel is vermilion or yellow only with
+   that ink's chroma (neutral greys, a soft frame's blend of black into white, sit nearer either
+   than black or white). It registers drawing 00 onto the status's still where the two overlap
+   most (`register()`: scale and offset searched from the extents' whole-pixel estimate, so no
+   single tip or edge pixel decides where a loop sits) and traces each ink with vtracer (spline, holes
    kept) into `body-NN.svg`, with `timing.json`. `trace.py --halo` reports yellow traced where
    the take has none, and `trace.py --eyes` reports any eye white a drawing on disk shows as
    see-through (a hole in dark); it ends "eyes: N/22 loops intact" and fails if any loop has one.

@@ -1,0 +1,155 @@
+{
+  "take": "tk_qlWCrklQ7BwrqSfE_6-XX",
+  "frames": 16,
+  "fps": 24,
+  "drawings": [
+    {
+      "start": 0,
+      "length": 2,
+      "drawing": 8
+    },
+    {
+      "start": 2,
+      "length": 2,
+      "drawing": 5
+    },
+    {
+      "start": 4,
+      "length": 2,
+      "drawing": 4
+    },
+    {
+      "start": 6,
+      "length": 4,
+      "drawing": 3
+    },
+    {
+      "start": 10,
+      "length": 2,
+      "drawing": 2
+    },
+    {
+      "start": 12,
+      "length": 2,
+      "drawing": 1
+    },
+    {
+      "start": 14,
+      "length": 2,
+      "drawing": 7
+    }
+  ],
+  "placement": {
+    "scale": 0.6258413642328071,
+    "x": -63.91218608389147,
+    "y": -82.88944056887942
+  },
+  "stillOverlap": 0.9949,
+  "halo": {
+    "01": 0,
+    "02": 0,
+    "03": 0,
+    "04": 0,
+    "05": 0,
+    "07": 0,
+    "08": 0
+  },
+  "probe": {
+    "take": "tk_qlWCrklQ7BwrqSfE_6-XX",
+    "specksCleared": {},
+    "whiteMarksRemovedAtTrace": [],
+    "tracedFrames": 22,
+    "traced": [
+      [0, 6, 109513],
+      [6, 2, 109216],
+      [8, 2, 108833],
+      [10, 4, 108184],
+      [14, 2, 106674],
+      [16, 2, 105677],
+      [18, 4, 104573]
+    ],
+    "trimmedTrailingFrames": 2,
+    "last": {
+      "against": "compacted/body-00",
+      "iou": 0.9931,
+      "sameInks": 0.9905,
+      "outlineMaxPx": 3.61,
+      "outlineP99Px": 2.0,
+      "largestDiffs": [
+        {
+          "px": 75,
+          "at": [359, 218]
+        },
+        {
+          "px": 19,
+          "at": [126, 57]
+        },
+        {
+          "px": 18,
+          "at": [16, 276]
+        }
+      ]
+    },
+    "first": {
+      "against": "head-smile/body-00",
+      "iou": 0.9939,
+      "sameInks": 0.9899,
+      "outlineMaxPx": 2.83,
+      "outlineP99Px": 2.0,
+      "largestDiffs": [
+        {
+          "px": 62,
+          "at": [363, 220]
+        },
+        {
+          "px": 39,
+          "at": [127, 53]
+        },
+        {
+          "px": 39,
+          "at": [363, 316]
+        }
+      ]
+    },
+    "trimmedLeadingFrames": 0,
+    "frames": 16,
+    "slots": 7,
+    "drawings": 7,
+    "onTwos": true,
+    "whiteMarks": {},
+    "halo": {
+      "01": 0,
+      "02": 0,
+      "03": 0,
+      "04": 0,
+      "05": 0,
+      "07": 0,
+      "08": 0
+    },
+    "eyesCut": {},
+    "gates": {
+      "landing": true,
+      "opens": true,
+      "onTwos": true,
+      "whiteMarks": true,
+      "halo": true,
+      "eyes": true,
+      "inkOrder": true,
+      "safeArea": true
+    },
+    "inksOutOfOrder": {
+      "foreign": [],
+      "ownEarly": [],
+      "ownBy": {
+        "1": "eyes",
+        "2": "eyes",
+        "3": "eyes",
+        "4": "eyes",
+        "5": "eyes",
+        "6": "eyes",
+        "7": "eyes"
+      }
+    },
+    "outsideSafe": []
+  }
+}

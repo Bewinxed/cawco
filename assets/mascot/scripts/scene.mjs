@@ -71,8 +71,17 @@ export const TEMPLATES = [
   "template-design",
   "template-social",
 ];
-/** Every file build.mjs writes: one per status, the ledge files, then the template poses. */
-export const FILES = [...STATUS, ...LEDGES, ...TEMPLATES];
+/**
+ * Caw's head in the top bar, files that are not statuses: the owner's picks from Backlot film
+ * `UeuRv6sumFzEx_Dyz9E5Y`, each a rest with a drawn enter that opens on the bar's head and lands
+ * on a still (trace_clip.py --opens). `head-beat` is his needs-you beat: from his compacted head he
+ * blinks, stretches up into the alert face, holds it and settles back (beat-b2). `head-smile`
+ * squeezes his eyes into ^^ and rests there; `head-unsmile` opens them again onto his compacted
+ * head (smile-3, its in and its out). Reduce Motion holds each file's rest.
+ */
+export const HEADS = ["head-beat", "head-smile", "head-unsmile"];
+/** Every file build.mjs writes: one per status, the ledge files, the template poses, the bar's head. */
+export const FILES = [...STATUS, ...LEDGES, ...TEMPLATES, ...HEADS];
 /** Each file's name: assets/mascot/caw/<name>.riv. */
 export const fileName = (status) => status.replace("_", "-");
 
@@ -172,10 +181,13 @@ const INK = { cream: "#fbf4e5", yellow: "#f2cc6b" };
  * `compacted`'s cream note measured 1.0:1 against the light page, so it is filled with his
  * yellow ink, the butter note the owner picked ("I choose butter"). It has no line of its own:
  * the silhouette the rim is grown from includes the note, so on the dark page one rim runs round
- * head and note.
+ * head and note. The bar's head files carry the same note, drawn the same.
  */
 const LOOK = {
   compacted: { note: INK.yellow },
+  "head-beat": { note: INK.yellow },
+  "head-smile": { note: INK.yellow },
+  "head-unsmile": { note: INK.yellow },
 };
 /**
  * The drawings are placed on the stills' 512 px box, but the acting leaves it. The artboard is
@@ -382,19 +394,31 @@ export function statusScene(status) {
   const scheme = {
     name: "Scheme",
     states: [
+      { name: "pending", animation: "scheme_light" },
       { name: "light", animation: "scheme_light" },
       { name: "dark", animation: "scheme_dark" },
     ],
+    // A file starts in the scheme its view model holds, with no fade: a fade carries a change
+    // (FADE_MS), and a file loading on the dark page has not changed scheme. Entering on light
+    // and fading to dark drew his rim in over 200 ms at the start of every clip, under a head
+    // the bar had drawn with it (the needs-you beat, the smile). The view model's values reach
+    // the state machine during its first advance, after the entry's transitions are chosen (a
+    // condition on `dark` there read false), so the file waits one advance in `pending` and
+    // then takes its scheme at once. The fades run between the two schemes only: from `any`,
+    // they would also leave `pending` (a layer's `any` transitions are tried before a state's
+    // own) and fade the rim in after all.
     transitions: [
-      { from: "entry", to: "light" },
+      { from: "entry", to: "pending" },
+      { from: "pending", to: "dark", when: flag("dark", true) },
+      { from: "pending", to: "light", when: flag("dark", false) },
       {
-        from: "any",
+        from: "light",
         to: "dark",
         durationMs: FADE_MS,
         when: flag("dark", true),
       },
       {
-        from: "any",
+        from: "dark",
         to: "light",
         durationMs: FADE_MS,
         when: flag("dark", false),

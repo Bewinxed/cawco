@@ -51,5 +51,20 @@
     "clip": "climb-peer",
     "drawing": 18,
     "ledgeLine": 0.5684
+  },
+  "head-beat": {
+    "loop": "compacted",
+    "drawing": 0,
+    "inks": ["cream"]
+  },
+  "head-smile": {
+    "loop": "head-smile",
+    "drawing": 0,
+    "inks": ["cream"]
+  },
+  "head-unsmile": {
+    "loop": "compacted",
+    "drawing": 0,
+    "inks": ["cream"]
   }
 }

@@ -1,0 +1,26 @@
+{
+  "still": "light-head-smile.png",
+  "frames": 2,
+  "fps": 24,
+  "drawings": [
+    {
+      "start": 0,
+      "length": 2,
+      "drawing": 0
+    }
+  ],
+  "placement": {
+    "scale": 0.6251526251526252,
+    "x": 0.0,
+    "y": 0.0
+  },
+  "stillOverlap": 0.9967,
+  "inks": {
+    "black": 102541,
+    "white": 2021,
+    "cream": 4024
+  },
+  "halo": {
+    "00": 0
+  }
+}

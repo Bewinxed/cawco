@@ -31,11 +31,19 @@
     | "template-social";
 
   /**
-   * Every file Caw is drawn from: a status's, `peek`, his ledge peek, or a
-   * template pose, none of which is a status (assets/mascot/README.md,
-   * Contract).
+   * His head in the top bar (NeedsCaw): `head-beat`, his needs-you beat;
+   * `head-smile`, his ^^ smile, and `head-unsmile`, back out of it. Each opens
+   * on the drawing the bar shows before it and lands on the one it shows
+   * after (assets/mascot/README.md, Contract). Not statuses.
    */
-  export type CawFile = CawStatus | CawPose | "peek";
+  export type CawHead = "head-beat" | "head-smile" | "head-unsmile";
+
+  /**
+   * Every file Caw is drawn from: a status's, `peek`, his ledge peek, a
+   * template pose, or the bar's head, none of which is a status
+   * (assets/mascot/README.md, Contract).
+   */
+  export type CawFile = CawStatus | CawPose | CawHead | "peek";
 
   /**
    * Where the ledge runs across peek.riv's 512 still box, as a share of its
@@ -143,10 +151,11 @@
   export interface CawStage {
     dispose: () => void;
     /**
-     * His coming in, played once on the runtime's frames. `landed` is called
-     * in the frame he reaches his still, already drawn. Returns its stop.
+     * His coming in, played once on the runtime's frames. `drawn` is called
+     * once its first frame is on the canvas, `landed` in the frame he reaches
+     * his still, already drawn. Returns its stop.
      */
-    enter: (landed: () => void) => () => void;
+    enter: (landed: () => void, drawn?: () => void) => () => void;
     /** His still, drawn once: the scheme's rim settled, nothing left to play. */
     rest: () => void;
   }
@@ -209,12 +218,16 @@
         draw();
         rive.resolveAnimationFrame();
       },
-      enter(landed) {
+      enter(landed, drawn) {
         let last: number | undefined;
         let request = rive.requestAnimationFrame(function tick(now) {
+          const first = last === undefined;
           machine.advanceAndApply(last === undefined ? 0 : (now - last) / 1000);
           last = now;
           draw();
+          if (first) {
+            drawn?.();
+          }
           if (entered.hasChanged) {
             landed();
             return;

@@ -583,23 +583,35 @@ public final class CawWaiting: UIViewController {
     }
 }
 
-/// What a Caw is drawn from: a status's file, or a ledge file (peek.riv, climb.riv: his drawn
-/// enter peering or climbing over an edge, resting on its landing).
+/// What a Caw is drawn from: a status's file, a ledge file (peek.riv, climb.riv: his drawn
+/// enter peering or climbing over an edge, resting on its landing), or one of his head's files in
+/// the top bar (`CawBeat`).
 enum CawFile: Hashable, Sendable {
     case status(CawStatus)
     case ledge(CawView.Ledge)
+    case head(CawHeadFile)
 
     var name: String {
         switch self {
         case let .status(status): status.rawValue
         case .ledge(.peek): "peek"
         case .ledge(.climb): "climb"
+        case let .head(file): file.rawValue
         }
     }
 
     var isLedge: Bool {
         if case .ledge = self { true } else { false }
     }
+}
+
+/// His head's files in the top bar, each a drawn enter that opens on the drawing the bar shows
+/// before it and rests on the one it shows after (assets/mascot/README.md, Contract): his
+/// needs-you beat, his ^^ smile, and back out of it.
+enum CawHeadFile: String, Sendable {
+    case beat = "head-beat"
+    case smile = "head-smile"
+    case unsmile = "head-unsmile"
 }
 
 /// One file's Caw: its Rive view, the `Caw` instance bound to its state machine, and the
