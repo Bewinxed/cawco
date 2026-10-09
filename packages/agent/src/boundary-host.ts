@@ -178,6 +178,9 @@ await SandboxManager.initialize(settings, ask);
  */
 const PROTECTED = ["config", "hooks", "modules"];
 
+/** A process's entry in `/proc`. */
+const PID = /^\d+$/;
+
 /** The mount points of `pid`'s mount namespace, as `/proc/<pid>/mountinfo` spells them (octal escapes read). */
 const mountPoints = (pid: number): Set<string> | undefined => {
   try {
@@ -192,7 +195,8 @@ const mountPoints = (pid: number): Set<string> | undefined => {
         .filter(Boolean)
     );
   } catch {
-    return;
+    // The sandbox is gone: it has no mount table.
+    return undefined;
   }
 };
 
@@ -200,7 +204,8 @@ const pidNamespace = (pid: string | number): string | undefined => {
   try {
     return readlinkSync(`/proc/${pid}/ns/pid`);
   } catch {
-    return;
+    // Gone, or another user's.
+    return undefined;
   }
 };
 
@@ -266,7 +271,7 @@ const startSandbox = async (): Promise<Sandbox | undefined> => {
         );
         const space = pidNamespace(inner);
         const idle = readdirSync("/proc").filter(
-          (pid) => /^\d+$/.test(pid) && pidNamespace(pid) === space
+          (pid) => PID.test(pid) && pidNamespace(pid) === space
         );
         const mounted = mountPoints(inner) ?? new Set<string>();
         const sandbox: Sandbox = {

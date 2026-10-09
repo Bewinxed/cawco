@@ -1039,7 +1039,14 @@ const planOf = async (ref: WorkspaceRef): Promise<Plan> => {
       .slice(0, 16),
     spec: {
       command: runtime,
-      args: [host, files.settings, files.runner, fifoOf(id), policy.clone, READY],
+      args: [
+        host,
+        files.settings,
+        files.runner,
+        fifoOf(id),
+        policy.clone,
+        READY,
+      ],
       // The host starts here, never in the clone: Bun reads bunfig.toml and
       // .env from where it starts (boundary-host.ts).
       cwd: stateDir(id),
@@ -1095,11 +1102,7 @@ const inSandbox = (seen: Seen[], inner: number | undefined): Seen[] => {
  * left — on Linux anything in the sandbox's pid namespace that was not there
  * when its runner was ready, on macOS anything carrying the runner's marker.
  */
-const busy = async (
-  seen: Seen[],
-  id: string,
-  held: Held
-): Promise<boolean> => {
+const busy = async (seen: Seen[], id: string, held: Held): Promise<boolean> => {
   const exec = join(stateDir(id), "exec");
   if (
     seen.some((one) => one.pid !== process.pid && one.command.includes(exec))
@@ -1424,7 +1427,7 @@ wait "$out" "$err"
 ${linux ? followTaker(id) : `taker=${held.pid}`}
 # A sandbox stopped mid-command leaves no status: the command is cut off.
 until [ -s "$req/status" ]; do
-${linux ? "  [ -z \"$taker\" ] && [ -s \"$req/sandbox\" ] && take" : ""}
+${linux ? '  [ -z "$taker" ] && [ -s "$req/sandbox" ] && take' : ""}
   if ! kill -0 "\${taker:-${held.pid}}" 2>/dev/null; then
     echo ${shellQuote(`cawco: workspace ${id}'s boundary stopped while this command ran, so it was cut off.`)} >&2
     rm -rf "$req"

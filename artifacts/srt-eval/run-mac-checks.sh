@@ -36,7 +36,8 @@ state=$HOME/.cawco/workspaces/$id
 echo "workspace $id: $clone"
 r() { (cd "$clone" && "$state/exec" "$@"); }
 
-step "the generated profile (first lines)"
+step "the generated profile (whole in $checkout/macos-boundary.sb; first lines)"
+cp "$state/boundary.sb" "$checkout/macos-boundary.sb"
 head -12 "$state/boundary.sb"
 
 step "escapes (writes verified here, outside the sandbox)"
