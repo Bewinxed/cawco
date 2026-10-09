@@ -2,8 +2,9 @@
  * Each harness's own to-do list, read where the harness keeps it and mapped
  * into one shape, a session's plan steps (`PlanStep`, core plan.ts). One
  * reader per harness:
- * - Claude Code: its task ledger, one JSON file per task under
- *   `~/.claude/tasks/<session>/`, read on the session's machine;
+ * - Claude Code: its task ledger, one JSON file per task under its config
+ *   dir's `tasks/<session>/` (the session's account's dir, else `~/.claude`),
+ *   read on the session's machine;
  * - OpenCode: its todo list, through the agent's `getTodos` control;
  * - pi: none.
  * Nothing here is stored: the harness's list is the truth.
@@ -48,7 +49,10 @@ export interface HarnessPlanDeps {
   ) => Promise<CommandResult>;
 }
 
-type Row = Pick<InstanceRow, "cwd" | "harness" | "machineId" | "sessionId">;
+type Row = Pick<
+  InstanceRow,
+  "accountId" | "cwd" | "harness" | "machineId" | "sessionId"
+>;
 
 const statusOf = (raw: unknown): PlanStep["status"] =>
   raw === "in_progress" || raw === "completed" ? raw : "pending";
@@ -91,9 +95,21 @@ export const readClaudeLedger = async (
   ) {
     return [];
   }
-  const dir = `"$HOME/.claude/tasks/${row.sessionId}"`;
-  // Each file as its number on a line, its JSON, then a record separator.
-  const cmd = `[ -d ${dir} ] || exit 0; for f in ${dir}/*.json; do [ -f "$f" ] && { basename "$f" .json; cat "$f"; printf '\\n\\036\\n'; }; done; exit 0`;
+  // Claude Code keeps the ledger in its config dir: a session on an account
+  // runs in that account's (`~/.cawco/accounts/<id>/claude`, core paths.ts
+  // `accountConfigDir`, where a move also carries it), one from before
+  // accounts in `~/.claude`. The account's dir is read first.
+  const dirs = [
+    ...(row.accountId && SESSION_ID.test(row.accountId)
+      ? [
+          `"$HOME/.cawco/accounts/${row.accountId}/claude/tasks/${row.sessionId}"`,
+        ]
+      : []),
+    `"$HOME/.claude/tasks/${row.sessionId}"`,
+  ];
+  // The first dir that exists; each file as its number on a line, its JSON,
+  // then a record separator.
+  const cmd = `d=; for c in ${dirs.join(" ")}; do [ -d "$c" ] && { d=$c; break; }; done; [ -n "$d" ] || exit 0; for f in "$d"/*.json; do [ -f "$f" ] && { basename "$f" .json; cat "$f"; printf '\\n\\036\\n'; }; done; exit 0`;
   try {
     const result = await deps.run(row.machineId, "/", cmd, READ_MS);
     if (result.exitCode !== 0) {
