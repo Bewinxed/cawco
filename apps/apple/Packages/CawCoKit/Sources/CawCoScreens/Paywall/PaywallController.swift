@@ -979,9 +979,15 @@ public enum PaywallProbe {
                    HeroBanner(title: PaywallCopy.bannerTitle(harness: "pi", machine: "obelisk"), body: PaywallCopy.bannerExample)]
                 : ["Claude Code", "OpenCode", "pi"].map { HeroBanner(title: PaywallCopy.bannerTitle(harness: $0, machine: "your machine"), body: PaywallCopy.bannerExample) }
             let paywall = PaywallController.present(.onboarding, banners: banners, from: self)
+            let log = Logger(subsystem: "dev.cawco.app", category: "Paywall")
+            log.notice("probe: the sheet is presented")
             Task { @MainActor [weak paywall] in
                 try? await Task.sleep(for: .seconds(15))
-                paywall?.printEvidence()
+                guard let paywall else {
+                    log.error("probe: the sheet is gone before its evidence")
+                    return
+                }
+                paywall.printEvidence()
             }
         }
     }
@@ -993,7 +999,10 @@ extension PaywallController {
     /// has, and the links row's insets.
     fileprivate func printEvidence() {
         let sheet = parent?.view ?? view!
-        guard let window = sheet.window else { return }
+        guard let window = sheet.window else {
+            log.error("probe: the sheet is not in a window")
+            return
+        }
         let inWindow = sheet.convert(sheet.bounds, to: window)
         let visible = min(inWindow.maxY, window.bounds.maxY) - inWindow.minY
         func showing(_ node: UIView) -> Bool {
@@ -1033,8 +1042,15 @@ extension PaywallController {
         let evidence: [String: Any] = ["screen": builtKey, "sheet": ["width": sheet.bounds.width, "visible": visible, "top": inWindow.minY],
                                        "hero": hero.convert(hero.bounds, to: sheet).debugDescription,
                                        "proseWords": words, "links": links, "buttons": buttons, "labels": rows]
-        if let data = try? JSONSerialization.data(withJSONObject: evidence, options: [.sortedKeys]), let line = String(data: data, encoding: .utf8) {
-            print("PAYWALL-EVIDENCE \(line)")
+        // Into the app's Documents (`simctl get_app_container … data`), where the pass reads it.
+        guard let data = try? JSONSerialization.data(withJSONObject: evidence, options: [.sortedKeys]),
+              let folder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
+        let file = folder.appendingPathComponent("paywall-evidence.json")
+        do {
+            try data.write(to: file)
+            log.notice("probe: evidence written to \(file.path, privacy: .public)")
+        } catch {
+            log.error("probe: evidence not written: \(String(describing: error), privacy: .public)")
         }
     }
 
