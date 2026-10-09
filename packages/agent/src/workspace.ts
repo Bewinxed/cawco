@@ -23,18 +23,13 @@ import type {
   WorkspaceRef,
 } from "@cawco/core";
 import { WORKSPACE_GIT_TIMEOUT_MS } from "@cawco/core";
-import { isSecretFileName } from "@cawco/core/paths";
+import { isSecretFileName, workspacesDir } from "@cawco/core/paths";
 import {
   repositoryConfigProblem,
   SAFE_GIT,
   SAFE_GIT_SHELL,
 } from "@cawco/core/safe-git";
-import {
-  closeBoundary,
-  ensureBoundary,
-  shellQuote,
-  workspacesDir,
-} from "./boundary";
+import { closeBoundary, ensureBoundary, shellQuote } from "./boundary";
 import { prepareClone } from "./clone";
 import { expandHome } from "./fs";
 import { runWorkflowCommand } from "./workflow-command";

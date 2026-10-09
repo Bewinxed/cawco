@@ -200,6 +200,12 @@ export async function buildBinary(options: {
       join(ROOT, "packages/agent/src/boundary-log-protocol.ts")
     ).bytes()
   );
+  // The same for the workspace judge: core and pi import it as a module, and
+  // each workspace's hook and OpenCode's plugin run its copy.
+  await writeFile(
+    join(work, "workspace-judge.ts"),
+    await Bun.file(join(ROOT, "packages/core/src/workspace-judge.ts")).bytes()
+  );
   const assets = [
     ...(await filesUnder(join(ROOT, "packages/hub/drizzle"), "drizzle")),
     ...(await filesUnder(join(ROOT, "packages/hub/skills"), "skills")),
@@ -234,6 +240,8 @@ export async function buildBinary(options: {
     // Run as plain Bun by a macOS workspace's `log` shim (boundary.ts).
     ["boundary/log.ts", join(ROOT, "packages/agent/src/boundary-log.ts")],
     ["boundary/log-protocol.ts", join(work, "boundary-log-protocol.ts")],
+    // Run as plain Bun beside the hook, and imported by OpenCode's plugin (boundary.ts).
+    ["boundary/workspace-judge.ts", join(work, "workspace-judge.ts")],
     ["native/claude", await nativeClaude(options.target, work)],
   ] as [string, string][];
   const assetsSource = `${assets.map(([, path], i) => `import a${i} from ${JSON.stringify(path)} with { type: "file" };`).join("\n")}\nexport const binaryAssets = {${assets.map(([key], i) => `${JSON.stringify(key)}:a${i}`).join(",")}};`;

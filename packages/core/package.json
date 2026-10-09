@@ -24,6 +24,8 @@
     "./install-script": "./src/install-script.ts",
     "./preview-proxy": "./src/preview-proxy.ts",
     "./paths": "./src/paths.ts",
+    "./workspace-policy": "./src/workspace-policy.ts",
+    "./workspace-judge": "./src/workspace-judge.ts",
     "./claude-dirs": "./src/claude-dirs.ts",
     "./safe-git": "./src/safe-git.ts",
     "./tool-presentation": "./src/tool-presentation.ts",

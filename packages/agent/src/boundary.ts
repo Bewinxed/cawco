@@ -83,10 +83,16 @@ import { binaryRoot } from "@cawco/core/binary-installation";
 import {
   AGENT_SOCKET_ENV,
   credentialStores,
+  darwinUserDirs,
   SECRET_FILE_NAME,
   sessionIdentityDir,
   workspaceCacheDir,
   workspaceCacheEnv,
+  workspaceCaches,
+  workspacePolicyFile,
+  workspaceScratchDir,
+  workspaceStateDir,
+  workspacesDir,
 } from "@cawco/core/paths";
 import {
   commandLine as commandLineOf,
@@ -95,6 +101,7 @@ import {
 } from "@cawco/core/process-identity";
 import { embeddedFile, runtimeDataDir, standalone } from "@cawco/core/runtime";
 import { type ProcSpec, sessiondEndpoint } from "@cawco/core/sessiond";
+import { workspacePolicy } from "@cawco/core/workspace-policy";
 import { cloneInPlace } from "./clone";
 import { logRelay } from "./log-relay";
 import { procIdFor } from "./proc-id";
@@ -104,10 +111,12 @@ import { ensureSessiond, SessiondClient } from "./sessiond-client";
 export interface Boundary {
   /** `exec [--cwd-out FILE] COMMAND`: runs COMMAND inside the boundary, in the caller's directory. */
   readonly exec: string;
-  /** The PreToolUse hook a claude session runs before each shell tool call ({@link hookScript}). */
+  /** The PreToolUse hook a claude session runs before each tool call ({@link hookScript}). */
   readonly hook: string;
   /** The anchor (Linux) or runner (macOS) process. */
   readonly pid: number;
+  /** The workspace's policy file, which every harness judges its file tools by (`workspace-policy.ts`). */
+  readonly policy: string;
   /** The workspace's scratch dir, its `/tmp`: `~/.cawco/workspaces/<id>/tmp`, on disk and outside the clone. */
   readonly scratch: string;
 }
@@ -124,18 +133,14 @@ interface Held extends Boundary {
   readonly path: string;
 }
 
-/** Where a workspace's boundary keeps its executor and state; read-only inside the boundary. */
-export const workspacesDir = (): string =>
-  join(homedir(), ".cawco", "workspaces");
-const stateDir = (id: string): string => join(workspacesDir(), id);
+const stateDir = workspaceStateDir;
 
 /**
- * A workspace's scratch dir: beside its state, so on disk (never tmpfs) and
- * outside its clone (never in git status). A command inside the boundary
- * writes in it but cannot remove it: on Linux it is a mountpoint, on macOS
- * Seatbelt refuses its unlink.
+ * A workspace's scratch dir (`workspaceScratchDir`). A command inside the
+ * boundary writes in it but cannot remove it: on Linux it is a mountpoint, on
+ * macOS Seatbelt refuses its unlink.
  */
-const scratchOf = (id: string): string => join(stateDir(id), "tmp");
+const scratchOf = workspaceScratchDir;
 
 /** The disk behind a Linux boundary's private user runtime dir. */
 const runOf = (id: string): string => join(stateDir(id), "run");
@@ -184,29 +189,14 @@ const READY = "cawco-boundary-ready";
 const STOP_TIMEOUT_MS = 2000;
 
 /**
- * The caches a command may write, so installs and builds keep working: the
- * workspaces' own cache, which the executor points every tool at
- * (`workspaceCacheEnv`). Every host cache (`~/.cache`, `~/.bun`, `~/.npm`,
+ * The caches a command may write, so installs and builds keep working
+ * (`workspaceCaches`): the workspaces' own cache, which the executor points
+ * every tool at (`workspaceCacheEnv`), and on macOS the provisioning profile
+ * folders. Every host cache (`~/.cache`, `~/.bun`, `~/.npm`,
  * `~/Library/Caches`, Xcode's DerivedData, SwiftPM's) is read-only inside: a
  * host process runs what is in them.
  */
-const cachesOf = (): string[] => [
-  workspaceCacheDir(),
-  ...(process.platform === "darwin"
-    ? [
-        // Where automatic signing keeps the provisioning profiles it fetches.
-        join(
-          homedir(),
-          "Library",
-          "Developer",
-          "Xcode",
-          "UserData",
-          "Provisioning Profiles"
-        ),
-        join(homedir(), "Library", "MobileDevice", "Provisioning Profiles"),
-      ]
-    : []),
-];
+const cachesOf = workspaceCaches;
 
 /**
  * What a command inside runs from beneath a credential store's directory (the
@@ -249,16 +239,18 @@ const HOOK_LIMIT_S = HOOK_TIMEOUT_S - 10;
 export const BOUNDARY_HOOK_SLOW = "cawco: the boundary hook took longer than";
 
 /**
- * The workspace's PreToolUse hook. It has `boundary-hook.ts` rewrite the
- * call's command to run through the executor, and refuses the call every way
- * that can fail. Claude Code blocks a call only on exit 2: any other failure
- * — a missing binary, a crash, a signal — is a "non-blocking error", and the
- * command runs as it was written, outside the boundary
- * (code.claude.com/docs/en/hooks#exit-code-2). So every status but 0 becomes
- * 2. A run that hangs is killed at {@link HOOK_LIMIT_S} and refused with
- * {@link BOUNDARY_HOOK_SLOW}, which refuses that call alone. Every other
- * failure says the hook failed. The first line it writes names the hook, so
- * a failure the CLI reports is known as this one's.
+ * The workspace's PreToolUse hook, run before every tool call. It has
+ * `boundary-hook.ts` rewrite a shell call's command to run through the
+ * executor and judge every other call's paths by the workspace's policy, and
+ * refuses the call every way that can fail. Claude Code blocks a call only
+ * on exit 2: any other failure — a missing binary, a crash, a signal — is a
+ * "non-blocking error", and the call runs as it was written, outside the
+ * boundary (code.claude.com/docs/en/hooks#exit-code-2). So every status but
+ * 0 becomes 2. A run that hangs is killed at {@link HOOK_LIMIT_S} and refused
+ * with {@link BOUNDARY_HOOK_SLOW}, which refuses that call alone. A run that
+ * exits 2 has refused the call and said why. Every other failure says the
+ * hook failed. The first line it writes names the hook, so a failure the CLI
+ * reports is known as this one's.
  *
  * It names its runtime by a path no update deletes: the binary install's
  * `run` wrapper, which execs whatever `current` names, or, in a checkout,
@@ -277,16 +269,17 @@ const hookScript = (
   id: string,
   runner: Runner,
   exec: string,
-  scratch: string
+  scratch: string,
+  policy: string
 ): string => `#!/bin/sh
 # CawCo workspace ${id}: the PreToolUse hook its claude sessions run before each
-# shell tool call. Any status but 0 refuses the call (exit 2).
+# tool call. Any status but 0 refuses the call (exit 2).
 PATH=${SYSTEM_PATH}
 export PATH
 echo "cawco boundary hook $0" >&2
 cd ${shellQuote(stateDir(id))} || exit 2
 exec 3<&0
-${runner.env}${[...runner.argv, exec, scratch].map(shellQuote).join(" ")} <&3 3<&- &
+${runner.env}${[...runner.argv, exec, scratch, policy].map(shellQuote).join(" ")} <&3 3<&- &
 hook=$!
 (
   trap 'kill "$timer" 2>/dev/null; exit 1' TERM
@@ -299,10 +292,11 @@ status=$?
 kill "$watchdog" 2>/dev/null
 [ "$status" -eq 0 ] && exit 0
 if wait "$watchdog"; then
-  echo "${BOUNDARY_HOOK_SLOW} ${HOOK_LIMIT_S}s on a loaded machine, so this command did not run. Run it again." >&2
+  echo "${BOUNDARY_HOOK_SLOW} ${HOOK_LIMIT_S}s on a loaded machine, so this call did not run. Run it again." >&2
   exit 2
 fi
-echo "cawco: the boundary hook $0 failed (status $status), so this command did not run" >&2
+[ "$status" -eq 2 ] && exit 2
+echo "cawco: the boundary hook $0 failed (status $status), so this call did not run" >&2
 exit 2
 `;
 
@@ -329,26 +323,37 @@ const hookRunner = async (id: string): Promise<Runner> => {
       `${runtime} is not there, so its boundary hook could not run`
     );
   });
+  // The hook imports the judge from beside it; OpenCode's plugin imports
+  // the same copy.
+  await writeScript(
+    id,
+    JUDGE_SCRIPT,
+    "boundary/workspace-judge.ts",
+    join(import.meta.dir, "..", "..", "core", "src", JUDGE_SCRIPT)
+  );
   const source = await writeScript(id, "boundary-hook.ts", "boundary/hook.ts");
   return { env: standalone ? "BUN_BE_BUN=1 " : "", argv: [runtime, source] };
 };
 
+/** The judge's file name in a workspace's state dir: `@cawco/core/workspace-judge`, as a plain Bun script. */
+export const JUDGE_SCRIPT = "workspace-judge.ts";
+
 /**
  * Writes one of the plain Bun scripts the boundary runs into the workspace's
- * state dir, under its source name: from this checkout, or as the binary
- * install embedded it (scripts/build-binary.ts).
+ * state dir, under its source name: from this checkout (`source`, by default
+ * beside this file), or as the binary install embedded it
+ * (scripts/build-binary.ts).
  */
 const writeScript = async (
   id: string,
   name: string,
-  embedded: string
+  embedded: string,
+  source = join(import.meta.dir, name)
 ): Promise<string> => {
   const path = join(stateDir(id), name);
   await writeWhole(
     path,
-    await Bun.file(
-      standalone ? embeddedFile(embedded) : join(import.meta.dir, name)
-    ).text(),
+    await Bun.file(standalone ? embeddedFile(embedded) : source).text(),
     0o644
   );
   return path;
@@ -469,14 +474,26 @@ const writeWhole = async (
  * only hands commands in, so it is current from the next command on, whatever
  * form the anchor or runner is: a boundary started by an earlier build takes
  * this build's PATH and cache environment from the next command on. On macOS
- * also its shims.
+ * also its shims. The workspace's policy is written again too, as this
+ * machine stands now (`workspacePolicy`): every harness reads it at each
+ * file tool call, so a store, toolchain or account added since is in it from
+ * the next call on.
  */
-const armHook = async (id: string, held: Omit<Held, "hook">): Promise<Held> => {
+const armHook = async (
+  id: string,
+  held: Omit<Held, "hook" | "policy">
+): Promise<Held> => {
   const hook = join(stateDir(id), "hook");
+  const policy = workspacePolicyFile(id);
+  await writeWhole(
+    policy,
+    `${JSON.stringify(await workspacePolicy({ id, path: held.path }), null, 2)}\n`,
+    0o644
+  );
   const runner = await hookRunner(id);
   await writeWhole(
     hook,
-    hookScript(id, runner, held.exec, held.scratch),
+    hookScript(id, runner, held.exec, held.scratch, policy),
     0o755
   );
   const gh = await hostGh();
@@ -494,7 +511,7 @@ const armHook = async (id: string, held: Omit<Held, "hook">): Promise<Held> => {
       0o755
     );
   }
-  const armed: Held = { ...held, hook };
+  const armed: Held = { ...held, hook, policy };
   await writeWhole(
     join(stateDir(id), "boundary.json"),
     `${JSON.stringify(armed)}\n`,
@@ -506,7 +523,7 @@ const armHook = async (id: string, held: Omit<Held, "hook">): Promise<Held> => {
 /**
  * Writes every held workspace's hook and its script again, in this build's
  * form. The agent does this as it starts, before it adopts or launches a
- * session: a running CLI reads its workspace's hook on every shell call, so
+ * session: a running CLI reads its workspace's hook on every tool call, so
  * one an earlier build wrote must not outlive that build's runtime. An anchor
  * or runner of an older form is replaced once it is idle
  * ({@link replaceWhenIdle}): the mounts or profile that hide the credential
@@ -546,14 +563,24 @@ export const rearmHooks = async (): Promise<void> => {
 };
 
 /**
+ * The PreToolUse matcher the boundary hook runs on: every tool. Claude Code
+ * runs its file tools (Read, Write, Edit, Glob, Grep, NotebookEdit) and MCP
+ * calls in the CLI, on the host, so each is judged by the workspace's policy;
+ * shell tools are rewritten through the executor. A hook's deny holds in
+ * every permission mode ("a hook deny applies even in bypassPermissions
+ * mode", code.claude.com/docs/en/agent-sdk/permissions).
+ */
+const EVERY_TOOL = "*";
+
+/**
  * The `query()` options that bound a claude session, none for a session with
- * no boundary: flag settings with a PreToolUse hook on every shell tool that
- * rewrites its command through the executor, and the hook events in the
- * stream, which is how the session hears that the hook failed. The CLI runs
- * the hook itself, so it holds while the agent that started the session
- * restarts; a local settings file cannot turn it off, because flag settings
- * outrank it. `|| exit 2` refuses the call when the hook script itself is
- * gone (the shell's 127 would let it through).
+ * no boundary: flag settings with a PreToolUse hook on every tool
+ * ({@link EVERY_TOOL}), and the hook events in the stream, which is how the
+ * session hears that the hook failed. The CLI runs the hook itself, so it
+ * holds while the agent that started the session restarts; a local settings
+ * file cannot turn it off, because flag settings outrank it. `|| exit 2`
+ * refuses the call when the hook script itself is gone (the shell's 127
+ * would let it through).
  */
 export const claudeBoundaryOptions = (boundary: Boundary | undefined) =>
   boundary
@@ -564,7 +591,7 @@ export const claudeBoundaryOptions = (boundary: Boundary | undefined) =>
           hooks: {
             PreToolUse: [
               {
-                matcher: "Bash|Monitor",
+                matcher: EVERY_TOOL,
                 hooks: [
                   {
                     type: "command" as const,
@@ -579,9 +606,13 @@ export const claudeBoundaryOptions = (boundary: Boundary | undefined) =>
       }
     : {};
 
-/** The boundary hook's entry in the `--settings` JSON {@link claudeBoundaryOptions} launches a CLI with: its command, still JSON-quoted. */
+/**
+ * The boundary hook's entry in the `--settings` JSON {@link claudeBoundaryOptions}
+ * launches a CLI with: its matcher — {@link EVERY_TOOL}, or `Bash|Monitor` as
+ * every build before this one wrote it — and its command, still JSON-quoted.
+ */
 const LAUNCHED_HOOK =
-  /"matcher":"Bash\|Monitor","hooks":\[\{"type":"command","command":("(?:[^"\\]|\\.)*")/;
+  /"matcher":"(\*|Bash\|Monitor)","hooks":\[\{"type":"command","command":("(?:[^"\\]|\\.)*")/;
 const HOOK_COMMAND = /^'([^']+\/hook)' \|\| exit 2$/;
 /** One word of a command {@link shellQuote} built: `'…'`, with `'\''` for a quote. */
 const QUOTED_WORD = /'((?:[^']|'\\'')*)'/g;
@@ -596,6 +627,13 @@ export interface LaunchedHook {
    * transcript, as a `hook_non_blocking_error` record.
    */
   readonly events: boolean;
+  /**
+   * Whether the hook runs on every tool ({@link EVERY_TOOL}). One launched
+   * on `Bash|Monitor` alone leaves the CLI's file tools and MCP calls
+   * unjudged: such a CLI is relaunched onto the hook that judges them
+   * ({@link hookFailsOpen}).
+   */
+  readonly gatesFiles: boolean;
   /** What names the hook when it fails: in its own words, or the shell's when what it runs is gone. */
   readonly names: readonly string[];
   /**
@@ -621,15 +659,16 @@ export const launchedHook = async (
     process.platform === "linux"
       ? (await readFile(`/proc/${pid}/cmdline`, "utf8")).replaceAll("\0", " ")
       : ((await commandLineOf(pid)) ?? "");
-  const quoted = LAUNCHED_HOOK.exec(commandLine)?.[1];
+  const [, matcher, quoted] = LAUNCHED_HOOK.exec(commandLine) ?? [];
   if (!quoted) {
     return;
   }
   const events = HOOK_EVENTS_FLAG.test(commandLine);
+  const gatesFiles = matcher === EVERY_TOOL;
   const command = JSON.parse(quoted) as string;
   const hook = HOOK_COMMAND.exec(command)?.[1];
   if (hook) {
-    return { events, names: [hook], needs: [] };
+    return { events, gatesFiles, names: [hook], needs: [] };
   }
   const words = QUOTED_WORDS.test(command)
     ? [...command.matchAll(QUOTED_WORD)].map(([, word]) =>
@@ -646,6 +685,7 @@ export const launchedHook = async (
   }
   return {
     events,
+    gatesFiles,
     names: [binary, verb],
     needs: [
       { path: binary, mode: constants.X_OK },
@@ -660,7 +700,18 @@ export const launchedHook = async (
 export const workspaceHook = (
   boundary: Boundary | undefined
 ): LaunchedHook | undefined =>
-  boundary ? { events: true, names: [boundary.hook], needs: [] } : undefined;
+  boundary
+    ? { events: true, gatesFiles: true, names: [boundary.hook], needs: [] }
+    : undefined;
+
+/**
+ * Whether a CLI running `hook` lets a call outside the workspace's policy:
+ * its hook runs what can go missing ({@link LaunchedHook.needs}), or it runs
+ * on shell tools alone ({@link LaunchedHook.gatesFiles}). Such a CLI is
+ * relaunched onto the workspace's hook script between turns.
+ */
+export const hookFailsOpen = (hook: LaunchedHook): boolean =>
+  hook.needs.length > 0 || !hook.gatesFiles;
 
 /** The first thing `hook` needs that is no longer there to run, if any. */
 export const hookMissing = (hook: LaunchedHook): string | undefined =>
@@ -1218,15 +1269,7 @@ const profileOf = async (
       })
     ),
   ];
-  const userDirs = await Promise.all(
-    ["DARWIN_USER_TEMP_DIR", "DARWIN_USER_CACHE_DIR"].map(async (name) => {
-      const path = (await Bun.$`getconf ${name}`.quiet()).text().trim();
-      if (!path.startsWith("/")) {
-        throw new Error(`getconf ${name} did not return an absolute path`);
-      }
-      return path;
-    })
-  );
+  const userDirs = await darwinUserDirs();
   const writable = await Promise.all(
     [ws, ...caches, ...userDirs].map((path) => realpath(path))
   );
@@ -1602,7 +1645,7 @@ const start = async (
   if (!proc?.alive) {
     throw refusal(ref.id, "the boundary exited right after it started");
   }
-  let held: Omit<Held, "hook">;
+  let held: Omit<Held, "hook" | "policy">;
   const exec = join(dir, "exec");
   if (linux) {
     // sessiond's child is the unshare process; the anchor is its one child.

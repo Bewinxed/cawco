@@ -80,7 +80,11 @@ import {
   VERIFY_SESSION_CREDENTIAL,
 } from "@cawco/core";
 import type { RestartHold } from "@cawco/core/binary-updates";
-import { credentialAccountIds } from "@cawco/core/paths";
+import {
+  credentialAccountIds,
+  WORKSPACE_POLICY_NAME,
+  workspacesDir,
+} from "@cawco/core/paths";
 // The protocol subpath, never the `@cawco/core` barrel: `sessiond.ts` reaches
 // for `node:os` and the barrel is imported by the browser bundle (see f2e1c4c).
 import { type ProcSpec, sessiondEndpoint } from "@cawco/core/sessiond";
@@ -105,7 +109,7 @@ import {
   type TextPart,
   type Todo,
 } from "@opencode-ai/sdk/v2";
-import { workspacesDir } from "../boundary";
+import { JUDGE_SCRIPT } from "../boundary";
 import { excludeFromCheckout, gitIn } from "../checkout-exclude";
 import { delegationHubUrl, harnessMcpUrl } from "../delegation";
 import {
@@ -967,6 +971,16 @@ const announceOpencodeServer = async (
  * The plugin is set up once per directory, which is the workspace's clone
  * for every session a work item runs there.
  *
+ * In a workspace's clone it also judges every other call before it runs, by
+ * the workspace's policy (`workspace-policy.ts`): OpenCode's file tools
+ * (read, edit, write, apply_patch, glob, grep, list, lsp) and MCP calls run
+ * in its server, on the host, outside any boundary. A path the policy
+ * refuses throws, which refuses the call with the reason the model reads
+ * (opencode.ai/docs/plugins: a `tool.execute.before` that throws stops the
+ * call). The judge is the copy the agent writes into the workspace's state
+ * dir beside the hook's, and the policy is read at each call; a policy that
+ * cannot be read refuses the call.
+ *
  * Every OpenCode server on the machine loads it, an account's own server
  * ({@link accountServerSpec}) too. That one runs under the account's
  * `XDG_DATA_HOME`, which only OpenCode's own paths are to read: OpenCode
@@ -980,7 +994,12 @@ const announceOpencodeServer = async (
 export const buildHandoffPluginSource =
   (): string => `import { spawn } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { tool } from "@opencode-ai/plugin";
+// Where this server saves a truncated tool output for the model to read back:
+// \`tool-output\` in the data dir OpenCode read as it started, before the
+// swap below (tool/truncation-dir.ts at 1.18.34).
+const cawcoToolOutput = (process.env.XDG_DATA_HOME || homedir() + "/.local/share") + "/opencode/tool-output";
 if (process.env.CAWCO_XDG_DATA_HOME !== undefined) {
   if (process.env.CAWCO_XDG_DATA_HOME) process.env.XDG_DATA_HOME = process.env.CAWCO_XDG_DATA_HOME;
   else delete process.env.XDG_DATA_HOME;
@@ -1010,6 +1029,21 @@ const boundaryOf = (id, directory) => {
     throw new Error("cawco: workspace " + id + "'s boundary record does not name this clone, so this command did not run.");
   }
   return held;
+};
+// Judges a call of workspace \`id\`'s session by the workspace's policy, and
+// throws its refusal. A judge or policy that cannot be read refuses it too.
+const judgeIn = async (id, tool, args, directory) => {
+  const state = cawcoWorkspaces + "/" + id;
+  let judge;
+  let policy;
+  try {
+    judge = await import(state + "/" + ${JSON.stringify(JUDGE_SCRIPT)});
+    policy = judge.readPolicy(state + "/" + ${JSON.stringify(WORKSPACE_POLICY_NAME)});
+  } catch (error) {
+    throw new Error("cawco: " + tool + " was refused: workspace " + id + "'s file policy could not be read (" + (error instanceof Error ? error.message : String(error)) + ").");
+  }
+  const verdict = judge.judgeCall(policy, { harness: "opencode", tool, input: args, cwd: directory, toolOutput: cawcoToolOutput });
+  if (!verdict.ok) throw new Error(verdict.reason);
 };
 const OUTPUT_LIMIT = 30000;
 // What each code-mode program's calls answered, by session and the program's
@@ -1101,6 +1135,9 @@ return ({
     ...(workspace ? { bash: boundedBash(workspace, directory) } : {})
   },
   "tool.execute.before": async (input, output) => {
+    if (workspace) {
+      await judgeIn(workspace, input.tool, output.args, directory);
+    }
     if (input.tool.startsWith("cawco_")) {
       const credential = sessionHeld(input.sessionID)?.credential;
       if (typeof credential !== "string" || !credential) {

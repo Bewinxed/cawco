@@ -329,8 +329,71 @@ export const releaseEnvPath = (): string =>
 export const workspaceCacheDir = (): string =>
   join(homedir(), ".cawco", "workspace-cache");
 
+/** Where every workspace's boundary keeps its state, one dir per workspace; read-only inside the boundary. */
+export const workspacesDir = (): string =>
+  join(homedir(), ".cawco", "workspaces");
+
+/** One workspace's state dir: its executor, hook, policy and boundary record. */
+export const workspaceStateDir = (id: string): string =>
+  join(workspacesDir(), id);
+
+/**
+ * A workspace's scratch dir, its `/tmp`: beside its state, so on disk (never
+ * tmpfs) and outside its clone (never in git status).
+ */
+export const workspaceScratchDir = (id: string): string =>
+  join(workspaceStateDir(id), "tmp");
+
+/** The name of a workspace's policy file in its state dir. */
+export const WORKSPACE_POLICY_NAME = "policy.json";
+
+/** Where a workspace's policy is written (`workspace-policy.ts`), for every harness to judge its file tools by. */
+export const workspacePolicyFile = (id: string): string =>
+  join(workspaceStateDir(id), WORKSPACE_POLICY_NAME);
+
+/**
+ * The caches a workspace writes besides its clone and scratch dir: the
+ * workspaces' own cache, and on macOS the provisioning profile folders
+ * automatic signing fills. Every host cache is read-only to a workspace: a
+ * host process runs what is in them.
+ */
+export const workspaceCaches = (): string[] => [
+  workspaceCacheDir(),
+  ...(process.platform === "darwin"
+    ? [
+        join(
+          homedir(),
+          "Library",
+          "Developer",
+          "Xcode",
+          "UserData",
+          "Provisioning Profiles"
+        ),
+        join(homedir(), "Library", "MobileDevice", "Provisioning Profiles"),
+      ]
+    : []),
+];
+
+/**
+ * macOS: the user's temp and cache folders (`getconf DARWIN_USER_TEMP_DIR`,
+ * `DARWIN_USER_CACHE_DIR`), which Apple's build tools write wherever they
+ * run, so a workspace writes them too. None elsewhere.
+ */
+export const darwinUserDirs = async (): Promise<string[]> =>
+  process.platform === "darwin"
+    ? await Promise.all(
+        ["DARWIN_USER_TEMP_DIR", "DARWIN_USER_CACHE_DIR"].map(async (name) => {
+          const path = (await Bun.$`getconf ${name}`.quiet()).text().trim();
+          if (!path.startsWith("/")) {
+            throw new Error(`getconf ${name} did not return an absolute path`);
+          }
+          return path;
+        })
+      )
+    : [];
+
 /** Where Playwright's browsers are on the host: a workspace runs them from there, read-only. */
-const hostPlaywrightBrowsers = (): string =>
+export const hostPlaywrightBrowsers = (): string =>
   process.platform === "darwin"
     ? join(homedir(), "Library", "Caches", "ms-playwright")
     : join(

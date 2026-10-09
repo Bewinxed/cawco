@@ -18,11 +18,22 @@ import {
   VERIFY_SESSION_CREDENTIAL,
 } from "@cawco/core";
 import {
+  judgeCall,
+  readPolicy,
+  type Verdict,
+} from "@cawco/core/workspace-judge";
+import {
   type AgentSession,
   type AgentSessionEvent,
   createAgentSession,
   createBashToolDefinition,
+  createEditToolDefinition,
+  createFindToolDefinition,
+  createGrepToolDefinition,
   createLocalBashOperations,
+  createLsToolDefinition,
+  createReadToolDefinition,
+  createWriteToolDefinition,
   DefaultResourceLoader,
   defineTool,
   type ExtensionAPI,
@@ -59,6 +70,52 @@ const boundedBash = (cwd: string, boundary: Boundary): ToolDefinition => {
     },
   }) as unknown as ToolDefinition;
 };
+
+/**
+ * pi's file tools, each judged by the workspace's policy before it runs: pi
+ * runs them in this process, on the host, outside the boundary. A call the
+ * policy refuses throws its reason, which pi hands the model as the tool's
+ * error; a policy that cannot be read refuses it too. Each replaces the
+ * built-in of its name (a custom tool takes a built-in's place in pi's
+ * registry, agent-session.js `_refreshToolRegistry`) and leaves which tools
+ * are active as it was. The judge runs on the call's own arguments, before
+ * pi resolves anything: `find` runs `fd` on the host without its
+ * operations, so arguments are the one place all six can be judged.
+ */
+const boundedFileTools = (cwd: string, boundary: Boundary): ToolDefinition[] =>
+  [
+    createReadToolDefinition(cwd),
+    createWriteToolDefinition(cwd),
+    createEditToolDefinition(cwd),
+    createLsToolDefinition(cwd),
+    createFindToolDefinition(cwd),
+    createGrepToolDefinition(cwd),
+  ].map((tool) => {
+    const definition = tool as unknown as ToolDefinition;
+    return {
+      ...definition,
+      execute: (id, params, signal, onUpdate, ctx) => {
+        let verdict: Verdict;
+        try {
+          verdict = judgeCall(readPolicy(boundary.policy), {
+            harness: "pi",
+            tool: definition.name,
+            input: params,
+            cwd: ctx?.cwd || cwd,
+          });
+        } catch (error) {
+          verdict = {
+            ok: false,
+            reason: `cawco: ${definition.name} was refused: the workspace's file policy could not be read (${error instanceof Error ? error.message : String(error)}).`,
+          };
+        }
+        if (!verdict.ok) {
+          throw new Error(verdict.reason);
+        }
+        return definition.execute(id, params, signal, onUpdate, ctx);
+      },
+    } as ToolDefinition;
+  });
 
 const piHandoffTools = async (
   instanceId: string,
@@ -601,7 +658,12 @@ export async function startPiHost(
     sessionManager: manager,
     settingsManager,
     resourceLoader,
-    customTools: ctx.boundary ? [boundedBash(ctx.cwd, ctx.boundary)] : [],
+    customTools: ctx.boundary
+      ? [
+          boundedBash(ctx.cwd, ctx.boundary),
+          ...boundedFileTools(ctx.cwd, ctx.boundary),
+        ]
+      : [],
   });
   return new PiSession(ctx, session, credential, tools, runtime);
 }

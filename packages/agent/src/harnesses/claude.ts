@@ -118,6 +118,7 @@ import {
 } from "../auth";
 import {
   claudeBoundaryOptions,
+  hookFailsOpen,
   hookMissing,
   type LaunchedHook,
   launchedHook,
@@ -1745,13 +1746,19 @@ class ClaudeSession implements HarnessSession {
 
   /**
    * Asks the hub to relaunch the session onto the workspace's hook script
-   * ({@link BOUNDARY_RELAUNCH}) when its CLI runs a hook that fails open:
-   * called at the attach when no turn is running, and as each turn ends. The
-   * hub does so only while the session is idle; until then the turn-start
-   * check and the transcript watch stand in.
+   * ({@link BOUNDARY_RELAUNCH}) when its CLI runs a hook that fails open
+   * (`hookFailsOpen`): one that runs what can go missing, or one launched on
+   * shell tools alone, which leaves file tools and MCP calls unjudged. Called
+   * at the attach when no turn is running, and as each turn ends. The hub
+   * does so only while the session is idle; until then the turn-start check
+   * and the transcript watch stand in for a hook that can go missing.
    */
   askRelaunch(): void {
-    if (this.#boundaryHook?.needs.length && !this.#hookRefusal) {
+    if (
+      this.#boundaryHook &&
+      hookFailsOpen(this.#boundaryHook) &&
+      !this.#hookRefusal
+    ) {
       this.#ctx.frame({ type: "system", subtype: BOUNDARY_RELAUNCH });
     }
   }
