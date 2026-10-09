@@ -72,4 +72,4 @@ Every value is a root token or a line named in PRESERVE.md §4, "Opening choreog
 
 ## 8. Verification
 
-Type-check and lint, then open New Session in the running dashboard at desktop and phone widths and check it against PRESERVE.md. `apps/dashboard/scripts/new-session-checks.mjs` still asserts the earlier composer and fails against this dialog until it is rewritten.
+Type-check and lint, then open New Session in the running dashboard at desktop and phone widths and check it against PRESERVE.md.

@@ -138,7 +138,6 @@ spawnSession({
 
 - Type-check the dashboard with `bun run typecheck` in `apps/dashboard`; check changed files with `bun run lint:changed` from the repository root.
 - The modal is verified in the running dashboard: open New Session at desktop and phone widths and check the geometry, containment, motion and payloads above.
-- `apps/dashboard/scripts/new-session-checks.mjs` still asserts the earlier composer (a 640px card, `.composer-bar`), not this dialog, so it fails against it until it is rewritten for the dialog as built.
 
 ## Modal-Relevant Tokens
 
