@@ -2815,7 +2815,7 @@
        and fades in (`.dock.asking`, below). */
     --step-aside: opacity var(--dur-fade) var(--ease-out), visibility 0s;
     position: absolute;
-    inset: 0 0 calc(var(--space-4) + env(safe-area-inset-bottom));
+    inset: 0 0 calc(var(--space-4) + var(--safe-bottom));
     z-index: 20;
     display: flex;
     flex-direction: column;
@@ -3418,7 +3418,7 @@
     /* Clear the home indicator / gesture bar — the resting gap plus the safe
        area inset, so the composer never sits under the rounded-screen chrome. */
     .dock {
-      bottom: calc(var(--space-2) + env(safe-area-inset-bottom));
+      bottom: calc(var(--space-2) + var(--safe-bottom));
     }
     /* The tray and the parked cards keep the composer's edges. */
     .composer,

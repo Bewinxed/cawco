@@ -239,7 +239,7 @@
       padding-block-end: calc(
         var(--c-btn-h-sm) +
         var(--space-8) +
-        env(safe-area-inset-bottom)
+        var(--safe-bottom)
       );
     }
   }

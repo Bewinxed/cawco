@@ -1260,7 +1260,7 @@
   }
   :global(.session-details-sheet) {
     padding: 0;
-    padding-bottom: env(safe-area-inset-bottom);
+    padding-bottom: var(--safe-bottom);
     max-height: 88dvh;
     overflow: hidden;
     border: 1px solid var(--border-control);
@@ -1275,7 +1275,7 @@
     display: flex;
     flex: 1 1 auto;
     min-height: 0;
-    max-height: calc(88dvh - 24px - env(safe-area-inset-bottom));
+    max-height: calc(88dvh - 24px - var(--safe-bottom));
     overflow: hidden;
   }
   /* The trailing controls sit 4px after the title and 4px apart, on every

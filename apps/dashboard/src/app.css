@@ -235,6 +235,15 @@
   html {
     @apply antialiased font-sans;
     -webkit-tap-highlight-color: transparent;
+    /* The screen's bottom inset (the home indicator's room), which a
+       keyboard over the screen's bottom takes away (cawco/visible-viewport
+       sets data-keyboard): Brave's resized web view drops env() to 0 on its
+       own, Safari keeps it, and a foreseen keyboard stands before both.
+       What stands on the screen's bottom pads by this, not by env(). */
+    --safe-bottom: env(safe-area-inset-bottom);
+  }
+  html[data-keyboard] {
+    --safe-bottom: 0px;
   }
 
   body {

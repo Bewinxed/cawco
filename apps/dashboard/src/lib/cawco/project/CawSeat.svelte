@@ -191,6 +191,6 @@
     padding: 0;
   }
   :global(.caw-sheet) {
-    padding-block-end: env(safe-area-inset-bottom);
+    padding-block-end: var(--safe-bottom);
   }
 </style>

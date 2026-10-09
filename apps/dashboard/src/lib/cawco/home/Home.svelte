@@ -460,7 +460,7 @@
     bottom: 0;
     margin-top: auto;
     padding: var(--space-3) var(--space-5)
-      calc(var(--space-3) + env(safe-area-inset-bottom));
+      calc(var(--space-3) + var(--safe-bottom));
     background: linear-gradient(
       transparent,
       var(--surface-recess) var(--space-4)

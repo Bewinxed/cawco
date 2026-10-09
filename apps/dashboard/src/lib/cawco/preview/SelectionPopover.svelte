@@ -230,7 +230,7 @@
     width: 100%;
     max-width: none;
     margin: 0;
-    padding-bottom: calc(var(--space-3) + env(safe-area-inset-bottom));
+    padding-bottom: calc(var(--space-3) + var(--safe-bottom));
   }
   :global(.selection-note-sheet::before),
   :global(.selection-note-sheet > div:first-child) {

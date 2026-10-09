@@ -52,6 +52,7 @@
   import Sidebar from "./Sidebar.svelte";
   import NewSessionDialog from "./spawn/NewSessionDialog.svelte";
   import { newSession, spawning } from "./spawn/new-session.svelte";
+  import { floor } from "./visible-viewport.svelte";
   import PaneTabs from "./workspace/PaneTabs.svelte";
   import { type WorkspaceV1, workspace } from "./workspace/workspace.svelte";
 
@@ -815,7 +816,13 @@
      snap away from on hydration. -->
 <!-- One provider: every tooltip in the app shares its delay and its skip. -->
 <Tooltip.Provider>
-  <div class="shell" style="--sidebar-width: var(--rail-w, {railWidth}px)">
+  <!-- As tall as the visible area reaches, so the composer and a page's
+       footer stand on a keyboard (cawco/visible-viewport `floor`). -->
+  <div
+    class="shell"
+    style="--sidebar-width: var(--rail-w, {railWidth}px)"
+    style:height={floor.bottom > 0 ? `${floor.bottom}px` : null}
+  >
     <aside class="rail hidden min-[900px]:flex">
       {#if railed}
         <Sidebar
@@ -1635,7 +1642,7 @@
   /* Own the home-indicator inset where no composer is present to own it. */
   @media (pointer: coarse) {
     .content.safe {
-      padding-bottom: env(safe-area-inset-bottom);
+      padding-bottom: var(--safe-bottom);
     }
   }
 </style>

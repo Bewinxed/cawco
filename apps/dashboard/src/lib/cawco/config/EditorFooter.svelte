@@ -146,7 +146,7 @@
     .footer {
       position: sticky;
       bottom: 0;
-      padding-bottom: calc(12px + env(safe-area-inset-bottom));
+      padding-bottom: calc(12px + var(--safe-bottom));
     }
     .inner {
       flex-wrap: wrap;

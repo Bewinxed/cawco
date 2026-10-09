@@ -769,7 +769,7 @@
   .off {
     position: absolute;
     inset-inline: 0;
-    inset-block-end: calc(var(--space-4) + env(safe-area-inset-bottom));
+    inset-block-end: calc(var(--space-4) + var(--safe-bottom));
     z-index: 20;
     inline-size: var(--c-composer-w);
     margin-inline: auto;

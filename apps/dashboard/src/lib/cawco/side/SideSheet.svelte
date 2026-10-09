@@ -14,6 +14,7 @@
   import { cawco } from "../client.svelte";
   import { land, waiting } from "../motion/share.svelte";
   import { lightbox } from "../transcript/lightbox-state.svelte";
+  import { visible as visibleArea } from "../visible-viewport.svelte";
 
   let {
     instanceId,
@@ -95,7 +96,16 @@
             typeof snap === "number" ? height * snap : Number.parseFloat(snap);
           // Vaul snapshots its initial pixel offsets; geometry changes refresh
           // the current position without changing the user's chosen snap.
+          // The sheet steps with the composer it stands on, as a kit sheet
+          // steps with the keyboard (app.css): the composer takes its
+          // keyboard-up place at the tap, and vaul's half-second ease, run
+          // through the stall WebKit's keyboard puts on the page, painted
+          // its first frame 40 to 80px along.
+          const ease = drawer.style.transition;
+          drawer.style.transition = "none";
           drawer.style.transform = `translate3d(0, ${height - visibleHeight}px, 0)`;
+          drawer.getBoundingClientRect();
+          drawer.style.transition = ease;
         }
       });
     }
@@ -166,7 +176,9 @@
       if (composerTop <= 0 || composerTop > visibleBottom) {
         return;
       }
-      viewportHeight = viewport?.height ?? innerHeight;
+      // The visible area as published, a foreseen keyboard's included, so
+      // the middle snap is the same at the tap and once the keyboard is up.
+      viewportHeight = untrack(() => visibleArea.height);
       const safeTop = frame
         ? Number.parseFloat(getComputedStyle(frame).top)
         : 0;

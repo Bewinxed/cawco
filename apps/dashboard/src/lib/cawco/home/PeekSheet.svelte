@@ -50,6 +50,6 @@
      growing under the reader as the transcript lands. */
   :global(.peek-sheet[data-vaul-drawer-direction="bottom"]) {
     height: 80dvh;
-    padding-bottom: env(safe-area-inset-bottom);
+    padding-bottom: var(--safe-bottom);
   }
 </style>
