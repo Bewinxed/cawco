@@ -26,7 +26,12 @@ import {
 } from "../../packages/agent/src/sessiond-client";
 import { CONTROL_PROBE_ACCOUNT } from "../../packages/core/src/accounts";
 import { CAPABILITIES_NONE } from "../../packages/core/src/harness";
-import type { HarnessKind, HarnessReport } from "../../packages/core/src/index";
+import {
+  CAWCO_ENV,
+  type HarnessKind,
+  type HarnessReport,
+} from "../../packages/core/src/index";
+import { sessionEnvironment } from "../../packages/core/src/session-env";
 
 /** What a session is handed by the supervisor, and what the harness hands back for it. */
 type Context = Parameters<Harness["spawn"]>[1];
@@ -155,7 +160,13 @@ for (const kind of ["claude", "opencode", "pi"] as const) {
         command: "sleep",
         args: ["3000"],
         cwd: ctx.cwd,
-        env: {},
+        // A real session's env as the Claude harness gives it (claude.ts
+        // `sessionEnv`): the agent's own as a session gets it, and the
+        // session's id. The keeper puts its own, as a session gets it, under.
+        env: {
+          ...sessionEnvironment(process.env),
+          [CAWCO_ENV.instanceId]: ctx.instanceId,
+        },
       });
       return session(held, ctx.instanceId, ctx, client);
     },

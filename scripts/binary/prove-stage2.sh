@@ -13,6 +13,11 @@ mkdir -p "$1"
 out=$(realpath "$1")
 bins=$(realpath "$2")
 [[ "$out" != *" "* ]] || { echo "output path may not contain spaces" >&2; exit 2; }
+# podman's exec with a terminal (every installer that answers prompts) makes its console socket in TMPDIR,
+# $out/tmp/conmon-term.XXXXXX, and a unix socket's path holds 107 bytes: past that the exec fails with
+# "crun: error opening …/conmon-term.XXXXXX: No such file or directory" (run-2, a 109-byte path).
+TERM_SOCKET=/tmp/conmon-term.XXXXXX
+(( ${#out} + ${#TERM_SOCKET} <= 107 )) || { echo "the output path is ${#out} characters; podman's console socket under it, $out$TERM_SOCKET, must fit 107, so it may be at most $(( 107 - ${#TERM_SOCKET} ))" >&2; exit 2; }
 here=$(dirname "$(realpath "$0")")
 python3 -c 'import pexpect' 2> /dev/null || { echo "python3 with pexpect is needed to answer the installer's prompts (pip install pexpect)" >&2; exit 2; }
 for need in cawco-1 cawco-2 cawco-3 cawco-4 cawco-5 cawco-6 cawco-7 cawco-8 cawco-9 keys/test-release-private.pem keys/test-release-public.pem; do
@@ -883,6 +888,35 @@ legacy_handed_over() {
 }
 export -f legacy_handed_over
 check "a keeper from before keepers ran side by side, holding sessions, is handed over at the update: they run on there, and the new build's keeper is the machine's" legacy_handed_over 600 "a session already running on the joined machine before its update is the same process afterwards, re-attached and running"
+
+# A session started through the hub on the keeper `keeper` names: its own process's environment, read from
+# /proc/<pid>/environ of the child the keeper holds, carries only the CAWCO_* a session's tools read (core
+# session-env.ts SESSION_CAWCO_ENV) and never CawCo's embedded pi dir. Neither the keeper's own runtime environment
+# (its endpoint, the binary root) nor the agent's reaches it. CAWCO_INSTANCE_ID names this session, so the environment
+# read is its own. The session is stopped afterwards.
+session_env_clean() {
+  local machine=$1 container=$2 id=$3 keeper=$4 pid env extra
+  start_session "$machine" "$id" > /dev/null
+  wait_until 60 "session_running $id"
+  [[ "$(holder_of "$container" "$id")" == "$keeper" ]]
+  pid=$(child_pids "$container" "$id")
+  [[ "$pid" =~ ^[0-9]+$ ]]
+  env=$(as_user "$container" cat "/proc/$pid/environ" | tr '\0' '\n')
+  echo "$id, pid $pid on $keeper: $(printf '%s\n' "$env" | grep -oE '^(CAWCO_[A-Z0-9_]*|PI_PACKAGE_DIR)=' | tr -d = | sort | tr '\n' ' ')"
+  printf '%s\n' "$env" | grep -qx "CAWCO_INSTANCE_ID=$id"
+  ! printf '%s\n' "$env" | grep -q '^PI_PACKAGE_DIR=' || { echo "it carries PI_PACKAGE_DIR"; return 1; }
+  extra=$(printf '%s\n' "$env" | grep -oE '^CAWCO_[A-Z0-9_]*' | grep -vxE 'CAWCO_HUB_URL|CAWCO_INSTANCE_ID|CAWCO_SESSION_CREDENTIAL|CAWCO_MODEL' || true)
+  [[ -z $extra ]] || { echo "it carries $(echo $extra)"; return 1; }
+  stop_session "$machine" "$id" > /dev/null
+  wait_until 60 "[[ -z \"\$(child_pids $container $id)\" ]]"
+}
+sessions_env_after_handover() {
+  need_hub
+  session_env_clean "$jid" "$joinerc" envjoiner-1 "$(endpoint_of 0.0.1-test.2)"
+  session_env_clean "$hid" "$hubc" envhub-1 "$(endpoint_of 0.0.1-test.2)"
+}
+export -f session_env_clean sessions_env_after_handover
+check "a session started on the new build's keeper after the handover carries only the CAWCO_* its tools read, and no PI_PACKAGE_DIR, on the joined machine and the hub's" sessions_env_after_handover 600 "a keeper from before keepers ran side by side, holding sessions, is handed over at the update: they run on there, and the new build's keeper is the machine's"
 
 one_helper() {
   need_hub
