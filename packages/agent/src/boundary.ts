@@ -738,7 +738,7 @@ let connection: Promise<SessiondClient> | undefined;
 /** This module's own sessiond connection, dialled on first use. */
 const sessiond = async (): Promise<SessiondClient> => {
   const open = await connection?.catch(() => undefined);
-  if (open && !open.closed) {
+  if (open && !open.retired) {
     return open;
   }
   const endpoint = sessiondPath();

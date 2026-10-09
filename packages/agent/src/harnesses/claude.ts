@@ -2432,11 +2432,12 @@ export class ClaudeHarness implements Harness {
     endpoint: string = process.env.CAWCO_SESSIOND_ENDPOINT ?? sessiondEndpoint()
   ): Promise<SessiondClient> {
     const existing = await this.#sessiond?.catch(() => undefined);
-    if (existing && !existing.closed) {
+    if (existing && !existing.retired) {
       return existing;
     }
-    // A dead connection is re-dialled; the CHILDREN are unaffected, which is
-    // the whole property sessiond exists to provide.
+    // A dead connection is re-dialled, and so is one to a keeper that is
+    // draining; the CHILDREN are unaffected, which is the whole property
+    // sessiond exists to provide.
     this.#sessiond = (async () => {
       await ensureSessiond(endpoint);
       return SessiondClient.connect(endpoint);

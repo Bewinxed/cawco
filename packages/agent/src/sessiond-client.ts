@@ -10,9 +10,8 @@
  *     build exists to escape. Under a service, a missing sessiond is a loud
  *     install-time error; only a hand-run `cawco up` spawns one.
  *  2. {@link SessiondClient} — NDJSON over the unix socket: `spawn`/`write`/
- *     `signal`/`stdin_end`/`subscribe`/`list`, `commandId` minted once per
- *     mutation so a re-delivery after a socket drop is re-acked rather than
- *     re-executed (design §8).
+ *     `signal`/`stdin_end`/`subscribe`/`list`, each mutation under its own
+ *     `commandId`, each settled by its ack or failed by the connection's end.
  *  3. {@link sessiondBridge} — the SDK's `spawnClaudeCodeProcess` hook
  *     (`sdk.d.ts:2053`, "Custom spawn logic for VM execution"). It hands us the
  *     command line it built; we forward it to sessiond and return a
@@ -319,9 +318,15 @@ export class SessiondClient {
   /** A write to a child's stdin can be megabytes too (an image): sent a piece at a time (core/paced-write.ts). */
   readonly #out: PacedWriter;
   #welcome: SessiondWelcomeInfo | undefined;
-  readonly #acks = new Map<string, (ack: SessiondAck) => void>();
-  /** Sent but not yet settled — re-sent once at reconnect under the same id (§8). */
-  readonly #unacked = new Map<string, SessiondClientMessage>();
+  /**
+   * Each mutation sent and not yet acked. The connection's end fails every
+   * one: an ack can only come on this socket, and a caller left waiting on
+   * one from a keeper that has gone waits for ever, without a word.
+   */
+  readonly #acks = new Map<
+    string,
+    { resolve: (ack: SessiondAck) => void; reject: (error: Error) => void }
+  >();
   /**
    * Each unsettled mutation's hold on an agent restart: a message, an answer,
    * a signal or a start on its way into the keeper, which a restart now would
@@ -333,6 +338,8 @@ export class SessiondClient {
   /** Listeners already told their child is gone: a death reaches each once. */
   readonly #toldExit = new WeakSet<ProcListener>();
   #closed = false;
+  /** The keeper said it is draining: it starts nothing more ({@link retired}). */
+  #draining = false;
   readonly onClose = new EventEmitter();
 
   private constructor(socket: Socket) {
@@ -346,6 +353,22 @@ export class SessiondClient {
         release();
       }
       this.#holds.clear();
+      const pending = [...this.#acks.values()];
+      this.#acks.clear();
+      for (const { reject } of pending) {
+        reject(
+          new Error(
+            "[sessiond] the keeper's connection ended before it answered"
+          )
+        );
+      }
+      for (const waiter of this.#welcomeWaiters.splice(0)) {
+        waiter.reject(
+          new Error(
+            "[sessiond] the keeper's connection ended before its listing came"
+          )
+        );
+      }
       this.onClose.emit("close");
     });
     socket.on("error", () => {
@@ -375,19 +398,25 @@ export class SessiondClient {
       const client = new SessiondClient(socket);
       socket.connect(endpoint);
       // The accept's own welcome, first in line: nothing is sent before it.
-      client.#welcomeWaiters.push((welcome) => {
-        clearTimeout(timer);
-        // §5: no compatible capability is a loud refusal, never a plausible lie.
-        if (!welcome.capabilities.includes(SESSIOND_V1)) {
-          socket.destroy();
-          reject(
-            new Error(
-              `[sessiond] speaks ${welcome.capabilities.join(", ") || "(nothing)"}; this agent needs ${SESSIOND_V1}`
-            )
-          );
-          return;
-        }
-        resolve(client);
+      client.#welcomeWaiters.push({
+        resolve: (welcome) => {
+          clearTimeout(timer);
+          // §5: no compatible capability is a loud refusal, never a plausible lie.
+          if (!welcome.capabilities.includes(SESSIOND_V1)) {
+            socket.destroy();
+            reject(
+              new Error(
+                `[sessiond] speaks ${welcome.capabilities.join(", ") || "(nothing)"}; this agent needs ${SESSIOND_V1}`
+              )
+            );
+            return;
+          }
+          resolve(client);
+        },
+        reject: (error) => {
+          clearTimeout(timer);
+          reject(error);
+        },
       });
     });
   }
@@ -400,9 +429,13 @@ export class SessiondClient {
    * (a hub reconnect starting a second reattach while the first was still
    * listing) took the slot over: the first asker was never answered, and its
    * reattach stalled without a word. A `subscribe`'s own `list` holds a place
-   * too, or its welcome would answer a `list()` that asked later.
+   * too, or its welcome would answer a `list()` that asked later. The
+   * connection's end fails every one still waiting.
    */
-  readonly #welcomeWaiters: ((welcome: SessiondWelcomeInfo) => void)[] = [];
+  readonly #welcomeWaiters: {
+    resolve: (welcome: SessiondWelcomeInfo) => void;
+    reject: (error: Error) => void;
+  }[] = [];
 
   get epoch(): string | undefined {
     return this.#welcome?.epoch;
@@ -417,8 +450,15 @@ export class SessiondClient {
     return this.#welcome?.procs ?? [];
   }
 
-  get closed(): boolean {
-    return this.#closed;
+  /**
+   * Whether this connection may carry new work: not once it has ended, nor
+   * once its keeper has said it is draining. A caller that keeps one client
+   * for the machine dials again when this says so, and reaches whichever
+   * keeper listens now; the sessions already on this one keep it.
+   */
+  get retired(): boolean {
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: both become true at runtime (the socket's "close", a `draining` line); biome's inference sees only the initializers
+    return this.#closed || this.#draining;
   }
 
   // ------------------------------------------------------------------ framing
@@ -455,17 +495,19 @@ export class SessiondClient {
             this.#exit(listener, proc.exitCode ?? null, proc.signal ?? null);
           }
         }
-        this.#welcomeWaiters.shift()?.(this.#welcome);
+        this.#welcomeWaiters.shift()?.resolve(this.#welcome);
         return;
       }
       case "ack": {
-        this.#unacked.delete(message.commandId);
         this.#holds.get(message.commandId)?.();
         this.#holds.delete(message.commandId);
-        this.#acks.get(message.commandId)?.(message);
+        this.#acks.get(message.commandId)?.resolve(message);
         this.#acks.delete(message.commandId);
         return;
       }
+      case "draining":
+        this.#draining = true;
+        return;
       case "proc.line":
         this.#listeners.get(message.event.procId)?.line?.(message.event);
         return;
@@ -512,17 +554,16 @@ export class SessiondClient {
   }
 
   /**
-   * Send a mutation and wait for its settlement. The `commandId` is minted
-   * once, before the first send attempt, so the retry after a socket drop is
-   * the *same* command — sessiond re-acks it instead of, in `spawn`'s case,
-   * killing and replacing a perfectly healthy child (§8).
+   * Send a mutation and wait for its settlement: its ack, or the end of this
+   * connection, which fails it. Nothing is re-sent on another connection: a
+   * keeper that ended took what it had not answered with it, and the caller
+   * hears so.
    */
   #command(
     message: SessiondClientMessage & { commandId: string }
   ): Promise<SessiondAck> {
     return new Promise((resolve, reject) => {
-      this.#acks.set(message.commandId, resolve);
-      this.#unacked.set(message.commandId, message);
+      this.#acks.set(message.commandId, { resolve, reject });
       this.#holds.set(
         message.commandId,
         holdRestart(
@@ -536,19 +577,11 @@ export class SessiondClient {
         this.#send(message);
       } catch (error) {
         this.#acks.delete(message.commandId);
-        this.#unacked.delete(message.commandId);
         this.#holds.get(message.commandId)?.();
         this.#holds.delete(message.commandId);
         reject(error as Error);
       }
     });
-  }
-
-  /** Re-send everything unsettled, unchanged, after a reconnect (§8). */
-  resendUnacked(): void {
-    for (const message of this.#unacked.values()) {
-      this.#send(message);
-    }
   }
 
   // -------------------------------------------------------------------- verbs
@@ -619,7 +652,10 @@ export class SessiondClient {
     });
     this.#send({ type: "list" });
     // Its welcome is read by the death check in `#onMessage`, not by a caller.
-    this.#welcomeWaiters.push(() => undefined);
+    this.#welcomeWaiters.push({
+      resolve: () => undefined,
+      reject: () => undefined,
+    });
   }
 
   unsubscribe(procId: string): void {
@@ -628,9 +664,9 @@ export class SessiondClient {
 
   /** Ask again what is alive. Answered with a fresh `welcome`. */
   list(): Promise<SessiondWelcomeInfo> {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       this.#send({ type: "list" });
-      this.#welcomeWaiters.push(resolve);
+      this.#welcomeWaiters.push({ resolve, reject });
     });
   }
 

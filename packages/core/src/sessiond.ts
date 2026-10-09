@@ -187,6 +187,21 @@ export interface SessiondAck {
 }
 
 /**
+ * sessiond → every attached agent, once, when it starts to drain (a SIGTERM:
+ * its service is stopping or restarting). From then it starts no child and
+ * accepts no connection; its children are ended and it exits. A client that
+ * hears it carries no new work to this keeper: the next start dials whichever
+ * keeper listens next.
+ */
+export interface SessiondDraining {
+  type: "draining";
+}
+
+/** The reason a `spawn` sent to a draining keeper is refused with. */
+export const SESSIOND_DRAINING =
+  "draining: this keeper is shutting down and starts nothing more";
+
+/**
  * How a `spawn` refused at the machine's process limit starts its `reason`:
  * `process-limit: <which limit, and how full>`. The keeper refuses rather than
  * start a child that would leave it no room for its own threads (a Bun process
@@ -215,7 +230,8 @@ export type SessiondServerMessage =
   | SessiondBacklog
   | SessiondReset
   | SessiondExit
-  | SessiondAck;
+  | SessiondAck
+  | SessiondDraining;
 
 /**
  * The socket dial string a caller connects/listens on — filesystem unix

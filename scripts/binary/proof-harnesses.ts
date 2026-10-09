@@ -38,7 +38,7 @@ let connection: Promise<SessiondClient> | undefined;
 async function holder(): Promise<SessiondClient> {
   const endpoint = process.env.CAWCO_SESSIOND_ENDPOINT ?? sessiondEndpoint();
   const existing = await connection?.catch(() => undefined);
-  if (existing && !existing.closed) {
+  if (existing && !existing.retired) {
     return existing;
   }
   connection = (async () => {

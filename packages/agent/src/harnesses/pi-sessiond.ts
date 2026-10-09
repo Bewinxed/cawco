@@ -75,7 +75,7 @@ export const piOpenTurns = new Set<string>();
 const staleHosts = new Map<string, string>();
 export async function piSessiond(): Promise<SessiondClient> {
   const previous = await connection?.catch(() => undefined);
-  if (previous && !previous.closed) {
+  if (previous && !previous.retired) {
     return previous;
   }
   const endpoint = process.env.CAWCO_SESSIOND_ENDPOINT ?? sessiondEndpoint();

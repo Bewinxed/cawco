@@ -5800,7 +5800,7 @@ export class OpencodeHarness implements Harness {
     endpoint: string = process.env.CAWCO_SESSIOND_ENDPOINT ?? sessiondEndpoint()
   ): Promise<SessiondClient> {
     const existing = await this.#sessiond?.catch(() => undefined);
-    if (existing && !existing.closed) {
+    if (existing && !existing.retired) {
       return existing;
     }
     this.#sessiond = (async () => {

@@ -20,7 +20,7 @@
 
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { chmod, mkdir, unlink } from "node:fs/promises";
+import { chmod, mkdir, stat, unlink } from "node:fs/promises";
 import {
   createConnection,
   createServer,
@@ -37,6 +37,7 @@ import { processLineage } from "@cawco/core/process-identity";
 // to derive the endpoint, and the core barrel is imported by the browser bundle.
 import {
   type ProcSpec,
+  SESSIOND_DRAINING,
   SESSIOND_PROCESS_LIMIT,
   SESSIOND_V1,
   type SessiondAck,
@@ -254,6 +255,15 @@ export class SessiondServer {
   readonly #now: () => number;
   #server: Server | undefined;
   #endpoint: string | undefined;
+  /** The inode of the socket file this keeper bound: the path is unlinked only while it is still this one. */
+  #socketInode: number | undefined;
+  /**
+   * Set once, when the drain starts: from then nothing new starts here and no
+   * connection is accepted ({@link drain}).
+   */
+  #draining = false;
+  /** The listener's close, begun when the drain starts and awaited by {@link close}. */
+  #listenerClosed: Promise<void> | undefined;
 
   constructor(options: SessiondOptions = {}) {
     this.#build = options.build ?? DEFAULT_BUILD;
@@ -292,6 +302,7 @@ export class SessiondServer {
     }
     await chmod(endpoint, 0o600);
     this.#endpoint = endpoint;
+    this.#socketInode = (await stat(endpoint)).ino;
     this.#surveying = setInterval(() => {
       if (
         // biome-ignore lint/suspicious/noUnnecessaryConditions: set true below and false in the reading's `finally`; biome's inference sees only the initializer
@@ -371,6 +382,11 @@ export class SessiondServer {
       build: this.#build,
       procs: this.procs(),
     });
+    // A connection the listener took in just as the drain began.
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: set true by drain() at runtime; biome's inference sees only the initializer
+    if (this.#draining) {
+      this.#send(conn, { type: "draining" });
+    }
   }
 
   #onData(conn: Conn, chunk: string): void {
@@ -571,6 +587,12 @@ export class SessiondServer {
     procId: string,
     spec: ProcSpec | undefined
   ): Promise<SessiondAck> {
+    // Checked when the spawn's turn comes, not when it arrived: one queued
+    // behind another as the drain began starts nothing either.
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: set true by drain() at runtime; biome's inference sees only the initializer
+    if (this.#draining) {
+      return ack(commandId, "failed", SESSIOND_DRAINING);
+    }
     if (!(procId && spec?.command)) {
       return ack(
         commandId,
@@ -959,8 +981,20 @@ export class SessiondServer {
    *
    * stdin-EOF first (the harness's own graceful path), then the grace window,
    * then SIGKILL. No child outlives the drain, and nothing a child started.
+   *
+   * NOTHING NEW STARTS ON A KEEPER THAT IS ENDING. The listener closes and
+   * its path goes before the first child is told to end, every attached agent
+   * is told (`draining`), and a spawn still to come is refused. A drain under
+   * load was still running 30 s after its SIGTERM (2026-10-09), still
+   * accepting, and an agent's next ten starts went down its still-open
+   * connection to a keeper that was ending: none of them ever started.
    */
   async drain(graceMs = DRAIN_TIMEOUT_MS): Promise<void> {
+    this.#draining = true;
+    this.#listenerClosed ??= this.#closeListener();
+    for (const conn of this.#conns) {
+      this.#send(conn, { type: "draining" });
+    }
     const alive = [...this.#procs.values()].filter((proc) => proc.alive);
     if (alive.length > 0) {
       const table = await processTable().catch((error: unknown) => {
@@ -1004,24 +1038,41 @@ export class SessiondServer {
     }
   }
 
+  /**
+   * Accept no more connections, and drop the socket file while it is still
+   * this keeper's: the keeper started next may have bound the path already,
+   * and its socket is not this one's to remove. Resolves once every open
+   * connection has ended too (net.Server.close), which {@link close} brings.
+   */
+  async #closeListener(): Promise<void> {
+    const server = this.#server;
+    this.#server = undefined;
+    const endpoint = this.#endpoint;
+    this.#endpoint = undefined;
+    // Stops accepting now; settles when the open connections have ended.
+    const closed = server
+      ? new Promise<void>((resolve) => server.close(() => resolve()))
+      : undefined;
+    if (endpoint) {
+      const now = await stat(endpoint).catch(() => undefined);
+      if (now?.ino === this.#socketInode) {
+        await unlink(endpoint).catch(() => {
+          /* already unlinked */
+        });
+      }
+    }
+    await closed;
+  }
+
   /** Stop listening and drop the socket file. Children are drain's business. */
   async close(): Promise<void> {
     clearInterval(this.#surveying);
+    this.#listenerClosed ??= this.#closeListener();
     for (const conn of this.#conns) {
       conn.socket.destroy();
     }
     this.#conns.clear();
-    const server = this.#server;
-    this.#server = undefined;
-    if (server) {
-      await new Promise<void>((resolve) => server.close(() => resolve()));
-    }
-    if (this.#endpoint) {
-      await unlink(this.#endpoint).catch(() => {
-        /* already unlinked */
-      });
-      this.#endpoint = undefined;
-    }
+    await this.#listenerClosed;
   }
 }
 
