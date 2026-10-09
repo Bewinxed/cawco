@@ -37,6 +37,7 @@ import type {
   StopPayload,
 } from "@cawco/core";
 import {
+  ACCOUNT_READ,
   AGENT_BUSY,
   alreadyIngested,
   BOUNDARY_RELAUNCH,
@@ -58,6 +59,7 @@ import {
   PREVIEW_START,
   PREVIEW_STOP,
   promptCacheUsage,
+  RATE_LIMIT_READ,
   READ_FLEET_HOLDINGS,
   REPEATED_FAILURE,
   REPEATED_FAILURE_LIMIT,
@@ -203,6 +205,15 @@ export type FrameSink = (
   ) &
     Partial<FrameProvenance> & { processGeneration?: string }
 ) => boolean;
+
+/**
+ * Whether a frame is an account reading: those name the launch that read
+ * them, so the hub keeps each for the account that launch runs on and drops
+ * one from a process its row has since replaced.
+ */
+const accountReading = (message: NeutralMessage): boolean =>
+  message.type === "system" &&
+  (message.subtype === ACCOUNT_READ || message.subtype === RATE_LIMIT_READ);
 
 const warn = (message: string): void => {
   Effect.runFork(Effect.logWarning(message));
@@ -2002,6 +2013,8 @@ export class SessionSupervisor {
       throw new Error("The hub did not supply this process's generation.");
     }
     this.#generations.set(instanceId, processGeneration);
+    const launchOf = (message: NeutralMessage) =>
+      accountReading(message) ? { processGeneration } : {};
     return {
       recordSessionAddress: (sessionId) => {
         const known = this.#addressAcknowledged.get(instanceId);
@@ -2093,6 +2106,7 @@ export class SessionSupervisor {
           ...(keepAlive ? { keepAlive: true } : {}),
           message,
           ...(src ?? {}),
+          ...launchOf(message),
         });
         if (message.type === "result") {
           this.#keepAlive.delete(instanceId);

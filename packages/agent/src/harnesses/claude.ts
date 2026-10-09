@@ -105,6 +105,7 @@ import { sessiondEndpoint } from "@cawco/core/sessiond";
 import {
   accountEnv,
   accountReports,
+  changingSignins,
   claudeAuth,
   probeAccount,
 } from "../accounts";
@@ -2897,30 +2898,40 @@ export class ClaudeHarness implements Harness {
         return readSkillFiles(args[0] as string, args[1] as string | undefined);
       case INSPECT_CONFIG:
         return inspectConfig(args[0] as string | undefined);
+      // Each change to an account dir's sign-in is one a report waits out
+      // (`changingSignins`), so none says what a dir was before it.
       case CONTROL_BEGIN_ACCOUNT_LOGIN:
-        return beginAccountLogin(args[0] as string, args[1] as AccountKind);
+        return changingSignins(
+          beginAccountLogin(args[0] as string, args[1] as AccountKind)
+        );
       case CONTROL_COMPLETE_ACCOUNT_LOGIN:
-        return completeAccountLogin(
-          args[0] as string,
-          args[1] as string,
-          (args[2] as AccountIdentity | null) ?? null
+        return changingSignins(
+          completeAccountLogin(
+            args[0] as string,
+            args[1] as string,
+            (args[2] as AccountIdentity | null) ?? null
+          )
         );
       case CONTROL_FORGET_ACCOUNT:
         // An answer, not undefined: undefined tells the daemon this harness
         // does not handle the control, and the hub reads that as a refusal.
-        await forgetAccount(args[0] as string);
+        await changingSignins(forgetAccount(args[0] as string));
         return { forgotten: true };
       case CONTROL_PROBE_ACCOUNT:
         return probeAccount(args[0] as string);
       case CONTROL_READ_HOME_LOGIN:
         return readHomeLogin();
       case CONTROL_MOVE_HOME_LOGIN:
-        return moveHomeLogin(args[0] as string, args[1] as AccountIdentity);
+        return changingSignins(
+          moveHomeLogin(args[0] as string, args[1] as AccountIdentity)
+        );
       case CONTROL_JOIN_ACCOUNT_LOGIN:
-        return joinAccountLogin(
-          args[0] as string,
-          args[1] as string,
-          args[2] as AccountIdentity
+        return changingSignins(
+          joinAccountLogin(
+            args[0] as string,
+            args[1] as string,
+            args[2] as AccountIdentity
+          )
         );
       case "unlockKeychain": {
         await unlockKeychain(args[0] as string);

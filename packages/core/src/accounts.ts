@@ -851,6 +851,8 @@ export type WaitReason = "fork" | "off" | "full" | "soon";
 export type AccountMove =
   | {
       kind: "moved";
+      /** Moved because a person asked (`POST /api/instances/:id/account`), not at a limit. */
+      asked?: true;
       from: NamedAccount;
       to: NamedAccount;
       /** Both accounts in one organization: its prompt cache came along. */
@@ -958,10 +960,12 @@ export const accountMoveWords = (
         line: move.sameOrganization
           ? `Moved to ${move.to.name} · same organization, cache kept`
           : `Moved to ${move.to.name} · re-read ${tokenWords(move.tokens)}`,
-        detail: [
-          `${move.from.name} hit its ${move.window ? `${move.window} ` : ""}limit`,
-          ...(left > 0 ? [`resets in ${spanWords(left)}`] : []),
-        ].join(" · "),
+        detail: move.asked
+          ? `Moved here from ${move.from.name}, as asked`
+          : [
+              `${move.from.name} hit its ${move.window ? `${move.window} ` : ""}limit`,
+              ...(left > 0 ? [`resets in ${spanWords(left)}`] : []),
+            ].join(" · "),
       };
     }
     case "waiting": {

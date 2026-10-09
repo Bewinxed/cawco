@@ -157,15 +157,18 @@ const dirState = (
  * Squares the account sign-ins on `machineId` with what its agent just read
  * from every account store there of one kind: Claude's config dirs
  * (`claude`), or every other provider's credential stores (`providers`). Who
- * each store is signed in as decides its sign-in, every time. True when
- * anything changed; `failed` when a Claude catalog probe it needed could not
- * be read, which the caller retries.
+ * each store is signed in as decides its sign-in, every time, except one
+ * settled since the report came in (`receivedAt`): a sign-in finished, or an
+ * earlier pass of this same report, while it waited behind a probe. True
+ * when anything changed; `failed` when a Claude catalog probe it needed
+ * could not be read, which the caller retries.
  */
 export const reconcileAccounts = async (
   db: DbShape,
   machineId: string,
   scope: "claude" | "providers",
   reports: AccountReport[],
+  receivedAt: number,
   probe: AccountProber
 ): Promise<Squared> => {
   const store = db.accounts;
@@ -177,6 +180,17 @@ export const reconcileAccounts = async (
     .filter(
       (one) => one.machineId === machineId && ofScope(store.get(one.accountId))
     );
+  // Read afresh each time: a pass waits on probes, and a sign-in can settle
+  // while it does.
+  const settledSince = (accountId: string) =>
+    store
+      .signins()
+      .find(
+        (one) =>
+          one.accountId === accountId &&
+          one.machineId === machineId &&
+          one.checkedAt > receivedAt
+      );
   let changed = false;
   let failed = false;
 
@@ -185,10 +199,13 @@ export const reconcileAccounts = async (
     if (!ofScope(found)) {
       continue;
     }
-    const state = dirState(db, found, report);
+    const settled = settledSince(found.id);
+    const state = settled ? settled.state : dirState(db, found, report);
     const account = store.get(found.id) ?? found;
-    changed =
-      store.putSignin({ accountId: account.id, machineId, state }) || changed;
+    if (!settled) {
+      changed =
+        store.putSignin({ accountId: account.id, machineId, state }) || changed;
+    }
     if (state === "signed-in" && scope === "claude") {
       // biome-ignore lint/performance/noAwaitInLoops: one dir's Claude Code at a time on the machine
       const read = await catalogFor(db, machineId, account, probe);
@@ -200,6 +217,7 @@ export const reconcileAccounts = async (
   for (const signin of mine) {
     const gone =
       signin.state !== "signed-out" &&
+      !settledSince(signin.accountId) &&
       !reports.some((report) => report.account === signin.accountId);
     if (gone) {
       changed = store.putSignin({ ...signin, state: "signed-out" }) || changed;

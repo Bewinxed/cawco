@@ -60,7 +60,7 @@ const SETTLE_MS = 5000;
 const SETTLE_FOR_MS = 2 * MINUTE_MS;
 
 /** Two accounts of one organization share its prompt cache and its thinking. */
-const sameOrganization = (a: Account, b: Account): boolean =>
+export const sameOrganization = (a: Account, b: Account): boolean =>
   !!a.identity?.organization &&
   a.identity.organization === b.identity?.organization;
 

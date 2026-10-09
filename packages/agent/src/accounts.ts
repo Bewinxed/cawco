@@ -113,20 +113,53 @@ export const kindOf = (
   return authMethod === "claude.ai" ? "subscription" : "console";
 };
 
-/** Every account dir on this machine and whether it is signed in. */
-export const accountReports = (): Promise<AccountReport[]> =>
-  Promise.all(
-    accountIds().map(async (account) => {
-      const status = await authStatusIn(envFor(account));
-      const kind = kindOf(status.authMethod);
-      return {
-        account,
-        loggedIn: status.loggedIn,
-        ...(kind ? { kind } : {}),
-        ...(status.identity ? { identity: status.identity } : {}),
-      };
-    })
-  );
+/**
+ * The sign-ins this agent is changing (a sign-in begun or finished, a dir
+ * signed out, a login moved or joined into an account), and how many
+ * changes have begun or ended: a report read across one says what a dir was
+ * before it, and the hub would take that over what the change settled.
+ */
+const signinChanges = new Set<Promise<unknown>>();
+let signinChanged = 0;
+
+/** Runs a change to this machine's account dirs as one {@link accountReports} waits out. */
+export const changingSignins = <T>(change: Promise<T>): Promise<T> => {
+  signinChanges.add(change);
+  signinChanged += 1;
+  const over = () => {
+    signinChanges.delete(change);
+    signinChanged += 1;
+  };
+  change.then(over, over);
+  return change;
+};
+
+/**
+ * Every account dir on this machine and whether it is signed in, read when
+ * no sign-in is changing here and again when one changed while it was read.
+ */
+export const accountReports = async (): Promise<AccountReport[]> => {
+  for (;;) {
+    // biome-ignore lint/performance/noAwaitInLoops: each read waits out the changes begun before it
+    await Promise.allSettled([...signinChanges]);
+    const seen = signinChanged;
+    const reports = await Promise.all(
+      accountIds().map(async (account) => {
+        const status = await authStatusIn(envFor(account));
+        const kind = kindOf(status.authMethod);
+        return {
+          account,
+          loggedIn: status.loggedIn,
+          ...(kind ? { kind } : {}),
+          ...(status.identity ? { identity: status.identity } : {}),
+        };
+      })
+    );
+    if (seen === signinChanged) {
+      return reports;
+    }
+  }
+};
 
 /** `errSecInteractionNotAllowed`: the item is there, this session may not read it. */
 const SEC_INTERACTION_NOT_ALLOWED = 36;

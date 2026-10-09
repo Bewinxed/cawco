@@ -16,6 +16,7 @@ import {
   accountsRoot,
   removeAccountRoot,
 } from "@cawco/core/paths";
+import { changingSignins } from "./accounts";
 import { forgetAccount } from "./login";
 import { forgetProviderAccount } from "./provider-accounts";
 
@@ -41,7 +42,7 @@ export const forgetUnknownAccounts = async (ids: string[]): Promise<void> => {
     try {
       if (existsSync(accountConfigDir(id))) {
         // biome-ignore lint/performance/noAwaitInLoops: one store at a time, each signed out by its own harness
-        await forgetAccount(id);
+        await changingSignins(forgetAccount(id));
       }
       if (existsSync(accountCredentialPath(id))) {
         await forgetProviderAccount(id);

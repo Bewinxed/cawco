@@ -246,7 +246,12 @@ import {
   clientCopy,
   createAskPresenter,
 } from "./ask-presentation";
-import { createAtLimit, type KeptSummary, type Summarised } from "./at-limit";
+import {
+  createAtLimit,
+  type KeptSummary,
+  type Summarised,
+  sameOrganization,
+} from "./at-limit";
 import { createBinaryUpdates } from "./binary-updates";
 import { type Caw, cawRoutes, createCaw, withCawDenials } from "./caw";
 import { DB_PATH, HUB_VERSION, SPAWN_START_TIMEOUT_MS } from "./config";
@@ -2662,16 +2667,35 @@ export const createServer = (
    * provider stores), squared with the hub's accounts one at a time. A
    * probe that failed is tried again, 30 s then doubling to 30 minutes,
    * while the machine is connected; a new report starts over.
+   *
+   * A report the same as the last one taken on this connection says
+   * nothing new and is not taken: a machine says its stores again with
+   * every heartbeat that carries its harnesses (pi's settings changed, say),
+   * read when they last changed, and sign-ins the hub settled since then
+   * would read as gone from it. The first on each connection is always
+   * taken ({@link freshAccountReports}).
    */
   const accountSyncs = new Map<
     string,
     {
       attempt: number;
-      reports: AccountReport[];
+      /** Undefined until the machine's connection has named its stores. */
+      reports: AccountReport[] | undefined;
+      /** When `reports` came in: a sign-in settled since is not theirs to undo. */
+      receivedAt: number;
       running: Promise<void>;
       timer?: ReturnType<typeof setTimeout>;
     }
   >();
+  /** A machine's new connection: its first report of each kind is taken. */
+  const freshAccountReports = (machineId: string): void => {
+    for (const harness of ["claude", "providers"] as const) {
+      const sync = accountSyncs.get(`${machineId}\u0000${harness}`);
+      if (sync) {
+        sync.reports = undefined;
+      }
+    }
+  };
   const syncAccounts = (
     machineId: string,
     harness: "claude" | "providers",
@@ -2680,22 +2704,33 @@ export const createServer = (
     const key = `${machineId}\u0000${harness}`;
     const sync = accountSyncs.get(key) ?? {
       attempt: 0,
-      reports: [],
+      reports: undefined,
+      receivedAt: 0,
       running: Promise.resolve(),
     };
+    if (reports && sync.reports && Bun.deepEquals(reports, sync.reports)) {
+      return;
+    }
     if (reports) {
       sync.reports = reports;
+      sync.receivedAt = Date.now();
       sync.attempt = 0;
       clearTimeout(sync.timer);
     }
     accountSyncs.set(key, sync);
     sync.running = sync.running
       .then(async () => {
+        // A retry after a new connection began waits for that connection's
+        // own report.
+        if (!sync.reports) {
+          return;
+        }
         const { changed, failed } = await reconcileAccounts(
           db,
           machineId,
           harness,
           sync.reports,
+          sync.receivedAt,
           probeAccount
         );
         if (changed) {
@@ -3981,10 +4016,13 @@ export const createServer = (
       ...asked
     } = payload;
     const owned = db.ownedInstance(payload.instanceId);
-    const [stored] = db.getInstancesByIds([payload.instanceId]);
-    if (!stored) {
+    const [read] = db.getInstancesByIds([payload.instanceId]);
+    if (!read) {
       throw new Error("A spawn has no recorded process generation.");
     }
+    // A process launched now runs on the account a person moved its session
+    // to mid-turn; a reattach takes the process as it runs.
+    const stored = payload.reattachOnly ? read : takeOwedMove(read);
     const row = knownRow ?? stored;
     const workspace = row ? workItems.workspaceOf(row) : undefined;
     const harness = payload.harness ?? row?.harness ?? "claude";
@@ -9746,22 +9784,161 @@ export const createServer = (
     return true;
   };
 
-  /** Sessions whose model was changed across an account provider mid-turn: each moves when its turn ends. */
-  const crossingModel = new Set<string>();
+  /**
+   * Sessions whose account changes mid-turn: each relaunches when its turn
+   * ends. A model that crossed an account provider has already put its
+   * account on the row (`to` absent). A person's move has not: a row names
+   * the account its running process reads, so its account's readings and
+   * sign-in stay that process's until it is replaced; the next launch of the
+   * row takes `to` and writes `move` ({@link takeOwedMove}).
+   */
+  const relaunchAtTurnEnd = new Map<
+    string,
+    { to?: string; move: AccountMove | null }
+  >();
 
   /**
-   * Relaunches a pi or OpenCode session on the account its row now names (or
-   * on none), its conversation whole: pi reopens its session file on that
-   * account's runtime; OpenCode carries it into that account's server.
+   * The row a launch of `row` runs as: on the account a person moved it to
+   * mid-turn, now that its process is being replaced, the move's line
+   * written. Every launch takes it (`bounded`), so one that comes before the
+   * turn's end (a restart, a wake after a crash) runs on it too.
    */
-  const moveAcrossProvider = (instanceId: string): void => {
-    const [row] = db.getInstancesByIds([instanceId]);
+  const takeOwedMove = (row: StoredRow): StoredRow => {
+    const owed = relaunchAtTurnEnd.get(row.id);
+    if (!owed) {
+      return row;
+    }
+    relaunchAtTurnEnd.delete(row.id);
+    if (owed.to === undefined) {
+      return row;
+    }
+    db.patchInstance(row.id, { accountId: owed.to });
+    db.atLimit.dropHold(row.id);
+    publishInstances(row.machineId);
+    if (owed.move) {
+      noteAtLimit(row, owed.move);
+    }
+    return { ...row, accountId: owed.to };
+  };
+
+  /** A session's row as the hub stores it. */
+  type StoredRow = ReturnType<typeof db.getInstancesByIds>[number];
+
+  /**
+   * Why `row` cannot move to `account` by hand: the account is another
+   * provider's than the session's, or is not signed in on its machine.
+   */
+  const handMoveRefusal = (
+    row: StoredRow,
+    account: Account
+  ): string | undefined => {
+    const harness = row.harness ?? "claude";
+    const provider = row.accountId
+      ? db.accounts.get(row.accountId)?.provider
+      : accountProvidersOf(
+          harness,
+          resolvedModel(row.machineId, harness, row.model)
+        )[0];
+    const named = (id: string) =>
+      id === CLAUDE_PROVIDER
+        ? "Claude"
+        : (knownProviders().find((one) => one.id === id)?.name ?? id);
+    if (provider !== account.provider) {
+      return provider
+        ? `${sessionName(row)} runs on a ${named(provider)} account; ${accountName(account)} is a ${named(account.provider)} account.`
+        : `${sessionName(row)}'s model is no account's, so it can't run on ${accountName(account)}.`;
+    }
+    const signedIn = db.accounts
+      .signins()
+      .some(
+        (one) =>
+          one.accountId === account.id &&
+          one.machineId === row.machineId &&
+          one.state === "signed-in"
+      );
+    if (signedIn) {
+      return undefined;
+    }
+    // An account never signed in has no name of its own yet.
+    return account.label || account.email
+      ? `${accountName(account)} isn't signed in on ${machineName(row.machineId)}; sign it in there first.`
+      : `That ${named(account.provider)} account has never been signed in; sign it in on ${machineName(row.machineId)} first.`;
+  };
+
+  /**
+   * Moves `row` to `account` because a person asked, the line "Moved to …"
+   * written as it moves. A session at rest relaunches on it now; one not
+   * running resumes on it when it next starts, its conversation carried
+   * then; both rows name it now. One mid-turn goes on reading its old
+   * account until the turn ends, so its row names that one until then
+   * ({@link relaunchAtTurnEnd}). A hold at its old account's limit ends:
+   * the person chose.
+   */
+  const moveByHand = async (
+    row: StoredRow,
+    account: Account
+  ): Promise<{
+    accountId: string;
+    state: "moved" | "pending";
+    why: string;
+  }> => {
+    const from = row.accountId ? db.accounts.get(row.accountId) : undefined;
+    const move: AccountMove | null = from
+      ? {
+          kind: "moved",
+          asked: true,
+          from: namedAccount(from),
+          to: namedAccount(account),
+          sameOrganization: sameOrganization(from, account),
+          tokens: row.contextTokens,
+          window: null,
+          resetsAt: null,
+        }
+      : null;
+    const running = !["sleeping", "stopped", "error"].includes(row.status);
+    if (running && !(await sessionIdle(row))) {
+      relaunchAtTurnEnd.set(row.id, { to: account.id, move });
+      return {
+        state: "pending",
+        accountId: account.id,
+        why: `${sessionName(row)} moves to ${accountName(account)} when its turn ends.`,
+      };
+    }
+    // A move it still owed (asked mid-turn, to another account) is over.
+    relaunchAtTurnEnd.delete(row.id);
+    db.patchInstance(row.id, { accountId: account.id });
+    db.atLimit.dropHold(row.id);
+    publishInstances(row.machineId);
+    if (running) {
+      relaunchOnAccount(row.id);
+    }
+    if (move) {
+      noteAtLimit(row, move);
+    }
+    return {
+      state: "moved",
+      accountId: account.id,
+      why: running
+        ? `${sessionName(row)} runs on ${accountName(account)} now.`
+        : `${sessionName(row)} runs on ${accountName(account)} when it next starts.`,
+    };
+  };
+
+  /**
+   * Relaunches a session on the account its row now names (or on none), its
+   * conversation whole: Claude Code's is carried into that account's dir; pi
+   * reopens its session file on that account's runtime; OpenCode carries it
+   * into that account's server.
+   */
+  const relaunchOnAccount = (instanceId: string): void => {
+    const [stored] = db.getInstancesByIds([instanceId]);
+    const row = stored && takeOwedMove(stored);
     const agent = row ? registry.agent(row.machineId) : undefined;
     if (!(row?.sessionId && agent)) {
       return;
     }
     console.log(
-      `[hub] ${row.id} moves to ${row.accountId ? `account ${row.accountId}` : "no account"} for its model ${row.model ?? "(default)"}`
+      `[hub] ${row.id} relaunches on ${row.accountId ? `account ${row.accountId}` : "no account"}`
     );
     transcripts.noteRelaunch(row.id);
     resumeSpawn(
@@ -9813,9 +9990,9 @@ export const createServer = (
     }
     db.patchInstance(row.id, { model, accountId: placed.accountId ?? null });
     if (await sessionIdle(row)) {
-      moveAcrossProvider(row.id);
+      relaunchOnAccount(row.id);
     } else {
-      crossingModel.add(row.id);
+      relaunchAtTurnEnd.set(row.id, { move: null });
     }
     return "crossed";
   };
@@ -12487,6 +12664,41 @@ export const createServer = (
           const { midTurn, hasTurns, lastTurnAt, activityBound } =
             followupState(row);
           return { row, midTurn, hasTurns, lastTurnAt, activityBound };
+        }
+      )
+      // Moves a session to another account of its provider, whole: its
+      // conversation is carried into the account's store and resumed there,
+      // with no summary. Now when it is at rest, else at its turn's end
+      // (`pending` until then). A fork may be moved too: it is the person's
+      // choice.
+      .post(
+        "/api/instances/:id/account",
+        { body: t.Object({ accountId: t.String() }) },
+        async ({ params, body, status }) => {
+          const [row] = db.getInstancesByIds([params.id]);
+          if (!row) {
+            return status(404, "Session not found");
+          }
+          const account = db.accounts.get(body.accountId);
+          if (!account) {
+            return status(404, `There is no account ${body.accountId}.`);
+          }
+          const refusal = handMoveRefusal(row, account);
+          if (refusal) {
+            return status(409, refusal);
+          }
+          if (row.accountId === account.id) {
+            // Back to the account it runs on: a move asked mid-turn is off.
+            if (relaunchAtTurnEnd.get(row.id)?.to !== undefined) {
+              relaunchAtTurnEnd.delete(row.id);
+            }
+            return {
+              state: "moved" as const,
+              accountId: account.id,
+              why: `${sessionName(row)} already runs on ${accountName(account)}.`,
+            };
+          }
+          return await moveByHand(row, account);
         }
       )
       .post(
@@ -16065,6 +16277,7 @@ export const createServer = (
                 peekInstances(message.payload),
                 revivable.map((orphan) => orphan.row.id)
               );
+              freshAccountReports(message.machineId);
               sendFrame(
                 ws,
                 registerAck(
@@ -16725,8 +16938,20 @@ export const createServer = (
                     frame.message.subtype === ACCOUNT_READ)
                 ) {
                   const [row] = db.getInstancesByIds([message.instanceId]);
+                  // A reading from a process its row has since replaced
+                  // (a move relaunched it on another account) is of no
+                  // account the row names: dropped, never let it say who is
+                  // signed in. The row names the account of the launch it
+                  // has now, as a move waits for it ({@link relaunchAtTurnEnd}).
+                  if (
+                    !row ||
+                    peek(message.payload, "processGeneration") !==
+                      processGeneration(row)
+                  ) {
+                    break;
+                  }
                   const accountId =
-                    row?.accountId &&
+                    row.accountId &&
                     db.accounts
                       .signins()
                       .some(
@@ -17094,10 +17319,12 @@ export const createServer = (
                       });
                     }
                   }
-                  // Its model was changed across an account provider during
-                  // the turn: it moves now, at the turn's end.
-                  if (cacheRow && crossingModel.delete(cacheRow.id)) {
-                    moveAcrossProvider(cacheRow.id);
+                  // Its account changed during the turn (its model crossed a
+                  // provider, or a person moved it): it moves now, at the
+                  // turn's end.
+                  // Its launch takes the move ({@link takeOwedMove}).
+                  if (cacheRow && relaunchAtTurnEnd.has(cacheRow.id)) {
+                    relaunchOnAccount(cacheRow.id);
                   }
                   // Claude reports each model's window only here; kept so a
                   // picker can say whether a model fits (claude's catalog

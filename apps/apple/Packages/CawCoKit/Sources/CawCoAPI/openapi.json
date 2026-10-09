@@ -8417,6 +8417,81 @@
         }
       }
     },
+    "/api/instances/{id}/account": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "accountId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "accountId"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiInstancesByIdAccount",
+        "responses": {
+          "200": {
+            "description": "postApiInstancesByIdAccount 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiInstancesByIdAccount200"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiInstancesByIdAccount 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiInstancesByIdAccount 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiInstancesByIdAccount 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/instances/titles": {
       "post": {
         "requestBody": {
@@ -15705,6 +15780,29 @@
             }
           ]
         }
+      },
+      "postApiInstancesByIdAccount200": {
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "moved",
+              "pending"
+            ],
+            "type": "string"
+          },
+          "why": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "accountId",
+          "state",
+          "why"
+        ]
       },
       "postApiInstancesTitles200": {
         "type": "array",
@@ -26172,6 +26270,11 @@
                       "moved"
                     ]
                   },
+                  "asked": {
+                    "description": "Moved because a person asked (`POST /api/instances/:id/account`), not at a limit.",
+                    "const": true,
+                    "type": "boolean"
+                  },
                   "from": {
                     "$ref": "#/components/schemas/NamedAccount"
                   },
@@ -31048,6 +31151,11 @@
                     "enum": [
                       "moved"
                     ]
+                  },
+                  "asked": {
+                    "description": "Moved because a person asked (`POST /api/instances/:id/account`), not at a limit.",
+                    "const": true,
+                    "type": "boolean"
                   },
                   "from": {
                     "$ref": "#/components/schemas/NamedAccount"
