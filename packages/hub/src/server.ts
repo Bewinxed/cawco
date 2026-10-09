@@ -253,7 +253,7 @@ import {
   sessionLimitsReader,
 } from "./accounts";
 import { createAdminAsks } from "./admin-asks";
-import { isAdminWrite } from "./admin-tools";
+import { adminTools, isAdminWrite } from "./admin-tools";
 import { appleDiagnosticsRoutes } from "./apple-diagnostics";
 import {
   answeredWithOriginal,
@@ -2071,12 +2071,12 @@ export const createServer = (
    * admin write — parked like a session's own: on the pending ledger, to every
    * dashboard, and to Telegram and push the first time.
    */
-  const parkForPerson = (envelope: Envelope): void => {
+  const parkForPerson = (envelope: Envelope, outlivesHub = false): void => {
     if (!envelope.requestId) {
       throw new Error("An ask for the person has no request id.");
     }
     const existed = pending.get(envelope.requestId);
-    if (!pending.remember(envelope.requestId, envelope)) {
+    if (!pending.remember(envelope.requestId, envelope, outlivesHub)) {
       return;
     }
     registry.broadcast(clientCopy(envelope));
@@ -2093,9 +2093,46 @@ export const createServer = (
   // sessions that did not survive the restart, and that listener withdraws
   // their admin writes, so it must find this already made.
   const adminAsks = createAdminAsks({
-    park: parkForPerson,
+    // Kept across a restart, as a session's own asks are.
+    park: (envelope) => parkForPerson(envelope, true),
+    parked: (requestId) => pending.get(requestId),
     settle: (requestId) => {
       pending.resolve(requestId);
+    },
+    // An ask approved after a restart: the hub runs the write itself.
+    run: async (name, input) => {
+      const entry = adminTools().find((tool) => tool.name === name);
+      if (!entry) {
+        throw new Error(`No admin tool ${name} in this build.`);
+      }
+      const result = (await entry.handler(input)) as {
+        content?: { text?: string; type?: string }[];
+      };
+      return (result.content ?? [])
+        .map((part) => (part.type === "text" ? (part.text ?? "") : ""))
+        .join("\n")
+        .trim();
+    },
+    tell: (instanceId, text) => {
+      const [row] = db.getInstancesByIds([instanceId]);
+      if (!row) {
+        return;
+      }
+      deliverSend({
+        verb: "send",
+        machineId: row.machineId,
+        instanceId: row.id,
+        payload: {
+          instanceId: row.id,
+          message: {
+            type: "user",
+            uuid: crypto.randomUUID(),
+            message: { role: "user", content: text },
+            parent_tool_use_id: null,
+            origin: { kind: "system", name: "admin" },
+          },
+        },
+      });
     },
   });
   // Each project's Caw (caw.ts), made further down once its services are; the
@@ -10528,10 +10565,20 @@ export const createServer = (
     return (placeId) => paths.get(placeId);
   };
 
-  // A place added or removed: its machine is sent its fleet config again, so
-  // the project's hooks reach the new place or leave the old one. Only when
-  // the project has any; a place of a project without them changes nothing.
+  /** Tells every dashboard the projects changed: each reads them again. */
+  const projectsChanged = (): void =>
+    registry.broadcast({
+      verb: "frames",
+      machineId: "hub",
+      payload: { kind: "projects.changed" },
+    });
+
+  // A place added or removed: every dashboard reads the projects again, and
+  // its machine is sent its fleet config again, so the project's hooks reach
+  // the new place or leave the old one. Only when the project has any; a
+  // place of a project without them changes nothing on its machine.
   onPlacesChanged((machineId, projectId) => {
+    projectsChanged();
     const agent = registry.agent(machineId);
     if (
       !agent ||
@@ -11708,6 +11755,7 @@ export const createServer = (
       remote,
       caw: asked.caw ?? false,
     });
+    projectsChanged();
     // The place it was made from: its checkout, else its folder on the hub.
     const place =
       checkoutOf(created) ??
@@ -16263,6 +16311,7 @@ export const createServer = (
           db.project(params.id)?.places.map((place) => place.machineId)
         );
         db.deleteProject(params.id);
+        projectsChanged();
         // Its hooks leave every place it had.
         for (const machineId of machines) {
           placesChanged(machineId, params.id);

@@ -2743,6 +2743,11 @@ function handleFrame(frame: FramePayload): void {
     return;
   }
 
+  if (frame.kind === "projects.changed") {
+    rereadProjects();
+    return;
+  }
+
   if (frame.kind === "tasks.changed") {
     state.tasksChanged[frame.projectId] =
       (state.tasksChanged[frame.projectId] ?? 0) + 1;
@@ -5430,6 +5435,29 @@ export async function readProjects(): Promise<void> {
   if (projects) {
     state.projects = reconcileRows(state.projects, projects, (row) => row.id);
   }
+}
+
+/**
+ * The hub said the projects changed (`projects.changed`: a place came or
+ * went): one read at a time, and one more after it for whatever a burst of
+ * workspaces opening said meanwhile.
+ */
+let projectsReading: Promise<void> | null = null;
+let projectsAgain = false;
+function rereadProjects(): void {
+  if (projectsReading) {
+    projectsAgain = true;
+    return;
+  }
+  projectsReading = readProjects()
+    .catch(() => undefined)
+    .finally(() => {
+      projectsReading = null;
+      if (projectsAgain) {
+        projectsAgain = false;
+        rereadProjects();
+      }
+    });
 }
 
 /** One running session of a project, in tree order (parents first). */

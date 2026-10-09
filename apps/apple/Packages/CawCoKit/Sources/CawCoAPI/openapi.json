@@ -19558,6 +19558,9 @@
             "$ref": "#/components/schemas/TasksChangedFrame"
           },
           {
+            "$ref": "#/components/schemas/ProjectsChangedFrame"
+          },
+          {
             "$ref": "#/components/schemas/ProjectCapFrame"
           },
           {
@@ -19611,6 +19614,7 @@
             "thread.upsert": "#/components/schemas/ThreadUpsertFrame",
             "thread.message": "#/components/schemas/ThreadMessageFrame",
             "tasks.changed": "#/components/schemas/TasksChangedFrame",
+            "projects.changed": "#/components/schemas/ProjectsChangedFrame",
             "project.cap": "#/components/schemas/ProjectCapFrame",
             "project.stop": "#/components/schemas/ProjectStopFrame",
             "delegate_event": "#/components/schemas/DelegateEventFrame",
@@ -34192,6 +34196,21 @@
         "required": [
           "kind",
           "projectId"
+        ]
+      },
+      "ProjectsChangedFrame": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "description": "Hub-originated: the projects changed (one was made or forgotten, or a\nplace was added or removed: a checkout joined, a delegate's workspace\nopened or was archived): read `/api/projects` again.",
+            "type": "string",
+            "enum": [
+              "projects.changed"
+            ]
+          }
+        },
+        "required": [
+          "kind"
         ]
       },
       "ProjectCapFrame": {

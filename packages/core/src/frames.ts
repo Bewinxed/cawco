@@ -329,6 +329,16 @@ export interface ProjectStopFrame {
   projectId: string;
 }
 
+export interface ProjectsChangedFrame {
+  instanceId?: undefined;
+  /**
+   * Hub-originated: the projects changed (one was made or forgotten, or a
+   * place was added or removed: a checkout joined, a delegate's workspace
+   * opened or was archived): read `/api/projects` again.
+   */
+  kind: "projects.changed";
+}
+
 export interface TasksChangedFrame {
   instanceId?: undefined;
   /**
