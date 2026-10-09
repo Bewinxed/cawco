@@ -451,6 +451,18 @@ TS
   done
 fi
 EOF
+# Signs a machine in to the CawCo account $1 the way `claude auth login` in that account's dir leaves it: the dir
+# ~/.cawco/accounts/$1/claude holding a credential (Linux keeps it in .credentials.json) and the account's
+# oauthAccount in the dir's own .claude.json. The token is fake; the bundled Claude Code's `auth status` reads the
+# dir as signed in without asking anyone, which is all a proof machine's sessions (a held `sleep`) need.
+cat > "$out/shared/account-dir.sh" <<'EOF'
+set -eu
+dir="$HOME/.cawco/accounts/$1/claude"
+mkdir -p -m 700 "$dir"
+umask 077
+printf '{"claudeAiOauth":{"accessToken":"sk-ant-oat01-proof-not-a-token","refreshToken":"sk-ant-ort01-proof-not-a-token","expiresAt":4102444800000,"scopes":["user:inference","user:profile"],"subscriptionType":"max"}}\n' > "$dir/.credentials.json"
+printf '{"oauthAccount":{"accountUuid":"00000000-0000-4000-8000-000000000001","emailAddress":"proof@cawco.test","organizationUuid":"00000000-0000-4000-8000-000000000002","organizationName":"CawCo proof","organizationRole":"admin"}}\n' > "$dir/.claude.json"
+EOF
 cat > "$out/shared/diagnose-machine.sh" <<'EOF'
 binary="$HOME/.local/share/cawco/binary"
 data="$HOME/.local/share/cawco"
@@ -590,6 +602,47 @@ check "running the installer again reports the install and changes nothing" reru
 hid=$(machine_id hub)
 jid=$(machine_id joiner)
 export hid jid
+
+# ---------------------------------------------------------------- Claude accounts
+# A Claude session runs only on a CawCo account signed in on its machine, in that account's own dir. Until a
+# machine has one, a start there is refused in the hub's words and nothing runs.
+no_account_refused() {
+  need_hub
+  local rc=0 said
+  said=$(start_session "$jid" noaccount-1 2>&1) || rc=$?
+  echo "$said"
+  [[ $rc != 0 ]] || { echo "ASSERTION FAILED: the start was not refused"; return 1; }
+  grep -qF "No Claude account is signed in on joiner. Add one in Configure → Accounts and sign it in there." <<< "$said"
+  sleep 5
+  # No session row, and no child on the machine.
+  [[ -z "$(hub_api /api/instances | json "d => d.find(r => r.id === 'noaccount-1')?.status")" ]]
+  [[ "$(children_with "$joinerc" noaccount-)" == 0 ]]
+}
+export -f no_account_refused
+check "on a machine with no CawCo account a session start is refused with the sentence, and nothing runs" no_account_refused
+
+# The machines whose sessions the proof starts are set up as a real machine is: one CawCo account, made through
+# the hub's API, signed in on each in its own dir. The hub records each sign-in before the first session starts.
+signed_in_on() { hub_api /api/accounts | json "d => d.signins.filter(s => s.accountId === '$1' && s.state === 'signed-in').map(s => s.machineId).sort().join(' ')"; }
+export -f signed_in_on
+sign_in_machines() {
+  need_hub
+  local aid c want
+  aid=$(hub_api /api/accounts -X POST -H 'content-type: application/json' -d '{"provider":"anthropic","kind":"subscription"}' | json 'd => d.id')
+  [[ -n $aid ]]
+  echo "$aid" > "$out/account-id"
+  for c in "$hubc" "$joinerc"; do
+    as_user "$c" sh /shared/account-dir.sh "$aid"
+    # The agent reads its account dirs as it registers.
+    as_user "$c" systemctl --user restart cawco-agent.service
+  done
+  want=$(printf '%s\n' "$hid" "$jid" | sort | paste -sd ' ')
+  wait_until 120 '[[ "$(signed_in_on '"$aid"')" == "'"$want"'" ]]'
+  hub_api /api/accounts | json "d => d.accounts.find(a => a.id === '$aid')?.email" | grep -qx proof@cawco.test
+  wait_until 60 '[[ "$(hub_api /api/agents | json "d => d.filter(a => a.status === \"online\" && (a.machineId === \"$hid\" || a.machineId === \"$jid\")).length")" == 2 ]]'
+}
+export -f sign_in_machines
+check "each machine that runs the proof's sessions is signed in to a CawCo account in its own dir" sign_in_machines
 
 truncated_script() {
   as_user "$freshc" true

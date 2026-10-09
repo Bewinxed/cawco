@@ -43,7 +43,7 @@ async function dashboardSocket(): Promise<WebSocket | undefined> {
   try {
     const socket = new WebSocket(`${hub.replace("http", "ws")}/ws/dashboard`);
     socket.onmessage = (event) => {
-      heard.push(String(event.data).slice(0, 160));
+      heard.push(String(event.data));
     };
     await new Promise<void>((resolve, reject) => {
       socket.onopen = () => resolve();
@@ -51,6 +51,25 @@ async function dashboardSocket(): Promise<WebSocket | undefined> {
     });
     dashboard = socket;
     return socket;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The hub's refusal of the start of `id`, in its words: the frame it answers a
+ * refused spawn with (`refusalFrame`: `payload.kind` "error" for that
+ * instance). Undefined when `text` is not one.
+ */
+function refusalOf(text: string, id: string): string | undefined {
+  try {
+    const frame = JSON.parse(text) as {
+      instanceId?: string;
+      payload?: { kind?: string; message?: string };
+    };
+    return frame.instanceId === id && frame.payload?.kind === "error"
+      ? (frame.payload.message ?? "refused")
+      : undefined;
   } catch {
     return undefined;
   }
@@ -78,10 +97,18 @@ async function fire(id: string): Promise<{ answer: string; refused: boolean }> {
       })
     );
     await Bun.sleep(ANSWER_MS);
-    const answer = heard.join(" | ");
+    const refusal = heard
+      .map((text) => refusalOf(text, id))
+      .find((one) => one !== undefined);
+    const answer = heard.map((text) => text.slice(0, 160)).join(" | ");
     return {
-      answer: answer || "no answer within 150ms",
-      refused: answer.includes('"ok":false') || answer.includes("failure"),
+      answer: refusal
+        ? `refused: ${refusal}`
+        : answer || "no answer within 150ms",
+      refused:
+        refusal !== undefined ||
+        answer.includes('"ok":false') ||
+        answer.includes("failure"),
     };
   }
   const reply: string[] = [];

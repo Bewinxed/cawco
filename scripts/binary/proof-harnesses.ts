@@ -6,15 +6,18 @@
  * call the Claude harness uses (`SessiondClient.spawnProc`, under the same
  * `procIdFor` id), outlives the agent, and is taken back by the same
  * `reattach`/`adopt`/`custodyCandidates` contract after the agent restarts.
- * No credentials and no model.
+ * No model. Claude's sign-ins are read as the real harness reads them
+ * ({@link detected}), so the hub places the proof's sessions on an account.
  */
 
+import { accountReports, claudeAuth } from "../../packages/agent/src/accounts";
 import { parseProcId, procIdFor } from "../../packages/agent/src/proc-id";
 import {
   endProc,
   ensureSessiond,
   SessiondClient,
 } from "../../packages/agent/src/sessiond-client";
+import { CONTROL_PROBE_ACCOUNT } from "../../packages/core/src/accounts";
 import { sessiondEndpoint } from "../../packages/core/src/sessiond";
 
 type Kind = "claude" | "opencode" | "pi";
@@ -59,6 +62,33 @@ function session(kind: Kind, instanceId: string, ctx: Context) {
   };
 }
 
+/**
+ * What Claude reports on this machine, as the real Claude harness reports it:
+ * every CawCo account dir (`~/.cawco/accounts/<id>/claude`) and what the
+ * bundled Claude Code's own `claude auth status` says of it there, and the
+ * machine's Claude word from those. A proof machine is signed in by giving it
+ * an account dir holding a credential and `oauthAccount`, as `claude auth
+ * login` would leave it. The other harnesses report no sign-in.
+ */
+const detected = async (kind: Kind) => {
+  if (kind !== "claude") {
+    return {
+      harness: kind,
+      installed: false,
+      auth: "unauthenticated",
+      capabilities: {},
+    };
+  }
+  const accounts = await accountReports();
+  return {
+    harness: kind,
+    installed: false,
+    auth: await claudeAuth(accounts),
+    capabilities: {},
+    accounts,
+  };
+};
+
 const registry = new Map();
 for (const kind of ["claude", "opencode", "pi"] as const) {
   const held = kind === "opencode" ? undefined : kind;
@@ -66,26 +96,26 @@ for (const kind of ["claude", "opencode", "pi"] as const) {
     kind,
     auth: "unauthenticated",
     capabilities: {},
-    detect: async () => ({
-      harness: kind,
-      installed: false,
-      auth: "unauthenticated",
-      capabilities: {},
-    }),
+    detect: () => detected(kind),
     listSessions: async () => [],
     getSessionMessages: async () => [],
     getSessionInfo: async () => undefined,
-    machine: (method: string) =>
-      method === "inspectConfig"
-        ? Promise.resolve({
-            at: Date.now(),
-            marketplaces: [],
-            mcp: [],
-            plugins: [],
-            skills: [],
-            memory: null,
-          })
-        : undefined,
+    machine: (method: string) => {
+      if (method === "inspectConfig") {
+        return Promise.resolve({
+          at: Date.now(),
+          marketplaces: [],
+          mcp: [],
+          plugins: [],
+          skills: [],
+          memory: null,
+        });
+      }
+      // The hub reads a newly signed-in account's model catalog once; the proof's sessions name model "stub".
+      if (method === CONTROL_PROBE_ACCOUNT && kind === "claude") {
+        return Promise.resolve({ models: [] });
+      }
+    },
     // The child is spawned under the session holder, under the id the real
     // harnesses use, unconditionally.
     spawn: async (_payload: unknown, ctx: Context) => {
