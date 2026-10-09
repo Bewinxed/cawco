@@ -4805,11 +4805,6 @@ export async function moveInstanceAccount(
 }
 
 /**
- * Promotes a spin-off to mainline work: the UI stops setting it apart, and
- * the tag that kept its transcript out of the machine's catalog comes off, so
- * the session joins the history it was being hidden from.
- */
-/**
  * The owner's name for a session the hub keeps. It outranks the name the
  * session gives itself (`set_title`), which the hub refuses from then on;
  * the new name reaches every dashboard through the instance-update frame.
@@ -4830,6 +4825,11 @@ export async function renameInstance(
   }
 }
 
+/**
+ * Promotes a spin-off to mainline work: the UI stops setting it apart, and
+ * the tag that kept its transcript out of the machine's catalog comes off, so
+ * the session joins the history it was being hidden from.
+ */
 export async function keepSession(instanceId: string): Promise<void> {
   const target = session(instanceId);
   const response = await fetch(`/api/instances/${instanceId}`, {
