@@ -42,6 +42,7 @@ import type {
   FleetConfig,
   FleetItemState,
   FleetMcpConfig,
+  FleetMcpServer,
   FleetSyncReport,
   HarnessCapabilities,
   HarnessReport,
@@ -1069,6 +1070,24 @@ const cawcoBase = ${JSON.stringify(harnessMcpUrl(""))};
 const cawcoWorkspaces = ${JSON.stringify(workspacesDir())};
 const cawcoCredentials = ${JSON.stringify(opencodeCredentialFile())};
 const realOf = (path) => { try { return realpathSync(path); } catch { return path; } };
+const cawcoPlacedMcp = ${JSON.stringify(OPENCODE_PLACED_MCP)};
+// The project MCP servers CawCo placed (the agent's placeOpencodeMcp) at the
+// deepest place holding \`directory\`, real paths on whole path segments, put
+// into \`cfg\`. A server the loaded config already names stays as it is.
+const placedMcpFor = (cfg, directory) => {
+  let placed = {};
+  try { placed = JSON.parse(readFileSync(cawcoPlacedMcp, "utf8")); } catch { return; }
+  const here = realOf(directory);
+  let place;
+  for (const { cwd } of Object.values(placed)) {
+    const root = realOf(cwd);
+    if ((here === root || here.startsWith(root + "/")) && !(place && place.length >= root.length)) place = root;
+  }
+  if (!place) return;
+  for (const { cwd, name, entry } of Object.values(placed)) {
+    if (realOf(cwd) === place && !(cfg.mcp && name in cfg.mcp)) cfg.mcp = { ...cfg.mcp, [name]: entry };
+  }
+};
 // The workspace whose clone holds \`directory\`, by the records the agent keeps
 // for it outside the clone: \`create.json\`, written before the clone is cut and
 // removed only with it, and the running boundary's \`boundary.json\`, the first
@@ -1269,8 +1288,10 @@ return ({
   // 415-489). The workspace's scratch is a root of its chrome-devtools-mcp
   // (CHROME_DEVTOOLS in the agent says why). OpenCode's plan agent is
   // off for a workspace whose delegate type turns CawCo's to-dos on
-  // (disablePlanAgentFor).
+  // (disablePlanAgentFor). A project's MCP servers come to any directory a
+  // place of it holds, checkout or clone (placeOpencodeMcp).
   config: async (cfg) => {
+    placedMcpFor(cfg, directory);
     if (!workspace) return;
     const state = cawcoWorkspaces + "/" + workspace;
     // The clone too: in a directory inside it, roots/list names that directory alone.
@@ -1531,6 +1552,60 @@ const syncOpencodeMcp = async (
 
   await writeOpencodeConfig("fleet sync", { ...stored, mcp });
   return names;
+};
+
+/**
+ * The project MCP servers CawCo places for OpenCode on this machine, by
+ * `<name>@<place id>`, each with its place's folder and its OpenCode entry.
+ * The agent's own file, outside every folder: the bridge plugin's `config`
+ * hook hands a directory's instance the servers of the deepest place that
+ * holds it as OpenCode loads it, so nothing is written into a place.
+ */
+const OPENCODE_PLACED_MCP = join(OPENCODE_DIR, "cawco-placed-mcp.json");
+
+type PlacedMcp = Record<string, { cwd: string; name: string; entry: unknown }>;
+
+/**
+ * A project's MCP servers at each of its places on this machine
+ * (`FleetConfig.placedMcp`), for OpenCode, as Claude Code gets them in each
+ * place's `.claude.json` map: {@link OPENCODE_PLACED_MCP} rewritten whole.
+ * Answers each copy's state under `<name>@<place id>`, a copy no longer
+ * carried as removed. A hub that predates placement sends no list, and the
+ * file is left as it is.
+ */
+const placeOpencodeMcp = async (
+  desired: FleetMcpServer[] | undefined
+): Promise<Record<string, FleetItemState>> => {
+  if (!desired) {
+    return {};
+  }
+  const before = (await readJson<PlacedMcp>(OPENCODE_PLACED_MCP)) ?? {};
+  const placed: PlacedMcp = {};
+  const report: Record<string, FleetItemState> = {};
+  for (const server of desired) {
+    if (!(server.enabled && server.cwd && server.placeId)) {
+      continue;
+    }
+    const key = `${server.name}@${server.placeId}`;
+    if (existsSync(server.cwd)) {
+      placed[key] = {
+        cwd: server.cwd,
+        name: server.name,
+        entry: toOpencodeMcp(server.config),
+      };
+      report[key] = { state: "applied" };
+    } else {
+      report[key] = {
+        state: "failed",
+        detail: `${server.cwd} is not on this machine`,
+      };
+    }
+  }
+  for (const key of Object.keys(before)) {
+    report[key] ??= { state: "removed" };
+  }
+  await writeJson(OPENCODE_PLACED_MCP, placed);
+  return report;
 };
 
 const recordOf = (value: unknown): Record<string, unknown> =>
@@ -4950,12 +5025,24 @@ export class OpencodeHarness implements Harness {
   // ---------------------------------------------- config convergence methods
 
   /**
-   * {@link configHash} of opencode.json as it is on disk now.
-   * Returns null if the file is missing or malformed.
+   * {@link configHash} of opencode.json as it is on disk now, with the
+   * project servers placed for OpenCode ({@link OPENCODE_PLACED_MCP}).
+   * Returns null if opencode.json is missing or malformed.
    */
   async #hashConfig(): Promise<string | null> {
     const config = await readJson<Record<string, unknown>>(OPENCODE_CONFIG);
-    return config ? configHash(config) : null;
+    if (!config) {
+      return null;
+    }
+    // The placed servers too: an instance takes them only as it loads
+    // (the plugin's `config` hook), so a change restarts the server.
+    const placed = await readJson<PlacedMcp>(OPENCODE_PLACED_MCP);
+    return placed && Object.keys(placed).length > 0
+      ? createHash("sha256")
+          .update(configHash(config))
+          .update(canonicalizeJson(placed))
+          .digest("hex")
+      : configHash(config);
   }
 
   /** Poll the installed CLI every 30s; upgrading it does not replace sessiond's server. */
@@ -7996,6 +8083,9 @@ export class OpencodeHarness implements Harness {
       config.cawcoTodos === true,
       sidecar.planAgentDisabled === true
     );
+    // Before the poke below: a placement that changed restarts the server as
+    // opencode.json changing does (`#hashConfig`).
+    const placed = await placeOpencodeMcp(config.placedMcp);
     await writeJson(OPENCODE_SIDECAR, {
       mcp,
       ...(planAgentDisabled ? { planAgentDisabled: true } : {}),
@@ -8008,12 +8098,17 @@ export class OpencodeHarness implements Harness {
     // A control RPC reports a restart, never waits on it. The watcher verifies
     // the written config and the next status read uses the replacement server.
     if (this.#applyGate) {
-      report.mcp = Object.fromEntries(
-        mcp.map((name) => [
-          name,
-          { state: "pending", detail: "OpenCode server restarting." },
-        ])
-      );
+      const restarting = {
+        state: "pending",
+        detail: "OpenCode server restarting.",
+      } as const;
+      report.mcp = Object.fromEntries([
+        ...Object.entries(placed).map(([key, state]) => [
+          key,
+          state.state === "applied" ? restarting : state,
+        ]),
+        ...mcp.map((name) => [name, restarting]),
+      ]);
       return report;
     }
     // Every running server here, for the directories its sessions run in.
@@ -8082,7 +8177,7 @@ export class OpencodeHarness implements Harness {
         }
       }
     }
-    Object.assign(report.mcp, await this.#readFleetMcp(mcp));
+    Object.assign(report.mcp, placed, await this.#readFleetMcp(mcp));
 
     return report;
   }
