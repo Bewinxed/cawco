@@ -68,7 +68,9 @@ const claude = $derived.by((): ClaudeRings | null => {
     return null;
   }
   const rings = claudeRings({
-    accounts: view.accounts,
+    accounts: view.accounts.filter(
+      (account) => account.provider === forecast.provider
+    ),
     bench: view.bench,
     forecast,
     instances: cawco.instances,

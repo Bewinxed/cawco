@@ -31,7 +31,7 @@
   import Caw from "./Caw.svelte";
   import HomeRecent from "./HomeRecent.svelte";
   import { home } from "./home-state.svelte";
-  import MovedLoginCard from "./MovedLoginCard.svelte";
+  import MovedLogins from "./MovedLogins.svelte";
   import NeedsCard from "./NeedsCard.svelte";
   import StatusLine from "./StatusLine.svelte";
   import UpdateCard from "./UpdateCard.svelte";
@@ -237,24 +237,24 @@
       </section>
     {/if}
 
-    {#each moved as one (one.id)}
-      <!-- A machine's own login moved into CawCo stays here until dismissed. -->
+    {#if moved.length > 0}
+      <!-- Logins moved into CawCo stay here until the ✕ acknowledges them. -->
       <section
-        aria-label="Login moved"
+        aria-label="Logins moved"
         class="group"
         data-flip="box"
         in:crossIn
         out:crossOut
       >
-        <MovedLoginCard
-          moved={one}
+        <MovedLogins
+          {moved}
           ondismiss={() => {
             // biome-ignore lint/complexity/noVoid: the hub's record comes back on the next board frame
-            void notices.acknowledge([one.id]);
+            void notices.acknowledge(moved.map((one) => one.id));
           }}
         />
       </section>
-    {/each}
+    {/if}
 
     {#if home.ready && home.needs.length > 0}
       <!-- The headline above names this group and counts it; a header

@@ -1,7 +1,7 @@
 <script lang="ts">
   /**
-   * Claude's routing. It is a choice among accounts, so it exists only with
-   * two or more; with fewer the address goes back to the list.
+   * A provider's routing. It is a choice among its accounts, so it exists
+   * only with two or more; with fewer the address goes back to the list.
    */
   import { accountsOf, routingOf } from "#lib/cawco/accounts/model.svelte.js";
   import RoutingEditor from "#lib/cawco/accounts/RoutingEditor.svelte";
@@ -9,10 +9,12 @@
   import EditorRoute from "#lib/cawco/config/EditorRoute.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
   import { goto } from "$app/navigation";
+  import { page } from "$app/state";
 
   const section = sectionOf("accounts");
-  const accounts = $derived(accountsOf());
-  const routing = $derived(routingOf());
+  const provider = $derived(page.params.provider ?? "");
+  const accounts = $derived(accountsOf(provider));
+  const routing = $derived(routingOf(provider));
   const loaded = $derived(cawco.accounts !== null);
 
   $effect(() => {
@@ -32,6 +34,8 @@
   what="routing"
 >
   {#if routing}
-    <RoutingEditor {accounts} {routing} />
+    {#key provider}
+      <RoutingEditor {accounts} {provider} {routing} />
+    {/key}
   {/if}
 </EditorRoute>

@@ -168,6 +168,7 @@ it actually means.
 | A page of decisions Caw writes with you, where you pick, note and comment | **decision page** | The Decisions tab; "Make tasks". | "plan" (that is the harness's list), "proposal" (that is the memory curator's) |
 | A project's preset of harness, model, effort, skills, tools and budget that a delegate runs as | **delegate type** | `delegates/writer.md`; the type picker. | "persona", "agent", "profile" |
 | One exact tool call you approved, run once by the hub at its time | **approved action** | "Posts at 12:30" rows; approval cards. | "scheduled post" as the general term, "automation" |
+| A provider's sign-in or key, held once per machine for the harnesses there that speak that provider (Claude Code, pi, OpenCode) | **account** | Configure › Accounts; the New session account chip. | "connection" (a connection is a service key the hub holds) |
 | A signed-in outside service whose key the hub holds | **connection** | Settings › Connections; `x-brand`. | "integration", "account" (an account is what a connection signs in as) |
 | The optional public path that lets push-only services reach the hub | **relay** | "Relay off · Set up". | "tunnel", "webhook server" in copy |
 
@@ -243,7 +244,7 @@ Every button parses as **[Verb] + [Object]** and stays comprehensible with surro
 "Yes" alone. A button is not "Submit" (mechanism), not "OK" (ambiguous), not "Click here" (pointer).
 Allowlisted imperative verbs for the gate: *Start, Create, Add, Save, Cancel, Delete, Remove,
 Approve, Deny, Allow, Deny, Reconnect, Retry, Export, Filter, Manage, Open, Stop, Interrupt, Send,
-Attach, Refresh, Install, Fetch, Restore, Redirect, Skip, Switch, Check, Configure*. "Continue" is acceptable only where the
+Attach, Refresh, Install, Fetch, Restore, Redirect, Skip, Switch, Check, Configure, Copy*. "Continue" is acceptable only where the
 next step is already visible in context (microcopy-patterns catalog).
 
 **Composer exception (recorded):** the transcript composer's `<textarea>` carries `aria-label="Message

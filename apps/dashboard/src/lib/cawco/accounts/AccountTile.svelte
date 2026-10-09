@@ -1,10 +1,17 @@
 <script lang="ts">
-  /** An account's tile: its glyph in its colour, on that colour at a low alpha. */
+  /**
+   * An account's tile: its provider's mark in one ink, the account's colour,
+   * on that colour at a low alpha.
+   */
   import type { AccountHue } from "@cawco/core";
-  import { IconAccounts } from "#lib/icons.js";
   import { hueVar } from "./model.svelte";
+  import ProviderMark from "./ProviderMark.svelte";
 
-  let { hue, size = 32 }: { hue: AccountHue; size?: 28 | 32 } = $props();
+  let {
+    hue,
+    provider,
+    size = 32,
+  }: { hue: AccountHue; provider: string; size?: 28 | 32 } = $props();
 </script>
 
 <span
@@ -13,7 +20,7 @@
   style:--c={hueVar(hue)}
   style:--tile={`${size}px`}
 >
-  <IconAccounts />
+  <ProviderMark mono {provider} size={size === 32 ? 18 : 16} />
 </span>
 
 <style>
@@ -29,9 +36,5 @@
     transition:
       background-color var(--dur-fade) var(--ease-out),
       color var(--dur-fade) var(--ease-out);
-  }
-  .tile :global(svg) {
-    width: 18px;
-    height: 18px;
   }
 </style>

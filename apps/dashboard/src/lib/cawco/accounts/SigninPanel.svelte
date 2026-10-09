@@ -8,23 +8,17 @@
   import { appear } from "#lib/cawco/motion/curves.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
-  import {
-    IconArrowUpRight,
-    IconSuccess,
-    IconWarningTriangle,
-  } from "#lib/icons.js";
+  import { IconArrowUpRight, IconWarningTriangle } from "#lib/icons.js";
+  import Check from "./Check.svelte";
   import type { SigninFlow } from "./signin.svelte";
 
   let {
     flow,
-    title,
     machine,
     online,
     expected,
   }: {
     flow: SigninFlow;
-    /** "Sign in you@gmail.com on gauntlet". */
-    title: string;
     machine: string;
     online: boolean;
     /** The email the account already is, for a sign-in as somebody else. */
@@ -35,7 +29,6 @@
 </script>
 
 <div class="panel">
-  <p class="title">{title}</p>
   {#if !online}
     <p class="line">{machine} is offline. Sign in there once it's back.</p>
   {/if}
@@ -97,8 +90,8 @@
       {flow.problem}
     </p>
   {:else if flow.phase === "signed-in"}
-    <p class="got" role="status" in:appear>
-      <IconSuccess />
+    <p class="got" role="status">
+      <Check />
       <span>Signed in as <b>{flow.email ?? expected ?? "the account"}</b></span>
     </p>
   {:else if flow.phase === "mismatch"}
@@ -118,12 +111,6 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-3);
-    padding: var(--space-2);
-  }
-  .title {
-    font: var(--type-label);
-    color: var(--ink-strong);
-    overflow-wrap: anywhere;
   }
   .row {
     display: flex;
@@ -154,14 +141,10 @@
     font-weight: var(--weight-strong);
     color: var(--ink-strong);
   }
-  .got :global(svg),
   .warn :global(svg) {
     flex: none;
     width: 14px;
     height: 14px;
     margin-top: 1px;
-  }
-  .got :global(svg) {
-    color: var(--status-done-glyph);
   }
 </style>

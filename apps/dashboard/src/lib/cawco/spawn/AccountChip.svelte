@@ -113,7 +113,9 @@
         {/if}
         <span class="words">
           <AccountName account={nameFields(option)} row wrap />
-          <span class="line"><Words parts={option.line} /></span>
+          {#if option.line.length > 0}
+            <span class="line"><Words parts={option.line} /></span>
+          {/if}
         </span>
         <Check class="check" />
       </button>

@@ -1,6 +1,7 @@
 <script lang="ts">
   import {
     accountName,
+    CLAUDE_PROVIDER,
     contextFitRefusal,
     type EffortLevel,
     HARNESSES,
@@ -240,9 +241,11 @@
     )
   );
   /**
-   * The account a Claude session here would start on, as the hub's placement
-   * says (`/api/accounts/placement`): its catalog is what the picker offers.
-   * Null while unread, for another harness, and with no account signed in.
+   * The account a session here would start on, as the hub's placement says
+   * (`/api/accounts/placement`): a Claude session's, whose catalog is what
+   * the picker offers, or a pi or OpenCode session's on an account
+   * provider's model. Null while unread, for a model no account provider
+   * bills, and with no account signed in.
    * Placement weighs every account's readings and bench, so it is asked again
    * whenever the hub's accounts view moves (`cawco.accounts` is replaced only
    * when it differs): Auto never names an account that has since run out.
@@ -255,13 +258,14 @@
   let placementRefusal = $state<string | null>(null);
   $effect(() => {
     const view = cawco.accounts;
+    const named = billedModel;
     const query = {
       harness,
       machineId,
-      ...(model ? { model } : {}),
+      ...(named ? { model: named } : {}),
       ...(projectId ? { projectId } : {}),
     };
-    if (harness !== "claude" || !machineId || !view) {
+    if (!(providerOf(harness, named) && machineId && view)) {
       placement = null;
       placementRefusal = null;
       return;
@@ -299,6 +303,17 @@
     )
   );
   /**
+   * The model as the account providers name it: pi's `default` (or a bare
+   * id) by the catalog's resolution of it. A Claude Code model is Claude's
+   * whatever it is, so its catalog (which follows the placed account) is
+   * never read for it.
+   */
+  const billedModel = $derived(
+    harness === "claude"
+      ? model
+      : (offered.find((row) => row.value === model)?.resolvedModel ?? model)
+  );
+  /**
    * The account chip, when the harness's provider has two or more accounts:
    * Auto with placement's reason, and each account with its rings and a key
    * line. Not on a continuation: its request (the hub's `continueBody`) has
@@ -306,11 +321,7 @@
    * starts from a session's menu and runs on its parent's account.
    */
   const accountTool = $derived.by((): AccountTool | null => {
-    // pi's `default` names its model by the catalog's resolution of it.
-    const provider = providerOf(
-      harness,
-      offered.find((row) => row.value === model)?.resolvedModel ?? model
-    );
+    const provider = providerOf(harness, billedModel);
     const own = (cawco.accounts?.accounts ?? [])
       .filter((one) => one.provider === provider)
       .sort((a, b) => a.order - b.order);
@@ -330,7 +341,10 @@
       options: own.map((one) => {
         const ring =
           usage.claude?.accounts.find((r) => r.id === one.id) ?? null;
-        let line: Part[] = ["no reading yet"];
+        // Only Claude's accounts have rings here; another provider's says
+        // nothing it can't read.
+        let line: Part[] =
+          provider === CLAUDE_PROVIDER ? ["no reading yet"] : [];
         if (ring?.state === "limit") {
           line = [
             "at its limit, back in ",

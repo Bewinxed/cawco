@@ -224,8 +224,12 @@ interface LaneParts {
   f0: number;
   gh: HTMLElement;
   i: number;
+  /** The lane's label: its dot and name. */
+  lb: HTMLElement;
   n: number;
   tblk: Track;
+  /** The clock's words: away while the blocked word stands in their place. */
+  tck: Track;
   tdim: Track;
   tf: Track;
   tgh: Track;
@@ -262,15 +266,50 @@ const CLOCKS = [
 const FILLS = [0.2, 0.3, 0.15, 0.25];
 
 /**
+ * The figure's geometry, px. Lanes stand on a fixed pitch from the top: a
+ * lane's label row, then its dock row centred `ROW` below the lane's top,
+ * then room under the dock (a fork's link; on the at-the-limit board, the
+ * tag naming the conversation's size) before the next lane. Left of every
+ * lane runs the entry gutter: sessions come in at the lanes' middle there,
+ * and turn into their lane's row before the dock, so a session in flight
+ * never crosses a lane's name, its dot, or a session already docked. The
+ * stage is as tall as its lanes and its caption.
+ */
+const PAD = 12;
+const PITCH = 40;
+/** The at-the-limit board's pitch: a tag line under each dock row. */
+const TAGGED_PITCH = 56;
+const ROW = 24;
+const GUTTER = 14;
+const SLOT = 13;
+const SLOTS = 5;
+const CHIP = 10;
+/** Room for the caption under the lanes: one line, and a line more per wrap. */
+const CAP_GAP = 6;
+const CAP_LINE = 16;
+const CAP_FOOT = 8;
+
+/** A board's lane pitch. */
+const pitchOf = (board: Board): number =>
+  board === "limit" ? TAGGED_PITCH : PITCH;
+
+/** A board's stage height for `lanes` lanes and a caption of `lines` lines. */
+export const figureHeight = (board: Board, lanes: number, lines = 1): number =>
+  PAD + lanes * pitchOf(board) + CAP_GAP + lines * CAP_LINE + CAP_FOOT;
+
+/**
  * Lays the lanes out in `stage` and returns the API a storyboard writes its
  * timeline with. Each lane: its name and clock on one row, then a dock for
- * session chips and the use bar.
+ * session chips and the use bar. Sessions dock from the bar's end of the
+ * dock back toward the gutter, so one arriving only ever passes empty slots.
  */
-function layout(stage: HTMLElement, lanes: LaneSpec[]) {
+function layout(stage: HTMLElement, board: Board, lanes: LaneSpec[]) {
   const mk = ease("--ease-figure");
   const eo = ease("--ease-out");
   const W = stage.clientWidth;
-  const H = stage.clientHeight;
+  const n = lanes.length;
+  const pitch = pitchOf(board);
+  const H = figureHeight(board, n);
   const probe = document.createElement("i");
   probe.style.display = "none";
   const root = document.createElement("div");
@@ -286,19 +325,21 @@ function layout(stage: HTMLElement, lanes: LaneSpec[]) {
     return getComputedStyle(probe).color;
   };
   const tl = new Timeline(mk);
-  const n = lanes.length;
-  const pad = 12;
-  const capH = 26;
-  const LH = Math.min(40, (H - capH - pad) / n);
-  const y0 = (i: number) => pad - 2 + i * LH + (H - capH - pad - LH * n) / 2;
-  const SLOT = 13;
-  const dockX = pad;
-  const barX = pad + 5 * SLOT + 8;
-  const barW = W - barX - pad;
+  const pad = PAD;
+  /** Where a lane's label and dock start: past the entry gutter. */
+  const left = PAD + GUTTER;
+  const y0 = (i: number) => PAD + i * pitch;
+  const dockX = left;
+  const barX = left + SLOTS * SLOT + 8;
+  const barW = W - barX - PAD;
+  /** A dock slot's centre, `k` from the gutter's end. */
   const slot = (i: number, k: number) => ({
-    x: dockX + 5 + k * SLOT,
-    y: y0(i) + 19 + 5,
+    x: dockX + CHIP / 2 + k * SLOT,
+    y: y0(i) + ROW,
   });
+  /** Where a lane's `k`th session docks: the first at the bar's end. */
+  const dock = (i: number, k: number) =>
+    slot(i, SLOTS - 1 - Math.min(k, SLOTS - 1));
   const el = (cls: string, css = "", parent: Element = root): HTMLElement => {
     const e = document.createElement("div");
     e.className = `e ${cls}`.trim();
@@ -314,7 +355,7 @@ function layout(stage: HTMLElement, lanes: LaneSpec[]) {
     const c = `--c:${ln.lane.color};`;
     const y = y0(i);
     const g = el("lane", `${c}inset:0;width:100%;height:100%`);
-    const lb = el("ln-lbl", `left:${pad}px;top:${y}px`, g);
+    const lb = el("ln-lbl", `left:${left}px;top:${y}px`, g);
     if (ln.handle) {
       lb.append(
         Object.assign(document.createElement("span"), { className: "hdl" })
@@ -346,7 +387,7 @@ function layout(stage: HTMLElement, lanes: LaneSpec[]) {
     bk.textContent = ln.blkText ?? "blocked";
     // A blocked lane dims its bar, never its words.
     const bg = el("bars", "inset:0;width:100%;height:100%", g);
-    const bar = `left:${barX}px;top:${y + 19}px;width:${barW}px`;
+    const bar = `left:${barX}px;top:${y + ROW - CHIP / 2}px;width:${barW}px`;
     el("bar", bar, bg);
     const hr = el("hr", c + bar, bg);
     const gh = el("gh", c + bar, bg);
@@ -354,6 +395,7 @@ function layout(stage: HTMLElement, lanes: LaneSpec[]) {
     const pu = el("pu", c + bar, bg);
     const parts: LaneParts = {
       i,
+      lb,
       bk,
       ck,
       cw,
@@ -365,6 +407,7 @@ function layout(stage: HTMLElement, lanes: LaneSpec[]) {
       tf: tl.tr(fl, "transform", `scaleX(${ln.fill})`),
       tdim: tl.tr(bg, "opacity", "1"),
       tglow: tl.tr(cw, "opacity", ln.glow ? "1" : "0"),
+      tck: tl.tr(ck, "opacity", "1"),
       tblk: tl.tr(bk, "opacity", "0"),
       thr: tl.tr(hr, "opacity", "0"),
       tgh: tl.tr(gh, "opacity", "0"),
@@ -375,13 +418,33 @@ function layout(stage: HTMLElement, lanes: LaneSpec[]) {
     }
     return parts;
   });
-  // The clock's wash sits behind the clock's words.
+  // The clock's wash sits behind the clock's words, and a lane's name gives
+  // way (an ellipsis) before it reaches them.
   requestAnimationFrame(() => {
     for (const o of L) {
       o.cw.style.width = `${o.ck.offsetWidth}px`;
+      const words = Math.max(o.ck.offsetWidth, o.bk.offsetWidth);
+      o.lb.style.maxWidth = `${W - left - PAD - words - 8}px`;
     }
   });
-  const entry = { x: -10, y: pad + (H - capH - pad) / 2 };
+  /** Where sessions come in: off the stage's edge, level with the lanes' middle. */
+  const entry = { x: -10, y: PAD + (n * pitch) / 2 };
+  /** The gutter's middle: where a session turns toward its lane, and waits when it must. */
+  const turn = left / 2;
+  /** A path's length, measured on the page (a pause is a share of it). */
+  const measure = document.createElementNS(SVG, "svg");
+  measure.setAttribute("width", "0");
+  measure.setAttribute("height", "0");
+  measure.style.position = "absolute";
+  root.append(measure);
+  const lengthOf = (d: string): number => {
+    const path = document.createElementNS(SVG, "path");
+    path.setAttribute("d", d);
+    measure.append(path);
+    const length = path.getTotalLength();
+    path.remove();
+    return length;
+  };
   const api = {
     W,
     H,
@@ -409,57 +472,65 @@ function layout(stage: HTMLElement, lanes: LaneSpec[]) {
         .set(t, `0 0 0 0 ${rc(L[i].c)}`)
         .to(t + 0.01, `0 0 0 7px ${rc(L[i].c, 0)}`, 0.9, "ease-out");
     },
-    /** A session enters from the left and docks in lane i. */
+    /**
+     * A session comes in through the gutter, turns into lane i's row there,
+     * and docks in the lane's next free slot. With `pause`, it waits at the
+     * turn for `hold` seconds first (the strategy weighing the lanes).
+     */
     chip(
       i: number,
       t: number,
-      o: { pause?: number; hold?: number } = {}
+      o: { pause?: boolean; hold?: number } = {}
     ): Chip {
       const ln = L[i];
-      const k = ln.n;
+      const s = dock(i, ln.n);
       ln.n += 1;
-      const s = slot(i, Math.min(k, 4));
       const e = entry;
+      const lead = `M ${e.x} ${e.y} L ${turn} ${e.y}`;
+      const d = `${lead} C ${left} ${e.y}, ${turn} ${s.y}, ${left} ${s.y} L ${s.x} ${s.y}`;
       const c = el(
         "chip",
-        `--c:${ln.c};offset-path:path('M ${e.x} ${e.y} C ${e.x + 40} ${e.y}, ${s.x - 26} ${s.y}, ${s.x} ${s.y}');offset-distance:100%`,
+        `--c:${ln.c};offset-path:path('${d}');offset-distance:100%`,
         dy
       );
       tl.tr(c, "opacity", "0").to(t, "1", 0.3, "ease-out");
       const tod = tl.tr(c, "offsetDistance", "0%");
-      if (o.pause === undefined) {
-        tod.to(t, "100%", 0.7, mk);
-      } else {
+      if (o.pause) {
+        const waitAt = (lengthOf(lead) / lengthOf(d)) * 100;
         tod
-          .to(t, `${o.pause}%`, 0.45, mk)
+          .to(t, `${waitAt}%`, 0.45, mk)
           .to(t + (o.hold ?? 0), "100%", 0.6, mk);
+      } else {
+        tod.to(t, "100%", 0.7, mk);
       }
       return { el: c, lane: i, pos: s };
     },
-    /** The child buds off its parent, the connector draws, the child docks beside it. */
+    /**
+     * A session's fork: the link draws under the dock row from its parent to
+     * the lane's next free slot, and the child grows there. Under the row,
+     * the link passes beneath the sessions between them and above the next
+     * lane, so it crosses no session and no lane's name.
+     */
     fork(par: Chip, t: number): Chip {
       const ln = L[par.lane];
-      const k = ln.n;
+      const s = dock(par.lane, ln.n);
       ln.n += 1;
-      const s = slot(par.lane, Math.min(k, 4));
       const p = par.pos;
-      const c = el(
-        "chip child",
-        `--c:${ln.c};offset-path:path('M ${p.x} ${p.y} Q ${(p.x + s.x) / 2} ${p.y - 16}, ${s.x} ${s.y}');offset-distance:100%`,
-        dy
-      );
-      tl.tr(c, "opacity", "0").to(t, "1", 0.2, "ease-out");
-      tl.tr(c, "transform", "scale(.6)").to(t, "scale(1)", 0.35, mk);
-      tl.tr(c, "offsetDistance", "0%").to(t + 0.16, "100%", 0.55, mk);
+      const at = (scale: number) =>
+        `translate(${s.x - CHIP / 2}px,${s.y - CHIP / 2}px) scale(${scale})`;
+      const c = el("chip child", `--c:${ln.c};transform:${at(1)}`, dy);
+      tl.tr(c, "opacity", "0").to(t + 0.3, "1", 0.2, "ease-out");
+      tl.tr(c, "transform", at(0.6)).to(t + 0.3, at(1), 0.35, mk);
       const svg = document.createElementNS(SVG, "svg");
       svg.setAttribute("class", "e");
       svg.setAttribute("width", String(W));
       svg.setAttribute("height", String(H));
       svg.style.overflow = "visible";
       const path = document.createElementNS(SVG, "path");
+      const foot = CHIP / 2;
       path.setAttribute(
         "d",
-        `M ${p.x} ${p.y - 5} Q ${(p.x + s.x) / 2} ${p.y - 17}, ${s.x} ${s.y - 5}`
+        `M ${p.x} ${p.y + foot} Q ${(p.x + s.x) / 2} ${p.y + foot + 14}, ${s.x} ${s.y + foot}`
       );
       path.setAttribute("fill", "none");
       path.setAttribute("stroke", "var(--ink-subtle)");
@@ -468,8 +539,17 @@ function layout(stage: HTMLElement, lanes: LaneSpec[]) {
       path.setAttribute("stroke-dasharray", "1");
       svg.append(path);
       dy.insertBefore(svg, dy.firstChild);
-      tl.tr(path, "strokeDashoffset", "1").to(t + 0.16, "0", 0.3, mk);
+      tl.tr(path, "strokeDashoffset", "1").to(t, "0", 0.3, mk);
       return { el: c, lane: par.lane, pos: s };
+    },
+    /** The lane's blocked word takes its clock's place, and gives it back with `on` false. */
+    block(i: number, t: number, on = true) {
+      const o = L[i];
+      o.tblk.to(t, on ? "1" : "0", 0.25, "ease-out");
+      o.tck.to(t, on ? "0" : "1", 0.2, "ease-out");
+      if (on) {
+        o.tglow.to(t, "0", 0.2, "ease-out");
+      }
     },
     /** A caption fades in at a and out at b; b = 99 holds it to the seam. */
     cap(a: number, b: number, text: string) {
@@ -490,6 +570,7 @@ function layout(stage: HTMLElement, lanes: LaneSpec[]) {
         o.tf.to(S, `scaleX(${o.f0})`, 0.3, eo);
         o.tdim.to(S, "1", 0.3, eo);
         o.tblk.to(S, "0", 0.2, eo);
+        o.tck.to(S, "1", 0.2, eo);
         o.thr.to(S, "0", 0.2, eo);
         o.tgh.to(S, "0", 0.2, eo);
         o.tglow.to(S, lanes[i].glow ? "1" : "0", 0.3, eo);
@@ -507,6 +588,7 @@ const BOARDS: Record<Board, (stage: HTMLElement, spec: FigureSpec) => Figure> =
     pinned(stage, { lanes, pin = 0 }) {
       const F = layout(
         stage,
+        "pinned",
         lanes.map((lane, i) => ({
           lane,
           fill: i === pin ? 0.2 : (FILLS[i] ?? 0.25),
@@ -534,6 +616,7 @@ const BOARDS: Record<Board, (stage: HTMLElement, spec: FigureSpec) => Figure> =
     fill(stage, { lanes }) {
       const F = layout(
         stage,
+        "fill",
         lanes.map((lane, i) => ({
           lane,
           fill: FILLS[i] ?? 0.25,
@@ -550,7 +633,7 @@ const BOARDS: Record<Board, (stage: HTMLElement, spec: FigureSpec) => Figure> =
       F.notch(0, 2.55, 0.14);
       F.fill(0, 2.8, 1, 0.3);
       F.pulse(0, 2.9);
-      L0.tblk.to(3.0, "1", 0.3, "ease-out");
+      F.block(0, 3.0);
       L0.tdim.to(3.0, ".6", 0.3, "ease-out");
       F.chip(1, 3.5);
       F.notch(1, 3.95, 0.14);
@@ -565,6 +648,7 @@ const BOARDS: Record<Board, (stage: HTMLElement, spec: FigureSpec) => Figure> =
       const f0 = [0.2, 0.6, 0.45, 0.35];
       const F = layout(
         stage,
+        "spread",
         lanes.map((lane, i) => ({
           lane,
           fill: f0[i] ?? 0.4,
@@ -574,11 +658,11 @@ const BOARDS: Record<Board, (stage: HTMLElement, spec: FigureSpec) => Figure> =
       let forkFrom: Chip | null = null;
       let forkAfter = 0;
       for (const t of [0.7, 1.6, 2.5, 3.4]) {
-        // The chip pauses at the fork in the track while every lane's
+        // The chip waits at the turn in the gutter while every lane's
         // headroom lights; the most room wins.
         const rooms = F.L.map((o) => 1 - o.f);
         const best = rooms.indexOf(Math.max(...rooms));
-        const c = F.chip(best, t, { pause: 42, hold: 0.55 });
+        const c = F.chip(best, t, { pause: true, hold: 0.55 });
         F.L.forEach((o, i) => {
           o.thr
             .to(t + 0.3, "1", 0.2, "ease-out")
@@ -618,6 +702,7 @@ const BOARDS: Record<Board, (stage: HTMLElement, spec: FigureSpec) => Figure> =
       };
       const F = layout(
         stage,
+        "soonest",
         lanes.map((lane, i) => ({
           lane,
           fill: fills[i] ?? 0.3,
@@ -645,7 +730,8 @@ const BOARDS: Record<Board, (stage: HTMLElement, spec: FigureSpec) => Figure> =
         F.notch(1, 3.25, 0.2);
       }
       if (Sp) {
-        Sp.tblk.to(3.6, "1", 0.25, "ease-out").to(4.5, "0", 0.25, "ease-out");
+        F.block(2, 3.6);
+        F.block(2, 4.5, false);
         F.cap(3.8, 4.5, "A full account is skipped.");
       }
       if (Wk) {
@@ -668,7 +754,7 @@ const BOARDS: Record<Board, (stage: HTMLElement, spec: FigureSpec) => Figure> =
         at: 90,
       };
       const [Wa, Pa] = lanes;
-      const F = layout(stage, [
+      const F = layout(stage, "limit", [
         { lane: Wa, fill: 0.85, clock: "resets 12m" },
         { lane: Pa, fill: 0.2, clock: "resets 4h 25m" },
       ]);
@@ -828,6 +914,15 @@ const BOARDS: Record<Board, (stage: HTMLElement, spec: FigureSpec) => Figure> =
 /** Builds the figure for `spec` in `stage`, standing at its last frame. */
 export function buildFigure(stage: HTMLElement, spec: FigureSpec): Timeline {
   const F = BOARDS[spec.board](stage, spec);
+  // As tall as its lanes and its longest caption, which wraps rather than
+  // being cut where the stage is narrow.
+  const tallest = Math.max(
+    CAP_LINE,
+    ...[...stage.querySelectorAll<HTMLElement>(".cap")].map(
+      (cap) => cap.scrollHeight
+    )
+  );
+  stage.style.height = `${figureHeight(spec.board, spec.lanes.length, Math.ceil(tallest / CAP_LINE))}px`;
   F.tl.rest();
   return F.tl;
 }

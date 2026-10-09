@@ -9,6 +9,7 @@ import type {
   AccountCatalog,
   AccountHue,
   AccountKind,
+  AccountProvider,
   AccountReading,
   AccountSignin,
   AccountSigninResult,
@@ -46,7 +47,10 @@ import type {
   ProjectSpend,
   ProjectStopFrame,
   ProjectView,
+  ProviderChoice,
   ProviderRouting,
+  ProviderSigninChallenge,
+  ProviderSigninResult,
   SendAttachment,
   SendPayload,
   SendRecord,
@@ -861,6 +865,12 @@ const state = $state({
    * `kind: 'usage'` frame, which the hub sends when any of it moves.
    */
   accounts: null as AccountsView | null,
+  /**
+   * The account picker's rows (`/api/accounts/providers`): every provider
+   * the fleet's machines know, each with how it signs in. Read with the
+   * accounts; null until read.
+   */
+  accountProviders: null as ProviderChoice[] | null,
   /**
    * The fleet's spend as the hub reckons it (`/api/usage/spend`, then every
    * `kind: 'usage'` frame); null until it lands.
@@ -1957,14 +1967,21 @@ export function followAccounts(follower: () => void): void {
 }
 
 /**
- * Reads the hub's Claude accounts, their sign-ins and catalogs; a failed read
- * keeps what was there. ChatGPT accounts have no screens here yet.
+ * Reads the hub's accounts of every provider, their sign-ins and catalogs,
+ * and the providers the fleet's machines know; a failed read keeps what was
+ * there.
  */
 export async function readAccounts(): Promise<void> {
   accountsFollower?.();
-  const view = await load<AccountsView>("/api/accounts?provider=anthropic");
+  const [view, providers] = await Promise.all([
+    load<AccountsView>("/api/accounts"),
+    load<ProviderChoice[]>("/api/accounts/providers"),
+  ]);
   if (view && !equal(state.accounts, view)) {
     state.accounts = view;
+  }
+  if (providers && !equal(state.accountProviders, providers)) {
+    state.accountProviders = providers;
   }
 }
 
@@ -1997,10 +2014,10 @@ async function accountsWrite<T>(
   return answer;
 }
 
-/** Adds an account; it goes last in fill-first order. */
+/** Adds an account; it goes last in its provider's fill-first order. */
 export const createAccount = (body: {
   kind: AccountKind;
-  provider: "anthropic";
+  provider: AccountProvider;
   hue?: AccountHue;
   label?: string;
 }): Promise<Account> => accountsWrite("/api/accounts", "POST", body);
@@ -2024,19 +2041,23 @@ export const deleteAccount = (id: string): Promise<{ ok: true }> =>
 
 /** Sets how a provider's new sessions choose among its accounts. */
 export const putRouting = (
+  provider: AccountProvider,
   routing: Omit<ProviderRouting, "provider">
 ): Promise<ProviderRouting> =>
-  accountsWrite("/api/accounts/routing/anthropic", "PUT", routing);
+  accountsWrite(
+    `/api/accounts/routing/${encodeURIComponent(provider)}`,
+    "PUT",
+    routing
+  );
+
+const signinUrl = (id: string, machineId: string) =>
+  `/api/accounts/${encodeURIComponent(id)}/machines/${encodeURIComponent(machineId)}/signin`;
 
 /** Starts Claude Code's own login for the account on a machine: the link to open. */
 export const beginSignin = (
   id: string,
   machineId: string
-): Promise<{ url: string }> =>
-  accountsWrite(
-    `/api/accounts/${encodeURIComponent(id)}/machines/${encodeURIComponent(machineId)}/signin`,
-    "POST"
-  );
+): Promise<{ url: string }> => accountsWrite(signinUrl(id, machineId), "POST");
 
 /** Types the pasted code into that login: signed in, or someone else's account. */
 export const completeSignin = (
@@ -2044,11 +2065,53 @@ export const completeSignin = (
   machineId: string,
   code: string
 ): Promise<AccountSigninResult> =>
+  accountsWrite(`${signinUrl(id, machineId)}/complete`, "POST", { code });
+
+/**
+ * Starts a provider's own OAuth sign-in for the account on a machine: a
+ * device code to enter on any device, where, and until when.
+ */
+export const beginDeviceSignin = (
+  id: string,
+  machineId: string
+): Promise<ProviderSigninChallenge> =>
+  accountsWrite(signinUrl(id, machineId), "POST");
+
+/**
+ * Waits up to a minute for the device code to be entered: signed in, as
+ * someone else, expired, or still pending (ask again).
+ */
+export const awaitDeviceSignin = (
+  id: string,
+  machineId: string
+): Promise<ProviderSigninResult> =>
+  accountsWrite(`${signinUrl(id, machineId)}/complete`, "POST", {});
+
+/**
+ * Signs an account out on one machine and drops its store there; the hub
+ * refuses a machine that is offline (409) or not signed in (404).
+ */
+export const signOutOn = (id: string, machineId: string): Promise<unknown> =>
   accountsWrite(
-    `/api/accounts/${encodeURIComponent(id)}/machines/${encodeURIComponent(machineId)}/signin/complete`,
-    "POST",
-    { code }
+    `/api/accounts/${encodeURIComponent(id)}/machines/${encodeURIComponent(machineId)}`,
+    "DELETE"
   );
+
+/** What sending a key came to on one machine: its result, or why it didn't arrive. */
+export type KeyDelivery =
+  | { machineId: string; result: ProviderSigninResult }
+  | { machineId: string; error: string };
+
+/** Relays a key account's key to each machine named; the hub never keeps it. */
+export const sendAccountKey = (
+  id: string,
+  key: string,
+  machineIds: string[]
+): Promise<{ machines: KeyDelivery[] }> =>
+  accountsWrite(`/api/accounts/${encodeURIComponent(id)}/key`, "POST", {
+    key,
+    machineIds,
+  });
 
 /**
  * Which account a session would start on, and why (`/api/accounts/placement`):
@@ -6551,6 +6614,10 @@ export const cawco = {
   /** The hub's accounts, their sign-ins and catalogs; null until read. */
   get accounts(): AccountsView | null {
     return state.accounts;
+  },
+  /** The account picker's rows, every provider the fleet knows; null until read. */
+  get accountProviders(): ProviderChoice[] | null {
+    return state.accountProviders;
   },
   /** The hub's limit readings have landed at least once. */
   get usageLimitsRead() {

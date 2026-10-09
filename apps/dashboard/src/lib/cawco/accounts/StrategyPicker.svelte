@@ -232,10 +232,14 @@
     outline: var(--focus-ring-width) solid var(--focus-ring);
     outline-offset: var(--focus-ring-offset);
   }
+  /* Where the pinned account's name doesn't fit beside the words, its pill
+     takes a line of its own, at the name's own width, rather than cutting
+     the name short. */
   .top {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: var(--space-3);
+    gap: var(--space-2) var(--space-3);
     min-height: 30px;
     padding-inline: var(--space-1);
   }
@@ -266,7 +270,7 @@
   }
   .words {
     display: flex;
-    flex: 1;
+    flex: 1 1 auto;
     flex-direction: column;
     gap: 1px;
     min-width: 0;
@@ -278,8 +282,10 @@
     color: var(--ink-muted);
   }
   .pin {
-    max-width: 160px;
+    flex: 0 1 auto;
+    max-width: 100%;
     min-width: 0;
+    margin-inline-start: auto;
     opacity: 0;
     pointer-events: none;
     transition: opacity var(--dur-fade) var(--ease-out);

@@ -17,10 +17,13 @@
   let {
     atLimit = $bindable(),
     accounts,
+    terms,
   }: {
     atLimit: AtLimit;
     /** The account that runs out, then the one that is free. */
     accounts: [Account, Account];
+    /** Claude subscriptions: Anthropic's terms cover the move, so they are linked. */
+    terms: boolean;
   } = $props();
 
   const id = $props.id();
@@ -107,18 +110,20 @@
         >
       </p>
       <div class="figure">
-        <StrategyFigure board="limit" {lanes} playing {policy} wide />
+        <StrategyFigure board="limit" {lanes} playing {policy} />
       </div>
-      <a
-        class="terms"
-        href={TERMS_URL}
-        rel="noopener noreferrer"
-        target="_blank"
-      >
-        Moving a conversation between Claude subscriptions is subject to
-        Anthropic’s terms
-        <IconArrowUpRight />
-      </a>
+      {#if terms}
+        <a
+          class="terms"
+          href={TERMS_URL}
+          rel="noopener noreferrer"
+          target="_blank"
+        >
+          Moving a conversation between Claude subscriptions is subject to
+          Anthropic’s terms
+          <IconArrowUpRight />
+        </a>
+      {/if}
     </div>
   {/if}
 </div>

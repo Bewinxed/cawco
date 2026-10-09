@@ -34,7 +34,8 @@
     settling = false,
   }: {
     title: string;
-    purpose: string;
+    /** The section's one line under its title; absent where the rows say it. */
+    purpose?: string;
     /** False until the section's rows have been read once. */
     ready?: boolean;
     problem?: string | null;
@@ -102,7 +103,9 @@
     <header class="head">
       <div class="titles">
         <h1 class="title">{title}</h1>
-        <p class="purpose">{purpose}</p>
+        {#if purpose}
+          <p class="purpose">{purpose}</p>
+        {/if}
       </div>
       {#if actions}
         <div class="actions">{@render actions(down)}</div>

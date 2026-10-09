@@ -68,6 +68,7 @@ export {
 export { default as IconDollar } from "~icons/solar/dollar-bold-duotone";
 export { default as IconDownload } from "~icons/solar/download-bold-duotone";
 export { default as IconEye } from "~icons/solar/eye-bold-duotone";
+export { default as IconEyeClosed } from "~icons/solar/eye-closed-bold-duotone";
 /** The assistant/supervisor: an eye in scan corners — oversight across sessions. */
 export { default as IconAssistant } from "~icons/solar/eye-scan-bold-duotone";
 export { default as IconDocument } from "~icons/solar/file-text-bold-duotone";
@@ -96,6 +97,7 @@ export { default as IconLeaf } from "~icons/solar/leaf-bold-duotone";
 export { default as IconLink } from "~icons/solar/link-minimalistic-2-bold-duotone";
 /** Waits on another task that has not landed. */
 export { default as IconLock } from "~icons/solar/lock-keyhole-minimalistic-bold-duotone";
+export { default as IconLogout } from "~icons/solar/logout-2-bold-duotone";
 export { default as IconSparkles } from "~icons/solar/magic-stick-3-bold-duotone";
 export {
   default as IconSearch,

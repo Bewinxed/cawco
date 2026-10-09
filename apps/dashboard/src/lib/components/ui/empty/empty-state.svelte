@@ -25,7 +25,8 @@
     icon?: Component;
     mark?: Snippet;
     title: string;
-    line: string | Snippet;
+    /** Why there is nothing; absent where the title and the action say it all. */
+    line?: string | Snippet;
     action?: Snippet;
     inline?: boolean;
   } = $props();
@@ -44,7 +45,7 @@
   {#snippet why()}
     {#if typeof line === "string"}
       {line}
-    {:else}
+    {:else if line}
       {@render line()}
     {/if}
   {/snippet}
@@ -57,7 +58,9 @@
     </p>
   {:else}
     <p class="kit-empty-title">{title}</p>
-    <p class="kit-empty-line">{@render why()}</p>
+    {#if line}
+      <p class="kit-empty-line">{@render why()}</p>
+    {/if}
   {/if}
   {#if action}
     <div class="kit-empty-action">{@render action()}</div>

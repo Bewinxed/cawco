@@ -1,8 +1,9 @@
 <script lang="ts">
   /**
-   * Claude's routing: how a person's sessions and a session's delegates each
-   * choose among the accounts, the order Fill first fills them in, and what
-   * a running session does at its limit. Two tabs share one picker's place;
+   * A provider's routing: how a person's sessions and a session's delegates
+   * each choose among its accounts, the order Fill first fills them in, and,
+   * where CawCo reads the provider's limits, what a running session does at
+   * its limit. Two tabs share one picker's place;
    * switching slides the one out and the other in from the side it stands
    * on, and the place takes the new height. Save writes the routing, then
    * the order of every account whose place changed.
@@ -28,17 +29,22 @@
   } from "#lib/components/ui/fluid-tabs/index.js";
   import { goto } from "$app/navigation";
   import AtLimitBlock from "./AtLimitBlock.svelte";
-  import { listed, nameOf, strategyLabel } from "./model.svelte";
+  import { providerLimits, providerName, strategyLabel } from "./model.svelte";
   import StrategyPicker from "./StrategyPicker.svelte";
 
   let {
+    provider,
     accounts,
     routing,
   }: {
+    provider: string;
     /** In fill-first order; two or more. */
     accounts: Account[];
     routing: ProviderRouting;
   } = $props();
+
+  const title = $derived(`${providerName(provider)} routing`);
+  const limits = $derived(providerLimits(provider));
 
   type Kind = "yours" | "delegates";
   let tab = $state<Kind>("yours");
@@ -74,7 +80,7 @@
     saving = true;
     refused = undefined;
     try {
-      await putRouting($state.snapshot(draft));
+      await putRouting(provider, $state.snapshot(draft));
       // Every account takes its place in the order, from 0, where it differs.
       for (const [at, id] of order.entries()) {
         const account = accounts.find((one) => one.id === id);
@@ -135,11 +141,10 @@
   onsubmit={save}
   saveLabel="Save routing"
   {saving}
-  title="Claude routing"
+  {title}
 >
   {#snippet header()}
-    <h1 class="title">Claude routing</h1>
-    <p class="note">{listed(accounts.map(nameOf))}</p>
+    <h1 class="title">{title}</h1>
     {#if refused}
       <p class="problem" role="alert" in:appear>{refused}</p>
     {/if}
@@ -188,9 +193,15 @@
     </div>
   </section>
 
-  <section class="well">
-    <AtLimitBlock accounts={limitLanes} bind:atLimit={draft.atLimit} />
-  </section>
+  {#if limits}
+    <section class="well">
+      <AtLimitBlock
+        accounts={limitLanes}
+        terms={provider === "anthropic"}
+        bind:atLimit={draft.atLimit}
+      />
+    </section>
+  {/if}
 </EditorFrame>
 
 <style>
@@ -198,11 +209,6 @@
     font: var(--type-title);
     letter-spacing: var(--track-title);
     color: var(--ink-strong);
-  }
-  .note {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    overflow-wrap: anywhere;
   }
   .problem {
     font: var(--type-meta);
@@ -214,6 +220,14 @@
     align-items: flex-start;
     gap: var(--space-4);
     min-width: 0;
+    container: kinds / inline-size;
+  }
+  /* Where the two tabs and their strategies don't fit on one row, the tabs
+     keep their whole names and the strategy is the chosen card's to say. */
+  @container kinds (width < 480px) {
+    .strategy {
+      display: none;
+    }
   }
   .strategy {
     font-weight: var(--weight-body);

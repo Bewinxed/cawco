@@ -1,177 +1,150 @@
 <script lang="ts">
   /**
-   * Configure → Accounts: every Claude account, where each is signed in,
-   * and, with two or more, how new sessions choose among them. A hollow
-   * machine chip signs the account in there; the popover glides between
-   * chips as one surface.
+   * Configure → Accounts: one grouped inset list per provider that has an
+   * account, in the picker's order. A group's header is the provider's logo
+   * and name, and Routing once it has two accounts to route between; its
+   * card holds the accounts in fill-first order, each row one link to the
+   * account. Groups and rows arriving or leaving reflow (motion/rows).
    */
-  import type { Account } from "@cawco/core";
-  import AccountRow from "#lib/cawco/accounts/AccountRow.svelte";
-  import {
-    accountsOf,
-    nameOf,
-    routingLine,
-    routingOf,
-  } from "#lib/cawco/accounts/model.svelte.js";
-  import { cawco, deleteAccount } from "#lib/cawco/client.svelte.js";
+  import AccountListRow from "#lib/cawco/accounts/AccountListRow.svelte";
+  import { groupsOf } from "#lib/cawco/accounts/model.svelte.js";
+  import ProviderMark from "#lib/cawco/accounts/ProviderMark.svelte";
+  import { cawco } from "#lib/cawco/client.svelte.js";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
-  import { confirm } from "#lib/cawco/confirm.svelte.js";
-  import HarnessLogo from "#lib/cawco/HarnessLogo.svelte";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
-  import NsPopoverGroup from "#lib/cawco/spawn/NsPopoverGroup.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
+  import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { IconChevronRight, IconPlus } from "#lib/icons.js";
-  import { goto } from "$app/navigation";
 
   const section = sectionOf("accounts");
-  const accounts = $derived(accountsOf());
-  const routing = $derived(routingOf());
-  /** The second account is set up in steps; any other is signed in and named. */
-  const addHref = $derived(
-    accounts.length === 1
-      ? "/config/accounts/new?setup"
-      : "/config/accounts/new"
-  );
-
-  async function askRemove(account: Account) {
-    await confirm({
-      title: `Remove ${nameOf(account)}?`,
-      body: "Each machine signed in to it signs it out with Claude Code's own logout and forgets it. New sessions stop being placed on it.",
-      confirmLabel: "Remove account",
-      destructive: true,
-      pendingLabel: "Removing…",
-      run: () => deleteAccount(account.id),
-    });
-  }
+  const groups = $derived(groupsOf());
 </script>
 
-<SectionFrame
-  purpose={section.purpose}
-  ready={cawco.accounts !== null}
-  title={section.label}
->
+<SectionFrame ready={cawco.accounts !== null} title={section.label}>
   {#snippet actions(
     down
   )}
-    <Button disabled={down !== null} href={addHref} title={down ?? undefined}>
+    <Button
+      disabled={down !== null}
+      href="/config/accounts/new"
+      title={down ?? undefined}
+    >
       <IconPlus />
       Add account
     </Button>
   {/snippet}
 
-  {#if accounts.length === 0}
-    <EmptyState
-      icon={section.icon}
-      line="Claude sessions run only on accounts signed in here. Add one and sign it in on each machine; add a second to share the work between them."
-      title="Add your first Claude account"
-    >
+  {#if groups.length === 0}
+    <EmptyState icon={section.icon} title="Add your first account">
       {#snippet action()}
-        <Button href={addHref} icon={IconPlus} label="Add account" size="sm" />
+        <Button
+          href="/config/accounts/new"
+          icon={IconPlus}
+          label="Add account"
+          size="sm"
+        />
       {/snippet}
     </EmptyState>
   {:else}
-    <section aria-labelledby="provider-claude" class="provider">
-      <header class="head">
-        <span aria-hidden="true" class="mark"
-          ><HarnessLogo harness="claude" /></span
+    <div class="groups" {@attach reflow()}>
+      {#each groups as group (group.provider)}
+        <section
+          aria-labelledby="provider-{group.provider}"
+          class="group"
+          data-flip
         >
-        <h2 class="name" id="provider-claude">Claude</h2>
-        {#if accounts.length > 1 && routing}
-          <div class="routing">
-            <span class="line">{routingLine(accounts, routing)}</span>
-            <a class="change" href="/config/accounts/anthropic/routing">
-              Change routing
-              <IconChevronRight />
-            </a>
-          </div>
-        {/if}
-      </header>
-      <NsPopoverGroup>
-        <ul aria-label="Claude accounts" class="rows" {@attach reflow()}>
-          {#each accounts as account (account.id)}
-            <AccountRow
-              {account}
-              onedit={() => goto(`/config/accounts/${account.id}`)}
-              onremove={() => askRemove(account)}
-            />
-          {/each}
-        </ul>
-      </NsPopoverGroup>
-    </section>
+          <header class="head">
+            <ProviderMark provider={group.provider} />
+            <h2 class="name" id="provider-{group.provider}">{group.name}</h2>
+            {#if group.accounts.length > 1}
+              <a
+                class="routing"
+                data-flip="pop"
+                href="/config/accounts/{encodeURIComponent(
+                  group.provider
+                )}/routing"
+              >
+                Routing
+                <IconChevronRight aria-hidden="true" />
+              </a>
+            {/if}
+          </header>
+          <ul
+            aria-labelledby="provider-{group.provider}"
+            class="card"
+            data-flip="box"
+            {@attach highlight({ rows: ".link" })}
+          >
+            {#each group.accounts as account (account.id)}
+              <AccountListRow {account} />
+            {/each}
+          </ul>
+        </section>
+      {/each}
+    </div>
   {/if}
 </SectionFrame>
 
 <style>
-  .provider {
+  .groups {
     display: flex;
     flex-direction: column;
+    gap: var(--space-6);
     min-width: 0;
-    container: accounts / inline-size;
+  }
+  .group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    min-width: 0;
   }
   .head {
     display: flex;
-    flex-wrap: wrap;
     align-items: center;
-    gap: var(--space-2) var(--space-3);
-    min-height: 30px;
-    padding: 0 var(--space-2) var(--space-3);
-  }
-  .mark {
-    display: grid;
-    flex: none;
-    place-items: center;
-    width: 22px;
-    height: 22px;
-    border-radius: var(--radius-xs);
-    background: var(--surface-fill-strong);
-  }
-  .mark :global(.harness-logo) {
-    width: 14px;
-    height: 14px;
+    gap: var(--space-2);
+    min-height: var(--c-btn-h-xs);
+    padding-inline: var(--space-3);
   }
   .name {
+    flex: 1 1 auto;
+    min-width: 0;
     font: var(--type-label);
-    color: var(--ink-strong);
+    color: var(--ink-muted);
   }
   .routing {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-2) var(--space-4);
-    margin-inline-start: auto;
-    min-width: 0;
-  }
-  .line {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    overflow-wrap: anywhere;
-  }
-  .change {
     display: inline-flex;
+    flex: none;
     align-items: center;
-    gap: var(--space-1);
+    gap: 2px;
     border-radius: var(--radius-xs);
     font: var(--type-label);
     color: var(--link-ink);
     text-decoration: none;
-    white-space: nowrap;
+    transition: opacity var(--dur-control) var(--ease-out);
   }
   @media (hover: hover) and (pointer: fine) {
-    .change:hover {
+    .routing:hover {
       color: var(--link-hover);
     }
   }
-  .change :global(svg) {
+  .routing:active {
+    opacity: 0.72;
+  }
+  .routing :global(svg) {
     width: 12px;
     height: 12px;
   }
-  .rows {
+  .card {
     display: flex;
     flex-direction: column;
+    min-width: 0;
     margin: 0;
     padding: 0;
     list-style: none;
+    border: 1px solid var(--border-hairline);
+    border-radius: var(--radius-lg);
+    background: var(--surface-raised);
   }
 </style>

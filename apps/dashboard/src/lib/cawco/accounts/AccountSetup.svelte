@@ -1,23 +1,29 @@
 <script lang="ts">
   /**
-   * Adding a Claude account, in steps beside a rail of them. Sign in comes
-   * first, so the account's email is known and becomes its name; the account
-   * itself is made when its first sign-in link is asked for. Adding the
-   * second account goes on to how the two share the work: who your sessions
-   * run on, who delegates run on, and what a session does at its limit.
-   * Otherwise it ends at Name it, back on the list.
+   * Adding an account, in steps beside a rail of them. Provider first: the
+   * picker's rows (a provider and how it signs in), and choosing one moves
+   * on, its tile flying to the Sign in step's while the other rows leave.
+   * Sign in follows the row's kind: Claude Code's own login with a pasted
+   * code, a device code entered on any device, or a key sent to the
+   * machines. Then Name it. A provider's second account goes on to how the
+   * two share the work: your sessions, delegates, and, where CawCo reads the
+   * provider's limits, what a session does at its limit.
    *
-   * Each step's box takes the next step's height (morph) while the step
-   * rises into it. Cancel takes back an account no machine signed in.
+   * The account itself is made by its first sign-in (a link, a code, a key),
+   * so its email is known and becomes its name. Each step's box takes the
+   * next step's height (morph) while the step rises into it. Cancel takes
+   * back an account no machine signed in.
    */
   import {
     type Account,
     type AccountHue,
-    type AccountKind,
+    CLAUDE_PROVIDER,
     DEFAULT_AT_LIMIT,
+    type HarnessKind,
+    type ProviderChoice,
     type StrategyChoice,
   } from "@cawco/core";
-  import { untrack } from "svelte";
+  import { onDestroy, untrack } from "svelte";
   import { SvelteMap, SvelteSet } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
   import {
@@ -36,15 +42,15 @@
   } from "#lib/cawco/motion/curves.svelte.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
+  import { depart, land } from "#lib/cawco/motion/share.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
-  import {
-    TabItem,
-    Tabs,
-    TabsList,
-  } from "#lib/components/ui/fluid-tabs/index.js";
+  import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { Input } from "#lib/components/ui/input/index.js";
+  import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import {
     IconArrowUpRight,
+    IconChevronRight,
+    IconSearch,
     IconSuccess,
     IconWarningTriangle,
   } from "#lib/icons.js";
@@ -52,58 +58,97 @@
   import AccountName from "./AccountName.svelte";
   import AccountTile from "./AccountTile.svelte";
   import AtLimitBlock from "./AtLimitBlock.svelte";
+  import DevicePanel from "./DevicePanel.svelte";
+  import { DeviceFlow } from "./device.svelte";
+  import KeyPanel from "./KeyPanel.svelte";
   import {
-    claudeMachines,
+    accountsOf,
+    choiceLabel,
+    choicesOf,
+    harnessWords,
     machineName,
     machineOnline,
+    machinesFor,
     nameOf,
     nextHue,
+    providerLimits,
     routingLine,
     signinState,
   } from "./model.svelte";
+  import ProviderMark from "./ProviderMark.svelte";
   import StrategyPicker from "./StrategyPicker.svelte";
   import Swatches from "./Swatches.svelte";
   import { SigninFlow } from "./signin.svelte";
 
-  let {
-    existing,
-  }: {
-    /** The one account there was: set, this is the second account's setup. */
-    existing: Account | null;
-  } = $props();
+  // ── Provider ───────────────────────────────────────────────────────────
+  const choices = $derived(choicesOf());
+  const keyOf = (one: ProviderChoice) => `${one.provider}:${one.kind}`;
+  let query = $state("");
+  const shownChoices = $derived.by(() => {
+    const words = query.trim().toLowerCase();
+    return words
+      ? choices.filter((one) => choiceLabel(one).toLowerCase().includes(words))
+      : choices;
+  });
+  /** The machines that run any of a row's harnesses. */
+  const runsOn = (harnesses: HarnessKind[]) =>
+    cawco.machines.filter((machine) =>
+      machine.harnesses?.some((entry) =>
+        harnesses.includes(entry.harness as HarnessKind)
+      )
+    );
+  const HARNESS: Record<HarnessKind, string> = {
+    claude: "Claude Code",
+    opencode: "OpenCode",
+    pi: "pi",
+  };
 
-  const full = untrack(() => existing !== null);
-  const STEPS = full
-    ? [
-        "Sign in",
-        "Name it",
-        "Your sessions",
-        "Delegates",
-        "At the limit",
-        "Done",
-      ]
-    : ["Sign in", "Name it"];
-  const LAST = STEPS.length - 1;
+  let choice = $state<ProviderChoice | null>(null);
+  /** The provider's one account, when this is its second: the setup goes on to routing. */
+  let existing = $state<Account | null>(null);
+  const provider = $derived(choice?.provider ?? null);
+  const limits = $derived(provider !== null && providerLimits(provider));
+  const full = $derived(existing !== null);
+  const STEPS = $derived([
+    "Provider",
+    "Sign in",
+    "Name it",
+    ...(full
+      ? [
+          "Your sessions",
+          "Delegates",
+          ...(limits ? ["At the limit"] : []),
+          "Done",
+        ]
+      : []),
+  ]);
+  const LAST = $derived(STEPS.length - 1);
 
   let step = $state(0);
+  const at = $derived(STEPS[step]);
   /** Which way the last step went: 1 on, -1 back. */
   let toward = 1;
 
   // ── Sign in ────────────────────────────────────────────────────────────
-  let kind = $state<AccountKind>("subscription");
   let createdId = $state<string | null>(null);
   let creating: Promise<string> | null = null;
-  /** The colour the account is made in: the first no account wears. */
-  let hue = $state<AccountHue>(
-    untrack(() => nextHue(cawco.accounts?.accounts ?? []))
-  );
+  /** The colour the account is made in: the first its provider's accounts don't wear. */
+  let hue = $state<AccountHue>("orange");
 
-  /** The account's id, making it first: it is made when its first link is asked for. */
+  /** The account's id, making it first: it is made by its first sign-in. */
   function ensureAccount(): Promise<string> {
     if (createdId) {
       return Promise.resolve(createdId);
     }
-    creating ??= createAccount({ provider: "anthropic", kind, hue }).then(
+    const row = choice;
+    if (!row) {
+      return Promise.reject(new Error("Choose a provider first."));
+    }
+    creating ??= createAccount({
+      provider: row.provider,
+      kind: row.kind,
+      hue,
+    }).then(
       (made) => {
         createdId = made.id;
         return made.id;
@@ -119,33 +164,43 @@
   const account = $derived(
     cawco.accounts?.accounts.find((one) => one.id === createdId) ?? null
   );
-  const machines = $derived(claudeMachines());
-  const flows = new SvelteMap<string, SigninFlow>();
+  const machines = $derived(choice ? runsOn(choice.harnesses) : []);
+  const pastes = new SvelteMap<string, SigninFlow>();
+  const devices = new SvelteMap<string, DeviceFlow>();
   const later = new SvelteSet<string>();
   $effect.pre(() => {
+    const kind = choice?.signin;
     for (const machine of machines) {
-      if (!untrack(() => flows.has(machine.machineId))) {
-        flows.set(
-          machine.machineId,
-          new SigninFlow(ensureAccount, machine.machineId)
-        );
+      const { machineId } = machine;
+      if (kind === "paste-code" && !untrack(() => pastes.has(machineId))) {
+        pastes.set(machineId, new SigninFlow(ensureAccount, machineId));
       }
+      if (kind === "device-code" && !untrack(() => devices.has(machineId))) {
+        devices.set(machineId, new DeviceFlow(ensureAccount, machineId));
+      }
+    }
+  });
+  onDestroy(() => {
+    for (const flow of devices.values()) {
+      flow.dispose();
     }
   });
 
   const signins = $derived(cawco.accounts?.signins ?? []);
   const stateOn = (machineId: string) =>
     createdId ? signinState(signins, createdId, machineId) : "signed-out";
+  const doneOn = (machineId: string) =>
+    stateOn(machineId) === "signed-in" ||
+    pastes.get(machineId)?.phase === "signed-in" ||
+    devices.get(machineId)?.phase === "signed-in";
   const signedIn = $derived(
-    machines.filter(
-      (machine) =>
-        stateOn(machine.machineId) === "signed-in" ||
-        flows.get(machine.machineId)?.phase === "signed-in"
-    ).length
+    machines.filter((machine) => doneOn(machine.machineId)).length
   );
   const email = $derived(
     account?.email ??
-      [...flows.values()].find((flow) => flow.phase === "signed-in")?.email ??
+      [...pastes.values(), ...devices.values()].find(
+        (flow) => flow.phase === "signed-in"
+      )?.email ??
       null
   );
 
@@ -155,12 +210,11 @@
     id: createdId ?? "new",
     email,
     label: nickname.trim() || null,
+    kind: choice?.kind,
   });
 
-  // ── Routing (the second account) ───────────────────────────────────────
-  let yours = $state<StrategyChoice>(
-    untrack(() => ({ strategy: "pinned", pinnedAccountId: existing?.id }))
-  );
+  // ── Routing (a provider's second account) ──────────────────────────────
+  let yours = $state<StrategyChoice>({ strategy: "pinned" });
   let delegates = $state<StrategyChoice>({ strategy: "soonest-reset" });
   let atLimit = $state({ ...DEFAULT_AT_LIMIT });
   /** Both accounts, the one there was first; the new one goes last. */
@@ -175,13 +229,60 @@
   let busy = $state(false);
   let refused = $state<string | null>(null);
 
-  const canGo = $derived(step !== 0 || signedIn > 0);
+  const canGo = $derived(
+    at === "Provider" ? false : at !== "Sign in" || signedIn > 0
+  );
   const nextLabel = $derived.by(() => {
     if (step === LAST && full) {
       return "Open Accounts";
     }
     return step === LAST ? "Save account" : "Continue";
   });
+
+  /**
+   * A row chosen: its tile takes off for the Sign in step's, and the setup
+   * moves on. Another row than the one an unsigned account was made for
+   * takes that account back first.
+   */
+  async function choose(row: ProviderChoice, tile: HTMLElement | null) {
+    if (busy) {
+      return;
+    }
+    if (choice && keyOf(choice) !== keyOf(row) && createdId) {
+      busy = true;
+      try {
+        await deleteAccount(createdId);
+      } catch (error) {
+        refused = error instanceof Error ? error.message : String(error);
+        busy = false;
+        return;
+      }
+      busy = false;
+      createdId = null;
+      creating = null;
+      pastes.clear();
+      for (const flow of devices.values()) {
+        flow.dispose();
+      }
+      devices.clear();
+    }
+    const theirs = accountsOf(row.provider).filter(
+      (one) => one.id !== createdId
+    );
+    existing = theirs.length === 1 ? theirs[0] : null;
+    yours = { strategy: "pinned", pinnedAccountId: existing?.id };
+    if (!createdId) {
+      hue = nextHue(theirs);
+    }
+    choice = row;
+    if (tile) {
+      tile.dataset.share = `provider:${keyOf(row)}`;
+      depart(tile);
+    }
+    refused = null;
+    toward = 1;
+    step = 1;
+  }
 
   async function next() {
     if (busy || !canGo) {
@@ -190,14 +291,15 @@
     refused = null;
     busy = true;
     try {
-      if (step === 1 && createdId) {
+      if (at === "Name it" && createdId) {
         await patchAccount(createdId, {
           label: nickname.trim() || null,
           hue,
         });
       }
-      if (step === 4 && full) {
-        await putRouting({
+      const lastRouting = limits ? "At the limit" : "Delegates";
+      if (at === lastRouting && full && provider) {
+        await putRouting(provider, {
           yours: $state.snapshot(yours),
           delegates: $state.snapshot(delegates),
           atLimit: $state.snapshot(atLimit),
@@ -220,11 +322,11 @@
 
   /** Each account whose place the drag changed takes it, from 0. */
   async function saveOrder() {
-    for (const [at, id] of order.entries()) {
+    for (const [place, id] of order.entries()) {
       const one = cawco.accounts?.accounts.find((a) => a.id === id);
-      if (one && one.order !== at) {
+      if (one && one.order !== place) {
         // biome-ignore lint/performance/noAwaitInLoops: one PATCH per account, in order, so a refusal stops the rest
-        await patchAccount(id, { order: at });
+        await patchAccount(id, { order: place });
       }
     }
   }
@@ -261,18 +363,32 @@
       css: (t) => `opacity: ${t}; transform: translateY(${(1 - t) * rise}px)`,
     };
   }
-
-  const title = full
-    ? "Set up a second Claude account"
-    : "Add a Claude account";
-  const purpose = $derived(
-    existing
-      ? `${nameOf(existing)} is your only Claude account so far.`
-      : "Sign it in on a machine, then name it."
-  );
+  /**
+   * The provider rows leaving as one is chosen: pinned where they stood,
+   * they fade over the exit's length while the chosen tile flies on. Every
+   * other step hands over at once.
+   */
+  function stepOut(node: HTMLElement): TransitionConfig {
+    if (!(node.classList.contains("picker") && toward === 1)) {
+      return { duration: 0 };
+    }
+    const { offsetTop, offsetLeft, offsetWidth } = node;
+    Object.assign(node.style, {
+      position: "absolute",
+      top: `${offsetTop}px`,
+      left: `${offsetLeft}px`,
+      width: `${offsetWidth}px`,
+      pointerEvents: "none",
+    });
+    return {
+      duration: dur("--dur-exit"),
+      easing: easeOut,
+      css: (t) => `opacity: ${t}`,
+    };
+  }
 </script>
 
-<SectionFrame {purpose} {title}>
+<SectionFrame title="Add account">
   {#snippet actions()}
     <Button disabled={busy} label="Cancel" onclick={cancel} variant="outline" />
   {/snippet}
@@ -280,12 +396,12 @@
   <div class="host">
     <div class="setup">
       <ol aria-label="Steps" class="steps">
-        {#each STEPS as name, at (name)}
+        {#each STEPS as name, place (name)}
           <li
-            aria-current={at === step ? "step" : undefined}
-            class={["step", at < step && "done", at === step && "cur"]}
+            aria-current={place === step ? "step" : undefined}
+            class={["step", place < step && "done", place === step && "cur"]}
           >
-            {#if at < step}
+            {#if place < step}
               <IconSuccess aria-hidden="true" />
             {:else}
               <span aria-hidden="true" class="dot"></span>
@@ -298,42 +414,40 @@
       <div class="work">
         <div class="box" {@attach morph()}>
           {#key step}
-            <div class="in" in:stepIn>
-              {#if step === 0}
+            <div
+              class={["in", at === "Provider" && "picker"]}
+              in:stepIn
+              out:stepOut
+            >
+              {#if at === "Provider"}
+                {@render pick()}
+              {:else if at === "Sign in"}
                 {@render signIn()}
-              {:else if step === 1}
+              {:else if at === "Name it"}
                 {@render nameIt()}
-              {:else if step === 2 && pair}
-                {@render strategy(
-                  "Your sessions",
-                  "Sessions you start yourself.",
-                  yours,
-                  (c) => {
-                    yours = c;
-                  }
-                )}
-              {:else if step === 3 && pair}
-                {@render strategy(
-                  "Delegates",
-                  "Sessions your sessions start.",
-                  delegates,
-                  (c) => {
-                    delegates = c;
-                  }
-                )}
-              {:else if step === 4 && pair}
+              {:else if at === "Your sessions" && pair}
+                {@render strategy("Your sessions", yours, (c) => {
+                  yours = c;
+                })}
+              {:else if at === "Delegates" && pair}
+                {@render strategy("Delegates", delegates, (c) => {
+                  delegates = c;
+                })}
+              {:else if at === "At the limit" && pair}
                 <section class="sec">
                   <h2>At the limit</h2>
-                  <p class="lead">
-                    What happens to a running session when its account runs out.
-                  </p>
-                  <AtLimitBlock accounts={[pair[1], pair[0]]} bind:atLimit />
+                  <AtLimitBlock
+                    accounts={[pair[1], pair[0]]}
+                    terms={provider === CLAUDE_PROVIDER}
+                    bind:atLimit
+                  />
                 </section>
-              {:else if step === 5 && pair}
+              {:else if at === "Done" && pair}
                 <section class="sec">
                   <h2>{nameOf(pair[0])} and {nameOf(pair[1])} are set up</h2>
                   <p class="lead">
-                    {routingLine(pair, { yours, delegates })}{atLimit.move
+                    {routingLine(pair, { yours, delegates })}{limits &&
+                    atLimit.move
                       ? " · Moves at the limit"
                       : ""}
                   </p>
@@ -347,7 +461,7 @@
         {/if}
         <div class="foot">
           <Button
-            disabled={step === 0 || busy}
+            disabled={step === 0 || busy || (step === 1 && signedIn > 0)}
             label="Back"
             onclick={back}
             variant="outline"
@@ -365,140 +479,227 @@
   </div>
 </SectionFrame>
 
+{#snippet pick()}
+  <section class="sec">
+    {#if choices.length > 8}
+      <label class="search">
+        <IconSearch aria-hidden="true" />
+        <input
+          aria-label="Search providers"
+          autocomplete="off"
+          placeholder="Search"
+          spellcheck="false"
+          type="search"
+          bind:value={query}
+        >
+      </label>
+    {/if}
+    <ul
+      aria-label="Providers"
+      class="choices"
+      {@attach highlight({ rows: ".choice:not([aria-disabled='true'])" })}
+    >
+      {#each shownChoices as row (keyOf(row))}
+        {@const free = runsOn(row.harnesses).length > 0}
+        {@const label = choiceLabel(row)}
+        {#snippet button(
+          props: Record<string, unknown>
+        )}
+          <button
+            {...props}
+            aria-disabled={free ? undefined : "true"}
+            class="choice"
+            onclick={(event) => {
+              if (free) {
+                choose(
+                  row,
+                  event.currentTarget.querySelector<HTMLElement>(".ptile")
+                );
+              }
+            }}
+            type="button"
+          >
+            <span class="ptile"><ProviderMark provider={row.provider} /></span>
+            <span class="plabel">{label}</span>
+            <span aria-hidden="true" class="chev"><IconChevronRight /></span>
+          </button>
+        {/snippet}
+        <li class="crow">
+          {#if free}
+            {@render button({})}
+          {:else}
+            <Tip
+              label="No machine runs {row.harnesses
+                .map((one) => HARNESS[one])
+                .join(" or ")}"
+            >
+              {#snippet children(
+                props
+              )}
+                {@render button(props)}
+              {/snippet}
+            </Tip>
+          {/if}
+        </li>
+      {:else}
+        <li class="none">No provider matches “{query.trim()}”</li>
+      {/each}
+    </ul>
+  </section>
+{/snippet}
+
 {#snippet signIn()}
   <section class="sec">
-    <h2>Sign in</h2>
-    <p class="lead">
-      Sign in on at least one machine. The account’s email becomes its name.
-    </p>
-    <fieldset class="fld" disabled={createdId !== null}>
-      <legend class="label">Kind</legend>
-      <Tabs
-        onValueChange={(value) => {
-          kind = value as AccountKind;
-        }}
-        value={kind}
-      >
-        <TabsList aria-label="Kind">
-          <TabItem label="Subscription" value="subscription" />
-          <TabItem label="Console" value="console" />
-        </TabsList>
-      </Tabs>
-    </fieldset>
-    {#if signedIn > 0}
+    {#if choice}
+      <h2 class="titled">
+        <span
+          class="ptile"
+          {@attach land(() =>
+            choice ? `provider:${keyOf(choice)}` : undefined
+          )}
+          ><ProviderMark provider={choice.provider} /></span
+        >
+        {choiceLabel(choice)}
+      </h2>
+    {/if}
+    {#if signedIn > 0 && choice?.signin !== "device-code"}
       <div class="signed-as" in:unfold out:unfold>
         <IconSuccess aria-hidden="true" />
         <span>Signed in as <b>{email ?? "the account"}</b></span>
       </div>
     {/if}
-    <ul class="machines">
-      {#each machines as machine (machine.machineId)}
-        {@const flow = flows.get(machine.machineId)}
-        {@const name = machineName(machine)}
-        {@const online = machineOnline(machine)}
-        {@const state = stateOn(machine.machineId)}
-        {@const done = state === "signed-in" || flow?.phase === "signed-in"}
-        {#if flow}
-          <li class="mrow">
-            <b class="mname">{name}</b>
-            <div class="controls">
-              {#if flow.url && !done}
-                <Button
-                  href={flow.url}
-                  icon={IconArrowUpRight}
-                  label="Open sign-in link"
-                  rel="noopener noreferrer"
-                  size="sm"
-                  target="_blank"
-                  variant="outline"
+    {#if choice?.signin === "api-key"}
+      <KeyPanel account={ensureAccount} {machines} />
+    {:else}
+      <ul class="machines">
+        {#each machines as machine (machine.machineId)}
+          {@const name = machineName(machine)}
+          {@const online = machineOnline(machine)}
+          {@const state = stateOn(machine.machineId)}
+          {@const done = doneOn(machine.machineId)}
+          {@const paste = pastes.get(machine.machineId)}
+          {@const device = devices.get(machine.machineId)}
+          {#if device}
+            <li class="mrow device">
+              <b class="mname">{name}</b>
+              <div class="controls">
+                <DevicePanel flow={device} machine={name} {online} />
+              </div>
+              <span class={["st", state === "mismatch" && "warn"]}>
+                {#if !done && state === "mismatch"}
+                  <IconWarningTriangle aria-hidden="true" />Someone else
+                {:else if !online}
+                  Offline
+                {/if}
+              </span>
+            </li>
+          {:else if paste}
+            <li class="mrow">
+              <b class="mname">{name}</b>
+              <div class="controls">
+                {#if paste.url && !done}
+                  <Button
+                    href={paste.url}
+                    icon={IconArrowUpRight}
+                    label="Open sign-in link"
+                    rel="noopener noreferrer"
+                    size="sm"
+                    target="_blank"
+                    variant="outline"
+                  />
+                {:else}
+                  <Button
+                    disabled={!online || done}
+                    icon={IconArrowUpRight}
+                    label="Open sign-in link"
+                    onclick={() => paste.open()}
+                    pending={paste.phase === "opening"}
+                    pendingLabel="Opening…"
+                    size="sm"
+                    variant="outline"
+                  />
+                {/if}
+                <Input
+                  aria-invalid={paste.problem ? "true" : undefined}
+                  aria-label="Code for {name}"
+                  autocomplete="off"
+                  class="code h-[30px]"
+                  disabled={paste.url === null || done}
+                  onkeydown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      paste.done();
+                    }
+                  }}
+                  placeholder="Paste the code"
+                  spellcheck="false"
+                  bind:value={paste.code}
                 />
-              {:else}
                 <Button
-                  disabled={!online || done}
-                  icon={IconArrowUpRight}
-                  label="Open sign-in link"
-                  onclick={() => flow.open()}
-                  pending={flow.phase === "opening"}
-                  pendingLabel="Opening…"
+                  disabled={paste.url === null ||
+                    done ||
+                    paste.code.trim() === ""}
+                  failed={paste.problem !== null}
+                  label="Done"
+                  onclick={() => paste.done()}
+                  pending={paste.phase === "checking"}
+                  pendingLabel="Checking…"
                   size="sm"
-                  variant="outline"
                 />
+                <Button
+                  disabled={done}
+                  label="Later"
+                  onclick={() => later.add(machine.machineId)}
+                  size="sm"
+                  variant="ghost"
+                />
+              </div>
+              <span
+                class={["st", done && "ok", state === "mismatch" && "warn"]}
+              >
+                {#if done}
+                  <IconSuccess aria-hidden="true" />Signed in
+                {:else if paste.phase === "mismatch" || state === "mismatch"}
+                  <IconWarningTriangle aria-hidden="true" />Someone else
+                {:else if !online}
+                  Offline
+                {:else if later.has(machine.machineId)}
+                  Later
+                {/if}
+              </span>
+              {#if paste.problem}
+                <p class="row-problem" role="alert" in:appear>
+                  {paste.problem}
+                </p>
+              {:else if paste.phase === "mismatch"}
+                <p class="row-warn" role="alert" in:appear>
+                  {name}
+                  signed in as {paste.email ?? "another account"}, so it signed
+                  out again. Open the link again and sign in as the account
+                  you're adding.
+                </p>
               {/if}
-              <Input
-                aria-invalid={flow.problem ? "true" : undefined}
-                aria-label="Code for {name}"
-                autocomplete="off"
-                class="code h-[30px]"
-                disabled={flow.url === null || done}
-                onkeydown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    flow.done();
-                  }
-                }}
-                placeholder="Paste the code"
-                spellcheck="false"
-                bind:value={flow.code}
-              />
-              <Button
-                disabled={flow.url === null || done || flow.code.trim() === ""}
-                failed={flow.problem !== null}
-                label="Done"
-                onclick={() => flow.done()}
-                pending={flow.phase === "checking"}
-                pendingLabel="Checking…"
-                size="sm"
-              />
-              <Button
-                disabled={done}
-                label="Later"
-                onclick={() => later.add(machine.machineId)}
-                size="sm"
-                variant="ghost"
-              />
-            </div>
-            <span class={["st", done && "ok", state === "mismatch" && "warn"]}>
-              {#if done}
-                <IconSuccess aria-hidden="true" />Signed in
-              {:else if flow.phase === "mismatch" || state === "mismatch"}
-                <IconWarningTriangle aria-hidden="true" />Someone else
-              {:else if !online}
-                Offline
-              {:else if later.has(machine.machineId)}
-                Later
-              {/if}
-            </span>
-            {#if flow.problem}
-              <p class="row-problem" role="alert" in:appear>{flow.problem}</p>
-            {:else if flow.phase === "mismatch"}
-              <p class="row-warn" role="alert" in:appear>
-                {name}
-                signed in as {flow.email ?? "another account"}, so it signed out
-                again. Open the link again and sign in as the account you're
-                adding.
-              </p>
-            {/if}
+            </li>
+          {/if}
+        {:else}
+          <li class="none">
+            No machine runs
+            {harnessWords(choice?.provider ?? CLAUDE_PROVIDER)}
+            yet. Install it on one, and it shows here.
           </li>
-        {/if}
-      {:else}
-        <li class="none">
-          No machine has Claude Code yet. Install it on one, and it shows here.
-        </li>
-      {/each}
-    </ul>
+        {/each}
+      </ul>
+    {/if}
   </section>
 {/snippet}
 
 {#snippet nameIt()}
   <section class="sec">
     <h2>Name it</h2>
-    <p class="lead">
-      It’s called by its email. Add a nickname if you’d like a shorter one.
-    </p>
     <div class="fld">
       <span class="label">How it shows</span>
       <div class="preview">
-        <AccountTile {hue} size={28} />
+        <AccountTile {hue} provider={choice?.provider ?? ""} size={28} />
         <AccountName account={shown} />
       </div>
     </div>
@@ -523,17 +724,15 @@
 
 {#snippet strategy(
   heading: string,
-  line: string,
-  choice: StrategyChoice,
+  value: StrategyChoice,
   onchoice: (choice: StrategyChoice) => void
 )}
   <section class="sec">
     <h2>{heading}</h2>
-    <p class="lead">{line}</p>
     {#if pair}
       <StrategyPicker
         accounts={pair}
-        {choice}
+        choice={value}
         label={heading}
         {onchoice}
         onorder={(next) => {
@@ -643,17 +842,128 @@
     min-width: 0;
   }
   .sec h2 {
-    margin-block-end: var(--space-1);
+    margin-block-end: var(--space-5);
     font: var(--type-title);
     letter-spacing: var(--track-title);
     color: var(--ink-strong);
     text-wrap: balance;
   }
+  .sec h2.titled {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+  }
   .lead {
-    margin-block-end: var(--space-5);
     color: var(--ink-muted);
     text-wrap: pretty;
   }
+
+  /* The provider picker: a grouped inset list on the well. */
+  .search {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    height: var(--c-btn-h);
+    margin-block-end: var(--space-3);
+    padding: 0 var(--space-3);
+    border-radius: var(--radius-md);
+    background: var(--surface-recess-deep);
+    color: var(--ink-muted);
+  }
+  .search:focus-within {
+    outline: var(--focus-ring-width) solid var(--focus-ring);
+    outline-offset: var(--focus-ring-inset);
+  }
+  .search :global(svg) {
+    flex: none;
+    width: 16px;
+    height: 16px;
+  }
+  .search input {
+    flex: 1 1 auto;
+    min-width: 0;
+    border: 0;
+    background: transparent;
+    font: var(--type-body);
+    color: var(--ink-strong);
+    outline: none;
+  }
+  .search input::placeholder {
+    color: var(--ink-subtle);
+  }
+  .choices {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    border: 1px solid var(--border-hairline);
+    border-radius: var(--radius-lg);
+    background: var(--surface-raised);
+  }
+  .crow + .crow {
+    border-block-start: 1px solid var(--border-hairline);
+  }
+  .choice {
+    display: grid;
+    grid-template-columns: 26px minmax(0, 1fr) 16px;
+    align-items: center;
+    gap: var(--space-3);
+    width: 100%;
+    min-height: var(--c-btn-h-lg);
+    padding: 0 var(--space-4) 0 var(--space-3);
+    border: 0;
+    background: transparent;
+    color: inherit;
+    text-align: start;
+    cursor: pointer;
+  }
+  /* By type, not child: the list's hover layers (spans) stand before the rows. */
+  .crow:first-of-type .choice {
+    border-start-start-radius: calc(var(--radius-lg) - 1px);
+    border-start-end-radius: calc(var(--radius-lg) - 1px);
+  }
+  .crow:last-of-type .choice {
+    border-end-start-radius: calc(var(--radius-lg) - 1px);
+    border-end-end-radius: calc(var(--radius-lg) - 1px);
+  }
+  .choice:active:not([aria-disabled="true"]) {
+    background-color: var(--surface-fill);
+  }
+  .choice:focus-visible {
+    outline: var(--focus-ring-width) solid var(--focus-ring);
+    outline-offset: var(--focus-ring-inset);
+  }
+  .choice[aria-disabled="true"] {
+    cursor: default;
+    opacity: 0.5;
+  }
+  .ptile {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-raised);
+    box-shadow: var(--shadow-tile);
+  }
+  .plabel {
+    overflow: hidden;
+    font: var(--type-label);
+    color: var(--ink-row);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .chev {
+    display: flex;
+    color: var(--ink-subtle);
+  }
+  .chev :global(svg) {
+    width: 16px;
+    height: 16px;
+  }
+
   .fld {
     display: flex;
     flex-direction: column;
@@ -712,6 +1022,9 @@
     padding: var(--space-3) 0;
     border-block-start: 1px solid var(--border-hairline);
   }
+  .mrow.device {
+    align-items: start;
+  }
   .mname {
     grid-area: name;
     min-width: 0;
@@ -720,6 +1033,9 @@
     color: var(--ink-strong);
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .mrow.device .mname {
+    line-height: var(--c-btn-h-sm);
   }
   .controls {
     grid-area: controls;
@@ -767,10 +1083,13 @@
     color: var(--status-attn-ink);
   }
   .none {
-    padding: var(--space-3) 0;
-    border-block-start: 1px solid var(--border-hairline);
+    padding: var(--space-3) var(--space-4);
     font: var(--type-meta);
     color: var(--ink-muted);
+  }
+  .machines .none {
+    padding-inline: 0;
+    border-block-start: 1px solid var(--border-hairline);
   }
   .preview {
     display: flex;

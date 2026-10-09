@@ -15,7 +15,8 @@
     row = false,
     wrap = false,
   }: {
-    account: Pick<Account, "email" | "id" | "label">;
+    account: Pick<Account, "email" | "id" | "label"> &
+      Partial<Pick<Account, "kind">>;
     row?: boolean;
     wrap?: boolean;
   } = $props();

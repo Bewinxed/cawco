@@ -10,6 +10,7 @@
   import {
     type Board,
     buildFigure,
+    figureHeight,
     type Lane,
     type Policy,
     type Timeline,
@@ -21,15 +22,12 @@
     playing,
     pin,
     policy,
-    wide = false,
   }: {
     board: Board;
     lanes: Lane[];
     playing: boolean;
     pin?: number;
     policy?: Policy;
-    /** The at-limit figure: a wider, shorter stage. */
-    wide?: boolean;
   } = $props();
 
   let stage = $state<HTMLElement | null>(null);
@@ -117,20 +115,23 @@
   }
 </script>
 
-<div class={["stage", wide && "wide"]} bind:this={stage}></div>
+<!-- Stands at its lanes' height from the first frame; the build sets it again
+     once its captions are measured, taller only where one wraps. -->
+<div
+  class="stage"
+  bind:this={stage}
+  style:height="{figureHeight(board, lanes.length)}px"
+></div>
 
 <style>
   .stage {
     position: relative;
-    height: 150px;
+    box-sizing: content-box;
     border-radius: var(--radius-md);
     background: var(--surface-recess);
     border: 1px solid var(--border-well);
     overflow: hidden;
     contain: layout paint;
-  }
-  .stage.wide {
-    height: 132px;
   }
   .stage :global(.dg) {
     position: absolute;
@@ -151,6 +152,11 @@
     line-height: 14px;
     color: var(--ink-row);
     white-space: nowrap;
+  }
+  .stage :global(.ln-lbl .nm) {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .stage :global(.ln-lbl .dot) {
     flex: none;
@@ -270,16 +276,15 @@
     color: var(--ink-row);
     white-space: nowrap;
   }
+  /* A caption wraps where the stage is narrow; the stage grows to hold it. */
   .stage :global(.cap) {
     left: 12px;
     right: 12px;
     bottom: 8px;
     top: auto;
-    overflow: hidden;
     font: var(--type-meta);
     line-height: 16px;
     color: var(--ink-row);
-    white-space: nowrap;
-    text-overflow: ellipsis;
+    text-wrap: pretty;
   }
 </style>

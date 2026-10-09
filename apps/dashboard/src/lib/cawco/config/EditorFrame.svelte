@@ -38,6 +38,7 @@
 
   let {
     title,
+    tile,
     header,
     children,
     onsubmit,
@@ -53,6 +54,8 @@
   }: {
     /** The document title. */
     title: string;
+    /** The thing's own tile in place of its section's (an account's), landing as the section's does. */
+    tile?: Snippet;
     header: Snippet;
     children: Snippet;
     onsubmit: () => void;
@@ -138,7 +141,15 @@
         : undefined}
     >
       <header class="head">
-        {#if section}
+        {#if tile}
+          <span
+            class="own"
+            data-share="icon:{page.url.pathname}"
+            {@attach land(() => `icon:${page.url.pathname}`)}
+          >
+            {@render tile()}
+          </span>
+        {:else if section}
           <span
             class="tile"
             data-share="icon:{page.url.pathname}"
@@ -281,6 +292,11 @@
   .tile :global(svg) {
     width: 16px;
     height: 16px;
+  }
+  /* An own tile stands at the title's line, at its own size. */
+  .own {
+    display: flex;
+    flex: none;
   }
   .lead {
     display: flex;
