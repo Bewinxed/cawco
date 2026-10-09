@@ -598,6 +598,28 @@ async function decide(start: TrialMarker, resumed: boolean): Promise<void> {
  * verdict is the problem that decides a rollback, or `undefined` to confirm.
  * A build whose agent can hold sessions with neither keeper is rolled back.
  */
+/**
+ * `cawco binary-units`, run from the build on trial: what it writes for the
+ * keeper's unit replaces what is on disk where they differ, and systemd
+ * reloads its unit files. What it said, for the log; a failure is said, and
+ * the update goes on with the unit it had.
+ */
+async function refreshKeeperUnit(version: string): Promise<string> {
+  const units = Bun.spawn(
+    [join(versionDirectory(version), "cawco"), "binary-units"],
+    { stdout: "pipe", stderr: "pipe" }
+  );
+  const [out, err, code] = await Promise.all([
+    new Response(units.stdout).text(),
+    new Response(units.stderr).text(),
+    units.exited,
+  ]);
+  if (code !== 0) {
+    return `binary-units exited ${code}: ${err.trim() || out.trim()}`;
+  }
+  return out.trim().replaceAll("\n", "; ") || "the keeper's unit is current";
+}
+
 async function settle(start: TrialMarker): Promise<string | undefined> {
   const up = await verify(start, 0);
   if (up) {
@@ -605,6 +627,12 @@ async function settle(start: TrialMarker): Promise<string | undefined> {
   }
   let trial = (await readTrial()) ?? start;
   if (!trial.keeperDone) {
+    // The keeper's unit as the new build writes it, before the keeper may
+    // restart on it: a unit change (its cgroup delegation) reaches machines
+    // installed before it, and a keeper that moves now starts under it.
+    await say(
+      `units ${trial.version}: ${await refreshKeeperUnit(trial.version)}`
+    );
     const move = await moveKeeper(trial.version).catch(
       (error): KeeperMove => ({
         outcome: "failed",

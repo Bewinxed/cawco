@@ -5,12 +5,22 @@
  */
 
 import { sessiondEndpoint } from "@cawco/core/sessiond";
+import { placeChildren } from "./cgroup";
 import { SessiondServer } from "./server";
 
 const main = async (): Promise<void> => {
   // Read directly: `CAWCO_ENV` has no key for sessiond's own override.
   const endpoint = process.env.CAWCO_SESSIOND_ENDPOINT ?? sessiondEndpoint();
-  const server = new SessiondServer();
+  // Linux only: macOS has no cgroups, and limits threads per process, so the
+  // children there cannot take the keeper's.
+  const placement =
+    process.platform === "linux" ? await placeChildren() : undefined;
+  if (placement) {
+    console.log(`[sessiond] ${placement.said}`);
+  }
+  const server = new SessiondServer({
+    ...(placement?.children ? { children: placement.children.procs } : {}),
+  });
   await server.listen(endpoint);
   console.log(`[sessiond] listening on ${endpoint} epoch=${server.epoch}`);
 

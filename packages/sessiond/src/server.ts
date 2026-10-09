@@ -42,6 +42,7 @@ import {
   type SessiondProcInfo,
   type SessiondServerMessage,
 } from "@cawco/core/sessiond";
+import { JOIN_CHILDREN } from "./cgroup";
 import { capChildTasks, START_ROOM, TASK_RESERVE, taskHeadroom } from "./tasks";
 
 /**
@@ -241,6 +242,8 @@ interface Settled {
 export interface SessiondOptions {
   /** Reported in `welcome` so the agent can surface skew as a board notice. */
   build?: BuildInfo;
+  /** The children's cgroup's `cgroup.procs`, which each child joins before it execs (cgroup.ts). */
+  children?: string;
   /** Injectable for tests; production passes nothing and gets the real clock. */
   now?: () => number;
 }
@@ -272,6 +275,8 @@ export class SessiondServer {
   #surveyInFlight = false;
   /** The spawn in progress; the next waits for it ({@link #queueSpawn}). */
   #spawning: Promise<unknown> = Promise.resolve();
+  /** The children's cgroup's `cgroup.procs`, when the keeper has one. */
+  readonly #children: string | undefined;
   /** The sweeps still giving an ended child's tree its grace ({@link #sweep}). */
   readonly #sweeps = new Set<ReturnType<typeof setTimeout>>();
   /** The clock every live child's tree is read on ({@link #survey}). */
@@ -284,6 +289,7 @@ export class SessiondServer {
   constructor(options: SessiondOptions = {}) {
     this.#build = options.build ?? DEFAULT_BUILD;
     this.#now = options.now ?? Date.now;
+    this.#children = options.children;
   }
 
   /**
@@ -622,9 +628,18 @@ export class SessiondServer {
     }
 
     let child: ChildProcessWithoutNullStreams;
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: spec is agent-side and opaque (§3.2) — the ProcSpec type promises args, the wire does not
+    const args = spec.args ?? [];
+    // With a children's cgroup, the child starts in a shell that joins it and
+    // execs the command in place (same pid): capped from its first instruction.
+    const [command, argv] = this.#children
+      ? [
+          "/bin/sh",
+          ["-c", JOIN_CHILDREN, this.#children, spec.command, ...args],
+        ]
+      : [spec.command, args];
     try {
-      // biome-ignore lint/suspicious/noUnnecessaryConditions: spec is agent-side and opaque (§3.2) — the ProcSpec type promises args, the wire does not
-      child = spawn(spec.command, spec.args ?? [], {
+      child = spawn(command, argv, {
         cwd: spec.cwd,
         // The spec is built entirely agent-side and handed over opaque (§3.2):
         // sessiond does not read, validate or enrich a single entry of it.

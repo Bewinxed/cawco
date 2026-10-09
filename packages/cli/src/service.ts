@@ -492,6 +492,15 @@ export interface ServiceSpec {
    */
   readonly check?: () => void;
   readonly command: readonly string[];
+  /**
+   * systemd `Delegate=` and `DelegateSubgroup=`: the cgroup controllers the
+   * service manages below its own cgroup, and the subgroup its main process
+   * starts in. launchd has no cgroups.
+   */
+  readonly delegate?: {
+    readonly controllers: string;
+    readonly subgroup: string;
+  };
   /** systemd `Description=`. */
   readonly description: string;
   /** On top of PATH, which every service gets. */
@@ -668,6 +677,17 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
       // unit is killed by the OOM killer, this is logged but the unit
       // continues running."
       oomContinue: true,
+      // The keeper's children count against the unit's task limit, and a Bun
+      // process that cannot create a thread aborts, taking every child with
+      // it. With the pids controller delegated, the keeper keeps its children
+      // in a cgroup of their own whose limit stops short of its reserve
+      // (sessiond/src/cgroup.ts). systemd.resource-control(5), Delegate=:
+      // "Units where this is enabled may create and manage their own private
+      // subhierarchy of control groups below the control group of the unit
+      // itself"; DelegateSubgroup= (systemd 254+): "it's almost always
+      // necessary to run the main ("supervising") process of a unit that has
+      // delegation turned on in a subgroup".
+      delegate: { controllers: "pids", subgroup: "keeper" },
       check: needs(layout.sessiond, "sessiond"),
       probe: probeSessiond,
     },
@@ -927,7 +947,11 @@ ${environment(spec)
   .map(([key, value]) => `Environment=${key}=${value}`)
   .join("\n")}
 Restart=${spec.restartOnSuccess ? "always" : "on-failure"}
-RestartSec=${spec.restartSec}${spec.oomContinue ? "\nOOMPolicy=continue" : ""}
+RestartSec=${spec.restartSec}${spec.oomContinue ? "\nOOMPolicy=continue" : ""}${
+  spec.delegate
+    ? `\nDelegate=${spec.delegate.controllers}\nDelegateSubgroup=${spec.delegate.subgroup}`
+    : ""
+}
 
 [Install]
 WantedBy=default.target
@@ -1772,22 +1796,12 @@ export interface ServiceOptions {
   whenIdle: boolean;
 }
 
-/**
- * Runs one of the service verbs against whichever init system this machine has.
- * Everything it touches is per-user: no sudo, and nothing outside `$HOME`.
- */
-export const service = async (
-  action: ServiceAction,
-  { ids, mode, follow, whenIdle, force, note, binaryLayout }: ServiceOptions
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one branch per service verb (install/uninstall/restart/status/logs), each already delegating its own logic to a named helper.
-): Promise<void> => {
-  const host = platform();
-  if (host !== "darwin" && host !== "linux") {
-    throw new ServiceError(
-      `cawco service does not know how to manage a service on ${host}`
-    );
-  }
-  const mac = host === "darwin";
+/** The specs of `ids`, for a binary install (every unit starts through its wrapper) or for this checkout. */
+const specsOf = (
+  ids: readonly ServiceId[],
+  mode: ServiceMode,
+  binaryLayout: ServiceOptions["binaryLayout"]
+): ServiceSpec[] => {
   const layout: Layout = binaryLayout
     ? {
         root: dirname(binaryLayout.executable),
@@ -1819,6 +1833,66 @@ export const service = async (
       );
     }
   }
+  return specs;
+};
+
+/**
+ * Rewrites the units of `ids` this build writes differently from what is on
+ * disk, and has systemd reload its unit files once; restarts nothing. A
+ * service picks its new definition up at its next start. What an update calls
+ * once its build has passed verification and before the keeper moves to it
+ * (`cawco binary-units`, binary-apply.ts `settle`), so a change to a unit
+ * reaches machines installed before it. On macOS the plist is rewritten the
+ * same way, and launchd reads it at the job's next load.
+ */
+export const refreshUnits = async (
+  ids: readonly ServiceId[],
+  binaryLayout: NonNullable<ServiceOptions["binaryLayout"]>,
+  note: (line: string) => void
+): Promise<string[]> => {
+  const mac = platform() === "darwin";
+  const changed: string[] = [];
+  for (const spec of specsOf(ids, "prod", binaryLayout)) {
+    const [path, text] = mac
+      ? [launchAgentPath(spec.id), plist(spec)]
+      : [systemdPath(spec.id), unit(spec)];
+    // biome-ignore lint/performance/noAwaitInLoops: one unit at a time, each note in its order
+    const before = await Bun.file(path)
+      .text()
+      .catch(() => "");
+    if (before !== text) {
+      await writeUnit(path, text);
+      changed.push(path);
+      note(`rewrote ${path}`);
+    }
+  }
+  if (changed.length > 0 && !mac) {
+    const reloaded = await run(["systemctl", "--user", "daemon-reload"]);
+    if (reloaded.exitCode !== 0) {
+      throw failed("systemctl --user daemon-reload", reloaded);
+    }
+    note("systemd reloaded its unit files");
+  }
+  return changed;
+};
+
+/**
+ * Runs one of the service verbs against whichever init system this machine has.
+ * Everything it touches is per-user: no sudo, and nothing outside `$HOME`.
+ */
+export const service = async (
+  action: ServiceAction,
+  { ids, mode, follow, whenIdle, force, note, binaryLayout }: ServiceOptions
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one branch per service verb (install/uninstall/restart/status/logs), each already delegating its own logic to a named helper.
+): Promise<void> => {
+  const host = platform();
+  if (host !== "darwin" && host !== "linux") {
+    throw new ServiceError(
+      `cawco service does not know how to manage a service on ${host}`
+    );
+  }
+  const mac = host === "darwin";
+  const specs = specsOf(ids, mode, binaryLayout);
 
   switch (action) {
     case "install": {

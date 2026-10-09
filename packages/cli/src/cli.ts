@@ -542,6 +542,18 @@ const run = async (argv: string[]): Promise<number> => {
       await rejoinBinary(toHttpBase(args.hub) ?? args.hub);
       return 0;
     }
+    case "binary-units": {
+      // A verified update's step before the keeper moves, run from that build: the
+      // session keeper's unit as this build writes it. Only that unit: the
+      // others carry what the installing shell knew (the hub's address, the
+      // dashboard's port), which this process may not.
+      const { binaryLayout } = await import("./binary-install");
+      const { refreshUnits } = await import("./service");
+      await refreshUnits(["sessiond"], binaryLayout(), (line) =>
+        console.log(`units: ${line}`)
+      );
+      return 0;
+    }
     case "binary-find-hub": {
       const url = await findExistingHub();
       if (url) {

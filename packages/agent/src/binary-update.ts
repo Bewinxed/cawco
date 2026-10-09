@@ -167,12 +167,19 @@ async function recordFailure(version: string, error: string): Promise<void> {
   } satisfies Failure);
 }
 
-/** The forwarded environment: CawCo's own settings, and a PATH and HOME a one-shot job would otherwise lack. */
+/**
+ * The forwarded environment: CawCo's own settings, and the PATH, HOME and XDG
+ * directories a one-shot job would otherwise lack. The same set the wrapper's
+ * resume path forwards (binary-wrapper.ts `forwarded`): the helper rewrites
+ * the keeper's unit (`cawco binary-units`), whose path and text come from
+ * XDG_CONFIG_HOME, XDG_DATA_HOME and PATH as the installer saw them.
+ */
 function helperEnvironment(): [string, string][] {
   return Object.entries(process.env).filter(
     (entry): entry is [string, string] =>
       entry[1] !== undefined &&
       (entry[0].startsWith("CAWCO_") ||
+        entry[0].startsWith("XDG_") ||
         entry[0] === "PATH" ||
         entry[0] === "HOME")
   );
