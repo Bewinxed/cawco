@@ -88,8 +88,8 @@ final class PaywallGate {
             seen = state
             log.notice("gate: \(state, privacy: .public)")
         }
-        // `Pro.boardOpen` (TestFlight before the App Store has products):
-        // the board stays open and nothing below shows.
+        // `Pro.boardOpen` (TestFlight, the paywall isn't enforced): the board
+        // stays open and nothing below shows; the sheet opens only on request.
         guard onBoard, let access = pro.access, !pro.boardOpen else {
             lock(false)
             bar.isHidden = true
@@ -197,7 +197,7 @@ final class PaywallGate {
 
     /// T's tap and T6's push: the Get Pro form for a live week; the offer otherwise.
     func keepPro() {
-        guard !Pro.shared.boardOpen, let access = Pro.shared.access, access != .owned else { return }
+        guard let access = Pro.shared.access, access != .owned else { return }
         present(access.entitled ? .keep : .offer)
     }
 

@@ -303,6 +303,10 @@ public final class PushRegistry {
         } catch {
             relay = .failed(Self.reason(error, from: "The relay"))
             log.error("Cawrier enrolment failed: \(String(describing: error), privacy: .public)")
+            // Cawrier seats a TestFlight install on its appTransactionID, which Apple gives from iOS 18.4.
+            if case .appTransaction = proof, #unavailable(iOS 18.4) {
+                log.error("Cawrier enrolment: TestFlight push needs iOS 18.4 or later, where the AppTransaction carries an appTransactionID")
+            }
             return
         }
         guard let hub = HubConnection.keptAddress else {

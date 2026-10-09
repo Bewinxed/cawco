@@ -118,22 +118,21 @@ public final class Pro {
     /// unverified, `.xcode`, `.production` or a throw are all false.
     public private(set) var testFlight: Bool?
 
-    /// The board stands open with nothing paywall-related on it: a TestFlight
-    /// install whose catalogue failed (owner: "Skip the paywall in TestFlight").
-    /// The App Store serves no products until the Paid Apps Agreement is
-    /// active; once they load, TestFlight gets the real paywall again.
-    /// App Store and Xcode builds never get here.
-    public var boardOpen: Bool { testFlight == true && catalog == .failed }
+    /// The paywall isn't enforced: a TestFlight install (owner: "tesflight just
+    /// let me be able to open and demo it, don't enforce it during testing").
+    /// The board stays open whatever the catalogue holds; the sheet still opens
+    /// on request, and buys as usual. App Store and Xcode builds never get here.
+    public var boardOpen: Bool { testFlight == true }
 
     /// Pro is on here, notifications included: an entitlement holds, or the board stands open.
     public var proOn: Bool { access?.entitled == true || boardOpen }
 
-    /// What Cawrier enrols this device on. While the board stands open, the
-    /// TestFlight install's signed AppTransaction; otherwise the purchase's
-    /// signed transaction. Nil when there's neither.
+    /// What Cawrier enrols this device on: the purchase's signed transaction;
+    /// without one, while the board stands open, the TestFlight install's
+    /// signed AppTransaction. Nil when there's neither.
     public var enrolmentProof: EnrolmentProof? {
-        if boardOpen { return appTransaction.map(EnrolmentProof.appTransaction) }
-        return proof.map(EnrolmentProof.transaction)
+        if let proof { return .transaction(proof) }
+        return boardOpen ? appTransaction.map(EnrolmentProof.appTransaction) : nil
     }
 
     /// The verified AppTransaction's JWS, kept for `enrolmentProof`.
@@ -141,7 +140,6 @@ public final class Pro {
     @ObservationIgnored private var products: [ProProduct: Product] = [:]
     @ObservationIgnored private var updates: Task<Void, Never>?
     @ObservationIgnored private var trialClock: Task<Void, Never>?
-    @ObservationIgnored private var openNoted = false
     private let log = Logger(subsystem: "dev.cawco.app", category: "Pro")
     private static let pendingKey = "paywall-pending"
 
@@ -203,17 +201,11 @@ public final class Pro {
             let install = await Self.install.value
             appTransaction = install?.jws
             testFlight = install?.environment == .sandbox
-            noteOpen()
+            guard boardOpen else { return }
+            log.notice("TestFlight: the paywall isn't enforced")
+            // A device with its token enrols now, on the purchase or the AppTransaction.
+            PushRegistry.shared.entitlementChanged()
         }
-    }
-
-    /// The launch's one line when the board stands open; a device with its
-    /// token enrols on the AppTransaction now.
-    private func noteOpen() {
-        guard boardOpen, !openNoted else { return }
-        openNoted = true
-        log.notice("TestFlight: the App Store has no products yet, so the board is open")
-        PushRegistry.shared.entitlementChanged()
     }
 
     /// The price StoreKit gives, or nil until it arrives. Never a price of our own.
@@ -252,7 +244,6 @@ public final class Pro {
             log.error("App Store catalogue failed: \(String(describing: error), privacy: .public)")
             catalog = .failed
         }
-        noteOpen()
     }
 
     /// Buys `product` with Apple's sheet over `scene`. The entitlement is read
