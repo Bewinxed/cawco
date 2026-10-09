@@ -72,12 +72,8 @@
     justify-content: flex-end;
     gap: 8px;
   }
+  /* On a phone the sheet's foot keeps the safe area clear (the kit drawer). */
   #session-start {
     min-width: 96px;
-  }
-  @media (max-width: 640px) {
-    .footer {
-      padding-bottom: max(10px, env(safe-area-inset-bottom));
-    }
   }
 </style>

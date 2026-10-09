@@ -1,5 +1,11 @@
 <script lang="ts">
+  /**
+   * A sheet's one header (app.css .kit-sheet-head): what it is, in the
+   * title role, and Close at the trailing edge.
+   */
   import type { HTMLAttributes } from "svelte/elements";
+  import { Drawer as DrawerPrimitive } from "vaul-svelte";
+  import { IconClose } from "#lib/icons.js";
   import { cn, type WithElementRef } from "#lib/utils.js";
 
   let {
@@ -11,13 +17,17 @@
 </script>
 
 <div
-  class={cn(
-    "flex flex-col gap-0.5 p-4 group-data-[vaul-drawer-direction=bottom]/drawer-content:text-center group-data-[vaul-drawer-direction=top]/drawer-content:text-center md:gap-1.5 md:text-left",
-    className
-  )}
+  class={cn("kit-sheet-head", className)}
   data-slot="drawer-header"
   bind:this={ref}
   {...restProps}
 >
   {@render children?.()}
+  <DrawerPrimitive.Close
+    aria-label="Close"
+    class="kit-sheet-close touch-hit"
+    title="Close"
+  >
+    <IconClose aria-hidden="true" />
+  </DrawerPrimitive.Close>
 </div>

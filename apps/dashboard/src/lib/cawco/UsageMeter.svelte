@@ -364,11 +364,9 @@
       >
         {@render face()}
       </Drawer.Trigger>
-      <Drawer.Content
-        class="usage-sheet max-h-[85vh] pb-[calc(1rem+env(safe-area-inset-bottom))]"
-      >
-        <Drawer.Header class="p-0 pb-1 text-left">
-          <Drawer.Title class="text-left">Usage limits</Drawer.Title>
+      <Drawer.Content class="usage-sheet">
+        <Drawer.Header>
+          <Drawer.Title>Usage limits</Drawer.Title>
         </Drawer.Header>
         {@render limits()}
       </Drawer.Content>

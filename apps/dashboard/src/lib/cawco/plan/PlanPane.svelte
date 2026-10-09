@@ -181,7 +181,9 @@
 
 <!-- The parts, flat on the surface: a heading, then what it names. -->
 {#snippet body()}
-  <div class="body kit-edge-fade-block" class:sheet>
+  <div
+    class={["body kit-edge-fade-block", { sheet, "kit-sheet-scroll": sheet }]}
+  >
     {#if steps.length > 0}
       {#if stepsHeaded}
         <h3 class="part-head">Steps</h3>
@@ -216,8 +218,8 @@
 
 <!-- How far it has got is the ring's to say, on the composer: said once. -->
 {#if sheet}
-  <Drawer.Header class="p-0 pb-3 text-left">
-    <Drawer.Title class="text-left">
+  <Drawer.Header>
+    <Drawer.Title>
       {cardTitle}
       {#if onlyTodos && plan?.taskId}
         <span class="ref">{plan.taskId}</span>
@@ -253,8 +255,15 @@
     flex-direction: column;
     gap: var(--space-2);
   }
+  /* In the sheet the column starts under the header's seam, so only its
+     foot fades: a line scrolled up under the title is cut on the seam. */
   .body.sheet {
-    padding-block: 0;
+    padding-block: var(--space-3) 0;
+    mask-image: linear-gradient(
+      to bottom,
+      #000 calc(100% - var(--fade-end)),
+      transparent
+    );
   }
   .rows {
     display: flex;
@@ -338,16 +347,21 @@
       scale: 0.7;
     }
   }
-  /* A part's heading is text on the surface: a step more above it than
-     below, so it belongs to what follows. */
+  /* A part's heading is text on the surface, as strong as anything the part
+     holds: body at 500 in the strong ink, which is where the spec's own
+     headings stop (MessageBody sets every markdown heading at body 500). A
+     part after the first starts on a seam, more space above its heading
+     than below, so the spec's headings read as inside it. */
   .part-head {
     margin: 0;
-    font: var(--type-label);
+    font: var(--type-body);
     font-weight: var(--weight-strong);
-    color: var(--ink-muted);
+    color: var(--ink-strong);
   }
   .part-head:not(:first-child) {
     margin-block-start: var(--space-3);
+    padding-block-start: var(--space-4);
+    border-block-start: 1px solid var(--border-hairline);
   }
   .ref {
     font: var(--type-code);

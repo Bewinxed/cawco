@@ -341,9 +341,7 @@
       }}
       open={planAsked}
     >
-      <Drawer.Content
-        class="plan-sheet pb-[calc(var(--space-4)+env(safe-area-inset-bottom))] [--drawer-max-height:85vh]"
-      >
+      <Drawer.Content class="plan-sheet">
         <PlanPane
           instanceId={planOf}
           onclose={() => {

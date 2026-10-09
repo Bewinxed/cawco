@@ -74,7 +74,7 @@ This is a literal record of the New Session modal's implementation contracts as 
 ```
 
 - On phones the card is the kit Drawer (`#lib/components/ui/drawer`, vaul): a bottom sheet with rounded top corners and safe-area bottom padding that follows the finger from its header and dismisses on vaul's distance or flick thresholds (`NewSessionDialog.svelte:1686-1723`). The kit Drawer keeps it inside the visible viewport: it publishes `visualViewport`'s `offsetTop` and `height` on the sheet as `--visible-top` and `--visible-height`, and `app.css` rests the sheet on the bottom of that area, capped at the smaller of it and the sheet's `--drawer-max-height`. Above a keyboard the header and Start stay on screen and the body scrolls (`touch-action: pan-y; overscroll-behavior: contain`). vaul's own keyboard repositioning is off in the kit.
-- The footer pads its bottom with the safe area on phones (`SessionFooter.svelte:78-82`).
+- On phones the sheet is the kit's one bottom-sheet recipe: its surface full-bleed with the hairline on the top edge only, its foot padded `1rem` plus the safe area (`ui/drawer/drawer-content.svelte`), its head the kit sheet head (title role, Close, the seam that comes in as the body scrolls; app.css `.kit-sheet-head`), and the form straight on the sheet with no card of its own. The dialog's one title is the head's ("New session", "Continue session").
 
 ## 4. Animations
 

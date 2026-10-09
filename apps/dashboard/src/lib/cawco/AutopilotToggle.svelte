@@ -191,11 +191,9 @@
         </button>
       {/snippet}
     </Drawer.Trigger>
-    <Drawer.Content
-      class="pb-[calc(1rem+env(safe-area-inset-bottom))] [--drawer-max-height:85vh]"
-    >
-      <Drawer.Header class="p-0 pb-3 text-left">
-        <Drawer.Title class="text-left">Autopilot</Drawer.Title>
+    <Drawer.Content>
+      <Drawer.Header>
+        <Drawer.Title>Autopilot</Drawer.Title>
       </Drawer.Header>
       {@render body()}
     </Drawer.Content>

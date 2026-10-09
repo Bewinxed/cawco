@@ -1250,12 +1250,12 @@
   <!-- While a start runs the form takes no input; the footer stays live so
        the pending Start keeps its focus (a focused element in an inert
        subtree drops focus to the body). -->
-  <div class="head" inert={busy}>
+  <div class="head kit-sheet-head" inert={busy}>
     <div class="head-left">
       <span class="bolt"><Bolt /></span>
-      <span class="title"
-        >{continueFrom ? "Sessions · Continue" : "Sessions · New"}</span
-      >
+      <h2 class="title">
+        {continueFrom ? "Continue session" : "New session"}
+      </h2>
     </div>
     <Tip keys="Esc" label="Close">
       {#snippet children(
@@ -1264,7 +1264,7 @@
         <button
           {...tip}
           aria-label="Close"
-          class="close touch-hit"
+          class="kit-sheet-close touch-hit"
           data-vaul-no-drag
           onclick={close}
           type="button"
@@ -1275,7 +1275,7 @@
     </Tip>
   </div>
   <div
-    class="body fai-scroll"
+    class="body fai-scroll kit-sheet-scroll"
     data-vaul-no-drag
     inert={busy}
     onscroll={bodyScroll}
@@ -1284,7 +1284,6 @@
          the chosen model's effort and permission chips glide between each
          other. -->
     <NsPopoverGroup>
-      <h2>New Session</h2>
       <section class="sec prompt-sec" style="--delay:0ms">
         <SectionHeader
           hue="var(--hue-blue-500)"
@@ -1519,24 +1518,24 @@
     backdrop-filter: blur(var(--scrim-blur));
     -webkit-backdrop-filter: blur(var(--scrim-blur));
   }
-  /* The dialog stands centred in the window; the sheet's place and height
-     are the kit drawer's. */
+  /* The dialog stands centred in the window, a recess tray holding the raised
+     body; the sheet's place, height and surface are the kit drawer's. */
   :global(.session-card:not([data-vaul-drawer])) {
     inset: 0;
     margin: auto;
     width: min(980px, 100vw - 48px);
     height: fit-content;
     max-height: calc(100dvh - 48px);
+    background: var(--surface-recess);
+    border-radius: var(--radius-lg);
+    padding: var(--space-2);
+    box-shadow: var(--shadow-modal);
   }
   :global(.session-card) {
     position: fixed;
     z-index: 81;
     display: flex;
     flex-direction: column;
-    background: var(--surface-recess);
-    border-radius: var(--radius-lg);
-    padding: var(--space-2);
-    box-shadow: var(--shadow-modal);
     outline: none;
     transform-origin: center;
   }
@@ -1555,12 +1554,8 @@
     }
   }
   .head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
     gap: 10px;
     padding: 3px 4px 8px;
-    flex: none;
   }
   .head-left {
     display: flex;
@@ -1583,35 +1578,15 @@
     width: 12px;
     height: 12px;
   }
+  /* The dialog's one title, in the title role, as every sheet's is. */
   .title {
-    font: var(--weight-strong) var(--text-label) / 1 var(--font-body);
-    color: var(--ink-muted);
+    margin: 0;
+    font: var(--type-title);
+    letter-spacing: -0.01em;
+    color: var(--ink-strong);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-  }
-  .close {
-    --hit-edge: 1px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    border: 1px solid transparent;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    color: var(--ink-muted);
-    cursor: pointer;
-  }
-  .close :global(svg) {
-    width: 16px;
-    height: 16px;
-  }
-  @media (hover: hover) {
-    .close:hover {
-      background: var(--surface-hover);
-      color: var(--ink-strong);
-    }
   }
   /* The body is as tall as what it holds and gives way when the card is
      capped. A zero flex basis counts for nothing in WebKit's fit-content
@@ -1625,12 +1600,6 @@
     border-radius: var(--radius-lg);
     padding: 18px 18px 20px;
   }
-  h2 {
-    margin: 0;
-    font: var(--type-title);
-    letter-spacing: -0.01em;
-    color: var(--ink-strong);
-  }
   .sec {
     display: grid;
     gap: 8px;
@@ -1640,7 +1609,6 @@
     }
   }
   .prompt-sec {
-    margin-top: 16px;
     position: relative;
     z-index: 30;
   }
@@ -1711,11 +1679,6 @@
     :global(.session-card[data-vaul-drawer]) {
       --drawer-max-height: calc(100dvh - max(env(safe-area-inset-top), 24px));
       margin: 0;
-      border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-      padding: 0 7px max(env(safe-area-inset-bottom), 7px);
-    }
-    :global(.session-card[data-vaul-drawer])::before {
-      display: none;
     }
     /* The sheet leaves as the dialog does: --dur-exit on --ease-out, with
        its scrim, instead of vaul's 500ms slide. */
@@ -1727,14 +1690,24 @@
       animation-duration: var(--dur-exit);
       animation-timing-function: var(--ease-out);
     }
+    /* The sheet's header is every sheet's: the title and Close. */
     .head {
+      padding: 0 0 var(--space-3);
       touch-action: none;
+    }
+    .bolt {
+      display: none;
     }
     .models.pair {
       grid-template-columns: minmax(0, 1fr);
     }
+    /* The form stands on the sheet itself: no card of its own. Its scroll
+       box keeps a step of room each side so focus rings are not clipped. */
     .body {
-      padding: 14px 12px 16px;
+      margin-inline: calc(-1 * var(--space-1));
+      padding: var(--space-3) var(--space-1) var(--space-4);
+      background: none;
+      border-radius: 0;
       touch-action: pan-y;
       overscroll-behavior: contain;
     }

@@ -1277,7 +1277,68 @@
      with the keyboard instead of animating against it. */
   [data-slot="drawer-content"][data-vaul-drawer-direction="bottom"] {
     bottom: calc(100% - var(--visible-top) - var(--visible-height));
-    max-height: min(var(--drawer-max-height, 80vh), var(--visible-height));
+    max-height: min(var(--drawer-max-height, 85vh), var(--visible-height));
+    /* What scrolls in the sheet (.kit-sheet-scroll) drives its header's
+       seam (.kit-sheet-head). */
+    timeline-scope: --sheet-scroll;
+  }
+
+  /* A sheet's one header (ui/drawer/drawer-header, the New session sheet's
+     head): its title in the title role, then Close at the trailing edge. A
+     hairline under it comes in as what is under it scrolls, so a line
+     scrolled up under the title is cut on a seam, never left loose. */
+  .kit-sheet-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    flex: none;
+    padding-block-end: var(--space-3);
+    border-block-end: 1px solid transparent;
+  }
+  /* The seam follows the sheet's scroll, inside a sheet: elsewhere the name
+     resolves to no timeline, which Chromium paints as the animation's end. */
+  [data-slot="drawer-content"] .kit-sheet-head {
+    animation: kit-sheet-seam linear both;
+    animation-timeline: --sheet-scroll;
+    animation-range: 0px var(--space-3);
+  }
+  @keyframes kit-sheet-seam {
+    to {
+      border-block-end-color: var(--border-hairline);
+    }
+  }
+  .kit-sheet-scroll {
+    scroll-timeline: --sheet-scroll block;
+  }
+  /* Close, in every sheet and dialog head: a 28px ghost with a 16px glyph,
+     reaching 44px under a finger through .touch-hit. A mouse never drags a
+     sheet; this and Escape put it away. */
+  .kit-sheet-close {
+    --hit-edge: 1px;
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 28px;
+    block-size: 28px;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--ink-muted);
+    cursor: pointer;
+    transition: var(--transition-control);
+
+    & svg {
+      inline-size: 16px;
+      block-size: 16px;
+    }
+    @media (hover: hover) {
+      &:hover {
+        background: var(--surface-hover);
+        color: var(--ink-strong);
+      }
+    }
   }
 
   /* Two icons sharing one slot; the outgoing icon animates out too. */

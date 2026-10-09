@@ -10,7 +10,7 @@
 </script>
 
 <DrawerPrimitive.Title
-  class={cn("font-medium text-foreground text-label", className)}
+  class={cn("min-w-0 text-[var(--ink-strong)] text-title", className)}
   data-slot="drawer-title"
   bind:ref
   {...restProps}
