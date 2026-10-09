@@ -32,7 +32,6 @@ import { type BuildInfo, SessionRing } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
 import { LineSplitter } from "@cawco/core/lines";
 import { PacedWriter } from "@cawco/core/paced-write";
-import { processLineage } from "@cawco/core/process-identity";
 import { sessionEnvironment } from "@cawco/core/session-env";
 // The protocol lives behind its own subpath: `sessiond.ts` reaches for `node:os`
 // to derive the endpoint, and the core barrel is imported by the browser bundle.
@@ -47,6 +46,7 @@ import {
   type SessiondServerMessage,
 } from "@cawco/core/sessiond";
 import { JOIN_CHILDREN } from "./cgroup";
+import { type Listed, processTable } from "./table";
 import { capChildTasks, START_ROOM, TASK_RESERVE, taskHeadroom } from "./tasks";
 
 /**
@@ -92,59 +92,6 @@ export const SWEEP_GRACE_MS = 2000;
  * is the only one a sweep can miss.
  */
 export const SURVEY_INTERVAL_MS = 30_000;
-
-/**
- * One process as the operating system lists it. `started` is its start time
- * as `ps -o lstart=` prints it: with the pid, what says a pid seen later is
- * still the same process and not another that was since given its number.
- */
-interface Listed {
-  pgid: number;
-  pid: number;
-  ppid: number;
-  started: string;
-}
-
-/**
- * Every process on the machine, read from the kernel (core's process
- * reader: one `kern.proc.all` sysctl on macOS, `/proc` on Linux), as `ps -A
- * -o pid=,ppid=,pgid=,lstart=` listed it. Neither system has a call that
- * lists a process's descendants, so the whole table is read.
- *
- * NOTHING HERE WAITS ON ANOTHER PROCESS. This was a synchronous spawn of the
- * process lister, and on a Mac it wedged the keeper: Bun's `spawnSync` waits on a private kqueue
- * of its own and, while it waits, points the runtime's loop handle at it, so
- * polls and keep-alives released or armed in that window land on the wrong
- * loop (oven-sh/bun#34069, the fix still open as oven-sh/bun#40078). The
- * keeper of 8 Oct held that second kqueue (lsof fd 8), sat in `kevent64` with
- * its socket open, and sent no `welcome` to anyone for 35 minutes.
- *
- * AND NOTHING HERE HOLDS THE LOOP. The read is synchronous on macOS, and the
- * welcome waits behind it. It reads the tree and the start times alone
- * (`processLineage`, under a millisecond), never every thread's state: that
- * read took 70 to 460ms on a Mac at load 550, once per child asked to end, and
- * twenty stopped at once held the loop 580ms. Asks made in the same turn of
- * the loop share one reading, which is the same moment for each of them.
- */
-let reading: Promise<Listed[]> | undefined;
-const processTable = (): Promise<Listed[]> => {
-  reading ??= processLineage()
-    .then((rows) =>
-      rows.map(({ pid, ppid, pgid, started }) => ({
-        pid,
-        ppid,
-        pgid,
-        // As this daemon always held it: the columns split on runs of spaces
-        // and joined by one (`Thu Oct 1 20:26:18 2026`).
-        started: started.split(SPACES).join(" "),
-      }))
-    )
-    .finally(() => {
-      reading = undefined;
-    });
-  return reading;
-};
-const SPACES = /\s+/;
 
 const reasonOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);

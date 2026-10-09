@@ -261,6 +261,7 @@ export async function buildBinary(options: {
       ),
       join(ROOT, "scripts/binary/workflow-worker.ts"),
       join(ROOT, "scripts/binary/transcript-worker.ts"),
+      join(ROOT, "scripts/binary/process-table-worker.ts"),
       join(pi, "dist/utils/image-resize-worker.js"),
       join(pi, "dist/extensions/codemode/worker.js"),
     ],
