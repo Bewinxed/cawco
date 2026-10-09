@@ -54,6 +54,7 @@
     machineFs,
     placementFor,
     projectAtFolder,
+    type SendExtras,
     spawnSession,
   } from "../client.svelte";
   import {
@@ -66,6 +67,7 @@
   } from "../continue.svelte";
   import { EFFORT_LEVELS } from "../effort-levels";
   import { type FleetSnapshot, inspectMachine } from "../fleet";
+  import { newId } from "../id";
   import { conversationHref } from "../links";
   import { loadModelWindows, models } from "../models.svelte";
   import { unfold } from "../motion/fold.svelte";
@@ -78,6 +80,10 @@
   } from "../permission-modes";
   import { checkoutOf, checkoutOn, placedOn } from "../projects";
   import { rememberSpawn, spawnPrefs } from "../spawnPrefs.svelte";
+  import AttachButton from "../transcript/AttachButton.svelte";
+  import AttachmentChips from "../transcript/AttachmentChips.svelte";
+  import { ComposerDraft } from "../transcript/composer-draft.svelte";
+  import { keepDraft } from "../transcript/keep-draft.svelte";
   import { startForecast, usage } from "../usage/forecast.svelte";
   import { fmt, type Part } from "../usage/rings";
   import type { AccountTool } from "./AccountChip.svelte";
@@ -122,8 +128,57 @@
     onexitcontinue?: () => void;
   } = $props();
   const REPO = /^[\w.-]+\/[\w.-]+$/;
-  /** Where this tab keeps the first prompt across a reload. */
-  const KEPT_PROMPT = "cawco:new-session-prompt";
+  /**
+   * The first prompt, its words and its attachments, as a session's composer
+   * holds a message: attached, uploaded and sent the same way.
+   */
+  const firstMessage = new ComposerDraft();
+  /** Where this tab names its key for the first prompt in the draft store. */
+  const KEPT_KEY = "cawco:new-session-draft";
+  /**
+   * This tab's key for the first prompt in the draft store: minted once and
+   * kept in the tab's own storage, so a reload finds the same draft and
+   * another tab keeps its own.
+   */
+  function keptKey(): string {
+    let id = sessionStorage.getItem(KEPT_KEY);
+    if (!id) {
+      id = newId();
+      sessionStorage.setItem(KEPT_KEY, id);
+    }
+    return `new-session:${id}`;
+  }
+  // The first prompt outlives a reload of this tab (`reload.svelte.ts`), as
+  // a session's draft does: kept as it is written while the dialog is open,
+  // read back as it opens, gone once it closes (`close` empties it first).
+  keepDraft(firstMessage, () => (open ? keptKey() : null));
+  const STILL_UPLOADING = "Wait for your file to finish uploading.";
+  const NOT_UPLOADED =
+    "A file couldn't upload. Tap it to try again, or remove it.";
+  // Either holds Start only while its file does: settled, it is gone.
+  $effect(() => {
+    const { uploading, unready } = firstMessage;
+    untrack(() => {
+      if (
+        (error === STILL_UPLOADING && !uploading) ||
+        (error === NOT_UPLOADED && !unready)
+      ) {
+        error = "";
+      }
+    });
+  });
+  // Continue's next step goes to the summariser as a note, which carries no
+  // attachments: a first prompt read back with some lets them go there.
+  $effect(() => {
+    if (
+      continueFrom &&
+      (firstMessage.images.length ||
+        firstMessage.texts.length ||
+        firstMessage.files.length)
+    ) {
+      firstMessage.dropAttachments();
+    }
+  });
   const mobile = new MediaQuery("(max-width: 640px)");
   let card = $state<HTMLElement | null>(null);
   /**
@@ -167,7 +222,6 @@
   }
   let opener: HTMLElement | null = null;
   let submission = 0;
-  let prompt = $state("");
   let machineIds = $state<string[]>([]);
   /** Set once the operator picks machines themselves; stops the late-arrival adoption below. */
   let machinesTouched = $state(false);
@@ -561,7 +615,8 @@
   /** The last start failed: the footer shows no check. */
   const startFailed = $derived(error !== "");
   const cantStart = $derived(
-    continueBlocked ||
+    firstMessage.uploading ||
+      continueBlocked ||
       placementRefusal !== null ||
       cawco.hub !== "connected" ||
       machineIds.length === 0 ||
@@ -665,7 +720,6 @@
       model = "";
       effort = null;
       account = null;
-      prompt = sessionStorage.getItem(KEPT_PROMPT) ?? "";
       repo = undefined;
       editing = false;
       spinOff = false;
@@ -674,8 +728,8 @@
       popover = null;
       verifiedLocation = "";
       if (continueFrom && restore) {
-        ({ repo, projectId, harness, effort, permissionMode, prompt } =
-          restore);
+        ({ repo, projectId, harness, effort, permissionMode } = restore);
+        firstMessage.text = restore.prompt;
         fullSendCarried = permissionMode === "fullSend";
         ({ harness: summarizerHarness, model: summarizerModel } =
           restore.summarizer);
@@ -703,18 +757,6 @@
         job = null;
       }
     };
-  });
-  // The first prompt outlives a reload of this tab (`reload.svelte.ts`):
-  // kept as it is typed, read back as the dialog opens, gone once it closes.
-  $effect(() => {
-    if (!open) {
-      return;
-    }
-    if (prompt) {
-      sessionStorage.setItem(KEPT_PROMPT, prompt);
-    } else {
-      sessionStorage.removeItem(KEPT_PROMPT);
-    }
   });
   // The continuation this dialog follows, stage by stage, as the hub publishes it.
   $effect(() => {
@@ -838,7 +880,8 @@
   }
   function close() {
     submission += 1;
-    sessionStorage.removeItem(KEPT_PROMPT);
+    firstMessage.text = "";
+    firstMessage.dropAttachments();
     onclose();
   }
   /** Cancel while a continuation runs: the hub stops it, and the dialog closes. */
@@ -1008,12 +1051,17 @@
     const attached = id ? cawco.project(id) : null;
     return attached && placedOn(attached, target) ? attached.id : undefined;
   }
-  function spawnOne(target: string, draft: SessionDraft): Promise<string> {
+  function spawnOne(
+    target: string,
+    draft: SessionDraft,
+    extras: SendExtras
+  ): Promise<string> {
     const toAttach = attachable(draft.projectId, target);
     return spawnSession({
       machineId: target,
       cwd: draft.cwd,
       prompt: draft.prompt,
+      extras,
       harness: draft.harness,
       ...(modeless ? {} : { permissionMode: draft.permissionMode }),
       ...(shownModel(draft) ? { model: shownModel(draft) } : {}),
@@ -1031,6 +1079,16 @@
     if (busy || cawco.hub !== "connected") {
       return;
     }
+    // A first prompt's file still on its way, or one the hub never got,
+    // holds Start as it holds a session's Send, in the same words.
+    if (firstMessage.uploading) {
+      error = STILL_UPLOADING;
+      return;
+    }
+    if (firstMessage.unready) {
+      error = NOT_UPLOADED;
+      return;
+    }
     error = validate();
     if (error) {
       document.getElementById("session-dir")?.focus();
@@ -1043,7 +1101,7 @@
       machineIds: [...machineIds],
       baseCwd: cwd.trim(),
       cwd: workdir,
-      prompt,
+      prompt: firstMessage.text,
       harness,
       permissionMode,
       model,
@@ -1059,6 +1117,7 @@
       usedModel: model,
       ...(accountTool && account ? { account } : {}),
     };
+    const extras = firstMessage.extras();
     busy = true;
     popover = null;
     let first = "";
@@ -1077,7 +1136,7 @@
         // open. `first ||= spawnOne(…)` short-circuited after machine one, so
         // "Start 3 sessions" started exactly one. Each waits for the hub's
         // answer: one it refuses throws its reason, and nothing navigates.
-        const spawned = await spawnOne(target, draft);
+        const spawned = await spawnOne(target, draft, extras);
         first ||= spawned;
       }
       if (!current()) {
@@ -1296,10 +1355,16 @@
             lead={sourceChip}
             {menuItems}
             onleadremove={onexitcontinue}
+            onpaste={(data) => !continueFrom && firstMessage.paste(data)}
             onsubmit={start}
             bind:element={editor}
-            bind:value={prompt}
+            bind:value={firstMessage.text}
           />
+          {#if !continueFrom}
+            <div class="prompt-atts">
+              <AttachmentChips draft={firstMessage} />
+            </div>
+          {/if}
           <div class="chips">
             <MachinesChip
               machines={machineItems}
@@ -1366,6 +1431,13 @@
               }}
               open={popover === "lifetime"}
             />
+            {#if !continueFrom}
+              <!-- Attach acts on the prompt, not on where it runs: it stands
+                   apart from the setting chips, at the row's end. -->
+              <span class="attach">
+                <AttachButton draft={firstMessage} />
+              </span>
+            {/if}
           </div>
         </div>
         <p
@@ -1668,6 +1740,20 @@
       --hit-gap-y: 14px;
       row-gap: 14px;
     }
+  }
+  /* The first prompt's attachments, between the words and the chips, their
+     edge on the chips' (the row pads its chips by --space-1). */
+  .prompt-atts {
+    padding-inline: calc(10px - var(--space-1));
+  }
+  /* What is attached and where it runs are two groups: a step more apart
+     than the chips inside either. */
+  .prompt-atts:not(:empty) {
+    padding-block-end: var(--space-2);
+  }
+  .attach {
+    display: inline-flex;
+    margin-inline-start: auto;
   }
   @media (max-width: 640px) {
     /* The kit drawer (vaul) carries the sheet: it rises from the bottom,

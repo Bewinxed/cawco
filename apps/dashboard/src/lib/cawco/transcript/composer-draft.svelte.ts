@@ -19,6 +19,46 @@ import type {
   SelectionShot,
 } from "../preview/selection";
 import type { DraftContent } from "./draft-store";
+import { uploadFile } from "./file-upload";
+
+/** A paste longer than this rides as a named attachment, not inline text. */
+const LARGE_PASTE = 1200;
+
+/** The largest file that rides as text, folded into the turn. */
+const TEXT_LIMIT = 1024 * 1024;
+
+/** base64 without the `data:` prefix — the wire shape images travel in. */
+function readImage(file: File): Promise<PendingImage> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result);
+      resolve({
+        mediaType: file.type,
+        data: result.slice(result.indexOf(",") + 1),
+        name: file.name,
+      });
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+/** A file's words, when it is small and reads as UTF-8 text; else undefined. */
+async function textOf(file: File): Promise<string | undefined> {
+  if (file.size > TEXT_LIMIT) {
+    return;
+  }
+  let text: string | undefined;
+  try {
+    text = new TextDecoder("utf-8", { fatal: true }).decode(
+      await file.arrayBuffer()
+    );
+  } catch {
+    // Not UTF-8: a file, not a text.
+  }
+  return text?.includes("\u0000") ? undefined : text;
+}
 
 export interface PendingImage {
   data: string;
@@ -214,6 +254,107 @@ export class ComposerDraft {
   /** A file the hub does not have: sending now would leave it behind. */
   unready = $derived(this.files.some((file) => !file.ref));
 
+  /**
+   * What an attached file becomes, as on iOS: a picture; a text (up to
+   * 1 MB, UTF-8), folded into the turn; or any other file, which goes up to
+   * the hub at once and rides the send as the hub's reference.
+   */
+  async add(files: Iterable<File>): Promise<void> {
+    for (const file of files) {
+      if (file.type.startsWith("image/")) {
+        // biome-ignore lint/performance/noAwaitInLoops: sequential by intent — each attachment must append in the order it was picked, not the order its read happens to settle.
+        this.images = [...this.images, await readImage(file)];
+        continue;
+      }
+      const text = await textOf(file);
+      if (text === undefined) {
+        const id = newId();
+        this.files = [
+          ...this.files,
+          {
+            id,
+            name: file.name,
+            mediaType: file.type || "application/octet-stream",
+            size: file.size,
+            progress: 0,
+            blob: file,
+          },
+        ];
+        this.upload(id);
+      } else {
+        this.texts = [
+          ...this.texts,
+          { kind: "text", name: file.name, content: text },
+        ];
+      }
+    }
+  }
+
+  /** Sends one pending file's bytes to the hub, its chip following along. */
+  upload(id: string): void {
+    const file = this.files.find((each) => each.id === id);
+    if (!file?.blob) {
+      return;
+    }
+    file.error = undefined;
+    file.progress = 0;
+    const patch = (change: Partial<PendingFile>) => {
+      const kept = this.files.find((each) => each.id === id);
+      if (kept) {
+        Object.assign(kept, change);
+      }
+    };
+    uploadFile(file.blob, file.name, (progress) => patch({ progress }))
+      .then(({ ref, size, mediaType }) =>
+        patch({ ref, size, mediaType, progress: 1, blob: undefined })
+      )
+      .catch((error: unknown) =>
+        patch({
+          error: error instanceof Error ? error.message : String(error),
+        })
+      );
+  }
+
+  /**
+   * A paste into the field: files in it are attached, and a paste longer
+   * than {@link LARGE_PASTE} rides as a named attachment. True when the
+   * paste was taken here, and the field must not insert it.
+   */
+  paste(data: DataTransfer | null): boolean {
+    if (!data) {
+      return false;
+    }
+    const files = [...data.items]
+      .filter((item) => item.kind === "file")
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => !!file);
+    if (files.length) {
+      // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — a paste handler returns synchronously, independent of the read.
+      void this.add(files);
+      return true;
+    }
+    const text = data.getData("text/plain");
+    if (text.length > LARGE_PASTE) {
+      this.texts = [
+        ...this.texts,
+        {
+          kind: "text",
+          name: `Pasted text · ${text.length.toLocaleString()} chars`,
+          content: text,
+        },
+      ];
+      return true;
+    }
+    return false;
+  }
+
+  /** Lets every attachment go: the draft keeps its text and notes. */
+  dropAttachments(): void {
+    this.images = [];
+    this.texts = [];
+    this.files = [];
+  }
+
   /** An element picked in the preview becomes a note on the next message. */
   attach(selection: CapturedSelection): "added" | "duplicate" | "full" {
     this.editorOpen = false;
@@ -289,6 +430,29 @@ export class ComposerDraft {
    * so a refused send still has them.
    */
   take(): { text: string; extras: SendExtras } {
+    const extras = this.extras();
+    const text = this.text.trim();
+    this.unsent = {
+      text,
+      images: this.images,
+      texts: $state.snapshot(this.texts),
+      files: $state.snapshot(this.files),
+      selections: $state.snapshot(this.selections),
+    };
+    this.text = "";
+    this.images = [];
+    this.texts = [];
+    this.files = [];
+    this.editorOpen = false;
+    this.editing = null;
+    return { text, extras };
+  }
+
+  /**
+   * What rides a message besides its text, as a send carries it: the notes,
+   * the texts and the files the hub has, and the images.
+   */
+  extras(): SendExtras {
     const extras: SendExtras = {};
     if (this.selections.length) {
       extras.selections = $state.snapshot(this.selections);
@@ -307,21 +471,7 @@ export class ComposerDraft {
         data: i.data,
       }));
     }
-    const text = this.text.trim();
-    this.unsent = {
-      text,
-      images: this.images,
-      texts: $state.snapshot(this.texts),
-      files: $state.snapshot(this.files),
-      selections: $state.snapshot(this.selections),
-    };
-    this.text = "";
-    this.images = [];
-    this.texts = [];
-    this.files = [];
-    this.editorOpen = false;
-    this.editing = null;
-    return { text, extras };
+    return extras;
   }
 
   /**

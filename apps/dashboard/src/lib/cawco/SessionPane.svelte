@@ -48,7 +48,6 @@
   import { delegateHandle } from "./links";
   import { planProgress, planShows } from "./plan/PlanPane.svelte";
   import PlanRing from "./plan/PlanRing.svelte";
-  import { keepsDrafts } from "./reload.svelte";
   import SideSplit from "./side/SideSplit.svelte";
   import { clip, type SuggestCandidate, suggestions } from "./suggest.svelte";
   import { inLists, threadIdOf } from "./thread-tabs";
@@ -57,12 +56,8 @@
     type Mention,
   } from "./transcript/Composer.svelte";
   import { ComposerDraft } from "./transcript/composer-draft.svelte";
-  import {
-    type DraftContent,
-    loadDraft,
-    saveDraft,
-  } from "./transcript/draft-store";
   import FootFade from "./transcript/FootFade.svelte";
+  import { keepDraft } from "./transcript/keep-draft.svelte";
   import ProjectOffer from "./transcript/ProjectOffer.svelte";
   import { parkedAsks } from "./transcript/present";
   import Transcript from "./transcript/Transcript.svelte";
@@ -729,68 +724,10 @@
   /** What this conversation has half-written, whichever composer draws it. */
   const draft = new ComposerDraft();
 
-  /* ---- the draft across a reload ---------------------------------------
-     Read back once when the pane opens, then written as it changes, at most
-     every 250ms, and at once when the page goes away or the pane closes. A
-     pane is mounted once per conversation (PaneHost keys it by id), so the
-     id is fixed for its life. Nothing is written until the read has landed:
-     the empty draft the pane starts with must not replace the stored one. */
-  let draftLoaded = $state(false);
-  $effect(() => {
-    const id = viewId;
-    untrack(() => {
-      // biome-ignore lint/complexity/noVoid: fire-and-forget — the read lands in the draft, and a refused read leaves the draft unstored rather than overwritten
-      void loadDraft(id).then(
-        (stored) => {
-          // Words typed while the read was in flight are the newer ones.
-          if (stored && !draft.hasContent) {
-            draft.fill(stored);
-          }
-          draftLoaded = true;
-        },
-        () => {
-          // No database: drafts do not start, so nothing is ever written.
-        }
-      );
-    });
-  });
-
-  /** The draft as it should be stored, waiting for the next write. */
-  let unwritten: DraftContent | null = null;
-  let draftTimer: ReturnType<typeof setTimeout> | undefined;
-  /** Writes what is waiting; resolves once it is stored. */
-  function writeDraft(): Promise<void> {
-    clearTimeout(draftTimer);
-    draftTimer = undefined;
-    if (!unwritten) {
-      return Promise.resolve();
-    }
-    const next = unwritten;
-    unwritten = null;
-    return saveDraft(viewId, next);
-  }
-
-  $effect(() => {
-    if (!draftLoaded) {
-      return;
-    }
-    // `keep` reads every stored piece, notes and attachments deeply, so any
-    // change to them lands here and schedules a write.
-    unwritten = draft.keep;
-    draftTimer ??= setTimeout(writeDraft, 250);
-  });
-
-  $effect(() => {
-    window.addEventListener("pagehide", writeDraft);
-    // A reload this tab does itself waits for the write to land.
-    const release = keepsDrafts(writeDraft);
-    return () => {
-      window.removeEventListener("pagehide", writeDraft);
-      release();
-      // biome-ignore lint/complexity/noVoid: fire-and-forget — the pane is closing; the write lands on its own
-      void writeDraft();
-    };
-  });
+  // The draft across a reload, under the conversation's id. A pane is
+  // mounted once per conversation (PaneHost keys it by id), so the id is
+  // fixed for its life, and the draft is written once more as it closes.
+  keepDraft(draft, () => viewId);
 
   // A queued message being edited here goes back as it was when the
   // conversation closes: its bubble is whole wherever it is next drawn.

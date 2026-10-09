@@ -4498,10 +4498,13 @@ export async function spawnSession({
   bootstrap,
   projectId,
   account,
+  extras = {},
 }: {
   machineId: string;
   cwd: string;
   prompt?: string;
+  /** What rides the first message besides its words: its attachments and images, as a send carries them. */
+  extras?: SendExtras;
   harness?: HarnessKind;
   permissionMode?: PermissionMode;
   model?: string;
@@ -4524,13 +4527,15 @@ export async function spawnSession({
     projectId,
     ...(account ? { account } : {}),
   });
-  if (prompt?.trim()) {
-    // Followed before its first prompt goes, on the socket that carries it:
+  const first = prompt?.trim() ?? "";
+  if (first || extras.images?.length || extras.attachments?.length) {
+    // Followed before its first message goes, on the socket that carries it:
     // that send's record is among the first frames the session's stream
     // carries, and a tab that joined after it would never hear it.
     subscribeSession(streamState, streamHost, created.instanceId);
     submitCommand(created.instanceId, machineId, "send", {
-      text: prompt.trim(),
+      text: first,
+      extras,
     });
   }
   // biome-ignore lint/complexity/noVoid: fire-and-forget — the session already started locally, this just resyncs the fleet list

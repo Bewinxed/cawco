@@ -17,6 +17,7 @@
     menuItems,
     lead,
     onleadremove,
+    onpaste,
     onsubmit,
   }: {
     value?: string;
@@ -24,6 +25,11 @@
     menuItems: (type: "@" | "/", query: string) => MenuItem[];
     lead?: LeadChip;
     onleadremove?: () => void;
+    /**
+     * A paste, before it lands as text: true when it was taken elsewhere
+     * (files, or a long paste, attached), and the editor inserts nothing.
+     */
+    onpaste?: (data: DataTransfer | null) => boolean;
     onsubmit: () => void;
   } = $props();
   interface Menu {
@@ -265,6 +271,9 @@
   }
   function paste(event: ClipboardEvent) {
     event.preventDefault();
+    if (onpaste?.(event.clipboardData)) {
+      return;
+    }
     // Native text insertion preserves the editing undo history and inline chips.
     document.execCommand(
       "insertText",
