@@ -279,7 +279,7 @@ public enum Palette {
     public static let materialPanel = Palette.named("material-panel")
     /// What a dialog's backdrop paints: the page itself, translucent.
     public static let scrim = Palette.named("scrim")
-    /// The 1px edge drawn inside a raster image (the brand row's icon), so it keeps its shape on any surface. Pure black by day and pure white at night, never a tinted neutral: a tint picks up the surface under it and reads as dirt on the image's edge.
+    /// The 1px edge drawn inside a raster image (the brand row's icon), so it keeps its shape on any surface. Pure black by day and pure white at night, never a tinted neutral: a tint picks up the surface under it and reads as dirt on the image's edge. An image whose own edge is darker than the surface it sits on (the paywall's night film band on the raised sheet) takes it one width outside instead: inside, 10% white over its near-black edge comes out the surface's own colour and parts nothing.
     public static let imageOutline = Palette.named("image-outline")
     /// Elevation tints: warm ink by day, the deepest surface at night, never rgba black.
     public static let shadowTint = Palette.named("shadow-tint")

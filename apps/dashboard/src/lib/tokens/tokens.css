@@ -407,7 +407,7 @@
     --material-panel: oklch(from var(--surface-raised) l c h / 0.72);
     /* What a dialog's backdrop paints: the page itself, translucent. */
     --scrim: oklch(from var(--background) l c h / 0.72);
-    /* The 1px edge drawn inside a raster image (the brand row's icon), so it keeps its shape on any surface. Pure black by day and pure white at night, never a tinted neutral: a tint picks up the surface under it and reads as dirt on the image's edge. */
+    /* The 1px edge drawn inside a raster image (the brand row's icon), so it keeps its shape on any surface. Pure black by day and pure white at night, never a tinted neutral: a tint picks up the surface under it and reads as dirt on the image's edge. An image whose own edge is darker than the surface it sits on (the paywall's night film band on the raised sheet) takes it one width outside instead: inside, 10% white over its near-black edge comes out the surface's own colour and parts nothing. */
     --image-outline: light-dark(oklch(0 0 0 / 0.1), oklch(1 0 0 / 0.1));
     /* Elevation tints: warm ink by day, the deepest surface at night, never rgba black. */
     --shadow-tint: light-dark(
