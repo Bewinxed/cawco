@@ -18,7 +18,7 @@
 # its own process group, which ends (TERM, then KILL) when the SSH link drops.
 set -euo pipefail
 
-SSH=(ssh -F "$HOME/.ssh/config" -o BatchMode=yes mac)
+SSH=(ssh -F "$HOME/.ssh/config" -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3 mac)
 ROOT=$(git rev-parse --show-toplevel)
 BUILD=$(basename "$ROOT")
 if [[ $ROOT == "$HOME/cockpit" ]]; then BUILD=main; fi
