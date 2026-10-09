@@ -49,9 +49,10 @@ struct HeroBanner: Equatable {
     }
 }
 
-/// The story still's notification slots (`story-end.slots.json`, bundled
-/// beside the still), in the still's pixels: any number of cards, each with
-/// its place in the stack (`order`, 0 in front) and the part of it that shows.
+/// The story still's notification group (`story-end.slots.json`, bundled
+/// beside the still), in the still's pixels: its `cards`, front to back, each
+/// with its whole hidden extent (`rect_px`) and the band of it that shows
+/// past the cards in front (`visible_px`).
 nonisolated struct StorySlots: Decodable {
     struct Rect: Decodable {
         let x: Double
@@ -63,32 +64,34 @@ nonisolated struct StorySlots: Decodable {
     }
 
     struct Slot: Decodable {
-        let x: Double
-        let y: Double
-        let width: Double
-        let height: Double
-        /// 0 is the front card, a higher number further back; absent, the file's order.
-        let order: Int?
-        /// The part that shows past the cards in front of it; absent, all of it.
-        let visible: Rect?
-        /// Its drawn corner; absent, the file's nominal corner.
-        let radius: Double?
+        let full: Rect
+        let visible: Rect
 
-        var rect: CGRect { CGRect(x: x, y: y, width: width, height: height) }
+        var rect: CGRect { full.cg }
+        var width: Double { full.width }
+        var height: Double { full.height }
         /// A card mostly behind another shows its edge only, as iOS stacks a group.
-        var showsContent: Bool { visible.map { $0.height >= height * 0.9 } ?? true }
+        var showsContent: Bool { visible.height >= full.height * 0.9 }
+
+        private enum Keys: String, CodingKey {
+            case full = "rect_px"
+            case visible = "visible_px"
+        }
+
+        init(from decoder: any Decoder) throws {
+            let keys = try decoder.container(keyedBy: Keys.self)
+            full = try keys.decode(Rect.self, forKey: .full)
+            visible = try keys.decode(Rect.self, forKey: .visible)
+        }
     }
 
     let size: CGSize
-    /// Front to back; without `order`, the file's own order.
+    /// Front to back, the file's order.
     let slots: [Slot]
-    /// The file says how the cards stack, rather than listing equal slots.
-    var stacked: Bool { slots.contains { $0.order != nil } }
     let radius: Double
 
     private enum Keys: String, CodingKey {
-        case frame, slots, cards
-        case slotsPx = "slots_px"
+        case frame, cards
         case radius = "corner_radius_nominal_px"
     }
 
@@ -99,13 +102,8 @@ nonisolated struct StorySlots: Decodable {
             throw DecodingError.dataCorruptedError(forKey: .frame, in: keys, debugDescription: "frame is [width, height]")
         }
         size = CGSize(width: frame[0], height: frame[1])
-        let listed = try keys.decodeIfPresent([Slot].self, forKey: .slotsPx)
-            ?? keys.decodeIfPresent([Slot].self, forKey: .slots)
-            ?? keys.decode([Slot].self, forKey: .cards)
-        slots = listed.enumerated()
-            .sorted { ($0.element.order ?? $0.offset) < ($1.element.order ?? $1.offset) }
-            .map(\.element)
-        radius = try keys.decodeIfPresent(Double.self, forKey: .radius) ?? 36
+        slots = try keys.decode([Slot].self, forKey: .cards)
+        radius = try keys.decode(Double.self, forKey: .radius)
     }
 
     /// The bundled file, read once.
@@ -128,9 +126,9 @@ nonisolated struct StorySlots: Decodable {
 /// a daylight one.
 ///
 /// - `story`: the desk scene's move (`paywall-story.mp4`, once, muted) from
-///   `PaywallStoryStart` to `PaywallStoryRest`, the phone's lock screen with
-///   empty card slots; native cards then come into them. The slots, their
-///   number and their stacking are the still's `story-end.slots.json`, read
+///   `PaywallStoryStart` to `PaywallStoryRest`, the phone's screen with its
+///   stacked notification group; native cards then come into it. The cards,
+///   their number and their stacking are the still's `story-end.slots.json`, read
 ///   from the bundle, so a new still and its file need no code. Under Reduce
 ///   Motion the band is the rest frame with the cards already in it.
 /// - `poster`: Butter above an exact horizon, Ivory below, a code-made grain
@@ -317,7 +315,7 @@ final class PaywallHeroView: UIView {
         for (card, slot) in zip(cards, story.slots) {
             card.bounds = CGRect(origin: .zero, size: CGSize(width: slot.width * scale, height: slot.height * scale))
             card.center = CGPoint(x: image.minX + slot.rect.midX * scale, y: image.minY + slot.rect.midY * scale)
-            card.corner = (slot.radius ?? story.radius) * scale
+            card.corner = story.radius * scale
         }
     }
 
@@ -346,7 +344,7 @@ final class PaywallHeroView: UIView {
 
     /// The cards come in one after another, the app's stagger apart (the
     /// poster's drop from above, back to front; the story's rise into their
-    /// slots, top to bottom), then the poster's Caw climbs up over them.
+    /// group, back to front), then the poster's Caw climbs up over them.
     private func cardsIn(still: Bool) {
         cardsShown = true
         guard !still else {
@@ -354,8 +352,8 @@ final class PaywallHeroView: UIView {
             climber?.present = true
             return
         }
-        // A stack comes in back to front, as notifications arrive; equal slots top to bottom.
-        let order = variant == .poster || story?.stacked == true ? Array(cards.reversed()) : cards
+        // Both stacks come in back to front, as notifications arrive.
+        let order = Array(cards.reversed())
         for (index, card) in order.enumerated() {
             card.transform = CGAffineTransform(translationX: 0, y: variant == .poster ? -Space.space5 : Space.space2)
             let drop = Motion.easeOut.animator(Motion.durPop) {
