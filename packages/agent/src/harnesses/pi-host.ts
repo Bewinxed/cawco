@@ -22,6 +22,9 @@ function start(
   if (starting) {
     throw new Error("pi host already started");
   }
+  if (command.gateForm) {
+    state.gateForm = command.gateForm;
+  }
   const ctx: HarnessContext = {
     instanceId: command.spec.instanceId,
     cwd: command.spec.cwd,

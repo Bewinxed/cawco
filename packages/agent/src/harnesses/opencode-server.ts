@@ -7,6 +7,7 @@ import {
   processStartMs,
 } from "@cawco/core/process-identity";
 import { type ProcSpec, sessiondEndpoint } from "@cawco/core/sessiond";
+import { launchGateForm } from "../gate-form";
 import { OPENCODE_SERVER_PROC_ID } from "../proc-id";
 import type { SessiondClient } from "../sessiond-client";
 import { readJson, writeJson } from "./fleet-common";
@@ -387,6 +388,12 @@ export class OpencodeServerOwner {
         console.info(
           `[opencode] candidate→active ${old?.procId ?? "none"}/${old?.pid ?? "none"} → ${candidate.procId}/${candidate.pid}`
         );
+        const [was, now] = [old?.launch, candidate.launch].map(launchGateForm);
+        if (old && was !== now) {
+          console.info(
+            `[opencode] gate: ${this.account ? `account ${this.account}'s` : "the machine's"} server relaunched from gate form ${was} onto ${now}; its sessions move over as each comes to rest`
+          );
+        }
         return candidate;
       } catch (error) {
         const current = await this.#load();

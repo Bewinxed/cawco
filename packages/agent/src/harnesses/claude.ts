@@ -1000,6 +1000,18 @@ const modeFrame = (
   (message.subtype === "init" || message.subtype === "status") &&
   !(message as { parent_tool_use_id?: string | null }).parent_tool_use_id;
 
+/**
+ * A workspace session's scratch as one of its working directories, so an MCP
+ * server that writes only inside its roots (chrome-devtools-mcp's captures)
+ * writes there as well as in the clone: "Claude Code answers `roots/list`
+ * with the session's launch directory plus every additional working
+ * directory you've granted with `--add-dir`, `/add-dir`, or the
+ * `additionalDirectories` setting" (code.claude.com/docs/en/mcp, v2.1.203
+ * on).
+ */
+const scratchDirectory = (boundary: HarnessContext["boundary"]) =>
+  boundary ? { additionalDirectories: [boundary.scratch] } : {};
+
 class ClaudeSession implements HarnessSession {
   readonly harness = "claude" as const;
   sessionId: string | null = null;
@@ -1233,6 +1245,7 @@ class ClaudeSession implements HarnessSession {
         // A work item's session runs every shell command inside its
         // workspace's boundary: a hook the CLI itself runs rewrites each one.
         ...claudeBoundaryOptions(ctx.boundary),
+        ...scratchDirectory(ctx.boundary),
         // THE SEAM (design §4.1). The SDK builds the CLI's command line and
         // hands it here instead of spawning it; we forward it to sessiond and
         // hand back a `SpawnedProcess` over the socket. Nothing downstream —

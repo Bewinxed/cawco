@@ -118,6 +118,7 @@ import {
   resolvedFleetDenials,
   sessionFleetDenials,
 } from "../denied-tools";
+import { GATE_FORM_ENV, gateForm } from "../gate-form";
 import type { Harness, HarnessContext, HarnessSession } from "../harness";
 import { HarnessRecoveryRefused, SessionAddressRefused } from "../harness";
 import { isMachineAgent } from "../machine-agent";
@@ -430,12 +431,19 @@ const withAccountReads = (
     : ctx;
 };
 
+/**
+ * The machine's OpenCode server launch. Its launch flags name the gate form
+ * its bridge plugin judges workspace sessions' calls with ({@link gateForm}):
+ * a server started on another fails its launch check and is replaced at rest,
+ * its sessions moving over as each comes to rest.
+ */
 const serverSpec = (config: Record<string, unknown>) => ({
   command: resolveBin("opencode") ?? "opencode",
   args: ["serve", "--hostname=127.0.0.1", "--port=0"],
   env: {
     OPENCODE_EXPERIMENTAL_CODE_MODE: "true",
     OPENCODE_CONFIG_CONTENT: JSON.stringify(config),
+    [GATE_FORM_ENV]: gateForm("opencode", buildHandoffPluginSource()),
   },
 });
 
@@ -1432,6 +1440,34 @@ const disablePlanAgentFor = async (
     );
     return;
   }
+  await mergeSessionConfig(
+    spec.instanceId,
+    cwd,
+    "OpenCode's plan agent is left as it is there",
+    (stored) => {
+      const agent = recordOf(stored.agent);
+      return {
+        ...stored,
+        agent: { ...agent, plan: { ...recordOf(agent.plan), disable: true } },
+      };
+    }
+  );
+};
+
+/**
+ * Writes `change` of the session directory's {@link SESSION_CONFIG}, kept
+ * out of git through the checkout's `info/exclude`; nothing when `change`
+ * returns nothing. A file that is the project's own, or not plain JSON, is
+ * said in the log (`leftAs`) and left as it is.
+ */
+const mergeSessionConfig = async (
+  instanceId: string,
+  cwd: string,
+  leftAs: string,
+  change: (
+    stored: Record<string, unknown>
+  ) => Record<string, unknown> | undefined
+): Promise<void> => {
   const path = join(cwd, SESSION_CONFIG);
   if (
     existsSync(path) &&
@@ -1439,7 +1475,7 @@ const disablePlanAgentFor = async (
       undefined
   ) {
     console.warn(
-      `[opencode] ${spec.instanceId}: ${path} is the project's own, so OpenCode's plan agent is left as it is there.`
+      `[opencode] ${instanceId}: ${path} is the project's own, so ${leftAs}.`
     );
     return;
   }
@@ -1448,16 +1484,74 @@ const disablePlanAgentFor = async (
     : {};
   if (!stored) {
     console.warn(
-      `[opencode] ${spec.instanceId}: ${path} is not plain JSON cawco can merge into, so OpenCode's plan agent is left as it is there.`
+      `[opencode] ${instanceId}: ${path} is not plain JSON cawco can merge into, so ${leftAs}.`
     );
     return;
   }
-  const agent = recordOf(stored.agent);
-  await writeJson(path, {
-    ...stored,
-    agent: { ...agent, plan: { ...recordOf(agent.plan), disable: true } },
-  });
+  const changed = change(stored);
+  if (!changed) {
+    return;
+  }
+  await writeJson(path, changed);
   await excludeFromCheckout(path);
+};
+
+/** The fleet's Chrome DevTools MCP server, by its fleet name (`mcp-launcher.ts`). */
+const CHROME_DEVTOOLS = "chrome-devtools";
+
+/**
+ * A workspace session's chrome-devtools-mcp writes captures to the
+ * workspace's scratch as well as its clone. It writes a `filePath` only
+ * inside its roots: the ones its client answers `roots/list` with, those
+ * named by `--filesystem-root` ("A directory that filesystem tools are
+ * allowed to access. May be specified more than once.", chrome-devtools-mcp
+ * 1.10.1 build/src/config/mcp-options.js) and its own temp dir. OpenCode
+ * answers `roots/list` with the session's directory alone (1.18.34:
+ * `roots:[{uri:<directory>}]`) and starts a local server per directory, so
+ * the clone's own config runs the fleet's server with the scratch as a
+ * filesystem root. Its temp dir stays the machine's: Chromium refuses a
+ * temp dir as deep as a workspace's scratch ("Socket path too long",
+ * process_singleton_posix.cc), and the plugin's judge refuses a capture
+ * there anyway, as it refuses every write outside the clone, the scratch
+ * and the workspace caches. Rewritten at each session's start, and dropped
+ * once the fleet no longer runs the server.
+ */
+const capturesToScratch = async (
+  spec: SpawnPayload,
+  ctx: HarnessContext
+): Promise<void> => {
+  const { boundary } = ctx;
+  if (!boundary) {
+    return;
+  }
+  const fleet = recordOf(
+    (await readJson<{ mcp?: unknown }>(OPENCODE_CONFIG))?.mcp
+  )[CHROME_DEVTOOLS];
+  const entry = recordOf(fleet);
+  await mergeSessionConfig(
+    spec.instanceId,
+    ctx.cwd,
+    "its Chrome DevTools server writes captures only in the clone",
+    (stored) => {
+      const { [CHROME_DEVTOOLS]: held, ...others } = recordOf(stored.mcp);
+      if (!(entry.type === "local" && Array.isArray(entry.command))) {
+        return held === undefined ? undefined : { ...stored, mcp: others };
+      }
+      return {
+        ...stored,
+        mcp: {
+          ...others,
+          [CHROME_DEVTOOLS]: {
+            ...entry,
+            command: [
+              ...entry.command,
+              `--filesystem-root=${boundary.scratch}`,
+            ],
+          },
+        },
+      };
+    }
+  );
 };
 
 const EFFORT_LEVELS: EffortLevel[] = ["low", "medium", "high", "xhigh", "max"];
@@ -7069,6 +7163,7 @@ export class OpencodeHarness implements Harness {
   ): Promise<OpencodeSession> {
     // Before the server first reads the directory's config.
     await disablePlanAgentFor(spec, ctx.cwd);
+    await capturesToScratch(spec, ctx);
     // The account a session runs on is the server it runs in: the account's
     // own, where OpenCode's own sign-in code sends its requests with that
     // account's credential; on no account, the machine's.

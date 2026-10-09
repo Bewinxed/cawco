@@ -8,6 +8,7 @@ import type {
   SpawnPayload,
 } from "@cawco/core";
 import {
+  BOUNDARY_RELAUNCH,
   CAWCO_ENV,
   CONTROL_INTERRUPT,
   MESSAGES_HELD,
@@ -15,6 +16,7 @@ import {
 } from "@cawco/core";
 import { standalone } from "@cawco/core/runtime";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
+import { gateForm } from "../gate-form";
 import {
   type HarnessContext,
   type HarnessSession,
@@ -31,7 +33,13 @@ import {
 } from "../sessiond-client";
 
 export type PiHostCommand =
-  | { type: "start"; spec: SpawnPayload; boundary?: HarnessContext["boundary"] }
+  | {
+      type: "start";
+      spec: SpawnPayload;
+      boundary?: HarnessContext["boundary"];
+      /** The gate form of the build that starts the host, which is the build the host runs ({@link gateForm}). */
+      gateForm?: string;
+    }
   | {
       type: "send";
       message: SentMessage;
@@ -43,6 +51,12 @@ export type PiHostCommand =
 
 export interface PiHostState {
   busy: boolean;
+  /**
+   * The gate form the host's file tools were started on, for a workspace
+   * session; absent on a host started before hosts recorded one, whose file
+   * tools may be unjudged.
+   */
+  gateForm?: string;
   held: string[];
   sessionId: string | null;
 }
@@ -57,6 +71,8 @@ export type PiHostEvent =
 let connection: Promise<SessiondClient> | undefined;
 /** History reads must not turn a retry gap into a stored failed turn. */
 export const piOpenTurns = new Set<string>();
+/** Sessions whose host was found on another gate, by instance: the form it ran, until the relaunch that replaces it. */
+const staleHosts = new Map<string, string>();
 export async function piSessiond(): Promise<SessiondClient> {
   const previous = await connection?.catch(() => undefined);
   if (previous && !previous.closed) {
@@ -90,6 +106,9 @@ export class PiRemoteSession implements HarnessSession {
   #seq: number;
   #ready = false;
   #busy = false;
+  #exited = false;
+  /** The gate form the host reports it started on ({@link PiHostState.gateForm}). */
+  #hostForm: string | undefined;
   readonly #frames: { seq: number; message: NeutralMessage }[] = [];
 
   constructor(
@@ -161,6 +180,7 @@ export class PiRemoteSession implements HarnessSession {
             pending.reject(new Error(`pi host exited: ${code ?? signal}`));
           }
           this.#pending.clear();
+          this.#exited = true;
           this.#setBusy(false);
           ctx.closed?.();
         },
@@ -175,6 +195,13 @@ export class PiRemoteSession implements HarnessSession {
     }
     (this.#ctx as Partial<SessiondAwareContext>).line?.(this.#epoch, seq);
     this.#ctx.frame(message);
+    // A turn of a host on another gate has ended: its boundary is where the
+    // hub relaunches it onto this build's gate. Asked after the result, which
+    // is how the hub knows the turn is over; a result replayed while a later
+    // turn runs asks nothing.
+    if (message.type === "result" && !this.#busy) {
+      this.askRelaunch();
+    }
   }
 
   #setBusy(active: boolean): void {
@@ -191,16 +218,42 @@ export class PiRemoteSession implements HarnessSession {
 
   applyState(state: PiHostState): void {
     this.sessionId = state.sessionId;
+    this.#hostForm = state.gateForm;
     this.#setBusy(state.busy);
     if (state.sessionId) {
       this.#ctx.session(state.sessionId);
     }
   }
 
+  /**
+   * Asks the hub to relaunch a workspace session whose host runs another
+   * gate than this build's ({@link gateForm}) — one started by an earlier
+   * build, or before hosts recorded their gate, whose file tools may be
+   * unjudged — onto this build's ({@link BOUNDARY_RELAUNCH}, the rule a
+   * Claude CLI on a hook that fails open follows). Called at the attach when
+   * no turn is running, and as each turn ends; the hub relaunches it only
+   * while it is idle, never mid-turn.
+   */
+  askRelaunch(): void {
+    if (!(this.#ctx.boundary && this.#ready) || this.#exited) {
+      return;
+    }
+    const current = gateForm("pi");
+    if (this.#hostForm === current) {
+      return;
+    }
+    staleHosts.set(this.#ctx.instanceId, this.#hostForm ?? "none");
+    this.#ctx.frame({ type: "system", subtype: BOUNDARY_RELAUNCH });
+  }
+
   attached(): void {
     this.#ready = true;
     for (const frame of this.#frames.splice(0)) {
       this.#frame(frame.seq, frame.message);
+    }
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: #busy follows the host's busy events and snapshots (#setBusy), which biome's per-method inference does not see
+    if (!this.#busy) {
+      this.askRelaunch();
     }
   }
 
@@ -264,6 +317,8 @@ export class PiRemoteSession implements HarnessSession {
     /* pi has no permissions */
   }
   async stop(): Promise<void> {
+    // A host being stopped is not one to relaunch.
+    this.#exited = true;
     await this.request({ type: "stop" });
     await this.#client.stdinEnd(procIdFor("pi", this.#ctx.instanceId));
   }
@@ -303,12 +358,20 @@ export async function spawnPi(
   }
   const session = new PiRemoteSession(client, ctx, proc.pid, 0);
   const { sessionCredential: _credential, ...hostSpec } = spec;
+  const form = ctx.boundary ? gateForm("pi") : undefined;
   await session.write({
     type: "start",
     spec: { ...hostSpec, cwd: ctx.cwd },
-    ...(ctx.boundary ? { boundary: ctx.boundary } : {}),
+    ...(ctx.boundary ? { boundary: ctx.boundary, gateForm: form } : {}),
   });
   await session.request({ type: "snapshot" });
+  const stale = staleHosts.get(ctx.instanceId);
+  if (stale !== undefined && form) {
+    staleHosts.delete(ctx.instanceId);
+    console.info(
+      `[pi] ${ctx.instanceId}: host relaunched between turns from gate form ${stale} onto ${form}`
+    );
+  }
   return session;
 }
 
