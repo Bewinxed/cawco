@@ -25,17 +25,22 @@
  * - pids.max: "it is not possible to violate a cgroup PID policy through
  *   fork() or clone(). These will return -EAGAIN".
  *
- * And from systemd (https://systemd.io/CGROUP_DELEGATION/): "The service
- * manager sets the user.delegate extended attribute … to the character 1 on
- * cgroup directories where delegation is enabled … supported on kernels 5.6
- * and newer in combination with systemd 251 and newer", and "systemd will make
- * the requested controllers available to your service … but won't actually
- * enable them … you have to do that manually by writing to
+ * And from systemd (https://systemd.io/CGROUP_DELEGATION/): "systemd will
+ * make the requested controllers available to your service … but won't
+ * actually enable them … you have to do that manually by writing to
  * cgroup.subtree_control within your delegated cgroup (e.g. write +memory)".
- * The unit asks for `Delegate=pids` and `DelegateSubgroup=keeper`; on systemd
- * before 254, which has no DelegateSubgroup=, the keeper moves itself.
+ * The unit asks for `Delegate=pids` and `DelegateSubgroup=keeper`
+ * (systemd.resource-control(5): DelegateSubgroup= "has no effect unless
+ * control group delegation is turned on via Delegate=", added in 254); on
+ * systemd before 254 the keeper moves itself.
+ *
+ * Whether the unit delegates is asked of the manager that runs it
+ * (`systemctl [--user] show --property=Delegate`), not read off the cgroup:
+ * the `user.delegate` xattr is set by the system manager only. systemd's
+ * src/core/cgroup.c, cgroup_xattr_apply: "if (!MANAGER_IS_SYSTEM(u->manager))
+ * return;" comes before cgroup_delegate_xattr_apply, so the keeper's user unit
+ * never carries it, delegated or not.
  */
-import { dlopen, FFIType, ptr } from "bun:ffi";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { TASK_RESERVE } from "./tasks";
@@ -45,6 +50,10 @@ export const KEEPER_LEAF = "keeper";
 /** Where its children run. */
 export const CHILDREN_GROUP = "children";
 const BLANKS = /\s+/;
+/** A cgroup systemd made for a unit, by its directory name. */
+const UNIT_CGROUP = /\.(service|scope)$/;
+/** A unit under a user's manager: its cgroup is below that manager's `user@<uid>.service`. */
+const USER_MANAGER = /\/user@\d+\.service\//;
 
 /** What the keeper's children join, and the limit they run under. */
 export interface Children {
@@ -62,8 +71,11 @@ export interface Placement {
 
 /** The parts of the system the placement reads and writes; a scratch tree stands in for them in a proof. */
 export interface CgroupSystem {
-  /** Whether systemd delegated this cgroup directory. */
-  delegated: (dir: string) => Promise<boolean>;
+  /** What the unit's manager says of its `Delegate=`: `yes`, `no`, or why it could not be asked. */
+  delegation: (
+    unit: string,
+    manager: "user" | "system"
+  ) => Promise<"yes" | "no" | { asked: string }>;
   pid: number;
   /** The cgroup v2 mount. */
   root: string;
@@ -71,39 +83,32 @@ export interface CgroupSystem {
   selfCgroup: () => Promise<string>;
 }
 
-let libc:
-  | ReturnType<
-      typeof dlopen<{
-        getxattr: {
-          args: [FFIType.ptr, FFIType.ptr, FFIType.ptr, FFIType.u64];
-          returns: FFIType.i64;
-        };
-      }>
-    >
-  | undefined;
-
-/** `getxattr(2)` of `user.delegate` and `trusted.delegate`: either reading `1`. */
-const delegatedByXattr = (dir: string): Promise<boolean> => {
-  libc ??= dlopen("libc.so.6", {
-    getxattr: {
-      args: [FFIType.ptr, FFIType.ptr, FFIType.ptr, FFIType.u64],
-      returns: FFIType.i64,
-    },
-  });
-  const path = Buffer.from(`${dir}\0`);
-  for (const name of ["user.delegate", "trusted.delegate"]) {
-    const value = new Uint8Array(8);
-    const read = libc.symbols.getxattr(
-      ptr(path),
-      ptr(Buffer.from(`${name}\0`)),
-      ptr(value),
-      value.length
-    );
-    if (Number(read) === 1 && value[0] === "1".charCodeAt(0)) {
-      return Promise.resolve(true);
+/** `systemctl [--user] show --property=Delegate --value <unit>`. */
+const askSystemd: CgroupSystem["delegation"] = async (unit, manager) => {
+  const command = [
+    "systemctl",
+    ...(manager === "user" ? ["--user"] : []),
+    "show",
+    "--property=Delegate",
+    "--value",
+    unit,
+  ];
+  try {
+    const asked = Bun.spawn(command, { stdout: "pipe", stderr: "pipe" });
+    const [out, err, code] = await Promise.all([
+      new Response(asked.stdout).text(),
+      new Response(asked.stderr).text(),
+      asked.exited,
+    ]);
+    if (code !== 0) {
+      return { asked: `${command.join(" ")} exited ${code}: ${err.trim()}` };
     }
+    return out.trim() === "yes" ? "yes" : "no";
+  } catch (error) {
+    return {
+      asked: `${command.join(" ")}: ${error instanceof Error ? error.message : String(error)}`,
+    };
   }
-  return Promise.resolve(false);
 };
 
 /** This machine, as the keeper finds it. */
@@ -111,7 +116,7 @@ export const LINUX: CgroupSystem = {
   root: "/sys/fs/cgroup",
   pid: process.pid,
   selfCgroup: () => readFile("/proc/self/cgroup", "utf8"),
-  delegated: delegatedByXattr,
+  delegation: askSystemd,
 };
 
 /** The tightest finite `pids.max` from `dir` up to the cgroup root; undefined when none is set. */
@@ -156,17 +161,28 @@ export async function placeChildren(
     };
   }
   const own = join(system.root, line.slice(3).trim());
-  let top: string;
-  if (await system.delegated(own)) {
-    top = own;
-  } else if (
-    basename(own) === KEEPER_LEAF &&
-    (await system.delegated(dirname(own)))
-  ) {
-    top = dirname(own);
-  } else {
+  // The unit's own cgroup: the keeper's, or the one above the subgroup
+  // systemd placed it in (DelegateSubgroup=).
+  const top =
+    basename(own) === KEEPER_LEAF && UNIT_CGROUP.test(basename(dirname(own)))
+      ? dirname(own)
+      : own;
+  if (!UNIT_CGROUP.test(basename(top))) {
     return {
-      said: `${own} is not a delegated cgroup (the unit needs Delegate=pids; systemd marks it from 251): children share the keeper's task limit, and it refuses spawns by headroom alone`,
+      said: `${own} is not a systemd unit's cgroup: children share the keeper's task limit, and it refuses spawns by headroom alone`,
+    };
+  }
+  const unit = basename(top);
+  const delegation = await system.delegation(
+    unit,
+    USER_MANAGER.test(top) ? "user" : "system"
+  );
+  if (delegation !== "yes") {
+    return {
+      said:
+        delegation === "no"
+          ? `${unit} does not delegate its cgroup (the unit needs Delegate=pids): children share the keeper's task limit, and it refuses spawns by headroom alone`
+          : `whether ${unit} delegates its cgroup could not be asked (${delegation.asked}): children share the keeper's task limit, and it refuses spawns by headroom alone`,
     };
   }
   const controllers = (

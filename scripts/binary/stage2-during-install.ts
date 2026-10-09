@@ -10,7 +10,9 @@
  *       asks the machine's own session keeper (its socket) to start a held child
  *
  * Output, one line each: `sent <id> before=<phase> after=<phase> answer=<what came back>`, then
- * `accepted <id>` when the hub reported `installing` before and after and nothing refused the request,
+ * `accepted <id>` when the hub reported `installing` before and after and nothing refused the request
+ * (in keeper-child mode: the keeper acked the spawn `applied`; one it refused for want of room under its
+ * task limit was never started, and is reported with its reason),
  * and a last line `done sent=<n> accepted=<n> sawInstalling=<bool> ...`. It ends by itself once the
  * machine has left `installing` (three answers in a row), or after 900 s.
  */
@@ -18,7 +20,9 @@ const [, , mode, hub, machineId, prefix] = Bun.argv;
 const POLL_MS = 20;
 const ANSWER_MS = 150;
 const DEADLINE = Date.now() + 900_000;
-const KEEPER_SOCKET = "/run/user/1000/cawco/sessiond.sock";
+/** The keeper's socket: where the proof's machines have it, unless its own variable says otherwise. */
+const KEEPER_SOCKET =
+  process.env.CAWCO_SESSIOND_ENDPOINT ?? "/run/user/1000/cawco/sessiond.sock";
 
 async function phase(): Promise<string | undefined> {
   try {
@@ -111,13 +115,13 @@ async function fire(id: string): Promise<{ answer: string; refused: boolean }> {
         answer.includes("failure"),
     };
   }
-  const reply: string[] = [];
+  let reply = "";
   try {
     const connection = await Bun.connect({
       unix: KEEPER_SOCKET,
       socket: {
         data(_socket, data) {
-          reply.push(Buffer.from(data).toString("utf8").slice(0, 160));
+          reply += Buffer.from(data).toString("utf8");
         },
       },
     });
@@ -134,10 +138,37 @@ async function fire(id: string): Promise<{ answer: string; refused: boolean }> {
   } catch (error) {
     return { answer: `the keeper refused: ${error}`, refused: true };
   }
-  return {
-    answer: reply.join(" | ") || "no answer within 150ms",
-    refused: false,
-  };
+  // The keeper's answer to this spawn: a child it started says `applied`; one
+  // it refused (no room under its task limit, a fork the kernel refused) says
+  // `failed` with the reason, and is not a session that was started.
+  const acked = reply
+    .split("\n")
+    .flatMap((line) => {
+      try {
+        return [
+          JSON.parse(line) as {
+            type?: string;
+            commandId?: string;
+            stage?: string;
+            reason?: string;
+          },
+        ];
+      } catch {
+        return [];
+      }
+    })
+    .find(
+      (message) => message.type === "ack" && message.commandId === `hold-${id}`
+    );
+  if (!acked) {
+    return { answer: "no answer from the keeper within 150ms", refused: true };
+  }
+  return acked.stage === "applied"
+    ? { answer: "the keeper started it", refused: false }
+    : {
+        answer: `refused by the keeper: ${acked.reason ?? acked.stage}`,
+        refused: true,
+      };
 }
 
 if (mode === "hub-start") {
