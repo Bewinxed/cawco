@@ -11,41 +11,25 @@ struct HeroBanner: Equatable {
     let title: String
     let body: String
 
-    /// The hero's cards (`PaywallHeroView.cardCount` of them): the asks waiting
-    /// (`held`, the one just answered, first), then the fleet's live
-    /// harness-and-machine pairs with the example ask, then the first machine
-    /// with each harness CawCo runs.
+    /// The hero's one card: the ask waiting (`held`, the one just answered,
+    /// first), else the fleet's first live harness-and-machine pair with the
+    /// example ask, else the first machine with Claude Code.
     @MainActor
-    static func cards(hub: HubConnection, home: HomeModel, held: ParkedAsk? = nil) -> [HeroBanner] {
-        let count = PaywallHeroView.cardCount
+    static func card(hub: HubConnection, home: HomeModel, held: ParkedAsk? = nil) -> HeroBanner {
         let fleet = hub.fleet
-        var asks = home.needs.compactMap { item -> ParkedAsk? in
+        let first = fleet.machines.first.map { fleet.machineName($0.machineId) } ?? "your machine"
+        let waiting = home.needs.lazy.compactMap { item -> ParkedAsk? in
             if case let .ask(ask) = item.kind { return ask }
             return nil
-        }
-        if let held {
-            asks.removeAll { $0.requestId == held.requestId }
-            asks.insert(held, at: 0)
-        }
-        var cards: [HeroBanner] = asks.prefix(count).map { ask in
+        }.first
+        if let ask = held ?? waiting {
             let row = fleet.byId[ask.instanceId]
-            let machine = row.map { fleet.machineName($0.machineId) } ?? fleet.machines.first.map { fleet.machineName($0.machineId) } ?? "your machine"
+            let machine = row.map { fleet.machineName($0.machineId) } ?? first
             let line = ask.summary.split(separator: "\n").first.map(String.init) ?? ask.summary
             return HeroBanner(title: PaywallCopy.bannerTitle(harness: ModelCatalog.harnessName(row?.harness ?? "claude"), machine: machine), body: line)
         }
-        var pairs: [(harness: String, machine: String)] = home.working.map { ($0.harness ?? "claude", fleet.machineName($0.machineId)) }
-        let first = fleet.machines.first.map { fleet.machineName($0.machineId) } ?? "your machine"
-        pairs += ["claude", "opencode", "pi"].map { ($0, first) }
-        let examples = pairs.map { HeroBanner(title: PaywallCopy.bannerTitle(harness: ModelCatalog.harnessName($0.harness), machine: $0.machine),
-                                              body: PaywallCopy.bannerExample) }
-        for card in examples where cards.count < count && !cards.contains(card) {
-            cards.append(card)
-        }
-        // A stack deeper than the fleet has pairs repeats them.
-        while cards.count < count, let card = examples.first {
-            cards.append(card)
-        }
-        return cards
+        let pair = home.working.first.map { (harness: $0.harness ?? "claude", machine: fleet.machineName($0.machineId)) } ?? (harness: "claude", machine: first)
+        return HeroBanner(title: PaywallCopy.bannerTitle(harness: ModelCatalog.harnessName(pair.harness), machine: pair.machine), body: PaywallCopy.bannerExample)
     }
 }
 
@@ -68,10 +52,6 @@ nonisolated struct StorySlots: Decodable {
         let visible: Rect
 
         var rect: CGRect { full.cg }
-        var width: Double { full.width }
-        var height: Double { full.height }
-        /// A card mostly behind another shows its edge only, as iOS stacks a group.
-        var showsContent: Bool { visible.height >= full.height * 0.9 }
 
         private enum Keys: String, CodingKey {
             case full = "rect_px"
@@ -120,6 +100,15 @@ nonisolated struct StorySlots: Decodable {
         rails = try keys.decode(Rails.self, forKey: .rails)
     }
 
+    /// The one card the app draws over the still's group: the front card's
+    /// width, from its top to the last band's bottom, so the bands of the
+    /// cards behind never show as a tab under it.
+    var group: CGRect? {
+        guard let front = slots.first?.rect else { return nil }
+        let bottom = slots.map(\.visible.cg.maxY).max() ?? front.maxY
+        return CGRect(x: front.minX, y: front.minY, width: front.width, height: bottom - front.minY)
+    }
+
     /// The bundled file, read once.
     static let bundled: StorySlots? = {
         guard let url = Bundle.module.url(forResource: "story-end.slots", withExtension: "json") else {
@@ -140,12 +129,12 @@ nonisolated struct StorySlots: Decodable {
 ///
 /// The scene is the desk film (`paywall-story.mp4`, once, muted) from
 /// `PaywallStoryStart` to `PaywallStoryRest`, the phone's screen with its
-/// stacked notification group; native cards then come into it. The cards,
-/// their number and their stacking are the still's `story-end.slots.json`,
-/// read from the bundle, so a new still and its file need no code. Under
-/// Reduce Motion the band is the rest frame with the cards already in it.
-/// Where the sheet asks for him, Caw climbs up over the front card's top edge
-/// (climb.riv) and stays there at that status.
+/// stacked notification group; one native card then comes over the whole
+/// group (`StorySlots.group`, from the still's `story-end.slots.json`, read
+/// from the bundle, so a new still and its file need no code). Under Reduce
+/// Motion the band is the rest frame with the card already on it. Where the
+/// sheet asks for him, Caw climbs up over the card's top edge (climb.riv) and
+/// stays there at that status.
 ///
 /// The stage is Caw alone at `HomeViewController.cawSide` on the plain field,
 /// while the sheet works or waits.
@@ -165,9 +154,9 @@ final class PaywallHeroView: UIView {
     private let movie = UIView()
     private let video = AVPlayerLayer()
     private var player: AVPlayer?
-    /// The cards and Caw over them.
+    /// The card and Caw over it.
     private let scene = UIView()
-    private let cards: [NotificationCard]
+    private let card: NotificationCard
     private let climber = CawView(status: .idle, ledge: .climb)
     private let stageCaw: CawView
     private var settledIn = false
@@ -181,15 +170,16 @@ final class PaywallHeroView: UIView {
     /// Caw's climb box at most; less where the band has less room above the front card.
     static let climbSide = 140.0
 
-    /// How many cards the hero needs: the story still's slots.
-    static var cardCount: Int { StorySlots.bundled?.slots.count ?? 0 }
-
-    /// The story still's slots, front to back; `cards` holds the card for each.
+    /// The story still's slots, front to back; `card` covers their group.
     private let story: StorySlots?
 
-    init(banners: [HeroBanner]) {
+    /// Told the inner edge of the still's leading rail, in the band's space,
+    /// each time a layout moves it (the close button stands inside it).
+    var onRail: ((Double) -> Void)?
+
+    init(banner: HeroBanner) {
         story = StorySlots.bundled
-        cards = zip(story?.slots ?? [], banners).map { NotificationCard($1, front: $0.showsContent) }
+        card = NotificationCard(banner)
         stageCaw = CawView(status: .loading)
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
@@ -222,12 +212,11 @@ final class PaywallHeroView: UIView {
 
         scene.translatesAutoresizingMaskIntoConstraints = false
         addSubview(scene)
-        // Caw behind the front card: its top edge is his ledge.
+        // Caw behind the card: its top edge is his ledge.
         climber.translatesAutoresizingMaskIntoConstraints = true
         climber.present = false
         scene.addSubview(climber)
-        // The front card last: it stands in front of the others and of Caw's body.
-        for card in cards.reversed() { scene.addSubview(card) }
+        scene.addSubview(card)
         stageCaw.present = false
         addSubview(stageCaw)
 
@@ -249,13 +238,12 @@ final class PaywallHeroView: UIView {
     }
 
     /// Where the still stands in the band, and its scale. It is fitted so its
-    /// cards fill the band's height less a margin and centred; the phone's
+    /// group fills the band's height less a margin and centred; the phone's
     /// bezels frame it on the Ink field. Then it is lowered, as far as the
-    /// room under the cards allows, until a whole `climbSide` Caw stands over
-    /// the front card, in every mode, so the cards never move when he comes.
+    /// room under the group allows, until a whole `climbSide` Caw stands over
+    /// the card, in every mode, so the card never moves when he comes.
     private var still: (image: CGRect, scale: Double)? {
-        guard let story, let first = story.slots.first else { return nil }
-        let stack = story.slots.dropFirst().reduce(first.rect) { $0.union($1.rect) }
+        guard let story, let stack = story.group else { return nil }
         let frame = story.size
         let scale = min(bounds.width / frame.width, (bounds.height - 2 * Space.space2) / stack.height)
         guard scale > 0 else { return nil }
@@ -276,74 +264,63 @@ final class PaywallHeroView: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
         art.frame = bounds
-        guard let story, let still else { return }
+        guard let story, let still, let group = story.group else { return }
         let image = still.image
         let scale = still.scale
         for view in [rest, start, movie] { view.frame = image }
         video.frame = movie.bounds
-        for (card, slot) in zip(cards, story.slots) {
-            card.bounds = CGRect(origin: .zero, size: CGSize(width: slot.width * scale, height: slot.height * scale))
-            card.center = CGPoint(x: image.minX + slot.rect.midX * scale, y: image.minY + slot.rect.midY * scale)
-            card.corner = story.radius * scale
-            // The part of the card that shows past the ones in front, in the card's own space.
-            card.visible = CGRect(x: (slot.visible.x - slot.full.x) * scale, y: (slot.visible.y - slot.full.y) * scale,
-                                  width: slot.visible.width * scale, height: slot.visible.height * scale)
-        }
-        // Caw stands on the front card's top edge toward its trailing end, as
-        // large as the room above it allows, so the band never crops him.
-        if let front = cards.first {
-            let ledge = front.frame.minY
-            let side = min(Self.climbSide, (ledge - Space.space2) / CawView.ledgeLine).rounded(.down)
-            climber.frame = CGRect(x: front.frame.maxX - Space.space3 - side, y: ledge + 1 - side * CawView.ledgeLine,
-                                   width: side, height: side * CawView.ledgeLine)
-        }
+        // By bounds and centre: the card rises and presses by its transform.
+        card.bounds = CGRect(origin: .zero, size: CGSize(width: group.width * scale, height: group.height * scale))
+        card.center = CGPoint(x: image.minX + group.midX * scale, y: image.minY + group.midY * scale)
+        card.corner = story.radius * scale
+        // Caw stands on the card's top edge toward its trailing end, as large
+        // as the room above it allows, so the band never crops him.
+        let ledge = card.center.y - card.bounds.height / 2
+        let side = min(Self.climbSide, (ledge - Space.space2) / CawView.ledgeLine).rounded(.down)
+        climber.frame = CGRect(x: card.center.x + card.bounds.width / 2 - Space.space3 - side, y: ledge + 1 - side * CawView.ledgeLine,
+                               width: side, height: side * CawView.ledgeLine)
+        if let rail = leadingRailEdge { onRail?(rail) }
     }
 
     /// The scene arrives once the sheet is up: the move plays once and the
-    /// cards stack into its slots. Reduce Motion puts everything at rest at once.
+    /// card comes over its group. Reduce Motion puts everything at rest at once.
     func settleIn() {
         guard !settledIn else { return }
         settledIn = true
-        for card in cards { card.alpha = 0 }
+        card.alpha = 0
         if let player {
             ended = NotificationCenter.default.addObserver(forName: AVPlayerItem.didPlayToEndTimeNotification, object: player.currentItem, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated {
                     self?.movie.isHidden = true
                     self?.start.isHidden = true
-                    self?.cardsIn(still: false)
+                    self?.cardIn(still: false)
                 }
             }
             player.play()
             return
         }
-        cardsIn(still: UIAccessibility.isReduceMotionEnabled)
+        cardIn(still: UIAccessibility.isReduceMotionEnabled)
     }
 
-    /// The cards rise into their group one after another, the app's stagger
-    /// apart, back to front as notifications arrive; then Caw, where asked
-    /// for, climbs up over the front one.
-    private func cardsIn(still: Bool) {
+    /// The card rises onto the group as a notification arrives, a stagger
+    /// after the film ends; then Caw, where asked for, climbs up over it.
+    private func cardIn(still: Bool) {
         cardsShown = true
         guard !still else {
-            for card in cards { card.alpha = 1 }
+            card.alpha = 1
             climb()
             return
         }
-        let order = Array(cards.reversed())
-        for (index, card) in order.enumerated() {
-            card.transform = CGAffineTransform(translationX: 0, y: Space.space2)
-            let rise = Motion.easeOut.animator(Motion.durPop) {
-                card.alpha = 1
-                card.transform = .identity
-            }
-            if index == order.count - 1 {
-                rise.addCompletion { [weak self] _ in self?.climb() }
-            }
-            rise.startAnimation(afterDelay: Motion.durStagger * Double(index + 1))
+        card.transform = CGAffineTransform(translationX: 0, y: Space.space2)
+        let rise = Motion.easeOut.animator(Motion.durPop) {
+            self.card.alpha = 1
+            self.card.transform = .identity
         }
+        rise.addCompletion { [weak self] _ in self?.climb() }
+        rise.startAnimation(afterDelay: Motion.durStagger)
     }
 
-    /// Caw over the front card, when the scene asks for him and its cards are in.
+    /// Caw over the card, when the scene asks for him and the card is in.
     private func climb() {
         guard case let .scene(status) = mode else { return }
         if let status { climber.status = status }
@@ -373,9 +350,9 @@ final class PaywallHeroView: UIView {
         }
     }
 
-    /// The front card presses as a whole (S1's beat).
+    /// The card presses as a whole (S1's beat).
     func flashApprove() {
-        cards.first?.flashApprove()
+        card.flashApprove()
     }
 }
 
@@ -398,20 +375,17 @@ extension PaywallHeroView {
 }
 #endif
 
-/// A lock-screen notification drawn natively, sized to its slot in the
-/// still: the app's icon and name, the ask's title and first line. A card
-/// behind the front one shows its edge only, as iOS stacks a group.
+/// A lock-screen notification drawn natively over the still's group: the
+/// app's icon and name, the ask's title and first line.
 ///
-/// Its words are laid out to the part of the slot that shows (`visible`):
-/// title and body take at most two lines each, as many as the height leaves
-/// under the app line, in the kit's smallest body size (`typeMeta`); text
-/// that still does not fit ends at a word, with an ellipsis.
+/// Title and body take at most two lines each, as many as the card's height
+/// leaves under the app line, in the kit's smallest body size (`typeMeta`);
+/// text that still does not fit ends at a word, with an ellipsis.
 private final class NotificationCard: UIView {
     private let head = UIStackView()
     private let title = KitLabel(TypeScale.typeMeta, ink: Palette.inkStrong, lines: 1)
     private let body = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 1)
     private let banner: HeroBanner
-    private let front: Bool
     /// Where the words were last fitted, to fit them again only when it changes.
     private var fitted: CGRect?
 
@@ -419,14 +393,8 @@ private final class NotificationCard: UIView {
         didSet { layer.cornerRadius = corner }
     }
 
-    /// The part of the card that shows, in its own space.
-    var visible: CGRect = .zero {
-        didSet { if visible != oldValue { setNeedsLayout() } }
-    }
-
-    init(_ banner: HeroBanner, front: Bool) {
+    init(_ banner: HeroBanner) {
         self.banner = banner
-        self.front = front
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = true
         backgroundColor = Palette.surfaceRaised
@@ -448,7 +416,6 @@ private final class NotificationCard: UIView {
         head.spacing = Space.space2
         head.alignment = .center
         for part in [head, title, body] {
-            part.isHidden = !front
             part.translatesAutoresizingMaskIntoConstraints = true
             addSubview(part)
         }
@@ -456,7 +423,7 @@ private final class NotificationCard: UIView {
             icon.widthAnchor.constraint(equalToConstant: 14),
             icon.heightAnchor.constraint(equalToConstant: 14),
         ])
-        isAccessibilityElement = front
+        isAccessibilityElement = true
         accessibilityLabel = "\(banner.title). \(banner.body)"
     }
 
@@ -467,8 +434,8 @@ private final class NotificationCard: UIView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        guard front, visible.width > 0 else { return }
-        let box = visible.insetBy(dx: Space.space3, dy: Space.space2)
+        guard bounds.width > 0 else { return }
+        let box = bounds.insetBy(dx: Space.space3, dy: Space.space2)
         guard box != fitted else { return }
         fitted = box
         let line = TypeScale.typeMeta.lineHeight

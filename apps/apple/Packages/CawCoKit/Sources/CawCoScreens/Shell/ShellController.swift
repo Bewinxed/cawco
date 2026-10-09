@@ -697,7 +697,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         // H2's Turn on: the notification setup, over the hub's sheet.
         connect.turnOnNotifications = { [weak self] in
             guard let self else { return }
-            PaywallController.present(.setup, banners: HeroBanner.cards(hub: hub, home: home), from: dialogPresenter)
+            PaywallController.present(.setup, banner: HeroBanner.card(hub: hub, home: home), from: dialogPresenter)
         }
         let sheet = UINavigationController(rootViewController: connect)
         connect.navigationItem.title = "Hub"

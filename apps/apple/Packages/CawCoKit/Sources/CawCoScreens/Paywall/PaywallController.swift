@@ -90,9 +90,9 @@ final class PaywallController: ObservedViewController {
     private static let terms = URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!
     private static let privacy = URL(string: "https://cawco.dev/privacy")!
 
-    init(entry: Entry, banners: [HeroBanner]) {
+    init(entry: Entry, banner: HeroBanner) {
         self.entry = entry
-        let hero = PaywallHeroView(banners: banners)
+        let hero = PaywallHeroView(banner: banner)
         let close = GhostIconButton(.close, label: "Close", tint: Palette.paper, side: Size.cBtnHLg)
         self.hero = hero
         self.close = close
@@ -115,8 +115,8 @@ final class PaywallController: ObservedViewController {
     /// The paywall in the house sheet over `host`: 90% of a phone's height,
     /// a 540pt form centred on a wide screen.
     @discardableResult
-    static func present(_ entry: Entry, banners: [HeroBanner], from host: UIViewController) -> PaywallController {
-        let paywall = PaywallController(entry: entry, banners: banners)
+    static func present(_ entry: Entry, banner: HeroBanner, from host: UIViewController) -> PaywallController {
+        let paywall = PaywallController(entry: entry, banner: banner)
         paywall.loadViewIfNeeded()
         let sheet = HouseSheetController(paywall, style: .card, scroller: paywall.scroll, cap: 0.9)
         sheet.formWidth = 540
@@ -128,6 +128,15 @@ final class PaywallController: ObservedViewController {
         super.viewDidLoad()
         view.backgroundColor = .clear
         close.addAction(UIAction { [weak self] _ in self?.finish() }, for: .primaryActionTriggered)
+        // The close glyph stands `space3` inside the still's leading rail, wherever the
+        // band's layout puts the still: its 44pt button centres a 16pt glyph. Up to the
+        // device pixel, so snapping never brings the glyph closer to the rail.
+        hero.onRail = { [weak self] rail in
+            guard let self else { return }
+            let pixel = max(1, traitCollection.displayScale)
+            let inset = ((rail + Space.space3 - (Size.cBtnHLg - Size.iconMd) / 2) * pixel).rounded(.up) / pixel
+            if closeLeading.constant != inset { closeLeading.constant = inset }
+        }
         view.addSubview(hero)
         view.addSubview(close)
         panel.axis = .vertical
@@ -162,15 +171,6 @@ final class PaywallController: ObservedViewController {
         foreground = NotificationCenter.default.addObserver(forName: UIScene.willEnterForegroundNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.cameBack() }
         }
-    }
-
-    /// The close glyph stands `space2` inside the still's leading rail, wherever
-    /// the band puts the still: its 44pt button centres a 16pt glyph.
-    override func viewDidLayoutSubviews() {
-        super.viewDidLayoutSubviews()
-        guard let rail = hero.leadingRailEdge else { return }
-        let inset = rail + Space.space2 - (Size.cBtnHLg - Size.iconMd) / 2
-        if abs(closeLeading.constant - inset) > 0.25 { closeLeading.constant = inset }
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -358,10 +358,14 @@ final class PaywallController: ObservedViewController {
         case .keep: (PaywallCopy.Keep.headline, PaywallCopy.Keep.subline(price))
         }
         var parts: [UIView] = [column([title(headline), muted(terms)], spacing: Space.space2)]
-        if form == .trial {
-            parts.append(timeline())
+        let store = storeBlock(price: price)
+        if form == .trial, storeUnanswered {
+            // P1c: the App Store's line and Try again stand apart from the rows, together.
+            parts.append(column([timeline(), store], spacing: Space.space4))
+        } else {
+            if form == .trial { parts.append(timeline()) }
+            parts.append(store)
         }
-        parts.append(storeBlock(price: price))
         let fail = KitLabel(TypeScale.typeMeta, ink: Palette.statusFailInk, lines: 0)
         failLabel = fail
         parts.append(fail)
@@ -370,13 +374,18 @@ final class PaywallController: ObservedViewController {
         return parts
     }
 
+    /// P1c: the App Store didn't answer, or Try again is asking it again.
+    private var storeUnanswered: Bool {
+        Pro.shared.canMakePayments != false && (Pro.shared.catalog == .failed || retrying)
+    }
+
     /// P1b, P1c, P1a, or the two buttons.
     private func storeBlock(price: String?) -> UIView {
         let pro = Pro.shared
         if pro.canMakePayments == false {
             return muted(PaywallCopy.Store.restricted(price))
         }
-        if pro.catalog == .failed || retrying {
+        if storeUnanswered {
             // P1c: Try again works (Caw too, on the stage) until the App Store answers.
             let again = SpinnerButton(PaywallCopy.Store.tryAgain, variant: .outline) { [weak self] in self?.retry() }
             again.busy = retrying
@@ -968,12 +977,13 @@ private final class TimelineDisc: UIView {
 #if DEBUG
 /// A simulator pass at the paywall alone, with no hub: `-paywall-probe` makes
 /// the window's root a plain board-coloured screen that raises the sheet,
-/// with `-paywall-banners long` for long asks on the hero's cards (the
-/// slots' example copy otherwise). `-paywall-catalog` and `-paywall-access`
-/// (Pro) pick P1a, P1c and P1e. 15 s after the sheet is up (the film has
-/// ended, the cards are in), it prints one `PAYWALL-EVIDENCE` line: the laid
-/// out labels, the links row and the sheet's visible height, read from the
-/// views themselves rather than from a screenshot.
+/// with `-paywall-banners long` for a long ask on the hero's card (the
+/// example copy otherwise). `-paywall-catalog` and `-paywall-access` (Pro)
+/// pick P1a, P1c and P1e. Once the film has ended and the card and Caw are in
+/// (or `-paywall-evidence-after <s>` after the sheet is up), it writes its
+/// evidence to Documents: the laid out labels, the links row, the sheet's
+/// visible height, the film's time, Caw's box and the close glyph's place,
+/// read from the views themselves rather than from a screenshot.
 public enum PaywallProbe {
     public static var asked: Bool { ProcessInfo.processInfo.arguments.contains("-paywall-probe") }
 
@@ -992,13 +1002,11 @@ public enum PaywallProbe {
             guard !raised else { return }
             raised = true
             let long = UserDefaults.standard.string(forKey: "paywall-banners") == "long"
-            let banners: [HeroBanner] = long
-                ? [HeroBanner(title: PaywallCopy.bannerTitle(harness: "Claude Code", machine: "obelisk-of-light-build-runner-02"),
-                              body: "Run bash: cd apps/apple && xcodebuild -project CawCo.xcodeproj -scheme CawCo -destination generic/platform=iOS build"),
-                   HeroBanner(title: PaywallCopy.bannerTitle(harness: "OpenCode", machine: "obelisk"), body: PaywallCopy.bannerExample),
-                   HeroBanner(title: PaywallCopy.bannerTitle(harness: "pi", machine: "obelisk"), body: PaywallCopy.bannerExample)]
-                : ["Claude Code", "OpenCode", "pi"].map { HeroBanner(title: PaywallCopy.bannerTitle(harness: $0, machine: "your machine"), body: PaywallCopy.bannerExample) }
-            let paywall = PaywallController.present(.onboarding, banners: banners, from: self)
+            let banner = long
+                ? HeroBanner(title: PaywallCopy.bannerTitle(harness: "Claude Code", machine: "obelisk-of-light-build-runner-02"),
+                             body: "Run bash: cd apps/apple && xcodebuild -project CawCo.xcodeproj -scheme CawCo -destination generic/platform=iOS build")
+                : HeroBanner(title: PaywallCopy.bannerTitle(harness: "Claude Code", machine: "your machine"), body: PaywallCopy.bannerExample)
+            let paywall = PaywallController.present(.onboarding, banner: banner, from: self)
             let log = Logger(subsystem: "dev.cawco.app", category: "Paywall")
             log.notice("probe: the sheet is presented")
             // `-paywall-evidence-after <s>`: that long after the sheet is up, for a frame mid-film.

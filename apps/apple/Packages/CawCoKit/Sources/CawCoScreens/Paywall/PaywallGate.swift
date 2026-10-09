@@ -186,13 +186,13 @@ final class PaywallGate {
         UserDefaults.standard.set(true, forKey: Self.shownKey)
         held = nil
         triggerClock?.cancel()
-        PaywallController.present(.onboarding, banners: HeroBanner.cards(hub: hub, home: home, held: ask), from: shell.dialogPresenter)
+        PaywallController.present(.onboarding, banner: HeroBanner.card(hub: hub, home: home, held: ask), from: shell.dialogPresenter)
         onChange()
     }
 
     /// The paywall over whatever the window shows.
     func present(_ entry: PaywallController.Entry) {
-        PaywallController.present(entry, banners: HeroBanner.cards(hub: hub, home: home), from: shell.dialogPresenter)
+        PaywallController.present(entry, banner: HeroBanner.card(hub: hub, home: home), from: shell.dialogPresenter)
     }
 
     /// T's tap and T6's push: the Get Pro form for a live week; the offer otherwise.
