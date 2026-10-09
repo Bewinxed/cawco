@@ -12,6 +12,7 @@
  * line ending in PASS or FAIL; the last line counts them. Everything it made
  * is removed at the end, whatever happened.
  */
+import { openSync } from "node:fs";
 import { copyFile, lstat, mkdir, readlink, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -44,13 +45,28 @@ const root = join(data, "cawco", "binary");
 const run = join(scratch, "run");
 const machine = join(run, "sessiond.sock");
 const binary = join(root, "versions", VERSION, "cawco");
+// The probe runs as `BUN_BE_BUN=1 ./cawco`; a `cawco` it starts with that set
+// is bun, not CawCo (`cawco sessiond`: `Script not found "sessiond"`, exit 1).
+// Nothing it starts gets it.
+const { BUN_BE_BUN: _runner, ...inherited } = process.env;
+delete process.env.BUN_BE_BUN;
 const env = {
-  ...process.env,
+  ...inherited,
   XDG_DATA_HOME: data,
   CAWCO_SESSIOND_ENDPOINT: machine,
 };
 process.env.XDG_DATA_HOME = data;
 process.env.CAWCO_SESSIOND_ENDPOINT = machine;
+const legacyLog = join(scratch, "legacy-keeper.log");
+/** The last of what a file says, for a failure's detail. */
+const tail = async (path: string): Promise<string> =>
+  (
+    await Bun.file(path)
+      .text()
+      .catch(() => "")
+  )
+    .trim()
+    .slice(-800);
 
 let passed = 0;
 let failed = 0;
@@ -128,12 +144,22 @@ try {
   }
 
   // 1. A legacy keeper, from before keepers ran side by side: on the machine's endpoint itself, holding a child.
+  const said = openSync(legacyLog, "w");
   legacy = Bun.spawn([binary, "sessiond"], {
     env,
-    stdout: "ignore",
-    stderr: "ignore",
+    stdout: said,
+    stderr: said,
   });
-  const before = await until(() => welcomes(machine), 20_000);
+  const started = legacy;
+  const before = await until(
+    async () => started.exitCode === null && (await welcomes(machine)),
+    60_000
+  );
+  if (!before) {
+    throw new Error(
+      `the legacy keeper never answered on ${machine} (${started.exitCode === null ? "still running" : `exited ${started.exitCode}`}): ${await tail(legacyLog)}`
+    );
+  }
   const held = await SessiondClient.connect(machine);
   await held.spawnProc("held-1", { command: "sleep", args: ["300"] });
   const child = (await held.list()).procs.find(
@@ -150,7 +176,10 @@ try {
     stdout: "pipe",
     stderr: "pipe",
   });
-  const unitsCode = await units.exited;
+  const [unitsSaid, unitsCode] = await Promise.all([
+    new Response(units.stderr).text(),
+    units.exited,
+  ]);
   const plist = await Bun.file(PLIST)
     .text()
     .catch(() => "");
@@ -161,7 +190,7 @@ try {
       plist.includes(`<string>${binary}</string>`) &&
       plist.includes(`<string>${own}</string>`) &&
       plist.includes("<string>Interactive</string>"),
-    `exit ${unitsCode}, ${PLIST}`
+    `exit ${unitsCode}, ${PLIST}${unitsCode === 0 ? "" : `: ${unitsSaid.trim().slice(-800)}`}`
   );
 
   // 3. Its job starts beside the legacy keeper and answers on its own endpoint; the legacy one is untouched.
@@ -171,7 +200,9 @@ try {
   step(
     "launchd starts the build's keeper beside it, answering on its own endpoint",
     up && pid !== undefined,
-    `pid ${pid}`
+    up && pid !== undefined
+      ? `pid ${pid}`
+      : `pid ${pid}; its log ${LOG}: ${await tail(LOG)}`
   );
   step(
     "it does not take the machine's endpoint by itself while a legacy keeper holds it",
