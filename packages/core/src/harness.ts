@@ -173,6 +173,14 @@ export const ACCOUNT_MOVE = "account_move";
 export const FRESH_START = "fresh_start";
 
 /**
+ * The hub's line that opens the transcript of a session started on a machine
+ * its project was moved to for it (core move.ts): what moved, in `content`'s
+ * first line, and what stayed, in its second when anything did. Drawn as a
+ * note with the done glyph, the conversation's first row.
+ */
+export const MOVED_HERE = "moved_here";
+
+/**
  * A session whose process its harness's server still holds, which CawCo did
  * not take back after a restart: the agent's signal to the hub, and the
  * hub's line in the session's transcript, which carries why in `content`.

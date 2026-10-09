@@ -22,6 +22,11 @@ export interface MachineItem {
   name: string;
   online: boolean;
   os: string;
+  /**
+   * With a project chosen, where it is on this machine: its folder there,
+   * or "will clone · 340 MB" when Start moves it there first.
+   */
+  place?: string;
 }
 
 /** A project as the chip, popover and `@` menu draw it (§2.7, §7). */

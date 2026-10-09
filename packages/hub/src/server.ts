@@ -174,6 +174,7 @@ import {
   MESSAGES_HELD,
   MESSAGES_READ,
   MESSAGES_STORED,
+  MOVED_HERE,
   machineLabel,
   memoryDocProblem,
   type NeutralSystemMessage,
@@ -957,6 +958,7 @@ const continueBody = t.Object({
 
 /** `POST /api/projects/:id/moves`: core `MoveRequest`. */
 const moveBody = t.Object({
+  approved: t.Optional(t.String({ minLength: 1 })),
   machineId: t.String({ minLength: 1 }),
   path: t.Optional(t.String({ pattern: "^(/|~/)" })),
   spawn: t.Object({
@@ -1451,6 +1453,24 @@ const freshStartLine = (
   uuid: `fresh-start-${row.id}`,
   session_id: row.sessionId ?? "",
   timestamp: new Date(at).toISOString(),
+});
+
+/**
+ * The hub's line that opens a session started where its project was moved
+ * to for it (core `MOVED_HERE`): what moved, then what stayed as a sentence.
+ */
+const movedHereLine = (
+  row: { id: string; sessionId: string | null },
+  line: { at: number; moved: string; stayed?: string }
+): NeutralSystemMessage => ({
+  type: "system",
+  subtype: MOVED_HERE,
+  uuid: `moved-here-${row.id}`,
+  session_id: row.sessionId ?? "",
+  content: line.stayed
+    ? `${line.moved}\n${line.stayed.charAt(0).toUpperCase()}${line.stayed.slice(1)}.`
+    : line.moved,
+  timestamp: new Date(line.at).toISOString(),
 });
 
 /**
@@ -9988,6 +10008,7 @@ export const createServer = (
     },
     online: (machineId) => registry.agent(machineId) !== undefined,
     machineName,
+    movedHere: (instanceId, line) => noteMovedHere(instanceId, line),
     park: parkForPerson,
     parked: (requestId) => pending.get(requestId) !== undefined,
     settle: (requestId, outcome) => {
@@ -12006,6 +12027,27 @@ export const createServer = (
       });
     }
     placeFreshStart(row, transcript);
+    placeMovedHere(row, transcript);
+  };
+
+  /** Where the session's project was moved to its machine for it: the transcript's first row. */
+  const placeMovedHere = (
+    row: InstanceRow,
+    transcript: SessionMessage[]
+  ): void => {
+    const line = db.movedHereOf(row.id);
+    if (!line) {
+      return;
+    }
+    transcript.unshift({
+      type: "system",
+      uuid: `moved-here-${row.id}`,
+      session_id: row.sessionId ?? "",
+      parent_tool_use_id: null,
+      parent_agent_id: null,
+      message: movedHereLine(row, line),
+      timestamp: new Date(line.at).toISOString(),
+    });
   };
 
   /** Where a session started again fresh ({@link noteFreshStart}), at that moment. */
@@ -13460,6 +13502,28 @@ export const createServer = (
     });
   };
 
+  /**
+   * A session started where its project was moved to for it (moves.ts): its
+   * transcript opens on the move's ready line, kept on its row and said now.
+   * Once: a Start retried after the line was written says nothing new.
+   */
+  const noteMovedHere = (
+    instanceId: string,
+    line: { at: number; moved: string; stayed?: string }
+  ): void => {
+    const [row] = db.getInstancesByIds([instanceId]);
+    if (!row || db.movedHereOf(instanceId) !== null) {
+      return;
+    }
+    db.noteMovedHere(instanceId, line);
+    transcripts.ingest(instanceId, {
+      kind: "frame",
+      instanceId,
+      harness: (row.harness ?? "claude") as HarnessKind,
+      message: movedHereLine(row, line),
+    });
+  };
+
   /** Writes a line into a session's transcript: kept, and folded into what its screens show now. */
   const noteAtLimit = (
     row: { id: string; sessionId: string | null; harness: string | null },
@@ -13959,7 +14023,7 @@ export const createServer = (
     new Elysia()
       // Each route's body cap, met before a request is routed or its body
       // read (body-limits.ts).
-      .request(({ request }) => bodyLimitRefusal(request))
+      .request(async ({ request }) => await bodyLimitRefusal(request))
       // Every route's large JSON answer is written as it is sent.
       .mapResponse("global", streamLargeJson)
       .use(websocket())

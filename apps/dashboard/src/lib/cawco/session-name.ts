@@ -7,6 +7,7 @@
 import { cawco } from "./client.svelte";
 import type { HubRead } from "./hub-read";
 import { resolveSessionTitle } from "./links";
+import { moveOf } from "./move.svelte";
 import { workingSet } from "./working-set.svelte";
 import { contextOf } from "./workspace/workspace.svelte";
 
@@ -34,6 +35,12 @@ export function sessionName(
   cwdFallback?: string
 ): SessionName {
   const row = cawco.instanceIndex.byId.get(id);
+  // A session its project is moving for has no row until it starts: the
+  // move names it (its New session title, else its first prompt's words).
+  const moving = row ? undefined : moveOf(id);
+  if (moving) {
+    return { label: moving.title, named: true };
+  }
   const view = cawco.session(id);
   const ctx = contextOf(id);
   const title = row?.title;

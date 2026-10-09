@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { MOVED_HERE } from "@cawco/core";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
   import {
@@ -6,6 +7,7 @@
     IconError,
     IconInfo,
     IconStop,
+    IconSuccess,
     IconTerminal,
   } from "#lib/icons.js";
   /**
@@ -82,6 +84,12 @@
    * and when it happened is said in the reader's own time.
    */
   const wokeCaw = $derived(message?.metadata?.noteKind === CAW_EVENT);
+  /**
+   * The line a session moved to its machine opens on (core `MOVED_HERE`):
+   * what moved, with the done glyph, and what stayed under it, open. It is
+   * where the project came from, kept in history, so nothing is folded.
+   */
+  const moved = $derived(message?.metadata?.subtype === MOVED_HERE);
   const eventAt = $derived(
     wokeCaw && message?.timestamp ? new Date(message.timestamp) : null
   );
@@ -167,6 +175,16 @@
       <span class="rail-cell"><IconStop /></span>
       <span class="ftitle">Interrupted</span>
     </span>
+  </div>
+{:else if moved}
+  <div class="note moved rail-row">
+    <span class="hline rail-line">
+      <span class="rail-cell"><IconSuccess /></span>
+      <span class="ftitle">{title}</span>
+    </span>
+    {#if message?.content}
+      <p class="stayed rail-hang">{message.content}</p>
+    {/if}
   </div>
 {:else if isFail}
   <!-- A failure takes the rail like every other line, in the fail colours:
@@ -301,6 +319,23 @@
     &.bad {
       color: var(--data-bad);
     }
+  }
+  /* Where the project came from: the done glyph in its status ink, what
+     moved on the line, and what stayed under it in the meta voice. */
+  .note.moved .rail-cell {
+    color: var(--status-live-glyph);
+  }
+  .note.moved .ftitle {
+    overflow: visible;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .stayed {
+    margin-block: var(--space-1) 0;
+    font-size: var(--text-meta);
+    font-weight: var(--weight-body);
+    line-height: var(--leading-body);
+    color: var(--ink-muted);
   }
   /* The task line's verb holds body ink; only failure carries colour. */
   .tverb {

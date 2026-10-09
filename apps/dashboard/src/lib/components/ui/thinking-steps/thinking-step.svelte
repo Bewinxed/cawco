@@ -1,5 +1,9 @@
 <script lang="ts" module>
-  export type StepStatus = "complete" | "active" | "pending";
+  /**
+   * `pending` is not drawn; `ahead` is drawn muted, a step still to come in
+   * a column that shows how long it is (a project's move).
+   */
+  export type StepStatus = "complete" | "active" | "pending" | "ahead";
 </script>
 
 <script lang="ts">
@@ -183,6 +187,14 @@
   .label {
     color: var(--ink-strong);
     font-weight: var(--weight-body);
+    transition: color var(--dur-control) var(--ease-out);
+  }
+  /* A step still to come: its dot and words in the muted ink. */
+  .step[data-status="ahead"] .label {
+    color: var(--ink-muted);
+  }
+  .step[data-status="ahead"] .icon {
+    color: var(--ink-subtle);
   }
   .description {
     white-space: pre-wrap;

@@ -26,6 +26,7 @@ import {
   FRESH_START,
   FRESH_START_LINE,
   firstSentence,
+  MOVED_HERE,
   REPEATED_FAILURE,
   REPEATED_FAILURE_LIMIT,
 } from "./harness";
@@ -965,6 +966,19 @@ export function mapFrame(
               subtype: CUSTODY_HELD,
               noteKind: "Held",
               noteTitle: title,
+            })
+          );
+          break;
+        }
+        // The hub's line that opens a session started where its project was
+        // moved to for it: what moved, titled, and what stayed under it.
+        case MOVED_HERE: {
+          const [moved = "", stayed = ""] = (sdk.content ?? "").split("\n");
+          mapping.blocks.push(
+            systemLine(base, "ui.system_note", stayed, {
+              subtype: MOVED_HERE,
+              noteKind: "Moved",
+              noteTitle: moved,
             })
           );
           break;

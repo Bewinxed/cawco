@@ -15,8 +15,10 @@
  *
  * A body is held to the length it declares (HTTP framing; Bun ends the
  * request at `Content-Length`), so a declared length over the cap is refused
- * at once, and a body that declares none (chunked) is refused outside `/git/`:
- * it could only be bounded by reading it.
+ * at once. A body that declares none (chunked, as the dashboard's server
+ * passes a browser's body on while it streams) is read from a copy up to
+ * the cap before the route reads it: past the cap it is refused, and within
+ * it the route reads the body as it came.
  */
 import { MAX_REQUEST_BYTES } from "./config";
 import { FILE_LIMIT_BYTES } from "./media";
@@ -38,11 +40,42 @@ export const bodyLimitOf = (path: string): number => {
 const megabytes = (bytes: number): string =>
   `${Math.round(bytes / (1024 * 1024))} MB`;
 
+const tooLarge = (path: string, limit: number): Response =>
+  new Response(
+    path === FILES_PATH
+      ? `Files up to ${megabytes(limit)}.`
+      : `This route takes bodies up to ${megabytes(limit)}.\n`,
+    { status: 413 }
+  );
+
+/** Whether a body that declares no length ends within `limit` bytes; reading stops past it. */
+const endsWithin = async (
+  body: ReadableStream<Uint8Array>,
+  limit: number
+): Promise<boolean> => {
+  const reader = body.getReader();
+  let read = 0;
+  for (;;) {
+    // biome-ignore lint/performance/noAwaitInLoops: a stream's chunks come one after another
+    const { done, value } = await reader.read();
+    if (done) {
+      return true;
+    }
+    read += value.byteLength;
+    if (read > limit) {
+      await reader.cancel();
+      return false;
+    }
+  }
+};
+
 /**
  * The refusal of a request whose body its route does not take, before the
- * body is read; undefined when it may go on.
+ * route reads the body; undefined when it may go on.
  */
-export const bodyLimitRefusal = (request: Request): Response | undefined => {
+export const bodyLimitRefusal = async (
+  request: Request
+): Promise<Response | undefined> => {
   const path = new URL(request.url).pathname;
   if (path.startsWith(GIT_PATH)) {
     return undefined;
@@ -50,20 +83,10 @@ export const bodyLimitRefusal = (request: Request): Response | undefined => {
   const limit = bodyLimitOf(path);
   const declared = request.headers.get("content-length");
   if (declared === null) {
-    return request.headers.has("transfer-encoding")
-      ? new Response(
-          `Send this body with a Content-Length (up to ${megabytes(limit)}).\n`,
-          { status: 411 }
-        )
+    const copy = request.body ? request.clone().body : null;
+    return copy && !(await endsWithin(copy, limit))
+      ? tooLarge(path, limit)
       : undefined;
   }
-  if (Number(declared) <= limit) {
-    return undefined;
-  }
-  return new Response(
-    path === FILES_PATH
-      ? `Files up to ${megabytes(limit)}.`
-      : `This route takes bodies up to ${megabytes(limit)}.\n`,
-    { status: 413 }
-  );
+  return Number(declared) <= limit ? undefined : tooLarge(path, limit);
 };

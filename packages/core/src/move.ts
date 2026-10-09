@@ -43,22 +43,26 @@ export interface MoveLargeFile {
 }
 
 /**
- * The person's one ask before a folder moves (design §2f, the owner's pick
- * D "Plain + details"): parked through the same channel as every permission
- * ask (dashboards, push, Telegram) as an `AskUserQuestion` whose options are
- * "Don't move" and "Move it".
+ * What a move does, as the person reads it before "Move it" (the owner's
+ * pick D "Plain + details"): in New session's step 2, which the modal
+ * morphs to on "Move & start", and on the approval card of a move started
+ * anywhere else.
  */
-export interface MoveApproval {
+export interface MoveAsk {
   /** The large files that go to LFS with the yes. */
   bigFiles: MoveLargeFile[];
   /** The Details fold: the git terms of what "Move it" runs, one per line, for mono. */
   details: string[];
   /** The folder is no repository: "Move it" runs `git init` and one commit. */
   gitInit: boolean;
-  /** The card's lines under the title, in order. */
+  /**
+   * What the person says yes to, when the move needs a yes (the folder is
+   * no repository, or big files would go into history): New session sends
+   * it back as {@link MoveRequest.approved}. Absent when no yes is needed.
+   */
+  key?: string;
+  /** The lines under the title, in order. */
   lines: string[];
-  /** The parked ask's request id (`/api/pending`), answered like any question. */
-  requestId: string;
   /** "Move ~/anbar to obelisk?" */
   title: string;
 }
@@ -84,8 +88,16 @@ export interface MoveError {
  * frame, in the `instances` frame's `moves`, and at `GET /api/moves`.
  */
 export interface MoveJob {
-  /** Set while `approval` waits: the ask's words and its request id. */
-  approval?: MoveApproval;
+  /** Set when `approval` is a step: what "Move it" does, for its card and its step's words. */
+  ask?: MoveAsk;
+  /**
+   * While `approval` waits on a yes nobody gave in New session (a
+   * delegate's, a task's or the API's move): the ask parked through the
+   * same channel as every permission ask (dashboards, push, Telegram), an
+   * `AskUserQuestion` whose options are "Don't move" and "Move it",
+   * answered like any question at `/api/pending`.
+   */
+  askId?: string;
   /** Bytes the clone fetches, as the source's repository measured them. */
   bytes: number;
   createdAt: string;
@@ -120,10 +132,17 @@ export interface MoveJob {
   stayed?: string;
   /** The steps this job runs, in order: the pane draws the ones ahead muted. */
   steps: MoveStep[];
+  /** Once cancelled: the step it stopped at. */
+  stoppedAt?: MoveStep;
   /** The session the job starts, under this id from the start. */
   targetInstanceId: string;
   targetMachineId: string;
   targetPath: string;
+  /**
+   * The session's name while it moves, before it has a row: the title New
+   * session gave it, else its first prompt's words, else the project's name.
+   */
+  title: string;
   updatedAt: string;
 }
 
@@ -132,8 +151,12 @@ export interface MoveJob {
  * picked: `GET /api/projects/:id/move-estimate?machine=<target>[&path=]`.
  */
 export interface MoveEstimate {
+  /** What "Move it" does, for New session's step 2; set when a move is needed and can run. */
+  ask?: MoveAsk;
   /** Bytes the clone fetches. */
   bytes: number;
+  /** The destination as the person reads it, under the machine's home as `~`: `~/cockpit`. */
+  display: string;
   /** Bytes of large files after the clone. */
   lfsBytes: number;
   /** Whether a move is needed: false when the target already has a checkout place. */
@@ -154,6 +177,12 @@ export interface MoveEstimate {
  * once the project is there, and sends the prompt to it.
  */
 export interface MoveRequest {
+  /**
+   * The {@link MoveAsk.key} the person said "Move it" to in New session: the
+   * move needs no other yes. Refused when what it covers changed since.
+   * Absent: a move that needs a yes asks for it as its first stage.
+   */
+  approved?: string;
   /** The first message's attachments, as a send carries them. */
   attachments?: import("./attachments").SendAttachment[];
   images?: { data: string; mediaType: string }[];
@@ -355,6 +384,28 @@ export interface MovesFrame {
   kind: "moves";
   moves: MoveJob[];
 }
+
+/** Bytes as a move says a size: "640 KB", "340 MB", "2.1 GB". */
+export const moveSize = (bytes: number): string => {
+  if (bytes >= 1024 ** 3) {
+    return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
+  }
+  return bytes >= 1024 ** 2
+    ? `${Math.round(bytes / 1024 ** 2)} MB`
+    : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+};
+
+/** Hosts by the names people call them. */
+const KNOWN_HOSTS: Record<string, string> = {
+  "github.com": "GitHub",
+  "gitlab.com": "GitLab",
+  "bitbucket.org": "Bitbucket",
+  "codeberg.org": "Codeberg",
+};
+
+/** Where a clone comes from, as a step says it: "the hub", "GitHub", or the host. */
+export const moveSourceName = (from: MoveJob["from"]): string =>
+  from.kind === "hub" ? "the hub" : (KNOWN_HOSTS[from.host] ?? from.host);
 
 /** The branch a machine's snapshot goes to on the hub. */
 export const moveBranch = (machineName: string): string =>

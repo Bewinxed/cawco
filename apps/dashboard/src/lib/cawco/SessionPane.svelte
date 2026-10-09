@@ -46,6 +46,8 @@
   import { cleanDetail } from "./command-detail";
   import { instanceTitle, projectOfRow } from "./home/home-state.svelte";
   import { delegateHandle } from "./links";
+  import MoveWait from "./move/MoveWait.svelte";
+  import { moveOf } from "./move.svelte";
   import { planProgress, planShows } from "./plan/PlanPane.svelte";
   import PlanRing from "./plan/PlanRing.svelte";
   import SideSplit from "./side/SideSplit.svelte";
@@ -151,6 +153,15 @@
   const isLive = $derived(cawco.instances.some((row) => row.id === viewId));
 
   /**
+   * This session's project is moving to its machine for it (move.svelte.ts).
+   * Until the move starts it there is no row and nothing to read: the
+   * staged wait is the whole pane. Once it starts, the wait stays over the
+   * transcript until that has drawn, then fades from over it.
+   */
+  const move = $derived(moveOf(viewId));
+  const prestart = $derived(!!move && move.stage !== "started");
+
+  /**
    * Reads a conversation's transcript: one page read, addressed by the id
    * alone. The hub resolves the id — a live row to its key, anything else to
    * whichever machine holds the file — and every way this ends is a named
@@ -205,7 +216,9 @@
     const running = isLive;
     // biome-ignore lint/complexity/noVoid: read-only dependency — Retry bumps `attempt` purely to re-run this effect
     void attempt;
-    if (!id) {
+    // A session its project is still moving for has nothing to read yet;
+    // this runs again the moment the move starts it.
+    if (!id || prestart) {
       return;
     }
     // Retry the read once the hub can actually answer. On a reload the effect
@@ -464,7 +477,7 @@
    * leaving fades over --dur-control on top of rows already in place, which
    * is the cross-fade, and nothing under it moves.
    */
-  const veiled = $derived(!namedState && (waiting || !shown));
+  const veiled = $derived(!(prestart || namedState) && (waiting || !shown));
   // Hidden while veiled, the pane is still laid out, so its transcript can
   // measure and draw before its tab is chosen (dock.svelte.ts `settling`).
   settleWhile(
@@ -839,7 +852,7 @@
   /** Whether this conversation takes messages from here at all. */
   const writable = $derived(
     !!session &&
-      !(unaddressable || readOnly) &&
+      !(prestart || unaddressable || readOnly) &&
       // A transcript that could not be read leaves the conversation as
       // writable as it was; only a machine that is offline cannot be written
       // to, and a send needs a machine to go to.
@@ -1007,7 +1020,9 @@
 {/snippet}
 
 <div class="pane" bind:clientWidth={paneWidth}>
-  {#if session}
+  {#if prestart}
+    <!-- Nothing stands behind the wait: the session does not exist yet. -->
+  {:else if session}
     <SideSplit
       {active}
       oncapture={(pick, shot) => draft.captured(pick, shot)}
@@ -1117,6 +1132,14 @@
          area shows, so the two loading moments look like one. -->
     <TranscriptSkeleton />
   {/if}
+  <!-- The move's wait: the whole pane until the session starts, then over
+       its transcript until that has drawn, fading from over it (design
+       §2e: the ready line is the transcript's first row by then). -->
+  {#if move && (prestart || !(shown || namedState))}
+    <div class="move-layer" out:crossOut>
+      <MoveWait job={move} {phone} />
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -1136,6 +1159,7 @@
   }
 
   .pane {
+    position: relative;
     container-type: inline-size;
     display: flex;
     flex-direction: column;
@@ -1180,6 +1204,15 @@
   /* The placeholder, laid over the transcript until its rows are drawn:
      opaque, so fading it is the cross-fade, and above the transcript's own
      sticky notes, below the composer. */
+  /* A move's wait, over everything the pane holds, opaque: fading it is the
+     cross-fade to the transcript under it. */
+  .move-layer {
+    position: absolute;
+    inset: 0;
+    z-index: 6;
+    display: flex;
+    flex-direction: column;
+  }
   .veil {
     position: absolute;
     inset: 0;

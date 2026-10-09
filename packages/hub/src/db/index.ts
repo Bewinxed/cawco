@@ -195,6 +195,11 @@ export type PublicInstanceRow = Omit<
   | "owedAt"
   | "freshStartAt"
   | "turnOpenAt"
+  | "movedHere"
+>;
+/** A session's move line ({@link DbShape.noteMovedHere}). */
+export type MovedHere = NonNullable<
+  (typeof instances.$inferSelect)["movedHere"]
 >;
 export type BoardInstanceRow = PublicInstanceRow;
 /** A session's whole row but its `tooling` ({@link PublicInstanceRow}). */
@@ -811,6 +816,8 @@ export interface DbShape {
    * (`delegate_events`, kind `ask`, status `pending`). What moved, by id.
    */
   readonly moveChildren: (from: string, to: string) => MovedChildren;
+  /** The move a session started from, as {@link noteMovedHere} kept it; null when none. */
+  readonly movedHereOf: (id: string) => MovedHere | null;
   /** One project move's record (moves.ts). */
   readonly moveRow: (id: string) => MoveRow | undefined;
   /** Every project move, oldest first. */
@@ -869,6 +876,8 @@ export interface DbShape {
     harness?: string,
     tooling?: SessionTooling
   ) => void;
+  /** Records that a session started where its project was moved to for it: the move's ready line. */
+  readonly noteMovedHere: (id: string, line: MovedHere) => void;
   /**
    * Records a fire and returns the session's new standing. `pending` is set
    * when the rule repeats; `fireCount` is what the ceiling counts, and only
@@ -1985,6 +1994,7 @@ const make = async (path: string): Promise<DbShape> => {
     owedAt: _owedAt,
     freshStartAt: _freshStartAt,
     turnOpenAt: _turnOpenAt,
+    movedHere: _movedHere,
     tooling: _tooling,
     ...publicColumns
   } = getTableColumns(instances);
@@ -5699,6 +5709,18 @@ const make = async (path: string): Promise<DbShape> => {
         .from(instances)
         .where(eq(instances.id, id))
         .get()?.at ?? null,
+    noteMovedHere: (id, line) => {
+      db.update(instances)
+        .set({ movedHere: line })
+        .where(eq(instances.id, id))
+        .run();
+    },
+    movedHereOf: (id) =>
+      db
+        .select({ line: instances.movedHere })
+        .from(instances)
+        .where(eq(instances.id, id))
+        .get()?.line ?? null,
     takeOwedSend: (uuid) => {
       const owed = db
         .select({ owed: sentMessages.owed })

@@ -577,6 +577,16 @@ export const instances = sqliteTable("instances", {
    * from before the hub kept it, until its next turn.
    */
   turnOpenAt: integer("turn_open_at"),
+  /**
+   * The session started on a machine its project was moved to for it (core
+   * `MOVED_HERE`): when, and the move's ready line, what moved and what
+   * stayed. Its transcript opens on that line.
+   */
+  movedHere: text("moved_here", { mode: "json" }).$type<{
+    at: number;
+    moved: string;
+    stayed?: string;
+  }>(),
   keepAliveEnabled: integer("keep_alive", { mode: "boolean" })
     .notNull()
     .default(false),

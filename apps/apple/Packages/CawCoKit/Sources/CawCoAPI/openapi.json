@@ -7766,6 +7766,10 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "approved": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
                   "machineId": {
                     "minLength": 1,
                     "type": "string"
@@ -26276,9 +26280,17 @@
         "description": "What the New session modal reads when a machine without the project is\npicked: `GET /api/projects/:id/move-estimate?machine=<target>[&path=]`.",
         "type": "object",
         "properties": {
+          "ask": {
+            "$ref": "#/components/schemas/MoveAsk",
+            "description": "What \"Move it\" does, for New session's step 2; set when a move is needed and can run."
+          },
           "bytes": {
             "description": "Bytes the clone fetches.",
             "type": "number"
+          },
+          "display": {
+            "description": "The destination as the person reads it, under the machine's home as `~`: `~/cockpit`.",
+            "type": "string"
           },
           "lfsBytes": {
             "description": "Bytes of large files after the clone.",
@@ -26307,6 +26319,7 @@
         },
         "required": [
           "bytes",
+          "display",
           "lfsBytes",
           "needed",
           "needsApproval",
@@ -26314,13 +26327,79 @@
           "uncommittedFiles"
         ]
       },
+      "MoveAsk": {
+        "description": "What a move does, as the person reads it before \"Move it\" (the owner's\npick D \"Plain + details\"): in New session's step 2, which the modal\nmorphs to on \"Move & start\", and on the approval card of a move started\nanywhere else.",
+        "type": "object",
+        "properties": {
+          "bigFiles": {
+            "description": "The large files that go to LFS with the yes.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MoveLargeFile"
+            }
+          },
+          "details": {
+            "description": "The Details fold: the git terms of what \"Move it\" runs, one per line, for mono.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "gitInit": {
+            "description": "The folder is no repository: \"Move it\" runs `git init` and one commit.",
+            "type": "boolean"
+          },
+          "key": {
+            "description": "What the person says yes to, when the move needs a yes (the folder is\nno repository, or big files would go into history): New session sends\nit back as {@link MoveRequest.approved}. Absent when no yes is needed.",
+            "type": "string"
+          },
+          "lines": {
+            "description": "The lines under the title, in order.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "title": {
+            "description": "\"Move ~/anbar to obelisk?\"",
+            "type": "string"
+          }
+        },
+        "required": [
+          "bigFiles",
+          "details",
+          "gitInit",
+          "lines",
+          "title"
+        ]
+      },
+      "MoveLargeFile": {
+        "description": "One file of a job's approval ask that goes to LFS: its path and size.",
+        "type": "object",
+        "properties": {
+          "bytes": {
+            "type": "number"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "bytes",
+          "path"
+        ]
+      },
       "MoveJob": {
         "description": "A move job as every dashboard and the apps follow it: on the `moves`\nframe, in the `instances` frame's `moves`, and at `GET /api/moves`.",
         "type": "object",
         "properties": {
-          "approval": {
-            "$ref": "#/components/schemas/MoveApproval",
-            "description": "Set while `approval` waits: the ask's words and its request id."
+          "ask": {
+            "$ref": "#/components/schemas/MoveAsk",
+            "description": "Set when `approval` is a step: what \"Move it\" does, for its card and its step's words."
+          },
+          "askId": {
+            "description": "While `approval` waits on a yes nobody gave in New session (a\ndelegate's, a task's or the API's move): the ask parked through the\nsame channel as every permission ask (dashboards, push, Telegram), an\n`AskUserQuestion` whose options are \"Don't move\" and \"Move it\",\nanswered like any question at `/api/pending`.",
+            "type": "string"
           },
           "bytes": {
             "description": "Bytes the clone fetches, as the source's repository measured them.",
@@ -26479,6 +26558,18 @@
               "$ref": "#/components/schemas/MoveStep"
             }
           },
+          "stoppedAt": {
+            "description": "Once cancelled: the step it stopped at.",
+            "enum": [
+              "approval",
+              "clone",
+              "install",
+              "lfs",
+              "snapshot",
+              "start"
+            ],
+            "type": "string"
+          },
           "targetInstanceId": {
             "description": "The session the job starts, under this id from the start.",
             "type": "string"
@@ -26487,6 +26578,10 @@
             "type": "string"
           },
           "targetPath": {
+            "type": "string"
+          },
+          "title": {
+            "description": "The session's name while it moves, before it has a row: the title New\nsession gave it, else its first prompt's words, else the project's name.",
             "type": "string"
           },
           "updatedAt": {
@@ -26507,70 +26602,8 @@
           "targetInstanceId",
           "targetMachineId",
           "targetPath",
+          "title",
           "updatedAt"
-        ]
-      },
-      "MoveApproval": {
-        "description": "The person's one ask before a folder moves (design §2f, the owner's pick\nD \"Plain + details\"): parked through the same channel as every permission\nask (dashboards, push, Telegram) as an `AskUserQuestion` whose options are\n\"Don't move\" and \"Move it\".",
-        "type": "object",
-        "properties": {
-          "bigFiles": {
-            "description": "The large files that go to LFS with the yes.",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/MoveLargeFile"
-            }
-          },
-          "details": {
-            "description": "The Details fold: the git terms of what \"Move it\" runs, one per line, for mono.",
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "gitInit": {
-            "description": "The folder is no repository: \"Move it\" runs `git init` and one commit.",
-            "type": "boolean"
-          },
-          "lines": {
-            "description": "The card's lines under the title, in order.",
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "requestId": {
-            "description": "The parked ask's request id (`/api/pending`), answered like any question.",
-            "type": "string"
-          },
-          "title": {
-            "description": "\"Move ~/anbar to obelisk?\"",
-            "type": "string"
-          }
-        },
-        "required": [
-          "bigFiles",
-          "details",
-          "gitInit",
-          "lines",
-          "requestId",
-          "title"
-        ]
-      },
-      "MoveLargeFile": {
-        "description": "One file of a job's approval ask that goes to LFS: its path and size.",
-        "type": "object",
-        "properties": {
-          "bytes": {
-            "type": "number"
-          },
-          "path": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "bytes",
-          "path"
         ]
       },
       "MoveError": {

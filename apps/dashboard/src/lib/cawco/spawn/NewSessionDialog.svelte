@@ -7,11 +7,13 @@
     type EffortLevel,
     HARNESSES,
     type HarnessKind,
+    type MoveEstimate,
     type PermissionMode,
     type PlacementPreview,
     providerOf,
     repoPath,
     SUMMARISER_OUTPUT_RESERVE_TOKENS,
+    moveSize as sizeWords,
     TARGET_HEADROOM_TOKENS,
   } from "@cawco/core";
   import { Dialog as DialogPrimitive } from "bits-ui";
@@ -36,14 +38,20 @@
     machineHue,
     machineIcon,
   } from "#lib/components/ui/machine-row/index.js";
-  import { SectionHeader } from "#lib/components/ui/section-header/index.js";
   /**
    * The New Session modal. This file owns the logic — open-reset boundary,
    * submission generation guard, draft snapshot, dual location verification,
    * the exact `spawnSession` payload — and composes the designed sections.
    */
+  import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
+  import { SectionHeader } from "#lib/components/ui/section-header/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
-  import { IconKey, IconShield, IconClose as X } from "#lib/icons.js";
+  import {
+    IconChevronLeft,
+    IconKey,
+    IconShield,
+    IconClose as X,
+  } from "#lib/icons.js";
   import { goto } from "$app/navigation";
   import Bolt from "~icons/solar/bolt-bold-duotone";
   import Book from "~icons/solar/book-2-bold-duotone";
@@ -73,6 +81,8 @@
   import { unfold } from "../motion/fold.svelte";
   import { morph } from "../motion/morph.svelte";
   import { handOver } from "../motion/share.svelte";
+  import MoveAskBody from "../move/MoveAsk.svelte";
+  import { moveEstimate, startMove } from "../move.svelte";
   import {
     fallbackMode,
     fullSendCopy,
@@ -128,6 +138,8 @@
     onexitcontinue?: () => void;
   } = $props();
   const REPO = /^[\w.-]+\/[\w.-]+$/;
+  /** A home folder at the start of a path (Linux, macOS). */
+  const HOME = /^\/(home|Users)\/[^/]+(?=\/|$)/;
   /**
    * The first prompt, its words and its attachments, as a session's composer
    * holds a message: attached, uploaded and sent the same way.
@@ -504,6 +516,125 @@
         !editing
     ) && repo === undefined
   );
+  /**
+   * The project moves to the machine first (Projects §5.1; the design's
+   * §1b): a project is chosen, one machine, and the project has no checkout
+   * there. A continuation and a repository's clone never move.
+   */
+  const moveTo = $derived(
+    project &&
+      machineIds.length === 1 &&
+      !continueFrom &&
+      repo === undefined &&
+      !checkoutOn(project, machineIds[0])
+      ? machineIds[0]
+      : null
+  );
+  /** A folder there the person typed instead of the hub's (the destination was taken). */
+  let moveAt = $state<string>();
+  /** The destination's chip was unlocked to type another folder. */
+  let moveEditing = $state(false);
+  /** The machines a move reads from and to, online or not: a change reads it again. */
+  const moveMachinesOnline = $derived(
+    project && moveTo
+      ? [moveTo, checkoutOf(project)?.machineId ?? ""].map(
+          (id) =>
+            cawco.machines.find((row) => row.machineId === id)?.status ===
+            "online"
+        )
+      : []
+  );
+  /** What the estimate below is asked about: the project, the machine, the folder. */
+  const moveFor = $derived(
+    project && moveTo
+      ? JSON.stringify([project.id, moveTo, moveAt ?? "", moveMachinesOnline])
+      : ""
+  );
+  /** The hub's estimate of the move, or why it couldn't read one, for what `moveFor` names. */
+  let moveRead = $state<{
+    for: string;
+    estimate?: MoveEstimate;
+    error?: string;
+  } | null>(null);
+  const moveAnswer = $derived(moveRead?.for === moveFor ? moveRead : null);
+  const moveEstimated = $derived(moveAnswer?.estimate);
+  /** A move is needed and can run: Start says "Move & start". */
+  const moving = $derived(
+    Boolean(
+      moveTo &&
+        moveEstimated?.needed &&
+        !moveEstimated.refused &&
+        moveEstimated.ask
+    )
+  );
+  /** The folder there is already a clone of the project: Start starts in it. */
+  const movedAlready = $derived(
+    Boolean(moveTo && moveEstimated && !moveEstimated.needed)
+  );
+  /**
+   * Step 2 (the owner's revision of C): "Move & start" morphs the form to
+   * what moving does and its yes; Back returns to the form as it was.
+   */
+  let moveStep = $state(false);
+  $effect(() => {
+    if (!moving) {
+      moveStep = false;
+    }
+  });
+  $effect(() => {
+    // biome-ignore lint/complexity/noVoid: read-only dependency — a new machine or project starts the destination over
+    void moveTo;
+    untrack(() => {
+      moveAt = undefined;
+      moveEditing = false;
+    });
+  });
+  $effect(() => {
+    const key = moveFor;
+    const id = project?.id;
+    const target = moveTo;
+    if (!(open && key && id && target) || cawco.hub !== "connected") {
+      return;
+    }
+    if (untrack(() => moveRead?.for === key)) {
+      return;
+    }
+    const at = untrack(() => moveAt);
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      moveEstimate(id, target, at, controller.signal).then(
+        (read) => {
+          moveRead = { for: key, estimate: read };
+        },
+        (cause: unknown) => {
+          if (!controller.signal.aborted) {
+            moveRead = {
+              for: key,
+              error: cause instanceof Error ? cause.message : String(cause),
+            };
+          }
+        }
+      );
+    }, PLACEMENT_SETTLE_MS);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  });
+  /** A machine's home as `~`, as the chips say a folder. */
+  const tilde = (path: string): string => path.replace(HOME, "~");
+  /** Where the project goes on the machine: the folder typed, the hub's, or its default until read. */
+  const moveDestination = $derived(
+    moveAt ??
+      (moveEstimated?.display ||
+        `~/${cwd.trim().split("/").filter(Boolean).pop() ?? ""}`)
+  );
+  /** Bytes a clone of the project fetches, large files too, once any estimate of it is read. */
+  const moveBytes = $derived(
+    project && moveRead?.estimate?.needed && moveRead.for.includes(project.id)
+      ? moveRead.estimate.bytes + moveRead.estimate.lfsBytes
+      : undefined
+  );
   const HUES = [
     "var(--hue-amber-500)",
     "var(--hue-green-500)",
@@ -523,6 +654,16 @@
     cawco.machines.map((row, i) => {
       const online = row.status === "online";
       const running = cawco.liveOn(row.machineId).length;
+      // With a project chosen, each row says where it is there, or that
+      // Start clones it there first (design §1b).
+      const place = project ? checkoutOn(project, row.machineId) : undefined;
+      let moves: string | undefined;
+      if (project && !place) {
+        moves =
+          moveBytes === undefined
+            ? "will clone"
+            : `will clone · ${sizeWords(moveBytes)}`;
+      }
       return {
         id: row.machineId,
         name: row.hostname,
@@ -531,6 +672,7 @@
         online,
         load: loadLabel(online, running),
         hue: machineHue(i, online),
+        place: place ? tilde(place.path) : moves,
       };
     })
   );
@@ -554,6 +696,20 @@
         path: place.path,
         hue: HUES[(i + 3) % 5],
       }))
+      // The chosen project stays chosen on a machine it moves to, where it goes.
+      .concat(
+        project && moveTo && !checkoutOn(project, moveTo)
+          ? [
+              {
+                id: project.id,
+                machineId: moveTo,
+                name: project.name,
+                path: moveDestination,
+                hue: HUES[3],
+              },
+            ]
+          : []
+      )
   );
   const locationReading = $derived.by(() => {
     if (offlineMachine) {
@@ -571,17 +727,57 @@
     }
     return "";
   });
-  const reading = $derived(
-    cawco.hub === "connected"
-      ? error || locationReading || (locationUnverified ? "Reading…" : "")
-      : "No spawn while the hub is unreachable. Reconnect to continue."
-  );
+  /**
+   * A move's reading (design §1b, §1c): what Move & start does first and how
+   * much it fetches, or the hub's reason it can't move.
+   */
+  const moveReading = $derived.by(() => {
+    if (!(project && moveTo)) {
+      return "";
+    }
+    if (moveAnswer?.error) {
+      return moveAnswer.error;
+    }
+    if (!moveEstimated) {
+      return "Reading…";
+    }
+    if (moveEstimated.refused) {
+      return moveEstimated.refused;
+    }
+    if (!moveEstimated.needed) {
+      return "";
+    }
+    const there =
+      cawco.machines.find((row) => row.machineId === moveTo)?.hostname ??
+      moveTo;
+    const from = checkoutOf(project)?.machineId;
+    const source =
+      cawco.machines.find((row) => row.machineId === from)?.hostname ?? from;
+    // One size, history and large files together: step 2 splits them.
+    const { bytes, lfsBytes, uncommittedFiles } = moveEstimated;
+    const size =
+      bytes + lfsBytes > 0 ? ` (${sizeWords(bytes + lfsBytes)})` : "";
+    const work =
+      uncommittedFiles > 0 ? `, with your uncommitted work on ${source}` : "";
+    return `${project.name} isn't on ${there} yet. Move & start clones it there first${work}${size}.`;
+  });
+  const reading = $derived.by(() => {
+    if (cawco.hub !== "connected") {
+      return "No spawn while the hub is unreachable. Reconnect to continue.";
+    }
+    if (moveTo) {
+      return error || moveReading;
+    }
+    return error || locationReading || (locationUnverified ? "Reading…" : "");
+  });
   const locationInformational = $derived(
-    Boolean(
-      !(error || locationUnverified || unreadable || offlineMachine) &&
-        missingMachines.length &&
-        cawco.hub === "connected"
-    )
+    moveTo
+      ? !(error || moveAnswer?.error || moveEstimated?.refused)
+      : Boolean(
+          !(error || locationUnverified || unreadable || offlineMachine) &&
+            missingMachines.length &&
+            cawco.hub === "connected"
+        )
   );
   const summarizerEntries = $derived(
     deriveModelEntries(models.forHarness(summarizerHarness, machineIds), {
@@ -632,7 +828,8 @@
       Boolean(offlineMachine) ||
       unreadable ||
       locationUnverified ||
-      (repo !== undefined && !REPO.test(repo.trim()))
+      (repo !== undefined && !REPO.test(repo.trim())) ||
+      (moveTo !== null && !(moving || movedAlready))
   );
   /** The source as the prompt's opening chip; a session title is often its first prompt, so it is cut short. */
   const sourceChip = $derived<LeadChip | undefined>(
@@ -649,6 +846,9 @@
   const startLabel = $derived.by(() => {
     if (continueFrom) {
       return "Continue";
+    }
+    if (moving) {
+      return moveStep ? "Move it" : "Move & start";
     }
     return machineIds.length > 1
       ? `Start ${machineIds.length} sessions`
@@ -736,6 +936,10 @@
       error = "";
       popover = null;
       verifiedLocation = "";
+      moveRead = null;
+      moveStep = false;
+      moveAt = undefined;
+      moveEditing = false;
       if (continueFrom && restore) {
         ({ repo, projectId, harness, effort, permissionMode } = restore);
         // Its words and what rode them, as they were submitted.
@@ -850,6 +1054,12 @@
     verifiedLocation = "";
     unreadable = false;
     missingMachines = [];
+    // A project moving there goes where the hub's estimate says, which
+    // reads that folder itself: this one is the project's on its source.
+    if (moveTo) {
+      verifiedLocation = key;
+      return;
+    }
     if (!(open && ids.length && path && machineOnline)) {
       return;
     }
@@ -915,7 +1125,13 @@
     machineIds = machineIds.includes(id)
       ? machineIds.filter((row) => row !== id)
       : [...machineIds, id];
-    if (project && !machineIds.some((chosen) => placedOn(project, chosen))) {
+    // One machine without the project keeps it: it moves there (design §1b).
+    // Several, and none has it, start no project.
+    if (
+      project &&
+      machineIds.length !== 1 &&
+      !machineIds.some((chosen) => placedOn(project, chosen))
+    ) {
       projectId = undefined;
     }
     editing = true;
@@ -1082,23 +1298,35 @@
       ...(draft.account ? { account: draft.account } : {}),
     });
   }
-  async function start() {
-    if (busy || cawco.hub !== "connected") {
-      return;
-    }
-    // A first prompt's file still on its way, or one the hub never got,
-    // holds Start as it holds a session's Send, in the same words.
+  /**
+   * What holds Start before anything is sent, saying why: a file still on
+   * its way or one the hub never got (as a session's Send is held, in the
+   * same words), or a form that doesn't hold. Move & start goes no further
+   * either: it morphs the form to step 2, and Move it starts the move.
+   */
+  function heldBack(): boolean {
     if (firstMessage.uploading) {
       error = STILL_UPLOADING;
-      return;
+      return true;
     }
     if (firstMessage.unready) {
       error = NOT_UPLOADED;
-      return;
+      return true;
     }
     error = validate();
     if (error) {
       document.getElementById("session-dir")?.focus();
+      return true;
+    }
+    if (moving && !moveStep) {
+      moveStep = true;
+      popover = null;
+      return true;
+    }
+    return false;
+  }
+  async function start() {
+    if (busy || cawco.hub !== "connected" || heldBack()) {
       return;
     }
     submission += 1;
@@ -1133,6 +1361,15 @@
         await startContinue(continueFrom, draft, current);
         return;
       }
+      if (moving) {
+        await startMoving(draft, current);
+        return;
+      }
+      // The folder there is already the project's: the session starts in it.
+      if (movedAlready && moveEstimated) {
+        draft.baseCwd = moveEstimated.path;
+        draft.cwd = moveEstimated.path;
+      }
       for (const target of draft.machineIds) {
         // biome-ignore lint/performance/noAwaitInLoops: each machine is verified, then spawned, in order — one failure must stop the batch before the next spawn.
         const ok = await verifyBeforeSpawn(target, draft.baseCwd, current);
@@ -1165,6 +1402,75 @@
       busy = false;
     }
   }
+  /**
+   * Move it: the hub moves the project to the machine and starts the session
+   * there, as a job it owns; the yes said here goes with it, so it asks for
+   * none. The dialog leaves for the session as a spawn does, and its pane
+   * follows the move until the session starts (design §2, E1).
+   */
+  async function startMoving(draft: SessionDraft, current: () => boolean) {
+    const ask = moveEstimated?.ask;
+    const target = moveTo;
+    const id = project?.id;
+    if (!(ask && target && id)) {
+      return;
+    }
+    let started: Awaited<ReturnType<typeof startMove>>;
+    try {
+      started = await startMove(id, {
+        machineId: target,
+        ...(moveAt ? { path: moveAt } : {}),
+        ...(ask.key ? { approved: ask.key } : {}),
+        spawn: {
+          harness: draft.harness,
+          ...(modeless ? {} : { permissionMode: draft.permissionMode }),
+          ...(shownModel(draft) ? { model: shownModel(draft) } : {}),
+          ...(draft.effort ? { effort: draft.effort } : {}),
+          ...(draft.account ? { account: draft.account } : {}),
+        },
+        ...(draft.prompt.trim() ? { prompt: draft.prompt } : {}),
+        ...(draft.extras.images ? { images: draft.extras.images } : {}),
+        ...(draft.extras.attachments
+          ? { attachments: draft.extras.attachments }
+          : {}),
+      });
+    } catch (cause) {
+      // What moving does changed since it was read: read it again, so the
+      // step shows what a yes now covers.
+      moveRead = null;
+      throw cause;
+    }
+    recordModelUse(draft.harness, draft.usedModel);
+    rememberSpawn({
+      harness: draft.harness,
+      model: shownModel(draft),
+      permissionMode: draft.permissionMode,
+      effort: draft.effort,
+    });
+    await exitTo(started.targetInstanceId, current);
+  }
+
+  /** Back from step 2: the form as it was. */
+  function back() {
+    moveStep = false;
+    error = "";
+  }
+  /** Esc in step 2 goes back to the form; anywhere else it closes. */
+  function escapeStep(event: KeyboardEvent) {
+    if (moveStep) {
+      event.preventDefault();
+      back();
+    }
+  }
+  /** The head says what step 2 asks; the form's own name otherwise. */
+  const headTitle = $derived.by(() => {
+    if (moveStep && moveEstimated?.ask) {
+      return moveEstimated.ask.title;
+    }
+    return continueFrom ? "Continue session" : "New session";
+  });
+  const readingMorph = morph();
+
   /**
    * Continue in new session: the hub summarises the source with the chosen
    * summariser and starts the new session with this form's options, as a job
@@ -1276,6 +1582,7 @@
         event.preventDefault();
         opener?.focus({ preventScroll: true });
       }}
+      onEscapeKeydown={escapeStep}
       onOpenAutoFocus={(event) => {
         event.preventDefault();
         card?.focus({ preventScroll: true });
@@ -1305,6 +1612,7 @@
           event.preventDefault();
           opener?.focus({ preventScroll: true });
         }}
+        onEscapeKeydown={escapeStep}
         onOpenAutoFocus={(event) => {
           event.preventDefault();
           card?.focus({ preventScroll: true });
@@ -1326,57 +1634,71 @@
     <div class="head-left">
       <span class="bolt"><Bolt /></span>
       <h2 class="title">
-        {continueFrom ? "Continue session" : "New session"}
+        <MorphText text={headTitle} />
       </h2>
     </div>
-    <Tip keys="Esc" label="Close">
+    <!-- Step 2's way out is back to the form: the × turns into a back
+         chevron in its place, and Esc goes back too. -->
+    <Tip keys="Esc" label={moveStep ? "Back" : "Close"}>
       {#snippet children(
         tip
       )}
         <button
           {...tip}
-          aria-label="Close"
+          aria-label={moveStep ? "Back" : "Close"}
           class="kit-sheet-close touch-hit"
           data-vaul-no-drag
-          onclick={close}
+          onclick={moveStep ? back : close}
           type="button"
         >
-          <X />
+          <span class="head-glyph" data-back={moveStep || undefined}>
+            <span class="glyph close"><X /></span>
+            <span class="glyph back"><IconChevronLeft /></span>
+          </span>
         </button>
       {/snippet}
     </Tip>
   </div>
+  <!-- Step 2 (the owner's revision of C) is the same form with only what a
+       move asks left in it: the chips that say where it runs, and what
+       moving does. Everything else is kept as it was, out of sight, for
+       Back. -->
   <div
     class="body fai-scroll kit-sheet-scroll"
     data-vaul-no-drag
     inert={busy}
     onscroll={bodyScroll}
+    class:stepped={moveStep}
   >
     <!-- One popover surface for every chip in the form: the composer's and
          the chosen model's effort and permission chips glide between each
          other. -->
     <NsPopoverGroup>
       <section class="sec prompt-sec" style="--delay:0ms">
-        <SectionHeader
-          hue="var(--hue-blue-500)"
-          icon={Chat}
-          label={continueFrom ? "Next step (optional)" : "First prompt"}
-        />
+        <div class="prompt-head">
+          <SectionHeader
+            hue="var(--hue-blue-500)"
+            icon={Chat}
+            label={continueFrom ? "Next step (optional)" : "First prompt"}
+          />
+        </div>
         <div class="fai-comb"></div>
         <div class="composer field-shell">
-          <PromptEditor
-            lead={sourceChip}
-            {menuItems}
-            onleadremove={onexitcontinue}
-            onpaste={(data) => firstMessage.paste(data)}
-            onsubmit={start}
-            bind:element={editor}
-            bind:value={firstMessage.text}
-          />
-          <div class="prompt-atts">
-            <AttachmentChips draft={firstMessage} />
+          <div class="prompt-body">
+            <PromptEditor
+              lead={sourceChip}
+              {menuItems}
+              onleadremove={onexitcontinue}
+              onpaste={(data) => firstMessage.paste(data)}
+              onsubmit={start}
+              bind:element={editor}
+              bind:value={firstMessage.text}
+            />
+            <div class="prompt-atts">
+              <AttachmentChips draft={firstMessage} />
+            </div>
           </div>
-          <div class="chips">
+          <div class="chips" inert={moveStep}>
             <MachinesChip
               machines={machineItems}
               onchange={(value) => {
@@ -1398,9 +1720,9 @@
               projects={projectItems}
             />
             <LocationChip
-              dir={cwd}
+              dir={moveTo ? moveDestination : cwd}
               informational={locationInformational}
-              {locked}
+              locked={moveTo ? !moveEditing : locked}
               {machineId}
               machineName={machine?.hostname ?? ""}
               mode={repo === undefined ? "dir" : "repo"}
@@ -1410,6 +1732,11 @@
               onclosefocus={promptAfterClose}
               oncommit={backToPrompt}
               ondir={(value) => {
+                // Moving, the folder typed is where the project goes there.
+                if (moveTo) {
+                  moveAt = value.trim() || undefined;
+                  return;
+                }
                 cwd = value;
                 editing = true;
                 projectId = undefined;
@@ -1423,7 +1750,11 @@
                 }
               }}
               onoverride={() => {
-                editing = true;
+                if (moveTo) {
+                  moveEditing = true;
+                } else {
+                  editing = true;
+                }
               }}
               onrepo={(value) => {
                 repo = value;
@@ -1449,14 +1780,22 @@
             </span>
           </div>
         </div>
+        <!-- A move's line may take two lines; its height follows (morph). -->
         <p
           aria-live="polite"
           class="reading"
           title={reading}
           class:informational={locationInformational}
+          class:two={moveTo !== null}
+          {@attach readingMorph}
         >
           {reading || "\u00a0"}
         </p>
+        {#if moveStep && moveEstimated?.ask}
+          <div class="tray" in:unfold out:unfold>
+            <MoveAskBody ask={moveEstimated.ask} />
+          </div>
+        {/if}
       </section>
       <div class="fai-comb comb-gap"></div>
       <div class="stack">
@@ -1724,6 +2063,49 @@
   }
   .reading.informational {
     color: var(--ink-muted);
+  }
+  /* A move's line wraps to a second line, never a third. */
+  .reading.two {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    white-space: normal;
+    text-wrap: pretty;
+  }
+  /* The prompt's words and files stand in the composer as they always did. */
+  .prompt-body {
+    display: contents;
+  }
+  /* Step 2: the chips that say where it runs, and what moving does. The rest
+     of the form is kept out of sight as it was, for Back. */
+  .stepped .prompt-head,
+  .stepped .prompt-sec > .fai-comb,
+  .stepped .prompt-body,
+  .stepped .reading,
+  .stepped .comb-gap,
+  .stepped .stack {
+    display: none;
+  }
+  .tray {
+    padding-block-start: var(--space-2);
+  }
+  /* The × and the back chevron share one cell and cross-fade in it. */
+  .head-glyph {
+    display: grid;
+  }
+  .head-glyph .glyph {
+    grid-area: 1 / 1;
+    display: grid;
+    place-items: center;
+    transition: opacity var(--dur-control) var(--ease-out);
+  }
+  .head-glyph .back,
+  .head-glyph[data-back] .close {
+    opacity: 0;
+  }
+  .head-glyph[data-back] .back {
+    opacity: 1;
   }
   .composer {
     position: relative;

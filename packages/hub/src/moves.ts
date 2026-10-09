@@ -17,6 +17,7 @@
  * the same spawn every hub-started session takes.
  */
 
+import { createHash } from "node:crypto";
 import { posix } from "node:path";
 import {
   ASK_USER_QUESTION,
@@ -27,9 +28,10 @@ import {
   CONTROL_MOVE_LFS,
   CONTROL_MOVE_PREPARE,
   CONTROL_MOVE_SNAPSHOT,
+  deriveTitleFromFirstMessage,
   type Envelope,
   installFor,
-  type MoveApproval,
+  type MoveAsk,
   type MoveError,
   type MoveEstimate,
   type MoveInspection,
@@ -44,6 +46,8 @@ import {
   type MoveStep,
   type MovesFrame,
   moveBranch,
+  moveSize,
+  moveSourceName,
   type PermissionResult,
   type SendPayload,
   type SpawnPayload,
@@ -65,8 +69,12 @@ export class MoveAway extends Error {
 
 /** Everything a job has learned and decided, as its record keeps it. */
 export interface MoveState {
-  /** The approval ask, and whether the person said "Move it". */
-  approval?: MoveApproval & { approved?: boolean };
+  /** The person said "Move it": in New session, or on the parked ask. */
+  approved?: boolean;
+  /** Set when `approval` is a step: what "Move it" does. */
+  ask?: MoveAsk;
+  /** The ask parked for a yes nobody gave in New session: its request id. */
+  askId?: string;
   /** The uncommitted large files the approval sends to LFS. */
   bigFiles: MoveLargeFile[];
   bytes: number;
@@ -97,6 +105,8 @@ export interface MoveState {
   steps: MoveStep[];
   /** A Cancel that the machine running the step has not heard yet: told at its register. */
   stopOn?: string;
+  /** Once cancelled: the step it stopped at. */
+  stoppedAt?: MoveStep;
   targetHome: string;
   targetInstanceId: string;
   targetMachineId: string;
@@ -119,6 +129,14 @@ export interface MovesDeps {
   readonly gitRoot: string;
   readonly lifetime: HubLifetimeShape;
   readonly machineName: (machineId: string) => string;
+  /**
+   * The started session's transcript opens on the move's ready line: kept
+   * on its row and said now. Once per session, whatever the retries.
+   */
+  readonly movedHere: (
+    instanceId: string,
+    line: { at: number; moved: string; stayed?: string }
+  ) => void;
   readonly online: (machineId: string) => boolean;
   /** Parks an ask for the person (server.ts `parkForPerson`). */
   readonly park: (envelope: Envelope) => void;
@@ -170,10 +188,7 @@ const WORKING = new Set<MoveStage>([
   "start",
 ]);
 
-const sizeWords = (bytes: number): string =>
-  bytes >= 1024 ** 3
-    ? `${(bytes / 1024 ** 3).toFixed(1)} GB`
-    : `${Math.max(1, Math.round(bytes / 1024 ** 2))} MB`;
+const sizeWords = moveSize;
 
 /** A folder as the person reads it: under the machine's home as `~`. */
 const shown = (path: string, home: string): string => {
@@ -269,16 +284,21 @@ export const createMoves = (deps: MovesDeps) => {
     "kept",
     "moved",
     "stayed",
+    "stoppedAt",
   ] as const;
+
+  /** The approval's parts: its words while it is a step, its parked ask while that waits. */
+  const askParts = ({ state, stage }: MoveRow): Partial<MoveJob> => ({
+    ...(state.ask ? { ask: state.ask } : {}),
+    ...(stage === "approval" && state.askId && !state.approved
+      ? { askId: state.askId }
+      : {}),
+  });
 
   /** The parts of a job a screen sees only while they are there. */
   const partsOf = (row: MoveRow): Partial<MoveJob> => {
     const { state, stage } = row;
-    const parts: Partial<MoveJob> = {};
-    if (state.approval) {
-      const { approved: _approved, ...approval } = state.approval;
-      parts.approval = approval;
-    }
+    const parts: Partial<MoveJob> = askParts(row);
     if (state.snapshot && state.steps.includes("snapshot")) {
       const { branch, files } = state.snapshot;
       parts.snapshot = { branch, files };
@@ -302,11 +322,16 @@ export const createMoves = (deps: MovesDeps) => {
   };
 
   const jobOf = (row: MoveRow): MoveJob => {
-    const { state } = row;
+    const { state, request } = row;
+    const projectName = db.project(row.projectId)?.name ?? row.projectId;
     return {
       id: row.id,
       projectId: row.projectId,
-      projectName: db.project(row.projectId)?.name ?? row.projectId,
+      projectName,
+      title:
+        request.spawn.title?.trim() ||
+        deriveTitleFromFirstMessage(request.prompt ?? "") ||
+        projectName,
       stage: row.stage,
       steps: state.steps,
       sourceMachineId: state.sourceMachineId,
@@ -454,6 +479,7 @@ export const createMoves = (deps: MovesDeps) => {
       uncommittedFiles: 0,
       needsApproval: false,
       path,
+      display: path,
       refused,
     },
   });
@@ -539,6 +565,7 @@ export const createMoves = (deps: MovesDeps) => {
           uncommittedFiles: 0,
           needsApproval: false,
           path: there.path,
+          display: there.path,
         },
       };
     }
@@ -572,71 +599,16 @@ export const createMoves = (deps: MovesDeps) => {
         uncommittedFiles: sourceInspection.uncommitted,
         needsApproval,
         path: targetInspection.path,
+        display: shown(targetInspection.path, targetInspection.home),
         ...foldersSay(project, source, target, needsApproval),
       },
     };
   };
 
-  /** The modal's estimate: `GET /api/projects/:id/move-estimate`. */
-  const estimate = async (
-    projectId: string,
-    targetMachineId: string,
-    path?: string
-  ): Promise<MoveEstimate> =>
-    (await plan(projectId, targetMachineId, path)).estimate;
-
-  /** The approval ask's words (the owner's pick D, "Plain + details"). */
-  const approvalOf = (
-    state: Pick<
-      MoveState,
-      | "sourcePath"
-      | "sourceHome"
-      | "sourceMachineId"
-      | "targetMachineId"
-      | "bigFiles"
-      | "gitInit"
-      | "snapshotBranch"
-    >
-  ): MoveApproval => {
-    const source = deps.machineName(state.sourceMachineId);
-    const target = deps.machineName(state.targetMachineId);
-    const big = state.bigFiles;
-    const bigBytes = big.reduce((sum, file) => sum + file.bytes, 0);
-    const lines = [
-      `CawCo saves the folder as it is now and copies it to ${target}. Your files on ${source} stay where they are.`,
-      ...(big.length > 0
-        ? [
-            big.length === 1
-              ? `1 big file (${sizeWords(bigBytes)}) travels separately, so the move stays quick.`
-              : `${big.length} big files (${sizeWords(bigBytes)}) travel separately, so the move stays quick.`,
-          ]
-        : []),
-    ];
-    const details = [
-      ...(state.gitInit ? ["git init"] : []),
-      ...big.map((file) => `git lfs track --filename -- ${file.path}`),
-      ...(state.gitInit
-        ? [
-            "git add -A",
-            'git commit -m "The folder as it was when CawCo first moved it"',
-          ]
-        : []),
-      `git push <hub> +<snapshot>:refs/heads/${state.snapshotBranch}`,
-    ];
-    return {
-      requestId: crypto.randomUUID(),
-      title: `Move ${shown(state.sourcePath, state.sourceHome)} to ${target}?`,
-      lines,
-      details,
-      bigFiles: big,
-      gitInit: state.gitInit,
-    };
-  };
-
   /** The approval as a parked question: "Don't move" or "Move it". */
-  const askOf = (row: MoveRow): Envelope | undefined => {
-    const { approval } = row.state;
-    if (!approval) {
+  const parkedAsk = (row: MoveRow): Envelope | undefined => {
+    const { ask, askId } = row.state;
+    if (!(ask && askId)) {
       return undefined;
     }
     const instanceId = `move:${row.id}`;
@@ -644,11 +616,11 @@ export const createMoves = (deps: MovesDeps) => {
       verb: "frames",
       machineId: row.state.sourceMachineId,
       instanceId,
-      requestId: approval.requestId,
+      requestId: askId,
       payload: {
         kind: "permission_request",
         instanceId,
-        requestId: approval.requestId,
+        requestId: askId,
         harness: "claude",
         requestKind: "question",
         toolName: ASK_USER_QUESTION,
@@ -656,24 +628,24 @@ export const createMoves = (deps: MovesDeps) => {
         input: {
           questions: [
             {
-              question: approval.title,
+              question: ask.title,
               header: "Move",
               multiSelect: false,
               options: [
                 { label: DONT_MOVE, description: "" },
-                { label: MOVE_IT, description: approval.lines.join(" ") },
+                { label: MOVE_IT, description: ask.lines.join(" ") },
               ],
             },
           ],
         },
         // The pane's card reads the rest: the Details fold and the job.
-        move: { jobId: row.id, details: approval.details },
+        move: { jobId: row.id, details: ask.details },
       },
     };
   };
 
   const parkApproval = (row: MoveRow): void => {
-    const ask = askOf(row);
+    const ask = parkedAsk(row);
     if (ask?.requestId && !deps.parked(ask.requestId)) {
       deps.park(ask);
     }
@@ -731,16 +703,133 @@ export const createMoves = (deps: MovesDeps) => {
     ];
   };
 
-  /** A new job's record. */
+  /** Step 2's lines: what happens to the folder, what it copies, and how big files go. */
+  const askLines = (
+    s: MoveInspection,
+    from: MoveJob["from"],
+    source: string,
+    target: string
+  ): string[] => {
+    const big = s.bigFiles;
+    const bigBytes = big.reduce((sum, file) => sum + file.bytes, 0);
+    const largeToo =
+      s.lfs.bytes > 0 ? `, plus ${sizeWords(s.lfs.bytes)} of large files` : "";
+    const copies = `It ${from.kind === "hub" ? "copies" : "fetches"} ${sizeWords(s.bytes)} from ${moveSourceName(from)}${largeToo}.`;
+    const travels =
+      big.length === 1
+        ? `1 big file (${sizeWords(bigBytes)}) travels separately, so the move stays quick.`
+        : `${big.length} big files (${sizeWords(bigBytes)}) travel separately, so the move stays quick.`;
+    return [
+      `CawCo saves the folder as it is now and copies it to ${target}. Your files on ${source} stay where they are.`,
+      // A folder that is no repository yet has no history to size.
+      ...(s.isGit && s.bytes > 0 ? [copies] : []),
+      ...(big.length > 0 ? [travels] : []),
+    ];
+  };
+
+  /** The Details fold: the git terms of each step "Move it" runs, in order. */
+  const askDetails = (
+    s: MoveInspection,
+    t: MoveInspection,
+    steps: MoveStep[],
+    source: string
+  ): string[] => {
+    const gitInit = !s.isGit;
+    const install = installFor(s.lockfile);
+    const origin = s.origin
+      ? (normaliseRemote(s.origin) ?? "its remote")
+      : "hub";
+    const firstCommit = [
+      "git add -A",
+      'git commit -m "The folder as it was when CawCo first moved it"',
+    ];
+    return [
+      ...(gitInit ? ["git init"] : []),
+      ...s.bigFiles.map((file) => `git lfs track --filename -- ${file.path}`),
+      ...(gitInit ? firstCommit : []),
+      ...(steps.includes("snapshot")
+        ? [`git push <hub> +<snapshot>:refs/heads/${moveBranch(source)}`]
+        : []),
+      `git clone <${origin}> ${shown(t.path, t.home)}`,
+      ...(steps.includes("lfs") ? ["git lfs pull"] : []),
+      ...(install ? [install.command] : []),
+    ];
+  };
+
+  /**
+   * What "Move it" does, in words (the owner's pick D, "Plain + details"):
+   * New session's step 2 and the approval card read the same. When the move
+   * needs a yes, `key` names what the yes covers: the folder and the
+   * destination, whether it becomes a repository, and which files go to LFS.
+   */
+  const askFor = (
+    planned: Placed,
+    steps: MoveStep[],
+    from: MoveJob["from"]
+  ): MoveAsk => {
+    const { inspection: s, machineId: sourceMachineId } = planned.source;
+    const { inspection: t, machineId: targetMachineId } = planned.target;
+    const source = deps.machineName(sourceMachineId);
+    const target = deps.machineName(targetMachineId);
+    const big = s.bigFiles;
+    const gitInit = !s.isGit;
+    const lines = askLines(s, from, source, target);
+    const details = askDetails(s, t, steps, source);
+    const key = steps.includes("approval")
+      ? createHash("sha256")
+          .update(
+            JSON.stringify([
+              s.path,
+              targetMachineId,
+              t.path,
+              gitInit,
+              big.map((file) => file.path).sort(),
+            ])
+          )
+          .digest("hex")
+          .slice(0, 32)
+      : undefined;
+    return {
+      title: `Move ${shown(s.path, s.home)} to ${target}?`,
+      lines,
+      details,
+      bigFiles: big,
+      gitInit,
+      ...(key ? { key } : {}),
+    };
+  };
+
+  /** The modal's estimate: `GET /api/projects/:id/move-estimate`, with step 2's words when it can move. */
+  const estimate = async (
+    projectId: string,
+    targetMachineId: string,
+    path?: string
+  ): Promise<MoveEstimate> => {
+    const planned = await plan(projectId, targetMachineId, path);
+    const { estimate: estimated, source, target } = planned;
+    if (!(estimated.needed && source && target) || estimated.refused) {
+      return estimated;
+    }
+    const placed: Placed = { ...planned, source, target };
+    const from = fromOf(source.inspection);
+    return {
+      ...estimated,
+      ask: askFor(placed, await stepsFor(placed, from), from),
+    };
+  };
+
+  /** A new job's record; `approved` when the person said "Move it" in New session. */
   const stateFor = (
     planned: Placed,
     from: MoveJob["from"],
-    steps: MoveStep[]
+    steps: MoveStep[],
+    ask: MoveAsk,
+    approved: boolean
   ): MoveState => {
     const { inspection: s, machineId: sourceMachineId } = planned.source;
     const { inspection: t, machineId: targetMachineId } = planned.target;
     const install = installFor(s.lockfile);
-    const base = {
+    return {
       sourceMachineId,
       sourcePath: s.path,
       sourceHome: s.home,
@@ -750,9 +839,6 @@ export const createMoves = (deps: MovesDeps) => {
       bigFiles: s.bigFiles,
       gitInit: !s.isGit,
       snapshotBranch: moveBranch(deps.machineName(sourceMachineId)),
-    };
-    return {
-      ...base,
       steps,
       bytes: s.bytes,
       from,
@@ -761,7 +847,12 @@ export const createMoves = (deps: MovesDeps) => {
       ignores: s.ignores,
       ...(install ? { install } : {}),
       ...(s.lfs.files > 0 ? { lfs: s.lfs } : {}),
-      ...(steps.includes("approval") ? { approval: approvalOf(base) } : {}),
+      ...(steps.includes("approval")
+        ? {
+            ask,
+            ...(approved ? { approved: true } : { askId: crypto.randomUUID() }),
+          }
+        : {}),
       // Nothing to snapshot: the target checks out the source's HEAD.
       ...(steps.includes("snapshot") || !s.head
         ? {}
@@ -790,6 +881,19 @@ export const createMoves = (deps: MovesDeps) => {
     );
     const { project, source, target } = planned;
     const from = fromOf(source.inspection);
+    const steps = await stepsFor(planned, from);
+    const ask = askFor(planned, steps, from);
+    // A yes given in New session covers what the person read there, only.
+    if (
+      request.approved !== undefined &&
+      ask.key !== undefined &&
+      request.approved !== ask.key
+    ) {
+      throw new MoveRefused(
+        409,
+        `What moving ${project.name} does changed since you looked. Check it again.`
+      );
+    }
     // A project with no outside remote has the hub as its remote.
     const identity = source.inspection.origin
       ? normaliseRemote(source.inspection.origin)
@@ -797,12 +901,17 @@ export const createMoves = (deps: MovesDeps) => {
     if (identity && !project.remote) {
       db.setProjectRemote(project.id, identity);
     }
-    const steps = await stepsFor(planned, from);
     const row = db.insertMove({
       id: crypto.randomUUID(),
       projectId: project.id,
       stage: steps[0],
-      state: stateFor(planned, from, steps),
+      state: stateFor(
+        planned,
+        from,
+        steps,
+        ask,
+        ask.key !== undefined && request.approved === ask.key
+      ),
       request,
     });
     console.log(
@@ -949,6 +1058,8 @@ export const createMoves = (deps: MovesDeps) => {
     console.log(
       `[moves] ${row.id}: start spawns ${state.targetInstanceId}${sessionKey ? ` resuming ${sessionKey}` : ""}`
     );
+    // Before the spawn: the line opens the transcript, ahead of its first prompt.
+    const at = Date.now();
     await deps.spawn(state.targetMachineId, {
       instanceId: state.targetInstanceId,
       requestId: crypto.randomUUID(),
@@ -957,8 +1068,16 @@ export const createMoves = (deps: MovesDeps) => {
       ...request.spawn,
       ...(sessionKey ? { resume: { sessionKey } } : {}),
     });
+    const ready = readyWords(row);
+    if (ready.moved) {
+      deps.movedHere(state.targetInstanceId, {
+        at,
+        moved: ready.moved,
+        ...(ready.stayed ? { stayed: ready.stayed } : {}),
+      });
+    }
     sendPrompt(row);
-    return readyWords(row);
+    return ready;
   };
 
   /** The first prompt, as the person wrote it in New session: sent once, under the job's own id. */
@@ -1018,7 +1137,7 @@ export const createMoves = (deps: MovesDeps) => {
       if (!(row && WORKING.has(row.stage))) {
         return;
       }
-      if (row.stage === "approval" && !row.state.approval?.approved) {
+      if (row.stage === "approval" && !row.state.approved) {
         parkApproval(row);
         return;
       }
@@ -1142,14 +1261,19 @@ export const createMoves = (deps: MovesDeps) => {
     }
     const words = kept ?? keptOf(row);
     const machine = machineFor(row);
-    const asked = row.state.approval;
+    const { askId } = row.state;
+    const stoppedAt =
+      row.stage === "failed"
+        ? (row.state.error?.stage ?? "start")
+        : (row.stage as MoveStep);
     const moved = update(id, "cancelled", (state) => ({
       ...state,
       kept: words,
+      stoppedAt,
       ...(deps.online(machine) ? {} : { stopOn: machine }),
     }));
-    if (row.stage === "approval" && asked && deps.parked(asked.requestId)) {
-      deps.settle(asked.requestId, "cancelled");
+    if (row.stage === "approval" && askId && deps.parked(askId)) {
+      deps.settle(askId, "cancelled");
     }
     if (deps.online(machine)) {
       detach(
@@ -1185,21 +1309,14 @@ export const createMoves = (deps: MovesDeps) => {
   const answer = (requestId: string, result: PermissionResult): boolean => {
     const row = db
       .moveRows()
-      .find(
-        (one) =>
-          one.stage === "approval" &&
-          one.state.approval?.requestId === requestId
-      );
-    if (!row?.state.approval) {
+      .find((one) => one.stage === "approval" && one.state.askId === requestId);
+    if (!row?.state.ask) {
       return false;
     }
     deps.settle(requestId, "answered");
-    const choice = choiceOf(result, row.state.approval.title);
+    const choice = choiceOf(result, row.state.ask.title);
     if (choice === MOVE_IT) {
-      update(row.id, undefined, (state) => ({
-        ...state,
-        approval: state.approval && { ...state.approval, approved: true },
-      }));
+      update(row.id, undefined, (state) => ({ ...state, approved: true }));
       console.log(`[moves] ${row.id}: the person said "Move it"`);
       goOn(row.id);
       return true;

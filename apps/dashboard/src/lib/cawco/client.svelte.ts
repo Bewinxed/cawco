@@ -6703,6 +6703,10 @@ export const cawco = {
   /** One continuation the hub is carrying, while it keeps it in its table. */
   continuation: (id: string): ContinuationJob | undefined =>
     state.continuations.find((job) => job.id === id),
+  /** The project moves the hub is carrying, settled ones for a few minutes after (move.svelte.ts). */
+  get moves(): MoveJob[] {
+    return state.moves;
+  },
   get machines() {
     return state.machines;
   },

@@ -126,7 +126,7 @@
           hue={row.hue}
           icon={row.icon}
           ink={on}
-          meta={`${row.os ? `${row.os} · ` : ""}${row.load}`}
+          meta={`${row.os ? `${row.os} · ` : ""}${row.load}${row.place ? ` · ${row.place}` : ""}`}
           name={row.name}
           presence={presenceOf(row)}
         />
