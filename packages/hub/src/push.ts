@@ -145,10 +145,31 @@ const payloadOf = (notification: Notification, e: string) => ({
   cawco: notification.data,
 });
 
-/** `text` cut by `chars` code points more than the ellipsis it ends in. */
-const cut = (text: string, chars: number): string => {
+/**
+ * The longest cut of `text` (whole code points, then "…") that `fits`, or
+ * undefined when not even "…" does. Bytes grow with every code point kept,
+ * so the longest is found by halving.
+ */
+const longestCut = (
+  text: string,
+  fits: (cut: string) => boolean
+): string | undefined => {
   const points = Array.from(text);
-  return `${points.slice(0, Math.max(0, points.length - chars - 1)).join("")}…`;
+  const cutAt = (kept: number) => `${points.slice(0, kept).join("")}…`;
+  if (!fits(cutAt(0))) {
+    return undefined;
+  }
+  let fitting = 0;
+  let over = points.length;
+  while (over - fitting > 1) {
+    const middle = Math.floor((fitting + over) / 2);
+    if (fits(cutAt(middle))) {
+      fitting = middle;
+    } else {
+      over = middle;
+    }
+  }
+  return cutAt(fitting);
 };
 
 /**
@@ -160,28 +181,27 @@ const plaintextOf = (notification: Notification): Plaintext => {
   const room =
     MAX_PAYLOAD_BYTES - byteLength(JSON.stringify(payloadOf(notification, "")));
   // Base64 writes each 3 bytes as 4 characters, padded to a whole 4.
-  const fits = Math.floor(room / 4) * 3 - IV_BYTES - TAG_BYTES;
-  let { title, subtitle, body } = notification.sealed;
-  for (;;) {
-    const plaintext = utf8.encode(
+  const limit = Math.floor(room / 4) * 3 - IV_BYTES - TAG_BYTES;
+  const { subtitle } = notification.sealed;
+  const encode = (title: string, body: string): Plaintext =>
+    utf8.encode(
       JSON.stringify({ v: 1, title, ...(subtitle ? { subtitle } : {}), body })
     );
-    const over = plaintext.length - fits;
-    if (over <= 0) {
-      return plaintext;
-    }
-    // A code point is at least one byte, so cutting `over` of them (and the
-    // ellipsis's three) fits unless JSON's escapes grew it; then it goes round.
-    const points = Array.from(body).length;
-    if (points > 1) {
-      body = cut(body, Math.min(over + 2, points - 1));
-    } else if (Array.from(title).length > 1) {
-      body = "…";
-      title = cut(title, Math.min(over + 2, Array.from(title).length - 1));
-    } else {
-      throw new Error("The visible alert alone fills the push.");
-    }
+  const fits = (title: string, body: string) =>
+    encode(title, body).length <= limit;
+  const whole = notification.sealed;
+  if (fits(whole.title, whole.body)) {
+    return encode(whole.title, whole.body);
   }
+  const shorterBody = longestCut(whole.body, (cut) => fits(whole.title, cut));
+  if (shorterBody !== undefined) {
+    return encode(whole.title, shorterBody);
+  }
+  const shorterTitle = longestCut(whole.title, (cut) => fits(cut, "…"));
+  if (shorterTitle === undefined) {
+    throw new Error("The visible alert alone fills the push.");
+  }
+  return encode(shorterTitle, "…");
 };
 
 /** AES-256-GCM under the device's key: `IV ‖ ciphertext ‖ tag`, base64. */
