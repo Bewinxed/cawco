@@ -3209,6 +3209,8 @@ function wirePayload<K extends CommandKind>(
         requestId,
         method: RESOLVE_PERMISSION,
         args: [requestId, result],
+        // Who answered, for the hub's settlement log (`answeredVia`).
+        via: "dashboard",
       };
     }
     case "interrupt":

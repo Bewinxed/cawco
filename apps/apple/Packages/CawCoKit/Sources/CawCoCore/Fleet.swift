@@ -628,6 +628,8 @@ public final class NeedsYouStore {
                 "requestId": ask.requestId,
                 "method": "resolvePermission",
                 "args": [ask.requestId, result] as [(any Sendable)?],
+                // Who answered, for the hub's settlement log (server.ts `answeredVia`).
+                "via": "ios",
             ] as [String: (any Sendable)?])
         } catch {
             Logger(subsystem: "dev.cawco.app", category: "Permission").fault("request \(ask.requestId, privacy: .public) answer not encodable: \(String(describing: error), privacy: .public)")

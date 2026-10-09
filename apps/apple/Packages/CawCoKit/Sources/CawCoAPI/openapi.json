@@ -19322,6 +19322,14 @@
           },
           "requestId": {
             "type": "string"
+          },
+          "via": {
+            "description": "The app a permission answer was sent from, for the hub's settlement log.",
+            "enum": [
+              "dashboard",
+              "ios"
+            ],
+            "type": "string"
           }
         },
         "required": [

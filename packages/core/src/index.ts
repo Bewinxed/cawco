@@ -445,9 +445,14 @@ export interface ControlPayload {
   instanceId?: string;
   method: string;
   requestId: string;
+  /** The app a permission answer was sent from, for the hub's settlement log. */
+  via?: "dashboard" | "ios";
 }
 
-/** Settles a parked permission request; args are `[requestId, PermissionResult]`. */
+/**
+ * Settles a parked permission request; args are `[requestId, PermissionResult]`,
+ * and the hub adds who answered as a third, which the machine logs.
+ */
 export const RESOLVE_PERMISSION = "resolvePermission";
 
 /**
