@@ -11,6 +11,7 @@ import { basename, dirname, join } from "node:path";
 import type { SkillFile } from "@cawco/core";
 import { projectClaudeRelative } from "@cawco/core/claude-dirs";
 import { hashFiles } from "@cawco/core/file-hash";
+import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 import { $ } from "bun";
 
 /** What a `source` string names, once its scheme has been read off it. */
@@ -238,12 +239,15 @@ export const downloadRepo = async (
   const slug = `${owner}/${repo}`;
   const store = join(work, "repo.git");
   const git = async (step: string, args: string[]): Promise<void> => {
-    const child = Bun.spawn(["git", `--git-dir=${store}`, step, ...args], {
-      env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
-      stdout: "ignore",
-      stderr: "pipe",
-      timeout: GIT_TIMEOUT_MS,
-    });
+    const child = Bun.spawn(
+      safeGitArgv([`--git-dir=${store}`, step, ...args]),
+      {
+        env: { ...process.env, ...SAFE_GIT_ENV },
+        stdout: "ignore",
+        stderr: "pipe",
+        timeout: GIT_TIMEOUT_MS,
+      }
+    );
     const [code, stderr] = await Promise.all([
       child.exited,
       new Response(child.stderr).text(),

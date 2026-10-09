@@ -1,6 +1,6 @@
 import { chmod } from "node:fs/promises";
-import { homedir } from "node:os";
 import { join } from "node:path";
+import { cawcoConfigDir } from "@cawco/core/paths";
 
 /** Machine configuration shared by the CLI and daemon. */
 export interface CliConfig {
@@ -10,11 +10,7 @@ export interface CliConfig {
   updatedAt: string;
 }
 
-export const CONFIG_PATH = join(
-  process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"),
-  "cawco",
-  "config.json"
-);
+export const CONFIG_PATH = join(cawcoConfigDir(), "config.json");
 
 /** Readable by its owner and nobody else. */
 const CONFIG_MODE = 0o600;

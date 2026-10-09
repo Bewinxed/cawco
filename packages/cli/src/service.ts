@@ -10,6 +10,7 @@ import {
   readEnv,
 } from "@cawco/core";
 import { holdPhrases, type RestartReadiness } from "@cawco/core/binary-updates";
+import { hubDataDir } from "@cawco/core/paths";
 import { processStart } from "@cawco/core/process-identity";
 import { standalone } from "@cawco/core/runtime";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
@@ -295,18 +296,11 @@ const servicePath = (): string => {
  * created with no sudo, and outside any git checkout — so `git clean -fdx` in a
  * dev tree or a deploy clone can never again reach the fleet's whole memory.
  * `XDG_DATA_HOME` is honoured the same way `SYSTEMD_DIR` honours
- * `XDG_CONFIG_HOME` above.
+ * `XDG_CONFIG_HOME` above. Every workspace boundary hides the dir
+ * (`credentialStores`).
  */
-const dataDir = (): string =>
-  platform() === "darwin"
-    ? join(homedir(), "Library", "Application Support", "cawco")
-    : join(
-        process.env.XDG_DATA_HOME ?? join(homedir(), ".local", "share"),
-        "cawco"
-      );
-
 const DEFAULT_DB_PATH =
-  readEnv(CAWCO_ENV.dbPath) ?? join(dataDir(), "cawco.db");
+  readEnv(CAWCO_ENV.dbPath) ?? join(hubDataDir(), "cawco.db");
 
 /** Where the hub this machine runs keeps its database: what its unit is given. */
 export const hubDbPath = (): string => DEFAULT_DB_PATH;

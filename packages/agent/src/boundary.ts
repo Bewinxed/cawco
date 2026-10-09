@@ -4,12 +4,18 @@
  * command sees and signals only its own workspace's processes, cannot reach
  * the user's service manager, and writes only the workspace's clone, its
  * scratch dir (its `/tmp`, on disk at `~/.cawco/workspaces/<id>/tmp`, which no
- * command inside can remove) and the package caches. On macOS, build tools
- * also write in the user's temp/cache folders, DerivedData, SwiftPM folders and
- * the provisioning profile folders automatic signing fills, and `swift`,
- * `xcodebuild` and `log` run through shims that keep them working inside
+ * command inside can remove) and the workspaces' own cache
+ * (`workspaceCacheDir`), where the executor points bun, npm, uv and
+ * `XDG_CACHE_HOME`. Every host cache is read-only inside: a host process runs
+ * what is in them, so a workspace that wrote one would run code outside. On
+ * macOS, build tools also write in the user's temp/cache folders and the
+ * provisioning profile folders automatic signing fills, and `swift`,
+ * `xcodebuild` and `log` run through shims that keep them working inside and
+ * point SwiftPM's and Xcode's caches at the workspaces' cache
  * ({@link writeShims}). The network is the host's, so the hub and the
- * internet stay reachable.
+ * internet stay reachable. The executor and the hook call every host tool by
+ * an absolute path or a system PATH: `~/.bun/bin`, on a host process's PATH,
+ * is only read-only inside, and nothing a workspace wrote must run outside.
  *
  * Linux: one anchor per workspace — a user, pid and mount namespace whose
  * tree is read-only but for those paths, with the user runtime dir (the
@@ -31,6 +37,15 @@
  * keyring sits behind the bus the boundary hides, so the executor reads its
  * token on the host side and hands it in as `GH_TOKEN`: pushes and `gh` keep
  * working inside.
+ *
+ * Every store core's `credentialStores` names is hidden from every command.
+ * Linux: each store that is a directory goes under an empty tmpfs as the
+ * anchor starts, and each that is a file under an empty read-only file. The
+ * kernel drops a file's mask in this namespace once the host renames a new
+ * file over it, as a token refresh does; the srt cutover replaces this with a
+ * tmpfs over the whole home dir. macOS: a Seatbelt deny on each, the login
+ * keychain among them, and on every file named as secrets are
+ * (`SECRET_FILE_NAME`) outside the workspace's own clone.
  */
 import { createHash } from "node:crypto";
 import { accessSync, constants } from "node:fs";
@@ -51,12 +66,18 @@ import { basename, dirname, join } from "node:path";
 import type { WorkspaceRef } from "@cawco/core";
 import { WORKSPACE_BOUNDARY_START_TIMEOUT_MS } from "@cawco/core";
 import { binaryRoot } from "@cawco/core/binary-installation";
-import { sessionIdentityDir } from "@cawco/core/paths";
+import {
+  credentialStores,
+  SECRET_FILE_NAME,
+  sessionIdentityDir,
+  workspaceCacheDir,
+  workspaceCacheEnv,
+} from "@cawco/core/paths";
 import {
   commandLine as commandLineOf,
   commandLines,
 } from "@cawco/core/process-identity";
-import { embeddedFile, standalone } from "@cawco/core/runtime";
+import { embeddedFile, runtimeDataDir, standalone } from "@cawco/core/runtime";
 import { type ProcSpec, sessiondEndpoint } from "@cawco/core/sessiond";
 import { cloneInPlace } from "./clone";
 import { logRelay } from "./log-relay";
@@ -142,18 +163,17 @@ const WHITESPACE = /\s+/;
 const READY = "cawco-boundary-ready";
 const STOP_TIMEOUT_MS = 2000;
 
-/** The package caches a command may write, so installs, builds and Playwright keep working. */
+/**
+ * The caches a command may write, so installs and builds keep working: the
+ * workspaces' own cache, which the executor points every tool at
+ * (`workspaceCacheEnv`). Every host cache (`~/.cache`, `~/.bun`, `~/.npm`,
+ * `~/Library/Caches`, Xcode's DerivedData, SwiftPM's) is read-only inside: a
+ * host process runs what is in them.
+ */
 const cachesOf = (): string[] => [
-  join(homedir(), ".cache"),
-  join(homedir(), ".bun"),
-  join(homedir(), ".npm"),
-  // Playwright's browsers and most tools' caches live here on macOS.
+  workspaceCacheDir(),
   ...(process.platform === "darwin"
     ? [
-        join(homedir(), "Library", "Caches"),
-        join(homedir(), "Library", "Developer", "Xcode", "DerivedData"),
-        join(homedir(), ".swiftpm"),
-        join(homedir(), "Library", "org.swift.swiftpm"),
         // Where automatic signing keeps the provisioning profiles it fetches.
         join(
           homedir(),
@@ -168,8 +188,21 @@ const cachesOf = (): string[] => [
     : []),
 ];
 
+/**
+ * What a command inside runs from beneath a credential store's directory (the
+ * data dir holds both): the `cawco` CLI, and the runtime trees it reads.
+ */
+const keptInStores = (): string[] => [binaryRoot(), dirname(runtimeDataDir())];
+
 export const shellQuote = (value: string): string =>
   `'${value.replaceAll("'", "'\\''")}'`;
+
+/**
+ * The PATH the executor, the hook and the anchor find their own tools on:
+ * the system's dirs alone, which nothing inside a workspace writes. The
+ * command itself runs with its caller's PATH.
+ */
+const SYSTEM_PATH = "/usr/sbin:/usr/bin:/sbin:/bin";
 
 /** `command`, as it runs inside the boundary. */
 export const boundaryCommand = (boundary: Boundary, command: string): string =>
@@ -228,6 +261,8 @@ const hookScript = (
 ): string => `#!/bin/sh
 # CawCo workspace ${id}: the PreToolUse hook its claude sessions run before each
 # shell tool call. Any status but 0 refuses the call (exit 2).
+PATH=${SYSTEM_PATH}
+export PATH
 echo "cawco boundary hook $0" >&2
 cd ${shellQuote(stateDir(id))} || exit 2
 exec 3<&0
@@ -311,10 +346,16 @@ const shimsOf = (id: string): string => join(stateDir(id), "bin");
  *   "Disable using the sandbox when executing subprocesses"
  *   (docs.swift.org/…/packagemanagerdocs/swiftbuild), which also hands the
  *   compiler `-disable-sandbox` for macro servers
- *   (github.com/swiftlang/swift-package-manager/pull/7167).
+ *   (github.com/swiftlang/swift-package-manager/pull/7167). And its
+ *   `--cache-path` and `--security-path` in the workspaces' cache: SwiftPM's
+ *   own, in `~/Library`, are the host's and read-only here.
  * - `xcodebuild` gets the IDE defaults that turn off its package manifest and
  *   plugin sandboxes, as nixpkgs builds Xcode projects under its own sandbox,
- *   and `-disable-sandbox` in OTHER_SWIFT_FLAGS for macro plugin servers.
+ *   and `-disable-sandbox` in OTHER_SWIFT_FLAGS for macro plugin servers. Its
+ *   DerivedData goes in the workspaces' cache through the
+ *   `IDECustomDerivedDataLocation` default, which every action takes; its
+ *   package cache through `-packageCachePath`, which only a build or a
+ *   package resolution takes (`-showsdks` refuses it, exit 64).
  * - `log`, which Seatbelt refuses outright, asks the agent to run `log show`
  *   or `log stream` outside the boundary (`log-relay.ts`).
  *
@@ -327,17 +368,20 @@ const writeShims = async (id: string, runner: Runner): Promise<void> => {
   await writeScript(id, "boundary-log-protocol.ts", "boundary/log-protocol.ts");
   const client = await writeScript(id, "boundary-log.ts", "boundary/log.ts");
   const { port, token } = logRelay();
+  const cache = workspaceCacheDir();
+  const swiftpm = shellQuote(join(cache, "swiftpm"));
   await Promise.all([
     writeWhole(
       join(bin, "swift"),
       `#!/bin/sh
-# CawCo workspace ${id}: swift, with SwiftPM's own sandbox off inside the boundary's.
+# CawCo workspace ${id}: swift, with SwiftPM's own sandbox off inside the boundary's
+# and its caches in the workspaces' cache.
 swift=$(/usr/bin/xcrun --find swift) || exit 1
 case "\${1:-}" in
   build | test | run | package)
     command=$1
     shift
-    exec "$swift" "$command" --disable-sandbox "$@"
+    exec "$swift" "$command" --disable-sandbox --cache-path ${swiftpm}/cache --security-path ${swiftpm}/security "$@"
     ;;
 esac
 exec "$swift" "$@"
@@ -347,9 +391,12 @@ exec "$swift" "$@"
     writeWhole(
       join(bin, "xcodebuild"),
       `#!/bin/bash
-# CawCo workspace ${id}: xcodebuild, with its package and macro sandboxes off inside the boundary's.
+# CawCo workspace ${id}: xcodebuild, with its package and macro sandboxes off inside the boundary's
+# and its DerivedData and package cache in the workspaces' cache.
 xcodebuild=$(/usr/bin/xcrun --find xcodebuild) || exit 1
 flags=
+builds=
+packages=
 args=()
 for arg in "$@"; do
   case $arg in
@@ -357,11 +404,20 @@ for arg in "$@"; do
       args+=("$arg -disable-sandbox")
       flags=1
       ;;
+    build | build-for-testing | test | test-without-building | archive | analyze | clean | install | installsrc | -resolvePackageDependencies)
+      args+=("$arg")
+      builds=1
+      ;;
+    -packageCachePath)
+      args+=("$arg")
+      packages=1
+      ;;
     *) args+=("$arg") ;;
   esac
 done
 [ -n "$flags" ] || args+=('OTHER_SWIFT_FLAGS=$(inherited) -disable-sandbox')
-exec "$xcodebuild" -IDEPackageSupportDisableManifestSandbox=YES -IDEPackageSupportDisablePluginExecutionSandbox=YES "\${args[@]}"
+[ -z "$builds" ] || [ -n "$packages" ] || args+=(-packageCachePath ${swiftpm}/xcode)
+exec "$xcodebuild" -IDEPackageSupportDisableManifestSandbox=YES -IDEPackageSupportDisablePluginExecutionSandbox=YES -IDECustomDerivedDataLocation=${shellQuote(join(cache, "DerivedData"))} "\${args[@]}"
 `,
       0o755
     ),
@@ -388,10 +444,12 @@ const writeWhole = async (
 };
 
 /**
- * Writes the workspace's hook for `held`, and the record of it. On macOS also
- * its shims and its executor, in this build's form, for the runner `held`
- * names: an executor only hands commands to the runner, so it is current from
- * the next command on, whatever form the runner is.
+ * Writes the workspace's hook for `held`, its executor in this build's form
+ * for the anchor or runner `held` names, and the record of them. An executor
+ * only hands commands in, so it is current from the next command on, whatever
+ * form the anchor or runner is: a boundary started by an earlier build takes
+ * this build's PATH and cache environment from the next command on. On macOS
+ * also its shims.
  */
 const armHook = async (id: string, held: Omit<Held, "hook">): Promise<Held> => {
   const hook = join(stateDir(id), "hook");
@@ -401,11 +459,18 @@ const armHook = async (id: string, held: Omit<Held, "hook">): Promise<Held> => {
     hookScript(id, runner, held.exec, held.scratch),
     0o755
   );
+  const gh = await hostGh();
   if (process.platform === "darwin") {
     await writeShims(id, runner);
     await writeWhole(
       held.exec,
-      darwinExec(id, held.pid, fifoOf(id), held.scratch, shimsOf(id)),
+      darwinExec(id, held.pid, fifoOf(id), held.scratch, shimsOf(id), gh),
+      0o755
+    );
+  } else {
+    await writeWhole(
+      held.exec,
+      linuxExec(id, held.pid, held.identity, gh),
       0o755
     );
   }
@@ -823,7 +888,9 @@ const forgetStale = (id: string): void => {
  * mount beneath it and asks the kernel to change a locked atime flag. The
  * host's ssh includes are replaced by the user's own copy of them, because
  * host root shows up as nobody here and ssh refuses an included file no
- * longer owned by root or the user. Then a nested
+ * longer owned by root or the user. Each credential store ({@link linuxStores})
+ * goes under an empty read-only tmpfs when it is a directory, and under an
+ * empty read-only file when it is a file. Then a nested
  * user namespace maps the user back to their own uid — tools see who they
  * always see, not root — and its own mount namespace locks every mount above.
  * The anchor is that namespace's PID 1: a bash loop, which reaps the orphans
@@ -831,7 +898,9 @@ const forgetStale = (id: string): void => {
  */
 const ANCHOR = `exec 2>&1
 set -eu
-ws=$1 scratch=$2 run=$3 uid=$4 gid=$5 runtime=$6 hidden=$7 ssh=$8 home=$9
+PATH=${SYSTEM_PATH}
+export PATH
+ws=$1 scratch=$2 run=$3 uid=$4 gid=$5 runtime=$6 hidden=$7 ssh=$8 stores=$9
 shift 9
 # mount_setattr (syscall 442 on x86_64 and arm64): AT_FDCWD "/", AT_RECURSIVE, attr_set MOUNT_ATTR_RDONLY
 perl -e 'my ($path, $attr) = ("/", pack("Q4", 1, 0, 0, 0)); syscall(442, -100, $path, 0x8000, $attr, 32) == 0 or die "mount_setattr: $!"'
@@ -849,13 +918,15 @@ mask=$(mktemp -d "$run/auth-mask.XXXXXX")
 mount -t tmpfs -o size=4k,mode=0700,uid=0,gid=0 auth-mask "$mask"
 touch "$mask/empty"
 mount -o remount,bind,ro "$mask"
-for path in "$home/.claude/.credentials.json" "$home/.local/share/opencode/auth.json" "$home/.pi/agent/auth.json"; do
-  if [ -f "$path" ]; then
+while IFS= read -r path; do
+  if [ -z "$path" ]; then continue; fi
+  if [ -d "$path" ]; then
+    mount -t tmpfs -o size=4k,mode=0555,ro hidden "$path"
+  elif [ -f "$path" ]; then
     mount --bind "$mask/empty" "$path"
     mount -o remount,bind,ro "$path"
   fi
-done
-if [ -d "$home/.cli-proxy-api" ]; then mount -t tmpfs -o size=4k,mode=0555 hidden "$home/.cli-proxy-api"; fi
+done <<< "$stores"
 if [ -n "$ssh" ]; then mount --bind "$ssh" ${SSH_INCLUDES}; fi
 mount -t tmpfs -o mode=1777,nosuid,nodev shm /dev/shm
 exec unshare --user --mount --map-user="$uid" --map-group="$gid" bash -c 'echo ${READY}; while :; do sleep 86400 & wait; done'`;
@@ -863,6 +934,40 @@ exec unshare --user --mount --map-user="$uid" --map-group="$gid" bash -c 'echo $
 /** A directory to hide, unless the workspace or a cache lives under it. */
 const hideable = (dir: string, kept: string[]): string =>
   kept.some((path) => path === dir || path.startsWith(`${dir}/`)) ? "" : dir;
+
+/**
+ * What a Linux anchor masks, by real path: each credential store there is
+ * now. A directory that holds something a command needs (the data dir holds
+ * the `cawco` CLI) is masked entry by entry instead, all but what is needed.
+ */
+const linuxStores = async (kept: string[]): Promise<string[]> => {
+  const holds = (dir: string): boolean =>
+    kept.some((path) => path === dir || path.startsWith(`${dir}/`));
+  const expand = async (path: string): Promise<string[]> => {
+    if (!holds(path)) {
+      return [path];
+    }
+    if (kept.includes(path)) {
+      return [];
+    }
+    const names = await readdir(path).catch(() => [] as string[]);
+    return (
+      await Promise.all(names.map((name) => expand(join(path, name))))
+    ).flat();
+  };
+  const reals = await Promise.all(
+    credentialStores().map((path) => realpath(path).catch(() => undefined))
+  );
+  const stores = await Promise.all(
+    [...new Set(reals)].map(async (real) => {
+      const info = real ? await stat(real).catch(() => undefined) : undefined;
+      return real && info && (info.isDirectory() || info.isFile())
+        ? expand(real)
+        : [];
+    })
+  );
+  return stores.flat();
+};
 
 const linuxSpec = async (
   ref: WorkspaceRef,
@@ -882,8 +987,14 @@ const linuxSpec = async (
     ...caches,
     ...alternates.split("\n").filter((line) => line.startsWith("/")),
   ];
+  const stores = await linuxStores([
+    ...kept,
+    ...(await Promise.all(
+      keptInStores().map((path) => realpath(path).catch(() => path))
+    )),
+  ]);
   return {
-    command: "unshare",
+    command: "/usr/bin/unshare",
     args: [
       "--user",
       "--map-root-user",
@@ -908,7 +1019,7 @@ const linuxSpec = async (
       hideable(runtime, kept),
       hideable(dirname(sessiondPath()), kept),
       ssh,
-      homedir(),
+      stores.join("\n"),
       ...caches,
     ],
   };
@@ -938,7 +1049,7 @@ done`;
 const sbString = (path: string): string =>
   `"${path.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
 
-/** Resolve existing ancestors too, so an absent sign-in file still has a deny rule. */
+/** Resolve existing ancestors too, so an absent credential store still has a deny rule. */
 const secretRealpath = async (path: string): Promise<string> => {
   try {
     return await realpath(path);
@@ -961,15 +1072,11 @@ const profileOf = async (
   caches: string[]
 ): Promise<string> => {
   const scratchPath = await realpath(scratch);
-  const secretsPath = await realpath(sessionIdentityDir());
-  const signInPaths = await Promise.all(
-    [
-      join(homedir(), ".claude", ".credentials.json"),
-      join(homedir(), ".local", "share", "opencode", "auth.json"),
-      join(homedir(), ".pi", "agent", "auth.json"),
-      join(homedir(), ".cli-proxy-api"),
-    ].map(secretRealpath)
-  );
+  const wsPath = await realpath(ws);
+  const stores = await Promise.all(credentialStores().map(secretRealpath));
+  // Seatbelt's last matching rule wins: what a command runs from inside a
+  // store is read again after the deny.
+  const keptPaths = await Promise.all(keptInStores().map(secretRealpath));
   const userDirs = await Promise.all(
     ["DARWIN_USER_TEMP_DIR", "DARWIN_USER_CACHE_DIR"].map(async (name) => {
       const path = (await Bun.$`getconf ${name}`.quiet()).text().trim();
@@ -993,9 +1100,12 @@ const profileOf = async (
     "(deny signal)",
     "(allow signal (target same-sandbox))",
     "(deny file-write*)",
-    `(deny file-read* (subpath ${sbString(secretsPath)}))`,
-    ...signInPaths.map(
-      (path) => `(deny file-read* (subpath ${sbString(path)}))`
+    ...stores.map((path) => `(deny file-read* (subpath ${sbString(path)}))`),
+    // A project's secret files, wherever they lie: the clone's own are read
+    // again below.
+    `(deny file-read* (regex #"/(${SECRET_FILE_NAME})$"))`,
+    ...[...keptPaths, wsPath].map(
+      (path) => `(allow file-read* (subpath ${sbString(path)}))`
     ),
     "(allow file-write*",
     ...[...writable, scratchPath].map(
@@ -1034,7 +1144,16 @@ const darwinForm = async (
     .update("\0")
     .update(RUNNER)
     .update("\0")
-    .update(darwinExec(ref.id, 0, fifoOf(ref.id), scratch, shimsOf(ref.id)))
+    .update(
+      darwinExec(
+        ref.id,
+        0,
+        fifoOf(ref.id),
+        scratch,
+        shimsOf(ref.id),
+        await hostGh()
+      )
+    )
     .digest("hex")
     .slice(0, 16);
   return { form, profile };
@@ -1116,21 +1235,66 @@ const ready = (client: SessiondClient, procId: string): Promise<void> =>
     );
   });
 
+/** Where a workspace writes, so nothing the executor runs on the host is found there. */
+const writableInside = (): string[] => [
+  workspaceCacheDir(),
+  workspacesDir(),
+  join(homedir(), ".worktrees"),
+  "/tmp",
+  "/private/tmp",
+  "/var/folders",
+  "/private/var/folders",
+];
+
+/**
+ * `gh` as the executor runs it on the host, by its real path; none when the
+ * agent finds none, or finds it where a workspace writes.
+ */
+const hostGh = async (): Promise<string | undefined> => {
+  const found = Bun.which("gh");
+  const real = found ? await realpath(found).catch(() => undefined) : undefined;
+  if (
+    !real ||
+    writableInside().some((dir) => real === dir || real.startsWith(`${dir}/`))
+  ) {
+    return;
+  }
+  return real;
+};
+
 /** The command token for `gh`, read on the host, where the keyring is. */
-const GH_TOKEN = `if [ -z "\${GH_TOKEN:-}" ] && command -v gh >/dev/null 2>&1; then
-  token=$(gh auth token 2>/dev/null) && [ -n "$token" ] && GH_TOKEN=$token && export GH_TOKEN
-fi`;
+const ghToken = (gh: string | undefined): string =>
+  gh
+    ? `if [ -z "\${GH_TOKEN:-}" ]; then
+  token=$(${shellQuote(gh)} auth token 2>/dev/null) && [ -n "$token" ] && GH_TOKEN=$token && export GH_TOKEN
+fi`
+    : "";
+
+/** The variables every command runs with: the workspaces' own cache, by `workspaceCacheEnv`. */
+const cacheAssignments = (): string[] =>
+  Object.entries(workspaceCacheEnv()).map(
+    ([name, value]) => `${name}=${shellQuote(value)}`
+  );
 
 const stoppedLine = (id: string): string =>
   `cawco: workspace ${id}'s boundary is not running, so this command did not run. The workspace's next session starts it again.`;
 
+/**
+ * The executor joins the anchor's namespaces and runs the command with the
+ * workspaces' cache in its environment and the caller's PATH. The executor
+ * finds its own tools on {@link SYSTEM_PATH}.
+ */
 const linuxExec = (
   id: string,
   pid: number,
-  identity: string
+  identity: string,
+  gh: string | undefined
 ): string => `#!/bin/sh
 # CawCo workspace ${id}: runs one shell command inside the workspace's boundary.
 # exec [--cwd-out FILE] COMMAND — FILE gets the directory COMMAND ended in.
+caller_path=$PATH
+PATH=${SYSTEM_PATH}
+export PATH
 anchor=${pid}
 if [ "$(readlink /proc/$anchor/ns/user 2>/dev/null)" != ${shellQuote(identity)} ]; then
   echo ${shellQuote(stoppedLine(id))} >&2
@@ -1138,9 +1302,10 @@ if [ "$(readlink /proc/$anchor/ns/user 2>/dev/null)" != ${shellQuote(identity)} 
 fi
 cwd_out=
 if [ "$1" = --cwd-out ]; then cwd_out=$2; shift 2; fi
-${GH_TOKEN}
-exec nsenter --user --mount --pid --preserve-credentials --target "$anchor" --wdns="$PWD" \\
-  env TMPDIR=/tmp bash -c 'eval "$1"; status=$?; [ -z "$2" ] || pwd -P > "$2"; exit $status' cawco "$1" "$cwd_out"
+${ghToken(gh)}
+exec /usr/bin/nsenter --user --mount --pid --preserve-credentials --target "$anchor" --wdns="$PWD" \\
+  /usr/bin/env PATH="$caller_path" TMPDIR=/tmp ${cacheAssignments().join(" ")} \\
+  /bin/bash -c 'eval "$1"; status=$?; [ -z "$2" ] || pwd -P > "$2"; exit $status' cawco "$1" "$cwd_out"
 `;
 
 const darwinExec = (
@@ -1148,15 +1313,19 @@ const darwinExec = (
   pid: number,
   fifo: string,
   scratch: string,
-  shims: string
+  shims: string,
+  gh: string | undefined
 ): string => `#!/bin/bash
 # CawCo workspace ${id}: runs one shell command inside the workspace's boundary.
 # exec [--cwd-out FILE] COMMAND — FILE gets the directory COMMAND ended in.
+caller_path=$PATH
+PATH=${SYSTEM_PATH}
+export PATH
 # While the agent replaces the runner, wait, then run through the new one.
 gate=${shellQuote(gateOf(id))}
 if [ -e "$gate" ]; then
   while [ -e "$gate" ] && kill -0 "$(cat "$gate" 2>/dev/null)" 2>/dev/null; do sleep 0.1; done
-  [ -e "$gate" ] || exec "$0" "$@"
+  [ -e "$gate" ] || PATH=$caller_path exec "$0" "$@"
 fi
 fifo=${shellQuote(fifo)}
 if ! [ -p "$fifo" ] || ! kill -0 ${pid} 2>/dev/null; then
@@ -1165,11 +1334,18 @@ if ! [ -p "$fifo" ] || ! kill -0 ${pid} 2>/dev/null; then
 fi
 cwd_out=
 if [ "$1" = --cwd-out ]; then cwd_out=$2; shift 2; fi
-${GH_TOKEN}
+${ghToken(gh)}
 req=$(mktemp -d ${shellQuote(scratch)}/.run.XXXXXX) || exit 126
 printf '%s' "$1" > "$req/cmd"
 pwd -P > "$req/cwd"
-{ export -p; echo "export TMPDIR=${scratch}"; echo ${shellQuote(`export PATH=${shellQuote(shims)}:"$PATH"`)}; } > "$req/env"
+{
+  export -p
+  echo "export TMPDIR=${scratch}"
+${cacheAssignments()
+  .map((assignment) => `  echo ${shellQuote(`export ${assignment}`)}`)
+  .join("\n")}
+  printf 'export PATH=%q\\n' ${shellQuote(`${shims}:`)}"$caller_path"
+} > "$req/env"
 mkfifo "$req/out" "$req/err"
 trap 'kill -TERM -- "-$(cat "$req/pid" 2>/dev/null)" 2>/dev/null; rm -rf "$req"; exit 143' TERM INT HUP
 printf '%s\\n' "$req" > "$fifo"
@@ -1244,9 +1420,7 @@ const start = async (
       );
     }
     held = { exec, pid, scratch, identity, path: ref.path };
-    await writeWhole(exec, linuxExec(ref.id, pid, identity), 0o755);
   } else {
-    // armHook writes the executor.
     held = {
       exec,
       pid: proc.pid,
@@ -1256,6 +1430,7 @@ const start = async (
       form: darwin?.form,
     };
   }
+  // armHook writes the executor.
   return armHook(ref.id, held);
 };
 

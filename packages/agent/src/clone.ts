@@ -15,13 +15,43 @@
 import { cp, readdir, rename, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { WorkspaceRef } from "@cawco/core";
+import {
+  repositoryConfigProblem,
+  SAFE_GIT_ENV,
+  SAFE_GIT_FLAGS,
+} from "@cawco/core/safe-git";
+import { workspaceHolding } from "./workspace-records";
+
+/**
+ * git in `dir`, on this host, as every git call there runs (`safe-git.ts`).
+ * In a workspace's clone it refuses to run while the clone's own config
+ * holds a key past the allowlist: the workspace writes that config. `stdin`
+ * is fed to git when given.
+ */
+export const hostGit = async (
+  dir: string,
+  args: readonly string[],
+  stdin?: string
+) => {
+  const workspace = await workspaceHolding(dir);
+  const problem = workspace
+    ? await repositoryConfigProblem(join(workspace.path, ".git"))
+    : undefined;
+  if (problem) {
+    throw new Error(`git did not run in ${dir}: ${problem}`);
+  }
+  const command = stdin
+    ? Bun.$`git ${SAFE_GIT_FLAGS} -C ${dir} ${args} < ${new Response(stdin)}`
+    : Bun.$`git ${SAFE_GIT_FLAGS} -C ${dir} ${args}`;
+  return await command
+    .env({ ...process.env, ...SAFE_GIT_ENV })
+    .quiet()
+    .nothrow();
+};
 
 /** Runs git, answering its stdout; its stderr is the error. */
 export const git = async (dir: string, ...args: string[]): Promise<string> => {
-  const run = await Bun.$`git -C ${dir} ${args}`
-    .env({ ...process.env, GIT_TERMINAL_PROMPT: "0" })
-    .quiet()
-    .nothrow();
+  const run = await hostGit(dir, args);
   if (run.exitCode !== 0) {
     throw new Error(`git ${args[0]} failed: ${run.stderr.toString().trim()}`);
   }
@@ -36,7 +66,7 @@ const gitMaybe = async (
   dir: string,
   ...args: string[]
 ): Promise<string | undefined> => {
-  const run = await Bun.$`git -C ${dir} ${args}`.quiet().nothrow();
+  const run = await hostGit(dir, args);
   return run.exitCode === 0 ? run.text().trim() : undefined;
 };
 
@@ -163,10 +193,11 @@ const packOwnObjects = async (dir: string): Promise<void> => {
   if (wanted.length === 0) {
     return;
   }
-  const pack =
-    await Bun.$`git -C ${dir} pack-objects -q ${join(dir, ".git", "objects", "pack", "pack")} < ${new Response(`${wanted.join("\n")}\n`)}`
-      .quiet()
-      .nothrow();
+  const pack = await hostGit(
+    dir,
+    ["pack-objects", "-q", join(dir, ".git", "objects", "pack", "pack")],
+    `${wanted.join("\n")}\n`
+  );
   if (pack.exitCode !== 0) {
     throw new Error(
       `git pack-objects failed: ${pack.stderr.toString().trim()}`

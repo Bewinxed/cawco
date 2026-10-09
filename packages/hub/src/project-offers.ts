@@ -27,6 +27,7 @@ import type {
   ProjectOfferSummary,
   ThreadSummary,
 } from "@cawco/core";
+import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { Elysia, t } from "elysia";
 import { z } from "zod";
 import { tool } from "./admin-tools";
@@ -170,7 +171,12 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
       return Promise.resolve(undefined);
     }
     const reading = deps
-      .run(machineId, placePath(cwd), "git remote get-url origin", READ_MS)
+      .run(
+        machineId,
+        placePath(cwd),
+        `${SAFE_GIT_SHELL}git remote get-url origin`,
+        READ_MS
+      )
       .then((result) =>
         result.exitCode === 0 ? normaliseRemote(result.stdout) : null
       )

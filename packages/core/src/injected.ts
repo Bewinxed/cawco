@@ -130,7 +130,7 @@ export const withWorkspaceLine = (
 ): string =>
   afterMarker(
     text,
-    `You work in your own clone of ${repoRoot} (your current directory), on its own branch; its stash is its own. Paths under ${repoRoot} in this brief mean the same path in your clone. ${hubLandLine(base, landing)} Your shell commands run inside this workspace's boundary: they can write only this clone, /tmp (the workspace's own), ~/.cache, ~/.bun and ~/.npm; they see and signal only this workspace's processes; they cannot reach the service manager; the hub and the internet are reachable.`
+    `You work in your own clone of ${repoRoot} (your current directory), on its own branch; its stash is its own. Paths under ${repoRoot} in this brief mean the same path in your clone. ${hubLandLine(base, landing)} Your shell commands run inside this workspace's boundary: they can write only this clone, /tmp (the workspace's own) and the workspaces' own package cache (bun, npm, uv and XDG_CACHE_HOME point there; the host's caches are read-only); they cannot read the credentials CawCo, the harnesses and the machine's tools keep; they see and signal only this workspace's processes; they cannot reach the service manager; the hub and the internet are reachable.`
   );
 
 /**

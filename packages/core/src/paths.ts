@@ -292,3 +292,142 @@ export const sessionIdentityDir = (): string =>
     dirname(process.env.CAWCO_SESSIOND_ENDPOINT ?? sessiondEndpoint()),
     "session-identity"
   );
+
+const xdgConfigHome = (): string =>
+  process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config");
+const xdgDataHome = (): string =>
+  process.env.XDG_DATA_HOME ?? join(homedir(), ".local", "share");
+
+/** CawCo's config dir: the CLI's `config.json`, the hub's env file, the release signing key. */
+export const cawcoConfigDir = (): string => join(xdgConfigHome(), "cawco");
+
+/** CawCo's data dir: the binary install, its runtime trees, the transcript index; on Linux the hub's database too. */
+export const cawcoDataDir = (): string => join(xdgDataHome(), "cawco");
+
+/** Where an installed hub keeps its database (`cawco.db`) and the backups beside it. */
+export const hubDataDir = (): string =>
+  process.platform === "darwin"
+    ? join(homedir(), "Library", "Application Support", "cawco")
+    : cawcoDataDir();
+
+/**
+ * The env file `scripts/release.ts` loads the release signing key from
+ * (`CAWCO_RELEASE_SIGNING_KEY`), with Bun's `--env-file`: inside the config
+ * dir, so no workspace reads it.
+ */
+export const releaseEnvPath = (): string =>
+  join(cawcoConfigDir(), "release.env");
+
+/**
+ * The one cache every workspace on this machine shares, and no host process
+ * ever reads: bun's and npm's package caches, the XDG cache, uv's, and on
+ * macOS Xcode's DerivedData and SwiftPM's. Every host cache is read-only
+ * inside a workspace, so nothing a workspace writes reaches a file the host
+ * runs; bun links a workspace's `node_modules` to the files here, never to the
+ * host's.
+ */
+export const workspaceCacheDir = (): string =>
+  join(homedir(), ".cawco", "workspace-cache");
+
+/** Where Playwright's browsers are on the host: a workspace runs them from there, read-only. */
+const hostPlaywrightBrowsers = (): string =>
+  process.platform === "darwin"
+    ? join(homedir(), "Library", "Caches", "ms-playwright")
+    : join(
+        process.env.XDG_CACHE_HOME ?? join(homedir(), ".cache"),
+        "ms-playwright"
+      );
+
+/** The environment every workspace command runs with, pointing each tool at {@link workspaceCacheDir}. */
+export const workspaceCacheEnv = (): Record<string, string> => {
+  const cache = workspaceCacheDir();
+  return {
+    BUN_INSTALL_CACHE_DIR: join(cache, "bun"),
+    npm_config_cache: join(cache, "npm"),
+    XDG_CACHE_HOME: join(cache, "xdg"),
+    UV_CACHE_DIR: join(cache, "uv"),
+    PLAYWRIGHT_BROWSERS_PATH: hostPlaywrightBrowsers(),
+  };
+};
+
+/**
+ * The name of a file that holds secrets wherever it lies: `.env`,
+ * `.env.local`, `.envrc`, `tunnel.env`, `telegram.env.bak`. A basename
+ * pattern without anchors, in the syntax JavaScript, Perl and POSIX extended
+ * regexes share: Seatbelt matches it as `/(…)$` on a path. No workspace reads
+ * one outside its own clone; its own repository's are copied into its clone
+ * when it is cut.
+ */
+export const SECRET_FILE_NAME = String.raw`\.env[^/]*|[^/]*\.env(\.[^/]*)?`;
+
+/** {@link SECRET_FILE_NAME} as a test on one file's name. */
+export const isSecretFileName = (name: string): boolean =>
+  new RegExp(`^(${SECRET_FILE_NAME})$`).test(name);
+
+/**
+ * Every place on this machine that holds a credential CawCo, a harness or
+ * another tool keeps. Every workspace boundary hides each one from every
+ * command it runs (packages/agent/src/boundary.ts): a directory with all that
+ * is in it, a file whole. A new store is hidden by adding it here; a secret
+ * file a project keeps is hidden by its name ({@link SECRET_FILE_NAME}).
+ */
+export const credentialStores = (): string[] => {
+  const home = homedir();
+  const dbPath = process.env.CAWCO_DB_PATH;
+  return [
+    // Each account's Claude Code dir (its `.credentials.json`, its
+    // `.claude.json`) and each provider account's `credential.json`.
+    accountsRoot(),
+    // Session credentials, OpenCode's bridge credentials, redaction values.
+    sessionIdentityDir(),
+    // The hub's env file (its Telegram token), the release signing key.
+    cawcoConfigDir(),
+    // The hub's database (fleet MCP OAuth tokens, API keys, push device
+    // keys) and its backups, the transcript index.
+    cawcoDataDir(),
+    hubDataDir(),
+    ...(dbPath ? [dirname(dbPath)] : []),
+    // Claude Code: each config dir's login (the machine's own, each
+    // account's, any it was pointed at), and the fleet's MCP servers with
+    // their headers and env.
+    ...claudeConfigDirs().map((dir) => join(dir, ".credentials.json")),
+    claudeHomeJson(),
+    // OpenCode: `auth.json`, `mcp-auth.json`; `opencode.json` with provider
+    // keys and MCP headers.
+    join(xdgDataHome(), "opencode"),
+    join(xdgConfigHome(), "opencode"),
+    // pi: `auth.json`, the CLIProxyAPI key; CLIProxyAPI's own logins.
+    join(home, ".pi", "agent"),
+    join(home, ".cli-proxy-api"),
+    // Other agents' logins: Codex, Gemini, GitHub Copilot.
+    join(home, ".codex"),
+    join(home, ".gemini"),
+    join(xdgConfigHome(), "github-copilot"),
+    // Other tools' tokens. `gh` gets its token from the executor as
+    // `GH_TOKEN`; git's credential helpers run outside.
+    join(xdgConfigHome(), "gh", "hosts.yml"),
+    join(home, ".git-credentials"),
+    join(home, ".netrc"),
+    join(home, ".npmrc"),
+    join(home, ".pypirc"),
+    join(home, ".docker", "config.json"),
+    join(home, ".cargo", "credentials.toml"),
+    join(home, ".cargo", "credentials"),
+    join(home, ".aws"),
+    join(home, ".kube"),
+    join(xdgConfigHome(), "gcloud"),
+    join(home, ".cloudflared"),
+    join(home, ".wrangler"),
+    join(xdgConfigHome(), ".wrangler"),
+    join(home, ".gnupg"),
+    join(home, ".password-store"),
+    // macOS: the login keychain, where Claude Code keeps each account's
+    // login and `gh` its token.
+    ...(process.platform === "darwin"
+      ? [
+          join(home, "Library", "Keychains", "login.keychain-db"),
+          join(home, "Library", "Keychains", "login.keychain"),
+        ]
+      : []),
+  ];
+};

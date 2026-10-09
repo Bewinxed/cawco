@@ -13,7 +13,9 @@
  *
  * The rewritten command carries the directory the command ended in back out
  * of the boundary and `cd`s there, so the session's working directory still
- * follows its `cd`s from one call to the next.
+ * follows its `cd`s from one call to the next. It runs in the CLI's own shell,
+ * on the host, so it names `cat` and `rm` by their absolute paths: a `cat`
+ * that a workspace put on the session's PATH would run outside the boundary.
  *
  * Anything this cannot do fails it, which the hook script turns into exit 2
  * — the one outcome a hook's output cannot override: a command never runs
@@ -42,7 +44,7 @@ try {
   // Monitor's websocket form runs no command, so there is nothing to bound.
   if (typeof call.command === "string") {
     const ended = quote(join(scratch, `.cwd-${randomUUID()}`));
-    const command = `${quote(exec)} --cwd-out ${ended} ${quote(call.command)}; __cawco_status=$?; if [ -s ${ended} ]; then cd -- "$(cat ${ended})"; fi; rm -f ${ended}; (exit $__cawco_status)`;
+    const command = `${quote(exec)} --cwd-out ${ended} ${quote(call.command)}; __cawco_status=$?; if [ -s ${ended} ]; then cd -- "$(/bin/cat ${ended})"; fi; /bin/rm -f ${ended}; (exit $__cawco_status)`;
     process.stdout.write(
       JSON.stringify({
         hookSpecificOutput: {

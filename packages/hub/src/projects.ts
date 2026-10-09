@@ -6,6 +6,7 @@
  */
 
 import type { CommandResult } from "@cawco/core";
+import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 
 /** A scheme URL: `https://`, `ssh://`, `git://`, `file://`. */
 const SCHEME = /^[a-z][a-z0-9+.-]*:\/\//i;
@@ -77,7 +78,7 @@ export const readRemote = async (
     const result = await run(
       machineId,
       path,
-      "git remote get-url origin",
+      `${SAFE_GIT_SHELL}git remote get-url origin`,
       REMOTE_READ_MS
     );
     return result.exitCode === 0 ? normaliseRemote(result.stdout) : null;

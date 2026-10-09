@@ -41,6 +41,7 @@ import {
 } from "node:fs/promises";
 import { devNull } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
+import { SAFE_GIT_ENV, SAFE_GIT_FLAGS } from "@cawco/core/safe-git";
 import { Elysia, status, t } from "elysia";
 import { DB_PATH } from "./config";
 
@@ -246,6 +247,7 @@ const gitEnv = (): Record<string, string> => {
       GIT_LITERAL_PATHSPECS: "1",
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_GLOBAL: devNull,
+      ...SAFE_GIT_ENV,
     };
   }
   return gitEnvironment;
@@ -268,6 +270,7 @@ const run = async (root: string, args: string[]): Promise<GitRun> => {
   const child = Bun.spawn(
     [
       "git",
+      ...SAFE_GIT_FLAGS,
       `--git-dir=${join(root, ".git")}`,
       `--work-tree=${root}`,
       "-c",

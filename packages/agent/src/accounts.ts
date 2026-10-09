@@ -35,6 +35,7 @@ import {
 } from "@cawco/core/paths";
 import { claudeExecutableOptions, idle, resolveClaudeExecutable } from "./auth";
 import { retireConfigDir } from "./claude-sessions";
+import { hostGit } from "./clone";
 
 /**
  * An account's Claude Code on this machine: its config dir, which holds its
@@ -396,12 +397,12 @@ const memorySlugs = async (configDir: string): Promise<string[]> => {
  * memory went under the main repo's slug.
  */
 export const projectMemoryRoot = async (cwd: string): Promise<string> => {
-  const common =
-    await Bun.$`git rev-parse --path-format=absolute --git-common-dir`
-      .cwd(cwd)
-      .quiet()
-      .nothrow();
-  const dir = common.exitCode === 0 ? common.stdout.toString().trim() : "";
+  const common = await hostGit(cwd, [
+    "rev-parse",
+    "--path-format=absolute",
+    "--git-common-dir",
+  ]).catch(() => undefined);
+  const dir = common?.exitCode === 0 ? common.stdout.toString().trim() : "";
   const root = dir.endsWith("/.git") ? dirname(dir) : cwd;
   return await realpath(root).catch(() => root);
 };

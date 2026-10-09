@@ -4,6 +4,7 @@
  */
 import { appendFile, mkdir, realpath } from "node:fs/promises";
 import { dirname, isAbsolute, relative as relativePath } from "node:path";
+import { SAFE_GIT_ENV, SAFE_GIT_FLAGS } from "@cawco/core/safe-git";
 import { resolveBin, toolEnv } from "./tools";
 
 /** One git query in `cwd`, its trimmed stdout; undefined when git fails (not a checkout, no git). */
@@ -16,8 +17,8 @@ export const gitIn = async (
     return;
   }
   try {
-    const child = Bun.spawn([git, "-C", cwd, ...args], {
-      env: toolEnv(),
+    const child = Bun.spawn([git, ...SAFE_GIT_FLAGS, "-C", cwd, ...args], {
+      env: { ...toolEnv(), ...SAFE_GIT_ENV },
       stdout: "pipe",
       stderr: "ignore",
     });

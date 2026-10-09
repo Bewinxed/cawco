@@ -58,6 +58,7 @@ import {
   withLandingLine,
   withWorkspaceLine,
 } from "@cawco/core";
+import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import type { DbShape, WorkItemRow, WorkspaceRow } from "./db";
 import type {
   WorkBudget,
@@ -2307,8 +2308,7 @@ export const createWorkItems = ({
     workspace: WorkspaceRow,
     item: WorkItemRow
   ): Promise<string> => {
-    const git = (cmd: string) =>
-      command(workspace.machineId, workspace.path, cmd, GIT_TIMEOUT_MS);
+    const git = (cmd: string) => runIn(workspace)(cmd, GIT_TIMEOUT_MS);
     const since = Math.floor(item.createdAt.getTime() / 1000);
     const kept = (await git(keptCommits(since))).stdout
       .split("\n")
@@ -2327,14 +2327,18 @@ export const createWorkItems = ({
     return `\n\nCommits:${fenced(commits.stdout.trim())}\n\nDiffstat:${fenced(diffstat.stdout.trim() || "(no changes)")}`;
   };
 
-  /** Runs a command in the item's workspace, inside its boundary. */
+  /**
+   * Runs a command in the item's workspace, inside its boundary, with every
+   * `git` in it run as `safe-git.ts` says: no hook or config the workspace
+   * wrote runs for the hub.
+   */
   const runIn =
     (workspace: WorkspaceRow) =>
     (cmd: string, timeoutMs: number): Promise<CommandResult> =>
       command(
         workspace.machineId,
         workspace.path,
-        cmd,
+        `${SAFE_GIT_SHELL}${cmd}`,
         timeoutMs,
         refOf(workspace)
       );

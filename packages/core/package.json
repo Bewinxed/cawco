@@ -25,6 +25,7 @@
     "./preview-proxy": "./src/preview-proxy.ts",
     "./paths": "./src/paths.ts",
     "./claude-dirs": "./src/claude-dirs.ts",
+    "./safe-git": "./src/safe-git.ts",
     "./tool-presentation": "./src/tool-presentation.ts",
     ".": {
       "types": "./src/index.ts",

@@ -80,6 +80,7 @@ import {
   mergeHolds,
   type RestartHold,
 } from "@cawco/core/binary-updates";
+import { SAFE_GIT, SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import {
   processLimitSentence,
   SESSIOND_PROCESS_LIMIT,
@@ -87,9 +88,9 @@ import {
 } from "@cawco/core/sessiond";
 import { Effect } from "effect";
 import { withFiles } from "./attachments";
-import { type Boundary, boundaryFor } from "./boundary";
+import { type Boundary, boundaryFor, shellQuote } from "./boundary";
 import { carryRefusal, carrySessions } from "./claude-sessions";
-import { fetchDefaultBranch } from "./clone";
+import { fetchDefaultBranch, hostGit } from "./clone";
 import { harnessMcpUrl } from "./delegation";
 import { expandHome, runFs } from "./fs";
 import type { Harness, HarnessContext, HarnessSession } from "./harness";
@@ -112,6 +113,8 @@ import { rememberCredential } from "./redaction";
 import { fenced } from "./restart";
 import { endProc, procEpoch, SessiondClient } from "./sessiond-client";
 import { installTool, probeTools } from "./tools";
+import { runWorkflowCommand } from "./workflow-command";
+import { workspaceHolding } from "./workspace-records";
 
 /**
  * What {@link SessionSupervisor.reattach} needs of a sessiond-backed adapter, named
@@ -349,23 +352,42 @@ const ghAvailable = async (): Promise<boolean> =>
 /**
  * {@link CONTROL_GIT_CHANGES}: exactly two read-only git commands in `cwd`.
  * `git status` refusing (exit 128: no work tree here) answers `{ repo: false }`.
+ * In a workspace's clone they run inside its boundary, as every git call
+ * there does (`safe-git.ts`): its config and hooks are the workspace's to
+ * write, and `git status` runs what they name (an fsmonitor, a filter).
  */
 const gitChanges = async (cwd: string, since: string): Promise<GitChanges> => {
   const dir = expandHome(cwd);
-  const status = await Bun.$`git -C ${dir} status --porcelain`
-    .quiet()
-    .nothrow();
+  const workspace = await workspaceHolding(dir);
+  const git = async (args: string) =>
+    workspace
+      ? await runWorkflowCommand(
+          dir,
+          `${SAFE_GIT_SHELL}git ${args}`,
+          GIT_CHANGES_TIMEOUT_MS,
+          workspace
+        )
+      : await runWorkflowCommand(
+          dir,
+          `${SAFE_GIT} ${args}`,
+          GIT_CHANGES_TIMEOUT_MS
+        );
+  const status = await git("status --porcelain");
   if (status.exitCode !== 0) {
     return { repo: false };
   }
-  const log =
-    await Bun.$`git -C ${dir} log --since=${since} --name-status ${"--format=%h %s"}`.quiet();
+  const log = await git(
+    `log --since=${shellQuote(since)} --name-status ${shellQuote("--format=%h %s")}`
+  );
   return {
     repo: true,
-    status: status.stdout.toString(),
-    log: log.stdout.toString(),
+    status: status.stdout,
+    log: log.stdout,
   };
 };
+
+/** How long each of {@link gitChanges}' two git commands may take. */
+const GIT_CHANGES_TIMEOUT_MS = 30_000;
 
 const listRepos = async (): Promise<ReposResult> => {
   if (!(await ghAvailable())) {
@@ -3188,9 +3210,7 @@ export class SessionSupervisor {
     const target = `${parent}/${repoLeaf(repo)}`;
 
     if (await isDirectory(target)) {
-      const origin = await Bun.$`git -C ${target} remote get-url origin`
-        .quiet()
-        .nothrow();
+      const origin = await hostGit(target, ["remote", "get-url", "origin"]);
       if (
         origin.exitCode !== 0 ||
         repoIdentity(origin.text()) !== repoIdentity(repo)
@@ -3214,9 +3234,7 @@ export class SessionSupervisor {
       ? await Bun.$`gh repo clone ${repo} ${target} -- --single-branch`
           .quiet()
           .nothrow()
-      : await Bun.$`git clone --single-branch ${repo} ${target}`
-          .quiet()
-          .nothrow();
+      : await hostGit(parent, ["clone", "--single-branch", repo, target]);
     if (cloned.exitCode !== 0) {
       throw new Error(
         `could not clone ${repo}: ${tail(cloned.stderr.toString())}`
@@ -3237,10 +3255,12 @@ export class SessionSupervisor {
       this.#recordWorktree(instanceId, recorded);
       return recorded.dir;
     }
-    const repository =
-      await Bun.$`git -C ${baseCwd} rev-parse --show-toplevel --show-prefix HEAD`
-        .quiet()
-        .nothrow();
+    const repository = await hostGit(baseCwd, [
+      "rev-parse",
+      "--show-toplevel",
+      "--show-prefix",
+      "HEAD",
+    ]);
     if (repository.exitCode !== 0) {
       return baseCwd;
     }
@@ -3250,9 +3270,9 @@ export class SessionSupervisor {
       `~/.worktrees/${basename(root)}-${instanceId.slice(0, 8)}`
     );
     // A relaunch after a daemon restart finds its worktree already there.
-    const listed = await Bun.$`git -C ${root} worktree list --porcelain`
-      .quiet()
-      .text();
+    const listed = (
+      await hostGit(root, ["worktree", "list", "--porcelain"])
+    ).text();
     const reused = listed.split("\n").includes(`worktree ${path}`);
     if (reused) {
       throw new Error(
@@ -3266,14 +3286,16 @@ export class SessionSupervisor {
       // remote-tracking ref nobody fetched. A repository with no remote has
       // nothing to land on, and starts from its own HEAD.
       const hasOrigin =
-        (await Bun.$`git -C ${root} remote get-url origin`.quiet().nothrow())
-          .exitCode === 0;
+        (await hostGit(root, ["remote", "get-url", "origin"])).exitCode === 0;
       base = hasOrigin ? await fetchDefaultBranch(root) : undefined;
       const commit = base ? `origin/${base}` : "HEAD";
-      const added =
-        await Bun.$`git -C ${root} worktree add --detach ${path} ${commit}`
-          .quiet()
-          .nothrow();
+      const added = await hostGit(root, [
+        "worktree",
+        "add",
+        "--detach",
+        path,
+        commit,
+      ]);
       if (added.exitCode !== 0) {
         throw new Error(
           `git worktree add failed: ${added.stderr.toString().trim()}`
@@ -3329,16 +3351,18 @@ export class SessionSupervisor {
       return;
     }
 
-    const removed =
-      await Bun.$`git -C ${worktree.root} worktree remove --force ${worktree.path}`
-        .quiet()
-        .nothrow();
+    const removed = await hostGit(worktree.root, [
+      "worktree",
+      "remove",
+      "--force",
+      worktree.path,
+    ]);
     if (removed.exitCode !== 0) {
       throw new Error(
         `git worktree remove failed: ${removed.stderr.toString().trim()}`
       );
     }
-    await Bun.$`git -C ${worktree.root} worktree prune`.quiet().nothrow();
+    await hostGit(worktree.root, ["worktree", "prune"]);
     this.#worktrees.delete(instanceId);
     await rm(this.#worktreeRecord(instanceId), { force: true });
   }

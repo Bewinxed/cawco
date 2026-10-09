@@ -36,8 +36,6 @@ const SOURCES = [
 const ALLOWED: Record<string, string> = {
   "packages/core/src/claude-dirs.ts":
     "the owner's browser-safe half: the one place the dir name is spelled",
-  "packages/agent/src/boundary.ts":
-    "the workspace boundary's credential deny list; another work item owns this file (hiding ~/.cawco/accounts from workspaces) and moves it onto paths.ts there",
   "scripts/claude-paths-check.ts":
     "this check, whose own examples name the paths it looks for",
   "packages/jsonl-parser/bench/bench.ts":

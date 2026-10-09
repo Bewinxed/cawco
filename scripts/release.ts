@@ -22,10 +22,11 @@ import {
 import { SESSIOND_V1 } from "../packages/core/src/sessiond";
 import { PINNED_BUN, TARGETS } from "./build-binary";
 import { publishRelease } from "./publish-release";
-import { signingPem, takeSigningKey } from "./release-signing";
+import { signingPem, takeSigningKey, underSigningEnv } from "./release-signing";
 
 const repo = resolve(import.meta.dir, "..");
 const argv = Bun.argv.slice(2);
+await underSigningEnv(import.meta.path, argv);
 function argument(name: string): string | undefined {
   const i = argv.indexOf(name);
   return i < 0 ? undefined : argv[i + 1];
@@ -53,7 +54,7 @@ if (channel === "nightly" && !nightlyNotes?.trim()) {
 if (Bun.version !== PINNED_BUN) {
   throw new Error(`Release pipeline requires Bun ${PINNED_BUN}`);
 }
-const signingKeyBase64 = await takeSigningKey();
+const signingKeyBase64 = takeSigningKey();
 
 /** A process named so a reused pid is never taken for it: pid and start time. */
 interface Proc {
