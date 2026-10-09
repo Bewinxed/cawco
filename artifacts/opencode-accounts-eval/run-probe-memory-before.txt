@@ -1,0 +1,245 @@
+[move-login] writing pi's xai into account acct-a
+[move-login] moved; pi's own store no longer holds xai
+[move-login] writing pi's xai into account acct-b
+[move-login] moved; pi's own store no longer holds xai
+[opencode] config written by fleet sync hash=96a803e5
+[opencode] config written by delegation tools hash=6399a669
+{"type":"config-convergence","event":"runtime-verify","fields":["agent","disabled_providers","enabled_providers","model","plugin","provider","small_model"],"mismatched":[],"at":1791548416953}
+{"type":"config-convergence","event":"mcp-config","managed":["cawco","local-one","local-two","proxied-one"],"mismatched":[],"at":1791548416953}
+{"type":"config-convergence","state":"applied","detail":"active generation opencode-server-fdc8adaf-9563-4648-b40c-4fed74e842c4/520, verified baseline 6399a669…","at":1791548416953}
+{"type":"config-convergence","event":"runtime-verify","fields":["agent","disabled_providers","enabled_providers","model","plugin","provider","small_model"],"mismatched":[],"at":1791548418508}
+{"type":"config-convergence","event":"mcp-config","managed":["cawco","local-one","local-two","proxied-one"],"mismatched":[],"at":1791548418508}
+[opencode] account acct-a: its server is opencode-server-account-acct-a-5e215379-c29a-43ab-9c27-c46e7d2b18e5/596
+[opencode] /tmp/accounts-probe-RMosH5/project: subscribe ready
+[opencode] recovery concurrency high-water 1
+[opencode] probe-move: permission snapshot
+[opencode] probe-move: question snapshot
+[opencode] /tmp/accounts-probe-RMosH5/project: MCP status {"local-one":{"status":"connected"},"local-two":{"status":"connected"},"proxied-one":{"status":"connected"},"cawco":{"status":"connected"}}
+turn "turn-1 on A: WRITE note.txt fromA": answered
+turn "turn-2 on A": answered
+[opencode] /tmp/accounts-probe-RMosH5/project: instance disposed by directory release, nothing attached and no turn running
+{"type":"config-convergence","event":"runtime-verify","fields":["agent","disabled_providers","enabled_providers","model","plugin","provider","small_model"],"mismatched":[],"at":1791548421239}
+{"type":"config-convergence","event":"mcp-config","managed":["cawco","local-one","local-two","proxied-one"],"mismatched":[],"at":1791548421239}
+[opencode] account acct-b: its server is opencode-server-account-acct-b-be8816ed-31f7-4a04-a1ec-117b4bda784a/793
+[opencode] /tmp/accounts-probe-RMosH5/project: subscribe ready
+[opencode] probe-move: permission snapshot
+[opencode] probe-move: question snapshot
+[opencode] /tmp/accounts-probe-RMosH5/project: MCP status {"local-one":{"status":"connected"},"local-two":{"status":"connected"},"proxied-one":{"status":"connected"},"cawco":{"status":"connected"}}
+turn "turn-3 on B": answered
+[opencode] /tmp/accounts-probe-RMosH5/project: instance disposed by directory release, nothing attached and no turn running
+[opencode] /tmp/accounts-probe-RMosH5/project: subscribe ready
+[opencode] probe-move: permission snapshot
+[opencode] probe-move: question snapshot
+[opencode] /tmp/accounts-probe-RMosH5/project: MCP status {"local-one":{"status":"connected"},"local-two":{"status":"connected"},"proxied-one":{"status":"connected"},"cawco":{"status":"connected"}}
+turn "turn-4 back on A": answered
+PASS each account's credential reached the mock from its own server: ["turn-1 on A: WRITE → Bearer xai-A1","turn-1 on A: WRITE (tool result) → Bearer xai-A1","turn-2 on A → Bearer xai-A1","turn-3 on B → Bearer xai-B1","turn-4 back on A → Bearer xai-A1"]
+PASS history read back on B: {"userEntriesOnB":3}
+[opencode] /tmp/accounts-probe-RMosH5/project: instance disposed by directory release, nothing attached and no turn running
+[opencode] /tmp/accounts-probe-RMosH5/project: MCP status {"local-one":{"status":"connected"},"local-two":{"status":"connected"},"proxied-one":{"status":"connected"},"cawco":{"status":"connected"}}
+PASS an edit made on A is undone from B: {"writtenOnA":true,"afterRevertOnB":false}
+PASS A's OpenCode store holds its token and a marker for the refresh token: {"type":"oauth","access":"xai-A1","refresh":"cawco-account","expires":1791552005124}
+[opencode] /tmp/accounts-probe-RMosH5/project: subscribe ready
+[opencode] /tmp/accounts-probe-RMosH5/project: instance disposed by directory release, nothing attached and no turn running
+[opencode] /tmp/accounts-probe-RMosH5/project: subscribe ready
+[opencode] probe-move: permission snapshot
+[opencode] probe-move: question snapshot
+[opencode] /tmp/accounts-probe-RMosH5/project: MCP status {"local-one":{"status":"connected"},"local-two":{"status":"connected"},"proxied-one":{"status":"connected"},"cawco":{"status":"connected"}}
+turn "turn-5 on A after refresh": answered
+PASS a pi-ai refresh reached A's server on its next request: ["Bearer xai-A2"]
+{"type":"config-convergence","event":"runtime-verify","fields":["agent","disabled_providers","enabled_providers","model","plugin","provider","small_model"],"mismatched":[],"at":1791548424781}
+{"type":"config-convergence","event":"mcp-config","managed":["cawco","local-one","local-two","proxied-one"],"mismatched":[],"at":1791548424781}
+[opencode] account acct-limited: its server is opencode-server-account-acct-limited-a1fab938-54b4-4f4f-a894-9b5a0ca5e463/1115
+[opencode] /tmp/accounts-probe-RMosH5/project: subscribe ready
+[opencode] probe-limit: permission snapshot
+[opencode] probe-limit: question snapshot
+[opencode] /tmp/accounts-probe-RMosH5/project: MCP status {"local-one":{"status":"connected"},"local-two":{"status":"connected"},"proxied-one":{"status":"connected"},"cawco":{"status":"connected"}}
+[opencode] probe-limit: its account's usage limit refused the request; ending the turn on it
+turn "turn-L at the limit": error ["The usage limit has been reached"]
+PASS the 429 ended the turn on the provider's own words, which the hub's at-limit rule reads: {"errors":["The usage limit has been reached"],"msToRefusal":628}
+[opencode] /tmp/accounts-probe-RMosH5/project: instance disposed by directory release, nothing attached and no turn running
+{"type":"config-convergence","event":"runtime-verify","fields":["agent","disabled_providers","enabled_providers","model","plugin","provider","small_model"],"mismatched":[],"at":1791548427222}
+{"type":"config-convergence","event":"mcp-config","managed":["cawco","local-one","local-two","proxied-one"],"mismatched":[],"at":1791548427222}
+[opencode] account acct-m: its server is opencode-server-account-acct-m-e56c758a-6ed5-4ff7-b7c2-bc76902652d0/1258
+[opencode] /tmp/accounts-probe-RMosH5/project: subscribe ready
+[opencode] probe-limit: permission snapshot
+[opencode] probe-limit: question snapshot
+[opencode] /tmp/accounts-probe-RMosH5/project: MCP status {"local-one":{"status":"connected"},"local-two":{"status":"connected"},"proxied-one":{"status":"connected"},"cawco":{"status":"connected"}}
+turn "turn-L continued on M": answered
+PASS the session moved to another account and carried on within seconds: {"auth":["Bearer key-M"],"secondsFrom429ToAnswer":3.1}
+[opencode] /tmp/accounts-probe-RMosH5/project: subscribe ready
+[opencode] probe-plain: permission snapshot
+[opencode] probe-plain: question snapshot
+[opencode] /tmp/accounts-probe-RMosH5/project: MCP status {"local-one":{"status":"connected"},"local-two":{"status":"connected"},"proxied-one":{"status":"connected"},"cawco":{"status":"connected"}}
+turn "turn-P on no account": answered
+PASS a model on no account ran on the machine's server with its own key: ["Bearer machine-key","Bearer machine-key"]
+[opencode] config written by fleet sync hash=6399a669
+MEMORY TREES {
+  "opencode-server": {
+    "processes": [
+      {
+        "pid": 520,
+        "command": "/home/bewinxed/.bun/bin/opencode serve --hostname=127.0.0.1 --port=46803",
+        "rssMiB": 601
+      },
+      {
+        "pid": 573,
+        "command": "/home/bewinxed/.bun/bin/bun /tmp/accounts-probe-RMosH5/fake-mcp.ts local-one",
+        "rssMiB": 23
+      },
+      {
+        "pid": 574,
+        "command": "/home/bewinxed/.bun/bin/bun /tmp/accounts-probe-RMosH5/fake-mcp.ts local-two",
+        "rssMiB": 23
+      },
+      {
+        "pid": 1381,
+        "command": "/home/bewinxed/.bun/bin/bun /tmp/accounts-probe-RMosH5/fake-mcp.ts local-one",
+        "rssMiB": 23
+      },
+      {
+        "pid": 1382,
+        "command": "/home/bewinxed/.bun/bin/bun /tmp/accounts-probe-RMosH5/fake-mcp.ts local-two",
+        "rssMiB": 22
+      }
+    ],
+    "totalMiB": 692
+  },
+  "opencode-server-account-acct-a": {
+    "processes": [
+      {
+        "pid": 596,
+        "command": "/home/bewinxed/.bun/bin/opencode serve --hostname=127.0.0.1 --port=36571",
+        "rssMiB": 648
+      },
+      {
+        "pid": 1049,
+        "command": "/home/bewinxed/.bun/bin/bun /tmp/accounts-probe-RMosH5/fake-mcp.ts local-one",
+        "rssMiB": 23
+      },
+      {
+        "pid": 1050,
+        "command": "/home/bewinxed/.bun/bin/bun /tmp/accounts-probe-RMosH5/fake-mcp.ts local-two",
+        "rssMiB": 23
+      },
+      {
+        "pid": 1520,
+        "command": "/home/bewinxed/.bun/bin/bun /tmp/accounts-probe-RMosH5/fake-mcp.ts local-one",
+        "rssMiB": 23
+      },
+      {
+        "pid": 1521,
+        "command": "/home/bewinxed/.bun/bin/bun /tmp/accounts-probe-RMosH5/fake-mcp.ts local-two",
+        "rssMiB": 23
+      }
+    ],
+    "totalMiB": 740
+  },
+  "opencode-server-account-acct-b": {
+    "processes": [
+      {
+        "pid": 793,
+        "command": "/home/bewinxed/.bun/bin/opencode serve --hostname=127.0.0.1 --port=38315",
+        "rssMiB": 489
+      },
+      {
+        "pid": 1528,
+        "command": "/home/bewinxed/.bun/bin/bun /tmp/accounts-probe-RMosH5/fake-mcp.ts local-one",
+        "rssMiB": 23
+      },
+      {
+        "pid": 1529,
+        "command": "/home/bewinxed/.bun/bin/bun /tmp/accounts-probe-RMosH5/fake-mcp.ts local-two",
+        "rssMiB": 23
+      }
+    ],
+    "totalMiB": 535
+  },
+  "opencode-server-account-acct-limited": {
+    "processes": [
+      {
+        "pid": 1115,
+        "command": "/home/bewinxed/.bun/bin/opencode serve --hostname=127.0.0.1 --port=45781",
+        "rssMiB": 439
+      },
+      {
+        "pid": 1536,
+        "command": "/home/bewinxed/.bun/bin/bun /tmp/accounts-probe-RMosH5/fake-mcp.ts local-one",
+        "rssMiB": 23
+      },
+      {
+        "pid": 1537,
+        "command": "/home/bewinxed/.bun/bin/bun /tmp/accounts-probe-RMosH5/fake-mcp.ts local-two",
+        "rssMiB": 23
+      }
+    ],
+    "totalMiB": 485
+  },
+  "opencode-server-account-acct-m": {
+    "processes": [
+      {
+        "pid": 1258,
+        "command": "/home/bewinxed/.bun/bin/opencode serve --hostname=127.0.0.1 --port=43795",
+        "rssMiB": 579
+      },
+      {
+        "pid": 1289,
+        "command": "/home/bewinxed/.bun/bin/bun /tmp/accounts-probe-RMosH5/fake-mcp.ts local-one",
+        "rssMiB": 22
+      },
+      {
+        "pid": 1290,
+        "command": "/home/bewinxed/.bun/bin/bun /tmp/accounts-probe-RMosH5/fake-mcp.ts local-two",
+        "rssMiB": 22
+      },
+      {
+        "pid": 1544,
+        "command": "/home/bewinxed/.bun/bin/bun /tmp/accounts-probe-RMosH5/fake-mcp.ts local-one",
+        "rssMiB": 23
+      },
+      {
+        "pid": 1545,
+        "command": "/home/bewinxed/.bun/bin/bun /tmp/accounts-probe-RMosH5/fake-mcp.ts local-two",
+        "rssMiB": 23
+      }
+    ],
+    "totalMiB": 669
+  }
+}
+FAIL an account's server runs the fleet's MCP servers only for its sessions' directory, none for its own: {"opencode-server":{"totalMiB":692,"localMcpProcesses":4},"opencode-server-account-acct-a":{"totalMiB":740,"localMcpProcesses":4},"opencode-server-account-acct-b":{"totalMiB":535,"localMcpProcesses":2},"opencode-server-account-acct-limited":{"totalMiB":485,"localMcpProcesses":2},"opencode-server-account-acct-m":{"totalMiB":669,"localMcpProcesses":4}}
+PASS the machine's first start installed OpenCode's plugin dependency into the config dir every server shares: {"longestMachineBootMs":10533}
+PASS no account server's first start on an empty data dir installed anything or waited on an install: {"acct-a":{"longestBootMs":468,"installedInDataDir":0},"acct-b":{"longestBootMs":475,"installedInDataDir":0},"acct-limited":{"longestBootMs":468,"installedInDataDir":0},"acct-m":{"longestBootMs":467,"installedInDataDir":0}}
+[opencode] /tmp/accounts-probe-RMosH5/project: instance disposed by directory release, nothing attached and no turn running
+[opencode] /tmp/accounts-probe-RMosH5/project: instance disposed by directory release, nothing attached and no turn running
+[opencode] /tmp/accounts-probe-RMosH5/project: instance disposed by directory release, nothing attached and no turn running
+[opencode] account acct-b: no session on its server for 5 minutes
+[opencode] account acct-b's server opencode-server-account-acct-b-be8816ed-31f7-4a04-a1ec-117b4bda784a/793: retiring
+[opencode] account acct-limited: no session on its server for 5 minutes
+[opencode] account acct-limited's server opencode-server-account-acct-limited-a1fab938-54b4-4f4f-a894-9b5a0ca5e463/1115: retiring
+[opencode] retire opencode-server-account-acct-b-be8816ed-31f7-4a04-a1ec-117b4bda784a/793 start=9517671: SIGTERM
+[opencode] retire opencode-server-account-acct-limited-a1fab938-54b4-4f4f-a894-9b5a0ca5e463/1115 start=9518025: SIGTERM
+[opencode] retired opencode-server-account-acct-b-be8816ed-31f7-4a04-a1ec-117b4bda784a/793: exit confirmed
+[opencode] retired opencode-server-account-acct-limited-a1fab938-54b4-4f4f-a894-9b5a0ca5e463/1115: exit confirmed
+[opencode] account acct-a: no session on its server for 5 minutes
+[opencode] account acct-a's server opencode-server-account-acct-a-5e215379-c29a-43ab-9c27-c46e7d2b18e5/596: retiring
+[opencode] account acct-m: no session on its server for 5 minutes
+[opencode] account acct-m's server opencode-server-account-acct-m-e56c758a-6ed5-4ff7-b7c2-bc76902652d0/1258: retiring
+[opencode] retire opencode-server-account-acct-m-e56c758a-6ed5-4ff7-b7c2-bc76902652d0/1258 start=9518272: SIGTERM
+[opencode] retire opencode-server-account-acct-a-5e215379-c29a-43ab-9c27-c46e7d2b18e5/596 start=9517397: SIGTERM
+[opencode] retired opencode-server-account-acct-m-e56c758a-6ed5-4ff7-b7c2-bc76902652d0/1258: exit confirmed
+[opencode] retired opencode-server-account-acct-a-5e215379-c29a-43ab-9c27-c46e7d2b18e5/596: exit confirmed
+PASS accounts' servers stopped once idle; the machine's kept running: {"runningBefore":["opencode-server-fdc8adaf-9563-4648-b40c-4fed74e842c4","opencode-server-account-acct-a-5e215379-c29a-43ab-9c27-c46e7d2b18e5","opencode-server-account-acct-b-be8816ed-31f7-4a04-a1ec-117b4bda784a","opencode-server-account-acct-limited-a1fab938-54b4-4f4f-a894-9b5a0ca5e463","opencode-server-account-acct-m-e56c758a-6ed5-4ff7-b7c2-bc76902652d0"],"runningAfter":["opencode-server-fdc8adaf-9563-4648-b40c-4fed74e842c4"],"minutesToStop":5.1}
+{
+  "firstOpenWithMachineAndAccountServerStartMs": 2388,
+  "moveOntoAnAccountServerStartedForItMs": 1845,
+  "memoryAfterFirstStart": {
+    "opencode-server-fdc8adaf-9563-4648-b40c-4fed74e842c4": "457 MiB",
+    "opencode-server-account-acct-a-5e215379-c29a-43ab-9c27-c46e7d2b18e5": "789 MiB"
+  },
+  "memoryAfterTurns": {
+    "opencode-server-fdc8adaf-9563-4648-b40c-4fed74e842c4": "415 MiB",
+    "opencode-server-account-acct-a-5e215379-c29a-43ab-9c27-c46e7d2b18e5": "828 MiB",
+    "opencode-server-account-acct-b-be8816ed-31f7-4a04-a1ec-117b4bda784a": "814 MiB"
+  }
+}
+11/12 checks passed
+The sandbox is kept for reading: /tmp/accounts-probe-RMosH5

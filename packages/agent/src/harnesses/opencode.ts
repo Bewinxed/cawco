@@ -437,9 +437,9 @@ const serverSpec = (config: Record<string, unknown>) => ({
 
 /**
  * How long an account's OpenCode server runs on once no session is on it.
- * Ours: starting one is about a second, and it holds about 370 MiB idle and
- * 0.55-0.97 GiB after turns (measured on 1.18.34,
- * artifacts/opencode-accounts-eval/REPORT.md). A session at rest is already
+ * Ours: a move onto one started for it takes about 2 s, and it holds
+ * 0.7-0.8 GiB with a session on it (measured on 1.18.34,
+ * artifacts/opencode-accounts-eval/REPORT.md §5). A session at rest is already
  * kept attached for half an hour before it sleeps (IDLE_SLEEP_MS), so the
  * server is free only once its sessions slept, ended or moved off the
  * account; five more minutes cover a session woken or moved straight back,
@@ -632,6 +632,28 @@ export async function writeHandoffPlugin(
 export const SERVER_ANNOUNCE_TIMEOUT_MS = 30_000;
 /** Recovery cancels the actual HTTP operation, never races an abandoned promise. */
 export const RECOVERY_TIMEOUT_MS = 10_000;
+
+/**
+ * How long the first request for a directory may take on a server: it boots
+ * the directory's OpenCode instance ({@link bootInstance}). With a plugin
+ * installed, and CawCo's bridge plugin always is, the boot waits for
+ * OpenCode's own install of `@opencode-ai/plugin` into every config dir that
+ * has no `node_modules` yet (v1.18.34: `if (plugins.length) yield*
+ * config.waitForDependencies()`, plugin/index.ts 184; the install,
+ * config/config.ts 452-471; "no node_modules" → reify, core/src/npm.ts
+ * 155-159). That is the machine's config dir on a machine's first start (9.4 s
+ * measured, artifacts/opencode-accounts-eval/REPORT.md §7), and a project's
+ * `.opencode` dir in every fresh clone. The config dir is every server's,
+ * so an account's server never pays it again on its own empty data dir.
+ *
+ * The install is npm's Arborist on npm's own network settings
+ * (core/src/npm-config.ts), so its bound is npm's: a stalled fetch is cut at
+ * `fetch-timeout` (300 s) and tried `fetch-retries` (2) more times, after
+ * waits of `fetch-retry-mintimeout` (10 s) and then that × `fetch-retry-factor`
+ * (10) capped at `fetch-retry-maxtimeout` (60 s): @npmcli/config 10.8.1,
+ * lib/definitions/definitions.js 662-717, the version OpenCode pins.
+ */
+export const INSTANCE_BOOT_TIMEOUT_MS = 3 * 300_000 + 10_000 + 60_000;
 
 /** How long before a directory's deferred release is tried again. Ours: a held turn or a recovery is over in minutes, not seconds. */
 const DIRECTORY_RELEASE_RETRY_MS = 30_000;
@@ -1560,6 +1582,29 @@ async function reached<T extends { response?: Response; error?: unknown }>(
     throw result.error;
   }
   return result;
+}
+
+/**
+ * Boots the server's OpenCode instance for `directory` (the server's own
+ * working directory when undefined) on its boot budget, before any request
+ * there runs on {@link RECOVERY_TIMEOUT_MS}: a booted instance answers at
+ * once, and a first boot may wait on OpenCode's own dependency install
+ * ({@link INSTANCE_BOOT_TIMEOUT_MS}). A server that went away fails it at once.
+ */
+async function bootInstance(
+  client: OpencodeClient,
+  directory?: string
+): Promise<void> {
+  const booted = await reached(
+    client.path.get(directory === undefined ? {} : { directory }, {
+      signal: AbortSignal.timeout(INSTANCE_BOOT_TIMEOUT_MS),
+    })
+  );
+  if (booted.error) {
+    throw new Error(
+      `OpenCode did not boot ${directory ?? "its own directory"}: ${errorText(booted.error)}`
+    );
+  }
 }
 
 /**
@@ -4327,6 +4372,12 @@ interface ServerSlot {
   idleSince: number | null;
   readonly owner: OpencodeServerOwner;
   ready: Promise<OpencodeClient> | null;
+  /**
+   * While {@link OpencodeHarness.#ensureAccount} starts, boots and verifies
+   * the server (an account's): its client is already set, but it is not yet
+   * the watcher's to replace or retire.
+   */
+  starting: boolean;
 }
 
 /** Each account's OpenCode models, by OpenCode's provider id, as its own server last listed them. */
@@ -4346,6 +4397,7 @@ export class OpencodeHarness implements Harness {
     idleSince: null,
     owner: this.#serverOwner,
     ready: null,
+    starting: false,
   };
   /** Every account's own server this agent keeps or has a record of, by account. */
   readonly #accounts = new Map<string, ServerSlot>();
@@ -4389,6 +4441,7 @@ export class OpencodeHarness implements Harness {
         idleSince: null,
         owner: this.#newOwner(account),
         ready: null,
+        starting: false,
       };
       this.#accounts.set(account, slot);
     }
@@ -4711,7 +4764,7 @@ export class OpencodeHarness implements Harness {
       if (
         !slot.owner.active ||
         this.#slotHeld(slot) ||
-        (slot.ready && !slot.client) ||
+        slot.starting ||
         this.#operationsPending()
       ) {
         slot.idleSince = null;
@@ -4762,13 +4815,15 @@ export class OpencodeHarness implements Harness {
       for (const slot of this.#accounts.values()) {
         const { account } = slot;
         if (
+          slot.starting ||
           !(account && slot.owner.active && slot.client && readHeld(account))
         ) {
           continue;
         }
         // biome-ignore lint/performance/noAwaitInLoops: one server is replaced at a time
         const { revision, spec } = await this.#accountRevision(account);
-        if (slot.applied === revision) {
+        // Read again after the await: a start may have begun meanwhile.
+        if (slot.starting || slot.applied === revision) {
           continue;
         }
         try {
@@ -4809,6 +4864,7 @@ export class OpencodeHarness implements Harness {
             preconnect: fetch.preconnect,
           }),
         });
+        await bootInstance(candidate);
         if (!(await this.#readsThisConfig(candidate))) {
           throw new Error("Candidate reads another global config root.");
         }
@@ -5359,6 +5415,7 @@ export class OpencodeHarness implements Harness {
               preconnect: fetch.preconnect,
             }),
           });
+          await bootInstance(candidate);
           if (!(await this.#readsThisConfig(candidate))) {
             throw new Error("Candidate reads another global config root.");
           }
@@ -5718,6 +5775,7 @@ export class OpencodeHarness implements Harness {
         // The owner chooses the ephemeral port and captures the process identity.
         const identity = await this.#serverOwner.ensure(serverSpec(config));
         const client = this.#adopt(this.#machine, identity);
+        await bootInstance(client);
         await this.#loadRecorded();
 
         // Convergence keeps the server matching the machine's global config;
@@ -5804,12 +5862,14 @@ export class OpencodeHarness implements Harness {
       return Promise.resolve(slot.client);
     }
     slot.ready ??= (async () => {
+      slot.starting = true;
       await this.#ensure();
       const { revision, spec } = await this.#accountRevision(account);
       await prepareAccountServer(account);
       const identity = await slot.owner.ensure(spec);
       if (identity.launch === launchOf(spec)) {
         const adopted = this.#adopt(slot, identity);
+        await bootInstance(adopted);
         // biome-ignore lint/suspicious/noUnnecessaryConditions: #converging is set in #ensure, a different method biome's per-method inference doesn't see
         if (this.#converging) {
           try {
@@ -5841,10 +5901,14 @@ export class OpencodeHarness implements Harness {
       // biome-ignore lint/complexity/noVoid: the catalog read rides on the start; nothing waits on it
       void this.#readAccountCatalogSoon(account, client);
       return client;
-    })().catch((error: unknown) => {
-      slot.ready = null;
-      throw error;
-    });
+    })()
+      .catch((error: unknown) => {
+        slot.ready = null;
+        throw error;
+      })
+      .finally(() => {
+        slot.starting = false;
+      });
     return slot.ready;
   }
 
@@ -5875,7 +5939,12 @@ export class OpencodeHarness implements Harness {
   /**
    * The models the account's provider offers it, as its own server lists them
    * (OpenCode's own sign-in code shapes the list: ChatGPT's models for a
-   * ChatGPT sign-in, Copilot's from Copilot), kept for the provider.
+   * ChatGPT sign-in, Copilot's from Copilot), kept for the provider. Read
+   * from `/config/providers`, the providers the server is signed in to
+   * (v1.18.34 server/routes/instance/httpapi/handlers/config.ts 24-28), not
+   * `/provider`, which serializes the whole models.dev catalog beside them
+   * (handlers/provider.ts 42-60): 393 → 544 MiB on a server with no session
+   * yet, for one provider's list (REPORT.md §8).
    */
   async #readAccountCatalog(
     account: string,
@@ -5886,8 +5955,12 @@ export class OpencodeHarness implements Harness {
       return [];
     }
     const provider = opencodeProviderOf(held.provider);
+    const listed = await client.config.providers();
+    if (listed.error || !listed.data) {
+      throw new Error(errorText(listed.error));
+    }
     const models = modelCatalog(
-      (await connectedProviders(client)).filter((one) => one.id === provider)
+      listed.data.providers.filter((one) => one.id === provider)
     );
     const catalogs = { ...this.#loadAccountCatalogs(), [provider]: models };
     this.#accountCatalogs = catalogs;
@@ -6985,6 +7058,7 @@ export class OpencodeHarness implements Harness {
     // cbd4c3a0 required the correct hub and caller identity, not readiness of
     // every remote server. Config provenance is fast; MCP health is asynchronous.
     if (!existing?.running) {
+      await bootInstance(client, ctx.cwd);
       const configured = await client.config.get(
         { directory: ctx.cwd },
         { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
@@ -7618,8 +7692,12 @@ export class OpencodeHarness implements Harness {
       );
       return report;
     }
-    // Every running server here: the machine's, and each account's, for the
-    // directories its sessions run in.
+    // Every running server here, for the directories its sessions run in.
+    // The machine's also for its own directory, which the fleet's MCP status
+    // is read from ({@link #readFleetMcp}). An account's never for its own:
+    // OpenCode starts every configured MCP server in an instance the first
+    // time it connects one there, so that would be a second copy of the
+    // fleet's local servers per account, held for nobody.
     const places = [
       {
         client: await this.#ensure(),
@@ -7636,12 +7714,11 @@ export class OpencodeHarness implements Harness {
           ? [
               {
                 client: slot.client,
-                directories: new Set([
-                  undefined,
-                  ...[...this.#sessions.values()]
+                directories: new Set(
+                  [...this.#sessions.values()]
                     .filter((session) => session.account === slot.account)
-                    .map((session) => session.directory),
-                ]),
+                    .map((session) => session.directory)
+                ),
               },
             ]
           : []

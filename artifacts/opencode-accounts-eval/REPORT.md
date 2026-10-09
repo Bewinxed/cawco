@@ -496,7 +496,9 @@ real `OpencodeServerOwner`, a private sessiond, pi-ai's real xAI refresh (its
 token endpoint answered in-process), and a mock that speaks Chat Completions
 and the Responses API. xAI requests go through OpenCode's own `@ai-sdk/xai`
 and its own xAI sign-in plugin. Output: `run-probe.txt`. Result: **9/9 checks
-passed**.
+passed**. The probe has since grown to 13 checks (first start, process trees,
+start-once; §7 and §8), and the final code passed all 13 in each of
+`run-probe-cold-{1,2,3}.txt`.
 
 | Check | Evidence from the run |
 |---|---|
@@ -519,11 +521,10 @@ Measured in the same run:
   are higher than §2(b)'s 370 MiB because §2 measured an idle server with no
   session.
 
-One cold-cache rig run (the first after `bun install`) failed before any server
-answered, with a bare `TimeoutError`. It happened while the machine's own server
-was starting, on a code path this change doesn't touch, and it hasn't recurred
-in four runs since. The probe now keeps its sandbox on failure, so a recurrence
-can be read.
+An early cold rig run failed with a bare `TimeoutError` before any server
+answered. That was a real first-start failure, not a one-off: see §7. The
+memory figures above are one server process each; §8 measures whole process
+trees.
 
 Checks run on the change: `bun run typecheck` at the root (every package,
 `openapi:check`, `roles:check`, `a2ui:check`, `tools:check`, the binary
@@ -604,3 +605,187 @@ branch at 2f3ba04 (2026-10-09), npm `@opencode/cli` 2.0.26.
    account's server lists its provider's models as now.
 6. **Proof** is this rig ported to 2.0: the same checks, with "history kept on
    a move" now meaning export, import and delete.
+
+---
+
+## 7. The first-start timeout
+
+### What timed out
+
+Reproduced on 8e8a3699's `opencode.ts` with the probe's sandbox kept (first
+attempt, 12 s in). The agent died on Bun's bare abort:
+
+```
+TimeoutError: The operation timed out.
+DOMException { stack: "", code: 23, name: "TimeoutError", … }
+```
+
+`AbortSignal.timeout` gives Bun's error an empty `stack`, so the await is
+pinned by timing instead. The kept sandbox's OpenCode log, against the files
+OpenCode wrote:
+
+| Time (UTC) | What |
+|---|---|
+| 13:21:14.119 | `creating instance directory=<the agent's cwd>`: the first request reached the server |
+| 13:21:14.147 | `bootstrapping` |
+| 13:21:24.110 | `~/.config/opencode/package.json` written (`{"@opencode-ai/plugin": "1.18.34"}`) |
+| 13:21:24.114 | `package-lock.json` written; `node_modules` (62 MiB) done |
+| 13:21:24.148 | `init`: 10.03 s after the request |
+
+The request was the first one `#ensure` makes after adopting the machine's
+server (8e8a3699 `opencode.ts`):
+
+- line 5732: `(await this.#readsThisConfig(client))`
+- line 4544: `client.path.get({}, { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) })`
+- line 634: `export const RECOVERY_TIMEOUT_MS = 10_000;`
+
+Nothing catches it, so the whole start fails.
+
+### Why the first request waits
+
+That request is the first for its directory, so it boots OpenCode's instance
+there. Because a plugin is configured (CawCo's bridge plugin always is), the
+boot waits for OpenCode's own install of `@opencode-ai/plugin` into any
+config dir that has no `node_modules` yet:
+
+- `if (plugins.length) yield* config.waitForDependencies()`
+  (1.18.34 `plugin/index.ts` 184)
+- the install itself, `config/config.ts` 452-471
+- "no node_modules" → reify, `core/src/npm.ts` 155-159
+
+That took 9.3-10.5 s on a cold config dir across the runs below, against a
+10 s budget.
+
+### Where the first start writes
+
+| Directory | Written on a first start | Whose |
+|---|---|---|
+| config (`XDG_CONFIG_HOME/opencode`) | `package.json`, `package-lock.json`, `node_modules` (the install the boot waits on) | every server's: an account server overrides only `XDG_DATA_HOME` and `OPENCODE_DB` (`opencode.ts` 502-503) |
+| data (`XDG_DATA_HOME/opencode`) | `log/`, `repos/`, and `auth.json` from CawCo | the server's own; nothing installed |
+| database (`OPENCODE_DB`) | its migrations, on the machine's first start | shared |
+| cache (`XDG_CACHE_HOME/opencode`) | `bin/`, models.dev's `models.json` | shared |
+| state (`XDG_STATE_HOME/opencode`) | `locks/` | shared |
+
+### Does it repeat for a new account?
+
+No. Each probe run starts every account server on an empty data dir while
+the machine's server is already up:
+
+| Run | Machine's longest boot | acct-a | acct-b | acct-limited | acct-m | Installed in a data dir |
+|---|---|---|---|---|---|---|
+| `run-probe-cold-1.txt` | 9301 ms | 47 ms | 41 ms | 45 ms | 48 ms | 0 |
+| `run-probe-cold-2.txt` | 9656 ms | 49 ms | 47 ms | 41 ms | 42 ms | 0 |
+| `run-probe-cold-3.txt` | 10072 ms | 46 ms | 45 ms | 54 ms | 47 ms | 0 |
+
+The install lands in the config dir every server shares, so the first
+direction (put it where every server shares it) is how OpenCode already
+behaves. The failure is the budget: the first request carried a 10 s timeout
+meant for recovery calls on a booted instance. A project's own `.opencode`
+dir with a plugin gets the same install on the first session in every fresh
+clone, which is every delegate workspace, on any server.
+
+### The fix
+
+The budget is now taken from what the install runs on.
+
+- `bootInstance(client, directory?)` boots a directory's instance with
+  `client.path.get` on `INSTANCE_BOOT_TIMEOUT_MS` before any 10 s request goes
+  there.
+- It runs before the first request on:
+  - the machine's server in `#ensure`;
+  - an account's server in `#ensureAccount`;
+  - each replacement candidate, in both replacement paths;
+  - a session's directory before its first `config.get` on spawn.
+- `INSTANCE_BOOT_TIMEOUT_MS = 3 × 300 s + 10 s + 60 s`. The install is npm's
+  Arborist on npm's own network settings (`core/src/npm-config.ts`), so its
+  bound is npm's: `fetch-timeout` 300 s, `fetch-retries` 2,
+  `fetch-retry-mintimeout` 10 s, `fetch-retry-factor` 10,
+  `fetch-retry-maxtimeout` 60 s (@npmcli/config 10.8.1,
+  `lib/definitions/definitions.js` 662-717, the version OpenCode pins).
+- A booted instance answers `path.get` at once, and a server that went away
+  fails it at once, so the long budget only waits on a real install.
+
+Proof: three runs, each on a fresh home (cold config dir, empty data dir for
+every account): `run-probe-cold-{1,2,3}.txt`, **13/13 checks passed** in each.
+
+### A race found on the way
+
+In one earlier run, acct-b's server was replaced right after it started, with
+a session on it, and the replaced process (596 MiB) lingered until idle. The
+config watcher's tick saw a server whose client was set but whose
+`applied` revision was not, and replaced it mid-start.
+
+- `ServerSlot.starting` is now true from the start of `#ensureAccount` to the
+  end of its boot and verify.
+- The watcher skips a starting slot, both before and after its revision read.
+- Idle retirement skips one too.
+- The probe checks that each account's server was started exactly once and
+  never replaced. That check passed in all three runs.
+
+---
+
+## 8. Memory: whole process trees
+
+Each server's process plus every descendant, RSS summed (`/proc`), with a
+session on each account and the fleet's MCP servers configured: two local
+stdio servers (`local-one`, `local-two`, 22-23 MiB each), one remote, and
+CawCo's own. LSPs: none on any server, here or in production. OpenCode starts
+LSPs only when the config has an `lsp` section (`lsp/lsp.ts` 151:
+`if (!cfg.lsp) … "all LSPs are disabled"`). CawCo never writes one, and the
+machine's own `opencode.json` has none.
+
+### Before (`run-probe-memory-before.txt`)
+
+| Server | Tree total | Server process | Local MCP processes |
+|---|---|---|---|
+| machine's | 692 MiB | 601 MiB | 4 |
+| acct-a (moved away and back) | 740 MiB | 648 MiB | 4 |
+| acct-b (session moved off) | 535 MiB | 489 MiB | 2 |
+| acct-limited (session moved off) | 485 MiB | 439 MiB | 2 |
+| acct-m (session on it) | 669 MiB | 579 MiB | 4 |
+
+### What each account server started that it didn't need
+
+1. **The fleet's MCP servers for its own directory.** `syncFleet` connected
+   the fleet's MCP servers on every server, both for its sessions'
+   directories and for the server's own directory. OpenCode starts every
+   configured MCP server in an instance the first time it connects one
+   there, so each account server held a second set of the fleet's local
+   servers for a directory no session of its runs in. Even acct-b and
+   acct-limited, with no session left, kept two.
+   - The machine's server still connects its own directory: that is where
+     the fleet's MCP status is read (`#readFleetMcp`).
+   - An account server connects only its sessions' directories, so one with
+     no session left holds none.
+2. **The whole models.dev catalog, for one provider's list.**
+   `#readAccountCatalog` read `/provider`, which serializes the whole
+   models.dev catalog beside the connected providers (v1.18.34
+   `handlers/provider.ts` 42-60). That took a server with no session yet
+   from 393 to 544 MiB.
+   - It now reads `/config/providers`, only the providers the server is
+     signed in to (`handlers/config.ts` 24-28).
+
+### After (`run-probe-cold-{1,2,3}.txt`)
+
+| Server | Tree total, runs 1 / 2 / 3 | Local MCP processes | Before |
+|---|---|---|---|
+| machine's | 706 / 710 / 715 MiB | 4 | 692 MiB |
+| acct-a (session on it) | 721 / 713 / 723 MiB | 2 | 740 MiB |
+| acct-b (no session left) | 454 / 451 / 452 MiB | 0 | 535 MiB |
+| acct-limited (no session left) | 427 / 427 / 428 MiB | 0 | 485 MiB |
+| acct-m (session on it) | 643 / 644 / 644 MiB | 2 | 669 MiB |
+
+### What remains, and why it is the design's cost
+
+- **An account server with a session**, 640-720 MiB. That is OpenCode's
+  runtime (about 430 MiB with nothing in it), plus the session's state, plus
+  one set of the fleet's local MCP servers for the session's directory. That
+  session's tools need that set.
+- **A second set of local MCP servers** exists only when sessions on two
+  servers share a directory, as the probe's do (the machine's no-account
+  session and acct-a's both run in `project/`). Each server's sessions call
+  their own server's MCP clients, so that set is in use, not a spare.
+- **An account server with no session left**, about 430 MiB, until the 5
+  minute idle stop retires it (§5).
+- No server installs or fetches anything per account: the plugin install
+  and models.dev's cache sit in the shared config and cache dirs (§7).

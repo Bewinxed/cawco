@@ -15,9 +15,12 @@
  *   3. a usage-limit 429 on an account ends the turn on it, and the session,
  *      moved to another account as the hub's at-limit move does, carries on;
  *   4. a model on no account runs on the machine's own server;
- *   5. accounts' servers start on demand and stop once idle, with memory.
+ *   5. a cold machine's first start waits out OpenCode's install of its
+ *      plugin dependency into the shared config dir, and no account's server
+ *      repeats it on its own empty data dir;
+ *   6. accounts' servers start on demand and stop once idle, with memory.
  */
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -45,7 +48,7 @@ if (!process.env.ACCOUNTS_PROBE_SANDBOX) {
     { env, stdout: "inherit", stderr: "inherit" }
   );
   const code = await child.exited;
-  if (code === 0) {
+  if (code === 0 && !process.env.ACCOUNTS_PROBE_KEEP) {
     await rm(sandbox, { recursive: true, force: true });
   } else {
     console.log(`The sandbox is kept for reading: ${sandbox}`);
@@ -244,7 +247,7 @@ const hub = Bun.serve({
     if (url.pathname === "/api/delegation/tools") {
       return Response.json({ tools: [] });
     }
-    if (url.pathname !== "/mcp/cawco" || request.method !== "POST") {
+    if (!url.pathname.startsWith("/mcp/") || request.method !== "POST") {
       return new Response(null, { status: 404 });
     }
     const rpc = (await request.json()) as { id?: number; method: string };
@@ -341,6 +344,7 @@ const { OpencodeHarness } = await import(
   "../packages/agent/src/harnesses/opencode"
 );
 type Neutral = import("../packages/core/src/index").NeutralMessage;
+type FleetConfig = import("../packages/core/src/index").FleetConfig;
 type Session = import("../packages/agent/src/harness").HarnessSession;
 
 const sessiond = new SessiondServer();
@@ -374,6 +378,46 @@ await accounts.setProviderKey("acct-m", "mockai", "key-M", null);
 
 const harness = new OpencodeHarness();
 harness.setCustodyReadiness(() => true);
+
+// The fleet's MCP servers, as the hub sends them: two local stdio servers
+// (a process each, wherever OpenCode starts them) and one proxied through the
+// hub (no process). The machine's real fleet has eight local ones.
+const fakeMcp = join(sandbox, "fake-mcp.ts");
+await Bun.write(
+  fakeMcp,
+  `for await (const line of console) {
+  if (!line.trim()) continue;
+  const rpc = JSON.parse(line);
+  if (rpc.id === undefined) continue;
+  const results = {
+    initialize: { protocolVersion: rpc.params?.protocolVersion ?? "2025-03-26", capabilities: { tools: {} }, serverInfo: { name: process.argv[2], version: "1" } },
+    "tools/list": { tools: [{ name: "noop", description: "noop", inputSchema: { type: "object", properties: {} } }] },
+  };
+  process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: rpc.id, result: results[rpc.method] ?? {} }) + "\\n");
+}
+`
+);
+const localMcp = (name: string) => ({
+  name,
+  enabled: true,
+  scope: "user",
+  config: { command: process.execPath, args: [fakeMcp, name] },
+});
+const fleet = {
+  marketplaces: [],
+  mcp: [
+    localMcp("local-one"),
+    localMcp("local-two"),
+    {
+      name: "proxied-one",
+      enabled: true,
+      proxied: true,
+      scope: "user",
+      config: { type: "http", url: `${hub.url.origin}/mcp/fleet/proxied-one` },
+    },
+  ],
+} as unknown as FleetConfig;
+await harness.syncFleet(fleet);
 
 // ── Sessions, as the supervisor drives them ─────────────────────────────
 interface Handle {
@@ -516,6 +560,91 @@ const memory = async () =>
     )
   );
 
+/**
+ * How long each instance boot took in a server's OpenCode logs: from its
+ * `bootstrapping` line to its `init` line, which is where a first boot waits
+ * on OpenCode's dependency install.
+ */
+const BOOT_LINE = /^timestamp=(\S+) .*message=(bootstrapping|init)\b/;
+const bootGaps = async (logDir: string): Promise<number[]> => {
+  const gaps: number[] = [];
+  for (const file of await Array.fromAsync(
+    new Bun.Glob("*.log").scan({ cwd: logDir })
+  )) {
+    let started: number | undefined;
+    // biome-ignore lint/performance/noAwaitInLoops: one log at a time
+    for (const line of (await Bun.file(join(logDir, file)).text()).split(
+      "\n"
+    )) {
+      const found = line.match(BOOT_LINE);
+      if (!found?.[1]) {
+        continue;
+      }
+      const at = Date.parse(found[1]);
+      if (found[2] === "bootstrapping") {
+        started = at;
+      } else if (started !== undefined) {
+        gaps.push(at - started);
+        started = undefined;
+      }
+    }
+  }
+  return gaps;
+};
+
+/** A process and every descendant, by RSS, from /proc. */
+interface Tree {
+  processes: { command: string; pid: number; rssMiB: number }[];
+  totalMiB: number;
+}
+const PARENT = /^\d+ \(.*\) \S (\d+)/;
+const PROC_UUID = /-[0-9a-f-]{36}$/;
+const treeOf = async (root: number): Promise<Tree> => {
+  const children = new Map<number, number[]>();
+  for (const entry of await readdir("/proc")) {
+    const pid = Number(entry);
+    if (!Number.isInteger(pid)) {
+      continue;
+    }
+    // biome-ignore lint/performance/noAwaitInLoops: one /proc entry at a time
+    const stat = await Bun.file(`/proc/${pid}/stat`)
+      .text()
+      .catch(() => "");
+    const parent = Number(stat.match(PARENT)?.[1] ?? Number.NaN);
+    if (Number.isInteger(parent)) {
+      children.set(parent, [...(children.get(parent) ?? []), pid]);
+    }
+  }
+  const processes: Tree["processes"] = [];
+  const walk = async (pid: number): Promise<void> => {
+    const status = await Bun.file(`/proc/${pid}/status`)
+      .text()
+      .catch(() => "");
+    const command = (
+      await Bun.file(`/proc/${pid}/cmdline`)
+        .text()
+        .catch(() => "")
+    )
+      .replaceAll("\0", " ")
+      .trim()
+      .slice(0, 120);
+    processes.push({
+      pid,
+      command,
+      rssMiB: Math.round(Number(status.match(VM_RSS)?.[1] ?? 0) / 1024),
+    });
+    for (const child of children.get(pid) ?? []) {
+      // biome-ignore lint/performance/noAwaitInLoops: the tree is walked in order
+      await walk(child);
+    }
+  };
+  await walk(root);
+  return {
+    processes,
+    totalMiB: processes.reduce((sum, one) => sum + one.rssMiB, 0),
+  };
+};
+
 const checks: { name: string; ok: boolean; detail: unknown }[] = [];
 const check = (name: string, ok: boolean, detail: unknown) => {
   checks.push({ name, ok, detail });
@@ -639,8 +768,115 @@ try {
     authOf("turn-P on no account", "plain-mock")
   );
 
-  // 5. Idle stop.
+  // 4b. Memory: each server's whole process tree with a session on it, once
+  // the fleet's MCP servers are synced into every running server as the
+  // daemon syncs them on any fleet change.
+  await harness.syncFleet(fleet);
+  await Bun.sleep(3000);
+  const trees = Object.fromEntries(
+    await Promise.all(
+      (await keeper.list()).procs
+        .filter(
+          (proc) => proc.alive && proc.procId.startsWith("opencode-server")
+        )
+        .map(
+          async (proc) =>
+            [
+              proc.procId.replace(PROC_UUID, ""),
+              await treeOf(proc.pid),
+            ] as const
+        )
+    )
+  );
+  console.log(`MEMORY TREES ${JSON.stringify(trees, null, 2)}`);
+  const localMcpCopies = (tree: Tree) =>
+    tree.processes.filter((row) => row.command.includes("fake-mcp.ts")).length;
+  // Every session here is in one directory: an account's server holds at
+  // most that directory's set (two local servers), none for its own.
+  check(
+    "an account's server runs the fleet's MCP servers only for its sessions' directory, none for its own",
+    Object.entries(trees).every(
+      ([id, tree]) =>
+        !id.startsWith("opencode-server-account-") || localMcpCopies(tree) <= 2
+    ),
+    Object.fromEntries(
+      Object.entries(trees).map(([id, tree]) => [
+        id,
+        { totalMiB: tree.totalMiB, localMcpProcesses: localMcpCopies(tree) },
+      ])
+    )
+  );
+
+  // 5. First starts, from OpenCode's own logs. The sandbox's config dir starts
+  // with no `node_modules`, so the machine's first instance waits on
+  // OpenCode's install of `@opencode-ai/plugin` there; each account's server
+  // starts on an empty data dir of its own and shares that config dir.
+  const machineBoots = await bootGaps(
+    join(home, ".local", "share", "opencode", "log")
+  );
+  const installed = await Bun.file(
+    join(
+      home,
+      ".config",
+      "opencode",
+      "node_modules",
+      "@opencode-ai",
+      "plugin",
+      "package.json"
+    )
+  ).exists();
+  check(
+    "the machine's first start installed OpenCode's plugin dependency into the config dir every server shares",
+    installed,
+    { longestMachineBootMs: Math.max(...machineBoots) }
+  );
+  const accountBoots = Object.fromEntries(
+    await Promise.all(
+      ["acct-a", "acct-b", "acct-limited", "acct-m"].map(
+        async (id) =>
+          [
+            id,
+            {
+              longestBootMs: Math.max(
+                ...(await bootGaps(
+                  join(accounts.opencodeAccountHome(id), "opencode", "log")
+                ))
+              ),
+              installedInDataDir: (
+                await Array.fromAsync(
+                  new Bun.Glob("**/node_modules").scan({
+                    cwd: accounts.opencodeAccountHome(id),
+                    onlyFiles: false,
+                  })
+                )
+              ).length,
+            },
+          ] as const
+      )
+    )
+  );
+  check(
+    "no account server's first start on an empty data dir installed anything or waited on an install",
+    Object.values(accountBoots).every(
+      (boot) => boot.installedInDataDir === 0 && boot.longestBootMs < 5000
+    ),
+    accountBoots
+  );
+
+  // 6. Idle stop.
   const running = await servers();
+  // Nothing changed an account's config or credential in this run, so no
+  // account's server was replaced: one generation each.
+  const generations = (account: string) =>
+    running.filter((id) => id.startsWith(`opencode-server-account-${account}-`))
+      .length;
+  check(
+    "each account's server was started once and never replaced",
+    ["acct-a", "acct-b", "acct-limited", "acct-m"].every(
+      (account) => generations(account) === 1
+    ),
+    running
+  );
   for (const handle of [one, limited, plain]) {
     // biome-ignore lint/performance/noAwaitInLoops: each session leaves its server in turn
     await handle.session.dispose();
