@@ -518,14 +518,9 @@ export const createTelegramBridge = ({
     });
   };
 
-  /**
-   * Where a session is, in the words its reader knows it by. Scanned rather than
-   * looked up: the hub has no single-instance read, and the table is small.
-   */
+  /** Where a session is, in the words its reader knows it by: its row, by its key. */
   const header = (instanceId: string, mark: string): string => {
-    const row = db
-      .listInstances()
-      .find((instance) => instance.id === instanceId);
+    const [row] = db.listedInstancesByIds([instanceId]);
     if (!row) {
       return `${mark} <b>${esc(instanceId.slice(0, 8))}</b>`;
     }
@@ -699,9 +694,7 @@ export const createTelegramBridge = ({
     if (chatId === undefined) {
       return;
     }
-    const row = db
-      .listInstances()
-      .find((instance) => instance.id === instanceId);
+    const [row] = db.listedInstancesByIds([instanceId]);
     if (!row) {
       return;
     }
@@ -726,9 +719,7 @@ export const createTelegramBridge = ({
     if (chatId === undefined) {
       return;
     }
-    const row = db
-      .listInstances()
-      .find((instance) => instance.id === instanceId);
+    const [row] = db.listedInstancesByIds([instanceId]);
     if (!row) {
       return;
     }

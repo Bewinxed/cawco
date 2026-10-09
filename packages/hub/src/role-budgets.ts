@@ -73,8 +73,11 @@ export const measureRoles = (): RoleSize[] => {
   const lifetime = makeLifetime();
   const mcp = createDelegationMcp({
     lifetime,
-    instances: () => rows,
+    instancesByIds: (ids) => rows.filter((row) => ids.includes(row.id)),
+    runningOf: (harness) =>
+      rows.filter((row) => row.harness === harness && row.status === "running"),
     instanceById: (id) => rows.find((row) => row.id === id),
+    fleet: { instances: () => rows, machines: () => [] },
     successorOf: (id) => id,
     forward: () => Promise.resolve(),
     deliver: () => Promise.reject(new Error("measuring")),

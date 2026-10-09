@@ -291,6 +291,7 @@ import {
 import { dashboardErrorsRoutes } from "./dashboard-errors";
 import type {
   AgentAuth,
+  BoardInstanceRow,
   ContinuationRow,
   DbShape,
   InstanceKind,
@@ -300,7 +301,7 @@ import type {
   SentMessageRow,
   WorkItemRow,
 } from "./db";
-import { checkoutOf, hashHookMaterial, TURN_UNRECORDED } from "./db";
+import { checkoutOf, hashHookMaterial, listedAt, TURN_UNRECORDED } from "./db";
 import type { LoginMove } from "./db/accounts";
 import { buildDecisionPage, type PageSources } from "./decision-page";
 import { delegateTypesRoutes, makeDelegateTypes } from "./delegate-types";
@@ -1175,19 +1176,18 @@ const peekParent = (
  * `autoAllows` would park its tool asks even though the tree's root session
  * runs under `bypassPermissions`. Walk `parentInstanceId` up to the root and
  * inherit its mode, so the child spawns with it explicitly and the row records
- * it. `rows` is the hub's instance table; `parentInstanceId` the spawn's
- * immediate parent. Pure, so it is exercised directly.
+ * it. `rowOf` reads one listed row by its key; `parentInstanceId` is the
+ * spawn's immediate parent.
  */
 export const resolveDelegatePermissionMode = (
-  rows: InstanceRow[],
+  rowOf: (id: string) => InstanceRow | undefined,
   parentInstanceId: string
 ): string | undefined => {
-  const byId = new Map(rows.map((row) => [row.id, row]));
   const seen = new Set<string>();
   let current: string | undefined = parentInstanceId;
   while (current && !seen.has(current)) {
     seen.add(current);
-    const row = byId.get(current);
+    const row = rowOf(current);
     if (!row) {
       break;
     }
@@ -1207,22 +1207,16 @@ export const resolveDelegatePermissionMode = (
  * delegates or start sessions, so its spawns are refused. No walk up the tree:
  * the flag is per-row, granted (or withheld) by the immediate parent when it
  * delegated. An unknown parent is refused; null or true allows.
- * `rows` is the hub's instance table. Pure, so it is exercised directly.
  */
-export const resolveCanDelegate = (
-  rows: InstanceRow[],
-  parentInstanceId: string
-): boolean => {
-  const parent = rows.find((row) => row.id === parentInstanceId);
-  return !!parent && parent.canDelegate !== false;
-};
+export const resolveCanDelegate = (parent: InstanceRow | undefined): boolean =>
+  !!parent && parent.canDelegate !== false;
 
 /**
  * Urgency is only honoured toward the caller's own delegate; anything else
  * downgrades to a normal queued send. Mutates the relay body in place.
  */
 const downgradeNonDelegateUrgent = (
-  rows: InstanceRow[],
+  row: InstanceRow | undefined,
   body: unknown,
   instanceId: string
 ): void => {
@@ -1230,7 +1224,6 @@ const downgradeNonDelegateUrgent = (
     return;
   }
   const from = peek(body, "from");
-  const row = rows.find((r) => r.id === instanceId);
   if (!(from && row) || row.parentInstanceId !== from) {
     console.warn(
       `[hub] downgraded urgent send to ${instanceId}: not its delegate`
@@ -3060,7 +3053,7 @@ export const createServer = (
     instanceId: string,
     event: SupervisorEvent
   ): void => {
-    const row = db.listInstances().find((r) => r.id === instanceId);
+    const [row] = db.listedInstancesByIds([instanceId]);
     if (!row) {
       return;
     }
@@ -3081,7 +3074,7 @@ export const createServer = (
     instanceId: string,
     status: SupervisorStatusSignal
   ): void => {
-    const row = db.listInstances().find((r) => r.id === instanceId);
+    const [row] = db.listedInstancesByIds([instanceId]);
     if (!row) {
       return;
     }
@@ -5312,7 +5305,7 @@ export const createServer = (
       throw new WorkItemRefusal(400, malformed);
     }
     downgradeNonDelegateUrgent(
-      db.listInstances(),
+      db.listedInstancesByIds([envelope.instanceId ?? ""])[0],
       payload,
       envelope.instanceId ?? ""
     );
@@ -5627,14 +5620,7 @@ export const createServer = (
    */
   const claudeSessionsOn = (machineId: string): CarrySessionRequest[] => {
     const bySession = new Map<string, CarrySessionRequest | null>();
-    for (const row of db.listInstances()) {
-      if (
-        row.machineId !== machineId ||
-        (row.harness ?? "claude") !== "claude" ||
-        !row.sessionId
-      ) {
-        continue;
-      }
+    for (const row of db.claudeConversationsOn(machineId)) {
       const accountId = row.accountId ?? null;
       const seen = bySession.get(row.sessionId);
       if (seen === undefined) {
@@ -7251,11 +7237,8 @@ export const createServer = (
     payload: SpawnPayload,
     fallbackMode?: string
   ): Promise<void> => {
-    const rows = db.listInstances();
-    const refusal = enforceRowSessionKey(
-      rows.find((row) => row.id === payload.instanceId),
-      payload
-    );
+    const listed = (id: string) => db.listedInstancesByIds([id])[0];
+    const refusal = enforceRowSessionKey(listed(payload.instanceId), payload);
     if (refusal) {
       throw new WorkItemRefusal(409, refusal);
     }
@@ -7268,7 +7251,7 @@ export const createServer = (
       payload,
       fallbackMode ??
         (parentInstanceId
-          ? resolveDelegatePermissionMode(rows, parentInstanceId)
+          ? resolveDelegatePermissionMode(listed, parentInstanceId)
           : undefined)
     );
     if (refused) {
@@ -9380,14 +9363,52 @@ export const createServer = (
       };
     });
   };
-  const boardRows = () =>
-    withKeepAlive(
-      withDelegates(
-        withSessionPresence(
-          db.listBoardInstances().filter((row) => row.kind !== "summariser")
-        )
-      )
+  /**
+   * THE BOARD, KEPT: every listed row as the database holds it, by id. Read
+   * whole once, as the hub starts; from then on only the rows the database's
+   * change log names (db `takeChangedInstances`) are read again, by key. The
+   * board was read whole on every publish, and on every board, list_sessions
+   * and dashboard read besides: 2,600 rows, their JSON columns parsed, while
+   * twenty sessions moved at once, held the hub's thread for seconds
+   * (2026-10-09). A row that ages out of the listing leaves by the listing's
+   * own rule ({@link listedAt}); what the database does not hold (presence,
+   * running delegates, keep-alive) is laid over it on each read, as before.
+   */
+  db.takeChangedInstances();
+  const boardBase = new Map(
+    db.listBoardInstances().map((row) => [row.id, row] as const)
+  );
+  /** The rows the database changed since the last publish took them. */
+  let boardMoved = new Set<string>();
+  const refreshBoard = (): void => {
+    const changed = db.takeChangedInstances();
+    if (changed.length === 0) {
+      return;
+    }
+    const fresh = new Map(
+      db.listedBoardInstancesByIds(changed).map((row) => [row.id, row] as const)
     );
+    for (const id of changed) {
+      const row = fresh.get(id);
+      if (row) {
+        boardBase.set(id, row);
+      } else {
+        boardBase.delete(id);
+      }
+      boardMoved.add(id);
+    }
+  };
+  const boardRows = () => {
+    refreshBoard();
+    const now = Date.now();
+    const listed: BoardInstanceRow[] = [];
+    for (const row of boardBase.values()) {
+      if (row.kind !== "summariser" && listedAt(row, now)) {
+        listed.push(row);
+      }
+    }
+    return withKeepAlive(withDelegates(withSessionPresence(listed)));
+  };
 
   /**
    * The whole board as one message: every row, every machine, and what each
@@ -9491,12 +9512,29 @@ export const createServer = (
    * so the only rows this can leave stale are ones that changed without a
    * publish — which the full frame never caught either.
    */
-  const publishedRows = new Map<string, string>(
-    // Seeded from the board as the hub boots: every dashboard connects after
-    // this and is handed a snapshot at least this fresh, so the first publish
-    // sends what moved rather than all of it.
-    boardRows().map((row) => [row.id, JSON.stringify(row)])
-  );
+  const publishedRows = new Map<string, string>();
+  /**
+   * Each row's overlay (what the database does not hold: presence, running
+   * delegates, keep-alive) as last published. A row neither the database
+   * moved nor whose overlay changed is the row published last time, and is
+   * not serialised again.
+   */
+  const publishedOverlays = new Map<string, string>();
+  const overlayOf = (row: ReturnType<typeof boardRows>[number]): string =>
+    JSON.stringify([
+      row.status,
+      "held" in row ? row.held : null,
+      row.runningDelegates,
+      row.keepAlive,
+    ]);
+  // Seeded from the board as the hub boots: every dashboard connects after
+  // this and is handed a snapshot at least this fresh, so the first publish
+  // sends what moved rather than all of it.
+  for (const row of boardRows()) {
+    publishedRows.set(row.id, JSON.stringify(row));
+    publishedOverlays.set(row.id, overlayOf(row));
+  }
+  boardMoved = new Set();
   const publishedExtras = boardExtras();
   const publishedAgents = new Map(
     publishedExtras.agents.map((row) => [row.machineId, JSON.stringify(row)])
@@ -9536,10 +9574,21 @@ export const createServer = (
 
   const publishInstanceDelta = (machineId: string): void => {
     const rows = boardRows();
+    const moved = boardMoved;
+    boardMoved = new Set();
     const upserts: typeof rows = [];
     const present = new Set<string>();
     for (const row of rows) {
       present.add(row.id);
+      const overlay = overlayOf(row);
+      if (
+        !moved.has(row.id) &&
+        publishedOverlays.get(row.id) === overlay &&
+        publishedRows.has(row.id)
+      ) {
+        continue;
+      }
+      publishedOverlays.set(row.id, overlay);
       const serialised = JSON.stringify(row);
       if (publishedRows.get(row.id) !== serialised) {
         publishedRows.set(row.id, serialised);
@@ -9550,6 +9599,7 @@ export const createServer = (
     for (const id of publishedRows.keys()) {
       if (!present.has(id)) {
         publishedRows.delete(id);
+        publishedOverlays.delete(id);
         removed.push(id);
       }
     }
@@ -9786,7 +9836,7 @@ export const createServer = (
     const asked = db.delegateAsk(requestId);
     const parentInstanceId =
       asked?.parentInstanceId ??
-      db.listInstances().find((r) => r.id === instanceId)?.parentInstanceId;
+      db.listedInstancesByIds([instanceId])[0]?.parentInstanceId;
     if (!parentInstanceId) {
       return;
     }
@@ -10038,13 +10088,7 @@ export const createServer = (
     if (methods.length === 0) {
       return;
     }
-    for (const row of db.listInstances()) {
-      if (row.machineId !== machineId) {
-        continue;
-      }
-      if (row.status !== "running" && row.status !== "starting") {
-        continue;
-      }
+    for (const row of db.liveInstancesOn(machineId)) {
       if (row.harness && row.harness !== "claude") {
         continue;
       }
@@ -12159,8 +12203,15 @@ export const createServer = (
       ? (actor, message, attachments) =>
           telegram.deliver(actor.machineId, actor.id, message, attachments)
       : undefined,
-    instances: () => withKeepAlive(db.listInstances()),
+    instancesByIds: (ids) => db.listedInstancesByIds(ids),
+    runningOf: (harness) => db.runningInstancesOf(harness),
     instanceById: (id) => db.getInstancesByIds([id])[0],
+    // What `GET /api/instances` and `GET /api/agents` answer, without the
+    // hub calling itself over HTTP for them.
+    fleet: {
+      instances: () => boardRows(),
+      machines: () => withPresence(db.listAgents()),
+    },
     successorOf: db.successorOf,
     ledBy: (id, leadId) => workItems.ledBy(id, leadId),
     credentialActor: (authorization) => {
@@ -12222,7 +12273,7 @@ export const createServer = (
       const { instanceId } = envelope;
       const machineId = envelope.machineId || requester.machineId;
       if (envelope.verb === "spawn") {
-        if (!resolveCanDelegate([requester], requester.id)) {
+        if (!resolveCanDelegate(requester)) {
           throw new WorkItemRefusal(403, LEAF_DELEGATE_REFUSAL);
         }
         const { fallbackPermissionMode, ...payload } =
@@ -12533,7 +12584,8 @@ export const createServer = (
 
   const keepAliveScheduler = createKeepAliveScheduler({
     lifetime,
-    rows: db.listInstances,
+    rows: db.keepAliveInstances,
+    row: (id) => db.listedInstancesByIds([id])[0],
     limits: () => sessionLimitsReader(db),
     idle: sessionIdle,
     send: deliverSend,
@@ -13567,9 +13619,7 @@ export const createServer = (
           }),
         },
         async ({ params, body, status, request, server }) => {
-          const row = db
-            .listInstances()
-            .find((instance) => instance.id === params.id);
+          const [row] = db.listedInstancesByIds([params.id]);
           if (!row) {
             return status(404, "Unknown calling session.");
           }
@@ -14379,11 +14429,11 @@ export const createServer = (
       // board's rows do not carry them (see boardRows). A session whose
       // harness announces neither answers empty lists.
       .get("/api/instances/:id/tooling", ({ params, status }) => {
-        const [row] = db.getInstancesByIds([params.id]);
-        if (!row) {
+        const tooling = db.instanceTooling(params.id);
+        if (tooling === undefined) {
           return status(404, `no session ${params.id}`);
         }
-        return row.tooling ?? { servers: [], tools: [] };
+        return tooling ?? { servers: [], tools: [] };
       })
       // A page of a session's transcript as blocks the hub built, newest
       // first: the newest page carries the sends waiting, the live tail, the
@@ -14925,9 +14975,14 @@ export const createServer = (
         if (!rule) {
           return status(404, "That rule no longer exists.");
         }
-        const named = new Map(db.listInstances().map((row) => [row.id, row]));
+        const states = db.ruleStatesFor(params.id);
+        const named = new Map(
+          db
+            .listedInstancesByIds(states.map((state) => state.instanceId))
+            .map((row) => [row.id, row])
+        );
         return {
-          activity: db.ruleStatesFor(params.id).map((state) => {
+          activity: states.map((state) => {
             const row = named.get(state.instanceId);
             return {
               ...state,
@@ -15120,9 +15175,7 @@ export const createServer = (
               "A standing prompt of under ten characters is not one — say what the autopilot should watch for."
             );
           }
-          const row = db
-            .listInstances()
-            .find((r) => r.id === params.instanceId);
+          const [row] = db.listedInstancesByIds([params.instanceId]);
           if (!row) {
             return status(404, "No such session.");
           }
@@ -18558,7 +18611,7 @@ export const createServer = (
                 // (`deliverSend`). Otherwise the ask is the user's exactly as
                 // it was before this feature.
                 const sender = message.instanceId
-                  ? db.listInstances().find((r) => r.id === message.instanceId)
+                  ? db.listedInstancesByIds([message.instanceId])[0]
                   : undefined;
                 const parentId = sender?.parentInstanceId;
                 if (
@@ -18842,9 +18895,8 @@ export const createServer = (
                   const parts = finalMessage.get(message.instanceId);
                   finalMessage.delete(message.instanceId);
                   const text = parts?.length ? parts.join("\n\n") : undefined;
-                  const row = db
-                    .listInstances()
-                    .find((r) => r.id === message.instanceId);
+                  // Every turn's end: its own row, by its key.
+                  const [row] = db.listedInstancesByIds([message.instanceId]);
                   const parentId = row?.parentInstanceId;
                   if (row && neutral.subtype === "aborted") {
                     workItems.interrupted(row.id);

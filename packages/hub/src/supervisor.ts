@@ -429,7 +429,7 @@ export class SupervisorEngine {
     }
 
     // Look up the instance row for facts and autopilot.
-    const row = this.#db.listInstances().find((r) => r.id === instanceId);
+    const [row] = this.#db.listedInstancesByIds([instanceId]);
     if (!row) {
       return false;
     }
@@ -588,9 +588,7 @@ export class SupervisorEngine {
 
       if (effectiveVerdict === "reply") {
         // Re-check instance + agent reachability before delivery.
-        const freshRow = this.#db
-          .listInstances()
-          .find((r) => r.id === instanceId);
+        const [freshRow] = this.#db.listedInstancesByIds([instanceId]);
         const sender = freshRow
           ? this.#agent(freshRow.machineId, instanceId)
           : undefined;
@@ -788,9 +786,7 @@ export class SupervisorEngine {
       }
 
       if (effective === "reply") {
-        const freshRow = this.#db
-          .listInstances()
-          .find((r) => r.id === instanceId);
+        const [freshRow] = this.#db.listedInstancesByIds([instanceId]);
         const sender = freshRow
           ? this.#agent(freshRow.machineId, instanceId)
           : undefined;

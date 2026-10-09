@@ -173,8 +173,15 @@ const MIGRATIONS_DIR = standalone
 
 export type InstanceKind = (typeof instances.$inferSelect)["kind"];
 export type InstanceRole = NonNullable<(typeof instances.$inferSelect)["role"]>;
+/**
+ * A session's row as the hub's readers take it: no hub-private column, and
+ * no `tooling`. That is the session's MCP servers and tools, 17 KB of JSON a
+ * row on average and 36 KB at most (2026-10-09), parsed on every read and
+ * read by one route alone ({@link DbShape.instanceTooling}).
+ */
 export type PublicInstanceRow = Omit<
   typeof instances.$inferSelect,
+  | "tooling"
   | "endIntent"
   | "endConfirmedAt"
   | "addressProtocol"
@@ -189,7 +196,9 @@ export type PublicInstanceRow = Omit<
   | "freshStartAt"
   | "turnOpenAt"
 >;
-export type BoardInstanceRow = Omit<PublicInstanceRow, "tooling">;
+export type BoardInstanceRow = PublicInstanceRow;
+/** A session's whole row but its `tooling` ({@link PublicInstanceRow}). */
+export type OwnedInstanceRow = Omit<typeof instances.$inferSelect, "tooling">;
 export type PlaceRow = typeof projectPlaces.$inferSelect;
 /**
  * A project as every client reads it: its row, whose `machineId` and `cwd`
@@ -235,6 +244,19 @@ export interface SettledInstance {
 
 /** How long a session that stopped moving stays in the listings the rails read. */
 const STALE_AFTER_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * The listings' one clock-bound rule, for a row already read: running or
+ * asleep, or moved within {@link STALE_AFTER_MS}. A row the board keeps
+ * leaves it by this as the listing's own query would drop it, with no write.
+ */
+export const listedAt = (
+  row: { status: string; updatedAt: Date },
+  now: number
+): boolean =>
+  row.status === "running" ||
+  row.status === "sleeping" ||
+  row.updatedAt.getTime() > now - STALE_AFTER_MS;
 /** The span of a usage bucket stored before quarters (`usage_buckets.span_ms`). */
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -402,6 +424,12 @@ export interface DbShape {
   ) => boolean;
   /** Every claude model's last observed context window, by model id. */
   readonly claudeContextWindows: () => Record<string, number>;
+  /** Each listed Claude session on a machine with a conversation, and its account: no more of its row. */
+  readonly claudeConversationsOn: (machineId: string) => {
+    accountId: string | null;
+    id: string;
+    sessionId: string;
+  }[];
   readonly clearEndConfirmation: (id: string) => void;
   readonly clearFleetMemory: () => void;
   /** Forget the OpenRouter key. */
@@ -592,12 +620,16 @@ export interface DbShape {
   readonly instanceBySessionId: (
     sessionId: string
   ) => PublicInstanceRow | undefined;
+  /** The MCP servers and tools a session's newest `init` announced. */
+  readonly instanceTooling: (id: string) => SessionTooling | null | undefined;
   /** Known prompt writes invalidate every Claude cache on the owning machine. */
   readonly invalidateClaudeCaches: (
     machineId: string,
     reason: string,
     at: number
   ) => void;
+  /** The listed sessions whose keep-alive is on: the only ones it schedules. */
+  readonly keepAliveInstances: () => PublicInstanceRow[];
   /** The canvas a session showed last, for `read_choices` after its preview closed. */
   readonly latestCanvasOf: (instanceId: string) => CanvasRow | undefined;
   /**
@@ -622,6 +654,12 @@ export interface DbShape {
     parent?: string;
     instance?: string;
   }) => DelegateEvent[];
+  /** {@link listBoardInstances}, of these ids only. */
+  readonly listedBoardInstancesByIds: (ids: string[]) => BoardInstanceRow[];
+  /** How many listed sessions this one started. */
+  readonly listedChildCount: (parentInstanceId: string) => number;
+  /** {@link listInstances}, of these ids only: by key, the same rows it would list. */
+  readonly listedInstancesByIds: (ids: string[]) => PublicInstanceRow[];
   /**
    * Every subagent the fleet keeps, file and all: a definition is a page of
    * markdown, so the listing is what the editor is seeded from.
@@ -644,6 +682,11 @@ export interface DbShape {
   readonly listFleetMemoryHistory: (path?: string) => MemoryVersion[];
   /** Newest first, without the files: one skill's history. */
   readonly listFleetSkillHistory: (name: string) => SkillVersion[];
+  /**
+   * Every listed row. A pass over the whole fleet only: what asks about one
+   * session or a few reads them by key ({@link listedInstancesByIds}), since
+   * each call reads and parses every row (2,600 of them, 2026-10-09).
+   */
   readonly listInstances: () => PublicInstanceRow[];
   /**
    * Every plugin row without its files, `error` and all. What the DASHBOARD
@@ -675,6 +718,14 @@ export interface DbShape {
   readonly listWorkflowRuns: (workflowId?: string) => WorkflowRunRow[];
   readonly listWorkflowSteps: (runId: string) => WorkflowStepRow[];
   readonly listWorkflows: () => WorkflowRow[];
+  /** The listed sessions running or starting on one machine. */
+  readonly liveInstancesOn: (machineId: string) => PublicInstanceRow[];
+  /** Where each live top-level mainline session works, and no more of it. */
+  readonly liveMainlineFolders: () => {
+    cwd: string;
+    id: string;
+    machineId: string;
+  }[];
   /** Every work item still `starting`/`running`, fleet-wide. */
   readonly liveWorkItems: () => WorkItemRow[];
   /** The work items a session delegated that are still `starting`/`running`. */
@@ -901,7 +952,7 @@ export interface DbShape {
   readonly ownedInstance: (
     id: string,
     machineId?: string
-  ) => typeof instances.$inferSelect | undefined;
+  ) => OwnedInstanceRow | undefined;
   /**
    * The asks the hub holds parked (`pending.ts`), kept across its restarts:
    * read once as it boots, written as each is parked and dropped as it ends.
@@ -1298,6 +1349,8 @@ export interface DbShape {
     machineId: string;
   }[];
   readonly runningDelegateCounts: () => Map<string, number>;
+  /** The listed sessions of one harness that are running. */
+  readonly runningInstancesOf: (harness: string) => PublicInstanceRow[];
   /** One send's record, by its uuid. */
   readonly sendRecord: (uuid: string) => SentMessageRow | undefined;
   /**
@@ -1324,9 +1377,7 @@ export interface DbShape {
     rejectPending?: boolean
   ) => void;
   /** Unfiltered ownership, including hidden deletes and discarded rows. */
-  readonly sessionOwnership: (
-    machineId?: string
-  ) => (typeof instances.$inferSelect)[];
+  readonly sessionOwnership: (machineId?: string) => OwnedInstanceRow[];
   /** What a session last wrote of its own plan through `todo_write` (plans.ts). */
   readonly sessionPlan: (instanceId: string) => SessionPlanRow | undefined;
   /** A machine's own account of what it came to, from the sync it just answered. */
@@ -1465,6 +1516,11 @@ export interface DbShape {
     toUnknown: number;
     toSleeping: number;
   };
+  /**
+   * The ids of the `instances` rows written since the last call (the
+   * connection's change log), and the log emptied: what the board reads again.
+   */
+  readonly takeChangedInstances: () => string[];
   readonly takeMcpAuthorization: (
     state: string
   ) => typeof fleetMcpOauth.$inferSelect | undefined;
@@ -1875,9 +1931,11 @@ const make = async (path: string): Promise<DbShape> => {
     owedAt: _owedAt,
     freshStartAt: _freshStartAt,
     turnOpenAt: _turnOpenAt,
+    tooling: _tooling,
     ...publicColumns
   } = getTableColumns(instances);
-  const { tooling: _tooling, ...boardColumns } = publicColumns;
+  const boardColumns = publicColumns;
+  const { tooling: _ownTooling, ...ownedColumns } = getTableColumns(instances);
   /** Dollars the project's booked Caw turns cost since `since` (ms epoch). */
   const cawSince = (projectId: string, since: number): number =>
     db
@@ -1897,6 +1955,25 @@ const make = async (path: string): Promise<DbShape> => {
         gt(instances.updatedAt, new Date(Date.now() - STALE_AFTER_MS))
       )
     );
+  /**
+   * A row as every listing hands it: one nobody named answers with the name
+   * its first message gave it, so every listing — the rail, the tab strip,
+   * the first server render — already carries it and no label changes once a
+   * transcript loads. The column itself stays as it was: a given title is
+   * still what wins here.
+   */
+  const asListed = <
+    Row extends {
+      autopilot: unknown;
+      derivedTitle: string | null;
+      title: string | null;
+    },
+  >(
+    row: Row
+  ): Row => ({
+    ...(row.title ? row : { ...row, title: row.derivedTitle }),
+    ...(row.autopilot ? { autopilot: row.autopilot } : {}),
+  });
   // A marker for the update helper: while it names a live process the hub is
   // migrating, and the helper's wait for a healthy start does not run down.
   const migrating = `${path}.migrating`;
@@ -1915,6 +1992,33 @@ const make = async (path: string): Promise<DbShape> => {
     rmSync(migrating, { force: true });
   }
   db.$client.run("PRAGMA foreign_keys = ON");
+
+  // THE BOARD'S CHANGE LOG: the id of every `instances` row written since the
+  // board last read it, on this connection, which is the only one that writes
+  // the table. Temporary (this connection's own, gone with it), so a hub
+  // starts with an empty log and a board read whole. The board reads only
+  // these rows again instead of every row on every publish, which with
+  // 2,600 rows held the hub's thread for seconds when twenty sessions moved
+  // at once (2026-10-09). A foreign key's own action (a project deleted, its
+  // sessions' `project_id` set null) fires these as any write does.
+  // No key and no conflict clause: a trigger's `OR IGNORE` yields to the
+  // statement that fired it, so a register's upsert that touched a row twice
+  // failed whole on a unique id here. Repeats are folded when the log is taken.
+  db.$client.run(
+    "CREATE TEMP TABLE IF NOT EXISTS instance_changes (id TEXT NOT NULL)"
+  );
+  db.$client.run(
+    "CREATE TEMP TRIGGER IF NOT EXISTS instance_inserted AFTER INSERT ON main.instances BEGIN INSERT INTO instance_changes (id) VALUES (new.id); END"
+  );
+  db.$client.run(
+    "CREATE TEMP TRIGGER IF NOT EXISTS instance_updated AFTER UPDATE ON main.instances BEGIN INSERT INTO instance_changes (id) VALUES (old.id), (new.id); END"
+  );
+  db.$client.run(
+    "CREATE TEMP TRIGGER IF NOT EXISTS instance_deleted AFTER DELETE ON main.instances BEGIN INSERT INTO instance_changes (id) VALUES (old.id); END"
+  );
+  const takeChanges = db.$client.prepare<{ id: string }, []>(
+    "DELETE FROM instance_changes RETURNING id"
+  );
 
   // A stored skill's or plugin's hash is what its files hash to with the
   // hashFiles this hub runs, because that is the hash every machine takes of
@@ -2315,9 +2419,22 @@ const make = async (path: string): Promise<DbShape> => {
         .where(eq(agents.machineId, machineId))
         .run();
     },
+    instanceTooling: (id) =>
+      db
+        .select({ tooling: instances.tooling })
+        .from(instances)
+        .where(
+          and(
+            eq(instances.id, id),
+            eq(instances.machineRemoved, false),
+            ne(instances.status, "discarded"),
+            or(isNull(instances.endIntent), eq(instances.endIntent, "stop"))
+          )
+        )
+        .get()?.tooling,
     ownedInstance: (id, machineId) =>
       db
-        .select()
+        .select(ownedColumns)
         .from(instances)
         .where(
           and(
@@ -2420,7 +2537,7 @@ const make = async (path: string): Promise<DbShape> => {
       }),
     sessionOwnership: (machineId) =>
       db
-        .select()
+        .select(ownedColumns)
         .from(instances)
         .where(
           machineId === undefined
@@ -2545,10 +2662,7 @@ const make = async (path: string): Promise<DbShape> => {
         .from(instances)
         .where(listedInstances())
         .all()
-        .map((row) => ({
-          ...(row.title ? row : { ...row, title: row.derivedTitle }),
-          ...(row.autopilot ? { autopilot: row.autopilot } : {}),
-        })),
+        .map(asListed),
     toolListing: (listing) =>
       db
         .select({ toolsHash: mcpToolListings.toolsHash })
@@ -4320,14 +4434,107 @@ const make = async (path: string): Promise<DbShape> => {
         .from(instances)
         .where(listedInstances())
         .all()
-        // A row nobody named answers with the name its first message gave it,
-        // so every listing — the rail, the tab strip, the first server render —
-        // already carries it and no label changes once a transcript loads. The
-        // column itself stays as it was: a given title is still what wins here.
-        .map((row) => ({
-          ...(row.title ? row : { ...row, title: row.derivedTitle }),
-          ...(row.autopilot ? { autopilot: row.autopilot } : {}),
-        })),
+        .map(asListed),
+    listedInstancesByIds: (ids) =>
+      ids.length === 0
+        ? []
+        : db
+            .select(publicColumns)
+            .from(instances)
+            .where(and(listedInstances(), inArray(instances.id, ids)))
+            .all()
+            .map(asListed),
+    listedBoardInstancesByIds: (ids) =>
+      ids.length === 0
+        ? []
+        : db
+            .select(boardColumns)
+            .from(instances)
+            .where(and(listedInstances(), inArray(instances.id, ids)))
+            .all()
+            .map(asListed),
+    takeChangedInstances: () => [
+      ...new Set(takeChanges.all().map((row) => row.id)),
+    ],
+    listedChildCount: (parentInstanceId) =>
+      db
+        .select({ n: sql<number>`count(*)` })
+        .from(instances)
+        .where(
+          and(
+            listedInstances(),
+            eq(instances.parentInstanceId, parentInstanceId)
+          )
+        )
+        .get()?.n ?? 0,
+    liveMainlineFolders: () =>
+      db
+        .select({
+          id: instances.id,
+          machineId: instances.machineId,
+          cwd: instances.cwd,
+        })
+        .from(instances)
+        .where(
+          and(
+            listedInstances(),
+            eq(instances.kind, "mainline"),
+            isNull(instances.parentInstanceId),
+            isNull(instances.workflowStepId),
+            inArray(instances.status, ["running", "starting", "sleeping"])
+          )
+        )
+        .all(),
+    liveInstancesOn: (machineId) =>
+      db
+        .select(publicColumns)
+        .from(instances)
+        .where(
+          and(
+            listedInstances(),
+            eq(instances.machineId, machineId),
+            inArray(instances.status, ["running", "starting"])
+          )
+        )
+        .all()
+        .map(asListed),
+    claudeConversationsOn: (machineId) =>
+      db
+        .select({
+          id: instances.id,
+          sessionId: sql<string>`${instances.sessionId}`,
+          accountId: instances.accountId,
+        })
+        .from(instances)
+        .where(
+          and(
+            listedInstances(),
+            eq(instances.machineId, machineId),
+            or(isNull(instances.harness), eq(instances.harness, "claude")),
+            isNotNull(instances.sessionId)
+          )
+        )
+        .all(),
+    runningInstancesOf: (harness) =>
+      db
+        .select(publicColumns)
+        .from(instances)
+        .where(
+          and(
+            listedInstances(),
+            eq(instances.status, "running"),
+            eq(instances.harness, harness)
+          )
+        )
+        .all()
+        .map(asListed),
+    keepAliveInstances: () =>
+      db
+        .select(publicColumns)
+        .from(instances)
+        .where(and(listedInstances(), eq(instances.keepAliveEnabled, true)))
+        .all()
+        .map(asListed),
     getInstancesByIds: (ids) => {
       if (ids.length === 0) {
         return [];

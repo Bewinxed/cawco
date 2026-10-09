@@ -257,8 +257,7 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
 
   /** The `repo` signal: another session in this folder's repository, which no project has. */
   const sharedRepository = async (
-    row: InstanceShape,
-    rows: InstanceShape[]
+    row: InstanceShape
   ): Promise<string | undefined> => {
     const cwd = placePath(row.cwd);
     if (
@@ -276,20 +275,11 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
     if (!remote || db.projectByRemote(remote)) {
       return;
     }
-    const mine = new Set([
-      row.id,
-      ...descendants(row.id, rows).map((r) => r.id),
-    ]);
-    const others = rows.filter(
-      (other) =>
-        !(
-          mine.has(other.id) ||
-          other.parentInstanceId ||
-          other.workflowStepId
-        ) &&
-        other.kind === "mainline" &&
-        ["running", "starting", "sleeping"].includes(other.status)
-    );
+    // Live top-level mainline sessions other than this one. Its delegates
+    // are never among them: each has a parent.
+    const others = db
+      .liveMainlineFolders()
+      .filter((other) => other.id !== row.id);
     for (const other of others) {
       // biome-ignore lint/performance/noAwaitInLoops: one git read per folder, cached; stops at the first match
       if ((await remoteOf(other.machineId, other.cwd)) === remote) {
@@ -308,8 +298,9 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
     }
     looking.add(id);
     try {
-      const rows = db.listInstances();
-      const delegates = rows.filter((r) => r.parentInstanceId === id).length;
+      // Every turn's end asks: counted and looked up in the database, never
+      // a read of every session (2,600 of them) per turn.
+      const delegates = db.listedChildCount(id);
       if (delegates > 0) {
         offer(
           row,
@@ -343,7 +334,7 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
         );
         return;
       }
-      const shared = await sharedRepository(row, rows);
+      const shared = await sharedRepository(row);
       if (shared) {
         offer(row, "repo", shared);
       }

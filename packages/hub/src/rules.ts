@@ -476,9 +476,9 @@ export class RuleEngine {
     if (cached) {
       return cached;
     }
-    const row = this.#db
-      .listInstances()
-      .find((candidate) => candidate.id === instanceId);
+    // By its key: every session's first frame comes here, and twenty
+    // sessions starting together read the whole table twenty times over.
+    const [row] = this.#db.listedInstancesByIds([instanceId]);
     if (!row) {
       return undefined;
     }

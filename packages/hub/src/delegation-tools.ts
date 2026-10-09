@@ -407,9 +407,7 @@ export function handoffTools(deps: HandoffDeps) {
         "A finished delegate still takes a handoff from its parent or the user: the message continues its own session.",
       {},
       async () => ({
-        content: [
-          { type: "text" as const, text: await actions.listSessions() },
-        ],
+        content: [{ type: "text" as const, text: actions.listSessions() }],
       })
     ),
     tool(
@@ -897,7 +895,7 @@ export function handoffTools(deps: HandoffDeps) {
         content: [
           {
             type: "text" as const,
-            text: await actions.interruptDelegate(target),
+            text: actions.interruptDelegate(target),
           },
         ],
       })
@@ -934,12 +932,7 @@ export function handoffTools(deps: HandoffDeps) {
         content: [
           {
             type: "text" as const,
-            text: await actions.answerDelegate(
-              target,
-              requestId,
-              answers,
-              deny
-            ),
+            text: actions.answerDelegate(target, requestId, answers, deny),
           },
         ],
       })

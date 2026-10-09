@@ -172,6 +172,14 @@ interface KeepAlivePorts {
    * (its account's). Taken once per pass over the rows, not once per row.
    */
   limits: () => (row: KeepAliveRow) => ClaudeLimits | undefined;
+  /** One session's row, read again by its key. */
+  row: (id: string) => KeepAliveRow | undefined;
+  /**
+   * The sessions whose keep-alive is on, and no others: a row with it off is
+   * neither sent to nor planned for. Read on every wake, and a wake follows
+   * every session's turn: all 2,600 rows each time held the hub's thread for
+   * seconds when twenty turns ended together (2026-10-09).
+   */
   rows: () => KeepAliveRow[];
   send: (envelope: Envelope<SendPayload>) => unknown;
 }
@@ -197,7 +205,7 @@ export const tickKeepAlive = async (
     if (!(await ports.idle(row))) {
       continue;
     }
-    const fresh = ports.rows().find((candidate) => candidate.id === row.id);
+    const fresh = ports.row(row.id);
     if (
       !(
         fresh?.keepAliveEnabled &&

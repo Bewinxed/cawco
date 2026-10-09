@@ -155,22 +155,23 @@ const ageOf = (at: InstanceRow["updatedAt"]): string => {
 };
 
 /** A machine of the fleet as the hub's registry has it (`GET /api/agents`). */
-interface Machine {
+export interface Machine {
   hostname: string;
   machineId: string;
   /** `online` while its daemon holds a socket to the hub. */
   status: string;
 }
 
-/** Every machine the hub knows, online or not. */
-async function fetchMachines(): Promise<Machine[]> {
-  const response = await fetch(`${hubHttpUrl()}/api/agents`, {
-    signal: AbortSignal.timeout(5000),
-  });
-  if (!response.ok) {
-    throw new Error(`the hub answered ${response.status} for its machines`);
-  }
-  return (await response.json()) as Machine[];
+/**
+ * The fleet as the hub reads it, in its own process: the board's rows (what
+ * `GET /api/instances` answers) and its machines (`GET /api/agents`). These
+ * were HTTP calls from the hub to itself, each under a 5 s deadline that ran
+ * on the same thread the answer needed: a hub busy for five seconds failed
+ * its own sessions' reads (2026-10-09).
+ */
+export interface Fleet {
+  instances: () => InstanceRow[];
+  machines: () => Machine[];
 }
 
 /** The machines work can start on now, by the names delegate and start_session take. */
@@ -213,26 +214,16 @@ function resolveMachine(machines: Machine[], target: string): Machine {
 }
 
 /** The raw rows behind the roster, before the running/starting narrowing. */
-async function fetchInstances(): Promise<{
+function fleetInstances(fleet: Fleet): {
   rows: InstanceRow[];
   hosts: Map<string, string>;
-}> {
-  const base = hubHttpUrl();
-  const [instancesRes, machines] = await Promise.all([
-    fetch(`${base}/api/instances`, { signal: AbortSignal.timeout(5000) }),
-    fetchMachines().catch(() => [] as Machine[]),
-  ]);
-  if (!instancesRes.ok) {
-    throw new Error(`the hub answered ${instancesRes.status}`);
-  }
-  const rows = (await instancesRes.json()) as InstanceRow[];
+} {
   const hosts = new Map(
-    machines.map((machine) => [
-      machine.machineId,
-      machineLabel(machine.hostname),
-    ])
+    fleet
+      .machines()
+      .map((machine) => [machine.machineId, machineLabel(machine.hostname)])
   );
-  return { rows, hosts };
+  return { rows: fleet.instances(), hosts };
 }
 
 /**
@@ -268,15 +259,18 @@ const toPeer = (row: InstanceRow, hosts: Map<string, string>): Peer => {
  * The fleet, read from the hub rather than from this daemon's own sessions:
  * the whole point is reaching a session that is usually somewhere else.
  */
-async function roster(exceptInstanceId: string): Promise<{
+function roster(
+  fleet: Fleet,
+  exceptInstanceId: string
+): {
   peers: Peer[];
   asleep: Peer[];
   own: InstanceRow | undefined;
   /** Sessions another took the place of: never listed, only followed. */
   superseded: InstanceRow[];
   hosts: Map<string, string>;
-}> {
-  const { rows, hosts } = await fetchInstances();
+} {
+  const { rows, hosts } = fleetInstances(fleet);
   const own = rows.find((row) => row.id === exceptInstanceId);
   const superseded = rows.filter((row) => row.continuedInto);
   const others = rows.filter(
@@ -589,6 +583,8 @@ export interface HandoffDeps {
   readonly deliver: (envelope: Envelope<SendPayload>) => Promise<SendDelivery>;
   /** Puts an envelope on the daemon's hub socket. */
   readonly emit: (envelope: Envelope) => void;
+  /** The board and the machines, read in the hub's own process. */
+  readonly fleet: Fleet;
   readonly harness?: "claude" | "opencode" | "pi";
   /** Exact-id lookup includes ended/archived rows outside the live roster. */
   readonly instanceById: (id: string) => InstanceRow | undefined;
@@ -633,7 +629,7 @@ export interface HandoffActions {
     requestId: string,
     answers?: Record<string, string>,
     deny?: boolean
-  ): Promise<string>;
+  ): string;
   /**
    * Summarises a session (this one when `session` is omitted) with the chosen
    * summariser and starts a new session seeded with the summary, through the
@@ -716,10 +712,10 @@ export interface HandoffActions {
   // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
   handoff(target: string, message: string, urgent?: boolean): Promise<string>;
   // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
-  interruptDelegate(target: string): Promise<string>;
+  interruptDelegate(target: string): string;
   readonly listDelegateTypes: () => Promise<{ types: DelegateType[] }>;
   // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
-  listSessions(): Promise<string>;
+  listSessions(): string;
   readonly listWorkflows: () => Promise<unknown>;
   /** The person's choices on the session's preview, or on a decision page of its project. */
   readonly readChoices: (page?: string) => Promise<string>;
@@ -999,6 +995,7 @@ export const handoffActions = ({
   ledBy,
   delegateList,
   sendToUser,
+  fleet,
 }: HandoffDeps): HandoffActions => ({
   async delegateList(include) {
     if (!delegateList) {
@@ -1010,7 +1007,7 @@ export const handoffActions = ({
   },
   async continueSession(input) {
     let source = instanceId;
-    const { rows, hosts } = await fetchInstances();
+    const { rows, hosts } = fleetInstances(fleet);
     if (input.session) {
       source = successorOf(
         resolve(
@@ -1237,11 +1234,9 @@ export const handoffActions = ({
     }, projectId);
     return { types };
   },
-  async listSessions(): Promise<string> {
-    const [{ peers, own }, machines] = await Promise.all([
-      roster(instanceId),
-      fetchMachines(),
-    ]);
+  listSessions(): string {
+    const { peers, own } = roster(fleet, instanceId);
+    const machines = fleet.machines();
     const where = `Machines online (\`machine\` on delegate and start_session): ${onlineNames(machines)}.`;
     if (peers.length === 0) {
       return `No other sessions are running.\n\n${where}`;
@@ -1271,7 +1266,7 @@ export const handoffActions = ({
     message: string,
     urgent = false
   ): Promise<string> {
-    const { peers, asleep, own, superseded, hosts } = await roster(instanceId);
+    const { peers, asleep, own, superseded, hosts } = roster(fleet, instanceId);
     // A session another took the place of is reached where it runs now.
     const followed = supersededBy(superseded, target, successorOf);
     const addressed = followed?.successor ?? target;
@@ -1331,18 +1326,16 @@ export const handoffActions = ({
     // Named: that machine, which must be online. Unnamed: "" is the caller's
     // own, which the hub's forwarder fills in.
     const target = machine
-      ? resolveMachine(await fetchMachines(), machine)
+      ? resolveMachine(fleet.machines(), machine)
       : undefined;
     const machineId = target?.machineId ?? "";
     // Nothing is left to the machine's defaults: the type (or `medium`) says
     // what runs, and the caller's own mode is how it answers permissions.
     // The caller's project's catalog: its own types shadow the fleet's.
-    const [types, { rows }] = await Promise.all([
-      fetchDelegateTypes((message) => {
-        throw new Error(message);
-      }, projectId),
-      fetchInstances(),
-    ]);
+    const types = await fetchDelegateTypes((message) => {
+      throw new Error(message);
+    }, projectId);
+    const { rows } = fleetInstances(fleet);
     const { type, harness, model } = resolveSpawnType(types, {
       type: typeName,
       model: modelName,
@@ -1411,7 +1404,7 @@ export const handoffActions = ({
   async delegate(prompt, opts) {
     const { machine, ...request } = opts;
     const target = machine
-      ? resolveMachine(await fetchMachines(), machine)
+      ? resolveMachine(fleet.machines(), machine)
       : undefined;
     if (opts.workspace) {
       await checkCold(undefined, opts.workspace, instanceId);
@@ -1488,7 +1481,7 @@ export const handoffActions = ({
   },
 
   async setItemChecks(target, checks) {
-    const { peers, superseded } = await roster(instanceId);
+    const { peers, superseded } = roster(fleet, instanceId);
     const followed = supersededBy(superseded, target, successorOf);
     const peer = resolveDelegate(
       peers,
@@ -1515,7 +1508,7 @@ export const handoffActions = ({
   },
 
   async stopDelegate(asked: string): Promise<string> {
-    const { peers, asleep, superseded } = await roster(instanceId);
+    const { peers, asleep, superseded } = roster(fleet, instanceId);
     const followed = supersededBy(superseded, asked, successorOf);
     const target = followed?.successor ?? asked;
     const ended =
@@ -1551,8 +1544,8 @@ export const handoffActions = ({
     );
   },
 
-  async interruptDelegate(target: string): Promise<string> {
-    const { peers, superseded } = await roster(instanceId);
+  interruptDelegate(target: string): string {
+    const { peers, superseded } = roster(fleet, instanceId);
     const followed = supersededBy(superseded, target, successorOf);
     const peer = resolveDelegate(
       peers,
@@ -1578,13 +1571,13 @@ export const handoffActions = ({
     );
   },
 
-  async answerDelegate(
+  answerDelegate(
     target: string,
     requestId: string,
     answers?: Record<string, string>,
     deny = false
-  ): Promise<string> {
-    const { peers, superseded } = await roster(instanceId);
+  ): string {
+    const { peers, superseded } = roster(fleet, instanceId);
     const followed = supersededBy(superseded, target, successorOf);
     const peer = resolveDelegate(
       peers,

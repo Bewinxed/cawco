@@ -16,7 +16,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { adminTools, isAdminWrite } from "./admin-tools";
 import type { Caw } from "./caw";
-import type { SendDelivery } from "./delegation-actions";
+import type { Fleet, SendDelivery } from "./delegation-actions";
 import { handoffInstructions, handoffTools } from "./delegation-tools";
 import type { DelegateListInclude, DelegateNode } from "./delegation-tree";
 import type { AttemptStart } from "./dispatch";
@@ -89,8 +89,14 @@ const listed = ({
 export function createDelegationMcp(options: {
   /** Runs the tool-list sweeps and each long call's heartbeat, and stops the source watchers, with the hub. */
   lifetime: HubLifetimeShape;
-  /** Every row, for a pass over all of them (the tool-list sweep); one session's row is {@link instanceById}. */
-  instances: () => InstanceRow[];
+  /**
+   * What the tool-list sweep reads, and no more: the rows its open streams
+   * are bound to, by key, and the running sessions of one harness. The
+   * sweep runs after every board publish; it read every row (2,600 of them,
+   * JSON parsed) each time, through a burst of twenty sessions (2026-10-09).
+   */
+  instancesByIds: (ids: string[]) => InstanceRow[];
+  runningOf: (harness: "pi") => InstanceRow[];
   /**
    * One row, by its key. Every MCP request reads its connection's row, and
    * a machine restoring 20 sessions makes hundreds of them in seconds: read
@@ -99,6 +105,8 @@ export function createDelegationMcp(options: {
    * restored sessions' credential checks timed out behind it (2026-10-09).
    */
   instanceById: (id: string) => InstanceRow | undefined;
+  /** The board and the machines, read in the hub's own process (delegation-actions.ts). */
+  fleet: Fleet;
   /** The session that runs in `id`'s place now (db `successorOf`). */
   successorOf: (id: string) => string;
   /** Whether `leadId` leads the project of the work item `instanceId` runs (work-items.ts `ledBy`). */
@@ -181,6 +189,7 @@ export function createDelegationMcp(options: {
             instanceId: "",
             instanceById: options.instanceById,
             successorOf: options.successorOf,
+            fleet: options.fleet,
             cwd: "",
             emit: () => {
               throw new Error("Discovery cannot execute tools");
@@ -229,6 +238,7 @@ export function createDelegationMcp(options: {
         instanceId: "",
         instanceById: options.instanceById,
         successorOf: options.successorOf,
+        fleet: options.fleet,
         cwd: "",
         canDelegate: actor?.canDelegate ?? undefined,
         lands: landsOf(actor),
@@ -413,6 +423,7 @@ export function createDelegationMcp(options: {
         instanceId: "",
         instanceById: options.instanceById,
         successorOf: options.successorOf,
+        fleet: options.fleet,
         cwd: "",
         projectId,
         deliver: () => {
@@ -573,6 +584,7 @@ export function createDelegationMcp(options: {
       instanceId: actor.id,
       instanceById: options.instanceById,
       successorOf: options.successorOf,
+      fleet: options.fleet,
       authorization,
       cwd: actor.cwd,
       harness: actor.harness as "claude" | "opencode" | "pi",
@@ -648,10 +660,13 @@ export function createDelegationMcp(options: {
    * the hub, so a restart onto a new build still finds the difference.
    */
   const reconcileLists = () => {
-    // The rows read once for the whole pass: every stream and every pi
-    // session is looked up in them, not read again for each.
-    const rows = options.instances();
-    const byId = new Map(rows.map((row) => [row.id, row]));
+    // The rows read once for the whole pass: every stream's, by key.
+    const bound = [...streams].flatMap((stream) =>
+      stream.binding ? [stream.binding] : []
+    );
+    const byId = new Map(
+      options.instancesByIds(bound).map((row) => [row.id, row])
+    );
     for (const stream of streams) {
       const listing = listingOf(stream.binding);
       const last = options.toolListing(listing);
@@ -673,10 +688,7 @@ export function createDelegationMcp(options: {
     }
     // A pi session lists over REST, from its own host, and hears through its
     // machine: the same check, the same once per change.
-    for (const row of rows) {
-      if (row.harness !== "pi" || row.status !== "running") {
-        continue;
-      }
+    for (const row of options.runningOf("pi")) {
       const last = options.toolListing(row.id);
       const now = toolsHash(row);
       if (last === undefined || last === now || hostTold.get(row.id) === now) {
@@ -714,6 +726,7 @@ export function createDelegationMcp(options: {
           instanceId: binding ?? "",
           instanceById: options.instanceById,
           successorOf: options.successorOf,
+          fleet: options.fleet,
           cwd: bound?.cwd ?? "",
           harness: bound?.harness as "claude" | "opencode" | "pi" | undefined,
           canDelegate,
