@@ -54,8 +54,9 @@ struct TabAction {
 /// scrolls sideways when it overflows, its edges fading over 40pt.
 ///
 /// A tab's options (`TabAction`) open on a long press, as its context menu,
-/// and under a finger by a pull down off the tab, as a sheet that follows
-/// the finger (`TabOptionsSheet`); a sideways drag is the strip's scroll.
+/// and under a finger by a pull down off the tab, growing out of the tab
+/// itself as one shape under the finger (`TabOptionsSheet`); a sideways drag
+/// is the strip's scroll.
 final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteractionDelegate {
     static let item = 32.0
     static let px = 10.0
@@ -728,7 +729,8 @@ final class TabView: UIView {
         row.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: leading, bottom: 0, trailing: trailing)
     }
 
-    private var radius: Double { phoneRow ? Radius.radiusLg : Radius.radiusSm }
+    /// Its shoulders' radius.
+    var radius: Double { phoneRow ? Radius.radiusLg : Radius.radiusSm }
 
     private let tint = CAShapeLayer()
     private let sheet = CAShapeLayer()
@@ -964,6 +966,30 @@ final class TabView: UIView {
         slide.duration = Motion.durPop
         slide.timingFunction = Motion.easeDrawer.function
         sheet.add(slide, forKey: "leap")
+    }
+
+    /// The surface the tab stands in, its press aside: its sheet when chosen,
+    /// else its card. Its pulled options grow out of it (`TabOptionsSheet`),
+    /// and fold back into it once the finger has let go.
+    var surface: UIColor {
+        (chosen ? Palette.surfaceRecess : card).resolvedColor(with: traitCollection)
+    }
+
+    /// What stands on the tab, its title and its rim, without its card or
+    /// sheet: drawn over the surface its options grow out of.
+    func contentSnapshot() -> UIView? {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        tint.isHidden = true
+        sheet.isHidden = true
+        CATransaction.commit()
+        let snapshot = snapshotView(afterScreenUpdates: true)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        tint.isHidden = false
+        sheet.isHidden = false
+        CATransaction.commit()
+        return snapshot
     }
 
     /// Under a swipe the sheet shows by its fraction, whole and faded over

@@ -429,9 +429,17 @@ public final class PushRegistry {
             }
         }
         if !gone.isEmpty {
-            center.removeDeliveredNotifications(withIdentifiers: gone)
+            await Self.takeDown(delivered: gone)
             log.notice("removed \(gone.count) delivered asks that are over")
         }
+    }
+
+    /// Off the main actor, as `TrialReminder`'s changes: the removal is a
+    /// synchronous message to the notifications daemon, which a slow daemon
+    /// holds the calling thread on.
+    @concurrent
+    private nonisolated static func takeDown(delivered: [String]) async {
+        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: delivered)
     }
 
     /// iOS's word on notifications, read again.

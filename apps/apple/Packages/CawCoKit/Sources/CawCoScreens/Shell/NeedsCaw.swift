@@ -579,28 +579,8 @@ final class NeedsDrawer: UIView {
 
     // MARK: Settle
 
-    /// The spring the house settles a hand-driven surface on (`durSettle`, no bounce).
-    private struct Spring {
-        var x: Double
-        var v: Double
-        let target: Double
-        static let stiffness = pow(2 * .pi / Motion.durSettle, 2)
-        static let damping = 4 * .pi / Motion.durSettle
-
-        mutating func step(_ dt: Double) -> Bool {
-            var left = dt
-            while left > 0 {
-                let h = min(left, 1.0 / 240)
-                let a = -Self.stiffness * x - Self.damping * v
-                v += a * h
-                x += v * h
-                left -= h
-            }
-            return abs(x) < 0.5 && abs(v) < 20
-        }
-    }
-
-    private var springing: Spring?
+    /// The house spring the drawer settles on (`HouseSpring`).
+    private var springing: HouseSpring?
     private var link: CADisplayLink?
     private var last: CFTimeInterval = 0
 
@@ -619,7 +599,7 @@ final class NeedsDrawer: UIView {
             finished(target)
             return
         }
-        springing = Spring(x: (progress - target) * g.travel, v: velocity * g.travel, target: target)
+        springing = HouseSpring(x: (progress - target) * g.travel, v: velocity * g.travel, target: target)
         last = CACurrentMediaTime()
         let made = CADisplayLink(target: self, selector: #selector(tick(_:)))
         made.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 120, preferred: 120)
