@@ -11,14 +11,15 @@
   "durable_objects": {
     "bindings": [
       { "name": "PAIRING", "class_name": "Pairing" },
-      { "name": "SEATS", "class_name": "Seats" },
-      { "name": "EXPERIMENT", "class_name": "Experiment" }
+      { "name": "SEATS", "class_name": "Seats" }
     ]
   },
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["Pairing"] },
     { "tag": "v2", "new_sqlite_classes": ["Seats"] },
-    { "tag": "v3", "new_sqlite_classes": ["Experiment"] }
+    { "tag": "v3", "new_sqlite_classes": ["Experiment"] },
+    // The paywall's A/B test is gone (owner: "No test: one paywall"): its counts go with it.
+    { "tag": "v4", "deleted_classes": ["Experiment"] }
   ],
   "ratelimits": [
     {
@@ -37,13 +38,9 @@
     "APP_APPLE_ID": "6819139448",
     // Apple allows one notification URL per app: every verified notification's
     // exact body goes on to Yield, the owner's revenue dashboard.
-    "ASSN_FORWARD_URL": "https://yield.petralab.ai/api/asc/webhook",
-    // The experiments counted from App Store Server Notifications, and the one
-    // fixed appAccountToken each variant hands StoreKit (no per-user id):
-    // "name:variant=token,variant=token;name:…".
-    "EXPERIMENT_TOKENS": "paywall-1:story=5c0f1a7e-0000-4000-8000-00000000057a,poster=5c0f1a7e-0000-4000-8000-0000000057e2"
+    "ASSN_FORWARD_URL": "https://yield.petralab.ai/api/asc/webhook"
   },
-  // Secrets, set by hand: APNS_TEAM_ID, APNS_KEY_ID, APNS_P8, EXPERIMENT_READ_TOKEN.
+  // Secrets, set by hand: APNS_TEAM_ID, APNS_KEY_ID, APNS_P8.
   // No request logs: only the status codes and APNs reasons the code logs.
   "observability": { "enabled": true, "logs": { "invocation_logs": false } }
 }

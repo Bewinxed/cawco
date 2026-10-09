@@ -10,13 +10,6 @@ interface Env {
   /** Where each verified App Store Server Notification's exact body goes on to: Yield. */
   readonly ASSN_FORWARD_URL: string;
   readonly ENROLL_LIMIT: RateLimit;
-  readonly EXPERIMENT: DurableObjectNamespace<
-    import("./experiment").Experiment
-  >;
-  /** Secret: reads an experiment's counts; absent, nobody can. */
-  readonly EXPERIMENT_READ_TOKEN?: string;
-  /** "name:variant=token,…;name:…": each experiment's variants and the fixed appAccountToken each hands StoreKit. */
-  readonly EXPERIMENT_TOKENS: string;
   readonly PAIRING: DurableObjectNamespace<import("./pairing").Pairing>;
   /** Comma-separated product ids that grant Pro. */
   readonly PRO_PRODUCT_IDS: string;

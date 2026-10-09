@@ -1,18 +1,15 @@
 /**
- * Cawrier: the one holder of CawCo's APNs key. A phone with Pro or a live
- * free week enrolls a pairing (its device token, under a secret it gives its
- * hub); the hub pushes through the pairing with that secret. No hub holds the
- * key. One purchase holds at most {@link SEATS_PER_PURCHASE} live pairings.
+ * Cawrier: the one holder of CawCo's APNs key. A phone with Pro, a live free
+ * week, or a TestFlight install before the App Store has products enrolls a
+ * pairing (its device token, under a secret it gives its hub); the hub pushes
+ * through the pairing with that secret. No hub holds the key. One purchase
+ * holds at most {@link SEATS_PER_PURCHASE} live pairings.
  *
  * POST /v1/enroll  { pairingId, secret, deviceToken, apnsEnvironment, proof }
  * POST /v1/push    Authorization: Bearer <secret>; { pairingId, collapseId?, expiration?, payload }
  * POST /v1/unenroll Authorization: Bearer <secret>; { pairingId }: the pairing and its seat go
  * GET  /v1/health  one APNs probe: proves outbound HTTP/2 to Apple and the key
  * POST /v1/apple/notifications  { signedPayload }: App Store Server Notifications V2
- * GET  /v1/experiment/<name> Authorization: Bearer <EXPERIMENT_READ_TOKEN>: the counts
- *
- * The paywall experiment is counted from Apple's notifications only; the app
- * sends Cawrier nothing for it (App Review 5.1.1(ii)).
  */
 import {
   type ApnsAnswer,
@@ -20,7 +17,6 @@ import {
   hasKey,
   sendApns,
 } from "./apns";
-import type { ExperimentEvent } from "./experiment";
 import { SEATS_PER_PURCHASE } from "./seats";
 import {
   type Notification,
@@ -31,7 +27,6 @@ import {
 } from "./storekit";
 
 // biome-ignore lint/performance/noBarrelFile: Workers find a Durable Object class among the entry module's exports.
-export { Experiment } from "./experiment";
 export { Pairing } from "./pairing";
 export { Seats } from "./seats";
 
@@ -291,93 +286,15 @@ const unenroll = async (request: Request, env: Env): Promise<Response> => {
     : refuse(401, "No pairing holds this id and secret.");
 };
 
-interface Variant {
-  readonly experiment: string;
-  readonly variant: string;
-}
-
-/**
- * `EXPERIMENT_TOKENS`: "name:variant=token,variant=token;name:…", the fixed
- * `appAccountToken` each paywall variant hands StoreKit. Read as the variants
- * of each experiment, and the variant each token names.
- */
-const experimentsOf = (
-  env: Env
-): { byName: Map<string, string[]>; byToken: Map<string, Variant> } => {
-  const byName = new Map<string, string[]>();
-  const byToken = new Map<string, Variant>();
-  for (const entry of env.EXPERIMENT_TOKENS.split(";")) {
-    const [name = "", pairs = ""] = entry.split(":").map((part) => part.trim());
-    if (!name) {
-      continue;
-    }
-    const variants: string[] = [];
-    for (const pair of pairs.split(",")) {
-      const [variant = "", token = ""] = pair
-        .split("=")
-        .map((part) => part.trim());
-      if (variant && UUID.test(token.toLowerCase())) {
-        variants.push(variant);
-        byToken.set(token.toLowerCase(), { experiment: name, variant });
-      }
-    }
-    byName.set(name, variants);
-  }
-  return { byName, byToken };
-};
-
-const experiment = (env: Env, name: string) =>
-  env.EXPERIMENT.get(env.EXPERIMENT.idFromName(name));
-
 const seats = (env: Env, seat: string) =>
   env.SEATS.get(env.SEATS.idFromName(seat));
 
 type Verified = Extract<Notification, { ok: true }>;
 
-/** What a purchase counts as under its variant, or nothing. */
-const eventOf = (env: Env, productId: string | undefined) => {
-  if (productId === env.TRIAL_PRODUCT_ID) {
-    return "trial";
-  }
-  const pro = env.PRO_PRODUCT_IDS.split(",").map((id) => id.trim());
-  return productId && pro.includes(productId) ? "bought" : undefined;
-};
-
-/**
- * A completed purchase (`ONE_TIME_CHARGE`): counted under the variant its
- * verified transaction's `appAccountToken` names, once per notification and
- * never over a refund. Family Sharing grants are not purchases and count nothing.
- */
-const charged = async (env: Env, notice: Verified): Promise<string> => {
-  const { transaction } = notice;
-  const variant = experimentsOf(env).byToken.get(
-    transaction?.appAccountToken?.toLowerCase() ?? ""
-  );
-  const event: ExperimentEvent | undefined = eventOf(
-    env,
-    transaction?.productId
-  );
-  if (
-    !(transaction?.originalTransactionId && variant && event) ||
-    transaction.inAppOwnershipType !== "PURCHASED"
-  ) {
-    return "not counted";
-  }
-  return await experiment(env, variant.experiment).charge({
-    uuid: notice.uuid,
-    transactionKey: `${notice.environment}:${transaction.originalTransactionId}`,
-    variant: variant.variant,
-    event,
-    purchasedAt: transaction.purchaseDate ?? notice.signedAt,
-    signedAt: notice.signedAt,
-  });
-};
-
 /**
  * A refund or revocation: terminal, in whatever order it arrives. The
- * purchase is marked revoked under its seats, every pairing on it is wiped
- * (each gives its seat back as it goes, so a retry finds the rest), and it
- * comes out of every experiment's counts.
+ * purchase is marked revoked under its seats, and every pairing on it is
+ * wiped (each gives its seat back as it goes, so a retry finds the rest).
  */
 const revoked = async (env: Env, notice: Verified): Promise<string> => {
   const original = notice.transaction?.originalTransactionId;
@@ -389,15 +306,6 @@ const revoked = async (env: Env, notice: Verified): Promise<string> => {
   await Promise.all(
     pairings.map((id) =>
       env.PAIRING.get(env.PAIRING.idFromString(id)).revoked()
-    )
-  );
-  await Promise.all(
-    [...experimentsOf(env).byName.keys()].map((name) =>
-      experiment(env, name).revoke({
-        uuid: notice.uuid,
-        transactionKey,
-        signedAt: notice.signedAt,
-      })
     )
   );
   return `revoked, ${pairings.length} pairing(s) wiped`;
@@ -431,9 +339,7 @@ const appleNotification = async (
     return refuse(400, notice.error);
   }
   let outcome = "ignored";
-  if (notice.type === "ONE_TIME_CHARGE") {
-    outcome = await charged(env, notice);
-  } else if (notice.type === "REFUND" || notice.type === "REVOKE") {
+  if (notice.type === "REFUND" || notice.type === "REVOKE") {
     outcome = await revoked(env, notice);
   } else if (notice.type === "TEST") {
     outcome = "verified";
@@ -464,47 +370,6 @@ const forward = async (env: Env, raw: string, uuid: string): Promise<void> => {
     );
   }
 };
-
-/** Constant-time over equal-length digests, so the token's length does not show either. */
-const sameToken = async (given: string, held: string): Promise<boolean> => {
-  const encoder = new TextEncoder();
-  const [left, right] = await Promise.all(
-    [given, held].map((text) =>
-      crypto.subtle.digest("SHA-256", encoder.encode(text))
-    )
-  );
-  return crypto.subtle.timingSafeEqual(
-    left as ArrayBuffer,
-    right as ArrayBuffer
-  );
-};
-
-const experimentReport = async (
-  request: Request,
-  env: Env,
-  name: string
-): Promise<Response> => {
-  const token = bearerOf(request);
-  if (
-    !(
-      env.EXPERIMENT_READ_TOKEN &&
-      token &&
-      (await sameToken(token, env.EXPERIMENT_READ_TOKEN))
-    )
-  ) {
-    return refuse(401, "The experiment's read token is missing or wrong.");
-  }
-  const variants = experimentsOf(env).byName.get(name);
-  if (!variants) {
-    return refuse(404, "No experiment has that name.");
-  }
-  return json(200, {
-    experiment: name,
-    ...(await experiment(env, name).report(variants)),
-  });
-};
-
-const EXPERIMENT_PATH = "/v1/experiment/";
 
 let health:
   | { at: number; body: { apns: ApnsAnswer; key: boolean } }
@@ -540,13 +405,6 @@ export default {
     }
     if (request.method === "POST" && pathname === "/v1/apple/notifications") {
       return await appleNotification(request, env, ctx);
-    }
-    if (request.method === "GET" && pathname.startsWith(EXPERIMENT_PATH)) {
-      return await experimentReport(
-        request,
-        env,
-        pathname.slice(EXPERIMENT_PATH.length)
-      );
     }
     return refuse(404, "Nothing is here.");
   },
