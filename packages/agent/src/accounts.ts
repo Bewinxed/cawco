@@ -320,8 +320,8 @@ export const probeAccount = async (account: string): Promise<AccountProbe> => {
  * of its dirs ({@link USER_LAYER_DIRS}, made in {@link claudeHome} when it is
  * not there yet, so an account never starts a copy of its own) and each of
  * its files `claudeHome` has ({@link USER_LAYER_FILES}) becomes a symlink to
- * the user's one copy; and so does each project's auto memory `claudeHome`
- * has ({@link linkProjectMemory}). A dir the account already has of its own
+ * the user's one copy; and so does each project's auto memory either side
+ * has ({@link memorySlugs}, {@link linkProjectMemory}). A dir the account already has of its own
  * is moved into the user's copy first ({@link shareDir}); a file of its own
  * is left alone and said in the log.
  */
@@ -351,20 +351,41 @@ export const linkUserLayer = async (account: string): Promise<void> => {
       await symlink(target, path);
     }),
   ]);
-  const projects = await readdir(userLayerPath("projects"), {
-    withFileTypes: true,
-  }).catch(() => []);
-  for (const project of projects) {
-    if (
-      project.isDirectory() &&
-      // biome-ignore lint/performance/noAwaitInLoops: one project at a time, each a handful of syscalls
-      (await lstat(projectMemoryDir(claudeHome(), project.name)).catch(
-        () => undefined
-      ))
-    ) {
-      await linkProjectMemory(dir, project.name);
-    }
+  for (const slug of await memorySlugs(dir)) {
+    // biome-ignore lint/performance/noAwaitInLoops: one project at a time, each a handful of syscalls
+    await linkProjectMemory(dir, slug);
   }
+};
+
+/**
+ * The projects whose auto memory an account dir links at link time: each one
+ * {@link claudeHome} has a memory for, and each one the account dir has a
+ * memory of its own for (moved into the user's copy as it is linked). A
+ * project neither has one for is linked when a session launches in it.
+ */
+const memorySlugs = async (configDir: string): Promise<string[]> => {
+  const withMemory = async (root: string): Promise<string[]> => {
+    const projects = await readdir(join(root, "projects"), {
+      withFileTypes: true,
+    }).catch(() => []);
+    const found = await Promise.all(
+      projects.map(async (project) =>
+        project.isDirectory() &&
+        (await lstat(projectMemoryDir(root, project.name)).catch(
+          () => undefined
+        ))
+          ? project.name
+          : undefined
+      )
+    );
+    return found.filter((slug): slug is string => slug !== undefined);
+  };
+  return [
+    ...new Set([
+      ...(await withMemory(claudeHome())),
+      ...(await withMemory(configDir)),
+    ]),
+  ];
 };
 
 /**
