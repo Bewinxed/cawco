@@ -70,9 +70,11 @@ export interface SendFrame {
 }
 
 /**
- * Daemon-originated: a send the machine was handed and no process took, its
- * process refused by the machine's session keeper. Whole, as it was sent; the
- * hub keeps it owed until the session's next start, which it goes behind.
+ * Daemon-originated: a send the machine was handed and no process took: it
+ * found no live process for its session, or the process it was handed to went
+ * away (slept, exited, failed, relaunched, refused by the session keeper)
+ * before reading it. Whole, as it was sent, under the hand-off it was given
+ * (`SendPayload.delivery`); the hub owes it to the session's next process.
  */
 export interface HeldSendFrame {
   instanceId: string;
@@ -224,12 +226,6 @@ export interface ErrorFrame {
   /** Internal end-reconciliation evidence; never relayed to a client. */
   endReason?: string;
   instanceId?: string;
-  /**
-   * A start the machine's session keeper refused: no process took anything,
-   * so the session's sends are not failed with it. Each comes back from its
-   * machine as a {@link HeldSendFrame} and goes with the session's next start.
-   */
-  keepsSends?: true;
   /** Hub-originated routing failures (e.g. target machine offline). */
   kind: "error";
   message: string;

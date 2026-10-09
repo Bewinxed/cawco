@@ -1186,6 +1186,20 @@ export const sentMessages = sqliteTable(
      * Null for every send its machine has.
      */
     owed: text("owed"),
+    /**
+     * The send whole, as its machine is handed it (`Envelope<SendPayload>`),
+     * kept while it is pending: a process that went away before reading it
+     * leaves the hub what to hand the session's next process. Null once the
+     * send is no longer pending, and on a keep-alive ping, which nothing
+     * hands on.
+     */
+    envelope: text("envelope"),
+    /**
+     * Its current hand-off to its machine (`SendPayload.delivery`). A machine
+     * handing a send back names the hand-off it was given; one that is not
+     * this was overtaken by a later hand-off and is not owed again.
+     */
+    delivery: text("delivery"),
   },
   (table) => [
     index("sent_messages_harness_id").on(table.harnessId),

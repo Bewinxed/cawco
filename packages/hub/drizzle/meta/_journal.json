@@ -883,6 +883,13 @@
       "when": 1791577633299,
       "tag": "0125_project_skills_mcp",
       "breakpoints": true
+    },
+    {
+      "idx": 126,
+      "version": "6",
+      "when": 1791578398159,
+      "tag": "0126_sent_message_envelope",
+      "breakpoints": true
     }
   ]
 }

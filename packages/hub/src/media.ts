@@ -16,7 +16,7 @@
  * agent-facing tools) are not rewritten: they get what the machine sent.
  */
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { DB_PATH } from "./config";
 
@@ -103,6 +103,20 @@ export function externalizeImages<T>(value: T): T {
 export function mediaFilePath(name: string): string | undefined {
   return MEDIA_NAME.test(name) ? join(MEDIA_DIR, name) : undefined;
 }
+
+/**
+ * The bytes behind a reference {@link externalizeImages} made, base64, as a
+ * machine is handed an image; undefined when it is no such reference or its
+ * file is gone.
+ */
+export function mediaBase64(url: string): string | undefined {
+  const path = mediaFilePath(url.replace(MEDIA_URL_PREFIX, ""));
+  return path && existsSync(path)
+    ? readFileSync(path).toString("base64")
+    : undefined;
+}
+
+const MEDIA_URL_PREFIX = /^\/api\/media\//;
 
 /**
  * Files the reader attaches that are neither a picture nor text: stored as

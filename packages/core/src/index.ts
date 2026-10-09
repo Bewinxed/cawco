@@ -342,6 +342,12 @@ export interface SendPayload {
    * agent fetches onto the session's machine and names by path in `message`.
    */
   attachments?: import("./attachments").SendAttachment[];
+  /**
+   * This hand-off of the send to its machine, stamped by the hub each time it
+   * hands the send on. A machine handing the send back (`held_send`) names
+   * it, so a hand-back a later hand-off overtook is not owed twice.
+   */
+  delivery?: string;
   /** The instance a fleet-originated send claims as its caller. */
   from?: string;
   /** Images the turn carries: base64, with no `data:` URI prefix. */

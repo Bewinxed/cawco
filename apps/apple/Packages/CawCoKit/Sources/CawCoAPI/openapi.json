@@ -20100,6 +20100,10 @@
               "$ref": "#/components/schemas/SendAttachment"
             }
           },
+          "delivery": {
+            "description": "This hand-off of the send to its machine, stamped by the hub each time it\nhands the send on. A machine handing the send back (`held_send`) names\nit, so a hand-back a later hand-off overtook is not owed twice.",
+            "type": "string"
+          },
           "from": {
             "description": "The instance a fleet-originated send claims as its caller.",
             "type": "string"
@@ -33143,7 +33147,7 @@
         ]
       },
       "HeldSendFrame": {
-        "description": "Daemon-originated: a send the machine was handed and no process took, its\nprocess refused by the machine's session keeper. Whole, as it was sent; the\nhub keeps it owed until the session's next start, which it goes behind.",
+        "description": "Daemon-originated: a send the machine was handed and no process took: it\nfound no live process for its session, or the process it was handed to went\naway (slept, exited, failed, relaunched, refused by the session keeper)\nbefore reading it. Whole, as it was sent, under the hand-off it was given\n(`SendPayload.delivery`); the hub owes it to the session's next process.",
         "type": "object",
         "properties": {
           "instanceId": {
@@ -34255,11 +34259,6 @@
           },
           "instanceId": {
             "type": "string"
-          },
-          "keepsSends": {
-            "description": "A start the machine's session keeper refused: no process took anything,\nso the session's sends are not failed with it. Each comes back from its\nmachine as a {@link HeldSendFrame} and goes with the session's next start.",
-            "const": true,
-            "type": "boolean"
           },
           "kind": {
             "description": "Hub-originated routing failures (e.g. target machine offline).",

@@ -643,6 +643,8 @@ export interface DbShape {
   ) => void;
   /** The listed sessions whose keep-alive is on: the only ones it schedules. */
   readonly keepAliveInstances: () => PublicInstanceRow[];
+  /** Keeps a pending send whole, as its machine was handed it. */
+  readonly keepEnvelope: (uuid: string, envelope: string) => void;
   /** The canvas a session showed last, for `read_choices` after its preview closed. */
   readonly latestCanvasOf: (instanceId: string) => CanvasRow | undefined;
   /**
@@ -927,6 +929,13 @@ export interface DbShape {
    * this launch is ({@link instances.turnOpenAt}). Returns whether it moved.
    */
   readonly openTurn: (id: string, at: number) => boolean;
+  /**
+   * A pending send its process went away without reading, owed again from
+   * the envelope its record kept ({@link sentMessages.envelope}). False when
+   * it is no longer pending or kept none (a record from before envelopes
+   * were kept).
+   */
+  readonly oweAgain: (uuid: string) => boolean;
   /** The sends still owed to their machine ({@link sentMessages.owed}), pending, in the order accepted: a session's, or a machine's. */
   readonly owedSends: (
     of: { instanceId: string } | { machineId: string }
@@ -1593,6 +1602,12 @@ export interface DbShape {
   /** Each completed turn's tokens, on the account it ran on. */
   readonly turnUsage: TurnUsageDb;
   /**
+   * Pending sends handed to a machine before the hub kept each whole
+   * ({@link sentMessages.envelope}): none once {@link keepEnvelope} has
+   * given each its own, which a hub start does once.
+   */
+  readonly unkeptSends: () => SentMessageRow[];
+  /**
    * The machine's sessions that nothing has ever put a name to, however old
    * they are — a stored conversation the hub could name off the machine's own
    * catalog, and the only rows worth spending a catalog read on. Empty is the
@@ -1657,6 +1672,7 @@ export interface DbShape {
         | "harnessId"
         | "held"
         | "acceptedAt"
+        | "delivery"
       >
     >
   ) => SentMessageRow | undefined;
@@ -5609,6 +5625,40 @@ const make = async (path: string): Promise<DbShape> => {
         )
         .returning({ uuid: sentMessages.uuid })
         .all().length === 1,
+    oweAgain: (uuid) =>
+      db
+        .update(sentMessages)
+        .set({ owed: sql`${sentMessages.envelope}` })
+        .where(
+          and(
+            eq(sentMessages.uuid, uuid),
+            eq(sentMessages.state, "pending"),
+            isNotNull(sentMessages.envelope)
+          )
+        )
+        .returning({ uuid: sentMessages.uuid })
+        .all().length === 1,
+    unkeptSends: () =>
+      db
+        .select()
+        .from(sentMessages)
+        .where(
+          and(
+            eq(sentMessages.state, "pending"),
+            isNull(sentMessages.envelope),
+            isNull(sentMessages.owed),
+            isNotNull(sentMessages.body)
+          )
+        )
+        .all(),
+    keepEnvelope: (uuid, envelope) => {
+      db.update(sentMessages)
+        .set({ envelope })
+        .where(
+          and(eq(sentMessages.uuid, uuid), eq(sentMessages.state, "pending"))
+        )
+        .run();
+    },
     noteFreshStart: (id, at) => {
       db.update(instances)
         .set({ freshStartAt: at })
@@ -5669,7 +5719,12 @@ const make = async (path: string): Promise<DbShape> => {
     updateSend: (uuid, change) =>
       db
         .update(sentMessages)
-        .set(change)
+        // A send no longer pending is handed on no more: what it was is its body.
+        .set(
+          change.state && change.state !== "pending"
+            ? { ...change, envelope: null, owed: null }
+            : change
+        )
         .where(eq(sentMessages.uuid, uuid))
         .returning()
         .get(),

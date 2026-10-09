@@ -313,13 +313,6 @@ export const IDLE_SLEEP_MS = 30 * 60_000;
 /** How often the sessions at rest are looked at. Ours: a minute is as fine as half an hour is read. */
 const IDLE_SWEEP_MS = 60_000;
 
-/**
- * How long a send that crossed a session's sleep is held for the process the
- * hub's wake starts. Ours: the hub wakes it on hearing of the sleep, one
- * socket round trip later; a minute is past any ordering of the two.
- */
-const CROSSED_HOLD_MS = 60_000;
-
 /** The one readable field of a tool call, for the rail's glance line. */
 const glanceOf = (input: Record<string, unknown> | undefined): string => {
   if (!input) {
@@ -640,12 +633,13 @@ export class SessionSupervisor {
    * by each sweep that finds the session not at rest.
    */
   readonly #activeAt = new Map<string, number>();
+  /** The sessions this daemon put to sleep, until their next start ({@link sleep}). */
+  readonly #asleep = new Set<string>();
   /**
-   * The sessions this daemon put to sleep, each with the sends that reached
-   * it after: the hub sent them before it heard, and they go to the process
-   * its wake starts ({@link sleep}).
+   * Sessions this daemon is stopping itself (a sleep, a stop): their process
+   * closing is that stop's to say, not a process going away on its own.
    */
-  readonly #asleep = new Map<string, SendPayload[]>();
+  readonly #ending = new WeakSet<HarnessSession>();
   readonly #generations = new Map<string, string>();
   readonly #addressWaiting = new Map<
     string,
@@ -667,17 +661,21 @@ export class SessionSupervisor {
   readonly #unsentFailures = new Map<string, Parameters<FrameSink>[0]>();
   /**
    * Sessions whose process the keeper refused its input ({@link KeeperRefused}),
-   * until their next start: every send that reaches one goes back to the hub,
-   * held for that start ({@link #holdSend}).
+   * until their next start: the failure that refusal is says why, so the
+   * harness letting go of what it was handed fails nothing ({@link #reject}).
    */
   readonly #keeperRefused = new Map<string, KeeperRefused>();
   /**
-   * Each session's sends handed to its harness and not yet read, whole, by
-   * uuid: what a refusal of the process's input hands back to the hub.
+   * Each session's sends handed to its process and not yet read, whole, by
+   * uuid: what goes back to the hub when that process goes away
+   * ({@link #handBack}).
    */
   readonly #handed = new Map<string, Map<string, SendPayload>>();
-  /** Held sends the sink could not send, until a connection takes them. */
-  readonly #unsentHeld: Parameters<FrameSink>[0][] = [];
+  /**
+   * What the hub is told of a process going away and the sends it handed
+   * back, in order, while no connection takes it: said on the next one.
+   */
+  readonly #unsentGone: Parameters<FrameSink>[0][] = [];
   /** Reattaches in flight, by instance id: see {@link reattach}. */
   readonly #adopting = new Map<string, Promise<void>>();
   /** Outlives its session: a discard can arrive after the query already ended. */
@@ -1353,8 +1351,8 @@ export class SessionSupervisor {
    * Run on the session's own queue, behind whatever was already on its way to
    * it and ahead of whatever follows, so it is decided against the sends that
    * came before and the ones after find it asleep. A send the hub sent before
-   * it heard is held here and handed to the process the hub's wake starts:
-   * the hub starts one as soon as it hears, for exactly those.
+   * it heard finds no process and goes back to the hub ({@link #send}), which
+   * owes it to the process its wake starts.
    */
   async sleep(
     instanceId: string
@@ -1369,29 +1367,13 @@ export class SessionSupervisor {
     }
     const processGeneration = this.#generations.get(instanceId);
     // Carried, and listed on every beat, until it has stopped: a beat that no
-    // longer listed it first would have the hub settle it as ended, and fail
-    // what it was sent.
+    // longer listed it first would have the hub settle it as ended.
+    this.#ending.add(session);
     await session.stop();
     this.#sessions.delete(instanceId);
     this.#forgetPulse(instanceId);
-    const crossed: SendPayload[] = [];
-    this.#asleep.set(instanceId, crossed);
-    // The hub wakes it for a crossed send the moment it hears. One nothing
-    // woke for by then (the hub was away as this was said) did not go.
-    setTimeout(() => {
-      if (this.#asleep.get(instanceId) !== crossed) {
-        return;
-      }
-      this.#asleep.delete(instanceId);
-      for (const held of crossed) {
-        this.#reject(
-          instanceId,
-          held.message.uuid,
-          "The session was put to sleep as this was sent, and nothing woke it."
-        );
-      }
-    }, CROSSED_HOLD_MS).unref();
-    this.sink({ kind: "asleep", instanceId, processGeneration });
+    this.#asleep.add(instanceId);
+    this.#gone(instanceId, processGeneration);
     Effect.runFork(
       Effect.logInfo(
         `put ${instanceId} to sleep: at rest, its ${session.harness} processes are stopped`
@@ -1858,7 +1840,6 @@ export class SessionSupervisor {
     // A start again: what its last process was refused is over, and the
     // sends kept for it come from the hub behind this spawn.
     this.#keeperRefused.delete(instanceId);
-    this.#handed.delete(instanceId);
     if (payload.processGeneration) {
       this.#generations.set(instanceId, payload.processGeneration);
     }
@@ -1963,6 +1944,9 @@ export class SessionSupervisor {
         this.#forgetPulse(instanceId);
         await running.stop();
       }
+      // What the process this replaces was handed and never read goes back to
+      // the hub, which hands it to this one behind its start.
+      this.#handBack(instanceId);
 
       // A work item's session runs every shell command inside its workspace's
       // boundary, and does not start without one: the refusal is the spawn's.
@@ -2036,13 +2020,7 @@ export class SessionSupervisor {
       } else {
         this.#activeAt.set(instanceId, Date.now());
       }
-      // What reached this session while it slept is its first work awake.
-      const crossed = this.#asleep.get(instanceId) ?? [];
       this.#asleep.delete(instanceId);
-      for (const held of crossed) {
-        // biome-ignore lint/performance/noAwaitInLoops: handed over in the order they were sent
-        await this.#send(held);
-      }
       // A reattach that met a running turn said so before there was a session
       // to carry the pulse ({@link #emitPulse} drops it): said now.
       if (this.#busy.has(instanceId)) {
@@ -2124,11 +2102,6 @@ export class SessionSupervisor {
       // this process, and a diagnosis on the machine itself was once blind to
       // why a resume died.
       warn(`spawn ${instanceId} failed: ${message}`);
-      // The sends that waited for this process have nowhere to go.
-      for (const held of this.#asleep.get(instanceId) ?? []) {
-        this.#reject(instanceId, held.message.uuid, error);
-      }
-      this.#asleep.delete(instanceId);
       if (ack) {
         this.sink({
           kind: "control_result",
@@ -2329,6 +2302,18 @@ export class SessionSupervisor {
           this.#sessions.delete(instanceId);
           this.#busy.delete(instanceId);
           this.#forgetPulse(instanceId);
+          // Its process went away of its own accord: a failure has said so
+          // (`#fail`), and anything else is the session at rest, its next
+          // message waking it ({@link #gone}). One this daemon is stopping
+          // (a sleep, a stop) is said by the one stopping it.
+          if (this.#ending.has(holder.session)) {
+            return;
+          }
+          if (this.#failures.has(instanceId)) {
+            this.#handBack(instanceId);
+          } else {
+            this.#gone(instanceId, processGeneration);
+          }
         }
       },
     };
@@ -2801,9 +2786,8 @@ export class SessionSupervisor {
    * The keeper refused this session's process its input. Said here with the
    * session and the keeper's reason; the session fails with it, as a start
    * that failed does, and is no longer one this daemon hands work to. What it
-   * was handed and has not read, and what waited for its process, goes back
-   * to the hub whole ({@link #holdSend}), as does every send that reaches it
-   * until it starts again: the hub keeps them for that start.
+   * was handed and has not read goes back to the hub whole, as every failed
+   * process's does ({@link #fail}).
    */
   #refusedInput(
     instanceId: string,
@@ -2818,34 +2802,7 @@ export class SessionSupervisor {
     this.#sessions.delete(instanceId);
     this.#busy.delete(instanceId);
     this.#forgetPulse(instanceId);
-    for (const payload of this.#handed.get(instanceId)?.values() ?? []) {
-      this.#holdSend(payload);
-    }
-    this.#handed.delete(instanceId);
-    for (const payload of this.#asleep.get(instanceId) ?? []) {
-      this.#holdSend(payload);
-    }
-    this.#asleep.delete(instanceId);
-    this.#fail(instanceId, error, processGeneration, true);
-  }
-
-  /**
-   * A send to a session whose process was refused its input: no process
-   * will read it until the session starts again, so it goes back to the hub
-   * for that start. True when it was held. A keep-alive ping is never held:
-   * nothing starts a session to keep its cache warm.
-   */
-  #heldForRefusal(payload: SendPayload, keepAlive: boolean): boolean {
-    const { instanceId } = payload;
-    if (
-      keepAlive ||
-      !this.#keeperRefused.has(instanceId) ||
-      this.#sessions.has(instanceId)
-    ) {
-      return false;
-    }
-    this.#holdSend(payload);
-    return true;
+    this.#fail(instanceId, error, processGeneration);
   }
 
   /** A send handed to its harness, whole as the hub sent it, until the harness reads it. */
@@ -2855,7 +2812,7 @@ export class SessionSupervisor {
     this.#handed.set(payload.instanceId, handed);
   }
 
-  /** The sends a harness says it read are no longer any refusal's to hand back. */
+  /** The sends a harness says it read are no longer any hand-back's ({@link #handBack}). */
   #noteRead(instanceId: string, message: NeutralMessage): void {
     if (message.type !== "system" || message.subtype !== MESSAGES_READ) {
       return;
@@ -2865,32 +2822,80 @@ export class SessionSupervisor {
     }
   }
 
-  /** A send no process took, back to the hub whole: it goes with the session's next start. */
+  /**
+   * A send no process took, back to the hub whole under the hand-off it came
+   * with: the hub owes it to the session's next process.
+   */
   #holdSend(payload: SendPayload): void {
-    const frame = {
-      kind: "held_send" as const,
+    console.info(
+      `[session] ${payload.instanceId}: send ${payload.message.uuid} handed back: no process took it`
+    );
+    this.#sayGone({
+      kind: "held_send",
       instanceId: payload.instanceId,
       send: payload,
-    };
-    console.info(
-      `[session] ${payload.instanceId}: send ${payload.message.uuid} kept for its next start`
-    );
-    if (!this.sink(frame)) {
-      this.#unsentHeld.push(frame);
+    });
+  }
+
+  /**
+   * A send that finds no process for its session (asleep, exited, failed,
+   * never started here) goes back to the hub ({@link #holdSend}), which owes
+   * it to the session's next process. A keep-alive ping is refused instead:
+   * nothing starts a session to keep its cache warm. True when it was settled
+   * so.
+   */
+  #noProcessFor(payload: SendPayload, keepAlive: boolean): boolean {
+    const { instanceId } = payload;
+    if (this.#sessions.has(instanceId)) {
+      return false;
+    }
+    if (keepAlive) {
+      this.sink({
+        kind: "rejected",
+        instanceId,
+        uuid: payload.message.uuid,
+        error: "This session is not live, and a keep-alive ping wakes nothing.",
+      });
+      return true;
+    }
+    this.#holdSend(payload);
+    return true;
+  }
+
+  /**
+   * What the session's process was handed and never read, back to the hub
+   * whole, once that process is gone ({@link #holdSend}).
+   */
+  #handBack(instanceId: string): void {
+    for (const payload of this.#handed.get(instanceId)?.values() ?? []) {
+      this.#holdSend(payload);
+    }
+    this.#handed.delete(instanceId);
+  }
+
+  /**
+   * The session's process went away and nothing failed: the hub files it
+   * asleep, its next message waking it, and is handed back what that process
+   * never read, which wakes it now.
+   */
+  #gone(instanceId: string, processGeneration: string | undefined): void {
+    this.#sayGone({ kind: "asleep", instanceId, processGeneration });
+    this.#handBack(instanceId);
+  }
+
+  /** One word of a process gone or a send handed back, in order, now or on the next connection. */
+  #sayGone(frame: Parameters<FrameSink>[0]): void {
+    if (this.#unsentGone.length > 0 || !this.sink(frame)) {
+      this.#unsentGone.push(frame);
     }
   }
 
-  #fail(
-    instanceId: string,
-    error: unknown,
-    processGeneration?: string,
-    /** No process took anything: its sends are kept, not failed ({@link #refusedInput}). */
-    keepsSends = false
-  ): void {
+  #fail(instanceId: string, error: unknown, processGeneration?: string): void {
     // Its process was refused its input, and that said why it failed
     // ({@link #refusedInput}): the harness's stream ending on it is the same
-    // failure, and must not fail the sends the refusal kept.
-    if (!keepsSends && this.#keeperRefused.has(instanceId)) {
+    // failure, said once.
+    const refusal = this.#keeperRefused.get(instanceId);
+    if (refusal && error !== refusal) {
       console.info(
         `[session] ${instanceId}: after its refusal: ${error instanceof Error ? error.message : String(error)}`
       );
@@ -2914,7 +2919,6 @@ export class SessionSupervisor {
       processGeneration,
       verb: "spawn" as const,
       message,
-      ...(keepsSends ? { keepsSends: true as const } : {}),
     };
     // The hub fails the row and its work item on this frame alone. One that
     // could not go out now goes out on the next connection.
@@ -2923,6 +2927,9 @@ export class SessionSupervisor {
     } else {
       this.#unsentFailures.set(instanceId, frame);
     }
+    // Behind the failure, so the hub has filed it failed when they arrive:
+    // what the failed process never read waits for the session's next start.
+    this.#handBack(instanceId);
   }
 
   /**
@@ -2936,25 +2943,32 @@ export class SessionSupervisor {
         this.#unsentFailures.delete(instanceId);
       }
     }
-    // The sends kept for a refused session's next start, behind its failure.
-    while (this.#unsentHeld.length && this.sink(this.#unsentHeld[0])) {
-      this.#unsentHeld.shift();
+    // The processes gone and sends handed back meanwhile, behind the failures.
+    while (this.#unsentGone.length && this.sink(this.#unsentGone[0])) {
+      this.#unsentGone.shift();
     }
   }
 
   /**
-   * One send that did not go: the harness refused it, or there was no
-   * session to hand it to. The hub fails that send's record; the session, if
-   * there is one, goes on.
+   * One send its harness refused. A live process refusing it fails it, and
+   * the session goes on. A process gone (exited, failed, refused by the
+   * keeper) letting go of what it was handed is no refusal: that send goes
+   * back to the hub for the session's next process, or already has.
    */
   #reject(instanceId: string, uuid: string, error: unknown): void {
-    // Its process was refused its input: what it was handed went back to
-    // the hub whole ({@link #refusedInput}), and the harness letting go of it
-    // as its stream ends is not that send failing.
-    if (this.#keeperRefused.has(instanceId)) {
+    const said = error instanceof Error ? error.message : String(error);
+    if (
+      !this.#sessions.has(instanceId) ||
+      this.#keeperRefused.has(instanceId)
+    ) {
+      const handed = this.#handed.get(instanceId)?.get(uuid);
+      this.#handed.get(instanceId)?.delete(uuid);
       console.info(
-        `[session] ${instanceId}: send ${uuid} kept, not failed: ${error instanceof Error ? error.message : String(error)}`
+        `[session] ${instanceId}: send ${uuid} let go by a process that is gone, not failed: ${said}`
       );
+      if (handed) {
+        this.#holdSend(handed);
+      }
       return;
     }
     this.#handed.get(instanceId)?.delete(uuid);
@@ -2971,19 +2985,7 @@ export class SessionSupervisor {
     const keepAlive =
       payload.message.origin.kind === "system" &&
       payload.message.origin.name === "keepalive";
-    if (this.#heldForRefusal(payload, keepAlive)) {
-      return;
-    }
-    // Sent before the hub heard this session was put to sleep: it waits for
-    // the process the hub's wake starts ({@link sleep}). A keep-alive ping is
-    // not held: nothing wakes a session to keep its cache warm, and it is
-    // refused below like any ping to a session that is not there.
-    const crossed =
-      this.#sessions.has(instanceId) || keepAlive
-        ? undefined
-        : this.#asleep.get(instanceId);
-    if (crossed) {
-      crossed.push(payload);
+    if (this.#noProcessFor(payload, keepAlive)) {
       return;
     }
     // Files go onto this machine before any harness sees the turn, which
@@ -3011,12 +3013,13 @@ export class SessionSupervisor {
       };
       worktree.announce = undefined;
     }
+    // Its process may have gone while the files were fetched.
+    if (this.#noProcessFor(payload, keepAlive)) {
+      return;
+    }
     const session = this.#sessions.get(instanceId);
     if (!session) {
-      throw new Error(
-        this.#failures.get(instanceId) ??
-          "This session is not live. Resume it before sending a message."
-      );
+      return;
     }
     if (keepAlive) {
       if (this.#cacheCold.has(instanceId) || this.#promptWrites > 0) {
@@ -3103,14 +3106,14 @@ export class SessionSupervisor {
     const stopStartedAt = Date.now();
     const processGeneration =
       namedGeneration ?? this.#generations.get(instanceId);
-    // A stop is a decision about the session: nothing waits for its wake now.
-    const crossed = this.#asleep.get(instanceId) ?? [];
+    // A stop is a decision about the session: the hub fails what it was sent
+    // and never read as it hears this said `stopped`.
     this.#asleep.delete(instanceId);
-    for (const held of crossed) {
-      this.#reject(instanceId, held.message.uuid, "The session was stopped.");
-    }
     try {
       const session = this.#sessions.get(instanceId);
+      if (session) {
+        this.#ending.add(session);
+      }
       const kind = harness ?? session?.harness;
       if (kind === "opencode" && !this.#hubContract) {
         throw new HubContractRefused(this.#hubRefusal);
@@ -3208,6 +3211,7 @@ export class SessionSupervisor {
         ended = { harness: kind ?? "claude", resourcesClosed: true };
       }
       this.#resumable.delete(instanceId);
+      this.#handed.delete(instanceId);
       if (discard && !sharedConversation) {
         if (scratchWorktree) {
           this.#worktrees.set(instanceId, scratchWorktree);

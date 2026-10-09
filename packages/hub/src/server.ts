@@ -342,6 +342,7 @@ import { MeaningJudge } from "./meaning";
 import {
   externalizeImages,
   FILE_LIMIT_BYTES,
+  mediaBase64,
   mediaContentType,
   mediaFilePath,
   storedFilePath,
@@ -600,6 +601,87 @@ const ACTIVITY_TOUCH_MS = 60_000;
  * `sleeping`, which is a wake button away.
  */
 const RESTORE_MAX = 20;
+
+/**
+ * At a hub start, the sends a machine was handed before the hub kept each
+ * whole: kept now from their records ({@link envelopeOf}), so a process that
+ * goes before reading one leaves its next one something to read.
+ * Idempotent: once each has its own, none is left to keep.
+ */
+const keepPendingWhole = (db: DbShape): void => {
+  let keptWhole = 0;
+  for (const send of db.unkeptSends()) {
+    const [row] = db.getInstancesByIds([send.instanceId]);
+    const envelope = row && envelopeOf(send, row.machineId);
+    if (envelope) {
+      db.keepEnvelope(send.uuid, JSON.stringify(envelope));
+      keptWhole += 1;
+    } else {
+      console.warn(
+        `[hub] send ${send.uuid} to ${send.instanceId} could not be kept whole: ${row ? "an image it carried is no longer in the media store" : "its session is gone"}`
+      );
+    }
+  }
+  if (keptWhole > 0) {
+    console.log(`[hub] boot: kept ${keptWhole} pending send(s) whole`);
+  }
+};
+
+/**
+ * A pending send whole again from its record, as its machine was handed it
+ * (`sentFrame`, read backwards): the images it led with, out of the media
+ * store, and the rest its message — one text block back to the words it
+ * was, the files and pasted text folded in as they went. Undefined when an
+ * image it carried is no longer stored.
+ */
+const envelopeOf = (
+  send: SentMessageRow,
+  machineId: string
+): Envelope<SendPayload> | undefined => {
+  const body = send.body as unknown as SentMessage;
+  const said = body.message.content;
+  const blocks = typeof said === "string" ? [] : said;
+  const images: { mediaType: string; data: string }[] = [];
+  let at = 0;
+  for (; at < blocks.length; at += 1) {
+    const block = blocks[at] as {
+      type: string;
+      source?: { type?: string; url?: string; media_type?: string };
+    };
+    if (block.type !== "image") {
+      break;
+    }
+    const data =
+      block.source?.type === "url" && block.source.url
+        ? mediaBase64(block.source.url)
+        : undefined;
+    if (!(data && block.source?.media_type)) {
+      return;
+    }
+    images.push({ mediaType: block.source.media_type, data });
+  }
+  const rest = blocks.slice(at);
+  const only = rest.length === 1 ? (rest[0] as { text?: unknown }) : undefined;
+  let content: SentMessage["message"]["content"] = rest;
+  if (typeof said === "string") {
+    content = said;
+  } else if (typeof only?.text === "string") {
+    content = only.text;
+  }
+  return {
+    verb: "send",
+    machineId,
+    instanceId: send.instanceId,
+    payload: {
+      instanceId: send.instanceId,
+      message: {
+        ...body,
+        message: { ...body.message, content } as SentMessage["message"],
+      },
+      ...(images.length > 0 ? { images } : {}),
+    },
+  };
+};
 
 /** A clock time as a hand-back says it: `12:09 UTC`. */
 const utcClock = (at: Date): string => `${at.toISOString().slice(11, 16)} UTC`;
@@ -2204,6 +2286,7 @@ export const createServer = (
       `[hub] boot sweep: ${swept.toUnknown} session(s) → unknown, ${swept.toSleeping} legacy restart error(s) → sleeping`
     );
   }
+  keepPendingWhole(db);
 
   /**
    * What each session is doing right now, as its own daemon last said: memory
@@ -3179,12 +3262,13 @@ export const createServer = (
     why: string,
     outlived = false,
     /**
-     * The sends this ending leaves pending: `owed`, the ones no process was
-     * ever handed (a relaunch, whose new process takes them); `all`, a start
-     * the keeper refused, whose machine hands each back to be owed
-     * (`held_send`).
+     * `all`: the session runs again, so nothing it was sent fails here — what
+     * its process never read is owed to the next one, as its machine hands it
+     * back ({@link takeBack}) or {@link losePending} decides. `none`: it never
+     * runs again (stopped, deleted, archived, nothing to resume), and what it
+     * never read fails for `why`.
      */
-    keep: "none" | "owed" | "all" = "none"
+    keep: "none" | "all" = "none"
   ): void => {
     if (!outlived) {
       pending.forget(instanceId);
@@ -3213,13 +3297,8 @@ export const createServer = (
           { ...row, status: "stopped" },
           (send.body as SentMessage).origin
         );
-      if (keep !== "all") {
-        settlePending(
-          instanceId,
-          why,
-          "fail",
-          keep === "owed" ? (send) => !send.owed : (send) => !keptAtRest(send)
-        );
+      if (keep === "none") {
+        settlePending(instanceId, why, "fail", (send) => !keptAtRest(send));
       }
     }
     // The supervisor's turn buffers for a dead session are waste.
@@ -3664,15 +3743,17 @@ export const createServer = (
 
   /**
    * What becomes of a pending send its harness has not taken up, once a
-   * transcript read has looked: `fail` — it did not go, for the reason given
-   * (the process is gone; a machine that cannot be asked cannot say it stored
-   * one); `wait` — a live process may still hand it over and say so;
+   * transcript read has looked: `fail` — it did not go, for the reason given:
+   * the session will never run again; `owe` — the process it was handed to
+   * is gone and the session runs again, so it is owed to the next process
+   * ({@link oweUnread}), a machine that cannot be asked counting as having
+   * taken none; `wait` — a live process may still hand it over and say so;
    * `unheld` — what the process holds is known, so a send it neither stored
    * nor said it held ({@link SentMessageRow.held}), or one a later send
-   * overtook, never reached it. That is decided only on a read the machine
-   * answered.
+   * overtook, never reached it, and is owed to it again. That is decided only
+   * on a read the machine answered.
    */
-  type Unstored = "fail" | "wait" | "unheld";
+  type Unstored = "fail" | "owe" | "wait" | "unheld";
 
   /**
    * Whether a later send of the session has been taken up ahead of `send`.
@@ -3710,7 +3791,7 @@ export const createServer = (
       unanswered.delete(instanceId);
     }
     // A send still owed never reached a machine, so no machine lost it; only
-    // an end ("fail") ends it.
+    // an end ("fail") ends it, and nothing owes it twice.
     const all = db
       .sendsIn(instanceId, ["pending"])
       .filter((send) => unstored === "fail" || !send.owed)
@@ -3730,14 +3811,25 @@ export const createServer = (
     detach(
       storedIn(instanceId)
         .then((answer) => {
+          if (!answer) {
+            console.warn(
+              `[hub] ${instanceId}: its transcript could not be read to settle ${sends.length} send(s) it never said it read`
+            );
+          }
           if (!answer && unstored === "unheld") {
             return;
           }
+          let owed = false;
           for (const send of sends) {
-            settleSend(send, answer ?? new Map(), unstored, why);
+            owed = settleSend(send, answer ?? new Map(), unstored, why) || owed;
           }
           if (whole) {
             decided();
+          }
+          // What is owed goes now to a process up or starting, or wakes an
+          // asleep session for it.
+          if (owed) {
+            releaseOwed({ instanceId });
           }
         })
         .finally(() => {
@@ -3749,31 +3841,151 @@ export const createServer = (
     );
   };
 
-  /** One send {@link settlePending} decides, against what `stored` says was taken up. */
+  /**
+   * One send {@link settlePending} decides, against what `stored` says was
+   * taken up. True when it is owed again.
+   */
   const settleSend = (
     send: SentMessageRow,
     stored: Map<string, boolean>,
     unstored: Unstored,
     why: string
-  ): void => {
+  ): boolean => {
     // Read meanwhile, or thrown away with its session: that stands.
     const now = db.sendRecord(send.uuid);
     if (now?.state !== "pending") {
-      return;
+      return false;
     }
     const taken = stored.get(now.uuid);
     if (taken) {
       readSend(now, false);
-      return;
+      return false;
+    }
+    if (unstored === "fail") {
+      failSend(now, why);
+      return false;
     }
     const lost =
-      unstored === "fail" ||
+      unstored === "owe" ||
       (unstored === "unheld" &&
         taken === undefined &&
         !(now.held && !overtaken(now)));
-    if (lost) {
-      failSend(now, why);
+    if (!lost) {
+      return false;
     }
+    // A keep-alive ping is kept for no process but the one it was for, and
+    // nothing starts a session to warm its cache: it did not go.
+    if (!db.oweAgain(now.uuid)) {
+      failSend(now, why);
+      return false;
+    }
+    console.log(
+      `[hub] send ${now.uuid} to ${now.instanceId} owed again: ${why}`
+    );
+    publishSend(db.sendRecord(now.uuid) ?? now);
+    return true;
+  };
+
+  /**
+   * What a session was handed and never read, owed to its next process: its
+   * process went away and the session runs again — filed asleep, restored,
+   * or failed and waiting for its next start. Taken up first is read.
+   */
+  const oweUnread = (instanceId: string, why: string): void =>
+    settlePending(instanceId, why, "owe");
+
+  /**
+   * A session's process went away and nobody ended the session ({@link
+   * forgetPending} for the rest). When the session runs again
+   * (`runsAgain`: it has a conversation to come back on, or is failed and
+   * waits for its next start), what it was sent and never read is owed to
+   * its next process; otherwise nothing can read it, and it fails for `why`.
+   */
+  const losePending = (
+    instanceId: string,
+    runsAgain: boolean,
+    why: string = UNREAD.ended
+  ): void => {
+    forgetPending(instanceId, why, false, runsAgain ? "all" : "none");
+    if (runsAgain) {
+      oweUnread(instanceId, why);
+    }
+  };
+
+  /** Sends handed back by their machine, decided together per session ({@link takeBack}). */
+  const handedBack = new Map<string, Envelope<SendPayload>[]>();
+
+  /** Whether a pending send's current hand-off is the one `send` was given. */
+  const currentHandOff = (instanceId: string, send: SendPayload): boolean => {
+    const record = db.sendRecord(send.message.uuid);
+    return (
+      record?.instanceId === instanceId &&
+      record.state === "pending" &&
+      !record.owed &&
+      (record.delivery ?? undefined) === send.delivery
+    );
+  };
+
+  /**
+   * A send its machine hands back whole ({@link HeldSendFrame}): no process
+   * took it — it found none, or the one it was handed to went away. The
+   * hand-off it names must be its current one: a later hand-off overtook any
+   * other, and owing that again would hand it twice. Once per session, what
+   * its transcript shows taken up is read, and the rest is owed to the
+   * session's next process ({@link releaseOwed}), as it was handed.
+   */
+  const takeBack = (
+    machineId: string,
+    instanceId: string,
+    send: SendPayload
+  ): void => {
+    if (!currentHandOff(instanceId, send)) {
+      console.log(
+        `[hub] send ${send.message.uuid} to ${instanceId} came back from ${machineId} after it was settled or handed on again: left as it is`
+      );
+      return;
+    }
+    const envelope: Envelope<SendPayload> = {
+      verb: "send",
+      machineId,
+      instanceId,
+      payload: send,
+    };
+    const batch = handedBack.get(instanceId);
+    if (batch) {
+      batch.push(envelope);
+      return;
+    }
+    handedBack.set(instanceId, [envelope]);
+    lifetime.after(0, () => {
+      const back = handedBack.get(instanceId) ?? [];
+      handedBack.delete(instanceId);
+      detach(
+        storedIn(instanceId).then((stored) => {
+          for (const one of back) {
+            const { uuid } = one.payload.message;
+            if (!currentHandOff(instanceId, one.payload)) {
+              continue;
+            }
+            const now = db.sendRecord(uuid);
+            if (now && stored?.get(uuid)) {
+              readSend(now, false);
+              continue;
+            }
+            db.holdSend(uuid, JSON.stringify(one));
+            console.log(
+              `[hub] send ${uuid} to ${instanceId} came back: no process took it; owed to the session's next process`
+            );
+            const owed = db.sendRecord(uuid);
+            if (owed) {
+              publishSend(owed);
+            }
+          }
+          releaseOwed({ instanceId });
+        }),
+        "sends handed back"
+      );
+    });
   };
 
   /**
@@ -4537,16 +4749,11 @@ export const createServer = (
    * out first, and the machine runs one instance's envelopes in order, so the
    * message that follows lands in the process this starts. It comes back on
    * the settings it last ran with, as a revive always has.
-   *
-   * `crossed` is the wake for sends that were already on their way when the
-   * machine put the session to sleep ({@link sessionAsleep}): those are held
-   * by the machine for this very process, so they stay pending.
    */
   const wakeForSend = (
     agent: NonNullable<ReturnType<typeof registry.agent>>,
     machineId: string,
-    instanceId: string,
-    crossed = false
+    instanceId: string
   ): void => {
     const [row] = db.getInstancesByIds([instanceId]);
     if (!(row && wakesForSend(row))) {
@@ -4554,7 +4761,7 @@ export const createServer = (
     }
     // Moving a session whose cache is cold is free: it is re-placed first.
     replaceAtWake(row);
-    resumeSpawn(agent, machineId, row, crossed);
+    resumeSpawn(agent, machineId, row);
   };
 
   /**
@@ -4601,7 +4808,6 @@ export const createServer = (
     agent: NonNullable<ReturnType<typeof registry.agent>>,
     machineId: string,
     row: ReturnType<typeof db.getInstancesByIds>[number],
-    crossed: boolean,
     /** The process is replaced even if the machine still runs one: a move to another account. */
     relaunch = false
   ): void => {
@@ -4626,10 +4832,9 @@ export const createServer = (
     }
     const revive = settled.payload;
     // A relaunch replaces the process; what the old one had parked is over.
-    // What no process was ever handed (owed) goes to the new one.
-    if (!crossed) {
-      forgetPending(instanceId, UNREAD.restarted, false, "owed");
-    }
+    // What it was handed and never read its machine hands back once it has
+    // stopped it, for this one ({@link takeBack}).
+    forgetPending(instanceId, UNREAD.restarted, false, "all");
     if (plan.kind === "fresh") {
       noteFreshStart(row);
     }
@@ -4654,15 +4859,16 @@ export const createServer = (
   };
 
   /**
-   * A machine put a session to sleep: it was at rest, and its machine stopped
-   * everything it ran (`asleep`, see `SessionSupervisor.sleep` in the agent).
-   * The row is filed `sleeping`, which every screen already draws, and the
-   * next send wakes it through {@link wakeForSend} like any sleeping session.
+   * A session's process went away with nothing failed: its machine put it to
+   * sleep at rest, or the process ended on its own (`asleep`, see
+   * `SessionSupervisor.sleep` and its `closed` in the agent). The row is filed
+   * `sleeping`, which every screen already draws, and the next send wakes it
+   * through {@link wakeForSend} like any sleeping session.
    *
-   * Nothing it was sent is failed, as a process that died would have it: the
-   * machine put it to sleep only with every earlier send read, so a send
-   * still pending here is one that crossed the stop on its way. The machine
-   * holds those, and the process this wakes for them reads them.
+   * Nothing it was sent is failed. A send still pending here is one its
+   * process never read, or one that crossed the sleep on its way: its machine
+   * hands each back ({@link takeBack}), and the process the wake starts reads
+   * it. What was already owed wakes it now.
    */
   const sessionAsleep = (machineId: string, instanceId: string): void => {
     db.accounts.removeMovedFrom(instanceId);
@@ -4672,23 +4878,11 @@ export const createServer = (
     console.log(
       `[hub] ${instanceId} is asleep: its machine stopped it at rest`
     );
-    pending.forget(instanceId);
-    forgetPending(instanceId, UNREAD.ended, true);
+    losePending(instanceId, true);
     // Asks its delegates had routed to it and it never answered are the
     // reader's from here, as when any parent's process goes.
     escalateRoutedAsks(instanceId);
-    // Nothing wakes a session for a keep-alive ping: its machine refuses one
-    // that crossed, and the record fails as any refused ping's does.
-    const agent = registry.agent(machineId);
-    // What the hub keeps owed is no crossing: it goes when its hold ends.
-    if (
-      agent &&
-      db
-        .sendsIn(instanceId, ["pending"])
-        .some((send) => !(isKeepAlive(send.body) || send.owed))
-    ) {
-      wakeForSend(agent, machineId, instanceId, true);
-    }
+    releaseOwed({ instanceId });
     publishInstances(machineId);
   };
 
@@ -5253,12 +5447,19 @@ export const createServer = (
       away ||
       kept ||
       (agent !== undefined && !keepAlive && sendWaits(instanceId));
+    // Every hand-off is named, so the machine handing one back names which
+    // ({@link takeBack}); a keep-alive ping is never handed back.
+    const delivery = keepAlive ? undefined : crypto.randomUUID();
+    if (delivery) {
+      envelope.payload.delivery = delivery;
+    }
     if (agent && !owed) {
       sendFrame(agent, envelope);
     }
     // Built after the send has gone: the machine is handed the image bytes,
     // the record a reference to them.
     const mode = sendMode(envelope.payload);
+    const whole = JSON.stringify(envelope);
     const record = db.recordSend({
       uuid: message.uuid,
       instanceId,
@@ -5269,7 +5470,8 @@ export const createServer = (
       ...(accepted
         ? {
             state: "pending" as const,
-            ...(owed ? { owed: JSON.stringify(envelope) } : {}),
+            ...(owed ? { owed: whole } : {}),
+            ...(delivery ? { envelope: whole, delivery } : {}),
           }
         : {
             state: "failed" as const,
@@ -5397,10 +5599,13 @@ export const createServer = (
 
   /**
    * What a machine is owed, handed over once the hold it waited on is over,
-   * in the order accepted and each once: a session asleep is woken first
-   * (as for a send that crossed its sleep, so the wake fails none of them),
-   * and one whose start is still held keeps its sends owed until that start
-   * goes ({@link flushOwedStarts}). Each goes out as accepted now: what its
+   * in the order accepted and each once. A session asleep is woken first; a
+   * failed or stopped one is not, its sends waiting for whatever starts it
+   * next (a person's message, a restart), so a process that keeps dying is
+   * never started again by its own sends. A send goes only to a process that
+   * is up or starting, and one whose start is still held keeps its sends
+   * owed until that start goes ({@link flushOwedStarts}). Each goes out as
+   * accepted now, under a hand-off of its own ({@link takeBack}): what its
    * machine settles at its register never counts it among the sends a
    * restart lost, as it never reached the machine before.
    */
@@ -5408,32 +5613,43 @@ export const createServer = (
     of: { instanceId: string } | { machineId: string }
   ): void => {
     for (const send of db.owedSends(of)) {
-      const [row] = db.getInstancesByIds([send.instanceId]);
-      const agent = row ? registry.agent(row.machineId) : undefined;
-      // Kept for a session nothing owed may wake: it waits for a send that may.
-      if (!(row && agent) || keptAsleep(row)) {
-        continue;
-      }
-      const envelope = JSON.parse(send.owed ?? "{}") as Envelope<SendPayload>;
-      const refused = inputRefusal(
-        send.instanceId,
-        envelope.payload.message.origin
-      );
-      if (refused) {
-        db.takeOwedSend(send.uuid);
-        failSend(send, refused);
-        continue;
-      }
-      wakeForSend(agent, row.machineId, send.instanceId, true);
-      if (db.owesSpawn(send.instanceId)) {
-        continue;
-      }
-      if (db.takeOwedSend(send.uuid) === undefined) {
-        continue;
-      }
-      changeSend(send, { acceptedAt: new Date() });
-      sendFrame(agent, envelope);
+      releaseOne(send);
     }
+  };
+
+  /** One owed send, as {@link releaseOwed} hands it over. */
+  const releaseOne = (send: SentMessageRow): void => {
+    const [row] = db.getInstancesByIds([send.instanceId]);
+    const agent = row ? registry.agent(row.machineId) : undefined;
+    // Kept for a session nothing owed may wake: it waits for a send that may.
+    if (!(row && agent) || keptAsleep(row)) {
+      return;
+    }
+    const envelope = JSON.parse(send.owed ?? "{}") as Envelope<SendPayload>;
+    const refused = inputRefusal(
+      send.instanceId,
+      envelope.payload.message.origin
+    );
+    if (refused) {
+      db.takeOwedSend(send.uuid);
+      failSend(send, refused);
+      return;
+    }
+    if (row.status === "sleeping") {
+      wakeForSend(agent, row.machineId, send.instanceId);
+    }
+    const [now] = db.getInstancesByIds([send.instanceId]);
+    if (
+      db.owesSpawn(send.instanceId) ||
+      !(now && (now.status === "running" || now.status === "starting")) ||
+      db.takeOwedSend(send.uuid) === undefined
+    ) {
+      return;
+    }
+    const delivery = crypto.randomUUID();
+    envelope.payload.delivery = delivery;
+    changeSend(send, { acceptedAt: new Date(), delivery });
+    sendFrame(agent, envelope);
   };
 
   /** A machine past its grace: what it was owed fails as any send to an absent machine does, but for a start an update still holds. */
@@ -7380,7 +7596,9 @@ export const createServer = (
     }
     const { payload } = settled;
     const placed = placedOrRefused(machineId, payload, workItemId);
-    forgetPending(payload.instanceId, UNREAD.restarted);
+    // A start under an id that ran before: what it was handed and never read
+    // its machine hands back as it replaces the process ({@link takeBack}).
+    forgetPending(payload.instanceId, UNREAD.restarted, false, "all");
     db.openInstance({
       id: payload.instanceId,
       addressProtocol: addressProtocolMachines.has(machineId),
@@ -7519,7 +7737,9 @@ export const createServer = (
     const { payload } = settled;
     const placed = placedOrRefused(machineId, payload);
     const requestId = crypto.randomUUID();
-    forgetPending(payload.instanceId, UNREAD.restarted);
+    // A start under an id that ran before: what it was handed and never read
+    // its machine hands back as it replaces the process ({@link takeBack}).
+    forgetPending(payload.instanceId, UNREAD.restarted, false, "all");
     db.openInstance({
       id: payload.instanceId,
       addressProtocol: addressProtocolMachines.has(machineId),
@@ -8060,12 +8280,17 @@ export const createServer = (
       sessionEnding(row);
     }
   };
-  /** What a session's work leaves behind as its end is decided. */
+  /**
+   * What a session's work leaves behind as its end is decided. What it was
+   * sent and has not read is settled when its machine says it `stopped`, not
+   * now: its process runs until then, and may take its queue up as the stop
+   * cuts its turn (Claude Code does), which its transcript then holds.
+   */
   const sessionEnding = (
     row: { id: string } & Parameters<typeof workItems.cancelled>[0]
   ) => {
     workItems.cancelled(row);
-    forgetPending(row.id, UNREAD.stopped);
+    forgetPending(row.id, UNREAD.stopped, false, "all");
     closePreview(row.id).catch(console.error);
   };
   // A project's running sessions, stopped before it is forgotten, each
@@ -11306,7 +11531,6 @@ export const createServer = (
       agent,
       row.machineId,
       { ...row, sessionId: row.sessionId },
-      false,
       true
     );
   };
@@ -12677,7 +12901,6 @@ export const createServer = (
       if (envelope.verb === "stop") {
         endSession(row.id, "stop");
         closePreview(row.id).catch(console.error);
-        forgetPending(row.id, UNREAD.stopped);
         noteInterrupt(row.id);
         workItems.cancelled(row);
         return;
@@ -12908,7 +13131,7 @@ export const createServer = (
     relaunching.add(instanceId);
     lifetime.after(RELAUNCH_SETTLE_MS, () => relaunching.delete(instanceId));
     transcripts.noteRelaunch(instanceId);
-    resumeSpawn(agent, machineId, { ...row, sessionId }, false, true);
+    resumeSpawn(agent, machineId, { ...row, sessionId }, true);
     console.info(
       `[hub] boundary: relaunching ${instanceId} onto the fail-closed hook`
     );
@@ -13561,7 +13784,6 @@ export const createServer = (
         agent,
         row.machineId,
         { ...now, sessionId: now.sessionId },
-        false,
         true
       );
       if (resume) {
@@ -13613,7 +13835,7 @@ export const createServer = (
       `[hub] ${named} was continued as ${successor}: its resume goes there`
     );
     if (wakesForSend(row)) {
-      resumeSpawn(agent, row.machineId, row, false);
+      resumeSpawn(agent, row.machineId, row);
       // A person brought it back: what was kept for it goes behind the start.
       releaseOwed({ instanceId: successor });
     }
@@ -13680,9 +13902,10 @@ export const createServer = (
     }
     // A relaunch replaces the process — questions the old one had
     // open are settled by its teardown and must not replay. What no process
-    // was ever handed (owed) goes to the new one.
+    // was ever handed (owed) goes to the new one, and what the old one was
+    // handed and never read its machine hands back for it ({@link takeBack}).
     const [before] = db.getInstancesByIds([message.instanceId]);
-    forgetPending(message.instanceId, UNREAD.restarted, false, "owed");
+    forgetPending(message.instanceId, UNREAD.restarted, false, "all");
     // A session whose harness never began a conversation comes back fresh
     // under its id (core `relaunchOf`), and its transcript says so.
     if (
@@ -17947,14 +18170,20 @@ export const createServer = (
               for (const orphan of settled) {
                 // A process that outlived the agent holds what reached it and
                 // has not been read, and nothing else: whatever the agent that
-                // went away had not handed it yet went with that agent. What
-                // it holds is decided once its harness has said
-                // (`decideCustody`). A send its harness has taken up is read
-                // either way — a read that happened while no agent was
-                // reading is not framed again.
+                // went away had not handed it yet went with that agent, and is
+                // owed to it again. What it holds is decided once its harness
+                // has said (`decideCustody`). A send its harness has taken up
+                // is read either way — a read that happened while no agent was
+                // reading is not framed again. One whose process is gone runs
+                // again on its conversation, restored now or woken later, and
+                // is owed what its process never read.
                 const kept =
                   custody.state === "unavailable" || outlived(orphan);
-                forgetPending(orphan.row.id, UNREAD.ended, kept);
+                if (kept) {
+                  forgetPending(orphan.row.id, UNREAD.ended, true);
+                } else {
+                  losePending(orphan.row.id, orphan.resumes);
+                }
                 if (kept) {
                   inCustody.set(orphan.row.id, {
                     machineId: message.machineId,
@@ -18249,8 +18478,10 @@ export const createServer = (
               );
               for (const row of beat.settled) {
                 // Its parked questions cannot be answered by a process that is
-                // gone, and the same goes for anything it was holding.
-                forgetPending(row.id, UNREAD.ended);
+                // gone. What it was sent and never read goes to its next
+                // process when it has a conversation to come back on; with
+                // none, nothing can run it again.
+                losePending(row.id, row.sessionId !== null);
                 escalateRoutedAsks(row.id);
               }
               // A restored process up before it said a word (Claude's CLI
@@ -18510,30 +18741,13 @@ export const createServer = (
                 });
                 break;
               }
-              // A send no process took, its process refused by the keeper:
-              // owed again, whole, and it goes with the session's next start.
+              // A send no process took, handed back whole by its machine: owed
+              // again for the session's next process ({@link takeBack}).
               if (kind === "held_send" && message.instanceId) {
                 const { send } = message.payload as FramePayload & {
                   kind: "held_send";
                 };
-                const kept = db.holdSend(
-                  send.message.uuid,
-                  JSON.stringify({
-                    verb: "send",
-                    machineId: message.machineId,
-                    instanceId: message.instanceId,
-                    payload: send,
-                  } satisfies Envelope<SendPayload>)
-                );
-                console.log(
-                  kept
-                    ? `[hub] send ${send.message.uuid} to ${message.instanceId} queued: its process never took it; it goes with the session's next start`
-                    : `[hub] send ${send.message.uuid} to ${message.instanceId} came back held, but is no longer pending`
-                );
-                const record = db.sendRecord(send.message.uuid);
-                if (record) {
-                  publishSend(record);
-                }
+                takeBack(message.machineId, message.instanceId, send);
                 break;
               }
               if (kind === "stopped" && message.instanceId) {
@@ -18598,7 +18812,9 @@ export const createServer = (
                 }
                 lifecycle.unavailable(message.instanceId);
                 db.settleUnavailableRecovery(message.instanceId);
-                forgetPending(message.instanceId, UNREAD.ended);
+                // A stored conversation stays resumable: what it was sent and
+                // never read goes to the process that next runs it.
+                losePending(message.instanceId, process.sessionId !== null);
                 publishInstances(message.machineId);
                 break;
               }
@@ -19474,21 +19690,13 @@ export const createServer = (
                   reportToParent(unstarted, `${reason}${line}`, true);
                 }
                 workflowRuntime.observe(message.instanceId, reason);
-                // A start the keeper refused took nothing: its sends come
-                // back from the machine one by one, owed to its next start.
-                const keepsSends =
-                  (message.payload as { keepsSends?: unknown }).keepsSends ===
-                  true;
-                if (keepsSends) {
-                  console.warn(
-                    `[hub] ${message.instanceId} failed, its sends kept for its next start: ${reason}`
-                  );
-                }
-                forgetPending(
+                // A failed session runs again when something starts it: what
+                // it was sent and never read waits, owed, for that start. One
+                // whose conversation is gone never runs again.
+                losePending(
                   message.instanceId,
-                  reason,
-                  false,
-                  keepsSends ? "all" : "none"
+                  reason !== CLAUDE_CONVERSATION_GONE,
+                  reason
                 );
                 escalateRoutedAsks(message.instanceId);
                 if (!internal) {
