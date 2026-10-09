@@ -126,11 +126,7 @@ import {
   workspaceHook,
 } from "../boundary";
 import { carrySessions, readTaskList, transcriptIn } from "../claude-sessions";
-import {
-  callDelegationTool,
-  delegationMcp,
-  MCP_SERVER_NAME,
-} from "../delegation";
+import { delegationMcp, MCP_SERVER_NAME } from "../delegation";
 import { sessionFleetDenials } from "../denied-tools";
 import {
   fleetHoldings,
@@ -2197,6 +2193,15 @@ class ClaudeSession implements HarnessSession {
         "Live Claude credential installation refused: it enrolls on its next fresh start."
       );
     }
+    // The slot carries this credential, and it is connected: the hub took
+    // that header as this session on the connection's every request
+    // (delegation-mcp.ts `requestBinding`: an unknown credential is a 401,
+    // another session's a 403), so a `connected` slot has already proved
+    // what a tool call would. The ACK, authenticated by the same header, is
+    // the one call left. A `list_sessions` here read the whole fleet twice
+    // over HTTP inside the hub, each read under a 5 s timeout; twenty
+    // sessions restored at once sat behind each other's reads, and four
+    // failed this gate with "The operation timed out." (2026-10-09).
     const servers = await this.#connectedCawcoSnapshot();
     const cawco = servers.find((server) => server.name === MCP_SERVER_NAME);
     if (
@@ -2205,7 +2210,6 @@ class ClaudeSession implements HarnessSession {
     ) {
       throw new Error("CawCo MCP launch credential could not be verified.");
     }
-    await callDelegationTool(this.instanceId, "list_sessions", {}, credential);
     await acknowledgeSessionCredential(credential);
     console.info(`[claude] launch credential installed ${this.instanceId}`);
     return {

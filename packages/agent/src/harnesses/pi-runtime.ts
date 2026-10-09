@@ -474,12 +474,12 @@ class PiSession implements HarnessSession {
       this.#credential.value = credential;
       // This host runs one session: its shells act as that session.
       process.env[CAWCO_ENV.sessionCredential] = credential;
-      await callDelegationTool(
-        this.#ctx.instanceId,
-        "list_sessions",
-        {},
-        credential
-      );
+      // The ACK is authenticated by the credential itself (the hub refuses
+      // one it does not know), and the hub minted it in this session's own
+      // spawn: the proof its tools will be taken as this session. No
+      // `list_sessions` first: it read the whole fleet twice inside the hub
+      // under 5 s timeouts, and a machine restoring twenty sessions at once
+      // timed its own gates out (2026-10-09).
       await acknowledgeSessionCredential(credential);
       return {
         installed: true,

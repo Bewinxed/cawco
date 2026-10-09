@@ -89,7 +89,15 @@ const listed = ({
 export function createDelegationMcp(options: {
   /** Runs the tool-list sweeps and each long call's heartbeat, and stops the source watchers, with the hub. */
   lifetime: HubLifetimeShape;
+  /** Every row, for a pass over all of them (the tool-list sweep); one session's row is {@link instanceById}. */
   instances: () => InstanceRow[];
+  /**
+   * One row, by its key. Every MCP request reads its connection's row, and
+   * a machine restoring 20 sessions makes hundreds of them in seconds: read
+   * as the whole table each time (2,600 rows, their JSON columns parsed),
+   * they held the hub's one thread for 1.5 to 4.8 s at a stretch, and the
+   * restored sessions' credential checks timed out behind it (2026-10-09).
+   */
   instanceById: (id: string) => InstanceRow | undefined;
   /** The session that runs in `id`'s place now (db `successorOf`). */
   successorOf: (id: string) => string;
@@ -607,7 +615,7 @@ export function createDelegationMcp(options: {
 
   /** The row a connection's binding names, read fresh: its role can change. */
   const boundRow = (binding: string | null) =>
-    binding ? options.instances().find((row) => row.id === binding) : undefined;
+    binding ? options.instanceById(binding) : undefined;
 
   /** Whose list a connection is: its session's, or OpenCode's shared discovery's. */
   const listingOf = (binding: string | null): string =>
@@ -780,10 +788,7 @@ export function createDelegationMcp(options: {
         status: 400,
       });
     }
-    if (
-      binding !== undefined &&
-      !options.instances().some((row) => row.id === binding)
-    ) {
+    if (binding !== undefined && !options.instanceById(binding)) {
       return new Response("Unknown CawCo instanceId", { status: 400 });
     }
     return undefined;
@@ -926,9 +931,7 @@ export function createDelegationMcp(options: {
   /** What a session is listed, for the REST door (`cawco tools`); without one, the superset. */
   /** `own`: the session's own harness listing it (pi's host), remembered like a `tools/list`. */
   const list = (instanceId?: string, own = false) => {
-    const actor = instanceId
-      ? options.instances().find((row) => row.id === instanceId)
-      : undefined;
+    const actor = instanceId ? options.instanceById(instanceId) : undefined;
     if (instanceId !== undefined && !actor) {
       throw new Error(`No session ${instanceId} on this hub.`);
     }
