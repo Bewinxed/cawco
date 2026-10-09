@@ -92,6 +92,7 @@
       : null
   );
   let body = $state<HTMLElement | null>(null);
+  let scroller = $state<HTMLElement | null>(null);
   // Let go once everything is in: any difference from the kept height is
   // tweened, not jumped.
   $effect(() => {
@@ -131,7 +132,7 @@
     onsubmit();
   }}
 >
-  <div class="scroll">
+  <div class="scroll" bind:this={scroller}>
     <div
       class="body"
       bind:this={body}
@@ -199,6 +200,7 @@
     </div>
   </div>
   <EditorFooter
+    body={scroller}
     {canSave}
     {deleteLabel}
     {deleting}

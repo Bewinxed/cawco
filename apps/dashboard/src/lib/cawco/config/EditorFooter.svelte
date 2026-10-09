@@ -13,10 +13,13 @@
 </script>
 
 <script lang="ts">
+  import { aboveKeyboard } from "#lib/cawco/visible-viewport.svelte.js";
   /**
    * The editor's commit row. It sits outside the scrolling body, on the
-   * recess, so no field ever scrolls under it; under 640px it pins to the
-   * bottom edge and Delete moves to the header's ⋯ menu.
+   * recess, so no field scrolls under it at rest; under 640px it pins to the
+   * bottom edge and Delete moves to the header's ⋯ menu, and over a keyboard
+   * it stands on the keyboard with the body's fields kept clear of it
+   * (aboveKeyboard, `body`).
    *
    * Save shows its work where it was pressed: the kit Button spins while
    * the save runs and draws a check for --dur-hold when it ends well, and
@@ -26,6 +29,7 @@
   import { IconTrash } from "#lib/icons.js";
 
   let {
+    body,
     saving,
     saveLabel,
     canSave = true,
@@ -36,6 +40,8 @@
     ondelete,
     oncancel,
   }: {
+    /** The scrolling body whose fields the row stands under. */
+    body: HTMLElement | null;
     saving: boolean;
     saveLabel: string;
     canSave?: boolean;
@@ -70,7 +76,7 @@
   $effect(() => () => clearTimeout(savedTimer));
 </script>
 
-<footer class="footer">
+<footer class="footer" {@attach aboveKeyboard(() => body)}>
   <div class="inner">
     {#if ondelete && deleteLabel}
       <Button

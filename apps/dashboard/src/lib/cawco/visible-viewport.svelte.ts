@@ -33,9 +33,11 @@
  * `preventScroll`, which WebKit honours for the keyboard's reveal as well;
  * the tap itself goes on untouched, so iOS still places the caret, the loupe
  * and Paste where the finger was. Only a tap: a touch that moved or
- * scrolled focuses nothing, as iOS does. (The first keyboard a freshly
- * launched browser raises still pans once: WebKit does not honour
- * `preventScroll` for that one.)
+ * scrolled focuses nothing, as iOS does. (WebKit still pans now and then
+ * for a field the keyboard comes up over, and always for the first keyboard
+ * a freshly launched browser raises: the scroll happens in its UI process,
+ * and a script scrolling the window back the same frame changed nothing on
+ * screen. WebKit bug 311821.)
  */
 import { flushSync } from "svelte";
 
@@ -78,49 +80,78 @@ function scrollers(node: HTMLElement): HTMLElement[] {
 }
 
 /**
- * Attachment for a footer stuck to the bottom of what scrolls (`position:
- * sticky; bottom: 0`, as a step's Back and Continue): it stays above a
- * keyboard and keeps the field being typed in clear of itself. Safari leaves
- * the scroller's bottom under the keyboard, so the footer's sticky offset
- * becomes as much of the scroller as the keyboard covers; Brave shrinks the
- * layout, and there the offset stays 0. Only the scroller is measured: the
- * footer's own box, read the frame the layout changed, still stood where it
- * was stuck before, and a lift taken from it threw the footer to the top.
- * The scroller's scroll-padding-bottom is the room the footer takes, so the
- * browser's own focus scrolling, and `reveal` here, stop above it.
+ * Attachment for a footer stuck to the bottom of its scroller (`position:
+ * sticky; bottom: 0`: a step's Back and Continue, an editor's Save): it
+ * stays above a keyboard and keeps the field being typed in clear of itself.
+ * Safari leaves the scroller's bottom under the keyboard, so the footer's
+ * sticky offset becomes as much of the scroller as the keyboard covers;
+ * Brave shrinks the layout, and there the offset stays 0. Only the scroller
+ * is measured: the footer's own box, read the frame the layout changed,
+ * still stood where it was stuck before, and a lift taken from it threw the
+ * footer to the top.
+ *
+ * The fields scroll in `covers` (by default the footer's own scroller, which
+ * it stands in), and that box's scroll-padding-bottom is how much of it the
+ * footer stands over, so the browser's own focus scrolling, and `reveal`
+ * here, stop above the footer. A footer below its fields' box (an editor's
+ * commit row) stands over none of it until a keyboard lifts it.
  */
-export function aboveKeyboard(node: HTMLElement): () => void {
-  const [box] = scrollers(node);
-  // Where its CSS does not stick it (a wide screen), it is in the flow.
-  if (
-    !box ||
-    visible.height === 0 ||
-    getComputedStyle(node).position !== "sticky"
-  ) {
-    return () => undefined;
-  }
-  const bottom = visible.top + visible.height;
-  const place = () => {
-    const lift = Math.max(
-      0,
-      Math.round(box.getBoundingClientRect().bottom - bottom)
-    );
-    node.style.bottom = lift > 0 ? `${lift}px` : "";
-    box.style.scrollPaddingBottom = `${node.offsetHeight + lift}px`;
-  };
-  // Brave reports the keyboard a frame before the layout shrinks for it, so
-  // the footer is placed a frame later, and again whenever the scroller
-  // takes a new size; placed at once it was thrown up by the keyboard's
-  // height for that frame. Safari's layout never moves, and there the lift
-  // comes a frame into the keyboard's rise.
-  const resized = new ResizeObserver(place);
-  resized.observe(box);
-  const frame = requestAnimationFrame(place);
-  return () => {
-    cancelAnimationFrame(frame);
-    resized.disconnect();
-    node.style.bottom = "";
-    box.style.scrollPaddingBottom = "";
+export function aboveKeyboard(covers?: () => HTMLElement | null | undefined) {
+  return (node: HTMLElement): (() => void) => {
+    const [box] = scrollers(node);
+    // Where its CSS does not stick it (a wide screen), it is in the flow.
+    if (
+      !box ||
+      visible.height === 0 ||
+      getComputedStyle(node).position !== "sticky"
+    ) {
+      return () => undefined;
+    }
+    const fields = covers?.() ?? box;
+    const inside = fields.contains(node);
+    const bottom = visible.top + visible.height;
+    const place = () => {
+      const area = box.getBoundingClientRect();
+      // Brave shrinks the layout viewport before the boxes in it are laid
+      // out again: a scroller still reaching past it has not taken the
+      // keyboard yet, and a lift taken from it threw the footer to the top.
+      // The observer below places it once it has its new size.
+      if (area.bottom > document.documentElement.clientHeight + 1) {
+        return;
+      }
+      const lift = Math.max(0, Math.round(area.bottom - bottom));
+      node.style.bottom = lift > 0 ? `${lift}px` : "";
+      const over = standsOver(lift);
+      fields.style.scrollPaddingBottom = over > 0 ? `${over}px` : "";
+    };
+    /** How much of the fields' box the footer stands over at this lift. */
+    const standsOver = (lift: number): number => {
+      if (inside) {
+        return node.offsetHeight + lift;
+      }
+      if (lift === 0) {
+        return 0;
+      }
+      // Lifted, its top is the visible area's bottom less its height.
+      return Math.max(
+        0,
+        Math.round(
+          fields.getBoundingClientRect().bottom - (bottom - node.offsetHeight)
+        )
+      );
+    };
+    // Placed a frame later, and again whenever the scroller takes a new size.
+    // Safari's layout never moves, and there the lift comes a frame into the
+    // keyboard's rise.
+    const resized = new ResizeObserver(place);
+    resized.observe(box);
+    const frame = requestAnimationFrame(place);
+    return () => {
+      cancelAnimationFrame(frame);
+      resized.disconnect();
+      node.style.bottom = "";
+      fields.style.scrollPaddingBottom = "";
+    };
   };
 }
 

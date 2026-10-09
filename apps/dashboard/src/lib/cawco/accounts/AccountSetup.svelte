@@ -488,7 +488,7 @@
         {#if refused}
           <p class="problem" role="alert" in:appear>{refused}</p>
         {/if}
-        <div class="foot" {@attach aboveKeyboard}>
+        <div class="foot" {@attach aboveKeyboard()}>
           <Button
             disabled={step === 0 || busy || (step === 1 && signedIn > 0)}
             label="Back"

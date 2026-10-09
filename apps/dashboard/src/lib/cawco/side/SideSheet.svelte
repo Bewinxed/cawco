@@ -43,7 +43,6 @@
   const share = untrack(() => `preview:${instanceId}`);
   const fromButton = untrack(() => waiting(share));
   let snap = $state<number | string | null>(null);
-  let bottom = $state(0);
   let viewportHeight = $state(0);
   let availableHeight = $state(0);
   const middle = $derived(
@@ -79,7 +78,7 @@
     return Math.max(0, availableHeight - visible);
   });
   $effect(() => {
-    const dimensions = bottom + viewportHeight + availableHeight;
+    const dimensions = viewportHeight + availableHeight;
     const nextMiddle = middle;
     if (dimensions) {
       tick().then(async () => {
@@ -154,8 +153,20 @@
             ].map((part) => part.getBoundingClientRect().top)
           )
         : box.bottom - offset;
-      bottom = innerHeight - composerTop;
-      viewportHeight = window.visualViewport?.height ?? innerHeight;
+      const viewport = window.visualViewport;
+      // A keyboard that resizes the web view (Brave) reports the new visible
+      // area a frame before the page is laid out in it, with the composer
+      // still below it, and WebKit can pan the page for a few frames with the
+      // composer above its top. A sheet sized from either frame dropped by
+      // hundreds of pixels and came back; it keeps its size until the
+      // composer stands in the visible area again, the next resize or scroll.
+      const visibleBottom = viewport
+        ? viewport.offsetTop + viewport.height
+        : innerHeight;
+      if (composerTop <= 0 || composerTop > visibleBottom) {
+        return;
+      }
+      viewportHeight = viewport?.height ?? innerHeight;
       const safeTop = frame
         ? Number.parseFloat(getComputedStyle(frame).top)
         : 0;
@@ -185,7 +196,7 @@
   ><div
     class="preview-sheet-host"
     data-active-snap={typeof snap === "string" ? 0.6 : snap}
-    style={`bottom:${bottom}px`}
+    style={`height:${availableHeight}px`}
     bind:this={host}
   ></div></Portal
 >
@@ -253,6 +264,11 @@
 {/if}
 
 <style>
+  /* Held by its top, as tall as the room above the composer. A height
+     between a top and a bottom is the fixed layer's container's, which
+     WebKit walks through stale sizes for frames while a keyboard resizes the
+     web view (Brave): a host held that way grew to 1106px and shrank by the
+     keyboard twice in one opening, throwing the sheet down and back. */
   .preview-sheet-host {
     position: fixed;
     top: env(safe-area-inset-top, 0px);
