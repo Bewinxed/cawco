@@ -46,6 +46,7 @@ import {
   RESTART_LOST,
   resolveRates,
 } from "@cawco/core";
+import { hashFiles } from "@cawco/core/file-hash";
 import { ownIdentity } from "@cawco/core/process-identity";
 import { materializeTree, standalone } from "@cawco/core/runtime";
 import {
@@ -1772,6 +1773,48 @@ const make = async (path: string): Promise<DbShape> => {
     rmSync(migrating, { force: true });
   }
   db.$client.run("PRAGMA foreign_keys = ON");
+
+  // A stored skill's or plugin's hash is what its files hash to with the
+  // hashFiles this hub runs, because that is the hash every machine takes of
+  // its disk. a1c94e85 put each file's execute bit into it, and the rows
+  // resolved before that kept the old hash: no machine's untouched copy ever
+  // matched it, so each one read as edited and a vendored plugin as missing
+  // its bytes. Every row whose hash and files disagree is rehashed at open,
+  // with no history row, since its bytes did not move.
+  for (const row of db
+    .select({ name: skills.name, hash: skills.hash, files: skills.files })
+    .from(skills)
+    .all()) {
+    const hash = row.files ? hashFiles(row.files) : row.hash;
+    if (hash !== row.hash) {
+      db.update(skills).set({ hash }).where(eq(skills.name, row.name)).run();
+    }
+  }
+  for (const row of db
+    .select({ id: plugins.id, hash: plugins.hash, files: plugins.files })
+    .from(plugins)
+    .all()) {
+    const hash = row.files ? hashFiles(row.files) : row.hash;
+    if (hash !== row.hash) {
+      db.update(plugins).set({ hash }).where(eq(plugins.id, row.id)).run();
+    }
+  }
+  for (const row of db
+    .select({
+      id: fleetSkillHistory.id,
+      hash: fleetSkillHistory.hash,
+      files: fleetSkillHistory.files,
+    })
+    .from(fleetSkillHistory)
+    .all()) {
+    const hash = hashFiles(row.files);
+    if (hash !== row.hash) {
+      db.update(fleetSkillHistory)
+        .set({ hash })
+        .where(eq(fleetSkillHistory.id, row.id))
+        .run();
+    }
+  }
 
   type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
   /** One project and its places, read inside a transaction or out of one. */

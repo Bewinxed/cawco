@@ -1071,6 +1071,12 @@ export const writeVendoredMarketplace = async (
  * the same bytes. Undefined for a directory that is missing or empty.
  */
 const treeHash = async (dir: string): Promise<string | undefined> => {
+  const files = await treeFiles(dir);
+  return files.length > 0 ? hashFiles(files) : undefined;
+};
+
+/** A directory's files as they are on this disk, execute bits included. */
+const treeFiles = async (dir: string): Promise<SkillFile[]> => {
   const files: SkillFile[] = [];
   for (const path of await filesUnder(dir)) {
     const file = join(dir, path);
@@ -1084,7 +1090,58 @@ const treeHash = async (dir: string): Promise<string | undefined> => {
       executable: ((await stat(file)).mode & 0o111) !== 0,
     });
   }
-  return files.length > 0 ? hashFiles(files) : undefined;
+  return files;
+};
+
+/**
+ * The hash a skill's record took before a1c94e85 put each file's execute bit
+ * into {@link hashFiles}: sorted `path\0content` pairs, no mode.
+ */
+const hashFilesWithoutMode = (files: SkillFile[]): string => {
+  const hasher = new Bun.CryptoHasher("sha256");
+  for (const file of [...files].sort((a, b) => a.path.localeCompare(b.path))) {
+    hasher.update(`${file.path}\0`);
+    hasher.update(file.contentBase64);
+  }
+  return hasher.digest("hex");
+};
+
+/**
+ * The sidecar's skill records in the hash {@link heldSkills} takes of a disk,
+ * which is the one {@link skillDrift} compares them in. A record cawco wrote
+ * before a1c94e85 is the hash without execute bits, which no disk read
+ * matches, so every untouched skill it covers read as edited. One that is
+ * that hash of the directory on disk now is exactly what cawco wrote there,
+ * and it becomes the disk's hash today. One that is that hash of the files a
+ * sync carries (`desired`) was the fleet's copy as it still is, and it becomes
+ * the fleet's hash, so an edit made since is told apart from a fleet change.
+ * The sync that follows stores either. Any other record is left as it is: an
+ * edit over an older copy, or a write that failed part-way.
+ */
+export const skillRecords = async (
+  dir: string,
+  managed: Record<string, string>,
+  held: Record<string, string>,
+  desired: readonly FleetSkillPayload[] = []
+): Promise<Record<string, string>> => {
+  const records = { ...managed };
+  const carried = new Map(desired.map((skill) => [skill.name, skill]));
+  for (const [name, recorded] of Object.entries(managed)) {
+    const disk = held[name];
+    if (disk === undefined || !recorded || disk === recorded) {
+      continue;
+    }
+    // biome-ignore lint/performance/noAwaitInLoops: one skill directory read at a time keeps the disk reads bounded
+    if (hashFilesWithoutMode(await treeFiles(join(dir, name))) === recorded) {
+      records[name] = disk;
+      continue;
+    }
+    const fleet = carried.get(name);
+    if (fleet?.files && hashFilesWithoutMode(fleet.files) === recorded) {
+      records[name] = fleet.hash;
+    }
+  }
+  return records;
 };
 
 /**
@@ -1287,14 +1344,15 @@ const syncVendoredPlugins = async (
  */
 const syncSkillFiles = async (
   desired: FleetSkillPayload[],
-  managed: Sidecar["skills"],
+  sidecar: Sidecar["skills"],
   report: Record<string, FleetItemState>
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: converge each skill while preserving ownership and reporting write and removal errors individually.
 ): Promise<Sidecar["skills"]> => {
   const written: Sidecar["skills"] = {};
   // What is on this disk now, not what the sidecar says was written: the
   // sidecar is who owns a directory, the disk is what is in it.
-  const held = await heldSkills(SKILLS_DIR, Object.keys(managed));
+  const held = await heldSkills(SKILLS_DIR, Object.keys(sidecar));
+  const managed = await skillRecords(SKILLS_DIR, sidecar, held, desired);
   for (const skill of desired) {
     try {
       // biome-ignore lint/performance/noAwaitInLoops: ownership is checked before this skill is written or claimed.
@@ -2376,7 +2434,8 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
     report.marketplaces
   );
   const heldNow = await heldSkills(SKILLS_DIR, Object.keys(managed.skills));
-  for (const [name, recorded] of Object.entries(managed.skills)) {
+  const records = await skillRecords(SKILLS_DIR, managed.skills, heldNow);
+  for (const [name, recorded] of Object.entries(records)) {
     // A status knows what cawco wrote, not what the fleet carries now, so an
     // edit is told apart from the record alone.
     const drift = skillDrift(heldNow[name], recorded, recorded);

@@ -17,7 +17,13 @@ import type {
   FleetMemory,
   FleetSkillPayload,
 } from "@cawco/core";
-import { heldSkills, memoryPlan, skillDrift, writeSkillFile } from "../fleet";
+import {
+  heldSkills,
+  memoryPlan,
+  skillDrift,
+  skillRecords,
+  writeSkillFile,
+} from "../fleet";
 import {
   guardWorkflowSkillRemoval,
   workflowSkillCollision,
@@ -101,14 +107,15 @@ export const writeSkill = async (
 export const syncSkillFiles = async (
   dir: string,
   desired: FleetSkillPayload[],
-  managed: Record<string, string>,
+  sidecar: Record<string, string>,
   report: Record<string, FleetItemState>
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: writes every skill this machine doesn't have yet and removes what the fleet no longer carries, reporting each one
 ): Promise<Record<string, string>> => {
   const written: Record<string, string> = {};
   // What is on this disk now, not what the sidecar says was written: the
   // sidecar is who owns a directory, the disk is what is in it.
-  const held = await heldSkills(dir, Object.keys(managed));
+  const held = await heldSkills(dir, Object.keys(sidecar));
+  const managed = await skillRecords(dir, sidecar, held, desired);
   for (const skill of desired) {
     try {
       // biome-ignore lint/performance/noAwaitInLoops: ownership is checked before this skill is written or claimed.

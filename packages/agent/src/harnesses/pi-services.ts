@@ -30,7 +30,7 @@ import {
   SessionManager,
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
-import { heldSkills, skillDrift } from "../fleet";
+import { heldSkills, skillDrift, skillRecords } from "../fleet";
 import { resolveBin } from "../tools";
 import {
   hashText,
@@ -703,7 +703,8 @@ export class PiProfile {
       };
     }
     const held = await heldSkills(PI_SKILLS, Object.keys(sidecar.skills));
-    for (const [name, recorded] of Object.entries(sidecar.skills)) {
+    const records = await skillRecords(PI_SKILLS, sidecar.skills, held);
+    for (const [name, recorded] of Object.entries(records)) {
       const drift = skillDrift(held[name], recorded, recorded);
       let state: FleetItemState = { state: "applied" };
       if (held[name] === undefined) {
