@@ -280,6 +280,40 @@ export const DEFAULT_AT_LIMIT: AtLimit = {
 };
 
 /**
+ * The strategies a provider's routing can choose from. Spread weighs each
+ * account's use and Soonest reset its 5-hour reset, both read from the
+ * account's limits; a provider whose limits CawCo doesn't read
+ * ({@link LIMITED_PROVIDERS}) has neither, so for it they would only ever
+ * place as Fill first does. It offers Pinned and Fill first.
+ */
+export const strategiesFor = (
+  provider: AccountProvider
+): readonly PlacementStrategy[] =>
+  LIMITED_PROVIDERS.includes(provider)
+    ? PLACEMENT_STRATEGIES
+    : ["pinned", "fill-first"];
+
+/**
+ * A provider's routing until it is saved: a person's sessions pinned and a
+ * session's delegates on the soonest reset where CawCo reads its limits;
+ * both Fill first where it doesn't.
+ */
+export const defaultRouting = (provider: AccountProvider): ProviderRouting =>
+  LIMITED_PROVIDERS.includes(provider)
+    ? {
+        provider,
+        yours: { strategy: "pinned" },
+        delegates: { strategy: "soonest-reset" },
+        atLimit: DEFAULT_AT_LIMIT,
+      }
+    : {
+        provider,
+        yours: { strategy: "fill-first" },
+        delegates: { strategy: "fill-first" },
+        atLimit: DEFAULT_AT_LIMIT,
+      };
+
+/**
  * One provider's routing. `yours` places the sessions a person starts;
  * `delegates` the ones a session starts.
  */

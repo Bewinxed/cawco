@@ -10,7 +10,7 @@ import {
   type AccountProvider,
   type AccountReading,
   type AccountSignin,
-  DEFAULT_AT_LIMIT,
+  defaultRouting,
   type HomeStore,
   type LimitWindow,
   type ModelInfo,
@@ -279,14 +279,7 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
         .from(accountRouting)
         .where(eq(accountRouting.provider, provider))
         .get();
-      return (
-        row ?? {
-          provider,
-          yours: { strategy: "pinned" },
-          delegates: { strategy: "soonest-reset" },
-          atLimit: DEFAULT_AT_LIMIT,
-        }
-      );
+      return row ?? defaultRouting(provider);
     },
     setRouting: (routing) => {
       db.insert(accountRouting)

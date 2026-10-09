@@ -19,6 +19,7 @@
     type AccountHue,
     CLAUDE_PROVIDER,
     DEFAULT_AT_LIMIT,
+    defaultRouting,
     type HarnessKind,
     type ProviderChoice,
     type StrategyChoice,
@@ -214,8 +215,9 @@
   });
 
   // ── Routing (a provider's second account) ──────────────────────────────
+  // The provider's defaults (core `defaultRouting`), taken when a row is chosen.
   let yours = $state<StrategyChoice>({ strategy: "pinned" });
-  let delegates = $state<StrategyChoice>({ strategy: "soonest-reset" });
+  let delegates = $state<StrategyChoice>({ strategy: "fill-first" });
   let atLimit = $state({ ...DEFAULT_AT_LIMIT });
   /** Both accounts, the one there was first; the new one goes last. */
   const pair = $derived(
@@ -270,7 +272,13 @@
       (one) => one.id !== createdId
     );
     existing = theirs.length === 1 ? theirs[0] : null;
-    yours = { strategy: "pinned", pinnedAccountId: existing?.id };
+    // Its defaults: a pin goes to the account there was.
+    const defaults = defaultRouting(row.provider);
+    yours =
+      defaults.yours.strategy === "pinned"
+        ? { strategy: "pinned", pinnedAccountId: existing?.id }
+        : { ...defaults.yours };
+    delegates = { ...defaults.delegates };
     if (!createdId) {
       hue = nextHue(theirs);
     }
@@ -739,6 +747,7 @@
           dragged = next;
         }}
         {order}
+        provider={pair[0].provider}
       />
     {/if}
   </section>

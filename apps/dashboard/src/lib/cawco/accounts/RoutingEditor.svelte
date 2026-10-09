@@ -187,6 +187,7 @@
               order = next;
             }}
             {order}
+            {provider}
           />
         </div>
       {/key}

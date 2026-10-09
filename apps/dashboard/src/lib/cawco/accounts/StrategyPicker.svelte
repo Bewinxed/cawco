@@ -1,12 +1,19 @@
 <script lang="ts">
   /**
-   * How a kind of session chooses its account: four cards, two by two, each
-   * holding its strategy's figure. Only the chosen card's figure and the one
-   * under the pointer play; the others hold their last frame. Pinned's card
-   * carries the account it pins; choosing Fill first unfolds the order the
-   * accounts fill in.
+   * How a kind of session chooses its account: a card per strategy the
+   * provider offers (four where CawCo reads its limits, Pinned and Fill first
+   * where it doesn't: core `strategiesFor`), two by two, each holding its
+   * strategy's figure. Only the chosen card's figure and the one under the
+   * pointer play; the others hold their last frame. Pinned's card carries
+   * the account it pins; choosing Fill first unfolds the order the accounts
+   * fill in.
    */
-  import type { Account, StrategyChoice } from "@cawco/core";
+  import {
+    type Account,
+    type AccountProvider,
+    type StrategyChoice,
+    strategiesFor,
+  } from "@cawco/core";
   import { tick } from "svelte";
   import {
     NativeSelect,
@@ -26,6 +33,7 @@
 
   let {
     label,
+    provider,
     accounts,
     choice,
     order,
@@ -34,6 +42,8 @@
   }: {
     /** "Your sessions" or "Delegates": the group's name. */
     label: string;
+    /** Whose accounts these are: it decides the strategies offered. */
+    provider: AccountProvider;
     accounts: Account[];
     choice: StrategyChoice;
     /** Fill-first order, account ids. */
@@ -44,6 +54,10 @@
 
   let hover = $state<string | null>(null);
   let grid = $state<HTMLElement | null>(null);
+
+  const offered = $derived(
+    STRATEGIES.filter((one) => strategiesFor(provider).includes(one.id))
+  );
 
   /** At most four lanes: a figure is an illustration, not a ledger. */
   const shown = $derived(accounts.slice(0, 4));
@@ -78,7 +92,7 @@
     if (event.key === "Enter" || event.key === " ") {
       if ((event.target as HTMLElement).matches(".card")) {
         event.preventDefault();
-        choose(STRATEGIES[at]);
+        choose(offered[at]);
       }
       return;
     }
@@ -86,8 +100,8 @@
       return;
     }
     event.preventDefault();
-    const next = (at + by + STRATEGIES.length) % STRATEGIES.length;
-    choose(STRATEGIES[next]);
+    const next = (at + by + offered.length) % offered.length;
+    choose(offered[next]);
     await tick();
     grid?.querySelectorAll<HTMLElement>(".card")[next]?.focus();
   }
@@ -95,7 +109,7 @@
 
 <div class="picker">
   <div aria-label={label} class="cards" role="radiogroup" bind:this={grid}>
-    {#each STRATEGIES as strategy, at (strategy.id)}
+    {#each offered as strategy, at (strategy.id)}
       {@const checked = choice.strategy === strategy.id}
       <!-- biome-ignore lint/a11y/useSemanticElements: the card is a radio holding its own controls (Pinned's account, Fill first's order), which a native radio or button cannot hold -->
       <div

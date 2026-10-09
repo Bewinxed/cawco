@@ -192,6 +192,7 @@ import {
   SUMMARISER_OUTPUT_RESERVE_TOKENS,
   SUMMARY_CAP_TOKENS,
   sameIdentity,
+  strategiesFor,
   TARGET_HEADROOM_TOKENS,
   TOOL_CATALOG,
   toolSpec,
@@ -14296,7 +14297,23 @@ export const createServer = (
           }),
         },
         ({ params, body, status }) => {
+          // Spread and Soonest reset weigh the limits CawCo reads; a provider
+          // it reads none for can only be routed Pinned or Fill first.
+          const offered = strategiesFor(params.provider);
           for (const choice of [body.yours, body.delegates]) {
+            if (!offered.includes(choice.strategy)) {
+              const name =
+                params.provider === CLAUDE_PROVIDER
+                  ? "Claude"
+                  : (knownProviders().find((one) => one.id === params.provider)
+                      ?.name ?? params.provider);
+              const asked =
+                choice.strategy === "spread" ? "Spread" : "Soonest reset";
+              return status(
+                400,
+                `${asked} can't route ${name}: CawCo reads no limits for ${name}'s accounts, so there is no use or reset to weigh. Choose Pinned or Fill first.`
+              );
+            }
             if (
               choice.strategy === "pinned" &&
               choice.pinnedAccountId &&
