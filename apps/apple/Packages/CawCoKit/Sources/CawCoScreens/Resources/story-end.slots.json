@@ -1,131 +1,116 @@
 {
- "frame": [
-  1024,
-  1536
- ],
- "source": "story-end-v2.png (Caw-scale re-render 2026-10-08)",
- "measured_with": "measure_video.end_bands: measure.py mid_bands rows (x 450-600, free fills) + band_x_extent columns",
- "order": "front to back; back cards' rect_px is the nominal hidden extent (band x, front height, bottom at the band's bottom); visible_px is the measured band",
- "corner_radius_nominal_px": 36,
- "cards": [
-  {
-   "name": "front",
-   "fill_nominal": "#2E2E2C",
-   "rect_px": {
-    "x": 108,
-    "y": 576,
-    "width": 809,
-    "height": 180
-   },
-   "visible_px": {
-    "x": 108,
-    "y": 576,
-    "width": 809,
-    "height": 180
-   },
-   "mean_rgb": [
-    45.5,
-    44.8,
-    43.5
-   ],
-   "rect_frac": {
-    "x": 0.10547,
-    "y": 0.375,
-    "width": 0.79004,
-    "height": 0.11719
-   },
-   "visible_frac": {
-    "x": 0.10547,
-    "y": 0.375,
-    "width": 0.79004,
-    "height": 0.11719
-   }
-  },
-  {
-   "name": "second",
-   "fill_nominal": "#252523",
-   "rect_px": {
-    "x": 139,
-    "y": 607,
-    "width": 747,
-    "height": 180
-   },
-   "visible_px": {
-    "x": 139,
-    "y": 757,
-    "width": 747,
-    "height": 30
-   },
-   "mean_rgb": [
-    35.5,
-    34.8,
-    33.4
-   ],
-   "rect_frac": {
-    "x": 0.13574,
-    "y": 0.39518,
-    "width": 0.72949,
-    "height": 0.11719
-   },
-   "visible_frac": {
-    "x": 0.13574,
-    "y": 0.49284,
-    "width": 0.72949,
-    "height": 0.01953
-   }
-  },
-  {
-   "name": "third",
-   "fill_nominal": "#1E1E1C",
-   "rect_px": {
-    "x": 161,
-    "y": 635,
-    "width": 701,
-    "height": 180
-   },
-   "visible_px": {
-    "x": 161,
-    "y": 787,
-    "width": 701,
-    "height": 28
-   },
-   "mean_rgb": [
-    25.6,
-    25.1,
-    23.5
-   ],
-   "rect_frac": {
-    "x": 0.15723,
-    "y": 0.41341,
-    "width": 0.68457,
-    "height": 0.11719
-   },
-   "visible_frac": {
-    "x": 0.15723,
-    "y": 0.51237,
-    "width": 0.68457,
-    "height": 0.01823
-   }
+  "frame": [1024, 1536],
+  "source": "story-end-v2.png (Caw-scale re-render 2026-10-08)",
+  "measured_with": "measure_video.end_bands: measure.py mid_bands rows (x 450-600, free fills) + band_x_extent columns",
+  "order": "front to back; back cards' rect_px is the nominal hidden extent (band x, front height, bottom at the band's bottom); visible_px is the measured band",
+  "corner_radius_nominal_px": 36,
+  "cards": [
+    {
+      "name": "front",
+      "fill_nominal": "#2E2E2C",
+      "rect_px": {
+        "x": 108,
+        "y": 576,
+        "width": 809,
+        "height": 180
+      },
+      "visible_px": {
+        "x": 108,
+        "y": 576,
+        "width": 809,
+        "height": 180
+      },
+      "mean_rgb": [45.5, 44.8, 43.5],
+      "rect_frac": {
+        "x": 0.10547,
+        "y": 0.375,
+        "width": 0.79004,
+        "height": 0.11719
+      },
+      "visible_frac": {
+        "x": 0.10547,
+        "y": 0.375,
+        "width": 0.79004,
+        "height": 0.11719
+      }
+    },
+    {
+      "name": "second",
+      "fill_nominal": "#252523",
+      "rect_px": {
+        "x": 139,
+        "y": 607,
+        "width": 747,
+        "height": 180
+      },
+      "visible_px": {
+        "x": 139,
+        "y": 757,
+        "width": 747,
+        "height": 30
+      },
+      "mean_rgb": [35.5, 34.8, 33.4],
+      "rect_frac": {
+        "x": 0.13574,
+        "y": 0.39518,
+        "width": 0.72949,
+        "height": 0.11719
+      },
+      "visible_frac": {
+        "x": 0.13574,
+        "y": 0.49284,
+        "width": 0.72949,
+        "height": 0.01953
+      }
+    },
+    {
+      "name": "third",
+      "fill_nominal": "#1E1E1C",
+      "rect_px": {
+        "x": 161,
+        "y": 635,
+        "width": 701,
+        "height": 180
+      },
+      "visible_px": {
+        "x": 161,
+        "y": 787,
+        "width": 701,
+        "height": 28
+      },
+      "mean_rgb": [25.6, 25.1, 23.5],
+      "rect_frac": {
+        "x": 0.15723,
+        "y": 0.41341,
+        "width": 0.68457,
+        "height": 0.11719
+      },
+      "visible_frac": {
+        "x": 0.15723,
+        "y": 0.51237,
+        "width": 0.68457,
+        "height": 0.01823
+      }
+    }
+  ],
+  "drift_vs_previous_slots_pct": {
+    "front": {
+      "x": 0.0,
+      "width": 0.0,
+      "y": 0.0,
+      "height": 0.0
+    },
+    "second": {
+      "x": 0.0,
+      "width": -0.1,
+      "y": 0.0,
+      "height": 0.0
+    },
+    "third": {
+      "x": -0.1,
+      "width": 0.2,
+      "y": -0.07,
+      "height": 0.07
+    }
   }
- ],
- "drift_vs_previous_slots_pct": {
-  "front": {
-   "x": 0.0,
-   "width": 0.0,
-   "y": 0.0,
-   "height": 0.0
-  },
-  "second": {
-   "x": 0.0,
-   "width": -0.1,
-   "y": 0.0,
-   "height": 0.0
-  },
-  "third": {
-   "x": -0.1,
-   "width": 0.2,
-   "y": -0.07,
-   "height": 0.07
-  }
- }
 }
