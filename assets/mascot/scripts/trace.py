@@ -28,6 +28,7 @@ registered onto the loop's light still (assets/mascot/stills).
 
 import io
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -45,7 +46,9 @@ from scipy.spatial import ConvexHull, Delaunay, QhullError
 HERE = Path(__file__).resolve().parent
 LOOPS = HERE.parent / "loops"
 STILLS = HERE.parent / "stills"
-CACHE = Path.home() / ".cache" / "caw-loops"
+# Where takes are fetched to: the XDG Base Directory spec's cache home, which is $XDG_CACHE_HOME
+# when it is set and not empty and ~/.cache otherwise (a workspace sets it to a writable place).
+CACHE = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "caw-loops"
 MEDIA = "https://backlot.bewinxed.com/api/takes/{}/media"
 # The repo formatter's line width (Biome).
 LINE = 80

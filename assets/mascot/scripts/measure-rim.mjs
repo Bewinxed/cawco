@@ -144,7 +144,14 @@ window.ready = true;
 `;
 
 function chromiumPath() {
-  const root = join(process.env.HOME, ".cache", "ms-playwright");
+  // Where Playwright installs its browsers (playwright-core registry): PLAYWRIGHT_BROWSERS_PATH,
+  // else the XDG cache home ($XDG_CACHE_HOME, or ~/.cache when it is unset) and ms-playwright.
+  const root =
+    process.env.PLAYWRIGHT_BROWSERS_PATH ||
+    join(
+      process.env.XDG_CACHE_HOME || join(process.env.HOME, ".cache"),
+      "ms-playwright"
+    );
   const revs = existsSync(root)
     ? readdirSync(root)
         .filter((d) => CHROMIUM_DIR.test(d))
@@ -158,7 +165,9 @@ function chromiumPath() {
       }
     }
   }
-  throw new Error(`No cached Chromium under ${root}`);
+  throw new Error(
+    `No cached Chromium under ${root}; run: npx playwright-core install chromium`
+  );
 }
 
 const ORIGIN = "http://caw.local";
