@@ -27,8 +27,9 @@ nonisolated enum Allowlist {
     return subjects
   }()
 
-  /// Apps CawCo may ask to control with Apple Events.
-  static let automationTargets: Set<String> = ["com.apple.dt.Xcode", "com.apple.iphonesimulator"]
+  /// Apps CawCo may ask to control with Apple Events: Xcode, and Device Hub,
+  /// which replaced Simulator.app in Xcode 27.
+  static let automationTargets: Set<String> = ["com.apple.dt.Xcode", "com.apple.dt.Devices"]
 
   /// Folders CawCo may ask to read, with the TCC service each one's grant is recorded under.
   static let folders: [String: String] = [
@@ -121,7 +122,10 @@ struct Rule {
     let recordedAs: [String]
     switch form {
     case .app:
+      // AppKit updates this list on its own schedule, so it can still hold an
+      // app that has quit.
       let apps = NSRunningApplication.runningApplications(withBundleIdentifier: identifier)
+        .filter { Processes.alive($0.processIdentifier) }
       let names = Set(apps.compactMap(\.localizedName))
       guard !apps.isEmpty else { return .failure(Refusal("\(identifier) is not running")) }
       guard names.count == 1, let only = names.first else {
@@ -138,13 +142,19 @@ struct Rule {
       pids = paths.map(\.0)
       recordedAs = Array(Set(paths.map(\.1))).sorted()
     }
+    var checked: [pid_t] = []
     for pid in pids {
       if case .unsatisfied(let why) = Signing.check(.pid(pid), against: requirement) {
+        // A process that exited between the listing and the check is not
+        // running; a live process that fails, a reused pid included, refuses.
+        guard Processes.alive(pid) else { continue }
         return .failure(Refusal("pid \(pid) shows as \(name) but is not CawCo's signed code: \(why)"))
       }
+      checked.append(pid)
     }
+    guard !checked.isEmpty else { return .failure(Refusal("\(identifier) is not running")) }
     let impostors = NSWorkspace.shared.runningApplications.filter {
-      $0.localizedName == name && !pids.contains($0.processIdentifier)
+      $0.localizedName == name && !checked.contains($0.processIdentifier) && Processes.alive($0.processIdentifier)
     }
     guard impostors.isEmpty else {
       let described = impostors.map { "\($0.bundleIdentifier ?? "no bundle id") pid \($0.processIdentifier)" }
@@ -223,6 +233,12 @@ nonisolated enum Processes {
     let filled = proc_listallpids(&pids, Int32(pids.count * MemoryLayout<pid_t>.size))
     guard filled > 0 else { return [] }
     return Array(pids.prefix(Int(filled))).filter { $0 > 0 }
+  }
+
+  /// Whether a process with this pid exists now. EPERM means it exists and
+  /// belongs to another user.
+  static func alive(_ pid: pid_t) -> Bool {
+    kill(pid, 0) == 0 || errno == EPERM
   }
 
   static func path(_ pid: pid_t) -> String? {
