@@ -43,6 +43,7 @@ import {
   refused,
   turnTaker,
   writeFolderFile,
+  writeFolderFiles,
   YOU,
 } from "./project-folder";
 import {
@@ -360,6 +361,8 @@ export interface TodoChanges {
 
 const TITLE_LIMIT = 200;
 const TODO_LIMIT = 500;
+/** A to-do line promoted to a task: `- [ ] Persist it → #152` (task-file.ts `PROMOTED`), its number apart. */
+const PROMOTED_TODO = /^(\s*- \[[ xX]\] .*?(?:→|->)\s*#)(\d{1,9})(?=\s*$)/gm;
 const TEXT_LIMIT = 20_000;
 const ITEM_LIMIT = 200;
 const LIST_LIMIT = 50;
@@ -369,7 +372,8 @@ const TODO_MARKER_START = /^\[td-\d+\]/;
 const LINE_BREAK = /[\r\n]/;
 
 /** The project folder's stages file, and the template that stands in while there is none. */
-const STAGES_FILE = "stages.md";
+/** A project's stages, in its folder (§5.2). */
+export const STAGES_FILE = "stages.md";
 const DEFAULT_TEMPLATE: StagesTemplate = "code";
 
 const refuse = (code: 400 | 403 | 404 | 409 | 422, message: string): never => {
@@ -1391,6 +1395,99 @@ export const createTasks = (store: TaskStore) => {
           task
         )
       );
+    },
+
+    /**
+     * Takes in another project's task files (a duplicate project folded into
+     * this one, project-merge.ts): each under this project's next number, its
+     * lines as they were, its edges and promoted to-dos renamed to the new
+     * ids. An edge to a task that is not among the files is dropped and said
+     * in the log: no task of this project is named by accident. Answers each
+     * old id → its new id.
+     */
+    adopt(
+      projectId: string,
+      files: { content: string; path: string }[],
+      actor: TaskActor,
+      from: string
+    ): Promise<Map<string, string>> {
+      return inTurn(projectId, async () => {
+        writable(projectId);
+        const numbered = files
+          .map((file) => ({ file, was: fileTaskNumber(file.path) }))
+          .filter(
+            (each): each is { file: typeof each.file; was: number } =>
+              each.was !== undefined
+          )
+          .sort((a, b) => a.was - b.was);
+        const renames = new Map<string, string>();
+        const numbers: number[] = [];
+        for (const { was } of numbered) {
+          // biome-ignore lint/performance/noAwaitInLoops: numbers are handed out in the files' own order
+          const number = await nextNumber(projectId);
+          renames.set(taskId(was), taskId(number));
+          numbers.push(number);
+        }
+        const renamed = (ref: string, was: string): string[] => {
+          const now = renames.get(ref);
+          if (!now) {
+            console.warn(
+              `[tasks] ${was} from ${from} named ${ref}, which did not come with it; the edge is dropped.`
+            );
+          }
+          return now ? [now] : [];
+        };
+        const written = numbered.map(({ file, was }, index) => {
+          const number = numbers[index] as number;
+          const old = taskId(was);
+          const doc = new TaskDoc(file.path, file.content);
+          const { fields } = doc.read();
+          doc.setField(
+            "after",
+            fields.after.flatMap((ref) => renamed(ref, old))
+          );
+          doc.setField(
+            "related",
+            fields.related.flatMap((ref) => renamed(ref, old))
+          );
+          doc.setField(
+            "parent",
+            fields.parent ? (renamed(fields.parent, old)[0] ?? null) : null
+          );
+          doc.setField(
+            "found_in",
+            fields.foundIn ? (renamed(fields.foundIn, old)[0] ?? null) : null
+          );
+          // A to-do promoted to a task names it `→ #<n>`.
+          const content = doc
+            .toString()
+            .replace(PROMOTED_TODO, (line, head: string, n: string) => {
+              const now = renames.get(taskId(Number(n)));
+              return now ? `${head}${taskNumber(now)}` : line;
+            });
+          return { path: taskPath(number, doc.title()), number, content };
+        });
+        if (written.length === 0) {
+          return renames;
+        }
+        // All of them in one commit, or none: a merge never half-lands.
+        stands(projectId);
+        await writeFolderFiles(
+          projectId,
+          written.map(({ path, content }) => ({ path, content })),
+          {
+            author: actor.author,
+            message: `tasks ${written.map((each) => taskId(each.number)).join(", ")}: ${from}'s ${written.length === 1 ? "task" : "tasks"}, merged in ${byWhom(actor)}`,
+          }
+        );
+        stands(projectId);
+        store.put(
+          written.map(({ path, number, content }) =>
+            indexRow(projectId, path, number, content, hashOf(content))
+          )
+        );
+        return renames;
+      }).then((renames) => told({ kind: "changed", projectId }, renames));
     },
 
     /** Fields and owned sections; what the patch leaves out stays as written. */

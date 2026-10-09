@@ -542,6 +542,19 @@ export interface DbShape {
   readonly fleetSkillVersion: (
     id: number
   ) => (SkillVersion & { skillSource: string; files: SkillFile[] }) | undefined;
+  /**
+   * Folds a duplicate project into the one it duplicates (project-merge.ts),
+   * in one transaction: its checkout and workspace places join `keepId`'s
+   * (the same folder once), its sessions, work items, threads, Caw turns,
+   * fleet rows, offers and queued starts become `keepId`'s, task ids renamed
+   * through `taskIds`; then its row goes. `keepId`'s settings, primary place
+   * and repositories stand. Answers what moved.
+   */
+  readonly foldProject: (
+    dupId: string,
+    keepId: string,
+    taskIds: ReadonlyMap<string, string>
+  ) => { places: number; sessions: number; threads: number; workItems: number };
   /** When a session last started again fresh; null when it never did. */
   readonly freshStartOf: (id: string) => number | null;
   readonly getCredential: (id: string) => Record<string, unknown> | undefined;
@@ -5416,6 +5429,133 @@ const make = async (path: string): Promise<DbShape> => {
         tx.delete(projects).where(eq(projects.id, id)).run();
       });
     },
+    foldProject: (dupId, keepId, taskIds) =>
+      // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one transaction moves every project-scoped table, so a fold is all or nothing
+      db.transaction((tx) => {
+        const renamed = (taskId: string | null): string | null =>
+          taskId ? (taskIds.get(taskId) ?? taskId) : null;
+        // Places: the duplicate's checkouts and workspaces join, each folder
+        // once; its hub folder is its own, and goes with it.
+        const kept = tx
+          .select()
+          .from(projectPlaces)
+          .where(eq(projectPlaces.projectId, keepId))
+          .all();
+        const where = new Set(kept.map((p) => `${p.machineId}\0${p.path}`));
+        let primary = kept.some((p) => p.isPrimary);
+        let places = 0;
+        for (const place of tx
+          .select()
+          .from(projectPlaces)
+          .where(eq(projectPlaces.projectId, dupId))
+          .orderBy(asc(projectPlaces.createdAt))
+          .all()) {
+          const key = `${place.machineId}\0${place.path}`;
+          if (place.kind === "hub" || where.has(key)) {
+            continue;
+          }
+          const first = !primary && place.kind === "checkout";
+          primary ||= first;
+          where.add(key);
+          tx.insert(projectPlaces)
+            .values({
+              ...place,
+              id: crypto.randomUUID(),
+              projectId: keepId,
+              isPrimary: first,
+            })
+            .run();
+          places += 1;
+        }
+        // Its repository on a machine where the kept project records none.
+        const machines = new Set(
+          tx
+            .select({ machineId: projectRepositories.machineId })
+            .from(projectRepositories)
+            .where(eq(projectRepositories.projectId, keepId))
+            .all()
+            .map((row) => row.machineId)
+        );
+        for (const repository of tx
+          .select()
+          .from(projectRepositories)
+          .where(eq(projectRepositories.projectId, dupId))
+          .all()) {
+          if (!machines.has(repository.machineId)) {
+            tx.insert(projectRepositories)
+              .values({ ...repository, projectId: keepId })
+              .run();
+          }
+        }
+        const sessions = tx
+          .select({ id: instances.id })
+          .from(instances)
+          .where(eq(instances.projectId, dupId))
+          .all().length;
+        tx.update(instances)
+          .set({ projectId: keepId })
+          .where(eq(instances.projectId, dupId))
+          .run();
+        const items = tx
+          .select({ id: workItems.id, taskId: workItems.taskId })
+          .from(workItems)
+          .where(eq(workItems.projectId, dupId))
+          .all();
+        for (const item of items) {
+          tx.update(workItems)
+            .set({ projectId: keepId, taskId: renamed(item.taskId) })
+            .where(eq(workItems.id, item.id))
+            .run();
+        }
+        const threads = tx
+          .select({ id: projectThreads.id })
+          .from(projectThreads)
+          .where(eq(projectThreads.projectId, dupId))
+          .all().length;
+        tx.update(projectThreads)
+          .set({ projectId: keepId })
+          .where(eq(projectThreads.projectId, dupId))
+          .run();
+        tx.update(cawTurns)
+          .set({ projectId: keepId })
+          .where(eq(cawTurns.projectId, dupId))
+          .run();
+        for (const table of [
+          fleetHooks,
+          fleetHookHistory,
+          mcpServers,
+          skills,
+        ]) {
+          tx.update(table)
+            .set({ projectId: keepId })
+            .where(eq(table.projectId, dupId))
+            .run();
+        }
+        tx.update(projectOffers)
+          .set({ projectId: keepId })
+          .where(eq(projectOffers.projectId, dupId))
+          .run();
+        for (const queued of tx
+          .select()
+          .from(queuedTaskStarts)
+          .where(eq(queuedTaskStarts.projectId, dupId))
+          .all()) {
+          tx.insert(queuedTaskStarts)
+            .values({
+              ...queued,
+              projectId: keepId,
+              taskId: renamed(queued.taskId) ?? queued.taskId,
+            })
+            .onConflictDoNothing()
+            .run();
+        }
+        tx.delete(queuedTaskStarts)
+          .where(eq(queuedTaskStarts.projectId, dupId))
+          .run();
+        // Its index rows and the rest of its own rows go with it (cascade).
+        tx.delete(projects).where(eq(projects.id, dupId)).run();
+        return { places, sessions, threads, workItems: items.length };
+      }),
     getCredential: (id) =>
       db.select().from(credentials).where(eq(credentials.id, id)).get()?.blob,
     putCredential: (id, blob) => {

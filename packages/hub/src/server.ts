@@ -386,6 +386,7 @@ import {
   trashProjectFolder,
   writeFolderFile,
 } from "./project-folder";
+import { type MergeDeps, mergeSameRemote } from "./project-merge";
 import { createProjectOffers, projectOfferRoutes } from "./project-offers";
 import {
   foldPlacedStates,
@@ -11656,7 +11657,9 @@ export const createServer = (
 
   /**
    * A project's remote, read from one of its checkouts. Nothing read (the
-   * machine away, no `origin`) leaves it unknown for the next chance.
+   * machine away, no `origin`) leaves it unknown for the next chance. A
+   * remote another project already has makes the two one project
+   * (project-merge.ts).
    */
   const learnRemote = async (
     projectId: string,
@@ -11666,6 +11669,7 @@ export const createServer = (
     const remote = await readRemote(runOnMachine, machineId, path);
     if (remote) {
       db.setProjectRemote(projectId, remote);
+      await mergeSameRemote(merging, remote);
     }
   };
 
@@ -12048,6 +12052,17 @@ export const createServer = (
     moves.resume();
   }
   // A project's tasks: files in its hub folder, indexed here (tasks.ts).
+  // One repository is one project: duplicates fold into the oldest
+  // (project-merge.ts), at start and when a project learns its remote.
+  const merging: MergeDeps = {
+    db,
+    tasks: {
+      adopt: (...args) => tasks.adopt(...args),
+      stages: (projectId) => tasks.stages(projectId),
+    },
+    placesChanged,
+    projectsChanged,
+  };
   const tasks = createTasks({
     project: (id) => db.project(id),
     projectIds: () => db.listProjects().map((project) => project.id),
@@ -12254,8 +12269,13 @@ export const createServer = (
   if (resumeWorkflows) {
     // The dispatcher's safety net: a slow look at every dispatching project.
     dispatcher.watch();
-    // Off the boot path: a folder edited while the hub was down is re-read once.
-    detach(tasks.syncAll(), "task catch-up");
+    // Off the boot path: projects that share a repository are folded into
+    // its oldest (project-merge.ts), then a folder edited while the hub was
+    // down is re-read once.
+    detach(
+      mergeSameRemote(merging).then(() => tasks.syncAll()),
+      "project merge and task catch-up"
+    );
   }
   const delegationMcp = createDelegationMcp({
     lifetime,
