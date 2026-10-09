@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import type { CommandResult, WorkspaceRef } from "@cawco/core";
+import { hostEnvironment } from "@cawco/core/session-env";
 import { ensureBoundary } from "./boundary";
 
 /** The most a command may write, stdout and stderr together, in bytes. */
@@ -76,7 +77,7 @@ export async function runWorkflowCommand(
       cwd,
       detached: true,
       // The executor enters the boundary in `$PWD`: it names `cwd`.
-      env: { ...process.env, PWD: cwd },
+      env: { ...hostEnvironment(), PWD: cwd },
       stdio: ["ignore", "pipe", "pipe"],
     });
     const { pid } = child;

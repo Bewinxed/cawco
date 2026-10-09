@@ -20,6 +20,7 @@ import {
   SAFE_GIT_ENV,
   SAFE_GIT_FLAGS,
 } from "@cawco/core/safe-git";
+import { hostEnvironment } from "@cawco/core/session-env";
 import { workspaceHolding } from "./workspace-records";
 
 /**
@@ -44,7 +45,7 @@ export const hostGit = async (
     ? Bun.$`git ${SAFE_GIT_FLAGS} -C ${dir} ${args} < ${new Response(stdin)}`
     : Bun.$`git ${SAFE_GIT_FLAGS} -C ${dir} ${args}`;
   return await command
-    .env({ ...process.env, ...SAFE_GIT_ENV })
+    .env({ ...hostEnvironment(), ...SAFE_GIT_ENV })
     .quiet()
     .nothrow();
 };

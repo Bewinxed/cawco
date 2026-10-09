@@ -30,6 +30,7 @@ import {
   etimeText,
   processTable as readProcessTable,
 } from "@cawco/core/process-identity";
+import { hostEnvironment } from "@cawco/core/session-env";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
 import { dialKeeper } from "./sessiond-client";
 
@@ -89,7 +90,7 @@ const run = async (argv: string[]): Promise<Run> => {
   const child = Bun.spawn(argv, {
     stdout: "pipe",
     stderr: "pipe",
-    env: { ...process.env, LC_ALL: "C" },
+    env: { ...hostEnvironment(), LC_ALL: "C" },
   });
   const [stdout, stderr, code] = await Promise.all([
     new Response(child.stdout).text(),

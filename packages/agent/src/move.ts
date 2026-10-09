@@ -43,6 +43,7 @@ import {
   type MoveSnapshotResult,
 } from "@cawco/core";
 import { cawcoDataDir, isSecretFileName } from "@cawco/core/paths";
+import { hostEnvironment } from "@cawco/core/session-env";
 import type { Subprocess } from "bun";
 
 // ── The hub's git remote ───────────────────────────────────────────────────
@@ -137,7 +138,7 @@ const hubEnv = (
 ): Record<string, string> => {
   const origin = hubOrigin();
   return {
-    ...process.env,
+    ...hostEnvironment(),
     GIT_TERMINAL_PROMPT: "0",
     GIT_OPTIONAL_LOCKS: "0",
     ...configEnv([
@@ -156,7 +157,7 @@ const hubEnv = (
  */
 const plainEnv = (extra: [string, string][] = []): Record<string, string> =>
   ({
-    ...process.env,
+    ...hostEnvironment(),
     GIT_TERMINAL_PROMPT: "0",
     GIT_OPTIONAL_LOCKS: "0",
     ...configEnv(extra),

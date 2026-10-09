@@ -5,6 +5,7 @@ import type {
   MachineCapabilities,
   MachineCapability,
 } from "@cawco/core/capabilities";
+import { hostEnvironment } from "@cawco/core/session-env";
 import { resolveBin } from "./tools";
 
 export function browserExecutable(): string | undefined {
@@ -91,6 +92,8 @@ async function readVersion(item: MachineCapability): Promise<void> {
     return;
   }
   const child = Bun.spawn([item.path, "--version"], {
+    // Never the embedded pi's package dir: `pi --version` would read CawCo's pi as its own.
+    env: hostEnvironment(),
     stdout: "pipe",
     stderr: "pipe",
     timeout: 5000,

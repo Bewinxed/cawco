@@ -30,6 +30,7 @@
     "./claude-dirs": "./src/claude-dirs.ts",
     "./safe-git": "./src/safe-git.ts",
     "./tool-presentation": "./src/tool-presentation.ts",
+    "./session-env": "./src/session-env.ts",
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"

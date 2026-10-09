@@ -13,6 +13,7 @@ import {
   standalone,
 } from "@cawco/core/runtime";
 import { SAFE_GIT_ENV, SAFE_GIT_FLAGS } from "@cawco/core/safe-git";
+import { hostEnvironment } from "@cawco/core/session-env";
 
 /** The checkout this daemon runs out of — up from `packages/agent/src`. */
 export const REPO_ROOT = resolve(
@@ -25,7 +26,7 @@ const STARTED_AT = Date.now();
 /** What git said, or nothing: a checkout that is not a git one is not a failure. */
 const git = async (args: string[]): Promise<string | undefined> => {
   const ran = await Bun.$`git ${SAFE_GIT_FLAGS} -C ${REPO_ROOT} ${args}`
-    .env({ ...process.env, ...SAFE_GIT_ENV })
+    .env({ ...hostEnvironment(), ...SAFE_GIT_ENV })
     .quiet()
     .nothrow();
   return ran.exitCode === 0 ? ran.stdout.toString().trim() : undefined;

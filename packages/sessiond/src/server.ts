@@ -33,6 +33,7 @@ import { detach } from "@cawco/core/detach";
 import { LineSplitter } from "@cawco/core/lines";
 import { PacedWriter } from "@cawco/core/paced-write";
 import { processLineage } from "@cawco/core/process-identity";
+import { sessionEnvironment } from "@cawco/core/session-env";
 // The protocol lives behind its own subpath: `sessiond.ts` reaches for `node:os`
 // to derive the endpoint, and the core barrel is imported by the browser bundle.
 import {
@@ -568,7 +569,10 @@ export class SessiondServer {
         cwd: spec.cwd,
         // The spec is built entirely agent-side and handed over opaque (§3.2):
         // sessiond does not read, validate or enrich a single entry of it.
-        env: spec.env ? { ...process.env, ...spec.env } : process.env,
+        // Under it, this keeper's own environment as a session gets it: its
+        // socket, and the embedded pi's package dir its entry set, are
+        // CawCo's own and reach no child (core `sessionEnvironment`).
+        env: { ...sessionEnvironment(process.env), ...spec.env },
         stdio: ["pipe", "pipe", "pipe"],
         // Its own process group, which it leads: what it starts stays findable
         // under its pid after it has exited ({@link #survey}).

@@ -103,6 +103,7 @@ import {
 } from "@cawco/core/paths";
 // The protocol subpath, never the `@cawco/core` barrel: `sessiond.ts` reaches
 // for `node:os` and the barrel is imported by the browser bundle (see f2e1c4c).
+import { SESSION_CAWCO_ENV } from "@cawco/core/session-env";
 import { type ProcSpec, sessiondEndpoint } from "@cawco/core/sessiond";
 import { opencodeDataDir } from "@cawco/core/usage/opencode-go";
 import {
@@ -1056,6 +1057,13 @@ if (process.env.CAWCO_XDG_DATA_HOME !== undefined) {
   if (process.env.CAWCO_XDG_DATA_HOME) process.env.XDG_DATA_HOME = process.env.CAWCO_XDG_DATA_HOME;
   else delete process.env.XDG_DATA_HOME;
   delete process.env.CAWCO_XDG_DATA_HOME;
+}
+// CawCo's launch flags and wiring (CAWCO_GATE_FORM, CAWCO_ACCOUNT_CREDENTIAL;
+// they are read off the launch spec, never this process) and its embedded
+// pi's package dir stay out of what the server starts: a session gets only
+// the CAWCO_* its tools read (core session-env.ts).
+for (const name of Object.keys(process.env)) {
+  if (name === "PI_PACKAGE_DIR" || (name.startsWith("CAWCO_") && !${JSON.stringify(SESSION_CAWCO_ENV)}.includes(name))) delete process.env[name];
 }
 const cawcoBase = ${JSON.stringify(harnessMcpUrl(""))};
 const cawcoWorkspaces = ${JSON.stringify(workspacesDir())};

@@ -14,6 +14,7 @@ import type {
   ToolStatus,
 } from "@cawco/core";
 import { TOOL_CATALOG, toolSpec } from "@cawco/core";
+import { hostEnvironment } from "@cawco/core/session-env";
 import { expandHome } from "./fs";
 
 /** Where {@link NATIVE_ROUTINES} put what they install. */
@@ -31,8 +32,9 @@ export const toolPath = (): string =>
     .filter(Boolean)
     .join(delimiter);
 
+/** A host tool's environment: this daemon's as a host tool gets it (core `hostEnvironment`), on {@link toolPath}. */
 export const toolEnv = (): Record<string, string | undefined> => ({
-  ...process.env,
+  ...hostEnvironment(),
   PATH: toolPath(),
 });
 

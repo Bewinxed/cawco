@@ -102,6 +102,7 @@ import {
   projectSlug,
   sessionConfigDir,
 } from "@cawco/core/paths";
+import { sessionEnvironment } from "@cawco/core/session-env";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
 import {
   accountEnv,
@@ -897,8 +898,9 @@ const scheduledWakeups = (input: unknown): number | undefined => {
 };
 
 /**
- * The CLI child's environment: the agent's own, the spec's over it, and the
- * session's model as `CAWCO_MODEL`.
+ * The CLI child's environment: the agent's own as a session gets it (core
+ * `sessionEnvironment`), the spec's over it, and the session's model as
+ * `CAWCO_MODEL`.
  *
  * Claude in Chrome follows the session's mode, like every other tool. The
  * CLI's server-side gate `tengu_cowork_chrome_automode_default` (the
@@ -917,7 +919,7 @@ const sessionEnv = (
   model: string | undefined,
   ctx: HarnessContext
 ): Record<string, string | undefined> => ({
-  ...process.env,
+  ...sessionEnvironment(process.env),
   CLAUDE_CHROME_CLASSIFIER_FLOOR: "0",
   ...specEnv,
   ...(model && { CAWCO_MODEL: model }),

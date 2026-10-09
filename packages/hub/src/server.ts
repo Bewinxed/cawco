@@ -9524,7 +9524,9 @@ export const createServer = (
       return;
     }
     instancePublishScheduled = true;
-    setImmediate(() => {
+    // On the hub's lifetime, as all its own schedule is: a hub closed first
+    // (scripts/openapi.ts closes its scratch hub) publishes nothing after.
+    lifetime.after(0, () => {
       instancePublishScheduled = false;
       const machines = [...pendingInstancePublishes];
       pendingInstancePublishes.clear();

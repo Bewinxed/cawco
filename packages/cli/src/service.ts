@@ -13,6 +13,7 @@ import { holdPhrases, type RestartReadiness } from "@cawco/core/binary-updates";
 import { hubDataDir } from "@cawco/core/paths";
 import { processStart } from "@cawco/core/process-identity";
 import { standalone } from "@cawco/core/runtime";
+import { hostEnvironment } from "@cawco/core/session-env";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
 
 /**
@@ -1002,7 +1003,7 @@ WantedBy=sockets.target
 const run = async (argv: string[]) =>
   Bun.$`${argv}`
     .env({
-      ...process.env,
+      ...hostEnvironment(),
       // logind owns this directory; su shells need not inherit its location.
       ...(platform() === "linux"
         ? {

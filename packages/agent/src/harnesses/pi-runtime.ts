@@ -19,6 +19,7 @@ import {
   usageByModel,
   VERIFY_SESSION_CREDENTIAL,
 } from "@cawco/core";
+import { sessionEnvironment } from "@cawco/core/session-env";
 import {
   judgeCall,
   readPolicy,
@@ -64,13 +65,30 @@ import {
 } from "./pi-services";
 import { piOpenTurns } from "./pi-sessiond";
 
-const boundedBash = (cwd: string, boundary: Boundary): ToolDefinition => {
+/**
+ * pi's bash, in place of its built-in: every shell gets this host's
+ * environment as a session gets it (core `sessionEnvironment`), never the
+ * embedded pi's package dir this host runs on or the gateway port it was
+ * told. In a workspace, each command runs inside its boundary.
+ */
+const sessionBash = (
+  cwd: string,
+  boundary: Boundary | undefined
+): ToolDefinition => {
   const local = createLocalBashOperations();
   return createBashToolDefinition(cwd, {
-    operations: {
-      exec: (command, dir, options) =>
-        local.exec(boundaryCommand(boundary, command), dir, options),
-    },
+    spawnHook: (context) => ({
+      ...context,
+      env: sessionEnvironment(context.env),
+    }),
+    ...(boundary
+      ? {
+          operations: {
+            exec: (command, dir, options) =>
+              local.exec(boundaryCommand(boundary, command), dir, options),
+          },
+        }
+      : {}),
   }) as unknown as ToolDefinition;
 };
 
@@ -689,12 +707,10 @@ export async function startPiHost(
     sessionManager: manager,
     settingsManager,
     resourceLoader,
-    customTools: ctx.boundary
-      ? [
-          boundedBash(ctx.cwd, ctx.boundary),
-          ...boundedFileTools(ctx.cwd, ctx.boundary),
-        ]
-      : [],
+    customTools: [
+      sessionBash(ctx.cwd, ctx.boundary),
+      ...(ctx.boundary ? boundedFileTools(ctx.cwd, ctx.boundary) : []),
+    ],
   });
   return new PiSession(ctx, session, credential, tools, runtime);
 }
