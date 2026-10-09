@@ -517,27 +517,62 @@ async function launchAccountOf(
     : undefined;
 }
 
+/** The entries in `text` that are whole lines: a live session may be mid-write. */
+const wholeLines = (text: string): SessionStoreEntry[] =>
+  text
+    .slice(0, text.lastIndexOf("\n") + 1)
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as SessionStoreEntry);
+
+const wholeTranscript = async (file: string): Promise<SessionStoreEntry[]> =>
+  wholeLines(await readFile(file, "utf8"));
+
+/** How much of each end of a transcript a listing reads, as the SDK's own listing does. */
+const LISTING_END_BYTES = 65_536;
+
+/**
+ * A transcript's first and last 64 KiB, for a listing: the SDK lists its own
+ * config dir from the same two ends (the first prompt, cwd and start time at
+ * the head; the title, tag and summary at the tail) and never reads the
+ * middle, so an account's sessions cost the same to list as the rest.
+ */
+const transcriptEnds = async (file: string): Promise<SessionStoreEntry[]> => {
+  const handle = await open(file, "r");
+  try {
+    const { size } = await handle.stat();
+    if (size <= LISTING_END_BYTES * 2) {
+      return wholeLines(await handle.readFile("utf8"));
+    }
+    const head = Buffer.alloc(LISTING_END_BYTES);
+    const tail = Buffer.alloc(LISTING_END_BYTES);
+    await handle.read(head, 0, LISTING_END_BYTES, 0);
+    await handle.read(tail, 0, LISTING_END_BYTES, size - LISTING_END_BYTES);
+    const tailText = tail.toString("utf8");
+    // The tail starts mid-line: its first whole line follows the first break.
+    return [
+      ...wholeLines(head.toString("utf8")),
+      ...wholeLines(tailText.slice(tailText.indexOf("\n") + 1)),
+    ];
+  } finally {
+    await handle.close();
+  }
+};
+
 /**
  * The SDK's own session readers and writers (getSessionInfo, listSessions,
  * tagSession, renameSession, deleteSession) look only in the config dir the
  * agent started with: it reads CLAUDE_CONFIG_DIR once and keeps it. A session
  * that runs on an account keeps its transcript under that account's dir, so
  * each of those calls is handed this store over the one file the session has,
- * wherever {@link claudeSessionFile} found it.
+ * wherever {@link claudeSessionFile} found it. `read` gives the entries the
+ * SDK folds: the whole transcript, or for a listing only its two ends.
  */
-const transcriptStore = (file: string): SessionStore => ({
-  async load(key) {
-    if (key.subpath) {
-      return null;
-    }
-    const text = await readFile(file, "utf8");
-    // A live session may be mid-write: only whole lines are entries.
-    return text
-      .slice(0, text.lastIndexOf("\n") + 1)
-      .split("\n")
-      .filter(Boolean)
-      .map((line) => JSON.parse(line) as SessionStoreEntry);
-  },
+const transcriptStore = (
+  file: string,
+  read: (file: string) => Promise<SessionStoreEntry[]> = wholeTranscript
+): SessionStore => ({
+  load: (key) => (key.subpath ? Promise.resolve(null) : read(file)),
   async append(key, entries) {
     if (key.subpath) {
       throw new Error(`cawco writes no subagent transcript (${key.subpath})`);
@@ -2742,7 +2777,11 @@ export class ClaudeHarness implements Harness {
       }
     }
     const accounts = await Promise.all(
-      files.map(({ file, sessionId }) => sessionInfoAt(file, sessionId))
+      files.map(({ file, sessionId }) =>
+        getSessionInfo(sessionId, {
+          sessionStore: transcriptStore(file, transcriptEnds),
+        })
+      )
     );
     return [
       ...own,
