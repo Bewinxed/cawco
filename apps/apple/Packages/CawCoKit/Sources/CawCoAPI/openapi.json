@@ -31055,6 +31055,12 @@
           "account": {
             "$ref": "#/components/schemas/AccountProbe"
           },
+          "account_id": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "commands": {
             "type": "array",
             "items": {
