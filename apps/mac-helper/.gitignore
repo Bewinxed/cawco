@@ -1,0 +1,5 @@
+# Written by `xcodegen generate` from project.yml.
+/CawCoHelper.xcodeproj
+/Helper/Info.plist
+# Xcode build state.
+DerivedData/

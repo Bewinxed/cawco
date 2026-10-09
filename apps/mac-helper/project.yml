@@ -1,0 +1,58 @@
+# XcodeGen 2.46. scripts/build.sh generates the project from this file on the
+# Mac; the .xcodeproj and Helper/Info.plist are never edited or committed.
+#
+# CawCo Helper: a Developer ID-signed agent app at the fixed path
+# ~/Applications/CawCo Helper.app. It holds the one Accessibility grant the
+# owner gives by hand, and with it approves CawCo's own later macOS prompts
+# from an exact allowlist (Helper/Allowlist.swift). The agent talks to it over
+# ~/.cawco/helper.sock.
+name: CawCoHelper
+options:
+  bundleIdPrefix: dev.cawco
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_APPROACHABLE_CONCURRENCY: YES
+    SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  CawCoHelper:
+    type: application
+    platform: macOS
+    sources:
+      - path: Helper
+    scheme: {}
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.cawco.helper
+        PRODUCT_NAME: CawCo Helper
+        DEVELOPMENT_TEAM: FN5LJSPX2R
+        ENABLE_HARDENED_RUNTIME: YES
+        # One Mach-O in every configuration. Xcode's Debug default splits the
+        # app into a stub plus CawCo Helper.debug.dylib and __preview.dylib
+        # (for SwiftUI previews), which carry only the linker's ad-hoc
+        # signature, so notarisation rejected a Debug build (2026-10-09).
+        ENABLE_DEBUG_DYLIB: NO
+        # scripts/build.sh signs the built bundle itself (Developer ID, the
+        # hardened runtime, a secure timestamp), then notarises and staples
+        # it. Xcode's own signing step is off so that one script holds the
+        # identity.
+        CODE_SIGNING_ALLOWED: NO
+        # TCC grants follow the code's signature, so the helper has none of
+        # its own besides Accessibility: no Apple Events, no sandbox.
+        ENABLE_APP_SANDBOX: NO
+    info:
+      path: Helper/Info.plist
+      properties:
+        CFBundleDisplayName: CawCo Helper
+        CFBundleName: CawCo Helper
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        # An agent app: no Dock icon and no menu bar.
+        LSUIElement: true
+        LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
+        NSHumanReadableCopyright: Petra Solutions LLC
