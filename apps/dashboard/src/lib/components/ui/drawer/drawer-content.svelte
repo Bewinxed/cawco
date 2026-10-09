@@ -1,8 +1,7 @@
 <script lang="ts">
-  import { type ComponentProps, tick } from "svelte";
-  import type { Attachment } from "svelte/attachments";
-  import { on } from "svelte/events";
+  import type { ComponentProps } from "svelte";
   import { Drawer as DrawerPrimitive } from "vaul-svelte";
+  import { visible } from "#lib/cawco/visible-viewport.svelte.js";
   import type { WithoutChildrenOrChild } from "#lib/utils.js";
   import { cn } from "#lib/utils.js";
   import DrawerOverlay from "./drawer-overlay.svelte";
@@ -20,47 +19,17 @@
   } = $props();
 
   /**
-   * The part of the layout viewport the reader can see, as the sheet's
-   * --visible-top and --visible-height: a software keyboard takes the bottom
-   * of it and iOS Safari pans it. app.css (the rule for bottom sheets) places
-   * the sheet from the two. They are read from `visualViewport` on each of
-   * its events and nothing is kept between events, so no keyboard state can
-   * leave a sheet small. They reach the sheet through its `style` prop: a
-   * property written on the node is lost whenever that attribute is redrawn.
+   * The visible area as the sheet's --visible-top and --visible-height,
+   * from the one measurement of it (cawco/visible-viewport); app.css rests a
+   * bottom sheet on the keyboard from the two. They reach the sheet through
+   * its `style` prop: a property written on the node is lost whenever that
+   * attribute is redrawn.
    */
-  let visible = $state("");
-
-  /** Lives on the sheet's own child, so it listens only while the sheet is open. */
-  const followVisibleViewport: Attachment = () => {
-    const viewport = window.visualViewport;
-    if (!viewport) {
-      return;
-    }
-    const place = async () => {
-      visible = `--visible-top:${viewport.offsetTop}px;--visible-height:${viewport.height}px;`;
-      // Once the sheet is laid out in what is now visible, the field being
-      // typed in stays in view inside whatever scrolls it.
-      await tick();
-      const field = document.activeElement;
-      if (
-        field?.matches("input, textarea, [contenteditable]") &&
-        ref?.contains(field)
-      ) {
-        field.scrollIntoView({ block: "nearest" });
-      }
-    };
-    place();
-    // A keyboard resizes the visual viewport; a pan only scrolls it.
-    const stops = [
-      on(viewport, "resize", place),
-      on(viewport, "scroll", place),
-    ];
-    return () => {
-      for (const stop of stops) {
-        stop();
-      }
-    };
-  };
+  const place = $derived(
+    visible.height > 0
+      ? `--visible-top:${visible.top}px;--visible-height:${visible.height}px;`
+      : ""
+  );
 </script>
 
 <DrawerPortal {...portalProps}>
@@ -75,7 +44,7 @@
       className
     )}
     data-slot="drawer-content"
-    style={`${visible}${style ?? ""}`}
+    style={`${place}${style ?? ""}`}
     bind:ref
     {...restProps}
   >
@@ -97,7 +66,6 @@
         }
       }}
       role="presentation"
-      {@attach followVisibleViewport}
     >
       {@render children?.()}
     </div>

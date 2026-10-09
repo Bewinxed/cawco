@@ -1772,7 +1772,10 @@
        sheets), so above a keyboard the header and Start stay on screen and
        the body scrolls between them. */
     :global(.session-card[data-vaul-drawer]) {
-      --drawer-max-height: calc(100dvh - max(env(safe-area-inset-top), 24px));
+      --drawer-max-height: calc(
+        var(--visible-height, 100dvh) -
+        max(env(safe-area-inset-top), 24px)
+      );
       margin: 0;
     }
     /* The sheet leaves as the dialog does: --dur-exit on --ease-out, with

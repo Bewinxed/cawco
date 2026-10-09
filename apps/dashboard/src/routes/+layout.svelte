@@ -15,6 +15,7 @@
   import { tabIcon } from "#lib/cawco/tab-icon/tab-icon.svelte.js";
   import { tallestComposer } from "#lib/cawco/transcript/composer-presence.svelte.js";
   import { startUpdateNotice } from "#lib/cawco/updates/update-notice.svelte.js";
+  import { trackVisibleViewport } from "#lib/cawco/visible-viewport.svelte.js";
   import { workspace } from "#lib/cawco/workspace/workspace.svelte.js";
   import { Toaster } from "#lib/components/ui/sonner/index.js";
   import { NARROW_QUERY } from "#lib/hooks/is-mobile.svelte.js";
@@ -63,6 +64,8 @@
   onMount(restWhenHidden);
   // Hairlines drawn outside a box stand on whole device pixels.
   onMount(trackDevicePixel);
+  // Bottom sheets rest on the keyboard, and a focused field stays in view.
+  onMount(trackVisibleViewport);
   // The tab's icon is app.html's link, there on every route; it follows the fleet.
   $effect(() =>
     tabIcon(document.querySelector('link[rel="icon"]') as HTMLLinkElement)

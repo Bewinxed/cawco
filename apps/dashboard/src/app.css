@@ -1271,13 +1271,20 @@
 
   /* A kit bottom sheet rests on the bottom of what the reader can see and is
      no taller than it: on the keyboard while one is up, on the screen's edge
-     otherwise. The sheet carries the visible viewport as --visible-top and
-     --visible-height (ui/drawer/drawer-content); a sheet names its own cap
-     in --drawer-max-height. Neither value transitions, so the sheet steps
-     with the keyboard instead of animating against it. */
+     otherwise. The sheet carries where the visible area starts and how tall
+     it is as --visible-top and --visible-height, measured together once a
+     frame (cawco/visible-viewport, ui/drawer/drawer-content); a sheet names
+     its own cap in --drawer-max-height. Its bottom is measured from the box
+     fixed elements stand in (100%), which WebKit in Brave resizes a frame
+     after the window: placed from the window's height, the sheet stood
+     below the screen for that frame. Neither value transitions, so the
+     sheet steps with the keyboard instead of animating against it. */
   [data-slot="drawer-content"][data-vaul-drawer-direction="bottom"] {
-    bottom: calc(100% - var(--visible-top) - var(--visible-height));
-    max-height: min(var(--drawer-max-height, 85vh), var(--visible-height));
+    bottom: calc(100% - var(--visible-top, 0px) - var(--visible-height, 100%));
+    max-height: min(
+      var(--drawer-max-height, 85vh),
+      var(--visible-height, 100dvh)
+    );
     /* What scrolls in the sheet (.kit-sheet-scroll) drives its header's
        seam (.kit-sheet-head). */
     timeline-scope: --sheet-scroll;
