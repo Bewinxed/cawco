@@ -1,69 +1,75 @@
-# New Session Composer
+# New Session
+
+The modal that starts sessions, opened from the Shell (`new-session.svelte.ts`). PRESERVE.md records its contracts with file and line; this is the shape of it. The authoritative design file is `/DESIGN.md` at the repository root.
 
 ## 1. Layout
 
-Above 600px the modal is 640px wide and centered on both viewport axes. It uses the app Dialog parts and bits-ui focus management, `--surface-raised`, `--radius-modal`, and `--shadow-modal`. The recessed prompt uses `--surface-well`. These two semantic aliases resolve to the existing field surface and overlay shadow in app.css. The authoritative design file is `/DESIGN.md` at the repository root.
+Above 640px the modal is a centred card, `min(980px, 100vw - 48px)` wide and at most `100dvh - 48px` tall, on `--surface-recess` with `--radius-lg` and `--shadow-modal`. It has a head (the "Sessions · New" or "Sessions · Continue" title and Close), a scrolling body on `--surface-raised`, and a footer with Cancel and Start. Head and footer stay in view; the body scrolls when the card is capped.
 
-There are two regions: a borderless prompt well with at least eight rows, and a composer region with a reserved error-reading slot and one 40px flex row. The placeholder is "What should the agent do?". Focus changes the well's inset edge and ink. Start remains anchored right through all selections. Chips and the prompt well have no hairline; buttons, inputs and popovers carry the 1px `--border-control` edge.
+The body holds the "New Session" heading, then the First prompt section: the prompt editor and the composer chips in one field, with a one-line reading slot under them for location and start messages. Below it is the Model section, or on a continuation the "Summarise with" and "Continue on" model sections side by side.
 
-At 600px and below, the modal is a full-width bottom sheet with rounded top corners, flush bottom corners, and safe-area bottom padding. The prompt starts at six rows and can shrink within the available viewport. The app's `interactive-widget=resizes-content` declaration is supplemented by a modal-scoped visual-viewport listener; both the sheet and mobile panels stay inside its height and offset.
+At 640px and below the modal is the kit Drawer: a bottom sheet with rounded top corners and safe-area bottom padding that follows the finger from its header. It stays inside the visible viewport above a keyboard, with the header and Start on screen and the body scrolling. Continuation's model sections stack.
 
-The mobile composer has two 44px rows separated by 8px. The first contains model, last directory segment, and mode, including all labels. Labels can reach 22ch before ellipsis. The row has 16px edge padding and scrolls horizontally without a scrollbar when needed. The second contains a flexible effort slider (minimum 160px, 20px icons), a 44px options target, and Start (minimum 96px wide). All touch targets are at least 44px. Mobile pickers occupy the available viewport, with a Back control, three equal agent tiles, and 48px model rows.
+## 2. Composer
 
-## 2. Composer Bar
+- The prompt is a contenteditable editor, 44px at rest and 120px while focused, filled or showing a menu (120px on phones), with the placeholder "What should the agent do first?". `@` offers machines and projects and `/` offers skills and plugins as inline chips, which are sent as `@name` and `/name`. On a continuation the source session is the editor's leading chip; deleting it turns the form back into a plain New Session.
+- The chips, 30px and wrapping:
+  - **Machines**: multi-select, plus Connect a machine.
+  - **Project**: pick, clear or create.
+  - **Location**: Existing files or Clone from GitHub, with a directory browser over the machine's filesystem.
+  - **Lifetime**: keep the session, or let it end with its task.
+- On a coarse pointer the chip rows open to 14px apart so each touch area reaches 44px.
+- Several machines make Start read "Start N sessions" and start one session on each.
 
-In order: agent/model pill, location pill, mode pill, effort slider, options, Start.
+## 3. Model
 
-- Agent/model shows the harness's actual 16px logo and the canonical model name. Its single popover contains three ToggleGroup agent tiles, then the model search/list. Uninstalled harnesses are disabled with a machine-specific accessible reason.
-- Location shows machine status and a shortened path. It opens LocationPicker.
-- Mode shows a Solar icon and the mode's name. Its popover holds one radio row for each mode the harness is offered (`permission-modes.ts`), each described for that harness. Full Send is confirmed in the app's confirm dialog every time it is picked, uses `--status-attn-bg` / `--status-attn-ink` with a real edge on the trigger, and while it is chosen a warning alert stands above the footer.
-- Effort uses a 150px bits-ui Slider with five 16px Solar detents. Inactive icons use full-opacity `--ink-muted`; the active filled icon rides an 18px spring thumb in `--brand-solid`. The visible 4px track uses `--border-control`. Hover/drag shows the level name. Null shows the harness-measured model default in muted ink and remains omitted from the payload; when unmeasured, it shows high where supported or the first supported level. Unsupported effort collapses inside a reserved slot.
-- Options contains two app Switch controls: Scratch and Bootstrap. Scratch maps to the existing scratch payload. Bootstrap opens the repository location picker.
-- Start is the primary button (`--action-surface` fill, `--on-brand` text, hover `--action-surface-hover`), with the keyboard hint.
+- The Model section has a harness rail (Claude Code, OpenCode, Pi; Codex shown as coming soon; harnesses missing on the machine marked "not installed"), one search field that also takes a custom model id, and a fixed 300px model list.
+- Rows show the provider tile, the canonical name, the id and the context size.
+- The chosen model carries its tool chips:
+  - **Effort**: a pip track with the level on its fill. Untouched it shows the model's measured default or "Default", and is omitted from the payload.
+  - **Permission mode**: one row per mode the harness offers. Full Send is confirmed in the app's confirm dialog every time it is picked, and a warning stands beside Start while it is chosen.
+  - **Account**: when the provider has two or more accounts. Auto with placement's reason, or a pick for this session only.
 
-Pills are transparent, with `--surface-hover` on hover and `--surface-fill` while open. Selected agent tiles and rows use a 12% `--brand-solid` tint with `--ink-strong` text; the travelling hover/keyboard highlight uses `--surface-hover`. Brand is reserved for selection, effort, enabled switches, and Start. Identity logos retain their own colours.
+## 4. Interaction
 
-## 3. Interaction
+The card takes focus on open. Cmd/Ctrl+Enter starts from anywhere in the form. Escape closes the topmost popover before the dialog, and focus returns to its chip, or to the prompt after a location is committed with Enter. Every chip's popover is one shared portaled surface that glides between chips. Scrolling the body closes an open popover.
 
-Prompt receives initial focus. Cmd/Ctrl+Enter submits. Escape closes the topmost popover before the dialog; focus returns to the trigger. The Dialog and Popover primitives own focus trapping and dismissal.
+Start is gated while:
+- the location is unverified or unreadable;
+- a chosen machine is offline;
+- no machine is chosen;
+- the hub is unreachable;
+- the repository is malformed;
+- no Claude account can take the session;
+- a continuation will not fit.
 
-Start is gated while a popover is open, location is unreadable or unverified, a submission is busy, or the hub is unreachable. A stale saved location cannot overwrite a newer user choice. Changing machines selects an installed harness if the previous harness is unavailable.
+A missing folder is announced in the reading slot as one Start creates. Changing machines selects an installed harness if the current one is unavailable.
 
-## 4. Motion
+## 5. Motion
 
-The scrim fades in over `--dur-panel`; the card rises 6px and fades in over `--dur-panel` on `--ease-out`, and leaves over `--dur-exit` settling to `--press-scale`. The prompt section arrives first, then the sections below it at 60ms and 80ms, each rising 8px over `--dur-pop`. Popovers rise from `--pop-scale` and their rows stagger in. Every value is a root token or a line named in PRESERVE.md §4, "Opening choreography and tuned values".
+The scrim fades in over `--dur-panel`. The card rises 6px and fades in over `--dur-panel` on `--ease-out`, and leaves over `--dur-exit`, settling to `--press-scale`. The prompt section arrives first, then the sections below it at 60ms and 80ms, each rising 8px over `--dur-pop`.
 
-Mobile uses the same card clip for an upward slide and fade after the scrim begins. Reduced motion places the sheet directly at its resting position.
+Popovers rise from `--pop-scale` and their rows stagger in. On a harness change the old model rows leave sideways with a stagger, then the new ones enter from the other side. Highlights glide between rows. Starting hands the Start button's place to the new session's tab as the dialog closes.
 
-Popover scale, list highlight, effort thumb, switch thumbs, and model row springs derive from `springFromVisual`. On each harness change old rows leave left with a stagger, then new rows enter from the right with a stagger. Highlights snap to the selected row on mount and fade in. Reduced motion jumps springs to their end states and removes delays.
+Every value is a root token or a line named in PRESERVE.md §4, "Opening choreography and tuned values". With reduced motion, every one of these animations is off.
 
-## 5. Model Naming And Ordering
+## 6. Model Naming And Ordering
 
-`deriveModelEntries` is pure over `models.forHarness(harness)`:
+`deriveModelEntries` is pure over `models.forHarness(harness, machineIds, accountId)`:
 
 1. Canonical ID is `resolvedModel ?? value`. Dedupe by ID, merging supported effort levels and release dates. Aliases collapse into canonical entries. The entry resolved by `default` carries the default tag.
-2. Names derive from canonical IDs. Route prefixes become provider metadata; strip `claude-`, title-case the family, join numeric version tokens with dots, and render `[1m]` as ` · 1M`. Examples: `claude-opus-5[1m]` becomes "Opus 5 · 1M"; `claude-fable-5-1` becomes "Fable 5.1"; `deepseek-v4-pro` becomes "DeepSeek V4 Pro". Unknown families use merged displayName or a monospaced ID.
+2. Names derive from canonical IDs. Route prefixes become provider metadata; strip `claude-`, title-case the family, join numeric version tokens with dots, and render `[1m]` as ` · 1M`. Examples: `claude-opus-5[1m]` becomes "Opus 5 · 1M"; `claude-fable-5-1` becomes "Fable 5.1"; `deepseek-v4-pro` becomes "DeepSeek V4 Pro".
 3. Group order: New since the last spawn; Recent by last-used descending; All by released descending with undated last; Typed remembered custom IDs. Record model use only when a session starts.
-4. A row contains provider logo, model name, an optional default tag, and a known release date at the right in muted ink. Release timing is relative to the last model use, falling back to the last harness use; without usage history it is relative to today. Unknown dates have no placeholder. Provider text, max support, and separate last-used trailers are omitted.
-5. One search matches name, canonical ID, aliases, and provider. An unmatched ID-shaped query is a selectable Typed/custom row; Enter selects it and remembers the ID.
-6. Submit the canonical ID after selection. Untouched model is `""` internally and omitted from the wire payload.
-
-## 6. Location
-
-Location is `{ machineId, cwd, repo? }`. Search spans machine names, project names and paths across every machine. Results include Projects, Recent and Browse. Selecting a cross-machine result moves the machine selection. Project prefill remains locked until Edit.
-
-A query starting `/` or `~` browses children of its longest existing prefix, filtered by the tail. Tab completes; Enter accepts the typed path after verification. `inspectMachine` and `machineFs(list)` verify readability. Inspection runs after 600ms and again before spawning. Unreadable locations display a path error and block submission. Repository mode supports reported repositories and typed URLs.
+4. One search matches name, canonical ID, aliases, and provider. An unmatched ID-shaped query is a selectable custom row; Enter selects it and remembers the ID.
+5. Submit the canonical ID after selection. Untouched model is `""` internally and omitted from the wire payload.
 
 ## 7. Submission
 
-Snapshot every submission input before asynchronous work. Closing invalidates the submission generation. Recheck the generation after directory verification, project creation, and exit animation.
-
-Preserve createProject-before-spawnSession ordering when saveAsProject is selected internally. Spawn receives machineId, workdir, prompt, harness, permissionMode, optional model/effort, scratch `{ worktree, baseCwd }`, bootstrap `{ repo, baseDir }`, and projectId. `spawnSession` sends the spawn frame and then a separate prompt send frame. Store preferences and model usage after spawning.
-
-The composer exposes only Scratch and Bootstrap switches. Worktree and Save as project remain in the submission logic but have no composer controls.
+- Snapshot every submission input before asynchronous work. Closing invalidates the submission generation. Recheck the generation after each location verification, each spawn, and before leaving.
+- Each chosen machine is verified, then spawned, in order; the first failure stops the batch and its reason shows in the reading slot.
+- `spawnSession` sends the spawn frame, then a separate prompt frame when the prompt is not empty. Store preferences and model use after spawning.
+- A continuation is one hub job: the dialog follows its stages and leaves for the new session once it starts. Closing hands it to the tab; Cancel stops it.
 
 ## 8. Verification
 
-`apps/dashboard/scripts/new-session-checks.mjs` intercepts the dashboard WebSocket and API writes. It never connects a spawn socket to the hub. Checks cover centering, fixed bar/card bounds, popover containment, all harness logos, canonical/custom/untouched payloads, keyboard submission, cancellation, invalid paths, options, and reduced motion. Stagger is sampled at `3 * stagger + 60ms` from entry of the new list. Any page error makes the script exit non-zero.
-
-Mobile gates cover row heights, label readability (full text or at least eight characters before ellipsis), 44px touch targets, Start width, sheet overflow, full-viewport panels, and a 390x500 keyboard simulation. `NS_DESKTOP_BASELINE=1` captures the desktop reference; `NS_DESKTOP_COMPARE=1` verifies an identical desktop PNG.
+Type-check and lint, then open New Session in the running dashboard at desktop and phone widths and check it against PRESERVE.md. `apps/dashboard/scripts/new-session-checks.mjs` still asserts the earlier composer and fails against this dialog until it is rewritten.

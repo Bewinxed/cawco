@@ -157,7 +157,7 @@ export class ListSwap<T> {
    * `notBefore` ms: when the old row in its place is gone.
    */
   rowAnim(i: number, notBefore = 0): string {
-    if (this.phase !== "in") {
+    if (this.phase !== "in" || !motionOk.current) {
       return "none";
     }
     return `${this.dir > 0 ? "ns-in-r" : "ns-in-l"} ${IN_MS}ms var(--ease-out) both ${ListSwap.enterAt(i, notBefore)}ms`;
@@ -165,6 +165,9 @@ export class ListSwap<T> {
 
   /** The `animation` for the i-th leaving row. */
   leaveAnim(i: number): string {
+    if (!motionOk.current) {
+      return "none";
+    }
     return `${this.dir > 0 ? "ns-out-l" : "ns-out-r"} ${OUT_MS}ms var(--ease-out) both ${Math.min(i, STAGGER_CAP) * OUT_STAGGER}ms`;
   }
 }

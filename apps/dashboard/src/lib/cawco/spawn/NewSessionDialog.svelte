@@ -1522,17 +1522,19 @@
     outline: none;
     transform-origin: center;
   }
-  :global(.session-card:not([data-vaul-drawer])[data-state="open"]) {
-    animation: ns-panel var(--dur-panel) var(--ease-out) both;
-  }
-  :global(.session-card:not([data-vaul-drawer])[data-state="closed"]) {
-    animation: ns-panel-out var(--dur-exit) var(--ease-out) both;
-  }
-  :global(.session-scrim:not([data-vaul-overlay])[data-state="open"]) {
-    animation: ns-scrim var(--dur-panel) var(--ease-out) both;
-  }
-  :global(.session-scrim:not([data-vaul-overlay])[data-state="closed"]) {
-    animation: ns-scrim-out var(--dur-exit) var(--ease-out) both;
+  @media (prefers-reduced-motion: no-preference) {
+    :global(.session-card:not([data-vaul-drawer])[data-state="open"]) {
+      animation: ns-panel var(--dur-panel) var(--ease-out) both;
+    }
+    :global(.session-card:not([data-vaul-drawer])[data-state="closed"]) {
+      animation: ns-panel-out var(--dur-exit) var(--ease-out) both;
+    }
+    :global(.session-scrim:not([data-vaul-overlay])[data-state="open"]) {
+      animation: ns-scrim var(--dur-panel) var(--ease-out) both;
+    }
+    :global(.session-scrim:not([data-vaul-overlay])[data-state="closed"]) {
+      animation: ns-scrim-out var(--dur-exit) var(--ease-out) both;
+    }
   }
   .head {
     display: flex;
@@ -1614,8 +1616,10 @@
   .sec {
     display: grid;
     gap: 8px;
-    animation: ns-in var(--dur-pop) var(--ease-out) both;
-    animation-delay: var(--delay, 0ms);
+    @media (prefers-reduced-motion: no-preference) {
+      animation: ns-in var(--dur-pop) var(--ease-out) both;
+      animation-delay: var(--delay, 0ms);
+    }
   }
   .prompt-sec {
     margin-top: 16px;

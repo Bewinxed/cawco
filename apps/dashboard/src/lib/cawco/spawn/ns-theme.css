@@ -1,17 +1,11 @@
 /*
  * The new-session dialog's own motion names. Each duration is a root token
- * from app.css under the name the dialog uses for it; the staggers and the
- * swap distance are its own choreography. Every colour, radius, type role
+ * from app.css under the name the dialog uses for it (the model list's swap
+ * timings are motion/list-swap's). Every colour, radius, type role
  * and curve comes from the root tokens. Scoped to `.ns-theme`, which sits on
  * the dialog card, the scrim and every portaled popover.
  */
 .ns-theme {
-  --ns-swap-out-ms: var(--dur-exit);
-  --ns-swap-out-stagger: 14ms;
-  --ns-swap-in-ms: var(--dur-pop);
-  --ns-swap-in-delay: 40ms;
-  --ns-swap-in-stagger: 32ms;
-  --ns-swap-distance: 18px;
   --ns-check-ms: var(--dur-fade);
   --ns-prompt-ms: var(--dur-pop);
   --ns-chip-ms: var(--dur-control);
