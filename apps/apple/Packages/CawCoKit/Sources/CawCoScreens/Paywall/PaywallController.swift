@@ -822,6 +822,9 @@ final class LinkButton: UIButton {
         translatesAutoresizingMaskIntoConstraints = false
         var config = UIButton.Configuration.plain()
         config.contentInsets = NSDirectionalEdgeInsets(top: Space.space2, leading: Space.space1, bottom: Space.space2, trailing: Space.space1)
+        // One line: under the default word wrap a hugging button fits to its
+        // longest word, and "Restore purchase" stood in three lines.
+        config.titleLineBreakMode = .byTruncatingTail
         configuration = config
         houseStyle()
         // As wide as its words: a row of links centres as a whole.
@@ -1022,13 +1025,23 @@ extension PaywallController {
             let text = label.text ?? ""
             guard !text.isEmpty else { continue }
             let frame = label.convert(label.bounds, to: sheet)
-            let needed = label.attributedText?.boundingRect(with: CGSize(width: label.bounds.width, height: .greatestFiniteMagnitude),
-                                                            options: [.usesLineFragmentOrigin], context: nil).height ?? 0
+            // Measured wrapped by word: the kit's paragraph truncates its
+            // tail, which measures any text as one line.
+            let wrapped = NSMutableAttributedString(attributedString: label.attributedText ?? NSAttributedString())
+            wrapped.enumerateAttribute(.paragraphStyle, in: NSRange(location: 0, length: wrapped.length)) { value, range, _ in
+                guard let style = (value as? NSParagraphStyle)?.mutableCopy() as? NSMutableParagraphStyle else { return }
+                style.lineBreakMode = .byWordWrapping
+                wrapped.addAttribute(.paragraphStyle, value: style, range: range)
+            }
+            let needed = wrapped.boundingRect(with: CGSize(width: label.bounds.width, height: .greatestFiniteMagnitude),
+                                              options: [.usesLineFragmentOrigin], context: nil).height
+            let lineHeight = (label.font.lineHeight * 10).rounded() / 10
             let inHero = label.isDescendant(of: hero)
             let prose = !inHero && label.superview is UIStackView && text != "·"
             if prose { words += text.split(whereSeparator: \.isWhitespace).count }
             rows.append(["text": text, "y": frame.minY, "maxY": frame.maxY, "x": frame.minX, "width": frame.width,
                          "height": frame.height, "needed": (needed * 10).rounded() / 10, "lines": label.numberOfLines,
+                         "shownLines": Int((frame.height / max(lineHeight, 1)).rounded(.down)),
                          "fits": needed <= frame.height + 0.5, "hero": inHero, "prose": prose])
         }
         var links: [String: Any] = [:]

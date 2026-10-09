@@ -448,9 +448,17 @@ private final class NotificationCard: UIView {
         Int((height(text, width: width) / TypeScale.typeMeta.lineHeight).rounded())
     }
 
+    /// The height `text` takes wrapped at `width`. The role's paragraph
+    /// truncates its tail, which measures any text as one line, so the
+    /// measure wraps by word instead.
     private static func height(_ text: String, width: Double) -> Double {
-        (text as NSString).boundingRect(with: CGSize(width: width, height: .greatestFiniteMagnitude), options: [.usesLineFragmentOrigin],
-                                        attributes: TypeScale.typeMeta.attributes(color: .label), context: nil).height
+        var attributes = TypeScale.typeMeta.attributes(color: .label)
+        if let style = (attributes[.paragraphStyle] as? NSParagraphStyle)?.mutableCopy() as? NSMutableParagraphStyle {
+            style.lineBreakMode = .byWordWrapping
+            attributes[.paragraphStyle] = style
+        }
+        return (text as NSString).boundingRect(with: CGSize(width: width, height: .greatestFiniteMagnitude), options: [.usesLineFragmentOrigin],
+                                               attributes: attributes, context: nil).height
     }
 
     /// `text` whole if it fits `lines` at `width`, else cut after the last
