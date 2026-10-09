@@ -111,6 +111,7 @@ import {
   plugins,
   projectOffers,
   projectPlaces,
+  projectRepositories,
   projects,
   projectTasks,
   projectThreads,
@@ -865,6 +866,11 @@ export interface DbShape {
   readonly projectByRemote: (remote: string) => ProjectRow | undefined;
   /** A session's "make this a project" offer, answered or not (project-offers.ts). */
   readonly projectOffer: (instanceId: string) => ProjectOfferRow | undefined;
+  /** The project's repository on a machine, as the last workspace cut there recorded it. */
+  readonly projectRepository: (
+    projectId: string,
+    machineId: string
+  ) => string | undefined;
   /**
    * A project's spend since `todayStart` and `monthStart`, all of it and its
    * Caw's; each attempt at a task with its session's spend (oldest first);
@@ -1141,6 +1147,12 @@ export interface DbShape {
     hash: string;
     files: SkillFile[];
     source: string;
+  }) => void;
+  /** Records the folder a workspace of the project was just cut from on a machine; the last one stands. */
+  readonly recordProjectRepository: (repository: {
+    projectId: string;
+    machineId: string;
+    path: string;
   }) => void;
   /** Files a send's record as the hub accepted it: pending, or failed at once. */
   readonly recordScratchWorktree: (
@@ -4190,6 +4202,30 @@ const make = async (path: string): Promise<DbShape> => {
         db.select().from(projectPlaces).all()
       ),
     project: (id) => projectOf(db, id),
+    projectRepository: (projectId, machineId) =>
+      db
+        .select({ path: projectRepositories.path })
+        .from(projectRepositories)
+        .where(
+          and(
+            eq(projectRepositories.projectId, projectId),
+            eq(projectRepositories.machineId, machineId)
+          )
+        )
+        .get()?.path,
+    recordProjectRepository: (repository) => {
+      const row = { ...repository, recordedAt: new Date() };
+      db.insert(projectRepositories)
+        .values(row)
+        .onConflictDoUpdate({
+          target: [
+            projectRepositories.projectId,
+            projectRepositories.machineId,
+          ],
+          set: { path: row.path, recordedAt: row.recordedAt },
+        })
+        .run();
+    },
     projectByRemote: (remote) => {
       const [oldest] = db
         .select()
@@ -4893,6 +4929,9 @@ const make = async (path: string): Promise<DbShape> => {
           .all();
         tx.delete(projectPlaces)
           .where(eq(projectPlaces.machineId, machineId))
+          .run();
+        tx.delete(projectRepositories)
+          .where(eq(projectRepositories.machineId, machineId))
           .run();
         for (const { projectId } of orphaned) {
           const [next] = tx

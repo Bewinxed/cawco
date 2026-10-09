@@ -491,6 +491,28 @@ export const projectPlaces = sqliteTable(
   ]
 );
 
+/**
+ * A project's repository on a machine: the folder the hub last cut a
+ * workspace of the project from there. A check that names the machine cuts
+ * its check workspace from it (work-items.ts `checkWorkspace`). It outlives
+ * every workspace cut from it, and is no place: nothing else reads it.
+ */
+export const projectRepositories = sqliteTable(
+  "project_repositories",
+  {
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    /** Not a reference: a machine's repositories go with it in `deleteMachine`. */
+    machineId: text("machine_id").notNull(),
+    path: text("path").notNull(),
+    recordedAt: timestamp("recorded_at")
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (table) => [primaryKey({ columns: [table.projectId, table.machineId] })]
+);
+
 /** A running or resumable `query()`. Messages live in SDK session storage, not here. */
 export const instances = sqliteTable("instances", {
   /** Birth contract, immutable on retries; acknowledgement is recorded separately. */

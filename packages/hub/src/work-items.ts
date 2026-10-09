@@ -1641,6 +1641,26 @@ export const createWorkItems = ({
     }
   };
 
+  /**
+   * Records the repository a new workspace of the project was cut from, on
+   * its machine: a check that names that machine is cut from it, whatever
+   * becomes of the workspace. One cut from another workspace's clone records
+   * the repository that clone was cut from.
+   */
+  const recordRepository = (
+    projectId: string,
+    workspace: WorkspaceRow
+  ): void => {
+    const source = db
+      .activeWorkspacesOn(workspace.machineId)
+      .find((each) => each.path === workspace.repoRoot);
+    db.recordProjectRepository({
+      projectId,
+      machineId: workspace.machineId,
+      path: source?.repoRoot ?? workspace.repoRoot,
+    });
+  };
+
   /** A new workspace's machine; a remote one needs its own repository and cannot fork. */
   const targetMachine = (
     request: WorkItemRequest,
@@ -1970,6 +1990,9 @@ export const createWorkItems = ({
         request.cwd ?? parent.cwd,
         machineId
       );
+      if (projectId) {
+        recordRepository(projectId, workspace);
+      }
       // While it lives, the clone is one of the parent's project's places;
       // archiving the workspace removes it.
       if (parent.projectId) {
@@ -2339,30 +2362,20 @@ export const createWorkItems = ({
 
   /**
    * The project's repository on a machine, which a check workspace there is
-   * cut from: its checkout there (the primary first), or the repository a
-   * workspace of the project there was cut from. Nothing when the hub knows
-   * neither.
+   * cut from: its checkout place there (the primary first), or the folder
+   * the last workspace of the project cut there was cut from
+   * ({@link recordRepository}), which outlives that workspace. Nothing when
+   * the hub knows neither.
    */
   const repositoryOn = (
     projectId: string,
     machineId: string
-  ): string | undefined => {
-    const places = (db.project(projectId)?.places ?? []).filter(
-      (place) => place.machineId === machineId
-    );
-    const checkout = places.find((place) => place.kind === "checkout");
-    if (checkout) {
-      return checkout.path;
-    }
-    const clones = new Set(
-      places
-        .filter((place) => place.kind === "workspace")
-        .map((place) => place.path)
-    );
-    return db
-      .activeWorkspacesOn(machineId)
-      .find((each) => clones.has(each.path))?.repoRoot;
-  };
+  ): string | undefined =>
+    db
+      .project(projectId)
+      ?.places.find(
+        (place) => place.machineId === machineId && place.kind === "checkout"
+      )?.path ?? db.projectRepository(projectId, machineId);
 
   /**
    * The workspace that runs `workspace`'s checks on `machineId`: the one cut
@@ -2388,7 +2401,7 @@ export const createWorkItems = ({
     if (!(projectId && repository)) {
       throw new Error(
         projectId
-          ? `the hub knows no checkout of this project on ${machineName(machineId)}. Open a session in the repository there once, so it is one of the project's places, and call finish_item again.`
+          ? `the hub knows no repository of this project on ${machineName(machineId)}: no checkout place there, and no workspace of it was ever cut there. Your parent delegates once to that machine with cwd at the repository there (or adds it as a checkout of the project); then call finish_item again.`
           : "this item belongs to no project, so the hub knows no checkout of its repository there."
       );
     }

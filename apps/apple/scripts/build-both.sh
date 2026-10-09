@@ -50,6 +50,12 @@ case $PLATFORM in
   ios | macos | both) ;;
   *) echo "usage: build-both.sh [ios|macos]" >&2; exit 2 ;;
 esac
+# Mac Catalyst signs (scripts/signed.sh), --compile-only too, and signing keys
+# never reach a CawCo workspace: there only the iOS Simulator builds run.
+if [[ -n ${CAWCO_WORKSPACE:-} && $PLATFORM != ios ]]; then
+  echo "Signed builds, device builds and TestFlight run from the orchestrator's shell, not a CawCo workspace: hand the commit to your parent. Here, build the iOS Simulator only: build-both.sh ios [--compile-only]." >&2
+  exit 2
+fi
 
 # Pass the authoritative workspace inventory from this host, never the Mac's
 # copies. Fail before retirement if the inventory cannot be read.

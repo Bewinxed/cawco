@@ -34,7 +34,10 @@ machine, so from one the script refuses: an item's check names the Mac
 instead (`delegate`'s `checks[].machine`, e.g. `{ machine: "Omars-MacBook-Pro",
 command: "bash apps/apple/scripts/build-both.sh ios --compile-only", expect:
 "BUILT iOS" }`), and the hub runs it in a workspace on the Mac at the item's
-commit; or the work is delegated to the Mac.
+commit; or the work is delegated to the Mac. Inside a workspace only the iOS
+Simulator builds: Mac Catalyst (which signs, `--compile-only` too), device
+builds, `signed.sh` and TestFlight refuse there, since signing keys never
+reach agent code. Those run from the orchestrator's shell.
 
 ```sh
 bash apps/apple/scripts/build-both.sh         # BUILT/LAUNCHED iOS, then BUILT/LAUNCHED macOS

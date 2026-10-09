@@ -18,6 +18,10 @@ PROFILE = "CawCo App Store 20261007"
 EXTENSION_PROFILE = "CawCo NotificationService App Store 20261009"
 TEAM = "FN5LJSPX2R"
 
+# Signing keys and App Store Connect credentials never reach a CawCo workspace.
+if os.environ.get("CAWCO_WORKSPACE"):
+    sys.exit("Signed builds, device builds and TestFlight run from the orchestrator's shell, not a CawCo workspace: hand the commit to your parent.")
+
 
 def api(method, path, body=None):
     command = ["/usr/bin/python3", str(HOME / "asc.py"), method, path]
