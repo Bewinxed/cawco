@@ -162,6 +162,26 @@ export const ACCOUNT_MOVE = "account_move";
  */
 export const FRESH_START = "fresh_start";
 
+/**
+ * A session whose process its harness's server still holds, which CawCo did
+ * not take back after a restart: the agent's signal to the hub, and the
+ * hub's line in the session's transcript, which carries why in `content`.
+ * Drawn as a note titled by that reason's first sentence, the rest under it.
+ */
+export const CUSTODY_HELD = "custody_held";
+
+const SENTENCE_END = /[.?!](\s|$)/;
+
+/** A text's first sentence, its full stop kept, and the rest; the whole as the first when it is one sentence. */
+export const firstSentence = (text: string): [string, string] => {
+  const end = SENTENCE_END.exec(text);
+  if (!end) {
+    return [text.trim(), ""];
+  }
+  const at = end.index + 1;
+  return [text.slice(0, at).trim(), text.slice(at).trim()];
+};
+
 /** What a session's transcript says where it started again fresh ({@link FRESH_START}). */
 export const FRESH_START_LINE =
   "This session started again because its first start never began.";

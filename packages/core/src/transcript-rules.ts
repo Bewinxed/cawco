@@ -22,8 +22,10 @@ import type {
 } from "./harness";
 import {
   ACCOUNT_MOVE,
+  CUSTODY_HELD,
   FRESH_START,
   FRESH_START_LINE,
+  firstSentence,
   REPEATED_FAILURE,
   REPEATED_FAILURE_LIMIT,
 } from "./harness";
@@ -31,6 +33,7 @@ import {
   parseDelegateAsk,
   parseHandoffMarker,
   parseReportMarker,
+  parseUndelivered,
   parseWorkflowNotice,
 } from "./injected";
 import { parseRuleMarker } from "./rules";
@@ -952,6 +955,20 @@ export function mapFrame(
           break;
         // The hub's line where the session started again fresh: its first
         // start never began, so it had no conversation to resume.
+        // The hub's line where the session's process is still held by its
+        // harness's server and CawCo did not take it back: titled by the
+        // reason's first sentence, so it reads without opening.
+        case CUSTODY_HELD: {
+          const [title, rest] = firstSentence(sdk.content ?? "");
+          mapping.blocks.push(
+            systemLine(base, "ui.system_note", rest, {
+              subtype: CUSTODY_HELD,
+              noteKind: "Held",
+              noteTitle: title,
+            })
+          );
+          break;
+        }
         case FRESH_START:
           mapping.blocks.push(
             systemLine(base, "ui.system_note", FRESH_START_LINE, {
@@ -1470,6 +1487,23 @@ export function turnStart(
  * marker: the reader's own words.
  */
 function injectedBlock(text: string, base: BlockBase): TranscriptBlock | null {
+  // The hub's word that a message this session sent never arrived: a note
+  // titled by who it was for, the reason under it.
+  const undelivered = parseUndelivered(text);
+  if (undelivered) {
+    return {
+      ...base,
+      type: "ui.system_note",
+      // Its own sentence under the title.
+      content:
+        undelivered.reason.charAt(0).toUpperCase() +
+        undelivered.reason.slice(1),
+      metadata: {
+        noteKind: "Not delivered",
+        noteTitle: `Your message to ${undelivered.to} wasn't delivered.`,
+      },
+    };
+  }
   const rule = parseRuleMarker(text);
   if (rule) {
     return {

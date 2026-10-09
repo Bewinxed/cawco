@@ -137,6 +137,7 @@ import {
   CONTROL_WORKSPACE_ARCHIVE,
   CONTROL_WORKSPACE_BOUNDARY,
   CONTROL_WORKSPACE_CREATE,
+  CUSTODY_HELD,
   contextFitRefusal,
   delegateAskText,
   deriveTitleFromFirstMessage,
@@ -208,6 +209,7 @@ import {
   TOOL_CATALOG,
   toolSpec,
   UPDATE_CAWCO,
+  undeliveredNotice,
   unshownAskMessage,
   validateWorkflow,
   WIRE_PROTOCOL,
@@ -1223,21 +1225,26 @@ const freshStartLine = (
   timestamp: new Date(at).toISOString(),
 });
 
-/** The same operator notice on the live stream and a later transcript read. */
-const custodyNotice = (
-  row: Pick<InstanceRow, "id" | "sessionId">,
+/**
+ * The hub's line where a session's process is still held by its harness's
+ * server and CawCo did not take it back (core `CUSTODY_HELD`): the same on
+ * the live stream and a later transcript read, titled by the reason's first
+ * sentence.
+ */
+const custodyLine = (
+  row: { id: string; sessionId: string | null },
   reason: string
-) => ({
-  type: "user" as const,
+): NeutralSystemMessage => ({
+  type: "system",
+  subtype: CUSTODY_HELD,
   uuid: `custody-held-${row.id}`,
   session_id: row.sessionId ?? "",
-  parent_agent_id: null,
-  parent_tool_use_id: null,
-  message: {
-    role: "user" as const,
-    content: `[SYSTEM NOTIFICATION]\n${reason}`,
-  },
+  content: reason,
 });
+
+/** Why a held session was not taken back, said on its row and in its transcript. */
+const custodyReason = (hours: string): string =>
+  `OpenCode's server still holds this session, idle ${hours} h, and CawCo didn't take it back after its restart. Review its pending work before you wake it.`;
 
 /**
  * THE SESSIONS A REGISTER ACK'S LEDGER MUST COVER (sessiond design §7, step 3).
@@ -3246,7 +3253,7 @@ export const createServer = (
           uuid: crypto.randomUUID(),
           message: {
             role: "user",
-            content: `[CawCo] Your message to ${sessionLabel(to).tag} was not delivered: ${reason}`,
+            content: undeliveredNotice(sessionLabel(to).tag, reason),
           },
           parent_tool_use_id: null,
           origin: { kind: "system", name: "undelivered" },
@@ -10272,7 +10279,14 @@ export const createServer = (
       registry.agent(row.machineId) &&
       (row.status === "sleeping" || row.status === "error")
     ) {
-      transcript.push(custodyNotice(row, held.reason));
+      transcript.push({
+        type: "system",
+        uuid: `custody-held-${row.id}`,
+        session_id: row.sessionId ?? "",
+        parent_tool_use_id: null,
+        parent_agent_id: null,
+        message: custodyLine(row, held.reason),
+      });
     }
     placeFreshStart(row, transcript);
   };
@@ -16533,7 +16547,7 @@ export const createServer = (
                 };
                 if (
                   frame.message.type === "system" &&
-                  frame.message.subtype === "custody_held"
+                  frame.message.subtype === CUSTODY_HELD
                 ) {
                   const [row] = db.getInstancesByIds([message.instanceId]);
                   if (
@@ -16548,7 +16562,7 @@ export const createServer = (
                     (Date.now() - row.updatedAt.getTime()) /
                     3_600_000
                   ).toFixed(1);
-                  const note = `Held by opencode server, not re-adopted: idle for ${hours}h. Review its pending work before waking it.`;
+                  const note = custodyReason(hours);
                   heldSessions.set(row.id, {
                     machineId: row.machineId,
                     since: row.updatedAt.getTime(),
@@ -16557,7 +16571,7 @@ export const createServer = (
                   publishInstances(message.machineId);
                   message.payload = {
                     ...frame,
-                    message: custodyNotice(row, note),
+                    message: custodyLine(row, note),
                   };
                   transcripts.ingest(
                     row.id,

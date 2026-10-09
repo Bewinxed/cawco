@@ -152,6 +152,27 @@ export function parseHandoffMarker(
 }
 
 /**
+ * The hub telling a session a message it sent another never reached it:
+ * the turn the sender reads, and the line its transcript draws (a note
+ * titled by who it was for, the reason under it).
+ */
+export const undeliveredNotice = (to: string, reason: string): string =>
+  `[CawCo] Your message to ${to} was not delivered: ${reason}`;
+
+const UNDELIVERED = /^\[CawCo\] Your message to (.+?) was not delivered: /;
+
+/** An undelivered notice read back into who it was for and why. */
+export function parseUndelivered(
+  text: string
+): { to: string; reason: string } | null {
+  const marker = UNDELIVERED.exec(text);
+  if (!marker) {
+    return null;
+  }
+  return { to: marker[1], reason: text.slice(marker[0].length).trim() };
+}
+
+/**
  * A workflow telling its supervising session what happened: a step passed or
  * failed, the run finished, a question or checkpoint came up.
  */

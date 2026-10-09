@@ -66,6 +66,7 @@ import {
   CONTROL_SET_PERMISSION_MODE,
   CONTROL_SUPPORTED_COMMANDS,
   CONTROL_SUPPORTED_MODELS,
+  CUSTODY_HELD,
   EFFORT_READ,
   IMAGE_GENERATION_TIMEOUT_MS,
   INSTALL_SESSION_CREDENTIAL,
@@ -6356,7 +6357,7 @@ export class OpencodeHarness implements Harness {
             payload: {
               kind: "frame",
               harness: "opencode",
-              message: { type: "system", subtype: "custody_held" },
+              message: { type: "system", subtype: CUSTODY_HELD },
             },
           });
           return;
