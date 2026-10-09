@@ -26,6 +26,7 @@ import type {
   Rule,
   RuleState,
   RuleStats,
+  SendPayload,
   SessionEffort,
   SessionEndIntent,
   SessionTooling,
@@ -236,6 +237,20 @@ const HOUR_MS = 60 * 60 * 1000;
 export type AgentAuth = (typeof agents.$inferSelect)["auth"];
 
 export type SentMessageRow = typeof sentMessages.$inferSelect;
+
+/** What {@link CawcoDb.moveChildren} moved from one parent to another, by id. */
+export interface MovedChildren {
+  /** Pending asks, by the permission request each is. */
+  asks: string[];
+  /** Work items. */
+  items: string[];
+  /** Queued delegations (`queued_work_items`). */
+  queued: string[];
+  /** Sessions nested under the parent. */
+  sessions: string[];
+  /** Queued task attempts, as `<project>/<task>`. */
+  taskStarts: string[];
+}
 
 /** One superseded version of the fleet's memory, as a listing reads it. */
 export interface MemoryVersion {
@@ -687,6 +702,16 @@ export interface DbShape {
   /** A whole report: every id it names is replaced, every other cell survives. */
   readonly mergeAgentTools: (machineId: string, statuses: ToolStatus[]) => void;
   /**
+   * Everything that answers to session `from` as its parent, made `to`'s, in
+   * one transaction: the sessions nested under it (`instances.parent_instance_id`),
+   * the work items it delegated, whatever state (`work_items.parent_instance_id`:
+   * a finished one is reopened by its parent's hand-off), the delegations and
+   * task attempts queued for it (`queued_work_items`, `queued_task_starts`),
+   * and the asks its delegates routed to it still unanswered
+   * (`delegate_events`, kind `ask`, status `pending`). What moved, by id.
+   */
+  readonly moveChildren: (from: string, to: string) => MovedChildren;
+  /**
    * Gives the session its name. The owner's always lands; the session's own
    * (`set_title`) is refused once the owner has named it, and the answer
    * carries the owner's name. Undefined when there is no such session.
@@ -1048,6 +1073,15 @@ export interface DbShape {
   readonly queueWorkItem: (
     row: Omit<QueuedWorkItemRow, "queuedAt">
   ) => QueuedWorkItemRow;
+  /**
+   * The sends owed to session `from` (accepted, held by the hub, not yet
+   * handed to a machine) re-addressed to session `to` on `machineId`: the
+   * record and the envelope it goes out as. The records as they now stand.
+   */
+  readonly readdressOwedSends: (
+    from: string,
+    to: { id: string; machineId: string }
+  ) => SentMessageRow[];
   /**
    * The daemon's own word, arriving every 15s: `liveIds` is exactly what its
    * supervisor is carrying right now (`HeartbeatPayload.instances`).
@@ -5193,6 +5227,86 @@ const make = async (path: string): Promise<DbShape> => {
     dropQueuedWorkItem: (id) => {
       db.delete(queuedWorkItems).where(eq(queuedWorkItems.id, id)).run();
     },
+    moveChildren: (from, to) =>
+      db.transaction((tx) => ({
+        sessions: tx
+          .update(instances)
+          .set({ parentInstanceId: to, updatedAt: new Date() })
+          .where(
+            and(eq(instances.parentInstanceId, from), ne(instances.id, to))
+          )
+          .returning({ id: instances.id })
+          .all()
+          .map((row) => row.id),
+        items: tx
+          .update(workItems)
+          .set({ parentInstanceId: to })
+          .where(eq(workItems.parentInstanceId, from))
+          .returning({ id: workItems.id })
+          .all()
+          .map((row) => row.id),
+        queued: tx
+          .update(queuedWorkItems)
+          .set({ parentInstanceId: to })
+          .where(eq(queuedWorkItems.parentInstanceId, from))
+          .returning({ id: queuedWorkItems.id })
+          .all()
+          .map((row) => row.id),
+        taskStarts: tx
+          .update(queuedTaskStarts)
+          .set({ parentInstanceId: to })
+          .where(eq(queuedTaskStarts.parentInstanceId, from))
+          .returning({
+            projectId: queuedTaskStarts.projectId,
+            taskId: queuedTaskStarts.taskId,
+          })
+          .all()
+          .map((row) => `${row.projectId}/${row.taskId}`),
+        asks: tx
+          .update(delegateEvents)
+          .set({ parentInstanceId: to })
+          .where(
+            and(
+              eq(delegateEvents.parentInstanceId, from),
+              eq(delegateEvents.kind, "ask"),
+              eq(delegateEvents.status, "pending")
+            )
+          )
+          .returning({ requestId: delegateEvents.requestId })
+          .all()
+          .map((row) => row.requestId ?? ""),
+      })),
+    readdressOwedSends: (from, to) =>
+      db.transaction((tx) =>
+        tx
+          .select()
+          .from(sentMessages)
+          .where(
+            and(
+              eq(sentMessages.instanceId, from),
+              eq(sentMessages.state, "pending"),
+              isNotNull(sentMessages.owed)
+            )
+          )
+          .all()
+          .map((send) => {
+            const envelope = JSON.parse(
+              send.owed ?? "{}"
+            ) as Envelope<SendPayload>;
+            const owed = JSON.stringify({
+              ...envelope,
+              machineId: to.machineId,
+              instanceId: to.id,
+              payload: { ...envelope.payload, instanceId: to.id },
+            } satisfies Envelope<SendPayload>);
+            return tx
+              .update(sentMessages)
+              .set({ instanceId: to.id, owed })
+              .where(eq(sentMessages.uuid, send.uuid))
+              .returning()
+              .get() as SentMessageRow;
+          })
+      ),
     liveWorkItemsOf: (parentInstanceId) =>
       db
         .select()

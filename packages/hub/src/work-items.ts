@@ -3500,6 +3500,17 @@ export const createWorkItems = ({
      * What a parent's delegate tray shows when it opens: live work, failures
      * nobody has dismissed yet, and what finished within the tray's hold.
      */
+    /**
+     * Items whose parent changed under them (a session took another's
+     * place, server.ts `handOverChildren`): every dashboard hears each as it
+     * now stands, so it leaves one tray for the other.
+     */
+    reparented(ids: string[]): void {
+      for (const id of ids) {
+        published(db.workItem(id));
+      }
+    },
+
     trayOf: (parentInstanceId: string): WorkItemSummary[] =>
       db
         .trayItemsOf(parentInstanceId, new Date(Date.now() - TRAY_HOLD_MS))

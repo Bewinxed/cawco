@@ -624,6 +624,11 @@ const WORKSPACE_TIMEOUT_MS = 60_000;
  * hear how it ended, and keeps the table to the few jobs of the moment.
  */
 const CONTINUATION_KEPT_MS = 5 * 60_000;
+/**
+ * How far apart the two "Continued on" lines of one move can be: written one
+ * after the other in one step ({@link tookPlace}), milliseconds apart. Ours.
+ */
+const ONE_MOVE_MS = 5000;
 /** The words a continuation stopped by its Cancel ends with. */
 const CONTINUATION_CANCELLED = "the continuation was cancelled";
 /** What a request a machine was answering gets when its socket closes. */
@@ -3010,6 +3015,44 @@ export const createServer = (
     parent: { id: string; machineId: string },
     ask: { requestId?: string; payload: unknown }
   ): void => {
+    tellDelegateAsk(delegate, parent, ask);
+    const toolName = peek(ask.payload, "toolName");
+    publishDelegateEvent(
+      delegate.machineId,
+      db.recordDelegateEvent({
+        instanceId: delegate.id,
+        parentInstanceId: parent.id,
+        kind: "ask",
+        requestId: ask.requestId,
+        toolName,
+        requestKind:
+          peek(ask.payload, "requestKind") === "question" ||
+          toolName === ASK_USER_QUESTION
+            ? "question"
+            : "tool",
+        payload: {
+          input: (
+            ask.payload as Extract<
+              FramePayload,
+              { kind: "permission_request" }
+            > | null
+          )?.input,
+        },
+        status: "pending",
+      })
+    );
+  };
+
+  /**
+   * The ask's message alone, into `parent`: what a session that takes
+   * another's place is told of the asks routed to that one, whose records
+   * are moved to it rather than made again ({@link handOverChildren}).
+   */
+  const tellDelegateAsk = (
+    delegate: InstanceRow,
+    parent: { id: string; machineId: string },
+    ask: { requestId?: string; payload: unknown }
+  ): void => {
     const { name, tag: label } = sessionLabel(delegate);
     const body = renderDelegateAsk(ask.payload);
     const instruction =
@@ -3046,32 +3089,6 @@ export const createServer = (
         },
       },
     });
-
-    const toolName = peek(ask.payload, "toolName");
-    publishDelegateEvent(
-      delegate.machineId,
-      db.recordDelegateEvent({
-        instanceId: delegate.id,
-        parentInstanceId: parent.id,
-        kind: "ask",
-        requestId: ask.requestId,
-        toolName,
-        requestKind:
-          peek(ask.payload, "requestKind") === "question" ||
-          toolName === ASK_USER_QUESTION
-            ? "question"
-            : "tool",
-        payload: {
-          input: (
-            ask.payload as Extract<
-              FramePayload,
-              { kind: "permission_request" }
-            > | null
-          )?.input,
-        },
-        status: "pending",
-      })
-    );
   };
 
   /**
@@ -6965,9 +6982,11 @@ export const createServer = (
   /**
    * A session taking another's place (continued on another account at the
    * other's limit): it answers to the same parent, runs the same work item,
-   * works for the same thread and project. The work item names it as its
-   * session from here, so the source's end is not the item's end. Done as
-   * the source is ended, never sooner: until then the source is the item's.
+   * works for the same thread and project, and everything that answered to
+   * the source as its parent answers to it ({@link handOverChildren}). The
+   * work item names it as its session from here, so the source's end is not
+   * the item's end. Done as the source is ended, never sooner: until then
+   * the source is the item's.
    */
   const takePlaceOf = (sourceId: string, targetId: string): void => {
     const [source] = db.getInstancesByIds([sourceId]);
@@ -6986,11 +7005,14 @@ export const createServer = (
       db.updateWorkItem(source.workItemId, { instanceId: targetId });
       db.patchInstance(sourceId, { workItemId: null });
     }
+    handOverChildren(sourceId, targetId, true);
   };
 
   /**
-   * The work item {@link takePlaceOf} gave `targetId` goes back to
-   * `sourceId`: the source was not ended after all, and goes on with it.
+   * What {@link takePlaceOf} gave `targetId` goes back to `sourceId`: the
+   * source was not ended after all, and goes on with it. Exactly that set:
+   * the new session was never handed its opening, so nothing answering to
+   * it is its own.
    */
   const giveBack = (targetId: string, sourceId: string): void => {
     const [target] = db.getInstancesByIds([targetId]);
@@ -6999,6 +7021,81 @@ export const createServer = (
       db.updateWorkItem(target.workItemId, { instanceId: sourceId });
       db.patchInstance(targetId, { workItemId: null });
     }
+    handOverChildren(targetId, sourceId, false);
+  };
+
+  /**
+   * The asks `parentId`'s delegates routed to it that nobody has answered,
+   * each with the delegate that asked.
+   */
+  const routedAsksTo = (
+    parentId: string
+  ): { delegate: InstanceRow; ask: Envelope }[] =>
+    pending.list().flatMap((parked) => {
+      const payload = parked.payload as { kind?: unknown; routedTo?: unknown };
+      const [delegate] =
+        payload.kind === "permission_request" &&
+        payload.routedTo === "parent" &&
+        parked.instanceId
+          ? db.getInstancesByIds([parked.instanceId])
+          : [];
+      return delegate?.parentInstanceId === parentId
+        ? [{ delegate, ask: parked }]
+        : [];
+    });
+
+  /**
+   * Everything that answers to `fromId` as its parent made `toId`'s: the
+   * sessions nested under it, the work items it delegated (live and
+   * finished: a finished one is reopened by its parent's hand-off), the
+   * delegations and attempts queued for it, the asks its delegates routed to
+   * it ({@link CawcoDb.moveChildren}), and the sends owed to it, re-addressed.
+   * `tell`: `toId` takes `fromId`'s place, and is told each routed ask
+   * nobody has answered, which it answers from here; handing them back tells
+   * nothing, as `fromId` was told them already. Said in the hub's log once,
+   * when anything moved.
+   */
+  const handOverChildren = (
+    fromId: string,
+    toId: string,
+    tell: boolean
+  ): void => {
+    const [to] = db.getInstancesByIds([toId]);
+    if (!to) {
+      return;
+    }
+    const routed = tell ? routedAsksTo(fromId) : [];
+    const moved = db.moveChildren(fromId, toId);
+    const sends = db.readdressOwedSends(fromId, to);
+    const kinds: [string, string[]][] = [
+      ["sessions", moved.sessions],
+      ["work items", moved.items],
+      ["queued delegations", moved.queued],
+      ["queued attempts", moved.taskStarts],
+      ["unanswered asks", moved.asks],
+      ["owed sends", sends.map((send) => send.uuid)],
+    ];
+    const said = kinds
+      .filter(([, ids]) => ids.length > 0)
+      .map(([what, ids]) => `${ids.length} ${what} (${ids.join(", ")})`);
+    if (said.length === 0) {
+      return;
+    }
+    console.log(
+      `[hub] ${fromId}'s place is ${toId}'s: moved ${said.join("; ")}`
+    );
+    for (const { delegate, ask } of routed) {
+      tellDelegateAsk(delegate, to, clientCopy(ask));
+    }
+    workItems.reparented(moved.items);
+    for (const send of sends) {
+      publishSend(send);
+    }
+    releaseOwed({ instanceId: toId });
+    for (const row of db.getInstancesByIds([fromId, ...moved.sessions])) {
+      publishInstances(row.machineId);
+    }
+    publishInstances(to.machineId);
   };
 
   /**
@@ -8251,6 +8348,56 @@ export const createServer = (
     }
     sendOpening(row);
     moveContinuation(row.id, { stage: "started" });
+  };
+
+  /**
+   * Every session that took another's place at the other's account's limit,
+   * read from what {@link tookPlace} leaves on record, which outlives its job
+   * (deleted {@link CONTINUATION_KEPT_MS} after it settles): the "Continued
+   * on" line it wrote into each transcript, the same move within a moment,
+   * and the opening the new session was sent from the old one, which is how
+   * the one is told from the other.
+   */
+  const successions = (): { sourceId: string; targetId: string }[] => {
+    const lines = db.atLimit.continued();
+    const sameMove = (
+      a: (typeof lines)[number],
+      b: (typeof lines)[number]
+    ): boolean =>
+      a.instanceId !== b.instanceId &&
+      Math.abs(a.at - b.at) <= ONE_MOVE_MS &&
+      JSON.stringify(a.move) === JSON.stringify(b.move);
+    return lines.flatMap((target) => {
+      const senders = new Set(
+        db
+          .sendsIn(target.instanceId, ["pending", "read", "failed"])
+          .flatMap(({ body }) =>
+            body?.origin?.kind === "peer" && body.origin.fromSession
+              ? [body.origin.fromSession]
+              : []
+          )
+      );
+      const source = lines.find(
+        (line) => sameMove(line, target) && senders.has(line.instanceId)
+      );
+      return source
+        ? [{ sourceId: source.instanceId, targetId: target.instanceId }]
+        : [];
+    });
+  };
+
+  /**
+   * At start: a session that took another's place before its children
+   * followed it (on a hub from before they did) has them follow it now,
+   * before any machine is heard, so nothing reaches the ended one. Once:
+   * an ended source has nothing left to hand over the next time.
+   */
+  const followSuccessions = (): void => {
+    for (const { sourceId, targetId } of successions()) {
+      if (db.ownedInstance(sourceId)?.endIntent) {
+        handOverChildren(sourceId, targetId, true);
+      }
+    }
   };
 
   /**
@@ -11213,6 +11360,7 @@ export const createServer = (
       workItems.cancelled(row);
     }
   }
+  followSuccessions();
   const workflowRuntime = createWorkflowRuntime({
     lifetime,
     custodyPending: (machineId, instanceId) => {

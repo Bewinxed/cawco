@@ -41,6 +41,8 @@ export interface LimitEvent {
 }
 
 export interface AtLimitDb {
+  /** Every "Continued on" line (move `continued`), in any session, oldest first. */
+  readonly continued: () => LimitEvent[];
   readonly dropHold: (instanceId: string) => void;
   readonly dropSummary: (instanceId: string) => void;
   /** The lines written into these sessions' transcripts, oldest first. */
@@ -90,6 +92,13 @@ const toSummary = (row: typeof limitSummaries.$inferSelect): LimitSummary => ({
   percent: row.percent,
   covers: row.covers,
   summary: row.summary,
+});
+
+const toEvent = (row: typeof limitEvents.$inferSelect): LimitEvent => ({
+  id: row.id,
+  instanceId: row.instanceId,
+  at: row.at.getTime(),
+  move: row.move,
 });
 
 export const atLimitDb = (db: BunSQLiteDatabase): AtLimitDb => ({
@@ -172,6 +181,14 @@ export const atLimitDb = (db: BunSQLiteDatabase): AtLimitDb => ({
       .values({ id, instanceId, at: new Date(at), move })
       .run();
   },
+  continued: () =>
+    db
+      .select()
+      .from(limitEvents)
+      .orderBy(asc(limitEvents.at))
+      .all()
+      .map(toEvent)
+      .filter((event) => event.move.kind === "continued"),
   events: (instanceIds) =>
     instanceIds.length === 0
       ? []
@@ -181,12 +198,7 @@ export const atLimitDb = (db: BunSQLiteDatabase): AtLimitDb => ({
           .where(inArray(limitEvents.instanceId, instanceIds))
           .orderBy(asc(limitEvents.at))
           .all()
-          .map((row) => ({
-            id: row.id,
-            instanceId: row.instanceId,
-            at: row.at.getTime(),
-            move: row.move,
-          })),
+          .map(toEvent),
   forget: (instanceIds) => {
     if (instanceIds.length === 0) {
       return;
