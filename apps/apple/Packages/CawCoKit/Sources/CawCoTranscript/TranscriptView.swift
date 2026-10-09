@@ -223,7 +223,15 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             hub?.sessions.read(id)
         }
         paneState.onReturn = { [weak self] in self?.onReturnToFleet() }
-        registerForTraitChanges([UITraitUserInterfaceStyle.self, UITraitPreferredContentSizeCategory.self]) { (view: TranscriptView, _: UITraitCollection) in
+        // Only the type size: the words are set in faces at it. Light and dark
+        // are not this view's: the rendered words carry the colour sets, which
+        // resolve as they draw, and each row that paints a colour of its own
+        // (a listing, a diff, a card's edge) paints it again itself. The system
+        // flips the appearance whenever the app goes to the background, to
+        // snapshot it both ways: clearing here threw every row of a long
+        // session away and built them all again on each trip (a 412ms frame
+        // over 936 rows).
+        registerForTraitChanges([UITraitPreferredContentSizeCategory.self]) { (view: TranscriptView, _: UITraitCollection) in
             // The words are set in faces at this type size: rendered again,
             // prepared again, every row drawn again.
             view.env.cache.clear()
