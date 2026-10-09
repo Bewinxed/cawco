@@ -52,7 +52,6 @@ final class PaywallController: ObservedViewController {
     }
 
     private let entry: Entry
-    private let variant = PaywallExperiment.variant
     private let hero: PaywallHeroView
     private let close: GhostIconButton
     let scroll = UIScrollView()
@@ -60,6 +59,8 @@ final class PaywallController: ObservedViewController {
     private var screen: Screen
     private var builtKey = ""
     private var restoring = false
+    /// P1c's Try again is asking the App Store again: Caw works until it answers.
+    private var retrying = false
     /// R2 to R4's line, and whether it is a failure's.
     private var restoreLine: (text: String, fails: Bool)?
     private var restoreLineClear: Task<Void, Never>?
@@ -89,8 +90,8 @@ final class PaywallController: ObservedViewController {
 
     init(entry: Entry, banners: [HeroBanner]) {
         self.entry = entry
-        hero = PaywallHeroView(variant: variant, banners: banners)
-        close = GhostIconButton(.close, label: "Close", tint: variant == .poster ? Palette.crowInk : Palette.paper)
+        hero = PaywallHeroView(banners: banners)
+        close = GhostIconButton(.close, label: "Close", tint: Palette.paper)
         screen = switch entry {
         case .onboarding, .offer, .keep: .offer
         case let .buy(product): .buying(product)
@@ -240,7 +241,7 @@ final class PaywallController: ObservedViewController {
         switch screen {
         case .offer:
             let price = pro.displayPrice(.pro) ?? "-"
-            return "offer|\(form)|\(pro.catalog)|\(pro.canMakePayments.map { "\($0)" } ?? "unread")|\(price)"
+            return "offer|\(form)|\(pro.catalog)|\(retrying)|\(pro.canMakePayments.map { "\($0)" } ?? "unread")|\(price)"
         case .late:
             return "late|\(PushRegistry.shared.testProblem ?? "")"
         case .asking:
@@ -273,11 +274,15 @@ final class PaywallController: ObservedViewController {
         let push = PushRegistry.shared
         switch screen {
         case .offer:
-            if restoring { return .stage(.loading) }
-            return Pro.shared.catalog == .failed && Pro.shared.canMakePayments == true ? .stage(.reconnecting) : .scene(.ready)
+            // R and P1c's Try again: Caw works on the stage until the App Store answers.
+            if restoring || retrying { return .stage(.working) }
+            // P1c: the App Store didn't answer; Caw alone, trying.
+            if Pro.shared.catalog == .failed, Pro.shared.canMakePayments == true { return .stage(.trying) }
+            // P1e: the scene stays, Caw over the card, idle. P1 is the film alone.
+            return .scene(form == .ended ? .idle : nil)
         case .buying: return .stage(.working)
-        case .started: return .scene(.done)
-        case .asking: return .scene(.ready)
+        // S1, and S2 (S1 unchanged under iOS's prompt).
+        case .started, .asking: return .scene(.done)
         case .setup:
             if push.tokenFailed { return .stage(.reconnecting) }
             if case .failed = push.relay { return .stage(.reconnecting) }
@@ -333,32 +338,21 @@ final class PaywallController: ObservedViewController {
         UIAccessibility.post(notification: .screenChanged, argument: parts.first)
     }
 
+    /// P1 (and P1a, P1b, P1c), P1e and T's Get Pro form: the headline, the
+    /// terms line T (duration, what is charged, no subscription: App Review
+    /// R10, above the buttons in every state), the free week's rows, the
+    /// buttons, and the links (R11).
     private func offerParts() -> [UIView] {
-        let pro = Pro.shared
-        let price = pro.displayPrice(.pro)
-        let pitch = PaywallCopy.P1.pitch(variant)
-        let (headline, body): (String, String) = switch form {
-        case .trial: (pitch.headline, pitch.subline)
-        case .ended: (PaywallCopy.P1e.headline, PaywallCopy.P1e.body(price))
+        let price = Pro.shared.displayPrice(.pro)
+        let (headline, terms): (String, String) = switch form {
+        case .trial: (PaywallCopy.P1.headline, PaywallCopy.P1.terms(price))
+        case .ended: (PaywallCopy.P1e.headline, PaywallCopy.P1e.terms(price))
         case .keep: (PaywallCopy.Keep.headline, PaywallCopy.Keep.subline(price))
         }
-        var parts: [UIView] = []
-        let words = column([eyebrow(pitch.eyebrow)], spacing: Space.space1)
-        // The poster sets its headline huge in the hero; the story's stands here.
-        hero.headlineText = variant == .poster ? headline : nil
-        if variant == .poster {
-            hero.accessibilityElements = nil
-            words.addArrangedSubview(title(headline, hiddenVisually: true))
-        } else {
-            words.addArrangedSubview(title(headline))
-        }
-        words.addArrangedSubview(muted(body))
-        parts.append(words)
-        parts.append(column(pitch.ticks.map { tick($0, ink: Palette.inkStrong) }, spacing: Space.space2))
+        var parts: [UIView] = [column([title(headline), muted(terms)], spacing: Space.space2)]
         if form == .trial {
-            parts.append(timeline(price: price))
+            parts.append(timeline())
         }
-        parts.append(tick(PaywallCopy.P1.price(price), ink: Palette.inkStrong))
         parts.append(storeBlock(price: price))
         let fail = KitLabel(TypeScale.typeMeta, ink: Palette.statusFailInk, lines: 0)
         failLabel = fail
@@ -374,11 +368,12 @@ final class PaywallController: ObservedViewController {
         if pro.canMakePayments == false {
             return muted(PaywallCopy.Store.restricted(price))
         }
-        if pro.catalog == .failed {
-            return column([muted(PaywallCopy.Store.unavailable),
-                           KitButton.make(PaywallCopy.Store.tryAgain, variant: .outline, height: .lg, stretch: true) {
-                               Task { await Pro.shared.loadProducts() }
-                           }], spacing: Space.space2)
+        if pro.catalog == .failed || retrying {
+            // P1c: Try again works (Caw too, on the stage) until the App Store answers.
+            let again = SpinnerButton(PaywallCopy.Store.tryAgain, variant: .outline) { [weak self] in self?.retry() }
+            again.busy = retrying
+            again.isEnabled = !retrying
+            return column([muted(PaywallCopy.Store.unavailable, centred: true), again], spacing: Space.space2)
         }
         var stack: [UIView] = []
         if form == .trial {
@@ -403,7 +398,6 @@ final class PaywallController: ObservedViewController {
         case .restoredPro: (PaywallCopy.S1.restoredProHeadline, PaywallCopy.S1.boughtBody)
         case .restoredTrial: (PaywallCopy.S1.restoredTrialHeadline, PaywallCopy.S1.startedBody(price))
         }
-        hero.headlineText = nil
         startedKind = kind
         let turnOn = SpinnerButton(PaywallCopy.S1.primary, variant: .action) { [weak self] in self?.turnOn() }
         turnOnButton = turnOn
@@ -416,7 +410,6 @@ final class PaywallController: ObservedViewController {
     }
 
     private func setupParts() -> [UIView] {
-        hero.headlineText = nil
         rows = (0 ..< 4).map { _ in SetupRow() }
         let retry = KitButton.make(PaywallCopy.Setup.tryAgain, variant: .outline, height: .lg, stretch: true) {
             PushRegistry.shared.retry()
@@ -464,8 +457,7 @@ final class PaywallController: ObservedViewController {
     }
 
     private func askToBuyParts(_ product: ProProduct) -> [UIView] {
-        hero.headlineText = nil
-        return [column([title(PaywallCopy.S8.headline), muted(product == .trial ? PaywallCopy.S8.trialBody : PaywallCopy.S8.proBody)], spacing: Space.space1),
+        [column([title(PaywallCopy.S8.headline), muted(product == .trial ? PaywallCopy.S8.trialBody : PaywallCopy.S8.proBody)], spacing: Space.space1),
                 KitButton.make(PaywallCopy.S8.done, variant: .action, height: .lg, stretch: true) { [weak self] in self?.finish() }]
     }
 
@@ -474,6 +466,8 @@ final class PaywallController: ObservedViewController {
     private func update() {
         let push = PushRegistry.shared
         hero.show(mode(for: screen))
+        // A sheet that opened on the stage (P1c) plays the film once the scene first shows.
+        if case .scene = hero.mode, viewIfLoaded?.window != nil { hero.settleIn() }
         close.isHidden = screen == .asking
         turnOnButton?.busy = screen == .asking
         turnOnButton?.isEnabled = screen != .asking
@@ -605,6 +599,18 @@ final class PaywallController: ObservedViewController {
         }
     }
 
+    /// P1c's Try again: the catalogue is read again; the sheet shows P1 if it answers, P1c again if not.
+    private func retry() {
+        guard !retrying else { return }
+        retrying = true
+        requestRefresh()
+        Task {
+            await Pro.shared.loadProducts()
+            retrying = false
+            requestRefresh()
+        }
+    }
+
     /// R2's muted line stands in the links' place for 4 s; R3's and R4's stay until the next try.
     private func say(_ text: String, fails: Bool) {
         restoreLine = (text, fails)
@@ -647,16 +653,11 @@ final class PaywallController: ObservedViewController {
         return label
     }
 
-    private func title(_ text: String, hiddenVisually: Bool = false) -> KitLabel {
+    private func title(_ text: String) -> KitLabel {
         let label = KitLabel(TypeScale.typeTitle, ink: Palette.inkStrong, lines: 0)
         label.text = text
         label.wrap = .balance
         label.accessibilityTraits = .header
-        if hiddenVisually {
-            // The poster's hero draws it; VoiceOver reads it here, in order.
-            label.alpha = 0
-            label.heightAnchor.constraint(equalToConstant: 1).isActive = true
-        }
         return label
     }
 
@@ -675,51 +676,50 @@ final class PaywallController: ObservedViewController {
         return stack
     }
 
-    /// A Butter tick (Solar duotone check-circle) before its line.
-    private func tick(_ text: String, ink: UIColor) -> UIView {
-        let mark = GlyphView(.passed, size: Size.iconMd, tint: Palette.spark)
-        let label = KitLabel(TypeScale.typeBody, ink: ink, lines: 0)
-        label.text = text
-        let row = UIStackView(arrangedSubviews: [mark, label])
-        row.spacing = Space.space2
-        row.alignment = .firstBaseline
-        mark.setContentHuggingPriority(.required, for: .horizontal)
-        return row
-    }
-
-    /// "The free week, day by day": round Butter markers on a hairline rail.
-    private func timeline(price: String?) -> UIView {
-        let head = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
-        head.text = PaywallCopy.P1.timelineTitle
-        head.accessibilityTraits = .header
-        let rows = PaywallCopy.P1.timeline(price: price).map { step -> UIView in
+    /// The free week, Today to Day 7: a Butter disc with its glyph on a
+    /// hairline rail, the day, and its line.
+    private func timeline() -> UIView {
+        let glyphs: [Glyph] = [.unlock, .bell, .lock]
+        var discs: [TimelineDisc] = []
+        let rows = zip(PaywallCopy.P1.timeline, glyphs).map { step, glyph -> UIView in
+            let disc = TimelineDisc(glyph)
+            discs.append(disc)
             let day = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong)
             day.text = step.day
             day.widthAnchor.constraint(equalToConstant: 48).isActive = true
             let text = KitLabel(TypeScale.typeBody, ink: Palette.inkMuted, lines: 0)
             text.text = step.text
             text.wrap = .pretty
-            let row = UIStackView(arrangedSubviews: [TimelineMarker(), day, text])
-            row.spacing = Space.space2
-            row.alignment = .firstBaseline
+            let words = UIStackView(arrangedSubviews: [day, text])
+            words.spacing = Space.space2
+            words.alignment = .firstBaseline
+            // The first line stands centred on the disc.
+            words.isLayoutMarginsRelativeArrangement = true
+            words.directionalLayoutMargins = NSDirectionalEdgeInsets(top: ((TimelineDisc.side - TypeScale.typeBody.lineHeight) / 2).rounded(), leading: 0, bottom: 0, trailing: 0)
+            let row = UIStackView(arrangedSubviews: [disc, words])
+            row.spacing = Space.space3
+            row.alignment = .top
             row.isAccessibilityElement = true
             row.accessibilityLabel = "\(step.day): \(step.text)"
             return row
         }
-        let list = column(rows, spacing: Space.space3)
+        let list = column(rows, spacing: Space.space2)
+        // A group of its own: a little more air above and below than between the panel's parts.
+        list.isLayoutMarginsRelativeArrangement = true
+        list.directionalLayoutMargins = NSDirectionalEdgeInsets(top: Space.space2, leading: 0, bottom: Space.space2, trailing: 0)
         let rail = UIView()
         rail.backgroundColor = Palette.borderHairline
         rail.translatesAutoresizingMaskIntoConstraints = false
         list.insertSubview(rail, at: 0)
-        if let first = rows.first, let last = rows.last {
+        if let first = discs.first, let last = discs.last {
             NSLayoutConstraint.activate([
                 rail.widthAnchor.constraint(equalToConstant: 1),
-                rail.centerXAnchor.constraint(equalTo: list.leadingAnchor, constant: TimelineMarker.side / 2),
-                rail.topAnchor.constraint(equalTo: first.topAnchor, constant: Space.space2),
-                rail.bottomAnchor.constraint(equalTo: last.topAnchor, constant: Space.space2),
+                rail.centerXAnchor.constraint(equalTo: first.centerXAnchor),
+                rail.topAnchor.constraint(equalTo: first.bottomAnchor),
+                rail.bottomAnchor.constraint(equalTo: last.topAnchor),
             ])
         }
-        return column([head, list], spacing: Space.space2)
+        return list
     }
 
     private func restoreLinkMade() -> LinkButton {
@@ -728,7 +728,9 @@ final class PaywallController: ObservedViewController {
         return link
     }
 
-    /// Links centred on one line, a middle dot between each; the restore line under them.
+    /// Links centred on one line, a middle dot between each; the restore line
+    /// under them. Every piece hugs its own width, so the row is as wide as
+    /// its words and stands centred, never spread to the panel's edges.
     private func links(_ items: [UIView]) -> UIView {
         let row = UIStackView()
         row.spacing = Space.space1
@@ -738,6 +740,7 @@ final class PaywallController: ObservedViewController {
                 let dot = KitLabel(TypeScale.typeMeta, ink: Palette.inkSubtle)
                 dot.text = "·"
                 dot.isAccessibilityElement = false
+                dot.setContentHuggingPriority(.required, for: .horizontal)
                 row.addArrangedSubview(dot)
             }
             row.addArrangedSubview(item)
@@ -821,6 +824,8 @@ final class LinkButton: UIButton {
         config.contentInsets = NSDirectionalEdgeInsets(top: Space.space2, leading: Space.space1, bottom: Space.space2, trailing: Space.space1)
         configuration = config
         houseStyle()
+        // As wide as its words: a row of links centres as a whole.
+        setContentHuggingPriority(.required, for: .horizontal)
         addAction(UIAction { _ in action() }, for: .primaryActionTriggered)
         spinner.isHidden = true
         spinner.isAccessibilityElement = false
@@ -906,28 +911,138 @@ final class SetupRow: UIStackView {
     }
 }
 
-/// The timeline's round Butter marker.
-private final class TimelineMarker: UIView {
-    static let side = 10.0
+/// The free week's round Butter disc, its Solar duotone glyph in Ink at the
+/// centre: the same Butter and Ink day and night, outlined as an image is.
+private final class TimelineDisc: UIView {
+    static let side = 28.0
 
-    init() {
+    init(_ glyph: Glyph) {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         backgroundColor = Palette.spark
         layer.cornerRadius = Self.side / 2
         layer.borderWidth = 1
-        NSLayoutConstraint.activate([widthAnchor.constraint(equalToConstant: Self.side), heightAnchor.constraint(equalToConstant: Self.side)])
-        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (marker: TimelineMarker, _: UITraitCollection) in marker.paint() }
+        let mark = GlyphView(glyph, size: Size.iconMd, tint: Palette.crowInk)
+        addSubview(mark)
+        NSLayoutConstraint.activate([
+            widthAnchor.constraint(equalToConstant: Self.side),
+            heightAnchor.constraint(equalToConstant: Self.side),
+            mark.centerXAnchor.constraint(equalTo: centerXAnchor),
+            mark.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (disc: TimelineDisc, _: UITraitCollection) in disc.paint() }
         paint()
         isAccessibilityElement = false
     }
 
     @available(*, unavailable)
     required init?(coder _: NSCoder) {
-        fatalError("TimelineMarker is built in code")
+        fatalError("TimelineDisc is built in code")
     }
 
     private func paint() {
         layer.borderColor = Palette.imageOutline.resolvedColor(with: traitCollection).cgColor
     }
 }
+
+#if DEBUG
+/// A simulator pass at the paywall alone, with no hub: `-paywall-probe` makes
+/// the window's root a plain board-coloured screen that raises the sheet,
+/// with `-paywall-banners long` for long asks on the hero's cards (the
+/// slots' example copy otherwise). `-paywall-catalog` and `-paywall-access`
+/// (Pro) pick P1a, P1c and P1e. 15 s after the sheet is up (the film has
+/// ended, the cards are in), it prints one `PAYWALL-EVIDENCE` line: the laid
+/// out labels, the links row and the sheet's visible height, read from the
+/// views themselves rather than from a screenshot.
+public enum PaywallProbe {
+    public static var asked: Bool { ProcessInfo.processInfo.arguments.contains("-paywall-probe") }
+
+    public static func root() -> UIViewController { ProbeRoot() }
+
+    private final class ProbeRoot: UIViewController {
+        private var raised = false
+
+        override func viewDidLoad() {
+            super.viewDidLoad()
+            view.backgroundColor = Palette.surfacePage
+        }
+
+        override func viewDidAppear(_ animated: Bool) {
+            super.viewDidAppear(animated)
+            guard !raised else { return }
+            raised = true
+            let long = UserDefaults.standard.string(forKey: "paywall-banners") == "long"
+            let banners: [HeroBanner] = long
+                ? [HeroBanner(title: PaywallCopy.bannerTitle(harness: "Claude Code", machine: "obelisk-of-light-build-runner-02"),
+                              body: "Run bash: cd apps/apple && xcodebuild -project CawCo.xcodeproj -scheme CawCo -destination generic/platform=iOS build"),
+                   HeroBanner(title: PaywallCopy.bannerTitle(harness: "OpenCode", machine: "obelisk"), body: PaywallCopy.bannerExample),
+                   HeroBanner(title: PaywallCopy.bannerTitle(harness: "pi", machine: "obelisk"), body: PaywallCopy.bannerExample)]
+                : ["Claude Code", "OpenCode", "pi"].map { HeroBanner(title: PaywallCopy.bannerTitle(harness: $0, machine: "your machine"), body: PaywallCopy.bannerExample) }
+            let paywall = PaywallController.present(.onboarding, banners: banners, from: self)
+            Task { @MainActor [weak paywall] in
+                try? await Task.sleep(for: .seconds(15))
+                paywall?.printEvidence()
+            }
+        }
+    }
+}
+
+extension PaywallController {
+    /// One line of JSON on stdout: every label that shows, in the sheet's
+    /// space, the height its words need at its width against the height it
+    /// has, and the links row's insets.
+    fileprivate func printEvidence() {
+        let sheet = parent?.view ?? view!
+        guard let window = sheet.window else { return }
+        let inWindow = sheet.convert(sheet.bounds, to: window)
+        let visible = min(inWindow.maxY, window.bounds.maxY) - inWindow.minY
+        func showing(_ node: UIView) -> Bool {
+            var at: UIView? = node
+            while let view = at, view !== sheet {
+                if view.isHidden || view.alpha < 0.01 { return false }
+                at = view.superview
+            }
+            return true
+        }
+        func labels(_ node: UIView) -> [UILabel] {
+            node.subviews.flatMap { sub -> [UILabel] in (sub as? UILabel).map { [$0] } ?? labels(sub) }
+        }
+        var rows: [[String: Any]] = []
+        var words = 0
+        for label in labels(sheet) where showing(label) {
+            let text = label.text ?? ""
+            guard !text.isEmpty else { continue }
+            let frame = label.convert(label.bounds, to: sheet)
+            let needed = label.attributedText?.boundingRect(with: CGSize(width: label.bounds.width, height: .greatestFiniteMagnitude),
+                                                            options: [.usesLineFragmentOrigin], context: nil).height ?? 0
+            let inHero = label.isDescendant(of: hero)
+            let prose = !inHero && label.superview is UIStackView && text != "·"
+            if prose { words += text.split(whereSeparator: \.isWhitespace).count }
+            rows.append(["text": text, "y": frame.minY, "maxY": frame.maxY, "x": frame.minX, "width": frame.width,
+                         "height": frame.height, "needed": (needed * 10).rounded() / 10, "lines": label.numberOfLines,
+                         "fits": needed <= frame.height + 0.5, "hero": inHero, "prose": prose])
+        }
+        var links: [String: Any] = [:]
+        if let row = linksRow, showing(row) {
+            let frame = row.convert(row.bounds, to: sheet)
+            links = ["minX": frame.minX, "maxX": frame.maxX, "maxY": frame.maxY,
+                     "leading": frame.minX, "trailing": sheet.bounds.width - frame.maxX,
+                     "aboveFold": frame.maxY < visible]
+        }
+        let buttons = panel.subviews.flatMap { labelsOrButtons($0) }
+        let evidence: [String: Any] = ["screen": builtKey, "sheet": ["width": sheet.bounds.width, "visible": visible, "top": inWindow.minY],
+                                       "hero": hero.convert(hero.bounds, to: sheet).debugDescription,
+                                       "proseWords": words, "links": links, "buttons": buttons, "labels": rows]
+        if let data = try? JSONSerialization.data(withJSONObject: evidence, options: [.sortedKeys]), let line = String(data: data, encoding: .utf8) {
+            print("PAYWALL-EVIDENCE \(line)")
+        }
+    }
+
+    private func labelsOrButtons(_ node: UIView) -> [String] {
+        if let button = node as? UIButton, !(button is LinkButton), !button.isHidden {
+            return [button.configuration?.attributedTitle.map { String($0.characters) } ?? ""]
+        }
+        return node.subviews.flatMap { labelsOrButtons($0) }
+    }
+}
+#endif

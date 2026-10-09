@@ -140,6 +140,9 @@ const SOLAR_ICONS = [
   "volume-cross-bold-duotone", // Sound off
   // The task sheet (tasks/TaskSheet.svelte).
   "lock-keyhole-minimalistic-bold-duotone", // IconLock: waits on
+  // The paywall's free-week rows (Today, Day 6; Day 7 is the lock above).
+  "lock-keyhole-minimalistic-unlocked-bold-duotone",
+  "bell-bold-duotone",
 ];
 
 /**

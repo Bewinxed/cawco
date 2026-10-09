@@ -225,6 +225,17 @@ public final class Pro {
     public func loadProducts() async {
         catalog = .loading
         canMakePayments = await Self.readCanMakePayments()
+        #if DEBUG
+        // The paywall probe's P1a and P1c: `-paywall-catalog loading|failed`.
+        switch UserDefaults.standard.string(forKey: "paywall-catalog") {
+        case "loading": return
+        case "failed":
+            try? await Task.sleep(for: .seconds(2))
+            catalog = .failed
+            return
+        default: break
+        }
+        #endif
         do {
             let found = try await Product.products(for: ProProduct.allCases.map(\.rawValue))
             var byId: [ProProduct: Product] = [:]
@@ -246,13 +257,11 @@ public final class Pro {
 
     /// Buys `product` with Apple's sheet over `scene`. The entitlement is read
     /// again before this returns, so `access` already says what it came to.
-    /// The paywall variant rides in the purchase as its `appAccountToken`.
     public func purchase(_ product: ProProduct, in scene: UIWindowScene) async -> ProPurchaseOutcome {
         guard let item = products[product] else { return .failed }
-        let token = PaywallExperiment.variant.accountToken
         let result: Product.PurchaseResult
         do {
-            result = try await item.purchase(confirmIn: scene, options: [.appAccountToken(token)])
+            result = try await item.purchase(confirmIn: scene)
         } catch StoreKitError.userCancelled {
             return .cancelled
         } catch {
@@ -330,13 +339,17 @@ public final class Pro {
         }
         let start = trial.map { min($0.transaction.purchaseDate, $0.transaction.originalPurchaseDate) }
         let endsAt = start.map { $0.addingTimeInterval(ProProduct.trialLength) }
-        let next: ProAccess = if pro != nil {
+        var next: ProAccess = if pro != nil {
             .owned
         } else if let endsAt {
             endsAt > .now ? .trial(endsAt: endsAt) : .ended
         } else {
             .none
         }
+        #if DEBUG
+        // The paywall probe's P1e: `-paywall-access ended`.
+        if UserDefaults.standard.string(forKey: "paywall-access") == "ended" { next = .ended }
+        #endif
         trialStart = start
         proof = pro?.jws ?? (next.entitled ? trial?.jws : nil)
         if next.entitled { pending = nil }
@@ -377,37 +390,6 @@ public final class Pro {
             guard !Task.isCancelled else { return }
             await self?.refresh()
         }
-    }
-}
-
-/// The paywall's A/B test (DESIGN.md rulings 6 and 9): two variants, assigned
-/// once per install the first time the paywall is built. The variant leaves
-/// the device only inside a purchase, as its `appAccountToken`; the app sends
-/// no events of its own (App Review R6).
-@MainActor
-public enum PaywallExperiment {
-    public enum Variant: String, CaseIterable, Sendable {
-        case story, poster
-
-        /// The fixed token a purchase made under this variant carries.
-        var accountToken: UUID {
-            switch self {
-            case .story: UUID(uuidString: "5c0f1a7e-0000-4000-8000-00000000057a")!
-            case .poster: UUID(uuidString: "5c0f1a7e-0000-4000-8000-0000000057e2")!
-            }
-        }
-    }
-
-    private static let variantKey = "paywall-1.variant"
-
-    /// This install's variant, drawn 50/50 the first time it is asked for.
-    public static var variant: Variant {
-        if let kept = UserDefaults.standard.string(forKey: variantKey).flatMap(Variant.init(rawValue:)) {
-            return kept
-        }
-        let drawn = Variant.allCases.randomElement() ?? .story
-        UserDefaults.standard.set(drawn.rawValue, forKey: variantKey)
-        return drawn
     }
 }
 

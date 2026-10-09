@@ -253,7 +253,12 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         Logger(subsystem: "dev.cawco.app", category: "Scene").info("window scene connected")
         let window = ReachWindow(windowScene: scene)
         window.tintColor = Palette.inkStrong
+        #if DEBUG
+        // A simulator pass at the paywall alone, with no hub (PaywallProbe).
+        window.rootViewController = PaywallProbe.asked ? PaywallProbe.root() : RootViewController(sessionId: sessionId, boardTab: boardTab)
+        #else
         window.rootViewController = RootViewController(sessionId: sessionId, boardTab: boardTab)
+        #endif
         window.makeKeyAndVisible()
         self.window = window
     }

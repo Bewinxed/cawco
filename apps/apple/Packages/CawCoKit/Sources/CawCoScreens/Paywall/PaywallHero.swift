@@ -121,33 +121,29 @@ nonisolated struct StorySlots: Decodable {
     }()
 }
 
-/// The paywall's hero band (DESIGN.md §2 and §4, ruling 6). Brand art, so it
-/// keeps its look in both appearances: the story is a night scene, the poster
-/// a daylight one.
+/// The paywall's hero band (DESIGN.md §2 and §4, ruling 6): brand art, a
+/// night scene in both appearances.
 ///
-/// - `story`: the desk scene's move (`paywall-story.mp4`, once, muted) from
-///   `PaywallStoryStart` to `PaywallStoryRest`, the phone's screen with its
-///   stacked notification group; native cards then come into it. The cards,
-///   their number and their stacking are the still's `story-end.slots.json`, read
-///   from the bundle, so a new still and its file need no code. Under Reduce
-///   Motion the band is the rest frame with the cards already in it.
-/// - `poster`: Butter above an exact horizon, Ivory below, a code-made grain
-///   at 3%, the headline set huge; three native cards drop in, staggered, and
-///   Caw climbs up and peeks over them (climb.riv), resting there.
+/// The scene is the desk film (`paywall-story.mp4`, once, muted) from
+/// `PaywallStoryStart` to `PaywallStoryRest`, the phone's screen with its
+/// stacked notification group; native cards then come into it. The cards,
+/// their number and their stacking are the still's `story-end.slots.json`,
+/// read from the bundle, so a new still and its file need no code. Under
+/// Reduce Motion the band is the rest frame with the cards already in it.
+/// Where the sheet asks for him, Caw climbs up over the front card's top edge
+/// (climb.riv) and stays there at that status.
 ///
 /// The stage is Caw alone at `HomeViewController.cawSide` on the plain field,
-/// while the sheet works or sets notifications up.
+/// while the sheet works or waits.
 final class PaywallHeroView: UIView {
     enum Mode: Equatable {
-        /// The art and the cards; Caw (the poster's) at this status.
-        case scene(CawStatus)
+        /// The film's scene and its cards; Caw over the front card at this status, or no Caw.
+        case scene(CawStatus?)
         /// Caw alone on the field.
         case stage(CawStatus)
     }
 
-    let variant: PaywallExperiment.Variant
-    private(set) var mode: Mode = .scene(.ready)
-    private let field = PosterField()
+    private(set) var mode: Mode = .scene(nil)
     /// The story's stills and move, laid on the slot stack.
     private let art = UIView()
     private let rest = UIImageView()
@@ -155,11 +151,10 @@ final class PaywallHeroView: UIView {
     private let movie = UIView()
     private let video = AVPlayerLayer()
     private var player: AVPlayer?
-    /// The words, the cards and the poster's Caw.
+    /// The cards and Caw over them.
     private let scene = UIView()
-    private let headline = UILabel()
     private let cards: [NotificationCard]
-    private let climber: CawView?
+    private let climber = CawView(status: .idle, ledge: .climb)
     private let stageCaw: CawView
     private var settledIn = false
     private var cardsShown = false
@@ -169,28 +164,18 @@ final class PaywallHeroView: UIView {
     static let storyRest = "PaywallStoryRest"
     static let storyStart = "PaywallStoryStart"
     static let storyMove = "paywall-story"
-    /// Caw's climb box on the poster (the poster's 120pt, a little smaller in a phone's band).
-    static let climbSide = 104.0
-    /// The poster's stack.
-    private static let posterCards = 3
+    /// Caw's climb box at most; less where the band has less room above the front card.
+    static let climbSide = 140.0
 
-    /// How many cards a hero needs: the story still's slots, or the poster's stack.
-    static var cardCount: Int { max(posterCards, StorySlots.bundled?.slots.count ?? 0) }
+    /// How many cards the hero needs: the story still's slots.
+    static var cardCount: Int { StorySlots.bundled?.slots.count ?? 0 }
 
     /// The story still's slots, front to back; `cards` holds the card for each.
     private let story: StorySlots?
 
-    init(variant: PaywallExperiment.Variant, banners: [HeroBanner]) {
-        self.variant = variant
-        let story = variant == .story
-        if story {
-            self.story = StorySlots.bundled
-            cards = zip(self.story?.slots ?? [], banners).map { NotificationCard($1, compact: true, front: $0.showsContent) }
-        } else {
-            self.story = nil
-            cards = banners.prefix(Self.posterCards).enumerated().map { NotificationCard($0.element, compact: false, front: $0.offset == 0) }
-        }
-        climber = story ? nil : CawView(status: .ready, ledge: .climb)
+    init(banners: [HeroBanner]) {
+        story = StorySlots.bundled
+        cards = zip(story?.slots ?? [], banners).map { NotificationCard($1, front: $0.showsContent) }
         stageCaw = CawView(status: .loading)
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
@@ -198,17 +183,15 @@ final class PaywallHeroView: UIView {
         layer.cornerRadius = Radius.radiusMd
         layer.cornerCurve = .continuous
         isAccessibilityElement = false
-        // The story is night on a lock screen; the poster is day on paper.
-        overrideUserInterfaceStyle = story ? .dark : .light
+        // Night on a lock screen, whatever the appearance.
+        overrideUserInterfaceStyle = .dark
+        backgroundColor = Palette.crowInk
 
-        field.poster = !story
-        addSubview(field)
         addSubview(art)
-        art.isHidden = !story
         rest.image = UIImage(named: Self.storyRest, in: .module, compatibleWith: nil)
         rest.contentMode = .scaleToFill
         art.addSubview(rest)
-        if story, !UIAccessibility.isReduceMotionEnabled,
+        if !UIAccessibility.isReduceMotionEnabled,
            let url = Bundle.module.url(forResource: Self.storyMove, withExtension: "mp4") {
             start.image = UIImage(named: Self.storyStart, in: .module, compatibleWith: nil)
             start.contentMode = .scaleToFill
@@ -225,23 +208,16 @@ final class PaywallHeroView: UIView {
 
         scene.translatesAutoresizingMaskIntoConstraints = false
         addSubview(scene)
-        // The poster's huge type; the story's words are all in the panel.
-        headline.font = TypeScale.typeTitle.font(30, weight: .semibold)
-        headline.textColor = Palette.crowInk
-        headline.numberOfLines = 3
-        headline.adjustsFontSizeToFitWidth = true
-        headline.minimumScaleFactor = 0.6
-        headline.isHidden = story
-        headline.isAccessibilityElement = false
-        headline.translatesAutoresizingMaskIntoConstraints = false
-        scene.addSubview(headline)
-        if let climber { scene.addSubview(climber) }
+        // Caw behind the front card: its top edge is his ledge.
+        climber.translatesAutoresizingMaskIntoConstraints = true
+        climber.present = false
+        scene.addSubview(climber)
         // The front card last: it stands in front of the others and of Caw's body.
         for card in cards.reversed() { scene.addSubview(card) }
         stageCaw.present = false
         addSubview(stageCaw)
 
-        var pinned = [
+        NSLayoutConstraint.activate([
             scene.leadingAnchor.constraint(equalTo: leadingAnchor),
             scene.trailingAnchor.constraint(equalTo: trailingAnchor),
             scene.topAnchor.constraint(equalTo: topAnchor),
@@ -250,35 +226,7 @@ final class PaywallHeroView: UIView {
             stageCaw.heightAnchor.constraint(equalToConstant: HomeViewController.cawSide),
             stageCaw.centerXAnchor.constraint(equalTo: centerXAnchor),
             stageCaw.centerYAnchor.constraint(equalTo: centerYAnchor),
-        ]
-        if let climber, let front = cards.first {
-            // The poster: the stack stands on the band's foot, the cards behind
-            // peeking under the front one as iOS stacks them; Caw's ledge is the
-            // front card's top edge, toward its trailing end.
-            pinned += [
-                // Under the sheet's ×, which stands at the band's top-leading corner.
-                headline.topAnchor.constraint(equalTo: topAnchor, constant: Space.space8 + Space.space3),
-                headline.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Space.space5),
-                headline.trailingAnchor.constraint(lessThanOrEqualTo: climber.leadingAnchor, constant: -Space.space2),
-                front.widthAnchor.constraint(equalTo: widthAnchor, multiplier: 0.84),
-                front.centerXAnchor.constraint(equalTo: centerXAnchor),
-                front.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -(Space.space4 + Self.stackStep * Double(cards.count - 1))),
-                climber.widthAnchor.constraint(equalToConstant: Self.climbSide),
-                climber.heightAnchor.constraint(equalToConstant: Self.climbSide * CawView.ledgeLine),
-                climber.bottomAnchor.constraint(equalTo: front.topAnchor, constant: 1),
-                climber.trailingAnchor.constraint(equalTo: front.trailingAnchor, constant: -Space.space3),
-            ]
-            for (index, card) in cards.enumerated().dropFirst() {
-                let inset = Self.stackInset * Double(index)
-                pinned += [
-                    card.leadingAnchor.constraint(equalTo: front.leadingAnchor, constant: inset),
-                    card.trailingAnchor.constraint(equalTo: front.trailingAnchor, constant: -inset),
-                    card.bottomAnchor.constraint(equalTo: front.bottomAnchor, constant: Self.stackStep * Double(index)),
-                    card.heightAnchor.constraint(equalTo: front.heightAnchor),
-                ]
-            }
-        }
-        NSLayoutConstraint.activate(pinned)
+        ])
     }
 
     @available(*, unavailable)
@@ -286,18 +234,8 @@ final class PaywallHeroView: UIView {
         fatalError("PaywallHeroView is built in code")
     }
 
-    /// The poster's stack: each card behind shows this much under the one in front, this much narrower a side.
-    private static let stackStep = 7.0
-    private static let stackInset = 10.0
-
-    var headlineText: String? {
-        get { headline.text }
-        set { headline.text = newValue }
-    }
-
     override func layoutSubviews() {
         super.layoutSubviews()
-        field.frame = bounds
         art.frame = bounds
         guard let story, let first = story.slots.first else { return }
         // The still is fitted so its cards fill the band's height less a
@@ -316,18 +254,26 @@ final class PaywallHeroView: UIView {
             card.bounds = CGRect(origin: .zero, size: CGSize(width: slot.width * scale, height: slot.height * scale))
             card.center = CGPoint(x: image.minX + slot.rect.midX * scale, y: image.minY + slot.rect.midY * scale)
             card.corner = story.radius * scale
+            // The part of the card that shows past the ones in front, in the card's own space.
+            card.visible = CGRect(x: (slot.visible.x - slot.full.x) * scale, y: (slot.visible.y - slot.full.y) * scale,
+                                  width: slot.visible.width * scale, height: slot.visible.height * scale)
+        }
+        // Caw stands on the front card's top edge toward its trailing end, as
+        // large as the room above it allows, so the band never crops him.
+        if let front = cards.first {
+            let ledge = front.frame.minY
+            let side = min(Self.climbSide, (ledge - Space.space2) / CawView.ledgeLine).rounded(.down)
+            climber.frame = CGRect(x: front.frame.maxX - Space.space3 - side, y: ledge + 1 - side * CawView.ledgeLine,
+                                   width: side, height: side * CawView.ledgeLine)
         }
     }
 
-    /// The scene arrives once the sheet is up: the story's move plays once and
-    /// the cards stack into its slots; the poster's cards drop in and Caw climbs
-    /// up after them. Reduce Motion puts everything at rest at once.
+    /// The scene arrives once the sheet is up: the move plays once and the
+    /// cards stack into its slots. Reduce Motion puts everything at rest at once.
     func settleIn() {
         guard !settledIn else { return }
         settledIn = true
-        let still = UIAccessibility.isReduceMotionEnabled
         for card in cards { card.alpha = 0 }
-        climber?.present = false
         if let player {
             ended = NotificationCenter.default.addObserver(forName: AVPlayerItem.didPlayToEndTimeNotification, object: player.currentItem, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated {
@@ -339,35 +285,38 @@ final class PaywallHeroView: UIView {
             player.play()
             return
         }
-        cardsIn(still: still)
+        cardsIn(still: UIAccessibility.isReduceMotionEnabled)
     }
 
-    /// The cards come in one after another, the app's stagger apart (the
-    /// poster's drop from above, back to front; the story's rise into their
-    /// group, back to front), then the poster's Caw climbs up over them.
+    /// The cards rise into their group one after another, the app's stagger
+    /// apart, back to front as notifications arrive; then Caw, where asked
+    /// for, climbs up over the front one.
     private func cardsIn(still: Bool) {
         cardsShown = true
         guard !still else {
             for card in cards { card.alpha = 1 }
-            climber?.present = true
+            climb()
             return
         }
-        // Both stacks come in back to front, as notifications arrive.
         let order = Array(cards.reversed())
         for (index, card) in order.enumerated() {
-            card.transform = CGAffineTransform(translationX: 0, y: variant == .poster ? -Space.space5 : Space.space2)
-            let drop = Motion.easeOut.animator(Motion.durPop) {
+            card.transform = CGAffineTransform(translationX: 0, y: Space.space2)
+            let rise = Motion.easeOut.animator(Motion.durPop) {
                 card.alpha = 1
                 card.transform = .identity
             }
             if index == order.count - 1 {
-                drop.addCompletion { [weak self] _ in
-                    guard let self, case .scene = mode else { return }
-                    climber?.present = true
-                }
+                rise.addCompletion { [weak self] _ in self?.climb() }
             }
-            drop.startAnimation(afterDelay: Motion.durStagger * Double(index + 1))
+            rise.startAnimation(afterDelay: Motion.durStagger * Double(index + 1))
         }
+    }
+
+    /// Caw over the front card, when the scene asks for him and its cards are in.
+    private func climb() {
+        guard case let .scene(status) = mode else { return }
+        if let status { climber.status = status }
+        climber.present = status != nil && cardsShown
     }
 
     /// Changes what the band shows: the scene and the stage cross-fade over
@@ -377,121 +326,62 @@ final class PaywallHeroView: UIView {
         let before = mode
         mode = next
         switch next {
-        case let .scene(status):
-            climber?.status = status
+        case .scene:
             stageCaw.present = false
+            climb()
             if case .stage = before {
-                if cardsShown { climber?.present = true }
                 Motion.easeOut.animator(Motion.durControl) { self.scene.alpha = 1; self.art.alpha = 1 }.startAnimation()
             }
         case let .stage(status):
             stageCaw.status = status
             stageCaw.present = true
             if case .scene = before {
-                climber?.present = false
+                climber.present = false
                 Motion.easeOut.animator(Motion.durControl) { self.scene.alpha = 0; self.art.alpha = 0 }.startAnimation()
             }
         }
     }
 
-    /// The front card's Approve flashes pressed (S1's beat); the story's
-    /// compact card presses as a whole.
+    /// The front card presses as a whole (S1's beat).
     func flashApprove() {
         cards.first?.flashApprove()
     }
 }
 
-/// The poster's field (DESIGN.md §4): Butter above an exact horizon, Ivory
-/// below, as two fills, and a 256×256 monochrome grain made here and tiled
-/// at 3%. Off, the story's flat Ink.
-private final class PosterField: UIView {
-    var poster = false {
-        didSet { setNeedsLayout() }
-    }
-
-    /// Where the horizon runs, as a share of the band's height.
-    static let horizon = 0.62
-    private let sky = CALayer()
-    private let ground = CALayer()
-    private let grain = CALayer()
-
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        isUserInteractionEnabled = false
-        for part in [sky, ground, grain] { layer.addSublayer(part) }
-        grain.opacity = 0.03
-        grain.backgroundColor = UIColor(patternImage: Self.grainTile).cgColor
-    }
-
-    @available(*, unavailable)
-    required init?(coder _: NSCoder) {
-        fatalError("PosterField is built in code")
-    }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        // The brand fills have no dark value: the same Butter, Ivory and Ink day and night.
-        if poster {
-            let line = (bounds.height * Self.horizon).rounded()
-            sky.frame = CGRect(x: 0, y: 0, width: bounds.width, height: line)
-            ground.frame = CGRect(x: 0, y: line, width: bounds.width, height: bounds.height - line)
-            sky.backgroundColor = Palette.spark.resolvedColor(with: traitCollection).cgColor
-            ground.backgroundColor = Palette.paper.resolvedColor(with: traitCollection).cgColor
-            grain.frame = bounds
-            grain.isHidden = false
-        } else {
-            sky.frame = bounds
-            sky.backgroundColor = Palette.crowInk.resolvedColor(with: traitCollection).cgColor
-            ground.frame = .zero
-            grain.isHidden = true
-        }
-        CATransaction.commit()
-    }
-
-    /// A 256×256 tile of grey noise from a fixed seed: the same grain on every launch.
-    static let grainTile: UIImage = {
-        let side = 256
-        var state: UInt64 = 0x9E37_79B9_7F4A_7C15
-        var pixels = [UInt8](repeating: 0, count: side * side)
-        for index in pixels.indices {
-            // SplitMix64.
-            state &+= 0x9E37_79B9_7F4A_7C15
-            var z = state
-            z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
-            z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
-            pixels[index] = UInt8(truncatingIfNeeded: z ^ (z >> 31))
-        }
-        let provider = CGDataProvider(data: Data(pixels) as CFData)!
-        let image = CGImage(width: side, height: side, bitsPerComponent: 8, bitsPerPixel: 8, bytesPerRow: side,
-                            space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.none.rawValue),
-                            provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent)!
-        return UIImage(cgImage: image, scale: 2, orientation: .up)
-    }()
-}
-
-/// A lock-screen notification drawn natively: the app's icon and name, the
-/// ask's title and first line, and on the poster's front card its two actions
-/// (push.ts `PUSH_CATEGORIES`: Approve and Open). The story's cards are
-/// compact, sized to the still's slots.
+/// A lock-screen notification drawn natively, sized to its slot in the
+/// still: the app's icon and name, the ask's title and first line. A card
+/// behind the front one shows its edge only, as iOS stacks a group.
+///
+/// Its words are laid out to the part of the slot that shows (`visible`):
+/// title and body take at most two lines each, as many as the height leaves
+/// under the app line, in the kit's smallest body size (`typeMeta`); text
+/// that still does not fit ends at a word, with an ellipsis.
 private final class NotificationCard: UIView {
-    private let approve = UILabel()
-    private let column = UIStackView()
-    private let compact: Bool
+    private let head = UIStackView()
+    private let title = KitLabel(TypeScale.typeMeta, ink: Palette.inkStrong, lines: 1)
+    private let body = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 1)
+    private let banner: HeroBanner
+    private let front: Bool
+    /// Where the words were last fitted, to fit them again only when it changes.
+    private var fitted: CGRect?
 
     var corner: Double = Radius.radiusPanel {
         didSet { layer.cornerRadius = corner }
     }
 
-    init(_ banner: HeroBanner, compact: Bool, front: Bool) {
-        self.compact = compact
+    /// The part of the card that shows, in its own space.
+    var visible: CGRect = .zero {
+        didSet { if visible != oldValue { setNeedsLayout() } }
+    }
+
+    init(_ banner: HeroBanner, front: Bool) {
+        self.banner = banner
+        self.front = front
         super.init(frame: .zero)
-        translatesAutoresizingMaskIntoConstraints = compact ? true : false
+        translatesAutoresizingMaskIntoConstraints = true
         backgroundColor = Palette.surfaceRaised
         layer.cornerRadius = corner
         layer.cornerCurve = .continuous
-        if !compact { boxShadow = Shadow.shadowDrawer }
 
         let icon = UIImageView(image: CawCoBrand.icon)
         icon.backgroundColor = Palette.spark
@@ -504,35 +394,17 @@ private final class NotificationCard: UIView {
         let now = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
         now.text = "now"
         now.setContentHuggingPriority(.required, for: .horizontal)
-        let head = UIStackView(arrangedSubviews: [icon, app, UIView(), now])
+        for part in [icon, app, UIView(), now] { head.addArrangedSubview(part) }
         head.spacing = Space.space2
         head.alignment = .center
-        let title = KitLabel(compact ? TypeScale.typeMeta : TypeScale.typeLabel, ink: Palette.inkStrong, lines: compact ? 1 : 2)
-        title.text = banner.title
-        let body = KitLabel(compact ? TypeScale.typeMeta : TypeScale.typeBody, ink: Palette.inkMuted, lines: 1)
-        body.text = banner.body
-        for part in [head, title, body] { column.addArrangedSubview(part) }
-        column.axis = .vertical
-        column.spacing = compact ? 0 : Space.space1
-        if !compact, front {
-            column.setCustomSpacing(Space.space2, after: body)
-            let actions = UIStackView(arrangedSubviews: [Self.action("Approve", into: approve), Self.action("Open", into: UILabel())])
-            actions.spacing = Space.space2
-            actions.distribution = .fillEqually
-            column.addArrangedSubview(actions)
+        for part in [head, title, body] {
+            part.isHidden = !front
+            part.translatesAutoresizingMaskIntoConstraints = true
+            addSubview(part)
         }
-        // A card behind the front one shows only its edge, as iOS stacks them.
-        column.isHidden = !front
-        column.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(column)
-        let inset = compact ? Space.space2 : Space.space3
         NSLayoutConstraint.activate([
-            icon.widthAnchor.constraint(equalToConstant: compact ? 14 : 18),
-            icon.heightAnchor.constraint(equalToConstant: compact ? 14 : 18),
-            column.leadingAnchor.constraint(equalTo: leadingAnchor, constant: inset),
-            column.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -inset),
-            compact ? column.centerYAnchor.constraint(equalTo: centerYAnchor) : column.topAnchor.constraint(equalTo: topAnchor, constant: inset),
-            compact ? column.topAnchor.constraint(greaterThanOrEqualTo: topAnchor) : column.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -inset),
+            icon.widthAnchor.constraint(equalToConstant: 14),
+            icon.heightAnchor.constraint(equalToConstant: 14),
         ])
         isAccessibilityElement = front
         accessibilityLabel = "\(banner.title). \(banner.body)"
@@ -543,32 +415,68 @@ private final class NotificationCard: UIView {
         fatalError("NotificationCard is built in code")
     }
 
-    private static func action(_ word: String, into label: UILabel) -> UIView {
-        label.text = word
-        label.font = TypeScale.typeLabel.font
-        label.textColor = Palette.inkStrong
-        label.textAlignment = .center
-        label.backgroundColor = Palette.surfaceFill
-        label.layer.cornerRadius = Radius.radiusSm
-        label.layer.cornerCurve = .continuous
-        label.clipsToBounds = true
-        label.translatesAutoresizingMaskIntoConstraints = false
-        label.heightAnchor.constraint(equalToConstant: Size.cBtnHXs + 2).isActive = true
-        return label
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        guard front, visible.width > 0 else { return }
+        let box = visible.insetBy(dx: Space.space3, dy: Space.space2)
+        guard box != fitted else { return }
+        fitted = box
+        let line = TypeScale.typeMeta.lineHeight
+        let headHeight = max(14, line).rounded(.up)
+        // Whole lines under the app line, shared out: the title first, each at most two.
+        let room = max(2, Int((box.height - headHeight) / line))
+        let titleLines = max(1, min(2, Self.lines(banner.title, width: box.width), room - 1))
+        let bodyLines = max(1, min(2, room - titleLines))
+        title.numberOfLines = titleLines
+        body.numberOfLines = bodyLines
+        title.text = Self.fit(banner.title, width: box.width, lines: titleLines)
+        body.text = Self.fit(banner.body, width: box.width, lines: bodyLines)
+        let titleHeight = (Double(titleLines) * line).rounded(.up)
+        let bodyHeight = (Double(max(1, min(bodyLines, Self.lines(body.text ?? "", width: box.width)))) * line).rounded(.up)
+        // The three blocks as one, centred in what shows.
+        let total = headHeight + titleHeight + bodyHeight
+        var y = box.minY + max(0, (box.height - total) / 2)
+        head.frame = CGRect(x: box.minX, y: y, width: box.width, height: headHeight)
+        y += headHeight
+        title.frame = CGRect(x: box.minX, y: y, width: box.width, height: titleHeight)
+        y += titleHeight
+        body.frame = CGRect(x: box.minX, y: y, width: box.width, height: bodyHeight)
     }
 
-    /// Approve pressed and let go; a compact card has no buttons, so it presses as a whole.
+    /// How many lines `text` takes at `width` in the card's type.
+    private static func lines(_ text: String, width: Double) -> Int {
+        Int((height(text, width: width) / TypeScale.typeMeta.lineHeight).rounded())
+    }
+
+    private static func height(_ text: String, width: Double) -> Double {
+        (text as NSString).boundingRect(with: CGSize(width: width, height: .greatestFiniteMagnitude), options: [.usesLineFragmentOrigin],
+                                        attributes: TypeScale.typeMeta.attributes(color: .label), context: nil).height
+    }
+
+    /// `text` whole if it fits `lines` at `width`, else cut after the last
+    /// word that still fits with an ellipsis.
+    private static func fit(_ text: String, width: Double, lines: Int) -> String {
+        let most = Double(lines) * TypeScale.typeMeta.lineHeight + 0.5
+        guard height(text, width: width) > most else { return text }
+        var words = text.split(separator: " ")
+        while words.count > 1 {
+            words.removeLast()
+            let cut = words.joined(separator: " ").trimmingCharacters(in: .punctuationCharacters) + "…"
+            if height(cut, width: width) <= most { return cut }
+        }
+        // One word wider than the card: the label cuts its tail.
+        return text
+    }
+
+    /// The card presses and lets go.
     func flashApprove() {
-        let target: UIView = compact ? self : approve
         let still = UIAccessibility.isReduceMotionEnabled
         let pressed = Motion.easeOut.animator(Motion.durControl) {
-            if !self.compact { self.approve.backgroundColor = Palette.surfaceFillStrong }
-            if !still { target.transform = CGAffineTransform(scaleX: Motion.pressScale, y: Motion.pressScale) }
+            if !still { self.transform = CGAffineTransform(scaleX: Motion.pressScale, y: Motion.pressScale) }
         }
         pressed.addCompletion { _ in
             Motion.easeOut.animator(Motion.durFade) {
-                if !self.compact { self.approve.backgroundColor = Palette.surfaceFill }
-                target.transform = .identity
+                self.transform = .identity
             }.startAnimation(afterDelay: Motion.durControl)
         }
         pressed.startAnimation(afterDelay: Motion.durPop)

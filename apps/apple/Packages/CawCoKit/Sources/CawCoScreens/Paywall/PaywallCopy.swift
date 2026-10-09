@@ -1,52 +1,25 @@
 import CawCoCore
 
-/// Every word of the paywall and notification setup, as the copywriter
-/// delivered them (paywall/final/COPY.md, 2026-10-08), one enum per screen.
-/// `price` is always StoreKit's `displayPrice`; a string that names it is nil
-/// until the price has arrived, and the place it fills stays blank.
+/// Every word of the paywall and notification setup (paywall/final/COPY.md,
+/// v3 2026-10-09), one enum per screen. `price` is always StoreKit's
+/// `displayPrice`; a string that names it is nil until the price has arrived,
+/// and the sentence says "pay once" until then (P1a): the charge is always said.
 enum PaywallCopy {
-    /// P1: the free week is still on offer. The variants differ only here and in the hero.
+    /// P1: the free week is still on offer.
     enum P1 {
-        struct Pitch {
-            let eyebrow: String
-            let headline: String
-            let subline: String
-            let ticks: [String]
+        static let headline = "Never leave an agent waiting."
+
+        /// T (App Review R10): the duration and the downstream charge, above the button.
+        static func terms(_ price: String?) -> String {
+            "7 days free, then \(price ?? "pay") once. No subscription."
         }
 
-        static func pitch(_ variant: PaywallExperiment.Variant) -> Pitch {
-            switch variant {
-            case .story:
-                Pitch(eyebrow: "CawCo Pro",
-                      headline: "Never leave an agent waiting.",
-                      subline: "Your whole fleet on one live board. When an agent stops to ask, approve or answer it from your phone, not an hour later.",
-                      ticks: ["Every machine and agent, one live board",
-                              "Approve or deny from the lock screen",
-                              "One purchase for iPhone, iPad and Mac"])
-            case .poster:
-                Pitch(eyebrow: "CawCo Pro",
-                      headline: "Keep every agent moving.",
-                      subline: "Every session on every machine, live on your phone. Approve from the lock screen.",
-                      ticks: ["See every agent, every machine, live",
-                              "Answer, steer and start sessions from anywhere",
-                              "Buy once for iPhone, iPad and Mac"])
-            }
-        }
-
-        static let timelineTitle = "The free week, day by day"
-
-        /// The three rows: their day and their words. Before the price arrives,
-        /// Day 7 says "Pay once" (P1a.price), so the charge is always disclosed.
-        static func timeline(price: String?) -> [(day: String, text: String)] {
-            [("Today", "Everything on. Nothing to pay."),
-             ("Day 6", "One notification from CawCo: tomorrow is the last free day. Turn it off any time under Notifications."),
-             ("Day 7", "The trial ends and the app locks. Pay \(spaced(price))once to keep it; nothing is charged on its own. The hub and web dashboard stay free.")]
-        }
-
-        /// P1.price, or P1a.price while `displayPrice` hasn't arrived.
-        static func price(_ price: String?) -> String {
-            "Pay \(spaced(price))once. No subscription, no auto-charge."
-        }
+        /// The free week's rows. Day 6 is the reminder's notice (R14); Day 7 says what is lost (R10).
+        static let timeline: [(day: String, text: String)] = [
+            ("Today", "Every agent on one live board. Approve from your phone."),
+            ("Day 6", "One reminder: tomorrow is the last free day."),
+            ("Day 7", "The app locks. Nothing is charged on its own."),
+        ]
 
         static let primary = "Start 7 days free"
         /// The one buying label everywhere; "Get Pro" alone while the price loads (P1a).
@@ -67,8 +40,8 @@ enum PaywallCopy {
     /// P1e: the week is over, or was already used on this Apple Account.
     enum P1e {
         static let headline = "Your 7 days are up."
-        static func body(_ price: String?) -> String {
-            "The app is locked. Your hub, machines and sessions are all still there. Pay \(spaced(price))once and the board comes back. No subscription."
+        static func terms(_ price: String?) -> String {
+            "The app is locked. Pay \(spaced(price))once to unlock it. No subscription."
         }
     }
 
@@ -82,12 +55,12 @@ enum PaywallCopy {
 
     /// P1a, P1b, P1c and a failed purchase.
     enum Store {
-        static let loading = "Getting prices from the App Store…"
+        static let loading = "Getting prices…"
         static func restricted(_ price: String?) -> String {
             "Purchases are off on this device (Screen Time or a management profile). Turn them on to start the free 7 days or pay \(spaced(price))once."
         }
 
-        static let unavailable = "The App Store didn't answer, so prices can't show."
+        static let unavailable = "The App Store didn't answer."
         static let tryAgain = "Try again"
         static let failed = "The App Store didn't complete that. Nothing was charged."
     }
