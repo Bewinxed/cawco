@@ -3543,6 +3543,22 @@ export const createWorkItems = ({
         : undefined;
     },
 
+    /**
+     * A restart cut the live item's turn and nothing resumed it, and nothing
+     * can (its workspace is gone, or nobody is left to hear it): the item
+     * fails with `reason`, and whoever hears its reports is told.
+     */
+    unresumed(row: InstanceRow, reason: string): void {
+      const item = itemOf(row);
+      if (!(item && LIVE.has(item.state))) {
+        return;
+      }
+      quiet.delete(item.id);
+      clearWait(item);
+      const failed = finish(item, { state: "failed", error: reason });
+      report(row, `${reason}${reportLine(failed)}`, true);
+    },
+
     /** Its session was stopped or archived while the work was live. */
     cancelled(row: InstanceRow): void {
       const item = itemOf(row);

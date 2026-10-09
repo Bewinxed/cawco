@@ -495,16 +495,21 @@ export class PiProfile {
     this.authReason = credential?.reason;
   }
 
+  /**
+   * pi's stored conversations: those run in `dir`, or without one every
+   * conversation on this machine, which is the catalog a register reads to
+   * tell a session it can resume from one that left nothing.
+   */
   async listSessions(dir?: string): Promise<NeutralSessionInfo[]> {
-    if (!dir) {
-      return [];
-    }
-    return (await SessionManager.list(dir)).map((info) => ({
+    const sessions = dir
+      ? await SessionManager.list(dir)
+      : await SessionManager.listAll();
+    return sessions.map((info) => ({
       sessionId: info.id,
       harness: "pi",
       createdAt: info.created.getTime(),
       lastModified: info.modified.getTime(),
-      cwd: info.cwd || dir,
+      ...(info.cwd || dir ? { cwd: info.cwd || dir } : {}),
       ...(info.firstMessage ? { firstPrompt: info.firstMessage } : {}),
       ...(info.name ? { customTitle: info.name } : {}),
     }));

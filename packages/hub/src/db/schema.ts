@@ -565,6 +565,17 @@ export const instances = sqliteTable("instances", {
    * transcript says so there (core `FRESH_START_LINE`).
    */
   freshStartAt: integer("fresh_start_at"),
+  /**
+   * When the hub first heard the session's turn under way (its frames, or its
+   * harness reading a send), on the hub's clock; null between turns. Cleared
+   * by the turn's `result`, which every harness ends every turn with, an
+   * interrupted one too. Older than `spawnedAt`: the turn ran in a launch
+   * that is gone and nothing ended it. Every start but a restore clears it,
+   * so that is a turn a restart cut, which the restored process is handed
+   * back once (server.ts `resumeCutTurn`). {@link TURN_UNRECORDED} on a row
+   * from before the hub kept it, until its next turn.
+   */
+  turnOpenAt: integer("turn_open_at"),
   keepAliveEnabled: integer("keep_alive", { mode: "boolean" })
     .notNull()
     .default(false),

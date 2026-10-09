@@ -68,7 +68,12 @@ export * from "./tools";
 // Transcripts: the hub folds each session's frames into blocks once
 // (TranscriptBuilder) and every client renders what it serves.
 export { TRANSCRIPT_PAGE, TranscriptBuilder } from "./transcript";
-export { COMPACT_SUMMARY_KIND, getToolGlance } from "./transcript-rules";
+export {
+  COMPACT_SUMMARY_KIND,
+  getToolGlance,
+  interruptLine,
+  transcriptUserText,
+} from "./transcript-rules";
 export * from "./transcript-types";
 // Usage, cost & limits (USAGE-SPEC.md §4). Pure types/math only.
 export * from "./usage";
@@ -1040,6 +1045,15 @@ export const RESTART_RESUMABLE =
 /** And what it records when there is nothing to go back to. */
 export const RESTART_LOST =
   "The agent restarted, and this session left nothing to resume from.";
+
+/**
+ * The error an OpenCode session's turn ends with when the server it ran in
+ * stopped before finishing it, read back on reattach from the reply the
+ * server kept unfinished. The turn did not end: it was cut, and the hub hands
+ * it back to the session once.
+ */
+export const SERVER_STOPPED_MID_TURN =
+  "The opencode server stopped before this turn finished; its reply is incomplete.";
 
 /**
  * `frames`: everything a session produces, flowing agent→hub→dashboard. The

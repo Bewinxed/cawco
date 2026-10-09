@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join, posix } from "node:path";
 import { generateCodeChallenge, generateCodeVerifier } from "@cawco/auth";
@@ -165,6 +166,7 @@ import {
   IMAGE_GENERATION_TIMEOUT_MS,
   INSPECT_CONFIG,
   INSTALL_SESSION_CREDENTIAL,
+  interruptLine,
   isEffortLevel,
   LIMITED_PROVIDERS,
   LIVE_CREDENTIAL_ENROLLMENT_REFUSAL,
@@ -208,6 +210,7 @@ import {
   reportMarker,
   ruleProblem,
   runDoing,
+  SERVER_STOPPED_MID_TURN,
   SESSION_DIR_READ,
   SUMMARISER_OUTPUT_RESERVE_TOKENS,
   SUMMARY_CAP_TOKENS,
@@ -216,6 +219,7 @@ import {
   TARGET_HEADROOM_TOKENS,
   TOOL_CATALOG,
   toolSpec,
+  transcriptUserText,
   UPDATE_CAWCO,
   undeliveredNotice,
   unshownAskMessage,
@@ -292,9 +296,11 @@ import type {
   InstanceKind,
   PlaceRow,
   ProjectRow,
+  PublicInstanceRow,
   SentMessageRow,
+  WorkItemRow,
 } from "./db";
-import { checkoutOf, hashHookMaterial } from "./db";
+import { checkoutOf, hashHookMaterial, TURN_UNRECORDED } from "./db";
 import type { LoginMove } from "./db/accounts";
 import { buildDecisionPage, type PageSources } from "./decision-page";
 import { delegateTypesRoutes, makeDelegateTypes } from "./delegate-types";
@@ -416,6 +422,7 @@ import {
 } from "./telegram";
 import {
   createTranscripts,
+  type HistoryFault,
   type HistoryRead,
   type TranscriptPayload,
 } from "./transcripts";
@@ -580,6 +587,72 @@ const ACTIVITY_TOUCH_MS = 60_000;
  * `sleeping`, which is a wake button away.
  */
 const RESTORE_MAX = 20;
+
+/** A clock time as a hand-back says it: `12:09 UTC`. */
+const utcClock = (at: Date): string => `${at.toISOString().slice(11, 16)} UTC`;
+
+/** What a hand-back asks of the session it goes to. */
+const CARRY_ON_CUT = "Carry on from where it stopped.";
+
+/** What a session restored after a restart is told of the turn that restart cut. */
+const restartedWords = (restartedAt: Date): string =>
+  `CawCo restarted this session's process at ${utcClock(restartedAt)} while your turn was running. ${CARRY_ON_CUT}`;
+
+/** What a delegate's session asleep on a cut turn is told when the hub wakes it to carry on. */
+const unresumedWords = (lastHeard: Date): string =>
+  `A restart cut your turn after ${utcClock(lastHeard)}, and nothing resumed it. ${CARRY_ON_CUT}`;
+
+/**
+ * Where a session's last turn stopped when it never finished, by its
+ * harness's own transcript: the session's last user or assistant entry is
+ * not the assistant entry its model ended a turn with (`turnEnd`: Claude's
+ * `end_turn`, opencode's finished `stop`, pi's `stop`) or a failure written
+ * in the model's place, nor Claude's own line for a turn its reader stopped,
+ * and no failed or stopped turn's result follows it (pi and opencode store
+ * those as one). A prompt or a tool result nothing answered, or an answer cut
+ * mid-way. Nothing for a transcript whose last turn ended, or holds none.
+ *
+ * Read for a session from before the hub kept the turn it had open
+ * ({@link TURN_UNRECORDED}).
+ */
+const cutEntry = (
+  entries: readonly SessionMessage[]
+): { key: string; at: Date } | undefined => {
+  for (let at = entries.length - 1; at >= 0; at -= 1) {
+    const entry = entries[at];
+    if (entry.type === "system") {
+      if ((entry.message as { type?: string } | null)?.type === "result") {
+        return undefined;
+      }
+      continue;
+    }
+    if (entry.type === "assistant" && (entry.turnEnd || entry.error)) {
+      return undefined;
+    }
+    if (
+      entry.type === "user" &&
+      interruptLine(transcriptUserText(entry.message))
+    ) {
+      return undefined;
+    }
+    const written = entry.timestamp ? new Date(entry.timestamp) : undefined;
+    return written && !Number.isNaN(written.getTime())
+      ? { key: `entry:${entry.uuid}`, at: written }
+      : undefined;
+  }
+  return undefined;
+};
+
+/**
+ * A uuid `name` alone decides (the version-5 layout, over SHA-256): a send
+ * made again under it is the same send, which the hub hands over once.
+ */
+const uuidOf = (name: string): string => {
+  const hex = createHash("sha256").update(name).digest("hex");
+  // The RFC 4122 variant: the nibble's top two bits are `10`.
+  const variant = "89ab".charAt(Number.parseInt(hex.charAt(16), 16) % 4);
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-5${hex.slice(13, 16)}-${variant}${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+};
 
 /**
  * How long a `starting` row is given before a heartbeat that does not list it
@@ -3405,6 +3478,28 @@ export const createServer = (
   const noteInterrupt = (instanceId: string): void => {
     unanswered.delete(instanceId);
     workItems.interrupted(instanceId);
+  };
+
+  /**
+   * Sessions whose open turn this launch is already written down for
+   * ({@link DbShape.openTurn}): one write a turn, not one a frame. A launch's
+   * `init` and a turn's `result` forget it.
+   */
+  const turnsWritten = new Set<string>();
+
+  /** A turn of the session is under way: its frames, or its harness reading a send. */
+  const turnUnderWay = (instanceId: string): void => {
+    if (turnsWritten.has(instanceId)) {
+      return;
+    }
+    turnsWritten.add(instanceId);
+    db.openTurn(instanceId, Date.now());
+  };
+
+  /** The session's turn ended with its result: nothing of it is left to hand back. */
+  const turnOver = (instanceId: string): void => {
+    turnsWritten.delete(instanceId);
+    db.closeTurn(instanceId);
   };
 
   /**
@@ -9011,6 +9106,8 @@ export const createServer = (
       permissionMode: settled.permissionMode,
       model: row.model ?? undefined,
       canDelegate: row.canDelegate ?? undefined,
+      // The turn its last launch had open is handed back once this one is up.
+      keepTurn: true,
     });
     sendFrame(agent, {
       verb: "spawn",
@@ -12349,6 +12446,247 @@ export const createServer = (
         },
       },
     } satisfies Envelope<SendPayload>);
+  };
+
+  /**
+   * The send that hands a cut turn back, by a uuid its turn decides: one
+   * made again for the same turn (a second register, a hub that died after
+   * making it) is the same send, which {@link deliverSend} hands over once.
+   */
+  const handTurnBack = (
+    row: { id: string; machineId: string },
+    turn: string,
+    content: string
+  ): SentMessageRow =>
+    deliverSend({
+      verb: "send",
+      machineId: row.machineId,
+      instanceId: row.id,
+      payload: {
+        instanceId: row.id,
+        message: {
+          type: "user",
+          uuid: uuidOf(`${row.id}\u0000${turn}`),
+          message: { role: "user", content },
+          parent_tool_use_id: null,
+          origin: { kind: "system", name: "restore" },
+        },
+      },
+    } satisfies Envelope<SendPayload>);
+
+  /**
+   * The turn of `row` a restart cut and nothing has taken up since, by when
+   * it was first heard ({@link instances.turnOpenAt}); nothing when there is
+   * none, or when something else answers for the session's next turn.
+   * `serverStopped`: its harness said the server its turn ran in stopped
+   * before finishing it ({@link SERVER_STOPPED_MID_TURN}), on a session it
+   * reattached to the server running now; that turn is cut whenever it was
+   * heard. Otherwise, what rules it out:
+   * - its turn ran in this launch, or ended: not older than `spawnedAt`;
+   * - the hub never recorded it ({@link TURN_UNRECORDED}): a restore of a
+   *   session from before it did hands nothing back;
+   * And either way:
+   * - the session is being ended, or is a summariser or a workflow step
+   *   (a continuation and the workflow runtime run those);
+   * - it has no process up (`running` or `starting`);
+   * - the at-limit controller has it, or a continuation of it is under way,
+   *   or it moves account at its turn's end: those send their own word;
+   * - a send to it is still pending, owed or handed: that send is its turn
+   *   (a keep-alive ping is no turn of its own);
+   * - an ask of it is parked: its process is waiting on that ask.
+   */
+  const cutTurnOf = (
+    row: PublicInstanceRow,
+    serverStopped = false
+  ): number | undefined => {
+    const owned = db.ownedInstance(row.id, row.machineId);
+    const open = owned?.turnOpenAt ?? null;
+    const launched = row.spawnedAt?.getTime();
+    if (
+      open === null ||
+      !(
+        serverStopped ||
+        (open !== TURN_UNRECORDED && launched !== undefined && open < launched)
+      )
+    ) {
+      return undefined;
+    }
+    const ruledOut =
+      !!owned?.endIntent ||
+      row.kind === "summariser" ||
+      row.workflowStepId !== null ||
+      !(row.status === "running" || row.status === "starting") ||
+      atLimit.handling(row.id) ||
+      relaunchAtTurnEnd.has(row.id) ||
+      db
+        .continuationRows()
+        .some(
+          (job) => job.sourceInstanceId === row.id && !SETTLED.has(job.stage)
+        ) ||
+      awaitsSend(row.id) ||
+      pending.list().some((ask) => ask.instanceId === row.id);
+    return ruledOut ? undefined : open;
+  };
+
+  /** Whether a send to the session is still pending, owed or handed, other than a keep-alive ping: that send is its next turn. */
+  const awaitsSend = (instanceId: string): boolean =>
+    db.sendsIn(instanceId, ["pending"]).some((send) => !isKeepAlive(send.body));
+
+  /**
+   * Hands a session restored after a restart the turn that restart cut, once
+   * its process is up: one message, through the send path every message
+   * takes, so it waits at the hub when the session cannot take it yet. The
+   * hand-back is the session's open turn from then on: a restart before it is
+   * read cuts it in its turn, and a register or a hub that sees the same cut
+   * turn again sends nothing ({@link handTurnBack}).
+   *
+   * `serverStopped`: when its harness said the server its turn ran in had
+   * stopped ({@link cutTurnOf}). A turn so cut that is not handed back ends
+   * there, as the turn that result closes.
+   */
+  const resumeCutTurn = (instanceId: string, serverStopped?: Date): void => {
+    const [row] = db.getInstancesByIds([instanceId]);
+    const cut = row ? cutTurnOf(row, serverStopped !== undefined) : undefined;
+    const restartedAt = serverStopped ?? row?.spawnedAt;
+    if (!(row && cut !== undefined && restartedAt)) {
+      if (serverStopped) {
+        turnOver(instanceId);
+      }
+      return;
+    }
+    const sent = handTurnBack(row, String(cut), restartedWords(restartedAt));
+    if (sent.state === "failed") {
+      turnOver(row.id);
+      console.warn(
+        `[hub] ${row.id}: the turn a restart cut was not handed back: ${sent.reason ?? "the send failed"}`
+      );
+      return;
+    }
+    if (db.handBackTurn(row.id, cut, Date.now())) {
+      console.log(
+        `[hub] ${row.id}: handed back the turn a restart cut (heard ${new Date(cut).toISOString()})`
+      );
+    }
+  };
+
+  /** Machines whose work items asleep on a cut turn this hub has settled since it started. */
+  const itemsSettledOn = new Set<string>();
+
+  /**
+   * Once a hub start, at each machine's first register: every running work
+   * item whose session on it has no process, was not restored just now, and
+   * whose last turn never ended — work a restart cut that no restore reached
+   * (older than the restore's horizon, past its cap, or from before the hub
+   * kept the turn it cut). Its session is woken to carry on, once, when its
+   * workspace is still there and someone still hears its reports; otherwise
+   * the item fails, and they hear why ({@link settleCutItem}).
+   */
+  const settleCutItems = async (
+    machineId: string,
+    restored: ReadonlySet<string>
+  ): Promise<void> => {
+    if (itemsSettledOn.has(machineId)) {
+      return;
+    }
+    itemsSettledOn.add(machineId);
+    for (const item of db.liveWorkItems()) {
+      const [row] = db.getInstancesByIds([item.instanceId]);
+      if (
+        !row?.sessionId ||
+        row.machineId !== machineId ||
+        restored.has(row.id) ||
+        row.status === "running" ||
+        row.status === "starting" ||
+        db.ownedInstance(row.id, row.machineId)?.endIntent ||
+        item.state !== "running" ||
+        item.checkingSince !== null ||
+        awaitsSend(row.id)
+      ) {
+        continue;
+      }
+      // biome-ignore lint/performance/noAwaitInLoops: one transcript read off the machine at a time, and only for a session from before the hub kept its turn
+      const cut = await stoppedTurnOf(row);
+      if (cut) {
+        settleCutItem(item, row, cut);
+      }
+    }
+  };
+
+  /**
+   * Where a session with no process left its last turn when nothing ended
+   * it: the turn the hub heard open and never heard end
+   * ({@link instances.turnOpenAt}), or, for a session from before the hub
+   * kept that ({@link TURN_UNRECORDED}), its harness's transcript's word
+   * ({@link cutEntry}). Nothing when its turn ended, or when the transcript
+   * could not be read, which is said.
+   */
+  const stoppedTurnOf = async (
+    row: PublicInstanceRow
+  ): Promise<{ key: string; at: Date } | undefined> => {
+    const open = db.ownedInstance(row.id, row.machineId)?.turnOpenAt ?? null;
+    if (open === null) {
+      return undefined;
+    }
+    if (open !== TURN_UNRECORDED) {
+      return { key: `open:${open}`, at: new Date(open) };
+    }
+    const read = await readHistory(row.id).catch(
+      (error: unknown): HistoryFault => ({
+        fault: "failed",
+        message: error instanceof Error ? error.message : String(error),
+      })
+    );
+    if ("fault" in read) {
+      console.warn(
+        `[hub] ${row.id}: whether its last turn ended could not be read: ${read.message}`
+      );
+      return undefined;
+    }
+    const cut = cutEntry(read.entries);
+    // Its transcript says the turn ended: the row says so from now on, and
+    // no later start reads it again.
+    if (!cut) {
+      db.closeTurn(row.id);
+    }
+    return cut;
+  };
+
+  /** One work item asleep on a cut turn: carried on when it can be, else failed ({@link settleCutItems}). */
+  const settleCutItem = (
+    item: WorkItemRow,
+    row: PublicInstanceRow,
+    cut: { key: string; at: Date }
+  ): void => {
+    const [workspace] = db.workspacesNamed(item.workspaceId);
+    const reportees = workItems.reportees(row);
+    const heard = reportees.some(
+      (reportee) =>
+        reportee.status === "running" ||
+        reportee.status === "starting" ||
+        (reportee.status === "sleeping" && reportee.sessionId !== null)
+    );
+    if (workspace?.state === "active" && heard) {
+      const sent = handTurnBack(
+        row,
+        `asleep:${cut.key}`,
+        unresumedWords(cut.at)
+      );
+      console.log(
+        `[hub] ${row.id}: woke its item ${item.id} on the turn a restart cut after ${cut.at.toISOString()}: ${sent.state}${sent.reason ? ` (${sent.reason})` : ""}`
+      );
+      return;
+    }
+    const why =
+      workspace?.state === "active"
+        ? "nobody is left to hear its reports"
+        : `its workspace ${item.workspaceId} is gone`;
+    workItems.unresumed(
+      row,
+      `Its session's turn was cut by a restart after ${utcClock(cut.at)} and was not resumed: ${why}.`
+    );
+    console.log(
+      `[hub] ${row.id}: failed its item ${item.id}, cut by a restart: ${why} (reportees: ${reportees.map((one) => `${one.id} ${one.status}`).join(", ") || "none"})`
+    );
   };
 
   /**
@@ -17107,6 +17445,10 @@ export const createServer = (
                 }
               }
               const restoredIds = new Set(revivable.map(({ row }) => row.id));
+              // Every session this register put back to a process, or handed
+              // to the OpenCode server that outlived the agent: none is left
+              // for the settle of work asleep on a cut turn (settleCutItems).
+              const reached = new Set(restoredIds);
               const named = new Set(
                 db
                   .continuationRows()
@@ -17149,6 +17491,7 @@ export const createServer = (
                       row,
                       row.updatedAt.getTime() >= cutoff ? "busy" : "inspect"
                     );
+                    reached.add(row.id);
                     restoreBatch += 1;
                     if (restoreBatch % 8 === 0) {
                       // biome-ignore lint/performance/noAwaitInLoops: history inspection must not monopolize the hub event loop.
@@ -17211,6 +17554,15 @@ export const createServer = (
               // after the spawn it waits on.
               awaitingMachine.delete(message.machineId);
               releaseOwed({ machineId: message.machineId });
+              // Behind what it was owed, which is its next turn when it has
+              // any: a process a hub restored and then died before it handed
+              // the cut turn back is up now, and hears of it here.
+              for (const id of peekInstances(message.payload)) {
+                resumeCutTurn(id);
+              }
+              // The settle reads transcripts off the machine; register must
+              // not stall on it.
+              detach(settleCutItems(message.machineId, reached), "cut items");
               // Reconnect retries overdue stored schedules right after the register ACK.
               detach(keepAliveScheduler.wake(), "keepalive wake");
               workflowRuntime.recover(message.machineId);
@@ -17271,6 +17623,12 @@ export const createServer = (
                 // gone, and the same goes for anything it was holding.
                 forgetPending(row.id, UNREAD.ended);
                 escalateRoutedAsks(row.id);
+              }
+              // A restored process up before it said a word (Claude's CLI
+              // speaks its `init` only once it has input) is handed back the
+              // turn a restart cut on the beat that lists it.
+              for (const id of beat.promoted) {
+                resumeCutTurn(id);
               }
               if (
                 (message.payload as HeartbeatPayload).custodyComplete ===
@@ -17753,6 +18111,15 @@ export const createServer = (
                   if (claimed) {
                     recordTurnUsage(claimed, neutral, false);
                   }
+                  if (neutral.errors?.includes(SERVER_STOPPED_MID_TURN)) {
+                    // Cut, not ended: the server it ran in stopped. Handed
+                    // back once this result is taken in like any other.
+                    const cutId = message.instanceId;
+                    const stoppedAt = new Date();
+                    lifetime.after(0, () => resumeCutTurn(cutId, stoppedAt));
+                  } else {
+                    turnOver(message.instanceId);
+                  }
                   // Claimed once: a lead's turn books its cost to its thread.
                   if (typeof neutral.total_cost_usd === "number") {
                     caw.turnCost(message.instanceId, neutral.total_cost_usd);
@@ -17782,6 +18149,10 @@ export const createServer = (
                       workItems.started(live);
                     }
                     heldSessions.delete(message.instanceId);
+                    // A launch's own word: what it has open is written anew,
+                    // and a turn a restart cut goes back to it now it is up.
+                    turnsWritten.delete(message.instanceId);
+                    resumeCutTurn(message.instanceId);
                   }
                   publishInstances(message.machineId);
                 }
@@ -17805,6 +18176,10 @@ export const createServer = (
                 };
                 const signal = peekSendSignal(frame);
                 if (signal) {
+                  // Its harness taking up a send is its turn starting.
+                  if (signal.kind === "read") {
+                    turnUnderWay(message.instanceId);
+                  }
                   takeSendSignal(message.instanceId, signal);
                   break;
                 }
@@ -17936,6 +18311,13 @@ export const createServer = (
                   }
                   publishUsage(message.machineId);
                   break;
+                }
+                if (
+                  frame.message.type === "assistant" ||
+                  frame.message.type === "user" ||
+                  frame.message.type === "stream_event"
+                ) {
+                  turnUnderWay(message.instanceId);
                 }
                 observeTurn(message.instanceId, frame);
               }

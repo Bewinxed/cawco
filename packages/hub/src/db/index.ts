@@ -187,6 +187,7 @@ export type PublicInstanceRow = Omit<
   | "owedSpawn"
   | "owedAt"
   | "freshStartAt"
+  | "turnOpenAt"
 >;
 export type BoardInstanceRow = Omit<PublicInstanceRow, "tooling">;
 export type PlaceRow = typeof projectPlaces.$inferSelect;
@@ -407,6 +408,8 @@ export interface DbShape {
   readonly clearOpenRouterConnection: () => void;
   /** Closes the connection: the hub's lifetime's last release (lifetime.ts). */
   readonly close: () => void;
+  /** The session's turn ended. */
+  readonly closeTurn: (id: string) => void;
   /** A receipt for the current row's decision; deletes are finalized here. */
   readonly confirmInstanceEnd: (id: string, reason?: string) => void;
   readonly continuationRow: (id: string) => ContinuationRow | undefined;
@@ -558,6 +561,12 @@ export interface DbShape {
     parentInstanceId: string,
     group: string
   ) => WorkItemRow[];
+  /**
+   * The cut turn `from` was handed back at `at`, which is now the session's
+   * open turn. False when the row no longer holds `from`: another hand-back
+   * or a turn took its place.
+   */
+  readonly handBackTurn: (id: string, from: number, at: number) => boolean;
   readonly hiddenSession: (id: string) => boolean;
   /**
    * A pending send no process took, owed again whole (`envelope`) until the
@@ -831,9 +840,20 @@ export interface DbShape {
     threadId?: string;
     /** The account placement chose; a row that has one keeps it. */
     accountId?: string;
+    /**
+     * A restore of the session's last launch: the turn that launch had open
+     * ({@link instances.turnOpenAt}) stays, to be handed back. Every other
+     * start is someone's own, and ends what was open.
+     */
+    keepTurn?: boolean;
   }) => void;
   /** The offers nobody has answered yet. */
   readonly openProjectOffers: () => ProjectOfferRow[];
+  /**
+   * The session's turn is under way, heard at `at`: kept when no turn of
+   * this launch is ({@link instances.turnOpenAt}). Returns whether it moved.
+   */
+  readonly openTurn: (id: string, at: number) => boolean;
   /** The sends still owed to their machine ({@link sentMessages.owed}), pending, in the order accepted: a session's, or a machine's. */
   readonly owedSends: (
     of: { instanceId: string } | { machineId: string }
@@ -1718,6 +1738,13 @@ const hookOf = (row: {
 /** A hub place's machine: the hub itself, which is no machine of the fleet. */
 export const HUB_PLACE_MACHINE = "hub";
 
+/**
+ * `instances.turn_open_at` of a session from before the hub kept the turn it
+ * had open (migration `turn_open_at`): whether that turn ended is its harness's
+ * transcript's word, not the hub's.
+ */
+export const TURN_UNRECORDED = -1;
+
 /** Where a place stands in its project's list: the primary checkout, other checkouts, the hub's folder, workspaces. */
 const placeRank = (place: PlaceRow): number => {
   if (place.isPrimary) {
@@ -1823,6 +1850,7 @@ const make = async (path: string): Promise<DbShape> => {
     owedSpawn: _owedSpawn,
     owedAt: _owedAt,
     freshStartAt: _freshStartAt,
+    turnOpenAt: _turnOpenAt,
     ...publicColumns
   } = getTableColumns(instances);
   const { tooling: _tooling, ...boardColumns } = publicColumns;
@@ -2795,6 +2823,7 @@ const make = async (path: string): Promise<DbShape> => {
       delegateType,
       threadId,
       accountId,
+      keepTurn = false,
       // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: opens (or reuses) the one live row for a conversation across every optional field a spawn can carry — see the "one conversation, one live row" invariant below.
     }) => {
       const now = new Date();
@@ -2910,6 +2939,7 @@ const make = async (path: string): Promise<DbShape> => {
             // daemon reconnect instant.
             status: "starting",
             spawnedAt: now,
+            ...(keepTurn ? {} : { turnOpenAt: null }),
             endIntent: null,
             endConfirmedAt: null,
             endReason: null,
@@ -5102,6 +5132,34 @@ const make = async (path: string): Promise<DbShape> => {
         .where(eq(instances.id, id))
         .run();
     },
+    openTurn: (id, at) =>
+      db
+        .update(instances)
+        .set({ turnOpenAt: at })
+        .where(
+          and(
+            eq(instances.id, id),
+            or(
+              isNull(instances.turnOpenAt),
+              sql`${instances.turnOpenAt} < coalesce(${instances.spawnedAt}, 0)`
+            )
+          )
+        )
+        .returning({ id: instances.id })
+        .all().length === 1,
+    closeTurn: (id) => {
+      db.update(instances)
+        .set({ turnOpenAt: null })
+        .where(and(eq(instances.id, id), isNotNull(instances.turnOpenAt)))
+        .run();
+    },
+    handBackTurn: (id, from, at) =>
+      db
+        .update(instances)
+        .set({ turnOpenAt: at })
+        .where(and(eq(instances.id, id), eq(instances.turnOpenAt, from)))
+        .returning({ id: instances.id })
+        .all().length === 1,
     freshStartOf: (id) =>
       db
         .select({ at: instances.freshStartAt })

@@ -77,6 +77,7 @@ import {
   PROVIDER_RETRY,
   REPEATED_FAILURE,
   REPEATED_FAILURE_LIMIT,
+  SERVER_STOPPED_MID_TURN,
   VERIFY_SESSION_CREDENTIAL,
 } from "@cawco/core";
 import type { RestartHold } from "@cawco/core/binary-updates";
@@ -3441,14 +3442,15 @@ export class OpencodeSession implements HarnessSession {
     } else if (last.time.completed) {
       replay("session.idle", { sessionID: this.sessionId });
     } else {
+      // Cut, not ended: the hub hands this turn back on hearing it, so a
+      // recovery handle stays to take it up rather than going to sleep.
+      this.#sleepAfterRecovery = false;
       this.#ctx.busy(false);
       this.#busy = false;
       this.#flushResult({
         subtype: "error_during_execution",
         is_error: true,
-        errors: [
-          "The opencode server stopped before this turn finished; its reply is incomplete.",
-        ],
+        errors: [SERVER_STOPPED_MID_TURN],
       });
       this.#drainQueue();
     }
@@ -8279,12 +8281,14 @@ export function toTranscript(
         });
       }
     }
-    // A turn that failed keeps its error on the assistant message opencode
-    // stored for it. Read back as the result frame the live stream closed that
-    // turn with, a reload draws the same failure line instead of a question
-    // that was never answered. An abort is the reader's own stop, not a failure.
+    // A turn that failed or was stopped keeps its error on the assistant
+    // message opencode stored for it. Read back as the result frame the live
+    // stream closed that turn with, a reload draws the same line instead of a
+    // question that was never answered, and the turn reads as ended rather
+    // than cut. An abort is the reader's own stop, not a failure.
     const failure = (info as AssistantMessage).error;
-    if (failure && failure.name !== "MessageAbortedError") {
+    if (failure) {
+      const aborted = failure.name === "MessageAbortedError";
       entries.push({
         type: "system",
         uuid: `${info.id}:error`,
@@ -8293,9 +8297,13 @@ export function toTranscript(
           type: "result",
           uuid: `${info.id}:error`,
           session_id: sessionKey,
-          subtype: "error_during_execution",
-          is_error: true,
-          errors: [errorText(failure)],
+          ...(aborted
+            ? { subtype: "aborted", is_error: false }
+            : {
+                subtype: "error_during_execution",
+                is_error: true,
+                errors: [errorText(failure)],
+              }),
         },
         parent_tool_use_id: null,
         parent_agent_id: null,

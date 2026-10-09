@@ -650,6 +650,18 @@ export const createAtLimit = (ports: AtLimitPorts) => {
   plan();
 
   return {
+    /**
+     * Whether `instanceId` is in this controller's hands now: held until a
+     * reset, looked at again while its refused turn settles, or being moved
+     * or continued. What it is told next is this controller's to send.
+     */
+    handling(instanceId: string): boolean {
+      return (
+        acting.has(instanceId) ||
+        settling.has(instanceId) ||
+        db.atLimit.hold(instanceId) !== undefined
+      );
+    },
     /** Whether a refused turn of `instanceId` is this controller's to answer. */
     manages(instanceId: string): boolean {
       const row = rowOf(instanceId);
