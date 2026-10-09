@@ -2936,6 +2936,9 @@ const make = async (path: string): Promise<DbShape> => {
           delegateTypeProject: delegateType?.projectId,
           threadId,
           accountId,
+          // A fresh conversation has spent nothing; a resumed one's spend so
+          // far is unknown until its first result says it.
+          modelUsageSeen: cleanSessionId ? null : {},
           // `starting`, not `running` — this row is written when a spawn is
           // *issued*, and issuing a spawn is not evidence that a process exists.
           // Writing `running` here is the original sin behind the 178-vs-42
@@ -2983,6 +2986,8 @@ const make = async (path: string): Promise<DbShape> => {
             endAttempts: 0,
             lastError: null,
             ...(cleanSessionId ? { sessionId: cleanSessionId } : {}),
+            // A start with no conversation to resume begins one from nothing.
+            ...(cleanSessionId ? {} : { modelUsageSeen: {} }),
             ...(harness ? { harness } : {}),
             ...(projectId ? { projectId } : {}),
             ...(parentInstanceId ? { parentInstanceId } : {}),

@@ -796,6 +796,56 @@ export interface NeutralStreamMessage {
   uuid?: string;
 }
 
+/**
+ * What one model spent in one turn. `cacheWrite` is every cache write;
+ * `cacheWrite1h` the part of it written with a 1-hour lifetime, absent when
+ * the harness does not split it.
+ */
+export interface ModelTurnUsage {
+  cacheRead: number;
+  cacheWrite: number;
+  cacheWrite1h?: number;
+  input: number;
+  model: string;
+  output: number;
+}
+
+/**
+ * One model's entry in a Claude result's `modelUsage`: what the session's
+ * process has spent on it so far, restored from the transcript on resume.
+ */
+export interface ClaudeModelUsage {
+  cacheCreationInputTokens: number;
+  cacheReadInputTokens: number;
+  costUSD: number;
+  inputTokens: number;
+  outputTokens: number;
+}
+
+/** A turn's requests summed by model; a model that spent nothing is left out. */
+export const usageByModel = (
+  requests: Iterable<ModelTurnUsage>
+): ModelTurnUsage[] => {
+  const byModel = new Map<string, ModelTurnUsage>();
+  for (const usage of requests) {
+    const held = byModel.get(usage.model);
+    if (!held) {
+      byModel.set(usage.model, { ...usage });
+      continue;
+    }
+    held.input += usage.input;
+    held.output += usage.output;
+    held.cacheRead += usage.cacheRead;
+    held.cacheWrite += usage.cacheWrite;
+    if (usage.cacheWrite1h !== undefined) {
+      held.cacheWrite1h = (held.cacheWrite1h ?? 0) + usage.cacheWrite1h;
+    }
+  }
+  return [...byModel.values()].filter(
+    (one) => one.input + one.output + one.cacheRead + one.cacheWrite > 0
+  );
+};
+
 export interface NeutralResultMessage {
   /** Prompt-cache tokens the turn read from / wrote to, when the harness reports them. */
   cache?: { read: number; write: number; write5m?: number; write1h?: number };
@@ -828,6 +878,12 @@ export interface NeutralResultMessage {
   /** When the harness stored what it closes on ({@link NeutralAssistantMessage.timestamp}). */
   timestamp?: string;
   total_cost_usd?: number;
+  /**
+   * OpenCode and pi: the turn's tokens by model, summed over its assistant
+   * messages and any compaction it ran. Claude's are read off the change in
+   * its cumulative `modelUsage` by the hub.
+   */
+  turnUsage?: ModelTurnUsage[];
   type: "result";
   uuid?: string;
 }

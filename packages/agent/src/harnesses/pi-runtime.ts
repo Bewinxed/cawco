@@ -1,5 +1,6 @@
 /** Host-only pi turns. This module is absent from the agent process graph. */
 import type {
+  ModelTurnUsage,
   PermissionResult,
   SentMessage,
   SpawnPayload,
@@ -15,6 +16,7 @@ import {
   CONTROL_SUPPORTED_MODELS,
   INSTALL_SESSION_CREDENTIAL,
   MESSAGES_READ,
+  usageByModel,
   VERIFY_SESSION_CREDENTIAL,
 } from "@cawco/core";
 import {
@@ -22,6 +24,7 @@ import {
   readPolicy,
   type Verdict,
 } from "@cawco/core/workspace-judge";
+import type { AssistantMessage, Usage } from "@earendil-works/pi-ai";
 import {
   type AgentSession,
   type AgentSessionEvent,
@@ -198,6 +201,24 @@ class PiSession implements HarnessSession {
   #busy = false;
   readonly #unread: string[] = [];
   #reading: string | undefined;
+  /** What the turn's requests spent so far: its answers' and any compaction's. */
+  #turnUsage: ModelTurnUsage[] = [];
+
+  /** One request's pi-ai `Usage` on `model` (`provider/id`). */
+  #spent(model: string, usage: Usage | undefined): void {
+    if (usage) {
+      this.#turnUsage.push({
+        model,
+        input: usage.input,
+        output: usage.output,
+        cacheRead: usage.cacheRead,
+        cacheWrite: usage.cacheWrite,
+        ...(usage.cacheWrite1h === undefined
+          ? {}
+          : { cacheWrite1h: usage.cacheWrite1h }),
+      });
+    }
+  }
 
   #leaf(): { uuid: string; timestamp: string } {
     const entry = this.#session.sessionManager.getLeafEntry() as {
@@ -296,6 +317,8 @@ class PiSession implements HarnessSession {
           );
         }
         if (role === "assistant") {
+          const answer = event.message as AssistantMessage;
+          this.#spent(`${answer.provider}/${answer.model}`, answer.usage);
           queueMicrotask(() => {
             const blocks = toBlocks(content);
             if (blocks.length) {
@@ -333,6 +356,11 @@ class PiSession implements HarnessSession {
       case "compaction_end": {
         if (!event.result) {
           break;
+        }
+        // pi summarizes with the session's model (`const model = this.model`
+        // in AgentSession.compact and its auto-compaction).
+        if (this.#session.model) {
+          this.#spent(piModelValue(this.#session.model), event.result.usage);
         }
         const leaf = this.#leaf();
         this.#ctx.frame({
@@ -398,12 +426,15 @@ class PiSession implements HarnessSession {
         const failed = errors.length > 0;
         const leaf = this.#leaf();
         const context = this.#contextTokens();
+        const turnUsage = usageByModel(this.#turnUsage);
+        this.#turnUsage = [];
         this.#ctx.frame({
           type: "result",
           uuid: leaf.uuid,
           timestamp: leaf.timestamp,
           subtype: failed ? "error_during_execution" : "success",
           is_error: failed,
+          turnUsage,
           ...(failed ? { errors } : {}),
           ...(context === undefined ? {} : { contextTokens: context }),
         });

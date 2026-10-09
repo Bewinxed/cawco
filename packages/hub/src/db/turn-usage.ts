@@ -1,6 +1,7 @@
+import type { ClaudeModelUsage } from "@cawco/core";
 import { and, asc, eq, gte, lte } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
-import { turnUsage } from "./schema";
+import { instances, turnUsage } from "./schema";
 
 /** Two weeks: two weekly windows, enough to measure a rate across a reset. */
 export const TURN_USAGE_RETENTION_MS = 14 * 24 * 60 * 60 * 1000;
@@ -16,13 +17,30 @@ export interface TurnUsageDb {
   }) => TurnUsageRow[];
   /** Drops turns older than the retention; how many went. */
   readonly prune: (now?: number) => number;
-  /** A claimed turn's usage; a second put of the same turn is ignored. */
-  readonly put: (turn: TurnUsageRow) => void;
+  /**
+   * A claimed turn's rows, and the Claude session's new cumulative baseline,
+   * together; a second put of the same turn's rows is ignored.
+   */
+  readonly put: (
+    instanceId: string,
+    rows: TurnUsageRow[],
+    seen?: Record<string, ClaudeModelUsage>
+  ) => void;
 }
 
 export const turnUsageDb = (db: BunSQLiteDatabase): TurnUsageDb => ({
-  put: (turn) => {
-    db.insert(turnUsage).values(turn).onConflictDoNothing().run();
+  put: (instanceId, rows, seen) => {
+    db.transaction((tx) => {
+      if (rows.length > 0) {
+        tx.insert(turnUsage).values(rows).onConflictDoNothing().run();
+      }
+      if (seen) {
+        tx.update(instances)
+          .set({ modelUsageSeen: seen })
+          .where(eq(instances.id, instanceId))
+          .run();
+      }
+    });
   },
   list: ({ accountId, since, until }) =>
     db

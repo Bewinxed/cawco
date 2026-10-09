@@ -47,6 +47,7 @@ import type {
   HarnessReport,
   McpServerStatus,
   ModelInfo,
+  ModelTurnUsage,
   NeutralAssistantBlock,
   NeutralContentBlock,
   NeutralSessionInfo,
@@ -89,6 +90,7 @@ import {
   REPEATED_FAILURE,
   REPEATED_FAILURE_LIMIT,
   SERVER_STOPPED_MID_TURN,
+  usageByModel,
   VERIFY_SESSION_CREDENTIAL,
 } from "@cawco/core";
 import type { RestartHold } from "@cawco/core/binary-updates";
@@ -2122,6 +2124,8 @@ export class OpencodeSession implements HarnessSession {
   /** A compaction is under way: the session has said so and not yet said otherwise. */
   #compacting: boolean;
   readonly #costs = new Map<string, number>();
+  /** The turn's assistant messages' tokens, by message id: each update carries the message's whole count. */
+  readonly #turnTokens = new Map<string, ModelTurnUsage>();
   #costBase = 0;
   readonly #pending = new Map<string, PendingMessage>();
   /** The reasoning part whose live block is open, so it is closed exactly once. */
@@ -2439,6 +2443,15 @@ export class OpencodeSession implements HarnessSession {
               : {}),
           };
           this.#costs.set(info.id, info.cost);
+          // OpenCode's `input` leaves out the cached tokens (see below), so it
+          // is the uncached input; a summary message is a compaction's spend.
+          this.#turnTokens.set(info.id, {
+            model: `${info.providerID}/${info.modelID}`,
+            input: info.tokens.input,
+            output: info.tokens.output,
+            cacheRead: info.tokens.cache.read,
+            cacheWrite: info.tokens.cache.write,
+          });
           this.#lastTokens = info.tokens;
           // The tokens this message's request sent: OpenCode's `input` leaves
           // out the cached ones (session/session.ts 361-375), so they are
@@ -3360,6 +3373,7 @@ export class OpencodeSession implements HarnessSession {
       is_error: result?.is_error ?? false,
       ...(result?.errors ? { errors: result.errors } : {}),
       total_cost_usd: this.#costBase + turnCost,
+      turnUsage: usageByModel(this.#turnTokens.values()),
       cache: {
         read: this.#lastTokens.cache.read,
         write: this.#lastTokens.cache.write,
@@ -3370,6 +3384,7 @@ export class OpencodeSession implements HarnessSession {
     });
     this.#costBase += turnCost;
     this.#costs.clear();
+    this.#turnTokens.clear();
     for (const messageID of flushed) {
       this.#roles.delete(messageID);
       this.#summaries.delete(messageID);

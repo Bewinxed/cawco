@@ -12505,7 +12505,7 @@ export const createServer = (
 
   /** A claimed turn's tokens, on the account the session runs on. */
   const recordTurnUsage = (
-    session: { accountId: string | null; id: string },
+    session: Parameters<typeof turnUsageOf>[0],
     result: NeutralResultMessage,
     keepAlive: boolean
   ) => {
@@ -12518,9 +12518,7 @@ export const createServer = (
       keepAlive,
       result.timestamp ? Date.parse(result.timestamp) : Date.now()
     );
-    if (turn) {
-      db.turnUsage.put(turn);
-    }
+    db.turnUsage.put(session.id, turn.rows, turn.seen);
   };
   const pruneTurnUsage = () => {
     const gone = db.turnUsage.prune();

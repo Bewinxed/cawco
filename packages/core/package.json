@@ -66,6 +66,7 @@
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "scripts": {
+    "pricing": "bun scripts/pricing-snapshot.ts",
     "tools": "bun scripts/tool-presentation.ts",
     "tools:check": "bun scripts/tool-presentation.ts --check",
     "typecheck": "tsc --noEmit"

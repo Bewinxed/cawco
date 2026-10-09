@@ -9,6 +9,7 @@ import type {
   AuthState,
   BuildInfo,
   CapPeriod,
+  ClaudeModelUsage,
   ContinuationJob,
   DelegateAskStatus,
   DelegateEventKind,
@@ -597,6 +598,16 @@ export const instances = sqliteTable("instances", {
   }>(),
   /** In-flight ping identity survives a hub or agent restart. */
   keepAliveTurn: text("keep_alive_turn"),
+  /**
+   * Claude: the cumulative `modelUsage` of the session's last result, which a
+   * turn's spend is the change from. Claude Code restores it on resume from
+   * the transcript's cost-state, so it runs across processes. `{}` for a
+   * conversation started fresh; null while unknown (a resumed or forked start
+   * this hub has seen no result of), until a result sets it.
+   */
+  modelUsageSeen: text("model_usage_seen", { mode: "json" }).$type<
+    Record<string, ClaudeModelUsage>
+  >(),
   workflowRunId: text("workflow_run_id"),
   workflowStepId: text("workflow_step_id"),
   /**
@@ -1711,10 +1722,11 @@ export const usageLimitHistory = sqliteTable(
 );
 
 /**
- * The tokens each completed turn spent, on the account it ran on: laid beside
- * {@link usageLimitHistory}, how much a percent of an account's window costs
- * is measurable. One row per turn the hub claims (`completed_turns`), keep-alive
- * pings included, since they spend the same window. Kept 14 days.
+ * The tokens each completed turn spent, by model, on the account it ran on:
+ * laid beside {@link usageLimitHistory}, how much a percent of an account's
+ * window costs is measurable. Rows for every turn the hub claims
+ * (`completed_turns`), compactions and keep-alive pings included, since they
+ * spend the same window. Kept 14 days.
  */
 export const turnUsage = sqliteTable(
   "turn_usage",
@@ -1722,22 +1734,30 @@ export const turnUsage = sqliteTable(
     instanceId: text("instance_id").notNull(),
     /** The harness's result identity, the one `completed_turns` claims. */
     resultId: text("result_id").notNull(),
+    /** As the harness names it: Claude's id, `provider/model` for OpenCode and pi. */
+    model: text("model").notNull(),
     /** Null: the machine's own sign-in, which is no account. */
     accountId: text("account_id"),
-    /** The turn's main model as its harness named it; null when it named none. */
-    model: text("model"),
+    /** Uncached input. */
     inputTokens: integer("input_tokens").notNull(),
     cacheReadTokens: integer("cache_read_tokens").notNull(),
-    cacheWrite5mTokens: integer("cache_write_5m_tokens").notNull(),
-    cacheWrite1hTokens: integer("cache_write_1h_tokens").notNull(),
+    /** Every cache write, whatever its lifetime. */
+    cacheWriteTokens: integer("cache_write_tokens").notNull(),
+    /** The part of {@link cacheWriteTokens} written for an hour; null when the harness does not split it. */
+    cacheWrite1hTokens: integer("cache_write_1h_tokens"),
     outputTokens: integer("output_tokens").notNull(),
-    /** Priced from the model's list rates; null when the model has none. */
+    /**
+     * Claude: the change in its `modelUsage[model].costUSD`, Claude Code's own
+     * price. OpenCode and pi: the model's list rates. Null when unpriced.
+     */
     costUsd: real("cost_usd"),
     keepAlive: integer("keep_alive", { mode: "boolean" }).notNull(),
     at: timestamp("at").notNull(),
   },
   (table) => [
-    primaryKey({ columns: [table.instanceId, table.resultId] }),
+    primaryKey({
+      columns: [table.instanceId, table.resultId, table.model],
+    }),
     index("turn_usage_account_at_idx").on(table.accountId, table.at),
     index("turn_usage_at_idx").on(table.at),
   ]

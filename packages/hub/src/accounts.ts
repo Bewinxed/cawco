@@ -480,6 +480,13 @@ export const noteProviderReading = (
  * A `rate_limit_event` from a session on `accountId`: the account's windows
  * move, its overage state with them, and a window that refused a request
  * benches the account (for that model, or for every one) until it resets.
+ *
+ * Every session on the account reports, each from the headers of its own
+ * latest response, so events arrive out of order: a session whose last
+ * response came earlier says a lower percent after another said a higher
+ * one. Within one window (same kind, scope and reset) use only accumulates
+ * until the reset, so a lower percent there is an older header, and the
+ * window keeps the higher reading.
  */
 export const noteRateLimit = (
   db: DbShape,
@@ -488,10 +495,23 @@ export const noteRateLimit = (
   now = Date.now()
 ): void => {
   const observed = observedReading(info);
+  const held =
+    db.accounts.readings().find((one) => one.accountId === accountId)
+      ?.windows ?? [];
+  const newer = observed.windows.filter(
+    (window) =>
+      !held.some(
+        (prior) =>
+          prior.kind === window.kind &&
+          prior.scopeLabel === window.scopeLabel &&
+          prior.resetsAt === window.resetsAt &&
+          prior.percent > window.percent
+      )
+  );
   db.accounts.putReading(
     accountId,
     {
-      windows: observed.windows,
+      windows: newer,
       ...(observed.overage ? { overage: observed.overage } : {}),
     },
     now

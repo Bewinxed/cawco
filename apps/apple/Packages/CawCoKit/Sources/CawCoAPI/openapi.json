@@ -15736,6 +15736,9 @@
                 "type": "string",
                 "format": "date-time"
               },
+              "modelUsageSeen": {
+                "type": "object"
+              },
               "workflowRunId": {
                 "type": [
                   "null",
@@ -16032,6 +16035,9 @@
                 "lastRequestAt": {
                   "type": "string",
                   "format": "date-time"
+                },
+                "modelUsageSeen": {
+                  "type": "object"
                 },
                 "workflowRunId": {
                   "type": [
@@ -31889,6 +31895,13 @@
           "total_cost_usd": {
             "type": "number"
           },
+          "turnUsage": {
+            "description": "OpenCode and pi: the turn's tokens by model, summed over its assistant\nmessages and any compaction it ran. Claude's are read off the change in\nits cumulative `modelUsage` by the hub.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ModelTurnUsage"
+            }
+          },
           "type": {
             "type": "string",
             "enum": [
@@ -31903,6 +31916,37 @@
           "is_error",
           "subtype",
           "type"
+        ]
+      },
+      "ModelTurnUsage": {
+        "description": "What one model spent in one turn. `cacheWrite` is every cache write;\n`cacheWrite1h` the part of it written with a 1-hour lifetime, absent when\nthe harness does not split it.",
+        "type": "object",
+        "properties": {
+          "cacheRead": {
+            "type": "number"
+          },
+          "cacheWrite": {
+            "type": "number"
+          },
+          "cacheWrite1h": {
+            "type": "number"
+          },
+          "input": {
+            "type": "number"
+          },
+          "model": {
+            "type": "string"
+          },
+          "output": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "cacheRead",
+          "cacheWrite",
+          "input",
+          "model",
+          "output"
         ]
       },
       "NeutralSystemMessage": {

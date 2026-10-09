@@ -23,7 +23,7 @@ interface SnapshotModel {
   output: number;
 }
 
-interface PricingSnapshot {
+export interface PricingSnapshot {
   generatedAt?: string;
   models: Record<string, SnapshotModel>;
   source?: string;
@@ -199,8 +199,16 @@ export async function refreshPricing(): Promise<number> {
   return RATES.size;
 }
 
-/** Same providers and key scheme the bundled snapshot generator used. */
-function filterModelsDev(raw: unknown): PricingSnapshot {
+/**
+ * models.dev's catalogs as rates keyed by model id: Anthropic's, OpenCode Zen's,
+ * and OpenCode Go's under `opencode-go/`. The bundled snapshot is this
+ * function's output (`bun run pricing` in packages/core). An id two catalogs
+ * both name keeps the first's rates: Anthropic's list price for a `claude-*`
+ * id, never Zen's resale of it ("Claude Sonnet 5.5 … $0.10 / MTok" cache
+ * hits, https://platform.claude.com/docs/en/about-claude/pricing, where Zen
+ * lists $0.20).
+ */
+export function filterModelsDev(raw: unknown): PricingSnapshot {
   interface Provider {
     models?: Record<
       string,
@@ -225,7 +233,12 @@ function filterModelsDev(raw: unknown): PricingSnapshot {
     const prefix = provider === "opencode-go" ? "opencode-go/" : "";
     for (const [id, m] of Object.entries(catalog.models)) {
       const { cost } = m;
-      if (!cost || cost.input === undefined || cost.output === undefined) {
+      if (
+        models[prefix + id] ||
+        !cost ||
+        cost.input === undefined ||
+        cost.output === undefined
+      ) {
         continue;
       }
       const entry: SnapshotModel = { input: cost.input, output: cost.output };
