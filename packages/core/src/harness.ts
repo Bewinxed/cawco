@@ -973,11 +973,12 @@ export interface HarnessReport {
   harness: HarnessKind;
   installed: boolean;
   /**
-   * pi only: the model each name a session may be started with resolves to,
-   * by pi's own resolver (`resolveCliModel`) with this machine's accounts
-   * counted as signed in: `default` and every bare model id pi offers, each
-   * to `provider/id`. A name pi cannot resolve is absent. The hub reads the
-   * provider, and so the account, of a session started on one of them here.
+   * pi only: the model each bare model id pi offers resolves to, by pi's own
+   * resolver (`resolveCliModel`) with this machine's accounts counted as
+   * signed in, as `provider/id`. A name pi cannot resolve is absent. The hub
+   * reads the provider, and so the account, of a session started on one of
+   * them here. `default` depends on the session's directory and is asked
+   * per start ({@link CONTROL_PI_DEFAULT_MODEL}).
    */
   modelNames?: Record<string, string>;
   /**

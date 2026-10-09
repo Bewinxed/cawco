@@ -3,6 +3,7 @@ import { homedir, platform } from "node:os";
 import { join } from "node:path";
 import {
   type AccountIdentity,
+  type AccountJoinedOn,
   type HomeLogin,
   type HomeLoginMoved,
   sameIdentity,
@@ -16,8 +17,10 @@ import {
   keychainUser,
   kindOf,
   linkUserLayer,
+  removeAccountDir,
 } from "./accounts";
 import { inFleetQueue, writeAtomic } from "./fleet";
+import { forgetAccount } from "./login";
 
 /**
  * The one-time move of this machine's own Claude Code login (`~/.claude`)
@@ -80,6 +83,8 @@ interface Store {
   heldBy: (account: string) => Promise<boolean>;
   /** Claude Code's own name for it. */
   name: string;
+  /** An account dir's credential; undefined when this store has none for it. */
+  read: (account: string) => Promise<string | undefined>;
   /** The default dir's credential; undefined when this store has none. */
   readHome: () => Promise<string | undefined>;
   remove: (account: string) => Promise<void>;
@@ -151,6 +156,7 @@ const deleteItem = async (service: string): Promise<void> => {
  */
 const keychain: Store = {
   name: "the macOS Keychain",
+  read: (account) => findItem(keychainService(account)),
   readHome: () => findItem(HOME_SERVICE),
   heldBy: async (account) =>
     (await findItem(keychainService(account))) !== undefined,
@@ -185,6 +191,7 @@ const readText = async (path: string): Promise<string | undefined> => {
 /** `<dir>/.credentials.json`, owner-only, as Claude Code keeps it. */
 const credentialsFile: Store = {
   name: "the credentials file",
+  read: (account) => readText(join(accountConfigDir(account), CREDENTIALS)),
   readHome: () => readText(join(homeDir(), CREDENTIALS)),
   heldBy: async (account) =>
     (await readText(join(accountConfigDir(account), CREDENTIALS))) !==
@@ -357,3 +364,105 @@ export const moveHomeLogin = (
     log("moved; Claude Code's own login on this machine is signed out");
     return { store: store.name };
   });
+
+/**
+ * A sign-in made into `from`'s dir came out as `into`, an account that
+ * already is `expected` ({@link CONTROL_JOIN_ACCOUNT_LOGIN}). When `into`'s
+ * dir is already signed in here as `expected`, `from`'s login is a second
+ * grant of the same person: Claude Code signs it out and its dir goes. Else
+ * the login moves from `from`'s dir into `into`'s the way the home login
+ * moves ({@link moveHomeLogin}): written into `into`'s dir, checked to
+ * answer as `expected`, and only then deleted from `from`'s, whose dir then
+ * goes; any failure before that removes what was written.
+ */
+export const joinAccountLogin = (
+  from: string,
+  into: string,
+  expected: AccountIdentity
+): Promise<AccountJoinedOn> =>
+  inFleetQueue(async () => {
+    const signedAs = await accountAnswersAs(from);
+    if (!(signedAs && sameIdentity(signedAs, expected))) {
+      throw new Error(
+        `The sign-in's dir on this machine answers as ${signedAs?.email ?? "nobody"}, not ${expected.email}.`
+      );
+    }
+    const there = await accountAnswersAs(into);
+    if (there) {
+      if (!sameIdentity(there, expected)) {
+        throw new Error(
+          `${into}'s dir on this machine is signed in as ${there.email}, not ${expected.email}.`
+        );
+      }
+      await forgetAccount(from);
+      log(
+        `${from} joined ${into}: ${into}'s own login kept, ${from}'s signed out`
+      );
+      return { outcome: "kept" as const };
+    }
+    return await moveAccountLogin(from, into, expected, await takeLogin(from));
+  });
+
+/** An account dir's login, read from the store Claude Code keeps it in, with its `oauthAccount`. */
+const takeLogin = async (account: string): Promise<Taken> => {
+  const stores =
+    platform() === "darwin" ? [keychain, credentialsFile] : [credentialsFile];
+  for (const store of stores) {
+    // biome-ignore lint/performance/noAwaitInLoops: Claude Code's own order: the Keychain first, the file as its fallback
+    const secret = await store.read(account);
+    if (secret) {
+      const oauthAccount = (await readJson(accountClaudeJson(account)))
+        ?.oauthAccount;
+      if (oauthAccount === undefined) {
+        throw new Error(
+          `${account}'s .claude.json names no oauthAccount for the login.`
+        );
+      }
+      return { oauthAccount, secret, store };
+    }
+  }
+  throw new Error(
+    `${account}'s dir answers as signed in, but its login is in none of ${stores.map((one) => one.name).join(" or ")}.`
+  );
+};
+
+/** Moves `from`'s login into `into`'s dir, checked to answer as `expected` before `from`'s copy goes. */
+const moveAccountLogin = async (
+  from: string,
+  into: string,
+  expected: AccountIdentity,
+  { oauthAccount, secret, store }: Taken
+): Promise<AccountJoinedOn> => {
+  await linkUserLayer(into);
+  const intoJson = accountClaudeJson(into);
+  const prior = await priorOf(intoJson);
+  const undo = async (why: string): Promise<never> => {
+    await store.remove(into);
+    if (prior) {
+      await writeAtomic(intoJson, prior);
+    } else {
+      await rm(intoJson, { force: true });
+    }
+    throw new Error(`${why} The login stays in ${from}'s dir.`);
+  };
+  try {
+    await store.write(into, secret);
+    await putOauthAccount(intoJson, oauthAccount);
+  } catch (error) {
+    return undo(`Writing ${into}'s copy failed: ${said(error)}.`);
+  }
+  const answered = await accountAnswersAs(into);
+  if (!(answered && sameIdentity(answered, expected))) {
+    return undo(
+      `${into}'s dir answered as ${answered?.email ?? "nobody"}, not ${expected.email}.`
+    );
+  }
+  // The login is `into`'s now: `from`'s copy goes without a sign-out,
+  // which would end the grant both copies are of.
+  await store.remove(from);
+  await removeAccountDir(from);
+  log(
+    `${from} joined ${into}: its login is ${into}'s here now, in ${store.name}`
+  );
+  return { outcome: "moved" as const };
+};

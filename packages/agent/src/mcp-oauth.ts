@@ -245,6 +245,47 @@ const freshRoute = async (accountId: string): Promise<Response> => {
   }
 };
 
+/** What hears an OpenCode session's request refused at its account's limit; set by the daemon. */
+let limitSink: ((sessionID: string, error: string) => void) | undefined;
+
+export const setOpencodeLimitSink = (
+  sink: (sessionID: string, error: string) => void
+): void => {
+  limitSink = sink;
+};
+
+/**
+ * `POST /opencode/limit` `{ sessionID, error }`: OpenCode's CawCo plugin saw
+ * the provider refuse a session's request at its account's usage limit. The
+ * agent ends that turn on it at once; the plugin waits for nothing.
+ */
+const limitRoute = async (request: Request): Promise<Response> => {
+  const body = (await request.json().catch(() => ({}))) as {
+    error?: unknown;
+    sessionID?: unknown;
+  };
+  if (typeof body.sessionID !== "string" || typeof body.error !== "string") {
+    return new Response("Name the session and its refusal.", { status: 400 });
+  }
+  limitSink?.(body.sessionID, body.error);
+  return new Response(null, { status: 204 });
+};
+
+/** The account routes the machine's harnesses call: a refresh, a limit refusal. Undefined for any other path. */
+const accountRoute = (
+  url: URL,
+  request: Request
+): Promise<Response> | undefined => {
+  if (request.method !== "POST") {
+    return undefined;
+  }
+  const fresh = url.pathname.match(ACCOUNT_FRESH_PATH);
+  if (fresh?.[1]) {
+    return freshRoute(fresh[1]);
+  }
+  return url.pathname === "/opencode/limit" ? limitRoute(request) : undefined;
+};
+
 export const startMcpGateway = async (hubUrl: () => string) => {
   // The one setting every session's config names too: a different port on a
   // live machine leaves its running sessions dialling the old one.
@@ -259,9 +300,9 @@ export const startMcpGateway = async (hubUrl: () => string) => {
         if (url.pathname === "/restart" || url.pathname === "/restart/fence") {
           return await restartRoute(request);
         }
-        const fresh = url.pathname.match(ACCOUNT_FRESH_PATH);
-        if (fresh?.[1] && request.method === "POST") {
-          return await freshRoute(fresh[1]);
+        const accounts = accountRoute(url, request);
+        if (accounts) {
+          return await accounts;
         }
         if (
           !(

@@ -22,6 +22,7 @@ import {
   CONTROL_BEGIN_PROVIDER_LOGIN,
   CONTROL_COMPLETE_PROVIDER_LOGIN,
   CONTROL_FORGET_PROVIDER_ACCOUNT,
+  CONTROL_JOIN_PROVIDER_ACCOUNT,
   CONTROL_MOVE_HOME_CREDENTIAL,
   CONTROL_READ_HOME_CREDENTIALS,
   CONTROL_RUN_COMMAND,
@@ -65,7 +66,11 @@ import { PI_AUTH_CHECK_INTERVAL_MS } from "./harnesses/pi-auth";
 import { cache as transcriptCache } from "./harnesses/transcript-cache";
 import { KeeperWatchdog, machineKeeper } from "./keeper-watchdog";
 import { endOrphanedSignIns, endSignIns } from "./login";
-import { setAccountFreshener, startMcpGateway } from "./mcp-oauth";
+import {
+  setAccountFreshener,
+  setOpencodeLimitSink,
+  startMcpGateway,
+} from "./mcp-oauth";
 import { servingPreviews } from "./preview";
 import { parseProcId, SESSION_PROC_KINDS } from "./proc-id";
 import {
@@ -75,6 +80,7 @@ import {
   forgetProviderAccount,
   freshen,
   freshenAll,
+  joinProviderAccount,
   moveHomeCredential,
   piProviders,
   providerAccountReports,
@@ -188,6 +194,17 @@ const registerProviderAccounts = (supervisor: SessionSupervisor): void => {
   );
   supervisor.registerDaemonFunction(CONTROL_READ_HOME_CREDENTIALS, () =>
     readHomeCredentials()
+  );
+  supervisor.registerDaemonFunction(
+    CONTROL_JOIN_PROVIDER_ACCOUNT,
+    (from, into, expected) =>
+      changing(() =>
+        joinProviderAccount(
+          from as string,
+          into as string,
+          expected as AccountIdentity
+        )
+      )()
   );
   supervisor.registerDaemonFunction(
     CONTROL_MOVE_HOME_CREDENTIAL,
@@ -1583,6 +1600,9 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
     // OpenCode's plugin ask for, and OpenCode's markers for them.
     registerProviderAccounts(supervisor);
     setAccountFreshener(freshen);
+    setOpencodeLimitSink((sessionID, error) =>
+      opencodeAdapter()?.limitRefused(sessionID, error)
+    );
     yield* Effect.promise(() => syncOpencodeMarkers().catch(() => false));
     yield* Effect.forkScoped(
       Effect.repeat(

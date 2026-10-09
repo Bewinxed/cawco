@@ -13121,6 +13121,14 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "cwd",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "operationId": "getApiAccountsPlacement",
@@ -13151,6 +13159,16 @@
               "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "getApiAccountsPlacement 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -13292,6 +13310,16 @@
           },
           "404": {
             "description": "postApiAccountsByIdMachinesByMachineIdSigninComplete 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiAccountsByIdMachinesByMachineIdSigninComplete 409",
             "content": {
               "text/plain": {
                 "schema": {
@@ -17817,6 +17845,10 @@
               "identity": {
                 "description": "Null when the provider's credential names nobody.",
                 "$ref": "#/components/schemas/AccountIdentity"
+              },
+              "joined": {
+                "$ref": "#/components/schemas/AccountJoined",
+                "description": "Signed in as an account that already exists: it is that account's now."
               },
               "plan": {
                 "type": [
@@ -25161,7 +25193,7 @@
           },
           "modelNames": {
             "type": "object",
-            "description": "pi only: the model each name a session may be started with resolves to,\nby pi's own resolver (`resolveCliModel`) with this machine's accounts\ncounted as signed in: `default` and every bare model id pi offers, each\nto `provider/id`. A name pi cannot resolve is absent. The hub reads the\nprovider, and so the account, of a session started on one of them here."
+            "description": "pi only: the model each bare model id pi offers resolves to, by pi's own\nresolver (`resolveCliModel`) with this machine's accounts counted as\nsigned in, as `provider/id`. A name pi cannot resolve is absent. The hub\nreads the provider, and so the account, of a session started on one of\nthem here. `default` depends on the session's directory and is asked\nper start ({@link CONTROL_PI_DEFAULT_MODEL})."
           },
           "models": {
             "description": "The models this harness offers on this machine.\n\nIt rides the machine's report for the same reason {@link * HarnessCapabilities.permissionModes} does, and not the {@link * CONTROL_SUPPORTED_MODELS} control beside it: the catalog is a property of\nthe installed CLI and the account behind it, identical for every session on\nthe machine and knowable with none running. Asking a session for it made a\nfleet-wide fact inherit one session's lifecycle — a machine with nothing\nrunning had no catalog at all, so its model picker was empty and no session\ncould be named or shown an effort scale.\n\nAbsent (not empty) from a machine whose agent predates the field, and from\na harness that could not be probed; empty means it was asked and offered\nnothing.",
@@ -29155,6 +29187,10 @@
         "description": "How a Claude sign-in ended, and what the dir's Claude Code said once it\nhad. `mismatch`: the dir signed in as someone other than the account\nalready is, so the machine logged that dir out again.",
         "type": "object",
         "properties": {
+          "joined": {
+            "$ref": "#/components/schemas/AccountJoined",
+            "description": "Signed in as an account that already exists: it is that account's now."
+          },
           "probe": {
             "$ref": "#/components/schemas/AccountProbe",
             "description": "What Claude Code's own initialize response says about a config dir: who it\nis signed in as (absent when nobody is), its plan, and the models it\noffers. Read by a probe (a session that never takes a turn) and by every\nsession as it starts."
@@ -29165,6 +29201,22 @@
         },
         "required": [
           "state"
+        ]
+      },
+      "AccountJoined": {
+        "description": "A sign-in that came out as an account that already exists: the sign-in is\nthat account's now, and the account made for it is gone. `note` says so\nfor a screen.",
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "accountId",
+          "note"
         ]
       },
       "AccountProbe": {
@@ -29210,6 +29262,10 @@
               "identity": {
                 "description": "Null when the provider's credential names nobody.",
                 "$ref": "#/components/schemas/AccountIdentity"
+              },
+              "joined": {
+                "$ref": "#/components/schemas/AccountJoined",
+                "description": "Signed in as an account that already exists: it is that account's now."
               },
               "plan": {
                 "type": [

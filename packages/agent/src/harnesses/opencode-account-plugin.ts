@@ -19,6 +19,7 @@
  * holds the same value, and the fetch puts the credential wherever it finds
  * that value, in a header or in the query.
  */
+import { PROVIDER_LIMIT } from "@cawco/core";
 import { OPENCODE_MARKER } from "../provider-accounts";
 
 export const OPENCODE_ACCOUNT_PLUGIN = `const CAWCO_STAMP = "x-cawco-session";
@@ -310,10 +311,28 @@ const cawcoCopilotPlugin = async (input) => ({
   },
 });
 
+// A provider's usage-limit refusal (core's PROVIDER_LIMIT): the agent hears
+// it at once and ends the session's turn on it, instead of OpenCode retrying
+// a refusal no retry gets past.
+const CAWCO_LIMIT = ${PROVIDER_LIMIT.toString()};
+const noteLimit = async (sessionID, response) => {
+  if (response.status < 400 || response.status >= 500) return response;
+  const text = await response.clone().text().catch(() => "");
+  if (!CAWCO_LIMIT.test(text)) return response;
+  await fetch(cawcoGateway + "/opencode/limit", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ sessionID, error: text.slice(0, 600) }),
+  }).catch(() => undefined);
+  return response;
+};
 const accountFetch = (opencodeProvider, input) => async (request, init) => {
   const headers = new Headers(init?.headers);
   const sessionID = headers.get(CAWCO_STAMP);
   headers.delete(CAWCO_STAMP);
+  return noteLimit(sessionID, await sendOnAccount(opencodeProvider, input, request, init, headers, sessionID));
+};
+const sendOnAccount = async (opencodeProvider, input, request, init, headers, sessionID) => {
   const account = sessionID ? accountOfSession(sessionID) : undefined;
   if (!account) throw new Error("cawco: this OpenCode session runs on no CawCo account for " + opencodeProvider + "; CawCo places it on one when it starts or wakes.");
   const held = await freshHeld(account);

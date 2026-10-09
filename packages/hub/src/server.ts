@@ -79,6 +79,8 @@ import {
   ACCOUNT_READ,
   type Account,
   type AccountIdentity,
+  type AccountJoined,
+  type AccountJoinedOn,
   type AccountKind,
   type AccountMove,
   type AccountProbe,
@@ -112,10 +114,13 @@ import {
   CONTROL_GET_SESSION_MESSAGES,
   CONTROL_GIT_CHANGES,
   CONTROL_INTERRUPT,
+  CONTROL_JOIN_ACCOUNT_LOGIN,
+  CONTROL_JOIN_PROVIDER_ACCOUNT,
   CONTROL_LIST_SESSIONS,
   CONTROL_MODEL_CATALOG,
   CONTROL_MOVE_HOME_CREDENTIAL,
   CONTROL_MOVE_HOME_LOGIN,
+  CONTROL_PI_DEFAULT_MODEL,
   CONTROL_PROBE_ACCOUNT,
   CONTROL_READ_HOME_CREDENTIALS,
   CONTROL_READ_HOME_LOGIN,
@@ -175,6 +180,7 @@ import {
   type ProviderSigninResult,
   parseAgentFrontMatter,
   providerChoices,
+  providerLimitRefused,
   QUESTION_DISMISSED,
   questionsOf,
   RATE_LIMIT_READ,
@@ -222,7 +228,6 @@ import {
   machineReadings,
   noteProviderReading,
   noteRateLimit,
-  providerLimitRefused,
   reconcileAccounts,
   sessionLimitsReader,
 } from "./accounts";
@@ -2166,24 +2171,62 @@ export const createServer = (
     return reports?.find((report) => report.harness === harness);
   };
   /**
-   * A pi session's model as pi itself resolves it on `machineId`: no model
-   * (pi's `default`) and a bare id become `provider/id` by the machine's
-   * report of pi's own resolution ({@link HarnessReport.modelNames}). Any
-   * other harness's, and a name pi does not resolve, as it is.
+   * A pi session's model as pi itself resolves it on `machineId`: a bare id
+   * becomes `provider/id` by the machine's report of pi's own resolution
+   * ({@link HarnessReport.modelNames}). `default` depends on the session's
+   * directory and is named before placement ({@link piDefaultFor}). Any other
+   * harness's, and a name pi does not resolve, as it is.
    */
   const resolvedModel = (
     machineId: string,
     harness: string,
     model: string | null | undefined
   ): string | null | undefined => {
-    if (harness !== "pi" || model?.includes("/")) {
+    if (harness !== "pi" || !model || model.includes("/")) {
       return model;
     }
-    return (
-      harnessReportOf(machineId, "pi")?.modelNames?.[model || "default"] ??
-      model
-    );
+    return harnessReportOf(machineId, "pi")?.modelNames?.[model] ?? model;
   };
+  /**
+   * A new pi session that names no model (or `default`) starts on the model
+   * pi picks in its directory, asked of its machine, which merges pi's global
+   * settings with `<cwd>/.pi/settings.json` as pi does: the payload names
+   * that model from here, so placement and the session agree on it. When pi
+   * would pick among the machine's own providers, or the session is resumed,
+   * or is not pi's, the payload is as it was. A machine that cannot say
+   * refuses the start.
+   */
+  const piDefaultFor = async (
+    machineId: string,
+    payload: SpawnPayload
+  ): Promise<SpawnPayload | { refusal: string }> => {
+    if (!asksPiDefault(payload)) {
+      return payload;
+    }
+    const answer = await callAgent(
+      machineId,
+      CONTROL_PI_DEFAULT_MODEL,
+      [payload.cwd],
+      READ_TIMEOUT_MS,
+      "pi"
+    );
+    if (answer === "offline") {
+      return payload;
+    }
+    if (answer === "timeout" || !answer.ok) {
+      return {
+        refusal: `${machineName(machineId)} could not say which model pi starts on in ${payload.cwd}: ${answer === "timeout" ? "it did not answer" : (answer.error ?? "it gave no reason")}. Nothing was started.`,
+      };
+    }
+    const model = answer.result as string | null;
+    return model ? { ...payload, model } : payload;
+  };
+  /** A new pi session that names no model, so pi's pick in its directory is asked first. */
+  const asksPiDefault = (payload: SpawnPayload): boolean =>
+    payload.harness === "pi" &&
+    (!payload.model || payload.model === "default") &&
+    !payload.resume &&
+    Boolean(payload.cwd);
   const accountProviderFor = (
     machineId: string,
     harness: string,
@@ -4691,12 +4734,141 @@ export const createServer = (
   const awayWords = (machineId: string, answer: "offline" | "timeout") =>
     `${machineName(machineId)} is ${answer === "offline" ? "not connected" : "not answering"}.`;
 
+  /**
+   * Accounts removed because a sign-in to them came out as an account that
+   * already was ({@link joinExisting}), and the account each is now: a
+   * sign-in still waiting on another machine for the removed one finishes
+   * into that account.
+   */
+  const joinedInto = new Map<string, string>();
+
+  /** The other account of `account`'s provider that already is `identity`. */
+  const existingAs = (
+    account: Account,
+    identity: AccountIdentity
+  ): Account | undefined =>
+    db.accounts
+      .list()
+      .find(
+        (one) =>
+          one.id !== account.id &&
+          one.provider === account.provider &&
+          one.identity !== null &&
+          sameIdentity(one.identity, identity)
+      );
+
+  /**
+   * One identity is one account. A sign-in on `machineId` into `account`,
+   * made for it and never signed in as anyone yet, came out as `existing`'s
+   * identity: the machine joins it into `existing` there (its login moved
+   * into `existing`'s store, or signed out and dropped when `existing`
+   * already holds one), the sign-in is recorded on `existing`, and `account`
+   * is removed with the empty stores its sign-ins left on other machines.
+   */
+  /**
+   * The machine's half of a join: the login it signed in under `fromId`
+   * becomes `existing`'s there, and the sign-in is recorded on `existing`.
+   */
+  const joinOn = async (
+    fromId: string,
+    existing: Account,
+    machineId: string,
+    identity: AccountIdentity
+  ): Promise<AccountJoined | { error: string }> => {
+    const answer =
+      existing.provider === CLAUDE_PROVIDER
+        ? await callAgent(
+            machineId,
+            CONTROL_JOIN_ACCOUNT_LOGIN,
+            [fromId, existing.id, identity],
+            SIGNIN_TIMEOUT_MS,
+            "claude"
+          )
+        : await callAgent(
+            machineId,
+            CONTROL_JOIN_PROVIDER_ACCOUNT,
+            [fromId, existing.id, identity],
+            SIGNIN_TIMEOUT_MS
+          );
+    if (answer === "offline" || answer === "timeout") {
+      return { error: awayWords(machineId, answer) };
+    }
+    if (!answer.ok) {
+      return {
+        error: `${machineName(machineId)} signed in as ${identity.email}, already ${accountName(existing)}, but could not make it that account's: ${answer.error ?? "it gave no reason"}`,
+      };
+    }
+    const joined = answer.result as AccountJoinedOn;
+    console.log(
+      `[accounts] ${fromId} signed in on ${machineName(machineId)} as ${identity.email}, already ${existing.id}: ${joined.outcome === "kept" ? "its login there kept, the new one dropped" : "the new login is its own there now"}`
+    );
+    db.accounts.putSignin({
+      accountId: existing.id,
+      machineId,
+      state: "signed-in",
+      moved: null,
+    });
+    publishUsage(machineId);
+    return {
+      accountId: existing.id,
+      note: `Signed in as ${identity.email}, which is already an account here; it's that account now.`,
+    };
+  };
+
+  const joinExisting = async (
+    account: Account,
+    existing: Account,
+    machineId: string,
+    identity: AccountIdentity
+  ): Promise<AccountJoined | { error: string }> => {
+    const joined = await joinOn(account.id, existing, machineId, identity);
+    if ("error" in joined) {
+      return joined;
+    }
+    for (const signin of db.accounts
+      .signins()
+      .filter(
+        (one) => one.accountId === account.id && one.machineId !== machineId
+      )) {
+      // biome-ignore lint/performance/noAwaitInLoops: one machine at a time; an offline one keeps its empty store until asked
+      await forgetOn(account, signin.machineId);
+    }
+    db.accounts.remove(account.id);
+    joinedInto.set(account.id, existing.id);
+    publishUsage();
+    return joined;
+  };
+
+  /**
+   * A sign-in into `account`, never anyone yet, that came out as an identity
+   * another account of its provider already is: joined into that account
+   * ({@link joinExisting}). Undefined when it is nobody else's.
+   */
+  const joinIfTaken = async (
+    account: Account,
+    machineId: string,
+    identity: AccountIdentity | null | undefined
+  ): Promise<AccountJoined | { error: string } | undefined> => {
+    const existing =
+      identity && !account.identity ? existingAs(account, identity) : undefined;
+    return existing && identity
+      ? await joinExisting(account, existing, machineId, identity)
+      : undefined;
+  };
+
   /** What a Claude sign-in came to, kept, with the models its probe read. */
-  const settleClaudeSignin = (
+  const settleClaudeSignin = async (
     account: Account,
     machineId: string,
     result: AccountSigninResult
-  ): AccountSigninResult => {
+  ): Promise<AccountSigninResult | { error: string }> => {
+    const joined =
+      result.state === "signed-in"
+        ? await joinIfTaken(account, machineId, result.probe?.identity)
+        : undefined;
+    if (joined) {
+      return "error" in joined ? joined : { ...result, joined };
+    }
     if (result.state === "signed-in" && result.probe) {
       if (result.probe.identity && !account.identity) {
         db.accounts.setIdentity(account.id, result.probe.identity);
@@ -4720,11 +4892,18 @@ export const createServer = (
    * or signed out again as someone else's. Still waiting or expired changes
    * nothing.
    */
-  const settleProviderSignin = (
+  const settleProviderSignin = async (
     account: Account,
     machineId: string,
     result: ProviderSigninResult
-  ): ProviderSigninResult => {
+  ): Promise<ProviderSigninResult | { error: string }> => {
+    const joined =
+      result.state === "signed-in"
+        ? await joinIfTaken(account, machineId, result.identity)
+        : undefined;
+    if (joined && result.state === "signed-in") {
+      return "error" in joined ? joined : { ...result, joined };
+    }
     if (result.state === "signed-in") {
       if (result.identity && !account.identity) {
         db.accounts.setIdentity(account.id, result.identity);
@@ -4744,6 +4923,76 @@ export const createServer = (
       publishUsage(machineId);
     }
     return result;
+  };
+
+  /**
+   * Finishes a machine's sign-in, which runs under the id it was begun with
+   * (`signinId`), as the account it now finishes into: it must come out as
+   * that account's identity.
+   */
+  const completeOn = (
+    account: Account,
+    signinId: string,
+    machineId: string,
+    code: string | undefined
+  ) =>
+    account.provider === CLAUDE_PROVIDER
+      ? callAgent(
+          machineId,
+          CONTROL_COMPLETE_ACCOUNT_LOGIN,
+          [code, signinId, account.identity],
+          SIGNIN_TIMEOUT_MS,
+          "claude"
+        )
+      : callAgent(
+          machineId,
+          CONTROL_COMPLETE_PROVIDER_LOGIN,
+          [code ?? null, signinId, account.identity],
+          SIGNIN_TIMEOUT_MS
+        );
+
+  /** Who a finished sign-in, of either kind, came out as. */
+  const signedInAs = (
+    account: Account,
+    result: AccountSigninResult | ProviderSigninResult
+  ): AccountIdentity | null | undefined => {
+    if (account.provider === CLAUDE_PROVIDER) {
+      return (result as AccountSigninResult).probe?.identity;
+    }
+    const provider = result as ProviderSigninResult;
+    return provider.state === "signed-in" ? provider.identity : undefined;
+  };
+
+  /** A finished sign-in, kept on its account ({@link settleClaudeSignin}, {@link settleProviderSignin}). */
+  const settleSignin = (
+    account: Account,
+    machineId: string,
+    result: AccountSigninResult | ProviderSigninResult
+  ) =>
+    account.provider === CLAUDE_PROVIDER
+      ? settleClaudeSignin(account, machineId, result as AccountSigninResult)
+      : settleProviderSignin(
+          account,
+          machineId,
+          result as ProviderSigninResult
+        );
+
+  /**
+   * A sign-in begun for `signinId`, an account a sign-in on another machine
+   * has since joined into `into`: it finishes into `into` there too.
+   */
+  const finishJoined = async (
+    signinId: string,
+    into: Account,
+    machineId: string,
+    result: AccountSigninResult | ProviderSigninResult
+  ) => {
+    const identity = signedInAs(into, result);
+    if (result.state !== "signed-in" || !identity) {
+      return result;
+    }
+    const joined = await joinOn(signinId, into, machineId, identity);
+    return "error" in joined ? joined : { ...result, joined };
   };
 
   /** A PATCH changes the live harness first; its receipt files the stored mode. */
@@ -5702,9 +5951,13 @@ export const createServer = (
    */
   const relaySpawn = async (
     machineId: string,
-    payload: SpawnPayload,
+    asked: SpawnPayload,
     fallbackMode?: string
   ): Promise<{ code: number; message: string } | undefined> => {
+    const payload = await piDefaultFor(machineId, asked);
+    if ("refusal" in payload) {
+      return { code: 503, message: payload.refusal };
+    }
     const { requestId } = payload;
     if (!requestId) {
       issueSpawn(machineId, payload, undefined, fallbackMode);
@@ -5780,7 +6033,11 @@ export const createServer = (
     if (holdingStarts(machineId)) {
       throw new MachineAway(machineId);
     }
-    const settled = settleSpawn(machineId, asked, fallbackMode);
+    const named = await piDefaultFor(machineId, asked);
+    if ("refusal" in named) {
+      throw new Error(named.refusal);
+    }
+    const settled = settleSpawn(machineId, named, fallbackMode);
     if ("refusal" in settled) {
       throw new Error(settled.refusal);
     }
@@ -10852,6 +11109,89 @@ export const createServer = (
 
   workItems.resumeWaits();
 
+  /**
+   * A dashboard's start, from its permission mode on: launch directory,
+   * account, the row, and the start itself (held while its machine installs
+   * an update).
+   */
+  const startFromDashboard = (
+    ws: HubSocket,
+    message: Envelope,
+    asked: SpawnPayload | { refusal: string }
+  ): void => {
+    if ("refusal" in asked) {
+      console.warn(`[hub] refused spawn: ${asked.refusal}`);
+      sendFrame(ws, failure(message, asked.refusal));
+      return;
+    }
+    const settled = settleMode(message.machineId, asked);
+    if ("refusal" in settled) {
+      console.warn(`[hub] refused spawn: ${settled.refusal}`);
+      sendFrame(ws, failure(message, settled.refusal));
+      return;
+    }
+    const launched = atLaunchDir(message.instanceId, settled.payload);
+    if ("refusal" in launched) {
+      console.warn(`[hub] refused spawn: ${launched.refusal}`);
+      sendFrame(ws, failure(message, launched.refusal));
+      return;
+    }
+    const { payload } = launched;
+    const placed = message.instanceId
+      ? placeSpawn(message.machineId, {
+          ...payload,
+          instanceId: message.instanceId,
+        })
+      : {};
+    if ("refusal" in placed) {
+      console.warn(`[hub] refused spawn: ${placed.refusal}`);
+      sendFrame(ws, failure(message, placed.refusal));
+      return;
+    }
+    if (!(registry.agent(message.machineId) && message.instanceId)) {
+      sendFrame(
+        ws,
+        failure(message, `machine ${message.machineId} is not connected`)
+      );
+      return;
+    }
+    // A relaunch replaces the process — questions the old one had
+    // open are settled by its teardown and must not replay.
+    forgetPending(message.instanceId, UNREAD.restarted);
+    noteRespawn(message.instanceId, message.requestId, message.payload);
+    // Brought back by the operator: nothing of the stop is left to carry.
+    db.openInstance({
+      id: message.instanceId,
+      addressProtocol: addressProtocolMachines.has(message.machineId),
+      machineId: message.machineId,
+      cwd: payload.cwd,
+      sessionId: peekResume(message.payload),
+      harness: peekHarness(message.payload),
+      projectId: peek(message.payload, "projectId"),
+      title: peek(message.payload, "title"),
+      kind: peekKind(message.payload),
+      permissionMode: settled.permissionMode,
+      model: payload.model,
+      ...peekParent(message.payload),
+      ...placed,
+    });
+    if (holdingStarts(message.machineId)) {
+      // The row says starting; the start goes out when the machine can take it.
+      db.oweSpawn(
+        message.instanceId,
+        JSON.stringify({ ...message, payload: bounded(payload) }),
+        Date.now()
+      );
+    } else {
+      forward({ ...message, payload: bounded(payload) }, ws);
+    }
+    // A conversation that starts here: its first turn is its name.
+    if (!peekResume(message.payload)) {
+      awaitingFirstTurn.add(message.instanceId);
+    }
+    publishInstances(message.machineId);
+  };
+
   return (
     new Elysia()
       // Every route's large JSON answer is written as it is sent.
@@ -14408,12 +14748,21 @@ export const createServer = (
             ),
             account: t.Optional(t.String()),
             forkOf: t.Optional(t.String()),
+            // The session's directory: what pi's `default` is there.
+            cwd: t.Optional(t.String()),
           }),
         },
-        ({ query, status }) => {
+        async ({ query, status }) => {
+          const asked = await piDefaultFor(query.machineId, {
+            ...askedStart(query),
+            ...(query.cwd ? { cwd: query.cwd } : {}),
+          });
+          if ("refusal" in asked) {
+            return status(503, asked.refusal);
+          }
           const input = placementInput(
             query.machineId,
-            askedStart(query),
+            asked,
             { projectId: query.projectId, taskId: query.taskId },
             query.forkOf
               ? {
@@ -14427,7 +14776,7 @@ export const createServer = (
             const resolved = resolvedModel(
               query.machineId,
               query.harness,
-              query.model
+              asked.model
             );
             const named =
               resolved && resolved !== query.model
@@ -14527,7 +14876,12 @@ export const createServer = (
         "/api/accounts/:id/machines/:machineId/signin/complete",
         { body: t.Object({ code: t.Optional(t.String()) }) },
         async ({ params, body, status }) => {
-          const account = db.accounts.get(params.id);
+          // The account the sign-in finishes into: its own, or the one a
+          // sign-in on another machine has since joined it into.
+          const into = () =>
+            db.accounts.get(params.id) ??
+            db.accounts.get(joinedInto.get(params.id) ?? "");
+          const account = into();
           if (!account) {
             return status(404, `There is no account ${params.id}.`);
           }
@@ -14535,24 +14889,17 @@ export const createServer = (
           if (claude && !body.code) {
             return status(400, "Paste the code from the authorisation page.");
           }
-          const answer = claude
-            ? await callAgent(
-                params.machineId,
-                CONTROL_COMPLETE_ACCOUNT_LOGIN,
-                [body.code, account.id, account.identity],
-                SIGNIN_TIMEOUT_MS,
-                "claude"
-              )
-            : await callAgent(
-                params.machineId,
-                CONTROL_COMPLETE_PROVIDER_LOGIN,
-                [body.code ?? null, account.id, account.identity],
-                SIGNIN_TIMEOUT_MS
-              );
+          const answer = await completeOn(
+            account,
+            params.id,
+            params.machineId,
+            body.code
+          );
           if (answer === "offline" || answer === "timeout") {
             return status(503, awayWords(params.machineId, answer));
           }
-          if (!db.accounts.get(account.id)) {
+          const now = into();
+          if (!now) {
             return status(
               404,
               await undoRemovedSignin(account, params.machineId)
@@ -14561,17 +14908,14 @@ export const createServer = (
           if (!answer.ok) {
             return status(422, answer.error ?? "The sign-in did not finish.");
           }
-          return claude
-            ? settleClaudeSignin(
-                account,
-                params.machineId,
-                answer.result as AccountSigninResult
-              )
-            : settleProviderSignin(
-                account,
-                params.machineId,
-                answer.result as ProviderSigninResult
-              );
+          const result = answer.result as
+            | AccountSigninResult
+            | ProviderSigninResult;
+          const settled =
+            now.id === params.id
+              ? await settleSignin(now, params.machineId, result)
+              : await finishJoined(params.id, now, params.machineId, result);
+          return "error" in settled ? status(409, settled.error) : settled;
         }
       )
       // A key account's key, typed once in the dashboard: relayed to each
@@ -14613,15 +14957,30 @@ export const createServer = (
                   error: answer.error ?? "The key was not written.",
                 };
               }
-              const fresh = db.accounts.get(account.id) ?? account;
-              return {
-                machineId,
-                result: settleProviderSignin(
-                  fresh,
-                  machineId,
-                  answer.result as ProviderSigninResult
-                ),
-              };
+              const result = answer.result as ProviderSigninResult;
+              // Another machine's write already joined the key into the
+              // account it already was: this one joins it there too.
+              const joinedTo = db.accounts.get(account.id)
+                ? undefined
+                : db.accounts.get(joinedInto.get(account.id) ?? "");
+              const settled =
+                joinedTo && result.state === "signed-in" && result.identity
+                  ? await joinOn(
+                      account.id,
+                      joinedTo,
+                      machineId,
+                      result.identity
+                    ).then((joined) =>
+                      "error" in joined ? joined : { ...result, joined }
+                    )
+                  : await settleProviderSignin(
+                      db.accounts.get(account.id) ?? account,
+                      machineId,
+                      result
+                    );
+              return "error" in settled
+                ? { machineId, error: settled.error }
+                : { machineId, result: settled };
             })
           );
           return { machines };
@@ -16704,86 +17063,27 @@ export const createServer = (
               // the one rule's (`settleMode`): explicit bypass when omitted for
               // a harness with modes, and none for one that has none.
               const { model: named, ...rest } = message.payload as SpawnPayload;
-              const settled = settleMode(message.machineId, {
+              const spawning: SpawnPayload = {
                 ...rest,
                 ...(named ? { model: named } : {}),
-              });
-              if ("refusal" in settled) {
-                console.warn(`[hub] refused spawn: ${settled.refusal}`);
-                sendFrame(ws, failure(message, settled.refusal));
-                break;
-              }
-              const launched = atLaunchDir(message.instanceId, settled.payload);
-              if ("refusal" in launched) {
-                console.warn(`[hub] refused spawn: ${launched.refusal}`);
-                sendFrame(ws, failure(message, launched.refusal));
-                break;
-              }
-              const { payload } = launched;
-              const placed = message.instanceId
-                ? placeSpawn(message.machineId, {
-                    ...payload,
-                    instanceId: message.instanceId,
-                  })
-                : {};
-              if ("refusal" in placed) {
-                console.warn(`[hub] refused spawn: ${placed.refusal}`);
-                sendFrame(ws, failure(message, placed.refusal));
-                break;
-              }
-              if (registry.agent(message.machineId) && message.instanceId) {
-                // A relaunch replaces the process — questions the old one had
-                // open are settled by its teardown and must not replay.
-                forgetPending(message.instanceId, UNREAD.restarted);
-                noteRespawn(
-                  message.instanceId,
-                  message.requestId,
-                  message.payload
-                );
-                // Brought back by the operator: nothing of the stop is left to carry.
-                db.openInstance({
-                  id: message.instanceId,
-                  addressProtocol: addressProtocolMachines.has(
-                    message.machineId
-                  ),
-                  machineId: message.machineId,
-                  cwd: payload.cwd,
-                  sessionId: peekResume(message.payload),
-                  harness: peekHarness(message.payload),
-                  projectId: peek(message.payload, "projectId"),
-                  title: peek(message.payload, "title"),
-                  kind: peekKind(message.payload),
-                  permissionMode: settled.permissionMode,
-                  model: payload.model,
-                  ...peekParent(message.payload),
-                  ...placed,
-                });
-                if (holdingStarts(message.machineId)) {
-                  // The row says starting; the start goes out when the machine can take it.
-                  db.oweSpawn(
-                    message.instanceId,
-                    JSON.stringify({
-                      ...message,
-                      payload: bounded(payload),
-                    }),
-                    Date.now()
+              };
+              // pi's `default` is first named by what pi picks in the
+              // session's directory, which its machine answers; every other
+              // start goes on in this same step.
+              if (asksPiDefault(spawning)) {
+                piDefaultFor(message.machineId, spawning)
+                  .then((asked) => startFromDashboard(ws, message, asked))
+                  .catch((error: unknown) =>
+                    sendFrame(
+                      ws,
+                      failure(
+                        message,
+                        error instanceof Error ? error.message : String(error)
+                      )
+                    )
                   );
-                } else {
-                  forward({ ...message, payload: bounded(payload) }, ws);
-                }
-                // A conversation that starts here: its first turn is its name.
-                if (!peekResume(message.payload)) {
-                  awaitingFirstTurn.add(message.instanceId);
-                }
-                publishInstances(message.machineId);
               } else {
-                sendFrame(
-                  ws,
-                  failure(
-                    message,
-                    `machine ${message.machineId} is not connected`
-                  )
-                );
+                startFromDashboard(ws, message, spawning);
               }
               break;
             }

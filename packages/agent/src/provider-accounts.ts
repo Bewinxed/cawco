@@ -18,6 +18,7 @@ import { chmod, mkdir, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
   type AccountIdentity,
+  type AccountJoinedOn,
   type AccountReport,
   type HomeCredential,
   type HomeLoginMoved,
@@ -135,16 +136,29 @@ class AccountStore implements CredentialStore {
     }
     return serial(this.#account, async () => {
       const current = readHeld(this.#account);
-      const next = await fn(
-        current?.provider === providerId ? current.credential : undefined
-      );
-      if (next !== undefined) {
+      const was =
+        current?.provider === providerId ? current.credential : undefined;
+      const next = await fn(was);
+      // pi-ai's refresh answers its own fields only: who the sign-in is
+      // stays on it while it is the same grant (the same refresh token; a
+      // Copilot refresh keeps its GitHub token). A new sign-in written over
+      // it is someone to be asked about again.
+      const kept = was ? keptIdentity(was) : undefined;
+      const sameGrant =
+        was?.type === "oauth" &&
+        next?.type === "oauth" &&
+        was.refresh === next.refresh;
+      const written =
+        next !== undefined && kept && sameGrant && !keptIdentity(next)
+          ? ({ ...next, [IDENTITY]: kept } as Credential)
+          : next;
+      if (written !== undefined) {
         await writeHeld(this.#account, {
           provider: providerId,
-          credential: next,
+          credential: written,
         });
       }
-      return next ?? current?.credential;
+      return written ?? current?.credential;
     });
   }
 
@@ -215,11 +229,95 @@ export const keyIdentity = (key: string): AccountIdentity => ({
   organization: `key:${createHash("sha256").update(key).digest("hex").slice(0, 16)}`,
 });
 
+/**
+ * Who a sign-in is, kept on its credential where the provider's token names
+ * nobody (Copilot's GitHub token): written when it signs in or moves in
+ * ({@link withIdentity}), and carried across pi-ai's refresh, which writes a
+ * credential of its own fields only ({@link AccountStore.modify}).
+ */
+const IDENTITY = "cawcoIdentity";
+
+const keptIdentity = (credential: Credential): AccountIdentity | undefined => {
+  const kept = (credential as Record<string, unknown>)[IDENTITY] as
+    | AccountIdentity
+    | undefined;
+  return kept && typeof kept.email === "string" ? kept : undefined;
+};
+
+/** GitHub's host for a Copilot sign-in: github.com, or its Enterprise domain (pi-ai's `normalizeDomain`). */
+const githubDomain = (credential: Credential): string => {
+  const enterprise = (credential as { enterpriseUrl?: unknown }).enterpriseUrl;
+  return typeof enterprise === "string" && enterprise.trim()
+    ? enterprise.trim().replace(LEADING_SCHEME, "").replace(TRAILING_PATH, "")
+    : "github.com";
+};
+const LEADING_SCHEME = /^https?:\/\//;
+const TRAILING_PATH = /\/.*$/;
+
+/**
+ * A Copilot sign-in's GitHub user, read with its GitHub token (`refresh`,
+ * where pi-ai and OpenCode both keep it) from GitHub's REST API on the
+ * sign-in's own domain, `api.<domain>`, as pi-ai reaches it
+ * (github-copilot.js 244-268: `https://api.${domain}/copilot_internal/v2/token`).
+ * Its login is who it is; the domain tells github.com from an Enterprise.
+ */
+const githubIdentity = async (
+  credential: Credential
+): Promise<AccountIdentity> => {
+  const domain = githubDomain(credential);
+  const token = (credential as { refresh?: unknown }).refresh;
+  if (typeof token !== "string" || !token) {
+    throw new Error("The Copilot sign-in holds no GitHub token.");
+  }
+  const response = await fetch(`https://api.${domain}/user`, {
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${token}`,
+      "User-Agent": "CawCo",
+      "X-GitHub-Api-Version": "2022-11-28",
+    },
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!response.ok) {
+    throw new Error(
+      `GitHub (${domain}) answered ${response.status} when asked who the Copilot sign-in is.`
+    );
+  }
+  const user = (await response.json()) as { login?: unknown };
+  if (typeof user.login !== "string" || !user.login) {
+    throw new Error(
+      `GitHub (${domain}) named no user for the Copilot sign-in.`
+    );
+  }
+  return { email: user.login, organization: `github:${domain}` };
+};
+
+/**
+ * The credential with who it is kept on it, read from the provider where its
+ * token names nobody: Copilot's, from GitHub. Any other as it is.
+ */
+export const withIdentity = async (
+  provider: string,
+  credential: Credential
+): Promise<Credential> =>
+  provider === "github-copilot" &&
+  credential.type === "oauth" &&
+  !keptIdentity(credential)
+    ? ({
+        ...credential,
+        [IDENTITY]: await githubIdentity(credential),
+      } as Credential)
+    : credential;
+
 /** Who a credential is, as far as it says. */
 export const identityOf = (
   provider: string,
   credential: Credential
 ): AccountIdentity | undefined => {
+  const kept = keptIdentity(credential);
+  if (kept) {
+    return kept;
+  }
   if (credential.type === "api_key") {
     return credential.key ? keyIdentity(credential.key) : undefined;
   }
@@ -377,12 +475,20 @@ const settled = async (
   accountId: string,
   expected: AccountIdentity | null
 ): Promise<ProviderSigninResult> => {
-  const held = readHeld(accountId);
-  if (!held) {
+  const signed = readHeld(accountId);
+  if (!signed) {
     throw new Error(
       "The sign-in finished but the account's store holds nothing."
     );
   }
+  // Who it is, asked of the provider where its token says nobody.
+  const credential = await withIdentity(signed.provider, signed.credential);
+  if (credential !== signed.credential) {
+    await serial(accountId, () =>
+      writeHeld(accountId, { provider: signed.provider, credential })
+    );
+  }
+  const held = { provider: signed.provider, credential };
   const identity = identityOf(held.provider, held.credential);
   if (expected && identity && !sameIdentity(expected, identity)) {
     await (await runtimeOf(accountId, held.provider)).logout(held.provider);
@@ -582,10 +688,11 @@ const providerOfEntry = (
  * Every credential in pi's and OpenCode's own stores on this machine a CawCo
  * account can hold. A Claude subscription's OAuth there (`anthropic`) is
  * never listed: Anthropic's terms keep it in Claude Code alone, and it stays
- * where it is.
+ * where it is. One whose provider cannot say who it is (GitHub not
+ * answering for a Copilot sign-in) is not listed, and the agent says why.
  */
-export const readHomeCredentials = (): HomeCredential[] =>
-  (["pi", "opencode"] as const).flatMap((store) =>
+export const readHomeCredentials = async (): Promise<HomeCredential[]> => {
+  const entries = (["pi", "opencode"] as const).flatMap((store) =>
     Object.entries(
       readJson(store === "pi" ? piStorePath() : opencodeStorePath())
     ).flatMap(([storeProvider, entry]) => {
@@ -598,11 +705,28 @@ export const readHomeCredentials = (): HomeCredential[] =>
         return [];
       }
       const credential = credentialOf(store, entry);
-      if (!credential) {
-        return [];
-      }
-      const provider = providerOfEntry(store, storeProvider, credential);
-      const identity = identityOf(provider, credential);
+      return credential
+        ? [
+            {
+              store,
+              storeProvider,
+              credential,
+              provider: providerOfEntry(store, storeProvider, credential),
+            },
+          ]
+        : [];
+    })
+  );
+  const listed = await Promise.all(
+    entries.map(async ({ store, storeProvider, credential, provider }) => {
+      const known = await withIdentity(provider, credential).catch(
+        (error: unknown) => {
+          moveLog(
+            `${store}'s ${storeProvider} is not listed: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+      );
+      const identity = known ? identityOf(provider, known) : undefined;
       return identity
         ? [
             {
@@ -619,6 +743,8 @@ export const readHomeCredentials = (): HomeCredential[] =>
         : [];
     })
   );
+  return listed.flat();
+};
 
 const moveLog = (line: string): void => {
   console.log(`[move-login] ${line}`);
@@ -679,13 +805,16 @@ export const moveHomeCredential = async (
 ): Promise<HomeLoginMoved> => {
   const path = store === "pi" ? piStorePath() : opencodeStorePath();
   const entry = readJson(path)[storeProvider];
-  const credential = entry ? credentialOf(store, entry) : undefined;
-  if (!credential) {
+  const read = entry ? credentialOf(store, entry) : undefined;
+  if (!read) {
     throw new Error(
       `${store}'s own store on this machine holds no ${storeProvider} credential CawCo can hold; nothing was moved.`
     );
   }
-  const provider = providerOfEntry(store, storeProvider, credential);
+  const provider = providerOfEntry(store, storeProvider, read);
+  // Who it is, asked of the provider where its token says nobody, and kept
+  // on it in the account's store.
+  const credential = await withIdentity(provider, read);
   const identity = identityOf(provider, credential);
   if (!(identity && sameIdentity(identity, expected))) {
     throw new Error(
@@ -716,9 +845,9 @@ export const moveHomeCredential = async (
   const still = now[storeProvider];
   const unchanged =
     still &&
-    (credential.type === "oauth"
-      ? still.refresh === credential.refresh
-      : (still.key ?? null) === credential.key);
+    (read.type === "oauth"
+      ? still.refresh === read.refresh
+      : (still.key ?? null) === read.key);
   if (!unchanged) {
     return undo(`${store} changed its own ${storeProvider} during the move.`);
   }
@@ -731,6 +860,61 @@ export const moveHomeCredential = async (
   );
   moveLog(`moved; ${store}'s own store no longer holds ${storeProvider}`);
   return { store: "the account's credential file" };
+};
+
+/** Drops an account's store here with nothing signed out: its credential is another account's now. */
+const dropStore = async (accountId: string): Promise<void> => {
+  signIns.get(accountId)?.abort.abort();
+  signIns.delete(accountId);
+  for (const key of runtimes.keys()) {
+    if (key.startsWith(`${accountId}\u0000`)) {
+      runtimes.delete(key);
+    }
+  }
+  await removeAccountRoot(accountId);
+};
+
+/**
+ * A sign-in made into `from` came out as `into`, an account that already is
+ * `expected` ({@link CONTROL_JOIN_PROVIDER_ACCOUNT}). When `into` already
+ * holds a credential here, `from`'s is a second grant of the same person:
+ * signed out through pi-ai and dropped. Else it moves into `into`'s store,
+ * checked to answer there ({@link answers}) before `from`'s store is dropped;
+ * one that does not answer stays where it was.
+ */
+export const joinProviderAccount = async (
+  from: string,
+  into: string,
+  expected: AccountIdentity
+): Promise<AccountJoinedOn> => {
+  const held = readHeld(from);
+  if (!held) {
+    throw new Error("The sign-in's store on this machine holds nothing.");
+  }
+  const identity = identityOf(held.provider, held.credential);
+  if (!(identity && sameIdentity(identity, expected))) {
+    throw new Error(`The sign-in on this machine is not ${expected.email}.`);
+  }
+  if (readHeld(into)) {
+    await forgetProviderAccount(from);
+    moveLog(
+      `${from} joined ${into}: ${into}'s own sign-in kept, ${from}'s signed out`
+    );
+    return { outcome: "kept" };
+  }
+  await serial(into, () => writeHeld(into, held));
+  const refused = await answers(into).catch((error: unknown) =>
+    error instanceof Error ? error.message : String(error)
+  );
+  if (refused) {
+    await serial(into, () => writeHeld(into, undefined));
+    throw new Error(
+      `${expected.email}'s sign-in did not answer as ${into}'s: ${refused}. It stays where it was.`
+    );
+  }
+  await dropStore(from);
+  moveLog(`${from} joined ${into}: its sign-in is ${into}'s here now`);
+  return { outcome: "moved" };
 };
 
 // ── OpenCode: the markers, and which account each session runs on ───────

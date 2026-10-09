@@ -127,6 +127,24 @@ const dirState = (
     return "signed-out";
   }
   if (!account.identity) {
+    // One identity is one account: a fresh account's store signed in as
+    // another account's identity is not named after it. The sign-in's own
+    // answer joins it into that account (server.ts `joinExisting`); until
+    // then it is signed in as nobody of its own.
+    const taken = report.identity;
+    if (
+      db.accounts
+        .list()
+        .some(
+          (one) =>
+            one.id !== account.id &&
+            one.provider === account.provider &&
+            one.identity !== null &&
+            sameIdentity(one.identity, taken)
+        )
+    ) {
+      return "signed-out";
+    }
     db.accounts.setIdentity(account.id, report.identity);
     return "signed-in";
   }
@@ -439,18 +457,6 @@ export const noteProviderReading = (
   }
   return true;
 };
-
-/**
- * Whether a pi or OpenCode turn ended on its account's usage limit, by the
- * error it ended on: ChatGPT answers `usage_limit_reached` ("You've hit your
- * usage limit"), OpenCode Go a `GoUsageLimitError`, which pi and OpenCode
- * pass on in their own words.
- */
-export const providerLimitRefused = (errors: readonly string[]): boolean =>
-  errors.some((error) => PROVIDER_LIMIT.test(error));
-
-const PROVIDER_LIMIT =
-  /usage_limit_reached|usage limit|GoUsageLimitError|rate_limit_exceeded|rate limit reached/i;
 
 /**
  * A `rate_limit_event` from a session on `accountId`: the account's windows

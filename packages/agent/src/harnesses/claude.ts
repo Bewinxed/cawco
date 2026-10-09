@@ -64,6 +64,7 @@ import {
   CONTROL_BEGIN_ACCOUNT_LOGIN,
   CONTROL_COMPLETE_ACCOUNT_LOGIN,
   CONTROL_FORGET_ACCOUNT,
+  CONTROL_JOIN_ACCOUNT_LOGIN,
   CONTROL_MOVE_HOME_LOGIN,
   CONTROL_PROBE_ACCOUNT,
   CONTROL_READ_HOME_LOGIN,
@@ -136,7 +137,7 @@ import {
   completeAccountLogin,
   forgetAccount,
 } from "../login";
-import { moveHomeLogin, readHomeLogin } from "../move-login";
+import { joinAccountLogin, moveHomeLogin, readHomeLogin } from "../move-login";
 import { parseProcId, procIdFor } from "../proc-id";
 // Type-only, and deliberately so: `session.ts` imports the harness registry
 // this file is part of, so a value import here would close a module cycle.
@@ -2695,6 +2696,12 @@ export class ClaudeHarness implements Harness {
         return readHomeLogin();
       case CONTROL_MOVE_HOME_LOGIN:
         return moveHomeLogin(args[0] as string, args[1] as AccountIdentity);
+      case CONTROL_JOIN_ACCOUNT_LOGIN:
+        return joinAccountLogin(
+          args[0] as string,
+          args[1] as string,
+          args[2] as AccountIdentity
+        );
       case "unlockKeychain": {
         await unlockKeychain(args[0] as string);
         this.auth = await claudeAuth(await accountReports());

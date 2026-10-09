@@ -2888,11 +2888,23 @@ export class OpencodeSession implements HarnessSession {
    * final frame, then a result. `result` overrides the default `success` result
    * for the abort/error paths, which also close a turn.
    */
-  #flushResult(result?: {
+  #flushResult(closing?: {
     subtype: string;
     is_error: boolean;
     errors?: string[];
   }): void {
+    // A turn ended at its account's usage limit closes on that refusal,
+    // however OpenCode ended it once asked to stop ({@link refuseAtLimit}).
+    const refusal = this.#limitRefusal;
+    this.#limitRefusal = undefined;
+    const result =
+      refusal && this.#turnOpen
+        ? {
+            subtype: "error_during_execution",
+            is_error: true,
+            errors: [refusal],
+          }
+        : closing;
     // The live trace ends before the settled blocks replace it.
     this.#closeThinking();
     this.#flushMessages(this.#pending, this.#roles);
@@ -4134,6 +4146,26 @@ export class OpencodeSession implements HarnessSession {
         directory: this.#directory,
       })
     );
+  }
+
+  /** The provider's usage-limit refusal the open turn ends on, once asked to stop. */
+  #limitRefusal: string | undefined;
+
+  /**
+   * The provider refused this session's request at its account's usage
+   * limit (the CawCo plugin saw it): the open turn is stopped now and closes
+   * on that refusal, so the hub's at-limit decision runs at once instead of
+   * after OpenCode's own retries of a refusal no retry gets past.
+   */
+  async refuseAtLimit(error: string): Promise<void> {
+    if (!this.#turnOpen || this.#limitRefusal) {
+      return;
+    }
+    this.#limitRefusal = error;
+    console.info(
+      `[opencode] ${this.instanceId}: its account's usage limit refused the request; ending the turn on it`
+    );
+    await this.interrupt();
   }
 
   /**
@@ -5819,6 +5851,25 @@ export class OpencodeHarness implements Harness {
    * last match is the newest — on the theory that a live event is more likely
    * meant for whichever instance most recently took that session over.
    */
+  /**
+   * The CawCo plugin saw OpenCode session `sid`'s request refused at its
+   * account's usage limit: each live session on it ends its turn on that
+   * refusal ({@link OpencodeSession.refuseAtLimit}).
+   */
+  limitRefused(sid: string, error: string): void {
+    for (const session of this.#sessions.values()) {
+      if (session.sessionId === sid) {
+        session
+          .refuseAtLimit(error)
+          .catch((cause: unknown) =>
+            console.warn(
+              `[opencode] ${session.instanceId}: could not end the turn at its limit: ${errorText(cause)}`
+            )
+          );
+      }
+    }
+  }
+
   #sessionForSid(
     sid: string,
     identity: ServerIdentity

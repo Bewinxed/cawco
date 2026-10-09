@@ -15,7 +15,7 @@ import type {
   NeutralSessionInfo,
   SessionMessage,
 } from "@cawco/core";
-import { CONTROL_MODEL_CATALOG } from "@cawco/core";
+import { CONTROL_MODEL_CATALOG, CONTROL_PI_DEFAULT_MODEL } from "@cawco/core";
 import type {
   ImageContent,
   Model,
@@ -24,9 +24,11 @@ import type {
 import {
   type AgentSessionServices,
   createAgentSessionServices,
+  getAgentDir,
   type ModelRuntime,
   resolveCliModel,
   SessionManager,
+  SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import { heldSkills, skillDrift } from "../fleet";
 import { resolveBin } from "../tools";
@@ -206,31 +208,17 @@ export const resolvePiModel = async (
 };
 
 /**
- * pi's own resolution of each name a session may start with, on this machine
- * with its accounts ({@link HarnessReport.modelNames}). `default`, which a
- * session asks for by naming no model, is pi's pick for a new session from
- * its saved default (`findInitialModel`, core/model-resolver.js 503-515: the
- * settings' provider and model when that provider has auth configured). When
- * it has none, pi picks among the machine's own providers, which needs no
- * account, so `default` is left out. Each bare id of a model pi can run here
- * is `resolveCliModel`'s answer for it.
+ * pi's own resolution of each bare model id pi can run on this machine, with
+ * its accounts ({@link HarnessReport.modelNames}): `resolveCliModel`'s answer
+ * for each.
  */
 export const modelNames = async (): Promise<Record<string, string>> => {
-  const { modelRuntime, settingsManager } = await PiProfile.services();
-  // The saved default as pi reads it for a session it starts now.
-  await settingsManager.reload();
+  const { modelRuntime } = await PiProfile.services();
   const available = await modelRuntime.getAvailable();
   const names: Record<string, string> = {};
-  const provider = settingsManager.getDefaultProvider();
-  const id = settingsManager.getDefaultModel();
-  const saved =
-    provider && id ? modelRuntime.getModel(provider, id) : undefined;
-  if (saved && modelRuntime.hasConfiguredAuth(saved.provider)) {
-    names.default = piModelValue(saved);
-  }
   for (const model of available) {
     const bare = modelIdOf(model);
-    if (bare === "default" || bare in names) {
+    if (bare in names) {
       continue;
     }
     const resolved = resolveCliModel({
@@ -242,6 +230,30 @@ export const modelNames = async (): Promise<Record<string, string>> => {
     }
   }
   return names;
+};
+
+/**
+ * The model pi starts a new session on in `cwd` when none is named, with
+ * this machine's accounts counted as signed in ({@link
+ * CONTROL_PI_DEFAULT_MODEL}): its saved default, read through pi's own
+ * settings merge for that directory (`SettingsManager.create(cwd)`: the
+ * global `settings.json` and `<cwd>/.pi/settings.json`,
+ * core/settings-manager.js 99-100), when that model's provider has auth
+ * configured (`findInitialModel`, core/model-resolver.js 503-515). Null when
+ * it has none: pi then picks among the machine's own providers, which needs
+ * no account.
+ */
+export const piDefaultModel = async (cwd: string): Promise<string | null> => {
+  const { modelRuntime } = await PiProfile.services();
+  await modelRuntime.getAvailable();
+  const settings = SettingsManager.create(cwd, getAgentDir());
+  const provider = settings.getDefaultProvider();
+  const id = settings.getDefaultModel();
+  const saved =
+    provider && id ? modelRuntime.getModel(provider, id) : undefined;
+  return saved && modelRuntime.hasConfiguredAuth(saved.provider)
+    ? piModelValue(saved)
+    : null;
 };
 
 /** The models `runtime` (the machine's own with its accounts, unless a session's is given) can run. */
@@ -621,7 +633,10 @@ export class PiProfile {
     servicesPromise = null;
     return Promise.resolve();
   }
-  async machine(method: string): Promise<unknown> {
+  async machine(method: string, args: unknown[]): Promise<unknown> {
+    if (method === CONTROL_PI_DEFAULT_MODEL) {
+      return await piDefaultModel(String(args[0]));
+    }
     return method === CONTROL_MODEL_CATALOG ? await modelCatalog() : undefined;
   }
 

@@ -491,6 +491,45 @@ export const CONTROL_PROBE_ACCOUNT = "probeAccount";
 export const CONTROL_READ_HOME_LOGIN = "readHomeLogin";
 export const CONTROL_MOVE_HOME_LOGIN = "moveHomeLogin";
 
+/**
+ * A sign-in that came out as an identity another account already is: its
+ * login joins that account's store on the machine (args: the new account's
+ * id, the existing account's id, the identity). When the existing account
+ * already holds a login there, the new one is a second grant of the same
+ * person and is signed out and dropped; else it moves into the existing
+ * account's store (Claude: credential and `oauthAccount`, checked to answer
+ * as the identity before the new dir is dropped). Answers an
+ * {@link AccountJoinedOn}. Claude's is a Claude harness control; any other
+ * provider's the agent's own.
+ */
+export const CONTROL_JOIN_ACCOUNT_LOGIN = "joinAccountLogin";
+export const CONTROL_JOIN_PROVIDER_ACCOUNT = "joinProviderAccount";
+
+/** What joining a new sign-in into an existing account did on its machine. */
+export interface AccountJoinedOn {
+  /** `kept`: the existing account's login there was kept, the new one dropped. `moved`: the new login is the existing account's there now. */
+  outcome: "kept" | "moved";
+}
+
+/**
+ * A sign-in that came out as an account that already exists: the sign-in is
+ * that account's now, and the account made for it is gone. `note` says so
+ * for a screen.
+ */
+export interface AccountJoined {
+  accountId: string;
+  note: string;
+}
+
+/**
+ * pi harness control (arg: the session's directory): the model pi starts a
+ * new session on there when none is named, as pi picks it (its saved
+ * default from the global settings and `<cwd>/.pi/settings.json` merged,
+ * when that model's provider has auth configured, accounts counted), as
+ * `provider/id`; null when pi would pick among the machine's own providers.
+ */
+export const CONTROL_PI_DEFAULT_MODEL = "piDefaultModel";
+
 /** Who a machine's own `~/.claude` is signed in as, by its `claude auth status`. */
 export interface HomeLogin {
   identity?: AccountIdentity;
@@ -559,6 +598,8 @@ export interface HomeCredential {
  * already is, so the machine logged that dir out again.
  */
 export interface AccountSigninResult {
+  /** Signed in as an account that already exists: it is that account's now. */
+  joined?: AccountJoined;
   probe?: AccountProbe;
   state: SigninState;
 }
@@ -588,11 +629,25 @@ export type ProviderSigninResult =
       email: string | null;
       /** Null when the provider's credential names nobody. */
       identity: AccountIdentity | null;
+      /** Signed in as an account that already exists: it is that account's now. */
+      joined?: AccountJoined;
       plan: string | null;
     }
   | { state: "mismatch"; email: string | null }
   | { state: "expired" }
   | { state: "pending" };
+
+/**
+ * A provider's usage-limit refusal, in its own words or as pi and OpenCode
+ * pass it on: ChatGPT's `usage_limit_reached` ("You've hit your usage
+ * limit"), OpenCode Go's `GoUsageLimitError`.
+ */
+export const PROVIDER_LIMIT =
+  /usage_limit_reached|usage limit|GoUsageLimitError|rate_limit_exceeded|rate limit reached/i;
+
+/** Whether a pi or OpenCode turn ended on its account's usage limit, by the error it ended on. */
+export const providerLimitRefused = (errors: readonly string[]): boolean =>
+  errors.some((error) => PROVIDER_LIMIT.test(error));
 
 /**
  * One reading of an account's windows on a machine, made by its agent from
