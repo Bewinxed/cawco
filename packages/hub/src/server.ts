@@ -145,6 +145,7 @@ import {
   estimateTokens,
   FLEET_STATUS,
   FLEET_SYNC,
+  FRESH_START,
   GENERATE_IMAGE,
   HARNESSES,
   HOOK_TEMPLATES,
@@ -192,8 +193,10 @@ import {
   READ_SKILL_FILES,
   RESOLVE_PERMISSION,
   RESTART_RESUMABLE,
+  type Relaunch,
   RULE_TEMPLATES,
   readProvenance,
+  relaunchOf,
   reportMarker,
   ruleProblem,
   runDoing,
@@ -398,7 +401,6 @@ import {
 import {
   createWorkItems,
   LEAF_DELEGATE_REFUSAL,
-  neverStarted,
   SESSION_TITLE_DESCRIPTION,
   titleProblem,
   WAIT_ITEM_LIMIT,
@@ -1202,6 +1204,23 @@ const limitLine = (
   uuid: `limit-${event.id}`,
   session_id: row.sessionId ?? "",
   timestamp: new Date(event.at).toISOString(),
+});
+
+/**
+ * The hub's line where a session started again fresh (core `FRESH_START`,
+ * `relaunchOf`), as its live stream and a later read both carry it. One per
+ * session: a start refused again and started once more says it once, where
+ * it last happened (the row keeps that moment).
+ */
+const freshStartLine = (
+  row: { id: string; sessionId: string | null },
+  at: number
+): NeutralSystemMessage => ({
+  type: "system",
+  subtype: FRESH_START,
+  uuid: `fresh-start-${row.id}`,
+  session_id: row.sessionId ?? "",
+  timestamp: new Date(at).toISOString(),
 });
 
 /** The same operator notice on the live stream and a later transcript read. */
@@ -2216,6 +2235,10 @@ export const createServer = (
       return;
     }
     sendFrame(agent, envelope);
+    // What waited for this start goes right behind it, in the order taken.
+    if (envelope.instanceId) {
+      releaseOwed({ instanceId: envelope.instanceId });
+    }
   };
 
   /**
@@ -2301,10 +2324,11 @@ export const createServer = (
   }): string => row.title || row.derivedTitle || row.id.slice(0, 8);
   /** A session a send wakes: its process is gone, its conversation on record. */
   const wakesForSend = (row: {
+    lastError: string | null;
     sessionId: string | null;
     status: string;
   }): boolean =>
-    row.sessionId !== null &&
+    relaunchOf(row).kind !== "refused" &&
     (row.status === "sleeping" ||
       row.status === "error" ||
       row.status === "stopped");
@@ -2759,14 +2783,8 @@ export const createServer = (
     if (row?.lastError === CLAUDE_CONVERSATION_GONE) {
       return CLAUDE_CONVERSATION_GONE;
     }
-    // No process, and no conversation a revive could resume: nothing will
-    // ever take the send up, so it fails now with why, and nothing reopens.
-    if (row && neverStarted(row)) {
-      return `This session never started, so nothing can read this message${
-        row.lastError ? `: ${row.lastError}` : "."
-      }`;
-    }
-    // A send to a session whose process is gone wakes it ({@link wakeForSend});
+    // A send to a session whose process is gone wakes it ({@link wakeForSend}),
+    // fresh when its harness never began a conversation (core `relaunchOf`);
     // one whose account can't run on its machine is not woken, and says why.
     if (row && wakesForSend(row)) {
       const refused = accountStartRefusal(row.machineId, row, sessionName(row));
@@ -2859,7 +2877,14 @@ export const createServer = (
   const forgetPending = (
     instanceId: string,
     why: string,
-    outlived = false
+    outlived = false,
+    /**
+     * The sends this ending leaves pending: `owed`, the ones no process was
+     * ever handed (a relaunch, whose new process takes them); `all`, a start
+     * the keeper refused, whose machine hands each back to be owed
+     * (`held_send`).
+     */
+    keep: "none" | "owed" | "all" = "none"
   ): void => {
     if (!outlived) {
       pending.forget(instanceId);
@@ -2878,7 +2903,14 @@ export const createServer = (
     // may hold it still: custody decides that ({@link decideCustody}).
     if (!outlived) {
       inCustody.delete(instanceId);
-      settlePending(instanceId, why, "fail");
+      if (keep !== "all") {
+        settlePending(
+          instanceId,
+          why,
+          "fail",
+          keep === "owed" ? (send) => !send.owed : undefined
+        );
+      }
     }
     // The supervisor's turn buffers for a dead session are waste.
     supervisor.forget(instanceId);
@@ -4155,15 +4187,10 @@ export const createServer = (
     crossed = false
   ): void => {
     const [row] = db.getInstancesByIds([instanceId]);
-    if (!(row?.sessionId && wakesForSend(row))) {
+    if (!(row && wakesForSend(row))) {
       return;
     }
-    resumeSpawn(
-      agent,
-      machineId,
-      { ...row, sessionId: row.sessionId },
-      crossed
-    );
+    resumeSpawn(agent, machineId, row, crossed);
   };
 
   /**
@@ -4173,40 +4200,60 @@ export const createServer = (
    * still running replaces its process, as the machine settles the old one
    * first.
    */
+  /** Why a session cannot be woken now; none when it can. */
+  const wakeRefusal = (
+    machineId: string,
+    row: ReturnType<typeof db.getInstancesByIds>[number],
+    plan: Relaunch
+  ): string | undefined =>
+    (plan.kind === "refused" ? plan.reason : undefined) ??
+    launchRefusal(row.id) ??
+    accountStartRefusal(machineId, row, sessionName(row));
+
+  /**
+   * A revive's start: on the settings the session last ran with, on its
+   * conversation when it has one (`plan`). A row whose launch directory is
+   * known holds it in `cwd` (`atLaunchDir`).
+   */
+  const revivePayloadOf = (
+    row: ReturnType<typeof db.getInstancesByIds>[number],
+    plan: Relaunch,
+    relaunch: boolean
+  ): SpawnPayload => ({
+    instanceId: row.id,
+    cwd: row.cwd,
+    ...(row.harness ? { harness: row.harness as HarnessKind } : {}),
+    ...(plan.kind === "resume"
+      ? { resume: { sessionKey: plan.sessionKey } }
+      : {}),
+    ...(relaunch ? { relaunch: true as const } : {}),
+    ...(row.kind === "scratch" ? { scratch: {} } : {}),
+    ...(row.model ? { model: row.model } : {}),
+    ...(isEffortLevel(row.effort) ? { effort: row.effort } : {}),
+    ...typeSettingsOf(row),
+  });
+
   const resumeSpawn = (
     agent: NonNullable<ReturnType<typeof registry.agent>>,
     machineId: string,
-    row: ReturnType<typeof db.getInstancesByIds>[number] & {
-      sessionId: string;
-    },
+    row: ReturnType<typeof db.getInstancesByIds>[number],
     crossed: boolean,
     /** The process is replaced even if the machine still runs one: a move to another account. */
     relaunch = false
   ): void => {
     const instanceId = row.id;
-    const refused =
-      launchRefusal(instanceId) ??
-      accountStartRefusal(machineId, row, sessionName(row));
+    // On its conversation, or fresh when its harness never began one.
+    const plan = relaunchOf(row);
+    const refused = wakeRefusal(machineId, row, plan);
     if (refused) {
       // Nothing it was sent will be read by a process that does not start.
       console.warn(`[hub] not waking ${instanceId}: ${refused}`);
       forgetPending(instanceId, refused);
       return;
     }
-    // A row whose launch directory is known holds it in `cwd` (`atLaunchDir`).
     const settled = settleMode(
       machineId,
-      {
-        instanceId,
-        cwd: row.cwd,
-        ...(row.harness ? { harness: row.harness as HarnessKind } : {}),
-        resume: { sessionKey: row.sessionId },
-        ...(relaunch ? { relaunch: true as const } : {}),
-        ...(row.kind === "scratch" ? { scratch: {} } : {}),
-        ...(row.model ? { model: row.model } : {}),
-        ...(isEffortLevel(row.effort) ? { effort: row.effort } : {}),
-        ...typeSettingsOf(row),
-      },
+      revivePayloadOf(row, plan, relaunch),
       row.permissionMode
     );
     if ("refusal" in settled) {
@@ -4215,15 +4262,19 @@ export const createServer = (
     }
     const revive = settled.payload;
     // A relaunch replaces the process; what the old one had parked is over.
+    // What no process was ever handed (owed) goes to the new one.
     if (!crossed) {
-      forgetPending(instanceId, UNREAD.restarted);
+      forgetPending(instanceId, UNREAD.restarted, false, "owed");
+    }
+    if (plan.kind === "fresh") {
+      noteFreshStart(row);
     }
     db.openInstance({
       id: instanceId,
       addressProtocol: addressProtocolMachines.has(machineId),
       machineId,
       cwd: revive.cwd,
-      sessionId: row.sessionId,
+      sessionId: row.sessionId ?? undefined,
       harness: row.harness ?? undefined,
       kind: row.kind ?? undefined,
       permissionMode: settled.permissionMode,
@@ -10223,6 +10274,31 @@ export const createServer = (
     ) {
       transcript.push(custodyNotice(row, held.reason));
     }
+    placeFreshStart(row, transcript);
+  };
+
+  /** Where a session started again fresh ({@link noteFreshStart}), at that moment. */
+  const placeFreshStart = (
+    row: InstanceRow,
+    transcript: SessionMessage[]
+  ): void => {
+    const fresh = db.freshStartOf(row.id);
+    if (fresh === null) {
+      return;
+    }
+    const at = transcript.findIndex(
+      (entry) =>
+        entry.timestamp !== undefined && Date.parse(entry.timestamp) > fresh
+    );
+    transcript.splice(at < 0 ? transcript.length : at, 0, {
+      type: "system",
+      uuid: `fresh-start-${row.id}`,
+      session_id: row.sessionId ?? "",
+      parent_tool_use_id: null,
+      parent_agent_id: null,
+      message: freshStartLine(row, fresh),
+      timestamp: new Date(fresh).toISOString(),
+    });
   };
 
   /** Every session's blocks, built here once, whether or not anyone watches. */
@@ -11350,6 +11426,25 @@ export const createServer = (
     } satisfies Envelope<SendPayload>);
   };
 
+  /**
+   * A session starting again fresh under its id: its first start never
+   * began, so there was no conversation to resume. Kept on its row, said in
+   * its transcript now and at every later read ({@link readRowHistory}).
+   */
+  const noteFreshStart = (row: InstanceRow): void => {
+    const at = Date.now();
+    db.noteFreshStart(row.id, at);
+    console.log(
+      `[hub] ${row.id} starts again fresh: its first start never began`
+    );
+    transcripts.ingest(row.id, {
+      kind: "frame",
+      instanceId: row.id,
+      harness: (row.harness ?? "claude") as HarnessKind,
+      message: freshStartLine(row, at),
+    });
+  };
+
   /** Writes a line into a session's transcript: kept, and folded into what its screens show now. */
   const noteAtLimit = (
     row: { id: string; sessionId: string | null; harness: string | null },
@@ -11610,8 +11705,19 @@ export const createServer = (
       return;
     }
     // A relaunch replaces the process — questions the old one had
-    // open are settled by its teardown and must not replay.
-    forgetPending(message.instanceId, UNREAD.restarted);
+    // open are settled by its teardown and must not replay. What no process
+    // was ever handed (owed) goes to the new one.
+    const [before] = db.getInstancesByIds([message.instanceId]);
+    forgetPending(message.instanceId, UNREAD.restarted, false, "owed");
+    // A session whose harness never began a conversation comes back fresh
+    // under its id (core `relaunchOf`), and its transcript says so.
+    if (
+      before &&
+      !peekResume(message.payload) &&
+      relaunchOf(before).kind === "fresh"
+    ) {
+      noteFreshStart(before);
+    }
     noteRespawn(message.instanceId, message.requestId, message.payload);
     // Brought back by the operator: nothing of the stop is left to carry.
     db.openInstance({
@@ -11638,6 +11744,8 @@ export const createServer = (
       );
     } else {
       forward({ ...message, payload: bounded(payload) }, ws);
+      // What waited for this start goes right behind it ({@link sendSpawn}).
+      releaseOwed({ instanceId: message.instanceId });
     }
     // A conversation that starts here: its first turn is its name.
     if (!peekResume(message.payload)) {
@@ -16327,6 +16435,32 @@ export const createServer = (
                 });
                 break;
               }
+              // A send no process took, its process refused by the keeper:
+              // owed again, whole, and it goes with the session's next start.
+              if (kind === "held_send" && message.instanceId) {
+                const { send } = message.payload as FramePayload & {
+                  kind: "held_send";
+                };
+                const kept = db.holdSend(
+                  send.message.uuid,
+                  JSON.stringify({
+                    verb: "send",
+                    machineId: message.machineId,
+                    instanceId: message.instanceId,
+                    payload: send,
+                  } satisfies Envelope<SendPayload>)
+                );
+                console.log(
+                  kept
+                    ? `[hub] send ${send.message.uuid} to ${message.instanceId} queued: its process never took it; it goes with the session's next start`
+                    : `[hub] send ${send.message.uuid} to ${message.instanceId} came back held, but is no longer pending`
+                );
+                const record = db.sendRecord(send.message.uuid);
+                if (record) {
+                  publishSend(record);
+                }
+                break;
+              }
               if (kind === "stopped" && message.instanceId) {
                 const ended = ownedSession;
                 if (
@@ -17207,7 +17341,22 @@ export const createServer = (
                   reportToParent(unstarted, `${reason}${line}`, true);
                 }
                 workflowRuntime.observe(message.instanceId, reason);
-                forgetPending(message.instanceId, reason);
+                // A start the keeper refused took nothing: its sends come
+                // back from the machine one by one, owed to its next start.
+                const keepsSends =
+                  (message.payload as { keepsSends?: unknown }).keepsSends ===
+                  true;
+                if (keepsSends) {
+                  console.warn(
+                    `[hub] ${message.instanceId} failed, its sends kept for its next start: ${reason}`
+                  );
+                }
+                forgetPending(
+                  message.instanceId,
+                  reason,
+                  false,
+                  keepsSends ? "all" : "none"
+                );
                 escalateRoutedAsks(message.instanceId);
                 if (!internal) {
                   telegram?.onError(message.instanceId, reason);

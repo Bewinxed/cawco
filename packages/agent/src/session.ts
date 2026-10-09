@@ -91,6 +91,7 @@ import {
   HarnessRecoveryRefused,
   HeldProcessRefused,
   HubContractRefused,
+  type KeeperRefused,
   SessionAddressRefused,
 } from "./harness";
 import { harnesses, harness as harnessOf } from "./harnesses";
@@ -583,6 +584,19 @@ export class SessionSupervisor {
   readonly #titles = new Map<string, string>();
   /** Spawn failures the sink could not send, until a connection takes them. */
   readonly #unsentFailures = new Map<string, Parameters<FrameSink>[0]>();
+  /**
+   * Sessions whose process the keeper refused its input ({@link KeeperRefused}),
+   * until their next start: every send that reaches one goes back to the hub,
+   * held for that start ({@link #holdSend}).
+   */
+  readonly #keeperRefused = new Map<string, KeeperRefused>();
+  /**
+   * Each session's sends handed to its harness and not yet read, whole, by
+   * uuid: what a refusal of the process's input hands back to the hub.
+   */
+  readonly #handed = new Map<string, Map<string, SendPayload>>();
+  /** Held sends the sink could not send, until a connection takes them. */
+  readonly #unsentHeld: Parameters<FrameSink>[0][] = [];
   /** Reattaches in flight, by instance id: see {@link reattach}. */
   readonly #adopting = new Map<string, Promise<void>>();
   /** Outlives its session: a discard can arrive after the query already ended. */
@@ -1684,6 +1698,10 @@ export class SessionSupervisor {
     settleClaim: () => void
   ): Promise<void> {
     const { instanceId, cwd, harness: kind, scratch, requestId: ack } = payload;
+    // A start again: what its last process was refused is over, and the
+    // sends kept for it come from the hub behind this spawn.
+    this.#keeperRefused.delete(instanceId);
+    this.#handed.delete(instanceId);
     if (payload.processGeneration) {
       this.#generations.set(instanceId, payload.processGeneration);
     }
@@ -1838,6 +1856,12 @@ export class SessionSupervisor {
           ? undefined
           : { credential: payload.sessionCredential }
       );
+      // Refused its input while it was starting: it is not a session to
+      // hand work to, and the refusal has said so.
+      const refused = this.#keeperRefused.get(instanceId);
+      if (refused) {
+        throw refused;
+      }
       this.#sessions.set(instanceId, session);
       if (boundary && this.#failOpen.delete(instanceId)) {
         console.info(
@@ -1917,6 +1941,21 @@ export class SessionSupervisor {
       // A probe that found nothing to attach says nothing; a held process
       // refused at attach was stopped, and that is its failure.
       if (payload.reattachOnly && !(error instanceof HeldProcessRefused)) {
+        return;
+      }
+      // The keeper refused its process its input: the refusal failed the
+      // session and kept its sends ({@link #refusedInput}); its caller hears it.
+      const refusal = this.#keeperRefused.get(instanceId);
+      if (refusal) {
+        if (ack) {
+          this.sink({
+            kind: "control_result",
+            instanceId,
+            requestId: ack,
+            ok: false,
+            error: refusal.message,
+          });
+        }
         return;
       }
       const message = error instanceof Error ? error.message : String(error);
@@ -2014,6 +2053,7 @@ export class SessionSupervisor {
       },
       frame: (message) => {
         this.#noteFailOpen(instanceId, message);
+        this.#noteRead(instanceId, message);
         const ping = this.#keepAlive.get(instanceId);
         if (
           ping &&
@@ -2103,6 +2143,8 @@ export class SessionSupervisor {
           ? this.#failures.set(instanceId, String(error))
           : this.#fail(instanceId, error, processGeneration),
       refused: (error) => this.#fail(instanceId, error, processGeneration),
+      keeperRefused: (error) =>
+        this.#refusedInput(instanceId, error, processGeneration),
       rejected: (uuid, error) => this.#reject(instanceId, uuid, error),
       emit: (envelope) => this.emit(envelope),
       closed: () => {
@@ -2591,7 +2633,105 @@ export class SessionSupervisor {
    * sentence a person reads, naming the machine and the session; the keeper's
    * own words about which limit stay in the agent's log.
    */
-  #fail(instanceId: string, error: unknown, processGeneration?: string): void {
+  /**
+   * The keeper refused this session's process its input. Said here with the
+   * session and the keeper's reason; the session fails with it, as a start
+   * that failed does, and is no longer one this daemon hands work to. What it
+   * was handed and has not read, and what waited for its process, goes back
+   * to the hub whole ({@link #holdSend}), as does every send that reaches it
+   * until it starts again: the hub keeps them for that start.
+   */
+  #refusedInput(
+    instanceId: string,
+    error: KeeperRefused,
+    processGeneration?: string
+  ): void {
+    if (this.#keeperRefused.has(instanceId)) {
+      return;
+    }
+    warn(`${instanceId}: ${error.reason} (${error.procId})`);
+    this.#keeperRefused.set(instanceId, error);
+    this.#sessions.delete(instanceId);
+    this.#busy.delete(instanceId);
+    this.#forgetPulse(instanceId);
+    for (const payload of this.#handed.get(instanceId)?.values() ?? []) {
+      this.#holdSend(payload);
+    }
+    this.#handed.delete(instanceId);
+    for (const payload of this.#asleep.get(instanceId) ?? []) {
+      this.#holdSend(payload);
+    }
+    this.#asleep.delete(instanceId);
+    this.#fail(instanceId, error, processGeneration, true);
+  }
+
+  /**
+   * A send to a session whose process was refused its input: no process
+   * will read it until the session starts again, so it goes back to the hub
+   * for that start. True when it was held. A keep-alive ping is never held:
+   * nothing starts a session to keep its cache warm.
+   */
+  #heldForRefusal(payload: SendPayload, keepAlive: boolean): boolean {
+    const { instanceId } = payload;
+    if (
+      keepAlive ||
+      !this.#keeperRefused.has(instanceId) ||
+      this.#sessions.has(instanceId)
+    ) {
+      return false;
+    }
+    this.#holdSend(payload);
+    return true;
+  }
+
+  /** A send handed to its harness, whole as the hub sent it, until the harness reads it. */
+  #noteHanded(payload: SendPayload): void {
+    const handed = this.#handed.get(payload.instanceId) ?? new Map();
+    handed.set(payload.message.uuid, payload);
+    this.#handed.set(payload.instanceId, handed);
+  }
+
+  /** The sends a harness says it read are no longer any refusal's to hand back. */
+  #noteRead(instanceId: string, message: NeutralMessage): void {
+    if (message.type !== "system" || message.subtype !== MESSAGES_READ) {
+      return;
+    }
+    for (const uuid of message.read ?? []) {
+      this.#handed.get(instanceId)?.delete(uuid);
+    }
+  }
+
+  /** A send no process took, back to the hub whole: it goes with the session's next start. */
+  #holdSend(payload: SendPayload): void {
+    const frame = {
+      kind: "held_send" as const,
+      instanceId: payload.instanceId,
+      send: payload,
+    };
+    console.info(
+      `[session] ${payload.instanceId}: send ${payload.message.uuid} kept for its next start`
+    );
+    if (!this.sink(frame)) {
+      this.#unsentHeld.push(frame);
+    }
+  }
+
+  #fail(
+    instanceId: string,
+    error: unknown,
+    processGeneration?: string,
+    /** No process took anything: its sends are kept, not failed ({@link #refusedInput}). */
+    keepsSends = false
+  ): void {
+    // Its process was refused its input, and that said why it failed
+    // ({@link #refusedInput}): the harness's stream ending on it is the same
+    // failure, and must not fail the sends the refusal kept.
+    if (!keepsSends && this.#keeperRefused.has(instanceId)) {
+      console.info(
+        `[session] ${instanceId}: after its refusal: ${error instanceof Error ? error.message : String(error)}`
+      );
+      return;
+    }
     const said = error instanceof Error ? error.message : String(error);
     const title = this.#titles.get(instanceId);
     const message = said.includes(`${SESSIOND_PROCESS_LIMIT}:`)
@@ -2610,6 +2750,7 @@ export class SessionSupervisor {
       processGeneration,
       verb: "spawn" as const,
       message,
+      ...(keepsSends ? { keepsSends: true as const } : {}),
     };
     // The hub fails the row and its work item on this frame alone. One that
     // could not go out now goes out on the next connection.
@@ -2631,6 +2772,10 @@ export class SessionSupervisor {
         this.#unsentFailures.delete(instanceId);
       }
     }
+    // The sends kept for a refused session's next start, behind its failure.
+    while (this.#unsentHeld.length && this.sink(this.#unsentHeld[0])) {
+      this.#unsentHeld.shift();
+    }
   }
 
   /**
@@ -2639,6 +2784,16 @@ export class SessionSupervisor {
    * there is one, goes on.
    */
   #reject(instanceId: string, uuid: string, error: unknown): void {
+    // Its process was refused its input: what it was handed went back to
+    // the hub whole ({@link #refusedInput}), and the harness letting go of it
+    // as its stream ends is not that send failing.
+    if (this.#keeperRefused.has(instanceId)) {
+      console.info(
+        `[session] ${instanceId}: send ${uuid} kept, not failed: ${error instanceof Error ? error.message : String(error)}`
+      );
+      return;
+    }
+    this.#handed.get(instanceId)?.delete(uuid);
     this.sink({
       kind: "rejected",
       instanceId,
@@ -2652,6 +2807,9 @@ export class SessionSupervisor {
     const keepAlive =
       payload.message.origin.kind === "system" &&
       payload.message.origin.name === "keepalive";
+    if (this.#heldForRefusal(payload, keepAlive)) {
+      return;
+    }
     // Sent before the hub heard this session was put to sleep: it waits for
     // the process the hub's wake starts ({@link sleep}). A keep-alive ping is
     // not held: nothing wakes a session to keep its cache warm, and it is
@@ -2720,6 +2878,7 @@ export class SessionSupervisor {
       // A send is the reader trying again: whatever failed before it is not
       // the session looping on its own.
       this.#failureRun.delete(instanceId);
+      this.#noteHanded(payload);
     }
     session.send(message, { attachments, images, urgent });
   }

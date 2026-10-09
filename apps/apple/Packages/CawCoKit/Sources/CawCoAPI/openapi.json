@@ -18933,6 +18933,9 @@
             "$ref": "#/components/schemas/RejectedFrame"
           },
           {
+            "$ref": "#/components/schemas/HeldSendFrame"
+          },
+          {
             "$ref": "#/components/schemas/InstancesFrame"
           },
           {
@@ -19017,6 +19020,7 @@
             "frame": "#/components/schemas/MessageFrame",
             "send": "#/components/schemas/SendFrame",
             "rejected": "#/components/schemas/RejectedFrame",
+            "held_send": "#/components/schemas/HeldSendFrame",
             "instances": "#/components/schemas/InstancesFrame",
             "instances_delta": "#/components/schemas/InstancesDeltaFrame",
             "permission_request": "#/components/schemas/PermissionRequestFrame",
@@ -31734,6 +31738,178 @@
           "uuid"
         ]
       },
+      "HeldSendFrame": {
+        "description": "Daemon-originated: a send the machine was handed and no process took, its\nprocess refused by the machine's session keeper. Whole, as it was sent; the\nhub keeps it owed until the session's next start, which it goes behind.",
+        "type": "object",
+        "properties": {
+          "instanceId": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "held_send"
+            ]
+          },
+          "send": {
+            "$ref": "#/components/schemas/SendPayload"
+          }
+        },
+        "required": [
+          "instanceId",
+          "kind",
+          "send"
+        ]
+      },
+      "SendAttachment": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/TextAttachment"
+          },
+          {
+            "$ref": "#/components/schemas/FileAttachment"
+          }
+        ]
+      },
+      "TextAttachment": {
+        "description": "What a turn carries beside its typed words, other than pictures: a text\nthe reader attached or pasted at length, folded into the prompt as quoted\nmaterial; or any other file, which the hub stores (`POST /api/files`) and\nthe session's machine fetches and puts on its own disk before the harness\nsees the turn, naming its path in one line of the message.",
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "text"
+            ]
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "content",
+          "kind",
+          "name"
+        ]
+      },
+      "FileAttachment": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "file"
+            ]
+          },
+          "mediaType": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "ref": {
+            "description": "The hub's reference to its bytes: `/api/files/<sha256>`.",
+            "type": "string"
+          },
+          "size": {
+            "description": "Its length in bytes.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "kind",
+          "mediaType",
+          "name",
+          "ref",
+          "size"
+        ]
+      },
+      "SentMessage": {
+        "description": "A message sent to a session, by the reader or by cawco. `uuid` is its one\nidentity from the press to a reload: the dashboard's command id for a\nreader's send, minted where the hub builds its own. The hub keeps one\n{@link SendRecord} under it, and every copy of the message on every screen\nis drawn from that record.",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/NeutralUserMessage"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "origin": {
+                "$ref": "#/components/schemas/NeutralOrigin"
+              },
+              "uuid": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "origin",
+              "uuid"
+            ]
+          }
+        ]
+      },
+      "NeutralOrigin": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "human"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "peer"
+                ]
+              },
+              "from": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "fromSession": {
+                "type": "string"
+              },
+              "body": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "system"
+                ]
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          }
+        ]
+      },
       "InstancesFrame": {
         "type": "object",
         "properties": {
@@ -32661,6 +32837,11 @@
           "instanceId": {
             "type": "string"
           },
+          "keepsSends": {
+            "description": "A start the machine's session keeper refused: no process took anything,\nso the session's sends are not failed with it. Each comes back from its\nmachine as a {@link HeldSendFrame} and goes with the session's next start.",
+            "const": true,
+            "type": "boolean"
+          },
           "kind": {
             "description": "Hub-originated routing failures (e.g. target machine offline).",
             "type": "string",
@@ -33533,155 +33714,6 @@
         "required": [
           "id",
           "path"
-        ]
-      },
-      "SendAttachment": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/TextAttachment"
-          },
-          {
-            "$ref": "#/components/schemas/FileAttachment"
-          }
-        ]
-      },
-      "TextAttachment": {
-        "description": "What a turn carries beside its typed words, other than pictures: a text\nthe reader attached or pasted at length, folded into the prompt as quoted\nmaterial; or any other file, which the hub stores (`POST /api/files`) and\nthe session's machine fetches and puts on its own disk before the harness\nsees the turn, naming its path in one line of the message.",
-        "type": "object",
-        "properties": {
-          "content": {
-            "type": "string"
-          },
-          "kind": {
-            "type": "string",
-            "enum": [
-              "text"
-            ]
-          },
-          "name": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "content",
-          "kind",
-          "name"
-        ]
-      },
-      "FileAttachment": {
-        "type": "object",
-        "properties": {
-          "kind": {
-            "type": "string",
-            "enum": [
-              "file"
-            ]
-          },
-          "mediaType": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "ref": {
-            "description": "The hub's reference to its bytes: `/api/files/<sha256>`.",
-            "type": "string"
-          },
-          "size": {
-            "description": "Its length in bytes.",
-            "type": "number"
-          }
-        },
-        "required": [
-          "kind",
-          "mediaType",
-          "name",
-          "ref",
-          "size"
-        ]
-      },
-      "SentMessage": {
-        "description": "A message sent to a session, by the reader or by cawco. `uuid` is its one\nidentity from the press to a reload: the dashboard's command id for a\nreader's send, minted where the hub builds its own. The hub keeps one\n{@link SendRecord} under it, and every copy of the message on every screen\nis drawn from that record.",
-        "allOf": [
-          {
-            "$ref": "#/components/schemas/NeutralUserMessage"
-          },
-          {
-            "type": "object",
-            "properties": {
-              "origin": {
-                "$ref": "#/components/schemas/NeutralOrigin"
-              },
-              "uuid": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "origin",
-              "uuid"
-            ]
-          }
-        ]
-      },
-      "NeutralOrigin": {
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "kind": {
-                "type": "string",
-                "enum": [
-                  "human"
-                ]
-              }
-            },
-            "required": [
-              "kind"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "kind": {
-                "type": "string",
-                "enum": [
-                  "peer"
-                ]
-              },
-              "from": {
-                "type": "string"
-              },
-              "name": {
-                "type": "string"
-              },
-              "fromSession": {
-                "type": "string"
-              },
-              "body": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "kind"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "kind": {
-                "type": "string",
-                "enum": [
-                  "system"
-                ]
-              },
-              "name": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "kind"
-            ]
-          }
         ]
       },
       "RepoInfo": {

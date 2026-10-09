@@ -523,6 +523,12 @@ export const instances = sqliteTable("instances", {
   owedSpawn: text("owed_spawn"),
   /** When it was asked for, so what a machine is owed goes out in order. */
   owedAt: integer("owed_at"),
+  /**
+   * When the session started again fresh under its id (core `relaunchOf`):
+   * its first start never began, so it had no conversation to resume. Its
+   * transcript says so there (core `FRESH_START_LINE`).
+   */
+  freshStartAt: integer("fresh_start_at"),
   keepAliveEnabled: integer("keep_alive", { mode: "boolean" })
     .notNull()
     .default(false),

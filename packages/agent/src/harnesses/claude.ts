@@ -1289,10 +1289,13 @@ class ClaudeSession implements HarnessSession {
               spawnClaudeCodeProcess: (
                 spawnOptions: import("@anthropic-ai/claude-agent-sdk").SpawnOptions
               ) =>
-                sessiondBridge(sessiond.client, sessiond.procId, spawnOptions, {
-                  seqs,
-                  attach: sessiond.attach,
-                }),
+                sessiondBridge(
+                  sessiond.client,
+                  sessiond.procId,
+                  spawnOptions,
+                  { seqs, attach: sessiond.attach },
+                  (refusal) => ctx.keeperRefused(refusal)
+                ),
             }
           : {}),
         canUseTool: (

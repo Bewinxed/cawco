@@ -678,6 +678,30 @@ export const CLAUDE_CONVERSATION_GONE =
   "This Claude Code conversation is gone and cannot be resumed. Start a new session to continue working.";
 
 /**
+ * How a session with no process comes back: on its conversation by its key;
+ * fresh under the same id when its harness never began one (no key: it never
+ * said init), so there is nothing to lose; or not at all when its
+ * conversation existed and is gone. The one decision for every revive: the
+ * dashboard's (`ensureAlive`) and the hub's wake for a send.
+ */
+export type Relaunch =
+  | { kind: "resume"; sessionKey: string }
+  | { kind: "fresh" }
+  | { kind: "refused"; reason: string };
+
+export const relaunchOf = (row: {
+  lastError?: string | null;
+  sessionId: string | null;
+}): Relaunch => {
+  if (row.lastError === CLAUDE_CONVERSATION_GONE) {
+    return { kind: "refused", reason: CLAUDE_CONVERSATION_GONE };
+  }
+  return row.sessionId
+    ? { kind: "resume", sessionKey: row.sessionId }
+    : { kind: "fresh" };
+};
+
+/**
  * A "continue in new session" the hub is carrying, as every dashboard follows
  * it: summarise the source, then start the target seeded with the summary.
  * The hub owns it from the POST that starts it to its end; only a Cancel
@@ -1007,6 +1031,7 @@ export type FramePayload =
   | import("./frames").MessageFrame
   | import("./frames").SendFrame
   | import("./frames").RejectedFrame
+  | import("./frames").HeldSendFrame
   | import("./frames").InstancesFrame
   | import("./frames").InstancesDeltaFrame
   | import("./frames").PermissionRequestFrame

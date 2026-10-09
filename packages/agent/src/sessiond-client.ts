@@ -46,6 +46,7 @@ import {
   type SessiondServerMessage,
   sessiondEndpoint,
 } from "@cawco/core/sessiond";
+import { KeeperRefused } from "./harness";
 import { parseProcId } from "./proc-id";
 import { holdRestart } from "./restart";
 
@@ -639,11 +640,26 @@ export class SessiondClient {
   }
 }
 
+/** sessiond refused a command; `reason` is the keeper's own words. */
+export class SessiondRefusal extends Error {
+  readonly reason: string;
+  constructor(verb: string, reason: string) {
+    super(`[sessiond] ${verb} failed: ${reason}`);
+    this.reason = reason;
+  }
+}
+
+/** The keeper's own words for why a command did not go, however it failed. */
+export const refusalReason = (error: unknown): string => {
+  if (error instanceof SessiondRefusal) {
+    return error.reason;
+  }
+  return error instanceof Error ? error.message : String(error);
+};
+
 const assertApplied = (ack: SessiondAck, verb: string): void => {
   if (ack.stage === "failed") {
-    throw new Error(
-      `[sessiond] ${verb} failed: ${ack.reason ?? "no reason given"}`
-    );
+    throw new SessiondRefusal(verb, ack.reason ?? "no reason given");
   }
 };
 
@@ -671,8 +687,14 @@ export const endProc = async (
   if (!held) {
     return;
   }
+  // Each step on a child already gone is refused, which is the end this
+  // asks for: said, and the next step goes on.
   const quietly = (step: Promise<void>): Promise<void> =>
-    step.catch(() => undefined);
+    step.catch((error: unknown) => {
+      console.warn(
+        `[sessiond] ${procId}: ending it: ${error instanceof Error ? error.message : String(error)}`
+      );
+    });
   await quietly(client.stdinEnd(procId));
   await quietly(client.signal(procId, "SIGTERM"));
   setTimeout(() => {
@@ -766,11 +788,15 @@ export const sessiondBridge = (
     env: Record<string, string | undefined>;
     signal?: AbortSignal;
   },
-  ring: BridgeRing
+  ring: BridgeRing,
+  /** The keeper refused the child its input ({@link KeeperRefused}): told once. */
+  refused: (error: KeeperRefused) => void
 ): import("@anthropic-ai/claude-agent-sdk").SpawnedProcess => {
   const { attach } = ring;
   const events = new EventEmitter();
   let killed = false;
+  /** The spawn itself failed: that error is the report, not a refusal after it. */
+  let spawnFailed = false;
   let exitCode: number | null = null;
   let signalCode: NodeJS.Signals | null = null;
 
@@ -791,6 +817,10 @@ export const sessiondBridge = (
       // reaches no child ("is not alive", or on a relaunch the old child
       // under the same procId). The SDK's first write is its `initialize`,
       // and one lost there left the session waiting on an answer forever.
+      if (spent("write")) {
+        callback();
+        return;
+      }
       started
         .then(() =>
           client.write(
@@ -799,17 +829,68 @@ export const sessiondBridge = (
           )
         )
         .then(() => callback())
-        // A write to a child that already died is the child's death, not a
-        // stream error the SDK should throw on: the exit event is the truth.
-        .catch(() => callback());
+        .catch((error: unknown) => {
+          refusedInput("write", error);
+          callback();
+        });
     },
     final(callback) {
+      if (spent("stdin_end")) {
+        callback();
+        return;
+      }
       started
         .then(() => client.stdinEnd(procId))
         .then(() => callback())
-        .catch(() => callback());
+        .catch((error: unknown) => {
+          refusedInput("stdin_end", error);
+          callback();
+        });
     },
   });
+
+  /**
+   * The keeper refused this child its input. Never silent: said with the
+   * child and the keeper's reason. To a child whose end this transport has
+   * already heard, the exit is the session's ending and the refusal only
+   * follows it. Otherwise the session is told (`refused`), and the SDK's
+   * stream ends with the refusal, so nothing waits on an answer to bytes
+   * that never arrived. A spawn that failed has said so already.
+   */
+  let refusal: KeeperRefused | null = null;
+  /**
+   * After a refusal this transport asks nothing more of the keeper: the
+   * session starts again under the same id, and a write, an end or a signal
+   * from here would reach that next process. Said, and not sent.
+   */
+  const spent = (verb: string): boolean => {
+    if (!refusal) {
+      return false;
+    }
+    console.warn(
+      `[sessiond] ${procId}: ${verb} not sent: this process was refused its input, and its id may name its next process by now`
+    );
+    return true;
+  };
+  const refusedInput = (verb: "write" | "stdin_end", error: unknown): void => {
+    const reason = refusalReason(error);
+    if (spawnFailed) {
+      return;
+    }
+    if (exitCode !== null || signalCode !== null) {
+      console.warn(
+        `[sessiond] ${procId}: ${verb} refused after its process ended: ${reason}`
+      );
+      return;
+    }
+    console.warn(`[sessiond] ${procId}: ${verb} refused: ${reason}`);
+    if (refusal) {
+      return;
+    }
+    refusal = new KeeperRefused(procId, reason);
+    refused(refusal);
+    events.emit("error", refusal);
+  };
 
   // The listener is built here but attached only once the spawn is acked (see
   // `started`). A relaunch reuses the procId, and until
@@ -909,6 +990,7 @@ export const sessiondBridge = (
           })
           .then(() => client.subscribe(procId, listener, 0))
   ).catch((error: unknown) => {
+    spawnFailed = true;
     events.emit(
       "error",
       error instanceof Error ? error : new Error(String(error))
@@ -919,10 +1001,17 @@ export const sessiondBridge = (
     killed = true;
     // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — kill() itself is synchronous, and the SDK does not await the signal reaching the child
     void started.then(async () => {
+      if (spent(sig)) {
+        return;
+      }
       try {
         await client.signal(procId, sig);
-      } catch {
-        // a child that already died cannot be signaled; the exit event is the truth
+      } catch (error) {
+        // A child that already died cannot be signaled, and its exit event is
+        // the truth of it; the refusal is still said.
+        console.warn(
+          `[sessiond] ${procId}: ${sig} refused: ${error instanceof Error ? error.message : String(error)}`
+        );
       }
     });
     return true;

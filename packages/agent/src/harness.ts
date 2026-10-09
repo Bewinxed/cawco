@@ -57,6 +57,25 @@ export class HubContractRefused extends SessionAddressRefused {}
  */
 export class HeldProcessRefused extends Error {}
 
+/**
+ * The machine's session keeper (sessiond) refused to pass a session's process
+ * its input: a write or the end of its stdin, for a process it does not hold
+ * alive. Nothing the refused bytes carried reached the harness, and nothing
+ * more will: the session fails with this, in its start failure's words, and
+ * keeps what it was sent for its next start.
+ */
+export class KeeperRefused extends Error {
+  readonly procId: string;
+  readonly reason: string;
+  constructor(procId: string, reason: string) {
+    super(
+      `This session's process could not be reached: the machine's session keeper refused its input (${reason}).`
+    );
+    this.procId = procId;
+    this.reason = reason;
+  }
+}
+
 /** Everything a harness needs from the supervisor while it owns a session. */
 export interface HarnessContext {
   /**
@@ -84,6 +103,13 @@ export interface HarnessContext {
   frame(message: NeutralMessage): void;
   readonly ingested?: import("@cawco/core").IngestMark;
   readonly instanceId: string;
+  /**
+   * The session keeper refused this session's process its input
+   * ({@link KeeperRefused}): said, the session failed with it, and the sends
+   * it was handed kept for its next start.
+   */
+  // biome-ignore lint/style/useConsistentMethodSignatures: matches the context callbacks
+  keeperRefused(error: KeeperRefused): void;
   /** Park a permission request; the supervisor forwards it and tracks the reply. */
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
   permission(request: {

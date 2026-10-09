@@ -54,6 +54,11 @@ function start(
     emit: () => {
       throw new Error("pi host cannot emit hub envelopes");
     },
+    // The host is the keeper's child: it writes to no keeper, and its own
+    // agent hears any refusal of its input.
+    keeperRefused: (error) => {
+      throw error;
+    },
   };
   const started = startPiHost(command.spec, ctx).then(
     (created: HarnessSession) => {

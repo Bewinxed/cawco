@@ -1,0 +1,1 @@
+ALTER TABLE `instances` ADD `fresh_start_at` integer;

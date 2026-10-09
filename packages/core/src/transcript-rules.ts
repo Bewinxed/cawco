@@ -22,6 +22,8 @@ import type {
 } from "./harness";
 import {
   ACCOUNT_MOVE,
+  FRESH_START,
+  FRESH_START_LINE,
   REPEATED_FAILURE,
   REPEATED_FAILURE_LIMIT,
 } from "./harness";
@@ -947,6 +949,17 @@ export function mapFrame(
               )
             );
           }
+          break;
+        // The hub's line where the session started again fresh: its first
+        // start never began, so it had no conversation to resume.
+        case FRESH_START:
+          mapping.blocks.push(
+            systemLine(base, "ui.system_note", FRESH_START_LINE, {
+              subtype: FRESH_START,
+              noteKind: "Started again",
+              noteTitle: FRESH_START_LINE,
+            })
+          );
           break;
         // A session-start hook that failed: the one hook frame a transcript
         // draws, live and read back alike (its output when it works is startup

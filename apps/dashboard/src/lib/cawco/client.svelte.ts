@@ -92,6 +92,7 @@ import {
   isEffortLevel,
   questionsOf,
   RESOLVE_PERMISSION,
+  relaunchOf,
   runDoing,
   WIRE_PROTOCOL,
 } from "@cawco/core";
@@ -4687,20 +4688,24 @@ export async function ensureAlive(
       row.status === "stopped" ||
       row.status === "sleeping");
   if (dead) {
-    // A dead row with no key on record cannot come back, and a spawn sent
-    // anyway would carry a guessed one — the refusal is the honest answer.
-    const sessionKey = resumeKeyFor(instanceId);
-    if (!sessionKey) {
-      throw new Error(
-        `no session key on record for ${instanceId}; cannot resume`
-      );
+    // The one decision every revive takes (core `relaunchOf`): on its
+    // conversation by the key on record, never a guessed one; fresh when its
+    // harness never began one; not at all when its conversation is gone.
+    const plan = relaunchOf({
+      sessionId: resumeKeyFor(instanceId),
+      lastError: row.lastError,
+    });
+    if (plan.kind === "refused") {
+      throw new Error(plan.reason);
     }
     const requestId = newId();
     const payload = explicit(machineId, {
       instanceId,
       cwd: target.cwd,
       harness: target.harness,
-      resume: { sessionKey },
+      ...(plan.kind === "resume"
+        ? { resume: { sessionKey: plan.sessionKey } }
+        : {}),
       scratch: target.scratch ? {} : undefined,
       // The new process answers the way the old one did: a revive nobody asked
       // for is not the moment to hand the session back on other settings.

@@ -181,6 +181,7 @@ export type PublicInstanceRow = Omit<
   | "endAttempts"
   | "owedSpawn"
   | "owedAt"
+  | "freshStartAt"
 >;
 export type BoardInstanceRow = Omit<PublicInstanceRow, "tooling">;
 export type PlaceRow = typeof projectPlaces.$inferSelect;
@@ -476,6 +477,8 @@ export interface DbShape {
   readonly fleetSkillVersion: (
     id: number
   ) => (SkillVersion & { skillSource: string; files: SkillFile[] }) | undefined;
+  /** When a session last started again fresh; null when it never did. */
+  readonly freshStartOf: (id: string) => number | null;
   readonly getCredential: (id: string) => Record<string, unknown> | undefined;
   readonly getFleetHook: (id: string) => FleetHook | undefined;
   /** The fleet's user-scope CLAUDE.md, or undefined while the fleet keeps none. */
@@ -531,6 +534,11 @@ export interface DbShape {
     group: string
   ) => WorkItemRow[];
   readonly hiddenSession: (id: string) => boolean;
+  /**
+   * A pending send no process took, owed again whole (`envelope`) until the
+   * session's next start; false when it is no longer pending.
+   */
+  readonly holdSend: (uuid: string, envelope: string) => boolean;
   readonly insertContinuation: (
     row: Omit<ContinuationRow, "createdAt" | "updatedAt">
   ) => ContinuationRow;
@@ -705,6 +713,8 @@ export interface DbShape {
   readonly noteDerivedTitle: (id: string, derivedTitle: string) => boolean;
   readonly noteEndFailure: (id: string, error: string) => void;
   readonly noteEndReason: (id: string, reason: string) => void;
+  /** Records that a session started again fresh, now. */
+  readonly noteFreshStart: (id: string, at: number) => void;
   /**
    * The effort the session's agent read back from its harness (`EFFORT_READ`).
    * Returns whether the row moved, so a reading repeated at every turn's end
@@ -1733,6 +1743,7 @@ const make = async (path: string): Promise<DbShape> => {
     endConfirmedAt: _endConfirmedAt,
     owedSpawn: _owedSpawn,
     owedAt: _owedAt,
+    freshStartAt: _freshStartAt,
     ...publicColumns
   } = getTableColumns(instances);
   const { tooling: _tooling, ...boardColumns } = publicColumns;
@@ -4960,6 +4971,27 @@ const make = async (path: string): Promise<DbShape> => {
         .orderBy(asc(sentMessages.acceptedAt))
         .all()
         .map((row) => row.send),
+    holdSend: (uuid, envelope) =>
+      db
+        .update(sentMessages)
+        .set({ owed: envelope })
+        .where(
+          and(eq(sentMessages.uuid, uuid), eq(sentMessages.state, "pending"))
+        )
+        .returning({ uuid: sentMessages.uuid })
+        .all().length === 1,
+    noteFreshStart: (id, at) => {
+      db.update(instances)
+        .set({ freshStartAt: at })
+        .where(eq(instances.id, id))
+        .run();
+    },
+    freshStartOf: (id) =>
+      db
+        .select({ at: instances.freshStartAt })
+        .from(instances)
+        .where(eq(instances.id, id))
+        .get()?.at ?? null,
     takeOwedSend: (uuid) => {
       const owed = db
         .select({ owed: sentMessages.owed })

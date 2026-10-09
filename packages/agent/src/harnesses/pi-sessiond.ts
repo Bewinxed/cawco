@@ -15,10 +15,20 @@ import {
 } from "@cawco/core";
 import { standalone } from "@cawco/core/runtime";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
-import type { HarnessContext, HarnessSession, TurnExtras } from "../harness";
+import {
+  type HarnessContext,
+  type HarnessSession,
+  KeeperRefused,
+  type TurnExtras,
+} from "../harness";
 import { procIdFor } from "../proc-id";
 import type { SessiondAwareContext } from "../session";
-import { ensureSessiond, procEpoch, SessiondClient } from "../sessiond-client";
+import {
+  ensureSessiond,
+  procEpoch,
+  refusalReason,
+  SessiondClient,
+} from "../sessiond-client";
 
 export type PiHostCommand =
   | { type: "start"; spec: SpawnPayload; boundary?: HarnessContext["boundary"] }
@@ -195,10 +205,17 @@ export class PiRemoteSession implements HarnessSession {
   }
 
   async write(command: PiHostCommand): Promise<void> {
-    await this.#client.write(
-      procIdFor("pi", this.#ctx.instanceId),
-      `${JSON.stringify(command)}\n`
-    );
+    const procId = procIdFor("pi", this.#ctx.instanceId);
+    try {
+      await this.#client.write(procId, `${JSON.stringify(command)}\n`);
+    } catch (error) {
+      // Never silent: the session hears the keeper refused its host its
+      // input, and the caller's wait ends with the same refusal.
+      const refusal = new KeeperRefused(procId, refusalReason(error));
+      console.warn(`[sessiond] ${procId}: write refused: ${refusal.reason}`);
+      this.#ctx.keeperRefused(refusal);
+      throw refusal;
+    }
   }
 
   async request(
@@ -226,9 +243,13 @@ export class PiRemoteSession implements HarnessSession {
 
   send(message: SentMessage, extras: TurnExtras): void {
     this.#setBusy(true);
-    this.write({ type: "send", message, extras }).catch((error: unknown) =>
-      this.#ctx.rejected(message.uuid, error)
-    );
+    this.write({ type: "send", message, extras }).catch((error: unknown) => {
+      // A refused write has been said, and its send is kept for the next
+      // start ({@link KeeperRefused}); any other failure is this send's.
+      if (!(error instanceof KeeperRefused)) {
+        this.#ctx.rejected(message.uuid, error);
+      }
+    });
   }
   control(method: string, args: unknown[]): Promise<unknown> {
     return this.request({ type: "control", method, args });

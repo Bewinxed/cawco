@@ -154,6 +154,18 @@ export const ACCOUNT_READ = "account";
  */
 export const ACCOUNT_MOVE = "account_move";
 
+/**
+ * The hub's line in a session's transcript where it started again fresh
+ * under its id ({@link import("./index").relaunchOf}): its first start never
+ * began, so it had no conversation to resume. Drawn as a note titled
+ * {@link FRESH_START_LINE}.
+ */
+export const FRESH_START = "fresh_start";
+
+/** What a session's transcript says where it started again fresh ({@link FRESH_START}). */
+export const FRESH_START_LINE =
+  "This session started again because its first start never began.";
+
 /** A session's own word on what it is doing right now. */
 export type NeutralStatus = "compacting" | "requesting" | null;
 
