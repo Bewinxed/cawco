@@ -55,6 +55,8 @@ final class TabOptionsSheet: UIView {
     private var link: CADisplayLink?
     private var last: CFTimeInterval = 0
     private var gone = false
+    /// VoiceOver has been moved to the open options.
+    private var announced = false
 
     init(sections: [[TabAction]], under tabView: TabView, in host: UIView) {
         let box = tabView.convert(tabView.bounds, to: host)
@@ -94,6 +96,8 @@ final class TabOptionsSheet: UIView {
         list.frame = CGRect(x: 6, y: 6, width: panel.width - 12, height: panel.height - 12)
         list.translatesAutoresizingMaskIntoConstraints = true
         body.addSubview(list)
+        // The rows' frames, which each one's reveal is measured on.
+        list.layoutIfNeeded()
         // The tab's title and rim, standing on the shape where they stood.
         if let head = tabView.contentSnapshot() {
             head.frame = tab
@@ -271,7 +275,7 @@ final class TabOptionsSheet: UIView {
         progress = at
         let traits = traitCollection
         let path = outline(at)
-        let widen = reach(at).widen
+        let (travel, widen, _) = reach(at)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         shape.frame = bounds
@@ -285,8 +289,22 @@ final class TabOptionsSheet: UIView {
         bodyMask.frame = body.bounds
         var toBody = CGAffineTransform(translationX: -panel.minX, y: -panel.minY)
         bodyMask.path = path.copy(using: &toBody)
-        list.alpha = Self.clamp01((at - 0.3) / 0.4)
+        reveal(travel: travel, widen: widen)
         CATransaction.commit()
+    }
+
+    /// Each option shows only once the shape has uncovered it, so no line is
+    /// ever read cut through by the shape's edge: it comes in as the foot
+    /// passes its last quarter, and once the body stands at nearly its full
+    /// width. Going back into the tab, the same in reverse.
+    private func reveal(travel: Double, widen: Double) {
+        let across = Self.clamp01((widen - 0.75) / 0.25)
+        for row in list.arrangedSubviews {
+            // The body's top is the tab's foot, where the travel is measured from.
+            let end = list.frame.minY + row.frame.maxY
+            let lead = row.frame.height / 4
+            row.alpha = min(across, Self.clamp01((travel - end + lead) / lead))
+        }
     }
 
     /// `a` toward `b` by `t`, both already resolved.
@@ -318,7 +336,6 @@ final class TabOptionsSheet: UIView {
         }
         if dy + velocity * Self.project >= Self.opens {
             settle(to: 1, velocity: velocity)
-            UIAccessibility.post(notification: .screenChanged, argument: list.arrangedSubviews.first)
         } else {
             settle(to: 0, velocity: velocity)
         }
@@ -404,7 +421,14 @@ final class TabOptionsSheet: UIView {
         let target = moving.target
         draw(target)
         stopSettle()
-        if target == 0 { finish() }
+        if target == 0 {
+            finish()
+        } else if !announced {
+            // VoiceOver moves to the options once they stand open: before
+            // that, the first row may not be uncovered yet.
+            announced = true
+            UIAccessibility.post(notification: .screenChanged, argument: list.arrangedSubviews.first)
+        }
     }
 
     private func finish() {
