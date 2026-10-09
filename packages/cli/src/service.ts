@@ -6,7 +6,7 @@ import type { AgentRow } from "@cawco/core";
 import {
   CAWCO_ENV,
   CAWCO_HUB_PORT,
-  CAWCO_MCP_CALLBACK_PORT,
+  mcpGatewayPort,
   readEnv,
 } from "@cawco/core";
 import { holdPhrases, type RestartReadiness } from "@cawco/core/binary-updates";
@@ -1377,10 +1377,9 @@ const sessionsMidTurn = async (): Promise<string[] | "unknown"> => {
 /**
  * Where this machine's agent says what its restart would cut: its own
  * loopback gateway, so the answer needs no hub and comes from the one process
- * that knows.
+ * that knows. The same setting the agent serves it on ({@link mcpGatewayPort}).
  */
-const agentGateway = (): string =>
-  `http://127.0.0.1:${process.env.CAWCO_MCP_CALLBACK_PORT ?? CAWCO_MCP_CALLBACK_PORT}`;
+const agentGateway = (): string => `http://127.0.0.1:${mcpGatewayPort()}`;
 
 /**
  * What restarting the agent would cut now, in words, or `unknown` when it

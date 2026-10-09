@@ -7,7 +7,12 @@ import type {
   SentMessage,
   SpawnPayload,
 } from "@cawco/core";
-import { CAWCO_ENV, CONTROL_INTERRUPT, MESSAGES_HELD } from "@cawco/core";
+import {
+  CAWCO_ENV,
+  CONTROL_INTERRUPT,
+  MESSAGES_HELD,
+  mcpGatewayPort,
+} from "@cawco/core";
 import { standalone } from "@cawco/core/runtime";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
 import type { HarnessContext, HarnessSession, TurnExtras } from "../harness";
@@ -260,9 +265,14 @@ export async function spawnPi(
     args: standalone ? ["pi-host"] : [host],
     cwd: ctx.cwd,
     // Session credentials arrive solely via the request-scoped stdin control.
-    ...(process.env[CAWCO_ENV.hubUrl]
-      ? { env: { [CAWCO_ENV.hubUrl]: process.env[CAWCO_ENV.hubUrl] as string } }
-      : {}),
+    // The host reaches CawCo's tools through this agent's gateway, so it is
+    // told this agent's port: the keeper's own environment may name another.
+    env: {
+      [CAWCO_ENV.mcpPort]: String(mcpGatewayPort()),
+      ...(process.env[CAWCO_ENV.hubUrl]
+        ? { [CAWCO_ENV.hubUrl]: process.env[CAWCO_ENV.hubUrl] as string }
+        : {}),
+    },
   });
   const proc = (await client.list()).procs.find(
     (one) => one.procId === procIdFor("pi", ctx.instanceId)

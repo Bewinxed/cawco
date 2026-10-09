@@ -256,12 +256,18 @@ Client registration, access and refresh tokens, expiry and a ten-minute pending
 authorization live in the private `fleet_mcp_oauth` table. Credentials stay in
 the hub; fleet sync carries the proxy URL `/mcp/fleet/<name>`.
 
-Configure → MCP servers offers **Sign in**, then **Open on**. It lists online
-computers whose agent can open a desktop browser. The hub sends the selected
-agent the authorization URL, and the dashboard shows **Approve on <machine>**.
-The browser redirects to the same computer's loopback listener at
-`127.0.0.1:43879/mcp-oauth/callback`. That agent relays the code and state to the
-hub; completion updates the dashboard and reconnects the fleet's servers.
+Configure → MCP servers offers **Sign in**. The authorization returns to the
+dashboard on the address the person reached their hub by (`/oauth/mcp`),
+directly or, for a provider that identifies clients by a metadata document,
+through `cawco.dev/oauth/callback`; completion updates the dashboard and
+reconnects the fleet's servers.
+
+Every harness reaches `/mcp/cawco` and the fleet proxy on loopback: the hub
+itself on the hub's machine, elsewhere its own agent's MCP gateway at
+`127.0.0.1:43879`. A second agent on one host (a rig, a dev checkout) names
+another port with `CAWCO_MCP_PORT`; the agent logs the port it serves on, and
+its sessions' configs carry it for their whole life, so a machine whose port
+changes needs its sessions relaunched.
 
 The proxy streams MCP JSON and SSE with the upstream status and MCP headers.
 It adds the hub's bearer token, refreshes within sixty seconds of expiry through

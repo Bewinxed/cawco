@@ -17,7 +17,7 @@ trap cleanup EXIT INT TERM
 "${p[@]}" run --name "$prefix-setup" docker.io/library/ubuntu:24.04 bash -c 'apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*' > "$out/packages-setup.log" 2>&1
 "${p[@]}" commit "$prefix-setup" "localhost/$prefix-clean:latest" > /dev/null
 "${p[@]}" rm "$prefix-setup" > /dev/null
-envs=(--env HOME=/output/clean-binary --env HOST=127.0.0.1 --env CAWCO_HUB_PORT=43456 --env CAWCO_HUB_URL=http://127.0.0.1:43456 --env CAWCO_MCP_CALLBACK_PORT=43459 --env CAWCO_SESSIOND_ENDPOINT=/output/sessiond.sock --env CAWCO_DB_PATH=/output/clean-binary/hub.db)
+envs=(--env HOME=/output/clean-binary --env HOST=127.0.0.1 --env CAWCO_HUB_PORT=43456 --env CAWCO_HUB_URL=http://127.0.0.1:43456 --env CAWCO_MCP_PORT=43459 --env CAWCO_SESSIOND_ENDPOINT=/output/sessiond.sock --env CAWCO_DB_PATH=/output/clean-binary/hub.db)
 mounts=(--mount "type=bind,src=$out,dst=/output,rw" --mount "type=bind,src=$bin,dst=/cawco,ro")
 "${p[@]}" run --name "$prefix-clean" --network none --read-only --tmpfs /tmp "${mounts[@]}" "${envs[@]}" "localhost/$prefix-clean:latest" bash -c 'mkdir -p "$HOME"; /cawco proof-isolation && /cawco capabilities > /output/capabilities-absent.json && /cawco proof-signing && /cawco proof-relay && /cawco proof-stack' > "$out/clean-proof.log" 2>&1
 # Separate real-init image: this is intentionally not the pristine no-tools proof.
@@ -38,7 +38,7 @@ After=cawco-binary-dashboard.socket
 [Service]
 ExecStartPre=/bin/sleep 1
 ExecStart=/cawco dashboard
-Environment=HOME=/output/systemd-binary HOST=127.0.0.1 CAWCO_HUB_PORT=43456 CAWCO_HUB_URL=http://127.0.0.1:43456 CAWCO_MCP_CALLBACK_PORT=43459 CAWCO_SESSIOND_ENDPOINT=/output/sessiond.sock CAWCO_DB_PATH=/output/systemd-binary/hub.db
+Environment=HOME=/output/systemd-binary HOST=127.0.0.1 CAWCO_HUB_PORT=43456 CAWCO_HUB_URL=http://127.0.0.1:43456 CAWCO_MCP_PORT=43459 CAWCO_SESSIOND_ENDPOINT=/output/sessiond.sock CAWCO_DB_PATH=/output/systemd-binary/hub.db
 TimeoutStopSec=10
 UNIT
 "${p[@]}" run --name "$prefix-systemd-setup" --mount "type=bind,src=$out,dst=/output,rw" docker.io/library/ubuntu:24.04 bash -c 'apt-get update && apt-get install -y --no-install-recommends systemd systemd-sysv dbus ca-certificates git && cp /output/cawco-binary-dashboard.* /etc/systemd/system/ && rm -rf /var/lib/apt/lists/*' > "$out/systemd-setup.log" 2>&1

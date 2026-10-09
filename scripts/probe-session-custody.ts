@@ -10,7 +10,6 @@ const root = resolve(import.meta.dir, "..");
 const [role, scratch, portText, old] = process.argv.slice(2);
 const machine = "ownership-proof";
 const pathEnv = { PATH: process.env.PATH ?? "/usr/bin:/bin" };
-const CALLBACK_SOURCE = /packages\/agent\/src\/mcp-oauth\.ts$/;
 const MAIN_BASE = "57984f2ac7e6c61a90251e25e6a454c6e020f3f2";
 
 async function delay(ms: number) {
@@ -415,18 +414,6 @@ if (role === "migration-main") {
       },
     });
   }
-  Bun.plugin({
-    name: "private-callback-port",
-    setup(build) {
-      build.onLoad({ filter: CALLBACK_SOURCE }, async ({ path }) => ({
-        contents: (await Bun.file(path).text()).replace(
-          "port: CAWCO_MCP_CALLBACK_PORT,",
-          "port: 0,"
-        ),
-        loader: "ts",
-      }));
-    },
-  });
   const { registerHarness } = await import("../packages/agent/src/harnesses");
   const { SessiondClient, endProc } = await import(
     "../packages/agent/src/sessiond-client"
@@ -729,13 +716,20 @@ if (role === "migration-main") {
   await mkdir(join(scratchDir, "home", ".config", "cawco"), {
     recursive: true,
   });
-  const lease = Bun.serve({
-    hostname: "127.0.0.1",
-    port: 0,
-    fetch: () => new Response(null),
-  });
-  const { port } = lease;
-  await lease.stop(true);
+  // Free ports for the hub and for the agent's MCP gateway, never this
+  // machine's own agent's (CAWCO_MCP_PORT).
+  const freePort = async (): Promise<number> => {
+    const lease = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch: () => new Response(null),
+    });
+    const leased = lease.port as number;
+    await lease.stop(true);
+    return leased;
+  };
+  const port = await freePort();
+  const gatewayPort = await freePort();
   const base = `http://127.0.0.1:${port}`;
   await writeFile(
     join(scratchDir, "home", ".config", "cawco", "config.json"),
@@ -775,6 +769,7 @@ if (role === "migration-main") {
         `HOME=${join(scratchDir, "home")}`,
         `XDG_CONFIG_HOME=${join(scratchDir, "home", ".config")}`,
         `XDG_DATA_HOME=${join(scratchDir, "home", ".local", "share")}`,
+        `CAWCO_MCP_PORT=${gatewayPort}`,
         process.execPath,
         import.meta.path,
         name,

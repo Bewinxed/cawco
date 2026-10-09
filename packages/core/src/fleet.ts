@@ -77,8 +77,12 @@ export interface FleetMcpServer extends FleetPlacement {
   proxied?: boolean;
 }
 
-/** OAuth redirects finish on the computer running the browser. */
-export const CAWCO_MCP_CALLBACK_PORT = 43_879;
+/**
+ * The port an agent serves its MCP gateway on when `CAWCO_MCP_PORT` names
+ * none: every production machine. Read it through `mcpGatewayPort()`, never
+ * directly.
+ */
+export const CAWCO_MCP_DEFAULT_PORT = 43_879;
 
 /**
  * Where CawCo publishes its shared OAuth client: a metadata document, and the

@@ -26,7 +26,7 @@ set -uo pipefail
 
 DELAY="${1:-45}"
 HUB="http://127.0.0.1:${CAWCO_HUB_PORT:-3456}"
-AGENT_GATEWAY="http://127.0.0.1:${CAWCO_MCP_CALLBACK_PORT:-43879}"
+AGENT_GATEWAY="http://127.0.0.1:${CAWCO_MCP_PORT:-43879}"
 MACHINE_ID="${CAWCO_MACHINE_ID:-d04ca118428001f1}"
 LOG="${HOME}/.claude/cawco-restart.log"
 SIDECAR="${HOME}/.claude/cawco-fleet.json"

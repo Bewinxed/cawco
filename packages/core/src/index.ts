@@ -1,4 +1,4 @@
-import type { FleetSyncReport } from "./fleet";
+import { CAWCO_MCP_DEFAULT_PORT, type FleetSyncReport } from "./fleet";
 import type { HarnessReport } from "./harness";
 import type { ToolStatus } from "./tools";
 
@@ -1144,6 +1144,12 @@ export const CAWCO_ENV = {
   sessionCredential: "CAWCO_SESSION_CREDENTIAL",
   /** Which service manager the installer targets: `systemd`, `launchd`, … */
   serviceMode: "CAWCO_SERVICE_MODE",
+  /**
+   * The port of the agent's MCP gateway ({@link mcpGatewayPort}). Unset on
+   * every installed machine; a second agent on one host (a rig, a dev
+   * checkout) names its own.
+   */
+  mcpPort: "CAWCO_MCP_PORT",
 } as const;
 
 /** One of {@link CAWCO_ENV}'s variable names. */
@@ -1161,6 +1167,37 @@ export const readEnv = (
   name: CawcoEnvVar,
   env: Record<string, string | undefined> = process.env
 ): string | undefined => env[name];
+
+let gatewayPort: number | undefined;
+
+/**
+ * The port this machine's agent serves its MCP gateway on: `CAWCO_MCP_PORT`,
+ * else {@link CAWCO_MCP_DEFAULT_PORT}, read once per process. It is the one
+ * setting every end that names the gateway reads: the agent's listener, the
+ * URL each session's MCP config and OpenCode config carry, the pi host the
+ * keeper runs (given it by its agent), and `cawco service`'s restart
+ * question. So a second agent on one host runs on a port of its own, with no
+ * network namespace; production machines keep the default, which nothing in
+ * the installer changes.
+ *
+ * A session's CLI is started with the gateway URL in its config and keeps it
+ * for its whole life, across restarts of its agent (the keeper holds it).
+ * Changing the port on a live machine therefore cuts every running session
+ * off from CawCo's tools until each is relaunched.
+ */
+export const mcpGatewayPort = (): number => {
+  if (gatewayPort === undefined) {
+    const named = readEnv(CAWCO_ENV.mcpPort);
+    const port = named === undefined ? CAWCO_MCP_DEFAULT_PORT : Number(named);
+    if (!(Number.isInteger(port) && port > 0 && port < 65_536)) {
+      throw new Error(
+        `${CAWCO_ENV.mcpPort} must be a port number, not "${named}"`
+      );
+    }
+    gatewayPort = port;
+  }
+  return gatewayPort;
+};
 
 /**
  * The mDNS service the hub advertises and `cawco` browses for.

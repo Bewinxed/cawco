@@ -1,8 +1,8 @@
 import {
   CAWCO_ENV,
   CAWCO_HUB_PORT,
-  CAWCO_MCP_CALLBACK_PORT,
   IMAGE_GENERATION_TIMEOUT_MS,
+  mcpGatewayPort,
   readEnv,
 } from "@cawco/core";
 
@@ -14,11 +14,15 @@ export const delegationHubUrl = () =>
     .replace(WS_SCHEME, "http")
     .replace(WS_PATH, "");
 
-/** Remote hubs are reached by the agent; every harness talks only to loopback. */
+/**
+ * Remote hubs are reached by the agent; every harness talks only to loopback:
+ * the hub itself when it is on this machine, else this agent's MCP gateway
+ * ({@link mcpGatewayPort}).
+ */
 export const harnessMcpUrl = (path: string): string => {
   const hub = new URL(delegationHubUrl());
   const local = ["localhost", "127.0.0.1", "[::1]"].includes(hub.hostname);
-  return `${local ? hub.origin : `http://127.0.0.1:${CAWCO_MCP_CALLBACK_PORT}`}${path}`;
+  return `${local ? hub.origin : `http://127.0.0.1:${mcpGatewayPort()}`}${path}`;
 };
 /** How long any call to the hub's tools may run: finish_item's checks set it. */
 const DELEGATION_CALL_TIMEOUT_MS = 24 * 60 * 60 * 1000;

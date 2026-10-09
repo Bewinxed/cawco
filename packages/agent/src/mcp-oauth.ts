@@ -1,4 +1,4 @@
-import { CAWCO_MCP_CALLBACK_PORT } from "@cawco/core";
+import { mcpGatewayPort } from "@cawco/core";
 import {
   AGENT_RESTARTING,
   RESUMABLE_CAWCO_TOOLS,
@@ -208,13 +208,13 @@ async function restartRoute(request: Request): Promise<Response> {
   return Response.json({ ...restartReadiness(), fenced: fenced() });
 }
 
-/** One stable loopback endpoint for every harness and the browser's OAuth callback. */
+/** One stable loopback endpoint every harness reaches the hub's tools through. */
 export const startMcpGateway = async (hubUrl: () => string) => {
-  const port = Number(
-    process.env.CAWCO_MCP_CALLBACK_PORT ?? CAWCO_MCP_CALLBACK_PORT
-  );
+  // The one setting every session's config names too: a different port on a
+  // live machine leaves its running sessions dialling the old one.
+  const port = mcpGatewayPort();
   try {
-    return Bun.serve({
+    const server = Bun.serve({
       hostname: "127.0.0.1",
       port,
       idleTimeout: 0,
@@ -257,6 +257,8 @@ export const startMcpGateway = async (hubUrl: () => string) => {
         }
       },
     });
+    console.info(`[gateway] MCP gateway serving on 127.0.0.1:${port}`);
+    return server;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "EADDRINUSE") {
       // Whoever it is, by name: on 2026-10-08 it was a leaf's network namespace
