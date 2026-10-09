@@ -63,6 +63,15 @@ public enum CawStatus: String, CaseIterable, Sendable {
 /// The ledge files are two: `peek` (peer-over, a Caw thread's composer corner) and `climb`
 /// (climb-peer, the paywall's poster hero: he climbs up and peeks over the cards). Both rest on
 /// the same ledge line.
+///
+/// He costs nothing while nothing about him changes. His Rive runs only while he can be seen
+/// (`CawStage`): in a window of a scene in the foreground, nothing over him hidden or clear, and
+/// no sheet presented over the place he stands. A rest file (`ready`, `sleeping`) holds one
+/// drawing, so once its state machine settles on it his Rive is paused, and only drawn again for
+/// a moment when he is seen again or his look is written. A waiting status's loops are drawn at
+/// 24 a second, the rate they were drawn at (assets/mascot/scripts/prove-viewmodel.mjs `FPS`);
+/// a drawn enter plays at the display's own rate. Paused, he holds his drawing and resumes from
+/// it.
 public final class CawView: UIView {
     /// Which ledge clip brings him in (assets/mascot/scripts/scene.mjs `LEDGES`).
     public enum Ledge: Sendable {
@@ -118,6 +127,20 @@ public final class CawView: UIView {
     /// The Caw on screen is fading out: whatever is asked for next comes in once he has gone.
     private var leaving = false
     private var entered = false
+    /// He can be seen, as `CawStage` last read it.
+    private var seen = false
+    /// The Caw on screen's state machine has settled on a drawing: nothing changes until something
+    /// is written to it.
+    private var settled = false
+    /// A settled Caw drawn for a moment: he was seen again, or his look was written.
+    private var drawing: Task<Void, Never>?
+    private var hearingSettled: Task<Void, Never>?
+
+    /// The rate his loops were drawn at; on a 60 Hz screen, the nearest it shows, 30.
+    static let loopRate = FrameRate.range(minimum: 24, maximum: 30, preferred: 24)
+    /// How long a settled Caw is drawn when he is seen again or written to: the scheme's rim fades
+    /// over 200 ms (as `CawMark.settle`).
+    private static let redraw = Duration.seconds(1)
 
     public init(status: CawStatus, ledge: Ledge? = nil) {
         self.status = status
@@ -293,13 +316,19 @@ public final class CawView: UIView {
     private func start(_ incoming: CawLayer, asked: ContinuousClock.Instant) {
         let below = shown
         let peeking = incoming.file.isLedge
-        incoming.hearEntered { [weak self] in
+        // His enter at the display's rate; what he rests or loops on after it, at his loops' rate.
+        incoming.view.frameRate = incoming.enters && !reducedMotion ? .default : Self.loopRate
+        incoming.hearEntered { [weak self, weak incoming] in
+            incoming?.view.frameRate = Self.loopRate
             self?.reportEntered()
             if peeking { self?.peekLanded() }
         }
         clip(incoming)
         addSubview(incoming.holder)
         shown = incoming
+        hearSettled(incoming)
+        CawStage.watch(self)
+        restage(force: true)
         // Loaded at the size the view had then (none, before its first layout): laid out below,
         // he is given the rim's pixel at the size he stands at.
         written = nil
@@ -370,6 +399,10 @@ public final class CawView: UIView {
         }
         shown = nil
         leaving = false
+        hearingSettled?.cancel()
+        drawing?.cancel()
+        drawing = nil
+        settled = false
         CawContract.log.info("Caw \(layer.file.name, privacy: .public) gone")
         if present {
             ask()
@@ -384,6 +417,79 @@ public final class CawView: UIView {
         if let shown {
             written = pixel
             CawContract.write(to: shown.caw, dark: dark, reducedMotion: reducedMotion, pixel: pixel)
+            if settled { drawAgain() }
+        }
+    }
+
+    // MARK: Pacing
+
+    /// `CawStage`'s read of whether he can be seen, at the end of a turn of the main run loop.
+    /// Seen again after he settled, he is drawn for a moment: a file that settled where nothing
+    /// drew it (off the window, in a pane beside the one shown) has not painted his drawing.
+    func restage(force: Bool = false) {
+        // No Caw on screen, or one fading out (already paused): nothing to pace.
+        guard shown != nil, !leaving else {
+            return
+        }
+        let now = CawStage.seen(self)
+        guard force || now != seen else {
+            return
+        }
+        seen = now
+        if now, settled {
+            drawAgain()
+        } else {
+            pace()
+        }
+    }
+
+    /// The Caw on screen runs while he is seen and has something to draw; a Caw fading out holds
+    /// its drawing (`fadeOut`).
+    private func pace() {
+        guard let shown, !leaving else {
+            return
+        }
+        let paused = !(seen && (!settled || drawing != nil))
+        if shown.view.isPaused != paused {
+            shown.view.isPaused = paused
+        }
+    }
+
+    /// Draws a settled Caw for `redraw`, then holds him again.
+    private func drawAgain() {
+        drawing?.cancel()
+        drawing = Task { [weak self] in
+            try? await Task.sleep(for: Self.redraw)
+            guard !Task.isCancelled, let self else {
+                return
+            }
+            drawing = nil
+            pace()
+        }
+        pace()
+    }
+
+    /// Hears `layer`'s state machine settle on a drawing (a rest file's still; a loop never
+    /// settles): from then his Rive holds that drawing.
+    private func hearSettled(_ layer: CawLayer) {
+        hearingSettled?.cancel()
+        drawing?.cancel()
+        drawing = nil
+        settled = false
+        guard let machine = layer.view.rive?.stateMachine else {
+            return
+        }
+        let stream = machine.settledStream()
+        hearingSettled = Task { [weak self, weak layer] in
+            for await _ in stream {
+                guard let self, let layer, shown === layer else {
+                    return
+                }
+                settled = true
+                drawing?.cancel()
+                drawing = nil
+                pace()
+            }
         }
     }
 

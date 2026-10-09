@@ -193,12 +193,21 @@ final class PaywallController: ObservedViewController {
         case .started: hero.flashApprove()
         default: break
         }
-        ticker = Task { [weak self] in
+        keepTicker()
+    }
+
+    /// A second's tick only while the setup checklist is up: its rows read the
+    /// clock (a token slow past 15 s, a test late past 10 s); no other screen does.
+    private func keepTicker() {
+        let wanted = viewIfLoaded?.window != nil && screen == .setup
+        guard wanted != (ticker != nil) else { return }
+        ticker?.cancel()
+        ticker = wanted ? Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1))
                 self?.requestRefresh()
             }
-        }
+        } : nil
     }
 
     override func viewDidDisappear(_ animated: Bool) {
@@ -228,6 +237,7 @@ final class PaywallController: ObservedViewController {
             rebuild(animated: !first)
         }
         update()
+        keepTicker()
     }
 
     /// The setup moves on by what iOS, APNs, Cawrier and the hub said.

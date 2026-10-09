@@ -158,10 +158,29 @@ final class DelegateTrayView: UIView {
             shut()
             return
         }
-        beat = Timer.scheduledTimer(withTimeInterval: Self.tick, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.onBeat() }
-        }
         take()
+    }
+
+    /// The beat runs only while it times something: a delegate waiting to be
+    /// admitted (`admitWaiting`), or a finished chip's hold (`holdFinished`).
+    private func keepBeat(waiting: Bool) {
+        let wanted = window != nil && (waiting || chips.contains { $0.tone == .done || $0.tone == .cancelled })
+        guard wanted != (beat != nil) else { return }
+        beat?.invalidate()
+        beat = wanted ? Timer.scheduledTimer(withTimeInterval: Self.tick, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.onBeat() }
+        } : nil
+    }
+
+    /// A delegate the tray has not admitted yet whose card is not on screen:
+    /// the beat admits it once it has had its chance (`admitWaiting`). One
+    /// whose card is on screen is admitted by the card leaving it
+    /// (`DelegateTrayState.card`), which no beat waits for.
+    private func awaitingAdmission(_ now: Double) -> Bool {
+        items.contains {
+            state.entered[$0.instanceId] == nil && !state.left.contains($0.id) && candidate($0, now)
+                && !state.cardVisible($0.instanceId)
+        }
     }
 
     // MARK: The chips
@@ -224,11 +243,14 @@ final class DelegateTrayView: UIView {
     /// Reads the chips under observation and draws what changed; asks again when they move.
     private func take() {
         guard window != nil else { return }
-        let next = withObservationTracking {
-            items.filter { state.entered[$0.instanceId] != nil && !state.left.contains($0.id) && $0.dismissedAt == nil }.map(chip)
+        let now = Date().timeIntervalSince1970 * 1000
+        let (next, waiting) = withObservationTracking {
+            (items.filter { state.entered[$0.instanceId] != nil && !state.left.contains($0.id) && $0.dismissedAt == nil }.map(chip),
+             awaitingAdmission(now))
         } onChange: { [weak self] in
             Task { @MainActor in self?.take() }
         }
+        defer { keepBeat(waiting: waiting) }
         guard next != chips || chipViews.isEmpty != next.isEmpty else { return }
         chips = next
         announce()
@@ -245,6 +267,7 @@ final class DelegateTrayView: UIView {
         let now = Date().timeIntervalSince1970 * 1000
         admitWaiting(now)
         holdFinished(now)
+        keepBeat(waiting: awaitingAdmission(now))
     }
 
     /// A delegate whose card has had its chance to be on screen and is not:

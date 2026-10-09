@@ -87,7 +87,11 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     private var ahead: Set<String>?
     private var folding: String?
 
-    private var dirty = true
+    /// Whatever marks the list for drawing wakes the frame.
+    private var dirty = true {
+        didSet { if dirty { wake() } }
+    }
+
     private var following = true
     private var landed = false
     /// How many rows of the first screen the list holds, until it holds every
@@ -423,6 +427,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     override public func didMoveToWindow() {
         super.didMoveToWindow()
         link?.invalidate(); link = nil
+        Self.sleepers.remove(self)
         if window != nil {
             let target = DisplayTarget(self)
             proxy = target
@@ -430,6 +435,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             link.add(to: .main, forMode: .common)
             self.link = link
             lastTick = 0
+            lastBusy = CACurrentMediaTime()
             Pace.watch()
         } else {
             // Off the screen, every delegate card this view drew has left it.
@@ -905,6 +911,10 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         let now = CACurrentMediaTime()
         let dt = lastTick == 0 ? link.targetTimestamp - link.timestamp : min(0.1, now - lastTick)
         lastTick = now
+        let offsetBefore = collection.contentOffset
+        let sizeBefore = collection.contentSize
+        let streaming = cursor < characters.count
+        var committed = false
         if cursor < characters.count {
             let pending = Double(characters.count) - shown
             let oldest = arrivals.first { $0.end > cursor }?.time ?? now
@@ -954,6 +964,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             if inSight || (!caughtUp && !yielding && Pace.taken < Self.budget / 2) {
                 dirty = false
                 commit()
+                committed = true
             } else if caughtUp || yielding {
                 Self.owing.add(self)
                 Self.watchOwing()
@@ -964,6 +975,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         while feeding, !yielding, CACurrentMediaTime() - now < Self.budget / 2 {
             collection.layoutIfNeeded()
             commit(fresh: false)
+            committed = true
         }
         restoreIfReady()
         // The tail is not held under the reader's finger, nor while the list
@@ -992,9 +1004,87 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             drewThisFrame = false
             collection.layoutIfNeeded()
         }
-        if inSight { warm(since: now, frame: link.targetTimestamp - link.timestamp) }
+        let warming = inSight && warm(since: now, frame: link.targetTimestamp - link.timestamp)
         let took = CACurrentMediaTime() - now
         Pace.spent(took, in: env.sessionId, items: items.count, cells: collection.visibleCells.count)
+        // Work this frame, or work the next one has: the frame runs on. A dirty
+        // pane that owes its drawing (`owing`) waits for the screen, not the frame.
+        let busy = committed || streaming || feeding || gliding || revealing != nil
+            || (dirty && (yielding || !Self.owing.contains(self)))
+            || collection.isDragging || collection.isDecelerating || collection.isTracking
+            || collection.contentOffset != offsetBefore || collection.contentSize != sizeBefore
+            || warming || DelegateTrayState.shared.reveal[env.sessionId] != nil
+        if busy {
+            lastBusy = now
+        } else if now - lastBusy > Self.linger {
+            sleep()
+        }
+    }
+
+    // MARK: Sleeping
+
+    /// When the frame last had work.
+    private var lastBusy = 0.0
+    /// How long the frame runs on after its last work: a streamed stretch fades
+    /// in over `durMenu` after the frame that drew it (ProseView `fade`).
+    private static let linger = 0.5
+    /// What the frame read as it slept: a turn of the main thread that changes
+    /// any of it wakes the frame.
+    private var slept: SleepMark?
+
+    private struct SleepMark: Equatable {
+        var box: CGRect
+        var inView: Bool
+        var offset: CGPoint
+        var size: CGSize
+        var news: DelegateTrayState.News?
+        var reveal: String?
+    }
+
+    private var sleepMark: SleepMark {
+        let tray = DelegateTrayState.shared
+        return SleepMark(box: convert(bounds, to: nil), inView: inView, offset: collection.contentOffset, size: collection.contentSize,
+                         news: tray.news[env.sessionId], reveal: tray.reveal[env.sessionId])
+    }
+
+    /// Panes whose frame is paused.
+    private static let sleepers = NSHashTable<TranscriptView>.weakObjects()
+    private static var watchingSleepers = false
+
+    /// Nothing for the frame to do: the display link pauses, and the pane is
+    /// watched at the end of every turn the main thread takes anyway.
+    private func sleep() {
+        guard let link, !link.isPaused else { return }
+        link.isPaused = true
+        slept = sleepMark
+        Self.sleepers.add(self)
+        Self.watchSleepers()
+    }
+
+    /// The frame runs again from the next display frame.
+    private func wake() {
+        lastBusy = CACurrentMediaTime()
+        guard let link, link.isPaused else { return }
+        link.isPaused = false
+        slept = nil
+        Self.sleepers.remove(self)
+    }
+
+    /// Ends every turn of the main thread by waking each sleeping pane whose
+    /// place on the screen, list, or tray asks changed in it: a swipe or a tab
+    /// bringing it into view, a row sizing itself, the tray asking for a report.
+    private static func watchSleepers() {
+        guard !watchingSleepers else { return }
+        watchingSleepers = true
+        let activities = CFRunLoopActivity([.beforeWaiting, .exit]).rawValue
+        let observer = CFRunLoopObserverCreateWithHandler(nil, activities, true, 1_998_000) { _, _ in
+            MainActor.assumeIsolated {
+                for view in sleepers.allObjects where view.slept != view.sleepMark {
+                    view.wake()
+                }
+            }
+        }
+        CFRunLoopAddObserver(CFRunLoopGetMain(), observer, .commonModes)
     }
 
     /// `fresh`: the items are built again from the transcript; a first
@@ -1261,18 +1351,19 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     /// with what the frame has left: the way the list is moving first, the
     /// nearest first. A row then enters the screen built, measured and laid
     /// out, and the frame it enters in only shows it. A frame that has
-    /// already taken its share builds nothing.
-    private func warm(since start: Double, frame: Double) {
+    /// already taken its share builds nothing. Says whether rows were left
+    /// unvisited when the frame's share ran out: the next frame has them.
+    private func warm(since start: Double, frame: Double) -> Bool {
         let offset = collection.contentOffset.y
         let up = offset < lastOffset - 0.5
         let down = offset > lastOffset + 0.5
         lastOffset = offset
-        guard landed, fed == nil, !collection.isHidden, let width = rowWidth else { return }
+        guard landed, fed == nil, !collection.isHidden, let width = rowWidth else { return false }
         let budget = min(Self.warmBudget, frame * 0.4)
-        guard CACurrentMediaTime() - start < budget else { return }
+        guard CACurrentMediaTime() - start < budget else { return false }
         let ids = listed.settled
         let shown = collection.indexPathsForVisibleItems.filter { $0.section == 0 }.map(\.item)
-        guard let first = shown.min(), let last = shown.max(), last < ids.count else { return }
+        guard let first = shown.min(), let last = shown.max(), last < ids.count else { return false }
         let above = Array(stride(from: first - 1, through: max(0, first - Self.reach), by: -1))
         let below = Array(stride(from: last + 1, to: min(ids.count, last + 1 + Self.reach), by: 1))
         let order = up ? above + below : down ? below + above
@@ -1280,10 +1371,11 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
                 (i < above.count ? [above[i]] : []) + (i < below.count ? [below[i]] : [])
             }
         for index in order {
-            guard CACurrentMediaTime() - start < budget else { return }
+            guard CACurrentMediaTime() - start < budget else { return true }
             guard let item = items[ids[index]] else { continue }
             store.warm(Self.rowType(item.kind), item: item, width: width)
         }
+        return false
     }
 
     // MARK: A queued message in the composer
