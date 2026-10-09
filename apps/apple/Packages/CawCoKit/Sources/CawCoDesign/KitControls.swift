@@ -155,13 +155,12 @@ public final class KitAlert: UIView {
 
     public let label = KitLabel(TypeScale.typeBody, ink: Palette.inkStrong, lines: 0)
 
-    public init(_ text: String = "", tone: Tone, glyph: Glyph? = nil) {
-        super.init(frame: .zero)
-        translatesAutoresizingMaskIntoConstraints = false
-        layer.cornerRadius = Radius.radiusMd
-        layer.cornerCurve = .continuous
-        // `text-pretty` (alert-description.svelte).
-        label.wrap = .pretty
+    /// The tone's ink, for what stands under the words.
+    public let ink: UIColor
+
+    /// `under`: what the description holds after its words (alert-description
+    /// children: the tool's own line, the actions), inside the tint.
+    public init(_ text: String = "", tone: Tone, glyph: Glyph? = nil, under: [UIView] = []) {
         let (ground, ink): (UIColor, UIColor) = switch tone {
         case .plain: (Palette.surfaceRecess, Palette.inkStrong)
         case .destructive: (Palette.statusFailBg, Palette.statusFailInk)
@@ -169,10 +168,21 @@ public final class KitAlert: UIView {
         case .success: (Palette.statusDoneBg, Palette.statusDoneInk)
         case .info: (Palette.statusLiveBg, Palette.statusLiveInk)
         }
+        self.ink = ink
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        layer.cornerRadius = Radius.radiusMd
+        layer.cornerCurve = .continuous
+        // `text-pretty` (alert-description.svelte).
+        label.wrap = .pretty
         backgroundColor = ground
         label.textColor = ink
         label.text = text
-        let row = UIStackView(arrangedSubviews: [label])
+        label.isHidden = text.isEmpty && !under.isEmpty
+        let words = UIStackView(arrangedSubviews: [label] + under)
+        words.axis = .vertical
+        words.spacing = Space.space2
+        let row = UIStackView(arrangedSubviews: [words])
         row.spacing = 10
         row.alignment = .top
         if let glyph {
@@ -196,7 +206,8 @@ public final class KitAlert: UIView {
             row.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
             row.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
         ])
-        isAccessibilityElement = true
+        // Words alone read as one element; with controls under them, each is its own.
+        isAccessibilityElement = under.isEmpty
         accessibilityTraits = .staticText
     }
 

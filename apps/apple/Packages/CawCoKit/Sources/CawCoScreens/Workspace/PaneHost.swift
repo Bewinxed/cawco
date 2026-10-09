@@ -88,8 +88,11 @@ final class PaneHost {
 
     /// What the group's composer draws for a tab: nil for a run, which has no
     /// composer, and for no tab at all.
+    /// The composer a tab is drawn with: none while its project is moving
+    /// for it (design 2b), as there is no session to write to yet.
     func binding(for id: String?) -> SessionComposerBinding? {
-        id.flatMap { (controller(for: $0) as? SessionViewController)?.composerBinding }
+        guard let id, !hub.fleet.moving(id) else { return nil }
+        return (controller(for: id) as? SessionViewController)?.composerBinding
     }
 
     /// A stored conversation's name, before its transcript has answered.

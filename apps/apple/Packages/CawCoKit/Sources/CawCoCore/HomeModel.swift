@@ -122,6 +122,11 @@ public final class HomeModel {
         if needsStore.blocked(id) || fleet.activityPulse(id)?.activity == .blocked {
             return .blocked
         }
+        // Its project is moving for it: working from the move's start (a yes
+        // the move waits on is its parked ask, above).
+        if fleet.byId[id]?.status == .moving {
+            return .working
+        }
         if let count = fleet.byId[id]?.runningDelegates, count > 0 {
             return .working
         }

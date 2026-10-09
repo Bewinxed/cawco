@@ -449,7 +449,7 @@ public final class PromptCardView: UIView {
 
     // MARK: Buttons
 
-    enum ButtonKind {
+    public enum ButtonKind {
         /// The question's Answer: the action surface, a step wider.
         case primary
         case outline
@@ -460,8 +460,9 @@ public final class PromptCardView: UIView {
     }
 
     /// The card's buttons (Prompt.svelte `btnBase`): 44pt on touch, radius 8,
-    /// the label role, 11pt in (14 for Answer), a 12pt glyph 7pt off.
-    static func button(_ title: String, glyph: Glyph?, kind: ButtonKind, action: @escaping () -> Void) -> UIButton {
+    /// the label role, 11pt in (14 for Answer), a 12pt glyph 7pt off. A
+    /// move's approval card answers with the same ones.
+    public static func button(_ title: String, glyph: Glyph?, kind: ButtonKind, action: @escaping () -> Void) -> UIButton {
         let variant: KitButton.Variant = switch kind {
         case .primary: .action
         case .outline: .outline

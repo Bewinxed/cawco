@@ -142,6 +142,8 @@ final class WorkspaceController: ObservedViewController, BackSwipeGate {
         _ = context.hub.fleet.rows
         _ = context.hub.needs.parked
         _ = context.hub.state
+        // A move's stage: whether its tab has a composer yet.
+        _ = context.hub.fleet.moves
         workspace.maxLeaves = maxLeaves
         if maxLeaves != .max { workspace.capLeaves(maxLeaves) }
         let animated = lastVersion >= 0 && view.window != nil

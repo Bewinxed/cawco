@@ -266,12 +266,13 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         }
     }
 
-    /// The approval card's answer, through the same channel as every ask's.
+    /// The approval card's answer, through the same channel as every ask's:
+    /// parked on this session's own row, which reads "Needs you" until now.
     private func answerMove(_ moveIt: Bool) {
         guard let move = hub.fleet.move(for: sessionId),
-              let ask = hub.needs.parked["move:\(move.id)"]?.first(where: { $0.requestId == move.askId }),
+              let ask = hub.needs.parked[move.targetInstanceId]?.first(where: { $0.requestId == move.askId }),
               let question = ask.questions.first?.question else { return }
-        hub.needs.answerQuestion(ask, machineId: move.sourceMachineId, answers: [question: [moveIt ? "Move it" : "Don't move"]])
+        hub.needs.answerQuestion(ask, machineId: move.targetMachineId, answers: [question: [moveIt ? "Move it" : "Don't move"]])
     }
 
     // MARK: The preview (SessionPane's preview split, PreviewSheet)

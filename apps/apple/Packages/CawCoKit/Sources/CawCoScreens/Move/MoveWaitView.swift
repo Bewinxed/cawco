@@ -4,8 +4,9 @@ import CawCoDesign
 import CawCoMascot
 import UIKit
 
-/// A session whose project is moving to its machine, before the session
-/// exists (move/MoveWait.svelte; design §2, the owner's picks B "Bar + MB"
+/// A session whose project is moving to its machine (its row on the board as
+/// `moving` from the move's start), before its process exists
+/// (move/MoveWait.svelte; design §2, the owner's picks B "Bar + MB"
 /// and C: a move nobody said yes to in New session asks for it here, as
 /// its first step). Drawn from the hub's job as it stands now and never
 /// replayed: a step done before the pane opened is simply done.
@@ -31,7 +32,12 @@ final class MoveWaitView: UIView {
     private var caw: CawView?
     private let column = UIStackView()
     private let stopped = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
+    /// On a phone, what pushes the foot to the bottom of the pane.
+    private let give = UIView()
     private let foot = UIStackView()
+    /// On a phone the steps start at the top and the foot stands at the bottom (web `.phone`).
+    private var compactLayout: [NSLayoutConstraint] = []
+    private var regularLayout: [NSLayoutConstraint] = []
     private var rows: [Step: StepRow] = [:]
     private var order: [Step] = []
     private var graceOver = false
@@ -45,6 +51,8 @@ final class MoveWaitView: UIView {
         backgroundColor = Palette.surfaceRecess
         scroll.translatesAutoresizingMaskIntoConstraints = false
         scroll.alwaysBounceVertical = true
+        // The safe area is laid out below, so the foot clears the home indicator.
+        scroll.contentInsetAdjustmentBehavior = .never
         addSubview(scroll)
         stack.axis = .vertical
         stack.alignment = .center
@@ -58,28 +66,40 @@ final class MoveWaitView: UIView {
         column.translatesAutoresizingMaskIntoConstraints = false
         foot.axis = .horizontal
         foot.translatesAutoresizingMaskIntoConstraints = false
+        give.setContentHuggingPriority(.fittingSizeLevel, for: .vertical)
+        give.isHidden = true
         stack.addArrangedSubview(cawSlot)
         stack.addArrangedSubview(column)
         stack.addArrangedSubview(stopped)
+        stack.addArrangedSubview(give)
         stack.addArrangedSubview(foot)
         stack.setCustomSpacing(Space.space3, after: column)
-        let readable = column.widthAnchor.constraint(equalToConstant: 560)
-        readable.priority = .defaultHigh
-        NSLayoutConstraint.activate([
+        // The column is the pane's width up to 560 and never its words': its
+        // edge, and every glyph on it, stays put whatever the steps say.
+        let wide = column.widthAnchor.constraint(equalTo: stack.widthAnchor)
+        wide.priority = .required - 1
+        compactLayout = [
+            stack.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor, constant: Space.space6),
+            stack.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor, constant: -Space.space4),
+        ]
+        // Wider, the wait stands in the middle of the pane, its foot under it.
+        regularLayout = [
+            stack.bottomAnchor.constraint(lessThanOrEqualTo: scroll.contentLayoutGuide.bottomAnchor, constant: -Space.space6),
+            stack.centerYAnchor.constraint(equalTo: scroll.frameLayoutGuide.centerYAnchor).withPriority(.defaultLow),
+        ]
+        NSLayoutConstraint.activate(regularLayout + [
             scroll.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor),
-            scroll.bottomAnchor.constraint(equalTo: bottomAnchor),
+            scroll.bottomAnchor.constraint(equalTo: safeAreaLayoutGuide.bottomAnchor),
             scroll.leadingAnchor.constraint(equalTo: leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: trailingAnchor),
             stack.topAnchor.constraint(greaterThanOrEqualTo: scroll.contentLayoutGuide.topAnchor, constant: Space.space6),
-            stack.bottomAnchor.constraint(lessThanOrEqualTo: scroll.contentLayoutGuide.bottomAnchor, constant: -Space.space6),
-            stack.centerYAnchor.constraint(equalTo: scroll.frameLayoutGuide.centerYAnchor).withPriority(.defaultLow),
             stack.leadingAnchor.constraint(equalTo: scroll.frameLayoutGuide.leadingAnchor, constant: Space.space4),
             stack.trailingAnchor.constraint(equalTo: scroll.frameLayoutGuide.trailingAnchor, constant: -Space.space4),
             scroll.contentLayoutGuide.heightAnchor.constraint(greaterThanOrEqualTo: scroll.frameLayoutGuide.heightAnchor),
             cawSide,
             cawSlot.widthAnchor.constraint(equalTo: cawSlot.heightAnchor),
-            readable,
-            column.widthAnchor.constraint(lessThanOrEqualTo: stack.widthAnchor),
+            column.widthAnchor.constraint(lessThanOrEqualToConstant: 560),
+            wide,
             stopped.widthAnchor.constraint(equalTo: column.widthAnchor),
             foot.widthAnchor.constraint(equalTo: column.widthAnchor),
         ])
@@ -93,9 +113,12 @@ final class MoveWaitView: UIView {
     /// Says a machine by its name.
     private var names: (String) -> String = { $0 }
 
-    /// The steps' words as drawn, for a simulator pass's log.
+    /// The steps' words as drawn, for a simulator pass's log, after where
+    /// the column stands: its edge must not move from one stage to the next.
     var said: String {
-        order.compactMap { rows[$0]?.said }.joined(separator: " | ") + (stopped.isHidden ? "" : " | \(stopped.text ?? "")")
+        let frame = column.convert(column.bounds, to: self)
+        return "column x \(Int(frame.minX)) w \(Int(frame.width)) · "
+            + order.compactMap { rows[$0]?.said }.joined(separator: " | ") + (stopped.isHidden ? "" : " | \(stopped.text ?? "")")
     }
 
     /// Draws `job` as it stands; `names` says a machine by its name.
@@ -105,6 +128,11 @@ final class MoveWaitView: UIView {
         self.names = names
         let compact = traitCollection.horizontalSizeClass == .compact
         cawSide.constant = compact ? 96 : 128
+        if compactLayout.first?.isActive != compact {
+            NSLayoutConstraint.deactivate(compact ? regularLayout : compactLayout)
+            NSLayoutConstraint.activate(compact ? compactLayout : regularLayout)
+        }
+        give.isHidden = !compact
         if first {
             // The Real Wait Rule: a move older than the grace is no fresh wait.
             graceOver = job.created.map { Date.now.timeIntervalSince($0) >= Motion.durWaitGrace } ?? false
@@ -171,6 +199,8 @@ final class MoveWaitView: UIView {
         cawSlot.isHidden = !wanted && caw == nil
     }
 
+    /// Cancel and Close are one control in one place: bordered, its edge on
+    /// the glyph column, the foot's whole width on a phone (design 2g).
     private func showFoot(_ job: Job, shown: Bool, compact: Bool) {
         foot.arrangedSubviews.forEach { $0.removeFromSuperview() }
         foot.isHidden = !shown
@@ -294,9 +324,10 @@ final class MoveWaitView: UIView {
         let title = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong, lines: 0)
         title.text = ask.title
         let words = MoveAskView(ask)
-        // The Peer Rule: two recessed peers at opposite ends of the row.
-        let dontMove = NsButton("Don't move", size: .sm) { [weak self] in self?.onAnswer(false) }
-        let moveIt = NsButton("Move it", size: .sm) { [weak self] in self?.onAnswer(true) }
+        // The permission card's own buttons: the no at the start, its cross
+        // muted; the yes, the action, coral as in New session's step 2.
+        let dontMove = PromptCardView.button("Don't move", glyph: .close, kind: .refuse) { [weak self] in self?.onAnswer(false) }
+        let moveIt = PromptCardView.button("Move it", glyph: .tick, kind: .primary) { [weak self] in self?.onAnswer(true) }
         let answers = UIStackView(arrangedSubviews: [dontMove, UIView(), moveIt])
         answers.spacing = Space.space8
         answers.alignment = .center
@@ -314,21 +345,28 @@ final class MoveWaitView: UIView {
         return card
     }
 
-    /// The failed step's Alert: the tool's own last line, and Cancel and Retry.
+    /// The failed step's Alert, as the web's: the machine's words, the tool's
+    /// own last line in mono, and Cancel and Retry, all inside the tint.
     private func failure(_ error: Components.Schemas.MoveError, label: String) -> UIView {
-        // The machine's words, unless they only repeat the step's.
-        let lead = error.message == label ? nil : error.message
-        let text = [lead, error.detail, error.stage == .clone ? "The partial clone is removed first." : nil]
-            .compactMap(\.self).joined(separator: "\n")
-        let alert = KitAlert(text, tone: .destructive, glyph: .failed)
+        var under: [UIView] = []
+        if let detail = error.detail, !detail.isEmpty {
+            let line = KitLabel(TypeScale.typeCode, ink: Palette.statusFailInk, lines: 0)
+            line.lineBreakMode = .byCharWrapping
+            line.text = detail
+            under.append(line)
+        }
+        if error.stage == .clone {
+            let note = KitLabel(TypeScale.typeBody, ink: Palette.statusFailInk, lines: 0)
+            note.text = "The partial clone is removed first."
+            under.append(note)
+        }
         let cancel = NsButton("Cancel", size: .sm) { [weak self] in self?.onCancel() }
         let retry = NsButton("Retry", size: .sm) { [weak self] in self?.onRetry() }
         let actions = UIStackView(arrangedSubviews: [UIView(), cancel, retry])
         actions.spacing = Space.space2
-        let box = UIStackView(arrangedSubviews: [alert, actions])
-        box.axis = .vertical
-        box.spacing = Space.space2
-        return box
+        under.append(actions)
+        // The machine's words, unless they only repeat the step's.
+        return KitAlert(error.message == label ? "" : error.message, tone: .destructive, glyph: .failed, under: under)
     }
 }
 
@@ -378,7 +416,9 @@ private struct Words {
             return "Dependencies installed"
         case .start:
             guard let moved = job.moved else { return "Ready on \(target)" }
+            // A branch breaks before it, never at its slashes: "cawco/move/gearbox" is one word.
             return [moved, job.stayed].compactMap(\.self).joined(separator: " · ")
+                .replacingOccurrences(of: "/", with: "/\u{2060}")
         }
     }
 
@@ -464,7 +504,7 @@ private final class StepRow: UIView {
         guard next != phase else { return }
         phase = next
         let glyph: UIView = switch next {
-        case .done: GlyphView(.passed, size: 16, tint: Palette.statusLiveGlyph)
+        case .done: GlyphView(.passed, size: 16, tint: Palette.statusDoneGlyph)
         case .active: KitSpinner(side: 16, tint: Palette.inkStrong)
         case .ahead: Self.dot()
         case .failed: GlyphView(.failed, size: 16, tint: Palette.statusFailGlyph)

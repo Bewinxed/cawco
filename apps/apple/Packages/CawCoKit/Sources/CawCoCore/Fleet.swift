@@ -13,8 +13,9 @@ public typealias BuildInfo = Components.Schemas.BuildInfo
 extension Components.Schemas.InstanceRow: TreeRow {}
 
 extension Components.Schemas.InstanceRow {
-    /// Only a session the hub can still reach is live; the rest is history.
-    public var isLive: Bool { status == .running || status == .starting }
+    /// Only a session the hub can still reach is live; the rest is history. A
+    /// session its project is moving for (`moving`) is live work the hub carries.
+    public var isLive: Bool { status == .running || status == .starting || status == .moving }
     /// On the board until the operator discards it: live work, a real failure
     /// to look at, a nap to wake from, one the operator stopped, or a row the
     /// hub cannot ask about right now. A stopped session has ended, so it is
@@ -170,6 +171,11 @@ public final class FleetStore {
     /// The move whose session is `instanceId`, while the hub keeps it.
     public func move(for instanceId: String) -> Components.Schemas.MoveJob? {
         moves.first { $0.targetInstanceId == instanceId }
+    }
+
+    /// `instanceId`'s project is still moving for it: no session to write to yet.
+    public func moving(_ instanceId: String) -> Bool {
+        move(for: instanceId).map { $0.stage != .started } ?? false
     }
     /// Each session's pulse, observed on its own (`PulseCell`): pulses arrive
     /// more than once a second across the fleet, and a screen must not be

@@ -112,6 +112,12 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
     private var moveReading: Task<Void, Never>?
     /// Step 2: Move & start morphed the form to what moving does and its yes; Back returns it as it was.
     private var moveStep = false
+    /// A folder there the person typed instead of the hub's (the destination was taken).
+    private var moveAt: String?
+    /// The destination's chip was unlocked to type another folder.
+    private var moveEditing = false
+    /// The machine the destination above was typed for: another one starts it over.
+    private var moveAtFor: String?
 
     // MARK: Views
 
@@ -414,13 +420,13 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         return machineIds[0]
     }
 
-    /// What the estimate is asked about: the project, the machine, and whether the two machines are online.
+    /// What the estimate is asked about: the project, the machine, the folder, and whether the two machines are online.
     private var moveKey: String {
         guard let project = chosenProject, let to = moveTo else { return "" }
         let online = [to, project.primaryPlace?.machineId ?? ""].map { id in
             fleet.machines.first { $0.machineId == id }?.status == "online" ? "on" : "off"
         }
-        return ([project.id, to] + online).joined(separator: "\u{1}")
+        return ([project.id, to, moveAt ?? ""] + online).joined(separator: "\u{1}")
     }
 
     private var moveEstimated: Components.Schemas.MoveEstimate? { moveRead?.key == moveKey ? moveRead?.estimate : nil }
@@ -435,9 +441,9 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
     /// The folder there is already a clone of the project: Start starts in it.
     private var movedAlready: Bool { moveTo != nil && moveEstimated?.needed == false }
 
-    /// Where the project goes there: the hub's destination, or its default until read.
+    /// Where the project goes there: the folder typed, the hub's destination, or its default until read.
     private var moveDestination: String {
-        moveEstimated?.display ?? "~/" + (path.split(separator: "/").last.map(String.init) ?? "")
+        moveAt ?? moveEstimated?.display ?? "~/" + (path.split(separator: "/").last.map(String.init) ?? "")
     }
 
     /// A move's reading (design §1b, §1c): what Move & start does first and how much it fetches, or why it can't.
@@ -536,6 +542,12 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         }
         // Step 2 holds only while the move it asks about can run.
         if moveStep, !moving { moveStep = false; applyStep(animated: true) }
+        // A new machine or project starts the destination over.
+        if moveTo != moveAtFor {
+            moveAtFor = moveTo
+            moveAt = nil
+            moveEditing = false
+        }
         verify()
         readMove()
         follow()
@@ -548,12 +560,13 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         moveAsked = key
         moveReading?.cancel()
         guard !key.isEmpty, connected, let id = chosenProject?.id, let to = moveTo else { return }
+        let at = moveAt
         moveReading = Task { [weak self, hub] in
             try? await Task.sleep(for: .milliseconds(250))
             guard !Task.isCancelled else { return }
             let read: (Components.Schemas.MoveEstimate?, String?)
             do {
-                read = (try await hub.moveEstimate(projectId: id, machineId: to), nil)
+                read = (try await hub.moveEstimate(projectId: id, machineId: to, path: at), nil)
             } catch {
                 read = (nil, error.localizedDescription)
             }
@@ -1001,17 +1014,33 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
     /// once the move is read; `-new-session-step`: Move & start pressed once it can be.
     private var probeMachines = ProcessInfo.processInfo.arguments.contains("-new-session-machines")
     private var probeStep = ProcessInfo.processInfo.arguments.contains("-new-session-step")
+    /// `-new-session-location <path>`: moving, the destination unlocked and
+    /// typed as `path`, its popover open; `-new-session-location-shut` leaves it shut.
+    private var probeLocation: String? = {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let at = arguments.firstIndex(of: "-new-session-location"), arguments.indices.contains(at + 1) else { return nil }
+        return arguments[at + 1]
+    }()
 
     /// What the pass last logged, so each change of the form is said once.
     private var probeSaid = ""
 
     private func probeForm() {
-        let said = "form: step \(moveStep) · start \"\(startLabel)\" · heading \"\(heading.text ?? "")\" · reading \"\(readingText)\""
+        let said = "form: step \(moveStep) · start \"\(startLabel)\" \(cantStart ? "disabled" : "enabled") · heading \"\(heading.text ?? "")\" · reading \"\(readingText)\""
         if said != probeSaid, ProcessInfo.processInfo.arguments.contains("-new-session") {
             probeSaid = said
             Logger(subsystem: "dev.cawco.app", category: "Probe").notice("\(said, privacy: .public)")
         }
         guard moving, view.window != nil else { return }
+        if let path = probeLocation {
+            probeLocation = nil
+            moveEditing = true
+            moveAt = path
+            requestRefresh()
+            if !ProcessInfo.processInfo.arguments.contains("-new-session-location-shut") {
+                DispatchQueue.main.async { [weak self] in self?.toggle(.location) }
+            }
+        }
         if probeMachines {
             probeMachines = false
             DispatchQueue.main.async { [weak self] in self?.toggle(.machines) }
@@ -1087,8 +1116,11 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         reading.numberOfLines = moveTo != nil ? 2 : 1
         reading.lineBreakMode = moveTo != nil ? .byWordWrapping : .byTruncatingTail
         reading.text = text.isEmpty ? "\u{a0}" : text
-        reading.ink = locationInformational ? Palette.inkMuted : Palette.statusFailInk
+        reading.ink = locationInformational && connected ? Palette.inkMuted : Palette.statusFailInk
         reading.accessibilityLabel = text
+        // Step 2's words are the move's own, so its line is away; never the
+        // reason Move it can't go, which it says under the chips.
+        if moveStep { reading.isHidden = connected && error.isEmpty }
 
         if continuing != nil {
             sizing.text = estimate.map { "Current context \(Self.tokens($0.liveContextTokens)) → \(Self.tokens($0.summariseInputTokens)) to summarise" }
@@ -1200,8 +1232,6 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
     /// A chip's press opens its picker, closes it when it is the one open, and
     /// moves straight to it from a sibling's.
     private func toggle(_ picker: Picker) {
-        // Moving, the location is the hub's destination: the chip names it and opens nothing.
-        if picker == .location, moveTo != nil { return }
         let target = chip(picker)
         if let open = popover {
             let same = openChip === target
@@ -1225,13 +1255,28 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
             made = ProjectPopover(projects: projectItems, projectId: projectId, onPick: { [weak self] row in self?.pickProject(row) },
                                   onCreate: { [weak self] name, path in try await self?.createProject(name: name, path: path) })
         case .location:
-            let location = LocationPopover(hub: hub, seed: .init(mode: repo == nil ? .dir : .repo, dir: cwd, repo: repo ?? "", locked: locked,
-                                                                 machineId: machineId, machineName: machine?.hostname ?? ""))
+            // Moving, it is where the project goes there: the hub's folder,
+            // locked until unlocked to type another (the web's LocationChip).
+            let to = moveTo
+            let seed: LocationPopover.Seed = if let to {
+                .init(mode: .dir, dir: moveDestination, repo: "", locked: !moveEditing, machineId: to,
+                      machineName: fleet.machines.first { $0.machineId == to }?.hostname ?? to)
+            } else {
+                .init(mode: repo == nil ? .dir : .repo, dir: cwd, repo: repo ?? "", locked: locked,
+                      machineId: machineId, machineName: machine?.hostname ?? "")
+            }
+            let location = LocationPopover(hub: hub, seed: seed)
             location.onDir = { [weak self] value in
-                self?.cwd = value
-                self?.overridden = true
-                self?.projectId = nil
-                self?.requestRefresh()
+                guard let self else { return }
+                if to != nil {
+                    let typed = value.trimmingCharacters(in: .whitespaces)
+                    moveAt = typed.isEmpty ? nil : typed
+                } else {
+                    cwd = value
+                    overridden = true
+                    projectId = nil
+                }
+                requestRefresh()
             }
             location.onMode = { [weak self] mode in
                 guard let self else { return }
@@ -1244,8 +1289,9 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
                 requestRefresh()
             }
             location.onOverride = { [weak self] in
-                self?.overridden = true
-                self?.requestRefresh()
+                guard let self else { return }
+                if to != nil { moveEditing = true } else { overridden = true }
+                requestRefresh()
             }
             location.onRepo = { [weak self] value in
                 self?.repo = value
@@ -1465,6 +1511,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         let request = HubConnection.MoveRequest(
             approved: ask.key,
             machineId: to,
+            path: moveAt,
             spawn: .init(
                 harness: try Self.wire(draft.harness),
                 model: model.isEmpty ? nil : model,
