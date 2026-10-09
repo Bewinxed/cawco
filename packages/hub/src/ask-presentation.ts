@@ -17,7 +17,7 @@ import {
 } from "@cawco/core";
 import type { DbShape } from "./db";
 import type { DelegateTypesShape } from "./delegate-types";
-import { sessionLabel } from "./labels";
+import { boardTitle } from "./labels";
 
 /** A permission (not a question) parked on this envelope, else undefined. */
 const permissionOf = (
@@ -86,9 +86,7 @@ export const createAskPresenter = (
   ): string => {
     const [row] = instanceId ? db.getInstancesByIds([instanceId]) : [];
     if (row) {
-      return (
-        row.title?.trim() || row.derivedTitle?.trim() || sessionLabel(row).name
-      );
+      return boardTitle(row);
     }
     if (typeof payload.workflowRunId === "string") {
       const run = db.getWorkflowRun(payload.workflowRunId);

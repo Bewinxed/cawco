@@ -906,7 +906,7 @@ export interface DbShape {
     readonly putDevice: (
       device: Pick<
         PushDeviceRow,
-        "name" | "pairingId" | "platform" | "secret"
+        "key" | "name" | "pairingId" | "platform" | "secret"
       > & {
         quiet?: boolean;
       }

@@ -70,9 +70,12 @@
       <section aria-labelledby="notifications">
         <h2 id="notifications">Notifications</h2>
         <p>
-          A notification carries only what it takes to tell you something needs you: the session's
-          own name, or which agent on which machine. Notifications pass
-          through Apple's push service on the way to your device.
+          Your own hub writes each notification and encrypts what it says, such as a session's
+          title and what the agent is asking, with a key only your device holds. CawCo's push
+          relay and Apple's push service carry it to your device without being able to read that
+          part, and your device decrypts it when it arrives. All they can read is a plain line:
+          the name you gave the session or which agent on which machine needs you, and its
+          project.
         </p>
       </section>
 

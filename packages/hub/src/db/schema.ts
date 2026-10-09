@@ -1982,6 +1982,12 @@ export const pushDevices = sqliteTable("push_devices", {
   pairingId: text("pairing_id").primaryKey(),
   /** The pairing's secret, base64url; sent to Cawrier only, never answered by a route. */
   secret: text("secret").notNull(),
+  /**
+   * The device's push key: 32 random bytes from the device, standard base64.
+   * Each push's real words are sealed under it (AES-256-GCM) so only the
+   * device reads them. Never logged, never answered by a route, never sent.
+   */
+  key: text("key").notNull(),
   /** The device's own name (`UIDevice.name`), for Settings. */
   name: text("name").notNull(),
   /** `ios`, `ipados` or `macos`. */

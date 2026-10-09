@@ -35,3 +35,12 @@ export const sessionLabel = (
   const name = leafOf(row.cwd);
   return { dir: row.cwd, name, tag: `${name}#${id8}` };
 };
+
+/**
+ * A session as the board names it: its given title (the owner's or its own),
+ * else the title its first message gave it, else its {@link sessionLabel}.
+ */
+export const boardTitle = (
+  row: LabelledRow & { derivedTitle?: string | null }
+): string =>
+  row.title?.trim() || row.derivedTitle?.trim() || sessionLabel(row).name;

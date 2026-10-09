@@ -1,8 +1,13 @@
 /**
- * Pushes to the iOS app (Projects spec §5.5, P2): content-free alerts from
- * the hub when something newly needs you. A push names the session, task or
- * project and nothing else; its `cawco` data carries the ids the app reads
- * the details by, over the tailnet, once opened.
+ * Pushes to the iOS app (Projects spec §5.5, P2): alerts from the hub when
+ * something newly needs you. The visible alert is safe text that never says
+ * what the work said (App Review 4.5.4); the real words (the session's own
+ * title, the question or the permission it asks) ride in the payload's `e`,
+ * sealed with AES-256-GCM under the key the device registered, which only
+ * that device and this hub hold. The app's notification service extension
+ * opens it and shows it in place of the safe alert, so neither Cawrier nor
+ * Apple can read it. Its `cawco` data carries the ids the app reads the
+ * details by, over the tailnet, once opened.
  *
  * - **Cawrier** (apps/cawrier) holds the app's APNs key; no hub does. A phone
  *   that bought Pro enrolls a pairing there and registers the pairing's id
@@ -29,6 +34,7 @@ import {
 import { Elysia, t } from "elysia";
 import type { DbShape, PushDeviceRow, WorkItemRow } from "./db";
 import { hidden } from "./hidden";
+import { boardTitle } from "./labels";
 import type { TaskEvent } from "./tasks";
 
 const CAWRIER = Bun.env.CAWCO_CAWRIER_ORIGIN ?? "https://cawrier.cawco.dev";
@@ -82,18 +88,119 @@ export type PushData =
     }
   | { kind: "test" };
 
+/** An alert's words; `subtitle` is the item's project, absent when it is the title. */
+interface Alert {
+  readonly body: string;
+  readonly subtitle?: string;
+  readonly title: string;
+}
+
 interface Notification {
-  /** Overrides the status line; only the test says something else. */
-  readonly body?: string;
   readonly category: string;
   readonly collapseId: string;
   readonly data: PushData;
-  /** Shown as the alert's title: the item's name. */
-  readonly name: string;
-  /** The project the item is in, as the alert's subtitle; omitted when it is the name. */
-  readonly project: string | null;
+  /** The real words, sealed for each device into `e`; the app shows them in place of `shown`. */
+  readonly sealed: Alert;
+  /** The alert Cawrier and Apple see: never what the work said (see `sessionName`). */
+  readonly shown: Alert;
   readonly threadId: string;
 }
+
+/** What the visible alert says under a name: the status line. */
+const NEEDS_YOU = "Needs you";
+
+/** An alert, its project as the subtitle unless it is the title. */
+const alertOf = (
+  title: string,
+  project: string | null,
+  body: string = NEEDS_YOU
+): Alert =>
+  project && project !== title
+    ? { title, subtitle: project, body }
+    : { title, body };
+
+/** Cawrier refuses a payload over APNs' 4096 bytes (apps/cawrier `MAX_PAYLOAD_BYTES`). */
+const MAX_PAYLOAD_BYTES = 4096;
+/** AES-GCM's IV and tag around the ciphertext: CryptoKit's `SealedBox.combined`. */
+const IV_BYTES = 12;
+const TAG_BYTES = 16;
+/** A device's push key: 32 random bytes, standard base64 with padding. */
+const KEY = /^[A-Za-z0-9+/]{43}=$/;
+
+const utf8 = new TextEncoder();
+/** The sealed alert's UTF-8 JSON, as WebCrypto takes it. */
+type Plaintext = Uint8Array<ArrayBuffer>;
+const byteLength = (text: string): number => utf8.encode(text).length;
+
+/** The payload APNs gets, `e` the sealed alert in base64. */
+const payloadOf = (notification: Notification, e: string) => ({
+  aps: {
+    alert: notification.shown,
+    sound: "default",
+    category: notification.category,
+    "thread-id": notification.threadId,
+    "mutable-content": 1,
+  },
+  e,
+  cawco: notification.data,
+});
+
+/** `text` cut by `chars` code points more than the ellipsis it ends in. */
+const cut = (text: string, chars: number): string => {
+  const points = Array.from(text);
+  return `${points.slice(0, Math.max(0, points.length - chars - 1)).join("")}…`;
+};
+
+/**
+ * The sealed alert's plaintext, `{"v":1,…}` as UTF-8, cut to fit the payload:
+ * the body first, then the title; the visible alert is never cut. Its sealed
+ * size is the same for every device, so it is fitted once per push.
+ */
+const plaintextOf = (notification: Notification): Plaintext => {
+  const room =
+    MAX_PAYLOAD_BYTES - byteLength(JSON.stringify(payloadOf(notification, "")));
+  // Base64 writes each 3 bytes as 4 characters, padded to a whole 4.
+  const fits = Math.floor(room / 4) * 3 - IV_BYTES - TAG_BYTES;
+  let { title, subtitle, body } = notification.sealed;
+  for (;;) {
+    const plaintext = utf8.encode(
+      JSON.stringify({ v: 1, title, ...(subtitle ? { subtitle } : {}), body })
+    );
+    const over = plaintext.length - fits;
+    if (over <= 0) {
+      return plaintext;
+    }
+    // A code point is at least one byte, so cutting `over` of them (and the
+    // ellipsis's three) fits unless JSON's escapes grew it; then it goes round.
+    const points = Array.from(body).length;
+    if (points > 1) {
+      body = cut(body, Math.min(over + 2, points - 1));
+    } else if (Array.from(title).length > 1) {
+      body = "…";
+      title = cut(title, Math.min(over + 2, Array.from(title).length - 1));
+    } else {
+      throw new Error("The visible alert alone fills the push.");
+    }
+  }
+};
+
+/** AES-256-GCM under the device's key: `IV ‖ ciphertext ‖ tag`, base64. */
+const seal = async (key: string, plaintext: Plaintext): Promise<string> => {
+  const sealer = await crypto.subtle.importKey(
+    "raw",
+    Buffer.from(key, "base64"),
+    "AES-GCM",
+    false,
+    ["encrypt"]
+  );
+  const iv = crypto.getRandomValues(new Uint8Array(IV_BYTES));
+  const sealed = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv, tagLength: TAG_BYTES * 8 },
+    sealer,
+    plaintext
+  );
+  return Buffer.concat([iv, new Uint8Array(sealed)]).toString("base64");
+};
 
 /** One device's answer from Cawrier. */
 export interface PushOutcome {
@@ -140,27 +247,14 @@ const askCategory = (
     : PUSH_CATEGORIES.permission;
 };
 
-const payloadOf = (notification: Notification) => ({
-  aps: {
-    alert: {
-      title: notification.name,
-      ...(notification.project && notification.project !== notification.name
-        ? { subtitle: notification.project }
-        : {}),
-      body: notification.body ?? "Needs you",
-    },
-    sound: "default",
-    category: notification.category,
-    "thread-id": notification.threadId,
-    "mutable-content": 0,
-  },
-  cawco: notification.data,
-});
-
-/** One POST to Cawrier; never throws. `reason` is Cawrier's sentence, or APNs' reason it passed on. */
+/**
+ * One POST to Cawrier, the alert sealed for this device; never throws.
+ * `reason` is Cawrier's sentence, or APNs' reason it passed on.
+ */
 const post = async (
   device: PushDeviceRow,
-  notification: Notification
+  notification: Notification,
+  plaintext: Plaintext
 ): Promise<{ status: number; reason: string | null }> => {
   try {
     const response = await fetch(`${CAWRIER}/v1/push`, {
@@ -173,7 +267,7 @@ const post = async (
         pairingId: device.pairingId,
         collapseId: notification.collapseId,
         expiration: Math.floor(Date.now() / 1000) + EXPIRY_S,
-        payload: payloadOf(notification),
+        payload: payloadOf(notification, await seal(device.key, plaintext)),
       }),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
@@ -273,9 +367,10 @@ export const createPush = ({ db, task }: PushServices) => {
     to?: PushDeviceRow[]
   ): Promise<PushOutcome[]> => {
     const devices = to ?? db.push.devices().filter((device) => !device.quiet);
+    const plaintext = plaintextOf(notification);
     return await Promise.all(
       devices.map(async (device): Promise<PushOutcome> => {
-        const { status, reason } = await post(device, notification);
+        const { status, reason } = await post(device, notification, plaintext);
         const pruned = settle(device, status, reason);
         return { name: device.name, status, reason, pruned };
       })
@@ -305,10 +400,11 @@ export const createPush = ({ db, task }: PushServices) => {
     (projectId ? db.project(projectId)?.name : undefined) ?? null;
 
   /**
-   * A push title crosses Cawrier and APNs and shows on a lock screen (App
-   * Review 4.5.4), so it never carries what the work said: not the title a
-   * session's first message gave it, not a title the agent gave itself, not
+   * A visible push title crosses Cawrier and APNs and shows on a lock screen
+   * (App Review 4.5.4), so it never carries what the work said: not the title
+   * a session's first message gave it, not a title the agent gave itself, not
    * its folder. Only a name the owner gave it, else "<harness> on <machine>".
+   * The real title goes sealed.
    */
   const sessionName = (instanceId: string): string | undefined => {
     const [row] = instanceId ? db.getInstancesByIds([instanceId]) : [];
@@ -360,9 +456,14 @@ export const createPush = ({ db, task }: PushServices) => {
         sessionName(instanceId) ||
         "A session";
       const projectId = row?.projectId ?? null;
+      const project = projectName(projectId);
+      // The ask's presentation, stamped as it parked (ask-presentation.ts):
+      // the session as the board names it, and the needs-you card's line.
+      const { asker, summary } = (payload as PermissionRequestFrame)
+        .presentation;
       moment({
-        name,
-        project: projectName(projectId),
+        shown: alertOf(name, project),
+        sealed: alertOf(asker, project, summary),
         category: askCategory(payload),
         collapseId: collapse("ask", requestId),
         threadId: projectId ?? instanceId,
@@ -396,9 +497,10 @@ export const createPush = ({ db, task }: PushServices) => {
           if (view?.kind !== "you") {
             return;
           }
+          const alert = alertOf(view.title, projectName(projectId));
           moment({
-            name: view.title,
-            project: projectName(projectId),
+            shown: alert,
+            sealed: alert,
             category: PUSH_CATEGORIES.task,
             collapseId: collapse("task", `${projectId}:${id}`),
             threadId: projectId,
@@ -422,9 +524,17 @@ export const createPush = ({ db, task }: PushServices) => {
       task(projectId, taskId)
         .catch(() => undefined)
         .then((view) => {
+          const project = projectName(projectId);
+          const [row] = db.getInstancesByIds([item.instanceId]);
           moment({
-            name: view?.title || sessionName(item.instanceId) || "A task",
-            project: projectName(projectId),
+            shown: alertOf(
+              view?.title || sessionName(item.instanceId) || "A task",
+              project
+            ),
+            sealed: alertOf(
+              view?.title || (row ? boardTitle(row) : "A task"),
+              project
+            ),
             category: PUSH_CATEGORIES.attempt,
             collapseId: collapse("task", `${projectId}:${taskId}`),
             threadId: projectId,
@@ -444,9 +554,16 @@ export const createPush = ({ db, task }: PushServices) => {
       return {
         outcomes: await deliver(
           {
-            name: "Test from Caw",
-            project: null,
-            body: "Notifications work. When an agent needs you, it arrives like this.",
+            shown: alertOf(
+              "Test from Caw",
+              null,
+              "Notifications work. When an agent needs you, it arrives like this."
+            ),
+            sealed: alertOf(
+              "Test from Caw",
+              null,
+              "Notifications work, end to end encrypted. When an agent needs you, it arrives like this."
+            ),
             category: PUSH_CATEGORIES.test,
             collapseId: "test",
             threadId: "test",
@@ -461,7 +578,7 @@ export const createPush = ({ db, task }: PushServices) => {
 
 export type Push = ReturnType<typeof createPush>;
 
-/** What Settings shows of a device; the secret never leaves the hub but for Cawrier. */
+/** What Settings shows of a device; the secret never leaves the hub but for Cawrier, the key never. */
 const deviceView = (device: PushDeviceRow) => ({
   id: device.pairingId,
   name: device.name,
@@ -525,6 +642,7 @@ export const pushRoutes = (db: DbShape, push: Push) =>
         body: t.Object({
           pairingId: t.String(),
           secret: t.String(),
+          key: t.String(),
           name: t.String(),
           platform: t.Union([
             t.Literal("ios"),
@@ -544,9 +662,16 @@ export const pushRoutes = (db: DbShape, push: Push) =>
             "The pairing secret is not 32 bytes in base64url (43 characters)."
           );
         }
+        if (!KEY.test(body.key)) {
+          return status(
+            400,
+            "The push key is not 32 bytes in padded base64 (44 characters)."
+          );
+        }
         const device = db.push.putDevice({
           pairingId: body.pairingId,
           secret: body.secret,
+          key: body.key,
           name: body.name.trim().slice(0, 120) || "iPhone",
           platform: body.platform,
           quiet: body.quiet,
