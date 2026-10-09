@@ -24,8 +24,18 @@
  *
  * Then, once the sheet is laid out at that size, the focused field is
  * scrolled into the visible area inside the boxes that scroll it. The window
- * itself is never scrolled here: the browser pans it, and a page that moved
- * it as well had the two chase each other.
+ * itself is never scrolled here.
+ *
+ * Nor does WebKit scroll it. Focus that a tap gives a field lets WebKit pan
+ * the window to it as the keyboard comes up, and in Brave that pan landed on
+ * a layout the keyboard had already shrunk: the page jumped 290px and
+ * snapped back a frame later. So a tap on a field focuses it first, with
+ * `preventScroll`, which WebKit honours for the keyboard's reveal as well;
+ * the tap itself goes on untouched, so iOS still places the caret, the loupe
+ * and Paste where the finger was. Only a tap: a touch that moved or
+ * scrolled focuses nothing, as iOS does. (The first keyboard a freshly
+ * launched browser raises still pans once: WebKit does not honour
+ * `preventScroll` for that one.)
  */
 import { flushSync } from "svelte";
 
@@ -37,6 +47,10 @@ export const visible = $state({ top: 0, height: 0 });
 
 /** Room kept between a revealed field and the visible area's edges. */
 const MARGIN = 12;
+/** How far a touch may travel and still be a tap, in CSS pixels. */
+const TAP_SLOP = 10;
+/** What a tap can land in that edits text. */
+const EDITABLE = "input, textarea, [contenteditable]";
 /** Inputs that raise no keyboard. */
 const KEYLESS =
   /^(button|checkbox|color|file|hidden|image|radio|range|reset|submit)$/;
@@ -61,6 +75,53 @@ function scrollers(node: HTMLElement): HTMLElement[] {
     }
   }
   return found;
+}
+
+/**
+ * Attachment for a footer stuck to the bottom of what scrolls (`position:
+ * sticky; bottom: 0`, as a step's Back and Continue): it stays above a
+ * keyboard and keeps the field being typed in clear of itself. Safari leaves
+ * the scroller's bottom under the keyboard, so the footer's sticky offset
+ * becomes as much of the scroller as the keyboard covers; Brave shrinks the
+ * layout, and there the offset stays 0. Only the scroller is measured: the
+ * footer's own box, read the frame the layout changed, still stood where it
+ * was stuck before, and a lift taken from it threw the footer to the top.
+ * The scroller's scroll-padding-bottom is the room the footer takes, so the
+ * browser's own focus scrolling, and `reveal` here, stop above it.
+ */
+export function aboveKeyboard(node: HTMLElement): () => void {
+  const [box] = scrollers(node);
+  // Where its CSS does not stick it (a wide screen), it is in the flow.
+  if (
+    !box ||
+    visible.height === 0 ||
+    getComputedStyle(node).position !== "sticky"
+  ) {
+    return () => undefined;
+  }
+  const bottom = visible.top + visible.height;
+  const place = () => {
+    const lift = Math.max(
+      0,
+      Math.round(box.getBoundingClientRect().bottom - bottom)
+    );
+    node.style.bottom = lift > 0 ? `${lift}px` : "";
+    box.style.scrollPaddingBottom = `${node.offsetHeight + lift}px`;
+  };
+  // Brave reports the keyboard a frame before the layout shrinks for it, so
+  // the footer is placed a frame later, and again whenever the scroller
+  // takes a new size; placed at once it was thrown up by the keyboard's
+  // height for that frame. Safari's layout never moves, and there the lift
+  // comes a frame into the keyboard's rise.
+  const resized = new ResizeObserver(place);
+  resized.observe(box);
+  const frame = requestAnimationFrame(place);
+  return () => {
+    cancelAnimationFrame(frame);
+    resized.disconnect();
+    node.style.bottom = "";
+    box.style.scrollPaddingBottom = "";
+  };
 }
 
 /** Keeps `visible` current and the focused field in it. Returns the cleanup. */
@@ -97,7 +158,10 @@ export function trackVisibleViewport(): () => void {
     reveal(from, from + height);
   };
 
-  /** Scrolls the focused field into [from, to] inside the boxes that scroll it. */
+  /**
+   * Scrolls the focused field into [from, to] inside the boxes that scroll
+   * it, clear of each box's scroll-padding (a sticky footer's room).
+   */
   const reveal = (from: number, to: number) => {
     const field = document.activeElement;
     if (!isField(field)) {
@@ -105,8 +169,17 @@ export function trackVisibleViewport(): () => void {
     }
     for (const box of scrollers(field)) {
       const area = box.getBoundingClientRect();
-      const upper = Math.max(area.top, from) + MARGIN;
-      const lower = Math.min(area.bottom, to) - MARGIN;
+      const style = getComputedStyle(box);
+      const upper =
+        Math.max(
+          area.top + (Number.parseFloat(style.scrollPaddingTop) || 0),
+          from
+        ) + MARGIN;
+      const lower =
+        Math.min(
+          area.bottom - (Number.parseFloat(style.scrollPaddingBottom) || 0),
+          to
+        ) - MARGIN;
       const place = field.getBoundingClientRect();
       if (place.bottom > lower) {
         // A field taller than the area shows its top.
@@ -138,12 +211,51 @@ export function trackVisibleViewport(): () => void {
     }
   };
 
+  /** Where the one finger on the screen came down; null for none or several. */
+  let press: { x: number; y: number } | null = null;
+  const touchStart = (event: TouchEvent) => {
+    const [touch] = event.touches;
+    press =
+      event.touches.length === 1 && touch
+        ? { x: touch.clientX, y: touch.clientY }
+        : null;
+  };
+  /** A tap on a field that is not focused yet focuses it without a pan. */
+  const touchEnd = (event: TouchEvent) => {
+    const [touch] = event.changedTouches;
+    const start = press;
+    press = null;
+    // A touch that travelled was a scroll or a drag, not a tap.
+    if (!(start && touch)) {
+      return;
+    }
+    if (
+      Math.hypot(touch.clientX - start.x, touch.clientY - start.y) > TAP_SLOP
+    ) {
+      return;
+    }
+    const target = event.target instanceof Element ? event.target : null;
+    const field =
+      target?.closest(EDITABLE) ?? target?.closest("label")?.control ?? null;
+    if (isField(field) && field !== document.activeElement) {
+      field.focus({ preventScroll: true });
+    }
+  };
+
   measure();
   viewport.addEventListener("resize", request);
   viewport.addEventListener("scroll", request);
   window.addEventListener("resize", request);
   document.addEventListener("focusin", follow);
   document.addEventListener("focusout", follow);
+  document.addEventListener("touchstart", touchStart, {
+    capture: true,
+    passive: true,
+  });
+  document.addEventListener("touchend", touchEnd, {
+    capture: true,
+    passive: true,
+  });
   return () => {
     cancelAnimationFrame(frame);
     resized.disconnect();
@@ -152,5 +264,7 @@ export function trackVisibleViewport(): () => void {
     window.removeEventListener("resize", request);
     document.removeEventListener("focusin", follow);
     document.removeEventListener("focusout", follow);
+    document.removeEventListener("touchstart", touchStart, { capture: true });
+    document.removeEventListener("touchend", touchEnd, { capture: true });
   };
 }

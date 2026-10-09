@@ -1274,13 +1274,19 @@
      otherwise. The sheet carries where the visible area starts and how tall
      it is as --visible-top and --visible-height, measured together once a
      frame (cawco/visible-viewport, ui/drawer/drawer-content); a sheet names
-     its own cap in --drawer-max-height. Its bottom is measured from the box
-     fixed elements stand in (100%), which WebKit in Brave resizes a frame
-     after the window: placed from the window's height, the sheet stood
-     below the screen for that frame. Neither value transitions, so the
-     sheet steps with the keyboard instead of animating against it. */
+     its own cap in --drawer-max-height. Its bottom edge is placed from the
+     top of the box fixed elements stand in, then the sheet is lifted by its
+     own height (translate, which vaul's transform composes with): Brave and
+     Firefox for iOS resize the whole web view for the keyboard, and WebKit
+     moves a fixed layer held by its `bottom` to the new edge before the
+     page has laid it out again, so a sheet hung from the bottom jumped up
+     by the keyboard's height as it opened and dropped as it closed, for
+     three frames each way. Held by its top, it stays where it is until its
+     new place is drawn. Neither value transitions, so the sheet steps with
+     the keyboard instead of animating against it. */
   [data-slot="drawer-content"][data-vaul-drawer-direction="bottom"] {
-    bottom: calc(100% - var(--visible-top, 0px) - var(--visible-height, 100%));
+    top: calc(var(--visible-top, 0px) + var(--visible-height, 100%));
+    translate: 0 -100%;
     max-height: min(
       var(--drawer-max-height, 85vh),
       var(--visible-height, 100dvh)

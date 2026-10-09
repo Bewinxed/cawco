@@ -44,6 +44,7 @@
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import { depart, land } from "#lib/cawco/motion/share.svelte.js";
+  import { aboveKeyboard } from "#lib/cawco/visible-viewport.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { Input } from "#lib/components/ui/input/index.js";
@@ -487,7 +488,7 @@
         {#if refused}
           <p class="problem" role="alert" in:appear>{refused}</p>
         {/if}
-        <div class="foot">
+        <div class="foot" {@attach aboveKeyboard}>
           <Button
             disabled={step === 0 || busy || (step === 1 && signedIn > 0)}
             label="Back"
@@ -1149,6 +1150,19 @@
     }
     .in {
       padding: var(--space-4);
+    }
+    /* Back and Continue stay in reach on a phone: pinned to the foot of what
+       scrolls (the section's ground), across the card's width on its own
+       surface, and over a keyboard (aboveKeyboard). The shell already keeps
+       the home indicator clear under the ground, so no safe area here. A
+       tall step scrolls between the steps and them. */
+    .foot {
+      position: sticky;
+      bottom: 0;
+      z-index: 1;
+      margin-inline: calc(-1 * var(--space-7));
+      padding: var(--space-3) var(--space-7) var(--space-2);
+      background: var(--surface-raised);
     }
     .mrow {
       grid-template-columns: minmax(0, 1fr) auto;
