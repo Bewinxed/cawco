@@ -514,6 +514,14 @@ export interface ServiceSpec {
   /** Whether the service is really up, which the init system does not know. */
   readonly probe: () => Promise<string | undefined>;
   /**
+   * launchd's `ProcessType`, for a service the person waits on. Absent, launchd
+   * throttles it: launchd.plist(5), "If left unspecified, the system will apply
+   * light resource limits to the job, throttling its CPU usage and I/O
+   * bandwidth"; "Interactive jobs run with the same resource limitations as
+   * apps, that is to say, none". systemd has no counterpart.
+   */
+  readonly processType?: "Interactive";
+  /**
    * Hard dependencies: systemd `Requires=`. A unit here is one the service
    * genuinely cannot work without, so its failure must take this one down
    * rather than leave it up and broken. Distinct from {@link wants}, which is
@@ -683,6 +691,11 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
       // necessary to run the main ("supervising") process of a unit that has
       // delegation turned on in a subgroup".
       delegate: { controllers: "pids", subgroup: "keeper" },
+      // Every session's welcome and every turn's bytes pass through the
+      // keeper, so a throttled keeper is a stalled board. Measured on the Mac
+      // (load-matched A/B, 2026-10-09, three counted pairs): the worst welcome
+      // was 600, 2,693 and 609 ms unset against 225, 27 and 201 ms Interactive.
+      processType: "Interactive",
       check: needs(layout.sessiond, "sessiond"),
       probe: probeSessiond,
     },
@@ -894,6 +907,12 @@ ${
       <string>${xml(spec.socket.port)}</string>
     </dict>
   </dict>
+`
+    : ""
+}${
+  spec.processType
+    ? `  <key>ProcessType</key>
+  <string>${spec.processType}</string>
 `
     : ""
 }  <key>RunAtLoad</key>
