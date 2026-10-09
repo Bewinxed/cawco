@@ -293,9 +293,25 @@ const CAP_FOOT = 8;
 const pitchOf = (board: Board): number =>
   board === "limit" ? TAGGED_PITCH : PITCH;
 
-/** A board's stage height for `lanes` lanes and a caption of `lines` lines. */
-export const figureHeight = (board: Board, lanes: number, lines = 1): number =>
-  PAD + lanes * pitchOf(board) + CAP_GAP + lines * CAP_LINE + CAP_FOOT;
+/**
+ * Whether a board writes a caption under its lanes: Pinned only where the
+ * provider has limits to reach, Fill first and Spread never.
+ */
+export const captioned = (board: Board, limits: boolean): boolean =>
+  board === "pinned" ? limits : board === "soonest" || board === "limit";
+
+/**
+ * A board's stage height for `lanes` lanes and a caption of `lines` lines;
+ * with none, the lanes alone, nothing kept for a caption that never shows.
+ */
+export const figureHeight = (
+  board: Board,
+  lanes: number,
+  lines: number
+): number =>
+  PAD +
+  lanes * pitchOf(board) +
+  (lines > 0 ? CAP_GAP + lines * CAP_LINE + CAP_FOOT : 0);
 
 /**
  * Lays the lanes out in `stage` and returns the API a storyboard writes its
@@ -309,7 +325,6 @@ function layout(stage: HTMLElement, board: Board, lanes: LaneSpec[]) {
   const W = stage.clientWidth;
   const n = lanes.length;
   const pitch = pitchOf(board);
-  const H = figureHeight(board, n);
   const probe = document.createElement("i");
   probe.style.display = "none";
   const root = document.createElement("div");
@@ -442,7 +457,6 @@ function layout(stage: HTMLElement, board: Board, lanes: LaneSpec[]) {
   };
   const api = {
     W,
-    H,
     L,
     tl,
     dy,
@@ -502,8 +516,8 @@ function layout(stage: HTMLElement, board: Board, lanes: LaneSpec[]) {
     },
     /**
      * A session's fork: the child grows in its parent's lane, in the next
-     * free slot, its badge (the child mark) saying what it is. Nothing is
-     * drawn between them: the lane is the relation.
+     * free slot, drawn hollow to say what it is. Nothing is drawn between
+     * them: the lane is the relation.
      */
     fork(par: Chip, t: number): Chip {
       const ln = L[par.lane];
@@ -546,8 +560,9 @@ function layout(stage: HTMLElement, board: Board, lanes: LaneSpec[]) {
       L.forEach((o, i) => {
         o.tf.to(S, `scaleX(${o.f0})`, 0.3, eo);
         o.tdim.to(S, "1", 0.3, eo);
-        o.tblk.to(S, "0", 0.2, eo);
-        o.tck.to(S, "1", 0.2, eo);
+        // The blocked word leaves before the clock comes back to its place.
+        o.tblk.to(S, "0", 0.12, eo);
+        o.tck.to(S + 0.12, "1", 0.18, eo);
         o.thr.to(S, "0", 0.2, eo);
         o.tgh.to(S, "0", 0.2, eo);
         o.tglow.to(S, lanes[i].glow ? "1" : "0", 0.3, eo);
@@ -890,12 +905,8 @@ export function buildFigure(stage: HTMLElement, spec: FigureSpec): Timeline {
   const F = BOARDS[spec.board](stage, spec);
   // As tall as its lanes and its longest caption, which wraps rather than
   // being cut where the stage is narrow.
-  const tallest = Math.max(
-    CAP_LINE,
-    ...[...stage.querySelectorAll<HTMLElement>(".cap")].map(
-      (cap) => cap.scrollHeight
-    )
-  );
+  const caps = [...stage.querySelectorAll<HTMLElement>(".cap")];
+  const tallest = Math.max(0, ...caps.map((cap) => cap.scrollHeight));
   stage.style.height = `${figureHeight(spec.board, spec.lanes.length, Math.ceil(tallest / CAP_LINE))}px`;
   F.tl.rest();
   return F.tl;

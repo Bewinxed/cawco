@@ -1,13 +1,15 @@
 <script lang="ts">
   /**
    * Which account a session runs on, at the start of its row's meta line: a
-   * 6px dot in the account's colour, its name in the tooltip. Only with two
-   * or more Claude accounts, where the answer can differ from row to row.
+   * 6px dot in the account's colour, its name in the tooltip. Only where its
+   * provider has two or more accounts, so the answer can differ from row to
+   * row. While the session moves to another account (its menu's Account), the
+   * dot is already the account it moves to, its colour turning as the board
+   * state pill's tint does.
    */
   import { accountName } from "@cawco/core";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { cawco } from "../client.svelte";
-  import { usage } from "./forecast.svelte";
 
   let {
     accountId,
@@ -18,11 +20,17 @@
     inline?: boolean;
   } = $props();
 
-  const account = $derived(
-    accountId && usage.claudeAccounts >= 2
+  const account = $derived.by(() => {
+    const found = accountId
       ? cawco.accounts?.accounts.find((one) => one.id === accountId)
-      : undefined
-  );
+      : undefined;
+    const siblings = found
+      ? (cawco.accounts?.accounts ?? []).filter(
+          (one) => one.provider === found.provider
+        ).length
+      : 0;
+    return siblings >= 2 ? found : undefined;
+  });
 </script>
 
 {#if account}
@@ -52,7 +60,7 @@
     border-radius: 50%;
     background: var(--c);
     vertical-align: 1px;
-    transition: background-color var(--dur-toggle) var(--ease-out);
+    transition: background-color var(--dur-panel) var(--ease-out);
   }
   .dot.inline {
     margin-inline-end: var(--space-1);

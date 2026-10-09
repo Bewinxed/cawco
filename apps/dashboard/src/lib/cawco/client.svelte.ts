@@ -4776,6 +4776,35 @@ export async function discardSession(
 }
 
 /**
+ * Moves a session whole to another account of its provider
+ * (`POST /api/instances/:id/account`): now when it is at rest, else at its
+ * next turn boundary. A refusal is thrown in the hub's own sentence; an
+ * answer that is not a sentence (a route's JSON) is named by its status.
+ */
+export async function moveInstanceAccount(
+  instanceId: string,
+  accountId: string
+): Promise<void> {
+  const response = await fetch(
+    `/api/instances/${encodeURIComponent(instanceId)}/account`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ accountId }),
+    }
+  );
+  if (!response.ok) {
+    const said = response.headers.get("content-type")?.startsWith("text/")
+      ? (await response.text()).trim()
+      : "";
+    throw new Error(
+      said ||
+        `The hub answered ${response.status}, so the session stayed on its account.`
+    );
+  }
+}
+
+/**
  * Promotes a spin-off to mainline work: the UI stops setting it apart, and
  * the tag that kept its transcript out of the machine's catalog comes off, so
  * the session joins the history it was being hidden from.

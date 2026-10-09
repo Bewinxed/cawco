@@ -1064,9 +1064,10 @@
   .mrow.paste .controls {
     padding-block-start: var(--space-2);
   }
+  /* The code fills the line, so Done ends on the edge every row's Sign in
+     ends on, wrapped under the link or beside it. */
   .controls :global(.code) {
     flex: 1 1 140px;
-    max-width: 180px;
     min-width: 0;
   }
   .st {

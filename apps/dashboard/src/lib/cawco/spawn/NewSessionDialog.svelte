@@ -377,8 +377,9 @@
     )
   );
   /**
-   * The account chip, when the harness's provider has two or more accounts:
-   * Auto with placement's reason, and each account with its rings and a key
+   * The account chip on the model section's heading, when two or more of the
+   * session's provider's accounts are signed in on the chosen machine: Auto
+   * with placement's reason, and each account with its rings and a key
    * line. Not on a continuation: its request (the hub's `continueBody`) has
    * no account to carry a pick in. A fork never comes through this form; it
    * starts from a session's menu and runs on its parent's account.
@@ -388,8 +389,17 @@
     if (!provider) {
       return null;
     }
+    // The provider's accounts signed in on the chosen machine: those a
+    // session there can run on.
+    const signedIn = new Set(
+      (cawco.accounts?.signins ?? [])
+        .filter(
+          (one) => one.machineId === machineId && one.state === "signed-in"
+        )
+        .map((one) => one.accountId)
+    );
     const own = (cawco.accounts?.accounts ?? [])
-      .filter((one) => one.provider === provider)
+      .filter((one) => one.provider === provider && signedIn.has(one.id))
       .sort((a, b) => a.order - b.order);
     if (continueFrom || own.length < 2) {
       return null;
@@ -1493,6 +1503,7 @@
           {/if}
           <div class="sec" style="--delay:80ms">
             <ModelSection
+              account={accountTool}
               {harness}
               installed={installedHarnesses}
               label={continueFrom ? "Continue on" : "Model"}
@@ -1516,7 +1527,6 @@
                 },
                 harness,
                 modes,
-                account: accountTool,
                 permission: permissionMode,
                 onpermission: (value) => {
                   permissionMode = value;

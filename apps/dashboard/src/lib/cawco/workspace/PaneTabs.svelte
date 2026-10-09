@@ -58,6 +58,7 @@
   } from "#lib/components/ui/fluid-tabs/index.js";
   import { IconArrowRight, IconChevronDown, IconClose } from "#lib/icons.js";
   import { page } from "$app/state";
+  import AccountSubmenu from "../accounts/AccountSubmenu.svelte";
   import {
     ACTIVITY_LABEL,
     type Activity,
@@ -1060,6 +1061,10 @@
                 <IconArrowRight />
                 Continue in new session…
               </ContextMenu.Item>
+              {@const row = cawco.instances.find((one) => one.id === tab.id)}
+              {#if row}
+                <AccountSubmenu instance={row} />
+              {/if}
             {/if}
             <!-- Every gesture has a command that does the same thing. Splitting
                  and moving are reachable from here before drag-and-drop exists,

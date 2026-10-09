@@ -27,11 +27,6 @@
 
   /** The run settings that ride on a model: its effort and the session's permission mode. */
   export interface ModelTools {
-    /**
-     * The account a new session runs on, where its provider has two or
-     * more; absent elsewhere (a running session's details).
-     */
-    account?: import("./AccountChip.svelte").AccountTool | null;
     effort: EffortLevel | null;
     /**
      * Set when the chip cannot show a level: the harness has no effort, the
@@ -59,7 +54,6 @@
   import Down from "~icons/solar/alt-arrow-down-linear";
   import Tuning from "~icons/solar/tuning-2-bold-duotone";
   import { crossIn, crossOut } from "../motion/curves.svelte";
-  import AccountChip from "./AccountChip.svelte";
   import EffortPips from "./EffortPips.svelte";
   import NsPopover from "./NsPopover.svelte";
   import NsPopoverGroup from "./NsPopoverGroup.svelte";
@@ -79,7 +73,7 @@
     closeOnCommit?: boolean;
     readonly?: boolean;
   } = $props();
-  let pop = $state<"effort" | "permission" | "account" | null>(null);
+  let pop = $state<"effort" | "permission" | null>(null);
   const look = $derived(
     tools.permission ? permissionLook(tools.permission, tools.harness) : null
   );
@@ -214,16 +208,6 @@
               value={tools.permission}
             />
           </NsPopover>
-        {/if}
-        {#if tools.account}
-          <AccountChip
-            {id}
-            onchange={(value) => {
-              pop = value ? "account" : null;
-            }}
-            open={pop === "account"}
-            tool={tools.account}
-          />
         {/if}
       </NsPopoverGroup>
     </span>

@@ -10,6 +10,7 @@
   import {
     type Board,
     buildFigure,
+    captioned,
     figureHeight,
     type Lane,
     type Policy,
@@ -119,12 +120,17 @@
   }
 </script>
 
-<!-- Stands at its lanes' height from the first frame; the build sets it again
-     once its captions are measured, taller only where one wraps. -->
+<!-- Stands at its lanes' height from the first frame, with a caption's line
+     only on a board that writes one; the build sets it again once its
+     captions are measured, taller only where one wraps. -->
 <div
   class="stage"
   bind:this={stage}
-  style:height="{figureHeight(board, lanes.length)}px"
+  style:height="{figureHeight(
+    board,
+    lanes.length,
+    captioned(board, limits) ? 1 : 0
+  )}px"
 ></div>
 
 <style>
@@ -231,16 +237,12 @@
     offset-rotate: 0deg;
     offset-anchor: 50% 50%;
   }
-  .stage :global(.chip.child::after) {
-    content: "";
-    position: absolute;
-    right: -2px;
-    top: -2px;
-    width: 4px;
-    height: 4px;
-    border-radius: 50%;
+  /* A fork is its parent's chip drawn hollow: the same lane, no extra mark. */
+  .stage :global(.chip.child) {
     background: var(--surface-recess);
-    box-shadow: inset 0 0 0 1px var(--ink-muted);
+    box-shadow:
+      inset 0 0 0 1.5px var(--c),
+      0 0 0 1.5px var(--surface-recess);
   }
   .stage :global(.doc) {
     width: 10px;

@@ -64,6 +64,7 @@
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { IconArchive } from "#lib/icons.js";
   import { cn } from "#lib/utils.js";
+  import { shownAccount } from "./accounts/switch.svelte";
   import type { InstanceRow } from "./client.svelte";
   import { swipeToArchive } from "./home/swipe-archive";
   import LiveSessionMenu from "./LiveSessionMenu.svelte";
@@ -213,7 +214,9 @@
         >
         {#if !compact}
           <span class="cell line"
-            ><AccountDot accountId={instance?.accountId} />{line}</span
+            ><AccountDot
+              accountId={instance ? shownAccount(instance) : undefined}
+            />{line}</span
           >
         {/if}
       </span>

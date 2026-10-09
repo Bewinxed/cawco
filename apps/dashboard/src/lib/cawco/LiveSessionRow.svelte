@@ -3,6 +3,7 @@
   import { TextMorph } from "torph/svelte";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { formatDuration } from "#lib/utils/time.js";
+  import { shownAccount } from "./accounts/switch.svelte";
   import { FAILED_HINT, SLEEPING_HINT, UNKNOWN_HINT } from "./activity";
   import {
     cawco,
@@ -199,7 +200,7 @@
            checkouts apart. -->
         <!-- Which account it runs on, leading what is said beside the title
              (usage/AccountDot: only with two or more Claude accounts). -->
-        <AccountDot accountId={instance.accountId} inline={false} />
+        <AccountDot accountId={shownAccount(instance)} inline={false} />
         {#if showCwd}
           <span
             class="hidden min-w-24 shrink-[3] truncate font-mono text-label text-muted-foreground [direction:rtl] sm:block"

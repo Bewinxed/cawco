@@ -27,6 +27,7 @@
     IconUnarchive,
   } from "#lib/icons.js";
   import { goto } from "$app/navigation";
+  import AccountSubmenu from "./accounts/AccountSubmenu.svelte";
   import {
     cawco,
     deleteTranscript,
@@ -212,6 +213,7 @@
       <IconArrowRight />
       Continue in new session…
     </ContextMenu.Item>
+    <AccountSubmenu {instance} />
     {#if running}
       <ContextMenu.Item
         onSelect={() => stopSession(instance.id, instance.machineId)}

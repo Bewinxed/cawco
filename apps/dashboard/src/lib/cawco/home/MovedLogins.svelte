@@ -87,17 +87,19 @@
   .from {
     grid-column: 2;
     min-width: 0;
+  }
+  .name {
     overflow: hidden;
+    font: var(--type-label);
+    color: var(--ink-strong);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .name {
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
+  /* Where it came from wraps in the rail rather than losing the machine. */
   .from {
     font: var(--type-meta);
     color: var(--ink-muted);
+    overflow-wrap: anywhere;
   }
   .there {
     grid-column: 2;

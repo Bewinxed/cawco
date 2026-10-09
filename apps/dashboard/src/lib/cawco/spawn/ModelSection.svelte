@@ -24,6 +24,7 @@
   import { crossIn, crossOut } from "../motion/curves.svelte";
   import { ListSwap } from "../motion/list-swap.svelte";
   import Rail from "../motion/Rail.svelte";
+  import AccountChip, { type AccountTool } from "./AccountChip.svelte";
   import {
     deriveModelEntries,
     groupModelEntries,
@@ -44,6 +45,7 @@
     onmodel,
     runtime = false,
     tools,
+    account,
     label = "Model",
     unavailable,
   }: {
@@ -57,6 +59,12 @@
     onmodel: (id: string) => void;
     runtime?: boolean;
     tools?: ModelTools;
+    /**
+     * The account the session runs on, a chip on the heading's line: it
+     * follows the harness, not the model row, so it never takes a row's room.
+     * Absent where there is no choice.
+     */
+    account?: AccountTool | null;
     /** The section's heading. */
     label?: string;
     /** Why a model cannot be picked here, shown on its row; nothing when it can. */
@@ -104,6 +112,7 @@
     }))
   );
   let toolsWidth = $state(0);
+  let accountOpen = $state(false);
 
   $effect(() => {
     const next = harness;
@@ -191,7 +200,22 @@
 
 <section class="model">
   {#if !runtime}
-    <SectionHeader hue="var(--hue-cyan-500)" icon={Cpu} {label} />
+    <SectionHeader hue="var(--hue-cyan-500)" icon={Cpu} {label}>
+      {#snippet right()}
+        {#if account}
+          <span class="account">
+            <AccountChip
+              id={uid}
+              onchange={(value) => {
+                accountOpen = value;
+              }}
+              open={accountOpen}
+              tool={account}
+            />
+          </span>
+        {/if}
+      {/snippet}
+    </SectionHeader>
   {/if}
   <div class="picker" class:railed={!runtime}>
     {#if !runtime}
@@ -537,6 +561,13 @@
   }
   /* The chosen row's run settings: effort and permission chips, riding the
      selection fill's transform so they slide to whichever model is picked. */
+  /* The account chip on the heading's line, at its end; its name gives way
+     before the line wraps. */
+  .account {
+    display: flex;
+    justify-content: flex-end;
+    min-width: 0;
+  }
   .tools {
     position: absolute;
     top: 4px;

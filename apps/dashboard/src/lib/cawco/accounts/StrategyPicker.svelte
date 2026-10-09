@@ -20,6 +20,7 @@
     NativeSelectOption,
   } from "#lib/components/ui/native-select/index.js";
   import { IconSubagent } from "#lib/icons.js";
+  import { appear, crossOut } from "../motion/curves.svelte";
   import { unfold } from "../motion/fold.svelte";
   import {
     hueVar,
@@ -138,11 +139,12 @@
             {strategy.label}
             <small>{strategy.line}</small>
           </span>
-          {#if strategy.id === "pinned"}
-            <span class="pin" class:on={checked}>
+          <!-- Only the chosen Pinned card names its account: an unchosen one
+               keeps no room for it. -->
+          {#if strategy.id === "pinned" && checked}
+            <span class="pin" in:appear out:crossOut>
               <NativeSelect
                 aria-label="Pinned account"
-                disabled={!checked}
                 onchange={(event) => {
                   onchoice({
                     strategy: "pinned",
@@ -302,13 +304,6 @@
     max-width: 100%;
     min-width: 0;
     margin-inline-start: auto;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity var(--dur-fade) var(--ease-out);
-  }
-  .pin.on {
-    opacity: 1;
-    pointer-events: auto;
   }
   .forks {
     display: flex;

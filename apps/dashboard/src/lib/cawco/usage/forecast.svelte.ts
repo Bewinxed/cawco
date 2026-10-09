@@ -98,13 +98,6 @@ const openCode = $derived.by((): RingAccount | null => {
   );
 });
 
-/** How many accounts a harness's provider has: the chip and the session dots show from two. */
-const claudeAccounts = $derived(
-  (cawco.accounts?.accounts ?? []).filter(
-    (account) => account.provider === "anthropic"
-  ).length
-);
-
 export const usage = {
   /** Claude's accounts as Rings, and the carry answer; null without a reading. */
   get claude() {
@@ -113,9 +106,6 @@ export const usage = {
   /** Opencode Go's plan as one ring; null without a reading. */
   get openCode() {
     return openCode;
-  },
-  get claudeAccounts() {
-    return claudeAccounts;
   },
   get read() {
     return state.read;
