@@ -22,7 +22,9 @@
  *
  * Which build's keeper is current is the `keeper` link's to say
  * ({@link readKeeperVersion}), on disk: it is what a machine's keeper starts
- * as after a reboot. The endpoint follows it.
+ * as after a reboot, and a build's keeper the link names publishes the
+ * machine's endpoint when it starts. A handover publishes the endpoint, then
+ * moves the link.
  */
 import {
   lstat,

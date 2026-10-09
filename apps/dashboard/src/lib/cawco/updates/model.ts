@@ -425,9 +425,10 @@ export const keeperRestartId = (machineId: string, at: number): string =>
   `keeper:${machineId}:${at}`;
 
 /**
- * 8. A machine's session keeper stopped answering and the agent restarted it
- * (agent keeper-watchdog.ts). Every session it held ended with it, which is
- * why it is said even though nothing is left to do.
+ * 8. A machine's session keeper stopped answering and the agent restarted it,
+ * or, an earlier build's keeper still holding sessions after a handover,
+ * removed it (agent keeper-watchdog.ts). Every session it held ended with it,
+ * which is why it is said even though nothing is left to do.
  */
 function keeperRestarted({ input, machines, name }: Ctx): Notice | null {
   const [machine] = machines
@@ -443,15 +444,20 @@ function keeperRestarted({ input, machines, name }: Ctx): Notice | null {
     return null;
   }
   const minutesSilent = Math.max(1, Math.round(restart.silentForMs / 60_000));
+  const silent = `It stopped answering for ${plural(minutesSilent, "minute")} (${plural(restart.dials, "call")}, no reply)`;
   return {
     acks: [keeperRestartId(machine.machineId, restart.at)],
     kind: 8,
-    title: `The session keeper on ${name(machine)} was restarted`,
+    title: restart.retiring
+      ? `An earlier session keeper on ${name(machine)} was removed`
+      : `The session keeper on ${name(machine)} was restarted`,
     failed: true,
     lines: [
       {
         state: "plain",
-        text: `It stopped answering for ${plural(minutesSilent, "minute")} (${plural(restart.dials, "call")}, no reply), so no session could start there. It was restarted and sessions start there again.`,
+        text: restart.retiring
+          ? `${silent}. It was the keeper of an earlier build, still holding sessions after an update; new sessions were already starting on the current keeper, and still do.`
+          : `${silent}, so no session could start there. It was restarted and sessions start there again.`,
       },
       {
         state: "plain",

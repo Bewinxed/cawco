@@ -260,12 +260,19 @@ children_total() { keeper_lists "$1" | jsonl "d => d.flatMap(k => k.procs).filte
 holder_of() { keeper_lists "$1" | jsonl "d => d.find(k => k.procs.some(p => p.alive && p.procId === '$2'))?.endpoint"; }
 # The live children one keeper holds, by its endpoint's name.
 held_on() { keeper_lists "$1" | jsonl "d => d.find(k => k.endpoint === '$2')?.procs.filter(p => p.alive).length ?? 0"; }
-# The current keeper's own endpoint, as the machine's endpoint names it.
-current_endpoint() { as_user "$1" readlink /run/user/1000/cawco/sessiond.sock; }
+# The current keeper's own endpoint, as the machine's endpoint names it (empty when it is a legacy keeper's own socket).
+current_endpoint() { as_user "$1" sh -c 'readlink /run/user/1000/cawco/sessiond.sock || true'; }
 # A build's keeper's endpoint and unit (keeperService: what a unit name cannot carry becomes _).
 endpoint_of() { echo "sessiond-$1.sock"; }
 unit_of() { local v=$1; echo "cawco-sessiond-${v//[^A-Za-z0-9._-]/_}.service"; }
-current_unit() { local e; e=$(current_endpoint "$1"); e=${e#sessiond-}; unit_of "${e%.sock}"; }
+# The current keeper's unit: its build's own, or a legacy keeper's cawco-sessiond.service.
+current_unit() {
+  local e
+  e=$(current_endpoint "$1")
+  if [[ -z $e ]]; then echo cawco-sessiond.service; return; fi
+  e=${e#sessiond-}
+  unit_of "${e%.sock}"
+}
 session_running() { [[ "$(hub_api /api/instances | json "d => d.find(r => r.id === '$1')?.status")" == running ]]; }
 # Starts sessions through the hub, waits until each runs, and writes down the pid of the process holding it.
 start_before() {
@@ -380,14 +387,22 @@ if [ ! -d "$binary/versions/$good" ]; then
   fi
 fi
 healthy() { curl -fsS --max-time 5 http://127.0.0.1:3456/health 2> /dev/null | grep -q "\"version\":\"$good\""; }
-# The good build's keeper, and only it: its own unit, the keeper link, the machine's endpoint naming it.
+# The good build's keeper, and only it. A build whose keeper runs in a unit of its own has it there, on its own
+# endpoint, which the machine's endpoint names; the build from before keepers ran side by side (build 1) runs it in
+# cawco-sessiond.service on the machine's endpoint itself.
 goodunit="cawco-sessiond-$(printf '%s' "$good" | sed 's/[^A-Za-z0-9._-]/_/g').service"
+keeper_ok() {
+  if [ -f "$HOME/.config/systemd/user/$goodunit" ]; then
+    [ "$(readlink /run/user/1000/cawco/sessiond.sock)" = "sessiond-$good.sock" ] && [ "$(systemctl --user is-active "$goodunit")" = active ]
+  else
+    [ ! -L /run/user/1000/cawco/sessiond.sock ] && [ "$(systemctl --user is-active cawco-sessiond.service)" = active ]
+  fi
+}
 clean() {
   [ ! -e "$binary/apply.lock" ] && [ ! -e "$binary/trial.json" ] && [ ! -e "$data/cawco.db.migrating" ] &&
     ! ls "$binary"/versions/*/cawco.real > /dev/null 2>&1 &&
     [ "$(readlink "$binary/current")" = "versions/$good" ] && [ "$(readlink "$binary/keeper")" = "versions/$good" ] &&
-    [ "$(readlink /run/user/1000/cawco/sessiond.sock)" = "sessiond-$good.sock" ] &&
-    [ "$(systemctl --user is-active "$goodunit")" = active ] &&
+    keeper_ok &&
     grep -qE '"phase":"(none|installed|waiting-sessions|available)"' "$binary/update-state.json" 2> /dev/null
 }
 if healthy && clean && [ -S /run/user/1000/cawco/sessiond.sock ]; then echo "GOODVERSION=$good"; exit 0; fi
@@ -399,18 +414,24 @@ ln -sfn "versions/$good" "$binary/current.reset" && mv -T "$binary/current.reset
 ln -sfn "versions/$good" "$binary/keeper.reset" && mv -T "$binary/keeper.reset" "$binary/keeper"
 sed -i "s/\"installedVersion\":\"[^\"]*\"/\"installedVersion\":\"$good\"/" "$binary/installation.json"
 printf '{"phase":"none","installedVersion":"%s","channel":"stable","updatedAt":%s000,"unseen":false,"hostsHub":true}\n' "$good" "$(date +%s)" > "$binary/update-state.json"
-# Every other keeper goes, with what it holds; the good build's own unit is written by that build, enabled and restarted.
+# Every keeper goes, with what it holds; the good build writes its own keeper's unit, which is enabled and started.
 for unit in $(systemctl --user list-unit-files --no-legend 'cawco-sessiond*.service' | awk '{print $1}'); do
-  [ "$unit" = "$goodunit" ] && continue
   systemctl --user disable --now "$unit"
-  rm -f "$HOME/.config/systemd/user/$unit"
+  [ "$unit" = cawco-sessiond.service ] || rm -f "$HOME/.config/systemd/user/$unit"
 done
-rm -f /run/user/1000/cawco/sessiond-*.sock /run/user/1000/cawco/legacy-sessiond-*.sock
+rm -f /run/user/1000/cawco/sessiond.sock /run/user/1000/cawco/sessiond-*.sock /run/user/1000/cawco/legacy-sessiond-*.sock
 "$binary/versions/$good/cawco" binary-units
 systemctl --user daemon-reload
 systemctl --user reset-failed
-systemctl --user enable "$goodunit"
-systemctl --user restart "$goodunit"
+if [ -f "$HOME/.config/systemd/user/$goodunit" ]; then
+  rm -f "$HOME/.config/systemd/user/cawco-sessiond.service"
+  systemctl --user daemon-reload
+  systemctl --user enable --now "$goodunit"
+  keeper_up() { [ "$(readlink /run/user/1000/cawco/sessiond.sock)" = "sessiond-$good.sock" ]; }
+else
+  systemctl --user enable --now cawco-sessiond.service
+  keeper_up() { [ -S /run/user/1000/cawco/sessiond.sock ]; }
+fi
 systemctl --user start cawco-hub.service cawco-dashboard.service cawco-agent.service
 n=0
 until healthy; do
@@ -427,7 +448,7 @@ until healthy; do
   sleep 2
 done
 until [ -S /run/user/1000/cawco/sessiond.sock ]; do sleep 1; done
-until [ "$(readlink /run/user/1000/cawco/sessiond.sock)" = "sessiond-$good.sock" ]; do sleep 1; done
+until keeper_up; do sleep 1; done
 echo "stopped any update in flight, restored current and keeper and the state files, restarted the services; used $used"
 echo "GOODVERSION=$good"
 EOF
@@ -794,6 +815,12 @@ install_now() {
   wait_until 300 '[[ "$(build_version $hid)" == 0.0.1-test.2 && "$(phase $hid)" == installed ]]'
   as_user "$hubc" curl -fsS http://127.0.0.1:3456/health | grep -q '"ok":true'
   [[ "$(as_user "$hubc" readlink /home/cawco/.local/share/cawco/binary/current)" == versions/0.0.1-test.2 ]]
+  # Build 1's keeper, from before keepers ran side by side, is handed over to build 2's, its own unit's: the machine's
+  # endpoint names it, and the legacy keeper, holding nothing, goes with its unit.
+  wait_until 180 '[[ "$(current_endpoint "$hubc")" == "$(endpoint_of 0.0.1-test.2)" ]]'
+  wait_until 120 'as_user "$hubc" test ! -e /home/cawco/.config/systemd/user/cawco-sessiond.service'
+  [[ "$(as_user "$hubc" sh -c 'grep -c "cawco-sessiond" ~/.config/systemd/user/cawco-agent.service || true')" == 0 ]]
+  wait_until 60 '[[ -z "$(retiring $hid)" && "$(field $hid sessiondVersion)" == 0.0.1-test.2 ]]'
 }
 export -f install_now
 check "Install now applies the newer build" install_now 600 "" 0.0.1-test.2
@@ -829,6 +856,33 @@ check "a session start requested while the joined machine installs runs once aft
 joiner_survived() { need_hub; survived "$joinerc" "$out/joiner-before.txt"; }
 export -f joiner_survived
 check "a session already running on the joined machine before its update is the same process afterwards, re-attached and running" joiner_survived 600 "a session start requested while the joined machine installs runs once afterwards, one child, none lost"
+
+# The fleet's own path. The joined machine was installed from build 1, from before keepers ran side by side: one keeper,
+# cawco-sessiond.service, on the machine's endpoint itself, and an agent unit that requires it. Its update to build 2
+# was applied by build 1's helper, which left the keeper where it was while it held sessions; build 2's agent then
+# handed it over to build 2's keeper, beside it, with those sessions still on it.
+legacy_handed_over() {
+  need_hub
+  local id pid
+  wait_until 180 '[[ "$(current_endpoint "$joinerc")" == "$(endpoint_of 0.0.1-test.2)" ]]'
+  [[ "$(as_user "$joinerc" readlink /home/cawco/.local/share/cawco/binary/keeper)" == versions/0.0.1-test.2 ]]
+  # The legacy keeper's socket was set aside under its build; it holds the sessions that ran before the update.
+  while read -r id pid; do
+    [[ "$(holder_of "$joinerc" "$id")" == legacy-sessiond-0.0.1-test.1.sock ]]
+  done < "$out/joiner-before.txt"
+  # Its unit no longer starts with the machine, and the agent's unit no longer requires it: the new keeper's unit,
+  # enabled, requires the agent's from its own side.
+  [[ "$(as_user "$joinerc" systemctl --user is-enabled cawco-sessiond.service)" == disabled ]]
+  [[ "$(as_user "$joinerc" sh -c 'grep -c "cawco-sessiond" ~/.config/systemd/user/cawco-agent.service || true')" == 0 ]]
+  [[ "$(as_user "$joinerc" systemctl --user is-enabled "$(unit_of 0.0.1-test.2)")" == enabled ]]
+  [[ "$(as_user "$joinerc" systemctl --user show -p RequiredBy --value "$(unit_of 0.0.1-test.2)")" == *cawco-agent.service* ]]
+  # The state says installed, on build 2's keeper, with the legacy keeper handing over what it holds; nothing owed.
+  wait_until 60 '[[ "$(phase $jid)" == installed && "$(field $jid sessiondVersion)" == 0.0.1-test.2 && "$(retiring $jid)" == *"0.0.1-test.1:"* ]]'
+  [[ -z "$(field $jid keeperOwed)" ]]
+  echo "retiring keepers: $(retiring $jid)"
+}
+export -f legacy_handed_over
+check "a keeper from before keepers ran side by side, holding sessions, is handed over at the update: they run on there, and the new build's keeper is the machine's" legacy_handed_over 600 "a session already running on the joined machine before its update is the same process afterwards, re-attached and running"
 
 one_helper() {
   need_hub
@@ -1212,9 +1266,14 @@ handover_on_joined_machine() {
   wait_until 300 '[[ "$(phase $hid)" != installing && "$(phase $jid)" != installing ]]'
   if [[ "$(build_version $jid)" != "$(build_version $hid)" ]]; then install_now_request "$jid" > /dev/null; fi
   wait_until 600 '[[ "$(build_version $jid)" == "$(build_version $hid)" && "$(phase $jid)" != installing ]]'
-  # The joined machine holds nothing, so no earlier keeper of its is left: the one it has is the only one.
+  # The joined machine holds nothing, so no earlier keeper of its is left: the one it has is the only one. Among those
+  # that went is its keeper from before keepers ran side by side (see "a keeper from before keepers ran side by side
+  # ..."): it went with its unit, and was killed outright, never told to drain, for a keeper of that age removes the
+  # machine's endpoint, now another keeper's, when it drains.
   end_all_sessions "$joinerc"
   wait_until 180 '[[ "$(children_total "$joinerc")" == 0 && -z "$(retiring $jid)" ]]'
+  wait_until 60 'as_user "$joinerc" test ! -e /home/cawco/.config/systemd/user/cawco-sessiond.service'
+  [[ "$(as_user "$joinerc" sh -c 'journalctl --user --no-pager -o cat -u cawco-sessiond.service | grep -c "draining children" || true')" == 0 ]]
   local old oldend oldunit oldpid new id pid
   old=$(keeper_link "$joinerc")
   old=${old#versions/}

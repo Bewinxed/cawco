@@ -286,7 +286,7 @@ export interface KeeperWatchdogOptions {
   /** Where each recovery's diagnostics go, one folder per recovery. */
   diagnosticsRoot?: string;
   log: (line: string) => void;
-  /** Records the current keeper's restart where the dashboard reads it, before the restart runs. */
+  /** Records the restart (or a retiring keeper's removal) where the dashboard reads it, before it runs. */
   record: (restart: KeeperRestart) => Promise<void>;
 }
 
@@ -386,10 +386,9 @@ export class KeeperWatchdog {
       silentForMs,
       children: held.length,
       diagnostics: dir,
+      ...(found.current ? {} : { retiring: true as const }),
     };
-    if (found.current) {
-      await this.#record(restart);
-    }
+    await this.#record(restart);
     this.#log(wedgedLine(found, job, streak, held, dir, silentForMs));
     await (found.current ? job.restart() : job.remove());
     // What the dead keeper started is ended here: a keeper killed outright

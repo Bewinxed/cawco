@@ -64,6 +64,7 @@ import {
   answers,
   currentKeeper,
   keeperEndpoint,
+  keeperEndpoints,
   machineEndpoint,
   publishKeeper,
 } from "@cawco/core/keepers";
@@ -399,18 +400,29 @@ async function handOverKeeper(to: string): Promise<KeeperMove> {
   await say(
     `keeper ${to}: answers at ${endpoint}; the machine's endpoint names it now${before ? `, and ${before.keeper.version}'s keeper keeps what it holds` : ""}`
   );
-  await pointLinkAt(keeperPath(), to);
+  // The endpoint first, setting a legacy keeper's socket aside under the
+  // build the link names before it moves; then the link. A helper that stops
+  // between the two leaves the endpoint naming this build's keeper with the
+  // link on the one before, which the agent hands over again: `to`'s keeper,
+  // answering already, is made the link's.
   await publishKeeper(
     endpoint,
     before?.keeper.kind === "legacy" ? before.keeper.version : undefined
   );
+  await pointLinkAt(keeperPath(), to);
   await job.enable();
-  if (before && before.endpoint !== endpoint) {
-    await keeperJob(before.keeper)
+  // Every other keeper on the machine starts with it no more: the one before,
+  // and one a handover that stopped half-way left enabled.
+  for (const other of await keeperEndpoints(machine)) {
+    if (other.endpoint === endpoint) {
+      continue;
+    }
+    // biome-ignore lint/performance/noAwaitInLoops: keepers are few, each said in its order
+    await keeperJob(other.keeper)
       ?.retire()
       .catch((error: unknown) =>
         say(
-          `keeper ${before.keeper.version}: it still starts with the machine: ${message(error)}`
+          `keeper ${other.keeper.version}: it still starts with the machine: ${message(error)}`
         )
       );
   }

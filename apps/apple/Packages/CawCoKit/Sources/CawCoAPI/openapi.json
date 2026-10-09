@@ -25538,7 +25538,7 @@
             "type": "string"
           },
           "keeperRestart": {
-            "description": "The last time the agent found the session keeper wedged (alive, socket\nopen, no welcome) and restarted it, which ended every session it held.\nThe event a notice announces, as `keeper:<machineId>:<at>`; the next\nrestart replaces it.",
+            "description": "The last time the agent found a session keeper wedged (alive, socket\nopen, no welcome) and restarted it, or (`retiring`) removed it, which\nended every session it held. The event a notice announces, as\n`keeper:<machineId>:<at>`; the next one replaces it.",
             "type": "object",
             "properties": {
               "at": {
@@ -25560,6 +25560,11 @@
               "pid": {
                 "description": "The wedged keeper's pid.",
                 "type": "number"
+              },
+              "retiring": {
+                "description": "It was a retiring keeper (an earlier build's, after a handover), removed rather than restarted: no session starts on it again.",
+                "const": true,
+                "type": "boolean"
               },
               "silentForMs": {
                 "description": "From the first silent dial to the call.",

@@ -184,12 +184,48 @@ const launchdJob = (keeper: KeeperName): KeeperJob => {
     },
     async remove() {
       if (keeper.kind === "legacy") {
-        await run(["launchctl", "kill", "SIGKILL", target]);
+        // Killed by its own pid, and gone, before launchd is asked anything:
+        // `bootout` would send it SIGTERM. Should launchd start it again
+        // meanwhile (a kill is not a successful exit), what starts is a keeper
+        // on the machine's endpoint, a symlink now, which exits by itself.
+        const running = await pid();
+        if (running !== undefined) {
+          killNow(running);
+          await gone(running);
+        }
       }
       await run(["launchctl", "bootout", target]);
       await rm(plist, { force: true });
     },
   };
+};
+
+const killNow = (target: number): void => {
+  try {
+    process.kill(target, "SIGKILL");
+  } catch {
+    // already gone
+  }
+};
+
+/** How long a killed keeper gets to be gone before its removal goes on. */
+const GONE_MS = 10_000;
+
+/** Resolves once `target` is no longer a process, or {@link GONE_MS} has passed. */
+const gone = async (target: number): Promise<void> => {
+  const deadline = Date.now() + GONE_MS;
+  for (;;) {
+    try {
+      process.kill(target, 0);
+    } catch {
+      return;
+    }
+    if (Date.now() > deadline) {
+      return;
+    }
+    // biome-ignore lint/performance/noAwaitInLoops: a poll for one process to be gone
+    await Bun.sleep(100);
+  }
 };
 
 /** The keeper's job on this machine's service manager; none where there is no service manager CawCo installs into. */

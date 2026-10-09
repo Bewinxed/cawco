@@ -237,10 +237,10 @@ export interface BinaryUpdateState {
   /** The build whose session keeper could not start; the keeper is not handed to it again by itself. */
   keeperFailedVersion?: string;
   /**
-   * The last time the agent found the session keeper wedged (alive, socket
-   * open, no welcome) and restarted it, which ended every session it held.
-   * The event a notice announces, as `keeper:<machineId>:<at>`; the next
-   * restart replaces it.
+   * The last time the agent found a session keeper wedged (alive, socket
+   * open, no welcome) and restarted it, or (`retiring`) removed it, which
+   * ended every session it held. The event a notice announces, as
+   * `keeper:<machineId>:<at>`; the next one replaces it.
    */
   keeperRestart?: {
     /** When the wedge was called, in milliseconds: the restart's identity. */
@@ -253,6 +253,8 @@ export interface BinaryUpdateState {
     dials: number;
     /** The wedged keeper's pid. */
     pid: number;
+    /** It was a retiring keeper (an earlier build's, after a handover), removed rather than restarted: no session starts on it again. */
+    retiring?: true;
     /** From the first silent dial to the call. */
     silentForMs: number;
   };

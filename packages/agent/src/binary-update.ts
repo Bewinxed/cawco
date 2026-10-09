@@ -449,9 +449,12 @@ export class BinaryUpdater {
   }
 
   async #load(): Promise<void> {
-    const saved = await readUpdateState();
+    // `keeperOwed`, written by builds whose keeper waited for its sessions to
+    // end: no keeper move is owed now (#advanceKeeper), so it is not carried on.
+    const { keeperOwed: _owed, ...saved } = ((await readUpdateState()) ??
+      this.#state) as BinaryUpdateState & { keeperOwed?: string };
     this.#state = {
-      ...(saved ?? this.#state),
+      ...saved,
       installedVersion: runtimeVersion,
       hostsHub: this.#hostsHub,
     };
@@ -528,8 +531,11 @@ export class BinaryUpdater {
     const named = keepers.find(
       ({ keeper }) => keeper.kind === "build" && keeper.version === link
     );
-    if (named && !named.current) {
-      // A legacy keeper still on the machine's endpoint is the handover's to set aside, with its build's name.
+    // The machine's endpoint names no keeper that answers (a symlink left
+    // dangling, a path removed): it names the link's again. One that names a
+    // live keeper is left alone, even ahead of the link: that is a handover
+    // half-done, which the next one finishes (#advanceKeeper).
+    if (named && !keepers.some((keeper) => keeper.current)) {
       await publishKeeper(named.endpoint).then(
         () =>
           console.info(
