@@ -12155,7 +12155,9 @@ export const createServer = (
   const projectOffers = createProjectOffers({
     db,
     tasks,
-    control: planControl,
+    // The plan as its panel reads it, on any harness. Called only once the
+    // hub is up, after `plans` below is made.
+    planSteps: async (instanceId) => (await plans.read(instanceId)).steps,
     run: runOnMachine,
     online: (machineId) => Boolean(registry.agent(machineId)),
     createProject: createOrJoinProject,
@@ -19101,10 +19103,6 @@ export const createServer = (
               // dashboards do; a turn's end is answered above.
               if (kind === "frame" && message.instanceId && !internal) {
                 ruleEngine.observe(
-                  message.instanceId,
-                  (message.payload as FramePayload & { kind: "frame" }).message
-                );
-                projectOffers.observe(
                   message.instanceId,
                   (message.payload as FramePayload & { kind: "frame" }).message
                 );

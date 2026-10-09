@@ -7,9 +7,9 @@
  * to ask at every turn's end and every delegate's spawn:
  * - `delegates`: it started a delegate;
  * - `days`: it has been going for more than a day, so it was active on two;
- * - `plan`: its plan still has {@link PLAN_ITEMS} or more open items as a turn
- *   ends (TodoWrite's list as the transcript carries it, or Claude Code's
- *   task ledger, read only after a turn that wrote it);
+ * - `plan`: its plan still has {@link PLAN_ITEMS} or more open steps as a turn
+ *   ends, read as its plan panel reads it (plans.ts): CawCo's own steps where
+ *   "CawCo's to-dos" is on, else its harness's list;
  * - `repo`: its folder belongs to no project, and another session is working
  *   in the same repository (normalised `origin`, projects.ts) on any machine.
  *
@@ -23,6 +23,7 @@
 import type {
   CommandResult,
   InstanceRow,
+  PlanStep,
   ProjectOfferReason,
   ProjectOfferSummary,
   ThreadSummary,
@@ -32,7 +33,6 @@ import { Elysia, t } from "elysia";
 import { z } from "zod";
 import { tool } from "./admin-tools";
 import type { DbShape, ProjectOfferRow, ProjectRow } from "./db";
-import { type HarnessPlanDeps, harnessTasks } from "./harness-plans";
 import { leafOf, sessionLabel } from "./labels";
 import { FolderRefusal, refused } from "./project-folder";
 import { normaliseRemote, placePath } from "./projects";
@@ -47,16 +47,6 @@ export const PROPOSED_LABEL = "proposed";
 const TITLE_MAX = 200;
 /** A git read is local; past this the machine is not going to answer it. */
 const READ_MS = 10_000;
-/** The tools that write Claude Code's task ledger: a turn using one moved the plan. */
-const LEDGER_TOOLS = new Set(["TaskCreate", "TaskUpdate"]);
-/** TodoWrite (Claude Code) and todowrite (OpenCode) carry the whole list in their input. */
-const TODO_TOOLS = new Set(["todowrite"]);
-
-/** One open item of a session's plan. */
-export interface PlanItem {
-  description?: string;
-  subject: string;
-}
 
 export interface AcceptResult {
   /** True when the session's folder joined a project that already had its repository. */
@@ -74,8 +64,6 @@ export interface AcceptResult {
 type InstanceShape = ReturnType<DbShape["listInstances"]>[number];
 
 export interface ProjectOffersDeps {
-  /** A machine control, answered by the session's harness: its task list. */
-  control: HarnessPlanDeps["control"];
   /** Makes the project with Caw, or joins the one that has the folder's remote (server.ts, POST /api/projects). */
   createProject: (asked: {
     name: string;
@@ -86,6 +74,11 @@ export interface ProjectOffersDeps {
   /** Sessions moved into a project: their machines' rails are published again. */
   moved: (machineIds: string[]) => void;
   online: (machineId: string) => boolean;
+  /**
+   * The session's plan steps as its plan panel reads them (plans.ts): CawCo's
+   * own list where "CawCo's to-dos" is on for it, else its harness's.
+   */
+  planSteps: (instanceId: string) => Promise<PlanStep[]>;
   /** To every dashboard: the session's standing offer, or null once answered. */
   publish: (row: InstanceShape, offer: ProjectOfferSummary | null) => void;
   run: (
@@ -112,18 +105,14 @@ const summaryOf = (row: ProjectOfferRow): ProjectOfferSummary => ({
 const plural = (n: number, one: string, many: string): string =>
   `${n} ${n === 1 ? one : many}`;
 
-/** A plan item's subject as a task title: one line, within the limit. */
-const titleOf = (subject: string): string => {
-  const line = subject.replace(/\s+/g, " ").trim();
+/** A plan step's words as a task title: one line, within the limit. */
+const titleOf = (content: string): string => {
+  const line = content.replace(/\s+/g, " ").trim();
   return line.length > TITLE_MAX ? `${line.slice(0, TITLE_MAX - 1)}…` : line;
 };
 
 export const createProjectOffers = (deps: ProjectOffersDeps) => {
   const { db } = deps;
-  /** The latest TodoWrite list each session's transcript carried. */
-  const todos = new Map<string, PlanItem[]>();
-  /** Sessions whose turn wrote the task ledger: read it at the turn's end. */
-  const ledgerMoved = new Set<string>();
   /** `machine:folder` → its normalised remote (null: none). Read once per folder. */
   const remotes = new Map<string, Promise<string | null>>();
   /** Sessions being looked at now, so a burst of ends asks once. */
@@ -186,27 +175,16 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
     return reading;
   };
 
-  /** Claude Code's task list for the session, open items only, in id order. */
-  const readLedger = async (row: InstanceShape): Promise<PlanItem[]> =>
-    (row.harness ?? "claude") === "claude"
-      ? (await harnessTasks(deps, row).catch(() => []))
-          .filter((task) => task.status !== "completed")
-          .map(({ subject, description }) => ({
-            subject,
-            ...(description ? { description } : {}),
-          }))
-      : [];
+  /** The session's open plan steps, in plan order; none when its plan cannot be read now. */
+  const openSteps = async (id: string): Promise<PlanStep[]> =>
+    (await deps.planSteps(id).catch(() => [])).filter(
+      (step) => step.status !== "completed"
+    );
 
-  /** The session's open plan: its ledger, else the TodoWrite list it last wrote. */
-  const planOf = async (row: InstanceShape): Promise<PlanItem[]> => {
-    const ledger = await readLedger(row);
-    return ledger.length > 0 ? ledger : (todos.get(row.id) ?? []);
-  };
-
-  /** Files a plan's items as proposed tasks, in plan order; the ones the project refused, with why. */
+  /** Files a plan's open steps as proposed tasks, in plan order; the ones the project refused, with why. */
   const filePlan = async (
     projectId: string,
-    plan: PlanItem[],
+    plan: PlanStep[],
     actor: TaskActor
   ): Promise<{
     filed: AcceptResult["tasks"];
@@ -214,8 +192,8 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
   }> => {
     const filed: AcceptResult["tasks"] = [];
     const unfiled: AcceptResult["unfiled"] = [];
-    for (const item of plan) {
-      const title = titleOf(item.subject);
+    for (const step of plan) {
+      const title = titleOf(step.content);
       if (!title) {
         continue;
       }
@@ -223,11 +201,7 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
         // biome-ignore lint/performance/noAwaitInLoops: task numbers are handed out in plan order
         const task = await deps.tasks.create(
           projectId,
-          {
-            title,
-            labels: [PROPOSED_LABEL],
-            ...(item.description ? { description: item.description } : {}),
-          },
+          { title, labels: [PROPOSED_LABEL] },
           actor
         );
         filed.push({ id: task.id, title: task.title });
@@ -322,10 +296,7 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
         );
         return;
       }
-      const moved = ledgerMoved.delete(id);
-      const open = moved
-        ? (await readLedger(row)).length
-        : (todos.get(id)?.length ?? 0);
+      const open = (await openSteps(id)).length;
       if (open >= PLAN_ITEMS) {
         offer(
           row,
@@ -360,47 +331,6 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
   };
 
   return {
-    /** Reads a transcript frame for the plan: TodoWrite's list, or a ledger write. */
-    observe(instanceId: string, message: unknown): void {
-      const frame = message as {
-        type?: string;
-        message?: { content?: unknown };
-      };
-      if (
-        frame.type !== "assistant" ||
-        !Array.isArray(frame.message?.content)
-      ) {
-        return;
-      }
-      for (const block of frame.message.content as {
-        type?: string;
-        name?: string;
-        input?: { todos?: { content?: unknown; status?: unknown }[] };
-      }[]) {
-        if (block.type !== "tool_use" || typeof block.name !== "string") {
-          continue;
-        }
-        if (LEDGER_TOOLS.has(block.name)) {
-          ledgerMoved.add(instanceId);
-        } else if (
-          TODO_TOOLS.has(block.name.toLowerCase()) &&
-          Array.isArray(block.input?.todos)
-        ) {
-          todos.set(
-            instanceId,
-            block.input.todos
-              .filter(
-                (todo) =>
-                  typeof todo.content === "string" &&
-                  todo.status !== "completed" &&
-                  todo.status !== "cancelled"
-              )
-              .map((todo) => ({ subject: todo.content as string }))
-          );
-        }
-      }
-    },
-
     /** A turn ended: is the session past plain? */
     turnEnded(instanceId: string): void {
       quietly(consider(instanceId, "turn"), instanceId);
@@ -468,10 +398,9 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
 
       const { filed, unfiled } = await filePlan(
         project.id,
-        await planOf(row),
+        await openSteps(row.id),
         actor
       );
-      todos.delete(row.id);
       // A new project is set up with Caw once its plan is on the board.
       const setupThread = joined
         ? undefined
