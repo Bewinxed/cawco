@@ -9676,6 +9676,12 @@
                   },
                   "enabled": {
                     "type": "boolean"
+                  },
+                  "projectId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
                   }
                 },
                 "required": [
@@ -10987,6 +10993,12 @@
                   },
                   "cwd": {
                     "type": "string"
+                  },
+                  "projectId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
                   }
                 }
               }
@@ -17043,6 +17055,10 @@
                 "description": "The checkout to write into. The hub fills this in as it sends a sync —\na daemon never resolves a project id, and a machine only ever receives\nthe project rows that live on it.",
                 "type": "string"
               },
+              "placeId": {
+                "description": "The place (`project_places` row) this copy is for, on a copy the hub\nplaced: the machine reports what it came to under `<key>@<placeId>`, and\nthe hub folds every place's report back onto the row.",
+                "type": "string"
+              },
               "projectId": {
                 "description": "The hub `projects` row this is bound to. Required unless `user`.",
                 "type": "string"
@@ -17359,6 +17375,10 @@
           },
           "cwd": {
             "description": "The checkout to write into. The hub fills this in as it sends a sync —\na daemon never resolves a project id, and a machine only ever receives\nthe project rows that live on it.",
+            "type": "string"
+          },
+          "placeId": {
+            "description": "The place (`project_places` row) this copy is for, on a copy the hub\nplaced: the machine reports what it came to under `<key>@<placeId>`, and\nthe hub folds every place's report back onto the row.",
             "type": "string"
           },
           "projectId": {
@@ -28587,6 +28607,10 @@
             "description": "The checkout to write into. The hub fills this in as it sends a sync —\na daemon never resolves a project id, and a machine only ever receives\nthe project rows that live on it.",
             "type": "string"
           },
+          "placeId": {
+            "description": "The place (`project_places` row) this copy is for, on a copy the hub\nplaced: the machine reports what it came to under `<key>@<placeId>`, and\nthe hub folds every place's report back onto the row.",
+            "type": "string"
+          },
           "projectId": {
             "description": "The hub `projects` row this is bound to. Required unless `user`.",
             "type": "string"
@@ -28619,6 +28643,10 @@
           },
           "cwd": {
             "description": "The checkout to write into. The hub fills this in as it sends a sync —\na daemon never resolves a project id, and a machine only ever receives\nthe project rows that live on it.",
+            "type": "string"
+          },
+          "placeId": {
+            "description": "The place (`project_places` row) this copy is for, on a copy the hub\nplaced: the machine reports what it came to under `<key>@<placeId>`, and\nthe hub folds every place's report back onto the row.",
             "type": "string"
           },
           "projectId": {
@@ -28667,6 +28695,10 @@
             "description": "The checkout to write into. The hub fills this in as it sends a sync —\na daemon never resolves a project id, and a machine only ever receives\nthe project rows that live on it.",
             "type": "string"
           },
+          "placeId": {
+            "description": "The place (`project_places` row) this copy is for, on a copy the hub\nplaced: the machine reports what it came to under `<key>@<placeId>`, and\nthe hub folds every place's report back onto the row.",
+            "type": "string"
+          },
           "projectId": {
             "description": "The hub `projects` row this is bound to. Required unless `user`.",
             "type": "string"
@@ -28713,6 +28745,10 @@
           },
           "cwd": {
             "description": "The checkout to write into. The hub fills this in as it sends a sync —\na daemon never resolves a project id, and a machine only ever receives\nthe project rows that live on it.",
+            "type": "string"
+          },
+          "placeId": {
+            "description": "The place (`project_places` row) this copy is for, on a copy the hub\nplaced: the machine reports what it came to under `<key>@<placeId>`, and\nthe hub folds every place's report back onto the row.",
             "type": "string"
           },
           "projectId": {
@@ -29305,6 +29341,10 @@
             "description": "The checkout to write into. The hub fills this in as it sends a sync —\na daemon never resolves a project id, and a machine only ever receives\nthe project rows that live on it.",
             "type": "string"
           },
+          "placeId": {
+            "description": "The place (`project_places` row) this copy is for, on a copy the hub\nplaced: the machine reports what it came to under `<key>@<placeId>`, and\nthe hub folds every place's report back onto the row.",
+            "type": "string"
+          },
           "projectId": {
             "description": "The hub `projects` row this is bound to. Required unless `user`.",
             "type": "string"
@@ -29606,6 +29646,10 @@
           "force": {
             "description": "Set on a targeted push only: overwrite a machine copy that drifted.",
             "type": "boolean"
+          },
+          "placeId": {
+            "description": "The place (`project_places` row) this copy is for, on a copy the hub\nplaced: the machine reports what it came to under `<key>@<placeId>`, and\nthe hub folds every place's report back onto the row.",
+            "type": "string"
           }
         },
         "required": [

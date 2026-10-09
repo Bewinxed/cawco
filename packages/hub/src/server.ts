@@ -389,10 +389,12 @@ import {
 import { createProjectOffers, projectOfferRoutes } from "./project-offers";
 import {
   foldPlacedStates,
-  hasProjectHooks,
+  hasProjectRows,
   onPlacesChanged,
+  placedCopies,
   placedHooks,
   placesChanged,
+  unbound,
 } from "./project-placements";
 import { createProjectStops } from "./project-stops";
 import { placePath, readRemote } from "./projects";
@@ -10043,14 +10045,24 @@ export const createServer = (
         // carried in this same sync. A read that fails or does not answer holds
         // nothing, so every byte goes — heavier, never wrong.
         const held = await readHoldings(machineId);
+        const places = db.listProjects().flatMap((project) => project.places);
+        const mcpRows = config.mcp.flatMap((row) =>
+          current.has(row.name) ? [current.get(row.name) as typeof row] : []
+        );
         const outbound = fleetMcp.syncConfig(
           {
             ...config,
-            skills: config.skills?.map((skill) =>
+            // The fleet's own, for every folder; a project's are placed below.
+            skills: unbound(config.skills).map((skill) =>
               held.skills?.[skill.name] === skill.hash
                 ? { ...skill, files: undefined }
                 : skill
             ),
+            // A project-bound skill and MCP server once per place of its
+            // project on this machine (project-placements.ts); a placed skill
+            // always carries its files, as each place is its own copy.
+            placedSkills: placedCopies(config.skills, places, machineId),
+            placedMcp: placedCopies(mcpRows, places, machineId),
             pluginPayloads: config.pluginPayloads?.map((plugin) =>
               held.plugins?.[plugin.name] === plugin.hash
                 ? { ...plugin, files: undefined }
@@ -10065,16 +10077,10 @@ export const createServer = (
                 ? { ...plugin, error }
                 : plugin;
             }),
-            mcp: config.mcp.flatMap((row) =>
-              current.has(row.name) ? [current.get(row.name) as typeof row] : []
-            ),
+            mcp: unbound(mcpRows),
             // A project-bound hook once per place of its project on this
             // machine, with that place as its cwd (project-placements.ts).
-            hooks: placedHooks(
-              config.hooks,
-              db.listProjects().flatMap((project) => project.places),
-              machineId
-            ),
+            hooks: placedHooks(config.hooks, places, machineId),
           },
           hubHttpUrl()
         );
@@ -10565,6 +10571,14 @@ export const createServer = (
     return (placeId) => paths.get(placeId);
   };
 
+  /** Why a fleet row cannot be bound to `projectId`, or nothing when it can (null and left out always can). */
+  const boundProblem = (
+    projectId: string | null | undefined
+  ): string | undefined =>
+    projectId && !db.project(projectId)
+      ? `There is no project ${projectId} on this hub.`
+      : undefined;
+
   /** Tells every dashboard the projects changed: each reads them again. */
   const projectsChanged = (): void =>
     registry.broadcast({
@@ -10574,15 +10588,21 @@ export const createServer = (
     });
 
   // A place added or removed: every dashboard reads the projects again, and
-  // its machine is sent its fleet config again, so the project's hooks reach
-  // the new place or leave the old one. Only when the project has any; a
-  // place of a project without them changes nothing on its machine.
+  // its machine is sent its fleet config again, so the project's hooks, MCP
+  // servers and skills reach the new place or leave the old one. Only when
+  // the project has any; a place of a project without them changes nothing
+  // on its machine.
   onPlacesChanged((machineId, projectId) => {
     projectsChanged();
     const agent = registry.agent(machineId);
+    const fleet = db.fleetConfig();
     if (
       !agent ||
-      (projectId && !hasProjectHooks(db.fleetConfig().hooks, projectId))
+      (projectId &&
+        !hasProjectRows(
+          [...(fleet.hooks ?? []), ...fleet.mcp, ...(fleet.skills ?? [])],
+          projectId
+        ))
     ) {
       return;
     }
@@ -14860,10 +14880,17 @@ export const createServer = (
             // object; `mcpProblem` checks the one field that makes it startable.
             config: t.Record(t.String(), t.Unknown()),
             enabled: t.Optional(t.Boolean()),
+            /**
+             * One project's only: placed at each of its checkouts and
+             * delegate workspaces. Null: every machine. Left out: as it was.
+             */
+            projectId: t.Optional(t.Union([t.String(), t.Null()])),
           }),
         },
         async ({ params, body, status }) => {
-          const problem = mcpProblem(params.name, body.config);
+          const problem =
+            mcpProblem(params.name, body.config) ??
+            boundProblem(body.projectId);
           if (problem) {
             return status(400, problem);
           }
@@ -14872,6 +14899,7 @@ export const createServer = (
             name: params.name,
             config: body.config as unknown as FleetMcpConfig,
             enabled: body.enabled,
+            projectId: body.projectId,
           });
           await fleetMcp.probe(params.name);
           announceMcp();
@@ -15307,12 +15335,21 @@ export const createServer = (
             fromMachine: t.Optional(t.String()),
             /** The checkout a project-scoped skill was discovered in. */
             cwd: t.Optional(t.String()),
+            /**
+             * One project's only: placed at each of its checkouts and
+             * delegate workspaces. Null: every machine. Left out: as it was.
+             */
+            projectId: t.Optional(t.Union([t.String(), t.Null()])),
           }),
         },
         // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: resolves a skill from any of its source shapes (url/npm/repo/fromMachine) in one place; splitting it would scatter the validation order this route depends on.
         async ({ params, body, status }) => {
           if (!SKILL_NAME.test(params.name)) {
             return status(400, `${params.name} is not a usable skill name`);
+          }
+          const unbindable = boundProblem(body.projectId);
+          if (unbindable) {
+            return status(400, unbindable);
           }
 
           if (body.fromMachine) {
@@ -15343,6 +15380,7 @@ export const createServer = (
               name: params.name,
               source: `machine:${body.fromMachine}`,
               enabled: body.enabled,
+              projectId: body.projectId,
               hash: hashFiles(files),
               bytes: files.reduce(
                 (total, file) =>
@@ -15367,6 +15405,7 @@ export const createServer = (
             name: params.name,
             source: body.source,
             enabled: body.enabled,
+            projectId: body.projectId,
             ...("error" in resolved
               ? { error: resolved.error }
               : {
@@ -19161,12 +19200,19 @@ export const createServer = (
               ) {
                 pendingFleet.delete(message.requestId);
                 const peeked = peekFleetReport(message.payload);
-                // A project-bound hook went out once per place; the hub keeps
-                // one state per hook, the worst of its places.
-                const report = peeked?.hooks
+                // A project-bound hook, MCP server or skill went out once per
+                // place; the hub keeps one state per row, the worst of its places.
+                const pathOf = placePathById();
+                const report = peeked
                   ? {
                       ...peeked,
-                      hooks: foldPlacedStates(peeked.hooks, placePathById()),
+                      mcp: foldPlacedStates(peeked.mcp, pathOf) ?? peeked.mcp,
+                      ...(peeked.skills
+                        ? { skills: foldPlacedStates(peeked.skills, pathOf) }
+                        : {}),
+                      ...(peeked.hooks
+                        ? { hooks: foldPlacedStates(peeked.hooks, pathOf) }
+                        : {}),
                     }
                   : peeked;
                 if (report) {

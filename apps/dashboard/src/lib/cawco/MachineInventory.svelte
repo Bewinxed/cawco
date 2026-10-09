@@ -70,7 +70,7 @@
     busy[key] = true;
     adoptFailed[key] = false;
     try {
-      onserver?.(await saveMcpServer(row.name, row.config, true));
+      onserver?.(await saveMcpServer(row.name, row.config, true, null));
       toast.success(`${row.name} is the fleet's now — every machine gets it.`);
     } catch (error) {
       adoptFailed[key] = true;

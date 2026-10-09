@@ -1086,10 +1086,16 @@ export interface DbShape {
   }) => MemoryDocRow;
   readonly putMarketplace: (marketplace: FleetMarketplace) => FleetMarketplace;
   readonly putMcpOauth: (row: typeof fleetMcpOauth.$inferInsert) => void;
+  /**
+   * Upsert. `projectId` binds it to one project (placed at each of its
+   * checkouts and workspaces), null makes it every machine's, and left out
+   * keeps what it was.
+   */
   readonly putMcpServer: (server: {
     name: string;
     config: FleetMcpServer["config"];
     enabled?: boolean;
+    projectId?: string | null;
   }) => FleetMcpServer;
   /** Stores the machine's latest OpenCode Go reading; one row per machine. */
   readonly putOpenCodeGoLimits: (
@@ -1124,6 +1130,8 @@ export interface DbShape {
     name: string;
     source: string;
     enabled?: boolean;
+    /** As {@link putMcpServer}'s: bound to a project, null for every machine, left out kept. */
+    projectId?: string | null;
     hash?: string;
     bytes?: number;
     error?: string;
@@ -1773,7 +1781,24 @@ const skillMeta = (
   ...(row.hash ? { hash: row.hash } : {}),
   ...(row.bytes === null ? {} : { bytes: row.bytes }),
   ...(row.error ? { error: row.error } : {}),
+  ...(row.projectId
+    ? { projectId: row.projectId, scope: row.scope ?? "project" }
+    : {}),
 });
+
+/**
+ * A fleet row's placement after a write: `asked` binds it to that project
+ * (under `scope`), null makes it every machine's, and left out keeps what it
+ * was (`stored`).
+ */
+const placementOf = (
+  asked: string | null | undefined,
+  stored: string | null | undefined,
+  scope: FleetScope
+): { projectId: string | null; scope: FleetScope | null } => {
+  const bound = asked === undefined ? (stored ?? null) : asked;
+  return { projectId: bound, scope: bound ? scope : null };
+};
 
 /** A subagent row as everything outside the hub reads it. */
 const agentFile = (row: typeof fleetAgents.$inferSelect): FleetAgent => ({
@@ -3782,7 +3807,7 @@ const make = async (path: string): Promise<DbShape> => {
           .select()
           .from(mcpServers)
           .all()
-          .map(({ name, config, enabled, authMode, authError }) => {
+          .map(({ name, config, enabled, authMode, authError, projectId }) => {
             const signedIn =
               authMode === "direct" ||
               Boolean(
@@ -3802,6 +3827,7 @@ const make = async (path: string): Promise<DbShape> => {
               name,
               config,
               enabled,
+              ...(projectId ? { projectId, scope: "local" as const } : {}),
               auth: {
                 mode: authMode,
                 state,
@@ -3827,12 +3853,24 @@ const make = async (path: string): Promise<DbShape> => {
               name: skills.name,
               hash: skills.hash,
               files: skills.files,
+              projectId: skills.projectId,
             })
             .from(skills)
             .where(eq(skills.enabled, true))
             .all()
-            .flatMap(({ name, hash, files }) =>
-              hash && files ? [{ name, hash, files }] : []
+            .flatMap(({ name, hash, files, projectId }) =>
+              hash && files
+                ? [
+                    {
+                      name,
+                      hash,
+                      files,
+                      ...(projectId
+                        ? { projectId, scope: "project" as const }
+                        : {}),
+                    },
+                  ]
+                : []
             ),
           ...db
             .select()
@@ -3929,7 +3967,7 @@ const make = async (path: string): Promise<DbShape> => {
         })(),
       };
     },
-    putMcpServer: ({ name, config, enabled }) => {
+    putMcpServer: ({ name, config, enabled, projectId }) => {
       const previous = db
         .select()
         .from(mcpServers)
@@ -3940,21 +3978,28 @@ const make = async (path: string): Promise<DbShape> => {
       if (changed) {
         db.delete(fleetMcpOauth).where(eq(fleetMcpOauth.name, name)).run();
       }
-      const server: FleetMcpServer = { name, config, enabled: enabled ?? true };
+      const placement = placementOf(projectId, previous?.projectId, "local");
+      const bound = placement.projectId;
       db.insert(mcpServers)
-        .values(server)
+        .values({ name, config, enabled: enabled ?? true, ...placement })
         .onConflictDoUpdate({
           target: mcpServers.name,
           set: {
             config,
-            enabled: server.enabled,
+            enabled: enabled ?? true,
+            ...placement,
             ...(changed
               ? { authMode: "direct" as const, authError: null }
               : {}),
           },
         })
         .run();
-      return server;
+      return {
+        name,
+        config,
+        enabled: enabled ?? true,
+        ...(bound ? { projectId: bound, scope: "local" as const } : {}),
+      };
     },
     deleteMcpServer: (name) => {
       db.delete(fleetMcpOauth).where(eq(fleetMcpOauth.name, name)).run();
@@ -4029,11 +4074,22 @@ const make = async (path: string): Promise<DbShape> => {
           hash: skills.hash,
           bytes: skills.bytes,
           error: skills.error,
+          scope: skills.scope,
+          projectId: skills.projectId,
         })
         .from(skills)
         .all()
         .map(skillMeta),
-    putSkill: ({ name, source, enabled, hash, bytes, error, files }) => {
+    putSkill: ({
+      name,
+      source,
+      enabled,
+      hash,
+      bytes,
+      error,
+      files,
+      projectId,
+    }) => {
       if (
         db
           .select()
@@ -4081,8 +4137,9 @@ const make = async (path: string): Promise<DbShape> => {
         error: error ?? null,
         files: (keep ? stored.files : files) ?? null,
       };
+      const placement = placementOf(projectId, stored?.projectId, "project");
       db.insert(skills)
-        .values(row)
+        .values({ ...row, ...placement })
         .onConflictDoUpdate({
           target: skills.name,
           set: {
@@ -4092,10 +4149,11 @@ const make = async (path: string): Promise<DbShape> => {
             bytes: row.bytes,
             error: row.error,
             files: row.files,
+            ...placement,
           },
         })
         .run();
-      return skillMeta(row);
+      return skillMeta({ ...row, ...placement });
     },
     deleteSkill: (name) => {
       // A delete takes a final snapshot, as a hook's does.

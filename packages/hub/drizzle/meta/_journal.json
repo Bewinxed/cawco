@@ -876,6 +876,13 @@
       "when": 1791577463118,
       "tag": "0124_instances_listing_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 125,
+      "version": "6",
+      "when": 1791577633299,
+      "tag": "0125_project_skills_mcp",
+      "breakpoints": true
     }
   ]
 }

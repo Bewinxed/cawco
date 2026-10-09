@@ -194,6 +194,17 @@ interface Sidecar {
   memoryDocs: Record<string, string>;
   /** The SessionStart command cawco registered; only this one is ever removed. */
   memoryHook?: string;
+  /**
+   * A project's MCP servers cawco placed here, by `<name>@<place id>`: the
+   * folder whose `.claude.json` map it went into, and the name, so a place
+   * that goes is taken back out of that folder's map and no other.
+   */
+  placedMcp: Record<string, PlacedRecord>;
+  /**
+   * A project's skills cawco placed here, by `<name>@<place id>`, with the
+   * hash written into `<cwd>/.claude/skills/<name>/`.
+   */
+  placedSkills: Record<string, PlacedRecord & { hash: string }>;
   plugins: string[];
   /** Skill name → the hash of the files written, which is what makes a sync a no-op. */
   skills: Record<string, string>;
@@ -203,6 +214,12 @@ interface Sidecar {
    * changes nothing rewrites nothing.
    */
   vendoredPlugins?: Record<string, string>;
+}
+
+/** Where one placed copy of a project's row went: its folder and its name. */
+interface PlacedRecord {
+  cwd: string;
+  name: string;
 }
 
 /** What cawco registered for one hook, enough to find and remove it later. */
@@ -312,6 +329,9 @@ const readSidecar = async (): Promise<Sidecar> => {
     ...(stored?.cawcoTodos ? { cawcoTodos: true } : {}),
     // A sidecar written before hooks existed manages none, which is the truth.
     hooks: stored?.hooks ?? {},
+    // Likewise one written before a project's rows were placed: none was.
+    placedMcp: stored?.placedMcp ?? {},
+    placedSkills: stored?.placedSkills ?? {},
   };
 };
 
@@ -412,6 +432,105 @@ const syncMcp = async (
     report[name] = { state: "removed" };
   }
   return names;
+};
+
+/** A placed copy's key in the sidecar and the report: `<name>@<place id>`. */
+const placedKey = (row: { name: string; placeId?: string }): string =>
+  `${row.name}@${row.placeId ?? ""}`;
+
+/**
+ * One `.claude.json`'s per-folder maps (`projects["<cwd>"].mcpServers`, the
+ * map Claude Code keeps per checkout and git never sees) with a project's
+ * placed servers in and the ones cawco placed before and no longer does out.
+ * Every other key of the file, of each folder's entry and of its map comes
+ * back out as it went in. Answers why it could not, or nothing.
+ */
+const mergePlacedMcp = async (
+  path: string,
+  wanted: FleetMcpServer[],
+  managed: Sidecar["placedMcp"]
+): Promise<string | undefined> => {
+  const file = await readClaudeJson(path);
+  if (!file.ok) {
+    return file.detail;
+  }
+  const before = JSON.stringify(file.root.projects ?? {});
+  const projects = {
+    ...((file.root.projects as
+      | Record<string, Record<string, unknown>>
+      | undefined) ?? {}),
+  };
+  const serversAt = (cwd: string): Record<string, unknown> => {
+    const entry = { ...(projects[cwd] ?? {}) };
+    const servers = {
+      ...((entry.mcpServers as Record<string, unknown> | undefined) ?? {}),
+    };
+    projects[cwd] = { ...entry, mcpServers: servers };
+    return servers;
+  };
+  const kept = new Set(wanted.map(placedKey));
+  const still = new Set(wanted.map((row) => `${row.cwd}\0${row.name}`));
+  for (const [key, { cwd, name }] of Object.entries(managed)) {
+    if (!(kept.has(key) || still.has(`${cwd}\0${name}`)) && projects[cwd]) {
+      delete serversAt(cwd)[name];
+    }
+  }
+  for (const server of wanted) {
+    serversAt(server.cwd as string)[server.name] = server.config;
+  }
+  if (JSON.stringify(projects) === before) {
+    return undefined;
+  }
+  try {
+    await writeJson(path, { ...file.root, projects }, "project MCP servers");
+  } catch (error) {
+    return `could not write ${path}: ${tail(said(error))}`;
+  }
+  return undefined;
+};
+
+/**
+ * A project's MCP servers, placed at each of its checkouts and workspaces on
+ * this machine (`FleetConfig.placedMcp`), into `~/.claude.json` and every
+ * account dir's, as the fleet's own servers go. Reported under
+ * `<name>@<place id>`; answers what cawco now manages.
+ */
+const syncPlacedMcp = async (
+  desired: FleetMcpServer[],
+  managed: Sidecar["placedMcp"],
+  report: FleetSyncReport["mcp"]
+): Promise<Sidecar["placedMcp"]> => {
+  const wanted = desired.filter(
+    (server) => server.enabled && server.cwd && server.placeId
+  );
+  const problem = await mergePlacedMcp(CLAUDE_JSON, wanted, managed);
+  if (problem) {
+    for (const server of wanted) {
+      report[placedKey(server)] = { state: "failed", detail: problem };
+    }
+    return managed;
+  }
+  for (const path of accountClaudeJsons()) {
+    // biome-ignore lint/performance/noAwaitInLoops: one account's file at a time, each written whole
+    const failed = await mergePlacedMcp(path, wanted, managed);
+    if (failed) {
+      console.warn(`[fleet] ${failed}`);
+    }
+  }
+  const placed: Sidecar["placedMcp"] = {};
+  for (const server of wanted) {
+    placed[placedKey(server)] = {
+      cwd: server.cwd as string,
+      name: server.name,
+    };
+    report[placedKey(server)] = { state: "applied" };
+  }
+  for (const key of Object.keys(managed)) {
+    if (!placed[key]) {
+      report[key] = { state: "removed" };
+    }
+  }
+  return placed;
 };
 
 /** The CLI the skill half drives — on PATH, or where the local installer puts it. */
@@ -1471,6 +1590,113 @@ const syncSkillFiles = async (
   return written;
 };
 
+/** Where a project's skill is placed in a folder: its project skills, which Claude Code and OpenCode both read. */
+const placedSkillsDir = (cwd: string): string =>
+  projectClaudeDir(cwd, "skills");
+
+/**
+ * One placed copy of a project's skill: written into its folder's
+ * `.claude/skills/<name>/` and kept out of the checkout's status, unless the
+ * folder holds a copy cawco did not write (the project's own, or one edited
+ * there), which stays as it is and is reported.
+ */
+const placeSkill = async (
+  skill: FleetSkillPayload,
+  recorded: string | undefined,
+  report: Record<string, FleetItemState>
+): Promise<string | undefined> => {
+  const key = placedKey(skill);
+  const cwd = skill.cwd as string;
+  if (!(await dirExists(cwd))) {
+    report[key] = {
+      state: "failed",
+      detail: `${cwd} is not on this machine`,
+    };
+    return recorded;
+  }
+  const root = placedSkillsDir(cwd);
+  const dir = join(root, skill.name);
+  const disk = await treeHash(dir);
+  if (disk === skill.hash) {
+    report[key] = { state: "applied" };
+    return skill.hash;
+  }
+  if (disk !== undefined && !recorded) {
+    report[key] = {
+      state: "failed",
+      detail: `${dir} is the folder's own skill; cawco leaves it as it is`,
+    };
+    return recorded;
+  }
+  const drift = skillDrift(disk, recorded, skill.hash);
+  if (drift && !skill.force) {
+    report[key] = { state: "failed", detail: `${dir}: ${drift}` };
+    return recorded;
+  }
+  const unsafe = (skill.files ?? []).find(({ path }) => !isSafeSkillPath(path));
+  if (!skill.files || unsafe) {
+    report[key] = {
+      state: "failed",
+      detail: unsafe ? `unsafe path ${unsafe.path}` : "the hub sent no files",
+    };
+    return recorded;
+  }
+  try {
+    await writeSkill(skill, root);
+    await excludeFromCheckout(dir);
+    report[key] = { state: "applied" };
+    return skill.hash;
+  } catch (error) {
+    report[key] = { state: "failed", detail: tail(said(error)) };
+    // Part of it may be on disk: taken away, so the next sync finds nothing
+    // there and writes it whole.
+    await rm(dir, { recursive: true, force: true }).catch(() => undefined);
+    return recorded;
+  }
+};
+
+/**
+ * A project's skills, placed at each of its checkouts and workspaces on
+ * this machine (`FleetConfig.placedSkills`), and the copies cawco placed
+ * before and no longer does taken away, unless edited since. Reported under
+ * `<name>@<place id>`; answers what cawco now manages.
+ */
+const syncPlacedSkills = async (
+  desired: FleetSkillPayload[],
+  managed: Sidecar["placedSkills"],
+  report: Record<string, FleetItemState>
+): Promise<Sidecar["placedSkills"]> => {
+  const placed: Sidecar["placedSkills"] = {};
+  for (const skill of desired.filter((each) => each.cwd && each.placeId)) {
+    const key = placedKey(skill);
+    // biome-ignore lint/performance/noAwaitInLoops: one skill directory written at a time keeps the disk writes bounded
+    const hash = await placeSkill(skill, managed[key]?.hash, report);
+    if (hash !== undefined) {
+      placed[key] = { cwd: skill.cwd as string, name: skill.name, hash };
+    }
+  }
+  for (const [key, record] of Object.entries(managed)) {
+    if (placed[key]) {
+      continue;
+    }
+    const dir = join(placedSkillsDir(record.cwd), record.name);
+    // biome-ignore lint/performance/noAwaitInLoops: one removal at a time, each recorded before the next
+    const disk = await treeHash(dir);
+    if (disk !== undefined && record.hash && disk !== record.hash) {
+      report[key] = { state: "removed", detail: "kept: edited in the folder" };
+      continue;
+    }
+    try {
+      await rm(dir, { recursive: true, force: true });
+      report[key] = { state: "removed" };
+    } catch (error) {
+      placed[key] = record;
+      report[key] = { state: "failed", detail: said(error) };
+    }
+  }
+  return placed;
+};
+
 /** The same hash the hub took of the same document: sha256 of its UTF-8 bytes. */
 const hashText = (content: string): string =>
   new Bun.CryptoHasher("sha256").update(content).digest("hex");
@@ -2304,12 +2530,24 @@ const converge = async (config: FleetConfig): Promise<FleetSyncReport> => {
   };
 
   const mcp = await syncMcp(config.mcp, managed.mcp, report.mcp);
+  // A hub that predates placement sends neither list: nothing placed is
+  // touched, as hooks are left alone by a hub that predates them.
+  const placedMcp = config.placedMcp
+    ? await syncPlacedMcp(config.placedMcp, managed.placedMcp, report.mcp)
+    : managed.placedMcp;
   const installed = await syncPlugins(config, managed, report);
   const skills = await syncSkillFiles(
     config.skills ?? [],
     managed.skills,
     skillStates
   );
+  const placedSkills = config.placedSkills
+    ? await syncPlacedSkills(
+        config.placedSkills,
+        managed.placedSkills,
+        skillStates
+      )
+    : managed.placedSkills;
   const memory = await syncMemory(config.memory, managed.memory, report);
   // A hub that predates the set sends no `docs`, which reads as a fleet that
   // links none — and the machine gives back the ones cawco wrote it.
@@ -2336,6 +2574,8 @@ const converge = async (config: FleetConfig): Promise<FleetSyncReport> => {
     memoryDocs,
     ...(memoryHook ? { memoryHook } : {}),
     hooks,
+    placedMcp,
+    placedSkills,
   } satisfies Sidecar);
   // The machine's own `claude` follows the fleet at once, not at the next
   // daemon start: what the fleet no longer denies comes out of
@@ -2412,6 +2652,18 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
   };
 
   report.mcp = await readMcpRuntime(managed.mcp);
+  // A project's placed servers: still in their folder's map.
+  const claudeJson = await readClaudeJson();
+  const projects = claudeJson.ok
+    ? ((claudeJson.root.projects as
+        | Record<string, { mcpServers?: Record<string, unknown> }>
+        | undefined) ?? {})
+    : {};
+  for (const [key, { cwd, name }] of Object.entries(managed.placedMcp)) {
+    report.mcp[key] = projects[cwd]?.mcpServers?.[name]
+      ? { state: "applied" }
+      : { state: "failed", detail: `not in ${CLAUDE_JSON} for ${cwd}` };
+  }
   for (const { name, linkedAs } of managed.marketplaces) {
     // biome-ignore lint/performance/noAwaitInLoops: a read-only status check; kept sequential like the rest of this report rather than fanning out parallel file reads
     report.marketplaces[name] = (await isLinked(linkedAs))
@@ -2451,6 +2703,18 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
       skills[name] = { state: "failed", detail: drift };
     } else {
       skills[name] = { state: "applied" };
+    }
+  }
+  for (const [key, record] of Object.entries(managed.placedSkills)) {
+    const dir = join(placedSkillsDir(record.cwd), record.name);
+    // biome-ignore lint/performance/noAwaitInLoops: a read-only status check; kept sequential like the rest of this report rather than fanning out parallel file reads
+    const disk = await treeHash(dir);
+    if (disk === undefined) {
+      skills[key] = { state: "failed", detail: `${dir} is not on disk` };
+    } else if (disk === record.hash) {
+      skills[key] = { state: "applied" };
+    } else {
+      skills[key] = { state: "failed", detail: `${dir}: ${DRIFTED}` };
     }
   }
   if (managed.memory !== undefined) {

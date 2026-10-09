@@ -1,4 +1,8 @@
-import { CAWCO_OAUTH_URL, type FleetConfig } from "@cawco/core";
+import {
+  CAWCO_OAUTH_URL,
+  type FleetConfig,
+  type FleetMcpServer,
+} from "@cawco/core";
 import {
   discoverAuthorizationServerMetadata,
   discoverOAuthProtectedResourceMetadata,
@@ -173,29 +177,36 @@ export class FleetMcp {
     }
   }
 
-  /** All outbound syncs pass here, including targeted memory and hook pushes. */
+  /**
+   * All outbound syncs pass here, including targeted memory and hook pushes:
+   * the fleet's servers and a project's placed copies alike.
+   */
   syncConfig(config: FleetConfig, hub: string): FleetConfig {
+    const outbound = (server: FleetMcpServer): FleetMcpServer => {
+      if (server.auth?.state === "failed") {
+        return { ...server, enabled: false };
+      }
+      if (server.auth?.mode !== "oauth") {
+        return server;
+      }
+      return {
+        ...server,
+        proxied: true,
+        config: {
+          type: "http",
+          url: `${hub}/mcp/fleet/${encodeURIComponent(server.name)}`,
+          ...("timeout" in server.config
+            ? { timeout: server.config.timeout }
+            : {}),
+        },
+      };
+    };
     return {
       ...config,
-      mcp: config.mcp.map((server) => {
-        if (server.auth?.state === "failed") {
-          return { ...server, enabled: false };
-        }
-        if (server.auth?.mode !== "oauth") {
-          return server;
-        }
-        return {
-          ...server,
-          proxied: true,
-          config: {
-            type: "http",
-            url: `${hub}/mcp/fleet/${encodeURIComponent(server.name)}`,
-            ...("timeout" in server.config
-              ? { timeout: server.config.timeout }
-              : {}),
-          },
-        };
-      }),
+      mcp: config.mcp.map(outbound),
+      ...(config.placedMcp
+        ? { placedMcp: config.placedMcp.map(outbound) }
+        : {}),
     };
   }
 

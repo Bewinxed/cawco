@@ -1,21 +1,24 @@
 /**
  * A project-bound fleet row reaches every place of its project (Projects spec
- * §5.1, D15). A row stores only its project; the hub fills in the cwd as it
+ * §5.1, D15): "Project skills and MCP servers reach every place of the
+ * project". A row stores only its project; the hub fills in the cwd as it
  * sends each machine its fleet config ({@link FleetPlacement}): one copy of
  * the row per checkout and per delegate workspace of that project on the
  * machine, each with that place's path. A machine with no place of the
  * project is not sent the row at all.
  *
- * Hooks are the rows that carry a placement today. A daemon keys what it
- * registered by the row's id, so each copy goes out under its own id,
- * `<hook id>@<place id>`, and the machine's report is folded back onto the
- * hook's own id before the hub keeps it — the dashboard reads one state per
- * hook per machine, the worst of its places.
+ * Hooks, MCP servers and skills carry a placement. A daemon keys a hook by
+ * its id, so each hook copy goes out under its own id, `<hook id>@<place
+ * id>`. An MCP server's and a skill's name is what sessions see, so their
+ * copies keep it and carry `placeId` instead ({@link placedCopies}); the
+ * machine reports them under `<name>@<place id>`. Every report is folded back
+ * onto the row's own key before the hub keeps it — the dashboard reads one
+ * state per row per machine, the worst of its places.
  *
  * The hub folder is a place too, but it is the hub's own git folder of
  * tasks, not a working tree a session runs in, so nothing is placed there.
  */
-import type { FleetHook, FleetItemState } from "@cawco/core";
+import type { FleetHook, FleetItemState, FleetPlacement } from "@cawco/core";
 
 /** A place as a placement needs it (`project_places`). */
 export interface PlacementPlace {
@@ -33,8 +36,33 @@ export const placedId = (id: string, placeId: string): string =>
   `${id}${PLACED}${placeId}`;
 
 /** Whether a row is bound to a project rather than to every machine. */
-const projectBound = (hook: FleetHook): boolean =>
-  !!hook.projectId && !!hook.scope && hook.scope !== "user";
+const projectBound = (row: FleetPlacement): boolean =>
+  !!row.projectId && !!row.scope && row.scope !== "user";
+
+/** The rows that are every machine's: the ones bound to no project. */
+export const unbound = <T extends FleetPlacement>(
+  rows: readonly T[] | undefined
+): T[] => (rows ?? []).filter((row) => !projectBound(row));
+
+/**
+ * The copies of the project-bound rows one machine is sent: each once per
+ * place of its project there, with that place's path and id. Their names
+ * stay as they are, being what a session sees.
+ */
+export const placedCopies = <T extends FleetPlacement>(
+  rows: readonly T[] | undefined,
+  places: readonly PlacementPlace[],
+  machineId: string
+): T[] =>
+  (rows ?? []).flatMap((row) =>
+    projectBound(row)
+      ? placesOn(places, row.projectId as string, machineId).map((place) => ({
+          ...row,
+          cwd: place.path,
+          placeId: place.id,
+        }))
+      : []
+  );
 
 /** The places a row's copies go to on one machine: the project's checkouts and workspaces there. */
 const placesOn = (
@@ -110,12 +138,12 @@ export const foldPlacedStates = (
   return folded;
 };
 
-/** Whether any of these hooks would be placed for this project. */
-export const hasProjectHooks = (
-  hooks: FleetHook[] | undefined,
+/** Whether any of these rows (hooks, MCP servers, skills) would be placed for this project. */
+export const hasProjectRows = (
+  rows: readonly FleetPlacement[],
   projectId: string
 ): boolean =>
-  !!hooks?.some((hook) => projectBound(hook) && hook.projectId === projectId);
+  rows.some((row) => projectBound(row) && row.projectId === projectId);
 
 // --- places changing -----------------------------------------------------------
 

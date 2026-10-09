@@ -1226,6 +1226,14 @@ export const mcpServers = sqliteTable("mcp_servers", {
   authError: text("auth_error"),
   /** A disabled row stays here and is removed from the machines. */
   enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+  /**
+   * Bound to one project (`local`: each checkout's own map in
+   * `.claude.json`); null for every machine and folder. The hub places a
+   * bound row at every checkout and delegate workspace of its project
+   * (project-placements.ts); no cwd is stored, as on `fleet_hooks`.
+   */
+  scope: text("scope").$type<FleetScope>(),
+  projectId: text("project_id"),
   createdAt: timestamp("created_at")
     .notNull()
     .$defaultFn(() => new Date()),
@@ -1310,6 +1318,13 @@ export const skills = sqliteTable("skills", {
   /** Why the last resolve failed. A failed row is kept so the dashboard can say so. */
   error: text("error"),
   files: text("files", { mode: "json" }).$type<SkillFile[]>(),
+  /**
+   * Bound to one project (`project`: `<checkout>/.claude/skills/<name>/`);
+   * null for every machine (`~/.claude/skills/`). Placed at every checkout
+   * and delegate workspace of the project, as a bound MCP server is.
+   */
+  scope: text("scope").$type<FleetScope>(),
+  projectId: text("project_id"),
   createdAt: timestamp("created_at")
     .notNull()
     .$defaultFn(() => new Date()),

@@ -4,7 +4,11 @@
    * then — when the repo holds several — which one. The hub downloads the
    * files once and every machine writes them into ~/.claude/skills.
    */
-  import { type FleetSkillMeta, userLayerLabel } from "@cawco/core";
+  import {
+    type FleetSkillMeta,
+    projectClaudeRelative,
+    userLayerLabel,
+  } from "@cawco/core";
   import { tick } from "svelte";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { closeInto } from "#lib/cawco/motion/share.svelte.js";
@@ -14,6 +18,7 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { IconPlus } from "#lib/icons.js";
+  import { cawco } from "../client.svelte";
   import {
     formatBytes,
     normalizeSkillSource,
@@ -23,6 +28,7 @@
     suggestSkillName,
   } from "../fleet";
   import Field from "./Field.svelte";
+  import PickerChip from "./PickerChip.svelte";
 
   let {
     taken,
@@ -44,6 +50,11 @@
   let failed = $state<string | undefined>(undefined);
   let choices = $state<string[]>([]);
   let surface = $state<HTMLElement | null>(null);
+  /** One project's only (placed in each of its checkouts and workspaces); "" for every machine. */
+  let projectId = $state("");
+  const project = $derived(
+    cawco.projects.find((each) => each.id === projectId)
+  );
 
   const source = $derived(normalizeSkillSource(typed));
   const nameProblem = $derived(skillNameProblem(skillName, taken));
@@ -55,6 +66,7 @@
     named = false;
     failed = undefined;
     choices = [];
+    projectId = "";
   }
 
   async function fetchIt(from: string) {
@@ -64,7 +76,11 @@
       const row = await saveSkill(skillName.trim(), {
         source: from,
         enabled: true,
+        projectId: projectId || null,
       });
+      const where = project
+        ? `every checkout and workspace of ${project.name}`
+        : "every machine";
       onsaved(row);
       if (row.choices && row.choices.length > 0) {
         ({ choices } = row);
@@ -82,8 +98,8 @@
       if (!row.error) {
         toast.success(
           row.bytes === undefined
-            ? `${row.name} is on its way to every machine.`
-            : `${row.name} — ${formatBytes(row.bytes)} on its way to every machine.`
+            ? `${row.name} is on its way to ${where}.`
+            : `${row.name} — ${formatBytes(row.bytes)} on its way to ${where}.`
         );
       }
     } catch (error) {
@@ -170,8 +186,10 @@
         {#snippet hint()}
           The directory it lands in —
           <span class="font-mono"
-            >{userLayerLabel("skills", skillName || "name")}</span
-          >
+            >{project
+              ? projectClaudeRelative("skills", skillName || "name")
+              : userLayerLabel("skills", skillName || "name")}</span
+          >{project ? ` in each of ${project.name}'s folders` : ""}
         {/snippet}
         <Input
           aria-invalid={skillName !== "" && nameProblem ? "true" : undefined}
@@ -186,6 +204,22 @@
           bind:value={skillName}
         />
       </Field>
+      <div>
+        <PickerChip
+          label="Scope"
+          onpick={(next) => {
+            projectId = next;
+          }}
+          options={[
+            { value: "", label: "Every machine in the fleet" },
+            ...cawco.projects.map((each) => ({
+              value: each.id,
+              label: each.name,
+            })),
+          ]}
+          value={projectId}
+        />
+      </div>
       {#if choices.length > 0}
         <div class="choices" transition:unfold>
           <span class="note"

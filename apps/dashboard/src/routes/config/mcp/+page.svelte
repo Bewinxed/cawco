@@ -57,7 +57,14 @@
   async function toggle(row: FleetMcpServer, enabled: boolean) {
     busy[row.name] = true;
     try {
-      landed(await saveMcpServer(row.name, row.config, enabled));
+      landed(
+        await saveMcpServer(
+          row.name,
+          row.config,
+          enabled,
+          row.projectId ?? null
+        )
+      );
     } catch (caught) {
       toast.error(message(caught));
     } finally {

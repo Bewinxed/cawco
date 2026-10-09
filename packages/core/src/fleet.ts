@@ -46,6 +46,12 @@ export interface FleetPlacement {
    * the project rows that live on it.
    */
   cwd?: string;
+  /**
+   * The place (`project_places` row) this copy is for, on a copy the hub
+   * placed: the machine reports what it came to under `<key>@<placeId>`, and
+   * the hub folds every place's report back onto the row.
+   */
+  placeId?: string;
   /** The hub `projects` row this is bound to. Required unless `user`. */
   projectId?: string;
   scope?: FleetScope;
@@ -541,12 +547,29 @@ export interface FleetConfig {
    * predates this, which is what has a daemon fall back to asking the CLI to
    * fetch — the old behaviour, kept only for that skew.
    */
+  /**
+   * Project-bound MCP servers (Projects §5.1: "reach every place of the
+   * project"), one copy per checkout and delegate workspace of the project on
+   * this machine, each with that place's `cwd` and `placeId`. Written into
+   * each `.claude.json`'s per-folder map (`projects["<cwd>"].mcpServers`),
+   * which git never sees. Never in {@link mcp}, so no user-scope path takes
+   * them. Absent from a hub that predates them: converge nothing.
+   */
+  placedMcp?: FleetMcpServer[];
+  /**
+   * Project-bound skills, one copy per place as {@link placedMcp}, files
+   * always inline. Written into `<cwd>/.claude/skills/<name>/`, which Claude
+   * Code and OpenCode both read, and kept out of the checkout's status
+   * through its `info/exclude`. Absent from a hub that predates them.
+   */
+  placedSkills?: FleetSkillPayload[];
   pluginPayloads?: FleetPluginPayload[];
   plugins: FleetPlugin[];
   /**
    * Directly-fetched skills, files inline (NEW.md §11). A daemon writes a
    * skill's directory under `~/.claude/skills/` only when the hash differs
    * from what its sidecar recorded. Absent from a hub that predates them.
+   * User-scope only: a project's skills are {@link placedSkills}.
    */
   skills?: FleetSkillPayload[];
 }

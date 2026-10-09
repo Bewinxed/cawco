@@ -257,8 +257,15 @@ export function adminTools() {
               "'github:owner/repo', 'npm:package-name', 'https://example.com/skill.tar.gz', " +
               "'skills:owner/repo@skill-name'."
           ),
+        projectId: z
+          .string()
+          .nullable()
+          .optional()
+          .describe(
+            "Install for one project only: it lands in every checkout and workspace of it. null: every machine."
+          ),
       },
-      async ({ action, name, source }) => {
+      async ({ action, name, source, projectId }) => {
         if (action === "list") {
           const fleet = (await api("GET", "/api/fleet")) as {
             skills?: unknown[];
@@ -288,6 +295,7 @@ export function adminTools() {
           await api("PUT", `/api/fleet/skills/${encodeURIComponent(name)}`, {
             source,
             enabled: true,
+            ...(projectId === undefined ? {} : { projectId }),
           })
         );
       },
@@ -387,8 +395,15 @@ export function adminTools() {
           .boolean()
           .optional()
           .describe("Whether the server is enabled. Defaults to true for put."),
+        projectId: z
+          .string()
+          .nullable()
+          .optional()
+          .describe(
+            "For one project only: placed in every checkout and workspace of it. null: every machine."
+          ),
       },
-      async ({ action, name, config, enabled }) => {
+      async ({ action, name, config, enabled, projectId }) => {
         if (action === "list") {
           const fleet = (await api("GET", "/api/fleet")) as {
             config?: { mcp?: unknown[] };
@@ -411,6 +426,7 @@ export function adminTools() {
           await api("PUT", `/api/fleet/mcp/${encodeURIComponent(name)}`, {
             config,
             ...(enabled === undefined ? {} : { enabled }),
+            ...(projectId === undefined ? {} : { projectId }),
           })
         );
       },

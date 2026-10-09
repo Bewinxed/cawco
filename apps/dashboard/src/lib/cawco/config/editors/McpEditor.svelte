@@ -11,9 +11,10 @@
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import { toast } from "#lib/cawco/toasts.js";
   import { Input } from "#lib/components/ui/input/index.js";
-  import { IconKey, IconPlay } from "#lib/icons.js";
+  import { IconKey, IconMapPoint, IconPlay } from "#lib/icons.js";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
+  import { cawco } from "../../client.svelte";
   import { confirm } from "../../confirm.svelte";
   import {
     isRemoteMcp,
@@ -33,6 +34,7 @@
   import EditorSection from "../EditorSection.svelte";
   import Field from "../Field.svelte";
   import McpSignIn from "../McpSignIn.svelte";
+  import PickerChip from "../PickerChip.svelte";
   import { configStore, upsert } from "../store.svelte";
   import TitleInput from "../TitleInput.svelte";
 
@@ -77,6 +79,8 @@
   let url = $state(remote?.url ?? "");
   let transport = $state<"http" | "sse">(remote?.type ?? "http");
   let headers = $state(recordToPairs(remote?.headers));
+  /** One project's only (placed at its checkouts and workspaces); "" for every machine. */
+  let projectId = $state(untrack(() => server?.projectId ?? ""));
   let busy = $state(false);
   let deleting = $state(false);
   let failed = $state<string | undefined>(undefined);
@@ -115,14 +119,17 @@
 
   /** What is saved, as the server it would write: an edit that comes back to it is no edit. */
   let baseline = $state(
-    untrack(() => ({ name: serverName.trim(), config: build() }))
+    untrack(() => ({ name: serverName.trim(), config: build(), projectId }))
   );
   /** A new server was just added (or a new name made one): its draft is over, and a second Save would add it again. */
   let created = false;
   const kept = keepDraft(
     page.url.pathname,
     () =>
-      sameFields({ name: serverName.trim(), config: build() }, baseline)
+      sameFields(
+        { name: serverName.trim(), config: build(), projectId },
+        baseline
+      )
         ? null
         : {
             mode,
@@ -136,6 +143,7 @@
             url,
             transport,
             headers,
+            projectId,
           },
     (stored) => {
       ({
@@ -150,6 +158,7 @@
         url,
         transport,
         headers,
+        projectId,
       } = stored);
     }
   );
@@ -170,14 +179,15 @@
       const saved = await saveMcpServer(
         serverName.trim(),
         build(),
-        server?.enabled ?? true
+        server?.enabled ?? true,
+        projectId || null
       );
       const fleet = store.fleet.value;
       if (fleet) {
         upsert(fleet.config.mcp, saved, (row) => row.name === saved.name);
       }
       if (server?.name === saved.name) {
-        baseline = { name: saved.name, config: build() };
+        baseline = { name: saved.name, config: build(), projectId };
       } else {
         if (server) {
           toast.info(
@@ -421,6 +431,29 @@
       </EditorSection>
     </div>
   {/if}
+
+  <EditorSection hue={HUE} icon={IconMapPoint} label="Where it applies">
+    <p class="note">
+      Every machine in the fleet unless you narrow it to one project. A
+      project's server reaches each of its checkouts and delegate workspaces.
+    </p>
+    <div>
+      <PickerChip
+        label="Scope"
+        onpick={(next) => {
+          projectId = next;
+        }}
+        options={[
+          { value: "", label: "Every machine in the fleet" },
+          ...cawco.projects.map((project) => ({
+            value: project.id,
+            label: project.name,
+          })),
+        ]}
+        value={projectId}
+      />
+    </div>
+  </EditorSection>
 </EditorFrame>
 
 <style>

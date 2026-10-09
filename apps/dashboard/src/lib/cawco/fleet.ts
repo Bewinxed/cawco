@@ -390,14 +390,19 @@ async function erase(
   }
 }
 
+/**
+ * Saves an MCP server. `projectId` binds it to one project, placed at each of
+ * its checkouts and workspaces; null makes it every machine's.
+ */
 export const saveMcpServer = (
   name: string,
   config: FleetMcpConfig,
-  enabled?: boolean
+  enabled: boolean,
+  projectId: string | null
 ): Promise<FleetMcpServer> =>
   put(
     `/api/fleet/mcp/${encodeURIComponent(name)}`,
-    { config, enabled },
+    { config, enabled, projectId },
     `save ${name}`
   );
 
@@ -562,7 +567,7 @@ export const refreshPlugin = (id: string): Promise<FleetPlugin> =>
  */
 export const saveSkill = (
   name: string,
-  body: { source: string; enabled?: boolean }
+  body: { source: string; enabled?: boolean; projectId?: string | null }
 ): Promise<SkillWriteResult> =>
   put(`/api/fleet/skills/${encodeURIComponent(name)}`, body, `save ${name}`);
 
