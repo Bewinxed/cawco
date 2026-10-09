@@ -26,8 +26,13 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     private let sessionCluster = TopBarCluster()
     private let sessionBurger = BurgerButton(bare: true)
     #if DEBUG
-    /// `-open-session` has been honoured once.
-    private var probeOpened = false
+    /// A simulator pass's `-open-session <id>`, until a fleet read holds that
+    /// session and the shell is on screen; then it opens once and is cleared.
+    private var probeSession: String? = {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let at = arguments.firstIndex(of: "-open-session"), arguments.indices.contains(at + 1) else { return nil }
+        return arguments[at + 1]
+    }()
     #endif
     /// What needs the operator, pulled down from Caw's head on any bar.
     private let needsDrawer = NeedsDrawer()
@@ -173,8 +178,27 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             guard let self else { return }
             refreshBars()
             followWorkspace()
+            #if DEBUG
+            openProbeSession()
+            #endif
         }
     }
+
+    #if DEBUG
+    /// Opens `-open-session`'s conversation once the fleet's first read that
+    /// holds it is in and the shell has appeared. Opened any sooner (from
+    /// `viewIsAppearing`, before the read) the push over the board was lost
+    /// and the pass landed on the board. Reads the rows on every pass while
+    /// it waits, so the watcher comes back when they change.
+    private func openProbeSession() {
+        guard let id = probeSession else { return }
+        let held = home.ready && hub.fleet.rows.contains { $0.id == id }
+        guard held, isViewLoaded, view.window != nil else { return }
+        probeSession = nil
+        // After the watcher's read: opening changes the workspace it observes.
+        DispatchQueue.main.async { [weak self] in self?.openSession(id) }
+    }
+    #endif
 
     @available(*, unavailable)
     required init?(coder _: NSCoder) {
@@ -225,14 +249,16 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         if ProcessInfo.processInfo.arguments.contains("-sidebar-probe") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 15) { [weak self] in self?.showRailSheet() }
         }
-        // A simulator pass opens a conversation at once: `-open-session <id>`.
-        let arguments = ProcessInfo.processInfo.arguments
-        if !probeOpened, let at = arguments.firstIndex(of: "-open-session"), arguments.indices.contains(at + 1) {
-            probeOpened = true
-            openSession(arguments[at + 1])
-        }
         #endif
     }
+
+    #if DEBUG
+    /// The fleet may have been read before the shell was on screen: the probe's session opens now.
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        openProbeSession()
+    }
+    #endif
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
