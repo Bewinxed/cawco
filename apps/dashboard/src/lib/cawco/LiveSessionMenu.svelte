@@ -49,6 +49,7 @@
     unarchive,
   } from "./home/home-state.svelte";
   import { conversationHref } from "./links";
+  import { heldByMove } from "./move.svelte";
   import RenameDialog from "./RenameDialog.svelte";
   import { sessionName } from "./session-name";
   import {
@@ -120,7 +121,8 @@
   const neverStarted = $derived(
     !instance.sessionId &&
       instance.status !== "running" &&
-      instance.status !== "starting"
+      instance.status !== "starting" &&
+      !heldByMove(instance.id)
   );
 
   /**

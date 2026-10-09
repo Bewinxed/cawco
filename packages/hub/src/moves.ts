@@ -154,6 +154,8 @@ export interface MovesDeps {
   readonly placesChanged: (machineId: string, projectId: string) => void;
   /** Every dashboard and app: one frame. */
   readonly publish: (frame: MovesFrame) => void;
+  /** A session row on `machineId` changed: every board hears it (server.ts `publishInstances`). */
+  readonly rowsChanged: (machineId: string) => void;
   /** Puts the first prompt into the started session (server.ts `deliverSend`). */
   readonly send: (envelope: Envelope<SendPayload>) => void;
   /** Takes a parked ask off the ledger, answered or withdrawn. */
@@ -330,16 +332,11 @@ export const createMoves = (deps: MovesDeps) => {
   };
 
   const jobOf = (row: MoveRow): MoveJob => {
-    const { state, request } = row;
-    const projectName = db.project(row.projectId)?.name ?? row.projectId;
+    const { state } = row;
     return {
       id: row.id,
       projectId: row.projectId,
-      projectName,
-      title:
-        request.spawn.title?.trim() ||
-        deriveTitleFromFirstMessage(request.prompt ?? "") ||
-        projectName,
+      projectName: db.project(row.projectId)?.name ?? row.projectId,
       stage: row.stage,
       steps: state.steps,
       sourceMachineId: state.sourceMachineId,
@@ -378,6 +375,68 @@ export const createMoves = (deps: MovesDeps) => {
     );
   };
 
+  // ── The session's row ───────────────────────────────────────────────────
+
+  /**
+   * The session's row from the move's start (design §2a): on the board
+   * under the id it starts under, `moving` while the project travels, named
+   * as the session will be (its New session title, else its first prompt's
+   * words). The start's spawn takes the same row on: one row, one id.
+   */
+  const holdRow = (row: MoveRow): void => {
+    const { state, request } = row;
+    const held = db.holdMovingInstance({
+      id: state.targetInstanceId,
+      machineId: state.targetMachineId,
+      cwd: state.targetPath,
+      projectId: row.projectId,
+      harness: request.spawn.harness,
+      model: request.spawn.model,
+      permissionMode: request.spawn.permissionMode,
+      title: request.spawn.title?.trim() || undefined,
+      derivedTitle:
+        deriveTitleFromFirstMessage(request.prompt ?? "") || undefined,
+      at: row.createdAt,
+    });
+    if (held) {
+      deps.rowsChanged(state.targetMachineId);
+    }
+  };
+
+  /**
+   * The row follows its move until the start's spawn takes it on: `error`
+   * while the move has failed, `moving` again on Retry, gone once cancelled.
+   */
+  const followRow = (row: MoveRow): void => {
+    const id = row.state.targetInstanceId;
+    let changed = false;
+    if (row.stage === "cancelled") {
+      changed = db.dropMovingInstance(id);
+    } else if (row.stage === "failed") {
+      changed = db.settleMovingInstance(
+        id,
+        "error",
+        row.state.error?.message ?? "The move failed."
+      );
+    } else if (WORKING.has(row.stage)) {
+      changed = db.settleMovingInstance(id, "moving");
+    }
+    if (changed) {
+      deps.rowsChanged(row.state.targetMachineId);
+    }
+  };
+
+  /** Whether a move still holds `instanceId`'s row: the move's to cancel, not a row to remove. */
+  const holds = (instanceId: string): boolean =>
+    db
+      .moveRows()
+      .some(
+        (row) =>
+          row.state.targetInstanceId === instanceId &&
+          row.stage !== "started" &&
+          row.stage !== "cancelled"
+      );
+
   /** Deletes a started or cancelled job once it has been kept a while. */
   const forgetLater = (row: MoveRow): void => {
     deps.lifetime.after(
@@ -415,6 +474,7 @@ export const createMoves = (deps: MovesDeps) => {
       if (stage === "started" || stage === "cancelled") {
         forgetLater(moved);
       }
+      followRow(moved);
     }
     publish();
     return moved;
@@ -652,16 +712,18 @@ export const createMoves = (deps: MovesDeps) => {
     };
   };
 
-  /** The approval as a parked question: "Don't move" or "Move it". */
+  /**
+   * The approval as a parked question, "Don't move" or "Move it", on the
+   * session's own row: it reads "Needs you" until the person answers.
+   */
   const parkedAsk = (row: MoveRow): Envelope | undefined => {
-    const { ask, askId } = row.state;
+    const { ask, askId, targetInstanceId: instanceId } = row.state;
     if (!(ask && askId)) {
       return undefined;
     }
-    const instanceId = `move:${row.id}`;
     return {
       verb: "frames",
-      machineId: row.state.sourceMachineId,
+      machineId: row.state.targetMachineId,
       instanceId,
       requestId: askId,
       payload: {
@@ -965,6 +1027,7 @@ export const createMoves = (deps: MovesDeps) => {
     console.log(
       `[moves] ${row.id}: ${project.name} from ${deps.machineName(source.machineId)} to ${deps.machineName(target.machineId)} (${steps.join(" → ")})`
     );
+    holdRow(row);
     publish();
     goOn(row.id);
     return jobOf(row);
@@ -1431,12 +1494,20 @@ export const createMoves = (deps: MovesDeps) => {
     }
   };
 
-  /** At the hub's start: every job goes on from its record, and the settled ones are let go later. */
+  /**
+   * At the hub's start: every job goes on from its record, its session's
+   * row held as its stage says (a move begun before rows were held gets its
+   * row now), and the settled ones are let go later.
+   */
   const resume = (): void => {
     for (const row of db.moveRows()) {
       if (row.stage === "started" || row.stage === "cancelled") {
         forgetLater(row);
-      } else if (WORKING.has(row.stage)) {
+        continue;
+      }
+      holdRow(row);
+      followRow(row);
+      if (WORKING.has(row.stage)) {
         goOn(row.id);
       }
     }
@@ -1446,6 +1517,7 @@ export const createMoves = (deps: MovesDeps) => {
     answer,
     cancel,
     estimate,
+    holds,
     machineBack,
     progress,
     resume,

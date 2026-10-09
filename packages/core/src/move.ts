@@ -93,9 +93,10 @@ export interface MoveJob {
   /**
    * While `approval` waits on a yes nobody gave in New session (a
    * delegate's, a task's or the API's move): the ask parked through the
-   * same channel as every permission ask (dashboards, push, Telegram), an
-   * `AskUserQuestion` whose options are "Don't move" and "Move it",
-   * answered like any question at `/api/pending`.
+   * same channel as every permission ask (dashboards, push, Telegram), on
+   * the session's own row ({@link targetInstanceId}, which reads "Needs
+   * you"), an `AskUserQuestion` whose options are "Don't move" and "Move
+   * it", answered like any question at `/api/pending`.
    */
   askId?: string;
   /** Bytes the clone fetches, as the source's repository measured them. */
@@ -134,15 +135,14 @@ export interface MoveJob {
   steps: MoveStep[];
   /** Once cancelled: the step it stopped at. */
   stoppedAt?: MoveStep;
-  /** The session the job starts, under this id from the start. */
+  /**
+   * The session the job starts, under this id from the start: its row is on
+   * the board from then (status `moving`, named by its New session title or
+   * its first prompt's words), and the start takes the same row on.
+   */
   targetInstanceId: string;
   targetMachineId: string;
   targetPath: string;
-  /**
-   * The session's name while it moves, before it has a row: the title New
-   * session gave it, else its first prompt's words, else the project's name.
-   */
-  title: string;
   updatedAt: string;
 }
 

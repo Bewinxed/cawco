@@ -330,8 +330,11 @@
   width: max-content;
   max-width: calc(100vw - 32px);
 }
+/* As the surface: a row with a long path shrinks and ellipsises it, never
+   widening the set past the surface (where its trailing check was cut). */
 .ns-panel-set {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--ns-pop-gap, 0px);
   align-content: start;
 }

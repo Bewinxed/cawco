@@ -82,3 +82,9 @@ export async function retryMove(id: string): Promise<MoveJob> {
 /** The move whose session is `instanceId`, while the hub keeps it. */
 export const moveOf = (instanceId: string): MoveJob | undefined =>
   cawco.moves.find((job) => job.targetInstanceId === instanceId);
+
+/** Whether a move still holds `instanceId`'s row: the move's to cancel, in its pane, not a row to remove. */
+export const heldByMove = (instanceId: string): boolean => {
+  const job = moveOf(instanceId);
+  return !!job && job.stage !== "started" && job.stage !== "cancelled";
+};

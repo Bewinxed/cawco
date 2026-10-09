@@ -515,6 +515,8 @@ export interface DbShape {
   readonly deleteWorkflow: (id: string) => void;
   /** A kept supervisor notice that has now been sent. */
   readonly deleteWorkflowNotice: (id: number) => void;
+  /** A cancelled move's held row leaves the board, while no spawn has taken it on. True when it went. */
+  readonly dropMovingInstance: (id: string) => boolean;
   /** Forgets a task's queued start, if it had one. */
   readonly dropQueuedTaskStart: (projectId: string, taskId: string) => void;
   readonly dropQueuedWorkItem: (id: string) => void;
@@ -623,6 +625,24 @@ export interface DbShape {
    */
   readonly handBackTurn: (id: string, from: number, at: number) => boolean;
   readonly hiddenSession: (id: string) => boolean;
+  /**
+   * A move's session on the board from the move's start (moves.ts): its row
+   * under the id it starts under, `moving`, named by its New session title
+   * or its first prompt's words. Its start's spawn ({@link openInstance})
+   * takes the same row on. True when this wrote it.
+   */
+  readonly holdMovingInstance: (instance: {
+    id: string;
+    machineId: string;
+    cwd: string;
+    projectId: string;
+    harness?: string;
+    model?: string;
+    permissionMode?: string;
+    title?: string;
+    derivedTitle?: string;
+    at: Date;
+  }) => boolean;
   /**
    * A pending send no process took, owed again whole (`envelope`) until the
    * session's next start; false when it is no longer pending.
@@ -1505,6 +1525,15 @@ export interface DbShape {
   ) => SettledInstance[];
   /** Files a row's launch directory as read: `cwd` when its conversation named one, else unknown. */
   readonly settleLaunchDir: (id: string, cwd?: string) => void;
+  /**
+   * A held row's status as its move's stage says (`moving`, or `error` with
+   * why), while no spawn has taken it on. True when it changed.
+   */
+  readonly settleMovingInstance: (
+    id: string,
+    status: "moving" | "error",
+    lastError?: string
+  ) => boolean;
   readonly settleRemovedSession: (id: string, present: boolean) => void;
   readonly settleUnavailableRecovery: (id: string) => boolean;
   /** Names of fleet skills installed at or after `since`. */
@@ -2015,7 +2044,8 @@ const make = async (path: string): Promise<DbShape> => {
       ne(instances.status, "discarded"),
       or(isNull(instances.endIntent), eq(instances.endIntent, "stop")),
       or(
-        inArray(instances.status, ["running", "sleeping"]),
+        // A move's row is work in hand however long its yes or its copy takes.
+        inArray(instances.status, ["running", "sleeping", "moving"]),
         gt(instances.updatedAt, new Date(Date.now() - STALE_AFTER_MS))
       )
     );
@@ -3135,6 +3165,10 @@ const make = async (path: string): Promise<DbShape> => {
           // No `cwd`: a row keeps the directory it was launched in, and every
           // spawn of it is sent there (`launchDirOf`).
           set: {
+            // A row a move held (moves.ts) is born at its first spawn.
+            ...(existing?.spawnedAt === null
+              ? { addressRequired: addressProtocol }
+              : {}),
             kind,
             permissionMode,
             ...(model ? { model } : {}),
@@ -3181,6 +3215,71 @@ const make = async (path: string): Promise<DbShape> => {
         })
         .run();
     },
+    holdMovingInstance: ({
+      id,
+      machineId,
+      cwd,
+      projectId,
+      harness,
+      model,
+      permissionMode,
+      title,
+      derivedTitle,
+      at,
+    }) =>
+      db
+        .insert(instances)
+        .values({
+          id,
+          machineId,
+          cwd,
+          projectId,
+          harness,
+          model,
+          permissionMode,
+          title,
+          ...(title ? { titleSource: "agent" as const } : {}),
+          derivedTitle,
+          kind: "mainline",
+          status: "moving",
+          createdAt: at,
+          updatedAt: at,
+        })
+        .onConflictDoNothing({ target: instances.id })
+        .returning({ id: instances.id })
+        .all().length > 0,
+    settleMovingInstance: (id, status, lastError) =>
+      db
+        .update(instances)
+        .set({ status, lastError: lastError ?? null })
+        .where(
+          and(
+            eq(instances.id, id),
+            isNull(instances.spawnedAt),
+            inArray(instances.status, ["moving", "error"]),
+            ne(instances.status, status)
+          )
+        )
+        .returning({ id: instances.id })
+        .all().length > 0,
+    dropMovingInstance: (id) =>
+      db.transaction((tx) => {
+        const held = tx
+          .select({ id: instances.id })
+          .from(instances)
+          .where(
+            and(
+              eq(instances.id, id),
+              isNull(instances.spawnedAt),
+              inArray(instances.status, ["moving", "error"])
+            )
+          )
+          .get();
+        if (held) {
+          dropInstances(tx, [id]);
+        }
+        return held !== undefined;
+      }),
     nameInstance: (id, title, by) => {
       const visible = db
         .select({ id: instances.id })

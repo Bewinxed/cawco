@@ -704,8 +704,13 @@ export const AGENT_BUSY = "agentBusy";
  * - `unknown` — the machine that owns this row can't currently be reached, so
  *   the hub can't say which of the above is true.
  * - `discarded` — a spin-off torn down on purpose; gone for good.
+ * - `moving` — its project is moving to its machine for it (move.ts): the hub
+ *   holds the row from the move's start, under the id the session starts
+ *   under, and the move's start takes it on to `starting`. No process, and
+ *   none is claimed: a failed move files it `error`, a cancelled one drops it.
  */
 export type InstanceStatus =
+  | "moving"
   | "starting"
   | "running"
   | "sleeping"

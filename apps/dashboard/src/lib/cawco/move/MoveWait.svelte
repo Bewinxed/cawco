@@ -1,7 +1,8 @@
 <script lang="ts">
   /**
-   * A session whose project is moving to its machine, before the session
-   * exists, and the moment it hands over to it (design §2, the staged wait;
+   * A session whose project is moving to its machine (its row on the board
+   * as `moving` from the move's start), before its process exists, and the
+   * moment it hands over to it (design §2, the staged wait;
    * the owner's picks B "Bar + MB" and C: a move nobody said yes to in New
    * session asks for it here, as its first step). Drawn from the hub's job
    * as it stands now and never replayed: a step done before the pane opened
@@ -345,10 +346,13 @@
       behavior: "allow",
       updatedInput: { answers: { [ask.title]: choice } },
     };
-    submitCommand(`move:${job.id}`, job.sourceMachineId, "permission.answer", {
-      requestId: askId,
-      result,
-    });
+    // Parked on the session's own row, which reads "Needs you" until now.
+    submitCommand(
+      job.targetInstanceId,
+      job.targetMachineId,
+      "permission.answer",
+      { requestId: askId, result }
+    );
   }
 
   let stopping = $state(false);
@@ -478,11 +482,11 @@
                       <IconClose class="deny" />
                       {DONT_MOVE}
                     </Button>
+                    <!-- The yes is the action, coral as in New session's step 2. -->
                     <Button
                       disabled={answered !== null}
                       onclick={() => answer(MOVE_IT)}
                       size="sm"
-                      variant="secondary"
                     >
                       <IconTick />
                       {MOVE_IT}
@@ -535,13 +539,15 @@
         </p>
       {/if}
     </div>
+    <!-- Cancel and Close are one control in one place: bordered, its edge on
+         the glyph column, the foot's whole width on a phone (design 2g). -->
     <div class="foot">
       {#if cancellable}
         <Button
           class="foot-button"
           disabled={stopping}
           onclick={cancel}
-          variant="ghost"
+          variant="secondary"
           >Cancel</Button
         >
       {:else if job.stage === "cancelled"}
@@ -594,7 +600,7 @@
   }
   /* The glyph says where each step stands, in its status ink. */
   .row[data-phase="done"] :global(.icon) {
-    color: var(--status-live-glyph);
+    color: var(--status-done-glyph);
   }
   .row[data-phase="active"] :global(.icon) {
     color: var(--ink-strong);
@@ -636,11 +642,12 @@
     align-items: center;
     gap: var(--space-2);
   }
+  /* Cut from the start (rtl), read from the left like every line above it. */
   .path {
     grid-area: 1 / 1;
     overflow: hidden;
     direction: rtl;
-    text-align: start;
+    text-align: left;
     text-overflow: ellipsis;
     white-space: nowrap;
     font: var(--type-code);
@@ -662,7 +669,7 @@
     font: var(--type-label);
     color: var(--ink-strong);
   }
-  /* The Peer Rule: two recessed peers at opposite ends of the row. */
+  /* The no at the start, the yes (the action) at the end. */
   .answers {
     display: flex;
     justify-content: space-between;

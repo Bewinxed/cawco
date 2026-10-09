@@ -154,9 +154,9 @@
 
   /**
    * This session's project is moving to its machine for it (move.svelte.ts).
-   * Until the move starts it there is no row and nothing to read: the
-   * staged wait is the whole pane. Once it starts, the wait stays over the
-   * transcript until that has drawn, then fades from over it.
+   * Until the move starts it its row is `moving` and there is nothing to
+   * read: the staged wait is the whole pane. Once it starts, the wait stays
+   * over the transcript until that has drawn, then fades from over it.
    */
   const move = $derived(moveOf(viewId));
   const prestart = $derived(!!move && move.stage !== "started");

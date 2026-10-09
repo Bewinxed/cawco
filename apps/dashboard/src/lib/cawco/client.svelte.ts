@@ -269,9 +269,14 @@ if (browser) {
   }, 30_000);
 }
 
-/** Only a session the hub can still reach is live; the rest is history. */
+/**
+ * Only a session the hub can still reach is live; the rest is history. A
+ * session its project is moving for (`moving`) is live work the hub carries.
+ */
 const isLive = (row: InstanceRow): boolean =>
-  row.status === "running" || row.status === "starting";
+  row.status === "running" ||
+  row.status === "starting" ||
+  row.status === "moving";
 
 /**
  * A session that stays on the board until the operator discards it: live work,
@@ -6933,6 +6938,11 @@ export const cawco = {
     // Blocked wins everywhere: a parked permission is broadcast, not filtered.
     if (target && target.pending.length > 0) {
       return "blocked";
+    }
+    // Its project is moving for it: working from the move's start (a yes
+    // the move waits on is its parked ask, above).
+    if (instanceIndex.byId.get(instanceId)?.status === "moving") {
+      return "working";
     }
     const pulse = state.pulses[instanceId];
     if (

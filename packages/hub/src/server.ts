@@ -2569,13 +2569,18 @@ export const createServer = (
     id: string;
     title?: string | null;
   }): string => row.title || row.derivedTitle || row.id.slice(0, 8);
-  /** A session a send wakes: its process is gone, its conversation on record. */
+  /**
+   * A session a send wakes: its process is gone, its conversation on record.
+   * Never one a move holds: the move's start is its first launch.
+   */
   const wakesForSend = (row: {
+    id: string;
     lastError: string | null;
     sessionId: string | null;
     status: string;
   }): boolean =>
     relaunchOf(row).kind !== "refused" &&
+    !moves.holds(row.id) &&
     (row.status === "sleeping" ||
       row.status === "error" ||
       row.status === "stopped");
@@ -10020,6 +10025,7 @@ export const createServer = (
     },
     publish: (frame) =>
       registry.broadcast({ verb: "frames", machineId: "hub", payload: frame }),
+    rowsChanged: (machineId) => publishInstances(machineId),
     placesChanged,
     spawn: (machineId, payload) => spawnSession(machineId, payload),
     send: (envelope) => {
@@ -14843,6 +14849,12 @@ export const createServer = (
         const [row] = db.getInstancesByIds([params.id]);
         if (!row) {
           return status(404, "No session with that id on this hub.");
+        }
+        if (moves.holds(row.id)) {
+          return status(
+            409,
+            "This session's project is still moving. Cancel the move in its pane instead."
+          );
         }
         if (
           ["running", "starting"].includes(row.status) ||

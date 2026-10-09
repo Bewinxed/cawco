@@ -784,6 +784,7 @@ export const instances = sqliteTable("instances", {
    */
   status: text("status")
     .$type<
+      | "moving"
       | "starting"
       | "running"
       | "sleeping"

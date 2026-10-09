@@ -15661,6 +15661,7 @@
                 "enum": [
                   "discarded",
                   "error",
+                  "moving",
                   "running",
                   "sleeping",
                   "starting",
@@ -15958,6 +15959,7 @@
                   "enum": [
                     "discarded",
                     "error",
+                    "moving",
                     "running",
                     "sleeping",
                     "starting",
@@ -26398,7 +26400,7 @@
             "description": "Set when `approval` is a step: what \"Move it\" does, for its card and its step's words."
           },
           "askId": {
-            "description": "While `approval` waits on a yes nobody gave in New session (a\ndelegate's, a task's or the API's move): the ask parked through the\nsame channel as every permission ask (dashboards, push, Telegram), an\n`AskUserQuestion` whose options are \"Don't move\" and \"Move it\",\nanswered like any question at `/api/pending`.",
+            "description": "While `approval` waits on a yes nobody gave in New session (a\ndelegate's, a task's or the API's move): the ask parked through the\nsame channel as every permission ask (dashboards, push, Telegram), on\nthe session's own row ({@link targetInstanceId}, which reads \"Needs\nyou\"), an `AskUserQuestion` whose options are \"Don't move\" and \"Move\nit\", answered like any question at `/api/pending`.",
             "type": "string"
           },
           "bytes": {
@@ -26571,17 +26573,13 @@
             "type": "string"
           },
           "targetInstanceId": {
-            "description": "The session the job starts, under this id from the start.",
+            "description": "The session the job starts, under this id from the start: its row is on\nthe board from then (status `moving`, named by its New session title or\nits first prompt's words), and the start takes the same row on.",
             "type": "string"
           },
           "targetMachineId": {
             "type": "string"
           },
           "targetPath": {
-            "type": "string"
-          },
-          "title": {
-            "description": "The session's name while it moves, before it has a row: the title New\nsession gave it, else its first prompt's words, else the project's name.",
             "type": "string"
           },
           "updatedAt": {
@@ -26602,7 +26600,6 @@
           "targetInstanceId",
           "targetMachineId",
           "targetPath",
-          "title",
           "updatedAt"
         ]
       },
@@ -33712,10 +33709,11 @@
         ]
       },
       "InstanceStatus": {
-        "description": "What a session row is doing, right now, as the hub last heard it.\n\n- `starting` — a spawn went out and hasn't been confirmed live yet.\n- `running` — the owning daemon currently lists the instance.\n- `sleeping` — no live process, but resumable: the harness has a session id\n  to pick back up from. This is what a daemon restart or a quiet drop used\n  to report as `error` with {@link RESTART_RESUMABLE} in `lastError`; that\n  encoding conflated \"gone but fine\" with a real failure, so `sleeping` rows\n  carry `lastError: null` — nothing went wrong, there's just nothing running.\n- `stopped` — deliberate: the operator (or a `stop` call) ended it.\n- `error` — an actual failure. `lastError` is required here, and this is\n  where {@link RESTART_LOST} still lands: a restart with nothing to resume\n  from is a real loss, not a nap.\n- `unknown` — the machine that owns this row can't currently be reached, so\n  the hub can't say which of the above is true.\n- `discarded` — a spin-off torn down on purpose; gone for good.",
+        "description": "What a session row is doing, right now, as the hub last heard it.\n\n- `starting` — a spawn went out and hasn't been confirmed live yet.\n- `running` — the owning daemon currently lists the instance.\n- `sleeping` — no live process, but resumable: the harness has a session id\n  to pick back up from. This is what a daemon restart or a quiet drop used\n  to report as `error` with {@link RESTART_RESUMABLE} in `lastError`; that\n  encoding conflated \"gone but fine\" with a real failure, so `sleeping` rows\n  carry `lastError: null` — nothing went wrong, there's just nothing running.\n- `stopped` — deliberate: the operator (or a `stop` call) ended it.\n- `error` — an actual failure. `lastError` is required here, and this is\n  where {@link RESTART_LOST} still lands: a restart with nothing to resume\n  from is a real loss, not a nap.\n- `unknown` — the machine that owns this row can't currently be reached, so\n  the hub can't say which of the above is true.\n- `discarded` — a spin-off torn down on purpose; gone for good.\n- `moving` — its project is moving to its machine for it (move.ts): the hub\n  holds the row from the move's start, under the id the session starts\n  under, and the move's start takes it on to `starting`. No process, and\n  none is claimed: a failed move files it `error`, a cancelled one drops it.",
         "enum": [
           "discarded",
           "error",
+          "moving",
           "running",
           "sleeping",
           "starting",
