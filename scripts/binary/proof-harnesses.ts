@@ -16,11 +16,7 @@
  */
 
 import { accountReports, claudeAuth } from "../../packages/agent/src/accounts";
-import type {
-  Harness,
-  HarnessContext,
-  HarnessSession,
-} from "../../packages/agent/src/harness";
+import type { Harness } from "../../packages/agent/src/harness";
 import { parseProcId, procIdFor } from "../../packages/agent/src/proc-id";
 import type { SessiondAdoption } from "../../packages/agent/src/session";
 import {
@@ -32,6 +28,10 @@ import { CONTROL_PROBE_ACCOUNT } from "../../packages/core/src/accounts";
 import { CAPABILITIES_NONE } from "../../packages/core/src/harness";
 import type { HarnessKind, HarnessReport } from "../../packages/core/src/index";
 import { sessiondEndpoint } from "../../packages/core/src/sessiond";
+
+/** What a session is handed by the supervisor, and what the harness hands back for it. */
+type Context = Parameters<Harness["spawn"]>[1];
+type Session = Awaited<ReturnType<Harness["spawn"]>>;
 
 let connection: Promise<SessiondClient> | undefined;
 /** The machine's one session-holder connection, dialled lazily and re-dialled when it drops. */
@@ -51,8 +51,8 @@ async function holder(): Promise<SessiondClient> {
 function session(
   kind: "claude" | "pi",
   instanceId: string,
-  ctx: HarnessContext
-): HarnessSession {
+  ctx: Context
+): Session {
   const procId = procIdFor(kind, instanceId);
   return {
     harness: kind,
@@ -103,7 +103,24 @@ const detected = async (kind: HarnessKind): Promise<HarnessReport> => {
 const registry = new Map<HarnessKind, Harness>();
 for (const kind of ["claude", "opencode", "pi"] as const) {
   const held = kind === "opencode" ? undefined : kind;
-  const adapter: Harness & SessiondAdoption = {
+  // What the supervisor's reattach reaches on a sessiond-backed adapter,
+  // checked against the shape it reads.
+  const adoption: SessiondAdoption = {
+    adopt: (instanceId, ctx) =>
+      Promise.resolve(session(held ?? "claude", instanceId, ctx)),
+    custodyCandidates: async () => {
+      const welcome = await (await holder()).list();
+      return {
+        ...welcome,
+        procs: welcome.procs.filter(
+          (proc) => held !== undefined && parseProcId(proc.procId).kind === held
+        ),
+      };
+    },
+    turnRunning: () => Promise.resolve(false),
+  };
+  const adapter: Harness = {
+    ...adoption,
     kind,
     auth: "unauthenticated",
     capabilities: CAPABILITIES_NONE,
@@ -152,18 +169,6 @@ for (const kind of ["claude", "opencode", "pi"] as const) {
       );
       return child ? session(held, ctx.instanceId, ctx) : undefined;
     },
-    adopt: (instanceId, ctx) =>
-      Promise.resolve(session(held ?? "claude", instanceId, ctx)),
-    custodyCandidates: async () => {
-      const welcome = await (await holder()).list();
-      return {
-        ...welcome,
-        procs: welcome.procs.filter(
-          (proc) => held !== undefined && parseProcId(proc.procId).kind === held
-        ),
-      };
-    },
-    turnRunning: () => Promise.resolve(false),
     deleteSession: () => Promise.resolve(),
     renameSession: () => Promise.resolve(),
     tagSession: () => Promise.resolve(),
