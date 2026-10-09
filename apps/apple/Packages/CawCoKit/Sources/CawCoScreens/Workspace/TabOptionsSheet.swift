@@ -6,14 +6,15 @@ import UIKit
 /// (`TabAction`), Close among them. They grow out of the tab itself, as one
 /// shape (owner: "it needs to smoothly gooey morph options from the tab not
 /// spawn a floating container"): the tab's outline stretches down from its
-/// foot under the finger 1:1, a rounded body swelling out of it that widens
-/// into the options panel, the two joined on each side by one smooth curve
-/// that runs straight down while the body is the tab's width and sweeps out
-/// as it widens, the way a drop of liquid joins what it hangs from. The
-/// shape takes the tab's own surface and turns to the kit's raised surface,
-/// its border and its overlay shadow as it opens; the tab's title and rim
-/// stand on it where they stood. Past fully out a third of the travel shows,
-/// no more than a fifth of it.
+/// foot under the finger 1:1, a rounded body swelling out of it, at first
+/// the width of the tab's flared foot and then widening into the options
+/// panel, the two joined on each side by one smooth curve, the way a drop of
+/// liquid joins what it hangs from. The shape takes the tab's own surface
+/// and lifts to the kit's raised surface, its border and its overlay shadow
+/// over the first stretch of the pull, so the tab and the drop read as one
+/// thing off the page from the start; the tab's title and rim stand on it
+/// where they stood. Past fully out a third of the travel shows, no more
+/// than a fifth of it.
 ///
 /// Let go past `opens` (carried along its speed) and it settles open on the
 /// house spring (`HouseSpring`); short of it, it folds back into the tab and
@@ -175,60 +176,87 @@ final class TabOptionsSheet: UIView {
     private static func lerp(_ a: Double, _ b: Double, _ t: Double) -> Double { a + (b - a) * t }
     /// The house's in-out curve, as a function of its share of the way.
     private static func easeInOut(_ t: Double) -> Double { t < 0.5 ? 4 * t * t * t : 1 - pow(-2 * t + 2, 3) / 2 }
+    /// The house's out curve (`ease-out`'s cubic).
+    private static func easeOut(_ t: Double) -> Double { 1 - pow(1 - t, 3) }
 
     /// How far the body has come out of the tab's foot at `at` (0 in it, 1
-    /// open, past 1 stretched); how far it has widened (0 the tab's width, 1
-    /// the panel's, over the first `widenShare` of the travel); and how far it
-    /// has settled into its open shape (0 a drop, 1 the folder's).
-    private func reach(_ at: Double) -> (travel: Double, widen: Double, settled: Double) {
+    /// open, past 1 stretched); how far it has widened (0 the tab's foot, 1
+    /// the panel); how far it has settled into its open shape (0 a drop, 1
+    /// the folder's); and how far it has lifted off the page (the raised
+    /// surface, its border and shadow).
+    private func reach(_ at: Double) -> (travel: Double, widen: Double, settled: Double, lift: Double) {
         let q = max(0, at)
         let height = panel.height
         let travel = min(q, 1) * height + min(max(0, q - 1) * height * Self.resist, height * Self.resistMax)
         return (
             travel,
-            Self.easeInOut(Self.clamp01(travel / (height * Self.widenShare))),
-            Self.easeInOut(Self.clamp01(travel / height))
+            Self.easeInOut(Self.clamp01((travel - height * Self.neckShare) / (height * Self.widenShare))),
+            Self.easeInOut(Self.clamp01(travel / height)),
+            Self.easeOut(Self.clamp01(travel / (height * Self.liftShare)))
         )
     }
 
-    /// The share of the travel over which the body widens from the tab to the panel.
-    static let widenShare = 0.6
+    /// The body hangs from the tab at its foot's width for this share of the
+    /// travel, so it reads as the tab stretching from the first frame, not a
+    /// card under it; then it widens to the panel over the next `widenShare`.
+    static let neckShare = 0.2
+    static let widenShare = 0.55
+    /// The share of the travel over which the shape lifts off the page: the
+    /// chosen tab is the page's own surface, so a drop in it would show only
+    /// as a shadow.
+    static let liftShare = 0.15
 
     /// The one outline at `at`: the tab's shoulders and sides, each side
     /// running on into the body's, and the body's rounded foot. Each join is
     /// a concave fillet off the tab's side, a run along its foot, and a
     /// convex corner down into the body's side; where the body stands no
     /// further out than the tab, all three are nothing and the side runs
-    /// straight down. Coming out it is a drop: its foot round, its fillets
-    /// and corners long. As it opens it settles into the folder's own shape,
-    /// the tab standing on the panel: each fillet the tab's flare
-    /// (`radiusLg`, as the chosen sheet's foot), the panel's corners
-    /// `radiusLg`.
+    /// straight down. It starts as the chosen tab's own foot, flared by
+    /// `radiusLg` each side (its sheet's), so the first frame is the tab as
+    /// it stood; the body hangs at that width (`neckShare`), a drop with its
+    /// foot round and its joins long, then widens to the panel. As it opens
+    /// it settles into the folder's own shape, the tab standing on the
+    /// panel: each fillet the tab's flare, the panel's corners `radiusLg`.
     func outline(_ at: Double) -> CGPath {
-        let (travel, widen, settled) = reach(at)
-        let left = min(tab.minX, Self.lerp(tab.minX, panel.minX, widen))
-        let right = max(tab.maxX, Self.lerp(tab.maxX, panel.maxX, widen))
+        let (travel, widen, settled, _) = reach(at)
+        let flare = Radius.radiusLg
+        let left = Self.lerp(tab.minX - flare, panel.minX, widen)
+        let right = Self.lerp(tab.maxX + flare, panel.maxX, widen)
         let foot = tab.maxY
         let bottom = foot + travel
         let r = min(tabRadius, tab.width / 2, tab.height / 2)
         let half = (right - left) / 2
         let rb = Self.lerp(min(half, travel / 2, 2 * Radius.radiusLg), min(Radius.radiusLg, half, travel / 2), settled)
         let side = tab.height - r
-        // One join's fillet (how far up the tab's side, how far out along the
-        // foot) and corner, for a body standing `out` past the tab: each
-        // within its half of `out`, the fillet under the tab's shoulder, the
-        // corner above the body's own foot corner.
-        func join(_ out: Double) -> (up: Double, along: Double, corner: Double) {
-            let up = Self.lerp(min(2 * Radius.radiusLg, side), Radius.radiusLg, settled)
-            let along = Self.lerp(2 * Radius.radiusLg, Radius.radiusLg, settled)
-            let corner = Self.lerp(2 * Radius.radiusLg, Radius.radiusLg, settled)
-            return (
-                min(up, side, travel / 2, out),
-                min(along, out / 2),
-                min(corner, out / 2, max(0, travel - rb))
-            )
-        }
         let k = 0.5523 // a quarter circle's control length, of its radius
+        // One join, for a body standing `out` past the tab: its fillet, `up`
+        // the tab's side and `across` out along the foot, and its corner,
+        // `across` in along the foot and `down` the body's side. Across, each
+        // takes at most half of `out`; up and down, each its own length, the
+        // fillet under the tab's shoulder, the corner above the body's foot
+        // corner. Open, both are the folder's quarter circles with a run
+        // along the foot between them. While the body stands only a little
+        // past the tab, as its foot's flare, there is no run, and the two
+        // meet on the slope of the whole join (`ux`, `uy`, the way down at
+        // their meeting): one long soft S, a neck, not a step that turns flat
+        // at the foot and down again. The slope eases to flat by the time a
+        // run opens, so the join never kinks. `fillet` and `turn` are the
+        // two curves' control lengths along that way, each kept inside its
+        // curve's box so neither bulges past it.
+        func join(_ out: Double) -> (up: Double, across: Double, down: Double, ux: Double, uy: Double, fillet: Double, turn: Double) {
+            let full = Self.lerp(2 * Radius.radiusLg, Radius.radiusLg, settled)
+            let up = min(Self.lerp(min(2 * Radius.radiusLg, side), Radius.radiusLg, settled), side, travel / 2)
+            let across = min(full, out / 2)
+            let down = min(full, max(0, travel - rb))
+            let slope = Self.clamp01((full - out / 2) / Radius.radiusLg) * (up + down) / max(out, 1)
+            let length = (1 + slope * slope).squareRoot()
+            let ux = 1 / length
+            let uy = slope / length
+            func control(_ run: Double, _ drop: Double) -> Double {
+                min(k * (run * ux + drop * uy), run / ux, uy > 0 ? drop * (1 - k) / uy : .infinity)
+            }
+            return (up, across, down, ux, uy, control(across, up), control(across, down))
+        }
         let joinL = join(tab.minX - left)
         let joinR = join(right - tab.maxX)
         let path = UIBezierPath()
@@ -237,33 +265,37 @@ final class TabOptionsSheet: UIView {
         path.addLine(to: CGPoint(x: tab.maxX - r, y: tab.minY))
         path.addArc(withCenter: CGPoint(x: tab.maxX - r, y: tab.minY + r), radius: r, startAngle: .pi * 1.5, endAngle: 0, clockwise: true)
         // The right join: fillet, run, corner.
+        let filletR = CGPoint(x: tab.maxX + joinR.across, y: foot)
         path.addLine(to: CGPoint(x: tab.maxX, y: foot - joinR.up))
         path.addCurve(
-            to: CGPoint(x: tab.maxX + joinR.along, y: foot),
+            to: filletR,
             controlPoint1: CGPoint(x: tab.maxX, y: foot - joinR.up * (1 - k)),
-            controlPoint2: CGPoint(x: tab.maxX + joinR.along * (1 - k), y: foot)
+            controlPoint2: CGPoint(x: filletR.x - joinR.fillet * joinR.ux, y: foot - joinR.fillet * joinR.uy)
         )
-        path.addLine(to: CGPoint(x: right - joinR.corner, y: foot))
+        let cornerR = CGPoint(x: right - joinR.across, y: foot)
+        path.addLine(to: cornerR)
         path.addCurve(
-            to: CGPoint(x: right, y: foot + joinR.corner),
-            controlPoint1: CGPoint(x: right - joinR.corner * (1 - k), y: foot),
-            controlPoint2: CGPoint(x: right, y: foot + joinR.corner * (1 - k))
+            to: CGPoint(x: right, y: foot + joinR.down),
+            controlPoint1: CGPoint(x: cornerR.x + joinR.turn * joinR.ux, y: foot + joinR.turn * joinR.uy),
+            controlPoint2: CGPoint(x: right, y: foot + joinR.down * (1 - k))
         )
         path.addLine(to: CGPoint(x: right, y: bottom - rb))
         path.addArc(withCenter: CGPoint(x: right - rb, y: bottom - rb), radius: rb, startAngle: 0, endAngle: .pi / 2, clockwise: true)
         path.addLine(to: CGPoint(x: left + rb, y: bottom))
         path.addArc(withCenter: CGPoint(x: left + rb, y: bottom - rb), radius: rb, startAngle: .pi / 2, endAngle: .pi, clockwise: true)
         // The left join, back up: corner, run, fillet.
-        path.addLine(to: CGPoint(x: left, y: foot + joinL.corner))
+        let cornerL = CGPoint(x: left + joinL.across, y: foot)
+        path.addLine(to: CGPoint(x: left, y: foot + joinL.down))
         path.addCurve(
-            to: CGPoint(x: left + joinL.corner, y: foot),
-            controlPoint1: CGPoint(x: left, y: foot + joinL.corner * (1 - k)),
-            controlPoint2: CGPoint(x: left + joinL.corner * (1 - k), y: foot)
+            to: cornerL,
+            controlPoint1: CGPoint(x: left, y: foot + joinL.down * (1 - k)),
+            controlPoint2: CGPoint(x: cornerL.x - joinL.turn * joinL.ux, y: foot + joinL.turn * joinL.uy)
         )
-        path.addLine(to: CGPoint(x: tab.minX - joinL.along, y: foot))
+        let filletL = CGPoint(x: tab.minX - joinL.across, y: foot)
+        path.addLine(to: filletL)
         path.addCurve(
             to: CGPoint(x: tab.minX, y: foot - joinL.up),
-            controlPoint1: CGPoint(x: tab.minX - joinL.along * (1 - k), y: foot),
+            controlPoint1: CGPoint(x: filletL.x + joinL.fillet * joinL.ux, y: foot - joinL.fillet * joinL.uy),
             controlPoint2: CGPoint(x: tab.minX, y: foot - joinL.up * (1 - k))
         )
         path.close()
@@ -275,17 +307,17 @@ final class TabOptionsSheet: UIView {
         progress = at
         let traits = traitCollection
         let path = outline(at)
-        let (travel, widen, _) = reach(at)
+        let (travel, widen, _, lift) = reach(at)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         shape.frame = bounds
         shape.path = path
         let raised = Palette.surfaceRaised.resolvedColor(with: traits)
-        shape.fillColor = Self.mix(tabSurface, raised, widen).cgColor
-        shape.strokeColor = Palette.borderControl.resolvedColor(with: traits).withAlphaComponent(widen).cgColor
+        shape.fillColor = Self.mix(tabSurface, raised, lift).cgColor
+        shape.strokeColor = Palette.borderControl.resolvedColor(with: traits).withAlphaComponent(lift).cgColor
         shadow.paint(traits)
         shadow.update(path, in: bounds)
-        shadow.layer.opacity = Float(widen)
+        shadow.layer.opacity = Float(lift)
         bodyMask.frame = body.bounds
         var toBody = CGAffineTransform(translationX: -panel.minX, y: -panel.minY)
         bodyMask.path = path.copy(using: &toBody)
@@ -293,17 +325,19 @@ final class TabOptionsSheet: UIView {
         CATransaction.commit()
     }
 
-    /// Each option shows only once the shape has uncovered it, so no line is
-    /// ever read cut through by the shape's edge: it comes in as the foot
-    /// passes its last quarter, and once the body stands at nearly its full
-    /// width. Going back into the tab, the same in reverse.
+    /// Each option shows only while the shape has uncovered its words, so no
+    /// line is ever read cut through by the shape's edge, and no option goes
+    /// while they are still uncovered, which would leave an empty band under
+    /// the last one: it comes in over the 8pt after the foot passes the
+    /// bottom of its words (a row's 20pt band of ink round its middle; a
+    /// separator's line), and once the body stands at nearly its full width.
+    /// Going back into the tab, the same in reverse.
     private func reveal(travel: Double, widen: Double) {
         let across = Self.clamp01((widen - 0.75) / 0.25)
         for row in list.arrangedSubviews {
             // The body's top is the tab's foot, where the travel is measured from.
-            let end = list.frame.minY + row.frame.maxY
-            let lead = row.frame.height / 4
-            row.alpha = min(across, Self.clamp01((travel - end + lead) / lead))
+            let ink = list.frame.minY + row.frame.midY + min(row.frame.height / 2, 10)
+            row.alpha = min(across, Self.clamp01((travel - ink) / 8))
         }
     }
 
