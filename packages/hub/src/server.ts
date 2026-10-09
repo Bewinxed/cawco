@@ -10243,7 +10243,7 @@ export const createServer = (
         }
       : null;
     const running = !["sleeping", "stopped", "error"].includes(row.status);
-    const pending = () => {
+    const owe = () => {
       relaunchAtTurnEnd.set(row.id, { to: account.id, move });
       return {
         state: "pending" as const,
@@ -10257,7 +10257,7 @@ export const createServer = (
       (running && !(await sessionIdle(row))) ||
       !registry.agent(row.machineId)
     ) {
-      return pending();
+      return owe();
     }
     // A move it still owed (asked mid-turn, to another account) is over.
     relaunchAtTurnEnd.delete(row.id);
@@ -10272,7 +10272,7 @@ export const createServer = (
     );
     const why = kept.get(row.id);
     if (why === PROCESS_RUNS) {
-      return pending();
+      return owe();
     }
     if (why) {
       return {
@@ -10309,7 +10309,7 @@ export const createServer = (
     const [stored] = db.getInstancesByIds([instanceId]);
     const owed = stored ? relaunchAtTurnEnd.get(stored.id) : undefined;
     if (stored && owed?.to !== undefined && registry.agent(stored.machineId)) {
-      const to = owed.to;
+      const { to } = owed;
       relaunchAtTurnEnd.delete(stored.id);
       transcripts.noteRelaunch(stored.id);
       // biome-ignore lint/complexity/noVoid: the carry runs on its own; the relaunch follows it
