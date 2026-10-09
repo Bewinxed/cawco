@@ -1,0 +1,65 @@
+runner up: srt 297594, sandbox 297637, runner 297642
+
+== bun install (workspace's own cache, through srt's proxy)
+Checked 1032 installs across 1298 packages (no changes) [21.00ms]
+exit=0 wall=0s
+
+== dashboard build
+✔ done
+exit=0 wall=43s
+
+== git add -A and commit
+2d000d06 srt eval probe
+exit=0 wall=0s
+
+== playwright: Chromium from ~/.cache/ms-playwright, page served by the same command
+{"text":"inside srt","shot":"/tmp/proto/st2/tmp/srt-eval.png","ms":326}
+exit=0 wall=0s
+
+== a server one command starts, reached and stopped by the next
+next command: 200
+stopped by a later command
+
+== escape checks (reads and sockets from inside; writes verified on the host)
+read ~/.cawco/accounts         BLOCKED
+read claude sign-in            BLOCKED
+read other repo .env           BLOCKED
+read ~/.ssh key                BLOCKED
+user bus socket                BLOCKED
+sessiond socket                BLOCKED
+signal process outside         BLOCKED
+ssh to the Mac                 BLOCKED
+write ~/.bun/bin               BLOCKED
+write ~/.cache (host runs it)  BLOCKED
+plant .git/hooks               BLOCKED
+write .git/modules/*/config    BLOCKED
+plant source repo hook         BLOCKED
+write .claude/settings.local.json BLOCKED
+write opencode.jsonc           BLOCKED
+set core.hooksPath             BLOCKED
+
+== host unix sockets a command can connect to
+/run/podman/podman.sock            not visible
+/run/docker.sock                   not visible
+/run/tailscale/tailscaled.sock     not visible
+/run/ssh-unix-local/socket         not visible
+/run/dbus/system_bus_socket        not visible
+/run/snapd.socket                  not visible
+/run/mullvad-vpn                   not visible
+/run/libvirt/virtlockd-sock        not visible
+
+== the host's own loopback services (the agent/hub API on 3456), forced through srt's proxy
+host 127.0.0.1:3456 via proxy: 403
+host 127.0.0.1:3456 direct: 000
+
+== host /tmp and /tmp/claude
+claude
+proto
+tmp entries visible: 2
+touch: cannot touch '/tmp/claude/.srt-eval': Read-only file system
+
+== overhead
+bare bash -c true            median    4 ms   p90    4 ms   (n=20)
+srt per command              median  280 ms   p90  285 ms   (n=20)
+srt runner (FIFO)            median   32 ms   p90   33 ms   (n=20)
+ 14:48:40 up 1 day,  1:54,  1 user,  load average: 1.92, 2.72, 4.70

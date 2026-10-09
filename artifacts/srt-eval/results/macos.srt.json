@@ -1,0 +1,96 @@
+{
+  "network": {
+    "allowedDomains": [
+      "github.com",
+      "*.github.com",
+      "*.githubusercontent.com",
+      "registry.npmjs.org",
+      "*.npmjs.org",
+      "bun.sh",
+      "*.bun.sh",
+      "cdn.playwright.dev",
+      "playwright.download.prss.microsoft.com",
+      "swift.org",
+      "*.swift.org"
+    ],
+    "deniedDomains": [],
+    "allowLocalBinding": true,
+    "allowMachLookup": [
+      "*"
+    ]
+  },
+  "filesystem": {
+    "denyRead": [
+      "/Users/bewinxed"
+    ],
+    "allowRead": [
+      "/private/var/folders/wt/03qhc4bd7dgfq232vr28hp500000gn/T/cawco-srt-eval/ws",
+      "/private/var/folders/wt/03qhc4bd7dgfq232vr28hp500000gn/T/cawco-srt-eval/state/ro",
+      "/Users/bewinxed/anbar/.git/objects",
+      "/Users/bewinxed/.bun/bin",
+      "/Users/bewinxed/.nvm",
+      "/Users/bewinxed/.local/bin",
+      "/Users/bewinxed/.cargo/bin",
+      "/Users/bewinxed/.rustup",
+      "/Users/bewinxed/.gitconfig",
+      "/Users/bewinxed/.config/git",
+      "/Users/bewinxed/Library/Caches/ms-playwright",
+      "/Users/bewinxed/Library/Developer",
+      "/Users/bewinxed/Library/Preferences",
+      "/Users/bewinxed/Library/Keychains",
+      "/Users/bewinxed/Library/Caches",
+      "/Users/bewinxed/Library/Developer/Xcode/DerivedData",
+      "/Users/bewinxed/.swiftpm",
+      "/Users/bewinxed/Library/org.swift.swiftpm",
+      "/Users/bewinxed/Library/Developer/Xcode/UserData/Provisioning Profiles",
+      "/Users/bewinxed/Library/MobileDevice/Provisioning Profiles",
+      "/var/folders/wt/03qhc4bd7dgfq232vr28hp500000gn/T/",
+      "/var/folders/wt/03qhc4bd7dgfq232vr28hp500000gn/C/"
+    ],
+    "allowWrite": [
+      "/private/var/folders/wt/03qhc4bd7dgfq232vr28hp500000gn/T/cawco-srt-eval/ws",
+      "/private/var/folders/wt/03qhc4bd7dgfq232vr28hp500000gn/T/cawco-srt-eval/state/tmp",
+      "/private/var/folders/wt/03qhc4bd7dgfq232vr28hp500000gn/T/cawco-srt-eval/state/cache",
+      "/Users/bewinxed/Library/Caches",
+      "/Users/bewinxed/Library/Developer/Xcode/DerivedData",
+      "/Users/bewinxed/.swiftpm",
+      "/Users/bewinxed/Library/org.swift.swiftpm",
+      "/Users/bewinxed/Library/Developer/Xcode/UserData/Provisioning Profiles",
+      "/Users/bewinxed/Library/MobileDevice/Provisioning Profiles",
+      "/var/folders/wt/03qhc4bd7dgfq232vr28hp500000gn/T/",
+      "/var/folders/wt/03qhc4bd7dgfq232vr28hp500000gn/C/"
+    ],
+    "denyWrite": [
+      {
+        "path": "/private/var/folders/wt/03qhc4bd7dgfq232vr28hp500000gn/T/cawco-srt-eval/ws/.git/config",
+        "literal": true
+      },
+      "/private/var/folders/wt/03qhc4bd7dgfq232vr28hp500000gn/T/cawco-srt-eval/ws/.git/modules",
+      {
+        "path": "/private/var/folders/wt/03qhc4bd7dgfq232vr28hp500000gn/T/cawco-srt-eval/ws/.claude/settings.json",
+        "literal": true
+      },
+      {
+        "path": "/private/var/folders/wt/03qhc4bd7dgfq232vr28hp500000gn/T/cawco-srt-eval/ws/.claude/settings.local.json",
+        "literal": true
+      },
+      {
+        "path": "/private/var/folders/wt/03qhc4bd7dgfq232vr28hp500000gn/T/cawco-srt-eval/ws/opencode.json",
+        "literal": true
+      },
+      {
+        "path": "/private/var/folders/wt/03qhc4bd7dgfq232vr28hp500000gn/T/cawco-srt-eval/ws/opencode.jsonc",
+        "literal": true
+      },
+      {
+        "path": "/private/var/folders/wt/03qhc4bd7dgfq232vr28hp500000gn/T/cawco-srt-eval/ws/.opencode",
+        "literal": true
+      }
+    ],
+    "allowGitConfig": true
+  },
+  "ripgrep": {
+    "command": "/opt/homebrew/bin/rg"
+  },
+  "mandatoryDenySearchDepth": 3
+}

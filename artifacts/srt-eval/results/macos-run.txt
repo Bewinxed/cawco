@@ -1,0 +1,104 @@
+macOS 27.0.1 (arm64), Xcode 27.2, srt 0.0.79, load average 490-905 throughout.
+Scratch: $TMPDIR/cawco-srt-eval (ws = `git clone --shared ~/anbar`, state = its state dir).
+
+== run-mac-checks.sh (final run, verbatim)
+wrote /var/folders/wt/03qhc4bd7dgfq232vr28hp500000gn/T/cawco-srt-eval/state/srt.json
+runner up: srt 53455, sandbox none, runner 53478
+
+== bun install (workspace's own cache, through srt's proxy)
+
+Checked 340 installs across 454 packages (no changes) [119.00ms]
+exit=0 wall=0s
+  (first, cold run: "337 packages installed [5.30s]", exit=0 wall=6s)
+
+== bun run build:core
+$ bun run render.ts
+teaching-core 2026.9.12: server-instructions 3654 chars, SKILL.md 7860 B, guidance.json 12-24m
+teaching-core 2026.9.12 → src/lib/server/mcp/generated/teaching-core.ts
+exit=0 wall=1s
+
+== git add -A and commit
+9c85d0d srt eval probe
+exit=0 wall=0s
+
+== playwright: Chromium from ~/Library/Caches/ms-playwright
+  ]
+}
+
+Node.js v26.10.0
+exit=1 wall=1s
+  (the error, run alone:
+   FATAL:base/apple/mach_port_rendezvous_mac.cc:159] Check failed: kr == KERN_SUCCESS.
+   bootstrap_check_in org.chromium.Chromium.MachPortRendezvousServer.41791: Permission denied (1100)
+   = srt issue #210, no allowMachRegister option)
+
+== escape checks
+read ~/.cawco/accounts         BLOCKED
+read claude sign-in            BLOCKED
+read other repo .env           BLOCKED
+read ~/.ssh key                BLOCKED
+user bus socket                BLOCKED
+sessiond socket                BLOCKED
+signal process outside         BLOCKED
+ssh to the Mac                 BLOCKED   (n/a on the Mac itself)
+write ~/.bun/bin               BLOCKED
+write ~/.cache (host runs it)  BLOCKED
+plant .git/hooks               BLOCKED
+write .git/modules/*/config    BLOCKED
+plant source repo hook         BLOCKED
+write .claude/settings.local.json BLOCKED
+write opencode.jsonc           BLOCKED
+set core.hooksPath             BLOCKED
+
+== overhead
+bare bash -c true            median    6 ms   p90    7 ms   (n=15)
+srt per command              median  316 ms   p90  337 ms   (n=15)
+srt runner (FIFO)            median  121 ms   p90  128 ms   (n=15)
+14:44  up 7 days, 18:18, 1 user, load averages: 905.71 643.40 567.34
+
+== mac-mach-register-probe.mjs: srt's own profile + (allow mach-register (global-name-prefix "org.chromium."))
+{"text":"inside srt","shot":".../cawco-srt-eval/state/tmp/srt-eval.png","ms":1435}
+exit=0
+
+== swift build, AnbarKit (apps/ios/AnbarKit), through the srt runner
+plain `swift build`:                     sandbox-exec: sandbox_apply: Operation not permitted   (srt #67: no nested Seatbelt)
+`swift build --disable-sandbox`:         fatal: cannot copy '.../templates/hooks/commit-msg.sample' to '.../.build/checkouts/swift-numerics/.git/hooks/commit-msg.sample': Operation not permitted
+  + GIT_TEMPLATE_DIR=<empty dir>:        error: could not write config file .../.build/checkouts/swift-numerics/.git/config: Operation not permitted
+  + allowGitConfig + literal clone deny: error: unable to create file Examples/streaming-chatgpt-proxy/.vscode/settings.json: Operation not permitted
+  + --scratch-path $TMPDIR/swiftpm/...:  Build complete! (31.91 secs)   real 43.23
+bare, same scratch layout:               Build complete! (37.84 secs)   wall 51s
+
+== xcodebuild, iOS Simulator
+anbar (Anbar.xcodeproj, scheme Anbar): resolves packages and runs plug-ins inside srt with
+  -IDEPackageSupportDisableManifestSandbox=YES -IDEPackageSupportDisablePluginExecutionSandbox=YES
+  -skipPackagePluginValidation -skipMacroValidation "OTHER_SWIFT_FLAGS=$(inherited) -disable-sandbox"
+  then fails compiling: Anbar/Design/Theme.swift:68:10: error: type member must not be named 'Type'
+  control, same command outside srt: bare-exit=65, the same Theme.swift:68:10 error (the branch head does not compile on Xcode 27.2)
+template app (~/Documents/test, stray "x1" removed in the scratch copy), destination iPhone 16 simulator, per-workspace -derivedDataPath:
+  inside srt: ** BUILD SUCCEEDED **  real 8.70
+  bare:       ** BUILD SUCCEEDED **  9s
+
+== other tools inside the srt runner
+log show --last 5s:  log: Cannot run while sandboxed (exit 64)  -> CawCo's log relay stays
+launchctl list:      exit 1 (refused)
+open -g URL:         exit 1 (refused; allowAppleEvents is off)
+xcrun simctl list:   lists the simulators
+xcodebuild -showdestinations: 91 iOS Simulator destinations inside srt, 91 bare
+
+== today's macOS boundary profile (rebuilt by today-mac-profile.sh from boundary.ts profileOf), same checks
+read ~/.cawco/accounts         OPEN
+read claude sign-in            BLOCKED
+read other repo .env           OPEN
+read ~/.ssh key                OPEN
+user bus socket                BLOCKED
+sessiond socket                BLOCKED   (connect refused by its network-outbound unix-socket deny)
+signal process outside         BLOCKED
+ssh to the Mac                 BLOCKED   (n/a)
+write ~/.bun/bin               OPEN (reached the host)
+write ~/.cache (host runs it)  OPEN (reached the host)
+plant .git/hooks               OPEN (reached the host)
+write .git/modules/*/config    OPEN (reached the host)
+plant source repo hook         BLOCKED
+write .claude/settings.local.json OPEN (reached the host)
+write opencode.jsonc           OPEN (reached the host)
+set core.hooksPath             OPEN (reached the host)

@@ -1,0 +1,81 @@
+{
+  "network": {
+    "allowedDomains": [
+      "github.com",
+      "*.github.com",
+      "*.githubusercontent.com",
+      "registry.npmjs.org",
+      "*.npmjs.org",
+      "bun.sh",
+      "*.bun.sh",
+      "cdn.playwright.dev",
+      "playwright.download.prss.microsoft.com",
+      "swift.org",
+      "*.swift.org"
+    ],
+    "deniedDomains": [],
+    "allowLocalBinding": true,
+    "allowAllUnixSockets": true
+  },
+  "filesystem": {
+    "denyRead": [
+      "/home/bewinxed",
+      "/run",
+      "/var/run",
+      "/tmp"
+    ],
+    "allowRead": [
+      "/tmp/proto/ws",
+      "/tmp/proto/st2/ro",
+      "/home/bewinxed/cockpit/.git/objects",
+      "/home/bewinxed/.bun/bin",
+      "/home/bewinxed/.nvm",
+      "/home/bewinxed/.local/bin",
+      "/home/bewinxed/.cargo/bin",
+      "/home/bewinxed/.rustup",
+      "/home/bewinxed/.gitconfig",
+      "/home/bewinxed/.config/git",
+      "/home/bewinxed/.cache/ms-playwright",
+      "/run/user/1000/cawco-srt/63a84ad1",
+      "/run/systemd/resolve"
+    ],
+    "allowWrite": [
+      "/tmp/proto/ws",
+      "/tmp/proto/st2/tmp",
+      "/tmp/proto/st2/cache"
+    ],
+    "denyWrite": [
+      {
+        "path": "/tmp/proto/ws/.git/config",
+        "literal": true
+      },
+      "/tmp/proto/ws/.git/modules",
+      {
+        "path": "/tmp/proto/ws/.claude/settings.json",
+        "literal": true
+      },
+      {
+        "path": "/tmp/proto/ws/.claude/settings.local.json",
+        "literal": true
+      },
+      {
+        "path": "/tmp/proto/ws/opencode.json",
+        "literal": true
+      },
+      {
+        "path": "/tmp/proto/ws/opencode.jsonc",
+        "literal": true
+      },
+      {
+        "path": "/tmp/proto/ws/.opencode",
+        "literal": true
+      },
+      "/tmp/claude"
+    ],
+    "allowGitConfig": true
+  },
+  "ripgrep": {
+    "command": "/home/bewinxed/.cache/srt-eval/bin/rg"
+  },
+  "mandatoryDenySearchDepth": 3
+}
