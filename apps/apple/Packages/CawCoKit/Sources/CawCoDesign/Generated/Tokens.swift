@@ -151,6 +151,8 @@ public enum Palette {
     public static let borderContrast = Palette.named("border-contrast")
     /// An icon card's edge (New project's templates, the empty fleet's ways in) on the recess: the control edge by day; at night a step past it, the control edge all but meeting the recess.
     public static let borderCard = Palette.named("border-card")
+    /// The outline button's edge: the control edge by day; at night 3.26:1 against the raised surface it stands on (#766F66 on #23211E), where the control edge measures 1.43:1 (the owner's pick, 'Strengthen to 3:1', WCAG 1.4.11).
+    public static let borderButtonOutline = Palette.named("border-button-outline")
     public static let input = Palette.named("input")
     /// Inks. Subtle is the weakest mix that holds 4.5:1 on fill, hover and raised.
     public static let inkStrong = Palette.named("ink-strong")

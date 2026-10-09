@@ -284,8 +284,9 @@ final class PaywallController: ObservedViewController {
         case .offer:
             // R and P1c's Try again: Caw works on the stage until the App Store answers.
             if restoring || retrying { return .stage(.working) }
-            // P1c: the App Store didn't answer; Caw alone, trying.
-            if Pro.shared.catalog == .failed, Pro.shared.canMakePayments == true { return .stage(.trying) }
+            // P1c: the App Store didn't answer; Caw alone, awake and still (the owner's
+            // "Neutral/concerned face": trying's furrowed loop read as blame here).
+            if Pro.shared.catalog == .failed, Pro.shared.canMakePayments == true { return .stage(.ready) }
             // P1e: the scene stays, Caw over the card, idle. P1 is the film alone.
             return .scene(form == .ended ? .idle : nil)
         case .buying: return .stage(.working)

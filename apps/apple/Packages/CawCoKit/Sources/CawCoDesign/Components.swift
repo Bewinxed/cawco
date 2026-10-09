@@ -164,7 +164,7 @@ public enum KitButton {
             config.background.strokeColor = Palette.borderHairline
             config.background.strokeWidth = 1
         case .outline:
-            config.background.strokeColor = Palette.borderControl
+            config.background.strokeColor = Palette.borderButtonOutline
             config.background.strokeWidth = 1
         case .ghost:
             config.background.strokeWidth = 0
