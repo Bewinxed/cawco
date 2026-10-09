@@ -106,6 +106,7 @@ import {
   marketplaces,
   mcpServers,
   mcpToolListings,
+  moves,
   openrouterConnection,
   type PlaceKind,
   parkedAsks,
@@ -207,6 +208,7 @@ export type ThreadMessageRow = typeof threadMessages.$inferSelect;
 /** A thread as its project's list shows it: with its newest message. */
 export type ThreadListRow = ThreadRow & { last: string };
 export type ContinuationRow = typeof continuations.$inferSelect;
+export type MoveRow = typeof moves.$inferSelect;
 export type WorkflowRow = typeof workflows.$inferSelect;
 export type WorkflowRunRow = typeof workflowRuns.$inferSelect;
 export type WorkflowStepRow = typeof workflowSteps.$inferSelect;
@@ -457,6 +459,7 @@ export interface DbShape {
   readonly deleteMarketplace: (name: string) => void;
   readonly deleteMcpOauth: (name: string) => void;
   readonly deleteMcpServer: (name: string) => void;
+  readonly deleteMove: (id: string) => void;
   readonly deletePlugin: (id: string) => void;
   /** The project and its places; the sessions started from it stay, unattached. */
   readonly deleteProject: (id: string) => void;
@@ -563,6 +566,9 @@ export interface DbShape {
   readonly insertContinuation: (
     row: Omit<ContinuationRow, "createdAt" | "updatedAt">
   ) => ContinuationRow;
+  readonly insertMove: (
+    row: Omit<MoveRow, "createdAt" | "updatedAt">
+  ) => MoveRow;
   /** Look up a single non-discarded instance by its harness sessionId. */
   readonly instanceBySessionId: (
     sessionId: string
@@ -711,6 +717,10 @@ export interface DbShape {
    * (`delegate_events`, kind `ask`, status `pending`). What moved, by id.
    */
   readonly moveChildren: (from: string, to: string) => MovedChildren;
+  /** One project move's record (moves.ts). */
+  readonly moveRow: (id: string) => MoveRow | undefined;
+  /** Every project move, oldest first. */
+  readonly moveRows: () => MoveRow[];
   /**
    * Gives the session its name. The owner's always lands; the session's own
    * (`set_title`) is refused once the owner has named it, and the answer
@@ -1334,6 +1344,8 @@ export interface DbShape {
       >
     >
   ) => void;
+  /** A move's "Don't move", remembered on its project; null forgets it. */
+  readonly setProjectMoveDeclined: (id: string, at: Date | null) => void;
   /** The repository a project's checkouts are of, once a machine has read it. */
   readonly setProjectRemote: (id: string, remote: string) => void;
   /** Where the project's tasks live; tasks.ts refuses a tracker not built yet. */
@@ -1498,6 +1510,11 @@ export interface DbShape {
       >
     >
   ) => void;
+  /** Moves one job; the row as it now is, or undefined when it is gone. */
+  readonly updateMove: (
+    id: string,
+    patch: Partial<Pick<MoveRow, "stage" | "state">>
+  ) => MoveRow | undefined;
   /** One change to a send's record — the hub's only kind of write to one. */
   readonly updateSend: (
     uuid: string,
@@ -5888,6 +5905,32 @@ const make = async (path: string): Promise<DbShape> => {
       db.select().from(continuations).orderBy(continuations.createdAt).all(),
     continuationRow: (id) =>
       db.select().from(continuations).where(eq(continuations.id, id)).get(),
+    moveRows: () => db.select().from(moves).orderBy(moves.createdAt).all(),
+    moveRow: (id) => db.select().from(moves).where(eq(moves.id, id)).get(),
+    insertMove: (row) => {
+      const now = new Date();
+      return db
+        .insert(moves)
+        .values({ ...row, createdAt: now, updatedAt: now })
+        .returning()
+        .get();
+    },
+    updateMove: (id, patch) =>
+      db
+        .update(moves)
+        .set({ ...patch, updatedAt: new Date() })
+        .where(eq(moves.id, id))
+        .returning()
+        .get(),
+    deleteMove: (id) => {
+      db.delete(moves).where(eq(moves.id, id)).run();
+    },
+    setProjectMoveDeclined: (id, at) => {
+      db.update(projects)
+        .set({ moveDeclinedAt: at })
+        .where(eq(projects.id, id))
+        .run();
+    },
     deleteContinuation: (id) => {
       db.delete(continuations).where(eq(continuations.id, id)).run();
     },

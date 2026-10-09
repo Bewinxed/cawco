@@ -19,6 +19,7 @@ import type {
   Verb,
   WorkItemSummary,
 } from "./index";
+import type { MoveJob } from "./move";
 import type { PermissionPresentation } from "./permission-presentation";
 import type { ThreadMessage, ThreadSummary } from "./threads";
 import type { UsageLimitsReading, UsageSpend } from "./usage";
@@ -95,6 +96,8 @@ export interface InstancesFrame {
   instances: InstanceRow[];
   /** Hub-originated: the complete board on every connection, including reconnects. */
   kind: "instances";
+  /** Every project move the hub is carrying; each change after this arrives on the `moves` frame. */
+  moves: MoveJob[];
   /** The notice ids a person acknowledged, on any tab or device (hub notices.ts). */
   noticesSeen: string[];
   previews?: PreviewFrame[];

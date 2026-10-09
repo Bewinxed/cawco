@@ -1,3 +1,4 @@
+import { dirname, resolve } from "node:path";
 import { CAWCO_ENV, CAWCO_HUB_PORT, readEnv } from "@cawco/core";
 import { runtimeVersion, standalone } from "@cawco/core/runtime";
 
@@ -22,3 +23,16 @@ export const SPAWN_START_TIMEOUT_MS = 120_000;
  * through the environment; the relative default is the bare `bun run hub` case.
  */
 export const DB_PATH = readEnv(CAWCO_ENV.dbPath) ?? "./cawco.db";
+
+/** The hub as a git remote (git-remote.ts): each project's bare repository, beside the database. */
+export const GIT_ROOT = resolve(dirname(DB_PATH), "git");
+
+/** The hub's LFS store: each large file once, by sha256. */
+export const LFS_ROOT = resolve(dirname(DB_PATH), "lfs");
+
+/**
+ * The largest request body the hub takes: a pack pushed to its git remote or
+ * a large file to its LFS store streams through, and Bun's own default
+ * (128 MiB) would refuse both.
+ */
+export const MAX_REQUEST_BYTES = 64 * 1024 ** 3;

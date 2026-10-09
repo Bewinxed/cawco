@@ -24,7 +24,14 @@ import {
   CONTROL_COMPLETE_PROVIDER_LOGIN,
   CONTROL_FORGET_PROVIDER_ACCOUNT,
   CONTROL_JOIN_PROVIDER_ACCOUNT,
+  CONTROL_MOVE_CANCEL,
+  CONTROL_MOVE_CLONE,
   CONTROL_MOVE_HOME_CREDENTIAL,
+  CONTROL_MOVE_INSPECT,
+  CONTROL_MOVE_INSTALL,
+  CONTROL_MOVE_LFS,
+  CONTROL_MOVE_PREPARE,
+  CONTROL_MOVE_SNAPSHOT,
   CONTROL_READ_HOME_CREDENTIALS,
   CONTROL_RUN_COMMAND,
   CONTROL_SEARCH_TRANSCRIPTS,
@@ -73,6 +80,17 @@ import { KeeperWatchdog, machineKeeper } from "./keeper-watchdog";
 import { endOrphanedSignIns, endSignIns } from "./login";
 import { isMachineAgent } from "./machine-agent";
 import { setAccountFreshener, startMcpGateway } from "./mcp-oauth";
+import {
+  moveCancel,
+  moveClone,
+  moveInspect,
+  moveInstall,
+  moveLfs,
+  movePrepare,
+  moveSnapshot,
+  setHubCredential,
+  setMoveProgress,
+} from "./move";
 import { servingPreviews } from "./preview";
 import { parseProcId, SESSION_PROC_KINDS } from "./proc-id";
 import {
@@ -1076,11 +1094,13 @@ const attach = (
       }
       // Usage and workflow-run transitions originate at the hub, never at a
       // daemon; machine-scoped control replies do travel through this sink,
-      // without an instanceId.
+      // without an instanceId. A move's progress goes out on `emit`.
       if (
         frame.kind === "usage" ||
         frame.kind === "workflow" ||
-        frame.kind === "fleet_mcp"
+        frame.kind === "fleet_mcp" ||
+        frame.kind === "moves" ||
+        frame.kind === "move_progress"
       ) {
         return false;
       }
@@ -1367,6 +1387,11 @@ const attach = (
             .addressContract === true
         );
         awaitingRegisterAck = false;
+        // This connection's credential for the hub's git remote, in memory only.
+        setHubCredential(
+          identity.machineId,
+          (envelope.payload as RegisterAckPayload).machineCredential
+        );
         const spawns = heldSpawns.splice(0);
         takeCustody(envelope.payload, spawns);
         sweepAccounts(envelope.payload as RegisterAckPayload);
@@ -1735,6 +1760,49 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
     supervisor.registerDaemonFunction(
       CONTROL_WORKSPACE_MIGRATE,
       convertWorktrees
+    );
+    // A project move's steps (move.ts). Each runs as this process's child, so
+    // none starts behind a raised fence; the hub runs it again after a restart.
+    const unfenced =
+      <A extends unknown[], R>(step: (...args: A) => Promise<R>) =>
+      (...args: A): Promise<R> =>
+        fenced() ? Promise.reject(new Error(AGENT_RESTARTING)) : step(...args);
+    setMoveProgress((frame) =>
+      supervisor.emit({ verb: "frames", machineId: "", payload: frame })
+    );
+    supervisor.registerDaemonFunction(CONTROL_MOVE_INSPECT, (path) =>
+      moveInspect(path as string)
+    );
+    supervisor.registerDaemonFunction(
+      CONTROL_MOVE_PREPARE,
+      unfenced((request) =>
+        movePrepare(request as Parameters<typeof movePrepare>[0])
+      )
+    );
+    supervisor.registerDaemonFunction(
+      CONTROL_MOVE_SNAPSHOT,
+      unfenced((request) =>
+        moveSnapshot(request as Parameters<typeof moveSnapshot>[0])
+      )
+    );
+    supervisor.registerDaemonFunction(
+      CONTROL_MOVE_CLONE,
+      unfenced((request) =>
+        moveClone(request as Parameters<typeof moveClone>[0])
+      )
+    );
+    supervisor.registerDaemonFunction(
+      CONTROL_MOVE_LFS,
+      unfenced((request) => moveLfs(request as Parameters<typeof moveLfs>[0]))
+    );
+    supervisor.registerDaemonFunction(
+      CONTROL_MOVE_INSTALL,
+      unfenced((request) =>
+        moveInstall(request as Parameters<typeof moveInstall>[0])
+      )
+    );
+    supervisor.registerDaemonFunction(CONTROL_MOVE_CANCEL, (jobId) =>
+      moveCancel(jobId as string)
     );
     supervisor.registerDaemonFunction(
       CONTROL_SEARCH_TRANSCRIPTS,

@@ -33,6 +33,7 @@ import type {
   InstanceRow,
   McpServerStatus,
   ModelInfo,
+  MoveJob,
   NeutralSessionInfo,
   NeutralStatus,
   OnCap,
@@ -761,6 +762,11 @@ const state = $state({
    * started after its dialog was dismissed.
    */
   continuations: [] as ContinuationJob[],
+  /**
+   * The project moves the hub is carrying (core move.ts), whole: handed on
+   * connect in the `instances` frame, then replaced by each `moves` frame.
+   */
+  moves: [] as MoveJob[],
   projects: [] as ProjectRow[],
   /**
    * Each project's threads with its Caw, newest first, by project id: read
@@ -2654,6 +2660,9 @@ function handleFrame(frame: FramePayload): void {
     if (frame.continuations) {
       adoptContinuations(frame.continuations);
     }
+    if (frame.kind === "instances") {
+      state.moves = frame.moves;
+    }
     // The notices acknowledged on any tab or device: one dismissed elsewhere leaves this tab now.
     if (frame.noticesSeen) {
       notices.adopt(frame.noticesSeen);
@@ -2851,6 +2860,16 @@ function handleFrame(frame: FramePayload): void {
       source: supervisorStatus.source,
       since: supervisorStatus.at,
     };
+    return;
+  }
+
+  // Every project move, whole, on each change. A move's progress travels
+  // machine → hub only, and never reaches a screen as its own frame.
+  if (frame.kind === "moves") {
+    state.moves = frame.moves;
+    return;
+  }
+  if (frame.kind === "move_progress") {
     return;
   }
 

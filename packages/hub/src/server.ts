@@ -36,6 +36,8 @@ import type {
   MachineHookScript,
   MachineMemorySet,
   ModelInfo,
+  MoveProgressFrame,
+  MoveRequest,
   NeutralAssistantMessage,
   NeutralOrigin,
   NeutralResultMessage,
@@ -223,6 +225,7 @@ import {
   WORKSPACE_CREATE_TIMEOUT_MS,
 } from "@cawco/core";
 import {
+  AGENT_RESTARTING,
   BINARY_UPDATE_PHASES,
   type BinaryUpdatePhase,
   type BinaryUpdatePolicy,
@@ -261,7 +264,13 @@ import {
 } from "./at-limit";
 import { createBinaryUpdates } from "./binary-updates";
 import { type Caw, cawRoutes, createCaw, withCawDenials } from "./caw";
-import { DB_PATH, HUB_VERSION, SPAWN_START_TIMEOUT_MS } from "./config";
+import {
+  DB_PATH,
+  GIT_ROOT,
+  HUB_VERSION,
+  LFS_ROOT,
+  SPAWN_START_TIMEOUT_MS,
+} from "./config";
 import {
   type ContinuationSource,
   type ContinueRequest,
@@ -301,6 +310,7 @@ import { faviconRoutes } from "./favicon";
 import { fleetChoicesRoutes } from "./fleet-choices";
 import { FleetMcp } from "./fleet-mcp";
 import { accountForecasts, carrySequence } from "./forecast";
+import { gitRemoteRoutes } from "./git-remote";
 import type { HarnessPlanDeps } from "./harness-plans";
 import { hidden } from "./hidden";
 import { joinRoutes } from "./join";
@@ -317,6 +327,7 @@ import {
 import { type LabelledRow, leafOf, sessionLabel } from "./labels";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import { probe } from "./llm";
+import { basicCaller, createMachineCredentials } from "./machine-credentials";
 import { MeaningJudge } from "./meaning";
 import {
   externalizeImages,
@@ -326,6 +337,7 @@ import {
   storedFilePath,
   storeFile,
 } from "./media";
+import { createMoves, MoveAway, MoveRefused } from "./moves";
 import { createNoticesSeen } from "./notices";
 import type { PendingShape } from "./pending";
 import {
@@ -777,6 +789,31 @@ const continueBody = t.Object({
   ),
 });
 
+/** `POST /api/projects/:id/moves`: core `MoveRequest`. */
+const moveBody = t.Object({
+  machineId: t.String({ minLength: 1 }),
+  path: t.Optional(t.String({ pattern: "^(/|~/)" })),
+  spawn: t.Object({
+    harness: t.Optional(harnessSchema),
+    model: t.Optional(t.String({ minLength: 1 })),
+    effort: t.Optional(
+      t.Union([
+        t.Literal("low"),
+        t.Literal("medium"),
+        t.Literal("high"),
+        t.Literal("xhigh"),
+        t.Literal("max"),
+      ])
+    ),
+    permissionMode: t.Optional(permissionModeSchema),
+    account: t.Optional(t.String({ minLength: 1 })),
+    title: t.Optional(t.String()),
+  }),
+  prompt: t.Optional(t.String()),
+  images: continueBody.properties.images,
+  attachments: continueBody.properties.attachments,
+});
+
 const ruleBody = t.Object({
   name: t.String(),
   enabled: t.Boolean(),
@@ -855,7 +892,8 @@ const registerAck = (
   envelope: Envelope,
   ingested: Record<string, IngestMark>,
   unknownAccounts: string[] | undefined,
-  sessions: CarrySessionRequest[]
+  sessions: CarrySessionRequest[],
+  machineCredential: string
 ): Envelope<RegisterAckPayload> => ({
   verb: envelope.verb,
   machineId: envelope.machineId,
@@ -864,6 +902,7 @@ const registerAck = (
     ingested,
     addressContract: true,
     hubEpoch: HUB_EPOCH,
+    machineCredential,
     ...(unknownAccounts ? { unknownAccounts } : {}),
     sessions,
   },
@@ -9153,6 +9192,52 @@ export const createServer = (
     changed: () => publishInstances(""),
   });
 
+  /** What each fleet machine proves itself with to the git remote (machine-credentials.ts). */
+  const machineCredentials = createMachineCredentials();
+
+  /**
+   * Project moves (moves.ts): a machine's control throws {@link MoveAway}
+   * when the machine is not here or went while it answered, so the job
+   * waits for its register; anything else is the machine's own words.
+   */
+  const moves = createMoves({
+    db,
+    lifetime,
+    gitRoot: GIT_ROOT,
+    call: async (machineId, method, args, timeoutMs) => {
+      const answer = await callAgent(machineId, method, args, timeoutMs);
+      if (answer === "offline") {
+        throw new MoveAway(machineId);
+      }
+      if (answer === "timeout") {
+        throw new Error(`${machineName(machineId)} did not answer in time.`);
+      }
+      if (!answer.ok) {
+        throw answer.error === MACHINE_DISCONNECTED ||
+          answer.error === AGENT_RESTARTING
+          ? new MoveAway(machineId)
+          : new Error(
+              answer.error ?? `${machineName(machineId)} gave no answer.`
+            );
+      }
+      return answer.result;
+    },
+    online: (machineId) => registry.agent(machineId) !== undefined,
+    machineName,
+    park: parkForPerson,
+    parked: (requestId) => pending.get(requestId) !== undefined,
+    settle: (requestId, outcome) => {
+      pending.resolve(requestId, outcome);
+    },
+    publish: (frame) =>
+      registry.broadcast({ verb: "frames", machineId: "hub", payload: frame }),
+    placesChanged,
+    spawn: (machineId, payload) => spawnSession(machineId, payload),
+    send: (envelope) => {
+      deliverSend(envelope);
+    },
+  });
+
   /** Everything an `instances` frame carries besides the rows themselves. */
   const boardExtras = () => ({
     agents: withPresence(db.listAgents()),
@@ -9163,6 +9248,9 @@ export const createServer = (
     // Carried on every publish, so a dashboard follows a continuation it
     // started over the socket rather than over the request that started it.
     continuations: continuationTable(),
+    // A screen that connects is handed every move; each change after
+    // arrives on the `moves` frame.
+    moves: moves.table(),
     // Carried on every publish too: a notice acknowledged on one device
     // leaves every other one live, and is never shown after a reload.
     noticesSeen: noticesSeen.ids(),
@@ -10268,7 +10356,8 @@ export const createServer = (
       // workflow's question, or an admin write waiting on the person.
       if (
         answerWorkflow(pending, requestId, result) ||
-        adminAsks.answer(requestId, result)
+        adminAsks.answer(requestId, result) ||
+        moves.answer(requestId, result)
       ) {
         if (receipt.outcome !== "answered") {
           throw new Error("That request is no longer pending.");
@@ -11627,6 +11716,9 @@ export const createServer = (
   // and parked questions accessing its scratch database after it is removed.
   if (resumeWorkflows) {
     detach(workflowRuntime.resume(), "workflow resume");
+    // Moves go on from their records: an approval is asked again, every
+    // other step waits for its machine's register.
+    moves.resume();
   }
   // A project's tasks: files in its hub folder, indexed here (tasks.ts).
   const tasks = createTasks({
@@ -12632,6 +12724,22 @@ export const createServer = (
         })
       )
       .use(pushRoutes(db, push))
+      // The hub as a git remote and LFS server, for fleet machines and
+      // sessions only (git-remote.ts).
+      .use(
+        gitRemoteRoutes({
+          root: GIT_ROOT,
+          lfsRoot: LFS_ROOT,
+          projectExists: (projectId) => db.project(projectId) !== undefined,
+          authenticate: (authorization) =>
+            basicCaller(
+              authorization,
+              machineCredentials,
+              (credential) =>
+                identities.resolve(`Bearer ${credential}`)?.instanceId
+            ),
+        })
+      )
       .use(faviconRoutes())
       .use(appleDiagnosticsRoutes())
       .use(projectOfferRoutes(projectOffers, YOU_ACTOR))
@@ -13052,6 +13160,75 @@ export const createServer = (
           ? continuationJob(cancelled.row)
           : status(cancelled.refused, cancelled.why);
       })
+      // Moving a project to a machine without a checkout of it (moves.ts).
+      // What the New session modal reads when such a machine is picked.
+      .get(
+        "/api/projects/:id/move-estimate",
+        {
+          query: t.Object({
+            machine: t.String({ minLength: 1 }),
+            path: t.Optional(t.String({ pattern: "^(/|~/)" })),
+          }),
+        },
+        async ({ params, query, status }) => {
+          try {
+            return await moves.estimate(params.id, query.machine, query.path);
+          } catch (error) {
+            return error instanceof MoveRefused
+              ? status(error.status, error.message)
+              : status(
+                  422,
+                  error instanceof Error ? error.message : String(error)
+                );
+          }
+        }
+      )
+      // Move & start: the hub owns the job from here; its stages reach every
+      // screen on the `moves` frame. The no-move case is the ordinary spawn.
+      .post(
+        "/api/projects/:id/moves",
+        { body: moveBody },
+        async ({ params, body, status }) => {
+          try {
+            return await moves.start(params.id, body as MoveRequest);
+          } catch (error) {
+            return error instanceof MoveRefused
+              ? status(error.status, error.message)
+              : status(
+                  422,
+                  error instanceof Error ? error.message : String(error)
+                );
+          }
+        }
+      )
+      // The moves the hub is carrying, for a screen that connects late.
+      .get("/api/moves", () => moves.table())
+      // Cancel: the step in flight stops; what is done stays, in `kept`.
+      .delete("/api/moves/:id", ({ params, status }) => {
+        try {
+          return moves.cancel(params.id);
+        } catch (error) {
+          return error instanceof MoveRefused
+            ? status(error.status, error.message)
+            : status(
+                422,
+                error instanceof Error ? error.message : String(error)
+              );
+        }
+      })
+      // Retry: a failed move runs its failed step again.
+      .post("/api/moves/:id/retry", ({ params, status }) => {
+        try {
+          return moves.retry(params.id);
+        } catch (error) {
+          return error instanceof MoveRefused
+            ? status(error.status, error.message)
+            : status(
+                422,
+                error instanceof Error ? error.message : String(error)
+              );
+        }
+      })
       // A started continuation's report, once it has one: what the
       // `continue_session` tool waits on. The job runs whether or not anyone
       // waits here.
@@ -13167,6 +13344,8 @@ export const createServer = (
         }
         const gone = db.deleteMachine(params.machineId);
         forgetInstances(gone.instanceIds);
+        // A removed machine proves nothing to the git remote any more.
+        machineCredentials.forget(params.machineId);
         // The frame that carries the machine list: every dashboard drops the
         // machine and its sessions without a reload.
         publishInstances(params.machineId);
@@ -16980,7 +17159,10 @@ export const createServer = (
                   message,
                   streams.ingestedFor(reattaching),
                   unknownAccountsOf(message.machineId, message.payload),
-                  claudeSessionsOn(message.machineId)
+                  claudeSessionsOn(message.machineId),
+                  // This connection's credential for the hub's git remote;
+                  // the one its last connection held stops working.
+                  machineCredentials.mint(message.machineId)
                 )
               );
               for (const row of toEnd) {
@@ -17013,6 +17195,8 @@ export const createServer = (
                   detach(advanceContinuation(job.id), "continuation");
                 }
               }
+              // And project moves waiting on it, likewise (moves.ts).
+              moves.machineBack(message.machineId);
               break;
             }
             case "heartbeat": {
@@ -17192,6 +17376,13 @@ export const createServer = (
                 db.invalidateClaudeCaches(message.machineId, reason, at);
                 publishInstances(message.machineId);
                 // Cache bookkeeping is neither a turn nor fleet attention.
+                break;
+              }
+              if (kind === "move_progress") {
+                moves.progress(
+                  message.machineId,
+                  message.payload as MoveProgressFrame
+                );
                 break;
               }
               if (kind === "control_result" && !message.requestId) {

@@ -213,6 +213,14 @@ export interface RegisterAckPayload {
    * anyway.
    */
   ingested?: Record<string, IngestMark>;
+  /**
+   * The machine's credential for the hub's git remote (`/git/…`, HTTP Basic
+   * `<machineId>:<credential>`), minted for this connection and replaced on
+   * the next. The machine keeps it in memory only and hands it to git per
+   * command through env-only config; it is never written, logged or put in
+   * a session's environment.
+   */
+  machineCredential: string;
   ok: true;
   /**
    * Every Claude session this hub has a row for on the machine, each with

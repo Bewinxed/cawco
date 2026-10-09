@@ -36,6 +36,9 @@ export * from "./injected";
 // Adding a machine: the join routes' shapes and the install script's step
 // prefix, which `cawco binary-install agent` prints and the hub reads back off SSH output.
 export * from "./join";
+// Moving a project to a machine without a checkout of it: the hub-owned job,
+// its estimate and request, and the hub ↔ machine controls that run its steps.
+export * from "./move";
 // What a permission prompt says on every surface, stamped by the hub as it
 // parks the ask: the summary, who asked, the change it makes, its fields.
 export * from "./permission-presentation";
@@ -1075,6 +1078,10 @@ export type FramePayload =
   | import("./frames").DelegateEventFrame
   | import("./frames").SupervisorEventFrame
   | import("./frames").SupervisorStatusFrame
+  /** Hub-originated: every project move, whole, on each change. */
+  | import("./move").MovesFrame
+  /** Daemon-originated: how far a move's clone or large files are. */
+  | import("./move").MoveProgressFrame
   /** Hub-originated workflow run transition (§7.2). */
   | import("./workflow").WorkflowFrame;
 

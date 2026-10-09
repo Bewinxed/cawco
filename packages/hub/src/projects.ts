@@ -15,12 +15,21 @@ const SCP = /^(?:[^@/]+@)?([^:/]+):(.+)$/;
 const EDGE_SLASHES = /^\/+|\/+$/g;
 const DOT_GIT = /\.git$/i;
 const TRAILING_SLASHES = /\/+$/;
+/** The hub's own git remote for a project (git-remote.ts): `/git/<project uuid>.git`. */
+const HUB_REMOTE_PATH =
+  /^\/git\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:\.git)?\/?$/i;
+
+/** A project's identity when the hub is its remote: the same from every machine, whatever address it reaches the hub by. */
+export const hubRemoteIdentity = (projectId: string): string =>
+  `cawco/${projectId.toLowerCase()}`;
 
 /**
  * `origin` as `host/owner/repo`: the host lowercased, credentials, port and a
  * trailing `.git` dropped, so `git@github.com:Owner/repo.git` and
- * `https://github.com/Owner/repo` are one remote. Null for what names no
- * host (a path on the same disk, `file://`), which no other machine shares.
+ * `https://github.com/Owner/repo` are one remote. The hub's own remote of a
+ * project is {@link hubRemoteIdentity}, by its path alone: machines reach the
+ * hub by different addresses. Null for what names no host (a path on the
+ * same disk, `file://`), which no other machine shares.
  */
 export const normaliseRemote = (url: string): string | null => {
   const raw = url.trim();
@@ -36,6 +45,10 @@ export const normaliseRemote = (url: string): string | null => {
       path = parsed.pathname;
     } catch {
       return null;
+    }
+    const hub = HUB_REMOTE_PATH.exec(path);
+    if (hub) {
+      return hubRemoteIdentity(hub[1]);
     }
   } else {
     const scp = SCP.exec(raw);

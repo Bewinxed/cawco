@@ -1,7 +1,7 @@
 import { detach } from "@cawco/core/detach";
 import { Effect, Layer } from "effect";
 import { buildInfo } from "./build";
-import { DB_PATH, HUB_PORT, HUB_VERSION } from "./config";
+import { DB_PATH, HUB_PORT, HUB_VERSION, MAX_REQUEST_BYTES } from "./config";
 import { Db, DbLayer } from "./db";
 import { HubLifetime, HubLifetimeLayer } from "./lifetime";
 import { advertise } from "./mdns";
@@ -32,6 +32,8 @@ const main = Effect.gen(function* () {
     hostname,
     port: HUB_PORT,
     idleTimeout: 120,
+    // A pack to the git remote and a large file to LFS stream through.
+    maxRequestBodySize: MAX_REQUEST_BYTES,
   });
   startPreviewListener(hostname);
   yield* Effect.log(`cawco hub ${HUB_VERSION} listening on :${HUB_PORT}`);

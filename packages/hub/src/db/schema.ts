@@ -24,6 +24,8 @@ import type {
   LandsMode,
   LimitWindow,
   ModelInfo,
+  MoveRequest,
+  MoveStage,
   NeutralUserMessage,
   OnCap,
   OpenCodeGoLimits,
@@ -69,6 +71,7 @@ import {
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 import type { ContinueRequest, PreparedContinuation } from "../continuation";
+import type { MoveState } from "../moves";
 
 const timestamp = (column: string) => integer(column, { mode: "timestamp_ms" });
 
@@ -343,6 +346,12 @@ export const projects = sqliteTable("projects", {
   onCap: text("on_cap").$type<OnCap>(),
   /** The accounts its sessions may run on; null: every account. */
   accounts: text("accounts", { mode: "json" }).$type<string[]>(),
+  /**
+   * When the person answered a move's ask "Don't move" (moves.ts): a folder
+   * that still needs that ask can't move, and the New session modal says so
+   * instead of asking again. Null: never declined.
+   */
+  moveDeclinedAt: timestamp("move_declined_at"),
   createdAt: timestamp("created_at")
     .notNull()
     .$defaultFn(() => new Date()),
@@ -2029,6 +2038,27 @@ export const continuations = sqliteTable("continuations", {
   summary: text("summary"),
   stage: text("stage").$type<ContinuationJob["stage"]>().notNull(),
   error: text("error"),
+  createdAt: timestamp("created_at").notNull(),
+  updatedAt: timestamp("updated_at").notNull(),
+});
+
+/**
+ * Project moves (moves.ts, core move.ts): the one record of each, so a hub
+ * that restarts mid-way carries the job on from its stage rather than
+ * forgetting it. A started or cancelled job is kept a while so a screen that
+ * was away hears how it ended, then deleted; a failed one stays until it is
+ * retried or cancelled.
+ */
+export const moves = sqliteTable("moves", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id")
+    .notNull()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  stage: text("stage").$type<MoveStage>().notNull(),
+  /** Everything the job has learned and decided, as moves.ts keeps it. */
+  state: text("state", { mode: "json" }).$type<MoveState>().notNull(),
+  /** The request as asked: the target and the spawn New session sent. */
+  request: text("request", { mode: "json" }).$type<MoveRequest>().notNull(),
   createdAt: timestamp("created_at").notNull(),
   updatedAt: timestamp("updated_at").notNull(),
 });

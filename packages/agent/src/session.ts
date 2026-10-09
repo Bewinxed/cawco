@@ -60,6 +60,7 @@ import {
   GENERATE_IMAGE,
   INSTALL_SESSION_CREDENTIAL,
   MESSAGES_READ,
+  MOVE_STEPS,
   machineLabel,
   PREVIEW_START,
   PREVIEW_STOP,
@@ -819,6 +820,10 @@ export class SessionSupervisor {
       key = `image:${imageRequest}`;
     } else if (control?.method === CONTROL_RUN_COMMAND) {
       key = `command:${String(control.args?.[0])}`;
+    } else if (control && MOVE_STEPS.has(control.method)) {
+      // A move's steps queue per job: two jobs never wait on each other, and
+      // a hub asking again for a step in flight waits on that one run.
+      key = `move:${(control.args?.[0] as { jobId?: string } | undefined)?.jobId}`;
     } else if (control?.method === CONTROL_WORKSPACE_CREATE) {
       // A late create must finish before its discard; different workspace ids do not queue together.
       key = `workspace:${String(control.args?.[1])}`;
