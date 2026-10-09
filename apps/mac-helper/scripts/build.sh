@@ -165,8 +165,9 @@ notarise_step() {
     echo "SUBMITTED $id (cdhash $cdhash)"
   fi
 
+  # On a timeout (exit 124) the JSON message goes to stderr, not stdout.
   xcrun notarytool wait "$id" "${notary[@]}" --timeout "$NOTARY_WAIT" --output-format json \
-    >"$records/$cdhash.wait.json" 2>/dev/null || true
+    >"$records/$cdhash.wait.json" 2>"$records/$cdhash.wait.err" || true
   local status
   status=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1])).get("status", ""))' \
     "$records/$cdhash.wait.json" 2>/dev/null || true)
@@ -197,8 +198,7 @@ notarise_step() {
       exit 1
       ;;
     *)
-      cat "$records/$cdhash.wait.json" 2>/dev/null || true
-      echo
+      cat "$records/$cdhash.wait.json" "$records/$cdhash.wait.err" 2>/dev/null || true
       echo "PENDING notarisation $id: Apple has not finished; run notarise again to resume"
       exit 75
       ;;
