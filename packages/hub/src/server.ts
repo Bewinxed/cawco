@@ -6252,15 +6252,19 @@ export const createServer = (
     };
   };
 
+  /** The fingerprint of each connected machine's own stores this hub last moved from, by machine; cleared at its register. */
+  const homeStamps = new Map<string, string>();
   /**
-   * Every credential in a connecting machine's own pi and OpenCode stores
-   * moved into CawCo, so every provider login its harnesses use is an
-   * account the hub places sessions on and reads limits for (OpenCode Go's
-   * windows, ChatGPT's). Asked once per connection, when its first beat
-   * reports what it can do; a credential already moved is gone from its
-   * store, and one whose account is already signed in there stays where it
-   * is. A move that fails leaves the original as it was and is asked again
-   * at the machine's next connection.
+   * Every credential in a machine's own pi and OpenCode stores moved into
+   * CawCo, so every provider login its harnesses use is an account the hub
+   * places sessions on and reads limits for (OpenCode Go's windows,
+   * ChatGPT's) and generate_image signs in with. Asked once per connection,
+   * when its first report says how those stores stand, and again each time
+   * they change under it ({@link HeartbeatPayload.homeStores}): a login made
+   * there later moves within the agent's next check. A credential already
+   * moved is gone from its store, and one whose account is already signed in
+   * there stays where it is. A move that fails leaves the original as it was
+   * and is asked again when the stores next change or the machine reconnects.
    */
   const adoptHomeCredentials = async (machineId: string): Promise<void> => {
     const read = await callAgent(
@@ -18080,6 +18084,9 @@ export const createServer = (
                 ws.remoteAddress,
                 peekPreviews(message.payload)
               );
+              // Each connection moves what the machine's own stores hold
+              // once its first report says how they stand.
+              homeStamps.delete(message.machineId);
               // A machine arriving can turn a remembered "nobody holds this"
               // into an answer, so the negatives go. The hits stay: a
               // conversation does not move between machines.
@@ -18550,6 +18557,16 @@ export const createServer = (
                 );
                 autoInstall(message.machineId, ws);
                 sendFleetSync(message.machineId, ws);
+              }
+              // What the machine's own pi and OpenCode stores hold, moved into
+              // accounts on each connection and whenever they change under it
+              // (a login made there with `opencode auth login`).
+              const { homeStores } = message.payload as HeartbeatPayload;
+              if (
+                homeStores !== undefined &&
+                homeStamps.get(message.machineId) !== homeStores
+              ) {
+                homeStamps.set(message.machineId, homeStores);
                 adoptHomeCredentials(message.machineId).catch(console.error);
               }
               // Every other provider's accounts on this machine, as their

@@ -102,6 +102,7 @@ import {
   forgetProviderAccount,
   freshen,
   freshenAll,
+  homeStoresStamp,
   joinProviderAccount,
   moveHomeCredential,
   piProviders,
@@ -956,6 +957,8 @@ const attach = (
     let lastPiCheck = Date.now();
     const pi = harness("pi");
     let reportedProviderAccounts = providerAccountReports();
+    /** The fingerprint of pi's and OpenCode's own stores this connection last sent. */
+    let reportedHomeStores = homeStoresStamp();
     /** `report` in place of the one of its harness this connection last read, or beside the others. */
     const keepReport = (report: HarnessReport): void => {
       reportedHarnesses = [
@@ -1034,6 +1037,7 @@ const attach = (
         reportedHarnesses = read;
         announced = true;
         reportedProviderAccounts = providerAccountReports();
+        reportedHomeStores = homeStoresStamp();
         send(socket, {
           verb: "heartbeat",
           machineId: identity.machineId,
@@ -1046,6 +1050,7 @@ const attach = (
             ...(read.length > 0 ? { harnesses: read } : {}),
             ...(tools ? { tools } : {}),
             providerAccounts: reportedProviderAccounts,
+            homeStores: reportedHomeStores,
             ...(providers ? { providers } : {}),
           } satisfies HeartbeatPayload,
         });
@@ -1060,6 +1065,7 @@ const attach = (
     // its credential.
     providerAccountsChanged = () => {
       reportedProviderAccounts = providerAccountReports();
+      reportedHomeStores = homeStoresStamp();
       if (socket.readyState === WebSocket.OPEN) {
         send(socket, {
           verb: "heartbeat",
@@ -1068,6 +1074,7 @@ const attach = (
             at: Date.now(),
             instances: supervisor.instanceIds,
             providerAccounts: reportedProviderAccounts,
+            homeStores: reportedHomeStores,
           } satisfies HeartbeatPayload,
         });
       }
@@ -1121,8 +1128,14 @@ const attach = (
     yield* Effect.forkScoped(
       Effect.repeat(
         Effect.promise(async () => {
+          // A login made, refreshed or moved in pi's or OpenCode's own store
+          // reaches the hub too, which moves it into an account.
           if (
-            !Bun.deepEquals(providerAccountReports(), reportedProviderAccounts)
+            !Bun.deepEquals(
+              providerAccountReports(),
+              reportedProviderAccounts
+            ) ||
+            homeStoresStamp() !== reportedHomeStores
           ) {
             providerAccountsChanged();
           }

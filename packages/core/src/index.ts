@@ -390,6 +390,13 @@ export interface HeartbeatPayload {
    * every other beat.
    */
   harnesses?: HarnessReport[];
+  /**
+   * A fingerprint of the machine's own pi and OpenCode credential stores
+   * (never their contents). Rides the beat `harnesses` rides, and again
+   * whenever it changed: the hub moves what they hold into accounts each
+   * time it differs from the last one it heard on this connection.
+   */
+  homeStores?: string;
   instances: string[];
   /**
    * Every account of a provider other than Claude's with a store on the

@@ -5,14 +5,16 @@ import {
   mkdir,
   open,
   readFile,
-  rename,
   stat,
   unlink,
 } from "node:fs/promises";
-import { arch, homedir, platform, release } from "node:os";
+import { arch, platform, release } from "node:os";
 import { dirname, extname, join, resolve } from "node:path";
 import { type GeneratedImage, IMAGE_GENERATION_TIMEOUT_MS } from "@cawco/core";
+import { credentialAccountIds } from "@cawco/core/paths";
+import { chatgptBaseUrl, chatgptClaims } from "@cawco/core/usage/chatgpt";
 import { z } from "zod";
+import { freshen, readHeld } from "./provider-accounts";
 
 /** Native Codex's image model and edit-image cap (codex-rs/ext/image-generation/src/tool.rs). */
 const IMAGE_MODEL = "gpt-image-2";
@@ -29,27 +31,18 @@ const requestSchema = z
     quality: z.enum(["auto", "low", "medium", "high"]).default("auto"),
   })
   .strict();
-const oauthSchema = z.object({
-  type: z.literal("oauth"),
-  access: z.string().min(1),
-  refresh: z.string().min(1),
-  expires: z.number(),
-  accountId: z.string().optional(),
-});
-type OAuth = z.infer<typeof oauthSchema>;
-const tokenSchema = z.object({
-  access_token: z.string().min(1),
-  refresh_token: z.string().min(1),
-  expires_in: z.number().optional(),
-});
-/** OpenCode's ChatGPT OAuth client (opencode 1.18 codex plugin), whose login this tool shares. */
-const OPENCODE_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann";
+/** The ChatGPT sign-in a request goes out on: its access token and ChatGPT account. */
+interface ChatgptAuth {
+  access: string;
+  accountId?: string;
+}
 /** Codex's image backend: CHATGPT_CODEX_BASE_URL + images/{generations,edits} (openai/codex codex-api). */
-const CODEX_IMAGES = "https://chatgpt.com/backend-api/codex/images";
+const codexImages = (): string => `${chatgptBaseUrl()}/codex/images`;
+const SIGN_IN =
+  "Run `opencode auth login` and choose OpenAI → ChatGPT (CawCo moves that login into a ChatGPT account), or add a ChatGPT account in Configure → Accounts.";
 const SIZE = /^(\d+)x(\d+)$/;
 const PNG = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 const activeOutputs = new Set<string>();
-let refreshing: Promise<OAuth> | undefined;
 
 async function requireNewOutput(output: string): Promise<void> {
   try {
@@ -125,95 +118,67 @@ function imageMime(bytes: Buffer): string {
   );
 }
 
-function authFile(): string {
-  const dataRoot =
-    process.env.XDG_DATA_HOME ?? join(homedir(), ".local", "share");
-  return join(dataRoot, "opencode", "auth.json");
-}
-
-async function readAuth(): Promise<{
-  file: Record<string, unknown>;
-  openai: OAuth;
-}> {
-  let data: unknown;
-  try {
-    data = JSON.parse(await readFile(authFile(), "utf8"));
-  } catch (cause) {
-    throw new Error(
-      "ChatGPT subscription login is unavailable on this machine. Run `opencode auth login` and choose OpenAI → ChatGPT. API keys are not accepted.",
-      { cause }
-    );
-  }
-  const result = z
-    .object({ openai: oauthSchema })
-    .passthrough()
-    .safeParse(data);
-  if (!result.success) {
-    throw new Error(
-      "ChatGPT OAuth is required. Run `opencode auth login` and choose OpenAI → ChatGPT. This tool never uses an OpenAI API key."
-    );
-  }
-  return { file: result.data, openai: result.data.openai };
+/**
+ * The CawCo accounts on this machine holding a ChatGPT sign-in (OAuth only:
+ * an OpenAI key is never one), a paid plan's first: a free plan cannot make
+ * images. The machine's own OpenCode login is one of them once CawCo has
+ * moved it in.
+ */
+function chatgptAccounts(): string[] {
+  const held = credentialAccountIds().flatMap((accountId) => {
+    const one = readHeld(accountId);
+    return one?.provider === "openai-codex" && one.credential.type === "oauth"
+      ? [
+          {
+            accountId,
+            free: chatgptClaims(one.credential.access).plan === "free",
+          },
+        ]
+      : [];
+  });
+  return [
+    ...held.filter((one) => !one.free),
+    ...held.filter((one) => one.free),
+  ].map((one) => one.accountId);
 }
 
 /**
- * Renews an expired access token the way OpenCode's codex plugin does, and
- * stores the rotated tokens back in OpenCode's auth.json so OpenCode keeps a
- * valid refresh token.
+ * The sign-in a request goes out on, from the account's own store, renewed
+ * first when it is near its expiry by the account machinery's one refresher
+ * ({@link freshen}: pi-ai's ChatGPT refresh, on OpenCode's own client id
+ * `app_EMoamEEZ73f0CkXaXp7hrann`, pi-ai auth/oauth/openai-codex.js 18), which
+ * writes the rotated tokens back to that store and the account's OpenCode
+ * store. No second copy of the grant is kept or refreshed here.
  */
-async function refreshAuth(): Promise<OAuth> {
-  // Re-read: OpenCode may have rotated the tokens since the caller looked.
-  const { file, openai } = await readAuth();
-  if (openai.expires > Date.now()) {
-    return openai;
-  }
-  const response = await fetch("https://auth.openai.com/oauth/token", {
-    method: "POST",
-    redirect: "error",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "refresh_token",
-      refresh_token: openai.refresh,
-      client_id: OPENCODE_CLIENT_ID,
-    }).toString(),
-  });
-  if (!response.ok) {
+async function subscriptionAuth(): Promise<ChatgptAuth> {
+  const [accountId] = chatgptAccounts();
+  if (!accountId) {
     throw new Error(
-      `ChatGPT login refresh returned HTTP ${response.status}: ${await errorDetail(response)} Run \`opencode auth login\` and choose OpenAI → ChatGPT.`
+      `No ChatGPT subscription login is held by a CawCo account on this machine. ${SIGN_IN} API keys are not accepted.`
     );
   }
-  const tokens = tokenSchema.parse(await response.json());
-  const renewed: OAuth = {
-    type: "oauth",
-    access: tokens.access_token,
-    refresh: tokens.refresh_token,
-    expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
-    ...(openai.accountId ? { accountId: openai.accountId } : {}),
-  };
-  const target = authFile();
-  const temporary = join(dirname(target), `.auth-${randomUUID()}.tmp`);
-  const handle = await open(temporary, "wx", 0o600);
   try {
-    await handle.writeFile(
-      JSON.stringify({ ...file, openai: renewed }, null, 2)
+    await freshen(accountId);
+  } catch (cause) {
+    throw new Error(
+      `The ChatGPT login could not be renewed: ${cause instanceof Error ? cause.message : String(cause)} ${SIGN_IN}`,
+      { cause }
     );
-    await handle.sync();
-  } finally {
-    await handle.close();
   }
-  await rename(temporary, target);
-  return renewed;
-}
-
-async function subscriptionAuth(): Promise<OAuth> {
-  const { openai } = await readAuth();
-  if (openai.expires > Date.now()) {
-    return openai;
+  const held = readHeld(accountId);
+  if (held?.credential.type !== "oauth") {
+    throw new Error(
+      `The ChatGPT account's sign-in is gone from this machine. ${SIGN_IN}`
+    );
   }
-  refreshing ??= refreshAuth().finally(() => {
-    refreshing = undefined;
-  });
-  return await refreshing;
+  const { credential } = held;
+  const accountIdClaim =
+    (typeof credential.accountId === "string" ? credential.accountId : null) ??
+    chatgptClaims(credential.access).accountId;
+  return {
+    access: credential.access,
+    ...(accountIdClaim ? { accountId: accountIdClaim } : {}),
+  };
 }
 
 /** What the access token says about its ChatGPT account; never the token itself. */
@@ -319,12 +284,12 @@ async function referenceImages(
  * endpoint/images.rs): generations for text alone, edits when images are given.
  */
 async function requestImage(
-  auth: OAuth,
+  auth: ChatgptAuth,
   body: { images?: { image_url: string }[] } & Record<string, unknown>
 ): Promise<Buffer> {
   const account = accountFacts(auth.access);
   const response = await fetch(
-    `${CODEX_IMAGES}/${body.images ? "edits" : "generations"}`,
+    `${codexImages()}/${body.images ? "edits" : "generations"}`,
     {
       method: "POST",
       redirect: "error",

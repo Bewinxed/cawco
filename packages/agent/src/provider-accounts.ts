@@ -621,6 +621,25 @@ export const forgetProviderAccount = async (
 const piStorePath = (): string => join(getAgentDir(), "auth.json");
 const opencodeStorePath = (): string => join(opencodeDataDir(), "auth.json");
 
+/**
+ * A fingerprint of pi's and OpenCode's own stores as they are on disk now:
+ * it changes whenever a login is made, refreshed or moved out there, so the
+ * hub moves a login made under a connected machine at once
+ * ({@link HeartbeatPayload.homeStores}). Never the stores' contents.
+ */
+export const homeStoresStamp = (): string => {
+  const hash = createHash("sha256");
+  for (const path of [piStorePath(), opencodeStorePath()]) {
+    try {
+      hash.update(readFileSync(path));
+    } catch {
+      hash.update("absent");
+    }
+    hash.update("\u0000");
+  }
+  return hash.digest("hex").slice(0, 16);
+};
+
 type Json = Record<string, Record<string, unknown>>;
 
 const readJson = (path: string): Json => {
