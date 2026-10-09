@@ -11,7 +11,8 @@
    *
    * A wait counts down to its reset and, once that has passed, says the
    * session went on there; a move counts down to the old account's reset in
-   * its second line. The clock ticks only while something on the row counts.
+   * its second line, as a stop (Caw off) does to its own account's. The
+   * clock ticks only while something on the row counts.
    */
   import { accountMoveWords } from "@cawco/core";
   import IconTransfer from "~icons/solar/transfer-horizontal-bold-duotone";
@@ -33,6 +34,7 @@
       case "waiting":
         return row.move.until;
       case "moved":
+      case "stopped":
         return row.move.resetsAt;
       default:
         return null;
@@ -58,6 +60,7 @@
   const hue = $derived.by(() => {
     switch (row.move.kind) {
       case "waiting":
+      case "stopped":
         return row.move.account.hue;
       case "unmoved":
         return row.move.from.hue;

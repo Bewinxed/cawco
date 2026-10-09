@@ -615,6 +615,52 @@ export const createAtLimit = (ports: AtLimitPorts) => {
   };
 
   /**
+   * Whether `row` stays at its limit with nothing carrying it on: a work
+   * item's session in a project whose Caw is off, as with Caw off nothing
+   * wakes a model for the project (Projects §5.3), neither a move to a free
+   * account nor a resume at the reset. Its hold goes, and its transcript
+   * says so once per limit: the line stands in for a wait written while Caw
+   * was on, which would otherwise read as carried on at the reset.
+   */
+  const stays = (row: LimitRow, current: Account): boolean => {
+    const project = row.projectId ? db.project(row.projectId) : undefined;
+    if (!(row.workItemId && project && !project.caw)) {
+      return false;
+    }
+    const now = Date.now();
+    const resetsAt = refusedUntil(
+      db.accounts.bench(now),
+      readingOf(current.id),
+      current.id,
+      row.model,
+      now
+    );
+    const held = db.atLimit.hold(row.id);
+    db.atLimit.dropHold(row.id);
+    const last = db.atLimit.events([row.id]).at(-1)?.move;
+    if (
+      !(
+        last?.kind === "stopped" &&
+        last.account.id === current.id &&
+        last.resetsAt === resetsAt
+      )
+    ) {
+      ports.note(row, {
+        kind: "stopped",
+        account: namedAccount(current),
+        resetsAt,
+      });
+      console.info(
+        `[at-limit] ${row.id}: ${project.name}'s Caw is off, so nothing carries it on past ${accountName(current)}'s limit`
+      );
+    }
+    if (held) {
+      ports.changed();
+    }
+    return true;
+  };
+
+  /**
    * One held session: past its reset, it carries on where it is once it is
    * between turns; before, another account may have come free for it.
    */
@@ -623,6 +669,9 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     const current = db.accounts.get(held.accountId);
     if (over(row) || !row || !current) {
       db.atLimit.dropHold(held.instanceId);
+      return;
+    }
+    if (stays(row, current)) {
       return;
     }
     if (held.until === null || held.until > now) {
@@ -714,7 +763,9 @@ export const createAtLimit = (ports: AtLimitPorts) => {
         );
         return;
       }
-      await act(row, current);
+      if (!stays(row, current)) {
+        await act(row, current);
+      }
     },
     /** A turn of `instanceId` ended as any turn does: maybe write a summary ahead of the limit. */
     async turnEnded(instanceId: string): Promise<void> {

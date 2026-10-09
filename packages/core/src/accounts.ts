@@ -844,6 +844,17 @@ export type AccountMove =
       preparedAtPct: number | null;
     }
   | {
+      /**
+       * A work item's session whose project has Caw off: nothing wakes a
+       * model there, so nothing carries it on past `account`'s limit,
+       * neither a move nor a resume at the reset. A person sends it on.
+       */
+      kind: "stopped";
+      account: NamedAccount;
+      /** When that limit resets, epoch ms; null when nothing said. */
+      resetsAt: number | null;
+    }
+  | {
       /** Continuing it on `to` failed at `step`: it is the one session running, still on `from`. */
       kind: "unmoved";
       from: NamedAccount;
@@ -906,6 +917,21 @@ const WAIT_WHY: Record<WaitReason, (tokens: string) => string> = {
     `The reset comes sooner than re-reading ${tokens} elsewhere is worth`,
 };
 
+/** A stop (Caw off) in words at `now`: it counts down to its account's reset, then asks for a message. */
+const stoppedWords = (
+  move: Extract<AccountMove, { kind: "stopped" }>,
+  now: number
+): { line: string; detail: string } => {
+  const left = move.resetsAt === null ? 0 : move.resetsAt - now;
+  return {
+    line: `Stopped at ${move.account.name}'s limit · Caw is off`,
+    detail:
+      left > 0
+        ? `Nothing sends it on while Caw is off · ${move.account.name} resets in ${spanWords(left)}`
+        : "Nothing sends it on while Caw is off · send it a message to carry on",
+  };
+};
+
 /**
  * An account line in words at `now`: its line, and the second line drawn on
  * hover, focus, or at wide widths. A wait counts down to its reset and, once
@@ -940,6 +966,8 @@ export const accountMoveWords = (
         detail: WAIT_WHY[move.why](tokenWords(move.tokens)),
       };
     }
+    case "stopped":
+      return stoppedWords(move, now);
     case "unmoved":
       return move.step === "end"
         ? {

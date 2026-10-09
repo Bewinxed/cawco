@@ -27270,6 +27270,33 @@
                 "type": "object",
                 "properties": {
                   "kind": {
+                    "description": "A work item's session whose project has Caw off: nothing wakes a\nmodel there, so nothing carries it on past `account`'s limit,\nneither a move nor a resume at the reset. A person sends it on.",
+                    "type": "string",
+                    "enum": [
+                      "stopped"
+                    ]
+                  },
+                  "account": {
+                    "$ref": "#/components/schemas/NamedAccount"
+                  },
+                  "resetsAt": {
+                    "description": "When that limit resets, epoch ms; null when nothing said.",
+                    "type": [
+                      "null",
+                      "number"
+                    ]
+                  }
+                },
+                "required": [
+                  "account",
+                  "kind",
+                  "resetsAt"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
                     "description": "Continuing it on `to` failed at `step`: it is the one session running, still on `from`.",
                     "type": "string",
                     "enum": [
@@ -32237,6 +32264,33 @@
                   "to",
                   "tokens",
                   "writtenOn"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "description": "A work item's session whose project has Caw off: nothing wakes a\nmodel there, so nothing carries it on past `account`'s limit,\nneither a move nor a resume at the reset. A person sends it on.",
+                    "type": "string",
+                    "enum": [
+                      "stopped"
+                    ]
+                  },
+                  "account": {
+                    "$ref": "#/components/schemas/NamedAccount"
+                  },
+                  "resetsAt": {
+                    "description": "When that limit resets, epoch ms; null when nothing said.",
+                    "type": [
+                      "null",
+                      "number"
+                    ]
+                  }
+                },
+                "required": [
+                  "account",
+                  "kind",
+                  "resetsAt"
                 ]
               },
               {
