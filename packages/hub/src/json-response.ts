@@ -70,7 +70,9 @@ export const streamLargeJson = ({
 }): Response | undefined => {
   if (
     !isPlainJson(responseValue) ||
-    jsonSizeEstimate(responseValue) <= STREAM_ABOVE_CHARS
+    // Walks no further than it takes to know: at most a part's worth.
+    jsonSizeEstimate(responseValue, STREAM_ABOVE_CHARS + 1) <=
+      STREAM_ABOVE_CHARS
   ) {
     return;
   }

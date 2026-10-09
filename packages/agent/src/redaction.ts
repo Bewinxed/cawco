@@ -24,6 +24,7 @@ import {
   textPieces,
 } from "@cawco/core/json-stream";
 import { sessionIdentityDir } from "@cawco/core/paths";
+import { WIRE_PART_CHARS } from "@cawco/core/wire";
 import { delegationHubUrl } from "./delegation";
 
 export const REDACTED = "[cawco credential]";
@@ -237,7 +238,8 @@ export const outbound = (envelope: Envelope): OutboundMessage[] => {
   if (!(key && delta)) {
     out.push({
       pieces: redactPieces(encodeJson(envelope)),
-      chars: jsonSizeEstimate(envelope),
+      // Counted against the outbox's bound up to a part's worth (wire.ts).
+      chars: jsonSizeEstimate(envelope, WIRE_PART_CHARS),
     });
     return out;
   }

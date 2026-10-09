@@ -501,12 +501,19 @@ export class Outbox {
 
   /**
    * Queues a message, written as JSON and cut into frames as it goes out. It
-   * is counted against the bound by an estimate of its size
-   * ({@link jsonSizeEstimate}), a walk far cheaper than writing it.
+   * is counted against the bound by its size up to a part's worth
+   * ({@link jsonSizeEstimate}, which walks no further): a peer that stops
+   * reading is closed once it owes that many messages' worth, and one large
+   * message in flight is counted as a part, its text written only as the
+   * socket takes it.
    */
   send(value: unknown): void {
     this.#enqueue(
-      new Outgoing(encodeJson(value), jsonSizeEstimate(value), !this.#parts)
+      new Outgoing(
+        encodeJson(value),
+        jsonSizeEstimate(value, WIRE_PART_CHARS),
+        !this.#parts
+      )
     );
   }
 

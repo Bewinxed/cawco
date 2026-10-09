@@ -207,39 +207,60 @@ function* walk(root: unknown): Generator<string, void, undefined> {
 }
 
 /**
- * About how many characters `value`'s JSON takes, without writing it: what
- * an outbox counts against its bound for a value it has not encoded yet.
- * A walk of the value's nodes, far cheaper than encoding it.
+ * About how many characters `value`'s JSON takes, without writing it, up to
+ * `cap`: the walk stops once it has counted that many, so asking whether a
+ * value is large costs no more than walking `cap` characters of it (a whole
+ * walk of 2.5 million rows held the loop for most of a second, measured).
+ * A walk of the value's nodes, far cheaper than encoding them.
  */
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one iterative walk over every node kind; recursion would cost the stack depth the encoder avoids
-export const jsonSizeEstimate = (value: unknown): number => {
+export const jsonSizeEstimate = (
+  value: unknown,
+  cap = Number.POSITIVE_INFINITY
+): number => {
   let size = 0;
-  const stack: unknown[] = [value];
+  // The containers being walked, each with the next member to count.
+  const stack: {
+    at: number;
+    keys: string[] | undefined;
+    members: unknown[];
+  }[] = [];
   const seen = new Set<object>();
-  while (stack.length > 0) {
-    const item = stack.pop();
+  const count = (item: unknown): void => {
     if (typeof item === "string") {
       size += item.length + 2;
-    } else if (typeof item === "object" && item !== null) {
-      if (seen.has(item)) {
-        continue;
-      }
-      seen.add(item);
-      size += 2;
-      if (Array.isArray(item)) {
-        for (const child of item) {
-          stack.push(child);
-          size += 1;
-        }
-      } else {
-        for (const [key, child] of Object.entries(item)) {
-          stack.push(child);
-          size += key.length + 4;
-        }
-      }
-    } else {
-      size += 6;
+      return;
     }
+    if (typeof item !== "object" || item === null) {
+      size += 6;
+      return;
+    }
+    if (seen.has(item)) {
+      return;
+    }
+    seen.add(item);
+    size += 2;
+    if (Array.isArray(item)) {
+      stack.push({ members: item, keys: undefined, at: 0 });
+    } else {
+      const keys = Object.keys(item);
+      stack.push({
+        members: keys.map((key) => (item as Record<string, unknown>)[key]),
+        keys,
+        at: 0,
+      });
+    }
+  };
+  count(value);
+  while (stack.length > 0 && size < cap) {
+    const top = stack.at(-1) as (typeof stack)[number];
+    if (top.at >= top.members.length) {
+      stack.pop();
+      continue;
+    }
+    const key = top.keys?.[top.at];
+    size += key === undefined ? 1 : key.length + 4;
+    count(top.members[top.at]);
+    top.at += 1;
   }
   return size;
 };
