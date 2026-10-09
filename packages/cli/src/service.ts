@@ -775,6 +775,12 @@ const devFor = (
         "--host",
         DASHBOARD_HOST,
       ],
+      // A vite server reads its hub from this variable alone and refuses to
+      // start without it (vite.config.ts). This unit is the one vite server
+      // meant to drive the machine's own hub, so it names that hub here.
+      environment: {
+        [CAWCO_ENV.devHubUrl]: readEnv(CAWCO_ENV.hubUrl) ?? hubOrigin(),
+      },
       // vite binds its own port, so the dev flavour has no socket to wait on.
       socket: undefined,
       after: [unitName("hub")],
@@ -822,6 +828,7 @@ const specFor = (
   return {
     ...base,
     ...dev[id],
+    environment: { ...base.environment, ...dev[id]?.environment },
     mode,
     description: `${base.description} (dev)`,
   };

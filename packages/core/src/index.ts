@@ -1188,6 +1188,14 @@ export const CAWCO_SCRATCH_TAG = "cawco-scratch";
  */
 export const CAWCO_ENV = {
   hubUrl: "CAWCO_HUB_URL",
+  /**
+   * The hub the dashboard's `vite dev` server talks to, and the only one: a
+   * dev server reads no other variable and has no default, and refuses to
+   * start without it. The fleet exports `CAWCO_HUB_URL` into every session's
+   * shell and never this, so a leaf's test pages reach the live hub only
+   * when the leaf names it here on purpose. The `--dev` service unit does.
+   */
+  devHubUrl: "CAWCO_DEV_HUB_URL",
   hubPort: "CAWCO_HUB_PORT",
   previewPort: "CAWCO_PREVIEW_PORT",
   machineId: "CAWCO_MACHINE_ID",

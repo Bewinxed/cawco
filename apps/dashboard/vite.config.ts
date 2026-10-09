@@ -49,7 +49,33 @@ function previewMatch(req: http.IncomingMessage): {
   return null;
 }
 
-const HUB_URL = new URL(process.env.CAWCO_HUB_URL || "http://localhost:3456");
+/**
+ * The hub a vite server (`vite dev`, `vite preview`) talks to: the one named in
+ * `CAWCO_DEV_HUB_URL`, with no default. The fleet exports the live hub as
+ * `CAWCO_HUB_URL` into every session's shell, and a leaf's dev server that
+ * fell back on it, or on `localhost:3456`, put its test pages on the live hub:
+ * a test script's Escape there denied the owner's parked question. So a vite
+ * server never reads `CAWCO_HUB_URL`, and refuses to start without its own.
+ *
+ * The `/api` route reads `CAWCO_HUB_URL`, in dev (SSR in this process) and in
+ * preview (the built server, imported into this process) alike, so this
+ * process's copy is set to the dev hub before either loads. The production
+ * server is serve.js under node, which never loads this file.
+ *
+ * The refusal is the servers' own (`hubProxy`'s hooks), not the config's:
+ * svelte-check loads this config as a `serve` too, and starts no server.
+ */
+const DEV_HUB_ENV = "CAWCO_DEV_HUB_URL";
+const DEV_HUB = process.env[DEV_HUB_ENV];
+const devHub = (): URL => {
+  if (!DEV_HUB) {
+    console.error(
+      `[cawco] a vite server needs ${DEV_HUB_ENV}, the hub it talks to (e.g. ${DEV_HUB_ENV}=http://localhost:4456 bun run dev); it never reads CAWCO_HUB_URL, which in a session's shell is the live hub.`
+    );
+    process.exit(1);
+  }
+  return new URL(DEV_HUB);
+};
 
 /**
  * The faces the first paint sets its text in: Figtree's and JetBrains
@@ -80,7 +106,11 @@ const INLINE_FACES =
  */
 const hubProxy = (): Plugin => ({
   name: "cawco:hub-proxy",
+  configurePreviewServer() {
+    devHub();
+  },
   configureServer(server) {
+    const HUB_URL = devHub();
     const hubPort = Number(HUB_URL.port || 80);
     const pvPort = Number(process.env.CAWCO_PREVIEW_PORT || hubPort + 1);
 
@@ -292,80 +322,86 @@ const streamdownOverlayOwn = (): Plugin => ({
   },
 });
 
-export default defineConfig({
-  plugins: [
-    calendarThemeOff(),
-    streamdownOverlayOwn(),
-    hubProxy(),
-    runningVersion(),
-    tailwindcss(),
-    sveltekit({
-      preprocess: vitePreprocess(),
-      compilerOptions: { experimental: { async: true } },
-      adapter: adapter({ out: ".build-next" }),
-      experimental: { remoteFunctions: true },
-      version: { name: BUILD_VERSION },
-    }),
-    Icons({ compiler: "svelte" }),
-  ],
-  server: {
-    port: 3000,
-    host: true,
-    // The dashboard is reached from the other machines on the tailnet, by name.
-    // Vite refuses an unknown Host header with a 403, so the tailnet suffix is
-    // named here; `.ts.net` covers this tailnet's MagicDNS names without
-    // pinning the machine's own hostname into the repo.
-    allowedHosts: [".ts.net", "localhost"],
-    // The hub's live socket. REST /api is handled by SvelteKit's own route
-    // (routes/api/[...path]).
-    proxy: {
-      "/ws": { target: HUB_URL.origin, ws: true },
-    },
-  },
-  /**
-   * The CSS floor, for the minifier. Vite's own default target predates
-   * light-dark(), and Lightning CSS lowers what a target lacks: light-dark()
-   * would become variables keyed on a `prefers-color-scheme` media query,
-   * which ignores the app's theme class and breaks every relative colour
-   * built on a token. These are the releases where the stylesheet's newest
-   * features ship natively: @scope (Firefox 146) and a relative colour whose
-   * origin is light-dark() or currentColor (Chrome 131, Safari 18). The JS
-   * target stays Vite's default.
-   */
-  build: {
-    cssTarget: ["chrome131", "edge131", "firefox146", "safari18", "ios18"],
-    assetsInlineLimit: (file) => INLINE_FACES.test(file) || undefined,
-  },
-  optimizeDeps: {
-    // svelte-streamdown is compiled like the app's own components, so its
-    // stylesheet passes through streamdownOverlayOwn in dev as in the build:
-    // prebundled, its styles are injected from the bundle's JS instead.
-    exclude: ["@xyflow/svelte", "svelte-streamdown"],
-  },
-  ssr: {
-    // Both ship raw .svelte sources; dev SSR must compile them, not require them.
-    // These publish raw .svelte sources, which dev SSR must compile rather
-    // than hand to Node — externalizing any of them ends in
-    // ERR_UNKNOWN_FILE_EXTENSION on the first server-rendered request.
-    //
-    // The two @atlaskit packages are here for the production server, which
-    // runs under node: their subpaths (`…/combine`, `…/util/…`) are
-    // directories holding their own package.json, and node's ESM resolver
-    // refuses a directory import (ERR_UNSUPPORTED_DIR_IMPORT) where vite's
-    // resolver follows it. Bundled, the server never resolves them at all.
-    noExternal: [
-      "tw-animate-css",
-      "shadcn-svelte",
-      "@fontsource-variable/figtree",
-      "@fontsource-variable/jetbrains-mono",
-      "@fontsource/fredoka",
-      "@fontsource-variable/nunito",
-      "@xyflow/svelte",
-      "virtua",
-      "@hugeicons/svelte",
-      "torph",
-      "@atlaskit/pragmatic-drag-and-drop",
-      "@atlaskit/pragmatic-drag-and-drop-hitbox",
+export default defineConfig(({ command }) => {
+  // A build talks to no hub; only a vite server does, and only to the dev hub.
+  if (command === "serve" && DEV_HUB) {
+    process.env.CAWCO_HUB_URL = DEV_HUB;
+  }
+  return {
+    plugins: [
+      calendarThemeOff(),
+      streamdownOverlayOwn(),
+      hubProxy(),
+      runningVersion(),
+      tailwindcss(),
+      sveltekit({
+        preprocess: vitePreprocess(),
+        compilerOptions: { experimental: { async: true } },
+        adapter: adapter({ out: ".build-next" }),
+        experimental: { remoteFunctions: true },
+        version: { name: BUILD_VERSION },
+      }),
+      Icons({ compiler: "svelte" }),
     ],
-  },
+    server: {
+      port: 3000,
+      host: true,
+      // The dashboard is reached from the other machines on the tailnet, by name.
+      // Vite refuses an unknown Host header with a 403, so the tailnet suffix is
+      // named here; `.ts.net` covers this tailnet's MagicDNS names without
+      // pinning the machine's own hostname into the repo.
+      allowedHosts: [".ts.net", "localhost"],
+      // The hub's live socket. REST /api is handled by SvelteKit's own route
+      // (routes/api/[...path]).
+      proxy: DEV_HUB
+        ? { "/ws": { target: new URL(DEV_HUB).origin, ws: true } }
+        : undefined,
+    },
+    /**
+     * The CSS floor, for the minifier. Vite's own default target predates
+     * light-dark(), and Lightning CSS lowers what a target lacks: light-dark()
+     * would become variables keyed on a `prefers-color-scheme` media query,
+     * which ignores the app's theme class and breaks every relative colour
+     * built on a token. These are the releases where the stylesheet's newest
+     * features ship natively: @scope (Firefox 146) and a relative colour whose
+     * origin is light-dark() or currentColor (Chrome 131, Safari 18). The JS
+     * target stays Vite's default.
+     */
+    build: {
+      cssTarget: ["chrome131", "edge131", "firefox146", "safari18", "ios18"],
+      assetsInlineLimit: (file) => INLINE_FACES.test(file) || undefined,
+    },
+    optimizeDeps: {
+      // svelte-streamdown is compiled like the app's own components, so its
+      // stylesheet passes through streamdownOverlayOwn in dev as in the build:
+      // prebundled, its styles are injected from the bundle's JS instead.
+      exclude: ["@xyflow/svelte", "svelte-streamdown"],
+    },
+    ssr: {
+      // Both ship raw .svelte sources; dev SSR must compile them, not require them.
+      // These publish raw .svelte sources, which dev SSR must compile rather
+      // than hand to Node — externalizing any of them ends in
+      // ERR_UNKNOWN_FILE_EXTENSION on the first server-rendered request.
+      //
+      // The two @atlaskit packages are here for the production server, which
+      // runs under node: their subpaths (`…/combine`, `…/util/…`) are
+      // directories holding their own package.json, and node's ESM resolver
+      // refuses a directory import (ERR_UNSUPPORTED_DIR_IMPORT) where vite's
+      // resolver follows it. Bundled, the server never resolves them at all.
+      noExternal: [
+        "tw-animate-css",
+        "shadcn-svelte",
+        "@fontsource-variable/figtree",
+        "@fontsource-variable/jetbrains-mono",
+        "@fontsource/fredoka",
+        "@fontsource-variable/nunito",
+        "@xyflow/svelte",
+        "virtua",
+        "@hugeicons/svelte",
+        "torph",
+        "@atlaskit/pragmatic-drag-and-drop",
+        "@atlaskit/pragmatic-drag-and-drop-hitbox",
+      ],
+    },
+  };
 });

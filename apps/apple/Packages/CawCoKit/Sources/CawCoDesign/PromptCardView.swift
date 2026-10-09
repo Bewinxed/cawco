@@ -307,14 +307,11 @@ public final class PromptCardView: UIView {
     }
 
     /// The keys the card advertises: a digit picks the option wearing it,
-    /// Return sends once every question is answered, Escape dismisses.
+    /// Return sends once every question is answered. Escape is never one of
+    /// them: a question is put down only by its own Dismiss button.
     @discardableResult
     public func key(_ input: String) -> Bool {
         guard answerable else { return false }
-        if input == UIKeyCommand.inputEscape {
-            choose(.deny)
-            return true
-        }
         if ask.isQuestion, let digit = Int(input), (1 ... 9).contains(digit),
            current < ask.questions.count, digit <= ask.questions[current].options.count {
             toggle(current, ask.questions[current].options[digit - 1].label)

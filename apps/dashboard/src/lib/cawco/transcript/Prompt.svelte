@@ -50,7 +50,7 @@
     permissionAnswer,
   } from "../client.svelte";
   import { suggestedRule } from "../permission-summary";
-  import { questionAnswer } from "../question";
+  import { questionAnswer, questionDismissal } from "../question";
 
   let {
     request,
@@ -320,23 +320,31 @@
 
   /**
    * The keys the card already advertises: a digit picks the option wearing that
-   * keycap, Enter sends once every question has an answer, Escape dismisses.
+   * keycap, Enter sends once every question has an answer. They are heard only
+   * from inside the card's own pane (its workspace group, `[data-leaf]`): a key
+   * pressed with focus elsewhere, or on nothing at all, is not meant for it.
+   * Escape is never one of them: it closes menus, dialogs and peeks all over
+   * the page, and a question is put down only by its own Dismiss button. A
+   * test script's Escape on a page with nothing focused once dismissed the
+   * owner's parked question through here.
+   *
    * They are inert while the reader is writing (`isTyping`) — which is what
    * lets "2" mean an option here and a character in the composer — inert under
    * a modifier, so browser and OS chords still reach their owners, and inert
    * whenever the buttons are, so the `answerable` latch is the single gate on
    * answering: an answer cannot be keyed in twice, or into a dead socket.
    */
+  let card = $state<HTMLElement | null>(null);
+  const inPane = (target: EventTarget | null): boolean => {
+    const pane = card?.closest("[data-leaf]");
+    return !!pane && target instanceof Node && pane.contains(target);
+  };
+
   function handleKeydown(event: KeyboardEvent): void {
-    if (!(ownsKeys && answerable)) {
+    if (!(ownsKeys && answerable && inPane(event.target))) {
       return;
     }
     if (event.metaKey || event.ctrlKey || event.altKey || isTyping()) {
-      return;
-    }
-    if (event.key === "Escape") {
-      event.preventDefault();
-      answer("deny");
       return;
     }
     if (event.key >= "1" && event.key <= "9") {
@@ -368,6 +376,15 @@
     }
     pressed = "answer";
     commandId = onanswer(questionAnswer(input, answers));
+  }
+
+  /** The Dismiss button, and only it: the question is put down, in the words iOS sends. */
+  function dismissQuestion(): void {
+    if (!answerable) {
+      return;
+    }
+    pressed = "deny";
+    commandId = onanswer(questionDismissal);
   }
 
   /* shadcn <Button>, dressed in DESIGN.md tokens so nothing reads as stock
@@ -430,6 +447,7 @@
     ? `Question from ${asker}`
     : `Permission request from ${presentation.asker}`}
   class="hitl"
+  bind:this={card}
   class:shown={shown}
 >
   {#if questions}
@@ -508,7 +526,7 @@
           disabled={disabledOf("deny")}
           failed={failedOf("deny")}
           label="Dismiss"
-          onclick={() => answer("deny")}
+          onclick={dismissQuestion}
           pending={pendingOf("deny")}
           pendingLabel="Dismissing…"
           variant="outline"

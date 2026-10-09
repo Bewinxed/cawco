@@ -21,6 +21,10 @@ const PARTIAL_CONTENT = 206;
  * http(s) and the trailing `/ws` path dropped. Without this the api route did
  * `fetch("ws://…/ws/api/agents")`, which fetch cannot dial (ws scheme), and
  * every load returned "Failed to connect to hub server".
+ *
+ * Under `vite dev` or `vite preview` this process's CAWCO_HUB_URL is the
+ * required `CAWCO_DEV_HUB_URL`, set by vite.config.ts before this module
+ * loads, so the default below is reached only by the production server.
  */
 const HUB_URL = (() => {
   const raw = readEnv(CAWCO_ENV.hubUrl) || "http://localhost:3456";
