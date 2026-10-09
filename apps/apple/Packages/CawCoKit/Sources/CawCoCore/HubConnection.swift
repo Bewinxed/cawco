@@ -570,6 +570,10 @@ public final class HubConnection {
 
     /// The mutation and its list refresh finish together: every rail reads
     /// the hub's project list before the caller dismisses its form or menu.
+    /// The answer is the project the folder belongs to, made or joined: a
+    /// folder whose remote a project already has joins that project under its
+    /// own name, and `place` is the folder asked about, which need not be on
+    /// that project's primary machine.
     public func createProject(name: String, cwd: String, machineId: String) async throws -> Components.Schemas.PostApiProjects200 {
         let api = try self.api
         let response = try await api.projects.create(.init(body: .json(.init(name: name, machineId: machineId, cwd: cwd))))
@@ -587,6 +591,7 @@ public final class HubConnection {
             let said = await Wire.words(payload.body)
             throw ControlError(message: said.map { "Could not save this project — \($0)" } ?? "Could not save this project — the hub answered \(statusCode). Try again.")
         }
+        log.notice("project \(created.id, privacy: .public) \"\(created.name, privacy: .public)\": place \(created.place.id, privacy: .public) on \(created.place.machineId, privacy: .public) at \(created.place.path, privacy: .public), placeAdded \(created.placeAdded), primary \(created.place.isPrimary)")
         fleet.projects = try await api.projects.list().ok.body.json
         return created
     }

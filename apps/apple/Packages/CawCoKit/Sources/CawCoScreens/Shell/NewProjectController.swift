@@ -21,9 +21,13 @@ final class NewProjectController: KitPopoverController, UITextFieldDelegate {
     private let stack = UIStackView()
     private var machineId = ""
     private var saving = false
+    /// The hub's answer once the popover has closed: the project the folder
+    /// belongs to (made, or the one it joined) and the place it holds there.
+    private let onCreated: (Components.Schemas.PostApiProjects200) -> Void
 
-    init(hub: HubConnection) {
+    init(hub: HubConnection, onCreated: @escaping (Components.Schemas.PostApiProjects200) -> Void) {
         self.hub = hub
+        self.onCreated = onCreated
         super.init(material: true)
     }
 
@@ -181,8 +185,8 @@ final class NewProjectController: KitPopoverController, UITextFieldDelegate {
         let name = (nameField.text ?? "").trimmingCharacters(in: .whitespaces)
         Task { @MainActor in
             do {
-                _ = try await hub.createProject(name: name.isEmpty ? Self.leaf(dir) : name, cwd: dir, machineId: machineId)
-                dismiss(animated: true)
+                let created = try await hub.createProject(name: name.isEmpty ? Self.leaf(dir) : name, cwd: dir, machineId: machineId)
+                dismiss(animated: true) { [onCreated] in onCreated(created) }
             } catch {
                 saving = false
                 create.configuration?.showsActivityIndicator = false

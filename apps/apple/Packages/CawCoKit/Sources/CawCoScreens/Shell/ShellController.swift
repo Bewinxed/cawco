@@ -1564,9 +1564,17 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         return flow
     }()
 
-    /// NewProjectPopover: hung off the rail's plus, wherever the rail is.
+    /// NewProjectPopover: hung off the rail's plus, wherever the rail is. The
+    /// project the hub answers with, made or joined, opens in the rail and on
+    /// its page, under the hub's name for it: a folder that joined a project
+    /// shows that project, wherever its primary place is.
     func newProject(from source: UIView) {
-        KitPopover.present(NewProjectController(hub: hub), from: source, in: railSheet ?? self)
+        let form = NewProjectController(hub: hub) { [weak self] created in
+            RailPrefs.shared.setCollapsed(created.id, false)
+            self?.rail.requestRefresh()
+            self?.go(.project(created.id))
+        }
+        KitPopover.present(form, from: source, in: railSheet ?? self)
     }
 
     /// A task's sheet over its project's page (a `task` or `attempt` push):
