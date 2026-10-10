@@ -376,6 +376,10 @@ public final class PromptCardView: UIView, UIGestureRecognizerDelegate {
            let next = ask.questions.firstIndex(where: { (picks[$0.question] ?? []).isEmpty }) {
             current = next
         }
+        #if DEBUG
+        // What a tap picked, for the same simulator pass.
+        Self.layoutLog.notice("pick q=\(index + 1, privacy: .public) \"\(label, privacy: .public)\" answered=\(self.allAnswered, privacy: .public)")
+        #endif
         render()
     }
 
