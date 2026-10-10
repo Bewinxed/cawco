@@ -12,15 +12,17 @@
  *   so git runs the remote helper `git-remote-cawco` for them
  *   (gitremote-helpers(7): "<transport>::<address> … git-remote-<transport>
  *   is invoked"). That helper ({@link HELPER}) only pipes its stdin and
- *   stdout through the workspace's git door, a unix socket in its read-only
- *   state dir.
+ *   stdout through the workspace's git door, a unix socket in its door dir
+ *   (`workspaceDoorDir`).
  * - On the host the agent takes the door's connection and runs git's own
  *   HTTP helper (`git remote-http <remote> <url>`) in the clone with this
  *   machine's credential, env-only (move.ts {@link hubGitEnv}), after the
  *   clone's own config passed `repositoryConfigProblem` and only for the
- *   clone's own `origin`. Landing's fetch and push, `workspaceAt`'s fetch and
- *   a session's own `git fetch`/`git push` all run inside the boundary, so all
- *   take this one path.
+ *   clone's own `origin`. Before a push reaches it, the push's large files
+ *   go to the hub's LFS ({@link pushLfs}); after a fetch, the large files of
+ *   the refs it moved come from there ({@link fetchLfs}). Landing's fetch and push,
+ *   `workspaceAt`'s fetch and a session's own `git fetch`/`git push` all run
+ *   inside the boundary, so all take this one path.
  *
  * A checkout outside any workspace whose `origin` is the hub (one a project
  * got the hub as its remote in, or one a move made) pulls and pushes from a
@@ -33,17 +35,22 @@ import { chmod, mkdir, rm, writeFile } from "node:fs/promises";
 import { createServer, type Server, type Socket } from "node:net";
 import { join } from "node:path";
 import { CAWCO_ENV, type WorkspaceRef } from "@cawco/core";
-import { hubCredentialSocket, workspaceReadOnlyDir } from "@cawco/core/paths";
+import {
+  hubCredentialSocket,
+  workspaceDoorDir,
+  workspaceReadOnlyDir,
+} from "@cawco/core/paths";
 import {
   repositoryConfigProblem,
   SAFE_GIT_ENV,
   safeGitArgv,
 } from "@cawco/core/safe-git";
 import { hubGitEnv, hubGitLogin, isHubRemote, withoutCredential } from "./move";
+import { prepareDoor } from "./tool-door";
 
 /** A workspace's git door. */
 export const gitDoorOf = (id: string): string =>
-  join(workspaceReadOnlyDir(id), "git.sock");
+  join(workspaceDoorDir(id), "git.sock");
 
 /** Where a workspace's `git-remote-cawco` is, on its commands' PATH. */
 export const gitHelperDirOf = (id: string): string =>
@@ -81,6 +88,181 @@ exit 0;
 `;
 
 const LINE_END = 10;
+
+/** A command after which the helper protocol carries git's own packets, not lines. */
+const CONNECT = /^(stateless-)?connect /;
+const FORCED = /^\+/;
+
+/** A push command's refspec (`push [+]<src>:<dst>`), its source and destination. */
+const refspecOf = (line: string): { dst: string; src: string } => {
+  const [src = "", dst = ""] = line
+    .slice("push ".length)
+    .replace(FORCED, "")
+    .split(":");
+  return { src, dst };
+};
+
+/**
+ * The large files a push batch's sources reach, sent to the hub's LFS first:
+ * `git lfs push origin <src>…` in the clone with this machine's credential
+ * (Projects spec §5.1: "Large files go through Git LFS: the hub is the LFS
+ * server for its remotes"). Inside the boundary git-lfs reaches no hub, and
+ * CawCo's git runs no pre-push hook, so a push would otherwise land pointers
+ * whose objects stay behind. Answers why the files did not go, or nothing.
+ */
+const pushLfs = async (
+  ref: WorkspaceRef,
+  sources: string[]
+): Promise<string | undefined> => {
+  if (sources.length === 0 || !Bun.which("git-lfs")) {
+    return;
+  }
+  const child = Bun.spawn(safeGitArgv(["lfs", "push", "origin", ...sources]), {
+    cwd: ref.path,
+    env: { ...hubGitEnv(), ...SAFE_GIT_ENV, GIT_DIR: join(ref.path, ".git") },
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [code, out, err] = await Promise.all([
+    child.exited,
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ]);
+  if (code === 0) {
+    return;
+  }
+  const said = withoutCredential(`${err}\n${out}`.trim())
+    .split("\n")
+    .filter(Boolean)
+    .at(-1);
+  console.warn(
+    `[hub-git] ${ref.id}: git lfs push of ${sources.join(" ")} failed: ${said ?? `exit ${code}`}`
+  );
+  return `the large files did not reach the hub: ${said ?? `git lfs push exited ${code}`}`;
+};
+
+/** The clone's `origin` remote-tracking refs, each with the commit it is at. */
+const remoteRefs = (clone: string): Map<string, string> => {
+  const listed = Bun.spawnSync(
+    safeGitArgv([
+      "for-each-ref",
+      "--format=%(objectname) %(refname)",
+      "refs/remotes/origin/",
+    ]),
+    { cwd: clone, env: { ...process.env, ...SAFE_GIT_ENV } }
+  );
+  return new Map(
+    listed.stdout
+      .toString()
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => {
+        const [sha = "", name = ""] = line.split(" ");
+        return [name, sha] as const;
+      })
+  );
+};
+
+/** The refs a fetch made or moved: in `after`, at another commit than in `before`. */
+const movedRefs = (
+  before: Map<string, string>,
+  after: Map<string, string>
+): string[] =>
+  [...after]
+    .filter(
+      ([name, sha]) =>
+        before.get(name) !== sha && name !== "refs/remotes/origin/HEAD"
+    )
+    .map(([name]) => name);
+
+/**
+ * The large files the trees of `refs` point at, fetched from the hub's LFS
+ * into the clone's own store (`git lfs fetch origin <ref>…`, this machine's
+ * credential): inside the boundary git-lfs reaches no hub, so a checkout or
+ * rebase there onto a fetched commit (landing onto a newer default branch,
+ * a session's own `git pull`) smudges from what is already here.
+ */
+const fetchLfs = async (ref: WorkspaceRef, refs: string[]): Promise<void> => {
+  if (refs.length === 0 || !Bun.which("git-lfs")) {
+    return;
+  }
+  const child = Bun.spawn(safeGitArgv(["lfs", "fetch", "origin", ...refs]), {
+    cwd: ref.path,
+    env: { ...hubGitEnv(), ...SAFE_GIT_ENV, GIT_DIR: join(ref.path, ".git") },
+    stdin: "ignore",
+    stdout: "ignore",
+    stderr: "pipe",
+  });
+  const [code, err] = await Promise.all([
+    child.exited,
+    new Response(child.stderr).text(),
+  ]);
+  if (code !== 0) {
+    throw new Error(
+      `git lfs fetch of ${refs.join(" ")} failed: ${withoutCredential(err.trim()).split("\n").at(-1) ?? `exit ${code}`}`
+    );
+  }
+};
+
+/**
+ * git's side of the helper protocol, fed to the host's helper by `write`: a
+ * line at a time until a `connect` or `stateless-connect` turns it to git's
+ * own packets, passed through as they come. A push batch (`push` lines, then
+ * a blank one) is held until {@link pushLfs} has sent its large files; when
+ * they did not go, the batch never reaches the helper and git is answered
+ * `error <dst> <why>` for each ref (gitremote-helpers(7), "push").
+ */
+const protocolFeed = (
+  ref: WorkspaceRef,
+  socket: Socket,
+  write: (bytes: Buffer | string) => void
+) => {
+  let raw = false;
+  let pending = Buffer.alloc(0);
+  let batch: string[] = [];
+  const endBatch = async (): Promise<void> => {
+    const lines = batch;
+    batch = [];
+    const refused = await pushLfs(
+      ref,
+      lines.map((line) => refspecOf(line).src).filter(Boolean)
+    );
+    if (refused) {
+      socket.write(
+        `${lines.map((line) => `error ${refspecOf(line).dst} ${refused}\n`).join("")}\n`
+      );
+      return;
+    }
+    write(`${lines.join("\n")}\n\n`);
+  };
+  return async (chunk: Buffer): Promise<void> => {
+    if (raw) {
+      write(chunk);
+      return;
+    }
+    pending = Buffer.concat([pending, chunk]);
+    let end = pending.indexOf(LINE_END);
+    while (end >= 0 && !raw) {
+      const line = pending.subarray(0, end).toString();
+      pending = pending.subarray(end + 1);
+      if (line.startsWith("push ")) {
+        batch.push(line);
+      } else if (line === "" && batch.length > 0) {
+        // biome-ignore lint/performance/noAwaitInLoops: a batch is answered before the next command is read
+        await endBatch();
+      } else {
+        write(`${line}\n`);
+        raw = CONNECT.test(line);
+      }
+      end = pending.indexOf(LINE_END);
+    }
+    if (raw && pending.length > 0) {
+      write(pending);
+      pending = Buffer.alloc(0);
+    }
+  };
+};
 
 /** One door connection: the URL line, then git's remote helper on the host, piped both ways. */
 const serveConnection = (ref: WorkspaceRef, socket: Socket): void => {
@@ -135,6 +317,7 @@ const serveConnection = (ref: WorkspaceRef, socket: Socket): void => {
         stdio: ["pipe", "pipe", "pipe"],
       }
     );
+    const before = remoteRefs(ref.path);
     let stderr = "";
     child.stderr.on("data", (chunk: Buffer) => {
       stderr = (stderr + chunk.toString()).slice(-4000);
@@ -145,6 +328,16 @@ const serveConnection = (ref: WorkspaceRef, socket: Socket): void => {
           `[hub-git] ${ref.id}: git remote-${scheme} exited ${code}: ${withoutCredential(stderr.trim())}`
         );
       }
+      // git waits on the helper as it disconnects, after it has written the
+      // refs it fetched: the door closes once their large files are here.
+      const moved = code === 0 ? movedRefs(before, remoteRefs(ref.path)) : [];
+      fetchLfs(ref, moved)
+        .catch((error: unknown) =>
+          console.warn(
+            `[hub-git] ${ref.id}: ${error instanceof Error ? error.message : String(error)}`
+          )
+        )
+        .finally(() => socket.end());
     });
     child.on("error", () => socket.destroy());
     child.stdin.on("error", () => undefined);
@@ -154,11 +347,25 @@ const serveConnection = (ref: WorkspaceRef, socket: Socket): void => {
         child.kill("SIGTERM");
       }
     });
-    if (rest.length > 0) {
-      child.stdin.write(rest);
-    }
-    socket.pipe(child.stdin);
-    child.stdout.pipe(socket);
+    child.stdout.pipe(socket, { end: false });
+    const feed = protocolFeed(ref, socket, (bytes) => child.stdin.write(bytes));
+    let chain = feed(rest);
+    socket.on("data", (chunk: Buffer) => {
+      socket.pause();
+      chain = chain
+        .then(() => feed(chunk))
+        .then(() => {
+          socket.resume();
+        })
+        .catch((error: unknown) =>
+          fail(error instanceof Error ? error.message : String(error))
+        );
+    });
+    socket.on("end", () => {
+      chain = chain.then(() => {
+        child.stdin.end();
+      });
+    });
     socket.resume();
   };
   socket.on("data", onData);
@@ -180,7 +387,7 @@ export const openGitDoor = async (ref: WorkspaceRef): Promise<void> => {
   await mkdir(bin, { recursive: true });
   await writeFile(join(bin, "git-remote-cawco"), HELPER, { mode: 0o755 });
   const path = gitDoorOf(ref.id);
-  await rm(path, { force: true });
+  await prepareDoor(path);
   const server = createServer({ allowHalfOpen: true }, (socket) =>
     serveConnection(ref, socket)
   );
@@ -194,7 +401,10 @@ export const openGitDoor = async (ref: WorkspaceRef): Promise<void> => {
   });
 };
 
-/** Stops serving workspace `id`'s git door. */
+/**
+ * Stops serving workspace `id`'s git door. Its door dir goes too when it is
+ * one of its own (under the runtime dir): the tool door closes first.
+ */
 export const closeGitDoor = async (id: string): Promise<void> => {
   const server = doors.get(id);
   doors.delete(id);
@@ -202,6 +412,9 @@ export const closeGitDoor = async (id: string): Promise<void> => {
     await new Promise<void>((done) => server.close(() => done()));
   }
   await rm(gitDoorOf(id), { force: true });
+  if (workspaceDoorDir(id) !== workspaceReadOnlyDir(id)) {
+    await rm(workspaceDoorDir(id), { recursive: true, force: true });
+  }
 };
 
 const shellWord = (word: string): string =>
@@ -213,9 +426,16 @@ const shellWord = (word: string): string =>
  * `GIT_CONFIG_PARAMETERS` (git reads it as `-c` options) after it has set
  * srt's own over the request, which carries a `GIT_CONFIG_PARAMETERS` of its
  * own: the hub's `/git/` URLs rewritten to the `cawco::` helper, and that
- * transport allowed. None without a hub.
+ * transport allowed. When the clone at `clone`'s origin is the hub, also
+ * `GIT_LFS_SKIP_PUSH=1` (git-lfs: "Do nothing on pre-push"): any git-lfs
+ * command installs a pre-push hook, which inside the boundary reaches no
+ * hub; the door sends a push's large files from the host ({@link pushLfs}).
+ * A clone of an outside remote keeps its own LFS push. None without a hub.
  */
-export const gitDoorEnv = (id: string): Record<string, string> => {
+export const gitDoorEnv = (
+  id: string,
+  clone: string
+): Record<string, string> => {
   const hub = process.env[CAWCO_ENV.hubUrl];
   if (!hub) {
     return {};
@@ -223,6 +443,18 @@ export const gitDoorEnv = (id: string): Record<string, string> => {
   const url = new URL(hub);
   url.protocol = url.protocol === "wss:" ? "https:" : "http:";
   const prefix = `${url.origin}/git/`;
+  const origin = Bun.spawnSync(
+    safeGitArgv([
+      "config",
+      "--file",
+      join(clone, ".git", "config"),
+      "--get",
+      "remote.origin.url",
+    ]),
+    { env: { ...process.env, ...SAFE_GIT_ENV } }
+  )
+    .stdout.toString()
+    .trim();
   return {
     CAWCO_GIT_SOCKET: gitDoorOf(id),
     CAWCO_GIT_PARAMETERS: [
@@ -231,6 +463,7 @@ export const gitDoorEnv = (id: string): Record<string, string> => {
     ]
       .map(([key, value]) => `${shellWord(key)}=${shellWord(value)}`)
       .join(" "),
+    ...(origin.startsWith(prefix) ? { GIT_LFS_SKIP_PUSH: "1" } : {}),
   };
 };
 

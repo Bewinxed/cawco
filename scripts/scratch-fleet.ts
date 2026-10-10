@@ -35,6 +35,8 @@ export interface Seen {
   at: number;
   /** The last user message's text: what started this request. */
   last: string;
+  /** The names of the tools it offered, loaded ones only. */
+  toolNames: string[];
   /** Whether the harness offered tools: a session's turn, not a side call (a title). */
   tools: boolean;
 }
@@ -298,7 +300,7 @@ export async function scratchFleet(options: {
       const body = (await request.json().catch(() => ({}))) as {
         messages?: { role: string; content: unknown }[];
         stream?: boolean;
-        tools?: unknown[];
+        tools?: { name?: string }[];
       };
       if (path.endsWith("/count_tokens")) {
         return Response.json({ input_tokens: 100 });
@@ -311,6 +313,9 @@ export async function scratchFleet(options: {
         all: users.map((user) => textOf(user.content)).join("\n"),
         last: textOf(users.at(-1)?.content),
         tools: (body.tools?.length ?? 0) > 0,
+        toolNames: (body.tools ?? []).flatMap((tool) =>
+          typeof tool.name === "string" ? [tool.name] : []
+        ),
       };
       seen.push(one);
       const reply = options.respond(one);

@@ -3,8 +3,8 @@
  * boundary reaches none of the owner's machines, the hub among them (it has
  * no auth guard of its own: "The tailnet is the perimeter", PRODUCT.md), yet
  * `cawco tools` and `cawco tool` must keep working there. So the agent serves
- * one unix socket per workspace, in the part of its state dir a command reads
- * (`workspaceReadOnlyDir`), and forwards exactly the hub's two tool routes
+ * one unix socket per workspace, in its door dir, which a command reads
+ * (`workspaceDoorDir`), and forwards exactly the hub's two tool routes
  * through it: `GET /api/delegation/tools` and `POST
  * /api/delegation/call/:instanceId`, the session's `Authorization: Bearer`
  * credential passed through, so the hub resolves the session and its role as
@@ -12,13 +12,30 @@
  * socket to every command (`CAWCO_TOOL_SOCKET`).
  */
 import { mkdir, rm } from "node:fs/promises";
-import { join } from "node:path";
-import { workspaceReadOnlyDir } from "@cawco/core/paths";
+import { dirname, join } from "node:path";
+import { UNIX_SOCKET_PATH_MAX, workspaceDoorDir } from "@cawco/core/paths";
 import { harnessMcpUrl } from "./delegation";
 
 /** A workspace's door socket. */
 export const toolDoorOf = (id: string): string =>
-  join(workspaceReadOnlyDir(id), "tools.sock");
+  join(workspaceDoorDir(id), "tools.sock");
+
+/**
+ * A door socket's place, ready to listen on: refused up front when its path
+ * is longer than a unix socket's holds (the listen would fail, or bind a cut
+ * name), its dir made (0700, as a runtime dir is), and a socket an earlier
+ * agent left removed.
+ */
+export const prepareDoor = async (path: string): Promise<void> => {
+  const bytes = Buffer.byteLength(path);
+  if (bytes > UNIX_SOCKET_PATH_MAX) {
+    throw new Error(
+      `the workspace door ${path} is ${bytes} bytes, past the ${UNIX_SOCKET_PATH_MAX} a unix socket's path holds: give the agent a short XDG_RUNTIME_DIR`
+    );
+  }
+  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+  await rm(path, { force: true });
+};
 
 const CALL = /^\/api\/delegation\/call\/[^/]+$/;
 
@@ -59,17 +76,15 @@ const forward = async (request: Request): Promise<Response> => {
 const open = new Map<string, ReturnType<typeof Bun.serve>>();
 
 /**
- * Serves workspace `id`'s door, once per agent: a socket an earlier agent left
- * is replaced. The read-only dir it lies in is made first, as a boundary's
- * start makes it: a workspace whose boundary predates that dir has none yet.
+ * Serves workspace `id`'s door, once per agent ({@link prepareDoor}: a socket
+ * an earlier agent left is replaced, and the dir it lies in is made).
  */
 export const openToolDoor = async (id: string): Promise<string> => {
   const path = toolDoorOf(id);
   if (open.has(id)) {
     return path;
   }
-  await mkdir(workspaceReadOnlyDir(id), { recursive: true });
-  await rm(path, { force: true });
+  await prepareDoor(path);
   open.set(
     id,
     Bun.serve({

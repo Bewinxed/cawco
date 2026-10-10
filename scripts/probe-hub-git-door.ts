@@ -20,12 +20,19 @@
  *    with `SAFE_GIT_SHELL`, as the hub runs it. All go through the door.
  * 4. A plain `git pull` in the source, from a terminal, brings the landed
  *    commit in.
- * 5. The same for a checkout in the state a move leaves it: origin the hub,
- *    only `cawco/move/<machine>` on the hub.
+ * 5. The delegate's commit adds a new 60 MB LFS file: the door sends it to
+ *    the hub's LFS before the push, and a fresh clone from the hub smudges
+ *    it whole.
+ * 6. The same for a project moved here by move.ts's own snapshot and clone
+ *    steps (only `cawco/move/<machine>` on the hub): its branch tracks the
+ *    hub's, and a plain `git pull` brings the landed commit in.
+ * 7. The doors listen under the fleet's runtime dir, within a unix socket's
+ *    107 bytes however deep HOME is; a longer path is refused up front.
  *
- * Run: IS_SANDBOX=1 HOME=<a short writable dir> bun scripts/probe-hub-git-door.ts [--keep]
+ * Run: IS_SANDBOX=1 HOME=<a deep writable dir> bun scripts/probe-hub-git-door.ts [--keep]
  */
 import { mkdir, stat, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { CAWCO_ENV } from "../packages/core/src/index";
 import {
@@ -102,10 +109,24 @@ try {
   const gitRoot = join(fleet.sandbox, "hub", "git");
   const prefix = `${fleet.base}/git/`;
 
-  // This process as the agent's machine: its hub, and its credential from the
-  // agent's socket under the fleet's HOME. The doors this process serves go
-  // under its own HOME (short: a unix socket path is capped at 108 bytes).
+  // This process as the agent's machine: its hub, its runtime dir (where the
+  // doors this process serves go), and its credential from the agent's
+  // socket under the fleet's HOME.
   process.env[CAWCO_ENV.hubUrl] = fleet.env.CAWCO_HUB_URL as string;
+  process.env.XDG_RUNTIME_DIR = fleet.env.XDG_RUNTIME_DIR as string;
+  const { prepareDoor } = await import("../packages/agent/src/tool-door");
+  const tooLong = join(homedir(), "x".repeat(120), "git.sock");
+  check(
+    "a door path past 107 bytes is refused up front",
+    await prepareDoor(tooLong).then(
+      () => false,
+      (error: Error) => error.message.includes("past the 107")
+    ),
+    await prepareDoor(tooLong).then(
+      () => "accepted",
+      (error: Error) => error.message
+    )
+  );
   const answer = await fetch("http://cawco/", {
     method: "POST",
     body: `protocol=http\nhost=${new URL(fleet.base).host}\n`,
@@ -179,7 +200,7 @@ try {
 
   /** A workspace's clone, cut and served as `createWorkspace` and the boundary do; its executor env. */
   const workspace = async (source: string, base: string, tag: string) => {
-    const id = `p${tag}${crypto.randomUUID().slice(0, 6)}`;
+    const id = crypto.randomUUID();
     const path = join(fleet.sandbox, `ws-${tag}`);
     await prepareClone(source, path, hubGit(), base);
     await hubGit(move.LFS_FILTERS)(
@@ -191,12 +212,35 @@ try {
       `origin/${base}`
     );
     await openGitDoor({ id, path });
+    const door = gitDoorEnv(id, path);
+    const socket = door.CAWCO_GIT_SOCKET as string;
+    const oldLayout = join(
+      homedir(),
+      ".cawco",
+      "workspaces",
+      id,
+      "ro",
+      "git.sock"
+    );
+    check(
+      `${tag}: the git door listens under the fleet's runtime dir, within 107 bytes`,
+      socket.startsWith(fleet.env.XDG_RUNTIME_DIR as string) &&
+        Buffer.byteLength(socket) <= 107 &&
+        (await stat(socket)).isSocket(),
+      `${socket} (${Buffer.byteLength(socket)} bytes); in the read-only dir under this HOME it would be ${Buffer.byteLength(oldLayout)} bytes`
+    );
+    check(
+      `${tag}: a hub-origin workspace's commands skip git-lfs's own pre-push`,
+      door.GIT_LFS_SKIP_PUSH === "1",
+      JSON.stringify(Object.keys(door))
+    );
     const env = {
       ...owner,
       PATH: `${gitHelperDirOf(id)}:${owner.PATH}`,
-      CAWCO_GIT_SOCKET: gitDoorEnv(id).CAWCO_GIT_SOCKET as string,
+      CAWCO_GIT_SOCKET: socket,
+      GIT_LFS_SKIP_PUSH: door.GIT_LFS_SKIP_PUSH as string,
       // What the runner exports after srt's own environment.
-      GIT_CONFIG_PARAMETERS: gitDoorEnv(id).CAWCO_GIT_PARAMETERS as string,
+      GIT_CONFIG_PARAMETERS: door.CAWCO_GIT_PARAMETERS as string,
     };
     return { id, path, env, run: shIn(env) };
   };
@@ -206,7 +250,9 @@ try {
     ws: Awaited<ReturnType<typeof workspace>>,
     base: string,
     tag: string,
-    hubRepo: string
+    hubRepo: string,
+    /** A new large file the delegate's commit adds, tracked by LFS. */
+    large?: string
   ) => {
     const rewritten = await ws.run(ws.path, "git ls-remote --get-url origin");
     check(
@@ -220,6 +266,13 @@ try {
         "git fetch origin 2>&1 && echo FETCH-OK",
         `echo 'by the delegate ${tag}' > delegate-${tag}.txt`,
         `git add delegate-${tag}.txt`,
+        ...(large
+          ? [
+              `head -c ${BIG} /dev/urandom > ${large}`,
+              `git lfs track --filename ${large} >/dev/null`,
+              `git add .gitattributes ${large}`,
+            ]
+          : []),
         `git -c user.name=Delegate -c user.email=d@probe.test commit -qm 'Delegate commit ${tag}'`,
         `git push origin HEAD:refs/heads/probe-session-${tag} 2>&1 && echo PUSH-OK`,
       ].join(" && ")
@@ -336,7 +389,56 @@ try {
     big.size === BIG,
     `${big.size} bytes`
   );
-  await sessionAndLand(wsA, "trunk", "a", bare);
+  // The owner adds a large file of their own and pushes it, plainly, after the
+  // workspace was cut: landing then rebases onto it, inside the boundary,
+  // where git-lfs reaches no hub, so its object must already be in the clone.
+  const ownerPush = await sh(
+    src,
+    // In a folder with its own .gitattributes: the delegate adds a line to
+    // the root one, which would be a real conflict, not a landing's.
+    `mkdir assets && head -c ${BIG} /dev/urandom > assets/owner.bin && printf 'owner.bin filter=lfs diff=lfs merge=lfs -text\\n' > assets/.gitattributes && git add assets && git commit -qm 'Owner adds a large file' && git push 2>&1`
+  );
+  check(
+    "a: the owner's plain git push (with a new LFS file) reaches the hub",
+    (await sh(bare, "git log --format=%s -1 trunk")) ===
+      "Owner adds a large file",
+    ownerPush.replaceAll("\n", " | ")
+  );
+  await sessionAndLand(wsA, "trunk", "a", bare, "new-a.bin");
+  const ownerBin = await stat(join(wsA.path, "assets", "owner.bin")).catch(
+    () => undefined
+  );
+  check(
+    "a: landing rebased onto the owner's commit, its 60 MB file smudged in the clone",
+    ownerBin?.size === BIG,
+    `owner.bin is ${ownerBin?.size ?? "missing"} bytes in the clone; ${await sh(wsA.path, "git log --format='%h %s' -3 | tr '\\n' ' '")}`
+  );
+  const [newOid] = (
+    await sh(wsA.path, "git lfs ls-files -l -I new-a.bin")
+  ).split(" ");
+  const newOnHub = await sh(
+    fleet.sandbox,
+    `find hub -name ${newOid} -size +50M`
+  );
+  check(
+    "a: the delegate's new 60 MB LFS object reached the hub",
+    newOnHub.length > 0,
+    `${newOid.slice(0, 12)}: ${newOnHub}`
+  );
+  const helper = `!${process.execPath} ${join(root, "packages/cli/src/cli.ts")} git-credential`;
+  const auth = `-c 'credential.${fleet.base}.helper=' -c 'credential.${fleet.base}.helper=${helper}'`;
+  // A fresh checkout of the hub, its helper named in its own config as a
+  // hub checkout's is (git-credential.ts `useHubCredentialHelper`).
+  await sh(
+    fleet.sandbox,
+    `GIT_LFS_SKIP_SMUDGE=1 git ${auth} clone -q -b trunk ${hubUrl} fresh-a && cd fresh-a && git config --add 'credential.${fleet.base}.helper' '' && git config --add 'credential.${fleet.base}.helper' '${helper}' && git lfs pull`
+  );
+  const fresh = await stat(join(fleet.sandbox, "fresh-a", "new-a.bin"));
+  check(
+    "a: a fresh clone from the hub smudges the new file to its full size",
+    fresh.size === BIG,
+    `new-a.bin is ${fresh.size} bytes`
+  );
   const pulled = await sh(
     src,
     "git pull --ff-only 2>&1 && git log --format='%h %s' -2 && ls"
@@ -348,30 +450,43 @@ try {
   );
   await closeGitDoor(wsA.id);
 
-  // ── B: a checkout in the state a move leaves ──────────────────────────
-  const helper = `!${process.execPath} ${join(root, "packages/cli/src/cli.ts")} git-credential`;
-  const auth = `-c 'credential.${prefix}.helper=' -c 'credential.${prefix}.helper=${helper}'`;
+  // ── B: a project moved here (move.ts's own snapshot and clone steps) ──
   const projectB = await fleet.api<{ id: string }>("/api/projects", {
     name: "Moved here",
   });
-  const hubB = `${prefix}${projectB.id}.git`;
   const before = join(fleet.sandbox, "before-move");
   await mkdir(before, { recursive: true });
   await sh(
     before,
     "git init -q -b main && echo moved > MOVED.md && git add -A && git commit -qm 'Before the move'"
   );
-  const snapshot = await sh(before, "git rev-parse HEAD");
-  await sh(
-    before,
-    `git ${auth} push -q ${hubB} +${snapshot}:refs/heads/cawco/move/${MACHINE}`
-  );
+  const jobId = crypto.randomUUID();
+  const moveSnapshot = await move.moveSnapshot({
+    jobId,
+    path: before,
+    branch: `cawco/move/${MACHINE}`,
+    hub: { projectId: projectB.id },
+    remote: "hub",
+  });
+  const snapshot = moveSnapshot.commit;
   const moved = join(fleet.sandbox, "moved");
-  await sh(fleet.sandbox, `git ${auth} clone -q --no-checkout ${hubB} moved`);
-  await sh(moved, `git checkout -q -B main ${snapshot}`);
-  await sh(
-    moved,
-    `git config --local --add 'credential.${prefix}.helper' '' && git config --local --add 'credential.${prefix}.helper' '${helper}'`
+  await move.moveClone({
+    jobId,
+    path: moved,
+    display: "moved",
+    machine: MACHINE,
+    bytes: 0,
+    hub: { projectId: projectB.id },
+    lfs: false,
+    snapshot: moveSnapshot,
+  });
+  check(
+    "b: the moved checkout's branch tracks its remote's",
+    (await sh(
+      moved,
+      "git config --get branch.main.remote; git config --get branch.main.merge"
+    )) === "origin\nrefs/heads/main",
+    await sh(moved, "git config --get-regexp '^branch\\.'")
   );
   await fleet.api(`/api/projects/${projectB.id}/places`, {
     machineId: MACHINE,

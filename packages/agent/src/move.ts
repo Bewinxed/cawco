@@ -1333,6 +1333,27 @@ const checkOut = async (
     "git checkout failed",
     quiet
   );
+  if (snapshot.sourceBranch) {
+    // It tracks its remote's branch of the same name, as a clone's first
+    // branch does, so a plain `git pull` there works once the remote has it
+    // (the hub's remote gets it when a workspace is first cut from here).
+    for (const [key, value] of [
+      [`branch.${snapshot.sourceBranch}.remote`, "origin"],
+      [
+        `branch.${snapshot.sourceBranch}.merge`,
+        `refs/heads/${snapshot.sourceBranch}`,
+      ],
+    ]) {
+      // biome-ignore lint/performance/noAwaitInLoops: two config keys
+      await must(
+        run,
+        clone,
+        ["config", key, value],
+        "git config failed",
+        quiet
+      );
+    }
+  }
   if (request.lfs) {
     await must(
       run,

@@ -38,6 +38,7 @@ import {
   USER_LAYER_DIRS,
   USER_LAYER_FILES,
   workspaceCaches,
+  workspaceDoorDir,
   workspaceReadOnlyDir,
   workspaceScratchDir,
   xdgDataHome,
@@ -407,6 +408,8 @@ export const workspacePolicy = async (
     // host's.
     workspaceReadOnlyDir(workspace.id),
     workspaceScratchDir(workspace.id),
+    // Its door sockets, under the runtime dir on Linux (`workspaceDoorDir`).
+    workspaceDoorDir(workspace.id),
     ...caches,
     ...(await alternatesOf(workspace.path)),
     ...(await homeToolchains(home)),

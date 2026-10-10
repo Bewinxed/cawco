@@ -9,10 +9,16 @@
  * The config is env-only (`GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_n`/
  * `GIT_CONFIG_VALUE_n`, appended after any the environment already carries),
  * so nothing is written to the session's repository or home. For the hub's
- * `/git/` URLs it first empties the helper list ("If credential.helper is
- * set to the empty string, this resets the helper list to empty",
- * git-config(1)), so a machine's own `credential.helper = store` is never
- * handed the session's credential to keep on disk.
+ * origin it first empties the helper list ("If credential.helper is set to
+ * the empty string, this resets the helper list to empty", git-config(1)),
+ * so a machine's own `credential.helper = store` is never handed the
+ * session's credential to keep on disk.
+ *
+ * The helper is keyed to the hub's origin (protocol and host), not to its
+ * `/git/` path: git-lfs asks `git credential fill` with no path (git sends
+ * one only under `credential.useHttpPath`), and a path-scoped
+ * `credential.<url>` matches no request without one, so git-lfs's uploads
+ * and downloads found no helper ("could not read Username").
  */
 
 import { dirname, join } from "node:path";
@@ -65,7 +71,7 @@ const hubOrigin = (): string | undefined => {
 
 /**
  * `cawco git-credential` named in the checkout at `repo`'s own config for
- * the hub's `/git/` URLs (the helper list reset first, so no helper of the
+ * the hub's origin (the helper list reset first, so no helper of the
  * machine's is handed the credential to keep), and LFS lock checks off: a
  * plain `git pull` and `git push` there authenticate to the hub, with the
  * session's credential in a session's shell and the machine's elsewhere
@@ -84,9 +90,11 @@ export const useHubCredentialHelper = (repo: string): void => {
       env: { ...process.env, ...SAFE_GIT_ENV },
       stderr: "pipe",
     });
-  const key = `credential.${remote}.helper`;
-  // Exit 5 when there is none to unset.
+  const key = `credential.${origin}.helper`;
+  // Exit 5 when there is none to unset. The `/git/`-scoped key is what an
+  // earlier build wrote: it matched none of git-lfs's requests.
   config("--unset-all", key);
+  config("--unset-all", `credential.${remote}.helper`);
   for (const args of [
     ["--add", key, ""],
     ["--add", key, helper],
@@ -116,9 +124,9 @@ export const sessionGitEnv = (
   }
   const remote = `${origin}/git/`;
   const pairs: [string, string][] = [
-    [`credential.${remote}.helper`, ""],
+    [`credential.${origin}.helper`, ""],
     [
-      `credential.${remote}.helper`,
+      `credential.${origin}.helper`,
       `!${cawcoCommand("git-credential").map(shellWord).join(" ")}`,
     ],
     [`lfs.${remote}.locksverify`, "false"],

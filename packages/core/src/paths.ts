@@ -363,6 +363,25 @@ export const workspaceScratchDir = (id: string): string =>
 export const workspaceReadOnlyDir = (id: string): string =>
   join(workspaceStateDir(id), "ro");
 
+/**
+ * Where a workspace's door sockets are (its tool door and git door). On
+ * Linux, a dir of its own under `$XDG_RUNTIME_DIR`, as srt keeps its own
+ * sockets there: a unix socket's path holds at most 107 bytes, and one in
+ * the read-only dir under a deep HOME passes that. Named by the id's first 8
+ * characters, as its clone (`<repo>-<id8>`) and branch (`ws/<id8>`) are.
+ * Elsewhere, and without a runtime dir, the read-only dir. Read inside the
+ * boundary either way.
+ */
+export const workspaceDoorDir = (id: string): string => {
+  const runtime = process.env.XDG_RUNTIME_DIR;
+  return process.platform === "linux" && runtime
+    ? join(runtime, "cawco-ws", id.slice(0, 8))
+    : workspaceReadOnlyDir(id);
+};
+
+/** The most bytes a unix socket's path holds (`sun_path` is 108, its NUL included). */
+export const UNIX_SOCKET_PATH_MAX = 107;
+
 /** The name of a workspace's policy file in its state dir. */
 export const WORKSPACE_POLICY_NAME = "policy.json";
 

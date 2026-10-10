@@ -2146,11 +2146,11 @@ fi`
  * What every command runs with besides its caller's environment: the
  * workspaces' own cache (`workspaceCacheEnv`), its scratch dir as `TMPDIR`,
  * the empty git template, gh's empty config dir ({@link ghConfigOf}), the
- * tool door, and `CAWCO_WORKSPACE`, by which a
+ * tool and git doors (hub-git.ts `gitDoorEnv`), and `CAWCO_WORKSPACE`, by which a
  * script tells that it runs inside one; never a key agent's socket
  * ({@link AGENT_SOCKET_ENV}).
  */
-const commandEnv = (id: string, scratch: string): string[] => [
+const commandEnv = (id: string, scratch: string, clone: string): string[] => [
   `unset ${AGENT_SOCKET_ENV.join(" ")}`,
   ...Object.entries({
     ...workspaceCacheEnv(),
@@ -2159,7 +2159,7 @@ const commandEnv = (id: string, scratch: string): string[] => [
     GH_CONFIG_DIR: ghConfigOf(id),
     CAWCO_TOOL_SOCKET: toolDoorOf(id),
     CAWCO_WORKSPACE: id,
-    ...gitDoorEnv(id),
+    ...gitDoorEnv(id, clone),
   }).map(([name, value]) => `export ${name}=${shellQuote(value)}`),
 ];
 
@@ -2256,7 +2256,7 @@ printf '%s' "$1" > "$req/cmd"
 pwd -P > "$req/cwd"
 {
   export -p
-${commandEnv(id, held.scratch)
+${commandEnv(id, held.scratch, held.path)
   .map((line) => `  echo ${shellQuote(line)}`)
   .join("\n")}
   ${path}
