@@ -543,21 +543,123 @@ async function recordOpenClose(udid: string, cawFrame: Frame) {
     await pause(1200);
     console.log(`  phone: recorded ${step}`);
   }
-  const report = await mac(`kill -INT ${pid}
-for i in $(seq 1 30); do kill -0 ${pid} 2>/dev/null || break; sleep 0.5; done
-if command -v ffprobe >/dev/null; then
-  ffprobe -v error -select_streams v:0 -count_frames -show_entries stream=r_frame_rate,avg_frame_rate,nb_read_frames,duration -of default=nw=1 ${file} | tr '\\n' ' '
-else
-  echo "no ffprobe on the Mac"
-fi`).catch((error) => String(error));
+  await mac(`kill -INT ${pid}
+for i in $(seq 1 30); do kill -0 ${pid} 2>/dev/null || break; sleep 0.5; done`).catch(
+    () => ""
+  );
   const movie = await mac(`base64 < ${file}; rm -f ${file}`).catch(() => "");
   const saved = join(out, "phone-open-close.mov");
-  if (movie.trim()) {
-    await Bun.write(saved, Buffer.from(movie.replace(/\s/g, ""), "base64"));
+  const bytes = Buffer.from(movie.replace(/\s/g, ""), "base64");
+  if (bytes.length > 0) {
+    await Bun.write(saved, bytes);
   }
-  console.log(
-    `  recording: ${movie.trim() ? saved : "none saved"} (${report.trim()})`
+  // simctl writes a frame only when the screen changes: while the panel
+  // moves, one per refresh. The rate is read off the frames inside motion
+  // (gaps of 100ms or less), from the movie's own frame table.
+  const timing = bytes.length > 0 ? frameTiming(bytes) : undefined;
+  const moving = (timing?.gaps ?? [])
+    .filter((gap) => gap <= 0.1)
+    .sort((a, b) => a - b);
+  const median = moving[Math.floor(moving.length / 2)];
+  const fps = median ? 1 / median : 0;
+  check(
+    "phone: the open and close recording runs at 60fps",
+    fps >= 55,
+    timing
+      ? `${saved}: ${timing.gaps.length + 1} frames over ${timing.seconds.toFixed(1)}s; ${moving.length} frames in motion at ${fps.toFixed(1)}fps (median gap ${((median ?? 0) * 1000).toFixed(1)}ms)`
+      : `no readable recording (${bytes.length} bytes)`
   );
+}
+
+/** One box of an MP4 / QuickTime file: its type and its payload's bounds. */
+interface Mp4Box {
+  end: number;
+  start: number;
+  type: string;
+}
+function* mp4Boxes(buf: Buffer, from: number, to: number): Generator<Mp4Box> {
+  let at = from;
+  while (at + 8 <= to) {
+    let size = buf.readUInt32BE(at);
+    let header = 8;
+    if (size === 1) {
+      size = Number(buf.readBigUInt64BE(at + 8));
+      header = 16;
+    } else if (size === 0) {
+      size = to - at;
+    }
+    if (size < header) {
+      return;
+    }
+    yield {
+      type: buf.toString("latin1", at + 4, at + 8),
+      start: at + header,
+      end: at + size,
+    };
+    at += size;
+  }
+}
+const childBox = (buf: Buffer, parent: Mp4Box, type: string) => {
+  for (const box of mp4Boxes(buf, parent.start, parent.end)) {
+    if (box.type === type) {
+      return box;
+    }
+  }
+};
+
+/**
+ * The video track's frame timing (moov › trak › mdia: `hdlr` "vide",
+ * `mdhd`'s timescale, `minf › stbl › stts`'s frame durations): each gap
+ * between frames in seconds, and the length of the whole.
+ */
+function frameTiming(
+  buf: Buffer
+): { gaps: number[]; seconds: number } | undefined {
+  const moov = [...mp4Boxes(buf, 0, buf.length)].find(
+    (box) => box.type === "moov"
+  );
+  if (!moov) {
+    return;
+  }
+  for (const trak of mp4Boxes(buf, moov.start, moov.end)) {
+    const mdia = trak.type === "trak" ? childBox(buf, trak, "mdia") : undefined;
+    const hdlr = mdia && childBox(buf, mdia, "hdlr");
+    if (
+      !(mdia && hdlr) ||
+      buf.toString("latin1", hdlr.start + 8, hdlr.start + 12) !== "vide"
+    ) {
+      continue;
+    }
+    const mdhd = childBox(buf, mdia, "mdhd");
+    const minf = childBox(buf, mdia, "minf");
+    const stbl = minf && childBox(buf, minf, "stbl");
+    const stts = stbl && childBox(buf, stbl, "stts");
+    if (!(mdhd && stts)) {
+      return;
+    }
+    const gaps = frameGaps(buf, mdhd, stts);
+    return { gaps, seconds: gaps.reduce((sum, gap) => sum + gap, 0) };
+  }
+}
+
+/** `stts`'s frame durations in seconds on `mdhd`'s timescale, the last frame's dropped. */
+function frameGaps(buf: Buffer, mdhd: Mp4Box, stts: Mp4Box): number[] {
+  const timescale =
+    buf[mdhd.start] === 1
+      ? buf.readUInt32BE(mdhd.start + 20)
+      : buf.readUInt32BE(mdhd.start + 12);
+  const entries = buf.readUInt32BE(stts.start + 4);
+  const gaps: number[] = [];
+  for (let k = 0; k < entries; k += 1) {
+    const count = buf.readUInt32BE(stts.start + 8 + k * 8);
+    const delta = buf.readUInt32BE(stts.start + 12 + k * 8) / timescale;
+    for (let n = 0; n < count; n += 1) {
+      gaps.push(delta);
+    }
+  }
+  // The last frame's duration is how long it stays up, not a gap to a next one.
+  gaps.pop();
+  return gaps;
 }
 
 /**
