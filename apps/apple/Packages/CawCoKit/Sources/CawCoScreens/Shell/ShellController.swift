@@ -267,6 +267,9 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     @objc private func railEdgePanned(_ pan: UIScreenEdgePanGestureRecognizer) {
         let width = RailSheetTransition.width(in: view.bounds.width)
         let dx = pan.translation(in: view).x
+        #if DEBUG
+        RailEdgeGate.probe("probe edge state=\(pan.state.rawValue) dx=\(dx)")
+        #endif
         guard compact else {
             if pan.state == .began { toggleRail() }
             return
@@ -1027,8 +1030,29 @@ private final class RailEdgeGate: NSObject, UIGestureRecognizerDelegate {
     var holder: @MainActor () -> UIView? = { nil }
 
     func gestureRecognizerShouldBegin(_: UIGestureRecognizer) -> Bool {
-        mayBegin()
+        let may = mayBegin()
+        #if DEBUG
+        Self.probe("probe edge shouldBegin=\(may)")
+        #endif
+        return may
     }
+
+    #if DEBUG
+    /// A simulator pass's `-shell-probe`: each touch the edge swipe is
+    /// offered, whether it may begin, and its states (ShellController).
+    static let probing = ProcessInfo.processInfo.arguments.contains("-shell-probe")
+
+    static func probe(_ line: String) {
+        guard probing else { return }
+        Logger(subsystem: "dev.cawco.app", category: "Probe").notice("\(line, privacy: .public)")
+    }
+
+    func gestureRecognizer(_: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        let at = touch.location(in: nil)
+        if at.x < 40 { Self.probe("probe edge touch x=\(at.x) y=\(at.y) touches=\(touch.tapCount)") }
+        return true
+    }
+    #endif
 
     /// Every drag inside the conversations (the pages' swipe between chats,
     /// the strip's scroll, a tab's pull) waits for the edge swipe to fail.

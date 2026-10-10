@@ -37,7 +37,12 @@ final class NeedsCawButton: UIControl {
     }
 
     override var accessibilityFrame: CGRect {
-        get { standing ? UIAccessibility.convertToScreenCoordinates(touchBox, in: self) : super.accessibilityFrame }
+        // Converted through the screen's own space: UIAccessibility's
+        // converter handed back his own space while he first stood.
+        get {
+            guard standing, let screen = window?.windowScene?.screen else { return super.accessibilityFrame }
+            return convert(touchBox, to: screen.coordinateSpace)
+        }
         set { super.accessibilityFrame = newValue }
     }
 
