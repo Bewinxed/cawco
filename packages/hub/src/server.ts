@@ -828,6 +828,16 @@ const UPDATE_TIMEOUT_MS = 10 * 60_000;
 /** Reading one file off a machine: it answers about as fast as a disk does. */
 const READ_TIMEOUT_MS = 10_000;
 
+/**
+ * Statuses a session's row holds once its process has ended, or once its end
+ * is decided: whether a process still runs is its machine's custody to say.
+ */
+const NO_PROCESS_STATUSES: ReadonlySet<string> = new Set([
+  "stopped",
+  "discarded",
+  "error",
+]);
+
 /** Why a carry left a session's data where it was: its process runs there. */
 const PROCESS_RUNS = "its process runs";
 /**
@@ -8543,6 +8553,18 @@ export const createServer = (
     forgetPending(row.id, UNREAD.stopped, false, "all");
     closePreview(row.id).catch(console.error);
   };
+  /**
+   * A stop stored without asking the machine first: its reconcile sends it
+   * whenever the machine is there to take it. For a machine that is away,
+   * and for a session with no process to wait on.
+   */
+  const oweStop = (instanceId: string): void => {
+    const row = db.ownedInstance(instanceId);
+    lifecycle.oweEndSession(instanceId, "stop");
+    if (row) {
+      sessionEnding(row);
+    }
+  };
   // A project's running sessions, stopped before it is forgotten, each
   // reported to the dashboard as its machine confirms the end (project-stops.ts).
   const projectStops = createProjectStops({
@@ -8552,21 +8574,18 @@ export const createServer = (
     stop: (id) => endSession(id, "stop"),
     // A machine that is away: the stop is stored, and its next register's
     // reconcile sends it (session-lifecycle `reconcile`).
-    owe: (id) => {
-      const row = db.ownedInstance(id);
-      lifecycle.oweEndSession(id, "stop");
-      if (row) {
-        sessionEnding(row);
-      }
-    },
+    owe: (id) => oweStop(id),
     online: (machineId) => !!registry.agent(machineId),
     publish: (payload) =>
       registry.broadcast({ verb: "frames", machineId: "hub", payload }),
     timeoutMs: READ_TIMEOUT_MS,
   });
-  const waitForEnd = (instanceId: string): Promise<void> =>
+  const waitForEnd = (
+    instanceId: string,
+    waitMs = SPAWN_START_TIMEOUT_MS
+  ): Promise<void> =>
     new Promise((resolve, reject) => {
-      const deadline = Date.now() + SPAWN_START_TIMEOUT_MS;
+      const deadline = Date.now() + waitMs;
       const observe = () => {
         const row = db.ownedInstance(instanceId);
         if (!row || row.endConfirmedAt) {
@@ -8574,7 +8593,7 @@ export const createServer = (
         } else if (Date.now() >= deadline) {
           reject(
             new Error(
-              "The end decision is stored and still awaiting its machine."
+              `Session ${instanceId} was told to stop and its machine has not confirmed it within ${Math.round(waitMs / 1000)}s; the stop stays stored.`
             )
           );
         } else {
@@ -12792,9 +12811,24 @@ export const createServer = (
     // `plans` below is made.
     planSteps: async (instanceId) => (await plans.read(instanceId)).steps,
     pauses: (projectId) => caps.pauses(projectId),
-    end: async (instanceId) => {
+    // A session already ended, or stopped with no process on its machine's
+    // last custody reading, has nothing to confirm its stop: its stop is
+    // stored and the end returns at once. A session with a process is
+    // stopped and waited on, for `waitMs` at most.
+    end: async (instanceId, waitMs) => {
+      const row = db.ownedInstance(instanceId);
+      if (!row || (row.endIntent && row.endConfirmedAt)) {
+        return;
+      }
+      if (
+        NO_PROCESS_STATUSES.has(row.status) &&
+        !lifecycle.holds(row.machineId, instanceId)
+      ) {
+        oweStop(instanceId);
+        return;
+      }
       endSession(instanceId, "stop");
-      await waitForEnd(instanceId);
+      await waitForEnd(instanceId, waitMs);
     },
     // An attempt at a task ended: the dispatcher moves the task. Deferred: the
     // boot sweep below ends items before the dispatcher exists.

@@ -442,8 +442,12 @@ export interface WorkItemDeps {
     workspace?: WorkspaceRef
   ) => Promise<CommandResult>;
   readonly db: DbShape;
-  /** Store stop intent and wait for the machine's positive end confirmation. */
-  readonly end: (instanceId: string) => Promise<void>;
+  /**
+   * Store stop intent and wait for the machine's positive end confirmation,
+   * for `waitMs` at most. Returns at once for a session already ended or with
+   * no process on its machine.
+   */
+  readonly end: (instanceId: string, waitMs?: number) => Promise<void>;
   /** The agent's live turn state, including a long tool call with no output. */
   readonly inTurn: (row: InstanceRow) => boolean;
   /**
@@ -519,6 +523,12 @@ const PLAN_TODO = /\[(td-\d{1,6})\]/;
 const PROPOSALS_LIMIT = 20;
 /** How often the hub looks at every live item's budget, between turns. */
 const BUDGET_SWEEP_MS = 30_000;
+
+/**
+ * How long archiving waits on a running session's machine to confirm its
+ * stop: well inside the hub's 120 s HTTP idle timeout (index.ts).
+ */
+const ARCHIVE_STOP_WAIT_MS = 30_000;
 
 /** The last path segment — how the rail names a session. */
 /**
@@ -3611,9 +3621,30 @@ export const createWorkItems = ({
           `Workspace ${workspace.id} has a live work item: ${live.title} (${live.id}) is ${live.state}. Stop it before archiving the workspace.`
         );
       }
-      await Promise.all(
-        db.workItemsIn(workspace.id).map((item) => end(item.instanceId))
+      // Bounded well inside the HTTP call's own idle timeout: a machine that
+      // never confirms leaves the workspace active, and the answer says so.
+      const stops = await Promise.allSettled(
+        [
+          ...new Set(
+            db.workItemsIn(workspace.id).map((item) => item.instanceId)
+          ),
+        ].map((instanceId) => end(instanceId, ARCHIVE_STOP_WAIT_MS))
       );
+      const unconfirmed = stops.flatMap((stop) =>
+        stop.status === "rejected"
+          ? [
+              stop.reason instanceof Error
+                ? stop.reason.message
+                : String(stop.reason),
+            ]
+          : []
+      );
+      if (unconfirmed.length > 0) {
+        throw new WorkItemRefusal(
+          409,
+          `Workspace ${workspace.id} stays active: ${unconfirmed.join(" ")} Retry once its machine has ended it.`
+        );
+      }
       // Its check workspaces on other machines go first: none outlives it.
       await Promise.all(db.checkWorkspacesOf(workspace.id).map(closeWorkspace));
       return closeWorkspace(workspace);

@@ -311,6 +311,20 @@ export const createSessionLifecycle = (ports: {
   };
 
   return {
+    /**
+     * Whether the machine's last custody reading has a process for `id`:
+     * held, attached, or a spawn or attach in flight. False when the machine
+     * has no reading (it is away) or cannot read its custody.
+     */
+    holds: (machineId: string, id: string): boolean => {
+      const snapshot = snapshots.get(machineId);
+      return (
+        snapshot?.custody.state === "available" &&
+        (snapshot.custody.instances.includes(id) ||
+          snapshot.attached.includes(id) ||
+          (snapshot.custody.pending ?? []).includes(id))
+      );
+    },
     preserveUnattached: (id: string) => preservedUnattached.add(id),
     restoring: (id: string) => {
       const prior = attaching.get(id);
