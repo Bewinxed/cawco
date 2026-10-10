@@ -2300,6 +2300,11 @@
       "$value": "8px",
       "$description": "On the phone bar, the first tab starts this far after the toggle glyph, and the strip stops this far short of Caw's glass."
     },
+    "c-edge-pull": {
+      "$type": "dimension",
+      "$value": "16px",
+      "$description": "On a phone, the strip along the screen's left edge where a finger that travels right pulls the sidebar out; a drag that starts further in is the page's (the chat swipe)."
+    },
     "c-tab-lead": {
       "$type": "dimension",
       "$value": "12px",

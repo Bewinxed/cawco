@@ -233,7 +233,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         needsDrawer.frame = view.bounds
         needsDrawer.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         view.addSubview(needsDrawer)
-        railEdge.edges = .left
+        railEdge.maximumNumberOfTouches = 1
         // Only where the conversations' pages reach the screen's left edge,
         // with nothing over them: a phone's, and an iPad's with the rail's
         // column put away (beside it, the left edge is the rail's).
@@ -260,11 +260,15 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     /// that starts anywhere else is still the pages'. On an iPad with the
     /// rail's column put away the same swipe brings the column back, as its
     /// toggle does; the split view moves its columns itself, so it does not
-    /// follow the finger.
-    private lazy var railEdge = UIScreenEdgePanGestureRecognizer(target: self, action: #selector(railEdgePanned(_:)))
+    /// follow the finger. The edge is the app's own strip (`RailEdgeGate`),
+    /// not UIScreenEdgePanGestureRecognizer's: that one decides by itself
+    /// what counts as the screen's edge, and failed a one-finger drag from
+    /// x=1 before it ever asked whether to begin, which handed the drag to
+    /// the pages (simulator pass, `probe edge`).
+    private lazy var railEdge = UIPanGestureRecognizer(target: self, action: #selector(railEdgePanned(_:)))
     private let railEdgeGate = RailEdgeGate()
 
-    @objc private func railEdgePanned(_ pan: UIScreenEdgePanGestureRecognizer) {
+    @objc private func railEdgePanned(_ pan: UIPanGestureRecognizer) {
         let width = RailSheetTransition.width(in: view.bounds.width)
         let dx = pan.translation(in: view).x
         #if DEBUG
@@ -1029,10 +1033,26 @@ private final class RailEdgeGate: NSObject, UIGestureRecognizerDelegate {
     /// The view whose drags wait for the edge swipe: the conversations, on a phone.
     var holder: @MainActor () -> UIView? = { nil }
 
-    func gestureRecognizerShouldBegin(_: UIGestureRecognizer) -> Bool {
-        let may = mayBegin()
+    /// Only a touch that lands in the edge's strip (`cEdgePull`, the web's
+    /// `.edge`): the rest never reach the edge pan, so no drag that starts
+    /// further in ever waits on it.
+    func gestureRecognizer(_: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        let at = touch.location(in: nil)
         #if DEBUG
-        Self.probe("probe edge shouldBegin=\(may)")
+        if at.x < 40 { Self.probe("probe edge touch x=\(at.x) y=\(at.y) inStrip=\(at.x <= Size.cEdgePull)") }
+        #endif
+        return at.x <= Size.cEdgePull
+    }
+
+    /// From the strip, a finger that travels right more than it travels down
+    /// (Shell.svelte `edgeSwipe`), where the sidebar may open.
+    func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
+        guard let pan = gesture as? UIPanGestureRecognizer, let view = pan.view else { return false }
+        let v = pan.velocity(in: view)
+        let rightward = v.x > 0 && v.x > abs(v.y)
+        let may = rightward && mayBegin()
+        #if DEBUG
+        Self.probe("probe edge shouldBegin=\(may) rightward=\(rightward) v=\(v.x),\(v.y)")
         #endif
         return may
     }
@@ -1045,12 +1065,6 @@ private final class RailEdgeGate: NSObject, UIGestureRecognizerDelegate {
     static func probe(_ line: String) {
         guard probing else { return }
         Logger(subsystem: "dev.cawco.app", category: "Probe").notice("\(line, privacy: .public)")
-    }
-
-    func gestureRecognizer(_: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
-        let at = touch.location(in: nil)
-        if at.x < 40 { Self.probe("probe edge touch x=\(at.x) y=\(at.y) touches=\(touch.tapCount)") }
-        return true
     }
     #endif
 

@@ -488,6 +488,8 @@ public enum Size {
     public static let cBarPhoneEdge: Double = 12
     /// On the phone bar, the first tab starts this far after the toggle glyph, and the strip stops this far short of Caw's glass.
     public static let cBarPhoneGap: Double = 8
+    /// On a phone, the strip along the screen's left edge where a finger that travels right pulls the sidebar out; a drag that starts further in is the page's (the chat swipe).
+    public static let cEdgePull: Double = 16
     /// A phone tab's pad before its title past the folder overlap, the tab's corner radius (the approved row's 12px): the row draws no status glyph, its rim is the status. Its title's trailing room is the folder overlap plus the chosen sheet's flare. Both ends keep the overlap on every tab, chosen or not, so a neighbour tucked over either end never touches the title and a choice never resizes a tab.
     public static let cTabLead: Double = 12
     /// A session tab row: its list's 4px pad over 32px tabs (PaneTabs).

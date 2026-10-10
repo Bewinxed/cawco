@@ -174,7 +174,15 @@ final class PaneGroupController: UIViewController, UIDropInteractionDelegate {
         stack.isScrollEnabled = swipeable
         // Held for the swipe and no longer: released on every end of it, a
         // landing, a swipe let go back where it began, or one onto no tab.
-        stack.onBegin = { [weak self] in self?.dock.held = true }
+        stack.onBegin = { [weak self] in
+            self?.dock.held = true
+            #if DEBUG
+            // A simulator pass's `-shell-probe`: which drag took a touch (ShellController `probe edge`).
+            if ProcessInfo.processInfo.arguments.contains("-shell-probe") {
+                Logger(subsystem: "dev.cawco.app", category: "Probe").notice("probe edge pages began")
+            }
+            #endif
+        }
         stack.onEnd = { [weak self] in self?.dock.held = false }
         stack.onScroll = { [weak self] position in self?.pagingMoved(position) }
         stack.onLand = { [weak self] page in

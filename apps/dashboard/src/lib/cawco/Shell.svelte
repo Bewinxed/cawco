@@ -1562,7 +1562,7 @@
     position: absolute;
     inset: var(--c-top-bar-h) auto 0 0;
     z-index: 15;
-    inline-size: 16px;
+    inline-size: var(--c-edge-pull);
     touch-action: none;
   }
 
