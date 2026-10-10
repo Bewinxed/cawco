@@ -1,4 +1,6 @@
 <script lang="ts" module>
+  /** The x of a floating wrapper's `translate(Xpx, Ypx)`. */
+  const TRANSLATE_X = /translate(?:3d)?\(\s*(-?[\d.]+)px/;
   /**
    * Where the pointer last moved to, for every strip on the page. A tab that
    * the layout slides under a pointer at rest (a split, a tab closing, the
@@ -48,8 +50,6 @@
   import { land } from "#lib/cawco/motion/share.svelte.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
-  import * as Drawer from "#lib/components/ui/drawer/index.js";
   import {
     TabItem,
     Tabs,
@@ -305,6 +305,7 @@
     if (!(detailsOpen && detailId !== id)) {
       detailId = id;
       detailAnchor = anchor;
+      neck = neckOf(anchor);
       detailsOpen = true;
       return;
     }
@@ -324,9 +325,104 @@
             : -1;
         detailId = id;
         detailAnchor = anchor;
+        neck = neckOf(anchor);
       });
     });
   }
+
+  /* ── The card hangs from its tab ──────────────────────────────────
+     The card's anchor is the tab's whole box (`.tab`), however it was
+     opened: hover, a click on the tab or its chevron, the keyboard, the
+     menu. Its top edge is the tab's foot (no side offset), and its
+     leading edge stands one flare, one card corner and 4px before the
+     tab, so its outline runs corner → short run → the chosen sheet's
+     concave flare → up the tab's flank: one folder. Its top border is
+     cut across the tab's flared span (`--neck-start`, `--neck-end`,
+     `--neck-flare`, in the card's own coordinates), and a stroke runs up
+     the tab's flanks instead (`.neck`). A phone's card stands at the
+     screen's 12px margin; collision does the rest. */
+  /** Round the card's corner, and the 4px run before the flare begins. */
+  const CARD_CORNER = 12;
+  const CARD_RUN = 4;
+  /** The card's width (`.session-details-popover`) and its margin to the viewport. */
+  const CARD_W = 416;
+  const CARD_MARGIN = 12;
+  const flareOf = (anchor: HTMLElement) =>
+    Number.parseFloat(getComputedStyle(anchor).getPropertyValue("--flare")) ||
+    0;
+  const alignOffset = $derived(touch.current ? -CARD_MARGIN : undefined);
+  /** The card's leading edge's offset from its tab's, before collision. */
+  function alignFor(anchor: HTMLElement | null) {
+    if (alignOffset !== undefined || !anchor) {
+      return alignOffset ?? 0;
+    }
+    return -(flareOf(anchor) + CARD_CORNER + CARD_RUN);
+  }
+  /** The tab's span in the card's coordinates, from where the card stands (or will). */
+  interface Neck {
+    end: number;
+    flare: number;
+    start: number;
+  }
+  let neck = $state<Neck>({ start: 0, end: 0, flare: 0 });
+  function neckOf(anchor: HTMLElement, cardLeft?: number): Neck {
+    const box = anchor.getBoundingClientRect();
+    const vw = document.documentElement.clientWidth;
+    const width = Math.min(CARD_W, vw - 2 * CARD_MARGIN);
+    const left =
+      cardLeft ??
+      Math.min(
+        Math.max(box.left + alignFor(anchor), CARD_MARGIN),
+        vw - CARD_MARGIN - width
+      );
+    // Only a chosen tab wears the sheet's flared foot; another tab's card
+    // (hovered open) meets the card square.
+    const flare = anchor.hasAttribute("data-chosen") ? flareOf(anchor) : 0;
+    return { start: box.left - left, end: box.right - left, flare };
+  }
+  /** The tab's box, the card's anchor, by the tab's id. */
+  function anchorOf(id: string): HTMLElement | null {
+    return (
+      document
+        .querySelector(`[data-session-tab="${CSS.escape(id)}"]`)
+        ?.closest<HTMLElement>(".tab") ?? null
+    );
+  }
+  /**
+   * Keeps the neck where the card really stands once bits-ui has placed it:
+   * every placement (open, a glide, a resize, the strip scrolling) is a
+   * write to its wrapper's transform.
+   */
+  const trackNeck: Attachment<HTMLElement> = (node) => {
+    const wrapper = node.parentElement;
+    if (!wrapper) {
+      return;
+    }
+    const sync = () =>
+      untrack(() => {
+        const at = TRANSLATE_X.exec(wrapper.style.transform);
+        if (!(at && detailAnchor)) {
+          return;
+        }
+        const next = neckOf(detailAnchor, Number(at[1]));
+        if (
+          Math.abs(next.start - neck.start) > 0.5 ||
+          Math.abs(next.end - neck.end) > 0.5 ||
+          next.flare !== neck.flare
+        ) {
+          neck = next;
+        }
+      });
+    const observer = new MutationObserver(sync);
+    observer.observe(wrapper, { attributes: true, attributeFilter: ["style"] });
+    sync();
+    // Beside bits-ui's own handlers in the content's props, not over them.
+    node.addEventListener("pointerdown", swipeCardShut);
+    return () => {
+      observer.disconnect();
+      node.removeEventListener("pointerdown", swipeCardShut);
+    };
+  };
   function hoverTab(id: string, event: PointerEvent) {
     if (touch.current || event.pointerType !== "mouse" || pinned || menuOpen) {
       return;
@@ -339,10 +435,8 @@
     }
     clearTimeout(timer);
     // The handlers sit on the whole tab, its buttons included, so moving onto
-    // them is not leaving it; the card still hangs from the tab's link.
-    const anchor = (
-      event.currentTarget as HTMLElement
-    ).querySelector<HTMLElement>("[data-session-tab]") as HTMLElement;
+    // them is not leaving it; the card hangs from the whole tab.
+    const anchor = event.currentTarget as HTMLElement;
     if (detailsOpen) {
       showDetails(id, anchor, false);
       return;
@@ -378,15 +472,21 @@
     ) {
       return;
     }
+    // The tab's box, whichever of its parts was clicked: the chevron's
+    // click once hung the card from the 20px chevron near the tab's end.
+    const anchor = anchorOf(id);
+    if (!anchor) {
+      return;
+    }
     if (leaf.active === id) {
       event.preventDefault();
       if (detailsOpen && pinned && detailId === id) {
         closeDetails();
       } else {
-        showDetails(id, event.currentTarget as HTMLElement, true);
+        showDetails(id, anchor, true);
       }
     } else if (detailsOpen) {
-      showDetails(id, event.currentTarget as HTMLElement, pinned);
+      showDetails(id, anchor, pinned);
     } else {
       closeDetails();
     }
@@ -739,15 +839,16 @@
   onMount(() => () => cancelAnimationFrame(pullFrame));
 
   /**
-   * Settles the menu from `from` of the way out to open (1) or shut (0) on
-   * the house spring, leaving at `speed` px/ms.
+   * Settles a surface hanging from a tab's foot (the tab's menu, its card)
+   * from `from` of the way out to open (1) or shut (0) on the house spring,
+   * leaving at `speed` px/ms; `done` hears where it came to rest.
    */
   function settlePull(
-    id: string,
     el: HTMLElement,
     from: number,
     target: 0 | 1,
-    speed: number
+    speed: number,
+    done: (target: 0 | 1) => void
   ) {
     cancelAnimationFrame(pullFrame);
     const h = el.offsetHeight || 1;
@@ -762,14 +863,18 @@
         pullFrame = requestAnimationFrame(step);
         return;
       }
-      if (target === 1) {
-        releasePull(el);
-      } else {
-        setMenu(id, false);
-      }
+      done(target);
     };
     pullFrame = requestAnimationFrame(step);
   }
+  /** Where a tab's menu comes to rest: back to its own rules open, or closed. */
+  const menuRest = (id: string, el: HTMLElement) => (target: 0 | 1) => {
+    if (target === 1) {
+      releasePull(el);
+    } else {
+      setMenu(id, false);
+    }
+  };
 
   /** The press that follows a pull lands on the tab as a click: it is not one. */
   function swallowClick(node: HTMLElement) {
@@ -867,18 +972,18 @@
       const speed = pullSpeed(samples);
       const h = shown.offsetHeight || 1;
       settlePull(
-        id,
         shown,
         dy / h,
         dy + speed * PULL_PROJECT >= PULL_OPEN ? 1 : 0,
-        speed
+        speed,
+        menuRest(id, shown)
       );
     };
     /** The press was taken away mid-pull: the menu goes back up. */
     const cancel = () => {
       stop();
       if (pulling && el) {
-        settlePull(id, el, dy / (el.offsetHeight || 1), 0, 0);
+        settlePull(el, dy / (el.offsetHeight || 1), 0, 0, menuRest(id, el));
       }
     };
     const stop = () => {
@@ -892,37 +997,88 @@
   }
 
   /**
-   * The drawer drags from anywhere in it. A finger pulling down over content
-   * that is scrolled to its top would otherwise start the browser's own
-   * scroll, which takes the touch away from the drawer; held there, the
-   * pull is the drawer's. Content scrolled down scrolls back up first.
+   * A finger swiping up on the open card's head folds it back into its tab,
+   * 1:1 under the finger, and lets go on the house spring: past PULL_OPEN
+   * (carried along its speed) it goes back into the tab and closes; short
+   * of it, it comes back down. The pull of the tab's menu, the other way.
+   * With less motion a swipe past PULL_OPEN closes it.
    */
-  function lockAtTop(node: HTMLElement) {
-    let startY = 0;
-    const onstart = (event: TouchEvent) => {
-      startY = event.touches[0].clientY;
-    };
-    const onmove = (event: TouchEvent) => {
-      if (event.touches[0].clientY <= startY) {
-        return;
-      }
-      for (
-        let el = event.target instanceof Element ? event.target : null;
-        el && el !== node;
-        el = el.parentElement
-      ) {
-        if (el.scrollTop > 0) {
+  function swipeCardShut(event: PointerEvent) {
+    if (
+      event.pointerType === "mouse" ||
+      !event.isPrimary ||
+      !(event.target instanceof Element && event.target.closest(".head"))
+    ) {
+      return;
+    }
+    const el = event.currentTarget as HTMLElement;
+    const x0 = event.clientX;
+    const y0 = event.clientY;
+    let swiping = false;
+    let dy = 0;
+    const samples: PullSample[] = [];
+    const h = () => el.offsetHeight || 1;
+    const move = (e: PointerEvent) => {
+      dy = e.clientY - y0;
+      if (!swiping) {
+        const verdict = pullVerdict(e.clientX - x0, -dy);
+        if (verdict === "wait") {
           return;
         }
+        if (verdict === "not") {
+          stop();
+          return;
+        }
+        swiping = true;
+        el.setPointerCapture(e.pointerId);
       }
-      event.preventDefault();
+      if (!motionOk.current) {
+        if (-dy >= PULL_OPEN) {
+          stop();
+          closeDetails();
+        }
+        return;
+      }
+      cancelAnimationFrame(pullFrame);
+      track(samples, dy, e.timeStamp);
+      drawPull(el, 1 + Math.min(dy, 0) / h());
     };
-    node.addEventListener("touchstart", onstart, { passive: true });
-    node.addEventListener("touchmove", onmove, { passive: false });
-    return () => {
-      node.removeEventListener("touchstart", onstart);
-      node.removeEventListener("touchmove", onmove);
+    const up = () => {
+      stop();
+      if (!(swiping && motionOk.current)) {
+        return;
+      }
+      const speed = pullSpeed(samples);
+      settlePull(
+        el,
+        1 + Math.min(dy, 0) / h(),
+        -(dy + speed * PULL_PROJECT) >= PULL_OPEN ? 0 : 1,
+        speed,
+        (target) => {
+          if (target === 0) {
+            // Folded into the tab: it leaves from there, with nothing left
+            // to play.
+            closeDetails();
+          } else {
+            releasePull(el);
+          }
+        }
+      );
     };
+    const cancel = () => {
+      stop();
+      if (swiping && motionOk.current) {
+        settlePull(el, 1 + Math.min(dy, 0) / h(), 1, 0, () => releasePull(el));
+      }
+    };
+    const stop = () => {
+      el.removeEventListener("pointermove", move);
+      el.removeEventListener("pointerup", up);
+      el.removeEventListener("pointercancel", cancel);
+    };
+    el.addEventListener("pointermove", move);
+    el.addEventListener("pointerup", up);
+    el.addEventListener("pointercancel", cancel);
   }
 </script>
 
@@ -947,6 +1103,8 @@
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
         class="tab"
+        data-chosen={chosen ? "" : undefined}
+        data-details-open={detailsOpen && detailId === tab.id ? "" : undefined}
         data-tone={tab.tone}
         oncontextmenucapture={anchorMenu}
         onpointerdown={(event) => pullMenu(tab.id, event)}
@@ -985,7 +1143,10 @@
                 if (event.key === "ArrowDown" || event.key === " ") {
                   event.preventDefault();
                   event.stopPropagation();
-                  showDetails(tab.id, event.currentTarget as HTMLElement, true);
+                  const anchor = anchorOf(tab.id);
+                  if (anchor) {
+                    showDetails(tab.id, anchor, true);
+                  }
                 }
               }}
               onpointerdown={() => rebuildScheduler.prepare(tab.id)}
@@ -1084,9 +1245,7 @@
             {#if !(runIdOf(tab.id) || isThreadTab(tab.id))}
               <ContextMenu.Item
                 onSelect={() => {
-                  const anchor = document.querySelector<HTMLElement>(
-                    `[data-session-tab="${tab.id}"]`
-                  );
+                  const anchor = anchorOf(tab.id);
                   if (anchor) {
                     showDetails(tab.id, anchor, true);
                   }
@@ -1155,138 +1314,134 @@
         </ContextMenu.Root>
         <!-- The status rim, drawn on the tab's own outline, on every width. -->
         <span aria-hidden="true" class="rim"></span>
+        <!-- The stroke up the tab's flanks while its card hangs from it:
+             the rim owns the top, the neck the foot. -->
+        <span aria-hidden="true" class="neck"></span>
       </div>
     {/each}
   </TabsList>
 </Tabs>
 
-{#if touch.current}
-  <!-- It drags from anywhere, not only its handle (`handleOnly` false),
-       and content scrolled to its top gives a downward pull to the drawer
-       (`lockAtTop`); vaul follows the finger 1:1 and lets go on velocity. -->
-  <Drawer.Root
-    handleOnly={false}
-    onOpenChange={(open) => {
-      if (!open) {
-        closeDetails();
-      }
-    }}
-    open={detailsOpen}
-  >
-    <Drawer.Content
-      class="session-details-sheet"
+<Popover.Root
+  onOpenChange={(open) => {
+    if (!open) {
+      closeDetails();
+    }
+  }}
+  open={detailsOpen}
+>
+  <Popover.Portal>
+    <Popover.Content
+      align="start"
+      alignOffset={alignFor(detailAnchor)}
+      aria-label="Session details"
+      class="kit-pop session-details-popover"
+      collisionPadding={12}
+      customAnchor={detailAnchor}
       onCloseAutoFocus={(event) => {
         event.preventDefault();
-        detailAnchor?.focus();
+        if (restoreFocus) {
+          detailAnchor?.focus();
+        }
       }}
-    >
-      <Drawer.Title class="sr-only">Session details</Drawer.Title>
-      <Drawer.Description class="sr-only"
-        >Session identity, runtime configuration and usage.</Drawer.Description
-      >
-      <div class="details-scroll" {@attach lockAtTop}>
-        {#if detailTab}
-          <SessionDetails
-            dir={detailDir}
-            href={detailTab.href}
-            onclose={closeDetails}
-            sessionId={detailTab.id}
-            title={detailTab.label}
-          />
-        {/if}
-      </div>
-    </Drawer.Content>
-  </Drawer.Root>
-{:else}
-  <Popover.Root
-    onOpenChange={(open) => {
-      if (!open) {
-        closeDetails();
-      }
-    }}
-    open={detailsOpen}
-  >
-    <Popover.Portal>
-      <Popover.Content
-        align="start"
-        aria-label="Session details"
-        class="kit-pop session-details-popover"
-        collisionPadding={12}
-        customAnchor={detailAnchor}
-        onCloseAutoFocus={(event) => {
+      onfocusin={() => {
+        clearTimeout(timer);
+        pinned = true;
+      }}
+      onInteractOutside={(event) => {
+        if (
+          event.target instanceof Element &&
+          event.target.closest("[data-session-tab]")
+        ) {
           event.preventDefault();
-          if (restoreFocus) {
-            detailAnchor?.focus();
-          }
-        }}
-        onfocusin={() => {
-          clearTimeout(timer);
-          pinned = true;
-        }}
-        onInteractOutside={(event) => {
-          if (
-            event.target instanceof Element &&
-            event.target.closest("[data-session-tab]")
-          ) {
-            event.preventDefault();
-          }
-        }}
-        onOpenAutoFocus={(event) => {
-          if (!pinned) {
-            event.preventDefault();
-          }
-        }}
-        onpointerdowncapture={() => {
-          clearTimeout(timer);
-          pinned = true;
-        }}
-        onpointerenter={() => clearTimeout(timer)}
-        onpointerleave={leaveDetails}
-        side="bottom"
-        sideOffset={6}
-        trapFocus={pinned}
-      >
-        {#snippet child({
-          props,
-          wrapperProps,
-        })}
-          <div {...wrapperProps}>
-            <!-- The morph mark changes as the surface retargets. It is set
+        }
+      }}
+      onOpenAutoFocus={(event) => {
+        if (!pinned) {
+          event.preventDefault();
+        }
+      }}
+      onpointerdowncapture={() => {
+        clearTimeout(timer);
+        pinned = true;
+      }}
+      onpointerenter={() => clearTimeout(timer)}
+      onpointerleave={leaveDetails}
+      side="bottom"
+      sideOffset={0}
+      trapFocus={pinned}
+    >
+      {#snippet child({
+        props,
+        wrapperProps,
+      })}
+        <div {...wrapperProps}>
+          <!-- The morph mark changes as the surface retargets. It is set
                  here, on the element: as a prop of Popover.Content the change
                  re-mounts bits-ui's focus scope, which runs its close
                  auto-focus on a surface that is still open. -->
-            <div {...props} data-morph={morphing ? "" : undefined}>
-              <div
-                class="details-morph"
-                style:height={detailsHeight ? `${detailsHeight}px` : undefined}
-              >
-                <div class="details-measure" bind:offsetHeight={detailsHeight}>
-                  {#if detailTab}
-                    <SessionDetails
-                      dir={detailDir}
-                      href={detailTab.href}
-                      onclose={closeDetails}
-                      sessionId={detailTab.id}
-                      title={detailTab.label}
-                    />
-                  {/if}
-                </div>
+          <div
+            {...props}
+            data-morph={morphing ? "" : undefined}
+            style:--neck-end={`${neck.end}px`}
+            style:--neck-flare={`${neck.flare}px`}
+            style:--neck-start={`${neck.start}px`}
+            {@attach trackNeck}
+          >
+            <div
+              class="details-morph"
+              style:height={detailsHeight ? `${detailsHeight}px` : undefined}
+            >
+              <div class="details-measure" bind:offsetHeight={detailsHeight}>
+                {#if detailTab}
+                  <SessionDetails
+                    dir={detailDir}
+                    href={detailTab.href}
+                    onclose={closeDetails}
+                    sessionId={detailTab.id}
+                    title={detailTab.label}
+                  />
+                {/if}
               </div>
             </div>
           </div>
-        {/snippet}
-      </Popover.Content>
-    </Popover.Portal>
-  </Popover.Root>
-{/if}
+        </div>
+      {/snippet}
+    </Popover.Content>
+  </Popover.Portal>
+</Popover.Root>
 
 <style>
   /* The card is a kit floating surface (app.css `.kit-pop`): its surface,
-     and its open and close as transitions on data-state. Closed, it rests
-     invisible, so there is nothing to show between the close ending and
-     bits-ui unmounting it, and a close caught mid-open turns back from where
-     the entrance had reached. Its content runs edge to edge. */
-  :global(.session-details-popover) {
+     its shadow and its fade with reduced motion. Its content runs edge to
+     edge. It hangs from its tab's foot (PaneTabs script, "The card hangs
+     from its tab"): its edge is drawn by `::after` rather than its border,
+     so the top can be cut across the tab's flared span, and its shadow is
+     cut at its top edge, so none falls on the strip or darkens the tab's
+     foot into a seam. */
+  @property --neck-start {
+    syntax: "<length>";
+    inherits: true;
+    initial-value: 0px;
+  }
+  @property --neck-end {
+    syntax: "<length>";
+    inherits: true;
+    initial-value: 0px;
+  }
+  :global(.kit-pop.session-details-popover) {
+    /* Open: cut at its top edge only, with room for the whole overlay
+       shadow past the others (as the pulled menu's `drawPull`). Shut: the
+       tab's span at the card's top edge, no height at all. Both rounded at
+       the foot like the card, so one interpolates into the other. */
+    --clip-open: inset(
+      0 -120px -120px round 0 0 var(--radius-lg) var(--radius-lg)
+    );
+    --clip-shut: inset(
+      0 calc(100% - var(--neck-end)) 100% var(--neck-start) round 0 0
+        var(--radius-lg) var(--radius-lg)
+    );
+    position: relative;
     display: flex;
     z-index: 60;
     width: min(416px, calc(100vw - 24px));
@@ -1294,28 +1449,78 @@
     overflow: hidden;
     overscroll-behavior: contain;
     padding: 0;
-    transform-origin: var(--bits-popover-content-transform-origin);
+    border: 0;
+    clip-path: var(--clip-open);
     outline: none;
+
+    /* A phone's card stands a margin in from each side, under its tab,
+       and holds clear of the screen's foot. */
+    @media (max-width: 640px) {
+      max-height: min(
+        calc(100dvh - var(--c-top-bar-h) - 24px - var(--safe-bottom)),
+        var(--bits-popover-content-available-height, 85dvh)
+      );
+    }
   }
-  :global(.session-details-sheet) {
-    padding: 0;
-    padding-bottom: var(--safe-bottom);
-    max-height: 88dvh;
+  /* Open and close: a clip that grows down out of the tab's foot and widens
+     to the card as it deepens, revealing what is in it as the foot passes;
+     nothing inside fades. Transitions on data-state, so a close caught
+     mid-open turns back from where it is (The Interruptible Rule), over
+     --dur-pop in and --dur-exit out (The Fast Exit Rule). The kit's rise
+     and scale do not apply; with reduced motion the kit's fade runs and
+     the card stands open. */
+  @media (prefers-reduced-motion: no-preference) {
+    :global(.kit-pop.session-details-popover) {
+      translate: none;
+      scale: none;
+      transition: clip-path var(--dur-pop) var(--ease-drawer);
+    }
+    :global(.kit-pop.session-details-popover[data-state="closed"]) {
+      opacity: 1;
+      translate: none;
+      scale: none;
+      clip-path: var(--clip-shut);
+      transition-duration: var(--dur-exit);
+    }
+    @starting-style {
+      :global(.kit-pop.session-details-popover[data-state="open"]) {
+        opacity: 1;
+        translate: none;
+        scale: none;
+        clip-path: var(--clip-shut);
+      }
+    }
+  }
+  .details-morph {
+    width: 100%;
+    max-height: inherit;
     overflow: hidden;
-    border: 1px solid var(--border-control);
-    border-bottom: 0;
-    background: var(--surface-raised);
-    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   }
-  :global(.session-details-sheet::before) {
-    content: none;
-  }
-  .details-scroll {
+  .details-measure {
     display: flex;
-    flex: 1 1 auto;
-    min-height: 0;
-    max-height: calc(88dvh - 24px - var(--safe-bottom));
-    overflow: hidden;
+    flex-direction: column;
+    width: 100%;
+    max-height: inherit;
+  }
+  /* The glide to another tab: the wrapper's move, the card's height and the
+     cut in its top edge, together. */
+  @media (prefers-reduced-motion: no-preference) {
+    :global(
+      [data-bits-floating-content-wrapper]:has(
+        > .session-details-popover[data-morph]
+      )
+    ) {
+      transition: transform var(--dur-pop) var(--ease-drawer);
+    }
+    :global(.session-details-popover[data-morph]) .details-morph {
+      transition: height var(--dur-pop) var(--ease-drawer);
+    }
+    :global(.kit-pop.session-details-popover[data-morph]) {
+      transition:
+        clip-path var(--dur-pop) var(--ease-drawer),
+        --neck-start var(--dur-pop) var(--ease-drawer),
+        --neck-end var(--dur-pop) var(--ease-drawer);
+    }
   }
   /* The trailing controls sit 4px after the title and 4px apart, on every
      pointer (owner: "a lot of wasted space until the x button"); where the
@@ -1377,29 +1582,6 @@
       &:hover {
         background: var(--surface-fill);
       }
-    }
-  }
-  .details-morph {
-    width: 100%;
-    max-height: inherit;
-    overflow: hidden;
-  }
-  .details-measure {
-    display: flex;
-    flex-direction: column;
-    width: 100%;
-    max-height: inherit;
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    :global(
-      [data-bits-floating-content-wrapper]:has(
-        > .session-details-popover[data-morph]
-      )
-    ) {
-      transition: transform var(--dur-pop) var(--ease-drawer);
-    }
-    :global(.session-details-popover[data-morph]) .details-morph {
-      transition: height var(--dur-pop) var(--ease-drawer);
     }
   }
   /* ── The row ──────────────────────────────────────────────────────
@@ -1772,6 +1954,57 @@
     }
   }
 
+  /* ── The tab its card hangs from ─────────────────────────────────
+     While its card is open a tab keeps the card head's surface (the
+     chosen sheet already is it; a hovered tab's card would light to the
+     hover step instead), and the chosen tab draws a 1px stroke in the
+     card's edge from the flare's outer end, up the concave flare and up
+     each flank, fading out by 60% of the tab's height where the rim's
+     taper takes over. It is drawn like the rim's stroke, as a shape on a
+     box one flare wider than the tab each side, and reaches 1px under the
+     tab so it meets the card's own top edge. */
+  .tab[data-details-open] {
+    --tab-fill: var(--surface-recess);
+    --tab-hover: var(--surface-recess);
+  }
+  .neck {
+    display: none;
+  }
+  .tab[data-details-open][data-chosen] .neck {
+    --f: var(--flare);
+    --h: calc(100% - 1px);
+    display: block;
+    position: absolute;
+    inset-block: 0 -1px;
+    inset-inline: calc(-1 * var(--flare));
+    z-index: 2;
+    pointer-events: none;
+    background: var(--border-control);
+    clip-path: shape(
+      from 0 100%,
+      arc to calc(var(--f) + 1px) calc(var(--h) - var(--f)) of
+        calc(var(--f) + 1px) ccw,
+      line to calc(var(--f) + 1px) 0,
+      line to var(--f) 0,
+      line to var(--f) calc(var(--h) - var(--f)),
+      arc to 0 var(--h) of var(--f) cw,
+      close,
+      move to 100% 100%,
+      arc to calc(100% - var(--f) - 1px) calc(var(--h) - var(--f)) of
+        calc(var(--f) + 1px) cw,
+      line to calc(100% - var(--f) - 1px) 0,
+      line to calc(100% - var(--f)) 0,
+      line to calc(100% - var(--f)) calc(var(--h) - var(--f)),
+      arc to 100% var(--h) of var(--f) ccw,
+      close
+    );
+    mask-image: linear-gradient(
+      to top,
+      #000 calc(var(--f) + 2px),
+      transparent 60%
+    );
+  }
+
   .tclose {
     display: grid;
     place-items: center;
@@ -1819,5 +2052,27 @@
   }
   .tdetails[aria-expanded="true"] :global(svg) {
     transform: rotate(180deg);
+  }
+  /* The card's edge, with its top cut across the tab's flared span
+     (`.session-details-popover` above). Last, after the rim's own. */
+  :global(.kit-pop.session-details-popover)::after {
+    --gap-from: calc(var(--neck-start) - var(--neck-flare, 0px));
+    --gap-to: calc(var(--neck-end) + var(--neck-flare, 0px));
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    border: 1px solid var(--border-control);
+    border-radius: inherit;
+    pointer-events: none;
+    mask:
+      linear-gradient(
+        to right,
+        #000 var(--gap-from),
+        transparent var(--gap-from) var(--gap-to),
+        #000 var(--gap-to)
+      )
+      top / 100% 1px no-repeat,
+      linear-gradient(#000 0 0) 0 1px / 100% calc(100% - 1px) no-repeat;
   }
 </style>
