@@ -20,7 +20,7 @@
 </script>
 
 <script lang="ts">
-  import { Popover } from "bits-ui";
+  import { mergeProps, Popover } from "bits-ui";
   /**
    * One group's tabs: a segmented control (the Fluid Functionalism tabs,
    * `#lib/components/ui/fluid-tabs/index.js`) with one segment per open conversation.
@@ -45,7 +45,12 @@
     easeOut,
     motionOk,
   } from "#lib/cawco/motion/curves.svelte.js";
-  import { hang, type Neck, sameNeck } from "#lib/cawco/motion/hang.js";
+  import {
+    hang,
+    type Neck,
+    neckStyle,
+    sameNeck,
+  } from "#lib/cawco/motion/hang.js";
   import { land } from "#lib/cawco/motion/share.svelte.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
@@ -1411,13 +1416,9 @@
                  re-mounts bits-ui's focus scope, which runs its close
                  auto-focus on a surface that is still open. -->
           <div
-            {...props}
+            {...mergeProps(props, { style: neckStyle(neck) })}
             data-flush={neck.flush ?? undefined}
             data-morph={morphing ? "" : undefined}
-            style:--neck-end={`${neck.end}px`}
-            style:--neck-flare-end={`${neck.flareEnd}px`}
-            style:--neck-flare-start={`${neck.flareStart}px`}
-            style:--neck-start={`${neck.start}px`}
             {@attach hangCard}
             {@attach swipeShut}
           >

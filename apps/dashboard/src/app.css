@@ -1108,7 +1108,8 @@
       border-radius: inherit;
       pointer-events: none;
       /* A flare's stroke meets the top edge along it, its last few pixels
-         in the edge's own row (`--neck-tail-*`, none unless the card asks):
+         in the edge's own row (`--neck-tail-*`, √(2·flare + 1) each side
+         with a flare, written by every card through hang's `neckStyle`):
          the edge fades out across them as the stroke's coverage does,
          rather than stopping short of them. */
       mask:
@@ -1825,29 +1826,41 @@
   }
 }
 
-/* Important because a row's own component rule (unlayered, often
-   `background: none` or a hover fill) would otherwise win over any layer. A
-   colour change, so it runs under every motion preference. */
-@layer utilities {
-  .press-tint:active:not(:disabled, [aria-disabled="true"]),
-  [data-holding] {
-    background-color: var(--surface-fill) !important;
-  }
-  /* By day the hover step is surface-fill's own, so a press under the
-     pointer is the step past it. Muted ink on that step is 3.93:1 and a
-     selected row's coral ink 4.12:1: those inks inside the pressed control
-     go strong for as long as it is held (8.90:1). Night keeps surface-fill
-     and its inks. */
-  :root:not(.dark)
+/* The tint must win over a row's own component rule (unlayered, often
+   `background: none` or a hover fill), which wins over any layer. So it is
+   unlayered too, and outranks every such rule by an id's weight: `#\#` is
+   an id no element has, so `:is(…, #\#)` matches as its other argument does
+   and counts as an id (Selectors 4, :is() takes its most specific
+   argument). Not `!important`: an important base value cannot be animated
+   on the compositor (Chromium's kAffectsImportantProperty), so every
+   control's fade into the tint ran on the main thread. A colour change, so
+   it runs under every motion preference. By day the hover step is
+   surface-fill's own, so a press under the pointer is the step past it;
+   night keeps surface-fill. */
+:is(.press-tint:active, #\#):not(:disabled, [aria-disabled="true"]),
+:is([data-holding], #\#) {
+  background-color: var(--surface-fill);
+}
+:root:not(.dark)
   :is(
-    .press-tint:active:not(:disabled, [aria-disabled="true"]),
-    [data-holding]
+    :is(.press-tint:active, #\#):not(:disabled, [aria-disabled="true"]),
+    :is([data-holding], #\#)
   ) {
+  background-color: var(--surface-fill-strong);
+}
+/* Muted ink on the day's press step is 3.93:1 and a selected row's coral
+   ink 4.12:1: those inks inside the pressed control go strong for as long
+   as it is held (8.90:1). Night keeps its inks. */
+@layer utilities {
+  :root:not(.dark)
+    :is(
+      .press-tint:active:not(:disabled, [aria-disabled="true"]),
+      [data-holding]
+    ) {
     --ink-muted: var(--ink-strong);
     --text-muted: var(--ink-strong);
     --ink-subtle: var(--ink-strong);
     --selected-ink: var(--ink-strong);
-    background-color: var(--surface-fill-strong) !important;
   }
 }
 
