@@ -382,7 +382,7 @@ export class GrownShape {
     this.#done?.();
     // A drop that was up follows the shape while it fades out.
     if (this.#dropUntil === Number.POSITIVE_INFINITY) {
-      this.#dropUntil = performance.now() + dur("--dur-fade");
+      this.#dropUntil = performance.now() + dur("--dur-exit");
     }
     this.#drop.classList.remove("settled");
     for (const band of this.#bands) {

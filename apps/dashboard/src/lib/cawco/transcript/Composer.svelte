@@ -3729,12 +3729,14 @@
   /* Faded out, the drop and the blur are not drawn at all: a clear layer's
      shadow or backdrop still cost a frame in six on WebKit as the shape
      moved under it. */
+  /* They leave faster than they come (--dur-exit): the shape is moving
+     under them as they go. */
   .shell :global(:is(.grown-drop, .grown-band)) {
     opacity: 0;
     visibility: hidden;
     transition:
-      opacity var(--dur-fade) var(--ease-out),
-      visibility 0s linear var(--dur-fade);
+      opacity var(--dur-exit) var(--ease-out),
+      visibility 0s linear var(--dur-exit);
   }
   .shell :global(:is(.grown-drop, .grown-band).settled) {
     opacity: 1;
