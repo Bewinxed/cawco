@@ -520,6 +520,40 @@ public final class HubConnection {
         }
     }
 
+    /// Reads the fleet's update policy; a failed read keeps what was there.
+    func readUpdatePolicy() {
+        guard let client else { return }
+        Task { [weak self] in
+            guard let policy = try? await client.getApiBinaryUpdatesSettings().ok.body.json else { return }
+            self?.fleet.updatePolicy = Notice.Policy(autoUpdate: policy.autoUpdate)
+        }
+    }
+
+    /// Install now on one machine (updates.svelte.ts `installNow`): one
+    /// command, acted on once, for the build it offers. A machine that is not
+    /// connected or could not start it is no longer counted as asked.
+    public func installUpdate(machineId: String) {
+        guard let client else { return }
+        let version = fleet.machines.first { $0.machineId == machineId }?.binaryUpdate?.availableVersion
+        fleet.commanded.insert(machineId)
+        Task { [weak self] in
+            let answer = try? await client.postApiAgentsByMachineIdUpdate(
+                path: .init(machineId: machineId),
+                body: .json(.init(commandId: UUID().uuidString.lowercased(), version: version))
+            )
+            switch answer {
+            case .notFound, .internalServerError:
+                self?.log.error("install on \(machineId, privacy: .public) refused: \(String(describing: answer), privacy: .public)")
+                self?.fleet.commanded.remove(machineId)
+            default:
+                break
+            }
+        }
+    }
+
+    /// The update notice's ✕ on "running on N machines": this device's installs are forgotten.
+    public func forgetCommanded() { fleet.commanded.removeAll() }
+
     /// Which account a session would start on, and why (client.svelte.ts
     /// `placementFor`): the account whose models the picker offers.
     public func placement(harness: String, machineId: String, model: String?, projectId: String?) async -> String? {
@@ -536,6 +570,7 @@ public final class HubConnection {
             return false
         }
         readAccounts()
+        readUpdatePolicy()
         // The reads and their decoding run off the main actor; only what they
         // found is adopted here, so the first frames keep drawing while the
         // fleet is read.

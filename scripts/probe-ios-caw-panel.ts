@@ -194,7 +194,9 @@ const pause = (ms: number) => Bun.sleep(ms);
 const tap = (udid: string, p: { x: number; y: number }) =>
   mac(`${AXE} tap -x ${Math.round(p.x)} -y ${Math.round(p.y)} --udid ${udid}`);
 
-const NOTICE = "Probe moved into CawCo";
+/** The moved login's row (MovedLogins.svelte): the account's name is its entry, its ✕ "Dismiss moved logins". */
+const NOTICE = "Probe";
+const NOTICE_DISMISS = "Dismiss moved logins";
 /** Caw's own label: "Needs you, N". The panel's head reads "Needs you" alone. */
 const CAW_LABEL = /^Needs you, \d+$/;
 const caw = (nodes: Node[]) =>
@@ -202,7 +204,7 @@ const caw = (nodes: Node[]) =>
 const approve = (nodes: Node[]) =>
   nodes.find((n) => n.label?.startsWith("Approve ") === true);
 const dismiss = (nodes: Node[]) =>
-  nodes.find((n) => n.label === `Dismiss ${NOTICE}`);
+  nodes.find((n) => n.label === NOTICE_DISMISS);
 /** The panel's box: its group, or else what it holds. */
 const panelBox = (nodes: Node[]): Frame | undefined => {
   const group = nodes.find((n) => n.label === "Notifications" && n.frame);
@@ -343,11 +345,13 @@ xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-e
   check(
     `${kind}: the panel lists the notice, under Needs you`,
     dismiss(nodes) !== undefined &&
+      nodes.some((n) => n.label === NOTICE) &&
+      nodes.some((n) => n.label?.startsWith("from Claude Code on ") === true) &&
       (dismiss(nodes)?.frame?.y ?? 0) >
         (ask?.frame?.y ?? Number.POSITIVE_INFINITY) - 1,
     dismiss(nodes)
-      ? `"${NOTICE}" with its ✕ at y ${Math.round(dismiss(nodes)?.frame?.y ?? 0)}, the ask's Approve at y ${Math.round(ask?.frame?.y ?? 0)}`
-      : `no "Dismiss ${NOTICE}"; labels: ${nodes
+      ? `"${NOTICE}", "${nodes.find((n) => n.label?.startsWith("from Claude Code on ") === true)?.label ?? "no from-line"}", its ✕ at y ${Math.round(dismiss(nodes)?.frame?.y ?? 0)}, the ask's Approve at y ${Math.round(ask?.frame?.y ?? 0)}`
+      : `no "${NOTICE_DISMISS}"; labels: ${nodes
           .map((n) => n.label)
           .filter(Boolean)
           .slice(0, 40)

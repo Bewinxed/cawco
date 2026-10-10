@@ -1,91 +1,307 @@
+import CawCoAPI
 import Foundation
 
-/// Something the fleet tells the operator once, kept by the hub until a person
-/// acknowledges it on any device (notices.svelte.ts): an update that landed
-/// (updates/model.ts `updatedNotice`), a login moved into CawCo
-/// (accounts/model.svelte.ts `movedLogins`), or what adding an account set
-/// moving (`rebalancesUnseen`, core `rebalanceWords`). Caw's panel lists them
-/// under Needs you, each with its ✕.
+/// One row under Caw's panel's Notices (CawPanel.svelte, NoticeRow.svelte):
+/// the update notice (updates/model.ts `noticeFor`), the logins moved into
+/// CawCo (MovedLogins.svelte), or what an account that came set moving
+/// (RebalanceNotices.svelte). Each kind is one row, its entries in it, and its
+/// ✕ acknowledges every entry it shows on every device (notices.svelte.ts).
 public struct Notice: Identifiable, Equatable, Sendable {
-    public enum Kind: String, Sendable {
-        case update, movedLogin, rebalance
+    public enum Kind: Sendable {
+        /// The update notice; `landedAll` is "CawCo X is running on N machines", which also forgets this device's installs.
+        case update(landedAll: Bool)
+        case movedLogins
+        case rebalances
+    }
+
+    /// The update notice's one act.
+    public enum Action: Equatable, Sendable {
+        case retry, installAll
+
+        public var label: String {
+            switch self {
+            case .retry: "Retry"
+            case .installAll: "Install now"
+            }
+        }
+    }
+
+    /// One entry of the row: what it says first, then a line each.
+    public struct Entry: Equatable, Sendable {
+        public let title: String
+        public let lines: [String]
     }
 
     public let id: String
     public let kind: Kind
-    public let title: String
-    /// What it says under its title, a line each.
-    public let lines: [String]
+    /// What VoiceOver calls the row, and its ✕.
+    public let label: String
+    public let dismissLabel: String
+    /// The title says a failure: the fail glyph stands before it.
+    public let failed: Bool
+    public let entries: [Entry]
+    /// A last line in the muted ink, after the entries.
+    public let closing: String?
+    public let action: Action?
+    /// The machines it stands for, by id.
+    public let machineIds: [String]
     /// The notice ids its ✕ acknowledges.
     public let acks: [String]
-    /// When it happened, ms epoch.
-    public let at: Double
 
-    /// Every notice nobody has acknowledged: the update first, then moved
-    /// logins and rebalances, newest first.
-    static func unseen(machines: [MachineRow], accounts: Components.Schemas.GetApiAccounts200?, seen: Set<String>) -> [Notice] {
+    public static func == (a: Notice, b: Notice) -> Bool {
+        a.id == b.id && a.entries == b.entries && a.closing == b.closing && a.action == b.action && a.failed == b.failed
+    }
+
+    /// Every row under Notices, in the panel's order: the update, the moved logins, the rebalances.
+    static func unseen(machines: [MachineRow], accounts: Components.Schemas.GetApiAccounts200?, policy: Policy?,
+                       commanded: Set<String>, seen: Set<String>) -> [Notice] {
         var out: [Notice] = []
-        if let update = updated(machines, seen: seen) { out.append(update) }
+        let fleet = machines.compactMap(UpdateMachine.init)
+        if let policy, let update = noticeFor(fleet, policy: policy, commanded: commanded, seen: seen) {
+            out.append(update)
+        }
         // Only the parts a notice reads: the view also carries every model catalog.
         guard let accounts,
               let people = try? Wire.transcode(accounts.accounts, as: [Account].self),
               let signins = try? Wire.transcode(accounts.signins, as: [Signin].self) else { return out }
-        let view = AccountsRead(accounts: people, signins: signins,
-                                rebalances: (try? Wire.transcode(accounts.rebalances, as: [Rebalance]?.self)) ?? nil)
-        out += movedLogins(view, machines: machines, seen: seen)
-        out += (view.rebalances ?? []).filter { !seen.contains($0.id) }.sorted { $0.at > $1.at }.map(rebalance)
+        if let moved = movedLogins(people, signins: signins, machines: machines, seen: seen) { out.append(moved) }
+        let rebalances = (try? Wire.transcode(accounts.rebalances, as: [Rebalance].self)) ?? []
+        if let rebalanced = rebalanced(rebalances.filter { !seen.contains($0.id) }) { out.append(rebalanced) }
         return out
     }
 
-    // MARK: The update
+    // MARK: The update notice (updates/model.ts)
+
+    /// The fleet's update policy (`/api/binary-updates/settings`).
+    public struct Policy: Equatable, Sendable {
+        public let autoUpdate: Bool
+    }
+
+    private nonisolated struct Hold: Decodable {
+        let reason: String
+        let ids: [String]
+    }
 
     private nonisolated struct Landing: Decodable {
         let at: Double
         let outcome: String
         let version: String
+        let notes: String?
     }
 
-    private nonisolated struct UpdateState: Decodable {
-        let landed: Landing?
+    private nonisolated struct KeeperRestart: Decodable {
+        let at: Double
+        let children: Int
+        let diagnostics: String
+        let dials: Int
+        let silentForMs: Double
+        let retiring: Bool?
+    }
+
+    private nonisolated struct State: Decodable {
+        let phase: String
+        let installedVersion: String
+        let availableVersion: String?
+        let hostsHub: Bool
+        let waitingOn: [Hold]?
+        let notes: String?
+        var landed: Landing?
+        let keeperRestart: KeeperRestart?
+    }
+
+    /// A machine that reports an update, as the notices read it.
+    private struct UpdateMachine {
+        let id: String
+        let name: String
+        let online: Bool
+        var state: State
+
+        init?(_ row: MachineRow) {
+            guard let update = row.binaryUpdate, let state = try? Wire.transcode(update, as: State.self) else { return nil }
+            id = row.machineId
+            name = Naming.machineLabel(row.hostname)
+            online = row.status == "online"
+            self.state = state
+        }
     }
 
     /// The hub's id for a landing (updates/model.ts `landingId`).
-    static func landingId(_ machineId: String, at: Double) -> String {
-        "landed:\(machineId):\(Int64(at))"
-    }
+    static func landingId(_ machineId: String, at: Double) -> String { "landed:\(machineId):\(Int64(at))" }
 
-    /// The build every online machine installed and nobody has acknowledged:
-    /// "CawCo updated to 0.9.2", on which machines.
-    private static func updated(_ machines: [MachineRow], seen: Set<String>) -> Notice? {
-        let landed: [(MachineRow, Landing)] = machines.compactMap { machine -> (MachineRow, Landing)? in
-            guard machine.status == "online", let state = machine.binaryUpdate,
-                  let landing = (try? Wire.transcode(state, as: UpdateState.self))?.landed,
-                  landing.outcome == "installed", !seen.contains(landingId(machine.machineId, at: landing.at)) else { return nil }
-            return (machine, landing)
-        }.sorted { $0.0.hostname.localizedStandardCompare($1.0.hostname) == .orderedAscending }
-        guard let lead = landed.first?.1 else { return nil }
-        let names = landed.map { Naming.machineLabel($0.0.hostname) }
-        let acks = landed.map { landingId($0.0.machineId, at: $0.1.at) }
-        return Notice(id: acks[0], kind: .update, title: "CawCo updated to \(displayVersion(lead.version))",
-                      lines: ["On \(sentence(names))"], acks: acks, at: lead.at)
-    }
+    private static func keeperRestartId(_ machineId: String, at: Double) -> String { "keeper:\(machineId):\(Int64(at))" }
 
     /// "0.9.2", "nightly 41" (updates/model.ts `displayVersion`).
-    static func displayVersion(_ version: String) -> String {
-        let bare = version.split(separator: "+", maxSplits: 1).first.map(String.init) ?? version
+    static func displayVersion(_ version: String?) -> String {
+        let whole = version ?? ""
+        let bare = whole.split(separator: "+", maxSplits: 1).first.map(String.init) ?? whole
         if let match = bare.firstMatch(of: /-nightly\.(\d+)$/) {
             return "nightly \(match.1)"
         }
         return bare
     }
 
-    // MARK: Accounts
+    private static func plural(_ n: Int, _ noun: String) -> String { "\(n) \(noun)\(n == 1 ? "" : "s")" }
 
-    private nonisolated struct AccountsRead {
-        let accounts: [Account]
-        let signins: [Signin]
-        let rebalances: [Rebalance]?
+    private static func counted(_ n: Int, _ one: String, _ many: String) -> String { "\(n) \(n == 1 ? one : many)" }
+
+    /// core `holdPhrases`: `2 tool calls`, `1 image generation`.
+    private static func holdWords(_ hold: Hold) -> String {
+        let n = hold.ids.count
+        switch hold.reason {
+        case "custody": return "the takeover of this machine's sessions"
+        case "starting": return counted(n, "session starting", "sessions starting")
+        case "image": return counted(n, "image generation", "image generations")
+        case "workspace": return counted(n, "workspace being set up or archived", "workspaces being set up or archived")
+        case "command": return counted(n, "command running", "commands running")
+        case "tool-call": return counted(n, "tool call", "tool calls")
+        case "hub-tool-call": return counted(n, "tool call at the hub", "tool calls at the hub")
+        case "write": return counted(n, "message being handed over", "messages being handed over")
+        case "opencode": return counted(n, "OpenCode operation", "OpenCode operations")
+        case "opencode-send": return counted(n, "session with messages not yet handed to OpenCode", "sessions with messages not yet handed to OpenCode")
+        default: return counted(n, "piece of work", "pieces of work")
+        }
     }
+
+    /// What a ready build waits for: the work in flight its restart would cut.
+    private static func waitsOn(_ state: State) -> [String] {
+        state.phase == "ready" ? (state.waitingOn ?? []).map(holdWords) : []
+    }
+
+    private static func doneOn(_ state: State) -> Bool {
+        state.availableVersion != nil && state.installedVersion == state.availableVersion
+    }
+
+    /// core `UPDATE_WAIT_CAP_MS`, in minutes.
+    private static let waitCapMinutes = 30
+
+    /// The release notes as lines: a section's name, then its items.
+    private static func noteLines(_ notes: String?) -> [String] {
+        (notes ?? "").split(separator: "\n").compactMap { raw -> String? in
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            if line.isEmpty { return nil }
+            if line.hasPrefix("#") { return line.drop { $0 == "#" }.trimmingCharacters(in: .whitespaces) }
+            if let match = line.firstMatch(of: /^(?:[-*+]|\d+\.)\s+(.*)$/) { return "• \(match.1)" }
+            return line
+        }
+    }
+
+    private static func update(_ id: String, title: String, failed: Bool = false, lines: [String] = [], closing: String? = nil,
+                               action: Action? = nil, machines: [UpdateMachine], acks: [String], landedAll: Bool = false) -> Notice {
+        Notice(id: id, kind: .update(landedAll: landedAll), label: title, dismissLabel: "Dismiss the update notice", failed: failed,
+               entries: [Entry(title: title, lines: lines)], closing: closing, action: action,
+               machineIds: machines.map(\.id), acks: acks)
+    }
+
+    /// The one update notice, or none: first match wins (updates/model.ts
+    /// `noticeFor`). This app is never a tab older than the dashboard, so the
+    /// reload notices do not apply; installs it asked for are `commanded`.
+    private static func noticeFor(_ all: [UpdateMachine], policy: Policy, commanded: Set<String>, seen: Set<String>) -> Notice? {
+        // The machines, with every landing someone has acknowledged taken off.
+        let machines = all.map { machine -> UpdateMachine in
+            var unseen = machine
+            if let landed = machine.state.landed, seen.contains(landingId(machine.id, at: landed.at)) { unseen.state.landed = nil }
+            return unseen
+        }
+        let live = machines.filter(\.online).sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        let landingIds = { (list: [UpdateMachine]) -> [String] in
+            list.compactMap { m -> String? in m.state.landed.map { landingId(m.id, at: $0.at) } }
+        }
+        let unlessSeen = { (notice: Notice?) -> Notice? in
+            guard let notice, !notice.acks.allSatisfy({ seen.contains($0) }) else { return nil }
+            return notice
+        }
+
+        // 1. A rollback nobody has seen.
+        if let machine = live.first(where: { $0.state.landed?.outcome == "rolled-back" }) {
+            let v = displayVersion(machine.state.landed?.version)
+            let cur = displayVersion(machine.state.installedVersion)
+            return update(landingIds([machine])[0], title: "CawCo \(v) did not install on \(machine.name)", failed: true,
+                          lines: ["It did not start, so \(machine.name) went back to \(cur) and is running. It will not try \(v) again by itself."],
+                          action: .retry, machines: [machine], acks: landingIds([machine]))
+        }
+        // 8. A machine's session keeper was restarted, or an earlier one removed.
+        if let machine = live.first(where: { m in m.state.keeperRestart.map { !seen.contains(keeperRestartId(m.id, at: $0.at)) } ?? false }),
+           let restart = machine.state.keeperRestart {
+            let id = keeperRestartId(machine.id, at: restart.at)
+            let silent = "It stopped answering for \(plural(max(1, Int((restart.silentForMs / 60000).rounded())), "minute")) (\(plural(restart.dials, "call")), no reply)"
+            let retiring = restart.retiring == true
+            return update(id, title: retiring ? "An earlier session keeper on \(machine.name) was removed" : "The session keeper on \(machine.name) was restarted",
+                          failed: true, lines: [
+                              retiring
+                                  ? "\(silent). It was the keeper of an earlier build, still holding sessions after an update; new sessions were already starting on the current keeper, and still do."
+                                  : "\(silent), so no session could start there. It was restarted and sessions start there again.",
+                              "\(restart.children == 1 ? "The 1 process" : "The \(restart.children) processes") it held ended with it: the sessions running there stopped.",
+                              "What it was doing is saved on \(machine.name) in \(restart.diagnostics).",
+                          ], machines: [machine], acks: [id])
+        }
+        // 2. An install this device asked for, or the hub restarting under it.
+        let inSet = live.filter { commanded.contains($0.id) || ($0.state.hostsHub && $0.state.phase == "installing") }
+        let running = inSet.contains { m in
+            (commanded.contains(m.id) && ["available", "downloading", "ready", "installing"].contains(m.state.phase))
+                || (m.state.hostsHub && m.state.phase == "installing")
+        }
+        if running {
+            let v = displayVersion(inSet.compactMap(\.state.availableVersion).first)
+            let id = "installing:\(v):\(inSet.map(\.id).joined(separator: ","))"
+            if !seen.contains(id) {
+                var lines: [String] = []
+                if inSet.count > 1 { lines.append("\(inSet.filter { doneOn($0.state) }.count) of \(inSet.count) machines done") }
+                if inSet.count <= 3 {
+                    lines += inSet.map { m -> String in
+                        if doneOn(m.state) { return "✓ \(m.name)" }
+                        if m.state.phase == "installing" { return "\(m.name) · restarting" }
+                        if m.state.phase == "downloading" { return "\(m.name) · downloading" }
+                        let waiting = waitsOn(m.state)
+                        return waiting.isEmpty ? "· \(m.name) · waiting" : "· \(m.name) · waiting for \(waiting.joined(separator: ", "))"
+                    }
+                }
+                let hub = inSet.first { $0.state.hostsHub && !doneOn($0.state) }
+                return update(id, title: "Installing CawCo \(v)", lines: lines,
+                              closing: hub.map { "The hub restarts with \($0.name). The app reconnects by itself." },
+                              machines: inSet, acks: [id])
+            }
+        }
+        // 3. Everything this device asked for has landed.
+        let asked = live.filter { commanded.contains($0.id) }
+        if !asked.isEmpty, asked.allSatisfy({ doneOn($0.state) }) {
+            let v = displayVersion(asked[0].state.availableVersion)
+            let acks = landingIds(asked)
+            return update(acks.first ?? "landed-all:\(v)", title: "CawCo \(v) is running on \(plural(asked.count, "machine"))",
+                          machines: asked, acks: acks, landedAll: true)
+        }
+        // 4. Auto-update is off and a build waits for a person.
+        let waiting = live.filter { $0.state.phase == "available" }
+        if !policy.autoUpdate, let lead = waiting.first {
+            let v = displayVersion(lead.state.availableVersion)
+            let id = "ready:\(waiting.count):\(v)"
+            if let notice = unlessSeen(update(id, title: "CawCo \(v) is ready", lines: noteLines(lead.state.notes),
+                                              closing: "Auto-update is off. It waits until you install it.",
+                                              action: .installAll, machines: waiting, acks: [id])) {
+                return notice
+            }
+        }
+        // 5. Auto-update is on and work in flight holds machines back.
+        let held = live.filter { !waitsOn($0.state).isEmpty }
+        if policy.autoUpdate, let lead = held.first {
+            let v = displayVersion(lead.state.availableVersion)
+            let id = "ready:\(held.count):\(v)"
+            let closing = "Each machine installs it once its work in flight ends, within \(waitCapMinutes) minutes. Turns keep running through it. \(held.count) \(held.count == 1 ? "is" : "are") waiting now."
+            if let notice = unlessSeen(update(id, title: "CawCo \(v) is ready", lines: noteLines(lead.state.notes), closing: closing,
+                                              machines: held, acks: [id])) {
+                return notice
+            }
+        }
+        // 6. A build landed that nobody has acknowledged.
+        let landed = live.filter { $0.state.landed?.outcome == "installed" }
+        if let landing = landed.first?.state.landed {
+            let acks = landingIds(landed)
+            return update(acks[0], title: "CawCo updated to \(displayVersion(landing.version))", lines: noteLines(landing.notes),
+                          machines: landed, acks: acks)
+        }
+        return nil
+    }
+
+    // MARK: Moved logins (MovedLogins.svelte)
 
     private nonisolated struct Account: Decodable {
         let id: String
@@ -111,21 +327,23 @@ public struct Notice: Identifiable, Equatable, Sendable {
 
     private static let storeWords = ["claude": "Claude Code", "pi": "pi", "opencode": "OpenCode"]
 
-    /// Each login moved in from a machine's own store, newest first.
-    private static func movedLogins(_ view: AccountsRead, machines: [MachineRow], seen: Set<String>) -> [Notice] {
-        view.signins.compactMap { signin -> Notice? in
+    /// Every login moved in from a machine's own store nobody has acknowledged, newest first, as one row.
+    private static func movedLogins(_ accounts: [Account], signins: [Signin], machines: [MachineRow], seen: Set<String>) -> Notice? {
+        let moved = signins.compactMap { signin -> (id: String, at: Double, entry: Entry)? in
             guard let movedAt = signin.movedAt,
-                  let account = view.accounts.first(where: { $0.id == signin.accountId }),
+                  let account = accounts.first(where: { $0.id == signin.accountId }),
                   let from = machines.first(where: { $0.machineId == signin.machineId }) else { return nil }
             let id = "moved-login:\(account.id):\(signin.machineId):\(Int64(movedAt))"
             guard !seen.contains(id) else { return nil }
             let store = storeWords[signin.movedFrom ?? "claude"] ?? "Claude Code"
-            return Notice(id: id, kind: .movedLogin, title: "\(name(account)) moved into CawCo",
-                          lines: ["From \(store) on \(Naming.machineLabel(from.hostname))"], acks: [id], at: movedAt)
+            return (id, movedAt, Entry(title: name(account), lines: ["from \(store) on \(Naming.machineLabel(from.hostname))"]))
         }.sorted { $0.at > $1.at }
+        guard let first = moved.first else { return nil }
+        return Notice(id: first.id, kind: .movedLogins, label: "Logins moved into CawCo", dismissLabel: "Dismiss moved logins",
+                      failed: false, entries: moved.map(\.entry), closing: nil, action: nil, machineIds: [], acks: moved.map(\.id))
     }
 
-    // MARK: Rebalances
+    // MARK: Rebalances (RebalanceNotices.svelte, core `rebalanceWords`)
 
     private nonisolated struct Named: Decodable {
         let name: String
@@ -174,11 +392,15 @@ public struct Notice: Identifiable, Equatable, Sendable {
         let held: [Held]
     }
 
-    /// core `rebalanceWords`: "design@ added on obelisk", then a line per thing it did.
-    private static func rebalance(_ notice: Rebalance) -> Notice {
-        let lines = notice.running.map(runningLine) + notice.held.map(heldLine)
-        return Notice(id: notice.id, kind: .rebalance, title: "\(cameWords(notice.came)) on \(notice.machine)",
-                      lines: lines, acks: [notice.id], at: notice.at)
+    /// Every pass nobody has acknowledged, newest first, as one row.
+    private static func rebalanced(_ passes: [Rebalance]) -> Notice? {
+        let sorted = passes.sorted { $0.at > $1.at }
+        guard let first = sorted.first else { return nil }
+        let entries = sorted.map { pass in
+            Entry(title: "\(cameWords(pass.came)) on \(pass.machine)", lines: pass.running.map(runningLine) + pass.held.map(heldLine))
+        }
+        return Notice(id: first.id, kind: .rebalances, label: "Sessions rebalanced", dismissLabel: "Dismiss rebalance notices",
+                      failed: false, entries: entries, closing: nil, action: nil, machineIds: [], acks: sorted.map(\.id))
     }
 
     private static func cameWords(_ came: [Came]) -> String {
@@ -189,8 +411,6 @@ public struct Notice: Identifiable, Equatable, Sendable {
         if !back.isEmpty { parts.append("\(sentence(back)) back from \(back.count == 1 ? "its" : "their") bench") }
         return parts.joined(separator: ", ")
     }
-
-    private static func sessionsWords(_ n: Int) -> String { "\(n) session\(n == 1 ? "" : "s")" }
 
     private static func thousands(_ tokens: Double?) -> String {
         tokens.map { "\(Int(($0 / 1000).rounded()))k" } ?? "its whole context"
@@ -205,7 +425,7 @@ public struct Notice: Identifiable, Equatable, Sendable {
         let on = group.organization.map { "\(group.from.name) (\($0))" } ?? group.from.name
         let why = group.cacheKept ? "cache shared" : "re-read on the move"
         let left = group.left > 0 ? "; \(group.left) not yet (mid-turn)" : ""
-        return "\(sessionsWords(group.moved + group.left)) on \(on) forecast to run out at \(clockWords(group.runsOutAt)); \(group.moved) moved to \(group.to.name) between turns (\(why))\(left)"
+        return "\(counted(group.moved + group.left, "session", "sessions")) on \(on) forecast to run out at \(clockWords(group.runsOutAt)); \(group.moved) moved to \(group.to.name) between turns (\(why))\(left)"
     }
 
     private static func heldMoveWords(_ one: HeldMove) -> String {

@@ -238,6 +238,10 @@ public final class FleetStore {
     public internal(set) var noticesSeen: Set<String> = []
     /// The hub's record has arrived: until then no notice can know it was seen.
     public internal(set) var noticesKnown = false
+    /// The fleet's update policy (`/api/binary-updates/settings`); nil until read, and no update notice is said until it is.
+    public internal(set) var updatePolicy: Notice.Policy?
+    /// The machines whose install this device asked for (updates.svelte.ts `commanded`).
+    public internal(set) var commanded: Set<String> = []
 
     /// Takes the hub's record, keeping what this device acknowledged that the hub has not echoed yet.
     func adopt(noticesSeen ids: [String]) {

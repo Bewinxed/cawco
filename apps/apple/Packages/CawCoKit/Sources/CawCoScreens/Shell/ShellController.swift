@@ -156,6 +156,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             hub.needs.answer(ask, machineId: item.machineId, answer)
         }
         cawPanel.onDismiss = { [weak self] notice in self?.home.dismiss(notice) }
+        cawPanel.onAct = { [weak self] notice in self?.home.act(notice) }
         cawPanel.onOpenChange = { [weak self] _ in self?.refreshBars() }
         TopBar.install(on: detail.navigationItem, crumb: mainCrumb, cluster: mainCluster, burger: railToggle)
         TopBar.install(on: board.navigationItem, crumb: compactCrumb, cluster: compactCluster, burger: burger, showsCrumb: false)

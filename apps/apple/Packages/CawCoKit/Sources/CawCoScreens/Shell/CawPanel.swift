@@ -30,6 +30,8 @@ final class CawPanel: UIView, UIGestureRecognizerDelegate {
     var onChoose: (HomeModel.NeedsItem) -> Void = { _ in }
     var onAnswer: (HomeModel.NeedsItem, ParkedAsk, NeedsYouStore.Answer) -> Void = { _, _, _ in }
     var onDismiss: (Notice) -> Void = { _ in }
+    /// The update notice's one act (Retry, Install now).
+    var onAct: (Notice) -> Void = { _ in }
     /// Opened or closed: Caw says so.
     var onOpenChange: (Bool) -> Void = { _ in }
 
@@ -102,7 +104,10 @@ final class CawPanel: UIView, UIGestureRecognizerDelegate {
             let stage = Self.stageWords(answers.sent[item.id])
             return "\(item.id)\u{1f}\(item.title)\u{1f}\(item.place)\u{1f}\(item.raisedAt.map { Naming.span(ms: now - $0) } ?? "")\u{1f}\(item.stale)\u{1f}\(stage?.text ?? "")\u{1f}\(answers.sent[item.id].map { $0.stage != .failed } ?? false)"
         }
-        let words = (needWords + notices.map { "\($0.id)\u{1f}\($0.title)\u{1f}\($0.lines.joined())" } + [quiet, "\(live)"]).joined(separator: "\n")
+        let noticeWords = notices.map { notice in
+            ([notice.id, notice.closing ?? "", notice.action?.label ?? ""] + notice.entries.flatMap { [$0.title] + $0.lines }).joined(separator: "\u{1f}")
+        }
+        let words = (needWords + noticeWords + [quiet, "\(live)"]).joined(separator: "\n")
         guard words != drawn else { return }
         drawn = words
         for view in list.arrangedSubviews { view.removeFromSuperview() }
@@ -126,6 +131,7 @@ final class CawPanel: UIView, UIGestureRecognizerDelegate {
             for notice in notices {
                 let row = NoticeRow(notice)
                 row.onDismiss = { [weak self] in self?.onDismiss(notice) }
+                row.onAct = { [weak self] in self?.onAct(notice) }
                 list.addArrangedSubview(row)
             }
         }
@@ -421,25 +427,54 @@ private final class NeedRow: UIControl {
 
 // MARK: A notice
 
-/// One notice (NoticeRow.svelte): what happened, a line for each thing it
-/// says, and its ✕, which acknowledges it on every device.
+/// One notice row (NoticeRow.svelte, UpdateCard, MovedLogins,
+/// RebalanceNotices): each entry's title and its lines, the update's
+/// closing words and its one act, and the row's ✕, which acknowledges every
+/// entry it shows on every device.
 private final class NoticeRow: UIView {
     var onDismiss: () -> Void = {}
+    var onAct: () -> Void = {}
 
     init(_ notice: Notice) {
         super.init(frame: .zero)
-        let title = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong, lines: 0)
-        title.text = notice.title
-        let column = UIStackView(arrangedSubviews: [title])
+        let column = UIStackView()
         column.axis = .vertical
         column.spacing = 2
-        for line in notice.lines {
+        for (at, entry) in notice.entries.enumerated() {
+            let title = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong, lines: 0)
+            title.text = entry.title
+            if at == 0, notice.failed {
+                // The failure glyph before the title (UpdateCard `.title`).
+                let glyph = GlyphView(.alert, size: Size.iconMd, tint: Palette.statusFailGlyph)
+                glyph.setContentHuggingPriority(.required, for: .horizontal)
+                let head = UIStackView(arrangedSubviews: [glyph, title])
+                head.spacing = Space.space1
+                head.alignment = .center
+                column.addArrangedSubview(head)
+            } else {
+                column.addArrangedSubview(title)
+            }
+            if at > 0 { column.setCustomSpacing(Space.space3, after: column.arrangedSubviews[column.arrangedSubviews.count - 2]) }
+            for line in entry.lines {
+                let said = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
+                said.text = line
+                column.addArrangedSubview(said)
+            }
+        }
+        if let closing = notice.closing {
             let said = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
-            said.text = line
+            said.text = closing
             column.addArrangedSubview(said)
         }
+        if let action = notice.action {
+            let act = KitButton.make(action.label, variant: .action, height: .sm) { [weak self] in self?.onAct() }
+            let actions = UIStackView(arrangedSubviews: [act, UIView()])
+            column.setCustomSpacing(Space.space2, after: column.arrangedSubviews[column.arrangedSubviews.count - 1])
+            column.addArrangedSubview(actions)
+        }
+        accessibilityLabel = notice.label
         let close = RowActionButton(.close)
-        close.accessibilityLabel = "Dismiss \(notice.title)"
+        close.accessibilityLabel = notice.dismissLabel
         close.addAction(UIAction { [weak self] _ in self?.onDismiss() }, for: .touchUpInside)
         let row = UIStackView(arrangedSubviews: [column, close])
         row.spacing = Space.space2

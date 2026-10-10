@@ -108,16 +108,35 @@ public final class HomeModel {
     /// Every notice nobody has acknowledged (`Notice`), once the hub's record
     /// of what was seen has arrived; Caw's panel lists them under Needs you.
     public var notices: [Notice] {
-        fleet.noticesKnown ? Notice.unseen(machines: fleet.machines, accounts: fleet.accounts, seen: fleet.noticesSeen) : []
+        guard fleet.noticesKnown else { return [] }
+        return Notice.unseen(machines: fleet.machines, accounts: fleet.accounts, policy: fleet.updatePolicy,
+                             commanded: fleet.commanded, seen: fleet.noticesSeen)
     }
 
-    /// The notices' sources are all read (the seen record and the accounts):
-    /// a notice that appears after this is new, and Caw beats for it.
-    public var noticesRead: Bool { fleet.noticesKnown && fleet.accounts != nil }
+    /// The notices' sources are all read (the seen record, the accounts and
+    /// the update policy): a notice that appears after this is new, and Caw beats for it.
+    public var noticesRead: Bool { fleet.noticesKnown && fleet.accounts != nil && fleet.updatePolicy != nil }
 
-    /// Acknowledges a notice everywhere: its ✕.
+    /// Acknowledges a notice everywhere: its ✕ (update-notice.svelte.ts `dismissUpdate`).
     public func dismiss(_ notice: Notice) {
         hub.acknowledge(notices: notice.acks)
+        if case .update(landedAll: true) = notice.kind { hub.forgetCommanded() }
+    }
+
+    /// The update notice's act (update-notice.svelte.ts `actOnUpdate`): Retry
+    /// installs again where it rolled back and acknowledges the rollback;
+    /// Install now installs on every machine that has the build to install.
+    public func act(_ notice: Notice) {
+        switch notice.action {
+        case .retry:
+            guard let machineId = notice.machineIds.first else { return }
+            hub.installUpdate(machineId: machineId)
+            hub.acknowledge(notices: notice.acks)
+        case .installAll:
+            for machineId in notice.machineIds { hub.installUpdate(machineId: machineId) }
+        case nil:
+            break
+        }
     }
 
     /// Machines that have not answered yet; until none, an empty list proves nothing.
