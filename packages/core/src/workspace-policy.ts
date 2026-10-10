@@ -14,7 +14,9 @@
  *   config, Playwright's browsers, the cawco binary, on macOS the selected
  *   Xcode bundle (`darwinDeveloperBundle`), and the user layer of
  *   Claude Code (CLAUDE.md, memories, skills, plugins, agents, commands,
- *   rules, output styles, workflows, themes, plans). A Claude session also
+ *   rules, output styles, workflows, themes, plans), also by its names in
+ *   the config dir of each account the workspace's sessions run on
+ *   (`accountLayers`). A Claude session also
  *   reads its own `projects/<slug>/` dir, which the judge adds from the
  *   transcript the CLI names.
  * - Writes: the clone, the scratch dir and the workspace caches only; never
@@ -31,6 +33,7 @@ import { delimiter, dirname, isAbsolute, join, resolve } from "node:path";
 import { binaryRoot } from "./binary-installation";
 import type { WorkspaceRef } from "./harness";
 import {
+  accountConfigDir,
   claudeHome,
   credentialStores,
   darwinDeveloperBundle,
@@ -39,6 +42,7 @@ import {
   projectClaudeDir,
   USER_LAYER_DIRS,
   USER_LAYER_FILES,
+  workspaceAccountsFile,
   workspaceCaches,
   workspaceDoorDir,
   workspaceReadOnlyDir,
@@ -428,7 +432,54 @@ const LINUX_HOST_PRIVATE = [
   "/usr/bin/coredumpctl",
 ];
 
-/** The workspace's policy on this machine as it stands now, every path a real path. */
+/** An account id as the hub mints it: one path component, never `.` or `..`. */
+const ACCOUNT_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
+
+/**
+ * The user layer's entries in the config dir of each Claude account a
+ * session of the workspace runs on ({@link workspaceAccountsFile}), by the
+ * names that session is given: its `CLAUDE_CONFIG_DIR` is the account's dir,
+ * so Claude Code hands out a skill's files under it ("Base directory for this
+ * skill: <account>/claude/skills/…"). Each entry there is a link into
+ * {@link claudeHome} (`accounts.ts` links them). The account dir lies in a
+ * credential store (`accountsRoot`), so only these names open, each kept as
+ * written under the dir's real path: srt binds what the name resolves to
+ * back at the name, and refuses one that resolves into anything else the
+ * policy denies (a link planted at `skills` to `~/.ssh` opens nothing,
+ * `restorePlacementOf` in srt 0.0.79); Seatbelt and the judge follow the
+ * link to its target, which the user layer's own entries allow. The
+ * account's credential, `.claude.json`, transcripts and the rest stay denied.
+ */
+const accountLayers = async (id: string): Promise<string[]> => {
+  const text = await readFile(workspaceAccountsFile(id), "utf8").catch(
+    (error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") {
+        return "[]";
+      }
+      throw error;
+    }
+  );
+  const listed = JSON.parse(text) as unknown;
+  if (!Array.isArray(listed)) {
+    throw new Error(`${workspaceAccountsFile(id)} is not a list`);
+  }
+  return listed
+    .filter(
+      (account): account is string =>
+        typeof account === "string" && ACCOUNT_ID.test(account)
+    )
+    .flatMap((account) => {
+      const dir = resolveReal(accountConfigDir(account));
+      return [...USER_LAYER_DIRS, ...USER_LAYER_FILES].map((name) =>
+        join(dir, name)
+      );
+    });
+};
+
+/**
+ * The workspace's policy on this machine as it stands now, every path a real
+ * path but the account layer names ({@link accountLayers}).
+ */
 export const workspacePolicy = async (
   workspace: WorkspaceRef
 ): Promise<Policy> => {
@@ -443,30 +494,33 @@ export const workspacePolicy = async (
   const stores = denied(credentialStores());
   const mac = process.platform === "darwin";
   const caches = [...workspaceCaches(), ...(await darwinUserDirs())];
-  const allowRead = real([
-    workspace.path,
-    // Its state dir's read-only part and its scratch dir: the state dir
-    // itself (its hook, executor, policy, boundary record) is the host's.
-    workspaceReadOnlyDir(workspace.id),
-    workspaceScratchDir(workspace.id),
-    // Its door sockets, under the runtime dir on Linux (`workspaceDoorDir`).
-    workspaceDoorDir(workspace.id),
-    ...caches,
-    ...(await alternatesOf(workspace.path)),
-    ...(await homeToolchains(home)),
-    join(home, ".gitconfig"),
-    join(home, ".config", "git"),
-    hostPlaywrightBrowsers(),
-    ...(await darwinDeveloperBundle()),
-    binaryRoot(),
-    ...[...USER_LAYER_DIRS, ...USER_LAYER_FILES].map((name) =>
-      join(claudeHome(), name)
-    ),
-    ...(mac
-      ? ["Developer", "Preferences", "Keychains"].map((name) =>
-          join(home, "Library", name)
-        )
-      : []),
+  const allowRead = unique([
+    ...real([
+      workspace.path,
+      // Its state dir's read-only part and its scratch dir: the state dir
+      // itself (its hook, executor, policy, boundary record) is the host's.
+      workspaceReadOnlyDir(workspace.id),
+      workspaceScratchDir(workspace.id),
+      // Its door sockets, under the runtime dir on Linux (`workspaceDoorDir`).
+      workspaceDoorDir(workspace.id),
+      ...caches,
+      ...(await alternatesOf(workspace.path)),
+      ...(await homeToolchains(home)),
+      join(home, ".gitconfig"),
+      join(home, ".config", "git"),
+      hostPlaywrightBrowsers(),
+      ...(await darwinDeveloperBundle()),
+      binaryRoot(),
+      ...[...USER_LAYER_DIRS, ...USER_LAYER_FILES].map((name) =>
+        join(claudeHome(), name)
+      ),
+      ...(mac
+        ? ["Developer", "Preferences", "Keychains"].map((name) =>
+            join(home, "Library", name)
+          )
+        : []),
+    ]),
+    ...(await accountLayers(workspace.id)),
   ]);
   const denyRead = unique([
     resolveDenied(home),

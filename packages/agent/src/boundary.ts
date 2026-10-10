@@ -87,6 +87,7 @@ import {
   AGENT_SOCKET_ENV,
   scratchSocketProblem,
   sessionIdentityDir,
+  workspaceAccountsFile,
   workspaceCacheDir,
   workspaceCacheEnv,
   workspaceCaches,
@@ -1236,11 +1237,49 @@ export const hookMissing = (hook: LaunchedHook): string | undefined =>
     }
   })?.path;
 
-/** The boundary a spawn is bounded to, running; none for a spawn without a workspace. */
-export const boundaryFor = (
-  workspace: WorkspaceRef | undefined
-): Promise<Boundary | undefined> =>
-  workspace ? ensureBoundary(workspace) : Promise.resolve(undefined);
+/**
+ * The boundary a spawn is bounded to, running; none for a spawn without a
+ * workspace. A Claude session's `account` is added to the workspace's
+ * accounts first ({@link addAccount}), so the boundary it runs in reads that
+ * account's user layer: one started before it is handed over, its form
+ * changed with its policy.
+ */
+export const boundaryFor = async (
+  workspace: WorkspaceRef | undefined,
+  account: string | undefined
+): Promise<Boundary | undefined> => {
+  if (!workspace) {
+    return;
+  }
+  if (account) {
+    await addAccount(workspace.id, account);
+  }
+  return ensureBoundary(workspace);
+};
+
+/**
+ * Adds `account` to the accounts workspace `id`'s sessions run on
+ * ({@link workspaceAccountsFile}), once. Never taken away: a session moved to
+ * another account may still be running on the first until it relaunches,
+ * and what each adds is only that account's links to the user layer.
+ */
+const addAccount = async (id: string, account: string): Promise<void> => {
+  const file = workspaceAccountsFile(id);
+  const listed = await readFile(file, "utf8").then(
+    (text): string[] => JSON.parse(text),
+    (error: NodeJS.ErrnoException): string[] => {
+      if (error.code === "ENOENT") {
+        return [];
+      }
+      throw error;
+    }
+  );
+  if (listed.includes(account)) {
+    return;
+  }
+  await mkdir(stateDir(id), { recursive: true });
+  await writeWhole(file, `${JSON.stringify([...listed, account])}\n`, 0o644);
+};
 
 /** The machine's keeper endpoint: its directory, where every keeper's endpoint is, is hidden from a bounded command. */
 const sessiondPath = machineEndpoint;

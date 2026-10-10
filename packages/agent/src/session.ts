@@ -2098,13 +2098,6 @@ export class SessionSupervisor {
       // the hub, which hands it to this one behind its start.
       this.#handBack(instanceId);
 
-      // A work item's session runs every shell command inside its workspace's
-      // boundary, and does not start without one: the refusal is the spawn's.
-      // A spawn that names no workspace but runs anywhere inside a
-      // workspace's clone runs inside that clone's.
-      const boundary = await boundaryFor(
-        payload.workspace ?? (await workspaceHolding(workdir))
-      );
       if (payload.ingested) {
         this.#ingested.set(instanceId, payload.ingested);
       }
@@ -2121,6 +2114,18 @@ export class SessionSupervisor {
             homeLoginMove: grant.homeLoginMove,
           }
         : payload;
+      // A work item's session runs every shell command inside its workspace's
+      // boundary, and does not start without one: the refusal is the spawn's.
+      // A spawn that names no workspace but runs anywhere inside a
+      // workspace's clone runs inside that clone's. A Claude session's
+      // account goes with it: the boundary reads that account's user layer
+      // by the paths the session is given.
+      const boundary = await boundaryFor(
+        spec.workspace ?? (await workspaceHolding(workdir)),
+        (spec.harness ?? "claude") === "claude"
+          ? (spec.accountDir?.accountId ?? spec.homeLoginMove?.accountId)
+          : undefined
+      );
       const holder: { session: HarnessSession | null } = { session: null };
       const ctx = this.#context(
         instanceId,

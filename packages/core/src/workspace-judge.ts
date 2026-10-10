@@ -16,8 +16,11 @@
  * a path decides ("`allowRead` takes precedence over `denyRead`… A `denyRead`
  * entry that is more specific than the `allowRead` region it falls inside…
  * still stays denied"); writes are allowed only inside `allowWrite`, and a
- * `denyWrite` entry wins inside it. Every entry is a real path. A path is
- * judged at its real path too, so a link is judged where it points.
+ * `denyWrite` entry wins inside it. Every entry is a real path, but the
+ * user-layer links in an account's config dir, which srt must bind at their
+ * names (`accountLayers` in workspace-policy.ts). A path is judged at its
+ * real path, so a link is judged where it points: through one of those
+ * links, at the user layer's own entry.
  *
  * Anything the judge cannot decide is refused: a path it cannot resolve, a
  * call whose input is not an object, a policy file it cannot read.
@@ -28,7 +31,7 @@ import { fileURLToPath } from "node:url";
 
 export type Access = "read" | "write";
 
-/** A workspace's policy, every path a real path. */
+/** A workspace's policy, every path a real path but an account's user-layer links. */
 export interface Policy {
   readonly allowRead: readonly string[];
   readonly allowWrite: readonly string[];

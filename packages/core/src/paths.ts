@@ -453,6 +453,16 @@ export const workspacePolicyFile = (id: string): string =>
   join(workspaceStateDir(id), WORKSPACE_POLICY_NAME);
 
 /**
+ * The Claude accounts a workspace's sessions have run on, a JSON list of
+ * account ids the agent adds to as each session spawns there
+ * (`boundaryFor`), so the workspace reads each one's user layer by the path
+ * its session is given (`workspacePolicy`). In the state dir, which nothing
+ * inside the boundary writes.
+ */
+export const workspaceAccountsFile = (id: string): string =>
+  join(workspaceStateDir(id), "accounts.json");
+
+/**
  * The caches a workspace writes besides its clone and scratch dir: the
  * workspaces' own cache, and on macOS the provisioning profile folders
  * automatic signing fills. Every host cache is read-only to a workspace: a
