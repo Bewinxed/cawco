@@ -465,6 +465,16 @@ export interface WorkItemDeps {
    */
   readonly pauses: (projectId: string) => string | undefined;
   /**
+   * A new workspace's first session placed before the workspace is cut
+   * ({@link ItemPlacement}), on the project and task its item will name.
+   * Throws the refusal its start would.
+   */
+  readonly placeAhead: (
+    machineId: string,
+    session: Omit<SpawnPayload, "cwd">,
+    task: { projectId: string | null; taskId?: string }
+  ) => ItemPlacement;
+  /**
    * The session's plan steps as its plan panel reads them (plans.ts): CawCo's
    * own list where "CawCo's to-dos" is on for it, else its harness's (Claude
    * Code's ledger, OpenCode's todos). The plan ↔ to-do link reads these.
@@ -488,13 +498,16 @@ export interface WorkItemDeps {
   /**
    * Sends a spawn and records its row under the work item. `fallbackMode` is
    * the mode it runs in when its harness has modes; the hub's one rule
-   * settles it (none at all for a harness without modes).
+   * settles it (none at all for a harness without modes). `placed`: the
+   * account {@link placeAhead} put it on, which it opens on without being placed
+   * again; absent, it is placed now.
    */
   readonly spawn: (
     machineId: string,
     payload: SpawnPayload,
     workItemId: string,
-    fallbackMode: PermissionMode
+    fallbackMode: PermissionMode,
+    placed?: { accountId?: string }
   ) => void;
   /** A task's title as its project's index has it: a pull request's title. */
   readonly taskTitle?: (
@@ -547,6 +560,19 @@ interface Settings {
   type?: DelegateType;
 }
 
+/**
+ * A new workspace's first session, placed before the workspace is cut: the
+ * account its row opens on (`accountId`), and the Claude account its launch
+ * runs on (`launchesOn`), as the hub's launch grant will name it. The
+ * workspace's boundary starts reading `launchesOn`'s user layer, so the
+ * session's spawn finds the boundary in its form and hands it over to no new
+ * generation.
+ */
+export interface ItemPlacement {
+  accountId?: string;
+  launchesOn?: string;
+}
+
 /** A workspace as its machine is told about it. */
 const refOf = (workspace: WorkspaceRow): WorkspaceRef => ({
   id: workspace.id,
@@ -563,10 +589,21 @@ const spawnOf = (
   title: string,
   parent: InstanceRow,
   workspace: WorkspaceRow,
-  { account, canDelegate, forkOf, harness, model, skills, type }: Settings
+  settings: Settings
 ): SpawnPayload => ({
-  instanceId,
+  ...sessionOf(instanceId, title, parent, settings),
   cwd: workspace.path,
+  workspace: refOf(workspace),
+});
+
+/** {@link spawnOf} but where it works: what placement reads of the session. */
+const sessionOf = (
+  instanceId: string,
+  title: string,
+  parent: InstanceRow,
+  { account, canDelegate, forkOf, harness, model, skills, type }: Settings
+): Omit<SpawnPayload, "cwd"> => ({
+  instanceId,
   harness,
   ...(account ? { account } : {}),
   ...(parent.projectId ? { projectId: parent.projectId } : {}),
@@ -595,7 +632,6 @@ const spawnOf = (
   parent: { instanceId: parent.id },
   spawnedBy: { instanceId: parent.id },
   canDelegate,
-  workspace: refOf(workspace),
 });
 
 /**
@@ -979,6 +1015,7 @@ export const createWorkItems = ({
   itemEnded,
   lifetime,
   pauses,
+  placeAhead,
   planSteps,
   publish,
   report,
@@ -1667,14 +1704,17 @@ export const createWorkItems = ({
 
   /**
    * A new workspace: its machine cuts the clone and starts its boundary, then
-   * the hub files it. `checksFor` makes it the check workspace of that one.
+   * the hub files it. `checksFor` makes it the check workspace of that one;
+   * `account` is the Claude account its first session launches on
+   * ({@link ItemPlacement}), whose user layer the boundary reads from its
+   * first start.
    */
   const openWorkspace = async (
     createdBy: string,
     cwd: string,
     machineId: string,
     projectId: string | null,
-    checksFor?: string
+    { account, checksFor }: { account?: string; checksFor?: string } = {}
   ): Promise<WorkspaceRow> => {
     const id = crypto.randomUUID();
     db.beginWorkspaceCreate(id, machineId);
@@ -1685,6 +1725,7 @@ export const createWorkItems = ({
         cwd,
         id,
         projectId,
+        account ?? null,
       ])) as WorkspaceCheckout;
       return db.createWorkspace({
         id,
@@ -2119,11 +2160,20 @@ export const createWorkItems = ({
     if (!request.workspace) {
       const machineId = targetMachine(request, parent);
       const settings = settingsOf(request, parent);
+      // Placed before the clone is cut: the boundary starts with the account
+      // the session launches on, and the session opens on that same account.
+      const instanceId = request.queuedAs?.instanceId ?? crypto.randomUUID();
+      const placement = placeAhead(
+        machineId,
+        sessionOf(instanceId, request.title.trim(), parent, settings),
+        { projectId, taskId: request.task?.id }
+      );
       const workspace = await openWorkspace(
         parent.id,
         request.cwd ?? parent.cwd,
         machineId,
-        projectId
+        projectId,
+        { account: placement.launchesOn }
       );
       if (projectId) {
         recordRepository(projectId, workspace);
@@ -2140,7 +2190,10 @@ export const createWorkItems = ({
         });
         placesChanged(machineId, parent.projectId);
       }
-      return spawnIn(workspace, settings, parent, request);
+      return spawnIn(workspace, settings, parent, request, {
+        instanceId,
+        placement,
+      });
     }
     // Awaited before the claim, which files the item in the same step as
     // its one-writer check.
@@ -2193,16 +2246,22 @@ export const createWorkItems = ({
         : "",
     ].join("");
 
-  /** A new session in `workspace`, running a new item from the request's brief. */
+  /**
+   * A new session in `workspace`, running a new item from the request's
+   * brief. `ahead`: its id and account, placed before a new workspace was
+   * cut ({@link ItemPlacement}); absent, it is placed as it spawns.
+   */
   const spawnIn = (
     workspace: WorkspaceRow,
     settings: Settings,
     parent: InstanceRow,
-    request: WorkItemRequest
+    request: WorkItemRequest,
+    ahead?: { instanceId: string; placement: ItemPlacement }
   ): WorkItemStart => {
     const { harness, canDelegate } = settings;
     // A queued delegate's session and item take the ids its chip stood under.
-    const instanceId = request.queuedAs?.instanceId ?? crypto.randomUUID();
+    const instanceId =
+      ahead?.instanceId ?? request.queuedAs?.instanceId ?? crypto.randomUUID();
     // Not a row yet: it is launched in the workspace's root.
     const label = `${leafOf(workspace.path)}#${instanceId.slice(0, 8)}`;
     const item = db.createWorkItem({
@@ -2233,7 +2292,8 @@ export const createWorkItems = ({
         // permission prompt nobody is watching for. Questions still ask.
         // Its parent caused it: Full Send only when the parent is in it now,
         // read off its row as it stands after the workspace was cut.
-        unwatchedMode(db.getInstancesByIds([parent.id])[0]?.permissionMode)
+        unwatchedMode(db.getInstancesByIds([parent.id])[0]?.permissionMode),
+        ahead && { accountId: ahead.placement.accountId }
       );
       send(
         messageOf(
@@ -2546,7 +2606,7 @@ export const createWorkItems = ({
       repository,
       machineId,
       projectId,
-      workspace.id
+      { checksFor: workspace.id }
     );
     db.addPlace({ projectId, machineId, path: opened.path, kind: "workspace" });
     placesChanged(machineId, projectId);

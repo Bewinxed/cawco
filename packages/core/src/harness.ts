@@ -1330,8 +1330,11 @@ export type GitChanges =
  * command of its work items runs inside. A repository with no `origin` gets
  * the hub's remote of `projectId` as its `origin` first, with its default
  * branch pushed there (Projects spec §5.1: "A project with no outside remote
- * gets the hub as its remote"). Args `[cwd, workspaceId, projectId | null]`;
- * answers {@link WorkspaceCheckout}. Machine-scoped; a directory that is not
+ * gets the hub as its remote"). The boundary starts reading the user layer
+ * of `account`, the Claude account the workspace's first session launches
+ * on, so that session's spawn hands it over to no new generation. Args
+ * `[cwd, workspaceId, projectId | null, account | null]`; answers
+ * {@link WorkspaceCheckout}. Machine-scoped; a directory that is not
  * in a git repository is refused, so is one with no `origin` and no project,
  * and so is a machine that cannot hold the boundary.
  */

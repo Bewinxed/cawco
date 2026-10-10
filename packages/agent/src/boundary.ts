@@ -1241,8 +1241,10 @@ export const hookMissing = (hook: LaunchedHook): string | undefined =>
  * The boundary a spawn is bounded to, running; none for a spawn without a
  * workspace. A Claude session's `account` is added to the workspace's
  * accounts first ({@link addAccount}), so the boundary it runs in reads that
- * account's user layer: one started before it is handed over, its form
- * changed with its policy.
+ * account's user layer. A new workspace's first session finds its account
+ * there already (`createWorkspace`), so its boundary's form is unchanged; one
+ * started without it (a later session on another account) is handed over,
+ * its form changed with its policy.
  */
 export const boundaryFor = async (
   workspace: WorkspaceRef | undefined,
@@ -1263,7 +1265,10 @@ export const boundaryFor = async (
  * another account may still be running on the first until it relaunches,
  * and what each adds is only that account's links to the user layer.
  */
-const addAccount = async (id: string, account: string): Promise<void> => {
+export const addAccount = async (
+  id: string,
+  account: string
+): Promise<void> => {
   const file = workspaceAccountsFile(id);
   const listed = await readFile(file, "utf8").then(
     (text): string[] => JSON.parse(text),

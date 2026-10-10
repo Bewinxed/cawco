@@ -469,6 +469,7 @@ import {
 } from "./wire-socket";
 import {
   createWorkItems,
+  type ItemPlacement,
   LEAF_DELEGATE_REFUSAL,
   SESSION_TITLE_DESCRIPTION,
   titleProblem,
@@ -8157,12 +8158,13 @@ export const createServer = (
    * The account a session about to open runs on: its row's, when it has one
    * (an account is for the session's whole life); a resumed conversation's
    * stays where its transcript is; a fork takes its origin's; anything else
-   * is placed. A refusal is a sentence for whoever asked.
+   * is placed. `task`: the project and task of its work item, whose
+   * allow-lists it keeps to. A refusal is a sentence for whoever asked.
    */
   const placeSpawn = (
     machineId: string,
     payload: SpawnPayload,
-    workItemId?: string
+    task: { projectId?: string | null; taskId?: string | null } = {}
   ): { accountId?: string } | { refusal: string; status?: 404 } => {
     // Checked here, in the same synchronous step as the row's write that
     // follows: a project deleted after it was picked refuses the start.
@@ -8190,11 +8192,10 @@ export const createServer = (
       return runsOn(held);
     }
     const { resume } = payload;
-    const item = workItemId ? db.workItem(workItemId) : undefined;
     const input = placementInput(
       machineId,
       payload,
-      { projectId: item?.projectId, taskId: item?.taskId },
+      task,
       resume?.fork
         ? {
             accountId:
@@ -8259,13 +8260,48 @@ export const createServer = (
   const placedOrRefused = (
     machineId: string,
     payload: SpawnPayload,
-    workItemId?: string
+    task?: { projectId?: string | null; taskId?: string | null }
   ): { accountId?: string } => {
-    const placed = placeSpawn(machineId, payload, workItemId);
+    const placed = placeSpawn(machineId, payload, task);
     if ("refusal" in placed) {
       throw new WorkItemRefusal(placed.status ?? 400, placed.refusal);
     }
     return placed;
+  };
+
+  /**
+   * A new workspace's first session placed before the workspace is cut
+   * (work-items `ItemPlacement`): its account by {@link placedOrRefused}, and
+   * the Claude account its launch runs on as {@link grantLaunch} will name it
+   * ({@link launchAccount} on the row it opens with: the machine's own login
+   * while that moves into CawCo, else its account). The agent adds that one
+   * to the workspace's accounts as the boundary first starts, as its spawn
+   * would (`boundaryFor`). Placement reads no directory.
+   */
+  const placeItem = (
+    machineId: string,
+    session: Omit<SpawnPayload, "cwd">,
+    task: { projectId: string | null; taskId?: string }
+  ): ItemPlacement => {
+    const placed = placedOrRefused(machineId, { ...session, cwd: "" }, task);
+    if ((session.harness ?? "claude") !== "claude") {
+      return placed;
+    }
+    const launch = launchAccount(
+      machineId,
+      {
+        accountId: placed.accountId ?? null,
+        harness: session.harness,
+        model: session.model,
+        projectId: session.projectId,
+      },
+      session.title || "this session"
+    );
+    const launchesOn =
+      "refusal" in launch
+        ? undefined
+        : (launch.homeLoginMove?.accountId ?? launch.accountId);
+    return { ...placed, ...(launchesOn ? { launchesOn } : {}) };
   };
 
   /**
@@ -8324,11 +8360,35 @@ export const createServer = (
       : { payload: launched.payload, permissionMode: settled.permissionMode };
   };
 
+  /**
+   * The account a spawn opens on: `placedAhead`, when a work item's session
+   * was placed before its workspace was cut ({@link placeItem}), so it is
+   * placed once; otherwise placed now, keeping to the allow-lists of work
+   * item `workItemId`'s project and task.
+   */
+  const spawnPlacement = (
+    machineId: string,
+    payload: SpawnPayload,
+    workItemId: string | undefined,
+    placedAhead: { accountId?: string } | undefined
+  ): { accountId?: string } => {
+    if (placedAhead) {
+      return placedAhead;
+    }
+    const item = workItemId ? db.workItem(workItemId) : undefined;
+    return placedOrRefused(machineId, payload, {
+      projectId: item?.projectId,
+      taskId: item?.taskId,
+    });
+  };
+
+  /** Sends a spawn and opens its row, on the account {@link spawnPlacement} gives. */
   const issueSpawn = (
     machineId: string,
     asked: SpawnPayload,
     workItemId?: string,
-    fallbackMode?: string | null
+    fallbackMode?: string | null,
+    placedAhead?: { accountId?: string }
   ): void => {
     const agent = registry.agent(machineId);
     if (!agent) {
@@ -8344,7 +8404,7 @@ export const createServer = (
       throw new WorkItemRefusal(400, settled.refusal);
     }
     const { payload } = settled;
-    const placed = placedOrRefused(machineId, payload, workItemId);
+    const placed = spawnPlacement(machineId, payload, workItemId, placedAhead);
     // A start under an id that ran before: what it was handed and never read
     // its machine hands back as it replaces the process ({@link takeBack}).
     forgetPending(payload.instanceId, UNREAD.restarted, false, "all");
@@ -13268,6 +13328,7 @@ export const createServer = (
     },
     // A session's project's catalog: its own types shadow the fleet's.
     types: (projectId?: string | null) => projectTypes.typesFor(projectId),
+    placeAhead: placeItem,
     spawn: issueSpawn,
     send: deliverSend,
     // What a pull request an attempt opens links back to and is titled by.

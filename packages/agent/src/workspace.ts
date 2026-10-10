@@ -35,7 +35,12 @@ import {
   safeGitArgv,
 } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
-import { closeBoundary, ensureBoundary, shellQuote } from "./boundary";
+import {
+  addAccount,
+  closeBoundary,
+  ensureBoundary,
+  shellQuote,
+} from "./boundary";
 import { prepareClone } from "./clone";
 import { expandHome } from "./fs";
 import { useHubCredentialHelper } from "./git-credential";
@@ -163,12 +168,17 @@ const hubBase = async (git: Git, repo: string): Promise<string> => {
  * project with no outside remote gets the hub as its remote"), and a
  * repository whose `origin` is the hub reaches it with this machine's
  * credential, env-only; the owner's own pulls and pushes there go through
- * `cawco git-credential`, named in its config.
+ * `cawco git-credential`, named in its config. `account` is the Claude
+ * account the workspace's first session launches on, placed by the hub
+ * before the clone is cut: the boundary starts reading that account's user
+ * layer, so the session's spawn finds its form unchanged and hands nothing
+ * over (`boundaryFor`).
  */
 export const createWorkspace = async (
   cwd: unknown,
   workspaceId: unknown,
-  projectId?: unknown
+  projectId?: unknown,
+  account?: unknown
 ): Promise<WorkspaceCheckout> => {
   const dir = expandHome(String(cwd));
   const deadline = Date.now() + WORKSPACE_GIT_TIMEOUT_MS;
@@ -231,6 +241,9 @@ export const createWorkspace = async (
         : authed;
     await checkout(path, "checkout", "--quiet", "-b", branch, `origin/${base}`);
     await copyOwnSecrets(repoRoot, path, plain);
+    if (typeof account === "string" && account) {
+      await addAccount(id, account);
+    }
     const boundary = await ensureBoundary({ id, path });
     return {
       repoRoot,

@@ -2157,10 +2157,10 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
     // A workspace is cut in this process, so a restart would cut it too: none starts behind a raised fence.
     supervisor.registerDaemonFunction(
       CONTROL_WORKSPACE_CREATE,
-      (cwd, id, projectId) =>
+      (cwd, id, projectId, account) =>
         fenced()
           ? Promise.reject(new Error(AGENT_RESTARTING))
-          : createWorkspace(cwd, id, projectId)
+          : createWorkspace(cwd, id, projectId, account)
     );
     supervisor.registerDaemonFunction(
       CONTROL_WORKSPACE_BOUNDARY,
