@@ -546,10 +546,12 @@ async function answerFromPanel(kind: Kind, udid: string) {
   )
     .then(() => Date.now() - tapped)
     .catch(() => undefined);
+  // `until` takes an undefined read as "no reading yet", so the read says
+  // whether the ask is gone rather than handing back the element it lacks.
   const panelAt = await until(
     `${kind}: the ask leaving the panel`,
-    async () => approve(await tree(udid)),
-    (node) => node === undefined,
+    async () => approve(await tree(udid)) === undefined,
+    (gone) => gone,
     60_000
   )
     .then(() => Date.now() - tapped)
