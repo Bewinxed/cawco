@@ -109,7 +109,8 @@ public final class HomeModel {
     /// of what was seen has arrived; Caw's panel lists them under Needs you.
     public var notices: [Notice] {
         guard fleet.noticesKnown else { return [] }
-        return Notice.unseen(machines: fleet.machines, accounts: fleet.accounts, policy: fleet.updatePolicy,
+        return Notice.unseen(machines: fleet.machines, accounts: fleet.accounts, providerHarnesses: fleet.providerHarnesses,
+                             policy: fleet.updatePolicy,
                              commanded: fleet.commanded, seen: fleet.noticesSeen)
     }
 

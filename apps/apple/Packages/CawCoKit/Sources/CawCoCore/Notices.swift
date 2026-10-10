@@ -30,6 +30,15 @@ public struct Notice: Identifiable, Equatable, Sendable {
     public struct Entry: Equatable, Sendable {
         public let title: String
         public let lines: [String]
+        /// A moved login some online machine that could use it still lacks:
+        /// "Sign in there" leads to Configure (MovedLogins.svelte `missing`).
+        public var signIn = false
+    }
+
+    /// One row of the account picker (`/api/accounts/providers`): which harnesses use a provider's accounts.
+    nonisolated struct ProviderChoice: Decodable {
+        let provider: String
+        let harnesses: [String]
     }
 
     public let id: String
@@ -43,6 +52,8 @@ public struct Notice: Identifiable, Equatable, Sendable {
     /// A last line in the muted ink, after the entries.
     public let closing: String?
     public let action: Action?
+    /// "Configure update behaviour" is offered (updates/model.ts `configure`).
+    public let configure: Bool
     /// The machines it stands for, by id.
     public let machineIds: [String]
     /// The notice ids its ✕ acknowledges.
@@ -50,11 +61,13 @@ public struct Notice: Identifiable, Equatable, Sendable {
 
     public static func == (a: Notice, b: Notice) -> Bool {
         a.id == b.id && a.entries == b.entries && a.closing == b.closing && a.action == b.action && a.failed == b.failed
+            && a.configure == b.configure
     }
 
     /// Every row under Notices, in the panel's order: the update, the moved logins, the rebalances.
-    static func unseen(machines: [MachineRow], accounts: Components.Schemas.GetApiAccounts200?, policy: Policy?,
-                       commanded: Set<String>, seen: Set<String>) -> [Notice] {
+    /// `providerHarnesses`: each non-Claude provider's harnesses, from the picker's rows.
+    static func unseen(machines: [MachineRow], accounts: Components.Schemas.GetApiAccounts200?, providerHarnesses: [String: Set<String>],
+                       policy: Policy?, commanded: Set<String>, seen: Set<String>) -> [Notice] {
         var out: [Notice] = []
         let fleet = machines.compactMap(UpdateMachine.init)
         if let policy, let update = noticeFor(fleet, policy: policy, commanded: commanded, seen: seen) {
@@ -64,7 +77,9 @@ public struct Notice: Identifiable, Equatable, Sendable {
         guard let accounts,
               let people = try? Wire.transcode(accounts.accounts, as: [Account].self),
               let signins = try? Wire.transcode(accounts.signins, as: [Signin].self) else { return out }
-        if let moved = movedLogins(people, signins: signins, machines: machines, seen: seen) { out.append(moved) }
+        if let moved = movedLogins(people, signins: signins, machines: machines, providerHarnesses: providerHarnesses, seen: seen) {
+            out.append(moved)
+        }
         let rebalances = (try? Wire.transcode(accounts.rebalances, as: [Rebalance].self)) ?? []
         if let rebalanced = rebalanced(rebalances.filter { !seen.contains($0.id) }) { out.append(rebalanced) }
         return out
@@ -186,9 +201,10 @@ public struct Notice: Identifiable, Equatable, Sendable {
     }
 
     private static func update(_ id: String, title: String, failed: Bool = false, lines: [String] = [], closing: String? = nil,
-                               action: Action? = nil, machines: [UpdateMachine], acks: [String], landedAll: Bool = false) -> Notice {
+                               action: Action? = nil, configure: Bool = true, machines: [UpdateMachine], acks: [String],
+                               landedAll: Bool = false) -> Notice {
         Notice(id: id, kind: .update(landedAll: landedAll), label: title, dismissLabel: "Dismiss the update notice", failed: failed,
-               entries: [Entry(title: title, lines: lines)], closing: closing, action: action,
+               entries: [Entry(title: title, lines: lines)], closing: closing, action: action, configure: configure,
                machineIds: machines.map(\.id), acks: acks)
     }
 
@@ -232,7 +248,7 @@ public struct Notice: Identifiable, Equatable, Sendable {
                                   : "\(silent), so no session could start there. It was restarted and sessions start there again.",
                               "\(restart.children == 1 ? "The 1 process" : "The \(restart.children) processes") it held ended with it: the sessions running there stopped.",
                               "What it was doing is saved on \(machine.name) in \(restart.diagnostics).",
-                          ], machines: [machine], acks: [id])
+                          ], configure: false, machines: [machine], acks: [id])
         }
         // 2. An install this device asked for, or the hub restarting under it.
         let inSet = live.filter { commanded.contains($0.id) || ($0.state.hostsHub && $0.state.phase == "installing") }
@@ -267,7 +283,7 @@ public struct Notice: Identifiable, Equatable, Sendable {
             let v = displayVersion(asked[0].state.availableVersion)
             let acks = landingIds(asked)
             return update(acks.first ?? "landed-all:\(v)", title: "CawCo \(v) is running on \(plural(asked.count, "machine"))",
-                          machines: asked, acks: acks, landedAll: true)
+                          configure: false, machines: asked, acks: acks, landedAll: true)
         }
         // 4. Auto-update is off and a build waits for a person.
         let waiting = live.filter { $0.state.phase == "available" }
@@ -305,6 +321,7 @@ public struct Notice: Identifiable, Equatable, Sendable {
 
     private nonisolated struct Account: Decodable {
         let id: String
+        let provider: String
         let kind: String?
         let label: String?
         let email: String?
@@ -313,8 +330,30 @@ public struct Notice: Identifiable, Equatable, Sendable {
     private nonisolated struct Signin: Decodable {
         let accountId: String
         let machineId: String
+        let state: String
         let movedAt: Double?
         let movedFrom: String?
+    }
+
+    private nonisolated struct HarnessRow: Decodable {
+        let harness: String
+    }
+
+    /// The harnesses that use a provider's accounts (accounts/model.svelte.ts `providerHarnesses`).
+    private static func harnesses(of provider: String, _ providerHarnesses: [String: Set<String>]) -> Set<String> {
+        provider == "anthropic" ? ["claude"] : providerHarnesses[provider] ?? []
+    }
+
+    /// An online machine with a harness that would use `account` lacks its sign-in (MovedLogins.svelte `missing`).
+    private static func missing(_ account: Account, signins: [Signin], machines: [MachineRow], providerHarnesses: [String: Set<String>]) -> Bool {
+        let wanted = harnesses(of: account.provider, providerHarnesses)
+        return machines.contains { machine in
+            guard machine.status == "online",
+                  let installed = try? Wire.transcode(machine.harnesses, as: [HarnessRow].self),
+                  installed.contains(where: { wanted.contains($0.harness) }) else { return false }
+            let state = signins.first { $0.accountId == account.id && $0.machineId == machine.machineId }?.state ?? "signed-out"
+            return state != "signed-in"
+        }
     }
 
     /// An account as the operator knows it (accounts/model.svelte.ts `nameOf`).
@@ -328,7 +367,8 @@ public struct Notice: Identifiable, Equatable, Sendable {
     private static let storeWords = ["claude": "Claude Code", "pi": "pi", "opencode": "OpenCode"]
 
     /// Every login moved in from a machine's own store nobody has acknowledged, newest first, as one row.
-    private static func movedLogins(_ accounts: [Account], signins: [Signin], machines: [MachineRow], seen: Set<String>) -> Notice? {
+    private static func movedLogins(_ accounts: [Account], signins: [Signin], machines: [MachineRow], providerHarnesses: [String: Set<String>],
+                                    seen: Set<String>) -> Notice? {
         let moved = signins.compactMap { signin -> (id: String, at: Double, entry: Entry)? in
             guard let movedAt = signin.movedAt,
                   let account = accounts.first(where: { $0.id == signin.accountId }),
@@ -336,11 +376,12 @@ public struct Notice: Identifiable, Equatable, Sendable {
             let id = "moved-login:\(account.id):\(signin.machineId):\(Int64(movedAt))"
             guard !seen.contains(id) else { return nil }
             let store = storeWords[signin.movedFrom ?? "claude"] ?? "Claude Code"
-            return (id, movedAt, Entry(title: name(account), lines: ["from \(store) on \(Naming.machineLabel(from.hostname))"]))
+            return (id, movedAt, Entry(title: name(account), lines: ["from \(store) on \(Naming.machineLabel(from.hostname))"],
+                                       signIn: missing(account, signins: signins, machines: machines, providerHarnesses: providerHarnesses)))
         }.sorted { $0.at > $1.at }
         guard let first = moved.first else { return nil }
         return Notice(id: first.id, kind: .movedLogins, label: "Logins moved into CawCo", dismissLabel: "Dismiss moved logins",
-                      failed: false, entries: moved.map(\.entry), closing: nil, action: nil, machineIds: [], acks: moved.map(\.id))
+                      failed: false, entries: moved.map(\.entry), closing: nil, action: nil, configure: false, machineIds: [], acks: moved.map(\.id))
     }
 
     // MARK: Rebalances (RebalanceNotices.svelte, core `rebalanceWords`)
@@ -400,7 +441,7 @@ public struct Notice: Identifiable, Equatable, Sendable {
             Entry(title: "\(cameWords(pass.came)) on \(pass.machine)", lines: pass.running.map(runningLine) + pass.held.map(heldLine))
         }
         return Notice(id: first.id, kind: .rebalances, label: "Sessions rebalanced", dismissLabel: "Dismiss rebalance notices",
-                      failed: false, entries: entries, closing: nil, action: nil, machineIds: [], acks: sorted.map(\.id))
+                      failed: false, entries: entries, closing: nil, action: nil, configure: false, machineIds: [], acks: sorted.map(\.id))
     }
 
     private static func cameWords(_ came: [Came]) -> String {

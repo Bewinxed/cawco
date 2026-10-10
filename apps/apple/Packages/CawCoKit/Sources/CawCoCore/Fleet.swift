@@ -240,6 +240,9 @@ public final class FleetStore {
     public internal(set) var noticesKnown = false
     /// The fleet's update policy (`/api/binary-updates/settings`); nil until read, and no update notice is said until it is.
     public internal(set) var updatePolicy: Notice.Policy?
+    /// Each non-Claude provider's harnesses, from the account picker's rows
+    /// (`/api/accounts/providers`): which machines could use its accounts.
+    public internal(set) var providerHarnesses: [String: Set<String>] = [:]
     /// The machines whose install this device asked for (updates.svelte.ts `commanded`).
     public internal(set) var commanded: Set<String> = []
 

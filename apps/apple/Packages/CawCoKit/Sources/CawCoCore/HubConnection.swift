@@ -497,6 +497,12 @@ public final class HubConnection {
             guard let view = try? await client.getApiAccounts().ok.body.json else { return }
             self?.fleet.accounts = view
         }
+        // The picker's rows: which harnesses use each provider's accounts (client.svelte.ts `readAccounts`).
+        Task { [weak self] in
+            guard let rows = try? await client.getApiAccountsProviders().ok.body.json,
+                  let choices = try? Wire.transcode(rows, as: [Notice.ProviderChoice].self) else { return }
+            self?.fleet.providerHarnesses = Dictionary(choices.map { ($0.provider, Set($0.harnesses)) }, uniquingKeysWith: { $0.union($1) })
+        }
     }
 
     /// The person acknowledged notices (notices.svelte.ts `acknowledge`): gone
