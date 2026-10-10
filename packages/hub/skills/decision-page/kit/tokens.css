@@ -458,6 +458,9 @@
     --shadow-overlay:
       0 18px 48px var(--shadow-tint-3), 0 2px 6px var(--shadow-tint),
       inset 0 0 0 1px var(--night-ring);
+    /* A hanging surface whose top shows its own surface across the cut into its anchor (Caw's panel, kit-hang): the overlay's drop without the night ring, which would draw across the cut as a seam. */
+    --shadow-overlay-hung:
+      0 18px 48px var(--shadow-tint-3), 0 2px 6px var(--shadow-tint);
     --shadow-modal: var(--shadow-overlay);
     --shadow-drawer: 0 12px 40px var(--shadow-tint-3);
     /* A drawn shape's drop (the grown composer), set as drop-shadow() filters so it follows the shape, not a box: this far layer, then shadow-drop-near. */

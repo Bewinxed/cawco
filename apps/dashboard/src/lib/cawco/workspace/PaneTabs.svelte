@@ -1,6 +1,4 @@
 <script lang="ts" module>
-  /** The x of a floating wrapper's `translate(Xpx, Ypx)`. */
-  const TRANSLATE_X = /translate(?:3d)?\(\s*(-?[\d.]+)px/;
   /**
    * Where the pointer last moved to, for every strip on the page. A tab that
    * the layout slides under a pointer at rest (a split, a tab closing, the
@@ -47,6 +45,7 @@
     easeOut,
     motionOk,
   } from "#lib/cawco/motion/curves.svelte.js";
+  import { hang, type Neck, sameNeck } from "#lib/cawco/motion/hang.js";
   import { land } from "#lib/cawco/motion/share.svelte.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
@@ -386,21 +385,14 @@
   /**
    * The tab's span in the card's coordinates, from where the card stands (or
    * will), and the flare each side of it: none on a side the card is flush
-   * with.
+   * with (motion/hang).
    */
-  interface Neck {
-    end: number;
-    flareEnd: number;
-    flareStart: number;
-    flush: boolean;
-    start: number;
-  }
   let neck = $state<Neck>({
     start: 0,
     end: 0,
     flareStart: 0,
     flareEnd: 0,
-    flush: false,
+    flush: null,
   });
   function neckOf(anchor: HTMLElement, cardLeft?: number): Neck {
     const box = anchor.getBoundingClientRect();
@@ -421,7 +413,7 @@
       end: box.right - left,
       flareStart: flush ? 0 : flare,
       flareEnd: flare,
-      flush,
+      flush: flush ? "start" : null,
     };
   }
   /** The tab's box, the card's anchor, by the tab's id. */
@@ -432,171 +424,31 @@
         ?.closest<HTMLElement>(".tab") ?? null
     );
   }
-  /**
-   * Keeps the neck where the card really stands once bits-ui has placed it:
-   * every placement (open, a glide, a resize, the strip scrolling) is a
-   * write to its wrapper's transform.
-   */
-  const trackNeck: Attachment<HTMLElement> = (node) => {
-    const wrapper = node.parentElement;
-    if (!wrapper) {
-      return;
-    }
-    const motion = cardMotion(node);
-    const sync = () =>
-      untrack(() => {
-        const at = TRANSLATE_X.exec(wrapper.style.transform);
-        if (!(at && detailAnchor)) {
-          return;
-        }
-        const next = neckOf(detailAnchor, Number(at[1]));
-        // Placed: the card can grow out of its tab now, measured where it
-        // stands and after the frame that mounted it.
-        motion.placed(next);
-        if (
-          Math.abs(next.start - neck.start) > 0.5 ||
-          Math.abs(next.end - neck.end) > 0.5 ||
-          next.flareStart !== neck.flareStart ||
-          next.flareEnd !== neck.flareEnd ||
-          next.flush !== neck.flush
-        ) {
-          neck = next;
-        }
-      });
-    const observer = new MutationObserver(sync);
-    observer.observe(wrapper, { attributes: true, attributeFilter: ["style"] });
-    sync();
-    // Beside bits-ui's own handlers in the content's props, not over them.
-    node.addEventListener("pointerdown", swipeCardShut);
-    return () => {
-      observer.disconnect();
-      motion.stop();
-      node.removeEventListener("pointerdown", swipeCardShut);
-    };
-  };
-
-  /* ── The card's open and close ────────────────────────────────────
-     A clip that grows down out of the tab's foot and widens to the card as
-     it deepens, revealing what is in it as the foot passes; nothing inside
-     fades. Open over --dur-pop, close over --dur-exit (The Fast Exit Rule),
-     both on --ease-out: an entrance and an exit, so the strong ease-out
-     (Emil Kowalski, "Entering or exiting → ease-out"; transitions.dev's
-     dropdown, 250ms open and 150ms close on cubic-bezier(0.22, 1, 0.36, 1),
-     the same family).
-
-     It runs on the compositor: a WAAPI animation of an inset() in px only.
-     Chromium composites a clip-path animation whose shapes are plain
-     lengths and paints one with calc() or a percentage on the main thread
-     every frame (a trace: compositeFailed, unsupportedProperties
-     clip-path), which is what dropped frames before. So the shapes are
-     written in px from the card's measured box. The card is held shut
-     (`data-shown` absent) until bits-ui has placed it, and starts growing
-     only then: started with the mount, the frame that mounted it ate the
-     first part of the growth (33ms at full speed, 200ms on a slow CPU).
-
-     Interruptible (The Interruptible Rule): a close caught mid-open, or an
-     open caught mid-close, turns back from the clip it has reached. bits-ui
-     holds the card mounted until the close animation ends (it waits on the
-     content's getAnimations()). With reduced motion nothing here runs and
-     the kit's fade does. A card the finger folded into its tab
-     (`swipeCardShut`) is already shut and leaves at once. */
-  /** Room past the card's sides and foot for its whole overlay shadow, px. */
-  const CLIP_ROOM = 120;
-  /** The event the card fires once it stands open. */
-  const GROWN = "grown";
-  /** What a shut clip keeps of the card's height, px: see `shut`. */
-  const CLIP_SLIVER = 1;
-  /** The card's foot corners, px (radius-lg). */
-  const CLIP_ROUND = "round 0px 0px 12px 12px";
   /** Set by the finger that folded the card into its tab: nothing left to play. */
   let folded = false;
-  function cardMotion(node: HTMLElement) {
-    let run: Animation | null = null;
-    let at: Neck | null = null;
-    const open = `inset(0px -${CLIP_ROOM}px -${CLIP_ROOM}px -${CLIP_ROOM}px ${CLIP_ROUND})`;
-    // Shut leaves a pixel of the head under the tab's foot, the tab's
-    // own surface, so nothing shows: a keyframe with no height at all is a
-    // shape Chromium will not composite, and the whole animation then
-    // paints on the main thread every frame.
-    const shut = (neckNow: Neck) => {
-      // The box's own fractional size: offsetHeight rounds, and a sliver
-      // rounded away is the degenerate shape again.
-      const { width: w, height: h } = node.getBoundingClientRect();
-      const right = Math.max(0, w - neckNow.end);
-      const left = Math.max(0, neckNow.start);
-      const bottom = Math.max(0, h - CLIP_SLIVER);
-      return `inset(0px ${right}px ${bottom}px ${left}px ${CLIP_ROUND})`;
-    };
-    /** Where the clip is drawn now, mid-animation or at rest. */
-    const drawn = (fallback: string) =>
-      run ? getComputedStyle(node).clipPath : fallback;
-    const play = (from: string, to: string, ms: number) => {
-      const next = node.animate([{ clipPath: from }, { clipPath: to }], {
-        duration: ms,
-        easing: ease("--ease-out"),
-        fill: "forwards",
-      });
-      run?.cancel();
-      run = next;
-      return next;
-    };
-    const grow = () => {
-      if (!at) {
-        return;
+  /**
+   * The card hangs from its tab and grows out of it (motion/hang): the neck
+   * follows every placement, and a card the finger folded into its tab
+   * (`swipeCardShut`) is already shut and leaves at once.
+   */
+  const hangCard = hang({
+    neckAt: (left) => (detailAnchor ? neckOf(detailAnchor, left) : null),
+    onneck: (next) => {
+      if (!sameNeck(next, neck)) {
+        neck = next;
       }
-      node.dataset.shown = "";
-      // What waits on the card standing open (SessionDetails asks for its
-      // context reading then) hears `grown`.
-      if (!motionOk.current) {
-        node.dispatchEvent(new Event(GROWN));
-        return;
-      }
-      const growth = play(drawn(shut(at)), open, dur("--dur-pop"));
-      growth.finished
-        .then(() => {
-          if (run === growth) {
-            // At rest the card's own rules hold it open.
-            growth.cancel();
-            run = null;
-            node.dispatchEvent(new Event(GROWN));
-          }
-        })
-        .catch(() => undefined);
-    };
-    const fold = () => {
-      if (folded || !motionOk.current || !at) {
-        folded = false;
-        return;
-      }
-      play(drawn(open), shut(at), dur("--dur-exit"));
-    };
-    let frame = 0;
-    const state = new MutationObserver(() => {
-      if (node.dataset.state === "closed") {
-        cancelAnimationFrame(frame);
-        fold();
-      } else if (node.dataset.state === "open" && "shown" in node.dataset) {
-        grow();
-      }
-    });
-    state.observe(node, { attributes: true, attributeFilter: ["data-state"] });
-    return {
-      placed(neckNow: Neck) {
-        const first = !at;
-        at = neckNow;
-        if (first) {
-          // After the frame that lays the placed card out, so the growth
-          // starts on a frame of its own.
-          frame = requestAnimationFrame(grow);
-        }
-      },
-      stop() {
-        cancelAnimationFrame(frame);
-        state.disconnect();
-        run?.cancel();
-      },
-    };
-  }
+    },
+    folded: () => {
+      const was = folded;
+      folded = false;
+      return was;
+    },
+  });
+  /** A finger's swipe up the card's head, beside bits-ui's own handlers in the content's props. */
+  const swipeShut: Attachment<HTMLElement> = (node) => {
+    node.addEventListener("pointerdown", swipeCardShut);
+    return () => node.removeEventListener("pointerdown", swipeCardShut);
+  };
   function hoverTab(id: string, event: PointerEvent) {
     if (touch.current || event.pointerType !== "mouse" || pinned || menuOpen) {
       return;
@@ -1280,8 +1132,8 @@
         class="tab"
         data-chosen={chosen ? "" : undefined}
         data-details-open={detailsOpen && detailId === tab.id ? "" : undefined}
-        data-flush={detailsOpen && detailId === tab.id && neck.flush
-          ? "start"
+        data-flush={detailsOpen && detailId === tab.id
+          ? (neck.flush ?? undefined)
           : undefined}
         data-tone={tab.tone}
         oncontextmenucapture={anchorMenu}
@@ -1513,7 +1365,7 @@
       align="start"
       alignOffset={alignFor(detailAnchor)}
       aria-label="Session details"
-      class="kit-pop session-details-popover"
+      class="kit-pop kit-hang session-details-popover"
       collisionPadding={12}
       customAnchor={detailAnchor}
       onCloseAutoFocus={(event) => {
@@ -1560,13 +1412,14 @@
                  auto-focus on a surface that is still open. -->
           <div
             {...props}
-            data-flush={neck.flush ? "start" : undefined}
+            data-flush={neck.flush ?? undefined}
             data-morph={morphing ? "" : undefined}
             style:--neck-end={`${neck.end}px`}
             style:--neck-flare-end={`${neck.flareEnd}px`}
             style:--neck-flare-start={`${neck.flareStart}px`}
             style:--neck-start={`${neck.start}px`}
-            {@attach trackNeck}
+            {@attach hangCard}
+            {@attach swipeShut}
           >
             <div
               class="details-morph"
@@ -1592,36 +1445,11 @@
 </Popover.Root>
 
 <style>
-  /* The card is a kit floating surface (app.css `.kit-pop`): its surface,
-     its shadow and its fade with reduced motion. Its content runs edge to
-     edge. It hangs from its tab's foot (PaneTabs script, "The card hangs
-     from its tab"): its edge is drawn by `::after` rather than its border,
-     so the top can be cut across the tab's flared span, and its shadow is
-     cut at its top edge, so none falls on the strip or darkens the tab's
-     foot into a seam. */
-  @property --neck-start {
-    syntax: "<length>";
-    inherits: true;
-    initial-value: 0px;
-  }
-  @property --neck-end {
-    syntax: "<length>";
-    inherits: true;
-    initial-value: 0px;
-  }
+  /* The card is a kit floating surface (app.css `.kit-pop`) that hangs from
+     its tab (`.kit-hang`, motion/hang): its edge, the cut across the tab's
+     flared span, its shadow cut at its top edge, and its open and close
+     are the recipe's. Its content runs edge to edge. */
   :global(.kit-pop.session-details-popover) {
-    /* Open: cut at its top edge only, with room for the whole overlay
-       shadow past the others (as the pulled menu's `drawPull`). Shut, held
-       until it is placed and grows (`cardMotion`): the tab's span at the
-       card's top edge, no height at all. */
-    --clip-open: inset(
-      0 -120px -120px round 0 0 var(--radius-lg) var(--radius-lg)
-    );
-    --clip-shut: inset(
-      0 calc(100% - var(--neck-end)) 100% var(--neck-start) round 0 0
-        var(--radius-lg) var(--radius-lg)
-    );
-    position: relative;
     display: flex;
     z-index: 60;
     width: min(416px, calc(100vw - 24px));
@@ -1629,14 +1457,7 @@
     overflow: hidden;
     overscroll-behavior: contain;
     padding: 0;
-    border: 0;
-    clip-path: var(--clip-open);
     outline: none;
-
-    /* Flush with its tab on the leading side: square there. */
-    &[data-flush="start"] {
-      border-start-start-radius: 0;
-    }
 
     /* A phone's card stands a margin in from each side, under its tab,
        and holds clear of the screen's foot. */
@@ -1645,28 +1466,6 @@
         calc(100dvh - var(--c-top-bar-h) - 24px - var(--safe-bottom)),
         var(--bits-popover-content-available-height, 85dvh)
       );
-    }
-  }
-  /* Open and close are the card's own (`cardMotion`): the kit's rise,
-     scale and fade do not apply, and until it is placed it is held shut.
-     With reduced motion the kit's fade runs and the card stands open. */
-  @media (prefers-reduced-motion: no-preference) {
-    :global(.kit-pop.session-details-popover),
-    :global(.kit-pop.session-details-popover[data-state="closed"]) {
-      opacity: 1;
-      translate: none;
-      scale: none;
-      transition: none;
-    }
-    :global(.kit-pop.session-details-popover:not([data-shown])) {
-      clip-path: var(--clip-shut);
-    }
-    @starting-style {
-      :global(.kit-pop.session-details-popover[data-state="open"]) {
-        opacity: 1;
-        translate: none;
-        scale: none;
-      }
     }
   }
   .details-morph {
@@ -2263,27 +2062,5 @@
   }
   .tdetails[aria-expanded="true"] :global(svg) {
     transform: rotate(180deg);
-  }
-  /* The card's edge, with its top cut across the tab's flared span
-     (`.session-details-popover` above). Last, after the rim's own. */
-  :global(.kit-pop.session-details-popover)::after {
-    --gap-from: calc(var(--neck-start) - var(--neck-flare-start, 0px));
-    --gap-to: calc(var(--neck-end) + var(--neck-flare-end, 0px));
-    content: "";
-    position: absolute;
-    inset: 0;
-    z-index: 1;
-    border: 1px solid var(--border-control);
-    border-radius: inherit;
-    pointer-events: none;
-    mask:
-      linear-gradient(
-        to right,
-        #000 var(--gap-from),
-        transparent var(--gap-from) var(--gap-to),
-        #000 var(--gap-to)
-      )
-      top / 100% 1px no-repeat,
-      linear-gradient(#000 0 0) 0 1px / 100% calc(100% - 1px) no-repeat;
   }
 </style>

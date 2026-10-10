@@ -952,6 +952,9 @@
              alone. -->
         <div class="right">
           <div class="tools" data-bar-group>
+            <!-- The glass as one shape with Caw's panel while it hangs from
+                 it (NeedsCaw `data-joined`). -->
+            <span aria-hidden="true" class="join"></span>
             {#if railed}
               <Tip keys="⌘K" label="Jump to session">
                 {#snippet children(
@@ -1359,6 +1362,9 @@
      would make it the box Caw's fixed drawer is laid out in. */
   .tools {
     --hit-gap-x: var(--c-bar-group-pad);
+    /* How far the glass's leading foot flares out into Caw's panel while it
+       hangs (`.join`): the panel's own corner radius. */
+    --flare: var(--radius-lg);
     position: relative;
     display: flex;
     align-items: center;
@@ -1392,6 +1398,67 @@
       backdrop-filter: none;
       border-color: var(--border-contrast);
     }
+  }
+  /* ── The glass and Caw's panel, one shape ───────────────────────────
+     While Caw's panel hangs from the glass (NeedsCaw, `kit-hang`), the
+     glass is one shape with it, as a session tab is with its card: its
+     top corners keep the glass's round, its trailing flank runs straight
+     down into the panel's side, its leading one flares out at its foot
+     into the panel's top edge (`--flare`), and its foot is no edge at all.
+     It takes the panel's material: `surface-raised`, which the glass
+     already is at 72% (`material-panel`), and the panel's `border-control`
+     edge. Drawn as a layer over the glass and under the items, one flare
+     wider than the glass on its leading side and reaching 1px under its
+     foot into the panel's top edge, as the tab's `.neck` does: the layer is
+     the edge's ink in the outline, and `::before` is the surface 1px inside
+     it, so the edge runs up the flare and both flanks and over the top.
+     It fades in as the panel grows and out as it folds, on the panel's
+     clock (`data-joined`: from the growth's first frame to the fold's). */
+  .join {
+    --f: var(--flare);
+    /* The glass's top corners: its pill's end. */
+    --r: calc(var(--c-btn-h) / 2);
+    --h: calc(100% - 1px);
+    position: absolute;
+    inset-block: 0 -1px;
+    inset-inline: calc(-1 * var(--f)) 0;
+    pointer-events: none;
+    opacity: 0;
+    background: var(--border-control);
+    clip-path: shape(
+      from 0 var(--h),
+      arc to var(--f) calc(var(--h) - var(--f)) of var(--f) ccw,
+      line to var(--f) var(--r),
+      arc to calc(var(--f) + var(--r)) 0 of var(--r) cw,
+      line to calc(100% - var(--r)) 0,
+      arc to 100% var(--r) of var(--r) cw,
+      line to 100% 100%,
+      line to 0 100%,
+      close
+    );
+    transition: opacity var(--dur-exit) var(--ease-out);
+
+    &::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: var(--surface-raised);
+      clip-path: shape(
+        from 0 100%,
+        arc to calc(var(--f) + 1px) calc(var(--h) - var(--f)) of
+          calc(var(--f) + 1px) ccw,
+        line to calc(var(--f) + 1px) var(--r),
+        arc to calc(var(--f) + var(--r)) 1px of calc(var(--r) - 1px) cw,
+        line to calc(100% - var(--r)) 1px,
+        arc to calc(100% - 1px) var(--r) of calc(var(--r) - 1px) cw,
+        line to calc(100% - 1px) 100%,
+        close
+      );
+    }
+  }
+  .tools:has(:global([data-joined])) .join {
+    opacity: 1;
+    transition-duration: var(--dur-pop);
   }
   /* An item of the group: borderless (Apple HIG, Toolbars: "Borders… aren't
      necessary because the section provides a visible container"), on the
@@ -1509,6 +1576,34 @@
     /* The side that meets the screen's edge draws no edge of its own. */
     .tools::before {
       border-inline-end-width: 0;
+    }
+    /* Joined to Caw's panel, the same: its trailing side is the screen's
+       edge, square and with no edge drawn, as the panel's is below it. */
+    .join {
+      --r: calc(var(--c-bar-caw-glass-phone) / 2);
+      clip-path: shape(
+        from 0 var(--h),
+        arc to var(--f) calc(var(--h) - var(--f)) of var(--f) ccw,
+        line to var(--f) var(--r),
+        arc to calc(var(--f) + var(--r)) 0 of var(--r) cw,
+        line to 100% 0,
+        line to 100% 100%,
+        line to 0 100%,
+        close
+      );
+
+      &::before {
+        clip-path: shape(
+          from 0 100%,
+          arc to calc(var(--f) + 1px) calc(var(--h) - var(--f)) of
+            calc(var(--f) + 1px) ccw,
+          line to calc(var(--f) + 1px) var(--r),
+          arc to calc(var(--f) + var(--r)) 1px of calc(var(--r) - 1px) cw,
+          line to 100% 1px,
+          line to 100% 100%,
+          close
+        );
+      }
     }
     /* Caw, the group's one item, is the glass's whole box. */
     .tools :global(.bar-item) {

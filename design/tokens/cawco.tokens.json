@@ -1782,6 +1782,11 @@
       "$type": "shadow",
       "$value": "0 18px 48px {color.shadow-tint-3}, 0 2px 6px {color.shadow-tint}, inset 0 0 0 1px {color.night-ring}"
     },
+    "shadow-overlay-hung": {
+      "$type": "shadow",
+      "$value": "0 18px 48px {color.shadow-tint-3}, 0 2px 6px {color.shadow-tint}",
+      "$description": "A hanging surface whose top shows its own surface across the cut into its anchor (Caw's panel, kit-hang): the overlay's drop without the night ring, which would draw across the cut as a seam."
+    },
     "shadow-modal": {
       "$type": "shadow",
       "$value": "{shadow.shadow-overlay}"
