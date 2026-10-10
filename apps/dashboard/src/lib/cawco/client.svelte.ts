@@ -4406,6 +4406,12 @@ export function ensureConnected(): void {
       lastPlanFollowKey = "";
       syncPlanFollows();
       resumePendingSends(streamState, streamHost);
+      // As `hubReached` does: the update notice reads the served build and
+      // the policy, so an adopted socket never leaves it unread.
+      // biome-ignore lint/complexity/noVoid: fire-and-forget — the update notice says it when the served build is newer
+      void checkServedBuild();
+      // biome-ignore lint/complexity/noVoid: fire-and-forget — the settings page and the notice read the policy once it lands
+      void updates.loadPolicy();
     } else {
       state.status = "connecting";
     }

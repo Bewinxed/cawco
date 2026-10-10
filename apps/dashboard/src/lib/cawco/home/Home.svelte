@@ -1,40 +1,28 @@
 <script lang="ts">
-  import { machineLabel } from "@cawco/core";
   /**
-   * The home: a status line, a headline, and the sessions grouped by what
-   * they want from the operator — Needs you, then Working and Finished as
-   * two tabs, then (on the phone) Recent. The same list is the phone's home
+   * The home: a status line, and the sessions grouped by what they are
+   * doing — Working and Finished as two tabs, then (on the phone) Recent.
+   * What needs the operator, and every notice, is Caw's panel's (NeedsCaw):
+   * nothing here says it a second time. The same list is the phone's home
    * page (`page`) and the wide screen's sidebar (`rail`), where the
    * transcripts take the rest of the screen and Recent sits under Projects.
    *
-   * What it never does: claim nothing needs you while the hub is not live.
-   * Then the rows stay as last known and greyed, there is no headline and
-   * no Caw, and the status line says the hub is gone.
+   * What it never does: claim the fleet is empty while the hub is not live.
+   * Then the rows stay as last known and greyed, there is no Caw, and the
+   * status line says the hub is gone.
    */
-  import { untrack } from "svelte";
-  import { TextMorph } from "torph/svelte";
+  import { machineLabel } from "@cawco/core";
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconPlus } from "#lib/icons.js";
-  import Attention from "~icons/solar/hand-shake-bold-duotone";
-  import { movedLogins } from "../accounts/model.svelte";
-  import { cawco } from "../client.svelte";
   import MachinesEmpty from "../MachinesEmpty.svelte";
-  import { crossIn, crossOut, morphMs } from "../motion/curves.svelte";
+  import { crossIn, crossOut } from "../motion/curves.svelte";
   import { reflow } from "../motion/rows.svelte";
-  import { notices } from "../notices.svelte";
-  import { newerBuild } from "../served-build.svelte";
   import { newSession } from "../spawn/new-session.svelte";
   import UsageMeter from "../UsageMeter.svelte";
-  import { reloadId, unseenLandings, updatedNotice } from "../updates/model";
-  import { reloadAcknowledging } from "../updates/update-notice.svelte";
-  import { updates } from "../updates/updates.svelte";
   import Caw from "./Caw.svelte";
   import HomeRecent from "./HomeRecent.svelte";
   import { home } from "./home-state.svelte";
-  import MovedLogins from "./MovedLogins.svelte";
-  import NeedsCard from "./NeedsCard.svelte";
   import StatusLine from "./StatusLine.svelte";
-  import UpdateCard from "./UpdateCard.svelte";
   import WorkTabs from "./WorkTabs.svelte";
 
   let {
@@ -48,57 +36,6 @@
   } = $props();
 
   const stale = $derived(!home.live);
-  /** Logins moved into CawCo that nobody has dismissed yet. */
-  const moved = $derived(notices.known ? movedLogins(notices.seen) : []);
-  /** The landing nobody has acknowledged, until it is dismissed. */
-  const updated = $derived(
-    variant === "page" && notices.known
-      ? updatedNotice(unseenLandings(cawco.machines, notices.seen))
-      : null
-  );
-  /**
-   * Reload was chosen, or the tab is reloading by itself (idle) while the
-   * card is up: the card says its goodbye until the tab goes, also once
-   * acknowledging has dropped the landing from `updated`.
-   */
-  let reloading = $state(false);
-  $effect(() => {
-    if (updates.goodbye && updated !== null) {
-      reloading = true;
-    }
-  });
-  const card = $derived(updated !== null || reloading);
-  // While the card is on screen it is the landing's one surface: the toast stands aside.
-  $effect(() => {
-    if (!card) {
-      return;
-    }
-    // Untracked: the count is written here, never followed.
-    untrack(() => {
-      updates.cards += 1;
-    });
-    return () => {
-      untrack(() => {
-        updates.cards -= 1;
-      });
-    };
-  });
-  function dismissUpdate(): void {
-    // biome-ignore lint/complexity/noVoid: the hub's record comes back on the next board frame
-    void notices.acknowledge(updated?.acks ?? []);
-  }
-  function reloadForUpdate(): void {
-    if (reloading) {
-      return;
-    }
-    reloading = true;
-    const build = newerBuild();
-    // biome-ignore lint/complexity/noVoid: the tab goes once the acknowledgement is in
-    void reloadAcknowledging([
-      ...(updated?.acks ?? []),
-      ...(build ? [reloadId(build)] : []),
-    ]);
-  }
   /**
    * The tabs are changing their rows and driving the list's height
    * themselves (WorkTabs `relaying`): the home is not the rail's reflow's
@@ -151,12 +88,10 @@
   const noFleet = $derived(machinesThere === "none");
   /**
    * In the rail, the block over the groups with nothing in it: the hub is
-   * live and read (no status line) and nothing needs the reader (no
-   * headline). It takes no room then, not its padding either.
+   * live and read, so the status line is silent. It takes no room then, not
+   * its padding either.
    */
-  const bare = $derived(
-    variant === "rail" && home.status === "connected" && home.needs.length === 0
-  );
+  const bare = $derived(variant === "rail" && home.status === "connected");
   /**
    * What Caw's line says. "No sessions" is a claim, so it waits on the data:
    * while any machine has not answered, the line names who it is waiting
@@ -186,10 +121,7 @@
   data-flip={variant === "rail" && !relaying ? "box" : undefined}
   {@attach reflow()}
 >
-  <div
-    class="top"
-    class:bare={bare || (machinesThere !== null && home.needs.length === 0)}
-  >
+  <div class="top" class:bare={bare || machinesThere !== null}>
     <!-- The line every other line on this screen is believed by; live and
          read, it says nothing and takes no room. -->
     <StatusLine />
@@ -201,18 +133,6 @@
         <UsageMeter variant="home" />
       </div>
     {/if}
-    <!-- Only when something does: an empty claim is clutter. It enters and
-         leaves as one block of the reflow, never a snap. -->
-    {#if home.ready && home.live && home.needs.length > 0}
-      <h1 class="headline" data-flip in:crossIn out:crossOut>
-        <span aria-hidden="true" class="spark"><Attention /></span>
-        <TextMorph
-          as="span"
-          duration={morphMs()}
-          text={`${home.needs.length} need${home.needs.length === 1 ? "s" : ""} you`}
-        />
-      </h1>
-    {/if}
   </div>
 
   <!-- The groups stand from the first frame. Until the first read is in,
@@ -220,60 +140,6 @@
        `waiting`), so the tab row is where it will be and the list
        cross-fades in under it; nothing else here is claimed before then. -->
   <div class="groups">
-    {#if card}
-      <!-- An update nobody has seen stays here until it is dismissed. -->
-      <section
-        aria-label="Update"
-        class="group"
-        data-flip="box"
-        in:crossIn
-        out:crossOut
-      >
-        <UpdateCard
-          notice={updated}
-          ondismiss={dismissUpdate}
-          onreload={newerBuild() ? reloadForUpdate : undefined}
-        />
-      </section>
-    {/if}
-
-    {#if moved.length > 0}
-      <!-- Logins moved into CawCo stay here until the ✕ acknowledges them. -->
-      <section
-        aria-label="Logins moved"
-        class="group"
-        data-flip="box"
-        in:crossIn
-        out:crossOut
-      >
-        <MovedLogins
-          {moved}
-          ondismiss={() => {
-            // biome-ignore lint/complexity/noVoid: the hub's record comes back on the next board frame
-            void notices.acknowledge(moved.map((one) => one.id));
-          }}
-        />
-      </section>
-    {/if}
-
-    {#if home.ready && home.needs.length > 0}
-      <!-- The headline above names this group and counts it; a header
-           here would say the same twice. -->
-      <section
-        aria-label="Needs you"
-        class="group"
-        data-flip="box"
-        in:crossIn
-        out:crossOut
-      >
-        <div class="cards">
-          {#each home.needs as item (item.key)}
-            <NeedsCard {item} {stale} />
-          {/each}
-        </div>
-      </section>
-    {/if}
-
     {#if !noFleet}
       <WorkTabs
         {markedElsewhere}
@@ -383,38 +249,6 @@
   .usage {
     margin-inline: -8px;
   }
-  .headline {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    margin: 0;
-    font: var(--type-title);
-    letter-spacing: var(--track-title);
-    color: var(--ink-strong);
-  }
-  .rail .headline {
-    font: var(--type-label);
-    font-size: var(--text-body);
-  }
-  /* The one spark on the screen: needs you is the loudest thing here. */
-  .spark {
-    display: inline-grid;
-    place-items: center;
-    inline-size: 28px;
-    block-size: 28px;
-    border-radius: var(--radius-sm);
-    background: var(--status-attn-bg);
-    color: var(--status-attn-ink);
-  }
-  .rail .spark {
-    inline-size: 22px;
-    block-size: 22px;
-    border-radius: var(--radius-xs);
-  }
-  .spark :global(svg) {
-    width: 16px;
-    height: 16px;
-  }
   .groups {
     display: flex;
     flex-direction: column;
@@ -426,16 +260,6 @@
   .rail .groups {
     gap: var(--space-3);
     padding: var(--space-1) var(--space-2) var(--space-2);
-  }
-  .group {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-  .cards {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
   }
   .caw {
     display: flex;

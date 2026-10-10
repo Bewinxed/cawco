@@ -1,47 +1,47 @@
 /**
- * Puts the one update notice on screen. A single custom toast under one id:
- * the box stays mounted and its props change in place, so every state
- * replaces the last in the same box. Started once from the root layout.
+ * The one update notice, which Caw's panel shows as its update row
+ * (home/CawPanel, home/UpdateCard): the notice the fleet's state calls for
+ * now (`noticeFor`), what its buttons do, and what goes on without anyone
+ * looking (`startUpdateWatch`): "running on N machines" leaving by itself,
+ * and a tab older than the dashboard reloading once the operator isn't using
+ * it, Caw's panel closed (reload.svelte.ts).
  *
  * Every notice is acknowledged on the hub (notices.svelte.ts), by the ids of
- * the events it announces: closing it, or acting on it, clears it for every
- * tab and device, and a reload never brings it back. A Home card on screen
- * is the landing's one surface while it is there.
+ * the events it announces: its ✕, or acting on it, clears it for every tab
+ * and device, and a reload never brings it back.
  */
 import { machineLabel } from "@cawco/core";
-import { untrack } from "svelte";
-import { page } from "$app/state";
 import { cawco } from "../client.svelte";
 import { notices } from "../notices.svelte";
 import { bidFarewell, reloadWhenIdle } from "../reload.svelte";
 import { newerBuild } from "../served-build.svelte";
-import { toast } from "../toasts";
-import { goodbyeSeenMs } from "./goodbye";
-import { type Notice, noticeFor, reloadId, reloadNotice } from "./model";
-import UpdateNotice from "./UpdateNotice.svelte";
+import { type Notice, noticeFor, reloadId } from "./model";
 import { updates } from "./updates.svelte";
 
-const ID = "cawco-update";
 /** How long "running on N machines" stays up. */
 const DONE_MS = 6000;
 
-/**
- * Has sonner measure the toast `id` again once its box settled at a new
- * height, whatever changed it (UpdateNotice's ResizeObserver). svelte-sonner (1.2.1, the latest) stores each toast's
- * height when it mounts and measures it again only when its title or
- * description changes (Toast.svelte's height effect, upstream PR #76), and
- * stacks every older toast by those stored heights; a custom toast that
- * grows in place would otherwise lie over the toasts behind it. So the same
- * toast is given again, by its id, with a description naming its height. A
- * custom toast never draws its description (Toast.svelte renders the
- * component in place of title and description), so the word is never shown;
- * the update keeps its component, props, duration and onDismiss.
- */
-export const remeasure =
-  (id: string) =>
-  (height: number): void => {
-    toast.custom(UpdateNotice, { id, description: `${height}px` });
-  };
+class UpdateNotice {
+  /** The notice to show, or null; until the hub's record is in, none can know it was seen. */
+  readonly current = $derived.by<Notice | null>(() => {
+    const { policy } = updates;
+    if (!(policy && notices.known)) {
+      return null;
+    }
+    return noticeFor(
+      {
+        commanded: new Set(updates.commanded),
+        machines: cawco.machines,
+        newerBuild: newerBuild(),
+        policy,
+        seen: new Set(notices.seen),
+      },
+      (hostname) => machineLabel(hostname)
+    );
+  });
+}
+
+export const updateNotice = new UpdateNotice();
 
 /**
  * Reload chosen: what the notice said is acknowledged on the hub first, so
@@ -53,147 +53,54 @@ export async function reloadAcknowledging(acks: string[]): Promise<void> {
   location.reload();
 }
 
-export function startUpdateNotice(): () => void {
+/** The notice's ✕: acknowledged everywhere; "running on N machines" also forgets this tab's installs. */
+export function dismissUpdate(notice: Notice): void {
+  // biome-ignore lint/complexity/noVoid: the hub's record comes back on the next board frame
+  void notices.acknowledge(notice.acks);
+  if (notice.kind === 3) {
+    updates.commanded.clear();
+  }
+}
+
+/** The notice's button. */
+export function actOnUpdate(
+  notice: Notice,
+  action: NonNullable<Notice["action"]>
+): void {
+  if (action === "reload") {
+    const build = newerBuild();
+    // biome-ignore lint/complexity/noVoid: the tab goes once the acknowledgement is in
+    void reloadAcknowledging([
+      ...notice.acks,
+      ...(build ? [reloadId(build)] : []),
+    ]);
+    return;
+  }
+  const { policy } = updates;
+  if (action === "install-all" && policy) {
+    // biome-ignore lint/complexity/noVoid: each machine reports its own outcome
+    void updates.installAll(cawco.machines, policy);
+    return;
+  }
+  const machine = cawco.machines.find(
+    (row) => row.machineId === notice.machineIds[0]
+  );
+  if (machine) {
+    // biome-ignore lint/complexity/noVoid: the machine reports its own outcome
+    void updates.installNow(machine);
+    // biome-ignore lint/complexity/noVoid: the hub's record comes back on the next board frame
+    void notices.acknowledge(notice.acks);
+  }
+}
+
+/** What runs with nobody looking at the notice. Started once from the root layout. */
+export function startUpdateWatch(): () => void {
   return $effect.root(() => {
-    const view = $state<{ notice: Notice; onPage: boolean }>({
-      notice: undefined as unknown as Notice,
-      onPage: false,
-    });
-    let shown = false;
-    /** A dismissal we asked for ourselves is not the person's. */
-    let ours = false;
-    /** Reload was chosen: the box says its goodbye, and nothing replaces or closes it, until the tab goes. */
-    let leaving = false;
-    /** What the notice would say now, Home's card or not: what a reload acknowledges. */
-    let found: Notice | null = null;
-
-    /** The person closed the notice (its ✕). */
-    const dismiss = () => {
-      if (ours) {
-        return;
-      }
-      shown = false;
-      const { notice } = view;
-      // biome-ignore lint/complexity/noVoid: the hub's record comes back on the next board frame
-      void notices.acknowledge(notice.acks);
-      if (notice.kind === 3) {
-        updates.commanded.clear();
-      }
-    };
-
-    const finishDone = (acks: string[]) => {
-      // biome-ignore lint/complexity/noVoid: the hub's record comes back on the next board frame
-      void notices.acknowledge(acks);
-      updates.commanded.clear();
-    };
-
-    const act = (action: NonNullable<Notice["action"]>) => {
-      const { notice } = view;
-      if (action === "reload") {
-        leaving = true;
-        // biome-ignore lint/complexity/noVoid: the tab goes once the acknowledgement is in
-        void reloadAcknowledging(notice.acks);
-        return;
-      }
-      const { policy } = updates;
-      if (action === "install-all" && policy) {
-        // biome-ignore lint/complexity/noVoid: each machine reports its own outcome
-        void updates.installAll(cawco.machines, policy);
-        return;
-      }
-      const machine = cawco.machines.find(
-        (row) => row.machineId === notice.machineIds[0]
-      );
-      if (machine) {
-        // biome-ignore lint/complexity/noVoid: the machine reports its own outcome
-        void updates.installNow(machine);
-        // biome-ignore lint/complexity/noVoid: the hub's record comes back on the next board frame
-        void notices.acknowledge(notice.acks);
-      }
-    };
-
-    const clearOurs = () => {
-      ours = true;
-      toast.dismiss(ID);
-      setTimeout(() => {
-        ours = false;
-      }, 1000);
-    };
-
-    $effect(() => {
-      const { policy } = updates;
-      // Until the hub's record is in, no notice can know it was already seen.
-      const input =
-        policy && notices.known
-          ? {
-              commanded: new Set(updates.commanded),
-              machines: cawco.machines,
-              newerBuild: newerBuild(),
-              policy,
-              seen: new Set(notices.seen),
-            }
-          : null;
-      found = input
-        ? noticeFor(input, (hostname) => machineLabel(hostname))
-        : null;
-      // A Home card on screen says the landing: one surface, never the toast and the card together.
-      const notice = found?.kind === 6 && updates.cards > 0 ? null : found;
-      const onPage = page.url.pathname === "/config/updates";
-      untrack(() => {
-        if (leaving) {
-          return;
-        }
-        if (!notice) {
-          if (shown) {
-            shown = false;
-            clearOurs();
-          }
-          return;
-        }
-        view.notice = notice;
-        view.onPage = onPage;
-        show();
-      });
-    });
-
-    function show(): void {
-      if (shown) {
-        return;
-      }
-      shown = true;
-      toast.custom(UpdateNotice, {
-        id: ID,
-        duration: Number.POSITIVE_INFINITY,
-        // Closing it acknowledges it for every tab and device, so only its
-        // own ✕ closes it: never a stray swipe.
-        dismissible: false,
-        onDismiss: dismiss,
-        componentProps: {
-          view,
-          onaction: act,
-          ondismiss: dismiss,
-          onsettle: remeasure(ID),
-        },
-      });
-    }
-
-    // A tab older than the dashboard reloads itself once it is idle
-    // (reload.svelte.ts). In view it says its goodbye first, in the toast
-    // (or Home's card, while that is up); the reload acknowledges what the
-    // notice said, as Reload does.
+    // A tab older than the dashboard reloads itself once it is idle and
+    // nothing stands over the page, Caw's panel included (reload.svelte.ts
+    // `busy`); the reload acknowledges what the notice said, as Reload does.
     const unbid = bidFarewell({
-      acks: (build) => [...(found?.acks ?? []), reloadId(build)],
-      goodbye: async (build) => {
-        leaving = true;
-        if (updates.cards === 0) {
-          // Nothing said in this tab (acknowledged elsewhere first): the
-          // reload's own notice is the box that says goodbye.
-          view.notice ??= reloadNotice(build);
-          show();
-        }
-        updates.goodbye = true;
-        await new Promise((done) => setTimeout(done, goodbyeSeenMs()));
-      },
+      acks: (build) => [...(updateNotice.current?.acks ?? []), reloadId(build)],
     });
     $effect(() => {
       if (newerBuild() !== null) {
@@ -205,8 +112,8 @@ export function startUpdateNotice(): () => void {
 
     // "Running on N machines" leaves by itself, unless it is also this tab's reload.
     $effect(() => {
-      const { notice } = view;
-      if (!(shown && notice?.kind === 3)) {
+      const notice = updateNotice.current;
+      if (notice?.kind !== 3) {
         return;
       }
       const { acks } = notice;
@@ -215,7 +122,11 @@ export function startUpdateNotice(): () => void {
       if (notice.action === "reload") {
         return;
       }
-      const timer = setTimeout(() => finishDone(acks), DONE_MS);
+      const timer = setTimeout(() => {
+        // biome-ignore lint/complexity/noVoid: the hub's record comes back on the next board frame
+        void notices.acknowledge(acks);
+        updates.commanded.clear();
+      }, DONE_MS);
       return () => clearTimeout(timer);
     });
   });

@@ -3,7 +3,7 @@
    * UPDATE STATES — every look of the update screens from fixtures, with no
    * hub needed: the channel cards (the fleet on Stable, then on Nightly with
    * Stable chosen), one table row for each row of the Update cell, and the
-   * seven notices, each also shown as the real toast.
+   * seven notices as the update row of Caw's panel.
    */
   import { machineLabel } from "@cawco/core";
   import type {
@@ -13,7 +13,6 @@
   } from "@cawco/core/binary-updates";
   import UpdateCard from "#lib/cawco/home/UpdateCard.svelte";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
-  import { toast } from "#lib/cawco/toasts.js";
   import ChannelCards from "#lib/cawco/updates/ChannelCards.svelte";
   import {
     type Notice,
@@ -22,10 +21,7 @@
     type UpdateMachine,
     updatedNotice,
   } from "#lib/cawco/updates/model.js";
-  import UpdateNotice from "#lib/cawco/updates/UpdateNotice.svelte";
   import UpdateTable from "#lib/cawco/updates/UpdateTable.svelte";
-  import { remeasure } from "#lib/cawco/updates/update-notice.svelte.js";
-  import { Button } from "#lib/components/ui/button/index.js";
 
   /** Notes as every release writes them (docs/releases/README.md). */
   const NOTES = [
@@ -281,69 +277,19 @@
     machineLabel
   ) as Notice;
 
-  // The real toast: one id, and the box changes in place.
-  const ID = "cawco-update-demo";
-  const demo = $state<{ notice: Notice; onPage: boolean }>({
-    notice: NOTICES[3],
-    onPage: false,
-  });
   /**
-   * The rig's reload stand-in. Reload here does not reload: it changes the
-   * notice under the box at once, as an acknowledgement can, so the goodbye
-   * can be seen to stand on its own until the tab would go.
+   * The row in a tab older than the dashboard, which the acknowledgement
+   * drops as Reload is chosen. Reload here does not reload: the notice goes
+   * at once, so the goodbye can be seen to stand on its own until the tab
+   * would go.
    */
-  function demoAction(action: NonNullable<Notice["action"]>) {
+  let reloadRow = $state<Notice | null>(UPDATED_RELOAD);
+  function rowAction(action: NonNullable<Notice["action"]>) {
     if (action === "reload") {
-      demo.notice = NOTICES.at(-1) as Notice;
+      reloadRow = null;
     }
-  }
-  const inline = $state<{ notice: Notice; onPage: boolean }>({
-    notice: UPDATED_RELOAD,
-    onPage: false,
-  });
-  function inlineAction(action: NonNullable<Notice["action"]>) {
-    if (action === "reload") {
-      inline.notice = NOTICES.at(-1) as Notice;
-    }
-  }
-  /** Home's card, which the acknowledgement drops as Reload is chosen. */
-  let reloadCard = $state<Notice | null>(UPDATED);
-  function cardReload() {
-    reloadCard = null;
-  }
-  function showAsToast(notice: Notice) {
-    demo.notice = notice;
-    if (toast.getActiveToasts().some((active) => active.id === ID)) {
-      return;
-    }
-    toast.custom(UpdateNotice, {
-      id: ID,
-      duration: Number.POSITIVE_INFINITY,
-      dismissible: false,
-      componentProps: {
-        view: demo,
-        onaction: demoAction,
-        ondismiss: () => undefined,
-        onsettle: remeasure(ID),
-      },
-    });
   }
   const noop = () => undefined;
-  /**
-   * Two ordinary toasts that stay, to stack around the notice, made in one
-   * tick: the case svelte-sonner mis-measures (issue #24) and lib/cawco/
-   * toasts.ts spaces into macrotasks of their own.
-   */
-  let stacked = 0;
-  function stackTwo() {
-    for (let i = 0; i < 2; i += 1) {
-      stacked += 1;
-      toast(`Toast ${stacked}`, {
-        description: "Stacked with the notice",
-        duration: Number.POSITIVE_INFINITY,
-      });
-    }
-  }
 </script>
 
 <svelte:head><title>Update states · CawCo</title></svelte:head>
@@ -364,76 +310,36 @@
     <UpdateTable machines={ROWS} policy={OFF} />
   </section>
 
-  <h1>Notices 1 to 7</h1>
-  <div data-states="stack">
-    <Button
-      label="Stack two toasts"
-      onclick={stackTwo}
-      size="sm"
-      variant="outline"
-    />
-  </div>
+  <h1>Notices 1 to 7, as the update row of Caw's panel</h1>
   <div class="notices" data-states="notices">
     {#each NOTICES as notice (notice.kind)}
-      <div class="one" data-notice={notice.kind}>
-        <UpdateNotice
-          onaction={noop}
-          ondismiss={noop}
-          view={{ notice, onPage: false }}
-        />
-        <Button
-          label="Show as toast"
-          onclick={() => showAsToast(notice)}
-          size="sm"
-          variant="outline"
-        />
+      <div class="kit-pop panel" data-notice={notice.kind}>
+        <UpdateCard {notice} onaction={noop} ondismiss={noop} />
       </div>
     {/each}
   </div>
 
-  <h1>Updated, in a tab older than the dashboard</h1>
-  <div class="notices" data-states="notice-reload">
-    <div class="one" data-notice="reload">
-      <UpdateNotice onaction={inlineAction} ondismiss={noop} view={inline} />
-      <Button
-        label="Show as toast"
-        onclick={() => showAsToast(UPDATED_RELOAD)}
-        size="sm"
-        variant="outline"
-      />
-    </div>
-  </div>
-
   <h1>Updated, with notes written before sections</h1>
   <div class="notices" data-states="notice-plain">
-    <div class="one" data-notice="plain">
-      <UpdateNotice
-        onaction={noop}
-        ondismiss={noop}
-        view={{ notice: UPDATED_PLAIN, onPage: false }}
-      />
-      <Button
-        label="Show as toast"
-        onclick={() => showAsToast(UPDATED_PLAIN)}
-        size="sm"
-        variant="outline"
-      />
+    <div class="kit-pop panel" data-notice="plain">
+      <UpdateCard notice={UPDATED_PLAIN} onaction={noop} ondismiss={noop} />
     </div>
   </div>
 
-  <h1>Updated, unseen, on Home</h1>
-  <div class="home-card" data-states="update-card">
-    <UpdateCard notice={UPDATED} ondismiss={noop} />
+  <h1>Updated, in a tab older than the dashboard: Reload says goodbye</h1>
+  <!-- As the panel has it: the row in a `reflow`, a row under it. -->
+  <div class="kit-pop panel" data-states="notice-reload" {@attach reflow()}>
+    <div data-flip="box">
+      <UpdateCard notice={reloadRow} onaction={rowAction} ondismiss={noop} />
+    </div>
+    <div class="under" data-flip="box">
+      The next row of the panel follows the row's edge
+    </div>
   </div>
-  <h1>Updated, unseen, on Home, in a tab older than the dashboard</h1>
-  <!-- As Home has it: the card in a group box of a `reflow`, a group under it. -->
-  <div class="home-card" data-states="update-card-reload" {@attach reflow()}>
-    <section class="group" data-flip="box">
-      <UpdateCard notice={reloadCard} ondismiss={noop} onreload={cardReload} />
-    </section>
-    <section class="group under" data-flip="box">
-      The next group on Home follows the card's edge
-    </section>
+  <div class="notices" data-states="update-card">
+    <div class="kit-pop panel">
+      <UpdateCard notice={UPDATED} onaction={noop} ondismiss={noop} />
+    </div>
   </div>
 </main>
 
@@ -461,25 +367,18 @@
   }
   .notices {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(356px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+    align-items: start;
     gap: var(--space-5);
   }
-  .home-card {
-    display: grid;
-    gap: var(--space-4);
-    max-inline-size: 440px;
+  /* The panel's own width (NeedsCaw). */
+  .panel {
+    inline-size: 380px;
   }
   .under {
-    padding: var(--space-3) var(--space-4);
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
+    padding: var(--space-3);
+    border-block-start: 1px solid var(--border-hairline);
     font: var(--type-meta);
     color: var(--ink-muted);
-  }
-  .one {
-    display: grid;
-    justify-items: start;
-    gap: var(--space-2);
   }
 </style>

@@ -135,18 +135,6 @@ class Updates {
       method: "POST",
     }).catch(() => null);
   }
-
-  /**
-   * How many Home update cards are on screen. While one is, the card is the
-   * landing's surface and the toast does not say it too.
-   */
-  cards = $state(0);
-
-  /**
-   * The tab is reloading by itself, idle (reload.svelte.ts): the toast and
-   * Home's card turn into their goodbye, as Reload turns them.
-   */
-  goodbye = $state(false);
 }
 
 async function errorText(response: Response): Promise<string> {

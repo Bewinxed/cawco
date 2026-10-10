@@ -9,12 +9,12 @@
  *   reads nothing more until it reloads.
  *
  * Either way the reload never comes under the operator's hands: it waits
- * until the tab is idle ({@link busy}), so "nobody gets a page pulled out
- * from under them mid-task" (440bdbc6) holds without asking. A tab in view
- * says its goodbye first (the update notice's "See you in a bit",
- * updates/goodbye.ts); a hidden one goes at once, unseen. The reload
- * acknowledges what the notice announced, on the hub, so neither the
- * reloaded tab nor any other says it again.
+ * until the tab is idle ({@link busy}), Caw's panel closed with everything
+ * else that stands over the page, so "nobody gets a page pulled out from
+ * under them mid-task" (440bdbc6) holds without asking. Then it goes at
+ * once: the update notice's goodbye lives in Caw's panel, which is closed.
+ * The reload acknowledges what the notice announced, on the hub, so neither
+ * the reloaded tab nor any other says it again.
  *
  * It only reloads once the dashboard's server runs a build other than this
  * tab's (`runningBuild`), or the reload would load this one again.
@@ -140,9 +140,9 @@ function unsentWords(): boolean {
 }
 
 /**
- * What stands over the page: a dialog or sheet, a popover, a menu or a
- * list to pick from, a drawer (the Needs-you drawer is `inert` while
- * closed). Toasts are not in it, and neither is a preview: one sits beside
+ * What stands over the page: a dialog or sheet, a popover (Caw's panel
+ * among them: an idle tab never reloads under it), a menu or a list to pick
+ * from, a drawer. Toasts are not in it, and neither is a preview: one sits beside
  * the conversation most of the time, and it comes back after the reload as
  * it was (open, from the hub's snapshot; at the reader's place in it,
  * PreviewPane `keptAt`). Input inside it counts as using the tab
@@ -198,18 +198,13 @@ export function busy(): "typing" | "unsent" | "open" | "recent" | null {
  */
 export type ReloadHold = "build" | "busy";
 
-/**
- * What the update notice gives the reload: the goodbye it plays in a tab in
- * view (resolves once it has been seen), and the notice ids the reload
- * acknowledges for the build it loads.
- */
+/** What the update notice gives the reload: the notice ids it acknowledges for the build it loads. */
 interface Farewell {
   acks: (build: string) => string[];
-  goodbye: (build: string) => Promise<void>;
 }
 let farewell: Farewell | null = null;
 
-/** The update notice hands the reload its goodbye and its acknowledgement. */
+/** The update notice hands the reload its acknowledgement. */
 export function bidFarewell(given: Farewell): () => void {
   farewell = given;
   return () => {
@@ -294,9 +289,6 @@ export async function reloadWhenIdle(
     }
     // biome-ignore lint/performance/noAwaitInLoops: one look at a time until the tab is idle
     await nextLook();
-  }
-  if (document.visibilityState === "visible") {
-    await farewell?.goodbye(running);
   }
   await Promise.allSettled([
     ...[...flushes].map((flush) => flush()),

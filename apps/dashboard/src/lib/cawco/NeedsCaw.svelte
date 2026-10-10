@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { questionsOf } from "@cawco/core";
   /**
    * Caw's head in the top bar: the way into what needs the operator (the
    * home's Needs you: every parked ask, a workflow run's question, a project
@@ -32,40 +31,35 @@
    * on and the clip's Rive is gone. Every drawing keeps two device pixels
    * inside his glass circle (assets/mascot/scripts/head_circle.py).
    *
-   * A tap on him, or a drag down from him, pulls a drawer down from the top.
-   * Dragged, its body grows out of the capsule under the finger 1:1, joined
-   * to it by a neck that thins as the two part and snaps once they are a gap
-   * apart (a metaball's join); let go, it opens or closes on where the
-   * finger was heading (its position projected along its speed) and settles
-   * on the spring every hand-driven surface uses (motion/spring), which a
-   * finger can take hold of again mid-flight. Inside, the rows, longest
-   * wait first; choosing one closes the drawer and opens it: a session with
-   * its composer grown into the ask, a run, or a project's spend. It closes
-   * by a drag up, a tap outside, Escape, or a row.
+   * A tap on him opens his panel: the kit's popover (`kit-pop`), anchored
+   * under his glass as the machines item beside him opens MachinesList
+   * (MachinesButton). It is non-modal: no scrim, no focus trap, nothing of
+   * the page made inert, so the transcript scrolls, the composer takes keys
+   * and the rail's rows open while it stands. A click anywhere else closes
+   * it and still lands where it was aimed; Escape closes it and focus comes
+   * back to him. Inside (CawPanel), Needs you, longest wait first, then the
+   * Notices; choosing a row closes it and opens what the row is.
    */
   import { mergeProps } from "bits-ui";
   import { untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
+  import * as Popover from "#lib/components/ui/popover/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { DRAWER_QUERY } from "#lib/hooks/is-mobile.svelte.js";
-  import { IconDollar, IconWorkflow } from "#lib/icons.js";
   import { browser } from "$app/env";
-  import { goto } from "$app/navigation";
   import { page } from "$app/state";
-  import { cawco } from "./client.svelte";
   import { type CawFile, type CawHead, stageCaw } from "./home/Caw.svelte";
   import CawFace from "./home/CawFace.svelte";
+  import CawPanel from "./home/CawPanel.svelte";
+  import { cawNotices } from "./home/caw-notices.svelte";
   import {
     CAW_HEAD_CENTRE,
     CAW_STILL_BLEED,
     cawStill,
   } from "./home/caw-still.svelte";
-  import { clock, home, type NeedsItem, span } from "./home/home-state.svelte";
-  import { conversationHref } from "./links";
-  import { dur, easeInOut, easeOut, motionOk } from "./motion/curves.svelte";
-  import { integrate, type Sample, sampleAt } from "./motion/spring";
-  import SessionMark from "./SessionMark.svelte";
-  import { capLine } from "./usage";
+  import { home } from "./home/home-state.svelte";
+  import { dur, easeOut, motionOk } from "./motion/curves.svelte";
 
   /**
    * The phone bar, where his glass is his own (Shell). The server has the
@@ -81,28 +75,12 @@
    * same 4px margin (`--c-bar-caw-head-phone`).
    */
   const head = $derived(phone ? 24 : 20);
-  /** Where the drawer stands under the capsule once parted, px. */
+  /** Where the panel stands under the glass he stands on, px. */
   const GAP = 8;
-  /** The finger's travel by which the neck has thinned to nothing and snapped, px. */
-  const SNAP = 56;
-  /** The travel over which the body widens from the capsule's width to its own, px. */
-  const WIDEN = 160;
-  /** Travel before a press is a drag, px. */
-  const SLOP = 8;
-  /** Release speed is read over this last stretch, ms. */
-  const VELOCITY_WINDOW = 80;
-  /**
-   * How far a release is carried along its speed when deciding where it was
-   * going, ms: the projection a deceleration of 0.99 a millisecond reaches
-   * (0.99 / (1 − 0.99) = 99).
-   */
-  const PROJECT_MS = 99;
-  /** Past fully open, a third of the finger's travel shows, and no more than a fifth. */
-  const RESIST = 0.35;
-  const RESIST_MAX = 0.2;
 
   const needs = $derived(home.needs);
   const count = $derived(needs.length);
+  const noticeCount = $derived(cawNotices.count);
   /**
    * What he says with nothing to count: "All caught up" only once the fleet
    * is read over a live hub (PRODUCT.md: an empty answer is only given when
@@ -120,7 +98,15 @@
         return "Hub unreachable";
     }
   });
-  const label = $derived(count > 0 ? `Needs you, ${count}` : quiet);
+  /** "· 2 notices" after what he says, while any notice stands. */
+  const noticeWords = $derived(
+    noticeCount > 0
+      ? ` · ${noticeCount} ${noticeCount === 1 ? "notice" : "notices"}`
+      : ""
+  );
+  const label = $derived(
+    `${count > 0 ? `Needs you, ${count}` : quiet}${noticeWords}`
+  );
 
   /* ── The count ─────────────────────────────────────────────────────── */
   /**
@@ -171,7 +157,9 @@
   const slots = (n: number) => Array.from({ length: n }, (_, k) => k);
   const arcSlots = $derived(slots(arcCount));
   const lapSlots = $derived(slots(lapCount));
-  const tipText = $derived(count > 0 ? `${count} need you` : quiet);
+  const tipText = $derived(
+    `${count > 0 ? `${count} need you` : quiet}${noticeWords}`
+  );
 
   /** A point on the rim, `deg` clockwise from 12 o'clock. */
   const onRim = (deg: number) => {
@@ -366,8 +354,10 @@
   /** What he has already seen, by key; null until the fleet is first read. */
   let seen: Set<string> | null = null;
 
+  // A new ask, or a new notice: his beat, once. A notice draws nothing on
+  // his rim (the arcs are needs you's), so the beat is how it arrives.
   $effect(() => {
-    const keys = needs.map((item) => item.key);
+    const keys = [...needs.map((item) => item.key), ...cawNotices.keys];
     if (!home.ready) {
       return;
     }
@@ -438,7 +428,7 @@
     }
   }
 
-  /** A press: one squash, and the smile; the drawer is `grab`'s. */
+  /** A press: one squash, and the smile; the panel is the popover's. */
   function press(event: PointerEvent) {
     if (!event.isPrimary || event.button > 0) {
       return;
@@ -460,657 +450,236 @@
     window.addEventListener("pointercancel", lift);
   }
 
-  /* ── The drawer ────────────────────────────────────────────────────── */
+  /* ── The panel ─────────────────────────────────────────────────────── */
   let capsule = $state<HTMLButtonElement | null>(null);
-  let body = $state<HTMLElement | null>(null);
-  let inner = $state<HTMLElement | null>(null);
-  let neck = $state<SVGPathElement | null>(null);
-  let scrim = $state<HTMLElement | null>(null);
-  /** The drawer is open, or opening: what the capsule says and the focus follows. */
+  let content = $state<HTMLElement | null>(null);
   let open = $state(false);
-  /** How far down it is drawn: 0 folded into the capsule, 1 open. */
-  let progress = 0;
-  /** Any of it is on screen. */
-  let shown = $state(false);
-
-  interface Geometry {
-    /** The capsule's box. */
-    capBottom: number;
-    capLeft: number;
-    capRight: number;
-    /** The open drawer's box. */
-    height: number;
-    left: number;
-    width: number;
-  }
-  let geo: Geometry | null = null;
-
-  /** Where the open drawer stands, read off the capsule and the content as they are now. */
-  function measure(): Geometry | null {
-    if (!(capsule && inner)) {
-      return null;
-    }
-    // Across under him, and down to the foot of the glass he stands on (the
-    // bar's group, `data-bar-group`), so the drawer grows out of what is seen.
-    const own = capsule.getBoundingClientRect();
-    const glass = capsule.closest("[data-bar-group]")?.getBoundingClientRect();
-    const cap = {
-      left: own.left,
-      right: own.right,
-      bottom: glass?.bottom ?? own.bottom,
-    };
-    const width = phone ? window.innerWidth - 16 : 380;
-    const left = phone ? 8 : Math.max(8, cap.right - width);
-    inner.style.width = `${width}px`;
-    // Its travel: the gap it parts by, then the content, as far as the screen allows.
-    const room = window.innerHeight - cap.bottom - 16;
-    const height = Math.min(inner.scrollHeight + GAP, room, 560 + GAP);
-    return {
-      capLeft: cap.left,
-      capRight: cap.right,
-      capBottom: cap.bottom,
-      left,
-      width,
-      height,
-    };
-  }
-
-  const clamp01 = (t: number) => Math.min(1, Math.max(0, t));
-  /** Where the neck snaps: SNAP, or sooner in a drawer too short for it. */
-  const snapAt = (g: Geometry) => Math.min(SNAP, g.height * 0.4);
-  const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
-
-  /** Draws the drawer at `at` of its travel: body, neck, content and scrim. */
-  function paint(at: number) {
-    progress = at;
-    const g = geo;
-    if (!(g && body && inner)) {
-      return;
-    }
-    const q = Math.max(0, at);
-    const over = Math.max(0, q - 1);
-    // The finger's travel: 1:1 to fully open, then the rubber band.
-    const travel =
-      Math.min(q, 1) * g.height +
-      Math.min(over * g.height * RESIST, g.height * RESIST_MAX);
-    // Its edges leave the capsule's for its own: it grows out from under him,
-    // done by the time it is open however short it is.
-    const widen = easeInOut(clamp01(travel / Math.min(WIDEN, g.height * 0.8)));
-    const left = lerp(g.capLeft, g.left, widen);
-    const right = lerp(g.capRight, g.left + g.width, widen);
-    const gap = GAP * clamp01(travel / snapAt(g));
-    const top = g.capBottom + gap;
-    const h = Math.max(0, travel - gap);
-    const w = right - left;
-    const r = Math.min(12, h / 2, w / 2);
-    body.style.left = `${left}px`;
-    body.style.top = `${top}px`;
-    body.style.width = `${w}px`;
-    body.style.height = `${h}px`;
-    body.style.borderRadius = `${r}px`;
-    inner.style.transform = `translateX(${g.left - left}px)`;
-    inner.style.opacity = String(clamp01((q - 0.3) / 0.4));
-    if (scrim) {
-      scrim.style.opacity = String(clamp01(q));
-    }
-    if (neck) {
-      neck.setAttribute("d", neckPath(g, travel, { left, right, top, h, r }));
-    }
-    shown = q > 0.001;
-  }
-
   /**
-   * The join between the capsule and the body until they are a gap apart:
-   * from a chord across the capsule's foot down to one across the body's
-   * head under him, pinched at its middle to a waist that thins to nothing
-   * as the finger travels, when it snaps and is drawn no more.
+   * The last thing that could open the panel was a pointer press, not a
+   * key (MachinesButton's rule): focus goes in without the ring.
    */
-  function neckPath(
-    g: Geometry,
-    travel: number,
-    bodyBox: { left: number; right: number; top: number; h: number; r: number }
-  ): string {
-    const t = travel / snapAt(g);
-    if (travel <= 0.5 || t >= 1 || bodyBox.h <= 0) {
-      return "";
-    }
-    const capW = g.capRight - g.capLeft;
-    const capX = g.capLeft + capW / 2;
-    const a = capW * 0.36;
-    const b = Math.min((bodyBox.right - bodyBox.left) / 2, a * 1.4);
-    // Under him, kept off the body's rounded corners.
-    const x = Math.min(
-      Math.max(capX, bodyBox.left + bodyBox.r + b),
-      bodyBox.right - bodyBox.r - b
-    );
-    const waist = a * (1 - t) ** 1.6;
-    const y1 = g.capBottom - capW * 0.12;
-    const y2 = bodyBox.top + Math.min(bodyBox.h, 10);
-    const ym = (y1 + y2) / 2;
-    const xm = (capX + x) / 2;
-    const d1 = (ym - y1) / 2;
-    const d2 = (y2 - ym) / 2;
-    return [
-      `M ${capX - a} ${y1}`,
-      `C ${capX - a} ${y1 + d1} ${xm - waist} ${ym - d1} ${xm - waist} ${ym}`,
-      `C ${xm - waist} ${ym + d2} ${x - b} ${y2 - d2} ${x - b} ${y2}`,
-      `L ${x + b} ${y2}`,
-      `C ${x + b} ${y2 - d2} ${xm + waist} ${ym + d2} ${xm + waist} ${ym}`,
-      `C ${xm + waist} ${ym - d1} ${capX + a} ${y1 + d1} ${capX + a} ${y1}`,
-      "Z",
-    ].join(" ");
-  }
-
-  /* The settle: the spring integrated once at release, sampled each frame,
-     so a finger that takes hold mid-flight takes it from where it is. */
-  let settleFrame = 0;
-  let settling: { path: Sample[]; start: number; target: 0 | 1 } | null = null;
-
-  function stopSettle() {
-    cancelAnimationFrame(settleFrame);
-    settling = null;
-  }
-
-  function settle(target: 0 | 1, velocity = 0) {
-    stopSettle();
-    const g = geo;
-    if (!g) {
-      return;
-    }
-    if (!motionOk.current) {
-      paint(target);
-      finished(target);
-      return;
-    }
-    const path = integrate((progress - target) * g.height, velocity * 1000);
-    settling = { path, start: performance.now(), target };
-    const step = (now: number) => {
-      if (!settling) {
-        return;
-      }
-      // biome-ignore lint/style/useAtIndex: integrate() always returns at least two points
-      const end = settling.path[settling.path.length - 1].t;
-      const seconds = (now - settling.start) / 1000;
-      const sample = sampleAt(settling.path, seconds);
-      paint(settling.target + sample.x / g.height);
-      if (seconds >= end) {
-        const done = settling.target;
-        settling = null;
-        finished(done);
-        return;
-      }
-      settleFrame = requestAnimationFrame(step);
-    };
-    settleFrame = requestAnimationFrame(step);
-  }
-
-  /** The drawer came to rest. */
-  function finished(at: 0 | 1) {
-    if (at === 0) {
-      shown = false;
-      return;
-    }
-    if (!body?.contains(document.activeElement)) {
-      body
-        ?.querySelector<HTMLElement>(".row, .empty")
-        ?.focus({ preventScroll: true });
-    }
-  }
-
-  function openDrawer(velocity = 0) {
-    // From rest it is measured as it is now; mid-flight it keeps its box.
-    if (!geo || progress <= 0.001) {
-      geo = measure();
-    }
-    open = true;
-    settle(1, velocity);
-  }
-
-  function closeDrawer(velocity = 0) {
-    open = false;
-    const hadFocus = body?.contains(document.activeElement);
-    settle(0, velocity);
-    if (hadFocus) {
-      capsule?.focus({ preventScroll: true });
-    }
-  }
-
-  /** A row: the drawer closes and what it asks for opens. */
-  function choose(item: NeedsItem) {
-    closeDrawer();
-    // biome-ignore lint/complexity/noVoid: the session surface takes it from the route
-    void goto(hrefOf(item));
-  }
-
-  function hrefOf(item: NeedsItem): string {
-    if (item.kind !== "ask") {
-      return item.href;
-    }
-    return item.thread
-      ? `/session/${item.thread}`
-      : conversationHref(item.instanceId, cawco.instanceIndex);
-  }
-
-  /** What a row asks for, in the words it is asked: its second line. */
-  function wantOf(item: NeedsItem): string {
-    switch (item.kind) {
-      case "ask":
-        return item.isQuestion
-          ? (questionsOf(item.request.toolName, item.request.input)?.[0]
-              ?.question ?? item.ask)
-          : item.ask;
-      case "run":
-        return "Waiting on your answer";
-      default:
-        return capLine(item.cap);
-    }
-  }
-
-  /** A row's last line: the kind, then where it is (machine · project). */
-  function metaOf(item: NeedsItem): string {
-    switch (item.kind) {
-      case "ask":
-        return `${item.isQuestion ? "Question" : "Permission"} · ${item.place}${item.stale ? " · machine offline" : ""}`;
-      case "run":
-        return `Workflow · ${item.place}`;
-      default:
-        return "Budget";
-    }
-  }
-
-  /* ── The hand ──────────────────────────────────────────────────────── */
+  let byPointer = false;
+  /** The panel is closing on a press outside it: the press keeps its focus. */
+  let closedOutside = false;
   /**
-   * A press on the capsule, or on the open drawer's head and handle: a tap
-   * toggles, a drag moves the drawer under the finger. From the capsule the
-   * drag is downward (or back up, once it has it); from the drawer, upward.
+   * How far the panel stands under him: GAP under the glass he stands on
+   * (the bar's group, `data-bar-group`, or his own on a phone), read as it
+   * opens.
    */
-  interface Hold {
-    base: number;
-    dragging: boolean;
-    fromDrawer: boolean;
-    samples: Array<{ at: number; t: number }>;
-    startX: number;
-    startY: number;
-  }
+  let offset = $state(GAP);
 
-  /**
-   * The first real travel decides whether a press is a drag: mostly down or
-   * up, and toward where the drawer can go (down from the capsule while it
-   * is shut, up from the open drawer).
-   */
-  function takesHold(hold: Hold, e: PointerEvent): boolean {
-    const dy = e.clientY - hold.startY;
-    const dx = Math.abs(e.clientX - hold.startX);
-    if (Math.abs(dy) < SLOP || dx > Math.abs(dy)) {
-      return false;
-    }
-    if (hold.fromDrawer) {
-      return dy < 0;
-    }
-    return open || dy > 0;
-  }
-
-  /** Release speed along the drawer's travel, px/ms, over the last stretch. */
-  function speedOf(samples: Hold["samples"]): number {
-    const last = samples.at(-1);
-    const first = samples.find(
-      (sample) => last && last.t - sample.t <= VELOCITY_WINDOW
-    );
-    if (!(first && last) || last.t <= first.t) {
-      return 0;
-    }
-    return (last.at - first.at) / (last.t - first.t);
-  }
-
-  function follow(hold: Hold, e: PointerEvent) {
-    const g = geo;
-    if (!g) {
+  function measure() {
+    if (!capsule) {
       return;
     }
-    const at = hold.base + (e.clientY - hold.startY) / g.height;
-    paint(at);
-    hold.samples.push({ at: at * g.height, t: e.timeStamp });
-    while (
-      hold.samples.length > 2 &&
-      e.timeStamp - hold.samples[0].t > VELOCITY_WINDOW
-    ) {
-      hold.samples.shift();
-    }
+    const own = capsule.getBoundingClientRect().bottom;
+    const glass =
+      capsule.closest("[data-bar-group]")?.getBoundingClientRect().bottom ??
+      own;
+    offset = GAP + Math.max(0, glass - own);
   }
-
-  /** Let go: it goes where its position, carried along its speed, points. */
-  function letGo(hold: Hold) {
-    const g = geo as Geometry;
-    const v = speedOf(hold.samples);
-    if (progress + (v * PROJECT_MS) / g.height > 0.5) {
-      openDrawer(v / g.height);
-    } else {
-      closeDrawer(v / g.height);
-    }
-  }
-
-  function grab(fromDrawer: boolean) {
-    return (event: PointerEvent) => {
-      if (!event.isPrimary || event.button > 0) {
-        return;
-      }
-      const node = event.currentTarget as HTMLElement;
-      const hold: Hold = {
-        base: progress,
-        dragging: false,
-        fromDrawer,
-        samples: [],
-        startX: event.clientX,
-        startY: event.clientY,
-      };
-      const move = (e: PointerEvent) => {
-        if (!hold.dragging) {
-          if (!takesHold(hold, e)) {
-            return;
-          }
-          hold.dragging = true;
-          node.setPointerCapture(e.pointerId);
-          stopSettle();
-          if (!fromDrawer && progress <= 0.001) {
-            geo = measure();
-          }
-          hold.base = progress;
-        }
-        follow(hold, e);
-      };
-      const end = (e: PointerEvent) => {
-        node.removeEventListener("pointermove", move);
-        node.removeEventListener("pointerup", end);
-        node.removeEventListener("pointercancel", end);
-        if (hold.dragging) {
-          letGo(hold);
-        } else if (e.type === "pointerup" && !fromDrawer) {
-          toggle();
-        }
-      };
-      node.addEventListener("pointermove", move);
-      node.addEventListener("pointerup", end);
-      node.addEventListener("pointercancel", end);
-    };
-  }
-
-  const grabCapsule = grab(false);
-
-  function toggle() {
-    if (open) {
-      closeDrawer();
-    } else {
-      openDrawer();
-    }
-  }
-
-  /** A key's press: a pointer's is the `pointerup` above, its click left alone. */
-  function onCapsuleClick(event: MouseEvent) {
-    if (event.detail === 0) {
-      toggle();
-    }
-  }
-
-  /** The drawer follows the window and the content while it stands open. */
-  $effect(() => {
-    if (!shown) {
-      return;
-    }
-    const again = () => {
-      if (settling || !open) {
-        return;
-      }
-      geo = measure();
-      paint(progress);
-    };
-    window.addEventListener("resize", again);
-    return () => window.removeEventListener("resize", again);
-  });
-  $effect(() => {
-    // The rows changed under an open drawer: its height follows them.
-    const rows = needs.length;
-    untrack(() => {
-      if (rows >= 0 && open && !settling) {
-        requestAnimationFrame(() => {
-          geo = measure();
-          paint(1);
-        });
-      }
-    });
-  });
 </script>
 
 <svelte:window
-  onkeydown={(event) => {
-    if (event.key === "Escape" && open) {
-      event.preventDefault();
-      closeDrawer();
-    }
+  onkeydowncapture={() => {
+    byPointer = false;
+  }}
+  onpointerdowncapture={() => {
+    byPointer = true;
   }}
 />
 
-<div class="needs-caw" class:shown>
-  <!-- Under the drawer: a tap outside closes it. -->
-  <div
-    aria-hidden="true"
-    class="scrim"
-    onclick={() => closeDrawer()}
-    bind:this={scrim}
-  ></div>
-  <svg aria-hidden="true" class="neck"><path d="" bind:this={neck}></path></svg>
-  <div
-    aria-label="Needs you"
-    aria-modal="false"
-    class="drawer"
-    id="needs-drawer"
-    inert={!open}
-    role="dialog"
-    bind:this={body}
-  >
-    <div class="inner" bind:this={inner}>
-      {#if needs.length > 0}
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div class="head" onpointerdown={grab(true)}>
-          <span class="title">Needs you</span>
-          <span class="count">{needs.length}</span>
-        </div>
-        <!-- More rows than the drawer holds: the house edge fade at the foot
-             while more is below, and at the head once scrolled. -->
-        <ul class="rows kit-edge-fade-block">
-          {#each needs as item (item.key)}
-            <li>
-              <button
-                class="row press-tint focus-inset"
-                data-stale={(item.kind === "ask" && item.stale) || undefined}
-                onclick={() => choose(item)}
-                type="button"
-              >
-                <!-- The session's own mark, as the rail draws it; a run and
-                     a budget their glyphs. -->
-                <span class="lead">
-                  {#if item.kind === "ask"}
-                    <SessionMark
-                      id={item.instanceId}
-                      place={item.cwd || item.machineId}
-                      status="attn"
-                    />
-                  {:else if item.kind === "run"}
-                    <IconWorkflow aria-hidden="true" />
-                  {:else}
-                    <IconDollar aria-hidden="true" />
-                  {/if}
-                </span>
-                <span class="name">{item.title}</span>
-                {#if item.raisedAt !== undefined}
-                  <span class="wait">{span(clock.now - item.raisedAt)}</span>
-                {/if}
-                <span class="want">{wantOf(item)}</span>
-                <span class="meta">{metaOf(item)}</span>
-              </button>
-            </li>
-          {/each}
-        </ul>
-      {:else}
-        <div
-          class="empty"
-          onpointerdown={grab(true)}
-          role="status"
-          tabindex="-1"
-        >
-          {#if home.status === "connected"}
-            <CawFace size={48} status="ready" />
-          {/if}
-          <span>{quiet}</span>
-        </div>
-      {/if}
-      <div aria-hidden="true" class="handle" onpointerdown={grab(true)}>
-        <span></span>
-      </div>
-    </div>
-  </div>
-
+<Popover.Root
+  bind:open={
+    () => open,
+    (value) => {
+    if (value) {
+      measure();
+    }
+    open = value;
+  }
+  }
+>
   <Tip label={tipText}>
     {#snippet children(
       tip
     )}
-      <button
-        {...mergeProps(tip, {
-          onclick: onCapsuleClick,
-          onpointerdown: (event: PointerEvent) => {
-            press(event);
-            grabCapsule(event);
-          },
-          onpointerenter: pointerOn,
-          onpointerleave: pointerOff,
+      <Popover.Trigger>
+        {#snippet child({
+          props,
         })}
-        aria-controls="needs-drawer"
-        aria-expanded={open}
-        aria-haspopup="dialog"
-        aria-label={label}
-        class="capsule bar-item touch-hit press-tint"
-        data-needs-caw
-        type="button"
-        bind:this={capsule}
-      >
-        <span class="mug" class:pressed={pressed}>
-          <span
-            class="face"
-            data-caw-phase={phase}
-            style:--bleed="{CAW_STILL_BLEED}px"
-            style:--dx={0.5 - CAW_HEAD_CENTRE.x}
-            style:--dy={0.5 - CAW_HEAD_CENTRE.y}
-            style:--side="{head}px"
-            class:covered={covering}
+          <button
+            {...mergeProps(props, tip, {
+              onpointerdown: press,
+              onpointerenter: pointerOn,
+              onpointerleave: pointerOff,
+            })}
+            aria-label={label}
+            class="capsule bar-item touch-hit press-tint"
+            data-needs-caw
+            type="button"
+            bind:this={capsule}
           >
-            <CawFace size={head} status={face} />
-            {#if clip}
-              {#key clip.id}
-                <canvas
-                  aria-hidden="true"
-                  {@attach playClip(clip.file)}
-                ></canvas>
-              {/key}
-            {/if}
-          </span>
-        </span>
-        <!-- What waits, on his rim: an arc each, a second lap on top in its
+            <span class="mug" class:pressed={pressed}>
+              <span
+                class="face"
+                data-caw-phase={phase}
+                style:--bleed="{CAW_STILL_BLEED}px"
+                style:--dx={0.5 - CAW_HEAD_CENTRE.x}
+                style:--dy={0.5 - CAW_HEAD_CENTRE.y}
+                style:--side="{head}px"
+                class:covered={covering}
+              >
+                <CawFace size={head} status={face} />
+                {#if clip}
+                  {#key clip.id}
+                    <canvas
+                      aria-hidden="true"
+                      {@attach playClip(clip.file)}
+                    ></canvas>
+                  {/key}
+                {/if}
+              </span>
+            </span>
+            <!-- What waits, on his rim: an arc each, a second lap on top in its
          own ink past ARCS, closed whole past two laps. -->
-        <svg
-          aria-hidden="true"
-          class="rim"
-          data-count={count}
-          viewBox="0 0 {RING_BOX} {RING_BOX}"
-        >
-          <!-- The wide bar's circle, and the phone's standing outline: the
+            <svg
+              aria-hidden="true"
+              class="rim"
+              data-count={count}
+              viewBox="0 0 {RING_BOX} {RING_BOX}"
+            >
+              <!-- The wide bar's circle, and the phone's standing outline: the
                one the width draws is shown (styles below). -->
-          <g class="round">
-            {#each arcSlots as k (k)}
-              <path
-                class="arc"
-                d={arcPath(k)}
-                pathLength="1"
-                transition:drawn
-              />
-            {/each}
-            {#each lapSlots as k (k)}
-              <path
-                class="arc lap"
-                d={arcPath(k)}
-                pathLength="1"
-                transition:drawn
-              />
-            {/each}
-            {#if ringClosed}
-              <circle
-                class="arc lap whole"
-                cx={MID}
-                cy={MID}
-                pathLength="1"
-                r={RIM}
-                transform="rotate(-90 {MID} {MID})"
-                transition:drawn
-              />
-            {/if}
-          </g>
-          <g class="standing">
-            {#each arcSlots as k (k)}
-              <path
-                class="arc"
-                d={outlinePath(k)}
-                pathLength="1"
-                transition:drawn
-              />
-            {/each}
-            {#each lapSlots as k (k)}
-              <path
-                class="arc lap"
-                d={outlinePath(k)}
-                pathLength="1"
-                transition:drawn
-              />
-            {/each}
-            {#if ringClosed}
-              <path
-                class="arc lap whole"
-                d={OUTLINE}
-                pathLength="1"
-                transition:drawn
-              />
-            {/if}
-          </g>
-        </svg>
-      </button>
+              <g class="round">
+                {#each arcSlots as k (k)}
+                  <path
+                    class="arc"
+                    d={arcPath(k)}
+                    pathLength="1"
+                    transition:drawn
+                  />
+                {/each}
+                {#each lapSlots as k (k)}
+                  <path
+                    class="arc lap"
+                    d={arcPath(k)}
+                    pathLength="1"
+                    transition:drawn
+                  />
+                {/each}
+                {#if ringClosed}
+                  <circle
+                    class="arc lap whole"
+                    cx={MID}
+                    cy={MID}
+                    pathLength="1"
+                    r={RIM}
+                    transform="rotate(-90 {MID} {MID})"
+                    transition:drawn
+                  />
+                {/if}
+              </g>
+              <g class="standing">
+                {#each arcSlots as k (k)}
+                  <path
+                    class="arc"
+                    d={outlinePath(k)}
+                    pathLength="1"
+                    transition:drawn
+                  />
+                {/each}
+                {#each lapSlots as k (k)}
+                  <path
+                    class="arc lap"
+                    d={outlinePath(k)}
+                    pathLength="1"
+                    transition:drawn
+                  />
+                {/each}
+                {#if ringClosed}
+                  <path
+                    class="arc lap whole"
+                    d={OUTLINE}
+                    pathLength="1"
+                    transition:drawn
+                  />
+                {/if}
+              </g>
+            </svg>
+          </button>
+        {/snippet}
+      </Popover.Trigger>
     {/snippet}
   </Tip>
-</div>
+  <!-- Non-modal: no scrim, no trap; an outside press closes it and still
+       lands (bits-ui's `interactOutsideBehavior` "close" prevents nothing). -->
+  <Popover.Content
+    align="end"
+    aria-label="Needs you"
+    class="caw-pop w-[min(380px,calc(100vw-24px))] gap-0"
+    collisionPadding={phone ? 12 : 8}
+    onCloseAutoFocus={(event) => {
+      // Closed by a press elsewhere: the focus stays where that press put
+      // it (the composer, a rail row). Escape and his own press bring it
+      // back to him, as the popover does by itself.
+      if (closedOutside) {
+        event.preventDefault();
+        closedOutside = false;
+      }
+    }}
+    onInteractOutside={() => {
+      closedOutside = true;
+    }}
+    onOpenAutoFocus={(event) => {
+      // Opened by a press, focus goes into the list as it does from a key,
+      // but without the ring: a script's focus would draw it after a press.
+      if (byPointer) {
+        event.preventDefault();
+        content
+          ?.querySelector<HTMLElement>("a.cover, button, .empty")
+          ?.focus({ focusVisible: false, preventScroll: true } as FocusOptions);
+      }
+    }}
+    side="bottom"
+    sideOffset={offset}
+    trapFocus={false}
+    bind:ref={content}
+  >
+    <CawPanel
+      onchoose={() => {
+        open = false;
+      }}
+      {quiet}
+    />
+  </Popover.Content>
+</Popover.Root>
 
 <style>
-  /* Its own stacking context over the page: the scrim, the neck and the
-     drawer under the capsule, so the neck joins the capsule from beneath. */
-  .needs-caw {
-    position: relative;
-    z-index: 60;
-    display: grid;
-    flex: none;
-  }
   /* An item of the bar's group (Shell's `.bar-item` recipe draws its box,
-     hover and focus); a drag down from him is the drawer's, never a scroll. */
+     hover and focus). */
   .capsule {
-    z-index: 3;
+    position: relative;
     display: grid;
     place-items: center;
     /* A circle whatever the strips' boxes: the beat's reaches past it. */
     inline-size: var(--c-bar-item);
+    flex: none;
     padding: 0;
-    touch-action: none;
     -webkit-tap-highlight-color: transparent;
+  }
+  /* The panel rises 8px from 0.92 as it opens (kit-pop's own motion, on
+     --dur-pop and the drawer curve; out on --dur-exit). */
+  :global(.kit-pop.caw-pop) {
+    --pop-scale: 0.92;
+    --pop-rise: 8px;
   }
   /* On a phone his box is his own glass's (Shell). His touch area is a 44px
      square (Apple HIG, Buttons: "a hit region of at least 44x44 pt") at the
      screen's edge, centred on his glass, so none of it falls off the screen
      or under the transcript. */
   @media (max-width: 899px) and (pointer: coarse) {
-    .needs-caw .capsule::after {
+    .capsule::after {
       inset: auto;
       inset-inline-end: 0;
       inset-block-start: calc((var(--c-bar-caw-glass-phone) - 44px) / 2);
@@ -1192,164 +761,5 @@
     inset: calc(var(--bleed) * -1);
     inline-size: calc(var(--side) + 2 * var(--bleed));
     block-size: calc(var(--side) + 2 * var(--bleed));
-  }
-
-  .scrim {
-    position: fixed;
-    z-index: 1;
-    inset: 0;
-    visibility: hidden;
-    background: oklch(from var(--surface-recess) l c h / 0.4);
-    opacity: 0;
-  }
-  .neck {
-    position: fixed;
-    z-index: 2;
-    inset: 0;
-    inline-size: 100vw;
-    block-size: 100dvh;
-    visibility: hidden;
-    overflow: visible;
-    pointer-events: none;
-    fill: var(--surface-raised);
-  }
-  .drawer {
-    position: fixed;
-    z-index: 2;
-    visibility: hidden;
-    overflow: hidden;
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-overlay);
-  }
-  .shown :is(.scrim, .neck, .drawer) {
-    visibility: visible;
-  }
-  .inner {
-    display: flex;
-    flex-direction: column;
-    max-block-size: min(560px, calc(100dvh - 120px));
-    @media (prefers-reduced-motion: reduce) {
-      transition: opacity var(--dur-fade) var(--ease-out);
-    }
-  }
-  .head {
-    display: flex;
-    align-items: baseline;
-    gap: var(--space-2);
-    padding: var(--space-4) var(--space-4) var(--space-2);
-    touch-action: none;
-  }
-  .title {
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-  .count {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    font-variant-numeric: tabular-nums;
-  }
-  .rows {
-    flex: 1 1 auto;
-    min-block-size: 0;
-    margin: 0;
-    padding: 0 var(--space-2);
-    list-style: none;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-  }
-  /* A row: the session's mark leading on the title's line; the title and
-     its wait; what it wants, two lines at most; then the kind and where. */
-  .row {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    column-gap: var(--space-3);
-    align-items: baseline;
-    inline-size: 100%;
-    min-block-size: 44px;
-    padding: var(--space-2) var(--space-3);
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: none;
-    text-align: start;
-    cursor: pointer;
-  }
-  /* Its machine is offline: it stands, dimmed as every stale row is. */
-  .row[data-stale] {
-    opacity: 0.55;
-  }
-  .lead {
-    grid-row: 1;
-    grid-column: 1;
-    align-self: center;
-    display: grid;
-    place-items: center;
-    inline-size: 18px;
-    block-size: 18px;
-    color: var(--ink-muted);
-  }
-  .lead > :global(svg) {
-    inline-size: 16px;
-    block-size: 16px;
-  }
-  .name {
-    grid-row: 1;
-    grid-column: 2;
-    overflow: hidden;
-    font: var(--type-label);
-    color: var(--ink-strong);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .wait {
-    grid-row: 1;
-    grid-column: 3;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    font-variant-numeric: tabular-nums;
-  }
-  .want {
-    grid-row: 2;
-    grid-column: 2 / 4;
-    display: -webkit-box;
-    overflow: hidden;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-    font: var(--type-body);
-    color: var(--ink-strong);
-    overflow-wrap: anywhere;
-  }
-  .meta {
-    grid-row: 3;
-    grid-column: 2 / 4;
-    overflow: hidden;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .empty {
-    display: grid;
-    justify-items: center;
-    gap: var(--space-2);
-    padding: var(--space-6) var(--space-4) var(--space-2);
-    font: var(--type-label);
-    color: var(--ink-muted);
-    outline: none;
-    touch-action: none;
-  }
-  /* The grabber at the drawer's foot: pulled up, the drawer goes back. */
-  .handle {
-    display: grid;
-    place-items: center;
-    block-size: 24px;
-    touch-action: none;
-    cursor: grab;
-  }
-  .handle span {
-    inline-size: 36px;
-    block-size: 4px;
-    border-radius: var(--radius-pill);
-    background: var(--border-control);
   }
 </style>

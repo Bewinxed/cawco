@@ -1,18 +1,18 @@
 <script lang="ts">
   /**
    * What adding an account, or one coming back from its bench, set moving,
-   * nobody has acknowledged yet: one card in the Home cards' recipe
-   * (MovedLogins'), one entry per pass: the tile of the first account that
-   * came, then "design@ and marketing@ added on obelisk", then a line per
-   * thing it did (core `rebalanceWords`): the running sessions moved off
-   * accounts forecast to run out, and the held sessions re-decided. The ✕
-   * acknowledges every entry shown.
+   * nobody has acknowledged yet: one row of Caw's panel (NeedsCaw,
+   * NoticeRow; MovedLogins' recipe), one entry per pass: the tile of the
+   * first account that came, then "design@ and marketing@ added on
+   * obelisk", then a line per thing it did (core `rebalanceWords`): the
+   * running sessions moved off accounts forecast to run out, and the held
+   * sessions re-decided. The ✕ on the first tile acknowledges every entry
+   * shown.
    */
   import { type RebalanceNotice, rebalanceWords } from "@cawco/core";
   import AccountTile from "#lib/cawco/accounts/AccountTile.svelte";
   import { cawco } from "#lib/cawco/client.svelte.js";
-  import { Button } from "#lib/components/ui/button/index.js";
-  import { IconClose } from "#lib/icons.js";
+  import NoticeRow from "#lib/cawco/home/NoticeRow.svelte";
 
   let {
     notices,
@@ -21,49 +21,43 @@
 
   const providerOf = (accountId: string) =>
     cawco.accounts?.accounts.find((one) => one.id === accountId)?.provider;
+  const leader = $derived(notices[0]?.came[0]?.account);
+  const leaderProvider = $derived(leader ? providerOf(leader.id) : undefined);
 </script>
 
-<article aria-label="Sessions rebalanced" class="card" data-flip="box">
+<NoticeRow
+  dismissLabel="Dismiss rebalance notices"
+  label="Sessions rebalanced"
+  {ondismiss}
+>
+  {#snippet lead()}
+    {#if leader && leaderProvider}
+      <AccountTile hue={leader.hue} provider={leaderProvider} size={28} />
+    {/if}
+  {/snippet}
   <ul class="entries">
-    {#each notices as notice (notice.id)}
+    {#each notices as notice, at (notice.id)}
       {@const words = rebalanceWords(notice)}
       {@const first = notice.came[0]?.account}
       {@const provider = first ? providerOf(first.id) : undefined}
-      <li class="entry" data-flip>
-        <span class="tile">
-          {#if first && provider}
-            <AccountTile hue={first.hue} {provider} size={28} />
-          {/if}
-        </span>
+      <li class="entry" data-flip class:later={at > 0}>
+        {#if at > 0}
+          <span class="tile">
+            {#if first && provider}
+              <AccountTile hue={first.hue} {provider} size={28} />
+            {/if}
+          </span>
+        {/if}
         <span class="title">{words.title}</span>
-        {#each words.lines as line, at (at)}
+        {#each words.lines as line, n (n)}
           <span class="line">{line}</span>
         {/each}
       </li>
     {/each}
   </ul>
-  <Button
-    aria-label="Dismiss rebalance notices"
-    class="close"
-    icon={IconClose}
-    onclick={ondismiss}
-    size="icon-xs"
-    variant="ghost"
-  />
-</article>
+</NoticeRow>
 
 <style>
-  .card {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: start;
-    gap: var(--space-2);
-    min-width: 0;
-    padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
-  }
   .entries {
     display: flex;
     flex-direction: column;
@@ -73,11 +67,11 @@
     padding: 0;
     list-style: none;
   }
-  /* The tile spans the entry's lines; each line has the text column to itself. */
+  /* The first entry's tile is the row's lead; each later entry's tile stands
+     in that same leading column, its lines in the text column. */
   .entry {
     display: grid;
-    grid-template-columns: 28px minmax(0, 1fr);
-    column-gap: var(--space-3);
+    grid-template-columns: minmax(0, 1fr);
     row-gap: 2px;
     align-items: center;
     min-width: 0;
@@ -89,7 +83,6 @@
   }
   .title,
   .line {
-    grid-column: 2;
     min-width: 0;
   }
   .title {
@@ -104,7 +97,15 @@
     color: var(--ink-muted);
     overflow-wrap: anywhere;
   }
-  .card :global(.close) {
-    color: var(--ink-muted);
+  /* A later entry: its tile in the row's leading column, its lines in the
+     text column. */
+  .entry.later {
+    grid-template-columns: 28px minmax(0, 1fr);
+    column-gap: var(--space-3);
+    margin-inline-start: calc(-28px - var(--space-3));
+  }
+  .later .title,
+  .later .line {
+    grid-column: 2;
   }
 </style>

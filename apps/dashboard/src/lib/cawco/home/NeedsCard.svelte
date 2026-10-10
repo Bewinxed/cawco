@@ -1,22 +1,22 @@
 <script lang="ts">
   /**
-   * One thing parked on the operator: a session's permission or question, or
-   * a workflow run's question. The card body opens the session at the
-   * request; a permission can be answered here (the `answer` choice), with
-   * Deny and Approve as equal recessed peers (DESIGN.md, The Peer Rule): same
-   * fill, size and type, told apart by glyph only. A question is answered in
-   * its session, so it gets one Answer that opens it. "Always allow" never
-   * appears here. A project past its spend cap says what it spent against
-   * what, what that holds back, and when it resets; its button opens the
-   * project's spend.
+   * One thing parked on the operator, as a row of Caw's panel (NeedsCaw):
+   * a session's permission or question, a workflow run's question, or a
+   * project past its spend cap. The session's mark leads (a run and a
+   * budget their glyphs), then the title and its wait, what it wants in the
+   * words it is asked, and the kind and where. The row itself opens it (the
+   * session at the request, the run, the project's spend) and the panel
+   * closes (`onchoose`). A permission is answered here too, with Deny and
+   * Approve as equal recessed peers (DESIGN.md, The Peer Rule): same fill,
+   * size and type, told apart by glyph only; "Always allow" never appears.
    *
    * Nothing is optimistic: an answer is the same `permission.answer` command
-   * the session's own card sends, and the card leaves when the hub has taken
+   * the session's own card sends, and the row leaves when the hub has taken
    * it — the request card above that pane's composer leaves with it.
    */
+  import { questionsOf } from "@cawco/core";
   import { Button } from "#lib/components/ui/button/index.js";
-  import Tip from "#lib/components/ui/tooltip/tip.svelte";
-  import { IconClose, IconMaximize, IconTick } from "#lib/icons.js";
+  import { IconClose, IconDollar, IconTick, IconWorkflow } from "#lib/icons.js";
   import { isTyping } from "#lib/utils/typing.js";
   import {
     cawco,
@@ -25,43 +25,63 @@
     submitCommand,
   } from "../client.svelte";
   import { conversationHref } from "../links";
-  import { capLine, resetLabel } from "../usage";
+  import SessionMark from "../SessionMark.svelte";
+  import { capLine } from "../usage";
   import { choices } from "./choices.svelte";
   import { clock, type NeedsItem, span } from "./home-state.svelte";
-  import { openPeek } from "./peek.svelte";
 
-  let { item, stale }: { item: NeedsItem; stale: boolean } = $props();
+  let {
+    item,
+    stale,
+    onchoose,
+  }: {
+    item: NeedsItem;
+    stale: boolean;
+    /** The row was chosen: it opens, and the panel closes. */
+    onchoose: () => void;
+  } = $props();
 
   const href = $derived.by(() => {
     if (item.kind !== "ask") {
       return item.href;
     }
-    // A project's Caw asked in a thread: the card opens the thread.
+    // A project's Caw asked in a thread: the row opens the thread.
     return item.thread
       ? `/session/${item.thread}`
       : conversationHref(item.instanceId, cawco.instanceIndex);
   });
-  const waited = $derived.by(() => {
-    if (item.kind === "cap") {
-      return `resets ${resetLabel(new Date(item.cap.resetsAt).toISOString(), clock.now)}`;
+  /** What it asks for, in the words it is asked: its second line. */
+  const want = $derived.by(() => {
+    switch (item.kind) {
+      case "ask":
+        return item.isQuestion
+          ? (questionsOf(item.request.toolName, item.request.input)?.[0]
+              ?.question ?? item.ask)
+          : item.ask;
+      case "run":
+        return "Waiting on your answer";
+      default:
+        return capLine(item.cap);
     }
-    return item.raisedAt === undefined
-      ? "waiting"
-      : `waiting ${span(clock.now - item.raisedAt)}`;
+  });
+  /** Its last line: the kind, then where it is (machine · project). */
+  const meta = $derived.by(() => {
+    switch (item.kind) {
+      case "ask":
+        return `${item.isQuestion ? "Question" : "Permission"} · ${item.place}${item.stale ? " · machine offline" : ""}`;
+      case "run":
+        return `Workflow · ${item.place}`;
+      default:
+        return "Budget";
+    }
   });
   /**
-   * The card stands but cannot be answered yet: the hub is not live, or its
+   * The row stands but cannot be answered yet: the hub is not live, or its
    * session's machine is offline. It keeps its place, dimmed, and its
    * answer waits; nothing is sent until it can land.
    */
   const held = $derived(stale || (item.kind === "ask" && item.stale));
-  /** Where it is, and why it waits when its machine is offline. */
-  const placeLine = $derived(
-    item.kind === "ask" && item.stale
-      ? `${item.place} · machine offline`
-      : item.place
-  );
-  /** A permission answered on the card, under the `answer` choice. */
+  /** A permission answered on the row, under the `answer` choice. */
   const answerable = $derived(
     item.kind === "ask" && !item.isQuestion && choices.answer === "a"
   );
@@ -76,7 +96,7 @@
     });
   }
 
-  /** The permission card's own keys (`y`/`a` allow, `n`/`d` deny) while a control here has focus. */
+  /** The permission's own keys (`y`/`a` allow, `n`/`d` deny) while a control here has focus. */
   function onkeydown(event: KeyboardEvent): void {
     if (
       !answerable ||
@@ -98,63 +118,43 @@
   }
 </script>
 
-<article
-  class="card"
+<div
+  class="row"
   data-flip
   data-share="pane:{item.kind === "ask" ? item.instanceId : item.key}"
   data-stale={held || undefined}
 >
-  <!-- The whole card opens the session, at the request. -->
-  <a aria-label="Open {item.title}" class="cover focus-inset" {href} {onkeydown}
+  <!-- The whole row opens it; the panel closes. -->
+  <a
+    aria-label="Open {item.title}"
+    class="cover press-tint focus-inset"
+    {href}
+    onclick={onchoose}
+    {onkeydown}
     ><span class="sr-only">Open {item.title}</span></a
   >
-  <div class="head">
-    <span class="title">{item.title}</span>
-    <span class="num wait">{waited}</span>
-    <!-- A thread is opened, not peeked: it is the conversation itself. -->
-    {#if item.kind === "ask" && !item.thread}
-      {@const ask = item}
-      <!-- Glance → peek → dive: read what led here before answering. -->
-      <Tip label="Peek">
-        {#snippet children(
-          tip
-        )}
-          <button
-            {...tip}
-            aria-label="Peek {item.title}"
-            class="peek touch-hit focus-inset"
-            onclick={() =>
-              openPeek({ viewId: ask.instanceId, href, title: ask.title })}
-            type="button"
-          >
-            <IconMaximize aria-hidden="true" />
-          </button>
-        {/snippet}
-      </Tip>
-    {/if}
-  </div>
-  <span class="place">{placeLine}</span>
-  <p class="ask">
-    {#if item.kind === "cap"}
-      {capLine(item.cap)}
+  <!-- The session's own mark, as the rail draws it; a run and a budget their glyphs. -->
+  <span class="lead">
+    {#if item.kind === "ask"}
+      <SessionMark
+        id={item.instanceId}
+        place={item.cwd || item.machineId}
+        status="attn"
+      />
+    {:else if item.kind === "run"}
+      <IconWorkflow aria-hidden="true" />
     {:else}
-      {item.kind === "run" ? "Waiting on your answer" : item.ask}
+      <IconDollar aria-hidden="true" />
     {/if}
-  </p>
-  {#if item.kind === "cap"}
-    <div class="actions">
-      <Button {href} size="sm" variant="secondary">See spend</Button>
-    </div>
-  {:else if item.kind === "run"}
-    <div class="actions">
-      <Button {href} size="sm" variant="secondary">Open</Button>
-    </div>
-  {:else if item.isQuestion}
-    <div class="actions">
-      <Button {href} size="sm" variant="secondary">Answer</Button>
-    </div>
-  {:else if answerable}
-    <div class="actions peers">
+  </span>
+  <span class="name">{item.title}</span>
+  {#if item.raisedAt !== undefined}
+    <span class="wait">{span(clock.now - item.raisedAt)}</span>
+  {/if}
+  <span class="want">{want}</span>
+  <span class="meta">{meta}</span>
+  {#if item.kind === "ask" && answerable}
+    <div class="peers">
       <Button
         aria-label="Deny {item.ask} on {item.title}"
         disabled={held}
@@ -179,112 +179,105 @@
       </Button>
     </div>
   {/if}
-</article>
+</div>
 
 <style>
-  .card {
+  /* The session's mark leading on the title's line; the title and its wait;
+     what it wants, two lines at most; then the kind and where; a
+     permission's peers under them. */
+  .row {
     position: relative;
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    padding: var(--space-3) var(--space-4);
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
-    transition: background-color var(--dur-control) var(--ease-out);
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    column-gap: var(--space-3);
+    align-items: baseline;
+    min-block-size: 44px;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
   }
-  @media (hover: hover) and (pointer: fine) {
-    .card:has(.cover:hover) {
-      background: var(--surface-hover);
-    }
-  }
-  .card[data-stale] {
+  /* Its machine is offline: it stands, dimmed as every stale row is. */
+  .row[data-stale] {
     opacity: 0.55;
   }
   /* Everything over the cover takes no pointer, so a press anywhere that is
-     not a control opens the session; the controls take theirs back. */
+     not a control opens it; the peers take theirs back. */
   .cover {
     position: absolute;
     inset: 0;
     border-radius: inherit;
   }
-  .head,
-  .place,
-  .ask {
+  @media (hover: hover) and (pointer: fine) {
+    .row:has(.cover:hover) {
+      background: var(--surface-hover);
+    }
+  }
+  .lead,
+  .name,
+  .wait,
+  .want,
+  .meta {
     position: relative;
     pointer-events: none;
   }
-  .head {
-    display: flex;
-    align-items: baseline;
-    gap: var(--space-2);
-    min-width: 0;
+  .lead {
+    grid-row: 1;
+    grid-column: 1;
+    align-self: center;
+    display: grid;
+    place-items: center;
+    inline-size: 18px;
+    block-size: 18px;
+    color: var(--ink-muted);
   }
-  .title {
-    flex: 1 1 auto;
-    min-width: 0;
+  .lead > :global(svg) {
+    inline-size: 16px;
+    block-size: 16px;
+  }
+  .name {
+    grid-row: 1;
+    grid-column: 2;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
     font: var(--type-label);
     color: var(--ink-strong);
-  }
-  .wait,
-  .place {
-    font: var(--type-meta);
-    color: var(--ink-muted);
+    text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .place {
-    overflow: hidden;
-    text-overflow: ellipsis;
+  .wait {
+    grid-row: 1;
+    grid-column: 3;
+    font: var(--type-meta);
+    color: var(--ink-muted);
+    font-variant-numeric: tabular-nums;
   }
-  .ask {
-    margin: 0;
-    font: var(--type-body);
-    color: var(--ink-row);
+  .want {
+    grid-row: 2;
+    grid-column: 2 / 4;
     display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
     line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
+    font: var(--type-body);
+    color: var(--ink-strong);
     overflow-wrap: anywhere;
   }
-  .peek {
-    display: inline-grid;
-    flex: none;
-    place-items: center;
-    align-self: center;
-    width: 28px;
-    height: 28px;
-    margin: -4px calc(-1 * var(--space-2)) -4px 0;
-    border: 0;
-    border-radius: var(--radius-xs);
-    background: none;
+  .meta {
+    grid-row: 3;
+    grid-column: 2 / 4;
+    overflow: hidden;
+    font: var(--type-meta);
     color: var(--ink-muted);
-    cursor: pointer;
-    pointer-events: auto;
-    transition: var(--transition-control);
-  }
-  .peek :global(svg) {
-    width: 16px;
-    height: 16px;
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .peek:hover {
-      background: var(--surface-fill);
-      color: var(--ink-strong);
-    }
-  }
-  .actions {
-    position: relative;
-    display: flex;
-    justify-content: flex-end;
-    margin-top: var(--space-1);
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   /* Equal peers at opposite ends, with nothing between them. */
   .peers {
+    position: relative;
+    grid-row: 4;
+    grid-column: 2 / 4;
+    display: flex;
     justify-content: space-between;
     gap: var(--space-8);
+    margin-top: var(--space-2);
   }
 </style>

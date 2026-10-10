@@ -1,10 +1,10 @@
 /**
- * The goodbye a box says once Reload is chosen (the update toast, Home's
- * update card): it turns into Caw, waiting on his `loading`, beside "See
- * you in a bit", and stays so until the tab goes.
+ * The goodbye the update row in Caw's panel says once Reload is chosen
+ * (home/UpdateCard): it turns into Caw, waiting on his `loading`, beside
+ * "See you in a bit", and stays so until the tab goes.
  *
- * The box drops what it showed at once and takes its goodbye's height (the
- * toast's `morph`, the card's `reflow` box), while copies of what it showed,
+ * The row drops what it showed at once and takes its goodbye's height (its
+ * `reflow` box), while copies of what it showed,
  * pinned where each stood, leave top down on the list switch's exit
  * (motion/list-swap) and the line arrives as a switch's new row does, once
  * the first old row is out. With reduced motion the two cross-fade.
@@ -17,16 +17,6 @@ import { dur, ease, motionOk } from "../motion/curves.svelte";
 import { IN_MS, ListSwap, OUT_MS } from "../motion/list-swap.svelte";
 
 export const GOODBYE = "See you in a bit";
-
-/**
- * How long a goodbye takes to be seen: the line arrives (after the first
- * old row is out, or by a fade with reduced motion), then stands for
- * --dur-wait-grace before the tab goes.
- */
-export const goodbyeSeenMs = (): number =>
-  (motionOk.current
-    ? ListSwap.enterAt(0, ListSwap.leaveEnd(0)) + IN_MS
-    : dur("--dur-fade")) + dur("--dur-wait-grace");
 
 /** The rows of what leaves: a heading, a bullet or a paragraph of the notes. */
 const ROWS = "h1, h2, h3, h4, h5, h6, li, p";

@@ -35,6 +35,11 @@
    * key: its own button, or the home's Check machines.
    */
   let byPointer = false;
+  /**
+   * The popover is closing on a press outside it: the press keeps its focus.
+   * Non-modal (no trap), so a click on the composer or a rail row lands.
+   */
+  let closedOutside = false;
 
   const count = $derived(cawco.machines.length);
   /** The glyph's hue: fail when a machine is down, attention when one is in trouble. */
@@ -120,6 +125,17 @@
     aria-label="Machines"
     class="machines-pop w-[min(20rem,calc(100vw-16px))] gap-0"
     collisionPadding={8}
+    onCloseAutoFocus={(event) => {
+      // Closed by a press elsewhere: the focus stays where that press put
+      // it. Escape and its own button bring it back here.
+      if (closedOutside) {
+        event.preventDefault();
+        closedOutside = false;
+      }
+    }}
+    onInteractOutside={() => {
+      closedOutside = true;
+    }}
     onOpenAutoFocus={(event) => {
       // Opened by a press, focus goes into the list as it does from a key,
       // but without the ring: a script's focus would draw it after a press.
@@ -132,6 +148,7 @@
     }}
     side="bottom"
     sideOffset={6}
+    trapFocus={false}
     bind:ref={content}
   >
     <MachinesList

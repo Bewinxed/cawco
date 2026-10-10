@@ -14,7 +14,7 @@
   import Shell from "#lib/cawco/Shell.svelte";
   import { tabIcon } from "#lib/cawco/tab-icon/tab-icon.svelte.js";
   import { tallestComposer } from "#lib/cawco/transcript/composer-presence.svelte.js";
-  import { startUpdateNotice } from "#lib/cawco/updates/update-notice.svelte.js";
+  import { startUpdateWatch } from "#lib/cawco/updates/update-notice.svelte.js";
   import { trackVisibleViewport } from "#lib/cawco/visible-viewport.svelte.js";
   import { workspace } from "#lib/cawco/workspace/workspace.svelte.js";
   import { Toaster } from "#lib/components/ui/sonner/index.js";
@@ -52,8 +52,9 @@
 
   // One socket for the whole app; routes only read the state it fills in.
   onMount(ensureConnected);
-  // The one update notice, on every page.
-  onMount(startUpdateNotice);
+  // The update notice's upkeep: an idle old tab reloads, "running on N
+  // machines" leaves by itself. The notice itself is a row of Caw's panel.
+  onMount(startUpdateWatch);
   // iOS has no right-click; a held press is its context menu.
   onMount(enableLongPressMenus);
   // Effects flush only once the whole tree has hydrated, so every handler is
