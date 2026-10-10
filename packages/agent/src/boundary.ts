@@ -94,7 +94,7 @@ import {
   standalone,
 } from "@cawco/core/runtime";
 import { type ProcSpec, sessiondEndpoint } from "@cawco/core/sessiond";
-import { workspacePolicy } from "@cawco/core/workspace-policy";
+import { cloneDenies, workspacePolicy } from "@cawco/core/workspace-policy";
 import { rgPath } from "@vscode/ripgrep-universal";
 import { seatbeltProfile, srtSettings } from "./boundary-policy";
 import { excludeSandboxNames } from "./checkout-exclude";
@@ -205,6 +205,14 @@ const STOP_TIMEOUT_MS = 5000;
 /** Linux: where the srt host names the sandbox it runs now ({@link Place}): `sandbox` in its working dir. */
 const placeOf = (id: string, gen: string | undefined): string =>
   join(generationDir(id, gen), "sandbox");
+
+/**
+ * Linux: the protected binds of the sandbox {@link placeOf} names, one mount
+ * point a line as `/proc/<pid>/mountinfo` spells it, written by the srt host
+ * before the place, so the executor checks what that very sandbox holds.
+ */
+const guardedOf = (id: string, gen: string | undefined): string =>
+  join(generationDir(id, gen), "guarded");
 
 const readPlace = async (
   id: string,
@@ -1309,14 +1317,20 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
   const settings = `${JSON.stringify(srtSettings(policy, { rg: ripgrep(), srtTmp }), null, 2)}\n`;
   const host = hostScript();
   hostText ??= Bun.file(host).text();
+  // What the host makes in the clone before each sandbox, so srt binds
+  // each deny path onto itself and leaves nothing on the host
+  // (`cloneDenies`), and guards for the sandbox's whole life.
+  const denies = `${JSON.stringify(cloneDenies(policy.clone), null, 2)}\n`;
   const files = {
     settings: join(generationDir(id, gen), "srt.json"),
     runner: join(generationDir(id, gen), "runner.sh"),
+    denies: join(generationDir(id, gen), "denies.json"),
   };
   return {
     files: [
       [files.settings, settings],
       [files.runner, RUNNER],
+      [files.denies, denies],
     ],
     form: hash
       .update(settings)
@@ -1324,6 +1338,8 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
       .update(RUNNER)
       .update("\0")
       .update(exec)
+      .update("\0")
+      .update(denies)
       .update("\0")
       .update(await hostText)
       .digest("hex")
@@ -1337,6 +1353,7 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
         fifoOf(id, gen),
         policy.clone,
         READY,
+        files.denies,
       ],
       // The host starts here, never in the clone: Bun reads bunfig.toml and
       // .env from where it starts (boundary-host.ts). It names its sandbox
@@ -1814,38 +1831,33 @@ const stoppedLine = (id: string): string =>
 const RESTART_WAIT_TENTHS = WORKSPACE_BOUNDARY_START_TIMEOUT_MS / 100;
 
 /**
- * Linux: srt protects the clone's `.git/config` and `.git/hooks` with
- * read-only binds, and the kernel drops such a bind in every other mount
+ * Linux: srt protects every clone-side deny path (`cloneDenies`: the clone's
+ * git config, hooks and submodule dirs, the harness project config) with a
+ * read-only bind, and the kernel drops such a bind in every other mount
  * namespace when the host renames or unlinks what it covers (a host-side
  * `git config` does: lock, then rename). The srt host watches for that and
  * starts the sandbox again (`boundary-host.ts`); this is the executor's own
  * look before every command: the running sandbox's mount table must still
- * hold both. When it does not, it asks the host to start a new sandbox
- * (SIGUSR1), and runs the command through that one (REPORT.md §5d). CawCo
- * never writes a live clone's config: it writes `branch.*` only before the
- * boundary starts (`cloneInPlace`).
+ * hold every bind its host guards ({@link guardedOf}). When it does not, it
+ * asks the host to start a new sandbox (SIGUSR1), and runs the command
+ * through that one (REPORT.md §5d). CawCo never writes a live clone's
+ * config: it writes `branch.*` only before the boundary starts
+ * (`cloneInPlace`).
  */
-const mountCheck = (
-  id: string,
-  held: Pick<Held, "gen" | "path" | "pid">
-): string => {
-  const clone = held.path;
-  return `place=${shellQuote(placeOf(id, held.gen))}
+const mountCheck = (id: string, held: Pick<Held, "gen" | "pid">): string =>
+  `place=${shellQuote(placeOf(id, held.gen))}
 read -r outer inner _ < "$place" 2>/dev/null
-for protected in ${shellQuote(join(clone, ".git", "config"))} ${shellQuote(join(clone, ".git", "hooks"))}; do
-  if ! awk -v p="$protected" '$5 == p { found = 1 } END { exit !found }' "/proc/\${inner:-0}/mountinfo" 2>/dev/null; then
-    kill -USR1 ${held.pid} 2>/dev/null
-    for _ in $(seq ${RESTART_WAIT_TENTHS}); do
-      read -r now _ < "$place" 2>/dev/null
-      if [ -n "$now" ] && [ "$now" != "\${outer:-}" ]; then PATH=$caller_path exec "$0" "$@"; fi
-      kill -0 ${held.pid} 2>/dev/null || break
-      sleep 0.1
-    done
-    echo ${shellQuote(stoppedLine(id))} >&2
-    exit 126
-  fi
-done`;
-};
+if ! awk 'FILENAME == ARGV[1] { want[$0] = 1; next } ($5 in want) { delete want[$5] } END { for (p in want) exit 1 }' ${shellQuote(guardedOf(id, held.gen))} "/proc/\${inner:-0}/mountinfo" 2>/dev/null; then
+  kill -USR1 ${held.pid} 2>/dev/null
+  for _ in $(seq ${RESTART_WAIT_TENTHS}); do
+    read -r now _ < "$place" 2>/dev/null
+    if [ -n "$now" ] && [ "$now" != "\${outer:-}" ]; then PATH=$caller_path exec "$0" "$@"; fi
+    kill -0 ${held.pid} 2>/dev/null || break
+    sleep 0.1
+  done
+  echo ${shellQuote(stoppedLine(id))} >&2
+  exit 126
+fi`;
 
 /**
  * Linux: which sandbox runs the command. The srt host may start a new one
@@ -2119,7 +2131,7 @@ const launch = async (
   await excludeSandboxNames(ref.path);
   const plan = await planOf(ref, gen);
   for (const [path, content] of plan.files) {
-    // biome-ignore lint/performance/noAwaitInLoops: two small files
+    // biome-ignore lint/performance/noAwaitInLoops: a few small files
     await writeWhole(path, content, 0o644);
   }
   const fifo = fifoOf(ref.id, gen);

@@ -17,7 +17,8 @@
  *   transcript the CLI names.
  * - Writes: the clone, the scratch dir and the workspace caches only; never
  *   the clone's git config, hooks or submodule dirs, or the harness project
- *   config the host loads at the next session, outside any boundary.
+ *   config the host loads at the next session, outside any boundary
+ *   ({@link cloneDenies}).
  * - Every credential store (`credentialStores`) is denied for reading and
  *   writing, even inside an allowed tree. On Linux so are the host's runtime
  *   dirs, with every daemon's socket, and the journal.
@@ -42,30 +43,61 @@ import {
 import { type Policy, resolveDenied, resolveReal } from "./workspace-judge";
 
 /**
- * Harness project config in a clone: Claude Code loads the project's
- * settings (hooks), hooks, commands and agents, OpenCode its config
- * (plugins, MCP commands), both `.mcp.json`, on the host at the workspace's
- * next session.
+ * What stands in for a clone-side deny path its clone does not have, before
+ * the sandbox starts: an empty directory, or a file holding the empty config
+ * its reader takes as nothing set; `none` for one that is never made (a
+ * clone without `.git/config` is no clone).
  */
-const harnessConfig = (clone: string): string[] => [
-  ...[
-    "settings.json",
-    "settings.local.json",
-    "hooks",
-    "commands",
-    "agents",
-  ].map((name) => projectClaudeDir(clone, name)),
-  ...["opencode.json", "opencode.jsonc", ".opencode", ".mcp.json"].map((name) =>
-    join(clone, name)
-  ),
-];
+export type CloneDenyEmpty =
+  | { readonly kind: "dir" }
+  | { readonly kind: "file"; readonly text: string }
+  | { readonly kind: "none" };
 
-/** What host git runs or reads from a clone: its config, its hooks, its submodules' git dirs. */
-const GIT_CONFIG = [
-  [".git", "config"],
-  [".git", "hooks"],
-  [".git", "modules"],
-] as const;
+/** One path in a clone no workspace writes, and what stands in for it while the clone has none. */
+export interface CloneDeny {
+  readonly empty: CloneDenyEmpty;
+  readonly path: string;
+}
+
+const DIR = { kind: "dir" } as const;
+const EMPTY_JSON = { kind: "file", text: "{}\n" } as const;
+
+/**
+ * Every path in a clone the workspace's policy denies writing, each with
+ * its stand-in. What host git runs or reads from a clone: its config, its
+ * hooks, its submodules' git dirs. And the harness project config the host
+ * loads at the workspace's next session, outside any boundary: Claude Code's
+ * project settings (hooks), hooks, commands and agents, OpenCode's config
+ * (plugins, MCP commands), both `.mcp.json`.
+ *
+ * Linux: srt binds `/dev/null` over a deny path that does not exist, and
+ * bwrap leaves a read-only empty file on the host at it for the sandbox's
+ * whole life (an empty directory at a missing parent). A host harness then
+ * reads that file as its config: OpenCode answered every request for such a
+ * clone with ENOTDIR on `.opencode/opencode.json` (2026-10-10). A path that
+ * exists is bound onto itself, which leaves nothing (srt #139: "Denied paths
+ * that already exist are handled separately via --ro-bind, create no
+ * artifact"), so the boundary's host makes each stand-in before every
+ * sandbox it starts (`boundary-host.ts`).
+ */
+export const cloneDenies = (clone: string): readonly CloneDeny[] => [
+  { path: join(clone, ".git", "config"), empty: { kind: "none" } },
+  { path: join(clone, ".git", "hooks"), empty: DIR },
+  { path: join(clone, ".git", "modules"), empty: DIR },
+  { path: projectClaudeDir(clone, "settings.json"), empty: EMPTY_JSON },
+  { path: projectClaudeDir(clone, "settings.local.json"), empty: EMPTY_JSON },
+  ...["hooks", "commands", "agents"].map((name) => ({
+    path: projectClaudeDir(clone, name),
+    empty: DIR,
+  })),
+  { path: join(clone, "opencode.json"), empty: EMPTY_JSON },
+  { path: join(clone, "opencode.jsonc"), empty: EMPTY_JSON },
+  { path: join(clone, ".opencode"), empty: DIR },
+  {
+    path: join(clone, ".mcp.json"),
+    empty: { kind: "file", text: '{"mcpServers":{}}\n' },
+  },
+];
 
 const unique = (paths: string[]): string[] => [...new Set(paths)];
 
@@ -188,10 +220,7 @@ export const workspacePolicy = async (
       ...caches,
     ]),
     denyWrite: unique([
-      ...denied([
-        ...GIT_CONFIG.map((parts) => join(workspace.path, ...parts)),
-        ...harnessConfig(workspace.path),
-      ]),
+      ...denied(cloneDenies(workspace.path).map(({ path }) => path)),
       ...stores,
     ]),
   };

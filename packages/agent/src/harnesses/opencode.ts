@@ -128,7 +128,7 @@ import {
   type Todo,
 } from "@opencode-ai/sdk/v2";
 import { JUDGE_SCRIPT } from "../boundary";
-import { gitIn } from "../checkout-exclude";
+import { excludeSandboxNames, gitIn } from "../checkout-exclude";
 import { delegationHubUrl, harnessMcpUrl } from "../delegation";
 import {
   type OpencodeDenySettings,
@@ -669,6 +669,24 @@ export async function writeHandoffPlugin(
 export const SERVER_ANNOUNCE_TIMEOUT_MS = 30_000;
 /** Recovery cancels the actual HTTP operation, never races an abandoned promise. */
 export const RECOVERY_TIMEOUT_MS = 10_000;
+
+/**
+ * How long one session's reattach goes on trying a server it cannot reach
+ * (a refused connection, a timeout: a generation restarting) before it is
+ * that session's failure. Our call: a server restart takes seconds, and
+ * two minutes outlasts it many times over. Never forever: a reattach that
+ * never ends holds that session, and once held a whole machine's custody.
+ */
+const RECOVERY_RETRY_BUDGET_MS = 120_000;
+
+/**
+ * A reattach that cannot succeed for its own session: the server answered
+ * for that session or its directory with an HTTP error, so the server is up
+ * and refuses it, or it stayed out of reach past
+ * {@link RECOVERY_RETRY_BUDGET_MS}. Not retried; it is the session's failure,
+ * in the server's words, filed as any failed reattach is.
+ */
+class OpencodeReattachFailed extends Error {}
 
 /**
  * How long the first request for a directory may take on a server: it boots
@@ -1744,6 +1762,9 @@ const removeCawcoSessionConfigsIn = async (
       exclude,
       lines.filter((line) => !gone.includes(line)).join("\n")
     );
+    // The root `/opencode.jsonc` is also a name its sandbox keeps there:
+    // the empty one its boundary makes in its place stays out of status.
+    await excludeSandboxNames(ref.path);
   }
   return gone.length;
 };
@@ -7332,10 +7353,13 @@ export class OpencodeHarness implements Harness {
     ctx: HarnessContext,
     wave: RecoveryWave
   ): Promise<OpencodeSession | undefined> {
+    const deadline = Date.now() + RECOVERY_RETRY_BUDGET_MS;
     let attempt = 0;
     // biome-ignore lint/suspicious/noUnnecessaryConditions: dispose() terminates retrying recoveries during agent teardown
     while (!this.#disposed) {
-      if (!wave.round || wave.round.attempt < attempt) {
+      // A round is shared only by recoveries on the same attempt, so a
+      // recovery that comes later never starts on an earlier one's reads.
+      if (wave.round?.attempt !== attempt) {
         wave.round = {
           attempt,
           token: {},
@@ -7343,14 +7367,21 @@ export class OpencodeHarness implements Harness {
         };
       }
       try {
-        // biome-ignore lint/performance/noAwaitInLoops: unresolved custody is retried, never converted to spawn failure
+        // biome-ignore lint/performance/noAwaitInLoops: an unreachable server is tried again, within the budget
         return await this.#reattachOnce(spec, ctx, wave.round);
       } catch (error) {
         if (
           error instanceof HarnessRecoveryRefused ||
-          error instanceof SessionAddressRefused
+          error instanceof SessionAddressRefused ||
+          error instanceof OpencodeReattachFailed
         ) {
           throw error;
+        }
+        if (Date.now() >= deadline) {
+          throw new OpencodeReattachFailed(
+            `OpenCode could not be reached to reattach session ${spec.resume?.sessionKey ?? ctx.instanceId} within ${RECOVERY_RETRY_BUDGET_MS / 1000} s: ${errorText(error)}`,
+            { cause: error }
+          );
         }
         const delay = Math.min(250 * 2 ** Math.min(attempt, 5), 5000);
         console.warn(
@@ -7410,6 +7441,13 @@ export class OpencodeHarness implements Harness {
       }
       if (busy.length === 0) {
         for (const generation of states) {
+          if (generation.state.kind === "refused") {
+            throw new OpencodeReattachFailed(
+              `OpenCode session ${resume.sessionKey} cannot be reattached: ${generation.state.reason}`
+            );
+          }
+        }
+        for (const generation of states) {
           if (generation.state.kind === "unreachable") {
             throw new Error(
               `OpenCode generation ${generation.identity.procId} is temporarily unreachable: ${generation.state.reason}`
@@ -7452,6 +7490,11 @@ export class OpencodeHarness implements Harness {
       );
       if (session.response?.status === 404) {
         return;
+      }
+      if (session.response && !session.response.ok) {
+        throw new OpencodeReattachFailed(
+          `OpenCode answered HTTP ${session.response.status} for session ${resume.sessionKey} in ${ctx.cwd}: ${JSON.stringify(session.error)}`
+        );
       }
       if (session.error || !session.data) {
         throw new Error(

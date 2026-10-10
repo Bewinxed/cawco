@@ -23,16 +23,26 @@ export const createSessionIdentities = (db: DbShape) => {
       return credential;
     },
     resolve,
-    acknowledge(authorization: string | null): boolean {
+    /**
+     * A delivered credential's installation, acknowledged: `pending` when
+     * this ack installed the one last minted (its launch's process is up
+     * with it), `installed` when it was installed already, nothing when it
+     * is neither.
+     */
+    acknowledge(
+      authorization: string | null
+    ): "pending" | "installed" | undefined {
       const row = resolve(authorization);
       if (!(row && authorization)) {
-        return false;
+        return;
       }
       const credentialHash = hash(authorization.slice(7));
-      return (
-        db.acknowledgeSessionIdentity(row.instanceId, credentialHash) ||
-        (row.credentialHash === credentialHash && row.installedAt !== null)
-      );
+      if (db.acknowledgeSessionIdentity(row.instanceId, credentialHash)) {
+        return "pending";
+      }
+      return row.credentialHash === credentialHash && row.installedAt !== null
+        ? "installed"
+        : undefined;
     },
   };
 };

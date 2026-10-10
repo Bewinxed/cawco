@@ -17,6 +17,13 @@ interface SessionObservation {
   state: ActivityState;
 }
 
+/**
+ * One directory's status as a generation's server gave it: read; `refused`,
+ * the server answering with an HTTP error for that directory (it is up: what
+ * it refuses is that directory, as a 500 for a clone whose `.opencode` was a
+ * file, 2026-10-10); or `unreachable`, no answer at all (refused connection,
+ * timeout) or one that cannot be read.
+ */
 export type DirectorySnapshot = {
   generation: string;
   directory: string;
@@ -25,6 +32,7 @@ export type DirectorySnapshot = {
   sampledAt: number;
 } & (
   | { kind: "available"; statuses: StatusMap }
+  | { kind: "refused"; reason: string }
   | { kind: "unreachable"; reason: string }
 );
 
@@ -41,6 +49,7 @@ export type CustodyObservation = {
   sampledAt: number;
 } & (
   | { kind: "decided"; state: "busy" | "idle"; sequence: number }
+  | { kind: "refused"; reason: string }
   | { kind: "unreachable"; reason: string }
 );
 
@@ -200,13 +209,22 @@ export class OpencodeActivity {
         requestedAt,
         sampledAt: Date.now(),
       };
-      result = statuses
-        ? { ...base, kind: "available", statuses }
-        : {
-            ...base,
-            kind: "unreachable",
-            reason: `OpenCode status ${read.response?.status ?? "unreadable"}: ${JSON.stringify(read.error ?? read.data)}`,
-          };
+      const said = JSON.stringify(read.error ?? read.data);
+      if (statuses) {
+        result = { ...base, kind: "available", statuses };
+      } else if (read.response && !read.response.ok) {
+        result = {
+          ...base,
+          kind: "refused",
+          reason: `OpenCode answered HTTP ${read.response.status} for ${directory}: ${said}`,
+        };
+      } else {
+        result = {
+          ...base,
+          kind: "unreachable",
+          reason: `OpenCode status ${read.response?.status ?? "unreadable"}: ${said}`,
+        };
+      }
     } catch (error) {
       result = {
         generation: this.#generation,
@@ -303,8 +321,8 @@ export class OpencodeActivity {
         sessionId,
         sampledAt: snapshot.sampledAt,
       };
-      if (snapshot.kind === "unreachable") {
-        return { ...base, kind: "unreachable", reason: snapshot.reason };
+      if (snapshot.kind !== "available") {
+        return { ...base, kind: snapshot.kind, reason: snapshot.reason };
       }
       entry.state = statusState(snapshot.statuses[sessionId]);
       entry.observedAt = snapshot.sampledAt;
@@ -317,8 +335,9 @@ export class OpencodeActivity {
     const instances = [...this.#sessions]
       .filter(([, entry]) => entry.state !== "idle")
       .flatMap(([id]) => [...(this.#bindings.get(id) ?? [id])]);
+    // A directory its server refuses is as unknown as one it cannot reach.
     const unreachableDirectories = [...this.#directories]
-      .filter(([, entry]) => entry.latest?.kind === "unreachable")
+      .filter(([, entry]) => entry.latest && entry.latest.kind !== "available")
       .map(([directory]) => directory);
     const lifetime = instances.length ? 15_000 : 45_000;
     if (
@@ -441,7 +460,7 @@ export class OpencodeActivity {
           roundStarted,
           round
         );
-        if (snapshot.kind === "unreachable") {
+        if (snapshot.kind !== "available") {
           return false;
         }
         for (const id of Object.keys(snapshot.statuses)) {
@@ -463,7 +482,7 @@ export class OpencodeActivity {
               directory,
               round
             );
-            if (observed.kind === "unreachable") {
+            if (observed.kind !== "decided") {
               return false;
             }
             continue;

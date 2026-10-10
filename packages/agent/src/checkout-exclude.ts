@@ -41,7 +41,9 @@ export const gitIn = async (
  * -A` then refuses it ("can only add regular files", REPORT.md §5c). srt's own
  * names, unanchored as srt applies them (`DANGEROUS_FILES` and
  * `getDangerousDirectories()` in sandbox-utils.ts at 0.0.79), and the harness
- * project config the workspace's policy denies at the clone's root.
+ * project config the workspace's policy denies at the clone's root, which
+ * the boundary's host makes as real empty stand-ins before each sandbox
+ * (`cloneDenies`), so srt leaves no file of its own there.
  */
 const SANDBOX_NAMES = [
   ".gitconfig",

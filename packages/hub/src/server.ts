@@ -2569,6 +2569,8 @@ export const createServer = (
       if (!db.takeOwedSpawn(owed.id)) {
         continue;
       }
+      // Taken off its row: it is in flight below only if it goes.
+      launches.delete(owed.id);
       const row = db.ownedInstance(owed.id, machineId);
       if (
         !row ||
@@ -2588,7 +2590,16 @@ export const createServer = (
         publishInstances(machineId);
         continue;
       }
-      sendFrame(agent, JSON.parse(owed.envelope) as Envelope<SpawnPayload>);
+      const envelope = JSON.parse(owed.envelope) as Envelope<SpawnPayload>;
+      sendFrame(agent, envelope);
+      // In flight from its mint ({@link launches}); held on its row until
+      // now, it is on its way from here, whatever its machine's last socket.
+      launches.set(owed.id, {
+        machineId,
+        generation: envelope.payload.processGeneration ?? "",
+        at: Date.now(),
+        replaces: envelope.payload.relaunch === true,
+      });
       // What it was sent while its start was held goes right behind it.
       releaseOwed({ instanceId: owed.id });
     }
@@ -2637,7 +2648,8 @@ export const createServer = (
   }): string => row.title || row.derivedTitle || row.id.slice(0, 8);
   /**
    * A session a send wakes: its process is gone, its conversation on record.
-   * Never one a move holds: the move's start is its first launch.
+   * Never one a move holds: the move's start is its first launch. Never one
+   * whose launch is on its way ({@link launches}): the send goes behind it.
    */
   const wakesForSend = (row: {
     id: string;
@@ -2647,6 +2659,7 @@ export const createServer = (
   }): boolean =>
     relaunchOf(row).kind !== "refused" &&
     !moves.holds(row.id) &&
+    !launchInFlight(row.id) &&
     (row.status === "sleeping" ||
       row.status === "error" ||
       row.status === "stopped");
@@ -4662,6 +4675,129 @@ export const createServer = (
    */
   const identities = createSessionIdentities(db);
   /**
+   * ONE LAUNCH IN FLIGHT PER SESSION. A launch carries the credential minted
+   * for it ({@link bounded}), and minting replaces the one hash the hub
+   * accepts for the session, so a second launch while one is still on its
+   * way leaves the first holding a dead credential: on obelisk (2026-10-10) a
+   * session sleeping behind a held custody was woken again by every minute's
+   * owed sweep, and when custody let go its machine ran 76 launches oldest
+   * first, each refused 401 ("Invalid session credential"). So from its mint
+   * until it settles a launch is the session's only one: no wake, relaunch,
+   * restart, start or credential install sends another, and what is sent to
+   * the session meanwhile goes to its machine behind the launch, which runs
+   * one session's envelopes in order. It settles when its process installs
+   * its credential ({@link launchSettled} from the ack), when the machine
+   * says the session is up for a launch that replaces nothing, when it fails,
+   * sleeps or stops, when its machine's socket closes, and when its machine
+   * names it nowhere any more ({@link settleLaunchesOn}). A start owed while
+   * its machine installs an update is in flight from its mint as well
+   * (`db.owesSpawn`).
+   */
+  const launches = new Map<
+    string,
+    {
+      readonly machineId: string;
+      readonly generation: string;
+      readonly at: number;
+      /** It replaces a process the machine may still be running: only its own ack says it is up. */
+      readonly replaces: boolean;
+    }
+  >();
+  const launchInFlight = (instanceId: string): boolean =>
+    launches.has(instanceId) || db.owesSpawn(instanceId);
+  /** Why another launch of `instanceId` does not go now; none when it may. */
+  const inFlightRefusal = (instanceId: string): string | undefined =>
+    launchInFlight(instanceId)
+      ? `${instanceId} is already starting: its launch is still on its way to its machine, and only one goes at a time.`
+      : undefined;
+  /**
+   * The launch of `instanceId` is over, for `why`; only the one of
+   * `generation` when one is named. Settled before whatever its end does
+   * next (a sleep that wakes for what it is owed, a death started again),
+   * so the next launch may go; what it is owed follows that path.
+   */
+  const launchSettled = (
+    instanceId: string,
+    why: string,
+    generation?: string
+  ): boolean => {
+    const launch = launches.get(instanceId);
+    if (
+      !launch ||
+      (generation !== undefined && generation !== launch.generation)
+    ) {
+      return false;
+    }
+    launches.delete(instanceId);
+    console.info(`[hub] launch of ${instanceId} settled: ${why}`);
+    return true;
+  };
+  /** The launch of `instanceId` is up: what was kept for it meanwhile goes to it now. */
+  const launchStarted = (instanceId: string, why: string): void => {
+    if (launchSettled(instanceId, why)) {
+      releaseOwed({ instanceId });
+    }
+  };
+  /**
+   * A machine's own word on what it carries, at each register and each
+   * heartbeat with a custody reading: a launch to it that it now names
+   * nowhere (not running, not held, not on its way) is gone, dropped there
+   * or with an agent that restarted, once `graceMs` has passed since it was
+   * sent (a beat may have been read before the launch arrived; a register
+   * is read after every launch to its last connection); one it lists
+   * running that replaces nothing is up. Its socket closing alone settles
+   * nothing: an agent that only reconnected still has its launches.
+   */
+  const settleLaunchesOn = (
+    machineId: string,
+    live: readonly string[],
+    custody: SessionCustody,
+    graceMs: number
+  ): void => {
+    if (custody.state !== "available") {
+      return;
+    }
+    const running = new Set(live);
+    const named = new Set([
+      ...live,
+      ...custody.instances,
+      ...(custody.pending ?? []),
+    ]);
+    for (const [instanceId, launch] of [...launches]) {
+      if (launch.machineId !== machineId) {
+        continue;
+      }
+      if (running.has(instanceId) && !launch.replaces) {
+        launchStarted(instanceId, "its machine runs it");
+      } else if (!named.has(instanceId) && Date.now() - launch.at >= graceMs) {
+        launchSettled(instanceId, "its machine no longer has it");
+      }
+    }
+  };
+  /**
+   * The credential a launch of `stored` carries, minted now, and the launch
+   * in flight from here ({@link launches}): each path that builds a launch
+   * has asked {@link inFlightRefusal} first.
+   */
+  const mintLaunch = (
+    payload: SpawnPayload,
+    stored: ReturnType<typeof db.getInstancesByIds>[number]
+  ): string => {
+    const credential = identities.mint(payload.instanceId);
+    launches.set(payload.instanceId, {
+      machineId: stored.machineId,
+      generation: processGeneration(stored),
+      at: Date.now(),
+      replaces: payload.relaunch === true,
+    });
+    return credential;
+  };
+  /** The sessions whose launch to `machineId` is on its way: a process the machine is about to have. */
+  const launchingOn = (machineId: string): string[] =>
+    [...launches]
+      .filter(([, launch]) => launch.machineId === machineId)
+      .map(([instanceId]) => instanceId);
+  /**
    * Sessions launched with no effort of their own: the first effort each
    * reads back is its model's default on its account (`putDefaultEffort`),
    * which a picker shows before anyone chooses.
@@ -4751,7 +4887,7 @@ export const createServer = (
     // the old one. A reattached process proves its own credential.
     const sessionCredential = payload.reattachOnly
       ? undefined
-      : identities.mint(payload.instanceId);
+      : mintLaunch(payload, stored);
     noteEffortAsked(payload);
     noteFork(payload, stored);
     const launchesIn = accountDirOf(stored, payload.reattachOnly);
@@ -4958,6 +5094,12 @@ export const createServer = (
     relaunch = false
   ): void => {
     const instanceId = row.id;
+    // Its launch on the way is the one: what it is sent goes behind that.
+    const inFlight = inFlightRefusal(instanceId);
+    if (inFlight) {
+      console.info(`[hub] not launching ${instanceId} again: ${inFlight}`);
+      return;
+    }
     // On its conversation, or fresh when its harness never began one.
     const plan = relaunchOf(row);
     const refused = wakeRefusal(machineId, row, plan);
@@ -7768,6 +7910,10 @@ export const createServer = (
   ):
     | { payload: SpawnPayload; permissionMode: string | null }
     | { refusal: string } => {
+    const inFlight = inFlightRefusal(asked.instanceId);
+    if (inFlight) {
+      return { refusal: inFlight };
+    }
     const settled = settleMode(machineId, asked, fallbackMode);
     if ("refusal" in settled) {
       return settled;
@@ -9313,6 +9459,7 @@ export const createServer = (
       throw new MachineAway(row.machineId);
     }
     const refused =
+      inFlightRefusal(row.id) ??
       launchRefusal(row.id) ??
       accountStartRefusal(row.machineId, row, sessionName(row));
     if (refused) {
@@ -9848,6 +9995,12 @@ export const createServer = (
           ingested: streams.ingestedFor([row.id])[row.id],
         },
       });
+      return;
+    }
+    // A launch already on its way is this restore: nothing goes beside it.
+    const inFlight = inFlightRefusal(row.id);
+    if (inFlight) {
+      console.info(`[hub] not restoring ${row.id}: ${inFlight}`);
       return;
     }
     const refuse = (refusal: string): void => {
@@ -13302,6 +13455,11 @@ export const createServer = (
       if (!agent) {
         throw new Error("Machine is not connected");
       }
+      // A mint now would cut off the credential its launch carries.
+      const inFlight = inFlightRefusal(instanceId);
+      if (inFlight) {
+        throw new Error(inFlight);
+      }
       await ensureIdentityWorkspace(row);
       const credential = identities.mint(instanceId);
       const requestId = crypto.randomUUID();
@@ -14804,9 +14962,21 @@ export const createServer = (
               "A valid delivered session credential is required for installation ACK"
             );
           }
-          return identities.acknowledge(authorization)
-            ? { ok: true }
-            : status(409, "This credential installation is no longer pending");
+          const acknowledged = identities.acknowledge(authorization);
+          if (!acknowledged) {
+            return status(
+              409,
+              "This credential installation is no longer pending"
+            );
+          }
+          // The credential its launch carried is installed: that launch is up.
+          if (acknowledged === "pending") {
+            launchStarted(
+              identity.instanceId,
+              "its process installed its credential"
+            );
+          }
+          return { ok: true };
         }
       )
       .post(
@@ -18738,10 +18908,21 @@ export const createServer = (
               for (const id of returningRemoved) {
                 lifecycle.preserveUnattached(id);
               }
+              // A launch its agent still has stays the session's one; one it
+              // does not have is over, and the restore below starts it anew.
+              settleLaunchesOn(
+                message.machineId,
+                peekInstances(message.payload),
+                registrationCustody,
+                0
+              );
               const settled = db.settleInstances(
                 message.machineId,
                 peekInstances(message.payload),
-                heldProcesses(registrationCustody),
+                [
+                  ...heldProcesses(registrationCustody),
+                  ...launchingOn(message.machineId),
+                ],
                 peekResumable(message.payload),
                 peekResumableAt(message.payload)
               );
@@ -19078,10 +19259,27 @@ export const createServer = (
               // as it disagreed with the hub. Recovery is register's job, where
               // it happens once, bounded, on an event that means "the machine
               // just came back".
+              //
+              // A row whose launch is on its way is the machine's to settle:
+              // it is starting, whatever the beat lists, until that launch
+              // settles ({@link launches}). Filed asleep instead, it was owed
+              // its sends again and woken by each one, every launch minting
+              // over the last (2026-10-10).
+              if ((message.payload as HeartbeatPayload).custody !== undefined) {
+                settleLaunchesOn(
+                  message.machineId,
+                  peekInstances(message.payload),
+                  peekCustody(message.payload),
+                  HEARTBEAT_SETTLE_GRACE_MS
+                );
+              }
               const beat = db.reconcileHeartbeat(
                 message.machineId,
                 peekInstances(message.payload),
-                heldProcesses(machineCustody.get(message.machineId)),
+                [
+                  ...heldProcesses(machineCustody.get(message.machineId)),
+                  ...launchingOn(message.machineId),
+                ],
                 HEARTBEAT_SETTLE_GRACE_MS
               );
               for (const row of beat.settled) {
@@ -19379,6 +19577,7 @@ export const createServer = (
                 ) {
                   break;
                 }
+                launchSettled(message.instanceId, "it was stopped");
                 for (const [key, sent] of stopDispatches) {
                   if (
                     sent.instanceId === message.instanceId &&
@@ -19418,6 +19617,11 @@ export const createServer = (
                   const { died } = message.payload as FramePayload & {
                     kind: "asleep";
                   };
+                  launchSettled(
+                    message.instanceId,
+                    died ? "its process died" : "it went to sleep",
+                    processGeneration(process)
+                  );
                   if (died) {
                     diedOnSignal(message.machineId, message.instanceId, died);
                   } else {
@@ -20304,6 +20508,11 @@ export const createServer = (
                 ) {
                   break;
                 }
+                launchSettled(
+                  message.instanceId,
+                  "it failed",
+                  processGeneration(process)
+                );
                 processFailed(
                   message.machineId,
                   message.instanceId,
@@ -20620,13 +20829,18 @@ export const createServer = (
               if (resumeFormer(ws, message)) {
                 break;
               }
-              // The row's key, not the client's — see `enforceRowSessionKey`.
-              const refusal = enforceRowSessionKey(
-                message.instanceId
-                  ? db.getInstancesByIds([message.instanceId])[0]
-                  : undefined,
-                message.payload
-              );
+              // One launch at a time ({@link launches}); then the row's key,
+              // not the client's — see `enforceRowSessionKey`.
+              const refusal =
+                (message.instanceId
+                  ? inFlightRefusal(message.instanceId)
+                  : undefined) ??
+                enforceRowSessionKey(
+                  message.instanceId
+                    ? db.getInstancesByIds([message.instanceId])[0]
+                    : undefined,
+                  message.payload
+                );
               if (refusal) {
                 console.warn(`[hub] refused spawn: ${refusal}`);
                 sendFrame(ws, failure(message, refusal));

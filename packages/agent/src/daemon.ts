@@ -1283,7 +1283,17 @@ const attach = (
      * The restores the hub sent ahead of its ack that go straight to the
      * supervisor rather than wait here: a held opencode session's reattach,
      * which asks its server whether its turn is running before it is handed
-     * back. Busy answers wait for them as they wait for claude's.
+     * back. Busy answers wait for them as they wait for claude's: OpenCode
+     * counts every recovery still pending as busy (`busyInstances`).
+     *
+     * EACH IS ITS OWN SESSION'S, AND NOTHING ELSE WAITS ON IT. Custody's
+     * completion, the spawns it dispatches and every other session's
+     * envelopes go on without them: one reattach that never ended (a server
+     * answering 500 for one directory, retried as unreachable) once held every
+     * attempt of a machine's custody past its 120 seconds for 4.5 hours, and no
+     * Claude session there could start (obelisk, 2026-10-10). A session's own
+     * envelopes go to the supervisor behind its reattach, which runs one
+     * session's envelopes in order.
      */
     const reattaching: Envelope[] = [];
     supervisor.registerDaemonFunction("sessionCustody", async () => ({
@@ -1307,9 +1317,36 @@ const attach = (
       const named = spawns.map((envelope) =>
         custodyRow(envelope.payload as SpawnPayload)
       );
-      const otherRecoveries = reattaching
-        .splice(0)
-        .map((envelope) => supervisor.dispatch(envelope));
+      /**
+       * What waited for one session's custody goes to the supervisor now,
+       * in order, behind that session's own attach, spawn or reattach (the
+       * supervisor runs one session's envelopes in order), and what comes
+       * for it from here goes straight there. No session's envelopes wait
+       * for another's.
+       */
+      const release = (id: string): Promise<void>[] => {
+        custodyIds.delete(id);
+        const own = custodyWaiting.filter(
+          (envelope) => envelope.instanceId === id
+        );
+        custodyWaiting.splice(
+          0,
+          custodyWaiting.length,
+          ...custodyWaiting.filter((envelope) => envelope.instanceId !== id)
+        );
+        return own.map((envelope) => supervisor.dispatch(envelope));
+      };
+      // Dispatched once, for this connection, and never awaited: each
+      // reattach ends as its own session's attach or failure ({@link
+      // reattaching}).
+      for (const envelope of reattaching.splice(0)) {
+        // biome-ignore lint/complexity/noVoid: the supervisor files the reattach's outcome as that session's own
+        void supervisor.dispatch(envelope);
+        // biome-ignore lint/complexity/noVoid: queued behind its own session's reattach
+        void Promise.all(
+          release((envelope.payload as SpawnPayload).instanceId)
+        );
+      }
       const recoverAttempt = async (signal: AbortSignal) => {
         const { attached, failed } = await supervisor.reattachFrom(
           ackPayload,
@@ -1317,19 +1354,21 @@ const attach = (
           signal
         );
         signal.throwIfAborted();
-        await Promise.all(otherRecoveries);
-        signal.throwIfAborted();
+        // Every held row is decided here: each session's spawn, when it has
+        // one, then what waited for that session alone.
         const outcomes = spawns.flatMap((envelope) => {
           const spawn = envelope.payload as SpawnPayload;
-          return attached.includes(spawn.instanceId) ||
+          const launched =
+            attached.includes(spawn.instanceId) ||
             failed.has(spawn.instanceId) ||
             spawn.reattachOnly
-            ? []
-            : [supervisor.dispatch(envelope)];
+              ? []
+              : [supervisor.dispatch(envelope)];
+          return [...launched, ...release(spawn.instanceId)];
         });
+        // Explicit stops sent behind the ack are handled before the listing.
         await Promise.all(outcomes);
         signal.throwIfAborted();
-        // Wait for explicit stops sent behind the ack before taking the listing.
         await Promise.all(
           custodyWaiting
             .splice(0)

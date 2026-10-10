@@ -2077,9 +2077,13 @@ export class SessionSupervisor {
         }
         return;
       }
-      // A probe that found nothing to attach says nothing; a held process
-      // refused at attach was stopped, and that is its failure.
+      // A probe that found nothing to attach says nothing to the hub, but
+      // why it found nothing goes in the journal; a held process refused at
+      // attach was stopped, and that is its failure.
       if (payload.reattachOnly && !(error instanceof HeldProcessRefused)) {
+        warn(
+          `reattach ${instanceId} found nothing: ${error instanceof Error ? error.message : String(error)}`
+        );
         return;
       }
       // The keeper refused its process its input: the refusal failed the
