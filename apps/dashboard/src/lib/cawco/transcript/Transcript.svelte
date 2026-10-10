@@ -1935,32 +1935,53 @@
 
   /**
    * THE PIN. While the reader is at the tail, the list getting taller is
-   * followed: put back on the foot in the frame a row grew (the rows'
-   * observer below), and a frame after a write virtua made in a task.
+   * followed: put back on the foot in the frame a row grew or the scroller's
+   * box changed (`onresize`, below), and a frame after a write virtua made in
+   * a task.
    *
-   * It listens to virtua's own container — the element whose height virtua
-   * sets from the rows it has measured — through a MutationObserver on its
-   * style, NOT a ResizeObserver. virtua resizes that container from inside
-   * its own ResizeObserver callback; observing it with another one asked for
-   * a notification the browser could not deliver in the same loop, which is
+   * A row growing (an answer streaming in, a row settling taller) and the
+   * scroller's own box changing (the window, the composer column's
+   * clearance) are both measured by virtua's one ResizeObserver, and virtua
+   * says so through `onresize` (virtua 0.53.2, made for "stay at the bottom":
+   * inokawa/virtua#301, #408). That call comes inside virtua's observer,
+   * after the frame's layout and before its paint, and the pin waits two
+   * microtasks behind it — still before the paint, so the tail is put back in
+   * the frame it grew. It waits because virtua is not done there: a scroll
+   * virtua was asked for (`land`'s `scrollToIndex`) aims again at every
+   * measurement, in a microtask virtua queues behind this same call, at the
+   * row that was last when it was asked — and keeps aiming for as long as
+   * rows measure less than 150ms apart, which is the whole of a streamed
+   * reply. Pinned in the call itself, that aim came after the pin every frame
+   * and held the view at the old last row, the reply growing under the
+   * composer by 1,500px. The pin flushes Svelte before it reads, so the
+   * height it reads is the one the frame will paint.
+   *
+   * virtua does not call `onresize` for a row taken out of the list (a parked
+   * ask's call, a tail row that went): only the length changed, and nothing
+   * was measured. So virtua's own container is watched as well — the element
+   * whose height virtua sets — through a MutationObserver on its style, NOT a
+   * ResizeObserver. virtua resizes that container from inside its own
+   * ResizeObserver callback; observing it with another one asked for a
+   * notification the browser could not deliver in the same loop, which is
    * the "ResizeObserver loop completed with undelivered notifications" every
    * arriving row used to raise. A style mutation is delivered as a microtask
-   * right behind virtua's write, still before the frame is painted. The
-   * scroller's own box (the window, the composer column's clearance) is the
-   * one thing observed for size, and nothing here resizes it.
-   *
-   * The box is pinned in the resize itself. Its observer runs after the
-   * frame's layout, before its paint, so the tail is put back in the frame
-   * the box changed. It is made when this transcript becomes the one being
-   * worked in, and an observer's first delivery comes in the next frame's
-   * layout: the frame a switch first draws this pane. So a tail that grew
-   * while the pane was off screen — skipped, never laid out — is pinned in
-   * the glide's first frame, not a frame behind it (`land`'s own frame).
+   * right behind virtua's write, still before the frame is painted.
    */
+  function onresize(): void {
+    queueMicrotask(() =>
+      queueMicrotask(() => {
+        if (!(active && landed && atBottom) || jumping) {
+          return;
+        }
+        flushSync();
+        pinBottom();
+      })
+    );
+  }
+
   $effect(() => {
-    const node = scroller;
     const container = listing?.firstElementChild;
-    if (!(active && node && container)) {
+    if (!(active && container)) {
       return;
     }
     const follow = (): void => {
@@ -1975,52 +1996,7 @@
     };
     const grew = new MutationObserver(follow);
     grew.observe(container, { attributes: true, attributeFilter: ["style"] });
-    const box = new ResizeObserver(() => {
-      if (landed && atBottom && !jumping) {
-        pinBottom();
-      }
-    });
-    box.observe(node);
-    // A row growing (an answer streaming in, a row settling taller) is
-    // measured by virtua in its ResizeObserver, which sets the list's height
-    // in the microtask behind it: `follow` hears that write, but puts the tail
-    // back a frame later (`followBottom`), so every frame a row grew in was
-    // painted with the tail that much off the foot. The rows themselves are
-    // watched too, one level inside virtua's items: their observer is called
-    // in the same pass, after virtua's has laid the list out again, so the
-    // tail is back on the foot in the frame it grew.
-    const sized = new ResizeObserver(() => {
-      if (landed && atBottom && !jumping) {
-        pinBottom();
-      }
-    });
-    const watch = (item: Node, as: "observe" | "unobserve"): void => {
-      if (item instanceof Element) {
-        for (const row of item.querySelectorAll("[data-row]")) {
-          sized[as](row);
-        }
-      }
-    };
-    watch(container, "observe");
-    // virtua's items are the container's children: one comes and goes with
-    // its row, and nothing inside a row is listened to.
-    const mounted = new MutationObserver((records) => {
-      for (const record of records) {
-        for (const item of record.removedNodes) {
-          watch(item, "unobserve");
-        }
-        for (const item of record.addedNodes) {
-          watch(item, "observe");
-        }
-      }
-    });
-    mounted.observe(container, { childList: true });
-    return () => {
-      grew.disconnect();
-      box.disconnect();
-      sized.disconnect();
-      mounted.disconnect();
-    };
+    return () => grew.disconnect();
   });
 
   /**
@@ -2871,6 +2847,7 @@
       getKey={(r) => r.key}
       itemSize={ROW_ESTIMATE}
       {keepMounted}
+      {onresize}
       {onscrollend}
       scrollRef={scroller}
       shift={built.shifted}
