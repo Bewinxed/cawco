@@ -32,7 +32,8 @@
  *     (c) the first drag that brings the reader near the first rows held
  *         reads exactly one more page, and the first row in view keeps its
  *         id and its y (within 1pt, axe describe-ui, retried) as it lands:
- *         the row first in view while the page was held is measured again
+ *         the row first in view while the page was held, once the list is
+ *         at rest (the drag's coast over), is measured again
  *         after, and stays first unless the loading strip stood above it
  *         (the rows that join take the strip's room);
  *     (d) dragging on reads a page at a time until the cursor is nil: the
@@ -463,6 +464,42 @@ const placed = () =>
     (at) => at.first !== undefined,
     15_000
   );
+/**
+ * `placed`, read again until the list is at rest: the same first row in view
+ * at the same top in two reads 400ms apart. A drag whose coast ends short of
+ * the start (the strip not reached, nothing to stop it) is still gliding
+ * when `flick`'s pause ends, and a place read then is not the place the page
+ * joins at. Says how far that first row moved while the list came to rest.
+ */
+async function rested(): Promise<{ at: Place; coasted: number }> {
+  const start = await placed();
+  const deadline = Date.now() + 15_000;
+  let at = start;
+  for (;;) {
+    // biome-ignore lint/performance/noAwaitInLoops: each read is compared with the one before it
+    await pause(400);
+    const next = await placed();
+    const still =
+      next.first?.row === at.first?.row &&
+      Math.abs((next.first?.y ?? 0) - (at.first?.y ?? 0)) < 0.01;
+    at = next;
+    if (still) {
+      break;
+    }
+    if (Date.now() >= deadline) {
+      throw new Error("the list at rest (describe-ui): still moving after 15s");
+    }
+  }
+  const row = start.first?.row;
+  const now = row === undefined ? undefined : at.tops.get(row);
+  return {
+    at,
+    coasted:
+      start.first && now !== undefined
+        ? Math.abs(now - start.first.y)
+        : Number.POSITIVE_INFINITY,
+  };
+}
 const said = (at: Place) =>
   at.first
     ? `first row in view row-${at.first.row} at y ${at.first.y.toFixed(2)}; rows ${at.rows[0]}…${at.rows.at(-1)}${at.strip ? "; the loading strip is in view" : ""}`
@@ -475,7 +512,8 @@ const flick = async (at: Place) => {
   await mac(
     `${AXE} drag --start-x ${x} --start-y ${Math.round(at.area.top + 0.12 * height)} --end-x ${x} --end-y ${Math.round(at.area.top + 0.92 * height)} --duration 0.3 --steps 12 --udid ${udid}`
   );
-  // The list coasts to rest before it is read.
+  // The list coasts before it is read. A coast that ends short of the start
+  // can outlast this; a page is only let in once the list is at rest (`rested`).
   await pause(1600);
 };
 
@@ -530,6 +568,8 @@ interface Move {
   /** The held first row's top before the page joined and after; undefined once it is off screen. */
   after?: number;
   before?: number;
+  /** How far the list coasted after the drag's pause, before it was at rest and the page was let in. */
+  coasted: number;
   /** It is still the first row in view, or the loading strip stood above it (the joined rows take the strip's room). */
   first: boolean;
   /** |after - before|, Infinity when the row is not on screen to measure. */
@@ -541,11 +581,11 @@ const moves: Move[] = [];
 const kept = (move: Move) => move.moved <= 1 && move.first;
 const told = (move: Move) =>
   move.row
-    ? `row-${move.row} at y ${move.before?.toFixed(2) ?? "?"} before, ${move.after === undefined ? "off screen" : `y ${move.after.toFixed(2)}`} after: moved ${move.moved.toFixed(2)}pt${move.first ? "" : ", no longer the first row in view"}`
+    ? `row-${move.row} at y ${move.before?.toFixed(2) ?? "?"} before, ${move.after === undefined ? "off screen" : `y ${move.after.toFixed(2)}`} after: moved ${move.moved.toFixed(2)}pt${move.first ? "" : ", no longer the first row in view"}${move.coasted >= 0.01 ? ` (the list coasted ${move.coasted.toFixed(2)}pt to rest before the page was let in)` : ""}`
     : "no row in view before it joined";
-/** Lets one held page in: the place before it joins, and after. */
+/** Lets one held page in once the list is at rest: the place before it joins, and after. */
 const land = async () => {
-  const held = await placed();
+  const { at: held, coasted } = await rested();
   const reads = olderReads().length;
   release();
   await until(
@@ -564,6 +604,7 @@ const land = async () => {
     row,
     before,
     after,
+    coasted,
     moved:
       before !== undefined && after !== undefined
         ? Math.abs(after - before)
