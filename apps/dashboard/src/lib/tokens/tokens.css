@@ -642,6 +642,8 @@
     --c-tab-lead: 12px;
     /* A session tab row: its list's 4px pad over 32px tabs (PaneTabs). */
     --c-tab-row-h: 36px;
+    /* A transcript's head fade, on every width: rows scrolled up under the tab strip dissolve over this length at the transcript's top edge (solid surface-recess at the edge, clear at its end, its stops eased by c-head-fade-curve), so they never meet the tab's rim edge-on and the tab and its pane read as one shape. Scrolled to the very top there is no fade (HeadFade on the web and in CawCoKit). */
+    --c-head-fade: 24px;
     /* The widest a session tab grows: its title, padding and close control. Below it a tab is as wide as its title; only a title past it ends in an ellipsis, and a row of tabs that will not fit scrolls (PaneTabs). */
     --c-tab-max-w: 240px;
     /* The top bar's icon group's inset round its items, and the bar's round its controls: the 44px bar less the 36px control height, halved. The group is a capsule and its items sit concentric inside it. */
@@ -791,6 +793,8 @@
     /* Entrances and exits ease out; on-screen movement eases in-out; drawers, popovers and page swaps use the drawer curve. No ease-in. */
     --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
     --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+    /* The transcript head fade's alpha along its length (c-head-fade): CSS ease-in-out, not the motion curve ease-in-out. Not a motion: its 13 sampled stops are baked into HeadFade on the web and in CawCoKit (larsenwork.com/easing-gradients). */
+    --c-head-fade-curve: cubic-bezier(0.42, 0, 0.58, 1);
     --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
     /* A small mark arriving beside what it belongs to (the compaction divider's chevron): it leaves at once and takes most of its time settling, so a 160ms entrance reads as motion where ease-out reads as a swap. */
     --ease-arrive: cubic-bezier(0.2, 0, 0, 1);

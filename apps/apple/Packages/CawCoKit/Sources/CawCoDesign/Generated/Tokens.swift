@@ -494,6 +494,8 @@ public enum Size {
     public static let cTabLead: Double = 12
     /// A session tab row: its list's 4px pad over 32px tabs (PaneTabs).
     public static let cTabRowH: Double = 36
+    /// A transcript's head fade, on every width: rows scrolled up under the tab strip dissolve over this length at the transcript's top edge (solid surface-recess at the edge, clear at its end, its stops eased by c-head-fade-curve), so they never meet the tab's rim edge-on and the tab and its pane read as one shape. Scrolled to the very top there is no fade (HeadFade on the web and in CawCoKit).
+    public static let cHeadFade: Double = 24
     /// The widest a session tab grows: its title, padding and close control. Below it a tab is as wide as its title; only a title past it ends in an ellipsis, and a row of tabs that will not fit scrolls (PaneTabs).
     public static let cTabMaxW: Double = 240
     /// The top bar's icon group's inset round its items, and the bar's round its controls: the 44px bar less the 36px control height, halved. The group is a capsule and its items sit concentric inside it.
@@ -644,6 +646,8 @@ public enum Motion {
     /// Entrances and exits ease out; on-screen movement eases in-out; drawers, popovers and page swaps use the drawer curve. No ease-in.
     public static let easeOut = TimingCurve(x1: 0.23, y1: 1, x2: 0.32, y2: 1)
     public static let easeInOut = TimingCurve(x1: 0.77, y1: 0, x2: 0.175, y2: 1)
+    /// The transcript head fade's alpha along its length (c-head-fade): CSS ease-in-out, not the motion curve ease-in-out. Not a motion: its 13 sampled stops are baked into HeadFade on the web and in CawCoKit (larsenwork.com/easing-gradients).
+    public static let cHeadFadeCurve = TimingCurve(x1: 0.42, y1: 0, x2: 0.58, y2: 1)
     public static let easeDrawer = TimingCurve(x1: 0.32, y1: 0.72, x2: 0, y2: 1)
     /// A small mark arriving beside what it belongs to (the compaction divider's chevron): it leaves at once and takes most of its time settling, so a 160ms entrance reads as motion where ease-out reads as a swap.
     public static let easeArrive = TimingCurve(x1: 0.2, y1: 0, x2: 0, y2: 1)

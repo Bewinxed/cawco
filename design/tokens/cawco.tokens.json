@@ -2315,6 +2315,11 @@
       "$value": "36px",
       "$description": "A session tab row: its list's 4px pad over 32px tabs (PaneTabs)."
     },
+    "c-head-fade": {
+      "$type": "dimension",
+      "$value": "24px",
+      "$description": "A transcript's head fade, on every width: rows scrolled up under the tab strip dissolve over this length at the transcript's top edge (solid surface-recess at the edge, clear at its end, its stops eased by c-head-fade-curve), so they never meet the tab's rim edge-on and the tab and its pane read as one shape. Scrolled to the very top there is no fade (HeadFade on the web and in CawCoKit)."
+    },
     "c-tab-max-w": {
       "$type": "dimension",
       "$value": "240px",
@@ -2722,6 +2727,11 @@
     "ease-in-out": {
       "$type": "cubicBezier",
       "$value": "cubic-bezier(0.77, 0, 0.175, 1)"
+    },
+    "c-head-fade-curve": {
+      "$type": "cubicBezier",
+      "$value": "cubic-bezier(0.42, 0, 0.58, 1)",
+      "$description": "The transcript head fade's alpha along its length (c-head-fade): CSS ease-in-out, not the motion curve ease-in-out. Not a motion: its 13 sampled stops are baked into HeadFade on the web and in CawCoKit (larsenwork.com/easing-gradients)."
     },
     "ease-drawer": {
       "$type": "cubicBezier",

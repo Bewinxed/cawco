@@ -3033,6 +3033,9 @@
     );
     min-block-size: 0;
     position: relative;
+    /* Its scroll drives the pane's head fade (HeadFade), which the pane
+       brings in scope with `timeline-scope`. */
+    scroll-timeline: --transcript-head block;
 
     @media (width <= 900px) {
       padding-inline: var(--space-5);
