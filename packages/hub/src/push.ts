@@ -33,6 +33,7 @@ import {
   questionsOf,
 } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
+import { firstLine } from "@cawco/core/tool-presentation";
 import { Elysia, t } from "elysia";
 import type { DbShape, PushDeviceRow, WorkItemRow } from "./db";
 import { hidden } from "./hidden";
@@ -50,17 +51,20 @@ const REQUEST_TIMEOUT_MS = 10_000;
 /**
  * The app's notification categories (the spec in the Projects plan, §5.5,
  * names their actions). A permission whose tool can run anything, or a plan,
- * is opened to be read, never approved from the lock screen. A push about a
- * session (`task` with one, `attempt`) offers Reply; a task no session has
- * worked on yet only opens. A question the app can answer inline goes as
- * `question` with its options sealed (`inlineOptions`): the app's
- * notification service extension opens them and gives that one push a
- * category of its own, an action per option and "Other…".
+ * is opened to be read, never approved or denied from the lock screen; any
+ * other permission offers Approve, Deny and "Other…" (a denial in the
+ * operator's words). A push about a session (`turn`, `task` with one,
+ * `attempt`) offers Reply; a task no session has worked on yet only opens. A
+ * question the app can answer inline goes as `question` with its options
+ * sealed (`inlineOptions`): the app's notification service extension opens
+ * them and gives that one push a category of its own, an action per option
+ * and "Other…".
  */
 export const PUSH_CATEGORIES = {
   permission: "CAWCO_PERMISSION",
   permissionOpenOnly: "CAWCO_PERMISSION_OPEN",
   question: "CAWCO_QUESTION",
+  turn: "CAWCO_TURN",
   task: "CAWCO_TASK",
   taskOpenOnly: "CAWCO_TASK_OPEN",
   attempt: "CAWCO_ATTEMPT",
@@ -69,6 +73,15 @@ export const PUSH_CATEGORIES = {
 
 /** A question with more options than this is opened to be answered: three and "Other…" fill the four actions a category shows. */
 const MAX_INLINE_OPTIONS = 3;
+
+/**
+ * How long a finished turn waits before it pushes, for a dashboard that has
+ * the session in front on a visible page to say so: it marks the session
+ * looked at as its turn ends (SessionSurface.svelte, `/api/seen` `look`).
+ */
+const LOOK_GRACE_MS = 5000;
+/** A finished turn's visible body: the reply itself goes sealed. */
+const TURN_ENDED = "Finished its turn";
 
 /** Tools whose approval must be read in full: a push never offers Approve for them. */
 const OPEN_ONLY_TOOLS = new Set([
@@ -88,6 +101,13 @@ export type PushData =
       projectId: string | null;
       requestId: string;
       workflowRunId: string | null;
+    }
+  | {
+      /** A session the owner started finished its turn and waits on them. */
+      kind: "turn";
+      instanceId: string;
+      machineId: string;
+      projectId: string | null;
     }
   | {
       kind: "task";
@@ -307,8 +327,9 @@ const askCategory = (
 /**
  * The options a question push answers with, or undefined when it is opened
  * to be answered: a session's AskUserQuestion (core `questionsOf`, the
- * reading the app's card and the dashboard share) of one question with one to
- * {@link MAX_INLINE_OPTIONS} options. Several questions, more options, or a
+ * reading the app's card and the dashboard share) of one single-choice
+ * question with one to {@link MAX_INLINE_OPTIONS} options. Several questions,
+ * a multi-select (one tap can't say several picks), more options, or a
  * workflow run's question (answered on its run's page) stay Open only.
  */
 const inlineOptions = (
@@ -319,7 +340,10 @@ const inlineOptions = (
     return undefined;
   }
   const questions = questionsOf(payload.toolName ?? "", payload.input ?? {});
-  const options = questions?.length === 1 ? questions[0].options : [];
+  const options =
+    questions?.length === 1 && !questions[0].multiSelect
+      ? questions[0].options
+      : [];
   if (options.length === 0 || options.length > MAX_INLINE_OPTIONS) {
     return undefined;
   }
@@ -416,6 +440,8 @@ export const createPush = ({ db, task }: PushServices) => {
   const asked = new Set<string>();
   /** When each collapse id last went out. */
   const recent = new Map<string, number>();
+  /** Sessions whose running turn the operator interrupted: its end pushes nothing. */
+  const stopped = new Set<string>();
 
   /** Records what Cawrier said for a device: taken, pairing gone (the device goes) or refused. */
   const settle = (
@@ -576,6 +602,73 @@ export const createPush = ({ db, task }: PushServices) => {
     /** An ask left the pending list: a later ask can never reuse its id, so its mark goes. */
     onSettled(requestId: string): void {
       asked.delete(requestId);
+    },
+
+    /** A turn of the session is under way: a stop asked before it is not this turn's. */
+    turnBegan(instanceId: string): void {
+      stopped.delete(instanceId);
+    },
+
+    /** The operator (or a session for them) interrupted the session: the turn it cuts pushes nothing. */
+    interrupted(instanceId: string): void {
+      stopped.add(instanceId);
+    },
+
+    /**
+     * A session's turn ended with its result, and no standing instruction
+     * answered it (server.ts, at the turn's end; a turn cut by a restart has
+     * no result and never comes here). Pushes when the session is one the
+     * owner started: top level, not a delegate, a workflow's step, a
+     * project's lead or a continuation's worker; and not stopped by them.
+     * It waits {@link LOOK_GRACE_MS} first: a dashboard that has the session
+     * in front marks it looked at as the turn ends, and then nothing goes.
+     * The app does not mark looks, so a session open in the app still pushes.
+     * One collapse id per session: a newer turn's push replaces the older.
+     */
+    turnEnded(
+      instanceId: string,
+      reply: string | undefined,
+      endedAt: Date
+    ): void {
+      if (stopped.delete(instanceId)) {
+        return;
+      }
+      setTimeout(() => {
+        const [row] = db.getInstancesByIds([instanceId]);
+        if (
+          !row ||
+          row.parentInstanceId ||
+          row.workflowStepId ||
+          row.workItemId ||
+          row.kind === "summariser" ||
+          row.role === "lead" ||
+          (row.seenAt && row.seenAt.getTime() >= endedAt.getTime())
+        ) {
+          return;
+        }
+        const project = projectName(row.projectId);
+        moment({
+          shown: alertOf(
+            sessionName(instanceId) ?? "A session",
+            project,
+            TURN_ENDED
+          ),
+          sealed: alertOf(
+            boardTitle(row),
+            project,
+            firstLine(reply) ?? TURN_ENDED
+          ),
+          category: PUSH_CATEGORIES.turn,
+          collapseId: collapse("turn", instanceId),
+          threadId: row.projectId ?? instanceId,
+          data: {
+            kind: "turn",
+            instanceId,
+            machineId: row.machineId,
+            projectId: row.projectId ?? null,
+          },
+        });
+      }, LOOK_GRACE_MS);
     },
 
     /**

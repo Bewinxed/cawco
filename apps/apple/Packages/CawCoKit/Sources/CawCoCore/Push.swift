@@ -88,6 +88,9 @@ public struct PushNote: Sendable {
             if let runId = fields["workflowRunId"], !runId.isEmpty { return .session(BoardRun.prefix + runId) }
             if let instanceId, !instanceId.isEmpty { return .session(instanceId) }
             return .board
+        case "turn":
+            if let instanceId, !instanceId.isEmpty { return .session(instanceId) }
+            return .board
         case "task", "attempt":
             guard let projectId = fields["projectId"], !projectId.isEmpty else { return .board }
             guard let taskId = fields["taskId"], !taskId.isEmpty else { return .project(projectId) }
@@ -661,6 +664,9 @@ enum PushPending {
 ///
 /// - Approve: exactly the one request the push named, `permission.answer`
 ///   allowing it, as the card's Approve.
+/// - Deny: the same request denied, as the card's Deny; "Other…" denies it
+///   with the operator's words as the denial's `message`, which the agent
+///   reads as what to do instead.
 /// - An option, or "Other…" with the operator's words: the question's answer,
 ///   `permission.answer` with the answers folded into its input, as the
 ///   card's Answer (`NeedsYouStore.answerQuestion`).
@@ -682,6 +688,10 @@ public enum PushActions {
         switch note.action {
         case PushAction.approve:
             await approve(note)
+        case PushAction.deny:
+            await deny(note, message: nil)
+        case PushAction.denyWith:
+            await deny(note, message: note.text ?? "")
         case PushAction.answerOther:
             await answer(note, .words(note.text ?? ""))
         case PushAction.reply:
@@ -709,6 +719,33 @@ public enum PushActions {
 
     private static func notApproved(_ note: PushNote) async {
         await post(note, title: nil, body: "\(note.title): not approved. Open to answer.", category: PushCategory.permissionOpenOnly)
+    }
+
+    // MARK: Deny
+
+    /// The request the push named, denied: with the card's own words, or with
+    /// `message`, the operator's (empty is refused, not sent as a bare Deny).
+    private static func deny(_ note: PushNote, message: String?) async {
+        guard note.kind == "ask", let requestId = note.requestId else { return }
+        let words = message?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let words, words.isEmpty {
+            await notDenied(note, "Nothing was written.")
+            return
+        }
+        let deadline = ContinuousClock.now + window
+        guard let found = await parked(note, deadline: deadline, failed: { await notDenied(note, "The hub couldn't be reached.") }) else { return }
+        let (connection, match, ask) = found
+        defer { connection.disconnect() }
+        connection.needs.answer(ask, machineId: match.machineId, .deny, message: words)
+        let stage = await settled(connection.needs.answers["\(ask.instanceId):\(ask.requestId)"], on: connection, deadline: deadline)
+        log.notice("deny \(requestId, privacy: .public): \(stage?.rawValue ?? "unanswered", privacy: .public)")
+        if stage != .applied {
+            await notDenied(note, connection.needs.answerSent(for: ask)?.reason)
+        }
+    }
+
+    private static func notDenied(_ note: PushNote, _ reason: String?) async {
+        await post(note, title: nil, body: "\(note.title): not denied. \(sentence(reason))Open to answer.", category: PushCategory.permissionOpenOnly)
     }
 
     // MARK: Answer
@@ -851,12 +888,7 @@ public enum PushActions {
         local.thread = note.thread
         do {
             try await NotificationCentre.add(local)
-            #if DEBUG
-            // scripts/probe-ios-push-actions.ts reads this: a notice posted while the app is in front shows as a banner only.
-            log.notice("posted in place of \(note.id, privacy: .public) (category \(local.category, privacy: .public)): \(body, privacy: .public)")
-            #else
             log.notice("posted in place of \(note.id, privacy: .public) (category \(local.category, privacy: .public)), \(body.count) characters")
-            #endif
         } catch {
             log.error("local notification failed: \(String(describing: error), privacy: .public)")
         }

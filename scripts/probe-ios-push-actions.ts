@@ -31,10 +31,25 @@
  *     - an option of a one-part question with three options answers it: the
  *       ask leaves /api/pending and the transcript carries the label;
  *     - "Other…" answers a two-option question with the typed words;
- *     - a question with four options goes sealed without options (Open only);
  *     - Reply on a failed attempt's push (made by the hub's own push.ts with
  *       the scratch hub's device and session) arrives as a user message;
- *     - with the hub stopped, Reply leaves the "not sent" local notification.
+ *     - the top-level session's finished turn pushes CAWCO_TURN (Open,
+ *       Reply) with the reply's first line sealed, and Reply on it lands;
+ *     - a delegate's finished turn pushes nothing;
+ *     - a Write permission (a session in default mode) offers Approve, Deny,
+ *       Other…, Open; Deny resolves it and the session hears the denial;
+ *       Other… denies with the typed words, which the transcript shows;
+ *     - a multi-select question, and one with four options, go sealed
+ *       without options (Open only);
+ *     - a push that lands with the app in front stays in Notification Centre;
+ *     - with the hub stopped, Reply leaves the "not sent" local notification
+ *       in the push's place, read off the delivered list.
+ *
+ * The inline buttons of a question are the notification service extension's
+ * work. It logs `opened` / `not opened` for every push it is handed; when no
+ * such line follows a `simctl push`, the simulator never ran it, and the probe
+ * says so (`FAIL the extension runs for a simctl push`) and SKIPs the button
+ * check rather than failing it as the code's fault.
  *
  * It stops only what it started: the fleet's processes by PID, the stand-in,
  * the tunnel, and the simulator it created (deleted at the end). `--keep`
@@ -67,6 +82,10 @@ const check = (step: string, ok: boolean, detail: string) => {
     failures += 1;
   }
 };
+/** A check this run can't judge, said with why; it does not count either way. */
+const skip = (step: string, why: string) => {
+  console.log(`SKIP ${step}: ${why}`);
+};
 
 /** Runs `script` in bash on the Mac; its stdout, or throws with its stderr. */
 async function mac(script: string): Promise<string> {
@@ -89,14 +108,14 @@ async function mac(script: string): Promise<string> {
   return text;
 }
 
-// ── The questions the mock asks, one per marker ──────────────────────────
+// ── What the mock asks, one tool call per marker ─────────────────────────
 const tag = crypto.randomUUID().slice(0, 6);
-const question = (text: string, labels: string[]) => ({
+const question = (text: string, labels: string[], multiSelect = false) => ({
   questions: [
     {
       question: text,
       header: "Probe",
-      multiSelect: false,
+      multiSelect,
       options: labels.map((label) => ({
         label,
         description: `Pick ${label}.`,
@@ -115,8 +134,20 @@ const ASKS: Record<string, ReturnType<typeof question>> = {
   [`probe-three ${tag}`]: question("Which change ships today?", THREE),
   [`probe-two ${tag}`]: question("Which hub does the run use?", TWO),
   [`probe-four ${tag}`]: question("Which way does the probe go?", FOUR),
+  [`probe-multi ${tag}`]: question(
+    "Which checks does the probe run?",
+    ["Lint", "Types"],
+    true
+  ),
+};
+/** Write calls a session in default permission mode parks for the operator. */
+const WRITES: Record<string, string> = {
+  [`probe-deny ${tag}`]: `denied-${tag}.txt`,
+  [`probe-deny-with ${tag}`]: `redirected-${tag}.txt`,
 };
 const asked = new Set<string>();
+/** The delegate's brief carries this, so its requests are known. */
+const DELEGATE_MARK = `probe-delegate ${tag}`;
 
 // ── The stand-in Cawrier: keeps every push the hub sends ─────────────────
 interface Captured {
@@ -149,18 +180,28 @@ const cawrierOrigin = `http://127.0.0.1:${cawrier.port}`;
 const fleet = await scratchFleet({
   name: "probe-ios-push-actions",
   respond: (seen) => {
+    const fresh = (marker: string) =>
+      seen.tools && seen.last.includes(marker) && !asked.has(marker);
     for (const [marker, input] of Object.entries(ASKS)) {
-      if (
-        seen.tools &&
-        seen.last.includes(marker) &&
-        !asked.has(marker) &&
-        seen.toolNames.includes("AskUserQuestion")
-      ) {
+      if (fresh(marker) && seen.toolNames.includes("AskUserQuestion")) {
         asked.add(marker);
         return {
           everyMs: 5,
           words: [],
           tool: { name: "AskUserQuestion", input },
+        };
+      }
+    }
+    for (const [marker, file] of Object.entries(WRITES)) {
+      if (fresh(marker) && seen.toolNames.includes("Write")) {
+        asked.add(marker);
+        return {
+          everyMs: 5,
+          words: [],
+          tool: {
+            name: "Write",
+            input: { file_path: join(fleet.workdir, file), content: "probe" },
+          },
         };
       }
     }
@@ -179,7 +220,11 @@ let hub = "";
 /** The sealed alert of a push, opened with the key the device registered. */
 const opened = async (
   push: Captured
-): Promise<{ title: string; options?: { id: string; label: string }[] }> => {
+): Promise<{
+  title: string;
+  body: string;
+  options?: { id: string; label: string }[];
+}> => {
   const [device] = fleet.query<{ key: string }>(
     "SELECT key FROM push_devices WHERE pairing_id = ?",
     push.pairingId
@@ -228,9 +273,18 @@ const launch = (args: string) =>
 const quit = () =>
   mac(`xcrun simctl terminate ${udid} ${BUNDLE} >/dev/null 2>&1 || true`);
 
-/** Delivers `push`'s payload as APNs would, with the app quit. */
-const deliver = async (push: Captured) => {
-  await quit();
+/**
+ * Delivers `push`'s payload as APNs would: with the app quit, or with it
+ * open in front (`foreground`). Returns the extension's lines for it.
+ */
+const deliver = async (push: Captured, foreground = false) => {
+  if (foreground) {
+    await launch("");
+    await Bun.sleep(4000);
+  } else {
+    await quit();
+  }
+  const start = await macNow();
   const apns = JSON.stringify({
     ...push.payload,
     "Simulator Target Bundle": BUNDLE,
@@ -241,7 +295,15 @@ echo '${b64}' | base64 -D > "$F"
 xcrun simctl push ${udid} ${BUNDLE} "$F" >/dev/null
 rm -f "$F"`);
   await Bun.sleep(3000);
+  return await logSince(start);
 };
+/**
+ * Whether the notification service extension ran for a delivered push: it
+ * logs `push <id> opened:` (or `not opened:`) for every push it is handed,
+ * from its own process. No such line means the simulator never handed the
+ * push to it, which is not the code failing.
+ */
+const EXTENSION_RAN = /push \S+ (?:opened|not opened):/;
 
 interface Listed {
   actions: string[];
@@ -268,19 +330,31 @@ const listed = async (): Promise<Listed[]> => {
     title: m[6],
   }));
 };
-/** Runs an action on a delivered notification; the log from its start. */
+/**
+ * Runs an action on a delivered notification; the log from its start, and
+ * what the notification centre showed after it (the app lists it).
+ */
 const act = async (id: string, action: string, text?: string) => {
   const start = await macNow();
   await launch(
     `-push-probe-act ${id} ${action}${text === undefined ? "" : ` '${text}'`}`
   );
-  const escaped = action.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return await awaitLine(
+  const ran = await awaitLine(
     start,
-    new RegExp(`probe acted ${id} ${escaped}: handled`),
+    new RegExp(`probe acted ${id} ${action}: handled`),
     60_000
   );
+  const done = await awaitLine(start, AFTER_DONE, 30_000);
+  const after = [...done.log.matchAll(AFTER)].map((m) => ({
+    id: m[1],
+    category: m[2],
+    body: m[3],
+  }));
+  return { ...ran, after };
 };
+const AFTER =
+  /probe after (\S+) category=(\S*) actions=\[[^\]]*\] kind=\S* request=\S* title=.*? body=(.*)/g;
+const AFTER_DONE = /probe after done:/;
 
 const pendingHas = async (requestId: string) =>
   JSON.stringify(await fleet.api<unknown[]>("/api/pending")).includes(
@@ -291,10 +365,13 @@ const transcriptHas = async (instanceId: string, words: string) =>
     await fleet.api<unknown>(`/api/instances/${instanceId}/transcript`)
   ).includes(words);
 
-/** Asks the session `marker`'s question and returns the push the hub sent for it. */
+/**
+ * Sends the session `marker`, which the mock answers with that marker's
+ * question or Write, and returns the push the hub sent for the parked ask.
+ */
 const askAndCapture = async (instanceId: string, marker: string) => {
   await fleet.send(instanceId, `${marker}: ask me.`);
-  const text = ASKS[marker].questions[0].question;
+  const text = WRITES[marker] ?? ASKS[marker].questions[0].question;
   const parked = await until(
     `${marker} parked`,
     () => fleet.api<{ requestId?: string }[]>("/api/pending"),
@@ -475,18 +552,33 @@ xcrun simctl install ${udid} "${app}"`);
           JSON.stringify(THREE),
       `aps.category ${push.payload.aps.category}; sealed options ${JSON.stringify(sealed.options)}`
     );
-    const pushStart = await macNow();
-    await deliver(push);
+    const extension = await deliver(push);
     const shown = (await listed()).find((n) => n.request === requestId);
-    const extension = await logSince(pushStart);
+    // The buttons are the extension's work: whether it ran at all decides
+    // whether a wrong category is the code's failure or the simulator's.
+    const extensionRan = EXTENSION_RAN.test(extension);
     check(
-      "the extension gives the push an action per option and Other…",
-      shown?.category.startsWith("CAWCO_QUESTION.") === true &&
-        JSON.stringify(shown.actions) === JSON.stringify([...THREE, "Other…"]),
-      shown
-        ? `category ${shown.category}, actions [${shown.actions.join(" | ")}], title "${shown.title}"; extension: ${extension.match(/question push answers inline: .*/)?.[0] ?? "no inline line"}`
-        : "the push is not in the notification centre"
+      "the extension runs for a simctl push",
+      extensionRan,
+      extensionRan
+        ? (extension.match(EXTENSION_RAN)?.[0] ?? "")
+        : "no `opened` / `not opened` line from NotificationService: this simulator did not hand the push to the extension"
     );
+    const step = "the extension gives the push an action per option and Other…";
+    const detail = shown
+      ? `category ${shown.category}, actions [${shown.actions.join(" | ")}], title "${shown.title}" (sealed "${sealed.title}"); extension: ${extension.match(/question push answers inline: .*/)?.[0] ?? "no inline line"}`
+      : "the push is not in the notification centre";
+    if (extensionRan) {
+      check(
+        step,
+        shown?.category.startsWith("CAWCO_QUESTION.") === true &&
+          JSON.stringify(shown.actions) ===
+            JSON.stringify([...THREE, "Other…"]),
+        detail
+      );
+    } else {
+      skip(step, `the extension never ran (above); ${detail}`);
+    }
     if (shown) {
       const ran = await act(shown.id, "ANSWER_1");
       const gone = await until(
@@ -615,6 +707,9 @@ xcrun simctl install ${udid} "${app}"`);
       ? `category ${attemptShown.category}, actions [${attemptShown.actions.join(" | ")}]`
       : "the push is not in the notification centre"
   );
+  // The turn the reply starts ends with the mock's "ok": that end is the
+  // top-level session's finished turn, pushed after the hub's look grace.
+  const turnsBefore = captured.length;
   if (attemptShown) {
     const reply = `probe reply ${tag}`;
     const ran = await act(attemptShown.id, "REPLY", reply);
@@ -631,9 +726,199 @@ xcrun simctl install ${udid} "${app}"`);
     );
   }
 
-  // ── 7. A question with four options is opened to be answered ───────────
+  // ── 7. A top-level session's finished turn pushes, with Reply ──────────
+  const turn = await until(
+    "the finished turn's push",
+    () =>
+      captured
+        .slice(turnsBefore)
+        .find(
+          (p) =>
+            p.payload.cawco.kind === "turn" && p.payload.cawco.instanceId === id
+        ),
+    (found) => found !== undefined,
+    60_000
+  ).catch(() => undefined);
+  const turnSealed = turn ? await opened(turn) : undefined;
+  check(
+    "a finished turn of a top-level session pushes CAWCO_TURN",
+    turn?.payload.aps.category === "CAWCO_TURN" &&
+      turn.payload.cawco.machineId === MACHINE &&
+      turnSealed?.body === "ok",
+    turn
+      ? `aps.category ${turn.payload.aps.category}, collapse ${turn.collapseId}, cawco ${JSON.stringify(turn.payload.cawco)}, sealed body "${turnSealed?.body}"`
+      : "no turn push for the session within 60 s of its turn's end"
+  );
+  if (turn) {
+    await deliver(turn);
+    const shown = (await listed()).find(
+      (n) => n.kind === "turn" && n.category === "CAWCO_TURN"
+    );
+    check(
+      "the turn push offers Open and Reply",
+      JSON.stringify(shown?.actions) === JSON.stringify(["Open", "Reply"]),
+      shown
+        ? `actions [${shown.actions.join(" | ")}]`
+        : "the push is not in the notification centre"
+    );
+    if (shown) {
+      const words = `probe turn reply ${tag}`;
+      const ran = await act(shown.id, "REPLY", words);
+      const arrived = await until(
+        "the turn reply in the transcript",
+        () => transcriptHas(id, words),
+        Boolean,
+        60_000
+      ).catch(() => false);
+      check(
+        "Reply on the turn push lands in the transcript",
+        arrived,
+        `${ran.match ? "action ran" : "no action line"}; transcript has "${words}" ${arrived}`
+      );
+    }
+  }
+
+  // ── 8. A delegate's finished turn pushes nothing ───────────────────────
   {
-    const { push } = await askAndCapture(id, `probe-four ${tag}`);
+    const origin = join(fleet.workdir, "..", "probe-origin.git");
+    await Bun.$`git -C ${fleet.workdir} init -q && git -C ${fleet.workdir} -c user.name=probe -c user.email=probe@localhost commit -q --allow-empty -m seed && git init -q --bare ${origin} && git -C ${fleet.workdir} remote add origin ${origin} && git -C ${fleet.workdir} push -q origin HEAD:main`.quiet();
+    const made = await fetch(`${fleet.base}/api/work-items`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        parentInstanceId: id,
+        title: "Probe delegate",
+        prompt: `Say ok. ${DELEGATE_MARK}`,
+        checks: [{ name: "Nothing to check here", command: "true" }],
+      }),
+    });
+    const madeText = await made.text();
+    const delegate = await until(
+      "the delegate's session",
+      () =>
+        fleet.query<{ id: string }>(
+          "SELECT id FROM instances WHERE parent_instance_id = ?",
+          id
+        )[0],
+      (row) => row !== undefined,
+      120_000
+    ).catch(() => undefined);
+    const answeredDelegate = await until(
+      "the delegate's turn",
+      () => fleet.seen.some((s) => s.tools && s.all.includes(DELEGATE_MARK)),
+      Boolean,
+      180_000
+    ).catch(() => false);
+    // Its turn's end, the hub's look grace, and the send to the stand-in.
+    await Bun.sleep(15_000);
+    const pushed = captured.filter(
+      (p) => delegate && p.payload.cawco.instanceId === delegate.id
+    );
+    if (delegate && answeredDelegate) {
+      check(
+        "a delegate's finished turn pushes nothing",
+        pushed.length === 0,
+        `delegate ${delegate.id}: ${pushed.length} pushes${pushed.length ? ` (${pushed.map((p) => p.payload.aps.category).join(", ")})` : ""}`
+      );
+    } else {
+      check(
+        "a delegate's finished turn pushes nothing",
+        false,
+        `no delegate turn to judge: POST /api/work-items ${made.status} ${madeText.slice(0, 200)}; session ${delegate?.id ?? "none"}; turn answered ${answeredDelegate}`
+      );
+    }
+  }
+
+  // ── 9. A permission: Deny, and Other… denying with the typed words ─────
+  const asker = await fleet.spawn(
+    "claude",
+    "Push permissions probe",
+    undefined,
+    { permissionMode: "default" }
+  );
+  {
+    const { requestId, push } = await askAndCapture(asker, `probe-deny ${tag}`);
+    await deliver(push);
+    const shown = (await listed()).find((n) => n.request === requestId);
+    check(
+      "a permission push offers Approve, Deny, Other…, Open",
+      push.payload.aps.category === "CAWCO_PERMISSION" &&
+        JSON.stringify(shown?.actions) ===
+          JSON.stringify(["Approve", "Deny", "Other…", "Open"]),
+      `aps.category ${push.payload.aps.category}; actions [${shown?.actions.join(" | ") ?? "not in the notification centre"}]`
+    );
+    if (shown) {
+      const ran = await act(shown.id, "DENY");
+      const gone = await until(
+        "the denied ask off /api/pending",
+        async () => !(await pendingHas(requestId)),
+        Boolean,
+        30_000
+      ).catch(() => false);
+      const heard = await until(
+        "the denial in the transcript",
+        () => transcriptHas(asker, "User denied permission"),
+        Boolean,
+        30_000
+      ).catch(() => false);
+      check(
+        "Deny resolves the ask and the session hears it",
+        gone && heard,
+        `${ran.match ? "action ran" : "no action line"}; pending cleared ${gone}; transcript has "User denied permission" ${heard}; ${ran.log.match(/deny \S+: \S+/)?.[0] ?? "no deny line"}`
+      );
+    }
+  }
+  {
+    const words = `Write it to notes-${tag}.md instead`;
+    const { requestId, push } = await askAndCapture(
+      asker,
+      `probe-deny-with ${tag}`
+    );
+    await deliver(push);
+    const shown = (await listed()).find((n) => n.request === requestId);
+    if (shown) {
+      const ran = await act(shown.id, "DENY_WITH", words);
+      const gone = await until(
+        "the redirected ask off /api/pending",
+        async () => !(await pendingHas(requestId)),
+        Boolean,
+        30_000
+      ).catch(() => false);
+      const heard = await until(
+        "the typed denial in the transcript",
+        () => transcriptHas(asker, words),
+        Boolean,
+        30_000
+      ).catch(() => false);
+      check(
+        "Other… denies with the typed words, and the transcript shows them",
+        gone && heard,
+        `${ran.match ? "action ran" : "no action line"}; pending cleared ${gone}; transcript has "${words}" ${heard}`
+      );
+    } else {
+      check(
+        "Other… denies with the typed words, and the transcript shows them",
+        false,
+        "the push is not in the notification centre"
+      );
+    }
+  }
+
+  // ── 10. A multi-select question is opened to be answered ───────────────
+  {
+    const { push } = await askAndCapture(asker, `probe-multi ${tag}`);
+    const sealed = await opened(push);
+    check(
+      "a multi-select question goes without options",
+      push.payload.aps.category === "CAWCO_QUESTION" &&
+        sealed.options === undefined,
+      `aps.category ${push.payload.aps.category}; sealed options ${JSON.stringify(sealed.options)}`
+    );
+  }
+
+  // ── 11. Four options: Open only; and a push that lands in front is kept ─
+  {
+    const { requestId, push } = await askAndCapture(id, `probe-four ${tag}`);
     const sealed = await opened(push);
     check(
       "a four-option question goes without options",
@@ -641,27 +926,31 @@ xcrun simctl install ${udid} "${app}"`);
         sealed.options === undefined,
       `aps.category ${push.payload.aps.category}; sealed options ${JSON.stringify(sealed.options)}`
     );
+    await deliver(push, true);
+    const shown = (await listed()).find((n) => n.request === requestId);
+    check(
+      "a push received with the app in front stays in Notification Centre",
+      shown !== undefined,
+      shown
+        ? `listed: ${shown.id} category ${shown.category}`
+        : "not among the delivered notifications after it showed in front"
+    );
   }
 
-  // ── 8. The hub stopped: Reply says it wasn't sent ──────────────────────
+  // ── 12. The hub stopped: Reply says it wasn't sent ─────────────────────
   if (attemptShown) {
     await fleet.stop("hub");
     const words = `probe offline ${tag}`;
     const ran = await act(attemptShown.id, "REPLY", words);
-    const posted = ran.log.match(
-      new RegExp(
-        `posted in place of ${attemptShown.id} \\(category (\\S*)\\): (.*)`
-      )
-    );
-    const body = posted?.[2] ?? "";
+    const notice = ran.after.find((n) => n.id === attemptShown.id);
     check(
       "with the hub stopped, Reply leaves a not-sent notification",
-      body.includes("reply not sent") &&
-        body.includes(words) &&
-        posted?.[1] === "CAWCO_ATTEMPT",
-      posted
-        ? `category ${posted[1]}: ${body}`
-        : `${ran.match ? "action ran" : "no action line"}; no local notification posted`
+      notice?.body.includes("reply not sent") === true &&
+        notice.body.includes(words) &&
+        notice.category === "CAWCO_ATTEMPT",
+      notice
+        ? `delivered ${notice.id}, category ${notice.category}: ${notice.body}`
+        : `${ran.match ? "action ran" : "no action line"}; nothing delivered in the push's place`
     );
   }
 } catch (error) {
