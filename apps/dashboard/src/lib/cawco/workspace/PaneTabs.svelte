@@ -1398,6 +1398,7 @@
       class="kit-pop kit-hang session-details-popover"
       collisionPadding={12}
       customAnchor={detailAnchor}
+      data-safe-bottom
       onCloseAutoFocus={(event) => {
         event.preventDefault();
         if (restoreFocus) {

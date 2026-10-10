@@ -76,7 +76,7 @@
   $effect(() => () => clearTimeout(savedTimer));
 </script>
 
-<footer class="footer" {@attach aboveKeyboard(() => body)}>
+<footer class="footer" data-safe-bottom {@attach aboveKeyboard(() => body)}>
   <div class="inner">
     {#if ondelete && deleteLabel}
       <Button

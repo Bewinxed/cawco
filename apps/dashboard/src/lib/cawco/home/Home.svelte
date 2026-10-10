@@ -199,7 +199,7 @@
   {#if variant === "page" && !noFleet && !machineless}
     <!-- The phone's thumb reaches the bottom; Start session lives there,
          while a machine is online to start one on. -->
-    <div class="dock">
+    <div class="dock" data-safe-bottom>
       <Button class="w-full" onclick={() => newSession()} size="lg">
         <IconPlus />
         Start session

@@ -50,6 +50,7 @@
       className
     )}
     data-placed={hosted ? undefined : ""}
+    data-safe-bottom
     data-slot="drawer-content"
     style={`${place}${style ?? ""}`}
     bind:ref

@@ -132,7 +132,7 @@
     onsubmit();
   }}
 >
-  <div class="scroll" bind:this={scroller}>
+  <div class="scroll" data-safe-bottom bind:this={scroller}>
     <div
       class="body"
       bind:this={body}

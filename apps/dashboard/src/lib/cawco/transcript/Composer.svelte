@@ -2405,6 +2405,7 @@
 <div
   class="dock"
   data-keeps-draft
+  data-safe-bottom
   bind:this={dockEl}
   style:--perch-rise={perch && perchHeight ? `${perchHeight}px` : null}
   class:asking={askRaised}

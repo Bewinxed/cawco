@@ -60,7 +60,7 @@
 
 <!-- More than the panel holds: the house edge fade at the foot while more
      is below, and at the head once scrolled. -->
-<div class="list kit-edge-fade-block" {@attach reflow()}>
+<div class="list kit-edge-fade-block" data-safe-bottom {@attach reflow()}>
   {#if needs.length > 0}
     <section aria-labelledby="caw-needs" class="section" data-flip="box">
       <div class="head">

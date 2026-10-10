@@ -1047,7 +1047,12 @@
          session route the composer owns its own bottom inset; everywhere else
          the scroll region pads the home-indicator safe area itself so the last
          row is never tucked under it. -->
-      <main class="content" id="main-content" class:safe={!onSession}>
+      <main
+        class="content"
+        data-safe-bottom
+        id="main-content"
+        class:safe={!onSession}
+      >
         <!-- The page is keyed on its route, so a navigation swaps one page for
            the next through their own transitions (motion/route.svelte.ts):
            both stand in this one grid cell while they overlap. Every

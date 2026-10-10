@@ -117,6 +117,7 @@
 </svelte:head>
 
 <Toaster
+  data-safe-bottom
   expand
   offset={toastOffset}
   position={narrowToasts.current ? "top-center" : "bottom-right"}

@@ -19,6 +19,17 @@
    all four by design. */
 @layer theme, base, components, utilities;
 
+/* The screen's bottom inset, on the boxes that stand on the screen's bottom
+   (data-safe-bottom), and nowhere else: not inherited, so the keyboard's
+   toggle (html[data-keyboard], base layer) restyles those boxes and not the
+   page. Set on the root and inherited, it restyled every element, 455ms on
+   Add account's 3,898. */
+@property --safe-bottom {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
 @custom-variant dark (&:where(.dark, .dark *));
 
 /* A hanging card's neck (.kit-hang), registered so a glide to another
@@ -260,14 +271,17 @@
   html {
     @apply antialiased font-sans;
     -webkit-tap-highlight-color: transparent;
-    /* The screen's bottom inset (the home indicator's room), which a
-       keyboard over the screen's bottom takes away (cawco/visible-viewport
-       sets data-keyboard): Brave's resized web view drops env() to 0 on its
-       own, Safari keeps it, and a foreseen keyboard stands before both.
-       What stands on the screen's bottom pads by this, not by env(). */
+  }
+  /* The screen's bottom inset (the home indicator's room), which a keyboard
+     over the screen's bottom takes away (cawco/visible-viewport sets
+     data-keyboard): Brave's resized web view drops env() to 0 on its own,
+     Safari keeps it, and a foreseen keyboard stands before both. A box that
+     stands on the screen's bottom carries data-safe-bottom and pads by
+     var(--safe-bottom), not by env() (@property --safe-bottom, above). */
+  [data-safe-bottom] {
     --safe-bottom: env(safe-area-inset-bottom);
   }
-  html[data-keyboard] {
+  html[data-keyboard] [data-safe-bottom] {
     --safe-bottom: 0px;
   }
 

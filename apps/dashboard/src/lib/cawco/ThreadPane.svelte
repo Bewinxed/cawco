@@ -659,7 +659,13 @@
     {#if view && !leadOn}
       <!-- No composer: nothing would read it. What is true, and the one
            thing that changes it. -->
-      <div class="off" bind:clientHeight={offHeight} in:crossIn out:crossOut>
+      <div
+        class="off"
+        data-safe-bottom
+        bind:clientHeight={offHeight}
+        in:crossIn
+        out:crossOut
+      >
         <Alert class="off-line" role="status">
           <AlertDescription>{offLine}</AlertDescription>
           {#if !view.on}
