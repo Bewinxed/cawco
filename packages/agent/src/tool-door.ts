@@ -11,7 +11,7 @@
  * it does over MCP. Anything else is answered 403. The executor names the
  * socket to every command (`CAWCO_TOOL_SOCKET`).
  */
-import { rm } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { workspaceReadOnlyDir } from "@cawco/core/paths";
 import { harnessMcpUrl } from "./delegation";
@@ -58,12 +58,17 @@ const forward = async (request: Request): Promise<Response> => {
 
 const open = new Map<string, ReturnType<typeof Bun.serve>>();
 
-/** Serves workspace `id`'s door, once per agent: a socket an earlier agent left is replaced. */
+/**
+ * Serves workspace `id`'s door, once per agent: a socket an earlier agent left
+ * is replaced. The read-only dir it lies in is made first, as a boundary's
+ * start makes it: a workspace whose boundary predates that dir has none yet.
+ */
 export const openToolDoor = async (id: string): Promise<string> => {
   const path = toolDoorOf(id);
   if (open.has(id)) {
     return path;
   }
+  await mkdir(workspaceReadOnlyDir(id), { recursive: true });
   await rm(path, { force: true });
   open.set(
     id,
