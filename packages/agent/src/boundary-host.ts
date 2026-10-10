@@ -30,9 +30,10 @@
  * reads its settings, because srt resolves its protected names against its
  * working directory.
  *
- * A plain Bun script, never a module of cawco: a binary install runs its
- * bundle (srt inside) on cawco's own runtime (`BUN_BE_BUN=1`), a checkout runs
- * it on bun.
+ * A plain Bun script, never a module of cawco, importing nothing of it but
+ * core's dependency-free dir names (`claude-dirs.ts`): a binary install runs
+ * its bundle (srt inside) on cawco's own runtime (`BUN_BE_BUN=1`), a checkout
+ * runs it on bun.
  */
 import {
   type FSWatcher,
@@ -55,6 +56,7 @@ import {
   SandboxManager,
   type SandboxRuntimeConfig,
 } from "@anthropic-ai/sandbox-runtime";
+import { projectClaudeRelative } from "@cawco/core/claude-dirs";
 import type { Subprocess } from "bun";
 
 const quote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`;
@@ -280,9 +282,36 @@ const standIn = (): void => {
 };
 
 /**
+ * Every clone-side deny path the guard covers, relative to the clone: what
+ * host git runs or reads (its config, hooks, submodules' git dirs) and the
+ * harness project config a host harness loads at the workspace's next
+ * session (Claude Code's project settings, hooks, commands and agents,
+ * OpenCode's config, `.mcp.json`). The guard covers these whatever DENIES
+ * names, and every path DENIES names besides (`cloneDenies` in
+ * workspace-policy.ts, the policy's list, which names the same).
+ */
+const PROTECTED = [
+  ".git/config",
+  ".git/hooks",
+  ".git/modules",
+  ...[
+    "settings.json",
+    "settings.local.json",
+    "hooks",
+    "commands",
+    "agents",
+  ].map((name) => projectClaudeRelative(name)),
+  "opencode.json",
+  "opencode.jsonc",
+  ".opencode",
+  ".mcp.json",
+];
+
+/**
  * What srt is to protect in the clone with read-only binds, each with the
- * inode it has as the sandbox is wrapped: every deny path the clone has as
- * a file or directory of its own, and the clone's directories above them,
+ * inode it has as the sandbox is wrapped: every {@link PROTECTED} path and
+ * DENIES path the clone has as a file or directory of its own, and the
+ * clone's directories above them,
  * which srt binds too so that what holds a deny path cannot be renamed. The
  * kernel drops such a bind in every other mount namespace when the host
  * renames or unlinks what it covers (a host-side `git config` locks, then
@@ -291,7 +320,11 @@ const standIn = (): void => {
  */
 const toProtect = (): Map<string, string> => {
   const found = new Map<string, string>();
-  for (const { path } of denies) {
+  const paths = new Set([
+    ...PROTECTED.map((name) => join(clone, name)),
+    ...denies.map(({ path }) => path),
+  ]);
+  for (const path of paths) {
     for (const each of [...above(path), path]) {
       const stat = lstatOf(each);
       if (stat && !stat.isSymbolicLink()) {
