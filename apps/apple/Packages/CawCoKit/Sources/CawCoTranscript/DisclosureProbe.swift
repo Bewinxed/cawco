@@ -61,6 +61,7 @@ final class DisclosureProbe {
             + " size=\(String(format: "%.2f", list.contentSize.height)) inset=\(String(format: "%.2f", list.contentInset.bottom))"
             + " belowLayout=\(y(model)) belowInRect=\(inRect.map { $0 ? "yes" : "no" } ?? "nil")"
             + " belowVisible=\(shown.map { $0 ? "yes" : "no" } ?? "nil")"
+            + " belowHidden=\(belowCell.map { $0.isHidden || $0.window == nil ? "yes" : "no" } ?? "nil")"
             + " height=\(String(format: "%.2f", list.bounds.height))"
         Self.log.notice("\(line, privacy: .public)")
     }

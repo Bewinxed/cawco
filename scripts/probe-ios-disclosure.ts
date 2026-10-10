@@ -68,7 +68,7 @@ const TURN_ASKED = /disclosure turn (\d)/;
 const TOOL_TURN = /seq (\d)01/;
 const BEGIN_LINE = /\bbegin \d+ (open|shut) /;
 const SAMPLE_LINE =
-  /\b(?:base|f) \d+ ms=(-?\d+) above=(\S+) top=(\S+) foot=(\S+) below=(\S+) offset=(\S+) size=\S+ inset=(\S+)(?: belowLayout=(\S+) belowInRect=(\S+) belowVisible=(\S+) height=(\S+))?/;
+  /\b(?:base|f) \d+ ms=(-?\d+) above=(\S+) top=(\S+) foot=(\S+) below=(\S+) offset=(\S+) size=\S+ inset=(\S+)(?: belowLayout=(\S+) belowInRect=(\S+) belowVisible=(\S+)(?: belowHidden=(\S+))? height=(\S+))?/;
 /** What a `--before` build's checks say: printed, not counted. */
 const sayBefore = (step: string, ok: boolean, detail: string) =>
   console.log(`  (before) ${ok ? "pass" : "FAIL"} ${step}: ${detail}`);
@@ -248,9 +248,14 @@ const drag = (x: number, fromY: number, toY: number) =>
 interface Sample {
   above: number | null;
   below: number | null;
-  /** The row below as the layout has it, and what the list does with it (printed, not checked). */
+  /** Whether the row below's cell is hidden or out of the window; null when not logged. */
+  belowHidden: boolean | null;
+  /** The row below as the layout has it (printed, not checked). */
   belowLayout: number | null;
+  /** In the layout's elements for the view / among the cells shown / hidden, as printed. */
   belowSeen: string;
+  /** Whether the row below's cell is among the cells the list shows; null when not logged. */
+  belowShown: boolean | null;
   foot: number | null;
   inset: number;
   ms: number;
@@ -291,9 +296,11 @@ async function trace(
         offset: Number(m[6]),
         inset: Number(m[7]),
         belowLayout: num(m[8]),
-        // In the layout's elements for the view / among the cells the list shows.
-        belowSeen: m[9] === undefined ? "  -" : `${m[9]}/${m[10]}`,
-        view: num(m[11]),
+        belowSeen:
+          m[9] === undefined ? "  -" : `${m[9]}/${m[10]}/${m[11] ?? "-"}`,
+        belowShown: m[10] === undefined ? null : m[10] === "yes",
+        belowHidden: m[11] === undefined ? null : m[11] === "yes",
+        view: num(m[12]),
       });
     }
   }
@@ -343,24 +350,41 @@ function footOf(t: Trace) {
   const [base] = s;
   const gap0 =
     base.below !== null && base.foot !== null ? base.below - base.foot : null;
+  // While the list shows the row below: once its row leaves the list's view
+  // the list stops showing its cell (`cells` no), and what that cell's frame
+  // says is no longer where the row stands. That cell is checked apart:
+  // it must not be drawn in the view (`unshown`).
   const gapDrift =
     gap0 === null
       ? null
       : Math.max(
           0,
           ...s
-            .filter((x) => x.below !== null && x.foot !== null)
+            .filter(
+              (x) =>
+                x.below !== null && x.foot !== null && x.belowShown !== false
+            )
             .map((x) =>
               Math.abs((x.below as number) - (x.foot as number) - gap0)
             )
         );
+  const gone = s.filter((x) => x.belowShown === false);
+  const drawn = gone.filter(
+    (x) =>
+      x.below !== null &&
+      x.view !== null &&
+      x.below < x.view &&
+      x.belowHidden !== true
+  );
   const first = s.find((x) => x.ms > 0 && x.foot !== null)?.foot ?? null;
   return {
     back,
+    drawn,
     end,
     final,
     first,
     gapDrift,
+    gone,
     moved: (feet[0] ?? 0) - final,
     overshoot,
     settle,
@@ -385,10 +409,11 @@ function judge(
   }
   const s = t.samples;
   console.log(`  ${name}: ${t.open ? "open" : "shut"}, ${s.length} samples`);
-  // below(layout): the row below as the layout has it; rect/cells: whether it
-  // is in the layout's elements for the view, and among the cells shown.
+  // below(layout): the row below as the layout has it; rect/cells/hidden:
+  // whether it is in the layout's elements for the view, among the cells
+  // shown, and whether its cell is hidden or out of the window.
   console.log(
-    "       ms   above     top    foot   below  offset   inset  below(layout) rect/cells    view"
+    "       ms   above     top    foot   below  offset   inset  below(layout) rect/cells/hidden    view"
   );
   for (const x of s) {
     console.log(
@@ -397,8 +422,18 @@ function judge(
   }
   const above = drift(s, "above");
   const top = drift(s, "top");
-  const { back, end, final, first, gapDrift, moved, overshoot, settle } =
-    footOf(t);
+  const {
+    back,
+    drawn,
+    end,
+    final,
+    first,
+    gapDrift,
+    gone,
+    moved,
+    overshoot,
+    settle,
+  } = footOf(t);
   say(
     `${name}: the row above stays`,
     above === null ? false : above <= 0.5,
@@ -426,8 +461,17 @@ function judge(
     gapDrift === null || gapDrift <= 0.5,
     gapDrift === null
       ? "no row below on screen"
-      : `its gap drifted ${gapDrift.toFixed(2)}pt`
+      : `its gap drifted ${gapDrift.toFixed(2)}pt while shown${gone.length > 0 ? `; left the view at ${gone[0].ms}ms` : ""}`
   );
+  if (gone.length > 0) {
+    say(
+      `${name}: the row below, once the list stops showing it, is not drawn in the view`,
+      drawn.length === 0,
+      drawn.length === 0
+        ? `${gone.length} samples unshown: each hidden, or past the view's foot`
+        : `${drawn.length} samples drawn at y ${drawn[0].below?.toFixed(1)} of a ${drawn[0].view?.toFixed(1)}pt view, not hidden (from ${drawn[0].ms}ms)`
+    );
+  }
   if (reduced) {
     say(
       `${name}: under Reduce Motion the end state is the first frame`,

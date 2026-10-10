@@ -1569,22 +1569,8 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             }
             collection.layoutIfNeeded()
             if let held = layout.hold, abs(collection.contentOffset.y - held) > 0.5 { collection.contentOffset.y = held }
-            standCells()
         }
         if moving.isEmpty { layout.hold = nil }
-    }
-
-    /// Every cell the list holds stands where the layout has its row. A row
-    /// a step pushes out of the list's view is left by the list's own pass
-    /// where it last stood (the probe's foot open: the row under a body
-    /// opening at the foot stood at 713pt while the foot went on to 897pt);
-    /// placed here, it goes off with the foot, on the same step.
-    private func standCells() {
-        for cell in collection.visibleCells {
-            guard let index = collection.indexPath(for: cell), let frame = layout.layoutAttributesForItem(at: index)?.frame,
-                  !cell.frame.equalTo(frame) else { continue }
-            cell.frame = frame
-        }
     }
 
     /// The layout takes `cell`'s height as it stands now, the way it takes a
