@@ -819,6 +819,8 @@
   );
   /** The last start failed: the footer shows no check. */
   const startFailed = $derived(error !== "");
+  /** The line under the chips says why Start can't go: it stays on step 2 too. */
+  const readingSaysWhy = $derived(cawco.hub !== "connected" || error !== "");
   const cantStart = $derived(
     firstMessage.uploading ||
       continueBlocked ||
@@ -1787,6 +1789,7 @@
           title={reading}
           class:informational={locationInformational}
           class:two={moveTo !== null}
+          class:why={readingSaysWhy}
           {@attach readingMorph}
         >
           {reading || "\u00a0"}
@@ -2078,11 +2081,12 @@
     display: contents;
   }
   /* Step 2: the chips that say where it runs, and what moving does. The rest
-     of the form is kept out of sight as it was, for Back. */
+     of the form is kept out of sight as it was, for Back; the line under the
+     chips stays when it says why Move it can't go (`why`), as on the phone app. */
   .stepped .prompt-head,
   .stepped .prompt-sec > .fai-comb,
   .stepped .prompt-body,
-  .stepped .reading,
+  .stepped .reading:not(.why),
   .stepped .comb-gap,
   .stepped .stack {
     display: none;

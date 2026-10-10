@@ -148,7 +148,8 @@ final class MoveWaitView: UIView {
         let asking = job.stage == .approval && job.askId != nil
         let failed = job.stage == .failed
         let waiting = Self.working.contains(job.stage) && !asking
-        placeCaw(wanted: graceOver && (waiting || failed), status: failed ? .needsYou : .loading)
+        placeCaw(wanted: graceOver && (waiting || failed), status: failed ? .needsYou : .loading,
+                 collapse: job.stage == .cancelled)
         let words = Words(job: job, source: names(job.sourceMachineId), target: names(job.targetMachineId))
         // Every step in order until the session starts; then the ready line alone.
         let steps = job.steps.filter { job.stage != .started || $0 == .start }
@@ -175,7 +176,9 @@ final class MoveWaitView: UIView {
     }
 
     /// Caw over the wait, once it is past its grace, and over a failure.
-    private func placeCaw(wanted: Bool, status: CawStatus) {
+    /// A stopped move has no Caw and no room for him (`collapse`): its
+    /// column starts at the same top whatever stage it stopped at.
+    private func placeCaw(wanted: Bool, status: CawStatus, collapse: Bool) {
         if wanted, caw == nil {
             let made = CawView(status: status)
             made.translatesAutoresizingMaskIntoConstraints = false
@@ -188,15 +191,22 @@ final class MoveWaitView: UIView {
             ])
             made.onGone = { [weak self, weak made] in
                 made?.removeFromSuperview()
-                if self?.caw === made { self?.caw = nil }
+                guard let self, caw === made else { return }
+                caw = nil
+                // His room goes with him.
+                cawSlot.isHidden = true
             }
             caw = made
+        }
+        if collapse, let caw {
+            caw.removeFromSuperview()
+            self.caw = nil
         }
         if let caw {
             if wanted, caw.status != status { caw.status = status }
             caw.present = wanted
         }
-        cawSlot.isHidden = !wanted && caw == nil
+        cawSlot.isHidden = collapse || (!wanted && caw == nil)
     }
 
     /// Cancel and Close are one control in one place: bordered, its edge on

@@ -391,7 +391,13 @@
 </script>
 
 <div class="wait" class:phone>
-  <div class="caw" class:empty={!cawThere}>
+  <!-- A stopped move has no Caw and no room for him: its column starts at
+       the same top whatever stage it stopped at, as on the phone app. -->
+  <div
+    class="caw"
+    class:empty={!cawThere}
+    class:gone={job.stage === "cancelled"}
+  >
     {#if cawThere}
       <Caw
         next={["loading", "needs-you"]}
@@ -586,6 +592,9 @@
   }
   .caw.empty {
     visibility: hidden;
+  }
+  .caw.gone {
+    display: none;
   }
   .column,
   .foot {
