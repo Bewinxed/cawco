@@ -22,9 +22,24 @@ final class NeedsCawButton: UIControl {
     static let head = 22.0
     /// His side in the wide bar's group: the group's height.
     static let side = 36.0
-    /// His own glass's side on a phone (`cBarCawGlassPhone`), centred on the
-    /// tabs' centre line, which leaves it clear of the transcript.
+    /// His own glass's side on a phone (`cBarCawGlassPhone`); in the session
+    /// row its foot stands `cBarPhoneGap` clear of the transcript (TopBarCluster).
     static let standingSide = Size.cBarCawGlassPhone
+
+    /// A phone's touch area for him, in his own space: a 44pt square
+    /// (`cBtnHLg`, Apple HIG Buttons: "a hit region of at least 44x44 pt")
+    /// flush with the screen's edge, as his glass is, and centred on his
+    /// glass's height, so a finger aimed at him lands in it on every side.
+    /// The drawn glass stays 32pt; VoiceOver's frame is this square too.
+    var touchBox: CGRect {
+        let side = Size.cBtnHLg
+        return CGRect(x: bounds.maxX - side, y: bounds.midY - side / 2, width: side, height: side)
+    }
+
+    override var accessibilityFrame: CGRect {
+        get { standing ? UIAccessibility.convertToScreenCoordinates(touchBox, in: self) : super.accessibilityFrame }
+        set { super.accessibilityFrame = newValue }
+    }
 
     var onTap: () -> Void = {}
     var onPan: (UIPanGestureRecognizer) -> Void = { _ in }

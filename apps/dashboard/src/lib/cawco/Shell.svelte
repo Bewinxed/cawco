@@ -1512,8 +1512,9 @@
     /* Caw's glass (`c-bar-caw-glass-phone`) is a tab tucked into the
        screen's trailing edge: square on that side, which meets the edge,
        and round on the other (owner: "it's top right doesn't need to be
-       rounded"). It is centred on the tabs' centre line as the toggle is,
-       which leaves it clear of the transcript under the row. His rim's arcs
+       rounded"). Its foot stands `c-bar-phone-gap` over the row's floor,
+       the transcript's top edge, the same gap that parts it from the tabs'
+       end (owner: "caw is still touching the transcript"). His rim's arcs
        follow its outline (NeedsCaw). */
     .right {
       align-self: stretch;
@@ -1523,10 +1524,8 @@
       block-size: var(--c-bar-caw-glass-phone);
       margin-block-start: calc(
         var(--c-top-bar-h) -
-        var(--c-tab-row-h) /
-        2 -
-        var(--c-bar-caw-glass-phone) /
-        2
+        var(--c-bar-phone-gap) -
+        var(--c-bar-caw-glass-phone)
       );
       padding: 0;
       border-radius: calc(var(--c-bar-caw-glass-phone) / 2) 0 0

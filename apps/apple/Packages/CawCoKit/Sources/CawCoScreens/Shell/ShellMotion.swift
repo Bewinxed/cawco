@@ -212,14 +212,48 @@ final class ShellNavigationMotion: NSObject, UINavigationControllerDelegate, UIG
 /// `durPanel` and out over `durExit`. A finger drags it back out the edge it
 /// came from (motion/drag.svelte.ts): past 30% or a flick past 0.3pt/ms it
 /// goes, else it springs back; dragged the other way it gives a little.
+/// A finger from the screen's left edge pulls it in the same way (`follow`):
+/// 1:1 with the finger, and let go past 30% or on a flick past 0.3pt/ms it
+/// opens, else it goes back, on the same spring the drag out settles on.
 /// Reduce Motion fades it in place over `durControl`.
 final class RailSheetTransition: NSObject, UIViewControllerTransitioningDelegate {
     static func width(in container: Double) -> Double {
         container >= 640 ? min(384, container * 0.75) : container * 0.75
     }
 
+    /// The edge swipe driving the presentation, while a finger has it.
+    private(set) var driver: UIPercentDrivenInteractiveTransition?
+
+    /// The next presentation follows the finger (`move`, `release`).
+    func follow() {
+        driver = UIPercentDrivenInteractiveTransition()
+    }
+
+    /// The finger has moved the sheet `dx` in from the edge, of `width`.
+    func move(_ dx: Double, width: Double) {
+        driver?.update(min(1, max(0, dx / max(1, width))))
+    }
+
+    /// Let go at `dx` and `speed` (pt/s): it opens past 30% or on a flick
+    /// in, unless flicked back out, and settles on a critically damped
+    /// spring carrying the finger's speed (RailSheetPresentation `dragged`).
+    func release(_ dx: Double, speed: Double, width: Double, ended: Bool) {
+        guard let driver else { return }
+        self.driver = nil
+        let open = ended && speed > -300 && (dx > width * 0.3 || speed > 300)
+        let done = Double(driver.percentComplete)
+        let left = (open ? 1 - done : done) * width
+        let velocity = left > 0.5 ? (open ? speed : -speed) / left : 0
+        driver.timingCurve = UISpringTimingParameters(dampingRatio: 1, initialVelocity: CGVector(dx: velocity, dy: 0))
+        if open { driver.finish() } else { driver.cancel() }
+    }
+
     func presentationController(forPresented presented: UIViewController, presenting: UIViewController?, source _: UIViewController) -> UIPresentationController? {
         RailSheetPresentation(presentedViewController: presented, presenting: presenting)
+    }
+
+    func interactionControllerForPresentation(using _: any UIViewControllerAnimatedTransitioning) -> (any UIViewControllerInteractiveTransitioning)? {
+        driver
     }
 
     func animationController(forPresented _: UIViewController, presenting _: UIViewController, source _: UIViewController) -> (any UIViewControllerAnimatedTransitioning)? {
@@ -258,7 +292,14 @@ final class RailSheetPresentation: UIPresentationController {
             view.boxShadow = Shadow.shadowDrawer
             view.addGestureRecognizer(UIPanGestureRecognizer(target: self, action: #selector(dragged(_:))))
         }
-        Motion.easeOut.animator(Motion.durPanel) { self.scrim.alpha = 1 }.startAnimation()
+        // Under a finger the scrim rides the sheet's own animator, so it
+        // follows the finger and goes back with the sheet if let go short.
+        if (presentedViewController.transitioningDelegate as? RailSheetTransition)?.driver != nil,
+           let coordinator = presentedViewController.transitionCoordinator {
+            coordinator.animate(alongsideTransition: { _ in self.scrim.alpha = 1 })
+        } else {
+            Motion.easeOut.animator(Motion.durPanel) { self.scrim.alpha = 1 }.startAnimation()
+        }
     }
 
     override func dismissalTransitionWillBegin() {
@@ -319,10 +360,25 @@ final class RailSheetAnimator: NSObject, UIViewControllerAnimatedTransitioning {
     }
 
     func animateTransition(using context: any UIViewControllerContextTransitioning) {
+        interruptibleAnimator(using: context).startAnimation()
+    }
+
+    /// One animator per transition: the edge swipe scrubs it (linearly, so
+    /// the sheet stays under the finger) and then sends it on.
+    private var running: UIViewPropertyAnimator?
+
+    func animationEnded(_: Bool) {
+        running = nil
+    }
+
+    func interruptibleAnimator(using context: any UIViewControllerContextTransitioning) -> any UIViewImplicitlyAnimating {
+        if let running { return running }
         let key: UITransitionContextViewKey = presenting ? .to : .from
         guard let sheet = context.view(forKey: key) else {
-            context.completeTransition(true)
-            return
+            let empty = UIViewPropertyAnimator(duration: 0, curve: .linear)
+            empty.addCompletion { _ in context.completeTransition(!context.transitionWasCancelled) }
+            running = empty
+            return empty
         }
         let still = UIAccessibility.isReduceMotionEnabled
         let away = CGAffineTransform(translationX: -sheet.bounds.width - 1, y: 0)
@@ -336,6 +392,7 @@ final class RailSheetAnimator: NSObject, UIViewControllerAnimatedTransitioning {
             if still { sheet.alpha = presenting ? 1 : 0 } else { sheet.transform = presenting ? .identity : away }
         }
         animator.addCompletion { _ in context.completeTransition(!context.transitionWasCancelled) }
-        animator.startAnimation()
+        running = animator
+        return animator
     }
 }

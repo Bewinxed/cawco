@@ -436,10 +436,13 @@ final class TopBarCluster: UIView {
     }
 
     /// A phone's Caw: his centre's height over the floor of the row he
-    /// stands in, on the line its sidebar toggle stands on. In the session
-    /// row, the tabs' centre line (the toggle is placed on it); on a bar
-    /// (`TopBar.pin`), the bar's middle, where its toggle item stands.
-    var cawLine = Size.cTabRowH / 2 {
+    /// stands in. In the session row his glass's foot stands `cBarPhoneGap`
+    /// over the row's floor, the transcript's top edge, the same gap that
+    /// parts him from the tabs' end (owner: "caw is still touching the
+    /// transcript"); his top is then the bar's 4pt margin under the row's
+    /// top. On a bar (`TopBar.pin`), the bar's middle, where its toggle item
+    /// stands.
+    var cawLine = Size.cBarPhoneGap + NeedsCawButton.standingSide / 2 {
         didSet { arrange() }
     }
 
@@ -512,8 +515,8 @@ final class TopBarCluster: UIView {
     private func arrange() {
         for view in stack.arrangedSubviews { stack.removeArrangedSubview(view); view.removeFromSuperview() }
         stack.addArrangedSubview(compact ? phoneCaw : group)
-        // A phone's Caw is centred on his row's toggle line (`cawLine`),
-        // which leaves his glass clear of what is under the row.
+        // A phone's Caw stands on his row's `cawLine`, which leaves his
+        // glass clear of what is under the row.
         stack.alignment = compact ? .bottom : .center
         stack.isLayoutMarginsRelativeArrangement = compact
         stack.directionalLayoutMargins = NSDirectionalEdgeInsets(
@@ -526,11 +529,15 @@ final class TopBarCluster: UIView {
     private var lastWidth = 0.0
     private var end: NSLayoutConstraint!
 
-    /// A phone's touch area for Caw: 44pt at the screen's edge, the bar's
-    /// whole height, so none of it falls off the screen or under the
-    /// transcript (DESIGN.md, The 44 Touch Rule).
+    /// A phone's touch area for Caw (`NeedsCawButton.touchBox`): 44pt square
+    /// at the screen's edge, centred on his glass, so none of it falls off
+    /// the screen or under the transcript (DESIGN.md, The 44 Touch Rule).
+    /// Taken from his centre, not his drawn box, so a press's scale never shrinks it.
     private var cawTouch: CGRect {
-        CGRect(x: bounds.maxX - 44, y: bounds.minY, width: 44, height: bounds.height)
+        guard let holder = phoneCaw.superview else { return .null }
+        let centre = holder.convert(phoneCaw.center, to: self)
+        let box = phoneCaw.touchBox
+        return box.offsetBy(dx: centre.x - phoneCaw.bounds.midX, dy: centre.y - phoneCaw.bounds.midY)
     }
 
     override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {

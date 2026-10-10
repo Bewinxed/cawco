@@ -1,6 +1,7 @@
 import CawCoCore
 import CawCoDesign
 import CawCoMascot
+import OSLog
 import UIKit
 
 /// The app chrome (Shell.svelte): the rail, the slim bar across the top, and
@@ -232,13 +233,64 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         needsDrawer.frame = view.bounds
         needsDrawer.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         view.addSubview(needsDrawer)
+        railEdge.edges = .left
+        // Only where the conversations' pages reach the screen's left edge,
+        // with nothing over them: a phone's, and an iPad's with the rail's
+        // column put away (beside it, the left edge is the rail's).
+        railEdgeGate.mayBegin = { [weak self] in
+            guard let self, presentedViewController == nil, !needsDrawer.open else { return false }
+            if compact { return compactNav.topViewController === workspaceController }
+            return traitCollection.userInterfaceIdiom == .pad && displayMode == .secondaryOnly && detail.shown === workspaceController
+        }
+        railEdgeGate.holder = { [weak self] in
+            guard let self, workspaceController.isViewLoaded else { return nil }
+            return workspaceController.view
+        }
+        railEdge.delegate = railEdgeGate
+        view.addGestureRecognizer(railEdge)
+    }
+
+    // MARK: Edge swipe
+
+    /// On a phone's conversations a finger from the screen's left edge pulls
+    /// the sidebar in, following it (`RailSheetTransition.follow`); the
+    /// pages' swipe between chats waits for it to fail, so an edge swipe
+    /// never moves to another chat (owner: "swipes from the leftmost of the
+    /// screen to open the sidebar not swipe to the other chat"). A swipe
+    /// that starts anywhere else is still the pages'. On an iPad with the
+    /// rail's column put away the same swipe brings the column back, as its
+    /// toggle does; the split view moves its columns itself, so it does not
+    /// follow the finger.
+    private lazy var railEdge = UIScreenEdgePanGestureRecognizer(target: self, action: #selector(railEdgePanned(_:)))
+    private let railEdgeGate = RailEdgeGate()
+
+    @objc private func railEdgePanned(_ pan: UIScreenEdgePanGestureRecognizer) {
+        let width = RailSheetTransition.width(in: view.bounds.width)
+        let dx = pan.translation(in: view).x
+        guard compact else {
+            if pan.state == .began { toggleRail() }
+            return
+        }
+        switch pan.state {
+        case .began:
+            // With less motion the sheet fades in at once rather than following the finger.
+            if !UIAccessibility.isReduceMotionEnabled { sheetTransition.follow() }
+            showRailSheet()
+        case .changed:
+            sheetTransition.move(dx, width: width)
+        case .ended, .cancelled, .failed:
+            sheetTransition.release(dx, speed: pan.velocity(in: view).x, width: width, ended: pan.state == .ended)
+        default:
+            break
+        }
     }
 
     /// The phone's session row (variant B), over the strip's ends: the bare
     /// toggle glyph's leading edge `cBarPhoneEdge` from the screen's, its
     /// centre on the tabs' centre line (they stand on the row's floor), in a
-    /// 44pt touch area reaching into the screen's edge; Caw's glass on the
-    /// same centre line, flush with the other edge (TopBarCluster).
+    /// 44pt touch area reaching into the screen's edge; Caw's glass flush
+    /// with the other edge, its foot `cBarPhoneGap` over the transcript
+    /// (TopBarCluster `cawLine`).
     private func placeSessionRow() {
         let row = workspaceController.barOverlay
         for part in [sessionBurger, sessionCluster] as [UIView] { row.addSubview(part) }
@@ -276,6 +328,43 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         openProbeSession()
+        if ProcessInfo.processInfo.arguments.contains("-shell-probe"), shellProbe == nil {
+            shellProbe = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated { self?.probeShell() }
+            }
+        }
+    }
+
+    private var shellProbe: Timer?
+
+    /// A simulator pass's `-shell-probe`: once a second, in the Probe log,
+    /// the tab in front, how many tabs its group has, whether the sidebar's
+    /// sheet is up, and on a phone's conversations Caw's glass and touch
+    /// frame (window points) against the top edge of the transcript's pages.
+    private func probeShell() {
+        let rail = railSheet.map { !$0.isBeingDismissed } ?? false
+        var line = "probe shell tab=\(currentId ?? "none") tabs=\(workspace.focused.tabs.count) rail=\(rail)"
+        let caw = sessionCluster.caw
+        if compact, compactNav.topViewController === workspaceController, let window = caw.window,
+           let pages = Self.firstPages(in: workspaceController.view) {
+            let glass = caw.convert(caw.bounds, to: window)
+            let top = pages.convert(pages.bounds, to: window).minY
+            let box = { (r: CGRect) in "\(r.minX),\(r.minY),\(r.width)x\(r.height)" }
+            line += " caw=\(box(glass)) hit=\(box(caw.accessibilityFrame))"
+            line += " transcriptTop=\(top) gap=\(top - glass.maxY) label=\(caw.accessibilityLabel ?? "")"
+        }
+        Logger(subsystem: "dev.cawco.app", category: "Probe").notice("\(line, privacy: .public)")
+    }
+
+    /// The focused group's pages: the transcripts' scroller.
+    private static func firstPages(in view: UIView) -> UIView? {
+        if let pages = view as? PagingScrollView, pages.traceName.hasPrefix("sessions:"), pages.window != nil, !pages.isHidden {
+            return pages
+        }
+        for child in view.subviews {
+            if let found = firstPages(in: child) { return found }
+        }
+        return nil
     }
     #endif
 
@@ -926,6 +1015,26 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         var values = selected?.restorationValues ?? [:]
         if case let .project(id) = destination { values["projectId"] = id }
         return values
+    }
+}
+
+/// The edge swipe's gate (ShellController `railEdge`): when it may begin,
+/// and which drags wait for it to fail.
+@MainActor
+private final class RailEdgeGate: NSObject, UIGestureRecognizerDelegate {
+    var mayBegin: @MainActor () -> Bool = { false }
+    /// The view whose drags wait for the edge swipe: the conversations, on a phone.
+    var holder: @MainActor () -> UIView? = { nil }
+
+    func gestureRecognizerShouldBegin(_: UIGestureRecognizer) -> Bool {
+        mayBegin()
+    }
+
+    /// Every drag inside the conversations (the pages' swipe between chats,
+    /// the strip's scroll, a tab's pull) waits for the edge swipe to fail.
+    func gestureRecognizer(_: UIGestureRecognizer, shouldBeRequiredToFailBy other: UIGestureRecognizer) -> Bool {
+        guard other is UIPanGestureRecognizer, let view = other.view, let holder = holder() else { return false }
+        return view.isDescendant(of: holder)
     }
 }
 

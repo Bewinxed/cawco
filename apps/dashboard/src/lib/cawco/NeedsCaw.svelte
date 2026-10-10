@@ -1102,22 +1102,17 @@
     touch-action: none;
     -webkit-tap-highlight-color: transparent;
   }
-  /* On a phone his box is his own glass's (Shell). His 44px touch area is
-     the bar's whole height at the screen's edge, so none of it falls off
-     the screen or under the transcript. */
+  /* On a phone his box is his own glass's (Shell). His touch area is a 44px
+     square (Apple HIG, Buttons: "a hit region of at least 44x44 pt") at the
+     screen's edge, centred on his glass, so none of it falls off the screen
+     or under the transcript. */
   @media (max-width: 899px) and (pointer: coarse) {
     .needs-caw .capsule::after {
       inset: auto;
       inset-inline-end: 0;
-      inset-block-start: calc(
-        var(--c-tab-row-h) /
-        2 +
-        var(--c-bar-caw-glass-phone) /
-        2 -
-        var(--c-top-bar-h)
-      );
+      inset-block-start: calc((var(--c-bar-caw-glass-phone) - 44px) / 2);
       inline-size: 44px;
-      block-size: var(--c-top-bar-h);
+      block-size: 44px;
     }
   }
   /* What waits, on his circle's rim: his circle's box round his item's
