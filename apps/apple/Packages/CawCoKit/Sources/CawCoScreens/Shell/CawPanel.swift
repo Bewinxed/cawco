@@ -23,7 +23,10 @@ import UIKit
 /// its top edge. On a phone his glass is a tab tucked into the screen's
 /// trailing edge and the panel is too: its trailing side is the screen's
 /// edge, square at top and foot with no edge drawn there, and its leading
-/// side keeps the phone's 12pt margin. While it hangs the glass takes its
+/// side keeps the phone's 12pt margin. His foot stands clear of the tab
+/// row's floor, and the panel hangs from that floor, covering no tab: the
+/// glass runs on down to it through a neck at its own width, which exists
+/// only while it hangs (`GlassCapsule.neck`). While it hangs the glass takes its
 /// material and edge (`GlassCapsule.setJoined`) and the lower half of his
 /// rim fades out (`NeedsCawButton.setJoined`). It grows out of the glass
 /// over `durPop` and folds back over `durExit` on `easeOut`; with less
@@ -196,8 +199,10 @@ final class CawPanel: UIView, UIGestureRecognizerDelegate {
 
     // MARK: Where it stands
 
-    /// On the glass's foot with no gap, flush with its trailing flank: on a
-    /// phone the screen's edge, its leading side `phoneMargin` in; on a wide
+    /// On the glass's foot with no gap, or on a phone past it by the glass's
+    /// neck, on the tab row's floor so it covers no tab; flush with the
+    /// glass's trailing flank: on a phone the screen's edge, its leading side
+    /// `phoneMargin` in; on a wide
     /// screen `wide` across, kept `edge` inside the screen. As tall as its
     /// rows, up to what the screen leaves under the glass or `tallest`, its
     /// list scrolling past that. The neck is the glass's span along its top
@@ -210,7 +215,8 @@ final class CawPanel: UIView, UIGestureRecognizerDelegate {
             ? min(Self.wide, cap.maxX - Self.phoneMargin)
             : min(Self.wide, cap.maxX - Self.edge)
         let x = cap.maxX - width
-        let top = cap.maxY
+        // On the glass's foot, or past it by its neck: on a phone, the tab row's floor.
+        let top = cap.maxY + glass.neck
         let room = host.bounds.height - host.safeAreaInsets.bottom - Self.edge - top
         let fit = list.systemLayoutSizeFitting(
             CGSize(width: width, height: UIView.layoutFittingCompressedSize.height),

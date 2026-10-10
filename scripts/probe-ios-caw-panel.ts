@@ -390,6 +390,10 @@ xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-e
     `  ${kind}: transcript row ${row ? `"${row.label}" ${row.value} at ${JSON.stringify(row.frame)}` : "not found"}`
   );
 
+  // At rest on a phone: his glass against the tabs and the floor.
+  if (kind === "phone") {
+    await restChecks(udid);
+  }
   // The screen before the panel opens: what stands where the glass will flare.
   const closed = await pixels(udid);
   await tap(udid, centre(head.frame));
@@ -508,56 +512,70 @@ function colourAt({ bmp, points }: Pixels, x: number, y: number): number[] {
 const apart = (a: number[], b: number[]) =>
   Math.max(...a.map((v, i) => Math.abs(v - b[i])));
 
-/**
- * The panel hangs from the glass as one shape (DESIGN.md, "Caw's panel"):
- * its top edge is the glass's foot with no gap, its trailing side runs
- * straight down from the glass's trailing flank, and the glass's leading
- * foot flares out into the panel's top edge in the panel's surface.
- */
 /** The phone's row as the shell drew it (`-shell-probe`'s line): Caw's glass, the first tab, the transcript's top. */
 const SHELL_LINE =
   /caw=(-?[\d.]+),(-?[\d.]+),(-?[\d.]+)x(-?[\d.]+) .*firstTab=(-?[\d.]+),(-?[\d.]+),(-?[\d.]+)x(-?[\d.]+) transcriptTop=(-?[\d.]+)/;
 
-/**
- * Caw's glass spans the tab row as the tabs do: its top where the tabs'
- * tops stand, its foot on the row's floor (the transcript's top), which
- * his panel hangs from (owner: "the spacing above the tabs isn't equal to
- * the spacing from caw to the top").
- */
-async function rowChecks() {
+/** The phone's row in the window's points: Caw's glass, the first tab, and the row's floor. */
+interface Row {
+  floor: number;
+  glassBottom: number;
+  glassTop: number;
+  tabBottom: number;
+  tabTop: number;
+}
+async function phoneRow(udid: string): Promise<Row | undefined> {
   const text = await mac(
-    `xcrun simctl spawn ${phoneUdid} log show --last 1m --style compact --predicate 'subsystem == "dev.cawco.app" AND category == "Probe"' | grep 'firstTab=' | tail -1`
+    `xcrun simctl spawn ${udid} log show --last 30s --style compact --predicate 'subsystem == "dev.cawco.app" AND category == "Probe"' | grep 'firstTab=' | tail -1`
   ).catch(() => "");
   const m = SHELL_LINE.exec(text);
   if (!m) {
-    check(
-      "phone: Caw's glass spans the tab row",
-      false,
-      "no '-shell-probe' line with Caw's glass and a tab"
-    );
     return;
   }
   const [, glassTop, , glassHeight, , tabTop, , tabHeight, floor] = m
     .slice(1)
     .map(Number);
-  const glassBottom = glassTop + glassHeight;
-  const tabBottom = tabTop + tabHeight;
-  const row = `glass top ${glassTop} bottom ${glassBottom}; tab top ${tabTop} bottom ${tabBottom}; tab row's floor (transcript top) ${floor}`;
-  console.log(`  phone row (pt): ${row}`);
+  const row = {
+    glassTop,
+    glassBottom: glassTop + glassHeight,
+    tabTop,
+    tabBottom: tabTop + tabHeight,
+    floor,
+  };
+  console.log(
+    `  phone row (pt): glass top ${row.glassTop} bottom ${row.glassBottom}; tab top ${row.tabTop} bottom ${row.tabBottom}; tab row's floor (transcript top) ${row.floor}`
+  );
+  return row;
+}
+
+/**
+ * At rest, Caw's glass top stands where the tabs' tops do (owner: "the
+ * spacing above the tabs isn't equal to the spacing from caw to the top")
+ * and its foot stays clear of the row's floor, the transcript's top (owner:
+ * "caw is still touching the transcript").
+ */
+async function restChecks(udid: string) {
+  const row = await phoneRow(udid);
   check(
-    "phone: Caw's glass top is the tabs' top, its foot the row's floor",
-    Math.abs(glassTop - tabTop) <= 0.5 && Math.abs(glassBottom - floor) <= 0.5,
+    "phone: at rest Caw's glass top is the tabs' top and his foot clears the floor",
+    row !== undefined &&
+      Math.abs(row.glassTop - row.tabTop) <= 0.5 &&
+      row.glassBottom < row.floor - 0.5,
     row
+      ? `glass top ${row.glassTop} vs tab top ${row.tabTop}; ${(row.floor - row.glassBottom).toFixed(2)}pt between his foot and the floor`
+      : "no '-shell-probe' line with Caw's glass and a tab"
   );
 }
-/** The phone simulator, for `rowChecks`. */
-let phoneUdid = "";
 
+/**
+ * The panel hangs from the glass as one shape (DESIGN.md, "Caw's panel"):
+ * on a phone from the tab row's floor, through the glass's neck, covering
+ * no tab; on a wide screen from the glass's foot with no gap. Its trailing
+ * side runs straight down from the glass's trailing flank, and the glass's
+ * leading foot flares out into the panel's top edge in the panel's surface.
+ */
 async function hangChecks(kind: Kind, udid: string, closed: Pixels) {
-  if (kind === "phone") {
-    phoneUdid = udid;
-    await rowChecks();
-  }
+  const row = kind === "phone" ? await phoneRow(udid) : undefined;
   const hung = await hanging(udid);
   if (!hung) {
     check(
@@ -569,19 +587,37 @@ async function hangChecks(kind: Kind, udid: string, closed: Pixels) {
   }
   const { glass, panel, flare } = hung;
   const foot = glass.y + glass.height;
-  check(
-    `${kind}: the panel hangs from the glass's foot, 0pt between`,
-    Math.abs(panel.y - foot) <= 0.5,
-    `glass foot y ${foot.toFixed(2)}, panel top y ${panel.y.toFixed(2)}`
-  );
+  if (kind === "phone") {
+    check(
+      "phone: the panel hangs from the tab row's floor",
+      row !== undefined && Math.abs(panel.y - row.floor) <= 0.5,
+      row
+        ? `floor y ${row.floor}, panel top y ${panel.y.toFixed(2)}, glass foot y ${foot.toFixed(2)} (the neck ${(panel.y - foot).toFixed(2)}pt)`
+        : "no '-shell-probe' line with the row's floor"
+    );
+    check(
+      "phone: no tab reaches into the open panel",
+      row !== undefined && row.tabBottom <= panel.y + 0.5,
+      row
+        ? `the tabs' foot y ${row.tabBottom}, panel top y ${panel.y.toFixed(2)}`
+        : "no '-shell-probe' line with a tab"
+    );
+  } else {
+    check(
+      `${kind}: the panel hangs from the glass's foot, 0pt between`,
+      Math.abs(panel.y - foot) <= 0.5,
+      `glass foot y ${foot.toFixed(2)}, panel top y ${panel.y.toFixed(2)}`
+    );
+  }
   check(
     `${kind}: its trailing side runs straight down from the glass's`,
     Math.abs(panel.x + panel.width - (glass.x + glass.width)) <= 0.5,
     `glass trailing x ${(glass.x + glass.width).toFixed(2)}, panel trailing x ${(panel.x + panel.width).toFixed(2)}`
   );
-  // Inside the flare: just left of the glass's leading flank, just above its foot.
+  // Inside the flare: just left of the glass's leading flank, just above
+  // where it meets the panel's top edge (past the neck on a phone).
   const open = await pixels(udid);
-  const inFlare = { x: glass.x - 3, y: foot - 2 };
+  const inFlare = { x: glass.x - 3, y: panel.y - 2 };
   const flareOpen = colourAt(open, inFlare.x, inFlare.y);
   const flareShut = colourAt(closed, inFlare.x, inFlare.y);
   const surface = colourAt(open, panel.x + 4, panel.y + 4);

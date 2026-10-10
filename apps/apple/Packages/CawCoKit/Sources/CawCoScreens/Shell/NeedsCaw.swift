@@ -22,22 +22,25 @@ final class NeedsCawButton: UIControl {
     static let head = 22.0
     /// His side in the wide bar's group: the group's height.
     static let side = 36.0
-    /// His own glass's side on a phone: the tab row's height (`cTabRowH`), so
-    /// it spans the row as the tabs do, its top where the tabs' tops stand and
-    /// its foot on the row's floor (TopBarCluster `cawLine`), and his panel
-    /// hangs from that floor over no tab (owner: "the spacing above the tabs
-    /// isn't equal to the spacing from caw to the top").
-    static let standingSide = Size.cTabRowH
+    /// His own glass's side on a phone (`cBarCawGlassPhone`). Its top stands
+    /// where the tabs' tops do (owner: "the spacing above the tabs isn't
+    /// equal to the spacing from caw to the top") and its foot `footRoom`
+    /// clear of the row's floor, the transcript's top edge (owner: "caw is
+    /// still touching the transcript"; TopBarCluster `cawLine`). His panel
+    /// hangs from that floor through a neck as tall as `footRoom`.
+    static let standingSide = Size.cBarCawGlassPhone
+    /// What the tab row is taller than his glass: the room under his foot.
+    static let footRoom = Size.cTabRowH - Size.cBarCawGlassPhone
 
     /// A phone's touch area for him, in his own space: a 44pt square
     /// (`cBtnHLg`, Apple HIG Buttons: "a hit region of at least 44x44 pt")
-    /// flush with the screen's edge, as his glass is, and standing on his
-    /// glass's foot, the row's floor: it reaches up past his glass to the
-    /// bar's top and never down into the transcript. The drawn glass stays
-    /// the row's height; VoiceOver's frame is this square too.
+    /// flush with the screen's edge, as his glass is, and standing on the
+    /// row's floor, `footRoom` under his glass's foot: it reaches up past his
+    /// glass to the bar's top and never down into the transcript. The drawn
+    /// glass stays 32pt; VoiceOver's frame is this square too.
     var touchBox: CGRect {
         let side = Size.cBtnHLg
-        return CGRect(x: bounds.maxX - side, y: bounds.maxY - side, width: side, height: side)
+        return CGRect(x: bounds.maxX - side, y: bounds.maxY + Self.footRoom - side, width: side, height: side)
     }
 
     override var accessibilityFrame: CGRect {
@@ -111,6 +114,8 @@ final class NeedsCawButton: UIControl {
         translatesAutoresizingMaskIntoConstraints = false
         if let capsule {
             capsule.squaredTrailing = true
+            // Joined, it runs on down past his foot to the row's floor, which his panel hangs from.
+            capsule.neck = Self.footRoom
             capsule.isUserInteractionEnabled = false
             addSubview(capsule)
             NSLayoutConstraint.activate([

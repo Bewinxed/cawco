@@ -26,6 +26,14 @@ public final class GlassCapsule: UIView {
     public var flare = Radius.radiusLg {
         didSet { setNeedsLayout() }
     }
+    /// How far below its foot a hanging card stands (Caw's glass on the
+    /// phone, its foot clear of the row's floor the panel hangs from): while
+    /// joined, the join runs straight on down that far at the glass's width,
+    /// in the card's surface, and flares out at the end. Zero where the card
+    /// stands on the foot itself.
+    public var neck = 0.0 {
+        didSet { setNeedsLayout() }
+    }
 
     public init() {
         if #available(iOS 26.0, macCatalyst 26.0, *) {
@@ -155,9 +163,10 @@ public final class GlassCapsule: UIView {
             glass.layer.cornerRadius = radius
             glass.layer.maskedCorners = corners
         }
-        // One flare wider than the glass on its leading side and reaching a
-        // point under its foot into the card's top edge (Shell.svelte `.join`).
-        join.frame = CGRect(x: -flare, y: 0, width: bounds.width + flare, height: bounds.height + 1)
+        // One flare wider than the glass on its leading side, down past its
+        // foot by the neck, and a point further into the card's top edge
+        // (Shell.svelte `.join`).
+        join.frame = CGRect(x: -flare, y: 0, width: bounds.width + flare, height: bounds.height + neck + 1)
         join.shape(flare: flare, top: radius, squaredTrailing: squaredTrailing)
         if squaredTrailing {
             // From the top of the trailing side, round the leading half
