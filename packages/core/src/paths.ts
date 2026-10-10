@@ -417,6 +417,9 @@ export const workspaceCacheEnv = (): Record<string, string> => {
   return {
     BUN_INSTALL_CACHE_DIR: join(cache, "bun"),
     npm_config_cache: join(cache, "npm"),
+    // node-gyp's headers: on macOS its default is `~/Library/Caches/node-gyp`,
+    // a host cache, whatever XDG_CACHE_HOME says.
+    npm_config_devdir: join(cache, "node-gyp"),
     XDG_CACHE_HOME: join(cache, "xdg"),
     UV_CACHE_DIR: join(cache, "uv"),
     PLAYWRIGHT_BROWSERS_PATH: hostPlaywrightBrowsers(),

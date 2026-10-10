@@ -9,7 +9,8 @@
  * - Reads: the whole home dir is denied, and back come the workspace's own
  *   trees (its clone, its state dir's read-only part and its scratch dir, the
  *   shared workspace cache, the
- *   objects dir its clone borrows), the toolchains on PATH, the user's git
+ *   objects dir its clone borrows), the toolchains on PATH and the Node
+ *   package trees their commands link into (`homeToolchains`), the user's git
  *   config, Playwright's browsers, the cawco binary, and the user layer of
  *   Claude Code (CLAUDE.md, memories, skills, plugins, agents, commands,
  *   rules, output styles, workflows, themes, plans). A Claude session also
@@ -23,9 +24,9 @@
  *   writing, even inside an allowed tree. On Linux so are the host's runtime
  *   dirs, with every daemon's socket, and the journal.
  */
-import { readFile } from "node:fs/promises";
+import { readdir, readFile, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { delimiter, isAbsolute, join, resolve } from "node:path";
+import { delimiter, dirname, isAbsolute, join, resolve } from "node:path";
 import { binaryRoot } from "./binary-installation";
 import type { WorkspaceRef } from "./harness";
 import {
@@ -168,11 +169,53 @@ const alternatesOf = async (clone: string): Promise<string[]> => {
   return found;
 };
 
-/** The toolchains on this process's PATH that live under the home dir, never the home dir itself. */
-const homeToolchains = (home: string): string[] =>
-  (process.env.PATH ?? "")
+const NODE_MODULES = "/node_modules";
+
+/**
+ * The toolchains on this process's PATH that live under the home dir, never
+ * the home dir itself, and the Node package trees their commands link into:
+ * a global npm or bun install puts each command in a PATH dir as a link into
+ * a `node_modules` tree elsewhere under home (`~/.bun/bin/node-gyp` to
+ * `~/node_modules/node-gyp/bin/node-gyp.js`), and the package needs its
+ * dependencies beside it. Seatbelt judges a link by where it lands, so
+ * without the tree the command is refused (EPERM) wherever it runs from, a
+ * native dependency's `node-gyp` among them. A tree in a git work tree is a
+ * clone's, never a toolchain.
+ */
+const homeToolchains = async (home: string): Promise<string[]> => {
+  const dirs = (process.env.PATH ?? "")
     .split(delimiter)
     .filter((entry) => entry.startsWith(`${home}/`));
+  const landings = await Promise.all(
+    dirs.map(async (dir) => {
+      const names = await readdir(dir).catch(() => []);
+      return Promise.all(
+        names.map((name) => realpath(join(dir, name)).catch(() => ""))
+      );
+    })
+  );
+  // The outermost `node_modules` a command lands in: its packages resolve
+  // their dependencies up to it.
+  const trees = unique(
+    landings.flat().flatMap((path) => {
+      const at = path.indexOf(`${NODE_MODULES}/`);
+      return path.startsWith(`${home}/`) && at >= 0
+        ? [path.slice(0, at + NODE_MODULES.length)]
+        : [];
+    })
+  );
+  const outsideClones = await Promise.all(
+    trees.map(async (tree) =>
+      (await stat(join(dirname(tree), ".git")).then(
+        () => true,
+        () => false
+      ))
+        ? []
+        : [tree]
+    )
+  );
+  return [...dirs, ...outsideClones.flat()];
+};
 
 /**
  * Linux: what the host keeps outside the home dir that no workspace reads.
@@ -223,7 +266,7 @@ export const workspacePolicy = async (
     workspaceScratchDir(workspace.id),
     ...caches,
     ...(await alternatesOf(workspace.path)),
-    ...homeToolchains(home),
+    ...(await homeToolchains(home)),
     join(home, ".gitconfig"),
     join(home, ".config", "git"),
     hostPlaywrightBrowsers(),
