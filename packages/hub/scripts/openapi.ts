@@ -796,6 +796,8 @@ const close = (slot: Slot): void => {
 interface Declared {
   enumSlot?: Slot;
   signature: string;
+  /** Where the property itself sits. */
+  slot: Slot;
 }
 /** A property's enum, itself or its array's items, as the slot holding it. */
 const enumSlotOf = (slot: Slot): Slot | undefined => {
@@ -843,24 +845,35 @@ const declared = (
     return;
   }
   for (const field of Object.keys(properties)) {
-    const enumSlot = enumSlotOf({ holder: properties, key: field });
+    const slot = { holder: properties, key: field };
+    const enumSlot = enumSlotOf(slot);
     const signature = enumSlot
       ? JSON.stringify(
           [...((resolved(enumSlot)?.enum as string[] | undefined) ?? [])].sort()
         )
-      : JSON.stringify(resolved({ holder: properties, key: field }) ?? null);
-    out.set(field, { signature, enumSlot });
+      : JSON.stringify(resolved(slot) ?? null);
+    out.set(field, { signature, enumSlot, slot });
   }
 };
-/** One undiscriminated union: closes the enums its branches are told apart by. */
-const closeDiscriminators = (branches: unknown[]): void => {
-  const holder = branches as unknown as Slot["holder"];
-  const fields = branches.map((_, index) => {
-    if (isStringEnum(resolved({ holder, key: index }))) {
-      close({ holder, key: index });
-    }
+/** A property's object, itself or its array's items, as the slot holding it. */
+const objectSlotOf = (slot: Slot): Slot | undefined => {
+  const property = resolved(slot);
+  if (property?.type === "array") {
+    const items = { holder: property as Slot["holder"], key: "items" };
+    return objectSlotOf(items);
+  }
+  return property && (property.properties || property.allOf) ? slot : undefined;
+};
+/**
+ * Branches (or the objects at one path in them) the generator tries in turn:
+ * a field they declare differently closes its enums, and objects there are
+ * compared the same way, so a branch that fails never reads a value as
+ * unknown that the branch that matches knows (a false update notice).
+ */
+const compareShapes = (shapes: Slot[], seen: Set<Schema>): void => {
+  const fields = shapes.map((shape) => {
     const out = new Map<string, Declared>();
-    declared({ holder, key: index }, new Set(), out);
+    declared(shape, new Set(), out);
     return out;
   });
   const names = new Set(fields.flatMap((one) => [...one.keys()]));
@@ -876,7 +889,37 @@ const closeDiscriminators = (branches: unknown[]): void => {
         close(enumSlot);
       }
     }
+    const nested = declarations
+      .map(({ slot }) => objectSlotOf(slot))
+      .filter((one): one is Slot => one !== undefined);
+    const fresh = nested.filter((one) => {
+      const schema = resolved(one);
+      return schema !== undefined && !seen.has(schema);
+    });
+    if (nested.length > 1 && fresh.length > 0) {
+      const next = new Set(seen);
+      for (const one of nested) {
+        const schema = resolved(one);
+        if (schema) {
+          next.add(schema);
+        }
+      }
+      compareShapes(nested, next);
+    }
   }
+};
+/** One undiscriminated union: closes the enums its branches are told apart by. */
+const closeDiscriminators = (branches: unknown[]): void => {
+  const holder = branches as unknown as Slot["holder"];
+  for (const index of branches.keys()) {
+    if (isStringEnum(resolved({ holder, key: index }))) {
+      close({ holder, key: index });
+    }
+  }
+  compareShapes(
+    [...branches.keys()].map((index) => ({ holder, key: index })),
+    new Set()
+  );
 };
 const findUnions = (value: unknown): void => {
   if (typeof value !== "object" || value === null) {
