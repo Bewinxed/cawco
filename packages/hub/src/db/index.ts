@@ -1282,9 +1282,9 @@ export interface DbShape {
    *
    * - listed → `running` (from `starting`, `unknown`, `sleeping` or `error`;
    *   a `stopped` or `discarded` row is a decision, not a guess, and stays).
-   * - not listed, currently `running` → the process is gone: `sleeping` when a
-   *   `sessionId` survives to resume from, `error` + {@link RESTART_LOST} when
-   *   nothing does.
+   * - not listed, currently `running` → the process is gone: `sleeping`, on
+   *   the `sessionId` it resumes from, or fresh under its id when it never
+   *   named one (core `relaunchOf`).
    * - not listed, currently `starting` → the same, but only after `graceMs`,
    *   because a spawn the hub issued moments ago has not necessarily reached
    *   the supervisor before the beat that was already in flight.
@@ -4130,14 +4130,12 @@ const make = async (path: string): Promise<DbShape> => {
         );
 
       // `updatedAt` deliberately absent: the hub concluding that a process
-      // vanished is not the session doing anything.
+      // vanished is not the session doing anything. One that never named a
+      // conversation comes back fresh under its id (core `relaunchOf`), as
+      // `settleInstances` files it: asleep, nothing lost.
       for (const row of gone) {
         db.update(instances)
-          .set(
-            row.sessionId
-              ? { status: "sleeping", lastError: null }
-              : { status: "error", lastError: RESTART_LOST }
-          )
+          .set({ status: "sleeping", lastError: null })
           .where(eq(instances.id, row.id))
           .run();
       }
@@ -4201,12 +4199,9 @@ const make = async (path: string): Promise<DbShape> => {
       if (!row || (row.status !== "starting" && row.status !== "unknown")) {
         return false;
       }
+      // Resumed on its conversation, or fresh when it never named one.
       db.update(instances)
-        .set(
-          row.sessionId
-            ? { status: "sleeping", lastError: null }
-            : { status: "error", lastError: RESTART_LOST }
-        )
+        .set({ status: "sleeping", lastError: null })
         .where(eq(instances.id, id))
         .run();
       return true;

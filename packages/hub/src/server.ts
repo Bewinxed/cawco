@@ -19066,9 +19066,9 @@ export const createServer = (
               for (const row of beat.settled) {
                 // Its parked questions cannot be answered by a process that is
                 // gone. What it was sent and never read goes to its next
-                // process when it has a conversation to come back on; with
-                // none, nothing can run it again.
-                losePending(row.id, row.sessionId !== null);
+                // process: on its conversation, or fresh when it never began
+                // one (core `relaunchOf`).
+                losePending(row.id, relaunchOf(row).kind !== "refused");
                 escalateRoutedAsks(row.id);
               }
               // A restored process up before it said a word (Claude's CLI
@@ -19418,7 +19418,10 @@ export const createServer = (
                 db.settleUnavailableRecovery(message.instanceId);
                 // A stored conversation stays resumable: what it was sent and
                 // never read goes to the process that next runs it.
-                losePending(message.instanceId, process.sessionId !== null);
+                losePending(
+                  message.instanceId,
+                  relaunchOf(process).kind !== "refused"
+                );
                 publishInstances(message.machineId);
                 break;
               }

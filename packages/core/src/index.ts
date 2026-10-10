@@ -692,8 +692,9 @@ export const AGENT_BUSY = "agentBusy";
  *
  * - `starting` — a spawn went out and hasn't been confirmed live yet.
  * - `running` — the owning daemon currently lists the instance.
- * - `sleeping` — no live process, but resumable: the harness has a session id
- *   to pick back up from. This is what a daemon restart or a quiet drop used
+ * - `sleeping` — no live process, but it runs again: on the session id its
+ *   harness picks back up from, or fresh under its id when it never named
+ *   one ({@link relaunchOf}). This is what a daemon restart or a quiet drop used
  *   to report as `error` with {@link RESTART_RESUMABLE} in `lastError`; that
  *   encoding conflated "gone but fine" with a real failure, so `sleeping` rows
  *   carry `lastError: null` — nothing went wrong, there's just nothing running.
