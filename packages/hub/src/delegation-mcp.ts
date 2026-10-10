@@ -107,8 +107,8 @@ export function createDelegationMcp(options: {
   instanceById: (id: string) => InstanceRow | undefined;
   /** The board and the machines, read in the hub's own process (delegation-actions.ts). */
   fleet: Fleet;
-  /** The session that runs in `id`'s place now (db `successorOf`). */
-  successorOf: (id: string) => string;
+  /** Every former id, by the id its session has now (db `formerIds`). */
+  formerIds: () => Record<string, string>;
   /** Whether `leadId` leads the project of the work item `instanceId` runs (work-items.ts `ledBy`). */
   ledBy?: (instanceId: string, leadId: string) => boolean;
   forward: (envelope: Envelope, actor: InstanceRow) => Promise<void>;
@@ -188,7 +188,7 @@ export function createDelegationMcp(options: {
           const definitions = module.handoffTools({
             instanceId: "",
             instanceById: options.instanceById,
-            successorOf: options.successorOf,
+            formerIds: options.formerIds,
             fleet: options.fleet,
             cwd: "",
             emit: () => {
@@ -237,7 +237,7 @@ export function createDelegationMcp(options: {
       ...tools({
         instanceId: "",
         instanceById: options.instanceById,
-        successorOf: options.successorOf,
+        formerIds: options.formerIds,
         fleet: options.fleet,
         cwd: "",
         canDelegate: actor?.canDelegate ?? undefined,
@@ -422,7 +422,7 @@ export function createDelegationMcp(options: {
       const entry = tools({
         instanceId: "",
         instanceById: options.instanceById,
-        successorOf: options.successorOf,
+        formerIds: options.formerIds,
         fleet: options.fleet,
         cwd: "",
         projectId,
@@ -583,7 +583,7 @@ export function createDelegationMcp(options: {
     const entry = tools({
       instanceId: actor.id,
       instanceById: options.instanceById,
-      successorOf: options.successorOf,
+      formerIds: options.formerIds,
       fleet: options.fleet,
       authorization,
       cwd: actor.cwd,
@@ -725,7 +725,7 @@ export function createDelegationMcp(options: {
         instructions: handoffInstructions({
           instanceId: binding ?? "",
           instanceById: options.instanceById,
-          successorOf: options.successorOf,
+          formerIds: options.formerIds,
           fleet: options.fleet,
           cwd: bound?.cwd ?? "",
           harness: bound?.harness as "claude" | "opencode" | "pi" | undefined,

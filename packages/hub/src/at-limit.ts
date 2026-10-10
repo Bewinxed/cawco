@@ -228,12 +228,13 @@ export interface AtLimitPorts {
   accountOf: (row: LimitRow) => string | undefined;
   changed: () => void;
   /**
-   * Continues `row` on `accountId` from a summary, the new session taking
-   * its place once `row` has ended: `kept` when it still covers the
-   * conversation as it stands, otherwise one written there and kept for
-   * `row` until `keepUntil`, so a retry reads it again rather than writing
-   * another. Throws when `row` cannot be read to start one; a later step
-   * that fails comes back as {@link createAtLimit}'s `continuationFailed`.
+   * Continues `row` on `accountId` from a summary: the same session goes on
+   * there in a fresh conversation seeded with it. `kept` when it still
+   * covers the conversation as it stands, otherwise one written there and
+   * kept for `row` until `keepUntil`, so a retry reads it again rather than
+   * writing another. Throws when `row` cannot be read to start one; a later
+   * step that fails comes back as {@link createAtLimit}'s
+   * `continuationFailed`.
    */
   continueOn: (
     row: LimitRow,
@@ -261,10 +262,8 @@ export interface AtLimitPorts {
     accountId: string,
     carryOn: boolean
   ) => Promise<string | undefined>;
-  /** The session's machine and title, as a line names them. */
-  named: (row: LimitRow) => { machine: string; session: string };
-  /** Writes one line into `row`'s transcript. */
-  note: (row: LimitRow, move: AccountMove) => void;
+  /** Writes one line into `row`'s transcript; under `id`, the line already written there is what it says now. */
+  note: (row: LimitRow, move: AccountMove, id?: string) => void;
   /** What adding an account set moving, for the Accounts page. */
   noticed: (notice: RebalanceNotice) => void;
   /** Has `row` carry on where its limit stopped it, on the account it is on. */
@@ -284,6 +283,8 @@ export interface AtLimitPorts {
   ) => Promise<Summarised | undefined>;
   /** Who would carry `row` off `accountId`: placement for its kind, excluding that account. */
   target: (row: LimitRow, accountId: string) => string | null;
+  /** Takes the line `id` out of `row`'s transcript. */
+  unnote: (row: LimitRow, id: string) => void;
   /** Whether `row`'s prompt cache is still warm: a move off its account then re-reads it. */
   warm: (row: LimitRow) => boolean;
 }
@@ -292,15 +293,9 @@ export interface AtLimitPorts {
 const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
-/**
- * A session past caring: its process will not be woken by anything the hub
- * does here. One another took the place of is never acted on again: a
- * session is continued once, ever.
- */
+/** A session past caring: its process will not be woken by anything the hub does here. */
 const over = (row: LimitRow | undefined): boolean =>
-  !row ||
-  ["stopped", "discarded", "error"].includes(row.status) ||
-  row.continuedInto !== null;
+  !row || ["stopped", "discarded", "error"].includes(row.status);
 
 /** The carry-on the hub sends at a reset: a turn the limit itself resumed. */
 const CARRY_ON_ORIGIN = "limit";
@@ -449,33 +444,41 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     now + db.accounts.routing(current.provider).atLimit.waitMinutes * MINUTE_MS;
 
   /**
-   * Continuing `row` on `target` failed at `step`: it is the one session
-   * running, still on `current`. Its transcript says so (once for the same
-   * failure, however often a retry meets it again), and it is held until
-   * its reset, each look deciding again whether to wait or try once more.
+   * Continuing `row` on `target` failed at `step`: it goes on in its
+   * conversation, still on `current`. Its transcript says so (once for the
+   * same failure, however often a retry meets it again; in place of the
+   * continuation's own "Summarising…" line, `line`, when it wrote one), and
+   * it is held until its reset, each look deciding again whether to wait or
+   * try once more.
    */
   const unmoved = (
     row: LimitRow,
     current: Account,
     target: Account,
     step: ContinueStep,
-    reason: string
+    reason: string,
+    line?: string
   ): void => {
-    const last = db.atLimit.events([row.id]).at(-1)?.move;
+    const events = db.atLimit.events([row.id]);
+    const last = events.filter((event) => event.id !== line).at(-1)?.move;
     const repeated =
       last?.kind === "unmoved" &&
       last.step === step &&
       last.reason === reason &&
-      last.to.id === target.id;
+      last.to?.id === target.id;
+    const move: AccountMove = {
+      kind: "unmoved",
+      from: namedAccount(current),
+      to: namedAccount(target),
+      step,
+      reason,
+    };
     if (!repeated) {
-      ports.note(row, {
-        kind: "unmoved",
-        from: namedAccount(current),
-        to: namedAccount(target),
-        step,
-        reason,
-        ...ports.named(row),
-      });
+      ports.note(row, move, line);
+    } else if (line && events.some((event) => event.id === line)) {
+      // The same failure again: its "Summarising…" line goes, the first
+      // telling of it stands.
+      ports.unnote(row, line);
     }
     db.atLimit.putHold({
       instanceId: row.id,
@@ -814,12 +817,6 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       console.info(
         `[at-limit] ${instanceId}: turn refused at ${accountName(current)}'s limit`
       );
-      if (row.continuedInto !== null) {
-        console.info(
-          `[at-limit] ${instanceId}: it was continued as ${row.continuedInto} already; it is never continued again`
-        );
-        return;
-      }
       const origin = ports.startedBy(row);
       if (origin?.kind === "system" && noticeTurn(origin)) {
         console.info(
@@ -841,7 +838,8 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     },
     /**
      * A continuation of `instanceId` from `fromAccountId` to `toAccountId`
-     * failed at `step`; nothing of it is left running but `instanceId`.
+     * failed at `step`: it goes on in the conversation it has. `line`: the
+     * continuation's "Summarising…" line, which says how it ended.
      */
     continuationFailed(
       instanceId: string,
@@ -850,13 +848,21 @@ export const createAtLimit = (ports: AtLimitPorts) => {
         toAccountId: string;
         step: ContinueStep;
         reason: string;
+        line: string;
       }
     ): void {
       const row = rowOf(instanceId);
       const current = db.accounts.get(failure.fromAccountId);
       const target = db.accounts.get(failure.toAccountId);
       if (row && current && target) {
-        unmoved(row, current, target, failure.step, failure.reason);
+        unmoved(
+          row,
+          current,
+          target,
+          failure.step,
+          failure.reason,
+          failure.line
+        );
       }
     },
     /** Looks at every hold and kept summary now, then rebalances every provider on every machine. */

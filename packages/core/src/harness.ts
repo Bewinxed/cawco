@@ -165,6 +165,13 @@ export const SESSION_DIR_READ = "session_dir";
 export const ACCOUNT_MOVE = "account_move";
 
 /**
+ * The `system` origin name of the message a session goes on from in a fresh
+ * conversation of its own: the summary of the one before, the artifact index
+ * and its last turns. Its row folds under the `continued` line before it.
+ */
+export const CONTINUATION_ORIGIN = "continuation";
+
+/**
  * The hub's line in a session's transcript where it started again fresh
  * under its id ({@link import("./index").relaunchOf}): its first start never
  * began, so it had no conversation to resume. Drawn as a note titled

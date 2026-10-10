@@ -7479,6 +7479,9 @@
                   "note": {
                     "type": "string"
                   },
+                  "inPlace": {
+                    "type": "boolean"
+                  },
                   "images": {
                     "type": "array",
                     "items": {
@@ -15782,12 +15785,6 @@
                   "string"
                 ]
               },
-              "continuedInto": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
               "parentInstanceId": {
                 "type": [
                   "null",
@@ -15889,7 +15886,6 @@
             "required": [
               "accountId",
               "canDelegate",
-              "continuedInto",
               "createdAt",
               "cwd",
               "delegateType",
@@ -16080,12 +16076,6 @@
                     "string"
                   ]
                 },
-                "continuedInto": {
-                  "type": [
-                    "null",
-                    "string"
-                  ]
-                },
                 "parentInstanceId": {
                   "type": [
                     "null",
@@ -16190,7 +16180,6 @@
               "required": [
                 "accountId",
                 "canDelegate",
-                "continuedInto",
                 "createdAt",
                 "cwd",
                 "delegateType",
@@ -26234,7 +26223,7 @@
         ]
       },
       "ContinuationJob": {
-        "description": "A \"continue in new session\" the hub is carrying, as every dashboard follows\nit: summarise the source, then start the target seeded with the summary.\nThe hub owns it from the POST that starts it to its end; only a Cancel\n(`DELETE /api/continuations/:id`) stops it.",
+        "description": "A continuation from a summary the hub is carrying, as every dashboard\nfollows it: summarise the source, then start a conversation seeded with the\nsummary. The hub owns it from the POST that starts it to its end; only a\nCancel (`DELETE /api/continuations/:id`) stops it.",
         "type": "object",
         "properties": {
           "error": {
@@ -26243,8 +26232,8 @@
           "id": {
             "type": "string"
           },
-          "inherits": {
-            "description": "The new session takes the source's place: its parent, work item, thread\nand tab. Set when the hub continued a session whose account reached its\nlimit on another account.",
+          "inPlace": {
+            "description": "The session goes on itself, in a fresh conversation (its account at its\nlimit, or it asked with `continue_session`): `targetInstanceId` is\n`sourceInstanceId`, one session throughout. Absent: \"Continue in new\nsession\", whose target is a new session and whose source is only read.",
             "const": true,
             "type": "boolean"
           },
@@ -26252,10 +26241,9 @@
             "type": "string"
           },
           "stage": {
-            "description": "`ending`: a continuation at an account's limit whose new session runs,\nwaiting for its source to be ended before it takes the source's place.",
+            "description": "`starting`: the new conversation (in place) or new session is starting.",
             "enum": [
               "cancelled",
-              "ending",
               "failed",
               "started",
               "starting",
@@ -27317,6 +27305,37 @@
                 "type": "object",
                 "properties": {
                   "kind": {
+                    "description": "The session's summary is being written, on `to` (null: a harness\nwithout accounts), for it to go on from in a fresh conversation:\nthe line it is until that conversation starts, when it becomes the\n`continued` line under the same id, or `unmoved` if it failed.",
+                    "type": "string",
+                    "enum": [
+                      "continuing"
+                    ]
+                  },
+                  "to": {
+                    "$ref": "#/components/schemas/NamedAccount"
+                  },
+                  "asked": {
+                    "description": "The session asked for it (`continue_session`), not its account's limit.",
+                    "const": true,
+                    "type": "boolean"
+                  },
+                  "tokens": {
+                    "type": [
+                      "null",
+                      "number"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind",
+                  "tokens"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "description": "The session went on in a fresh conversation of its own, seeded with a\nsummary of the one before: the same session, its account changed\n(`from` to `to`; null on a harness without accounts).",
                     "type": "string",
                     "enum": [
                       "continued"
@@ -27329,8 +27348,13 @@
                     "$ref": "#/components/schemas/NamedAccount"
                   },
                   "writtenOn": {
-                    "$ref": "#/components/schemas/NamedAccount",
-                    "description": "The account whose summariser wrote the summary it went on from."
+                    "description": "The account whose summariser wrote the summary it went on from.",
+                    "$ref": "#/components/schemas/NamedAccount"
+                  },
+                  "asked": {
+                    "description": "The session asked for it (`continue_session`), not its account's limit.",
+                    "const": true,
+                    "type": "boolean"
                   },
                   "tokens": {
                     "type": [
@@ -27347,12 +27371,9 @@
                   }
                 },
                 "required": [
-                  "from",
                   "kind",
                   "preparedAtPct",
-                  "to",
-                  "tokens",
-                  "writtenOn"
+                  "tokens"
                 ]
               },
               {
@@ -27386,7 +27407,7 @@
                 "type": "object",
                 "properties": {
                   "kind": {
-                    "description": "Continuing it on `to` failed at `step`: it is the one session running, still on `from`.",
+                    "description": "Continuing it on `to` failed at `step`: it goes on in its conversation, still on `from`.",
                     "type": "string",
                     "enum": [
                       "unmoved"
@@ -27398,16 +27419,13 @@
                   "to": {
                     "$ref": "#/components/schemas/NamedAccount"
                   },
+                  "asked": {
+                    "description": "The session asked for it (`continue_session`), not its account's limit.",
+                    "const": true,
+                    "type": "boolean"
+                  },
                   "step": {
                     "$ref": "#/components/schemas/ContinueStep"
-                  },
-                  "machine": {
-                    "description": "The session's machine, as the fleet names it.",
-                    "type": "string"
-                  },
-                  "session": {
-                    "description": "The session, as its title names it.",
-                    "type": "string"
                   },
                   "reason": {
                     "description": "What the hub got from the step that failed.",
@@ -27415,13 +27433,9 @@
                   }
                 },
                 "required": [
-                  "from",
                   "kind",
-                  "machine",
                   "reason",
-                  "session",
-                  "step",
-                  "to"
+                  "step"
                 ]
               }
             ]
@@ -27477,6 +27491,11 @@
               "success"
             ],
             "type": "string"
+          },
+          "continuation": {
+            "description": "A send that is the message a session went on from in a fresh\nconversation (origin {@link import (\"./harness\").CONTINUATION_ORIGIN}):\ndrawn folded under the `continued` line before it, never as a turn.",
+            "const": true,
+            "type": "boolean"
           },
           "cwd": {
             "type": "string"
@@ -27761,9 +27780,8 @@
         "type": "string"
       },
       "ContinueStep": {
-        "description": "The steps of continuing a session on another account, in order: read its\ntranscript, summarise it, start its successor, end it. Only after the last\ndoes the successor take its place.",
+        "description": "The steps of continuing a session from a summary, in order: read its\ntranscript, summarise it, start its fresh conversation. Until the last\none is done it goes on in the conversation it has.",
         "enum": [
-          "end",
           "prepare",
           "start",
           "summary"
@@ -32537,6 +32555,37 @@
                 "type": "object",
                 "properties": {
                   "kind": {
+                    "description": "The session's summary is being written, on `to` (null: a harness\nwithout accounts), for it to go on from in a fresh conversation:\nthe line it is until that conversation starts, when it becomes the\n`continued` line under the same id, or `unmoved` if it failed.",
+                    "type": "string",
+                    "enum": [
+                      "continuing"
+                    ]
+                  },
+                  "to": {
+                    "$ref": "#/components/schemas/NamedAccount"
+                  },
+                  "asked": {
+                    "description": "The session asked for it (`continue_session`), not its account's limit.",
+                    "const": true,
+                    "type": "boolean"
+                  },
+                  "tokens": {
+                    "type": [
+                      "null",
+                      "number"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind",
+                  "tokens"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "description": "The session went on in a fresh conversation of its own, seeded with a\nsummary of the one before: the same session, its account changed\n(`from` to `to`; null on a harness without accounts).",
                     "type": "string",
                     "enum": [
                       "continued"
@@ -32549,8 +32598,13 @@
                     "$ref": "#/components/schemas/NamedAccount"
                   },
                   "writtenOn": {
-                    "$ref": "#/components/schemas/NamedAccount",
-                    "description": "The account whose summariser wrote the summary it went on from."
+                    "description": "The account whose summariser wrote the summary it went on from.",
+                    "$ref": "#/components/schemas/NamedAccount"
+                  },
+                  "asked": {
+                    "description": "The session asked for it (`continue_session`), not its account's limit.",
+                    "const": true,
+                    "type": "boolean"
                   },
                   "tokens": {
                     "type": [
@@ -32567,12 +32621,9 @@
                   }
                 },
                 "required": [
-                  "from",
                   "kind",
                   "preparedAtPct",
-                  "to",
-                  "tokens",
-                  "writtenOn"
+                  "tokens"
                 ]
               },
               {
@@ -32606,7 +32657,7 @@
                 "type": "object",
                 "properties": {
                   "kind": {
-                    "description": "Continuing it on `to` failed at `step`: it is the one session running, still on `from`.",
+                    "description": "Continuing it on `to` failed at `step`: it goes on in its conversation, still on `from`.",
                     "type": "string",
                     "enum": [
                       "unmoved"
@@ -32618,16 +32669,13 @@
                   "to": {
                     "$ref": "#/components/schemas/NamedAccount"
                   },
+                  "asked": {
+                    "description": "The session asked for it (`continue_session`), not its account's limit.",
+                    "const": true,
+                    "type": "boolean"
+                  },
                   "step": {
                     "$ref": "#/components/schemas/ContinueStep"
-                  },
-                  "machine": {
-                    "description": "The session's machine, as the fleet names it.",
-                    "type": "string"
-                  },
-                  "session": {
-                    "description": "The session, as its title names it.",
-                    "type": "string"
                   },
                   "reason": {
                     "description": "What the hub got from the step that failed.",
@@ -32635,13 +32683,9 @@
                   }
                 },
                 "required": [
-                  "from",
                   "kind",
-                  "machine",
                   "reason",
-                  "session",
-                  "step",
-                  "to"
+                  "step"
                 ]
               }
             ]
@@ -33353,6 +33397,10 @@
               "$ref": "#/components/schemas/ContinuationJob"
             }
           },
+          "formerIds": {
+            "type": "object",
+            "description": "The ids sessions had before the hub folded each one's continuations at\nits account's limit into it (migration 0128): former id → its id now. A\ntab or link that names a former id is that session."
+          },
           "handoffs": {
             "type": "object"
           },
@@ -33402,6 +33450,7 @@
         "required": [
           "agents",
           "continuations",
+          "formerIds",
           "handoffs",
           "hubBuild",
           "instances",
@@ -33447,13 +33496,6 @@
             "type": [
               "null",
               "boolean"
-            ]
-          },
-          "continuedInto": {
-            "description": "The session that took this one's place when it was continued on another\naccount at its limit. Set: this one never runs again, every listing\nleaves it out, and whatever names it reaches the session at the end of\nthe chain. Null on every session nothing took the place of.",
-            "type": [
-              "null",
-              "string"
             ]
           },
           "cwd": {

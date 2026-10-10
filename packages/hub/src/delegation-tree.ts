@@ -49,7 +49,6 @@ export interface DelegationTreeDeps {
     | "project"
     | "projectAttempts"
     | "sendsIn"
-    | "successorOf"
     | "workItemsOfParents"
   >;
   /** A machine's name as the fleet shows it. */
@@ -143,13 +142,7 @@ export const createDelegationTree = (deps: DelegationTreeDeps) => {
   ): Promise<DelegateNode[]> => {
     const seen = new Set<string>([caller.id]);
     const build = async (items: WorkItemRow[]): Promise<DelegateNode[]> => {
-      // Each item as the session that runs it now: one another took the
-      // place of is never listed.
-      const current = items.map((item) => ({
-        ...item,
-        instanceId: db.successorOf(item.instanceId),
-      }));
-      const level = newestPerSession(current).filter(
+      const level = newestPerSession(items).filter(
         (item) => !seen.has(item.instanceId)
       );
       for (const item of level) {

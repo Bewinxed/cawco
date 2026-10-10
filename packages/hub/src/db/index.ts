@@ -26,7 +26,6 @@ import type {
   Rule,
   RuleState,
   RuleStats,
-  SendPayload,
   SessionEffort,
   SessionEndIntent,
   SessionTooling,
@@ -43,6 +42,7 @@ import type {
 } from "@cawco/core";
 import {
   CLAUDE_CONVERSATION_GONE,
+  CONTINUATION_ORIGIN,
   REMOVED_MACHINE,
   RESTART_LOST,
   resolveRates,
@@ -99,6 +99,7 @@ import {
   fleetMemoryDocs,
   fleetMemoryHistory,
   fleetSkillHistory,
+  instanceAliases,
   instances,
   limitEvents,
   limitHolds,
@@ -109,6 +110,7 @@ import {
   moves,
   openrouterConnection,
   type PlaceKind,
+  type PriorConversation,
   parkedAsks,
   plugins,
   projectOffers,
@@ -196,6 +198,7 @@ export type PublicInstanceRow = Omit<
   | "freshStartAt"
   | "turnOpenAt"
   | "movedHere"
+  | "conversations"
 >;
 /** A session's move line ({@link DbShape.noteMovedHere}). */
 export type MovedHere = NonNullable<
@@ -269,18 +272,29 @@ export type AgentAuth = (typeof agents.$inferSelect)["auth"];
 
 export type SentMessageRow = typeof sentMessages.$inferSelect;
 
-/** What {@link CawcoDb.moveChildren} moved from one parent to another, by id. */
-export interface MovedChildren {
-  /** Pending asks, by the permission request each is. */
-  asks: string[];
-  /** Work items. */
-  items: string[];
-  /** Queued delegations (`queued_work_items`). */
-  queued: string[];
-  /** Sessions nested under the parent. */
-  sessions: string[];
-  /** Queued task attempts, as `<project>/<task>`. */
-  taskStarts: string[];
+/**
+ * What a session going on in a fresh conversation of its own changes on its
+ * row ({@link DbShape.continueInPlace}): the account, harness and model the
+ * new conversation runs on, and the `continued` line drawn after the one it
+ * leaves.
+ */
+export interface InPlaceSwitch {
+  accountId: string | null;
+  effort?: string | null;
+  harness: string;
+  model: string | null;
+  /** The `limit_events` id of the line drawn between the two conversations. */
+  next: string;
+}
+
+/** What folding a session's former rows into it did, for the hub's log. */
+export interface FoldedSession {
+  /** The former rows whose process may still run: each is ended at its machine's register, then goes. */
+  ending: string[];
+  formers: string[];
+  instanceId: string;
+  /** Sends that failed only because a process went away, pending again for the session now. */
+  owedAgain: string[];
 }
 
 /** One superseded version of the fleet's memory, as a listing reads it. */
@@ -449,6 +463,15 @@ export interface DbShape {
   /** Every continuation job, oldest first. */
   readonly continuationRows: () => ContinuationRow[];
   /**
+   * The session goes on in a fresh conversation of its own: the one it ran
+   * (`sessionId`, on the account and harness its row named) is kept, last,
+   * in `conversations` with `next` drawn after it, and the row names no
+   * conversation until the new one's `init` says its key, on the account,
+   * harness and model `to` names, its spend and context counted from
+   * nothing. Once per `next`: a switch already kept answers false.
+   */
+  readonly continueInPlace: (id: string, to: InPlaceSwitch) => boolean;
+  /**
    * A project, with its folder on the hub as its first place, and the
    * checkout it was made from (`checkout`), its primary, when it has one.
    */
@@ -550,6 +573,19 @@ export interface DbShape {
     id: number
   ) => (SkillVersion & { skillSource: string; files: SkillFile[] }) | undefined;
   /**
+   * Folds every former session ({@link instanceAliases}) not yet folded into
+   * the session it is now, one transaction each: what answered to it, what
+   * it ran, what it was sent and wrote, its conversation (into
+   * `conversations`, in the order the conversations started), and the sends
+   * that failed only because one of its processes went away, owed again.
+   * Its row goes, or, with a process that may still run, is ended (`delete`)
+   * so its machine stops it first. What each fold did.
+   */
+  readonly foldFormerSessions: (
+    /** Whether a send that failed for `reason` failed only because a process went away. */
+    owedAgain: (reason: string) => boolean
+  ) => FoldedSession[];
+  /**
    * Folds a duplicate project into the one it duplicates (project-merge.ts),
    * in one transaction: its checkout and workspace places join `keepId`'s
    * (the same folder once), its sessions, work items, threads, Caw turns,
@@ -562,6 +598,8 @@ export interface DbShape {
     keepId: string,
     taskIds: ReadonlyMap<string, string>
   ) => { places: number; sessions: number; threads: number; workItems: number };
+  /** Every former id, by the id its session has now ({@link instanceIdOf}). */
+  readonly formerIds: () => Record<string, string>;
   /** When a session last started again fresh; null when it never did. */
   readonly freshStartOf: (id: string) => number | null;
   readonly getCredential: (id: string) => Record<string, unknown> | undefined;
@@ -658,6 +696,14 @@ export interface DbShape {
   readonly instanceBySessionId: (
     sessionId: string
   ) => PublicInstanceRow | undefined;
+  /**
+   * The session an id names now: a former id (a session whose continuations
+   * at its account's limit the hub folded into one, migration 0128) is the
+   * session it is part of; any other id is itself. Every path that takes a
+   * session id from outside — a send, a wake, a control, a tool's target, a
+   * link — reads it here.
+   */
+  readonly instanceIdOf: (id: string) => string;
   /** The MCP servers and tools a session's newest `init` announced. */
   readonly instanceTooling: (id: string) => SessionTooling | null | undefined;
   /** Known prompt writes invalidate every Claude cache on the owning machine. */
@@ -826,16 +872,6 @@ export interface DbShape {
   ) => void;
   /** A whole report: every id it names is replaced, every other cell survives. */
   readonly mergeAgentTools: (machineId: string, statuses: ToolStatus[]) => void;
-  /**
-   * Everything that answers to session `from` as its parent, made `to`'s, in
-   * one transaction: the sessions nested under it (`instances.parent_instance_id`),
-   * the work items it delegated, whatever state (`work_items.parent_instance_id`:
-   * a finished one is reopened by its parent's hand-off), the delegations and
-   * task attempts queued for it (`queued_work_items`, `queued_task_starts`),
-   * and the asks its delegates routed to it still unanswered
-   * (`delegate_events`, kind `ask`, status `pending`). What moved, by id.
-   */
-  readonly moveChildren: (from: string, to: string) => MovedChildren;
   /** The move a session started from, as {@link noteMovedHere} kept it; null when none. */
   readonly movedHereOf: (id: string) => MovedHere | null;
   /** One project move's record (moves.ts). */
@@ -1029,8 +1065,6 @@ export interface DbShape {
       forkedFrom?: string;
       threadId?: string;
       projectId?: string;
-      /** The session that takes its place at its account's limit; null: it goes on after all. */
-      continuedInto?: string | null;
     }
   ) => PublicInstanceRow | undefined;
   /** A project with its places, or undefined for an id the hub does not hold. */
@@ -1235,15 +1269,6 @@ export interface DbShape {
   readonly queueWorkItem: (
     row: Omit<QueuedWorkItemRow, "queuedAt">
   ) => QueuedWorkItemRow;
-  /**
-   * The sends owed to session `from` (accepted, held by the hub, not yet
-   * handed to a machine) re-addressed to session `to` on `machineId`: the
-   * record and the envelope it goes out as. The records as they now stand.
-   */
-  readonly readdressOwedSends: (
-    from: string,
-    to: { id: string; machineId: string }
-  ) => SentMessageRow[];
   /**
    * The daemon's own word, arriving every 15s: `liveIds` is exactly what its
    * supervisor is carrying right now (`HeartbeatPayload.instances`).
@@ -1548,19 +1573,6 @@ export interface DbShape {
   readonly spendOnCap: () => OnCap;
   readonly stageSessionIdentity: (instanceId: string, hash: string) => void;
   /**
-   * THE ONE RESOLVER of a session id: the session at the end of its
-   * `continuedInto` chain, the one that runs in its place now; `id` itself
-   * when nothing took its place. Every path that addresses a session by id
-   * (a send, a wake, a resume, a control, a stop, a listing) reads it here.
-   */
-  readonly successorOf: (id: string) => string;
-  /** Every session another took the place of, and whether its end is decided. */
-  readonly supersededInstances: () => {
-    id: string;
-    continuedInto: string;
-    ended: boolean;
-  }[];
-  /**
    * The one-time reclassification a taxonomy change needs when the column is
    * plain text and there is no SQL migration to hang it on. Idempotent by
    * construction — both halves select on states they then leave — so running it
@@ -1640,6 +1652,13 @@ export interface DbShape {
   /** Each completed turn's tokens, on the account it ran on. */
   readonly turnUsage: TurnUsageDb;
   /**
+   * {@link continueInPlace} taken back, while the new conversation has said
+   * nothing yet: the conversation kept under `next` is the row's again, on
+   * the account and harness it ran on. False when there is none to take
+   * back, or the new one already named itself.
+   */
+  readonly undoContinueInPlace: (id: string, next: string) => boolean;
+  /**
    * Pending sends handed to a machine before the hub kept each whole
    * ({@link sentMessages.envelope}): none once {@link keepEnvelope} has
    * given each its own, which a hub start does once.
@@ -1668,7 +1687,7 @@ export interface DbShape {
     patch: Partial<
       Pick<
         ContinuationRow,
-        "stage" | "error" | "summary" | "summariserInstanceId"
+        "stage" | "error" | "summary" | "summariserInstanceId" | "prepared"
       >
     >
   ) => ContinuationRow | undefined;
@@ -2025,6 +2044,7 @@ const make = async (path: string): Promise<DbShape> => {
     turnOpenAt: _turnOpenAt,
     movedHere: _movedHere,
     tooling: _tooling,
+    conversations: _conversations,
     ...publicColumns
   } = getTableColumns(instances);
   const boardColumns = publicColumns;
@@ -2218,6 +2238,281 @@ const make = async (path: string): Promise<DbShape> => {
       .where(inArray(instances.parentInstanceId, list))
       .run();
     tx.delete(instances).where(inArray(instances.id, list)).run();
+  };
+
+  /**
+   * Every table whose rows a former session's id names, by the column that
+   * names it: what answered to it, what it ran, what it was sent and wrote.
+   * Moved onto the session it is now; `once`: a table holding one row per
+   * session, whose row the session already has keeps that one.
+   */
+  const FOLD_MOVED: readonly (readonly [string, string, "once"?])[] = [
+    ["instances", "parent_instance_id"],
+    ["work_items", "instance_id"],
+    ["work_items", "parent_instance_id"],
+    ["queued_work_items", "parent_instance_id"],
+    ["queued_task_starts", "parent_instance_id"],
+    ["delegate_events", "instance_id"],
+    ["delegate_events", "parent_instance_id"],
+    ["workspaces", "created_by_instance_id"],
+    ["workflow_runs", "supervisor_instance_id"],
+    ["workflow_steps", "instance_id"],
+    ["workflow_notices", "instance_id"],
+    ["projects", "lead_instance_id"],
+    ["limit_events", "instance_id"],
+    ["turn_usage", "instance_id"],
+    ["supervisor_events", "instance_id"],
+    ["canvases", "instance_id"],
+    ["completed_turns", "instance_id", "once"],
+    ["session_plans", "instance_id", "once"],
+    ["project_offers", "instance_id", "once"],
+  ];
+  /** A former session's state of the moment, which the session it is now keeps its own of. */
+  const FOLD_DROPPED = [
+    "session_identities",
+    "limit_holds",
+    "limit_summaries",
+    "parked_asks",
+    "rule_state",
+    "moved_from_sessions",
+  ];
+  const idList = (ids: readonly string[]) =>
+    sql.join(
+      ids.map((id) => sql`${id}`),
+      sql`, `
+    );
+
+  /**
+   * Folds `formerIds` into `survivorId`, inside the caller's transaction
+   * ({@link DbShape.foldFormerSessions}). The sessions are read as they
+   * started, the one that runs last. Each one a continuation started opened
+   * on its "Continued on" line, which is the line between the conversation
+   * before it and its own; every other "Continued on" line of theirs is the
+   * same move told on the other side, and goes.
+   */
+  const foldInto = (
+    tx: Tx,
+    survivorId: string,
+    formerIds: readonly string[],
+    owedAgain: (reason: string) => boolean
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one transaction moving every kind of row a session owns, in the order they depend on each other
+  ): FoldedSession | undefined => {
+    const survivor = tx
+      .select()
+      .from(instances)
+      .where(eq(instances.id, survivorId))
+      .get();
+    const formers =
+      formerIds.length > 0
+        ? tx
+            .select()
+            .from(instances)
+            .where(
+              and(
+                inArray(instances.id, [...formerIds]),
+                ne(instances.id, survivorId)
+              )
+            )
+            .all()
+        : [];
+    if (!survivor || formers.length === 0) {
+      return undefined;
+    }
+    const members = [...formers, survivor].sort(
+      (a, b) => a.createdAt.getTime() - b.createdAt.getTime()
+    );
+    const [root] = members;
+    const order = [
+      ...members.filter((member) => member.id !== survivorId),
+      survivor,
+    ];
+    const ids = members.map((member) => member.id);
+    const gone = formers.map((member) => member.id);
+    const continued = tx
+      .select()
+      .from(limitEvents)
+      .where(inArray(limitEvents.instanceId, ids))
+      .orderBy(asc(limitEvents.at))
+      .all()
+      .filter((event) => event.move.kind === "continued");
+    const opened = new Map<string, string>();
+    for (const member of members) {
+      const first = continued.find((event) => event.instanceId === member.id);
+      if (member.id !== root.id && first) {
+        opened.set(member.id, first.id);
+      }
+    }
+    const kept = new Set(opened.values());
+    const told = continued
+      .filter((event) => !kept.has(event.id))
+      .map((event) => event.id);
+    if (told.length > 0) {
+      tx.delete(limitEvents).where(inArray(limitEvents.id, told)).run();
+    }
+    const prior: PriorConversation[] = order
+      .slice(0, -1)
+      .flatMap((member, at) =>
+        member.sessionId
+          ? [
+              {
+                sessionId: member.sessionId,
+                harness: member.harness ?? "claude",
+                model: member.model,
+                accountId: member.accountId,
+                endedAt: member.updatedAt.getTime(),
+                next: opened.get(order[at + 1].id) ?? null,
+              },
+            ]
+          : []
+      );
+    // Since the first continuation, what failed only because a process
+    // went away is the session's still: pending again, kept whole and owed
+    // by the hub as it starts (server.ts `keepPendingWhole`).
+    const since = continued[0]?.at ?? root.createdAt;
+    const again = tx
+      .select({ uuid: sentMessages.uuid, reason: sentMessages.reason })
+      .from(sentMessages)
+      .where(
+        and(
+          inArray(sentMessages.instanceId, ids),
+          eq(sentMessages.state, "failed"),
+          gte(sentMessages.acceptedAt, since)
+        )
+      )
+      .all()
+      .filter((send) => owedAgain(send.reason ?? ""))
+      .map((send) => send.uuid);
+    if (again.length > 0) {
+      tx.update(sentMessages)
+        .set({
+          state: "pending",
+          reason: null,
+          anchor: null,
+          owed: null,
+          envelope: null,
+          delivery: null,
+          held: false,
+        })
+        .where(inArray(sentMessages.uuid, again))
+        .run();
+    }
+    // Each session a continuation started opened on a message from the one
+    // before it: the opening of a fresh conversation now, folded under the
+    // line before it rather than read as a hand-off.
+    for (const member of members) {
+      const [first] = tx
+        .select({ uuid: sentMessages.uuid, body: sentMessages.body })
+        .from(sentMessages)
+        .where(eq(sentMessages.instanceId, member.id))
+        .orderBy(asc(sentMessages.acceptedAt))
+        .limit(1)
+        .all();
+      const origin = first?.body?.origin;
+      if (
+        member.id !== root.id &&
+        first?.body &&
+        origin?.kind === "peer" &&
+        origin.fromSession &&
+        ids.includes(origin.fromSession)
+      ) {
+        tx.update(sentMessages)
+          .set({
+            body: {
+              ...first.body,
+              origin: { kind: "system", name: CONTINUATION_ORIGIN },
+            },
+          })
+          .where(eq(sentMessages.uuid, first.uuid))
+          .run();
+      }
+    }
+    tx.run(
+      sql`UPDATE ${sentMessages} SET instance_id = ${survivorId},
+        owed = CASE WHEN owed IS NULL THEN NULL ELSE json_set(owed, '$.instanceId', ${survivorId}, '$.machineId', ${survivor.machineId}, '$.payload.instanceId', ${survivorId}) END,
+        envelope = CASE WHEN envelope IS NULL THEN NULL ELSE json_set(envelope, '$.instanceId', ${survivorId}, '$.machineId', ${survivor.machineId}, '$.payload.instanceId', ${survivorId}) END
+        WHERE instance_id IN (${idList(gone)})`
+    );
+    for (const [table, column, once] of FOLD_MOVED) {
+      const name = sql.identifier(table);
+      const by = sql.identifier(column);
+      // A session nested under one of the former rows is the session's;
+      // the former rows themselves go below.
+      const besides =
+        table === "instances" ? sql` AND id NOT IN (${idList(ids)})` : sql``;
+      tx.run(
+        sql`UPDATE OR IGNORE ${name} SET ${by} = ${survivorId} WHERE ${by} IN (${idList(gone)})${besides}`
+      );
+      if (once) {
+        tx.run(sql`DELETE FROM ${name} WHERE ${by} IN (${idList(gone)})`);
+      }
+    }
+    for (const table of FOLD_DROPPED) {
+      tx.run(
+        sql`DELETE FROM ${sql.identifier(table)} WHERE instance_id IN (${idList(gone)})`
+      );
+    }
+    // The session as it began: its parent, its work and its place, its
+    // toolset, and its name — but the owner's, which nothing replaces.
+    const first = <K extends keyof typeof survivor>(key: K) =>
+      members.map((member) => member[key]).find((value) => value !== null) ??
+      null;
+    const named = [...members]
+      .reverse()
+      .find((member) => member.titleSource === "owner");
+    const parent = members
+      .map((member) => member.parentInstanceId)
+      .find((id) => id !== null && !ids.includes(id));
+    tx.update(instances)
+      .set({
+        conversations: [...prior, ...survivor.conversations],
+        createdAt: root.createdAt,
+        parentInstanceId: parent ?? null,
+        workItemId: first("workItemId"),
+        threadId: first("threadId"),
+        projectId: first("projectId"),
+        role: first("role"),
+        delegateType: first("delegateType"),
+        delegateTypeProject: first("delegateTypeProject"),
+        canDelegate: first("canDelegate"),
+        derivedTitle: root.derivedTitle ?? survivor.derivedTitle,
+        ...(survivor.titleSource === "owner"
+          ? {}
+          : {
+              title: named?.title ?? root.title,
+              titleSource: named ? "owner" : root.titleSource,
+            }),
+      })
+      .where(eq(instances.id, survivorId))
+      .run();
+    // A former row with a process that may run is ended first, by its
+    // machine, and goes once that is confirmed ({@link confirmInstanceEnd}).
+    const ending = formers
+      .filter(
+        (member) => !["stopped", "discarded", "error"].includes(member.status)
+      )
+      .map((member) => member.id);
+    if (ending.length > 0) {
+      tx.update(instances)
+        .set({
+          endIntent: "delete",
+          endConfirmedAt: null,
+          endReason: `folded into ${survivorId}`,
+          endRetryAt: null,
+          endAttempts: 0,
+          keepAliveEnabled: false,
+          keepAliveTurn: null,
+          status: "stopped",
+          workItemId: null,
+          parentInstanceId: null,
+        })
+        .where(inArray(instances.id, ending))
+        .run();
+    }
+    dropInstances(
+      tx,
+      gone.filter((id) => !ending.includes(id))
+    );
+    return { instanceId: survivorId, formers: gone, ending, owedAgain: again };
   };
 
   const agentTools = (machineId: string): Record<string, ToolStatus> =>
@@ -3085,13 +3380,6 @@ const make = async (path: string): Promise<DbShape> => {
           `Instance ${id} is being deleted and cannot be reopened.`
         );
       }
-      // A session another took the place of never runs again, whoever asks.
-      if (existing?.continuedInto) {
-        throw new Error(
-          `Instance ${id} was continued as ${existing.continuedInto} and never runs again.`
-        );
-      }
-
       // Same refusal as noteInstanceSession below: a spawn whose resume key is
       // the instance id itself carries confusion, not identity. Treat it as
       // absent so the row is born session-less instead of self-pointing.
@@ -3391,43 +3679,117 @@ const make = async (path: string): Promise<DbShape> => {
         .where(eq(instances.id, id))
         .returning(publicColumns)
         .get(),
-    successorOf: (id) => {
-      const seen = new Set<string>();
-      let current = id;
-      for (;;) {
-        seen.add(current);
-        const next = db
-          .select({ continuedInto: instances.continuedInto })
-          .from(instances)
-          .where(eq(instances.id, current))
-          .get()?.continuedInto;
-        if (!next || seen.has(next)) {
-          return current;
-        }
-        current = next;
-      }
-    },
-    supersededInstances: () =>
+    instanceIdOf: (id) =>
       db
-        .select({
-          id: instances.id,
-          continuedInto: instances.continuedInto,
-          endIntent: instances.endIntent,
+        .select({ instanceId: instanceAliases.instanceId })
+        .from(instanceAliases)
+        .where(eq(instanceAliases.id, id))
+        .get()?.instanceId ?? id,
+    formerIds: () =>
+      Object.fromEntries(
+        db
+          .select({ id: instanceAliases.id, now: instanceAliases.instanceId })
+          .from(instanceAliases)
+          .all()
+          .map((row) => [row.id, row.now])
+      ),
+    continueInPlace: (id, to) =>
+      db.transaction((tx) => {
+        const row = tx
+          .select()
+          .from(instances)
+          .where(eq(instances.id, id))
+          .get();
+        if (
+          !row?.sessionId ||
+          row.conversations.some((one) => one.next === to.next)
+        ) {
+          return false;
+        }
+        tx.update(instances)
+          .set({
+            conversations: [
+              ...row.conversations,
+              {
+                sessionId: row.sessionId,
+                harness: row.harness ?? "claude",
+                model: row.model,
+                accountId: row.accountId,
+                endedAt: Date.now(),
+                next: to.next,
+              },
+            ],
+            sessionId: null,
+            accountId: to.accountId,
+            harness: to.harness,
+            model: to.model,
+            ...(to.effort === undefined
+              ? {}
+              : { effort: to.effort as SessionEffort | null }),
+            // The new conversation has read nothing and spent nothing yet.
+            contextTokens: null,
+            contextReadAt: null,
+            modelUsageSeen: {},
+            cacheCold: null,
+            lastRequestAt: null,
+            lastPingUsage: null,
+            keepAliveTurn: null,
+            turnOpenAt: null,
+            freshStartAt: null,
+          })
+          .where(eq(instances.id, id))
+          .run();
+        return true;
+      }),
+    undoContinueInPlace: (id, next) =>
+      db.transaction((tx) => {
+        const row = tx
+          .select()
+          .from(instances)
+          .where(eq(instances.id, id))
+          .get();
+        const left = row?.conversations.at(-1);
+        if (!(row && left?.next === next && row.sessionId === null)) {
+          return false;
+        }
+        tx.update(instances)
+          .set({
+            conversations: row.conversations.slice(0, -1),
+            sessionId: left.sessionId,
+            accountId: left.accountId,
+            harness: left.harness,
+            model: left.model,
+            // Its spend so far is unknown until its next result says it.
+            modelUsageSeen: null,
+          })
+          .where(eq(instances.id, id))
+          .run();
+        return true;
+      }),
+    foldFormerSessions: (owedAgain) => {
+      const open = db
+        .select()
+        .from(instanceAliases)
+        .where(eq(instanceAliases.folded, false))
+        .all();
+      const bySurvivor = new Map<string, string[]>();
+      for (const alias of open) {
+        bySurvivor.set(alias.instanceId, [
+          ...(bySurvivor.get(alias.instanceId) ?? []),
+          alias.id,
+        ]);
+      }
+      return [...bySurvivor].flatMap(([survivorId, formerIds]) =>
+        db.transaction((tx) => {
+          const folded = foldInto(tx, survivorId, formerIds, owedAgain);
+          tx.update(instanceAliases)
+            .set({ folded: true })
+            .where(inArray(instanceAliases.id, formerIds))
+            .run();
+          return folded ? [folded] : [];
         })
-        .from(instances)
-        .where(isNotNull(instances.continuedInto))
-        .all()
-        .flatMap((row) =>
-          row.continuedInto
-            ? [
-                {
-                  id: row.id,
-                  continuedInto: row.continuedInto,
-                  ended: row.endIntent !== null,
-                },
-              ]
-            : []
-        ),
+      );
+    },
     markSeen: (instanceIds, runIds, at) => ({
       instances:
         instanceIds.length > 0
@@ -3671,10 +4033,14 @@ const make = async (path: string): Promise<DbShape> => {
             .run();
           return { row, resumes: true };
         }
+        // One that never named a conversation comes back fresh under its id
+        // (core `relaunchOf`): nothing of it is lost — a continuation in
+        // place is one, until its new conversation's first `init`.
         const resumes =
           !catalog ||
-          (row.sessionId !== null &&
-            (row.harness === "opencode" || catalog.has(row.sessionId)));
+          row.sessionId === null ||
+          row.harness === "opencode" ||
+          catalog.has(row.sessionId);
         // OpenCode's listing is a directory/project-filtered catalog, not a
         // proof of absence. Only recovery's keyed session.get can decide that
         // a recorded conversation is gone; a hub restart cannot infer it here.
@@ -5981,86 +6347,6 @@ const make = async (path: string): Promise<DbShape> => {
     dropQueuedWorkItem: (id) => {
       db.delete(queuedWorkItems).where(eq(queuedWorkItems.id, id)).run();
     },
-    moveChildren: (from, to) =>
-      db.transaction((tx) => ({
-        sessions: tx
-          .update(instances)
-          .set({ parentInstanceId: to, updatedAt: new Date() })
-          .where(
-            and(eq(instances.parentInstanceId, from), ne(instances.id, to))
-          )
-          .returning({ id: instances.id })
-          .all()
-          .map((row) => row.id),
-        items: tx
-          .update(workItems)
-          .set({ parentInstanceId: to })
-          .where(eq(workItems.parentInstanceId, from))
-          .returning({ id: workItems.id })
-          .all()
-          .map((row) => row.id),
-        queued: tx
-          .update(queuedWorkItems)
-          .set({ parentInstanceId: to })
-          .where(eq(queuedWorkItems.parentInstanceId, from))
-          .returning({ id: queuedWorkItems.id })
-          .all()
-          .map((row) => row.id),
-        taskStarts: tx
-          .update(queuedTaskStarts)
-          .set({ parentInstanceId: to })
-          .where(eq(queuedTaskStarts.parentInstanceId, from))
-          .returning({
-            projectId: queuedTaskStarts.projectId,
-            taskId: queuedTaskStarts.taskId,
-          })
-          .all()
-          .map((row) => `${row.projectId}/${row.taskId}`),
-        asks: tx
-          .update(delegateEvents)
-          .set({ parentInstanceId: to })
-          .where(
-            and(
-              eq(delegateEvents.parentInstanceId, from),
-              eq(delegateEvents.kind, "ask"),
-              eq(delegateEvents.status, "pending")
-            )
-          )
-          .returning({ requestId: delegateEvents.requestId })
-          .all()
-          .map((row) => row.requestId ?? ""),
-      })),
-    readdressOwedSends: (from, to) =>
-      db.transaction((tx) =>
-        tx
-          .select()
-          .from(sentMessages)
-          .where(
-            and(
-              eq(sentMessages.instanceId, from),
-              eq(sentMessages.state, "pending"),
-              isNotNull(sentMessages.owed)
-            )
-          )
-          .all()
-          .map((send) => {
-            const envelope = JSON.parse(
-              send.owed ?? "{}"
-            ) as Envelope<SendPayload>;
-            const owed = JSON.stringify({
-              ...envelope,
-              machineId: to.machineId,
-              instanceId: to.id,
-              payload: { ...envelope.payload, instanceId: to.id },
-            } satisfies Envelope<SendPayload>);
-            return tx
-              .update(sentMessages)
-              .set({ instanceId: to.id, owed })
-              .where(eq(sentMessages.uuid, send.uuid))
-              .returning()
-              .get() as SentMessageRow;
-          })
-      ),
     liveWorkItemsOf: (parentInstanceId) =>
       db
         .select()

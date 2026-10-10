@@ -769,6 +769,12 @@ const state = $state({
    */
   continuations: [] as ContinuationJob[],
   /**
+   * The ids sessions had before the hub folded each one's continuations at
+   * its account's limit into it: former id → its id now. A tab on a former
+   * id is that session's.
+   */
+  formerIds: {} as Record<string, string>,
+  /**
    * The project moves the hub is carrying (core move.ts), whole: handed on
    * connect in the `instances` frame, then replaced by each `moves` frame.
    */
@@ -2670,6 +2676,9 @@ function handleFrame(frame: FramePayload): void {
     }
     if (frame.kind === "instances") {
       state.moves = frame.moves;
+      if (!equal(state.formerIds, frame.formerIds ?? {})) {
+        state.formerIds = frame.formerIds ?? {};
+      }
     }
     // The notices acknowledged on any tab or device: one dismissed elsewhere leaves this tab now.
     if (frame.noticesSeen) {
@@ -6704,6 +6713,10 @@ export const cawco = {
   /** The continuations the hub is carrying, settled ones for a few minutes after. */
   get continuations(): ContinuationJob[] {
     return state.continuations;
+  },
+  /** Former id → the id its session has now (the hub's fold of older continuations). */
+  get formerIds(): Record<string, string> {
+    return state.formerIds;
   },
   /** One continuation the hub is carrying, while it keeps it in its table. */
   continuation: (id: string): ContinuationJob | undefined =>

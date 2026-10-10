@@ -78,7 +78,7 @@ export const measureRoles = (): RoleSize[] => {
       rows.filter((row) => row.harness === harness && row.status === "running"),
     instanceById: (id) => rows.find((row) => row.id === id),
     fleet: { instances: () => rows, machines: () => [] },
-    successorOf: (id) => id,
+    formerIds: () => ({}),
     forward: () => Promise.resolve(),
     deliver: () => Promise.reject(new Error("measuring")),
     credentialActor: () => undefined,

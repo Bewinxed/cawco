@@ -266,16 +266,11 @@ function roster(
   peers: Peer[];
   asleep: Peer[];
   own: InstanceRow | undefined;
-  /** Sessions another took the place of: never listed, only followed. */
-  superseded: InstanceRow[];
   hosts: Map<string, string>;
 } {
   const { rows, hosts } = fleetInstances(fleet);
   const own = rows.find((row) => row.id === exceptInstanceId);
-  const superseded = rows.filter((row) => row.continuedInto);
-  const others = rows.filter(
-    (row) => row.id !== exceptInstanceId && !row.continuedInto
-  );
+  const others = rows.filter((row) => row.id !== exceptInstanceId);
   // `unknown` is a live session whose machine is not connected right now —
   // an agent restart, the two seconds between its socket closing and its
   // register — and a send to it waits for that register at the hub.
@@ -299,37 +294,36 @@ function roster(
           row.status === "stopped")
     )
     .map((row) => toPeer(row, hosts));
-  return { peers, asleep, own, superseded, hosts };
+  return { peers, asleep, own, hosts };
 }
 
 /**
- * The session a target names when another took its place: the session in
- * its place now (the hub's `successorOf`), and the id it was named by. By its
- * full id, or a short id of six or more characters that names only it.
- * Undefined when the target names no such session.
+ * The session a target names by one of its former ids (a session whose
+ * continuations at its account's limit the hub folded into one, the hub's
+ * `instanceIdOf`): its id now, and the id it was named by. By the full id,
+ * or a short id of six or more characters that names only it. Undefined
+ * when the target names no former id.
  */
-function supersededBy(
-  superseded: InstanceRow[],
-  target: string,
-  successorOf: (id: string) => string
-): { successor: string; continues: string } | undefined {
+function formerOf(
+  formerIds: Record<string, string>,
+  target: string
+): { now: string; former: string } | undefined {
   const needle = needleOf(target);
   const idPart = needle.includes("#")
     ? (needle.split("#").pop() ?? "")
     : needle;
-  const matches = superseded.filter(
-    (row) =>
-      row.id === needle || (idPart.length >= 6 && row.id.startsWith(idPart))
+  const matches = Object.keys(formerIds).filter(
+    (id) => id === needle || (idPart.length >= 6 && id.startsWith(idPart))
   );
-  if (matches.length !== 1) {
-    return;
-  }
-  return { successor: successorOf(matches[0].id), continues: matches[0].id };
+  const [former] = matches;
+  return matches.length === 1 && former
+    ? { now: formerIds[former], former }
+    : undefined;
 }
 
-/** How a tool's answer names the session a target was followed from. */
-const continuesWords = (followed: { continues: string } | undefined): string =>
-  followed ? ` (continues ${followed.continues.slice(0, 8)})` : "";
+/** How a tool's answer names the former id a target was named by. */
+const continuesWords = (followed: { former: string } | undefined): string =>
+  followed ? ` (once ${followed.former.slice(0, 8)})` : "";
 
 /** An `@` prefix on a target name, optional. */
 const AT_PREFIX = /^@/;
@@ -502,10 +496,18 @@ export const SPAWNING_TOOLS: ReadonlySet<string> = new Set([
  * session's start waits for it (`update`); its machine's agent is restarting
  * (`agent`); the hub has just started and the machine has not reconnected
  * (`hub`); sends before it to the same session are still queued
- * (`behind`); or the session has no process and this sender may not wake it
- * (`resting`: a stopped session is woken only by a person or its parent).
+ * (`behind`); the session has no process and this sender may not wake it
+ * (`resting`: a stopped session is woken only by a person or its parent); or
+ * its account is at its limit, where a turn would only be refused, and it
+ * waits for the reset, a move, or its continuation from a summary (`limit`).
  */
-export type SendHold = "agent" | "behind" | "hub" | "resting" | "update";
+export type SendHold =
+  | "agent"
+  | "behind"
+  | "hub"
+  | "limit"
+  | "resting"
+  | "update";
 
 /** What the hub did with a send, as `handoff` tells its sender. */
 export interface SendDelivery {
@@ -532,6 +534,8 @@ const HOLD_WORDS: Record<SendHold, string> = {
     "Messages sent to it earlier are still queued at the hub, so this one is queued behind them and goes right after them.",
   resting:
     "It is stopped, and only a person or its parent starts it again, so the message is kept at the hub and goes to it when one of them next writes to it.",
+  limit:
+    "Its account is at its usage limit, so the message is kept at the hub and goes to the session as soon as it can run again: at the reset, on another account, or once it goes on from a summary.",
 };
 
 /** What the hub did with a hand-off, as its sender is told. */
@@ -585,6 +589,12 @@ export interface HandoffDeps {
   readonly emit: (envelope: Envelope) => void;
   /** The board and the machines, read in the hub's own process. */
   readonly fleet: Fleet;
+  /**
+   * Every former id, by the id its session has now: sessions whose
+   * continuations at their account's limit the hub folded into one (db
+   * `formerIds`). A target named by one reaches its session.
+   */
+  readonly formerIds: () => Record<string, string>;
   readonly harness?: "claude" | "opencode" | "pi";
   /** Exact-id lookup includes ended/archived rows outside the live roster. */
   readonly instanceById: (id: string) => InstanceRow | undefined;
@@ -604,12 +614,6 @@ export interface HandoffDeps {
     message: string,
     attachments: string[]
   ) => Promise<string[]>;
-  /**
-   * The session that runs in `id`'s place now, at the end of its
-   * `continuedInto` chain; `id` itself when nothing took its place (the
-   * hub's one resolver, db `successorOf`).
-   */
-  readonly successorOf: (id: string) => string;
   readonly workflowRunId?: string;
   readonly workflowStepId?: string;
   /** Delegate role: finish_item is available even before an item has checks. */
@@ -631,9 +635,12 @@ export interface HandoffActions {
     deny?: boolean
   ): string;
   /**
-   * Summarises a session (this one when `session` is omitted) with the chosen
-   * summariser and starts a new session seeded with the summary, through the
-   * hub's own continuation.
+   * Summarises a session with the chosen summariser through the hub's own
+   * continuation. Another session (`session`): a new session starts seeded
+   * with the summary, and that one is only read. This one (`session`
+   * omitted): it goes on itself, in place, in a fresh conversation seeded
+   * with the summary once the turn that asked ends — same id, row, parent
+   * and children.
    */
   readonly continueSession: (input: {
     session?: string;
@@ -984,7 +991,7 @@ export function coldRefusalText(
 export const handoffActions = ({
   instanceId,
   instanceById,
-  successorOf,
+  formerIds,
   workflowRunId,
   workflowStepId,
   cwd,
@@ -1006,18 +1013,20 @@ export const handoffActions = ({
     return { delegates: await delegateList(include) };
   },
   async continueSession(input) {
-    let source = instanceId;
     const { rows, hosts } = fleetInstances(fleet);
-    if (input.session) {
-      source = successorOf(
-        resolve(
+    const target = input.session
+      ? (formerOf(formerIds(), input.session)?.now ?? input.session)
+      : undefined;
+    const source = target
+      ? resolve(
           rows.map((row) => toPeer(row, hosts)),
-          input.session
+          target
         ).row.id
-      );
-    }
-    // The new session answers permissions as the caller does, where its
-    // harness has modes; the hub settles it, never the machine's default.
+      : instanceId;
+    const inPlace = source === instanceId;
+    // The new conversation or session answers permissions as the caller
+    // does, where its harness has modes; the hub settles it, never the
+    // machine's default.
     const fallbackPermissionMode = callerMode(rows, instanceId);
     const response = await fetch(
       `${hubHttpUrl()}/api/instances/${encodeURIComponent(source)}/continue`,
@@ -1034,6 +1043,7 @@ export const handoffActions = ({
             model: input.target_model,
             ...(fallbackPermissionMode ? { fallbackPermissionMode } : {}),
           },
+          ...(inPlace ? { inPlace: true } : {}),
           ...(input.note ? { note: input.note } : {}),
         }),
       }
@@ -1041,10 +1051,25 @@ export const handoffActions = ({
     if (!response.ok) {
       throw new Error(await response.text());
     }
+    const { continuationId, summariserInstanceId } =
+      (await response.json()) as {
+        continuationId: string;
+        summariserInstanceId: string | null;
+      };
+    // In place, this process is the one the fresh conversation replaces: the
+    // job waits for this turn to end, so nothing here waits on it.
+    if (inPlace) {
+      return {
+        summariserInstanceId,
+        targetInstanceId: instanceId,
+        text:
+          `This session goes on as itself, in a fresh ${input.target_harness} conversation on ${input.target_model}, ` +
+          `once this turn ends: ${input.summarizer_harness}/${input.summarizer_model} summarises it then, and the new conversation opens on that summary, ` +
+          'the artifact index and your last turns. Same id, parent, delegates and work item; your transcript reads on through a "Continued" line. ' +
+          `End your turn now. (continuation ${continuationId})`,
+      };
+    }
     // The hub runs the continuation as its own job; this waits for its report.
-    const { continuationId } = (await response.json()) as {
-      continuationId: string;
-    };
     const outcome = await fetch(
       `${hubHttpUrl()}/api/continuations/${encodeURIComponent(continuationId)}/outcome`
     );
@@ -1266,10 +1291,10 @@ export const handoffActions = ({
     message: string,
     urgent = false
   ): Promise<string> {
-    const { peers, asleep, own, superseded, hosts } = roster(fleet, instanceId);
-    // A session another took the place of is reached where it runs now.
-    const followed = supersededBy(superseded, target, successorOf);
-    const addressed = followed?.successor ?? target;
+    const { peers, asleep, own, hosts } = roster(fleet, instanceId);
+    // A session named by a former id is reached by its id now.
+    const followed = formerOf(formerIds(), target);
+    const addressed = followed?.now ?? target;
     const unlisted =
       followed && ![...peers, ...asleep].some((p) => p.row.id === addressed)
         ? instanceById(addressed)
@@ -1481,11 +1506,11 @@ export const handoffActions = ({
   },
 
   async setItemChecks(target, checks) {
-    const { peers, superseded } = roster(fleet, instanceId);
-    const followed = supersededBy(superseded, target, successorOf);
+    const { peers } = roster(fleet, instanceId);
+    const followed = formerOf(formerIds(), target);
     const peer = resolveDelegate(
       peers,
-      followed?.successor ?? target,
+      followed?.now ?? target,
       instanceId,
       ledBy
     );
@@ -1508,9 +1533,9 @@ export const handoffActions = ({
   },
 
   async stopDelegate(asked: string): Promise<string> {
-    const { peers, asleep, superseded } = roster(fleet, instanceId);
-    const followed = supersededBy(superseded, asked, successorOf);
-    const target = followed?.successor ?? asked;
+    const { peers, asleep } = roster(fleet, instanceId);
+    const followed = formerOf(formerIds(), asked);
+    const target = followed?.now ?? asked;
     const ended =
       instanceById(needleOf(target)) ?? resolveById(asleep, target)?.row;
     const peer = resolveDelegate(
@@ -1545,11 +1570,11 @@ export const handoffActions = ({
   },
 
   interruptDelegate(target: string): string {
-    const { peers, superseded } = roster(fleet, instanceId);
-    const followed = supersededBy(superseded, target, successorOf);
+    const { peers } = roster(fleet, instanceId);
+    const followed = formerOf(formerIds(), target);
     const peer = resolveDelegate(
       peers,
-      followed?.successor ?? target,
+      followed?.now ?? target,
       instanceId,
       ledBy
     );
@@ -1577,11 +1602,11 @@ export const handoffActions = ({
     answers?: Record<string, string>,
     deny = false
   ): string {
-    const { peers, superseded } = roster(fleet, instanceId);
-    const followed = supersededBy(superseded, target, successorOf);
+    const { peers } = roster(fleet, instanceId);
+    const followed = formerOf(formerIds(), target);
     const peer = resolveDelegate(
       peers,
-      followed?.successor ?? target,
+      followed?.now ?? target,
       instanceId,
       ledBy
     );

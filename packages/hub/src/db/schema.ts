@@ -76,6 +76,23 @@ import type { MoveState } from "../moves";
 
 const timestamp = (column: string) => integer(column, { mode: "timestamp_ms" });
 
+/**
+ * One harness conversation a session had before the one it runs now
+ * (`instances.conversations`): its key, the harness and account it ran on,
+ * when the session left it, and the hub's line placed right after it in the
+ * transcript (the `continued` line of the move that left it; null for a
+ * conversation folded in with no line of its own).
+ */
+export interface PriorConversation {
+  accountId: string | null;
+  endedAt: number;
+  harness: string;
+  model: string | null;
+  /** The `limit_events` id drawn after it. */
+  next: string | null;
+  sessionId: string;
+}
+
 export const workflows = sqliteTable("workflows", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
@@ -653,13 +670,17 @@ export const instances = sqliteTable("instances", {
    */
   forkedFrom: text("forked_from"),
   /**
-   * The session that took this one's place when it was continued on another
-   * account at its limit: set as this one is ended for it, cleared only if
-   * that continuation failed and this one goes on. Once set, this session
-   * never runs again, and everything addressed to it reaches the end of the
-   * chain (db `successorOf`).
+   * The harness conversations this session had before the one it runs now
+   * (`sessionId`), oldest first: each time it went on from a summary in a
+   * fresh conversation (at its account's limit, or because it asked), the
+   * one it left. Its transcript reads them in order, then the current one,
+   * each on the machine it runs on, in the account dir it ran in there.
+   * Empty on a session that never continued.
    */
-  continuedInto: text("continued_into"),
+  conversations: text("conversations", { mode: "json" })
+    .$type<PriorConversation[]>()
+    .notNull()
+    .default([]),
   /** The instance this one is a delegate of (nested under it in every rail). */
   parentInstanceId: text("parent_instance_id"),
   /** The delegating tool call, so the parent transcript can render the round trip. */
@@ -2152,6 +2173,21 @@ export const continuations = sqliteTable("continuations", {
   error: text("error"),
   createdAt: timestamp("created_at").notNull(),
   updatedAt: timestamp("updated_at").notNull(),
+});
+
+/**
+ * The ids a session had before the hub folded its continuations into it
+ * (migration 0128): a hub before it started a second session for each
+ * continuation at an account's limit, and each of those is one session now,
+ * under the id of the one that runs (`instanceId`). Anything that names a
+ * former id — a link, a tab, a session's memory of its parent — is that
+ * session. `folded`: the former row's data has been moved onto it and the
+ * row is gone (db `foldFormerSessions`, once).
+ */
+export const instanceAliases = sqliteTable("instance_aliases", {
+  id: text("id").primaryKey(),
+  instanceId: text("instance_id").notNull(),
+  folded: integer("folded", { mode: "boolean" }).notNull().default(false),
 });
 
 /**

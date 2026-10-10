@@ -56,23 +56,30 @@ export interface ContinueRequest {
     /** The account it runs on; absent, placed as any start is. */
     account?: string;
     /**
-     * The new session takes the source's place, and the source ends: its
-     * account reached its limit and it goes on on `account` from a summary.
-     * What the source's transcript then says names both accounts, the
-     * context it left behind, and where its summary came from.
+     * The source goes on itself, in a fresh conversation seeded with the
+     * summary, on `account`: the same session — its id, row, tab, parent,
+     * children, work, role, workspace and every send owed to it — with its
+     * account changed. Its transcript reads on through a "Continued on"
+     * line. Absent: a new session starts, and the source is only read.
      */
-    inherit?: {
-      fromAccountId: string;
+    inPlace?: {
+      /** The account it runs on now; null on a harness without accounts. */
+      fromAccountId: string | null;
       contextTokens: number | null;
       /**
-       * The summary already kept for the source's conversation as it stands
-       * (the job writes none): the account that wrote it, and the window's
-       * percent when it was written ahead of the limit (null: at an earlier
-       * move). Null: the job's summariser writes it, on `summarizer.account`.
+       * Its account reached its limit. `written`: the summary already kept
+       * for its conversation as it stands (the job writes none), the account
+       * that wrote it, and the window's percent when it was written ahead of
+       * the limit (null: at an earlier move); null: the job's summariser
+       * writes it, on `summarizer.account`, kept for a retry until
+       * `keepUntil` (epoch ms: its reset). Absent: it asked
+       * (`continue_session`), and the job waits for the turn that asked to
+       * end before it reads the conversation.
        */
-      written: { onAccountId: string; atPct: number | null } | null;
-      /** Until when a summary the job writes is kept for a retry (epoch ms): the source's reset. */
-      keepUntil: number;
+      atLimit?: {
+        written: { onAccountId: string; atPct: number | null } | null;
+        keepUntil: number;
+      };
     };
     bootstrap?: { repo: string; baseDir: string };
     cwd?: string;

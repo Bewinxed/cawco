@@ -74,6 +74,8 @@ final class CompactionDividerView: UIView, RowContent, Disclosing {
         // nobody sees, and building them was the dearest row of a first screen.
         brief = compaction.brief ?? ""
         text.configure(open ? brief : "", style: .muted)
+        // A continuation's "Summarising for …" settles into its "Continued on …" here.
+        button.set(word: compaction.word)
         button.set(enabled: compaction.brief != nil, animated: same)
         button.set(open: open, animated: false)
         reveal.set(open: open)
@@ -203,6 +205,16 @@ final class CompactionButton: UIControl {
 
     // MARK: State
 
+    /// The word in the middle: "Compacted", or a continuation's line. The
+    /// centre is laid out again around it.
+    func set(word text: String) {
+        guard text != word.text else { return }
+        word.text = text
+        laid = .zero
+        setNeedsLayout()
+        describe()
+    }
+
     func set(enabled: Bool, animated: Bool) {
         guard enabled != isEnabled || accessibilityLabel == nil else { return }
         isEnabled = enabled
@@ -226,7 +238,7 @@ final class CompactionButton: UIControl {
     }
 
     private func describe() {
-        accessibilityLabel = isEnabled ? "Compacted, \(open ? "hide" : "show") the summary" : "Compacted"
+        accessibilityLabel = isEnabled ? "\(word.text), \(open ? "hide" : "show") the summary" : word.text
         accessibilityTraits = isEnabled ? .button : [.button, .notEnabled]
     }
 

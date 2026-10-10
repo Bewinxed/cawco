@@ -27,16 +27,24 @@ nonisolated enum Row: Sendable {
 
 /// A compaction (rows.ts `compaction`): the boundary the harness reported and
 /// the summary it wrote, one row. The brief is nil until the summary arrives.
+/// A continuation from a summary is drawn as one too (`Fold.continuation`):
+/// its line is the word, and the message its fresh conversation opened on
+/// the brief.
 nonisolated struct Compaction: Equatable, Sendable {
     let key: String
     let brief: String?
     let preTokens: Int?
     let trigger: String?
+    /// The word in the divider's middle: "Compacted", or a continuation's line.
+    var word = "Compacted"
+    /// What a continuation's line says after its word, in the facts' place.
+    var detail: String?
 
     /// "Automatic · 182k tokens before": only the facts the harness reported.
     var facts: String {
-        [trigger.map { $0 == "manual" ? "Manual" : "Automatic" },
-         preTokens.flatMap { $0 == 0 ? nil : "\(Int((Double($0) / 1000).rounded()))k tokens before" }]
+        if let detail { return detail }
+        return [trigger.map { $0 == "manual" ? "Manual" : "Automatic" },
+                preTokens.flatMap { $0 == 0 ? nil : "\(Int((Double($0) / 1000).rounded()))k tokens before" }]
             .compactMap(\.self).joined(separator: " · ")
     }
 }
@@ -188,6 +196,27 @@ nonisolated enum Fold {
                 boundary != nil && brief != nil ? 2 : 1)
     }
 
+    /// rows.ts `continuedAt` (AccountMoveDivider): a continuation from a
+    /// summary, as the compaction row draws it — its "Summarising for …"
+    /// line while the summary is written, nothing to open yet; then, under
+    /// the same key, its "Continued on …" line with the message its fresh
+    /// conversation opened on folded under it as the brief.
+    static func continuation(_ blocks: [Block], at i: Int) -> (row: Row, span: Int)? {
+        let line = blocks[i]
+        guard line.type == "system.account_move",
+              let move = line.meta["accountMove"] as? [String: Any],
+              let kind = move["kind"] as? String, kind == "continuing" || kind == "continued" else { return nil }
+        let next = i + 1 < blocks.count ? blocks[i + 1] : nil
+        let opening = kind == "continued" && (next?.meta["continuation"] as? Bool) == true ? next : nil
+        let words = opening.flatMap { $0.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0.content }
+        let parts = line.content.components(separatedBy: " · ")
+        let key = "c:\(line.id)"
+        let row = Row.compaction(key: key, compaction: Compaction(key: key, brief: words, preTokens: nil, trigger: nil,
+                                                                  word: parts.first ?? line.content,
+                                                                  detail: parts.dropFirst().joined(separator: " · ")))
+        return (row, opening != nil ? 2 : 1)
+    }
+
     enum Receipt { case fold, anchor(String) }
 
     /// rows.ts `receiptsOf`: how each workflow notice is told.
@@ -223,6 +252,7 @@ nonisolated enum Fold {
             let receipt = receiptAt(block, i)
             if case .fold = receipt { i += 1; continue }
             if let compaction = compaction(blocks, at: i) { rows.append(compaction.row); i += compaction.span; continue }
+            if let continued = continuation(blocks, at: i) { rows.append(continued.row); i += continued.span; continue }
             if case let .anchor(run) = receipt {
                 rows.append(.run(key: "r:\(block.id)", block: block, runId: run)); i += 1; continue
             }

@@ -41,6 +41,8 @@ export interface LimitEvent {
 }
 
 export interface AtLimitDb {
+  /** Takes one line back. */
+  readonly dropEvent: (id: string) => void;
   readonly dropHold: (instanceId: string) => void;
   readonly dropSummary: (instanceId: string) => void;
   /** The lines written into these sessions' transcripts, oldest first. */
@@ -56,6 +58,7 @@ export interface AtLimitDb {
     },
     at?: number
   ) => void;
+  /** Writes a line; one already written under its id is what it says now (a continuation's "Summarising…" turned into what came of it). */
   readonly putEvent: (event: LimitEvent) => void;
   readonly putHold: (hold: LimitHold) => void;
   /** Starts a summary ahead of the limit; false when one is already kept or being written. */
@@ -174,9 +177,16 @@ export const atLimitDb = (db: BunSQLiteDatabase): AtLimitDb => ({
       .where(eq(limitSummaries.instanceId, instanceId))
       .run();
   },
+  dropEvent: (id) => {
+    db.delete(limitEvents).where(eq(limitEvents.id, id)).run();
+  },
   putEvent: ({ id, instanceId, at, move }) => {
     db.insert(limitEvents)
       .values({ id, instanceId, at: new Date(at), move })
+      .onConflictDoUpdate({
+        target: limitEvents.id,
+        set: { at: new Date(at), move },
+      })
       .run();
   },
   events: (instanceIds) =>

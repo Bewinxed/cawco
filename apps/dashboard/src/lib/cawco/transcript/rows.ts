@@ -103,7 +103,18 @@ export type Row =
    * The hub's line where the session's account reached its limit: it moved,
    * waited for the reset, or went on from a summary (core `AccountMove`).
    */
-  | { kind: "account"; key: string; move: AccountMove; timestamp?: string };
+  | {
+      kind: "account";
+      key: string;
+      move: AccountMove;
+      timestamp?: string;
+      /**
+       * A `continued` line's: the message its fresh conversation opened on
+       * (the summary, the artifact index and the last turns), folded under
+       * it; null until that has arrived, and on every other line.
+       */
+      brief: string | null;
+    };
 
 /**
  * Who has the floor, row by row: a speaker line appears only when the speaker
@@ -525,6 +536,33 @@ function compactionAt(
   };
 }
 
+/**
+ * A `continued` line and the message its fresh conversation opened on, as
+ * one row: the opening is the line's brief, never a turn of its own. Null
+ * at anything else, and at a line whose opening has not arrived yet.
+ */
+function continuedAt(
+  messages: Message[],
+  i: number
+): { row: Extract<Row, { kind: "account" }>; span: number } | null {
+  const m = messages[i];
+  const move = m.type === "system.account_move" && m.metadata?.accountMove;
+  const next = messages[i + 1];
+  if (move && move.kind === "continued" && next?.metadata?.continuation) {
+    return {
+      row: {
+        kind: "account",
+        key: `am:${keyOf(m, i)}`,
+        move,
+        timestamp: m.timestamp,
+        brief: next.content,
+      },
+      span: 2,
+    };
+  }
+  return null;
+}
+
 /** The branch a tool.use spawned, when it opened one — a real subagent fold. */
 const branchOf = (
   m: Message,
@@ -625,6 +663,7 @@ function ownRow(
       key: `am:${keyOf(m, i)}`,
       move,
       timestamp: m.timestamp,
+      brief: null,
     };
   }
   if (isHarnessNote(m)) {
@@ -684,6 +723,13 @@ function foldRange(
     if (compaction) {
       rows.push(compaction.row);
       i += compaction.span;
+      continue;
+    }
+
+    const continued = continuedAt(messages, i);
+    if (continued) {
+      rows.push(continued.row);
+      i += continued.span;
       continue;
     }
 
@@ -1248,7 +1294,11 @@ const sameMessage = (a: Message | undefined, b: Message | undefined): boolean =>
  * The same test names what the reader sent, for the composer's recall.
  */
 export const opensTurn = (m: Message): boolean =>
-  m.type === "user" && !m.parentToolUseId && !isHarnessNote(m);
+  m.type === "user" &&
+  !m.parentToolUseId &&
+  !isHarnessNote(m) &&
+  // A fresh conversation's opening is its "Continued" line's brief.
+  !m.metadata?.continuation;
 
 /**
  * Where a fold of `messages` may restart given what `memo` was folded from,

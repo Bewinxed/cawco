@@ -93,6 +93,12 @@ export interface RejectedFrame {
 export interface InstancesFrame {
   agents: AgentRow[];
   continuations: ContinuationJob[];
+  /**
+   * The ids sessions had before the hub folded each one's continuations at
+   * its account's limit into it (migration 0128): former id → its id now. A
+   * tab or link that names a former id is that session.
+   */
+  formerIds: Record<string, string>;
   handoffs: Record<string, { from: string; at: number }>;
   hubBuild: BuildInfo;
   instances: InstanceRow[];

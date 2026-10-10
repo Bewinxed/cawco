@@ -22,6 +22,7 @@ import type {
 } from "./harness";
 import {
   ACCOUNT_MOVE,
+  CONTINUATION_ORIGIN,
   CUSTODY_HELD,
   FRESH_START,
   FRESH_START_LINE,
@@ -1734,10 +1735,14 @@ export function sendRow(
     timestamp: isoOf(record.acceptedAt),
     ...(sdkUuid ? { sdkUuid } : {}),
   });
+  const { origin } = record.body;
   const metadata = {
     ...row.metadata,
     ...(record.reason ? { sendFailed: record.reason } : {}),
     ...(record.mode === "urgent" ? { urgent: true as const } : {}),
+    ...(origin?.kind === "system" && origin.name === CONTINUATION_ORIGIN
+      ? { continuation: true as const }
+      : {}),
   };
   return {
     ...row,

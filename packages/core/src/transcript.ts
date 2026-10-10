@@ -646,6 +646,21 @@ export class TranscriptBuilder {
     return this.flush();
   }
 
+  /** One of the hub's own lines taken back: its row is no longer drawn. */
+  removeLine(id: string): TranscriptEvent[] {
+    const at = this.rows.findIndex((row) => row.id === id);
+    if (at >= 0) {
+      const [held] = this.rows.splice(at, 1);
+      this.rowIds.delete(id);
+      const shown = this.placed.indexOf(held);
+      if (shown >= 0) {
+        this.placed.splice(shown, 1);
+      }
+      this.events.push({ type: "block.remove", id });
+    }
+    return this.flush();
+  }
+
   /** Ends the live tail without a frame: the process behind it is gone. */
   endTurn(): TranscriptEvent[] {
     this.setTail({ busy: false, currentTool: null });
@@ -820,8 +835,13 @@ export class TranscriptBuilder {
       return;
     }
     // A row already there — a frame replayed behind a history read — is not
-    // said twice.
+    // said twice. The hub's account line said again under its id is what
+    // that line says now (a continuation's "Summarising…" turned into what
+    // came of it): it is redrawn in its place.
     if (this.rowIds.has(block.id)) {
+      if (block.type === "system.account_move") {
+        this.restate(block);
+      }
       return;
     }
     this.rows.push(block);
@@ -832,6 +852,21 @@ export class TranscriptBuilder {
       this.placed.push(block);
       this.events.push({ type: "block.append", block });
     }
+  }
+
+  /** A main-transcript row replaced by `block`, its id's newer word, where it stands. */
+  private restate(block: TranscriptBlock): void {
+    const at = this.rows.findIndex((row) => row.id === block.id);
+    if (at < 0) {
+      return;
+    }
+    const held = this.rows[at];
+    this.rows[at] = block;
+    const shown = this.placed.indexOf(held);
+    if (shown >= 0) {
+      this.placed[shown] = block;
+    }
+    this.events.push({ type: "block.update", block });
   }
 
   /**

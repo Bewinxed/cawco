@@ -846,11 +846,31 @@ export type AccountMove =
       tokens: number | null;
     }
   | {
+      /**
+       * The session's summary is being written, on `to` (null: a harness
+       * without accounts), for it to go on from in a fresh conversation:
+       * the line it is until that conversation starts, when it becomes the
+       * `continued` line under the same id, or `unmoved` if it failed.
+       */
+      kind: "continuing";
+      to: NamedAccount | null;
+      /** The session asked for it (`continue_session`), not its account's limit. */
+      asked?: true;
+      tokens: number | null;
+    }
+  | {
+      /**
+       * The session went on in a fresh conversation of its own, seeded with a
+       * summary of the one before: the same session, its account changed
+       * (`from` to `to`; null on a harness without accounts).
+       */
       kind: "continued";
-      from: NamedAccount;
-      to: NamedAccount;
+      from: NamedAccount | null;
+      to: NamedAccount | null;
       /** The account whose summariser wrote the summary it went on from. */
-      writtenOn: NamedAccount;
+      writtenOn: NamedAccount | null;
+      /** The session asked for it (`continue_session`), not its account's limit. */
+      asked?: true;
       tokens: number | null;
       /** The window's percent when the summary was written ahead of the limit; null when it was written at the move. */
       preparedAtPct: number | null;
@@ -867,25 +887,23 @@ export type AccountMove =
       resetsAt: number | null;
     }
   | {
-      /** Continuing it on `to` failed at `step`: it is the one session running, still on `from`. */
+      /** Continuing it on `to` failed at `step`: it goes on in its conversation, still on `from`. */
       kind: "unmoved";
-      from: NamedAccount;
-      to: NamedAccount;
+      from: NamedAccount | null;
+      to: NamedAccount | null;
+      /** The session asked for it (`continue_session`), not its account's limit. */
+      asked?: true;
       step: ContinueStep;
-      /** The session's machine, as the fleet names it. */
-      machine: string;
-      /** The session, as its title names it. */
-      session: string;
       /** What the hub got from the step that failed. */
       reason: string;
     };
 
 /**
- * The steps of continuing a session on another account, in order: read its
- * transcript, summarise it, start its successor, end it. Only after the last
- * does the successor take its place.
+ * The steps of continuing a session from a summary, in order: read its
+ * transcript, summarise it, start its fresh conversation. Until the last
+ * one is done it goes on in the conversation it has.
  */
-export type ContinueStep = "prepare" | "summary" | "start" | "end";
+export type ContinueStep = "prepare" | "summary" | "start";
 
 /** "5-hour", "weekly", "weekly Opus": a window as a sentence names it. */
 export const windowWords = (
@@ -1013,24 +1031,38 @@ export const accountMoveWords = (
     case "stopped":
       return stoppedWords(move, now);
     case "unmoved":
-      return move.step === "end"
-        ? {
-            line: `${move.machine} didn't end ${move.session}; it's still running`,
-            detail: `Stop it there, or try again when ${move.machine} answers`,
-          }
-        : {
-            line: `Couldn't continue on ${move.to.name}: ${move.reason}`,
-            detail: `It stays on ${move.from.name}; the hub tries again in a few minutes, or it goes on when ${move.from.name} resets`,
-          };
-    default:
       return {
-        line: `Continued on ${move.to.name} from a summary · ${tokenWords(move.tokens)} stayed on ${move.from.name}`,
+        line: `Couldn't continue${move.to ? ` on ${move.to.name}` : ""}: ${move.reason}`,
         detail:
-          move.preparedAtPct === null
-            ? `Summary written on ${move.writtenOn.name}, at the move`
-            : `Summary written at ${Math.round(move.preparedAtPct)}%, before the move`,
+          move.asked || !move.from
+            ? "It goes on in the conversation it has"
+            : `It stays on ${move.from.name}; the hub tries again in a few minutes, or it goes on when ${move.from.name} resets`,
       };
+    case "continuing":
+      return {
+        line: move.to ? `Summarising for ${move.to.name}…` : "Summarising…",
+        detail: `It goes on from the summary in a fresh conversation · ${tokenWords(move.tokens)} to summarise`,
+      };
+    default:
+      return continuedWords(move);
   }
+};
+
+/** A continuation in words: where it went on, what stayed behind, and where its summary was written. */
+const continuedWords = (
+  move: Extract<AccountMove, { kind: "continued" }>
+): { line: string; detail: string } => {
+  const stayed = `${tokenWords(move.tokens)} stayed ${move.from ? `on ${move.from.name}` : "in the conversation before"}`;
+  let detail = `Summary written at ${Math.round(move.preparedAtPct ?? 0)}%, before the move`;
+  if (move.preparedAtPct === null) {
+    detail = move.writtenOn
+      ? `Summary written on ${move.writtenOn.name}, ${move.asked ? "as it asked" : "at the move"}`
+      : "Summary written as it asked";
+  }
+  return {
+    line: `Continued${move.to ? ` on ${move.to.name}` : ""} from a summary · ${stayed}`,
+    detail,
+  };
 };
 
 /**

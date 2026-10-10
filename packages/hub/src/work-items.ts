@@ -3633,23 +3633,6 @@ export const createWorkItems = ({
     },
 
     /**
-     * Items whose parent changed under them (a session took another's
-     * place, server.ts `handOverChildren`): every dashboard hears each as it
-     * now stands, so it leaves one tray for the other.
-     */
-    reparented(ids: string[]): void {
-      const queued = new Map(db.queuedWorkItems().map((row) => [row.id, row]));
-      for (const id of ids) {
-        const row = queued.get(id);
-        if (row) {
-          publish(queuedSummaryOf(row));
-        } else {
-          published(db.workItem(id));
-        }
-      }
-    },
-
-    /**
      * What a session's delegate tray shows when it opens: the items it
      * delegated and, as its projects' lead, the ones it co-parents from
      * another session — live work, failures nobody has dismissed yet, what

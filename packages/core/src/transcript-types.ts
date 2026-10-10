@@ -75,6 +75,12 @@ export interface BlockMetadata {
    * (opencode): `failed` with the harness's words in `compactError`.
    */
   compactResult?: "success" | "failed";
+  /**
+   * A send that is the message a session went on from in a fresh
+   * conversation (origin {@link import("./harness").CONTINUATION_ORIGIN}):
+   * drawn folded under the `continued` line before it, never as a turn.
+   */
+  continuation?: true;
   cwd?: string;
   /** The delegate a `tool.handoff` started, read once off its result. */
   delegateInstanceId?: string;

@@ -108,6 +108,7 @@ import {
   CLAUDE_CONVERSATION_GONE,
   CLAUDE_PROVIDER,
   CONFIGURE_BINARY_UPDATES,
+  CONTINUATION_ORIGIN,
   CONTROL_BEGIN_ACCOUNT_LOGIN,
   CONTROL_BEGIN_PROVIDER_LOGIN,
   CONTROL_CARRY_SESSIONS,
@@ -308,6 +309,7 @@ import type {
 } from "./db";
 import { checkoutOf, hashHookMaterial, listedAt, TURN_UNRECORDED } from "./db";
 import type { LoginMove } from "./db/accounts";
+import type { PriorConversation } from "./db/schema";
 import { buildDecisionPage, type PageSources } from "./decision-page";
 import { delegateTypesRoutes, makeDelegateTypes } from "./delegate-types";
 import {
@@ -609,6 +611,55 @@ const RESTORE_MAX = 20;
  * goes before reading one leaves its next one something to read.
  * Idempotent: once each has its own, none is left to keep.
  */
+/**
+ * Why a send failed when it failed only because a process went away, as the
+ * hub said it before a send was the hub's to keep (UNREAD), or because the
+ * account's limit refused the turn that read it: in both the session still
+ * ought to read it.
+ */
+const LIMIT_REFUSED_WORDS = /usage limit|hit your limit|rate[ _-]?limit/i;
+const failedOnlyForAProcess = (reason: string): boolean =>
+  (Object.values(UNREAD) as string[]).includes(reason) ||
+  LIMIT_REFUSED_WORDS.test(reason);
+
+/**
+ * At start, before any machine is heard: each chain of sessions a hub before
+ * this one made of one at its account's limit is folded into the session at
+ * its end, the one that runs (db `foldFormerSessions`, once per former row).
+ * Answers the sends that failed only because a process went away, pending
+ * again for that session: kept whole and owed by the caller.
+ */
+const foldFormerSessions = (db: DbShape): string[] => {
+  const folded = db.foldFormerSessions(failedOnlyForAProcess);
+  for (const one of folded) {
+    console.log(
+      `[hub] folded ${one.formers.join(", ")} into ${one.instanceId}: one session from here${one.ending.length > 0 ? `; ${one.ending.join(", ")} ended at its machine's next register` : ""}${one.owedAgain.length > 0 ? `; ${one.owedAgain.length} send(s) a process lost owed to it again` : ""}`
+    );
+  }
+  return folded.flatMap((one) => one.owedAgain);
+};
+
+/**
+ * What a hub that starts holds of the sends before it: the chains of
+ * sessions a hub before this one split at an account's limit folded first
+ * (migration 0128), each one session from here; every pending send kept
+ * whole; and what the fold found a process lost owed again — or, with an
+ * image no longer stored, failed as it can no longer be sent.
+ */
+const keepSendsAtStart = (db: DbShape): void => {
+  const owedAgain = foldFormerSessions(db);
+  keepPendingWhole(db);
+  for (const uuid of owedAgain) {
+    if (!db.oweAgain(uuid) && db.sendRecord(uuid)?.state === "pending") {
+      db.updateSend(uuid, {
+        state: "failed",
+        reason:
+          "An image it carried is no longer stored, so it could not be sent again.",
+      });
+    }
+  }
+};
+
 const keepPendingWhole = (db: DbShape): void => {
   let keptWhole = 0;
   for (const send of db.unkeptSends()) {
@@ -689,6 +740,9 @@ const utcClock = (at: Date): string => `${at.toISOString().slice(11, 16)} UTC`;
 
 /** What a hand-back asks of the session it goes to. */
 const CARRY_ON_CUT = "Carry on from where it stopped.";
+
+/** The system origin name of the hub's word that a session at its account's limit may go on (at-limit.ts `CARRY_ON_ORIGIN`). */
+const LIMIT_ORIGIN = "limit";
 
 /** What a session restored after a restart is told of the turn that restart cut. */
 const restartedWords = (restartedAt: Date): string =>
@@ -935,6 +989,9 @@ const continueBody = t.Object({
     projectId: t.Optional(t.String()),
   }),
   note: t.Optional(t.String()),
+  // The session goes on itself, in a fresh conversation, rather than in a
+  // new session: what `continue_session` asks when it names no session.
+  inPlace: t.Optional(t.Boolean()),
   // What rides the new session's opening message beside its words, as a
   // send carries it. The summariser is never handed them.
   images: t.Optional(
@@ -2299,6 +2356,8 @@ export const createServer = (
   // they always were — `sleeping`. Idempotent, so this is a boot step and not a
   // migration script somebody has to remember to run.
   const swept = db.sweepBootStatuses(RESTART_RESUMABLE);
+  /** Asks this start drops with the process that parked them: asked again when each session next runs ({@link noteWithdrawn}). */
+  const droppedAtStart: Envelope[] = [];
   for (const parked of pending.list()) {
     const [row] = db.getInstancesByIds([parked.instanceId ?? ""]);
     // A move's approval is kept on its `moving` row, which no process holds;
@@ -2308,6 +2367,7 @@ export const createServer = (
         row && ["running", "starting", "unknown", "moving"].includes(row.status)
       )
     ) {
+      droppedAtStart.push(parked);
       pending.forget(parked.instanceId ?? "");
     }
   }
@@ -2316,7 +2376,7 @@ export const createServer = (
       `[hub] boot sweep: ${swept.toUnknown} session(s) → unknown, ${swept.toSleeping} legacy restart error(s) → sleeping`
     );
   }
-  keepPendingWhole(db);
+  keepSendsAtStart(db);
 
   /**
    * What each session is doing right now, as its own daemon last said: memory
@@ -3306,6 +3366,12 @@ export const createServer = (
     keep: "none" | "all" = "none"
   ): void => {
     if (!outlived) {
+      // What it had asked the person is asked again if it runs again.
+      if (keep === "all") {
+        noteWithdrawn(
+          pending.list().filter((ask) => ask.instanceId === instanceId)
+        );
+      }
       pending.forget(instanceId);
     }
     // Nor is it doing anything any more: a pulse outliving its process is the
@@ -3373,8 +3439,7 @@ export const createServer = (
   /**
    * The session a parked ask was routed to: its parent, or its project's
    * lead (work-items.ts `reportees`), as the ask's record names it
-   * ({@link deliverDelegateAsk}; a session taking another's place takes its
-   * records, `moveChildren`). Undefined for an ask not routed.
+   * ({@link deliverDelegateAsk}). Undefined for an ask not routed.
    */
   const routedRecipient = (parked: Envelope): string | undefined => {
     const payload = parked.payload as { kind?: unknown; routedTo?: unknown };
@@ -3420,44 +3485,6 @@ export const createServer = (
     parent: { id: string; machineId: string },
     ask: { requestId?: string; payload: unknown }
   ): void => {
-    tellDelegateAsk(delegate, parent, ask);
-    const toolName = peek(ask.payload, "toolName");
-    publishDelegateEvent(
-      delegate.machineId,
-      db.recordDelegateEvent({
-        instanceId: delegate.id,
-        parentInstanceId: parent.id,
-        kind: "ask",
-        requestId: ask.requestId,
-        toolName,
-        requestKind:
-          peek(ask.payload, "requestKind") === "question" ||
-          toolName === ASK_USER_QUESTION
-            ? "question"
-            : "tool",
-        payload: {
-          input: (
-            ask.payload as Extract<
-              FramePayload,
-              { kind: "permission_request" }
-            > | null
-          )?.input,
-        },
-        status: "pending",
-      })
-    );
-  };
-
-  /**
-   * The ask's message alone, into `parent`: what a session that takes
-   * another's place is told of the asks routed to that one, whose records
-   * are moved to it rather than made again ({@link handOverChildren}).
-   */
-  const tellDelegateAsk = (
-    delegate: InstanceRow,
-    parent: { id: string; machineId: string },
-    ask: { requestId?: string; payload: unknown }
-  ): void => {
     const { name, tag: label } = sessionLabel(delegate);
     const body = renderDelegateAsk(ask.payload);
     const instruction =
@@ -3494,6 +3521,31 @@ export const createServer = (
         },
       },
     });
+    const toolName = peek(ask.payload, "toolName");
+    publishDelegateEvent(
+      delegate.machineId,
+      db.recordDelegateEvent({
+        instanceId: delegate.id,
+        parentInstanceId: parent.id,
+        kind: "ask",
+        requestId: ask.requestId,
+        toolName,
+        requestKind:
+          peek(ask.payload, "requestKind") === "question" ||
+          toolName === ASK_USER_QUESTION
+            ? "question"
+            : "tool",
+        payload: {
+          input: (
+            ask.payload as Extract<
+              FramePayload,
+              { kind: "permission_request" }
+            > | null
+          )?.input,
+        },
+        status: "pending",
+      })
+    );
   };
 
   /**
@@ -4189,25 +4241,15 @@ export const createServer = (
     frame: FramePayload & { kind: "frame" }
   ): void => {
     const neutral = frame.message;
-    if (neutral.type === "assistant" && !neutral.parent_tool_use_id) {
-      // An error the harness wrote in the model's place answers nothing:
-      // what it had just read failed, in its words, which its rows carry.
-      const waiting = unanswered.get(instanceId);
-      if (neutral.error && waiting?.size) {
-        const words = neutral.message.content
-          .flatMap((block) => (block.type === "text" ? [block.text] : []))
-          .join("\n");
-        neutral.failedSends = failWaiting(
-          instanceId,
-          waiting,
-          words || neutral.error
-        );
-        return;
-      }
+    // A turn its account's limit refused fails nothing it read: the session
+    // reads it when it goes on — carried on at the reset or on another
+    // account, or from a summary that carries its last turns verbatim.
+    if (limitRefusesTurn(instanceId, neutral)) {
       unanswered.delete(instanceId);
-      if (neutral.uuid) {
-        anchors.set(instanceId, neutral.uuid);
-      }
+      return;
+    }
+    if (neutral.type === "assistant" && !neutral.parent_tool_use_id) {
+      observeAnswer(instanceId, neutral);
       return;
     }
     if (neutral.type !== "result") {
@@ -4225,6 +4267,65 @@ export const createServer = (
         ? neutral.errors.join("\n")
         : neutral.result || `Harness error (${neutral.subtype}).`
     );
+  };
+
+  /**
+   * The model's own message, answering what its turn read. An error the
+   * harness wrote in the model's place answers nothing: what it had just
+   * read failed, in its words, which its rows carry.
+   */
+  const observeAnswer = (
+    instanceId: string,
+    neutral: Extract<
+      (FramePayload & { kind: "frame" })["message"],
+      { type: "assistant" }
+    >
+  ): void => {
+    const waiting = unanswered.get(instanceId);
+    if (neutral.error && waiting?.size) {
+      const words = neutral.message.content
+        .flatMap((block) => (block.type === "text" ? [block.text] : []))
+        .join("\n");
+      neutral.failedSends = failWaiting(
+        instanceId,
+        waiting,
+        words || neutral.error
+      );
+      return;
+    }
+    unanswered.delete(instanceId);
+    if (neutral.uuid) {
+      anchors.set(instanceId, neutral.uuid);
+    }
+  };
+
+  /**
+   * Whether `neutral` is a session's account's limit refusing its turn, for a
+   * session the at-limit controller carries on: Claude Code's `rate_limit`
+   * answer, the result of a turn already marked refused, or a pi or OpenCode
+   * turn's error naming a ChatGPT limit CawCo reads.
+   */
+  const limitRefusesTurn = (
+    instanceId: string,
+    neutral: (FramePayload & { kind: "frame" })["message"]
+  ): boolean => {
+    let refused = false;
+    if (neutral.type === "assistant" && !neutral.parent_tool_use_id) {
+      refused = (neutral as { error?: string }).error === "rate_limit";
+    } else if (neutral.type === "result") {
+      const [row] = db.getInstancesByIds([instanceId]);
+      const provider = row?.accountId
+        ? db.accounts.get(row.accountId)?.provider
+        : undefined;
+      refused =
+        limitRefused.has(instanceId) ||
+        (neutral.is_error &&
+          !!provider &&
+          provider !== CLAUDE_PROVIDER &&
+          LIMITED_PROVIDERS.includes(provider) &&
+          providerLimitRefused(neutral.errors ?? []));
+    }
+    return refused && atLimit.manages(instanceId);
   };
 
   /** The sends a session read and nothing answered, failed for `reason`: their uuids. */
@@ -4836,6 +4937,9 @@ export const createServer = (
     ...(row.kind === "scratch" ? { scratch: {} } : {}),
     ...(row.model ? { model: row.model } : {}),
     ...(isEffortLevel(row.effort) ? { effort: row.effort } : {}),
+    ...(row.projectId ? { projectId: row.projectId } : {}),
+    // A leaf stays a leaf whatever brings it back (as `restore` says).
+    ...(row.canDelegate === false ? { canDelegate: false } : {}),
     ...typeSettingsOf(row),
   });
 
@@ -5337,29 +5441,26 @@ export const createServer = (
   carryOnMoves();
 
   /**
-   * An envelope addressed to a session another took the place of, addressed
-   * instead to the one that runs in its place now (db `successorOf`): its
-   * machine, and its id on the envelope and in the payload. Unchanged when
-   * nothing took its place. Every send, control and stop that names a
-   * session by id passes here, so a superseded session is never reached.
+   * An envelope that names a session by one of its former ids (db
+   * `instanceIdOf`: a session whose continuations the hub folded into one),
+   * addressed to the session by its id now: its machine, and its id on the
+   * envelope and in the payload. Unchanged for any other id. Every send,
+   * control and stop that names a session by id passes here.
    */
-  const toSuccessor = <P extends { instanceId?: string }>(
+  const byIdNow = <P extends { instanceId?: string }>(
     envelope: Envelope<P>
   ): Envelope<P> => {
     const named = envelope.payload.instanceId ?? envelope.instanceId;
-    const successor = named ? db.successorOf(named) : undefined;
-    if (!(named && successor) || successor === named) {
+    const now = named ? db.instanceIdOf(named) : undefined;
+    if (!(named && now) || now === named) {
       return envelope;
     }
-    const [row] = db.getInstancesByIds([successor]);
-    console.info(
-      `[hub] ${named} was continued as ${successor}: its ${envelope.verb} goes there`
-    );
+    const [row] = db.getInstancesByIds([now]);
     return {
       ...envelope,
-      instanceId: successor,
+      instanceId: now,
       machineId: row?.machineId ?? envelope.machineId,
-      payload: { ...envelope.payload, instanceId: successor },
+      payload: { ...envelope.payload, instanceId: now },
     };
   };
 
@@ -5424,16 +5525,17 @@ export const createServer = (
    * ({@link releaseOwed}), in the order accepted. The holds: the session's
    * start held while its machine installs an update ({@link holdingStarts}),
    * its machine's agent away within its reconnect grace
-   * ({@link awaitingMachine}), and a send owed before it to the same session,
-   * which it never overtakes.
+   * ({@link awaitingMachine}), its account at its limit or its continuation
+   * from a summary under way ({@link heldAtLimit}), and a send owed before it
+   * to the same session, which it never overtakes — but the opening of a
+   * continuation in place (`ahead`), which its fresh conversation opens on.
    */
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the single send transaction orders refusal, recovery, delivery and persistence.
-  const deliverSend = (asked: Envelope<SendPayload>): SentMessageRow => {
-    // A keep-alive ping keeps one process's cache warm: it is that row's or
-    // nobody's. Everything else is for the conversation, wherever it runs now.
-    const envelope = isKeepAlive(asked.payload.message)
-      ? asked
-      : toSuccessor(asked);
+  const deliverSend = (
+    asked: Envelope<SendPayload>,
+    ahead = false
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the single send transaction orders refusal, recovery, delivery and persistence.
+  ): SentMessageRow => {
+    const envelope = byIdNow(asked);
     const { instanceId, message } = envelope.payload;
     const { machineId } = envelope;
     const keepAlive = isKeepAlive(message);
@@ -5456,6 +5558,10 @@ export const createServer = (
       !!target &&
       wakesForSend(target) &&
       !startsTurnIn(target, message.origin);
+    // Kept, not handed: a turn at its account's limit would only be refused.
+    const limited =
+      !(refused || keepAlive || ahead) &&
+      heldAtLimit(instanceId, message.origin);
     const agent = refused ? undefined : registry.agent(machineId);
     const away =
       !(refused || agent || keepAlive) && awaitingMachine.has(machineId);
@@ -5471,7 +5577,7 @@ export const createServer = (
           ? `${content}${waitSummary}`
           : [...content, { type: "text", text: waitSummary }];
     }
-    if (agent && !kept) {
+    if (agent && !(kept || limited)) {
       if (keepAlive) {
         db.updateKeepAlive(instanceId, { keepAliveTurn: message.uuid });
       } else {
@@ -5481,7 +5587,9 @@ export const createServer = (
     const owed =
       away ||
       kept ||
-      (agent !== undefined && !keepAlive && sendWaits(instanceId));
+      (agent !== undefined &&
+        !keepAlive &&
+        (limited || (!ahead && sendWaits(instanceId))));
     // Every hand-off is named, so the machine handing one back names which
     // ({@link takeBack}); a keep-alive ping is never handed back.
     const delivery = keepAlive ? undefined : crypto.randomUUID();
@@ -5526,7 +5634,7 @@ export const createServer = (
     }
     publishSend(record);
     // A send that woke its session goes out behind what was kept for it.
-    if (agent && owed && !(kept || away)) {
+    if (agent && owed && !(kept || away || limited)) {
       releaseOwed({ instanceId });
     }
     if (accepted) {
@@ -5545,6 +5653,50 @@ export const createServer = (
    */
   const sendWaits = (instanceId: string): boolean =>
     db.owesSpawn(instanceId) || db.owedSends({ instanceId }).length > 0;
+
+  /**
+   * Whether a send to `instanceId` waits at the hub because the session's
+   * account is at its limit, where a turn would only be refused: held there
+   * until its reset (the at-limit controller's hold), or going on from a
+   * summary in place and not yet handed its opening. What carries it on — the
+   * controller's own word at the reset, and the opening — is not held.
+   */
+  const heldAtLimit = (instanceId: string, origin: NeutralOrigin): boolean => {
+    if (
+      origin.kind === "system" &&
+      (origin.name === LIMIT_ORIGIN || origin.name === CONTINUATION_ORIGIN)
+    ) {
+      return false;
+    }
+    return (
+      db.atLimit.hold(instanceId) !== undefined ||
+      db
+        .continuationRows()
+        .some(
+          (job) =>
+            job.sourceInstanceId === instanceId &&
+            job.request.target.inPlace !== undefined &&
+            !SETTLED.has(job.stage) &&
+            !db.sendRecord(job.openingUuid)
+        )
+    );
+  };
+
+  /** What a session held at its account's limit was kept goes, in order, once nothing holds it ({@link heldAtLimit}). */
+  const releaseLimitHeld = (): void => {
+    const owed = new Set(
+      db
+        .listAgents()
+        .flatMap((machine) =>
+          db
+            .owedSends({ machineId: machine.machineId })
+            .map((send) => send.instanceId)
+        )
+    );
+    for (const instanceId of owed) {
+      releaseOwed({ instanceId });
+    }
+  };
 
   /**
    * Machines whose agent is away within its reconnect grace, and why: its
@@ -5585,6 +5737,10 @@ export const createServer = (
     if (row && keptAsleep(row)) {
       return "resting";
     }
+    const origin = (record.body as SentMessage | null)?.origin;
+    if (origin && heldAtLimit(record.instanceId, origin)) {
+      return "limit";
+    }
     const away = row ? awaitingMachine.get(row.machineId) : undefined;
     if (row && away && !registry.agent(row.machineId)) {
       return away.why;
@@ -5602,7 +5758,7 @@ export const createServer = (
     asked: Envelope<SendPayload>,
     requester: InstanceRow
   ): SendDelivery => {
-    const envelope = toSuccessor(asked);
+    const envelope = byIdNow(asked);
     const { payload } = envelope;
     const malformed = normalizeRelayMessage(payload);
     if (malformed) {
@@ -5661,6 +5817,10 @@ export const createServer = (
       return;
     }
     const envelope = JSON.parse(send.owed ?? "{}") as Envelope<SendPayload>;
+    // Kept while its account is at its limit: it goes once that is over.
+    if (heldAtLimit(send.instanceId, envelope.payload.message.origin)) {
+      return;
+    }
     const refused = inputRefusal(
       send.instanceId,
       envelope.payload.message.origin
@@ -7551,18 +7711,13 @@ export const createServer = (
    * in, whatever directory the caller sent: the harness keeps the conversation
    * under that directory, and a folder the CLI later wandered into may be gone.
    * A row whose launch directory is unknown (its machine had no record of its
-   * conversation) is refused: there is nothing there to resume. So is a row
-   * another session took the place of ({@link supersededRefusal}): every
+   * conversation) is refused: there is nothing there to resume. Every
    * start, wake, resume and restore of an existing row is decided here.
    */
   const atLaunchDir = <P extends { cwd: string }>(
     instanceId: string | undefined,
     payload: P
   ): { payload: P } | { refusal: string } => {
-    const superseded = instanceId ? supersededRefusal(instanceId) : undefined;
-    if (superseded) {
-      return { refusal: superseded };
-    }
     const launched = instanceId ? db.launchDirOf(instanceId) : undefined;
     if (!launched) {
       return { payload };
@@ -7578,16 +7733,6 @@ export const createServer = (
       };
     }
     return { payload: { ...payload, cwd: launched.cwd } };
-  };
-  /**
-   * Why `instanceId` never runs again: another session took its place at
-   * its account's limit (db `successorOf`). Nothing when none did.
-   */
-  const supersededRefusal = (instanceId: string): string | undefined => {
-    const successor = db.successorOf(instanceId);
-    return successor === instanceId
-      ? undefined
-      : `${instanceId} was continued as ${successor} and never runs again; ${successor} runs in its place.`;
   };
   /** {@link atLaunchDir}'s refusal for a row, if it would refuse one. */
   const launchRefusal = (instanceId: string): string | undefined => {
@@ -7818,125 +7963,6 @@ export const createServer = (
   };
 
   /**
-   * A session taking another's place (continued on another account at the
-   * other's limit): it answers to the same parent, runs the same work item,
-   * works for the same thread and project, and everything that answered to
-   * the source as its parent answers to it ({@link handOverChildren}). The
-   * work item names it as its session from here, so the source's end is not
-   * the item's end. Done as the source is ended, never sooner: until then
-   * the source is the item's. The source's row names the target from here
-   * (`continuedInto`): it never runs again, and whatever is addressed to it
-   * reaches the target (db `successorOf`).
-   */
-  const takePlaceOf = (sourceId: string, targetId: string): void => {
-    const [source] = db.getInstancesByIds([sourceId]);
-    if (!source) {
-      return;
-    }
-    db.patchInstance(sourceId, { continuedInto: targetId });
-    db.patchInstance(targetId, {
-      ...(source.parentInstanceId
-        ? { parentInstanceId: source.parentInstanceId }
-        : {}),
-      ...(source.workItemId ? { workItemId: source.workItemId } : {}),
-      ...(source.threadId ? { threadId: source.threadId } : {}),
-      ...(source.projectId ? { projectId: source.projectId } : {}),
-    });
-    if (source.workItemId) {
-      db.updateWorkItem(source.workItemId, { instanceId: targetId });
-      db.patchInstance(sourceId, { workItemId: null });
-    }
-    handOverChildren(sourceId, targetId, true);
-  };
-
-  /**
-   * What {@link takePlaceOf} gave `targetId` goes back to `sourceId`: the
-   * source was not ended after all, and goes on with it. Exactly that set:
-   * the new session was never handed its opening, so nothing answering to
-   * it is its own.
-   */
-  const giveBack = (targetId: string, sourceId: string): void => {
-    db.patchInstance(sourceId, { continuedInto: null });
-    const [target] = db.getInstancesByIds([targetId]);
-    if (target?.workItemId) {
-      db.patchInstance(sourceId, { workItemId: target.workItemId });
-      db.updateWorkItem(target.workItemId, { instanceId: sourceId });
-      db.patchInstance(targetId, { workItemId: null });
-    }
-    handOverChildren(targetId, sourceId, false);
-  };
-
-  /**
-   * The asks routed to `recipientId` (as its delegates' parent, or as their
-   * project's lead) that nobody has answered, each with the delegate that
-   * asked.
-   */
-  const routedAsksTo = (
-    recipientId: string
-  ): { delegate: InstanceRow; ask: Envelope }[] =>
-    pending.list().flatMap((parked) => {
-      const [delegate] =
-        routedRecipient(parked) === recipientId && parked.instanceId
-          ? db.getInstancesByIds([parked.instanceId])
-          : [];
-      return delegate ? [{ delegate, ask: parked }] : [];
-    });
-
-  /**
-   * Everything that answers to `fromId` as its parent made `toId`'s: the
-   * sessions nested under it, the work items it delegated (live and
-   * finished: a finished one is reopened by its parent's hand-off), the
-   * delegations and attempts queued for it, the asks its delegates routed to
-   * it ({@link CawcoDb.moveChildren}), and the sends owed to it, re-addressed.
-   * `tell`: `toId` takes `fromId`'s place, and is told each routed ask
-   * nobody has answered, which it answers from here; handing them back tells
-   * nothing, as `fromId` was told them already. Said in the hub's log once,
-   * when anything moved.
-   */
-  const handOverChildren = (
-    fromId: string,
-    toId: string,
-    tell: boolean
-  ): void => {
-    const [to] = db.getInstancesByIds([toId]);
-    if (!to) {
-      return;
-    }
-    const routed = tell ? routedAsksTo(fromId) : [];
-    const moved = db.moveChildren(fromId, toId);
-    const sends = db.readdressOwedSends(fromId, to);
-    const kinds: [string, string[]][] = [
-      ["sessions", moved.sessions],
-      ["work items", moved.items],
-      ["queued delegations", moved.queued],
-      ["queued attempts", moved.taskStarts],
-      ["unanswered asks", moved.asks],
-      ["owed sends", sends.map((send) => send.uuid)],
-    ];
-    const said = kinds
-      .filter(([, ids]) => ids.length > 0)
-      .map(([what, ids]) => `${ids.length} ${what} (${ids.join(", ")})`);
-    if (said.length === 0) {
-      return;
-    }
-    console.log(
-      `[hub] ${fromId}'s place is ${toId}'s: moved ${said.join("; ")}`
-    );
-    for (const { delegate, ask } of routed) {
-      tellDelegateAsk(delegate, to, clientCopy(ask));
-    }
-    workItems.reparented([...moved.items, ...moved.queued]);
-    for (const send of sends) {
-      publishSend(send);
-    }
-    releaseOwed({ instanceId: toId });
-    for (const row of db.getInstancesByIds([fromId, ...moved.sessions])) {
-      publishInstances(row.machineId);
-    }
-    publishInstances(to.machineId);
-  };
-
-  /**
    * Puts one user message into a session, from the session it continues,
    * under `uuid`: its send record is what says it went.
    */
@@ -8118,12 +8144,6 @@ export const createServer = (
       projectStops.confirmed(row.id);
       if (row.workflowStepId && row.workflowRunId) {
         workflowRuntime.endConfirmed(row.workflowRunId);
-      }
-      // A continuation waiting on its source's end takes its place now.
-      for (const job of db.continuationRows()) {
-        if (job.stage === "ending" && job.sourceInstanceId === row.id) {
-          detach(advanceContinuation(job.id), "continuation");
-        }
       }
     },
     ready: (machineId) =>
@@ -8899,7 +8919,7 @@ export const createServer = (
     ...(row.summariserInstanceId
       ? { summariserInstanceId: row.summariserInstanceId }
       : {}),
-    ...(row.request.target.inherit ? { inherits: true as const } : {}),
+    ...(row.request.target.inPlace ? { inPlace: true as const } : {}),
     stage: row.stage,
     ...(row.error ? { error: row.error } : {}),
   });
@@ -8969,16 +8989,16 @@ export const createServer = (
     );
 
   /**
-   * Continue in new session, as a job the hub owns and records: summarise the
-   * source's live context once with the summariser the caller chose (skipped
-   * when there is nothing before the tail), then start the target session
-   * seeded with the summary, the artifact index and the tail. Returns at once;
-   * the job is carried to a started target whatever happens to whoever asked
-   * or to this hub, and only its Cancel — while it is still summarising —
-   * stops it. The source is only read, unless the job continues it at its
-   * account's limit (`target.inherit`): then the source is ended before the
-   * new session takes its place, or the job fails and the source goes on
-   * ({@link continuationSteps}).
+   * A continuation from a summary, as a job the hub owns and records:
+   * summarise the source's live context once with the summariser the caller
+   * chose (skipped when there is nothing before the tail), then start a
+   * conversation seeded with the summary, the artifact index and the tail.
+   * Returns at once; the job is carried to its end whatever happens to whoever
+   * asked or to this hub, and only its Cancel — while it is still summarising
+   * — stops it. "Continue in new session" starts a new session and only reads
+   * the source; one in place (`target.inPlace`) has the source itself go on in
+   * a fresh conversation, the same session throughout, or it fails and the
+   * source goes on in the conversation it has ({@link continuationSteps}).
    */
   const startContinuation = (
     prepared: PreparedContinuation,
@@ -8986,14 +9006,20 @@ export const createServer = (
     /** A summary already written (ahead of an account's limit): nothing is summarised. */
     written?: string
   ): ContinuationRow => {
-    const summarise = !!prepared.prompt && written === undefined;
+    const { inPlace } = request.target;
+    // One the session asked for reads its conversation once the turn that
+    // asked has ended, and summarises it then.
+    const asked = !!inPlace && !inPlace.atLimit;
+    const summarise = asked || (!!prepared.prompt && written === undefined);
     const row = db.insertContinuation({
       id: crypto.randomUUID(),
       sourceInstanceId: prepared.source.instanceId,
       request,
       prepared,
       summariserInstanceId: summarise ? crypto.randomUUID() : null,
-      targetInstanceId: crypto.randomUUID(),
+      targetInstanceId: inPlace
+        ? prepared.source.instanceId
+        : crypto.randomUUID(),
       openingUuid: crypto.randomUUID(),
       summary: prepared.prompt ? (written ?? null) : null,
       stage: summarise ? "summarising" : "starting",
@@ -9041,77 +9067,264 @@ export const createServer = (
 
   /**
    * A job's steps from where its record stands, each only while its machine
-   * is here. A continuation at an account's limit takes its source's place,
-   * so its steps run in the order that leaves one session running whatever
-   * fails: its machine is first asked whether it can end sessions at all;
-   * then the summary, then the new session, started but not yet handed
-   * anything; then the source is ended, and only once its machine confirms
-   * that is the new session handed its opening and both transcripts told
-   * (see {@link endSource}, {@link tookPlace}).
+   * is here. One in place first has its session between turns and its
+   * transcript saying the summary is being written ({@link readyInPlace});
+   * then the summary; then the new conversation, or the new session, started
+   * and handed the opening ({@link switchConversation}, {@link startTarget}).
+   * Until that last step the session goes on in the conversation it has.
    */
   const continuationSteps = async (id: string): Promise<void> => {
     let row = db.continuationRow(id);
-    if (row && endsNothing(row)) {
-      return;
+    if (row?.request.target.inPlace && !SETTLED.has(row.stage)) {
+      if (!registry.agent(row.prepared.source.machineId)) {
+        return;
+      }
+      row = await readyInPlace(row);
     }
     if (row?.stage === "summarising") {
-      if (!registry.agent(machineFor(row))) {
-        return;
-      }
-      const summary = await continuationSummary(row);
-      keepAtMove(row, summary);
-      // A Cancel that landed while the summariser answered stands.
-      row = cancelledContinuation(id)
-        ? undefined
-        : moveContinuation(id, { stage: "starting", summary });
+      row = await summaryStep(row);
     }
-    if (row?.stage === "starting") {
-      if (!registry.agent(machineFor(row))) {
-        return;
-      }
-      row = await startOrSpawn(row);
-    }
-    if (row?.stage === "ending") {
-      await endSource(row);
+    if (row?.stage === "starting" && registry.agent(machineFor(row))) {
+      await (row.request.target.inPlace
+        ? switchConversation(row)
+        : startTarget(row));
+      moveContinuation(row.id, { stage: "started" });
     }
   };
 
   /**
-   * A continuation at an account's limit whose source's machine is here and
-   * cannot end sessions fails before anything is summarised or started:
-   * true when it did.
+   * The `summarising` step, while its machine is here: the summary, when
+   * there is anything before the tail to summarise, kept on the record. The
+   * job as it then stands; nothing when its machine is away, or a Cancel
+   * landed while the summariser answered.
    */
-  const endsNothing = (row: ContinuationRow): boolean => {
-    const machine = row.prepared.source.machineId;
-    const early = row.stage === "summarising" || row.stage === "starting";
-    if (
-      !(row.request.target.inherit && early && registry.agent(machine)) ||
-      endsSessions(machine)
-    ) {
-      return false;
-    }
-    failContinuation(
-      row,
-      "end",
-      `${machineName(machine)} can't end sessions: its agent hasn't reported its sessions' addresses`
-    );
-    return true;
-  };
-
-  /**
-   * The `starting` step: a plain continuation starts its new session and
-   * hands it the opening, and is done; one at an account's limit only
-   * starts it, and goes on to end its source. The job as it then stands.
-   */
-  const startOrSpawn = async (
+  const summaryStep = async (
     row: ContinuationRow
   ): Promise<ContinuationRow | undefined> => {
-    if (!row.request.target.inherit) {
-      await startTarget(row);
-      return moveContinuation(row.id, { stage: "started" });
+    if (!registry.agent(machineFor(row))) {
+      return undefined;
     }
-    await spawnTarget(row);
-    return moveContinuation(row.id, { stage: "ending" });
+    const summary = row.prepared.prompt ? await continuationSummary(row) : null;
+    if (summary !== null) {
+      keepAtMove(row, summary);
+    }
+    return cancelledContinuation(row.id)
+      ? undefined
+      : moveContinuation(row.id, { stage: "starting", summary });
+  };
+
+  /** How often a continuation in place looks again whether its session is between turns: one busy read of its machine each time. */
+  const IN_PLACE_IDLE_LOOK_MS = 2000;
+
+  /**
+   * Waits until `instanceId` is between turns (`sessionIdle`): nothing
+   * running and nothing waiting on it. Throws {@link MachineAway} when its
+   * machine goes meanwhile, and a Cancel's words when the job was cancelled.
+   */
+  const untilIdle = async (
+    job: ContinuationRow,
+    instanceId: string
+  ): Promise<ReturnType<typeof db.getInstancesByIds>[number]> => {
+    for (;;) {
+      const [row] = db.getInstancesByIds([instanceId]);
+      if (!row) {
+        throw new Error(`${job.prepared.source.title} is no longer recorded`);
+      }
+      if (!registry.agent(row.machineId)) {
+        throw new MachineAway(row.machineId);
+      }
+      if (cancelledContinuation(job.id)) {
+        throw new Error(CONTINUATION_CANCELLED);
+      }
+      // biome-ignore lint/performance/noAwaitInLoops: one idle receipt a beat until the session is between turns
+      if (await sessionIdle(row)) {
+        return row;
+      }
+      await lifetime.sleep(IN_PLACE_IDLE_LOOK_MS);
+    }
+  };
+
+  /**
+   * A continuation in place, made ready to go on: its session between
+   * turns; one the session asked for reads its conversation again, as it
+   * stands now that the turn that asked has ended (what the call read was
+   * mid-turn); and its transcript says the summary is being written, under
+   * the job's id, the line the new conversation's "Continued on" takes the
+   * place of. The job as it then stands.
+   */
+  const readyInPlace = async (
+    job: ContinuationRow
+  ): Promise<ContinuationRow | undefined> => {
+    const { inPlace } = job.request.target;
+    if (!inPlace || db.sendRecord(job.openingUuid)) {
+      return job;
+    }
+    const row = await untilIdle(job, job.sourceInstanceId);
+    let ready: ContinuationRow | undefined = job;
+    if (!inPlace.atLimit && job.stage === "summarising" && !job.summary) {
+      ready = moveContinuation(job.id, {
+        prepared: await prepareContinuation(row.id, job.request.note),
+      });
+    }
+    if (!db.atLimit.events([row.id]).some((event) => event.id === job.id)) {
+      const to = job.request.target.account
+        ? db.accounts.get(job.request.target.account)
+        : undefined;
+      noteAtLimit(
+        row,
+        {
+          kind: "continuing",
+          to: to ? namedAccount(to) : null,
+          ...(inPlace.atLimit ? {} : { asked: true as const }),
+          tokens: inPlace.contextTokens,
+        },
+        job.id
+      );
+    }
+    return ready;
+  };
+
+  /**
+   * The step that makes a continuation in place final, the session between
+   * turns: its process is ended at rest, its conversation kept on its row
+   * with the "Continued on" line after it (db `continueInPlace`), and it
+   * starts again under its own id, on its new account and harness, in a
+   * fresh conversation handed the opening first. Everything else it is owed
+   * goes after that, in order. Once: a step that ran before (a restart in
+   * between) goes on from where the row stands.
+   */
+  const switchConversation = async (job: ContinuationRow): Promise<void> => {
+    if (db.sendRecord(job.openingUuid)) {
+      return;
+    }
+    const id = job.sourceInstanceId;
+    await leaveConversation(job);
+    const [row] = db.getInstancesByIds([id]);
+    const left = db
+      .ownedInstance(id)
+      ?.conversations.find((conversation) => conversation.next === job.id);
+    if (!(row && left)) {
+      throw new Error(`${job.prepared.source.title} is no longer recorded`);
+    }
+    const move = continuedMove(job.request);
+    noteAtLimit(row, move, job.id);
+    // Started once since it left its conversation: that process is the new one.
+    if (!(row.spawnedAt && row.spawnedAt.getTime() >= left.endedAt)) {
+      startFresh(row);
+    }
+    sendOpening(job, true);
+    db.atLimit.dropHold(id);
+    db.atLimit.dropSummary(id);
+    console.info(
+      `[continuation] ${id} goes on in a fresh conversation${move.to ? ` on ${move.to.name}` : ""}; its last one is kept on its row`
+    );
+    // What was kept for it while it went on goes now, behind the opening.
+    releaseOwed({ instanceId: id });
+    publishInstances(row.machineId);
+  };
+
+  /**
+   * A continuation in place's session leaves the conversation it runs, once
+   * it is between turns: refused before anything changes when its start on
+   * the new account would be, its process ended at rest where it runs (its
+   * data staying in its own account's dir; one that took a turn meanwhile is
+   * waited for again), and its conversation kept on its row (db
+   * `continueInPlace`). Done already: nothing.
+   */
+  const leaveConversation = async (job: ContinuationRow): Promise<void> => {
+    const id = job.sourceInstanceId;
+    const { target } = job.request;
+    if (
+      db
+        .ownedInstance(id)
+        ?.conversations.some((conversation) => conversation.next === job.id)
+    ) {
+      return;
+    }
+    const row = await untilIdle(job, id);
+    const accountId = target.account ?? row.accountId;
+    const refused = accountStartRefusal(
+      row.machineId,
+      { ...row, accountId, harness: target.harness },
+      sessionName(row)
+    );
+    if (refused) {
+      throw new Error(refused);
+    }
+    const { kept } = await moveRowsToAccount(
+      row.machineId,
+      [row],
+      row.accountId,
+      true
+    );
+    const why = kept.get(id);
+    if (why === PROCESS_RUNS) {
+      return leaveConversation(job);
+    }
+    if (why) {
+      throw new Error(why);
+    }
+    const left = db.continueInPlace(id, {
+      accountId,
+      harness: target.harness,
+      model: target.model ?? null,
+      ...(target.effort ? { effort: target.effort } : {}),
+      next: job.id,
+    });
+    if (!left) {
+      throw new Error(
+        `${job.prepared.source.title} has no conversation to go on from`
+      );
+    }
+  };
+
+  /**
+   * Starts a session's process again under its id in a fresh conversation,
+   * on the settings, account, role, delegate type and workspace its row
+   * names (`bounded`), the process it had replaced: the step a continuation
+   * in place goes on with.
+   */
+  const startFresh = (
+    row: ReturnType<typeof db.getInstancesByIds>[number]
+  ): void => {
+    const agent = registry.agent(row.machineId);
+    if (!agent) {
+      throw new MachineAway(row.machineId);
+    }
+    const refused =
+      launchRefusal(row.id) ??
+      accountStartRefusal(row.machineId, row, sessionName(row));
+    if (refused) {
+      throw new Error(refused);
+    }
+    const settled = settleMode(
+      row.machineId,
+      revivePayloadOf(row, { kind: "fresh" }, true),
+      row.permissionMode
+    );
+    if ("refusal" in settled) {
+      throw new Error(settled.refusal);
+    }
+    // What its last process was handed and never read its machine hands back
+    // for the new one ({@link takeBack}).
+    forgetPending(row.id, UNREAD.restarted, false, "all");
+    transcripts.noteRelaunch(row.id);
+    db.openInstance({
+      id: row.id,
+      addressProtocol: addressProtocolMachines.has(row.machineId),
+      machineId: row.machineId,
+      cwd: settled.payload.cwd,
+      harness: row.harness ?? undefined,
+      kind: row.kind ?? undefined,
+      permissionMode: settled.permissionMode,
+      model: row.model ?? undefined,
+    });
+    sendSpawn(agent, row.machineId, {
+      verb: "spawn",
+      machineId: row.machineId,
+      instanceId: row.id,
+      payload: bounded(settled.payload),
+    });
   };
 
   /**
@@ -9121,223 +9334,63 @@ export const createServer = (
    * not moved, rather than writing another.
    */
   const keepAtMove = (row: ContinuationRow, summary: string): void => {
-    const { inherit } = row.request.target;
+    const { inPlace } = row.request.target;
     const { covers } = row.prepared.extracted;
     const writtenOn = row.request.summarizer.account;
-    if (!(inherit && covers && writtenOn)) {
+    if (!(inPlace?.atLimit && inPlace.fromAccountId && covers && writtenOn)) {
       return;
     }
     db.atLimit.keepSummary({
       instanceId: row.sourceInstanceId,
-      accountId: inherit.fromAccountId,
+      accountId: inPlace.fromAccountId,
       writtenOn,
-      resetsAt: new Date(inherit.keepUntil).toISOString(),
+      resetsAt: new Date(inPlace.atLimit.keepUntil).toISOString(),
       percent: null,
       covers,
       summary,
     });
   };
 
-  /** Whether `machineId` is here and can end a session now, not on its next register. */
-  const endsSessions = (machineId: string): boolean =>
-    !!registry.agent(machineId) && addressProtocolMachines.has(machineId);
-
   /**
-   * How long a continuation's new session gets to come up, as its machine
-   * reports it running, before its source is ended.
-   */
-  const successorUp = async (
-    row: ContinuationRow
-  ): Promise<"running" | "away" | "late"> => {
-    const machine = targetMachineOf(row);
-    const deadline = Date.now() + SPAWN_START_TIMEOUT_MS;
-    for (;;) {
-      const [target] = db.getInstancesByIds([row.targetInstanceId]);
-      if (target?.status === "running") {
-        return "running";
-      }
-      if (!registry.agent(machine)) {
-        return "away";
-      }
-      if (Date.now() >= deadline) {
-        return "late";
-      }
-      // biome-ignore lint/performance/noAwaitInLoops: one look a beat until the new session runs or its machine goes
-      await lifetime.sleep(250);
-    }
-  };
-
-  /**
-   * Why a continuation's source cannot be ended now, and at which step:
-   * its new session never came up, or the source's machine went away or
-   * cannot end sessions. Nothing when it can.
-   */
-  const cannotEnd = async (
-    row: ContinuationRow
-  ): Promise<{ step: ContinueStep; reason: string } | undefined> => {
-    const { machineId: machine, title } = row.prepared.source;
-    const away = {
-      step: "end" as const,
-      reason: `${machineName(machine)} went away before ${title} was ended`,
-    };
-    const up = await successorUp(row);
-    if (up === "away") {
-      return away;
-    }
-    if (up === "late") {
-      return {
-        step: "start",
-        reason: `the new session didn't come up within ${SPAWN_START_TIMEOUT_MS / 1000}s`,
-      };
-    }
-    if (!registry.agent(machine)) {
-      return away;
-    }
-    return endsSessions(machine)
-      ? undefined
-      : {
-          step: "end",
-          reason: `${machineName(machine)} can't end sessions: its agent hasn't reported its sessions' addresses`,
-        };
-  };
-
-  /**
-   * The step that makes a continuation at an account's limit final: its new
-   * session running, the source is ended. Once its machine confirms the end
-   * the new session takes the source's place ({@link tookPlace}); until
-   * then the job waits in `ending`, and the confirmation, or the machine's
-   * next register, moves it on. A source its machine cannot end now fails
-   * the job: the new session is ended, and the source goes on.
-   */
-  const endSource = async (row: ContinuationRow): Promise<void> => {
-    const source = db.ownedInstance(row.sourceInstanceId);
-    if (!source) {
-      failContinuation(
-        row,
-        "end",
-        `${row.prepared.source.title} is no longer recorded`
-      );
-      return;
-    }
-    if (source.endConfirmedAt) {
-      tookPlace(row);
-      return;
-    }
-    if (source.endIntent) {
-      return;
-    }
-    const unended = await cannotEnd(row);
-    if (unended) {
-      failContinuation(row, unended.step, unended.reason);
-      return;
-    }
-    const { machineId: machine } = row.prepared.source;
-    takePlaceOf(source.id, row.targetInstanceId);
-    try {
-      endSession(source.id, "stop");
-    } catch (error) {
-      giveBack(row.targetInstanceId, source.id);
-      throw error;
-    }
-    const move = continuedMove(row.request);
-    if (move) {
-      db.noteEndReason(source.id, `continued on ${move.to.name}`);
-    }
-    publishInstances(machine);
-  };
-
-  /**
-   * A continuation at an account's limit whose source has ended: the new
-   * session is told what went where, then handed its opening, and the job
-   * is done. Both transcripts say "Continued on" only now.
-   */
-  const tookPlace = (row: ContinuationRow): void => {
-    const move = continuedMove(row.request);
-    // Told by this job: a source that was itself a continuation's new
-    // session already has that one's line, and is told its own.
-    const told = (instanceId: string): boolean =>
-      db.atLimit
-        .events([instanceId])
-        .some(
-          (event) =>
-            event.move.kind === "continued" &&
-            event.at >= row.createdAt.getTime()
-        );
-    const [source] = db.getInstancesByIds([row.sourceInstanceId]);
-    const [target] = db.getInstancesByIds([row.targetInstanceId]);
-    if (move && source && !told(source.id)) {
-      noteAtLimit(source, move);
-    }
-    // The tab follows the job to the new session (the dashboard's
-    // `followSuccessions`): its transcript opens on the line, ahead of the
-    // opening.
-    if (move && target && !told(target.id)) {
-      noteAtLimit(target, move);
-    }
-    sendOpening(row);
-    moveContinuation(row.id, { stage: "started" });
-  };
-
-  /**
-   * At start, before any machine is heard: every session another took the
-   * place of (`continuedInto`) is ended if anything brought it back since
-   * (a hub from before the link was kept woke it for a send), and whatever
-   * still answers to it as its parent answers to the session at the end of
-   * its chain. Nothing is left that reaches it, or that it runs.
-   */
-  const settleSuperseded = (): void => {
-    for (const { id, ended } of db.supersededInstances()) {
-      const successor = db.successorOf(id);
-      if (!ended) {
-        console.log(
-          `[hub] ${id} was continued as ${successor} but was running again: it is ended`
-        );
-        lifecycle.oweEndSession(id, "stop");
-        db.noteEndReason(id, `continued as ${successor}`);
-      }
-      handOverChildren(id, successor, true);
-    }
-  };
-
-  /**
-   * What a continuation at an account's limit did, as both its sessions'
-   * transcripts say it: on what account it went on, and what it left behind.
-   * Undefined for any other continuation.
+   * What a continuation in place did, as its transcript says between its two
+   * conversations: on what account it went on (none on a harness without
+   * accounts), what it left behind, and where its summary came from.
    */
   const continuedMove = (
     request: ContinueRequest
-  ): Extract<AccountMove, { kind: "continued" }> | undefined => {
-    const { inherit, account } = request.target;
-    const from = inherit ? db.accounts.get(inherit.fromAccountId) : undefined;
-    const to = account ? db.accounts.get(account) : undefined;
-    const writtenOn = db.accounts.get(
-      inherit?.written?.onAccountId ?? request.summarizer.account ?? ""
-    );
-    return inherit && from && to
-      ? {
-          kind: "continued",
-          from: namedAccount(from),
-          to: namedAccount(to),
-          writtenOn: namedAccount(writtenOn ?? to),
-          tokens: inherit.contextTokens,
-          preparedAtPct: inherit.written?.atPct ?? null,
-        }
-      : undefined;
+  ): Extract<AccountMove, { kind: "continued" }> => {
+    const { inPlace, account } = request.target;
+    const named = (id: string | null | undefined) => {
+      const known = id ? db.accounts.get(id) : undefined;
+      return known ? namedAccount(known) : null;
+    };
+    const to = named(account);
+    const written = inPlace?.atLimit?.written;
+    return {
+      kind: "continued",
+      from: named(inPlace?.fromAccountId),
+      to,
+      writtenOn:
+        named(written?.onAccountId ?? request.summarizer.account) ?? to,
+      ...(inPlace?.atLimit ? {} : { asked: true as const }),
+      tokens: inPlace?.contextTokens ?? null,
+      preparedAtPct: written?.atPct ?? null,
+    };
   };
 
   /** The step of a job that a failure in its stage is. */
   const STEP_OF: Partial<Record<ContinuationJob["stage"], ContinueStep>> = {
     summarising: "summary",
     starting: "start",
-    ending: "end",
   };
 
   /**
-   * A job fails at `step` in the words the hub got. A continuation at an
-   * account's limit leaves its source the one session running: a new
-   * session already started is ended (its row says why), anything it was
-   * given goes back, and the source's transcript says what failed and what
-   * to do (the at-limit controller holds it, and decides again).
+   * A job fails at `step` in the words the hub got. One in place leaves the
+   * session in the conversation it has: a switch half made (its conversation
+   * kept, the new one not handed its opening) is taken back, so it resumes
+   * the one it had, and its "Summarising…" line says what failed — at its
+   * account's limit through the at-limit controller, which holds it and
+   * decides again.
    */
   const failContinuation = (
     row: ContinuationRow,
@@ -9345,35 +9398,45 @@ export const createServer = (
     reason: string
   ): void => {
     moveContinuation(row.id, { stage: "failed", error: reason });
-    const { inherit, account } = row.request.target;
-    if (!(inherit && account)) {
+    const { inPlace, account } = row.request.target;
+    if (!inPlace) {
       return;
     }
-    const target = db.ownedInstance(row.targetInstanceId);
-    let said = reason;
-    if (
-      target &&
-      !target.endIntent &&
-      !["stopped", "discarded"].includes(target.status)
-    ) {
-      giveBack(target.id, row.sourceInstanceId);
-      try {
-        endSession(target.id, "discard");
-      } catch (error) {
-        said = `${reason}; its new session ${target.id} could not be ended either: ${error instanceof Error ? error.message : String(error)}`;
-      }
-      db.noteEndReason(
-        target.id,
-        `didn't take ${row.prepared.source.title}'s place: ${said}`
+    const id = row.sourceInstanceId;
+    if (!db.sendRecord(row.openingUuid) && db.undoContinueInPlace(id, row.id)) {
+      console.warn(
+        `[continuation] ${id} goes on in the conversation it had: ${reason}`
       );
-      publishInstances(target.machineId);
+      publishInstances(row.prepared.source.machineId);
     }
-    atLimit.continuationFailed(row.sourceInstanceId, {
-      fromAccountId: inherit.fromAccountId,
-      toAccountId: account,
-      step,
-      reason: said,
-    });
+    if (inPlace.atLimit && inPlace.fromAccountId && account) {
+      atLimit.continuationFailed(id, {
+        fromAccountId: inPlace.fromAccountId,
+        toAccountId: account,
+        step,
+        reason,
+        line: row.id,
+      });
+      return;
+    }
+    const [source] = db.getInstancesByIds([id]);
+    const move = continuedMove(row.request);
+    if (source) {
+      noteAtLimit(
+        source,
+        {
+          kind: "unmoved",
+          from: move.from,
+          to: move.to,
+          ...(inPlace.atLimit ? {} : { asked: true as const }),
+          step,
+          reason,
+        },
+        row.id
+      );
+    }
+    // What was kept for it while it was to go on goes to it now.
+    releaseOwed({ instanceId: id });
   };
 
   /**
@@ -9387,10 +9450,7 @@ export const createServer = (
     if (!row || SETTLED.has(row.stage)) {
       return false;
     }
-    if (
-      row.stage !== "ending" &&
-      (error instanceof MachineAway || !registry.agent(machineFor(row)))
-    ) {
+    if (error instanceof MachineAway || !registry.agent(machineFor(row))) {
       return true;
     }
     failContinuation(
@@ -9465,12 +9525,6 @@ export const createServer = (
       }
       return;
     }
-    await spawnTarget(row);
-    sendOpening(row);
-  };
-
-  /** Starts a job's new session under its minted id, unless it already runs. */
-  const spawnTarget = async (row: ContinuationRow): Promise<void> => {
     const { request, prepared } = row;
     const [target] = db.getInstancesByIds([row.targetInstanceId]);
     if (target?.status !== "running") {
@@ -9481,11 +9535,44 @@ export const createServer = (
         request.target.fallbackPermissionMode
       );
     }
+    sendOpening(row);
   };
 
-  /** Hands a job's new session its opening under the job's send uuid, once. */
-  const sendOpening = (row: ContinuationRow): void => {
+  /**
+   * Hands a job's opening under the job's send uuid, once: to its new
+   * session, from the session it continues; or, in place, to the session
+   * itself as the hub's word ({@link CONTINUATION_ORIGIN}), ahead of
+   * whatever is kept for it, so its fresh conversation opens on it.
+   */
+  const sendOpening = (row: ContinuationRow, ahead = false): void => {
     if (db.sendRecord(row.openingUuid)) {
+      return;
+    }
+    if (row.request.target.inPlace) {
+      deliverSend(
+        {
+          verb: "send",
+          machineId: targetMachineOf(row),
+          instanceId: row.sourceInstanceId,
+          payload: {
+            ...(row.request.images?.length
+              ? { images: row.request.images }
+              : {}),
+            ...(row.request.attachments?.length
+              ? { attachments: row.request.attachments }
+              : {}),
+            instanceId: row.sourceInstanceId,
+            message: {
+              type: "user",
+              uuid: row.openingUuid,
+              message: { role: "user", content: openingOf(row) },
+              parent_tool_use_id: null,
+              origin: { kind: "system", name: CONTINUATION_ORIGIN },
+            },
+          },
+        },
+        ahead
+      );
       return;
     }
     sendFromHub(
@@ -9517,13 +9604,13 @@ export const createServer = (
       return { refused: 404, why: "That continuation is not running." };
     }
     if (row.stage !== "summarising") {
-      return {
-        refused: 409,
-        why:
-          row.stage === "starting"
-            ? "The new session is already starting."
-            : `That continuation already ended (${row.stage}).`,
-      };
+      let why = `That continuation already ended (${row.stage}).`;
+      if (row.stage === "starting") {
+        why = row.request.target.inPlace
+          ? "Its fresh conversation is already starting."
+          : "The new session is already starting.";
+      }
+      return { refused: 409, why };
     }
     const cancelled = moveContinuation(id, { stage: "cancelled" }) ?? row;
     if (row.summariserInstanceId) {
@@ -9531,6 +9618,12 @@ export const createServer = (
         .get(row.summariserInstanceId)
         ?.reject(new Error(CONTINUATION_CANCELLED));
       retireSummariser(row.prepared.source.machineId, row.summariserInstanceId);
+    }
+    // In place, the session goes on as it was: its "Summarising…" line
+    // goes, and what was kept for it meanwhile goes to it.
+    if (row.request.target.inPlace) {
+      unnoteAtLimit({ id: row.sourceInstanceId }, row.id);
+      releaseOwed({ instanceId: row.sourceInstanceId });
     }
     return { row: cancelled };
   };
@@ -10070,6 +10163,8 @@ export const createServer = (
       kind: "instances",
       instances: boardRows(),
       ...boardExtras(),
+      // Fixed once the hub has folded what an older one split: once per connection.
+      formerIds: db.formerIds(),
       // Seed now-state once per connection; updates have per-session frames.
       pulses: Object.fromEntries(pulses),
     },
@@ -11376,6 +11471,8 @@ export const createServer = (
       if (owed.move) {
         noteAtLimit(row, owed.move);
       }
+      // What was kept for it at its old account's limit goes to this launch.
+      releaseOwed({ instanceId: row.id });
     }
     if ((row.accountId ?? null) === accountId) {
       return;
@@ -11512,6 +11609,8 @@ export const createServer = (
     if (move) {
       noteAtLimit(row, move);
     }
+    // What was kept for it at its old account's limit goes to it there.
+    releaseOwed({ instanceId: row.id });
     return {
       state: "moved",
       accountId: account.id,
@@ -11554,6 +11653,7 @@ export const createServer = (
               noteAtLimit(stored, owed.move);
             }
             relaunchOnAccount(stored.id);
+            releaseOwed({ instanceId: stored.id });
           }
         ),
         "account move"
@@ -11678,7 +11778,7 @@ export const createServer = (
     remember = true
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: transcript deletion shares the control receipt path but records intent before machine delivery
   ): boolean => {
-    const message = toSuccessor(asked);
+    const message = byIdNow(asked);
     if (relayModelCrossing(message, dashboard, remember)) {
       return true;
     }
@@ -11945,33 +12045,53 @@ export const createServer = (
     at?: string
   ): Promise<HistoryRead> => {
     const found = await historyWhere(instanceId);
-    if ("entries" in found || "fault" in found) {
+    if ("fault" in found) {
       return found;
     }
-    const { where, row } = found;
-    const cut = at ?? found.cut;
-    const answer = await storedEntries(where);
-    if ("fault" in answer) {
-      return answer;
+    const [held] = db.getInstancesByIds([instanceId]);
+    const prior = held ? (db.ownedInstance(held.id)?.conversations ?? []) : [];
+    if ("entries" in found && prior.length === 0) {
+      return found;
     }
-    let transcript = answer.entries;
-    if (cut) {
-      const end = transcript.findIndex((entry) => entry.uuid === cut);
-      if (end >= 0) {
-        transcript = transcript.slice(
-          0,
-          end + Number(includesRewindAnchor(where, transcript[end], at))
-        );
-      }
+    const { where } = found;
+    const row = "row" in found ? found.row : held;
+    // The conversations it went on from, oldest first, each followed by the
+    // line between it and the next: the transcript reads as one.
+    const earlier = row ? await priorEntries(row, where, prior) : [];
+    if ("fault" in earlier) {
+      return earlier;
     }
+    const current = await currentEntries(
+      where,
+      at,
+      "cut" in found ? found.cut : undefined
+    );
+    if ("fault" in current) {
+      return current;
+    }
+    const stored = [...earlier, ...current];
     // Pictures as references to the media store, before a send's record is
     // filled from one of these entries.
-    externalizeImages(transcript);
-    const records = recordMap(sendLines(row?.id, transcript, true, true));
-    // A stored ping and its answer are hidden together, also after hub restart.
-    // A new main-loop user prompt closes that range; tool results do not.
+    externalizeImages(stored);
+    const records = recordMap(sendLines(row?.id, stored, true, true));
+    const transcript = withoutPings(stored, records);
+    if (row) {
+      readRowHistory(row, transcript);
+    }
+    return { entries: transcript, records, where };
+  };
+
+  /**
+   * A stored transcript without its keep-alive pings: a ping and its answer
+   * are hidden together, also after a hub restart (a new main-loop user
+   * prompt closes that range; tool results do not), and their records go.
+   */
+  const withoutPings = (
+    entries: SessionMessage[],
+    records: Record<string, SendRecord>
+  ): SessionMessage[] => {
     let quiet = false;
-    transcript = transcript.filter((entry) => {
+    const kept = entries.filter((entry) => {
       if (
         entry.type === "user" &&
         !entry.parent_tool_use_id &&
@@ -11988,10 +12108,86 @@ export const createServer = (
         delete records[id];
       }
     }
-    if (row) {
-      readRowHistory(row, transcript);
+    return kept;
+  };
+
+  /**
+   * The conversation a session runs now, as its machine stores it (none yet:
+   * nothing), cut after the entry `at` a rewind names, else after a fork's
+   * own `cut`.
+   */
+  const currentEntries = async (
+    where: TranscriptWhere,
+    at: string | undefined,
+    forked: string | undefined
+  ): Promise<SessionMessage[] | HistoryFault> => {
+    if (!where.sessionKey) {
+      return [];
     }
-    return { entries: transcript, records, where };
+    const answer = await storedEntries(where);
+    if ("fault" in answer) {
+      return answer;
+    }
+    const cut = at ?? forked;
+    const end = cut
+      ? answer.entries.findIndex((entry) => entry.uuid === cut)
+      : -1;
+    return end >= 0
+      ? answer.entries.slice(
+          0,
+          end + Number(includesRewindAnchor(where, answer.entries[end], at))
+        )
+      : answer.entries;
+  };
+
+  /** One of the hub's lines at an account's limit, as a stored transcript entry holds it. */
+  const limitEntry = (
+    row: { sessionId: string | null },
+    event: { id: string; at: number; move: AccountMove }
+  ): SessionMessage => ({
+    type: "system",
+    uuid: `limit-${event.id}`,
+    session_id: row.sessionId ?? "",
+    parent_tool_use_id: null,
+    parent_agent_id: null,
+    message: limitLine(row, event),
+    timestamp: new Date(event.at).toISOString(),
+  });
+
+  /**
+   * The conversations a session went on from, oldest first, as their machine
+   * stores them — each where it ran there, in whichever account's dir, found
+   * by its key — each followed by the line that stands between it and the
+   * next ("Continued on …"). Or why one could not be read.
+   */
+  const priorEntries = async (
+    row: InstanceRow,
+    where: TranscriptWhere,
+    prior: readonly PriorConversation[]
+  ): Promise<SessionMessage[] | HistoryFault> => {
+    const events = new Map(
+      db.atLimit.events([row.id]).map((event) => [event.id, event])
+    );
+    const entries: SessionMessage[] = [];
+    for (const conversation of prior) {
+      // biome-ignore lint/performance/noAwaitInLoops: one conversation after another, in the order they are read
+      const answer = await storedEntries({
+        ...where,
+        sessionKey: conversation.sessionId,
+        harness: conversation.harness,
+      });
+      if ("fault" in answer) {
+        return answer;
+      }
+      entries.push(...answer.entries);
+      const line = conversation.next
+        ? events.get(conversation.next)
+        : undefined;
+      if (line) {
+        entries.push(limitEntry(row, line));
+      }
+    }
+    return entries;
   };
 
   /**
@@ -12010,23 +12206,28 @@ export const createServer = (
         nameFromFirstTurn(row.machineId, row.id, first);
       }
     }
-    // The hub's own lines at the account's limit, each where it happened.
+    // The hub's own lines at the account's limit, each where it happened;
+    // the one between two of its conversations stands between them already
+    // ({@link priorEntries}).
+    const between = new Set(
+      (db.ownedInstance(row.id)?.conversations ?? []).map(
+        (conversation) => conversation.next
+      )
+    );
     for (const event of db.atLimit.events([row.id])) {
+      if (between.has(event.id)) {
+        continue;
+      }
       const at = transcript.findIndex(
         (entry) =>
           entry.timestamp !== undefined &&
           Date.parse(entry.timestamp) > event.at
       );
-      const line: SessionMessage = {
-        type: "system",
-        uuid: `limit-${event.id}`,
-        session_id: row.sessionId ?? "",
-        parent_tool_use_id: null,
-        parent_agent_id: null,
-        message: limitLine(row, event),
-        timestamp: new Date(event.at).toISOString(),
-      };
-      transcript.splice(at < 0 ? transcript.length : at, 0, line);
+      transcript.splice(
+        at < 0 ? transcript.length : at,
+        0,
+        limitEntry(row, event)
+      );
     }
     const held = heldSessions.get(row.id);
     if (
@@ -12469,7 +12670,6 @@ export const createServer = (
       workItems.cancelled(row);
     }
   }
-  settleSuperseded();
   const workflowRuntime = createWorkflowRuntime({
     lifetime,
     custodyPending: (machineId, instanceId) => {
@@ -12857,7 +13057,7 @@ export const createServer = (
       instances: () => boardRows(),
       machines: () => withPresence(db.listAgents()),
     },
-    successorOf: db.successorOf,
+    formerIds: db.formerIds,
     ledBy: (id, leadId) => workItems.ledBy(id, leadId),
     credentialActor: (authorization) => {
       const identity = identities.resolve(authorization);
@@ -12943,9 +13143,9 @@ export const createServer = (
       ) {
         throw new Error(`Unsupported delegation operation ${envelope.verb}`);
       }
-      // A delegate another took the place of is acted on where it runs now.
+      // A delegate named by a former id is acted on by its id now.
       const row = instanceId
-        ? db.getInstancesByIds([db.successorOf(instanceId)])[0]
+        ? db.getInstancesByIds([db.instanceIdOf(instanceId)])[0]
         : undefined;
       // Its parent, or its project's lead: a co-parent of every work item of
       // the project, which may answer, steer and stop it.
@@ -13148,7 +13348,8 @@ export const createServer = (
       Array.isArray(reading.instances) &&
       !reading.instances.includes(row.id) &&
       !!registry.agent(row.machineId) &&
-      db.sendsIn(row.id, ["pending"]).length === 0 &&
+      // What is owed at the hub never reached the process.
+      db.sendsIn(row.id, ["pending"]).every((send) => send.owed) &&
       !pending.list().some((ask) => ask.instanceId === row.id)
     );
   };
@@ -13253,7 +13454,7 @@ export const createServer = (
           uuid: crypto.randomUUID(),
           message: { role: "user", content: CARRY_ON },
           parent_tool_use_id: null,
-          origin: { kind: "system", name: "limit" },
+          origin: { kind: "system", name: LIMIT_ORIGIN },
         },
       },
     } satisfies Envelope<SendPayload>);
@@ -13323,11 +13524,14 @@ export const createServer = (
         (how === "killed" ||
           (launched !== undefined && (open ?? 0) < launched)));
     const processUp = row.status === "running" || row.status === "starting";
+    // A question its process took with it is asked again whatever else waits.
     if (
       open === null ||
       !cut ||
       (how === "killed" ? row.status !== "sleeping" : !processUp) ||
-      (how !== "killed" && awaitsSend(row.id))
+      (how !== "killed" &&
+        awaitsSend(row.id) &&
+        !withdrawnQuestions.has(row.id))
     ) {
       return undefined;
     }
@@ -13344,6 +13548,90 @@ export const createServer = (
         ) ||
       pending.list().some((ask) => ask.instanceId === row.id);
     return ruledOut ? undefined : open;
+  };
+
+  /**
+   * Questions a session had put to the person when its process went, by
+   * session: the asks went with the process ("Question withdrawn"), nobody
+   * answered them, and the turn handed back asks them again
+   * ({@link askAgain}).
+   */
+  const withdrawnQuestions = new Map<string, string[]>();
+
+  /** Keeps the questions `asks` put to the person, which go with their process unanswered. */
+  const noteWithdrawn = (asks: readonly Envelope[]): void => {
+    for (const ask of asks) {
+      if (
+        !ask.instanceId ||
+        peek(ask.payload, "toolName") !== ASK_USER_QUESTION
+      ) {
+        continue;
+      }
+      const { input } = ask.payload as { input?: { questions?: unknown } };
+      const asked: { question?: unknown }[] = Array.isArray(input?.questions)
+        ? input.questions
+        : [];
+      const questions = asked.flatMap((one) =>
+        typeof one.question === "string" ? [one.question] : []
+      );
+      if (questions.length > 0) {
+        withdrawnQuestions.set(ask.instanceId, [
+          ...(withdrawnQuestions.get(ask.instanceId) ?? []),
+          ...questions,
+        ]);
+      }
+    }
+  };
+
+  noteWithdrawn(droppedAtStart);
+
+  /** A cut turn's hand-back, with the questions its process took with it to be asked again. */
+  const askAgain = (instanceId: string, words: string): string => {
+    const questions = withdrawnQuestions.get(instanceId);
+    withdrawnQuestions.delete(instanceId);
+    return questions?.length
+      ? `${words} The question${questions.length === 1 ? "" : "s"} you had asked the person (${questions.map((one) => `"${one}"`).join(", ")}) went with that process and ${questions.length === 1 ? "was" : "were"} never answered: ask again.`
+      : words;
+  };
+
+  /**
+   * A session up again whose question went with its last process, with no
+   * cut turn handed back to say so (what it was sent took that turn's
+   * place): told now, behind what it was owed, to ask it again. Once per
+   * process: the same start says it once however often it is looked at.
+   */
+  const askWithdrawnAgain = (
+    row: PublicInstanceRow | undefined,
+    restartedAt: Date | null | undefined
+  ): void => {
+    if (
+      !(row && restartedAt && withdrawnQuestions.has(row.id)) ||
+      db.ownedInstance(row.id, row.machineId)?.endIntent ||
+      !(row.status === "running" || row.status === "starting")
+    ) {
+      return;
+    }
+    deliverSend({
+      verb: "send",
+      machineId: row.machineId,
+      instanceId: row.id,
+      payload: {
+        instanceId: row.id,
+        message: {
+          type: "user",
+          uuid: uuidOf(`${row.id}\u0000asked\u0000${restartedAt.getTime()}`),
+          message: {
+            role: "user",
+            content: askAgain(
+              row.id,
+              `CawCo restarted this session's process at ${utcClock(restartedAt)}.`
+            ),
+          },
+          parent_tool_use_id: null,
+          origin: { kind: "system", name: "restore" },
+        },
+      },
+    } satisfies Envelope<SendPayload>);
   };
 
   /** Whether a send to the session is still pending, owed or handed, other than a keep-alive ping: that send is its next turn. */
@@ -13372,9 +13660,14 @@ export const createServer = (
       if (serverStopped) {
         turnOver(instanceId);
       }
+      askWithdrawnAgain(row, restartedAt);
       return;
     }
-    const sent = handTurnBack(row, String(cut), restartedWords(restartedAt));
+    const sent = handTurnBack(
+      row,
+      String(cut),
+      askAgain(row.id, restartedWords(restartedAt))
+    );
     if (sent.state === "failed") {
       turnOver(row.id);
       console.warn(
@@ -13490,7 +13783,11 @@ export const createServer = (
     if (!(row && cut !== undefined)) {
       return;
     }
-    const sent = handTurnBack(row, String(cut), killedWords(signal, killedAt));
+    const sent = handTurnBack(
+      row,
+      String(cut),
+      askAgain(row.id, killedWords(signal, killedAt))
+    );
     if (sent.state === "failed") {
       turnOver(row.id);
       console.warn(
@@ -13629,6 +13926,11 @@ export const createServer = (
    * its transcript now and at every later read ({@link readRowHistory}).
    */
   const noteFreshStart = (row: InstanceRow): void => {
+    // One that went on from a summary starts its fresh conversation under
+    // the "Continued" line already: that is no first start that never began.
+    if ((db.ownedInstance(row.id)?.conversations.length ?? 0) > 0) {
+      return;
+    }
     const at = Date.now();
     db.noteFreshStart(row.id, at);
     console.log(
@@ -13667,9 +13969,11 @@ export const createServer = (
   /** Writes a line into a session's transcript: kept, and folded into what its screens show now. */
   const noteAtLimit = (
     row: { id: string; sessionId: string | null; harness: string | null },
-    move: AccountMove
+    move: AccountMove,
+    /** A line already written under this id is what it says now: a continuation's "Summarising…" turned into what came of it. */
+    id: string = crypto.randomUUID()
   ): void => {
-    const event = { id: crypto.randomUUID(), at: Date.now(), move };
+    const event = { id, at: Date.now(), move };
     db.atLimit.putEvent({ ...event, instanceId: row.id });
     transcripts.ingest(row.id, {
       kind: "frame",
@@ -13680,6 +13984,12 @@ export const createServer = (
     console.info(
       `[at-limit] ${row.id}: ${accountMoveWords(move, event.at).line}`
     );
+  };
+
+  /** Takes one of the hub's lines back out of a session's transcript: kept, and drawn. */
+  const unnoteAtLimit = (row: { id: string }, id: string): void => {
+    db.atLimit.dropEvent(id);
+    transcripts.removeLine(row.id, `limit-${id}`);
   };
 
   /**
@@ -13854,12 +14164,12 @@ export const createServer = (
   };
 
   /**
-   * Continues a session on `accountId` from a summary, the new session in
-   * its place (its parent, work item, thread and tab): the summary kept for
-   * it (ahead of the limit, or at a move that failed) when it covers the
-   * conversation as it stands now, so an unchanged conversation is never
-   * summarised twice; else one the job writes on `accountId` and keeps
-   * until `keepUntil`.
+   * Continues a session on `accountId` from a summary, in place: the same
+   * session goes on there in a fresh conversation, its id, parent, work and
+   * tab its own throughout. The summary kept for it (ahead of the limit, or
+   * at a move that failed) when it covers the conversation as it stands
+   * now, so an unchanged conversation is never summarised twice; else one
+   * the job writes on `accountId` and keeps until `keepUntil`.
    */
   const continueOnAccount = async (
     row: ReturnType<typeof db.getInstancesByIds>[number],
@@ -13892,20 +14202,71 @@ export const createServer = (
             ? { permissionMode: row.permissionMode as PermissionMode }
             : {}),
           ...(row.projectId ? { projectId: row.projectId } : {}),
-          ...(row.kind === "scratch" ? { scratch: {} } : {}),
           account: accountId,
-          inherit: {
+          inPlace: {
             fromAccountId,
             contextTokens: row.contextTokens,
-            written: reused
-              ? { onAccountId: reused.writtenOn, atPct: reused.percent }
-              : null,
-            keepUntil,
+            atLimit: {
+              written: reused
+                ? { onAccountId: reused.writtenOn, atPct: reused.percent }
+                : null,
+              keepUntil,
+            },
           },
         },
       },
       reused?.text
     );
+  };
+
+  /**
+   * A session's continuation of itself (`continue_session` naming no
+   * session), in place: on its machine, in its directory, on the account it
+   * runs on, where its summary is written too, in the mode it runs in unless
+   * another is asked.
+   */
+  const inPlaceRequest = (
+    id: string,
+    asked: ContinueRequest
+  ): ContinueRequest => {
+    const [row] = db.getInstancesByIds([id]);
+    const account = row?.accountId ?? undefined;
+    return {
+      ...asked,
+      summarizer: { ...asked.summarizer, ...(account ? { account } : {}) },
+      target: {
+        ...asked.target,
+        ...(row ? { machineId: row.machineId, cwd: row.cwd } : {}),
+        ...(account ? { account } : {}),
+        ...(row?.permissionMode && !asked.target.permissionMode
+          ? { permissionMode: row.permissionMode as PermissionMode }
+          : {}),
+        inPlace: {
+          fromAccountId: row?.accountId ?? null,
+          contextTokens: row?.contextTokens ?? null,
+        },
+      },
+    };
+  };
+
+  /** Why a session cannot go on itself in place as asked; nothing when it can. */
+  const inPlaceRefusal = (
+    id: string,
+    asked: ContinueRequest
+  ): string | undefined => {
+    const [row] = db.getInstancesByIds([id]);
+    if (!row) {
+      return `no session ${id}`;
+    }
+    const harness = row.harness ?? "claude";
+    if (harness !== asked.target.harness) {
+      return `${sessionName(row)} runs on ${harness}, and goes on in place on ${harness}: ask target_harness "${harness}", or name the session to continue it in a new ${asked.target.harness} session.`;
+    }
+    return db
+      .continuationRows()
+      .some((job) => job.sourceInstanceId === id && !SETTLED.has(job.stage))
+      ? `${sessionName(row)} is already going on from a summary.`
+      : undefined;
   };
 
   /**
@@ -13946,10 +14307,6 @@ export const createServer = (
         .some(
           (job) => job.sourceInstanceId === row.id && !SETTLED.has(job.stage)
         ),
-    named: (row) => ({
-      machine: machineName(row.machineId),
-      session: row.title || row.derivedTitle || row.id.slice(0, 8),
-    }),
     target: limitTarget,
     idle: sessionIdle,
     warm: cacheWarm,
@@ -14000,7 +14357,7 @@ export const createServer = (
     },
     resume: carryOn,
     // What its process was last handed: what it kept for later never reached
-    // it. A turn the limit refused fails the send that started it.
+    // it. A turn the limit refused leaves the send that started it read.
     startedBy: (row) =>
       db
         .sendsIn(row.id, ["read", "pending", "failed"])
@@ -14009,43 +14366,46 @@ export const createServer = (
     continueOn: continueOnAccount,
     summarise: summariseOn,
     note: noteAtLimit,
-    changed: () => publishInstances(""),
+    unnote: unnoteAtLimit,
+    // Whatever it decided, what a session it no longer holds was kept goes.
+    changed: () => {
+      publishInstances("");
+      releaseLimitHeld();
+    },
   });
   accountsMoved = atLimit.accountsChanged;
 
   workItems.resumeWaits();
 
   /**
-   * A dashboard's start of a session another took the place of: the one in
-   * its place is woken on its own conversation and settings when its process
-   * is gone, and the dashboard told it is up. True when the start named such
-   * a session; nothing of the old one runs.
+   * A dashboard's start of a session by a former id (a tab or link from
+   * before the hub folded its continuations into it): the session is woken
+   * on its own conversation and settings when its process is gone, and the
+   * dashboard told it is up under its id now. True when the start named a
+   * former id.
    */
-  const resumeSuccessor = (ws: HubSocket, message: Envelope): boolean => {
+  const resumeFormer = (ws: HubSocket, message: Envelope): boolean => {
     const named = message.instanceId;
-    const successor = named ? db.successorOf(named) : undefined;
-    if (!(named && successor) || successor === named) {
+    const now = named ? db.instanceIdOf(named) : undefined;
+    if (!(named && now) || now === named) {
       return false;
     }
-    const [row] = db.getInstancesByIds([successor]);
+    const [row] = db.getInstancesByIds([now]);
     const agent = row ? registry.agent(row.machineId) : undefined;
     if (!(row && agent)) {
       sendFrame(
         ws,
         failure(
           message,
-          `${named} was continued as ${successor}, whose machine is not connected.`
+          `${named} is ${now} now, whose machine is not connected.`
         )
       );
       return true;
     }
-    console.info(
-      `[hub] ${named} was continued as ${successor}: its resume goes there`
-    );
     if (wakesForSend(row)) {
       resumeSpawn(agent, row.machineId, row);
       // A person brought it back: what was kept for it goes behind the start.
-      releaseOwed({ instanceId: successor });
+      releaseOwed({ instanceId: now });
     }
     const requestId =
       message.requestId ??
@@ -14053,7 +14413,7 @@ export const createServer = (
       crypto.randomUUID();
     sendFrame(ws, {
       ...message,
-      instanceId: successor,
+      instanceId: now,
       machineId: row.machineId,
       verb: "frames",
       requestId,
@@ -14620,11 +14980,17 @@ export const createServer = (
           },
         },
         async ({ params, body, status }) => {
+          const { inPlace: itself, ...asked } = body;
           let prepared: PreparedContinuation;
           let refusal: string | undefined;
+          const request: ContinueRequest = itself
+            ? inPlaceRequest(params.id, asked)
+            : asked;
           try {
             prepared = await prepareContinuation(params.id, body.note);
-            refusal = await continuationRefusal(prepared, body);
+            refusal =
+              (itself ? inPlaceRefusal(params.id, asked) : undefined) ??
+              (await continuationRefusal(prepared, request));
           } catch (error) {
             return status(
               422,
@@ -14634,7 +15000,7 @@ export const createServer = (
           if (refusal) {
             return status(409, refusal);
           }
-          const row = startContinuation(prepared, body);
+          const row = startContinuation(prepared, request);
           return {
             continuationId: row.id,
             targetInstanceId: row.targetInstanceId,
@@ -15318,7 +15684,12 @@ export const createServer = (
             Number(query.limit) > 0
               ? Math.floor(Number(query.limit))
               : undefined;
-          const page = await transcripts.page(params.id, limit, query.before);
+          // A former id is its session's (the hub's fold of older continuations).
+          const page = await transcripts.page(
+            db.instanceIdOf(params.id),
+            limit,
+            query.before
+          );
           if ("gone" in page) {
             return status(
               409,
@@ -18426,6 +18797,8 @@ export const createServer = (
                   !heldIds.has(parked.instanceId ?? "") &&
                   !(heldOpencode && owner?.harness === "opencode")
                 ) {
+                  // Asked again by its session when it next runs.
+                  noteWithdrawn([parked]);
                   pending.resolve(parked.requestId ?? "", "cancelled");
                 }
               }
@@ -20219,8 +20592,8 @@ export const createServer = (
 
           switch (message.verb) {
             case "spawn": {
-              // A resume of a session another took the place of resumes that one.
-              if (resumeSuccessor(ws, message)) {
+              // A resume by a former id resumes its session by its id now.
+              if (resumeFormer(ws, message)) {
                 break;
               }
               // The row's key, not the client's — see `enforceRowSessionKey`.

@@ -797,15 +797,17 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       "continue_session",
-      "Summarise a session with a model you choose, then start a new session on another model or " +
-        "harness, seeded with that summary. The source session is untouched: it is only read. " +
-        "Omit `session` to continue this session itself. Takes a few minutes on a long session.",
+      "Summarise a session with a model you choose and go on from that summary. Name another " +
+        "`session` and a new session starts on the model and harness you choose, seeded with the " +
+        "summary; the named one is only read. Omit `session` and this session goes on itself, in place: " +
+        "once this turn ends it is summarised and starts a fresh conversation on `target_model` (its own " +
+        "harness), keeping its id, parent, delegates and work item. Takes a few minutes on a long session.",
       {
         session: z
           .string()
           .optional()
           .describe(
-            "The session to continue: its id, short id, or directory name. Defaults to this session."
+            "Another session to continue in a new session: its id, short id, or directory name. Omit it to continue this session itself, in place."
           ),
         summarizer_harness: z
           .enum(["claude", "opencode", "pi"])

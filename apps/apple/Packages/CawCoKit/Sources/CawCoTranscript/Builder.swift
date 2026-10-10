@@ -64,7 +64,7 @@ nonisolated struct Builder {
                 items.append(Item(id: key, top: gap, kind: .harness(note, key: key), print: note.title + note.status + note.body))
             case let .compaction(key, compaction):
                 items.append(Item(id: key, top: gap, kind: .compaction(compaction),
-                                  print: "\(compaction.brief ?? "\u{0}")|\(compaction.facts)"))
+                                  print: "\(compaction.word)|\(compaction.brief ?? "\u{0}")|\(compaction.facts)"))
             }
         }
         return (items, rail)

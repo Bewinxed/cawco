@@ -18,7 +18,7 @@ import { goto } from "$app/navigation";
 import { cawco, followContinuations, type SendExtras } from "./client.svelte";
 import { conversationHref } from "./links";
 import { toast } from "./toasts";
-import { contextOf, workspace } from "./workspace/workspace.svelte";
+import { contextOf } from "./workspace/workspace.svelte";
 
 /** The session a continuation starts from, as the dialog shows and sends it. */
 export interface ContinueSource {
@@ -159,26 +159,7 @@ function settleDetached(table: ContinuationJob[]): void {
   }
 }
 
-/** The continuations the hub made in a session's place whose tab has followed. */
-const followed = new Set<string>();
-
-/**
- * A session the hub continued on another account at its old one's limit:
- * its tab becomes the new session's, where it stood.
- */
-function followSuccessions(table: ContinuationJob[]): void {
-  for (const job of table) {
-    if (job.inherits && job.stage === "started" && !followed.has(job.id)) {
-      followed.add(job.id);
-      workspace.retarget(job.sourceInstanceId, job.targetInstanceId);
-    }
-  }
-}
-
-followContinuations((table) => {
-  settleDetached(table);
-  followSuccessions(table);
-});
+followContinuations(settleDetached);
 
 /**
  * A dashboard session as a continuation source, found the way the session

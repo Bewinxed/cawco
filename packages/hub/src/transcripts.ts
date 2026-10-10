@@ -126,6 +126,8 @@ export interface TranscriptsShape {
     limit: number | undefined,
     before: string | undefined
   ) => Promise<TranscriptPage | HistoryFault | { gone: string }>;
+  /** One of the hub's own lines, `blockId`, taken back out of a built transcript. */
+  readonly removeLine: (instanceId: string, blockId: string) => void;
   /**
    * Read the session again from its machine — its stored transcript changed
    * under it — cut after the entry `at` when given (a rewind).
@@ -309,6 +311,12 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
       entries.get(instanceId)?.builder.noteInterrupt(),
     noteRelaunch: (instanceId) =>
       entries.get(instanceId)?.builder.noteRelaunch(),
+    removeLine: (instanceId, blockId) => {
+      const entry = entries.get(instanceId);
+      if (entry && entry.loading === null) {
+        emit(instanceId, entry.builder.removeLine(blockId));
+      }
+    },
     reread,
     machineRegistered: async (machineId, instanceIds) => {
       const build = ports.build(machineId);

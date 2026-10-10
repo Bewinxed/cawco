@@ -748,32 +748,24 @@ export const relaunchOf = (row: {
 };
 
 /**
- * A "continue in new session" the hub is carrying, as every dashboard follows
- * it: summarise the source, then start the target seeded with the summary.
- * The hub owns it from the POST that starts it to its end; only a Cancel
- * (`DELETE /api/continuations/:id`) stops it.
+ * A continuation from a summary the hub is carrying, as every dashboard
+ * follows it: summarise the source, then start a conversation seeded with the
+ * summary. The hub owns it from the POST that starts it to its end; only a
+ * Cancel (`DELETE /api/continuations/:id`) stops it.
  */
 export interface ContinuationJob {
   error?: string;
   id: string;
   /**
-   * The new session takes the source's place: its parent, work item, thread
-   * and tab. Set when the hub continued a session whose account reached its
-   * limit on another account.
+   * The session goes on itself, in a fresh conversation (its account at its
+   * limit, or it asked with `continue_session`): `targetInstanceId` is
+   * `sourceInstanceId`, one session throughout. Absent: "Continue in new
+   * session", whose target is a new session and whose source is only read.
    */
-  inherits?: true;
+  inPlace?: true;
   sourceInstanceId: string;
-  /**
-   * `ending`: a continuation at an account's limit whose new session runs,
-   * waiting for its source to be ended before it takes the source's place.
-   */
-  stage:
-    | "summarising"
-    | "starting"
-    | "ending"
-    | "started"
-    | "failed"
-    | "cancelled";
+  /** `starting`: the new conversation (in place) or new session is starting. */
+  stage: "summarising" | "starting" | "started" | "failed" | "cancelled";
   /** Absent when the source is short enough that nothing is summarised. */
   summariserInstanceId?: string;
   targetInstanceId: string;
@@ -808,13 +800,6 @@ export interface InstanceRow {
    * session nobody delegated, which may.
    */
   canDelegate?: boolean | null;
-  /**
-   * The session that took this one's place when it was continued on another
-   * account at its limit. Set: this one never runs again, every listing
-   * leaves it out, and whatever names it reaches the session at the end of
-   * the chain. Null on every session nothing took the place of.
-   */
-  continuedInto?: string | null;
   /** The directory the session was launched in; see `launchDir`. */
   cwd: string;
   /** The delegate type its spawn named; null: none. */
