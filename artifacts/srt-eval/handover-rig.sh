@@ -133,6 +133,21 @@ fi
 say "3. with the fix ($(git -C "$here" rev-parse --short HEAD)): the start-up pass"
 (cd "$here" && exec bun artifacts/srt-eval/rig-rearm.ts 120) > "$rig/fixed.log" 2>&1 &
 agent=$!
+# Between the start-up pass and the handover (the next look, 5 s on) the
+# anchor still runs every command, through the executor its own build wrote.
+armed() { grep -q 'boundary hooks written for' "$rig/fixed.log"; }
+if waitfor 30 armed; then
+  echo "-- a command between the start-up pass and the handover reaches its caller"
+  status=0
+  between=$("$state/exec" 'echo "pid namespace: $(readlink /proc/self/ns/pid)"' 2>&1) || status=$?
+  echo "$between"
+  echo "[exec exit $status]"
+  if [ "$status" -ne 0 ] || ! grep -q '^pid namespace: pid:' <<< "$between"; then
+    echo "FAILED: the command between the start-up pass and the handover did not run"
+  fi
+else
+  echo "FAILED: the start-up pass did not finish within 30 s"
+fi
 # This agent's own handover of the anchor, not any record an earlier pass left.
 handed() { grep -q "its boundary $anchor (form [^)]*) is handed over to" "$rig/fixed.log"; }
 if waitfor 30 handed; then

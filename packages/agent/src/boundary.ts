@@ -650,7 +650,11 @@ const writeWhole = async (
  * `held` to ask it, its executor in this build's form for the boundary `held`
  * names, and the record of them, and serves its tool door. An executor only
  * hands commands in, so it is current from the next command on, whatever form
- * the boundary is; a running CLI reads its hook at every call, so it asks
+ * the boundary is, but for one from before srt (`identity`): this build's
+ * executor cannot reach its anchor or its runner's FIFO, and would refuse
+ * every command as "not running" until the handover, so it keeps the
+ * executor its own build wrote, which also waits at the handover's gate. A
+ * running CLI reads its hook at every call, so it asks
  * the new judge from the next call on. On macOS also its shims. The
  * workspace's policy is written again too, as this machine stands now
  * (`workspacePolicy`): every harness reads it at each file tool call, so a
@@ -674,7 +678,9 @@ const armHook = async (
   if (process.platform === "darwin") {
     await writeShims(id, await bunRuntime(id));
   }
-  await writeWhole(held.exec, execScript(id, held, await hostGh()), 0o755);
+  if (!held.identity) {
+    await writeWhole(held.exec, execScript(id, held, await hostGh()), 0o755);
+  }
   await openToolDoor(id);
   const armed: Held = { ...held, hook, policy };
   await writeWhole(
