@@ -314,12 +314,14 @@ final class UserTurnView: UIView, RowContent, FitsWidth, UIGestureRecognizerDele
         }
         self.block = block
         let failed = block.state == "failed"
+        // A failed send going again says so, not the failure (MessageRow.svelte).
+        let sending = retried != nil || retrying != nil
         let waiting = block.state == "pending" || block.queued
         taken = waiting && env.isTaken(block.id)
         // On a touch screen, a queued message that can be edited says how.
         let tappable = waiting && !taken && Self.touch && env.canEditQueued(block.id)
         let queuedNote = tappable ? "queued · \(env.agentName) is still working · tap to edit" : "queued"
-        let note: String? = taken ? nil : failed ? "not sent" : waiting ? queuedNote : block.meta["urgent"] as? Bool == true ? "urgent" : nil
+        let note: String? = taken ? nil : failed ? (sending ? "sending…" : "not sent") : waiting ? queuedNote : block.meta["urgent"] as? Bool == true ? "urgent" : nil
         let clock = failed || waiting ? nil : Item.clock(block.date)
         who.isHidden = turn.grouped
         who.configure(.init(name: "You", clock: clock, note: note, you: true))
@@ -336,10 +338,13 @@ final class UserTurnView: UIView, RowContent, FitsWidth, UIGestureRecognizerDele
         configureChips(block)
         takenTag.attributedText = Styled.string("Queued · editing it below", TypeScale.typeMeta, color: Palette.statusAttnInk, weight: .medium)
         fold(taken)
-        let reasonText = block.string("sendFailed")
-        reason.attributedText = Styled.string("Couldn't send that message." + (reasonText.map { " \($0)" } ?? ""), TypeScale.typeMeta,
-                                              color: Palette.statusFailInk, lineBreak: .byWordWrapping)
-        let sending = retried != nil || retrying != nil
+        if sending {
+            showSendingAgain()
+        } else {
+            let reasonText = block.string("sendFailed")
+            reason.attributedText = Styled.string("Couldn't send that message." + (reasonText.map { " \($0)" } ?? ""), TypeScale.typeMeta,
+                                                  color: Palette.statusFailInk, lineBreak: .byWordWrapping)
+        }
         retry.setAttributedTitle(Styled.string(sending ? "Sending again…" : "Send again", TypeScale.typeLabel, color: Palette.inkStrong), for: .normal)
         retry.isEnabled = !sending
         failure.isHidden = !failed
@@ -453,6 +458,7 @@ final class UserTurnView: UIView, RowContent, FitsWidth, UIGestureRecognizerDele
     private func tryAgain() {
         guard retrying == nil, let block, let hub = env.hub, hub.state == .connected, let row = hub.fleet.byId[env.sessionId], row.isListed else { return }
         let extras = SentMessages.extras(of: block)
+        showSendingAgain()
         retry.setAttributedTitle(Styled.string("Sending again…", TypeScale.typeLabel, color: Palette.inkStrong), for: .normal)
         retry.isEnabled = false
         retrying = Task { [weak self] in
@@ -472,6 +478,13 @@ final class UserTurnView: UIView, RowContent, FitsWidth, UIGestureRecognizerDele
 
     /// The pictures being read for a retry.
     private var retrying: Task<Void, Never>?
+
+    /// The reason line while the send is going again: what is happening, in
+    /// the meta ink, not the failure it is recovering from.
+    private func showSendingAgain() {
+        reason.attributedText = Styled.string("Sending that message again…", TypeScale.typeMeta,
+                                              color: Palette.inkMuted, lineBreak: .byWordWrapping)
+    }
 
     /// The retry could not be put together: the row says why, and Send again stands again.
     private func retryRefused(_ why: String) {
