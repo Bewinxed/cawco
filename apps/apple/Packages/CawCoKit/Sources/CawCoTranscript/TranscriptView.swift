@@ -126,6 +126,9 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     private let catchUp = DockPill(glyph: nil, title: "Catching up…")
     private let compacting = DockPill(glyph: nil, title: "Compacting context…", pill: true)
     private let signposter = OSSignposter(subsystem: "dev.cawco.app", category: "Transcript")
+    #if DEBUG
+    private let probe = DisclosureProbe()
+    #endif
 
     /// The list's layout, which is asked where the list stands when rows join it.
     private final class Layout: UICollectionViewCompositionalLayout {
@@ -1005,6 +1008,9 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             collection.layoutIfNeeded()
         }
         let warming = inSight && warm(since: now, frame: link.targetTimestamp - link.timestamp)
+        #if DEBUG
+        probe.sample(collection) { id in self.dataSource.indexPath(for: id).flatMap { self.collection.cellForItem(at: $0) } }
+        #endif
         let took = CACurrentMediaTime() - now
         Pace.spent(took, in: env.sessionId, items: items.count, cells: collection.visibleCells.count)
         // Work this frame, or work the next one has: the frame runs on. A dirty
@@ -1448,6 +1454,13 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     /// A body grows open (--dur-reveal) or folds shut (--dur-exit) on
     /// --ease-out, its row's height on the same clock; at once under Reduce Motion.
     private func animate(_ row: Disclosing, open: Bool, in cell: UICollectionViewCell?) {
+        #if DEBUG
+        if let cell, let index = collection.indexPath(for: cell), let id = dataSource.itemIdentifier(for: index) {
+            probe.begin(collection, row: id, open: open, ids: dataSource.snapshot().itemIdentifiers) { id in
+                self.dataSource.indexPath(for: id).flatMap { self.collection.cellForItem(at: $0) }
+            }
+        }
+        #endif
         // Main-actor closures from a main-actor view, run on the main actor by the animator.
         nonisolated(unsafe) let (layout, shown) = row.toggled(open: open)
         // The body's elements joined or left the row: VoiceOver reads the
