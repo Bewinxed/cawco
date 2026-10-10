@@ -10,7 +10,7 @@
  * and morphs figures; the minute moving on ("clock") changes the words in
  * place, with nothing animated for it.
  */
-import type { ProviderForecast } from "@cawco/core";
+import type { CarrySpan, ProviderForecast } from "@cawco/core";
 import { cawco, followAccounts } from "../client.svelte";
 import { speakingReading } from "../usage";
 import {
@@ -61,7 +61,21 @@ export function startForecast(): void {
   }, 60_000);
 }
 
+/**
+ * A bench's view (routes/motion/usage-relay): its forecast and the rings it
+ * built from it with claudeRings/openCodeRing, in place of the hub's.
+ */
+interface StagedUsage {
+  claude: ClaudeRings | null;
+  forecast: ProviderForecast;
+  openCode: RingAccount | null;
+}
+let staged = $state<StagedUsage | null>(null);
+
 const claude = $derived.by((): ClaudeRings | null => {
+  if (staged) {
+    return staged.claude;
+  }
   const view = cawco.accounts;
   const { forecast } = state;
   if (!(view && forecast)) {
@@ -83,6 +97,9 @@ const claude = $derived.by((): ClaudeRings | null => {
 });
 
 const openCode = $derived.by((): RingAccount | null => {
+  if (staged) {
+    return staged.openCode;
+  }
   const reading = speakingReading(cawco.openCodeGoLimits)?.reading;
   if (!reading || reading.windows.length === 0) {
     return null;
@@ -107,8 +124,18 @@ export const usage = {
   get openCode() {
     return openCode;
   },
+  /** Who carries your new sessions across the 5-hour horizon, span by span. */
+  get spans(): CarrySpan[] {
+    return (staged?.forecast ?? state.forecast)?.yours ?? [];
+  },
   get read() {
-    return state.read;
+    return staged !== null || state.read;
+  },
+  /** A bench stands its own view in for the hub's; null hands it back. */
+  stage(view: StagedUsage | null) {
+    staged = view;
+    state.cause = "data";
+    state.now = Date.now();
   },
   /** The minute clock. */
   get now() {

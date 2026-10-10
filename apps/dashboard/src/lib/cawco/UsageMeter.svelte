@@ -10,9 +10,11 @@
    * rim what is left of its week, in the account's colour. When the carrying
    * order changes the rings slide to their new places.
    *
-   * The whole strip is one control. It opens every account with its key and
-   * where the next delegate goes, and the way to the Usage page: a popover
-   * by the strip with a fine pointer, the house bottom sheet on touch. The
+   * The whole strip is one control. It opens the relay: the time until
+   * Claude stops, who carries you across the next five hours as one bar,
+   * and every account on two lines (grouped by organization where one has
+   * more than two), then the way to the Usage page: a popover by the strip
+   * with a fine pointer, the house bottom sheet on touch. The
    * strip is 44px in the rail (56px on the phone home) in every state, so
    * nothing around it moves when a reading lands or changes.
    *
@@ -20,15 +22,17 @@
    * (usage/forecast.svelte.ts), and the words move on once a minute.
    */
   import { MediaQuery } from "svelte/reactivity";
+  import { badgeVariants } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Drawer from "#lib/components/ui/drawer/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "#lib/components/ui/popover/index.js";
-  import { IconKey, IconUsage } from "#lib/icons.js";
+  import Tip from "#lib/components/ui/tooltip/tip.svelte";
+  import { IconKey, IconSubagents, IconUsage } from "#lib/icons.js";
+  import { cn } from "#lib/utils.js";
   import ClaudeIcon from "~icons/logos/claude-icon";
-  import Arrow from "~icons/solar/arrow-right-linear";
   import AccountName from "./accounts/AccountName.svelte";
   import { cawco } from "./client.svelte";
   import { dur, motionOk } from "./motion/curves.svelte";
@@ -37,19 +41,25 @@
   import { claudeGap } from "./usage";
   import Figure from "./usage/Figure.svelte";
   import { startForecast, usage } from "./usage/forecast.svelte";
+  import Relay from "./usage/Relay.svelte";
   import Rings from "./usage/Rings.svelte";
-  import RingsKey from "./usage/RingsKey.svelte";
   import {
+    bindReset,
     caption,
+    delegateTip,
     nameFields,
+    openCodeRowTime,
     openCodeStatus,
     openCodeStop,
+    orgGroups,
     plain,
     type RingAccount,
     rowStatus,
     rowTime,
+    staleTip,
     stopText,
   } from "./usage/rings";
+  import SessionsChip from "./usage/SessionsChip.svelte";
   import Words from "./usage/Words.svelte";
 
   let {
@@ -62,6 +72,13 @@
   $effect(() => {
     startForecast();
   });
+
+  /** The popover or the sheet stands open. */
+  let open = $state(false);
+  /** A session was opened from it: it goes away, as a menu does. */
+  const putAway = () => {
+    open = false;
+  };
 
   const claude = $derived(usage.claude);
   const openCode = $derived(usage.openCode);
@@ -246,84 +263,151 @@
 {#snippet row(
   ring: RingAccount,
   time: string,
-  status: ReturnType<typeof rowStatus>
+  status: ReturnType<typeof rowStatus>,
+  delegates: string | null,
+  carrying: boolean
 )}
+  <!-- Two lines: its name and the time that matters, then what nothing
+       else says (its status, the sessions the carrier holds, where
+       delegates start) and the one reset that binds it. -->
   <div class="row" data-account={ring.id} class:limit={ring.state === "limit"}>
-    <Rings {ring} size={24} />
-    <div class="content">
-      <div class="r1">
-        <AccountName account={nameFields(ring)} row wrap />
-        <span class="time" class:muted={ring.state === "stale"}
-          ><Figure text={time} /></span
-        >
-      </div>
-      <p class="status" data-status><Words parts={status} /></p>
-      <RingsKey {ring} />
-    </div>
+    {#if ring.state === "stale"}
+      <Tip label={staleTip(ring, now)} side="top">
+        {#snippet children(
+          props
+        )}
+          <button
+            {...props}
+            aria-label={staleTip(ring, now)}
+            class="ring-tip"
+            data-stale-ring
+            type="button"
+          >
+            <Rings {ring} size={24} />
+          </button>
+        {/snippet}
+      </Tip>
+    {:else}
+      <Rings {ring} size={24} />
+    {/if}
+    <span class="who"><AccountName account={nameFields(ring)} row /></span>
+    <span class="time" data-time class:muted={ring.state === "stale"}
+      ><Figure text={time} /></span
+    >
+    <span class="line2">
+      {#if status.length > 0}
+        <span class="status" data-status><Words parts={status} /></span>
+      {/if}
+      {#if carrying && ring.sessions.length > 0}
+        <SessionsChip
+          account={ring.name}
+          onopen={putAway}
+          sessions={ring.sessions}
+        />
+      {/if}
+      {#if delegates}
+        <Tip label={delegates} side="top">
+          {#snippet children(
+            props
+          )}
+            <!-- The house delegated-work glyph, named "Delegates": the word
+                 doesn't fit beside a status, its sessions and its reset at
+                 320px. -->
+            <button
+              {...props}
+              aria-label="Delegates"
+              class={cn(badgeVariants({ variant: "secondary" }), "tag")}
+              data-delegates-tag
+              type="button"
+            >
+              <IconSubagents aria-hidden="true" />
+            </button>
+          {/snippet}
+        </Tip>
+      {/if}
+    </span>
+    <span class="reset" data-reset>{bindReset(ring, now)}</span>
   </div>
 {/snippet}
 
-{#snippet limits()}
-  <!-- Its size follows what it lists (a provider arriving, a note going). -->
-  <div class="pop-body" {@attach morph()}>
+{#snippet limits(
+  sheet: boolean
+)}
+  <!-- Its size follows what it lists (a provider arriving, a note going).
+       In the popover the head and the foot stand still and the accounts
+       between them scroll; in the sheet the whole body scrolls under the
+       sheet's header. -->
+  <div class={["pop-body", sheet && "kit-sheet-scroll"]} {@attach morph()}>
     {#if !shown && notes.length === 0}
       <p class="pop-empty">{empty}</p>
     {/if}
     {#if claude}
-      <section class="group">
-        <h3 class="provider">
-          <span aria-hidden="true" class="mark"><ClaudeIcon /></span>
-          Claude
-        </h3>
-        <div class="rows">
-          {#each claude.accounts as ring (ring.id)}
-            {@render row(
-              ring,
-              rowTime(ring, claude, now),
-              rowStatus(ring, claude, now)
-            )}
+      <header class="pop-head" data-pop-head>
+        <div class="head-line">
+          <h3 class="provider">
+            <span aria-hidden="true" class="mark"><ClaudeIcon /></span>
+            Claude
+          </h3>
+          <span class="stop">
+            <span class="kpi" class:muted={claude.stale !== null}
+              ><Figure text={stopText(claude, now)} /></span
+            >
+            <span class="stop-meta">until Claude stops</span>
+          </span>
+        </div>
+        <Relay accounts={claude.accounts} {now} spans={usage.spans} />
+      </header>
+    {/if}
+    <div class="accounts" data-accounts>
+      {#if claude}
+        <div class="group">
+          <!-- An organization of more than two accounts is a group under its
+               name; the rest follow, ungrouped. -->
+          {#each orgGroups(claude.accounts) as group (group.org ?? "")}
+            <div class="rows" data-org-group={group.org ?? ""}>
+              {#if group.org}
+                <h4 class="org" data-org-head>{group.org}</h4>
+              {/if}
+              {#each group.accounts as ring (ring.id)}
+                {@render row(
+                  ring,
+                  rowTime(ring, claude, now),
+                  rowStatus(ring, claude, now),
+                  ring.id === claude.delegate?.id ? delegateTip(claude) : null,
+                  ring.id === claude.carry?.id
+                )}
+              {/each}
+            </div>
           {/each}
         </div>
-        {#if claude.delegate}
-          <p class="delegates" data-delegates>
-            <b class="head">Delegates</b>
-            <span
-              ><Arrow aria-hidden="true" class="arrow" />
-              <Words
-                parts={[
-                  { strong: claude.delegate.name },
-                  claude.delegateWhy ? ` (${claude.delegateWhy})` : "",
-                ]}
-              /></span
-            >
-          </p>
-        {/if}
-      </section>
-    {/if}
-    {#if openCode}
-      <section class="group">
-        <h3 class="provider">
-          <span aria-hidden="true" class="mark"><OpenCodeLogo /></span>
-          opencode Go
-        </h3>
-        <div class="rows">
-          {@render row(
-            openCode,
-            openCodeStop(openCode, now),
-            openCodeStatus(openCode, now)
-          )}
-        </div>
-      </section>
-    {/if}
-    {#each notes as note (note.id)}
-      {@const Mark = note.mark}
-      <!-- A provider with nothing to draw: why, and what to do about it. -->
-      <p class="pop-empty pop-note">
-        <span aria-hidden="true" class="mark"><Mark /></span>
-        {note.text}
-      </p>
-    {/each}
-    <div class="foot">
+      {/if}
+      {#if openCode}
+        <section class="group">
+          <h3 class="provider">
+            <span aria-hidden="true" class="mark"><OpenCodeLogo /></span>
+            opencode Go
+          </h3>
+          <div class="rows">
+            {@render row(
+              openCode,
+              openCodeRowTime(openCode, now),
+              openCodeStatus(openCode, now),
+              null,
+              true
+            )}
+          </div>
+        </section>
+      {/if}
+      {#each notes as note (note.id)}
+        {@const Mark = note.mark}
+        <!-- A provider with nothing to draw: why, and what to do about it. -->
+        <p class="pop-empty pop-note">
+          <span aria-hidden="true" class="mark"><Mark /></span>
+          {note.text}
+        </p>
+      {/each}
+    </div>
+    <div class="foot" data-pop-foot>
       <Button href="/usage" label="Open Usage" size="sm" variant="outline" />
     </div>
   </div>
@@ -357,7 +441,7 @@
   {:else if touch.current}
     <!-- On touch every account rises in the house sheet, as a tab's details
          and a peek do; with a fine pointer it is a popover by the strip. -->
-    <Drawer.Root>
+    <Drawer.Root bind:open>
       <Drawer.Trigger
         aria-label={triggerLabel}
         class="strip-hit press-tint touch-hit"
@@ -368,11 +452,11 @@
         <Drawer.Header>
           <Drawer.Title>Usage limits</Drawer.Title>
         </Drawer.Header>
-        {@render limits()}
+        {@render limits(true)}
       </Drawer.Content>
     </Drawer.Root>
   {:else}
-    <Popover.Root>
+    <Popover.Root bind:open>
       <Popover.Trigger aria-label={triggerLabel} class="strip-hit press-tint">
         {@render face()}
       </Popover.Trigger>
@@ -383,7 +467,7 @@
         side="top"
         sideOffset={6}
       >
-        {@render limits()}
+        {@render limits(false)}
       </Popover.Content>
     </Popover.Root>
   {/if}
@@ -546,10 +630,57 @@
   }
 
   /* ── the popover and the sheet ── */
+  /* Never taller than the room bits-ui measures beside the strip (inside
+     its collision padding), less the popover's 1px edge above and below:
+     the head and the foot stand still, and the accounts between them
+     scroll. */
   .pop-body {
     --ring-ground: var(--surface-raised);
     display: flex;
     flex-direction: column;
+    max-block-size: calc(var(--bits-popover-content-available-height) - 2px);
+  }
+  .pop-head {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: 12px 14px 10px;
+  }
+  .head-line {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+  }
+  /* The answer first: how long until nothing can carry you. */
+  .stop {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+  }
+  .kpi {
+    font: var(--type-kpi);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    color: var(--ink-stat);
+  }
+  .kpi.muted {
+    color: var(--ink-muted);
+  }
+  .stop-meta {
+    font: var(--type-meta);
+    color: var(--ink-muted);
+  }
+  .accounts {
+    flex: 1 1 auto;
+    min-block-size: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .pop-head + .accounts {
+    border-block-start: 1px solid var(--border-hairline);
   }
   .pop-empty {
     padding: 10px 12px;
@@ -565,7 +696,7 @@
     display: flex;
     flex-direction: column;
     gap: 6px;
-    padding: 12px 10px;
+    padding: 8px 10px;
   }
   .group + .group,
   .group + .pop-note,
@@ -580,41 +711,56 @@
     font: var(--type-label);
     color: var(--ink-strong);
   }
+  .pop-head .provider {
+    padding: 0;
+  }
   .rows {
     display: flex;
     flex-direction: column;
     gap: 2px;
   }
-  /* An account: its ring, then its name and the time that matters, a short
-     status, and its key. */
+  /* An organization's name over its accounts: meta, no chrome of its own. */
+  .org {
+    padding: 2px var(--space-1) 0;
+    font: var(--type-meta);
+    color: var(--ink-muted);
+  }
+  /* A stale ring is its tooltip's trigger: a bare button, the ring itself. */
+  .ring-tip {
+    display: grid;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    cursor: help;
+  }
+  /* An account, on two lines beside its ring: its name and the time that
+     matters, then a short status and the one reset that binds it. 40px. */
   .row {
     display: grid;
-    grid-template-columns: 24px minmax(0, 1fr);
+    grid-template-columns: 24px minmax(0, 1fr) auto;
+    grid-template-rows: auto auto;
     column-gap: 10px;
-    align-items: start;
-    padding: 7px var(--space-1);
+    row-gap: 1px;
+    align-content: center;
+    align-items: baseline;
+    min-block-size: 40px;
+    padding: 0 var(--space-1);
     border-radius: var(--radius-sm);
     transition: background-color var(--dur-fade) var(--ease-out);
 
-    & > :global(svg) {
-      margin-block-start: 1px;
+    & > :global(svg),
+    & > .ring-tip {
+      grid-row: 1 / 3;
+      align-self: center;
     }
   }
   .row.limit {
     background: var(--meter-wash-over);
     --ring-ground: var(--meter-wash-over);
   }
-  .content {
+  .who {
     display: flex;
-    flex-direction: column;
-    gap: 3px;
-    min-inline-size: 0;
-  }
-  .r1 {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: var(--space-2);
     min-inline-size: 0;
   }
   .time {
@@ -624,41 +770,61 @@
     white-space: nowrap;
     color: var(--ink-strong);
   }
+  /* What only this account can say: its status, the sessions it carries,
+     where new delegates start. */
+  .line2 {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    min-inline-size: 0;
+  }
   .status {
-    margin: 0 0 3px;
+    min-inline-size: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
     font: var(--type-meta);
     color: var(--ink-row);
   }
-  .delegates {
-    display: flex;
-    align-items: baseline;
-    gap: 10px;
-    padding: 6px var(--space-1) 0;
+  .tag {
     font: var(--type-meta);
-    color: var(--ink-row);
-
-    & > .head {
-      font: var(--type-label);
-      color: var(--ink-strong);
-    }
-    & :global(.arrow) {
-      display: inline-block;
-      inline-size: 12px;
-      block-size: 12px;
-      vertical-align: -2px;
-      color: var(--ink-muted);
-    }
+  }
+  .reset {
+    flex: none;
+    align-self: center;
+    justify-self: end;
+    white-space: nowrap;
+    font: var(--type-meta);
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-muted);
   }
   .foot {
+    flex: none;
     padding: 10px 14px;
     border-block-start: 1px solid var(--border-hairline);
   }
+  /* The sheet: the whole body scrolls under its header, rows at the touch
+     floor. */
+  :global(.usage-sheet) .pop-body {
+    flex: 1 1 auto;
+    min-block-size: 0;
+    max-block-size: none;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  :global(.usage-sheet) .accounts {
+    flex: none;
+    overflow: visible;
+  }
+  :global(.usage-sheet) .pop-head {
+    padding: 4px 18px 12px;
+  }
   :global(.usage-sheet) .group {
-    padding: 12px;
+    padding: 8px 12px;
   }
   :global(.usage-sheet) .row {
     min-block-size: 44px;
-    padding: 8px 6px;
+    padding: 0 6px;
   }
   :global(.usage-sheet) .foot :global(a) {
     inline-size: 100%;

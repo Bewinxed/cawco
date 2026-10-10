@@ -17,6 +17,7 @@ import {
   type AccountForecast,
   accountName,
   type CarrySpan,
+  CLAUDE_PROVIDER,
   type InstanceRow,
   type LimitWindow,
   type ProviderForecast,
@@ -62,6 +63,8 @@ export interface RingAccount {
   bindName: string;
   /** When the binding window runs out at its pace; null: it lasts. */
   bindOut: number | null;
+  /** When the first span it carries you in starts (now, or later). */
+  carryFrom: number | null;
   /** When the span it carries you in ends (it carries now, or next). */
   carryUntil: number | null;
   /** `var(--account-<hue>)`. */
@@ -76,6 +79,12 @@ export interface RingAccount {
   neverBackup: boolean;
   /** The nickname, when one was given: shown with the email beneath. */
   nick: string | null;
+  /**
+   * The Claude organization it bills, by name (`identity.organization`, the
+   * initialize response's `account.organization`); null on any other
+   * provider, where that field is an account id or a key's fingerprint.
+   */
+  org: string | null;
   /** Percent left where its reserve sits, once the reserve is reached. */
   reserveLeft: number | null;
   /** When it last reported; null: never. */
@@ -257,6 +266,10 @@ function accountRing(
     name: accountName(account),
     nick: account.label,
     email: account.email,
+    org:
+      account.provider === CLAUDE_PROVIDER && account.identity?.organization
+        ? account.identity.organization
+        : null,
     color: `var(--account-${account.hue})`,
     w5,
     week,
@@ -274,6 +287,7 @@ function accountRing(
     seenAt,
     sessions: live,
     state,
+    carryFrom: null,
     carryUntil: null,
   };
 }
@@ -342,6 +356,7 @@ export function claudeRings(input: {
   for (const span of spans) {
     const ring = of(span);
     if (ring && ring.carryUntil === null) {
+      ring.carryFrom = span.from;
       ring.carryUntil = span.to;
     }
   }
@@ -422,6 +437,7 @@ export function openCodeRing(
     // The plan has no email; it goes by its name.
     nick: "Go plan",
     email: null,
+    org: null,
     color: "var(--account-amber)",
     w5,
     week,
@@ -436,6 +452,7 @@ export function openCodeRing(
     seenAt: reading.fetchedAt,
     sessions: live,
     state,
+    carryFrom: null,
     carryUntil: null,
   };
 }
@@ -482,52 +499,108 @@ export function caption(c: ClaudeRings, now: number): Part[] {
   return [];
 }
 
-/** The time that matters for a row, at its end. */
+/**
+ * The time that matters for a row, at its end. A reading out of date is a
+ * guess, and its time says so with a tilde ("~3h 40m left"); the ring's
+ * tooltip says why.
+ */
 export function rowTime(r: RingAccount, c: ClaudeRings, now: number): string {
   if (r.state === "limit") {
     return `back in ${until(r.backAt, now)}`;
   }
-  if (r.state === "reserve" || r.id === c.carry?.id) {
-    const out = r.bindOut ?? r.carryUntil;
-    return out !== null && out - now < HORIZON_MS
-      ? `${fmt(out - now)} left`
+  const guess = r.state === "stale" ? "~" : "";
+  const left = (out: number | null) =>
+    out !== null && out - now < HORIZON_MS
+      ? `${guess}${fmt(out - now)} left`
       : "5h+";
+  if (r.state === "reserve" || r.id === c.carry?.id) {
+    return left(r.bindOut ?? r.carryUntil);
   }
   if (r.neverBackup) {
     return "5h+";
   }
-  return r.carryUntil !== null && r.carryUntil - now < HORIZON_MS
-    ? `${fmt(r.carryUntil - now)} left`
-    : "5h+";
+  return left(r.carryUntil);
 }
 
-/** A row's short status, under its name. */
+/**
+ * A row's status, under its name: only what the bar, the figures and the
+ * session count don't say. The carrier says nothing (its sessions' count
+ * stands there); an account in the relay says when it takes over; one
+ * with nothing to do is idle.
+ */
 export function rowStatus(r: RingAccount, c: ClaudeRings, now: number): Part[] {
-  const n = r.sessions.length;
   if (r.state === "limit") {
     return ["at its limit"];
   }
-  if (r.state === "stale" && r.seenAt !== null) {
-    return [`seen ${fmt(now - r.seenAt)} ago`];
+  if (r.id === c.carry?.id) {
+    return [];
   }
   if (r.state === "reserve") {
-    return [
-      `${r.bind === "5h" ? "" : `its ${r.bindName} runs out first; `}reserve reached, keeps its ${sessions(n)}`,
-    ];
+    return ["reserve reached"];
   }
-  if (r.id === c.carry?.id) {
-    return [
-      n > 0 ? `carrying ${sessions(n)}` : "carries your next session",
-      ...(c.next ? [", then ", named(c.next)] : []),
-    ];
+  if (r.carryFrom !== null && r.carryFrom > now) {
+    return ["takes over in ", strong(fmt(r.carryFrom - now))];
   }
   if (r.neverBackup) {
     return ["never a backup"];
   }
-  if (r.id === c.next?.id && c.nextAt !== null) {
-    return ["takes over in ", strong(fmt(c.nextAt - now))];
+  return ["idle"];
+}
+
+/** One group of the accounts: an organization's accounts, or (null) the rest. */
+export interface OrgGroup {
+  accounts: RingAccount[];
+  org: string | null;
+}
+
+/**
+ * The accounts in groups: each organization with more than two accounts is a
+ * group, in the order its first account carries, its accounts in carrying
+ * order; the accounts of a smaller organization, or of none, follow
+ * ungrouped.
+ */
+export function orgGroups(accounts: RingAccount[]): OrgGroup[] {
+  const size = new Map<string, number>();
+  for (const ring of accounts) {
+    if (ring.org) {
+      size.set(ring.org, (size.get(ring.org) ?? 0) + 1);
+    }
   }
-  return ["not carrying anything"];
+  const groups = new Map<string, RingAccount[]>();
+  const rest: RingAccount[] = [];
+  for (const ring of accounts) {
+    if (ring.org && (size.get(ring.org) ?? 0) > 2) {
+      groups.set(ring.org, [...(groups.get(ring.org) ?? []), ring]);
+    } else {
+      rest.push(ring);
+    }
+  }
+  return [
+    ...[...groups].map(([org, members]) => ({ org, accounts: members })),
+    ...(rest.length > 0 ? [{ org: null, accounts: rest }] : []),
+  ];
+}
+
+/** A stale ring's tooltip: how old its reading is, and what that makes it. */
+export const staleTip = (r: RingAccount, now: number): string =>
+  r.seenAt === null
+    ? "No reading yet, so this is an estimate."
+    : `Last reading ${fmt(now - r.seenAt)} ago, so this is an estimate.`;
+
+/** The routing's reason, said of the account it chose. */
+const DELEGATE_CLAUSE: Record<string, string> = {
+  "most room left": "it has the most room left",
+  "first in your order": "it’s first in your order",
+  "resets soonest": "it resets soonest",
+  pinned: "it’s pinned",
+};
+
+/** The Delegates tag's tooltip: where new delegates start, and why. */
+export function delegateTip(c: ClaudeRings): string {
+  const why = DELEGATE_CLAUSE[c.delegateWhy] ?? c.delegateWhy;
+  return why
+    ? `New delegates start here: ${why}.`
+    : "New delegates start here.";
 }
 
 /** A tile's sentence: the same status, said whole. */
@@ -701,6 +774,12 @@ export const openCodeStop = (o: RingAccount, now: number): string => {
     : "5h+";
 };
 
+/** Opencode's row time, the Claude rows' shape: when it's back, at its limit. */
+export const openCodeRowTime = (o: RingAccount, now: number): string =>
+  o.state === "limit"
+    ? `back in ${until(o.backAt, now)}`
+    : openCodeStop(o, now);
+
 export function openCodeStatus(o: RingAccount, now: number): Part[] {
   if (o.state === "limit") {
     return ["at its limit"];
@@ -725,6 +804,24 @@ export function openCodeSentence(o: RingAccount, now: number): Part[] {
   return o.bindOut !== null && o.bindOut - now < HORIZON_MS
     ? ["Runs out in ", strong(fmt(o.bindOut - now)), "."]
     : ["Nothing stops you in the next 5 hours."];
+}
+
+/**
+ * A row's one reset, the window that binds it: "resets in 1h 33m" on the
+ * 5-hour, "resets Fri 23:00" on the week (the key's reset column, for the
+ * window that matters). Nothing at its limit: the row's time says when.
+ */
+export function bindReset(r: RingAccount, now: number): string {
+  // At its limit the row's time already says when it's back.
+  if (r.state === "limit") {
+    return "";
+  }
+  if (r.bind === "5h") {
+    const resets = r.w5?.resetsAt ?? null;
+    return resets === null ? "" : `resets in ${until(resets, now)}`;
+  }
+  const resets = r.week?.resetsAt ?? null;
+  return resets === null ? "" : `resets ${dayTime(resets, now)}`;
 }
 
 /** One line of the key: glyph | label | value | reset. */
