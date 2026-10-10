@@ -24,8 +24,12 @@
  *       - keyboard down: checks the card's layout, captures light and dark;
  *       - taps the composer so the software keyboard comes up, checks the
  *         layout again, captures dark and light;
- *       - picks the first option, scrolls the card's body with one finger
- *         (`axe drag`) to the last option and taps it: Answer turns live.
+ *       - scrolls the card's body with one finger (`axe drag`) to the first
+ *         question's first option and taps it, then to the second's last
+ *         and taps it: the card logs each pick, and Answer turns live.
+ *         The long lede scrolls with the options and is not clamped, as on
+ *         the web (Prompt.svelte `.body`), so with the keyboard up the
+ *         first option starts under the window's foot.
  *
  * The layout checks read the accessibility frames of every option, Answer
  * and Dismiss, and the card's own DEBUG log (`PromptCard`) for its size and
@@ -181,6 +185,8 @@ const PILL_INSET = 6;
 const BUILT_IOS = /^BUILT iOS$/m;
 const BUILT_IOS_18 = /^BUILT iOS 18\.5$/m;
 const WHITESPACE = /\s/g;
+/** A compact log line's stamp and process, before the card's own words. */
+const PICK_PREFIX = /^.*?(?=pick q=)/;
 
 // ── Frames ───────────────────────────────────────────────────────────────
 interface Rect {
@@ -706,22 +712,32 @@ async function keyboardUp(
   return up;
 }
 
-/** One-finger drags up the body until the last option stands whole in its
- * window, at most eight; the layout then, and how many it took. */
-async function dragToLast(sim: Sim, from: Layout) {
+/** One-finger drags on the body until the option `label` stands whole in
+ * its window, at most eight, each as far as the option still has to go
+ * (the window's height at most); the layout then, and how many it took. */
+async function dragTo(sim: Sim, from: Layout, label: string) {
   let now = from;
   let drags = 0;
   for (; drags < 8; drags += 1) {
-    const last = now.options.find((o) => o.label === LAST)?.frame;
+    const option = now.options.find((o) => o.label === label)?.frame;
     const w = now.window;
-    if (!(last && w) || within(last, w)) {
+    if (!(option && w) || within(option, w)) {
       break;
     }
-    // Up the body's right side, clear of the chips' words (the window is
+    // Up when the option is under the window's foot, down when it is over
+    // its top; never from the body's top downward, which the card takes
+    // as a swipe to minimize (the option is over the top only once the
+    // body has scrolled).
+    const below = bottomOf(option) > bottomOf(w);
+    const still = below
+      ? bottomOf(option) - bottomOf(w) + 12
+      : w.y - option.y + 12;
+    const reach = Math.min(still, w.height - 20);
+    // On the body's right side, clear of the chips' words (the window is
     // the card's width; the body stands 12pt in from it).
     const x = Math.round(rightOf(w) - 24);
-    const start = Math.round(bottomOf(w) - Math.min(10, w.height / 4));
-    const end = Math.round(w.y + Math.min(10, w.height / 4));
+    const start = Math.round(below ? bottomOf(w) - 10 : w.y + 10);
+    const end = Math.round(below ? start - reach : start + reach);
     // biome-ignore lint/performance/noAwaitInLoops: each drag waits for the scroll before it
     await mac(
       `${AXE} drag --start-x ${x} --start-y ${start} --end-x ${x} --end-y ${end} --duration 0.5 --steps 30 --udid ${sim.udid}`
@@ -731,43 +747,60 @@ async function dragToLast(sim: Sim, from: Layout) {
   return { now, drags };
 }
 
-/** Picks the first option, scrolls to the last and picks it: both
- * questions answered, Answer turns live. */
-async function pickFirstAndLast(run: Run, sim: Sim, up: Layout) {
-  const first = up.options.find((o) => o.label === FIRST)?.frame;
-  const firstShown = first && drawn(up, first);
-  if (firstShown) {
-    await sim.tap(centre(firstShown));
-    await pause(800);
-  }
+/** The card's own word on the last pick of `label` (PromptCardView
+ * `toggle`, DEBUG): `pick q=<n> "<label>" answered=<bool>`. */
+async function pickLog(udid: string, label: string) {
+  const text = await mac(
+    `xcrun simctl spawn ${udid} log show --last 2m --style compact --predicate 'subsystem == "dev.cawco.app" AND category == "PromptCard"' | grep ' pick q=' | tail -20 || true`
+  ).catch(() => "");
+  return text
+    .split("\n")
+    .filter((line) => line.includes(`"${label}"`))
+    .at(-1)
+    ?.replace(PICK_PREFIX, "");
+}
+
+/** Scrolls the option `label` whole into the body and taps it; the layout
+ * after, and the card's word on the pick. */
+async function scrollAndPick(run: Run, sim: Sim, label: string) {
+  const { now, drags } = await dragTo(sim, await readLayout(sim.udid), label);
+  const option = now.options.find((o) => o.label === label)?.frame;
+  const shown = option && drawn(now, option);
+  const whole =
+    option !== undefined && (!now.window || within(option, now.window));
   run.check(
-    "keyboard up: the first option is showing and takes a tap",
-    firstShown !== undefined,
-    firstShown ? `tapped at ${show(firstShown)}` : `"${FIRST}" not showing`
+    `keyboard up: one-finger drags bring "${label}" whole into the body`,
+    whole && shown !== undefined,
+    `${drags} drag(s); at ${option ? show(option) : "?"}${now.window ? `, body window ${show(now.window)}` : ""}`
   );
-  const { now, drags } = await dragToLast(sim, await readLayout(sim.udid));
-  const last = now.options.find((o) => o.label === LAST)?.frame;
-  const lastShown = last && drawn(now, last);
-  const whole = last !== undefined && (!now.window || within(last, now.window));
-  run.check(
-    "keyboard up: one-finger drags bring the last option fully into the body",
-    whole && lastShown !== undefined,
-    `${drags} drag(s); "${LAST}" at ${last ? show(last) : "?"}${now.window ? `, body window ${show(now.window)}` : ""}`
-  );
-  if (!lastShown) {
+  if (!shown) {
     return;
   }
-  const target = centre(lastShown);
+  const target = centre(shown);
   const under = await tree(sim.udid, target);
   await sim.tap(target);
-  await pause(1000);
+  await pause(1500);
+  const picked = await pickLog(sim.udid, label);
+  run.check(
+    `keyboard up: a tap on "${label}" picks it`,
+    under.some((n) => n.label === label) && picked !== undefined,
+    `under the finger: ${said(under)}; the card logged: ${picked ?? "no pick"}`
+  );
+  return picked;
+}
+
+/** Picks the first question's first option and the second's last, each
+ * scrolled to: both questions answered, Answer turns live. */
+async function pickFirstAndLast(run: Run, sim: Sim) {
+  await scrollAndPick(run, sim, FIRST);
+  const last = await scrollAndPick(run, sim, LAST);
   const answer = (await tree(sim.udid)).find((n) => n.label === "Answer");
   run.check(
-    "keyboard up: the last option takes the tap, and Answer turns live",
-    under.some((n) => n.label === LAST) && answer?.enabled === true,
-    `under the finger: ${said(under)}; Answer enabled: ${answer?.enabled ?? "not reported"}`
+    "keyboard up: with both questions answered, Answer turns live",
+    answer?.enabled === true && last?.includes("answered=true") === true,
+    `Answer enabled: ${answer?.enabled ?? "not reported"}; the card's last pick: ${last ?? "none"}`
   );
-  await sim.shot("keyboard-up-last-picked-light");
+  await sim.shot("keyboard-up-both-picked-light");
   await layoutChecks(
     run,
     sim.udid,
@@ -793,7 +826,7 @@ async function scenario(
     const down = await keyboardDown(run, sim);
     const up = await keyboardUp(run, sim, down);
     if (up) {
-      await pickFirstAndLast(run, sim, up);
+      await pickFirstAndLast(run, sim);
     }
   } catch (error) {
     run.check(
