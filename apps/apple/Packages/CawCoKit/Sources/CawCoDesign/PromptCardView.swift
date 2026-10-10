@@ -1,4 +1,5 @@
 import CawCoCore
+import OSLog
 import UIKit
 
 /// The one human-in-the-loop surface, parked above the composer
@@ -14,8 +15,15 @@ import UIKit
 /// (`TrayChipView`), Caw's needs-you face, what it asks and a chevron, so the
 /// transcript reads behind it. A tap on the bar brings the card back.
 /// Minimizing answers nothing; the ask stays parked (MinimizedAsks).
+///
+/// The card is its head, its body and its foot (Prompt.svelte `h2`, `.body`,
+/// `.foot`). It stands in the composer's column, which the dock holds between
+/// the tab strip and the keyboard's top (ComposerDock), so the room over the
+/// tray row and the pill is all it gets. When that room is shorter than the
+/// card, only the body gives: it scrolls inside the card between the head and
+/// the foot, which keep their places, and the buttons stay on the card's foot.
 @MainActor
-public final class PromptCardView: UIView {
+public final class PromptCardView: UIView, UIGestureRecognizerDelegate {
     public enum Choice: Sendable {
         case allow, deny, answer
     }
@@ -38,8 +46,32 @@ public final class PromptCardView: UIView {
     private var chips: [[OptionChip]] = []
     private var buttons: [Choice: UIButton] = [:]
     private let wait = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
-    /// The card in full: everything but the minimized bar.
+    /// The card in full: everything but the minimized bar. Its head, then
+    /// `scroll`, then `foot`.
     private let column = UIStackView()
+    /// The ask's words and its options (a permission's change and fields).
+    private let body = UIStackView()
+    /// The body's window: as tall as the body while the room allows, shorter
+    /// and scrolling when it does not (`.body { flex: 1 1 auto; min-block-size: 0;
+    /// overflow-y: auto }`).
+    private let scroll: UIScrollView
+    /// The body's step to the foot: the gap its last row keeps under it.
+    private var bodyGap = 0.0
+    /// The buttons and the wait line under them, never scrolled away (`.foot { flex: none }`).
+    private let foot = UIStackView()
+    /// The body's window as tall as the body. Below every row's compression
+    /// resistance (750), so a short room shortens the window, never a row;
+    /// above hugging (250).
+    private let fits: NSLayoutConstraint
+    private static let fitsPriority: Float = 700
+    /// Where the card stands among the cards on the pill, counted down from
+    /// the pill: the farther one gives its room first (ComposerView `syncPrompts`).
+    var roomRank = 0 {
+        didSet { fits.priority = UILayoutPriority(Self.fitsPriority - Float(min(roomRank, 40))) }
+    }
+
+    /// The body ran past its window as of the last layout.
+    private var overflowed = false
     /// The minimized question's bar; a permission has none.
     private var bar: PromptBar?
     /// Folded to its bar: what the reader set on this device (MinimizedAsks).
@@ -49,11 +81,19 @@ public final class PromptCardView: UIView {
     /// `diff` one change a permission makes: both live above this module.
     public init(_ ask: ParkedAsk, arriving: Bool, face: () -> UIView, diff: (PermissionChange) -> UIView) {
         self.ask = ask
+        let scroll = UIScrollView()
+        self.scroll = scroll
+        let fits = scroll.frameLayoutGuide.heightAnchor.constraint(equalTo: scroll.contentLayoutGuide.heightAnchor)
+        fits.priority = UILayoutPriority(Self.fitsPriority)
+        self.fits = fits
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         layer.cornerRadius = Radius.radiusLg
         layer.cornerCurve = .continuous
         isAccessibilityElement = false
+        // One group to VoiceOver, named for what asks.
+        accessibilityContainerType = .semanticGroup
+        accessibilityIdentifier = "prompt-card"
         accessibilityLabel = ask.isQuestion ? "Question from the agent" : "Permission request from \(ask.presentation.asker)"
         // The card in full and its bar are one column's two rows, one shown.
         let faces = UIStackView()
@@ -72,21 +112,40 @@ public final class PromptCardView: UIView {
         column.isLayoutMarginsRelativeArrangement = true
         column.directionalLayoutMargins = NSDirectionalEdgeInsets(top: inset, leading: inset, bottom: inset, trailing: inset)
         faces.addArrangedSubview(column)
+        body.axis = .vertical
+        body.translatesAutoresizingMaskIntoConstraints = false
+        scroll.addSubview(body)
+        scroll.showsHorizontalScrollIndicator = false
+        scroll.contentInsetAdjustmentBehavior = .never
+        NSLayoutConstraint.activate([
+            body.leadingAnchor.constraint(equalTo: scroll.contentLayoutGuide.leadingAnchor),
+            body.trailingAnchor.constraint(equalTo: scroll.contentLayoutGuide.trailingAnchor),
+            body.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor),
+            body.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor),
+            body.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor),
+            scroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 0),
+            fits,
+        ])
+        foot.axis = .vertical
         if ask.isQuestion {
-            buildQuestion(column)
+            buildQuestion()
             let made = PromptBar(face: face(), words: ask.questions.first?.question ?? "Question from the agent")
             made.addAction(UIAction { [weak self] _ in self?.setMinimized(false) }, for: .touchUpInside)
             faces.addArrangedSubview(made)
             bar = made
             let swipe = UISwipeGestureRecognizer(target: self, action: #selector(swiped))
             swipe.direction = .down
+            swipe.delegate = self
             addGestureRecognizer(swipe)
         } else {
-            buildPermission(column, diff: diff)
+            buildPermission(diff: diff)
         }
+        column.addArrangedSubview(scroll)
+        column.setCustomSpacing(bodyGap, after: scroll)
         wait.isHidden = true
         wait.wrap = .pretty
-        column.addArrangedSubview(wait)
+        foot.addArrangedSubview(wait)
+        column.addArrangedSubview(foot)
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (card: PromptCardView, _: UITraitCollection) in
             card.paint()
         }
@@ -110,6 +169,53 @@ public final class PromptCardView: UIView {
     @objc private func swiped() {
         if !minimized { setMinimized(true) }
     }
+
+    /// A swipe down that starts in the body counts only while the body is at
+    /// its top, where a downward pull has nothing to scroll (Prompt.svelte
+    /// `swipeStart`); the head and the foot always count.
+    public func gestureRecognizer(_: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        !scroll.bounds.contains(touch.location(in: scroll)) || scroll.contentOffset.y <= 0
+    }
+
+    /// At the body's top its pull and the swipe are the one gesture.
+    public func gestureRecognizer(_: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+        other === scroll.panGestureRecognizer
+    }
+
+    override public func layoutSubviews() {
+        super.layoutSubviews()
+        // The body has just run past its window: its indicator shows once
+        // that there is more under the foot.
+        let overflows = scroll.contentSize.height > scroll.bounds.height + 0.5
+        if overflows, !overflowed, !scroll.isHidden, window != nil { scroll.flashScrollIndicators() }
+        overflowed = overflows
+        #if DEBUG
+        logLayout()
+        #endif
+    }
+
+    #if DEBUG
+    /// A simulator pass reads the body's window here
+    /// (scripts/probe-ios-question-keyboard.ts): the accessibility tree gives
+    /// each chip's frame, never where the body clips it. In the card's own
+    /// points, with its last button's frame to place them on screen by.
+    private static let layoutLog = Logger(subsystem: "dev.cawco.app", category: "PromptCard")
+    private var loggedLayout = ""
+
+    private func logLayout() {
+        guard let last = buttons[.deny], !minimized else { return }
+        // The stacks inside place the body after the card's own pass.
+        column.superview?.layoutIfNeeded()
+        let body = scroll.convert(scroll.bounds, to: self)
+        let anchor = last.convert(last.bounds, to: self)
+        let line = "ask=\(ask.requestId) " + String(format: "card=%.1f,%.1f anchor=%.1f,%.1f body=%.1f,%.1f content=%.1f",
+                                                    bounds.width, bounds.height, anchor.minX, anchor.minY,
+                                                    body.minY, body.maxY, scroll.contentSize.height)
+        guard line != loggedLayout else { return }
+        loggedLayout = line
+        Self.layoutLog.notice("\(line, privacy: .public)")
+    }
+    #endif
 
     /// Folds the question to its bar or opens it again; answers nothing.
     private func setMinimized(_ on: Bool) {
@@ -219,33 +325,39 @@ public final class PromptCardView: UIView {
 
     // MARK: Question
 
-    private func buildQuestion(_ column: UIStackView) {
+    /// Puts `row` in the body, `gap` over whatever follows it.
+    private func place(_ row: UIView, gap: Double) {
+        body.addArrangedSubview(row)
+        body.setCustomSpacing(gap, after: row)
+        bodyGap = gap
+    }
+
+    private func buildQuestion() {
         let top = head("Question from the agent", minimizes: true)
         column.addArrangedSubview(top)
         column.setCustomSpacing(Space.space2, after: top)
         for (qi, question) in ask.questions.enumerated() {
-            let words = lede(question.question)
-            column.addArrangedSubview(words)
             // The lede's 7 and the options' 2 are adjoining margins: they collapse to 7.
-            column.setCustomSpacing(Space.space2, after: words)
+            place(lede(question.question), gap: Space.space2)
             var row: [OptionChip] = []
             for (i, option) in question.options.enumerated() {
                 let chip = OptionChip(key: i + 1, label: option.label)
+                chip.accessibilityIdentifier = "prompt-option-\(qi + 1)-\(i + 1)"
                 // A plain UIControl sends touchUpInside, never primaryActionTriggered.
                 chip.addAction(UIAction { [weak self] _ in self?.toggle(qi, option.label) }, for: .touchUpInside)
                 row.append(chip)
             }
             chips.append(row)
-            let wrap = WrapLayout(row)
-            column.addArrangedSubview(wrap)
-            column.setCustomSpacing(Space.space2, after: wrap)
+            place(WrapLayout(row), gap: Space.space2)
         }
         let answer = Self.button("Answer", glyph: Glyph.answer, kind: .primary) { [weak self] in self?.submitQuestion() }
         let dismiss = Self.button("Dismiss", glyph: nil, kind: .outline) { [weak self] in self?.choose(.deny) }
+        answer.accessibilityIdentifier = "prompt-answer"
+        dismiss.accessibilityIdentifier = "prompt-dismiss"
         buttons = [.answer: answer, .deny: dismiss]
         let actions = UIStackView(arrangedSubviews: [answer, dismiss, UIView()])
         actions.spacing = Space.space2
-        column.addArrangedSubview(actions)
+        foot.addArrangedSubview(actions)
     }
 
     private func toggle(_ index: Int, _ label: String) {
@@ -284,23 +396,21 @@ public final class PromptCardView: UIView {
     /// Who asks, what will happen and to what, how much changes, then the
     /// change and the fields, open (Prompt.svelte's permission body). The
     /// words are the hub's, the same on the web and in Telegram.
-    private func buildPermission(_ column: UIStackView, diff: (PermissionChange) -> UIView) {
+    private func buildPermission(diff: (PermissionChange) -> UIView) {
         let presentation = ask.presentation
         let top = head("\(presentation.asker) asks for permission")
         column.addArrangedSubview(top)
         column.setCustomSpacing(Space.space2, after: top)
         let words = lede(presentation.summary)
         words.role = TypeRole(weight: TypeScale.weightStrong, size: TypeScale.typeBody.size, leading: TypeScale.leadingBody, family: TypeScale.typeBody.family)
-        column.addArrangedSubview(words)
-        column.setCustomSpacing(Space.space1, after: words)
         if let detail = presentation.detail {
+            place(words, gap: Space.space1)
             let line = KitLabel(TypeScale.typeLabel, ink: Palette.inkMuted, lines: 0)
             line.role = TypeRole(weight: TypeScale.weightBody, size: TypeScale.typeLabel.size, leading: TypeScale.typeLabel.leading, family: TypeScale.typeLabel.family)
             line.text = detail
-            column.addArrangedSubview(line)
-            column.setCustomSpacing(Space.space2, after: line)
+            place(line, gap: Space.space2)
         } else {
-            column.setCustomSpacing(Space.space2, after: words)
+            place(words, gap: Space.space2)
         }
         if let command = ask.command {
             let text = KitLabel(TypeScale.typeCode, ink: Palette.inkStrong, lines: 0)
@@ -313,14 +423,11 @@ public final class PromptCardView: UIView {
             block.spacing = Space.space3
             block.isLayoutMarginsRelativeArrangement = true
             block.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 3, leading: 0, bottom: 3, trailing: 0)
-            column.addArrangedSubview(block)
-            column.setCustomSpacing(Space.space2, after: block)
+            place(block, gap: Space.space2)
         }
         // The change itself, open: a grant is made on what it changes.
         for change in presentation.changes {
-            let made = diff(change)
-            column.addArrangedSubview(made)
-            column.setCustomSpacing(Space.space2, after: made)
+            place(diff(change), gap: Space.space2)
         }
         // The rest of the input, shown, its secrets already hidden by the hub.
         if !presentation.fields.isEmpty {
@@ -345,17 +452,18 @@ public final class PromptCardView: UIView {
                 pair.accessibilityLabel = "\(field.key): \(field.value)"
                 fields.addArrangedSubview(pair)
             }
-            column.addArrangedSubview(fields)
-            column.setCustomSpacing(Space.space3, after: fields)
+            place(fields, gap: Space.space3)
         }
 
         let approve = Self.button("Approve", glyph: .tick, kind: .grant) { [weak self] in self?.choose(.allow) }
         let deny = Self.button("Deny", glyph: .close, kind: .refuse) { [weak self] in self?.choose(.deny) }
+        approve.accessibilityIdentifier = "prompt-approve"
+        deny.accessibilityIdentifier = "prompt-deny"
         buttons = [.allow: approve, .deny: deny]
         // The full width between grant and refusal, never less than 32pt.
         let choice = UIStackView(arrangedSubviews: [approve, UIView(), deny])
         choice.spacing = Space.space8
-        column.addArrangedSubview(choice)
+        foot.addArrangedSubview(choice)
     }
 
     // MARK: Answering

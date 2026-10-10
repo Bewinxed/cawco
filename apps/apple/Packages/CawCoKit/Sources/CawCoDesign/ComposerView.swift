@@ -541,8 +541,12 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
             card.alpha = 1
             prompts.insertArrangedSubview(card, at: min(index, prompts.arrangedSubviews.count))
         }
-        for case let card as PromptCardView in cards {
+        for (index, view) in cards.enumerated() {
+            guard let card = view as? PromptCardView else { continue }
             card.onFold = { [weak self] in self?.syncLift() }
+            // The room over the pill is the cards' to share: the one farthest
+            // from the pill scrolls first, the one standing on it last.
+            card.roomRank = cards.count - 1 - index
         }
         syncLift()
         let empty = cards.isEmpty
