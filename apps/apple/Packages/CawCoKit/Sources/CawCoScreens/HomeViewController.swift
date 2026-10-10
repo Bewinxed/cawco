@@ -3,12 +3,12 @@ import CawCoDesign
 import CawCoMascot
 import UIKit
 
-/// The home (home/Home.svelte, its phone page): a status line, a headline,
-/// and the sessions grouped by what they want from the operator — Needs you,
-/// then Working and Finished as two tabs, then Recent. It never claims
-/// nothing needs you while the hub is not live: the rows stay as last known
-/// and greyed, there is no headline and no Caw, and the status line says
-/// the hub is gone.
+/// The home (home/Home.svelte, its phone page): a status line and the
+/// sessions, Working and Finished as two tabs, then Recent. What needs the
+/// operator, and every notice, is Caw's panel's (`CawPanel`), not the home's.
+/// It never claims a quiet fleet while the hub is not live: the rows stay as
+/// last known and greyed, there is no Caw, and the status line says the hub
+/// is gone.
 ///
 /// One collection view with a compositional list layout and a diffable data
 /// source keyed by stable ids. `updateProperties()` reads the stores, so
@@ -19,7 +19,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     static let recentPage = 30
 
     nonisolated enum Section: Int, Hashable, Sendable {
-        case top, needs, work, caw, recent
+        case top, work, caw, recent
     }
 
     /// One drawn line, by a stable id: a machine's header is the same line in
@@ -29,8 +29,6 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         case hubNewer
         case status
         case usage
-        case headline
-        case need(String)
         case tabs
         case machine(String)
         case row(String)
@@ -68,7 +66,6 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     private var dataSource: UICollectionViewDiffableDataSource<Section, Item>!
 
     // What the last update drew, for the cells to read.
-    private var needs: [String: HomeModel.NeedsItem] = [:]
     private var rows: [String: RowLine] = [:]
     /// Each echoing row's place among the list's echoes (motion/echo): they beat top to bottom.
     private var echoing: [String: Int] = [:]
@@ -321,9 +318,6 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             layout.interGroupSpacing = Space.space2
             // With nothing in it the block takes no room (Home.svelte `.top.bare`).
             layout.contentInsets = empty ? .zero : metrics.top
-        case .needs:
-            layout.interGroupSpacing = Space.space2
-            layout.contentInsets = NSDirectionalEdgeInsets(top: above, leading: side, bottom: 0, trailing: side)
         case .work, .caw:
             // The groups' foot is under whichever group is last (`.groups` padding).
             layout.contentInsets = NSDirectionalEdgeInsets(top: above, leading: side, bottom: last ? metrics.foot : 0, trailing: side)
@@ -370,8 +364,6 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             ObjectIdentifier(UICollectionView.CellRegistration<UsageCell, Item>.self),
             ObjectIdentifier(UICollectionView.CellRegistration<StatusCell, Item>.self),
             ObjectIdentifier(UICollectionView.CellRegistration<UpdateNoticeCell, Item>.self),
-            ObjectIdentifier(UICollectionView.CellRegistration<HeadlineCell, Item>.self),
-            ObjectIdentifier(UICollectionView.CellRegistration<NeedsCardCell, Item>.self),
             ObjectIdentifier(UICollectionView.CellRegistration<TabsCell, Item>.self),
             ObjectIdentifier(UICollectionView.CellRegistration<CawCell, Item>.self),
             ObjectIdentifier(UICollectionView.CellRegistration<MachineCell, Item>.self),
@@ -395,6 +387,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             guard let self else { return }
             cell.line.configure(hub: hub, ready: home.ready)
         }
+<<<<<<< HEAD
         let hubNewer = UICollectionView.CellRegistration<UpdateNoticeCell, Item> { [weak self] cell, _, _ in
             guard let self else { return }
             cell.ground = variant.ground
@@ -404,33 +397,6 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
                 self?.hub.dismissHubNewer()
             }
             hub.hubNewerShown()
-        }
-        let headline = UICollectionView.CellRegistration<HeadlineCell, Item> { [weak self] cell, _, _ in
-            cell.rail = self?.variant == .rail
-            cell.configure(count: self?.needs.count ?? 0)
-        }
-        let need = UICollectionView.CellRegistration<NeedsCardCell, Item> { [weak self] cell, _, item in
-            guard let self, case let .need(id) = item, let need = needs[id] else { return }
-            var sent: Ledger.Command?
-            if case let .ask(parked) = need.kind {
-                sent = hub.needs.answerSent(for: parked)
-            }
-            cell.configure(need, now: home.now, sent: sent, stale: !home.live)
-            cell.onAnswer = { [weak self] answer in
-                guard let self, home.live, case let .ask(parked) = need.kind else { return }
-                hub.needs.answer(parked, machineId: need.machineId, answer)
-            }
-            cell.onOpen = { [weak self] in
-                guard let self else { return }
-                switch need.kind {
-                case let .ask(ask): onOpen(ask.instanceId)
-                case let .run(run): onOpen(run.rowId)
-                }
-            }
-            cell.onPeek = { [weak self] in
-                guard let self, case let .ask(ask) = need.kind else { return }
-                Peek.show(PeekTarget(viewId: ask.instanceId, title: need.title), hub: hub, home: home, from: self, open: onOpen)
-            }
         }
         let tabs = UICollectionView.CellRegistration<TabsCell, Item> { [weak self] cell, _, _ in
             guard let self else { return }
@@ -545,8 +511,6 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             case .hubNewer: view.dequeueConfiguredReusableCell(using: hubNewer, for: index, item: item)
             case .status: view.dequeueConfiguredReusableCell(using: status, for: index, item: item)
             case .usage: view.dequeueConfiguredReusableCell(using: usage, for: index, item: item)
-            case .headline: view.dequeueConfiguredReusableCell(using: headline, for: index, item: item)
-            case .need: view.dequeueConfiguredReusableCell(using: need, for: index, item: item)
             case .tabs: view.dequeueConfiguredReusableCell(using: tabs, for: index, item: item)
             case .machine: view.dequeueConfiguredReusableCell(using: machine, for: index, item: item)
             case .row: view.dequeueConfiguredReusableCell(using: row, for: index, item: item)
@@ -646,8 +610,8 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     }
 
     /// What an item draws, as something two passes can compare. A session's
-    /// row and a needs card carry state of their own (a pulse, an age, an
-    /// answer on its way); every other item draws only what `build()` read,
+    /// row carries state of its own (a pulse, an age); every other item
+    /// draws only what `build()` read,
     /// so it moves when the board is read again and not otherwise.
     private func print(of item: Item) -> AnyHashable {
         switch item {
@@ -657,17 +621,6 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             return AnyHashable([AnyHashable(line.depth), AnyHashable(line.first), AnyHashable(line.last), AnyHashable(entry.through), AnyHashable(content)])
         case let .recent(id):
             return recentContent(id).map(AnyHashable.init) ?? AnyHashable(contentRevision)
-        case let .need(id):
-            guard let need = needs[id] else { return AnyHashable(contentRevision) }
-            var sent: Ledger.Command?
-            var asks = ""
-            if case let .ask(parked) = need.kind {
-                sent = hub.needs.answerSent(for: parked)
-                asks = "\(parked.summary)\u{1f}\(parked.isQuestion)"
-            }
-            let stage = NeedsCardCell.stageWords(sent)
-            let waited = need.raisedAt.map { Naming.span(ms: home.now - $0) } ?? ""
-            return AnyHashable([need.title, need.place, asks, waited, stage?.text ?? "", "\(stage?.failed ?? false)", "\(sent.map { $0.stage != .failed } ?? false)", "\(home.live)", "\(need.stale)"])
         case .caw:
             return AnyHashable([cawLine, cawStatus.rawValue])
         default:
@@ -701,15 +654,6 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             // The phone has no rail: the rail's usage strip stands here, always
             // (owner pick i). In the rail the strip is the rail's own, in its footer.
             snapshot.appendItems([.usage], toSection: .top)
-        }
-        if ready, live, !needList.isEmpty {
-            snapshot.appendItems([.headline], toSection: .top)
-        }
-
-        needs = Dictionary(uniqueKeysWithValues: needList.map { ($0.id, $0) })
-        if !needList.isEmpty {
-            snapshot.appendSections([.needs])
-            snapshot.appendItems(needList.map { .need($0.id) }, toSection: .needs)
         }
 
         let board = home.board(for: tab)
@@ -947,7 +891,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         case let .row(id): return .line(key: id, group: rows[id]?.group ?? "")
         case let .more(id): return .line(key: RelayPlan.more(id), group: id)
         case .caw, .recentHead, .recentSearch, .recent, .recentNone, .recentMore: return .tail
-        case .hubNewer, .status, .usage, .headline, .need, .tabs: return .none
+        case .hubNewer, .status, .usage, .tabs: return .none
         }
     }
 
@@ -1095,7 +1039,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
 
     func collectionView(_: UICollectionView, shouldSelectItemAt indexPath: IndexPath) -> Bool {
         switch dataSource.itemIdentifier(for: indexPath) {
-        case .row, .recent, .need, .recentHead: true
+        case .row, .recent, .recentHead: true
         default: false
         }
     }
@@ -1106,13 +1050,6 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         case .recentHead: home.recentOpen.toggle()
         case let .row(id): onOpen(id)
         case let .recent(id): onOpen(id)
-        case let .need(id):
-            if let need = needs[id] {
-                switch need.kind {
-                case let .ask(ask): onOpen(ask.instanceId)
-                case let .run(run): onOpen(run.rowId)
-                }
-            }
         default: break
         }
     }
@@ -1148,7 +1085,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
 
 /// UIKit paging moves the list region under the tab row: the list
 /// there now drags off and the other tab's drags on beside it, in lockstep
-/// under the finger, while the status line, usage strip, needs cards and tab
+/// under the finger, while the status line, usage strip and tab
 /// row stay where they are and the tab strip's sheet follows the finger.
 /// The neighbour comes on with its machines and what is under the list, its
 /// rows not yet there; once it lands they fly in, staggered, from the side

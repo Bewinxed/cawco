@@ -416,9 +416,8 @@ extension GlassItem: UIPointerInteractionDelegate {
 final class TopBarCluster: UIView {
     var onMachines: (UIView) -> Void = { _ in }
     var onJump: (UIView) -> Void = { _ in }
-    /// Caw's head pressed, and dragged.
+    /// Caw's head pressed: his panel opens or closes.
     var onCaw: (NeedsCawButton) -> Void = { _ in }
-    var onCawPan: (UIPanGestureRecognizer, NeedsCawButton) -> Void = { _, _ in }
     /// The cluster's width changed: the crumb beside it is measured again.
     var onResize: () -> Void = {}
 
@@ -484,10 +483,6 @@ final class TopBarCluster: UIView {
             head.onTap = { [weak self, weak head] in
                 guard let self, let head else { return }
                 onCaw(head)
-            }
-            head.onPan = { [weak self, weak head] pan in
-                guard let self, let head else { return }
-                onCawPan(pan, head)
             }
         }
         groupRow.axis = .horizontal
@@ -570,8 +565,8 @@ final class TopBarCluster: UIView {
     }
 
     /// The hub's word on the bar: what needs the operator, which machines are up.
-    func configure(needs: Int, quiet: String, online: Int, tone: MachineHealth.Tone?, drawerOpen: Bool) {
-        for head in [phoneCaw, groupCaw] { head.configure(count: needs, quiet: quiet, open: drawerOpen) }
+    func configure(needs: Int, quiet: String, online: Int, tone: MachineHealth.Tone?, panelOpen: Bool) {
+        for head in [phoneCaw, groupCaw] { head.configure(count: needs, quiet: quiet, open: panelOpen) }
         machines.count.text = "\(online)"
         // The glyph alone carries a machine in trouble; it crosses over `durFade`, never pulses.
         let ink: UIColor = switch tone {

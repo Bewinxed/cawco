@@ -232,6 +232,19 @@ public final class FleetStore {
     /// hub sends when any of it moves. Nil until read.
     public internal(set) var accounts: Components.Schemas.GetApiAccounts200?
 
+    /// The notice ids a person acknowledged on any tab or device (hub
+    /// notices.ts), plus this device's own on their way to the hub
+    /// (notices.svelte.ts). The hub only ever adds to it.
+    public internal(set) var noticesSeen: Set<String> = []
+    /// The hub's record has arrived: until then no notice can know it was seen.
+    public internal(set) var noticesKnown = false
+
+    /// Takes the hub's record, keeping what this device acknowledged that the hub has not echoed yet.
+    func adopt(noticesSeen ids: [String]) {
+        noticesSeen.formUnion(ids)
+        noticesKnown = true
+    }
+
     public internal(set) var claudeLimits: [String: Components.Schemas.ClaudeLimits] = [:]
     public internal(set) var openCodeGoLimits: [String: Components.Schemas.OpenCodeGoLimits] = [:]
 

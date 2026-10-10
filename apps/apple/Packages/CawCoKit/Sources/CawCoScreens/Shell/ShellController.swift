@@ -35,10 +35,12 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         return arguments[at + 1]
     }()
     #endif
-    /// What needs the operator, pulled down from Caw's head on any bar.
-    private let needsDrawer = NeedsDrawer()
+    /// Every notification, in the panel under Caw's head on any bar.
+    private let cawPanel = CawPanel()
     /// The asks already seen, by id: one that is not is new, and Caw beats once. Nil until the fleet is read.
     private var seenNeeds: Set<String>?
+    /// Likewise the notices, by id; nil until their sources are read.
+    private var seenNotices: Set<String>?
     /// The wide screen's sidebar toggle: the rail's column shown or hidden.
     private let railToggle = BurgerButton()
 
@@ -145,12 +147,16 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             cluster.onMachines = { [weak self] source in self?.openMachines(from: source) }
             cluster.onCaw = { [weak self] head in
                 guard let self else { return }
-                if needsDrawer.open { needsDrawer.close() } else { needsDrawer.show(from: head) }
+                if cawPanel.open { cawPanel.close() } else { cawPanel.show(from: head) }
             }
-            cluster.onCawPan = { [weak self] pan, head in self?.needsDrawer.drag(pan, from: head) }
         }
-        needsDrawer.onChoose = { [weak self] item in self?.openWaiting(item) }
-        needsDrawer.onOpenChange = { [weak self] _ in self?.refreshBars() }
+        cawPanel.onChoose = { [weak self] item in self?.openWaiting(item) }
+        cawPanel.onAnswer = { [weak self] item, ask, answer in
+            guard let self, home.live else { return }
+            hub.needs.answer(ask, machineId: item.machineId, answer)
+        }
+        cawPanel.onDismiss = { [weak self] notice in self?.home.dismiss(notice) }
+        cawPanel.onOpenChange = { [weak self] _ in self?.refreshBars() }
         TopBar.install(on: detail.navigationItem, crumb: mainCrumb, cluster: mainCluster, burger: railToggle)
         TopBar.install(on: board.navigationItem, crumb: compactCrumb, cluster: compactCluster, burger: burger, showsCrumb: false)
         TopBar.pin(compactCluster, to: compactNav.navigationBar)
@@ -229,16 +235,17 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         super.viewDidLoad()
         view.backgroundColor = Palette.surfaceRecess
         installGrip()
-        // Over every column and the grip: the drawer comes down over the page.
-        needsDrawer.frame = view.bounds
-        needsDrawer.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        view.addSubview(needsDrawer)
+        // Over every column and the grip, with nothing under it: the page
+        // keeps working while it is open, and a tap outside it closes it and
+        // lands where it fell.
+        view.addSubview(cawPanel)
+        cawPanel.dismissal(in: view)
         railEdge.maximumNumberOfTouches = 1
         // Only where the conversations' pages reach the screen's left edge,
         // with nothing over them: a phone's, and an iPad's with the rail's
         // column put away (beside it, the left edge is the rail's).
         railEdgeGate.mayBegin = { [weak self] in
-            guard let self, presentedViewController == nil, !needsDrawer.open else { return false }
+            guard let self, presentedViewController == nil else { return false }
             if compact { return compactNav.topViewController === workspaceController }
             return traitCollection.userInterfaceIdiom == .pad && displayMode == .secondaryOnly && detail.shown === workspaceController
         }
@@ -380,9 +387,10 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         barTabs.relayout()
         placeGrip()
         // The split view lays its columns over what else is in its view on
-        // every pass (the grip brings itself back the same way): the drawer
-        // stays over all of them.
-        view.bringSubviewToFront(needsDrawer)
+        // every pass (the grip brings itself back the same way): Caw's panel
+        // stays over all of them, under him wherever he now stands.
+        view.bringSubviewToFront(cawPanel)
+        cawPanel.follow()
     }
 
     static func clamp(_ width: Double) -> Double { min(railMax, max(railMin, width.rounded())) }
@@ -628,6 +636,8 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     // MARK: Rail
 
     private func showRailSheet() {
+        // The sidebar comes over the page: Caw's panel does not stay open under it.
+        cawPanel.close()
         let sheet: SidebarViewController
         if let kept = keptRailSheet {
             sheet = kept
@@ -907,23 +917,35 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     private func refreshBars() {
         defer { barTabs.relayout() }
         let fleet = hub.fleet
-        // The count is the rows the drawer lists, as the web's is.
+        // The rim counts what needs the operator, never the notices.
         let needs = home.needs
+        let notices = home.notices
         let online = fleet.machines.filter { $0.status == "online" }.count
         let tone = MachineHealth.tone(fleet.machines, hubBuild: fleet.hubBuild)
         for cluster in [mainCluster, compactCluster, sessionCluster] {
-            cluster.configure(needs: needs.count, quiet: home.quiet, online: online, tone: tone, drawerOpen: needsDrawer.open)
+            cluster.configure(needs: needs.count, quiet: home.quiet, online: online, tone: tone, panelOpen: cawPanel.open)
         }
-        needsDrawer.configure(needs, quiet: home.quiet, now: Date.now.timeIntervalSince1970 * 1000)
-        // Something new needs the operator: Caw beats once, on the bar in front.
+        var answers = CawPanel.Answers()
+        for item in needs {
+            if case let .ask(ask) = item.kind, let sent = hub.needs.answerSent(for: ask) { answers.sent[item.id] = sent }
+        }
+        cawPanel.configure(needs: needs, answers: answers, notices: notices, quiet: home.quiet, now: home.now, live: home.live)
+        // Something new needs the operator, or a new notice came: Caw beats once, on the bar in front.
+        var fresh = false
         let ids = Set(needs.map(\.id))
         if home.ready {
-            if let seen = seenNeeds, !ids.subtracting(seen).isEmpty {
-                for cluster in [mainCluster, compactCluster, sessionCluster] where cluster.caw.window != nil {
-                    cluster.beat()
-                }
-            }
+            if let seen = seenNeeds, !ids.subtracting(seen).isEmpty { fresh = true }
             seenNeeds = ids
+        }
+        let noticeIds = Set(notices.map(\.id))
+        if home.ready, home.noticesRead {
+            if let seen = seenNotices, !noticeIds.subtracting(seen).isEmpty { fresh = true }
+            seenNotices = noticeIds
+        }
+        if fresh {
+            for cluster in [mainCluster, compactCluster, sessionCluster] where cluster.caw.window != nil {
+                cluster.beat()
+            }
         }
     }
 

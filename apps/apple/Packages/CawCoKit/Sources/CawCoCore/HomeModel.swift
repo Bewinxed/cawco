@@ -105,6 +105,21 @@ public final class HomeModel {
         }
     }
 
+    /// Every notice nobody has acknowledged (`Notice`), once the hub's record
+    /// of what was seen has arrived; Caw's panel lists them under Needs you.
+    public var notices: [Notice] {
+        fleet.noticesKnown ? Notice.unseen(machines: fleet.machines, accounts: fleet.accounts, seen: fleet.noticesSeen) : []
+    }
+
+    /// The notices' sources are all read (the seen record and the accounts):
+    /// a notice that appears after this is new, and Caw beats for it.
+    public var noticesRead: Bool { fleet.noticesKnown && fleet.accounts != nil }
+
+    /// Acknowledges a notice everywhere: its ✕.
+    public func dismiss(_ notice: Notice) {
+        hub.acknowledge(notices: notice.acks)
+    }
+
     /// Machines that have not answered yet; until none, an empty list proves nothing.
     public var waitingOn: [MachineRow] {
         fleet.machines.filter { machine in

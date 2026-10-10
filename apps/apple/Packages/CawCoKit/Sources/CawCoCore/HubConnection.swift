@@ -499,6 +499,27 @@ public final class HubConnection {
         }
     }
 
+    /// The person acknowledged notices (notices.svelte.ts `acknowledge`): gone
+    /// here at once, and everywhere once the hub has them. A hub that did not
+    /// take them leaves them standing here too.
+    public func acknowledge(notices ids: [String]) {
+        let fresh = ids.filter { !fleet.noticesSeen.contains($0) }
+        guard !fresh.isEmpty else { return }
+        fleet.noticesSeen.formUnion(fresh)
+        guard let client else {
+            fleet.noticesSeen.subtract(fresh)
+            return
+        }
+        Task { [weak self] in
+            do {
+                _ = try await client.postApiNoticesSeen(body: .json(.init(ids: fresh))).ok
+            } catch {
+                self?.log.error("notices not acknowledged: \(String(describing: error), privacy: .public)")
+                self?.fleet.noticesSeen.subtract(fresh)
+            }
+        }
+    }
+
     /// Which account a session would start on, and why (client.svelte.ts
     /// `placementFor`): the account whose models the picker offers.
     public func placement(harness: String, machineId: String, model: String?, projectId: String?) async -> String? {
@@ -793,6 +814,7 @@ public final class HubConnection {
             if let hubBuild { fleet.hubBuild = hubBuild }
             fleet.continuations = board.continuations
             fleet.moves = board.moves
+            fleet.adopt(noticesSeen: board.noticesSeen)
             adopt(machines: board.agents)
             fleet.adopt(rows: board.instances)
             previews.reconcile(board.previews)
@@ -801,6 +823,7 @@ public final class HubConnection {
         case let .instancesDelta(delta, hubBuild):
             if let hubBuild { fleet.hubBuild = hubBuild }
             if let continuations = delta.continuations { fleet.continuations = continuations }
+            if let seen = delta.noticesSeen { fleet.adopt(noticesSeen: seen) }
             if delta.agents != nil || delta.removedAgents != nil {
                 patchMachines(delta.agents ?? [], removed: delta.removedAgents ?? [])
             }
