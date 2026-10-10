@@ -1376,11 +1376,26 @@ const inSandbox = (seen: Seen[], inner: number | undefined): Seen[] => {
  */
 const ANCHOR_SLEEP = "sleep 86400";
 
-/** The executors on their way into workspace `id`'s boundary: its executor's path is on their command line. */
+/**
+ * Whether `command` runs the executor `exec`: as `<exec> …`, or as the
+ * interpreter its shebang names, `/bin/bash <exec> …`. Naming the path is not
+ * enough: the workspace's judge is handed it as an argument ({@link judgeFor})
+ * and runs as long as the workspace does, so an older boundary that counted
+ * it would never close.
+ */
+const runsExecutor = (command: string, exec: string): boolean => {
+  const startsWith = (text: string) =>
+    text === exec || text.startsWith(`${exec} `);
+  return (
+    startsWith(command) || startsWith(command.slice(command.indexOf(" ") + 1))
+  );
+};
+
+/** The executors on their way into workspace `id`'s boundary ({@link runsExecutor}). */
 const executors = (seen: Seen[], id: string): number[] => {
   const exec = join(stateDir(id), "exec");
   return seen
-    .filter((one) => one.pid !== process.pid && one.command.includes(exec))
+    .filter((one) => one.pid !== process.pid && runsExecutor(one.command, exec))
     .map((one) => one.pid);
 };
 
@@ -1402,9 +1417,12 @@ const busyOld = async (
   current: Held | undefined
 ): Promise<boolean> => {
   const exec = join(stateDir(id), "exec");
+  // Checked again as the executor itself, not by the record alone: a record
+  // written before {@link runsExecutor} lists the judge too.
   if (
     seen.some(
-      (one) => old.executors.includes(one.pid) && one.command.includes(exec)
+      (one) =>
+        old.executors.includes(one.pid) && runsExecutor(one.command, exec)
     )
   ) {
     return true;

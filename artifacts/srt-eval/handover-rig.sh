@@ -8,23 +8,28 @@
 # the rig needs user namespaces, which a boundary refuses ("unshare: unshare
 # failed: Operation not permitted"). It touches no live agent, hub or
 # sessiond: its own sessiond, HOME and XDG_RUNTIME_DIR live in one scratch dir
-# under /tmp (short, for srt's 108-byte socket paths), removed at the end.
+# under $HOME, removed at the end.
 #
 # 1. An older-form workspace, made by the code of a commit before srt
 #    (LEGACY_COMMIT, default d51a0359), with `sleep 6061 & disown` in it.
-# 2. The agent's start-up pass of the commit this one is based on
-#    (BASE_COMMIT, default the merge base with origin/main): it fails with
-#    "could not be written again: ENOENT … ro/tools.sock" and replaces nothing.
+# 2. The agent's start-up pass of the last build before the fix (BASE_COMMIT,
+#    default a7a370f4, Nightly C): it fails with "could not be written again:
+#    ENOENT … ro/tools.sock" and replaces nothing.
 # 3. The same pass from this checkout: no ENOENT, the hook is written, a
 #    boundary of this build's form starts beside the old one, a new command
 #    runs in it and cannot read ~/.claude/.credentials.json, and the sleep
 #    still runs in the old namespace, whose boundary stays up.
 # 4. Killing the sleep closes the old boundary, and its files go.
+#
+# Every command run through the executor prints its exit status, so one that
+# prints nothing cannot read as a pass.
 set -euo pipefail
 here=$(cd "$(dirname "$0")/../.." && pwd -P)
 legacy=${LEGACY_COMMIT:-d51a0359}
-base=${BASE_COMMIT:-$(git -C "$here" merge-base HEAD origin/main)}
-rig=$(mktemp -d /tmp/hrig.XXXXXX)
+base=${BASE_COMMIT:-a7a370f4}
+# Not under /tmp: the older form hides /tmp inside its boundary, so a state dir
+# there would vanish under its own mounts (as no real HOME ever does).
+rig=$(mktemp -d "$HOME/.hrig.XXXXXX")
 say() { printf '\n== %s\n' "$*"; }
 field() { { grep -o "\"$1\":[^,}]*" "$2" || true; } | head -1 | cut -d: -f2- | tr -d '"'; }
 waitfor() { # seconds, then a test command: polls once a second
@@ -35,6 +40,16 @@ waitfor() { # seconds, then a test command: polls once a second
     [ "$tries" -gt 0 ] || return 1
     sleep 1
   done
+}
+# A command through the workspace's executor, then its exit status.
+run() {
+  local status=0
+  "$state/exec" "$1" || status=$?
+  echo "[exec exit $status]"
+}
+# The ripgrep srt is handed in a checkout: part of the boundary's form (D3).
+rg_of() {
+  (cd "$1/packages/agent" && bun -e 'import { rgPath } from "@vscode/ripgrep-universal"; console.log(rgPath)') 2>/dev/null || echo "(none)"
 }
 
 say "worktrees: $legacy (older form), $base (without the fix), $here (with it)"
@@ -49,6 +64,8 @@ import { createWorkspace } from "./packages/agent/src/workspace";
 console.log(JSON.stringify(await createWorkspace(process.argv[2], process.argv[3])));
 process.exit(0);
 EOF
+rg_base=$(rg_of "$rig/base")
+rg_here=$(rg_of "$here")
 
 unset CAWCO_HUB_URL CAWCO_MACHINE_ID CAWCO_SESSION_CREDENTIAL INVOCATION_ID \
   CAWCO_SERVICE_MODE CLAUDE_CONFIG_DIR XPC_SERVICE_NAME
@@ -62,11 +79,15 @@ git -C "$rig/src" init -q -b main
 printf 'rig\n' > "$rig/src/README"
 git -C "$rig/src" add README
 git -C "$rig/src" commit -q -m rig
+# A workspace is cut only from a repository with an origin naming its default branch.
+git init -q --bare -b main "$rig/origin.git"
+git -C "$rig/src" remote add origin "$rig/origin.git"
+git -C "$rig/src" push -q origin main
 
 cleanup() {
   set +e
   if [ -n "${agent:-}" ]; then kill "$agent" 2>/dev/null; fi
-  if [ -n "${id:-}" ]; then
+  if [ -n "${id:-}" ] && [ -n "${clone:-}" ]; then
     (cd "$here" && bun artifacts/srt-eval/rig-workspace.ts archive "$id" "$clone" >/dev/null 2>&1)
   fi
   for proc in /proc/[0-9]*; do
@@ -93,10 +114,11 @@ echo "boundary.json: identity=$(field identity "$state/boundary.json") pid=$anch
 echo "state dir: $(ls "$state" | tr '\n' ' ')"
 [ ! -e "$state/ro" ] && echo "no ro/ dir: the older form"
 cd "$clone"
-"$state/exec" 'head -c0 ~/.claude/.credentials.json 2>/dev/null && echo "older form: ~/.claude/.credentials.json READ" || echo "older form: ~/.claude/.credentials.json denied"'
-"$state/exec" 'sleep 6061 >/dev/null 2>&1 & disown'
+run 'head -c0 ~/.claude/.credentials.json 2>/dev/null && echo "older form: ~/.claude/.credentials.json READ" || echo "older form: ~/.claude/.credentials.json denied"'
+run 'sleep 6061 >/dev/null 2>&1 & disown'
 job=$(pgrep -fx 'sleep 6061')
-echo "job: host pid $job, in pid namespace $(readlink "/proc/$job/ns/pid"); the anchor's is $(readlink "/proc/$anchor/ns/pid")"
+old_ns=$(readlink "/proc/$anchor/ns/pid")
+echo "job: host pid $job, in pid namespace $(readlink "/proc/$job/ns/pid"); the anchor's is $old_ns"
 
 say "2. without the fix ($base): the start-up pass"
 (cd "$rig/base" && bun rig-rearm.ts 12) 2>&1 | tee "$rig/base.log"
@@ -111,9 +133,11 @@ fi
 say "3. with the fix ($(git -C "$here" rev-parse --short HEAD)): the start-up pass"
 (cd "$here" && exec bun artifacts/srt-eval/rig-rearm.ts 120) > "$rig/fixed.log" 2>&1 &
 agent=$!
-if waitfor 30 grep -q '"gen"' "$state/boundary.json"; then
+# This agent's own handover of the anchor, not any record an earlier pass left.
+handed() { grep -q "its boundary $anchor (form [^)]*) is handed over to" "$rig/fixed.log"; }
+if waitfor 30 handed; then
   gen=$(field gen "$state/boundary.json")
-  echo "handed over within 30 s: boundary.json now gen=$gen pid=$(field pid "$state/boundary.json")"
+  echo "handed over within 30 s: boundary.json now gen=$gen pid=$(field pid "$state/boundary.json") form=$(field form "$state/boundary.json")"
 else
   echo "FAILED: no handover within 30 s"
 fi
@@ -123,7 +147,26 @@ echo "state dir: $(ls "$state" | tr '\n' ' ')"
 echo "ro/: $(ls "$state/ro" | tr '\n' ' ')"
 echo "boundaries/${gen:-?}/: $(ls "$state/boundaries/${gen:-none}" 2>/dev/null | tr '\n' ' ')"
 echo "-- a new command runs in the new form"
-"$state/exec" 'echo "pid namespace: $(readlink /proc/self/ns/pid)"; head -c0 ~/.claude/.credentials.json 2>/dev/null && echo "~/.claude/.credentials.json READ (OPEN)" || echo "~/.claude/.credentials.json denied (BLOCKED)"'
+# Traced, so a silent run shows which FIFO it went to and what status it read.
+status=0
+PS4='+exec: ' bash -x "$state/exec" 'echo "pid namespace: $(readlink /proc/self/ns/pid)"; head -c0 ~/.claude/.credentials.json 2>/dev/null && echo "~/.claude/.credentials.json READ (OPEN)" || echo "~/.claude/.credentials.json denied (BLOCKED)"' \
+  > "$rig/new.out" 2> "$rig/new.err" || status=$?
+cat "$rig/new.out"
+grep -v '^+' "$rig/new.err" >&2 || true
+echo "[exec exit $status]"
+if [ "$status" -ne 0 ] || ! grep -q '^~/.claude/.credentials.json denied (BLOCKED)$' "$rig/new.out" ||
+  ! grep -q '^pid namespace: pid:' "$rig/new.out" || grep -q "^pid namespace: $old_ns$" "$rig/new.out"; then
+  echo "FAILED: the new command did not run in the new form; what it went through:"
+  echo "--- the executor's trace"
+  cat "$rig/new.err"
+  echo "--- boundary.json: $(cat "$state/boundary.json")"
+  echo "--- the executor's $(grep -m1 '^fifo=' "$state/exec")"
+  echo "--- ro/: $(ls -l "$state/ro" | tr '\n' ' ')"
+  echo "--- boundaries/${gen:-?}/sandbox: $(cat "$state/boundaries/${gen:-none}/sandbox" 2>/dev/null)"
+  echo "--- requests left in tmp/: $(ls -A "$state/tmp" | tr '\n' ' ')"
+  echo "--- the agent's log"
+  cat "$rig/fixed.log"
+fi
 echo "-- the job runs on in the old namespace, and the old boundary with it"
 sleep 12
 if kill -0 "$job" 2>/dev/null; then
@@ -136,13 +179,22 @@ ls "$state"/retiring-* 2>/dev/null || echo "FAILED: no retiring record"
 
 say "4. killing the job closes the old boundary"
 kill "$job"
-if waitfor 20 test ! -e "$state/retiring-first.json"; then
+retired() { ! ls "$state"/retiring-*.json >/dev/null 2>&1; }
+if waitfor 20 retired; then
   echo "retiring record gone"
 else
-  echo "FAILED: the old boundary was not closed within 20 s"
+  echo "FAILED: the old boundary was not closed within 20 s: $(ls "$state"/retiring-*.json | tr '\n' ' ')"
 fi
-kill -0 "$anchor" 2>/dev/null && echo "FAILED: old anchor $anchor still alive" || echo "old anchor $anchor gone"
+# A zombie answers kill -0: gone is no longer running.
+running() { kill -0 "$anchor" 2>/dev/null && [ "$(cut -d' ' -f3 "/proc/$anchor/stat" 2>/dev/null)" != Z ]; }
+if waitfor 5 eval '! running'; then echo "old anchor $anchor gone"; else echo "FAILED: old anchor $anchor still alive"; fi
 for left in run ssh_config.d runner.fifo; do
   [ -e "$state/$left" ] && echo "FAILED: $left still there" || echo "$left cleaned"
 done
 grep -E "handed over|older boundary" "$rig/fixed.log" || true
+
+say "D3: the ripgrep srt is handed, by checkout (in the boundary's form)"
+echo "$base: $rg_base"
+echo "$here: $rg_here"
+[ "$rg_base" = "$rg_here" ] && echo "same ripgrep: the two checkouts give one form" ||
+  echo "different ripgrep: the two checkouts give two forms"
