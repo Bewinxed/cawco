@@ -86,7 +86,16 @@ login=$(r 'gh api user -q .login' 2>"$scratch/gh.err")
 if [ -n "$login" ]; then works "gh api user (token from the cache)" "PASS ($login)"; else works "gh api user (token from the cache)" FAIL; sed 's/^/    /' "$scratch/gh.err"; fi
 helpers=$(r "git config --show-origin --get-regexp '^credential\..*helper\$'" 2>&1)
 echo "git's credential helpers inside:"; printf '%s\n' "$helpers" | sed 's/^/    /'
-if printf '%s' "$helpers" | grep -q osxkeychain; then works "no osxkeychain helper inside" FAIL; else works "no osxkeychain helper inside" PASS; fi
+# Which helper answers a GitHub login inside: gh's, by GH_TOKEN, and git runs
+# no osxkeychain on the way (its trace names every helper it starts).
+r 'printf "protocol=https\nhost=github.com\n\n" | GIT_TRACE=1 git credential fill' > "$scratch/fill.out" 2> "$scratch/fill.trace"
+if grep -q '^password=.' "$scratch/fill.out" && ! grep -q osxkeychain "$scratch/fill.trace"; then
+  works "a GitHub login comes from gh's helper, no osxkeychain" PASS
+else
+  works "a GitHub login comes from gh's helper, no osxkeychain" FAIL
+  grep -E "run_command|osxkeychain" "$scratch/fill.trace" | head -5 | sed 's/^/    /'
+fi
+rm -f "$scratch/fill.out"
 trustd_kr=$(r "/usr/bin/python3 -c '$MACH_PROBE' com.apple.trustd.agent" 2>/dev/null)
 [ "$trustd_kr" = 0 ] && works "mach-lookup com.apple.trustd.agent (TLS)" PASS || works "mach-lookup com.apple.trustd.agent (TLS)" "FAIL (kr $trustd_kr)"
 origin=$(git -C "$clone" remote get-url origin)

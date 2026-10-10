@@ -235,6 +235,30 @@ const gitTemplateOf = (id: string): string => join(roOf(id), "git-template");
  */
 const ghConfigOf = (id: string): string => join(roOf(id), "gh");
 
+/**
+ * The system gitconfig every command's git reads (`GIT_CONFIG_SYSTEM`, git
+ * 2.32+), read-only inside, in place of the host's: Apple's git (Command
+ * Line Tools) and Homebrew's each ship one naming
+ * `credential.helper=osxkeychain`. It names gh's helper, by the host's gh,
+ * for GitHub, so git takes the `GH_TOKEN` the executor hands in whatever the
+ * user's gitconfig says: `helper =` clears what came before, and git asks its
+ * helpers in order, stopping at the first that answers, so an osxkeychain
+ * the user's gitconfig adds after it is never asked for a GitHub login (and
+ * reaches no keychain service in any case: `KEYCHAIN_MACH_SERVICES`). The
+ * user's gitconfig, read after it, still applies. `GIT_CONFIG_COUNT` is left
+ * alone: srt and the session hand git their own entries through it.
+ */
+const gitSystemConfigOf = (id: string): string => join(roOf(id), "gitconfig");
+
+/** {@link gitSystemConfigOf}'s text for the host's gh, by its real path; no helper when the host has none. */
+const gitSystemConfig = (id: string, gh: string | undefined): string => {
+  const helper = gh
+    ? `\thelper =\n\thelper = "${`!${shellQuote(gh)} auth git-credential`.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"\n`
+    : "";
+  return `# CawCo workspace ${id}: the system gitconfig git reads inside the boundary.
+${helper ? ["https://github.com", "https://gist.github.com"].map((url) => `[credential "${url}"]\n${helper}`).join("") : ""}`;
+};
+
 const WHITESPACE = /\s+/;
 
 /** The line the runner prints once a command can be handed to it. */
@@ -736,9 +760,12 @@ const armHook = async (
     await writeShims(id, await bunRuntime(id));
   }
   if (!held.identity) {
-    // A boundary started before gh had a config dir of its own gets it here.
+    // A boundary started before gh had a config dir of its own gets it here;
+    // the system gitconfig names the host's gh as it is now.
+    const gh = await hostGh();
     await mkdir(ghConfigOf(id), { recursive: true });
-    await writeWhole(held.exec, execScript(id, held, await hostGh()), 0o755);
+    await writeWhole(gitSystemConfigOf(id), gitSystemConfig(id, gh), 0o644);
+    await writeWhole(held.exec, execScript(id, held, gh), 0o755);
   }
   await openToolDoor(id);
   await openGitDoor({ id, path: held.path });
@@ -2156,9 +2183,9 @@ fi`
 /**
  * What every command runs with besides its caller's environment: the
  * workspaces' own cache (`workspaceCacheEnv`), its scratch dir as `TMPDIR`,
- * the empty git template, gh's empty config dir ({@link ghConfigOf}), git
- * without its system config, the tool and git doors (hub-git.ts
- * `gitDoorEnv`), and `CAWCO_WORKSPACE`, by which a
+ * the empty git template, gh's empty config dir ({@link ghConfigOf}), git's
+ * system config naming gh's helper ({@link gitSystemConfigOf}), the tool and
+ * git doors (hub-git.ts `gitDoorEnv`), and `CAWCO_WORKSPACE`, by which a
  * script tells that it runs inside one; never a key agent's socket
  * ({@link AGENT_SOCKET_ENV}).
  */
@@ -2169,12 +2196,7 @@ const commandEnv = (id: string, scratch: string, clone: string): string[] => [
     TMPDIR: scratch,
     GIT_TEMPLATE_DIR: gitTemplateOf(id),
     GH_CONFIG_DIR: ghConfigOf(id),
-    // No system gitconfig: Apple's git (Command Line Tools) and Homebrew's
-    // each ship one naming `credential.helper=osxkeychain`, so a push asked
-    // the keychain before gh's helper. The user's own gitconfig, where gh's
-    // helper is named, still applies; GIT_CONFIG_COUNT is not touched, since
-    // srt and the session already hand git their own entries through it.
-    GIT_CONFIG_NOSYSTEM: "1",
+    GIT_CONFIG_SYSTEM: gitSystemConfigOf(id),
     CAWCO_TOOL_SOCKET: toolDoorOf(id),
     CAWCO_WORKSPACE: id,
     ...gitDoorEnv(id, clone),
