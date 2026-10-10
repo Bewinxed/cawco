@@ -4,6 +4,21 @@ import Observation
 import OpenAPIRuntime
 import OSLog
 
+/// Whether the update notice was closed this launch: one for the app, read by
+/// every window's board, so closing it in one closes it in all.
+@MainActor
+@Observable
+final class HubNewerNotice {
+    static let shared = HubNewerNotice()
+    private(set) var dismissed = false
+    /// Its first drawing was logged ("update notice shown"), once a launch.
+    @ObservationIgnored var logged = false
+
+    func dismiss() {
+        dismissed = true
+    }
+}
+
 /// The one connection to the hub: its address, entered once and kept; the
 /// `/ws/dashboard` socket and its reconnects; the connect-time reads; and the
 /// stores every frame lands in. As the web's client does it
@@ -81,6 +96,23 @@ public final class HubConnection {
     /// The hub sent a value this app does not know (`HubNewer`): it is newer
     /// than the app. Everything else still reads; the app says once to update.
     public private(set) var hubNewer = false
+
+    /// The update notice stands on the board: the hub is newer and nobody
+    /// has closed it this launch, in any window.
+    public var showsHubNewer: Bool { hubNewer && !HubNewerNotice.shared.dismissed }
+
+    /// The board drew it: logged the first time in a launch.
+    public func hubNewerShown() {
+        guard !HubNewerNotice.shared.logged else { return }
+        HubNewerNotice.shared.logged = true
+        log.notice("update notice shown: hub newer than this app")
+    }
+
+    /// Its ✕ (or Open TestFlight): gone for the rest of the launch, every window.
+    public func dismissHubNewer() {
+        HubNewerNotice.shared.dismiss()
+        log.notice("update notice dismissed")
+    }
     @ObservationIgnored private var hubNewerWatch: (any NSObjectProtocol)?
 
     public let ledger = Ledger()

@@ -87,6 +87,79 @@ final class StatusCell: HomeCell {
     }
 }
 
+/// The update notice in the board's flow (the dashboard's NoticeRow inside
+/// UpdateCard): a tile at the head of the list, so what is under it moves
+/// down by its height and back up when it goes. Caw at 28pt leads it, the
+/// title in label type and the line in meta type beside him, the act's `sm`
+/// button at the column's trailing edge, and the ✕ (`NoticeCloseButton`)
+/// on Caw's top corner, inside the tile's corner inset. The ✕ is the one
+/// way it leaves (or opening TestFlight); its 44pt target reaches past the
+/// tile's corner, so the cell answers for it there too.
+final class UpdateNoticeCell: HomeCell {
+    var onDismiss: () -> Void = {}
+    var onAct: () -> Void = {}
+    private var close: NoticeCloseButton!
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        let tile = TileView()
+        let mark = CawMark(status: .needsYou, side: Self.lead)
+        mark.translatesAutoresizingMaskIntoConstraints = false
+        let title = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong, lines: 0)
+        title.text = Self.title
+        title.accessibilityTraits = .header
+        let line = KitLabel(TypeScale.typeMeta, ink: Palette.inkStrong, lines: 0)
+        line.text = Self.line
+        let act = KitButton.make("Open TestFlight", variant: .action, height: .sm) { [weak self] in self?.onAct() }
+        let actions = UIStackView(arrangedSubviews: [UIView(), act])
+        actions.alignment = .center
+        let column = UIStackView(arrangedSubviews: [title, line, actions])
+        column.axis = .vertical
+        column.spacing = Space.spaceRow
+        column.setCustomSpacing(Space.space1, after: line)
+        column.translatesAutoresizingMaskIntoConstraints = false
+        close = NoticeCloseButton(label: "Dismiss") { [weak self] in self?.onDismiss() }
+        tile.addSubview(mark)
+        tile.addSubview(column)
+        tile.addSubview(close)
+        let pad = Space.space3
+        NSLayoutConstraint.activate([
+            mark.topAnchor.constraint(equalTo: tile.topAnchor, constant: pad),
+            mark.leadingAnchor.constraint(equalTo: tile.leadingAnchor, constant: pad),
+            mark.widthAnchor.constraint(equalToConstant: Self.lead),
+            mark.heightAnchor.constraint(equalToConstant: Self.lead),
+            tile.bottomAnchor.constraint(greaterThanOrEqualTo: mark.bottomAnchor, constant: pad),
+            column.topAnchor.constraint(equalTo: tile.topAnchor, constant: pad),
+            column.leadingAnchor.constraint(equalTo: mark.trailingAnchor, constant: Space.space3),
+            column.trailingAnchor.constraint(equalTo: tile.trailingAnchor, constant: -pad),
+            column.bottomAnchor.constraint(equalTo: tile.bottomAnchor, constant: -pad),
+            // On Caw's top corner, 8pt out from it (NoticeRow `.x`): inside the tile's corner inset.
+            close.topAnchor.constraint(equalTo: mark.topAnchor, constant: -8),
+            close.leadingAnchor.constraint(equalTo: mark.leadingAnchor, constant: -8),
+        ])
+        pin(tile)
+        // The words, the act and the ✕ each read on their own; Caw is a picture.
+        contentView.accessibilityElements = [title, line, act, close as Any]
+    }
+
+    static let title = "Your hub is newer than this app"
+    static let line = "Update CawCo to see everything."
+    /// Caw's side in a notice row (NoticeRow's lead).
+    private static let lead = 28.0
+
+    /// The ✕'s 44pt target, where it reaches past the tile.
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        super.point(inside: point, with: event) || close.point(inside: convert(point, to: close), with: event)
+    }
+
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        if isUserInteractionEnabled, !isHidden, close.point(inside: convert(point, to: close), with: event) {
+            return close
+        }
+        return super.hitTest(point, with: event)
+    }
+}
+
 /// "N need(s) you", by its spark: the loudest thing on the screen.
 final class HeadlineCell: HomeCell {
     private let spark = UIView()

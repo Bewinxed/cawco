@@ -25,6 +25,8 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     /// One drawn line, by a stable id: a machine's header is the same line in
     /// both tabs, so a tab switch never takes it out and puts it back.
     nonisolated enum Item: Hashable, Sendable {
+        /// The update notice: the hub is newer than this app (`showsHubNewer`).
+        case hubNewer
         case status
         case usage
         case headline
@@ -367,6 +369,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             ObjectIdentifier(UICollectionViewDiffableDataSource<Section, Item>.self),
             ObjectIdentifier(UICollectionView.CellRegistration<UsageCell, Item>.self),
             ObjectIdentifier(UICollectionView.CellRegistration<StatusCell, Item>.self),
+            ObjectIdentifier(UICollectionView.CellRegistration<UpdateNoticeCell, Item>.self),
             ObjectIdentifier(UICollectionView.CellRegistration<HeadlineCell, Item>.self),
             ObjectIdentifier(UICollectionView.CellRegistration<NeedsCardCell, Item>.self),
             ObjectIdentifier(UICollectionView.CellRegistration<TabsCell, Item>.self),
@@ -391,6 +394,16 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         let status = UICollectionView.CellRegistration<StatusCell, Item> { [weak self] cell, _, _ in
             guard let self else { return }
             cell.line.configure(hub: hub, ready: home.ready)
+        }
+        let hubNewer = UICollectionView.CellRegistration<UpdateNoticeCell, Item> { [weak self] cell, _, _ in
+            guard let self else { return }
+            cell.ground = variant.ground
+            cell.onDismiss = { [weak self] in self?.hub.dismissHubNewer() }
+            cell.onAct = { [weak self] in
+                UIApplication.shared.open(HubConnection.Incompatible.testFlight)
+                self?.hub.dismissHubNewer()
+            }
+            hub.hubNewerShown()
         }
         let headline = UICollectionView.CellRegistration<HeadlineCell, Item> { [weak self] cell, _, _ in
             cell.rail = self?.variant == .rail
@@ -529,6 +542,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
 
         return UICollectionViewDiffableDataSource(collectionView: collectionView) { view, index, item in
             switch item {
+            case .hubNewer: view.dequeueConfiguredReusableCell(using: hubNewer, for: index, item: item)
             case .status: view.dequeueConfiguredReusableCell(using: status, for: index, item: item)
             case .usage: view.dequeueConfiguredReusableCell(using: usage, for: index, item: item)
             case .headline: view.dequeueConfiguredReusableCell(using: headline, for: index, item: item)
@@ -673,6 +687,11 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
 
         usageStrip = home.usage
         snapshot.appendSections([.top])
+        // The update notice heads the page's list, in its flow: what is under
+        // it moves down by its height, and back up when its ✕ takes it away.
+        if variant == .page, hub.showsHubNewer {
+            snapshot.appendItems([.hubNewer], toSection: .top)
+        }
         // The status line is drawn only until the hub is live and read
         // (StatusLine.svelte): then it says nothing and takes no room.
         if !(live && ready) {
@@ -928,7 +947,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         case let .row(id): return .line(key: id, group: rows[id]?.group ?? "")
         case let .more(id): return .line(key: RelayPlan.more(id), group: id)
         case .caw, .recentHead, .recentSearch, .recent, .recentNone, .recentMore: return .tail
-        case .status, .usage, .headline, .need, .tabs: return .none
+        case .hubNewer, .status, .usage, .headline, .need, .tabs: return .none
         }
     }
 

@@ -33,29 +33,14 @@ public enum Toast {
     /// `sticky`: it stays until swiped away or its action is taken
     /// (`duration: Infinity`), for a toast that carries the way to recover.
     public static func show(_ message: String, description: String? = nil, kind: Kind = .plain, action: Action? = nil, sticky: Bool = false, in view: UIView?) {
-        guard let layer = layer(for: view) else { return }
-        layer.add(ToastView(message: message, description: description, kind: kind, action: action), sticky: sticky)
+        guard let scene = view?.window?.windowScene ?? UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first else { return }
+        let layer = layers[ObjectIdentifier(scene)] ?? {
+            let made = ToastWindow(windowScene: scene)
+            layers[ObjectIdentifier(scene)] = made
+            return made
+        }()
+        layer.add(message, description: description, kind: kind, action: action, sticky: sticky)
         UIAccessibility.post(notification: .announcement, argument: message)
-    }
-
-    /// The update notice (DESIGN.md, Update notice; the dashboard's
-    /// UpdateNotice.svelte): `lead` (Caw at 48pt) on the leading edge, the
-    /// title in label type, the line in meta type, and the act's `sm` button
-    /// at the text column's trailing edge. It stays until its ✕ or its act:
-    /// no timeout, no swipe. The ✕ is a 20pt pill chip on the lead's top
-    /// corner, 44pt under a finger, read as "Dismiss".
-    public static func notice(_ title: String, line: String, lead: UIView, action: Action?, in view: UIView?) {
-        guard let layer = layer(for: view) else { return }
-        layer.add(ToastView(notice: title, line: line, lead: lead, action: action), sticky: true)
-        UIAccessibility.post(notification: .announcement, argument: "\(title). \(line)")
-    }
-
-    private static func layer(for view: UIView?) -> ToastWindow? {
-        guard let scene = view?.window?.windowScene ?? UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first else { return nil }
-        if let made = layers[ObjectIdentifier(scene)] { return made }
-        let made = ToastWindow(windowScene: scene)
-        layers[ObjectIdentifier(scene)] = made
-        return made
     }
 
     private static var layers: [ObjectIdentifier: ToastWindow] = [:]
@@ -90,8 +75,9 @@ private final class ToastWindow: UIWindow {
     /// Up to 640pt a toast drops from the top, under the top bar; wider it sits in the bottom-right corner.
     private var narrow: Bool { bounds.width <= 640 }
 
-    func add(_ toast: ToastView, sticky: Bool) {
+    func add(_ message: String, description: String?, kind: Toast.Kind, action: Toast.Action?, sticky: Bool) {
         guard let host = rootViewController?.view else { return }
+        let toast = ToastView(message: message, description: description, kind: kind, action: action)
         toast.onDismiss = { [weak self, weak toast] velocity in
             guard let self, let toast else { return }
             remove(toast, thrown: velocity)
@@ -157,72 +143,20 @@ private final class ToastWindow: UIWindow {
 
 private final class PassThroughView: UIView {}
 
-/// The update notice's ✕ (UpdateNotice.svelte `.x`): a 20pt pill chip on the
-/// raised surface in the control edge with the tile shadow, a 12pt close
-/// glyph in muted ink, and a 44pt touch area; VoiceOver reads it as "Dismiss".
-private final class NoticeCloseChip: UIButton {
-    init(_ run: @escaping @MainActor () -> Void) {
-        super.init(frame: .zero)
-        translatesAutoresizingMaskIntoConstraints = false
-        var config = UIButton.Configuration.plain()
-        config.image = Glyph.close.image.resized(to: Size.iconSm)
-        config.contentInsets = .zero
-        configuration = config
-        tintColor = Palette.inkMuted
-        backgroundColor = Palette.surfaceRaised
-        layer.cornerRadius = Size.cBadgeH / 2
-        layer.borderWidth = 1
-        boxShadow = Shadow.shadowTile
-        accessibilityLabel = "Dismiss"
-        accessibilityIdentifier = "notice-dismiss"
-        addAction(UIAction { _ in run() }, for: .touchUpInside)
-        NSLayoutConstraint.activate([
-            widthAnchor.constraint(equalToConstant: Size.cBadgeH),
-            heightAnchor.constraint(equalToConstant: Size.cBadgeH),
-        ])
-        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (chip: NoticeCloseChip, _: UITraitCollection) in chip.paint() }
-        paint()
-    }
-
-    @available(*, unavailable)
-    required init?(coder _: NSCoder) {
-        fatalError("NoticeCloseChip is built in code")
-    }
-
-    private func paint() {
-        layer.borderColor = Palette.borderControl.resolvedColor(with: traitCollection).cgColor
-    }
-
-    override func point(inside point: CGPoint, with _: UIEvent?) -> Bool {
-        let grow = (Size.cBtnHLg - Size.cBadgeH) / 2
-        return bounds.insetBy(dx: -grow, dy: -grow).contains(point)
-    }
-}
-
 private final class ToastView: UIView {
     var onDismiss: (CGFloat?) -> Void = { _ in }
     /// Under a finger: it does not time out.
     private(set) var held = false
     private var start = CGPoint.zero
     private var began = Date()
-    /// The box's edge: the control border on a toast, the hairline on the notice.
-    private let edge: UIColor
 
-    /// The floating surface every toast and the notice stand on.
-    private init(edge: UIColor) {
-        self.edge = edge
+    init(message: String, description: String?, kind: Toast.Kind, action: Toast.Action?) {
         super.init(frame: .zero)
         backgroundColor = Palette.surfaceRaised
         layer.cornerRadius = Radius.radiusLg
         layer.cornerCurve = .continuous
         layer.borderWidth = 1
         boxShadow = Shadow.shadowOverlay
-        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: ToastView, _: UITraitCollection) in view.paint() }
-        paint()
-    }
-
-    convenience init(message: String, description: String?, kind: Toast.Kind, action: Toast.Action?) {
-        self.init(edge: Palette.borderControl)
         let label = KitLabel(TypeScale.typeBody, ink: Palette.inkStrong, lines: 0)
         label.text = message
         let text = UIStackView(arrangedSubviews: [label])
@@ -277,63 +211,8 @@ private final class ToastView: UIView {
         // With an action the button is its own element; without, the toast reads as one.
         isAccessibilityElement = action == nil
         accessibilityLabel = [message, description].compactMap { $0 }.joined(separator: ". ")
-    }
-
-    /// UpdateNotice.svelte's box: 12pt by 14pt in, `lead` at 48pt holding the
-    /// leading column's top without sizing any row, the text column
-    /// `space-3` after it, rows `space-row` apart, the act `space-2` under
-    /// them at the column's trailing edge, and the ✕ 6pt into the lead's
-    /// top corner. Only the ✕ or the act closes it.
-    convenience init(notice title: String, line: String, lead: UIView, action: Toast.Action?) {
-        self.init(edge: Palette.borderHairline)
-        let padBlock = 12.0, padInline = 14.0, side = 48.0
-        lead.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(lead)
-        let heading = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong, lines: 0)
-        heading.text = title
-        heading.accessibilityTraits = .header
-        let words = KitLabel(TypeScale.typeMeta, ink: Palette.inkStrong, lines: 0)
-        words.text = line
-        let column = UIStackView(arrangedSubviews: [heading, words])
-        column.axis = .vertical
-        column.spacing = Space.spaceRow
-        // The words, the act and the ✕ each read on their own; the lead is a picture.
-        var elements: [Any] = [heading, words]
-        if let action {
-            let act = KitButton.make(action.label, variant: .action, height: .sm) { [weak self] in
-                action.run()
-                self?.onDismiss(nil)
-            }
-            let buttons = UIStackView(arrangedSubviews: [UIView(), act])
-            buttons.alignment = .center
-            column.addArrangedSubview(buttons)
-            column.setCustomSpacing(Space.space2, after: words)
-            elements.append(act)
-        }
-        column.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(column)
-        let close = NoticeCloseChip { [weak self] in self?.onDismiss(nil) }
-        addSubview(close)
-        // The box's floor is the lead's height; the column alone sets it past that.
-        let fit = bottomAnchor.constraint(equalTo: column.bottomAnchor, constant: padBlock)
-        fit.priority = .defaultHigh
-        NSLayoutConstraint.activate([
-            lead.topAnchor.constraint(equalTo: topAnchor, constant: padBlock),
-            lead.leadingAnchor.constraint(equalTo: leadingAnchor, constant: padInline),
-            lead.widthAnchor.constraint(equalToConstant: side),
-            lead.heightAnchor.constraint(equalToConstant: side),
-            bottomAnchor.constraint(greaterThanOrEqualTo: lead.bottomAnchor, constant: padBlock),
-            column.topAnchor.constraint(equalTo: topAnchor, constant: padBlock),
-            column.leadingAnchor.constraint(equalTo: lead.trailingAnchor, constant: Space.space3),
-            column.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -padInline),
-            bottomAnchor.constraint(greaterThanOrEqualTo: column.bottomAnchor, constant: padBlock),
-            fit,
-            close.topAnchor.constraint(equalTo: topAnchor, constant: 6),
-            close.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 6),
-        ])
-        isAccessibilityElement = false
-        elements.append(close)
-        accessibilityElements = elements
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: ToastView, _: UITraitCollection) in view.paint() }
+        paint()
     }
 
     @available(*, unavailable)
@@ -342,7 +221,7 @@ private final class ToastView: UIView {
     }
 
     private func paint() {
-        layer.borderColor = edge.resolvedColor(with: traitCollection).cgColor
+        layer.borderColor = Palette.borderControl.resolvedColor(with: traitCollection).cgColor
     }
 
     /// Tracks the finger 1:1; past 45pt or on a flick faster than 0.11pt/ms it goes.
