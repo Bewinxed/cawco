@@ -257,19 +257,11 @@
           opacity 0s;
       }
     }
-    /* A card tucked under a neighbour drawn above it (TabsList
-       `data-tucked`) starts where that neighbour's edge stands, its own
-       shoulder rounded there, so the neighbour's shoulder shows against
-       the shelf and each tab stands on it with its rounded top, not run
-       under the next into one slab. A host whose rim draws the outline
-       lets it run under (`--tuck: 0px`, PaneTabs' phone row). */
-    :global([data-tucked="start"]) &::before,
-    &:global([data-tucked="start"])::before {
-      inset-inline-start: var(--tuck, var(--overlap));
-    }
-    :global([data-tucked="end"]) &::before,
-    &:global([data-tucked="end"])::before {
-      inset-inline-end: var(--tuck, var(--overlap));
+    /* A card tucked under a neighbour drawn above it starts where that
+       neighbour's edge stands (TabsList `--card-in-start`, `--card-in-end`),
+       its own shoulder rounded there. */
+    &::before {
+      inset-inline: var(--card-in-start, 0px) var(--card-in-end, 0px);
     }
     /* Hidden once the sheet has covered it, so no tint fringes the
        sheet's shoulders at rest; back at once when the sheet leaves. */

@@ -605,6 +605,24 @@
     position: relative;
     margin-inline-start: calc(-1 * var(--overlap));
   }
+  /* The edge a neighbour drawn above a tab covers (`data-tucked`): the
+     tab's card starts where that neighbour's edge stands, its own shoulder
+     rounded there, so the neighbour's shoulder shows against the shelf and
+     each tab stands on it with its rounded top, not run under the next into
+     one slab. The one word on where a card's edges stand: its card
+     (TabItem) and anything a host draws on its outline (PaneTabs' rim)
+     read it. A host whose rim draws the outline lets the card run under
+     (`--tuck: 0px`, PaneTabs' phone row). */
+  :global([data-variant="folder"])
+    .ff-tabs-list
+    > :global([data-tucked="start"]) {
+    --card-in-start: var(--tuck, var(--overlap));
+  }
+  :global([data-variant="folder"])
+    .ff-tabs-list
+    > :global([data-tucked="end"]) {
+    --card-in-end: var(--tuck, var(--overlap));
+  }
   /* Placed by `transform`, not `left`/`top`: moving between tabs is then a
      compositor-only translate. Only the width change lays out, and it lays
      out one empty absolutely-positioned box. */

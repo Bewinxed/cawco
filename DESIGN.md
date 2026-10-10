@@ -659,6 +659,8 @@ Corners are soft and graded by role: 2px (`--radius-hair`) for marks too small t
 
 **Folder tabs.** A chosen folder tab is a sheet in the surface below it, with rounded shoulders and a foot that flares outward into the page (a CSS `shape()` path at the tab radius). Unchosen tabs stand on the shelf in `surface-recess-deep` with rounded tops.
 
+**Session tab status rim.** Every session tab, at every width and on every client, wears its session's status on its own outline: working `status-live-glyph`, needs you `status-attn-glyph`, failed `status-fail-glyph`, idle `ink-muted` at `tab-rim-mix-idle`. The stroke is 1.5px across the top and round both shoulders, tapering over 6px to 0.5px down the sides and fading out by 90% of the tab's height, with a 6px glow outside at half its strength. Its strength is `tab-rim-mix` on an unchosen tab and `tab-rim-mix-chosen` on the chosen one, and a status change cross-fades it over `--dur-panel`. Increase Contrast and Reduce Transparency draw it a solid 1px rim with no glow. The rim follows the card. On the desk a card tucked under a neighbour starts at that neighbour's edge with its own rounded shoulder, and its side on that edge stops below the shoulder, so where two tabs meet there is one outline and nothing is drawn under the neighbour. On the phone's row a tucked shoulder is square and runs under the neighbour. The desk keeps the status glyph before the title as well. The phone's row draws no glyph, so there the rim is the status.
+
 **Focus outline.** Focus is an outline, never a box-shadow, so it follows each element's own radius and survives forced colours.
 
 ## Components

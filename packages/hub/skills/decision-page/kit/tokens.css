@@ -782,9 +782,9 @@
     /* Relative tints for rows inside any surface: hover +6%, selected +10% ink. */
     --surface-hover-mix: 6%;
     --surface-selected-mix: 10%;
-    /* How much of its session's status colour an unchosen tab's rim on the phone's row carries; its glow carries half of it. */
+    /* How much of its session's status colour an unchosen session tab's rim carries, on every width; its glow carries half of it. */
     --tab-rim-mix: 51%;
-    /* The chosen tab's rim on the phone's row. */
+    /* The chosen session tab's rim, on every width. */
     --tab-rim-mix-chosen: 65%;
     /* An idle session's rim, chosen or not, in the muted ink. */
     --tab-rim-mix-idle: 32%;

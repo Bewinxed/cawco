@@ -115,7 +115,7 @@
      * the badge's words where it has any, else the status glyph's own label.
      */
     statusLabel: string;
-    /** The session's status on the rail's scale: the phone tab's rim wears it. */
+    /** The session's status on the rail's scale: the tab's rim wears it. */
     tone: StatusTone;
   }
 
@@ -992,10 +992,11 @@
               value={tab.id}
             >
               {#snippet lead()}
-                <!-- The status glyph, where no rim wears the status: the
+                <!-- The status glyph, on the desk beside the rim: the
                      phone's row draws none (owner: "why does it still have
-                     the icon if the rim is there"); the tab's label says
-                     the status in words either way. -->
+                     the icon if the rim is there"; "desktop has icons
+                     mobile not"); the tab's label says the status in words
+                     either way. -->
                 <span class="tglyph">
                   {#if isThreadTab(tab.id)}
                     <!-- A thread's mark is Caw, at what the thread is doing. -->
@@ -1152,7 +1153,7 @@
             </ContextMenu.CopyItem>
           </ContextMenu.Content>
         </ContextMenu.Root>
-        <!-- The phone's status rim, drawn on the tab's own outline. -->
+        <!-- The status rim, drawn on the tab's own outline, on every width. -->
         <span aria-hidden="true" class="rim"></span>
       </div>
     {/each}
@@ -1565,15 +1566,148 @@
     touch-action: pan-x;
   }
 
-  /* ── The phone's row: receding tabs and the status rim ─────────────
+  /* ── The status rim, on every width ───────────────────────────────
+     Each tab's rim wears its session's status (`data-tone`, the rail's
+     scale): the tab's own outline, a 1.5px stroke across the top and round
+     both shoulders, tapering to 0.5px down the sides, gone by 90% of its
+     height, with a soft glow outside at half its strength. A status change
+     cross-fades it. Increase Contrast and Reduce Transparency draw it a
+     solid 1px rim. How chosen a tab is (`--pick`, `look`) sets its
+     strength. The desk keeps its status glyph before the title as well
+     (owner: "desktop and mobile should all have rims, desktop has icons
+     mobile not").
+
+     It is drawn on the tab's card, edge for edge (TabsList
+     `--card-in-start`, `--card-in-end`; the shoulders' `--r-start`,
+     `--r-end`). On the desk a card tucked under a neighbour starts where
+     that neighbour's edge stands, its own shoulder rounded there, so the
+     rim does too, and its side on that edge stops below the shoulder: the
+     neighbour's side is the one outline where the two meet, and nothing of
+     it is drawn under the neighbour. The phone's row runs a tucked card
+     under its neighbour square (`--tuck: 0px`), where the neighbour's card
+     covers that side. */
+  .tab {
+    --tone: var(--ink-muted);
+    --rim-mix: calc(
+      var(--tab-rim-mix) +
+      (var(--tab-rim-mix-chosen) - var(--tab-rim-mix)) *
+      var(--pick)
+    );
+  }
+  @media (min-width: 900px) {
+    .tab[data-tucked="start"] {
+      --side-start: 0px;
+    }
+    .tab[data-tucked="end"] {
+      --side-end: 0px;
+    }
+  }
+  .tab[data-tone="working"] {
+    --tone: var(--status-live-glyph);
+  }
+  .tab[data-tone="attention"] {
+    --tone: var(--status-attn-glyph);
+  }
+  .tab[data-tone="failed"] {
+    --tone: var(--status-fail-glyph);
+  }
+  .tab:is([data-tone="quiet"], [data-tone="done"]) {
+    --rim-mix: var(--tab-rim-mix-idle);
+  }
+  /* Under a swipe the rim is where its fraction puts it, frame by frame:
+     no transition lags the finger. */
+  :global([data-ride]) .rim::before,
+  :global([data-ride]) .rim::after {
+    transition: none;
+  }
+  .rim {
+    /* 6px of room round the outline for the glow, inside the mask. */
+    --spill: 6px;
+    display: block;
+    position: absolute;
+    inset-block: calc(-1 * var(--spill)) 0;
+    inset-inline: calc(var(--card-in-start, 0px) - var(--spill))
+      calc(var(--card-in-end, 0px) - var(--spill));
+    z-index: 2;
+    pointer-events: none;
+    mask-image: linear-gradient(
+      #000 var(--spill),
+      transparent calc(var(--spill) + 0.9 * var(--item))
+    );
+
+    /* Both on the tab's own outline: the glow outside it (a box shadow
+       is drawn only outside its box), the stroke inside it. */
+    &::before,
+    &::after {
+      content: "";
+      position: absolute;
+      inset: var(--spill) var(--spill) 0;
+    }
+    &::before {
+      border-radius: var(--r-start, var(--radius)) var(--r-end, var(--radius)) 0
+        0;
+      box-shadow: 0 0 6px
+        color-mix(in oklab, var(--tone) calc(var(--rim-mix) / 2), transparent);
+      transition: box-shadow var(--dur-panel) var(--ease-out);
+    }
+    /* The stroke as a shape, so it holds its full width across the top
+       and round both shoulders, where a shadow's would thin with the
+       corner's radius, and only then tapers, over the next --spill down
+       each side, to its side width (`--side-start`, `--side-end`, none on
+       a desk tab's tucked edge). Each shoulder takes its own radius
+       (`--r-start`, `--r-end`, the strip's `--radius` unless the host
+       squares it); the stroke's inner edge turns on one `--top` less, none
+       on a square shoulder (`--in-*`). */
+    &::after {
+      --top: 1.5px;
+      --side: 0.5px;
+      --rs: var(--r-start, var(--radius));
+      --re: var(--r-end, var(--radius));
+      --ss: var(--side-start, var(--side));
+      --se: var(--side-end, var(--side));
+      --in-start: max(var(--rs), var(--top));
+      --in-end: max(var(--re), var(--top));
+      background: color-mix(in oklab, var(--tone) var(--rim-mix), transparent);
+      clip-path: shape(
+        from 0 100%,
+        line to 0 var(--rs),
+        arc to var(--rs) 0 of var(--rs) cw,
+        line to calc(100% - var(--re)) 0,
+        arc to 100% var(--re) of var(--re) cw,
+        line to 100% 100%,
+        line to calc(100% - var(--se)) 100%,
+        line to calc(100% - var(--se)) calc(var(--in-end) + var(--spill)),
+        line to calc(100% - var(--top)) var(--in-end),
+        arc to calc(100% - var(--in-end)) var(--top) of
+          calc(var(--in-end) - var(--top)) ccw,
+        line to var(--in-start) var(--top),
+        arc to var(--top) var(--in-start) of calc(var(--in-start) - var(--top))
+          ccw,
+        line to var(--ss) calc(var(--in-start) + var(--spill)),
+        line to var(--ss) 100%,
+        close
+      );
+      transition: background-color var(--dur-panel) var(--ease-out);
+    }
+
+    @media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
+      mask-image: none;
+
+      &::before {
+        box-shadow: none;
+      }
+      &::after {
+        --top: 1px;
+        --side: 1px;
+        background: var(--tone);
+      }
+    }
+  }
+
+  /* ── The phone's row: receding tabs ───────────────────────────────
      The chosen tab is the page it opens; every other tab recedes one step
-     toward the shelf per tab of distance from it, to three. Each tab's rim
-     wears its session's status (`data-tone`, the rail's scale): the tab's
-     own outline, a 1.5px stroke across the top and round both shoulders,
-     tapering to 0.5px down the sides, gone by 90% of its height, with a
-     soft glow outside at half its strength. The rim is the status: the row
-     draws no status glyph. A status change cross-fades it. Increase
-     Contrast and Reduce Transparency draw it a solid 1px rim.
+     toward the shelf per tab of distance from it, to three. The rim is the
+     status: the row draws no status glyph.
 
      A swipe carries the choice from tab to tab with the finger (`look`):
      how chosen a tab is (`--pick`) sets its rim's strength and its title's
@@ -1581,21 +1715,12 @@
      (`--fill-from`, `--fill-to`, by `--f`). At rest they are the chosen
      tab's alone. None of them sizes a tab: choosing one never moves the
      others. */
-  .rim {
-    display: none;
-  }
   @media (max-width: 899px) {
     .tab {
       --tab-fill: color-mix(
         in oklab,
         var(--fill-to) calc(var(--f) * 100%),
         var(--fill-from)
-      );
-      --tone: var(--ink-muted);
-      --rim-mix: calc(
-        var(--tab-rim-mix) +
-        (var(--tab-rim-mix-chosen) - var(--tab-rim-mix)) *
-        var(--pick)
       );
     }
     /* The rim is the status: no glyph beside the title. */
@@ -1641,102 +1766,10 @@
         var(--ink-muted)
       );
     }
-    /* Under a swipe every one of these is where its fraction puts it,
-       frame by frame: no transition lags the finger. */
-    :global([data-ride]) .tab :global(.ff-tab),
-    :global([data-ride]) .rim::before,
-    :global([data-ride]) .rim::after {
+    /* Under a swipe the title's ink is where its fraction puts it, frame
+       by frame: no transition lags the finger. */
+    :global([data-ride]) .tab :global(.ff-tab) {
       transition: none;
-    }
-    .tab[data-tone="working"] {
-      --tone: var(--status-live-glyph);
-    }
-    .tab[data-tone="attention"] {
-      --tone: var(--status-attn-glyph);
-    }
-    .tab[data-tone="failed"] {
-      --tone: var(--status-fail-glyph);
-    }
-    .tab:is([data-tone="quiet"], [data-tone="done"]) {
-      --rim-mix: var(--tab-rim-mix-idle);
-    }
-    .rim {
-      /* 6px of room round the outline for the glow, inside the mask. */
-      --spill: 6px;
-      display: block;
-      position: absolute;
-      inset: calc(-1 * var(--spill)) calc(-1 * var(--spill)) 0;
-      z-index: 2;
-      pointer-events: none;
-      mask-image: linear-gradient(
-        #000 var(--spill),
-        transparent calc(var(--spill) + 0.9 * var(--item))
-      );
-
-      /* Both on the tab's own outline: the glow outside it (a box shadow
-         is drawn only outside its box), the stroke inside it. */
-      &::before,
-      &::after {
-        content: "";
-        position: absolute;
-        inset: var(--spill) var(--spill) 0;
-      }
-      &::before {
-        border-radius: var(--r-start) var(--r-end) 0 0;
-        box-shadow: 0 0 6px
-          color-mix(in oklab, var(--tone) calc(var(--rim-mix) / 2), transparent);
-        transition: box-shadow var(--dur-panel) var(--ease-out);
-      }
-      /* The stroke as a shape, so it holds its full width across the top
-         and round both shoulders, where a shadow's would thin with the
-         corner's radius, and only then tapers, over the next --spill down
-         each side, to its side width. Each shoulder takes its own radius
-         (`--r-start`, `--r-end`); the stroke's inner edge turns on one
-         `--top` less, none on a square shoulder (`--in-*`). */
-      &::after {
-        --top: 1.5px;
-        --side: 0.5px;
-        --in-start: max(var(--r-start), var(--top));
-        --in-end: max(var(--r-end), var(--top));
-        background: color-mix(
-          in oklab,
-          var(--tone) var(--rim-mix),
-          transparent
-        );
-        clip-path: shape(
-          from 0 100%,
-          line to 0 var(--r-start),
-          arc to var(--r-start) 0 of var(--r-start) cw,
-          line to calc(100% - var(--r-end)) 0,
-          arc to 100% var(--r-end) of var(--r-end) cw,
-          line to 100% 100%,
-          line to calc(100% - var(--side)) 100%,
-          line to calc(100% - var(--side)) calc(var(--in-end) + var(--spill)),
-          line to calc(100% - var(--top)) var(--in-end),
-          arc to calc(100% - var(--in-end)) var(--top) of
-            calc(var(--in-end) - var(--top)) ccw,
-          line to var(--in-start) var(--top),
-          arc to var(--top) var(--in-start) of
-            calc(var(--in-start) - var(--top)) ccw,
-          line to var(--side) calc(var(--in-start) + var(--spill)),
-          line to var(--side) 100%,
-          close
-        );
-        transition: background-color var(--dur-panel) var(--ease-out);
-      }
-
-      @media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
-        mask-image: none;
-
-        &::before {
-          box-shadow: none;
-        }
-        &::after {
-          --top: 1px;
-          --side: 1px;
-          background: var(--tone);
-        }
-      }
     }
   }
 

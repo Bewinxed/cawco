@@ -2700,12 +2700,12 @@
     "tab-rim-mix": {
       "$type": "number",
       "$value": "51%",
-      "$description": "How much of its session's status colour an unchosen tab's rim on the phone's row carries; its glow carries half of it."
+      "$description": "How much of its session's status colour an unchosen session tab's rim carries, on every width; its glow carries half of it."
     },
     "tab-rim-mix-chosen": {
       "$type": "number",
       "$value": "65%",
-      "$description": "The chosen tab's rim on the phone's row."
+      "$description": "The chosen session tab's rim, on every width."
     },
     "tab-rim-mix-idle": {
       "$type": "number",

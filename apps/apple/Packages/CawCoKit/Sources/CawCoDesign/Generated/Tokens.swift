@@ -632,9 +632,9 @@ public enum Effect {
     /// Relative tints for rows inside any surface: hover +6%, selected +10% ink.
     public static let surfaceHoverMix: Double = 0.06
     public static let surfaceSelectedMix: Double = 0.1
-    /// How much of its session's status colour an unchosen tab's rim on the phone's row carries; its glow carries half of it.
+    /// How much of its session's status colour an unchosen session tab's rim carries, on every width; its glow carries half of it.
     public static let tabRimMix: Double = 0.51
-    /// The chosen tab's rim on the phone's row.
+    /// The chosen session tab's rim, on every width.
     public static let tabRimMixChosen: Double = 0.65
     /// An idle session's rim, chosen or not, in the muted ink.
     public static let tabRimMixIdle: Double = 0.32
