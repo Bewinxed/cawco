@@ -70,6 +70,7 @@ import {
   rename,
   rm,
   stat,
+  symlink,
   writeFile,
 } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -625,16 +626,80 @@ const shimsOf = (id: string): string => join(roOf(id), "bin");
  *   `IDECustomDerivedDataLocation` default, which every action takes, where
  *   `-derivedDataPath` is refused by some (`-showsdks`, exit 64); its
  *   package cache through `-packageCachePath`, which only a build or a
- *   package resolution takes.
+ *   package resolution takes. It runs with a home of its own
+ *   ({@link writeXcodeHome}), so what Foundation puts under `~/Library/Caches`
+ *   (SwiftPM's manifest cache among it) lands in the workspaces' cache.
  * - `log`, which Seatbelt refuses outright, asks the agent to run `log show`
  *   or `log stream` outside the boundary (`log-relay.ts`).
  *
  * Each finds the real tool with `xcrun --find`, so it follows the selected
  * Xcode. Nothing is set globally: the owner's own Xcode is untouched.
  */
+/**
+ * The entries of `~/Library` an xcodebuild inside a macOS boundary writes,
+ * each its own in the workspaces' cache ({@link writeXcodeHome}): Foundation's
+ * caches dir, where SwiftPM keeps its shared cache and manifest database
+ * (`swiftPMCacheDirectory`, FileManager's caches dir + `org.swift.swiftpm`,
+ * Sources/Basics/FileSystem/FileSystem+Extensions.swift), the logs, and
+ * SwiftPM's configuration and security dir.
+ */
+const XCODE_OWN_LIBRARY = ["Caches", "Logs", "org.swift.swiftpm"];
+
+/** The home a macOS workspace's xcodebuild runs with (`CFFIXED_USER_HOME`): in the part of its state dir a command reads. */
+const xcodeHomeOf = (id: string): string => join(roOf(id), "xcode-home");
+
+/** Where {@link XCODE_OWN_LIBRARY}'s entries live, in the workspaces' cache. */
+const xcodeLibraryCache = (): string =>
+  join(workspaceCacheDir(), "xcode-library");
+
+/**
+ * The home xcodebuild runs with inside a macOS boundary. Seatbelt lets it
+ * write nothing under the host's `~/Library`, and xcodebuild keeps SwiftPM's
+ * manifest database under `~/Library/Caches/org.swift.swiftpm/manifests`
+ * whatever `-packageCachePath` says, so package resolution failed ("The file
+ * “ManifestLoading” couldn’t be saved in the folder “manifests”", Nightly C,
+ * 2026-10-10). Opening the host's would let a workspace plant manifest
+ * results the owner's own Xcode then trusts. `CFFIXED_USER_HOME` is the home
+ * CoreFoundation, and Foundation through it, hands the process instead of
+ * the account's; this one's `Library` holds a link to each entry of the
+ * host's `~/Library`, which Seatbelt judges where it lands (the policy reads
+ * `Developer` and `Preferences`: the simulators, Xcode's settings), and, for
+ * {@link XCODE_OWN_LIBRARY}, a link into the workspaces' cache, which the
+ * shim makes inside. Written here, on the host, only in the read-only part
+ * of the state dir: nothing the workspace writes is followed. Each link is
+ * replaced by a rename, so an xcodebuild running meanwhile never finds one
+ * missing.
+ */
+const writeXcodeHome = async (id: string): Promise<void> => {
+  const library = join(xcodeHomeOf(id), "Library");
+  await mkdir(library, { recursive: true });
+  const hostLibrary = join(homedir(), "Library");
+  const names = await readdir(hostLibrary).catch(() => [] as string[]);
+  const links = new Map<string, string>([
+    ...names.map((name): [string, string] => [name, join(hostLibrary, name)]),
+    ...XCODE_OWN_LIBRARY.map((name): [string, string] => [
+      name,
+      join(xcodeLibraryCache(), name),
+    ]),
+  ]);
+  await Promise.all(
+    [...links].map(async ([name, target]) => {
+      const link = join(library, name);
+      if ((await readlink(link).catch(() => undefined)) === target) {
+        return;
+      }
+      const temporary = `${link}.${process.pid}.tmp`;
+      await rm(temporary, { force: true });
+      await symlink(target, temporary);
+      await rename(temporary, link);
+    })
+  );
+};
+
 const writeShims = async (id: string, runtime: string): Promise<void> => {
   const bin = shimsOf(id);
   await mkdir(bin, { recursive: true });
+  await writeXcodeHome(id);
   await writeScript(
     roOf(id),
     "boundary-log-protocol.ts",
@@ -700,6 +765,9 @@ for arg in "$@"; do
 done
 [ -n "$flags" ] || args+=('OTHER_SWIFT_FLAGS=$(inherited) -disable-sandbox')
 [ -z "$builds" ] || [ -n "$packages" ] || args+=(-packageCachePath ${swiftpm}/xcode)
+# A home of its own, whose Caches, Logs and org.swift.swiftpm are the workspaces' cache.
+mkdir -p ${XCODE_OWN_LIBRARY.map((name) => shellQuote(join(xcodeLibraryCache(), name))).join(" ")} || exit 1
+export CFFIXED_USER_HOME=${shellQuote(xcodeHomeOf(id))}
 exec "$xcodebuild" -IDEPackageSupportDisableManifestSandbox=YES -IDEPackageSupportDisablePluginExecutionSandbox=YES -IDECustomDerivedDataLocation=${shellQuote(join(cache, "DerivedData"))} "\${args[@]}"
 `,
       0o755

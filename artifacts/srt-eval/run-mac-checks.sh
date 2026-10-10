@@ -236,10 +236,9 @@ echo "a command's shell reads its directory: $noise getcwd line(s)"
 [ "$noise" -eq 0 ] || { echo "a command's shell cannot read its directory"; open=$((open + 1)); }
 # Where a failed xcodebuild wrote what the boundary refused, found from here:
 # Seatbelt does not log these denials. Reruns the same build (the shim adds
-# -packageCachePath and the DerivedData default) with its whole output, then
-# once with CFFIXED_USER_HOME at a scratch home, which moves every path
-# Foundation derives from the home dir, and lists where "manifests" landed
-# there and in the workspace cache. fs_usage only where sudo needs no password.
+# -packageCachePath, the DerivedData default and a home of its own) with its
+# whole output, lists where "manifests" landed in the workspace cache and the
+# shim's home. fs_usage only where sudo needs no password.
 xcodebuild_diagnosis() {
   local cache xhome trace
   cache=$(r 'printf %s "$(dirname "$XDG_CACHE_HOME")"')
@@ -264,11 +263,8 @@ xcodebuild_diagnosis() {
   grep -iE 'error|couldn.t|not permitted|denied' "$scratch/xcb.out" | head -8 | sed 's/^/      /'
   echo "    dirs named manifests or ManifestLoading in the workspace cache ($cache):"
   find "$cache" -maxdepth 6 -type d \( -name manifests -o -name ManifestLoading -o -name repositories \) 2>/dev/null | sed 's/^/      /'
-  xhome=$(r 'printf %s "$TMPDIR"')/xcode-home
-  r "mkdir -p '$xhome' && cd '$xcode_dir' && CFFIXED_USER_HOME='$xhome' xcodebuild -scheme '$xcode_scheme' -destination 'generic/platform=iOS Simulator' build" > "$scratch/xcb-home.out" 2>&1
-  echo "    with CFFIXED_USER_HOME=$xhome: exit $?; what it made there:"
-  find "$xhome" -maxdepth 6 -type d \( -name manifests -o -name ManifestLoading -o -name org.swift.swiftpm \) 2>/dev/null | sed "s|^$xhome|      ~xhome|"
-  grep -iE 'error|couldn.t|not permitted|denied|BUILD (SUCCEEDED|FAILED)' "$scratch/xcb-home.out" | head -5 | sed 's/^/      /'
+  echo "    the home the shim gives xcodebuild ($state/ro/xcode-home/Library), its own entries:"
+  ls -l "$state/ro/xcode-home/Library" 2>/dev/null | grep -E ' (Caches|Logs|org\.swift\.swiftpm) ' | sed 's/^/      /'
 }
 
 checked "git commit in the clone" r'set -o pipefail; date +%s > srt-mac-probe.txt && git add -A && git commit -qm "srt mac probe" && git log --oneline -1'
@@ -280,6 +276,16 @@ if [ -n "$xcode_dir" ]; then
     # A package's first product is one of the schemes Xcode makes for it.
     xcode_scheme=$(r "cd '$xcode_dir' && swift package dump-package 2>/dev/null" | perl -MJSON::PP -0777 -ne 'my $j = eval { decode_json($_) } or exit; print $j->{products}[0]{name} // ""')
     echo "xcodebuild scheme in $xcode_dir: ${xcode_scheme:-none found}"
+  fi
+  # The shim's own home still shows xcodebuild the host's simulators.
+  if [ -n "$xcode_scheme" ]; then
+    host_dest=$(xcrun simctl list devices available 2>/dev/null | grep -cE '\([0-9A-F-]{36}\)')
+    inside_dest=$(r "CFFIXED_USER_HOME='$state/ro/xcode-home' xcrun simctl list devices available 2>/dev/null | grep -cE '\\([0-9A-F-]{36}\\)'")
+    if [ "${inside_dest:-0}" -gt 0 ] && [ "$inside_dest" = "$host_dest" ]; then
+      works "simulators seen with the shim's home ($inside_dest, host $host_dest)" PASS
+    else
+      works "simulators seen with the shim's home (${inside_dest:-0}, host $host_dest)" FAIL
+    fi
   fi
   if [ -z "$xcode_scheme" ]; then
     works "xcodebuild simulator build ($xcode_dir)" "FAIL (no scheme)"
