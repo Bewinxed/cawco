@@ -183,6 +183,39 @@ rm -rf "$F"`);
   await Bun.write(file, Buffer.from(b64.replace(/\s/g, ""), "base64"));
   console.log(`  capture: ${file}`);
 };
+/**
+ * The darkest luminance (0 black, 1 white) where the status bar's clock
+ * stands, in a fresh capture: low means dark ink. The capture is read as
+ * a BMP (`sips` on the Mac), whose pixels need no decoder.
+ */
+const statusBarInk = async (): Promise<number> => {
+  const points = (await tree())[0]?.frame?.width ?? 402;
+  const b64 = await mac(`F=$(mktemp -d)
+xcrun simctl io ${udid} screenshot "$F/s.png" >/dev/null 2>&1
+sips -s format bmp "$F/s.png" --out "$F/s.bmp" >/dev/null 2>&1
+base64 < "$F/s.bmp"
+rm -rf "$F"`);
+  const bmp = Buffer.from(b64.replace(/\s/g, ""), "base64");
+  const offset = bmp.readUInt32LE(10);
+  const width = bmp.readInt32LE(18);
+  const signed = bmp.readInt32LE(22);
+  const height = Math.abs(signed);
+  const bytes = bmp.readUInt16LE(28) / 8;
+  const stride = Math.ceil((width * bytes) / 4) * 4;
+  const scale = width / points;
+  let darkest = 1;
+  // The clock: 20–140pt across, 10–48pt down, left of the island.
+  for (let y = Math.round(10 * scale); y < Math.round(48 * scale); y += 1) {
+    const row = signed > 0 ? height - 1 - y : y;
+    for (let x = Math.round(20 * scale); x < Math.round(140 * scale); x += 1) {
+      const at = offset + row * stride + x * bytes;
+      const lum =
+        (0.0722 * bmp[at] + 0.7152 * bmp[at + 1] + 0.2126 * bmp[at + 2]) / 255;
+      darkest = Math.min(darkest, lum);
+    }
+  }
+  return darkest;
+};
 const appearance = (mode: "light" | "dark") =>
   mac(`xcrun simctl ui ${udid} appearance ${mode}`);
 const pause = (ms: number) => Bun.sleep(ms);
@@ -212,7 +245,14 @@ try {
   await fleet.agentUp();
   await fleet.accountSignedIn();
   const id = await fleet.spawn("claude", "Slash menu probe");
-  await fleet.send(id, `${marker}: say ok.`);
+  // Three sends, a turn apart, so the wheel has history above the draft.
+  for (const [at, word] of ["one", "two", "three"].entries()) {
+    if (at > 0) {
+      // biome-ignore lint/performance/noAwaitInLoops: each send waits for the turn before it to end
+      await pause(6000);
+    }
+    await fleet.send(id, `${marker} ${word}: say ok.`);
+  }
   const facts = await until(
     "the session's `/` list in its transcript facts",
     () =>
@@ -398,10 +438,83 @@ xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-e
     rowsOf(nodes).length === 0,
     `the menu's rows while the wheel is up: ${rowsOf(nodes).length}`
   );
+  // What the wheel shows, by the screen's own answer at the rows' places:
+  // the AX tree lists rows the wheel's shape hides too.
+  const callout = nodes.filter((n) =>
+    ["Select", "Select All", "AutoFill", "Copy", "Paste"].includes(
+      n.label ?? ""
+    )
+  );
+  check(
+    "no edit menu over the wheel",
+    callout.length === 0,
+    callout.length === 0
+      ? "no Select / Select All / AutoFill element"
+      : `found: ${callout.map((n) => n.label).join(", ")}`
+  );
+  const line = (await fieldFrame()) ?? field2;
+  const onLine = (list: Node[], prefix: string) =>
+    list.find(
+      (n) =>
+        n.label?.startsWith(prefix) === true &&
+        n.frame !== undefined &&
+        Math.abs(n.frame.y + n.frame.height / 2 - (line.y + line.height / 2)) <
+          line.height
+    );
+  const newest = onLine(nodes, `${marker} three`);
+  const newestAt = newest?.frame
+    ? await tree({
+        x: newest.frame.x + Math.min(40, newest.frame.width / 2),
+        y: newest.frame.y + newest.frame.height / 2,
+      })
+    : [];
+  check(
+    "the newest message stands on the field's line, uncovered",
+    newestAt.some((n) => n.label?.startsWith(`${marker} three`) === true),
+    newest
+      ? `at its place: ${said(newestAt)}`
+      : "no row with the newest message on the line"
+  );
+  const above = nodes.filter(
+    (n) =>
+      n.label?.startsWith(marker) === true &&
+      n.frame !== undefined &&
+      n.frame.y < line.y &&
+      n.frame.y > line.y - 200
+  );
+  console.log(
+    `  history rows above the line: ${above.map((n) => n.label).join(" | ") || "none"}`
+  );
   await shot("wheel-dark");
   await appearance("light");
-  await pause(800);
+  // Long enough for the status bar to redraw in the new appearance.
+  await pause(2500);
   await shot("wheel-light");
+  const ink = await statusBarInk();
+  check(
+    "the status bar reads dark on light",
+    ink < 0.35,
+    `darkest luminance in the clock's place: ${ink.toFixed(2)} (cream is about 0.95)`
+  );
+
+  // ↓ rolls the wheel forward to the draft: it must be on the line, on screen.
+  await mac(`${AXE} key 81 --udid ${udid}`);
+  await pause(1000);
+  const draft = onLine(await tree(), "Your draft");
+  const draftAt = draft?.frame
+    ? await tree({
+        x: draft.frame.x + Math.min(40, draft.frame.width / 2),
+        y: draft.frame.y + draft.frame.height / 2,
+      })
+    : [];
+  check(
+    "↓ brings the draft onto the field's line, uncovered",
+    draftAt.some((n) => n.label?.startsWith("Your draft") === true),
+    draft
+      ? `${draft.label} at y ${Math.round(draft.frame?.y ?? 0)}; at its place: ${said(draftAt)}`
+      : "no draft row on the line"
+  );
+  await shot("wheel-draft-light");
 
   // Dismissed with a tap outside it, on the transcript halfway up the screen.
   await mac(`${AXE} tap -x ${cx} -y ${Math.round(sy / 2)} --udid ${udid}`);

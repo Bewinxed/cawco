@@ -53,16 +53,19 @@ public struct ComposerCommand: Sendable, Equatable {
     }
 
     /// The prose a row shows (command-detail.ts `cleanDetail`): a plugin's
-    /// `(plugin-name)` lead is the heading above it, so it goes; no prose
-    /// falls back to the argument shape.
+    /// `(plugin-name)` lead is the heading above it, and the `(project)` or
+    /// `(user)` scope Claude Code ends a description with says what the
+    /// section already does, so both go; no prose falls back to the argument shape.
     var detail: String? {
-        if let prose = description?.trimmingCharacters(in: .whitespacesAndNewlines), !prose.isEmpty {
-            if let source, prose.hasPrefix("(\(source))") {
-                return prose.dropFirst(source.count + 2).trimmingCharacters(in: .whitespaces)
-            }
-            return prose
+        var prose = description?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        for scope in [" (project)", " (user)", "(project)", "(user)"] where prose.hasSuffix(scope) {
+            prose = String(prose.dropLast(scope.count)).trimmingCharacters(in: .whitespaces)
+            break
         }
-        return argumentHint
+        if let source, prose.hasPrefix("(\(source))") {
+            prose = prose.dropFirst(source.count + 2).trimmingCharacters(in: .whitespaces)
+        }
+        return prose.isEmpty ? argumentHint : prose
     }
 
     /// What a pick puts in the field.

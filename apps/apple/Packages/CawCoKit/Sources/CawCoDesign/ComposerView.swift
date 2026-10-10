@@ -721,6 +721,14 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
         syncMenu()
     }
 
+    /// No edit menu (Select, Select All, AutoFill) over the wheel: while a
+    /// swipe is under way or the wheel is up, the field offers an empty menu,
+    /// which is never shown. Otherwise nil, the system's own.
+    public func textView(_: UITextView, editMenuForTextIn _: NSRange, suggestedActions _: [UIMenuElement]) -> UIMenu? {
+        let swiping = swipeUp.state == .began || swipeUp.state == .changed
+        return wheel != nil || swiping ? UIMenu(children: []) : nil
+    }
+
     public func scrollViewDidScroll(_: UIScrollView) {
         maskField()
     }
@@ -1303,6 +1311,15 @@ extension ComposerView {
             noteSwipe("cancels \(type(of: recognizer))")
             recognizer.isEnabled = false
             recognizer.isEnabled = true
+        }
+        // An edit menu the press already brought up goes too.
+        views = [field]
+        while let view = views.popLast() {
+            for case let menu as UIEditMenuInteraction in view.interactions {
+                noteSwipe("dismisses the edit menu")
+                menu.dismissMenu()
+            }
+            views += view.subviews
         }
     }
 
