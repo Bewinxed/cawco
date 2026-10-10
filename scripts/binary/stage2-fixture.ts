@@ -12,6 +12,7 @@ import {
   type ReleaseManifest,
   signManifest,
 } from "../../packages/core/src/release-manifest";
+import { protocolRange } from "../../packages/core/src/runtime";
 import { SESSIOND_V1 } from "../../packages/core/src/sessiond";
 
 const TARGET = "linux-x64";
@@ -82,13 +83,23 @@ if (verb === "keys") {
   await mkdir(staging);
   await Bun.write(join(staging, "cawco"), Bun.file(binary));
   await chmod(join(staging, "cawco"), 0o755);
+  // The hub ↔ agent contract the build speaks, as it says itself (build 1, from before the launch verb, speaks 1;
+  // this tree's builds speak this tree's): a joined machine installs it only when it overlaps its hub's.
+  const said = Bun.spawnSync([binary, "build-info"], { stderr: "inherit" });
+  if (!said.success) {
+    throw new Error(`${binary} build-info failed`);
+  }
+  const { protocol } = JSON.parse(said.stdout.toString()) as Pick<
+    ReleaseManifest,
+    "protocol"
+  >;
   const manifest: ReleaseManifest = {
     version,
     commit,
     channel: channel as "stable" | "nightly",
     sequence: Number(sequence),
     schemaVersion: Number(schemaVersion),
-    protocol: { min: 1, max: 1 },
+    protocol,
     sessiondProtocol: SESSIOND_V1,
     notes: `Proof build ${version}`,
     testSigned: false,
@@ -125,21 +136,27 @@ if (verb === "keys") {
     );
   }
 } else if (verb === "broken-binary") {
-  // A program that signs and unpacks like a build and cannot start. With
-  // `migrates` it first damages the hub database, as a migration that then
-  // fails would leave it.
+  // A program that signs and unpacks like a build and cannot start. It says
+  // what it was built from as a build of this tree does (`build-info`, which
+  // its release's manifest is written from). With `migrates` it first damages
+  // the hub database, as a migration that then fails would leave it.
   const [outFile, mode] = args;
+  const buildInfo = `if [ "$1" = build-info ]; then
+  echo '${JSON.stringify({ version: "broken", protocol: protocolRange })}'
+  exit 0
+fi
+`;
   await writeFile(
     outFile,
     mode === "migrates"
       ? `#!/bin/sh
-if [ "$1" = hub ]; then
+${buildInfo}if [ "$1" = hub ]; then
   db="\${CAWCO_DB_PATH:-$HOME/.local/share/cawco/cawco.db}"
   printf 'migrated-and-broken' >> "$db"
 fi
 exit 1
 `
-      : "#!/bin/sh\nexit 1\n",
+      : `#!/bin/sh\n${buildInfo}exit 1\n`,
     { mode: 0o755 }
   );
 } else {

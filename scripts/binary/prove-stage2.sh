@@ -854,6 +854,16 @@ joiner_not_ahead() {
 export -f joiner_not_ahead
 check "a joined machine is offered only the build its hub runs" joiner_not_ahead
 
+# Sessions running on the joined machine before its update begins, started while it and its hub both run build 1, as
+# a fleet's are: from the hub's own update until the joined machine installs the hub's build, the hub sends that
+# machine no launch (its agent speaks the contract from before launches asked for their credential).
+joiner_sessions_before() {
+  need_hub
+  start_before "$jid" "$joinerc" "$out/joiner-before.txt" joinerpre-1 joinerpre-2
+}
+export -f joiner_sessions_before
+check "sessions started on the joined machine while it and its hub run the same build run, one child each" joiner_sessions_before
+
 install_now() {
   need_hub
   install_now_request "$hid"
@@ -881,8 +891,15 @@ check "once the hub runs the newer build its joined machine is offered it" joine
 joiner_starts_held() {
   need_hub
   rm -f "$out/stop-joiner" "$out/accepted-joiner.txt"
-  # Sessions already running on the joined machine before its update begins.
-  start_before "$jid" "$joinerc" "$out/joiner-before.txt" joinerpre-1 joinerpre-2
+  # Sessions already running on the joined machine before its update begins (joiner_sessions_before).
+  [[ "$(wc -l < "$out/joiner-before.txt")" == 2 ]]
+  # A start asked while the joined machine still runs build 1 and its hub build 2 is kept by the hub, not sent: build
+  # 1's agent would launch it with no credential and stop it before its first turn. It runs once the machine has
+  # installed build 2.
+  start_session "$jid" joinerheld-1 > /dev/null
+  sleep 5
+  [[ "$(hub_api /api/instances | json "d => d.find(r => r.id === 'joinerheld-1')?.status")" == starting ]]
+  [[ -z "$(child_pids "$joinerc" joinerheld-1)" ]]
   install_now_request "$jid" > /dev/null
   start_loop "$jid" joinerstart "$out/accepted-joiner.txt" "$out/stop-joiner" &
   loop=$!
@@ -894,6 +911,8 @@ joiner_starts_held() {
   touch "$out/stop-joiner"
   wait "$loop"
   accepted_ran_once "$jid" "$joinerc" joinerstart "$out/accepted-joiner.txt"
+  wait_until 120 "session_running joinerheld-1"
+  [[ "$(child_pids "$joinerc" joinerheld-1)" =~ ^[0-9]+$ ]]
 }
 export -f joiner_starts_held
 check "a session start requested while the joined machine installs runs once afterwards, one child, none lost" joiner_starts_held 1200 "Install now applies the newer build"

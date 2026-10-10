@@ -49,6 +49,7 @@ export const buildInfo = async (): Promise<BuildInfo> => {
   return {
     version: HUB_VERSION,
     ...(commit ? { commit, dirty: Boolean(status) } : {}),
+    protocol: protocolRange,
     startedAt: STARTED_AT,
   };
 };

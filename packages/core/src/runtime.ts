@@ -19,8 +19,16 @@ export const runtimeVersion =
   typeof __CAWCO_VERSION__ === "string" ? __CAWCO_VERSION__ : "0.0.0-dev";
 export const runtimeCommit =
   typeof __CAWCO_COMMIT__ === "string" ? __CAWCO_COMMIT__ : undefined;
-/** Epoch 1 is the current register/frame/custody contract; range is explicit. */
-export const protocolRange = { min: 1, max: 1 } as const;
+/**
+ * The hub ↔ agent contract this build speaks, reported by every build at
+ * register and in `/health`, and carried by a release's manifest. Epoch 2: a
+ * launch asks the hub for its credential and account as it starts (the
+ * `launch` verb); an epoch-1 agent reads them off the spawn, which no longer
+ * carries them. A hub sends a launch only to an agent whose range holds its
+ * own, and a joined machine installs only a build whose range overlaps its
+ * hub's.
+ */
+export const protocolRange = { min: 2, max: 2 } as const;
 export const runtimeDataDir = () =>
   join(
     process.env.XDG_DATA_HOME ?? join(homedir(), ".local", "share"),

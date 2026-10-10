@@ -493,7 +493,10 @@ export const SPAWNING_TOOLS: ReadonlySet<string> = new Set([
 /**
  * Why the hub keeps a send queued instead of handing it to its session now
  * (server.ts `deliverSend`): its machine is installing an update, so the
- * session's start waits for it (`update`); its machine's agent is restarting
+ * session's start waits for it (`update`); its machine runs a build older
+ * than its hub's, which cannot start sessions for it, so the session's start
+ * waits until that machine installs the hub's build (`build`); its machine's
+ * agent is restarting
  * (`agent`); the hub has just started and the machine has not reconnected
  * (`hub`); sends before it to the same session are still queued
  * (`behind`); the session has no process and this sender may not wake it
@@ -504,6 +507,7 @@ export const SPAWNING_TOOLS: ReadonlySet<string> = new Set([
 export type SendHold =
   | "agent"
   | "behind"
+  | "build"
   | "hub"
   | "limit"
   | "resting"
@@ -527,6 +531,8 @@ export interface SendDelivery {
 const HOLD_WORDS: Record<SendHold, string> = {
   update:
     "Its machine is installing an update and restarting, so the message is queued at the hub and goes to the session as soon as the update is done.",
+  build:
+    "Its machine runs a CawCo build older than its hub's, which cannot start sessions for this hub, so the session's start and the message are kept at the hub and go as soon as that machine installs the hub's build.",
   agent:
     "Its machine's agent is restarting, so the message is queued at the hub and goes to the session when the agent is back; it fails if the agent is not back within a minute.",
   hub: "The hub has just started and the session's machine has not reconnected yet, so the message is queued at the hub and goes to the session when it does; it fails if the machine is not back within a minute.",

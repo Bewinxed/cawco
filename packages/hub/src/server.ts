@@ -250,6 +250,7 @@ import {
 import { detach } from "@cawco/core/detach";
 import { hashFiles } from "@cawco/core/file-hash";
 import { machineId as hostMachineId } from "@cawco/core/machine-id";
+import { protocolRange } from "@cawco/core/runtime";
 import { WIRE_MESSAGE_LIMIT_BYTES } from "@cawco/core/wire";
 import { Elysia, t, ValidationError } from "elysia";
 import { websocket } from "elysia/websocket";
@@ -2548,19 +2549,54 @@ export const createServer = (
   const binaryUpdateStates = new Map<string, BinaryUpdateState>();
 
   /**
-   * A machine that is installing an update takes no new session start: its agent
-   * is about to restart, and a start held there would go with it. The hub keeps
-   * the start instead, on the instance row already written for it.
+   * Each connected machine's agent's hub ↔ agent contract, as its last
+   * register said ({@link BuildInfo.protocol}); none for one that said none.
    */
+  const agentProtocols = new Map<string, BuildInfo["protocol"]>();
+
+  /**
+   * Why a machine takes no new session start now, or nothing when it does.
+   * One installing an update: its agent is about to restart, and a start held
+   * there would go with it. One whose agent does not speak this hub's
+   * contract ({@link protocolRange}): a launch there would ask for no
+   * credential, and its agent would stop it before its first turn. That
+   * machine is offered this hub's build, and registers on it once installed.
+   * The hub keeps the start instead, on the instance row already written for
+   * it, and sends it when the machine can take it ({@link flushOwedStarts}).
+   */
+  const startHold = (
+    machineId: string
+  ): { kind: "update" | "build"; words: string } | undefined => {
+    if (binaryUpdateStates.get(machineId)?.phase === "installing") {
+      return {
+        kind: "update",
+        words: `machine ${machineId} is installing an update`,
+      };
+    }
+    const range = agentProtocols.get(machineId);
+    if (
+      !range ||
+      range.min > protocolRange.max ||
+      range.max < protocolRange.min
+    ) {
+      return {
+        kind: "build",
+        words: `machine ${machineId} runs a CawCo build older than its hub's, which cannot start sessions for this hub until it installs the hub's build`,
+      };
+    }
+    return undefined;
+  };
   const holdingStarts = (machineId: string): boolean =>
-    binaryUpdateStates.get(machineId)?.phase === "installing";
+    startHold(machineId) !== undefined;
 
   /**
    * Sends a start as it was asked (`envelope`), bound now ({@link bounded}:
    * its workspace, its generation, in flight from here); or, while its
-   * machine is installing an update, keeps it on its row as asked, and binds
-   * it when it goes ({@link flushOwedStarts}). Either way its credential and
-   * account are the hub's as of its start ({@link grantLaunch}).
+   * machine takes no start ({@link startHold}), keeps it on its row as
+   * asked, and binds it when it goes ({@link flushOwedStarts}). Either way
+   * its credential and account are the hub's as of its start
+   * ({@link grantLaunch}). A dashboard's start ({@link sendDashboardStart})
+   * and a continuation's ({@link spawnFromHub}) meet the same hold.
    */
   const sendSpawn = (
     agent: NonNullable<ReturnType<typeof registry.agent>>,
@@ -2582,7 +2618,8 @@ export const createServer = (
    * Sends every start a machine is owed, in the order they were asked for,
    * each exactly once: the row's claim is taken before the send. Runs when the
    * machine registers and when its update state changes, and does nothing while
-   * it is still installing. A start the person has since stopped is dropped.
+   * it still takes no start ({@link startHold}). A start the person has since
+   * stopped is dropped.
    *
    * Each is bound as it goes ({@link bounded}), on the account its row runs
    * on now, and its machine asks for its credential as it starts it
@@ -6233,7 +6270,8 @@ export const createServer = (
 
   /**
    * Why an owed send waits, in {@link SendHold}'s terms: its machine away
-   * within its grace, else its session's start held by an update, else sends
+   * within its grace, else its session's start held ({@link startHold}: an
+   * update, or a build older than the hub's), else sends
    * owed before it. Undefined for a send its machine has.
    */
   const holdOf = (record: SentMessageRow): SendHold | undefined => {
@@ -6252,7 +6290,10 @@ export const createServer = (
     if (row && away && !registry.agent(row.machineId)) {
       return away.why;
     }
-    return db.owesSpawn(record.instanceId) ? "update" : "behind";
+    if (!db.owesSpawn(record.instanceId)) {
+      return "behind";
+    }
+    return (row && startHold(row.machineId)?.kind) ?? "update";
   };
 
   /**
@@ -8282,11 +8323,10 @@ export const createServer = (
     if (!agent) {
       throw new Error(`machine ${machineId} is not connected`);
     }
-    if (asked.requestId && holdingStarts(machineId)) {
+    const held = asked.requestId && startHold(machineId);
+    if (held) {
       // The caller is waiting for this start; it is told now rather than left to time out.
-      throw new Error(
-        `machine ${machineId} is installing an update; start the session again when it finishes`
-      );
+      throw new Error(`${held.words}; start the session again once it has`);
     }
     const settled = settleSpawn(machineId, asked, fallbackMode);
     if ("refusal" in settled) {
@@ -10396,11 +10436,12 @@ export const createServer = (
       // The turn its last launch had open is handed back once this one is up.
       keepTurn: true,
     });
-    sendFrame(agent, {
+    // Kept on its row while its machine takes no start ({@link startHold}).
+    sendSpawn(agent, row.machineId, {
       verb: "spawn",
       machineId: row.machineId,
       instanceId: row.id,
-      payload: bounded(payload, row),
+      payload,
     });
   };
 
@@ -14974,9 +15015,44 @@ export const createServer = (
   };
 
   /**
+   * A dashboard's start, its row written: sent now, or, while its machine
+   * takes no start ({@link startHold}), kept on its row and sent, minted
+   * then, when the machine can take it ({@link flushOwedStarts}). A kept
+   * start is answered as taken now, as a start sent is answered by its
+   * machine: whoever asked is not left waiting out a hold that lasts until
+   * the machine updates.
+   */
+  const sendDashboardStart = (
+    ws: HubSocket,
+    message: Envelope,
+    instanceId: string,
+    payload: SpawnPayload
+  ): void => {
+    if (!holdingStarts(message.machineId)) {
+      forward({ ...message, payload: bounded(payload) }, ws);
+      // What waited for this start goes right behind it ({@link sendSpawn}).
+      releaseOwed({ instanceId });
+      return;
+    }
+    db.oweSpawn(
+      instanceId,
+      JSON.stringify({ ...message, payload }),
+      Date.now()
+    );
+    const requestId = message.requestId ?? peek(message.payload, "requestId");
+    if (requestId) {
+      sendFrame(ws, {
+        ...message,
+        verb: "frames",
+        requestId,
+        payload: { kind: "control_result", requestId, ok: true },
+      } satisfies Envelope<ControlResult>);
+    }
+  };
+
+  /**
    * A dashboard's start, from its permission mode on: launch directory,
-   * account, the row, and the start itself (held while its machine installs
-   * an update).
+   * account, the row, and the start itself ({@link sendDashboardStart}).
    */
   const startFromDashboard = (
     ws: HubSocket,
@@ -15051,19 +15127,7 @@ export const createServer = (
       ...peekParent(message.payload),
       ...openedAccount(payload, placed),
     });
-    if (holdingStarts(message.machineId)) {
-      // The row says starting; the start goes out, minted then, when the
-      // machine can take it ({@link flushOwedStarts}).
-      db.oweSpawn(
-        message.instanceId,
-        JSON.stringify({ ...message, payload }),
-        Date.now()
-      );
-    } else {
-      forward({ ...message, payload: bounded(payload) }, ws);
-      // What waited for this start goes right behind it ({@link sendSpawn}).
-      releaseOwed({ instanceId: message.instanceId });
-    }
+    sendDashboardStart(ws, message, message.instanceId, payload);
     // A conversation that starts here: its first turn is its name.
     if (!peekResume(message.payload)) {
       awaitingFirstTurn.add(message.instanceId);
@@ -19256,6 +19320,12 @@ export const createServer = (
               if (registered) {
                 binaryUpdateStates.set(message.machineId, registered);
               }
+              // The contract this connection's agent speaks, read before any
+              // start goes to it ({@link startHold}).
+              agentProtocols.set(
+                message.machineId,
+                peekBuild(message.payload)?.protocol
+              );
               flushOwedStarts(message.machineId);
               // A question parked by a process that is gone cannot be answered:
               // the reply would arrive at a daemon with no such session. Drop them

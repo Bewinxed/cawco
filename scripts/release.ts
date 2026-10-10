@@ -480,13 +480,18 @@ const build = async (current: Request): Promise<void> => {
         join(checkout, "packages/hub/drizzle/meta/_journal.json")
       ).json()) as { entries: unknown[] }
     ).entries.length;
+    // The hub ↔ agent contract this build speaks, as the build itself says: a joined machine installs it only when
+    // it overlaps its hub's.
+    const { protocol } = JSON.parse(
+      await run([proofBinary, "build-info"], checkout, true)
+    ) as Pick<ReleaseManifest, "protocol">;
     const manifest: ReleaseManifest = {
       version,
       commit: current.commit,
       channel: current.channel,
       sequence,
       schemaVersion,
-      protocol: { min: 1, max: 1 },
+      protocol,
       sessiondProtocol: SESSIOND_V1,
       notes,
       testSigned: false,

@@ -50,6 +50,7 @@ const read = async (): Promise<BuildInfo> => {
   return {
     version: manifest.version,
     ...(commit ? { commit, dirty: Boolean(status) } : {}),
+    protocol: protocolRange,
     startedAt: STARTED_AT,
   };
 };
