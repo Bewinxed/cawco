@@ -75,6 +75,30 @@ export const sameNeck = (a: Neck, b: Neck): boolean =>
   a.flareEnd === b.flareEnd &&
   a.flush === b.flush;
 
+/**
+ * How far a flare's 1px stroke lies along the card's top edge row before it
+ * rises off it, px: the stroke is a band between radii f and f + 1 tangent
+ * to that row, which it leaves √(2f + 1) px out. None without a flare.
+ */
+const flareTail = (flare: number): number =>
+  flare > 0 ? Math.sqrt(2 * flare + 1) : 0;
+
+/**
+ * The neck as the card's style (`kit-hang`): its span, its flares, and the
+ * run each side over which the top edge fades out under the flare's stroke
+ * (`--neck-tail-*`), so the two strokes meet with no break. Every hanging
+ * card writes its neck through this.
+ */
+export const neckStyle = (neck: Neck): string =>
+  [
+    `--neck-start: ${neck.start}px`,
+    `--neck-end: ${neck.end}px`,
+    `--neck-flare-start: ${neck.flareStart}px`,
+    `--neck-flare-end: ${neck.flareEnd}px`,
+    `--neck-tail-start: ${flareTail(neck.flareStart)}px`,
+    `--neck-tail-end: ${flareTail(neck.flareEnd)}px`,
+  ].join("; ");
+
 export interface Hang {
   /**
    * Read once as the card closes: true when it is already shut and has

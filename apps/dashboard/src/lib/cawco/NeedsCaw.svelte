@@ -67,7 +67,7 @@
   } from "./home/caw-still.svelte";
   import { home } from "./home/home-state.svelte";
   import { dur, easeOut, motionOk } from "./motion/curves.svelte";
-  import { hang, type Neck, sameNeck } from "./motion/hang";
+  import { hang, type Neck, neckStyle, sameNeck } from "./motion/hang";
 
   /**
    * The phone bar, where his glass is his own (Shell). The server has the
@@ -516,12 +516,6 @@
     flareEnd: 0,
     flush: "end",
   });
-  /**
-   * How far the flare's 1px stroke runs along the panel's top edge row
-   * before it rises off it (Shell `.join`): a band between radii f and f + 1
-   * leaves a row it is tangent to √(2f + 1) px out.
-   */
-  const flareTail = $derived(Math.sqrt(2 * neck.flareStart + 1));
   /** The panel stands open from his glass: the glass is one shape with it. */
   let joined = $state(false);
   $effect(() => {
@@ -709,7 +703,7 @@
     }}
     side="bottom"
     sideOffset={0}
-    style="--neck-start: {neck.start}px; --neck-end: {neck.end}px; --neck-flare-start: {neck.flareStart}px; --neck-flare-end: {neck.flareEnd}px; --neck-tail-start: {flareTail}px"
+    style={neckStyle(neck)}
     trapFocus={false}
     bind:ref={content}
   >
