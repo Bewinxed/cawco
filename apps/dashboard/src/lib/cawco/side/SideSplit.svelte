@@ -259,6 +259,7 @@
   {:else if previewOpen}
     <PreviewPane
       instanceId={previewId}
+      linkSession={previewId !== viewId}
       {oncapture}
       {onescape}
       {onselect}
@@ -326,6 +327,7 @@
     >
       <PreviewPane
         instanceId={previewId}
+        linkSession={previewId !== viewId}
         {oncapture}
         {onescape}
         {onselect}

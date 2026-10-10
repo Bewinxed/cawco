@@ -27664,6 +27664,164 @@
             "description": "Why a send did not go: its record's reason.",
             "type": "string"
           },
+          "sendRefusal": {
+            "description": "What refused it, when the hub did: its record's refusal.",
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "account-signed-out"
+                    ]
+                  },
+                  "accountId": {
+                    "type": "string"
+                  },
+                  "machineId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "accountId",
+                  "kind",
+                  "machineId"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "no-account"
+                    ]
+                  },
+                  "machineId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "machineId"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "machine-away"
+                    ]
+                  },
+                  "machineId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "machineId"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "item-closed"
+                    ]
+                  },
+                  "itemId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "itemId",
+                  "kind"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "item-superseded"
+                    ]
+                  },
+                  "itemId": {
+                    "type": "string"
+                  },
+                  "latest": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "title": {
+                        "type": "string"
+                      },
+                      "instanceId": {
+                        "type": [
+                          "null",
+                          "string"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "instanceId",
+                      "title"
+                    ]
+                  }
+                },
+                "required": [
+                  "itemId",
+                  "kind",
+                  "latest"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "workspace-archived"
+                    ]
+                  },
+                  "itemId": {
+                    "type": "string"
+                  },
+                  "workspaceId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "itemId",
+                  "kind",
+                  "workspaceId"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "predates-items"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind"
+                ]
+              }
+            ]
+          },
           "sessionId": {
             "type": "string"
           },
@@ -31471,6 +31629,164 @@
           "reason": {
             "description": "Why it failed, in the harness's words or the hub's.",
             "type": "string"
+          },
+          "refusal": {
+            "description": "What refused it, when the hub did: the facts a screen offers the way\nback from ({@link SendRefusal}). `reason` says it in words.",
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "account-signed-out"
+                    ]
+                  },
+                  "accountId": {
+                    "type": "string"
+                  },
+                  "machineId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "accountId",
+                  "kind",
+                  "machineId"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "no-account"
+                    ]
+                  },
+                  "machineId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "machineId"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "machine-away"
+                    ]
+                  },
+                  "machineId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "machineId"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "item-closed"
+                    ]
+                  },
+                  "itemId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "itemId",
+                  "kind"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "item-superseded"
+                    ]
+                  },
+                  "itemId": {
+                    "type": "string"
+                  },
+                  "latest": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "title": {
+                        "type": "string"
+                      },
+                      "instanceId": {
+                        "type": [
+                          "null",
+                          "string"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "instanceId",
+                      "title"
+                    ]
+                  }
+                },
+                "required": [
+                  "itemId",
+                  "kind",
+                  "latest"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "workspace-archived"
+                    ]
+                  },
+                  "itemId": {
+                    "type": "string"
+                  },
+                  "workspaceId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "itemId",
+                  "kind",
+                  "workspaceId"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "predates-items"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind"
+                ]
+              }
+            ]
           },
           "replacedBy": {
             "description": "The retry that replaced it.",

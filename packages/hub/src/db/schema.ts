@@ -37,6 +37,7 @@ import type {
   RuleTrigger,
   RuleWatch,
   SendMode,
+  SendRefusal,
   SendState,
   SessionEffort,
   SessionTooling,
@@ -1195,6 +1196,8 @@ export const sentMessages = sqliteTable(
     state: text("state").$type<SendState>().notNull().default("read"),
     /** Why it failed. */
     reason: text("reason"),
+    /** What refused it, when the hub did (`SendRefusal`): what its row offers to recover. */
+    refusal: text("refusal", { mode: "json" }).$type<SendRefusal>(),
     /** A failed send's place: the last thing the session said before it failed. */
     anchor: text("anchor"),
     /** The failed send this one retries. */

@@ -1,4 +1,5 @@
 import type { Server, WebSocketHandler } from "bun";
+import { PREVIEW_DOWN_META, type PreviewDown } from "./index";
 import { embeddedFile, standalone } from "./runtime";
 
 /** Where every previewed page loads the overlay from, on its own origin. */
@@ -55,6 +56,31 @@ export async function overlayResponse(): Promise<Response> {
       "cache-control": "no-store",
     },
   });
+}
+
+const DOWN_WORDS: Record<PreviewDown, string> = {
+  server: "The page's server stopped answering. Start it again, then reload.",
+  machine:
+    "The machine serving this preview isn't answering. Check that it is connected, then reload.",
+};
+
+/**
+ * What a proxy answers when the hop behind it does not: a page that says
+ * so to a person who opened it in a tab of its own, and names the hop in
+ * its `<meta name="cawco-preview-down">` for the pane, which draws its own
+ * state from that ({@link PreviewDown}).
+ */
+export function downResponse(down: PreviewDown, status = 502): Response {
+  return new Response(
+    `<!doctype html><html><head><meta charset="utf-8"><meta name="${PREVIEW_DOWN_META}" content="${down}"><title>Preview unavailable</title></head><body><p>${DOWN_WORDS[down]}</p></body></html>`,
+    {
+      status,
+      headers: {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "no-store",
+      },
+    }
+  );
 }
 
 /** A page's identity for the choices bridge: sha256 of the HTML as it was served, before injection. */

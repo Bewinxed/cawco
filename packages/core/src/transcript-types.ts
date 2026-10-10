@@ -15,6 +15,7 @@ import type {
   NeutralStatus,
   PermissionMode,
   SendRecord,
+  SendRefusal,
   SendState,
   SlashCommand,
   UserQuestionResult,
@@ -123,6 +124,8 @@ export interface BlockMetadata {
   ruleName?: string;
   /** Why a send did not go: its record's reason. */
   sendFailed?: string;
+  /** What refused it, when the hub did: its record's refusal. */
+  sendRefusal?: SendRefusal;
   sessionId?: string;
   /** `init` only: which of the commands are skills rather than commands. */
   skills?: string[];

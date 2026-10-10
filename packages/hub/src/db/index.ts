@@ -1727,6 +1727,7 @@ export interface DbShape {
         SentMessageRow,
         | "state"
         | "reason"
+        | "refusal"
         | "anchor"
         | "replacedBy"
         | "body"
@@ -2391,6 +2392,7 @@ const make = async (path: string): Promise<DbShape> => {
         .set({
           state: "pending",
           reason: null,
+          refusal: null,
           anchor: null,
           owed: null,
           envelope: null,

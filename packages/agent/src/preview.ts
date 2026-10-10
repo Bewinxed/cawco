@@ -2,6 +2,7 @@ import { realpath, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import type { PreviewSource } from "@cawco/core";
 import {
+  downResponse,
   injectOverlay,
   OVERLAY_PATH,
   overlayResponse,
@@ -197,8 +198,9 @@ export async function startPreview(options: {
         headers,
       });
     },
+    // The dev server behind this listener did not answer.
     error() {
-      return new Response("Preview upstream unavailable", { status: 502 });
+      return downResponse("server");
     },
   });
   previews.set(instanceId, {

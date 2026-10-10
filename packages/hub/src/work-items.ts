@@ -45,6 +45,7 @@ import type {
   PermissionMode,
   PlanStep,
   SendPayload,
+  SendRefusal,
   SpawnPayload,
   WorkItemSummary,
   WorkspaceCheckout,
@@ -3265,28 +3266,57 @@ export const createWorkItems = ({
      * who-may rule. Every other session is not delegated work, and takes
      * messages as it always has.
      */
-    refusal(row: InstanceRow, origin: NeutralOrigin): string | undefined {
+    refusal(
+      row: InstanceRow,
+      origin: NeutralOrigin
+    ): { reason: string; refusal: SendRefusal } | undefined {
       const item = itemOf(row);
       if (item) {
         if (LIVE.has(item.state)) {
           return undefined;
         }
         if (!mayReopen(item, origin)) {
-          return finishedText(item);
+          return {
+            reason: finishedText(item),
+            refusal: { kind: "item-closed", itemId: item.id },
+          };
         }
         const [workspace] = db.workspacesNamed(item.workspaceId);
         if (workspace?.state === "archived") {
-          return `${item.title} (${item.id}) is ${item.state}, and its workspace ${item.workspaceId} is archived: its clone and boundary are gone.`;
+          return {
+            reason: `${item.title} (${item.id}) is ${item.state}, and its workspace ${item.workspaceId} is archived: its clone and boundary are gone.`,
+            refusal: {
+              kind: "workspace-archived",
+              itemId: item.id,
+              workspaceId: item.workspaceId,
+            },
+          };
         }
         const [latest] = db.workItemsIn(item.workspaceId);
-        return latest.id === item.id ? undefined : supersededText(item, latest);
+        return latest.id === item.id
+          ? undefined
+          : {
+              reason: supersededText(item, latest),
+              refusal: {
+                kind: "item-superseded",
+                itemId: item.id,
+                latest: {
+                  id: latest.id,
+                  title: latest.title,
+                  instanceId: latest.instanceId,
+                },
+              },
+            };
       }
       if (
         row.parentInstanceId &&
         !row.workflowStepId &&
         !reopens(row.parentInstanceId, origin)
       ) {
-        return `${sessionLabel(row).tag} predates work items; only the reader or its parent can message it.`;
+        return {
+          reason: `${sessionLabel(row).tag} predates work items; only the reader or its parent can message it.`,
+          refusal: { kind: "predates-items" },
+        };
       }
       return undefined;
     },

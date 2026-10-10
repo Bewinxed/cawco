@@ -27,17 +27,22 @@ function providerOfSession(instance: InstanceRow): AccountProvider | undefined {
 
 /**
  * The accounts a session can run on, in fill-first order: its provider's,
- * signed in on its machine. Empty unless there is a choice (two or more).
+ * signed in on its machine.
  */
-export function switchable(instance: InstanceRow): Account[] {
+export function signedInHere(instance: InstanceRow): Account[] {
   const provider = providerOfSession(instance);
   if (!provider) {
     return [];
   }
   const signins = cawco.accounts?.signins ?? [];
-  const eligible = accountsOf(provider).filter(
+  return accountsOf(provider).filter(
     (one) => signinState(signins, one.id, instance.machineId) === "signed-in"
   );
+}
+
+/** {@link signedInHere}, for the menu: empty unless there is a choice (two or more). */
+export function switchable(instance: InstanceRow): Account[] {
+  const eligible = signedInHere(instance);
   return eligible.length > 1 ? eligible : [];
 }
 

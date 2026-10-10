@@ -707,6 +707,38 @@ export type SendState =
   | "cancelled";
 
 /**
+ * Why the hub would not hand a send to its session, as the facts the way
+ * back is built from: every refusal the hub's input gate gives
+ * (`inputRefusal`) and the absent machine.
+ *
+ * - `account-signed-out`: the session's account is not signed in on its
+ *   machine. Signing it in there, or moving the session to an account that
+ *   is, lets it run.
+ * - `no-account`: no account the session may run on is signed in on its
+ *   machine. Signing one in there lets it run.
+ * - `machine-away`: the session's machine is not connected.
+ * - `item-closed`: finished delegated work, which only its reader, parent or
+ *   project lead may continue.
+ * - `item-superseded`: finished delegated work whose workspace has moved on
+ *   to a newer item, the one to message instead.
+ * - `workspace-archived`: finished delegated work whose clone is gone.
+ * - `predates-items`: a delegate from before work items, which only the
+ *   reader or its parent may message.
+ */
+export type SendRefusal =
+  | { kind: "account-signed-out"; accountId: string; machineId: string }
+  | { kind: "no-account"; machineId: string }
+  | { kind: "machine-away"; machineId: string }
+  | { kind: "item-closed"; itemId: string }
+  | {
+      kind: "item-superseded";
+      itemId: string;
+      latest: { id: string; title: string; instanceId: string | null };
+    }
+  | { kind: "workspace-archived"; itemId: string; workspaceId: string }
+  | { kind: "predates-items" };
+
+/**
  * THE ONE RECORD OF A SEND. The hub writes it when it accepts the send and is
  * its only writer after that: every change is stored, then sequenced into the
  * session's stream as a `send` frame, and a history read serves it beside the
@@ -740,6 +772,11 @@ export interface SendRecord {
   mode: SendMode;
   /** Why it failed, in the harness's words or the hub's. */
   reason?: string;
+  /**
+   * What refused it, when the hub did: the facts a screen offers the way
+   * back from ({@link SendRefusal}). `reason` says it in words.
+   */
+  refusal?: SendRefusal;
   /** The retry that replaced it. */
   replacedBy?: string;
   /** The failed send this one was sent in place of. */

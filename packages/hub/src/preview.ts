@@ -2,6 +2,7 @@ import { realpath, stat } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import type { FramePayload, PreviewSource } from "@cawco/core";
 import {
+  downResponse,
   injectOverlay,
   OVERLAY_PATH,
   overlayResponse,
@@ -119,8 +120,9 @@ export function startPreviewListener(hostname: string) {
       if ("project" in target.source) {
         return servePage(target.source, new URL(request.url).pathname);
       }
+      // Its machine is away: the register that brings it back serves it again.
       if (!target.upstream) {
-        return new Response("Preview is restarting.", { status: 503 });
+        return downResponse("machine", 503);
       }
       const url = new URL(request.url);
       const address = target.upstream.address.includes(":")
@@ -150,8 +152,9 @@ export function startPreviewListener(hostname: string) {
         headers: downstream,
       });
     },
+    // The machine's preview listener did not answer.
     error() {
-      return new Response("Preview upstream unavailable", { status: 502 });
+      return downResponse("machine");
     },
   });
 }

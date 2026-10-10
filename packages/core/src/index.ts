@@ -1171,6 +1171,18 @@ export type PreviewSource =
   | { project: string; page: string };
 
 /**
+ * A preview whose page nothing serves: the hop that did not answer, as the
+ * proxy's own page names it in a `<meta name="cawco-preview-down">` (core
+ * `preview-proxy` `downResponse`), so the pane beside the conversation can
+ * draw what happened instead of the proxy's page. `server`: the dev server
+ * on the session's machine is not answering its port. `machine`: the
+ * machine's preview listener is not answering the hub, or the machine is
+ * away.
+ */
+export type PreviewDown = "server" | "machine";
+export const PREVIEW_DOWN_META = "cawco-preview-down";
+
+/**
  * One id's entry in a canvas's choices (Projects spec §5.7): the options
  * picked for a choice, the person's note on it, or a value the page `set`.
  * `pageHash` is the page the person was looking at when it last changed, so

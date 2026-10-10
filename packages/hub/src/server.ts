@@ -57,6 +57,7 @@ import type {
   SendMode,
   SendPayload,
   SendRecord,
+  SendRefusal,
   SentMessage,
   SessionAddress,
   SessionCredentialInstall,
@@ -1984,6 +1985,7 @@ const toSendRecord = (row: SentMessageRow): SendRecord => ({
   mode: row.mode,
   state: row.state,
   ...(row.reason ? { reason: row.reason } : {}),
+  ...(row.refusal ? { refusal: row.refusal } : {}),
   ...(row.anchor ? { anchor: row.anchor } : {}),
   ...(row.harnessId ? { harnessId: row.harnessId } : {}),
   ...(row.replaces ? { replaces: row.replaces } : {}),
@@ -2989,7 +2991,7 @@ export const createServer = (
     session: string
   ):
     | { accountId?: string; homeLoginMove?: { accountId: string } }
-    | { refusal: string } => {
+    | { refusal: string; cause: SendRefusal } => {
     // The machine's own Claude login is moving into an account and has not
     // yet: a session that runs on it runs on it until it lands.
     const move = homeLoginMoveOf(machineId, row);
@@ -3008,7 +3010,7 @@ export const createServer = (
       projectId?: string | null;
     },
     session: string
-  ): { accountId?: string } | { refusal: string } => {
+  ): { accountId?: string } | { refusal: string; cause: SendRefusal } => {
     const harness = row.harness ?? "claude";
     // A row on an account stays on it (nothing moves it on its own); one
     // with none is placed when its model is an account provider's here.
@@ -3024,11 +3026,19 @@ export const createServer = (
         ? { accountId: row.accountId ?? undefined }
         : claimAccount(machineId, { ...row, id: row.id });
     if ("refusal" in claimed) {
-      return claimed;
+      return {
+        refusal: claimed.refusal,
+        cause: { kind: "no-account", machineId },
+      };
     }
     const { accountId } = claimed;
     if (!accountId) {
-      return harness === "claude" ? { refusal: noAccountRefusal(machine) } : {};
+      return harness === "claude"
+        ? {
+            refusal: noAccountRefusal(machine),
+            cause: { kind: "no-account", machineId },
+          }
+        : {};
     }
     if (
       db.accounts
@@ -3046,6 +3056,7 @@ export const createServer = (
     const named = account ? accountName(account) : accountId;
     return {
       refusal: `${named} isn't signed in on ${machine}, so ${session} can't run there. Sign ${named} in on ${machine} in Configure → Accounts, or continue the session on another account.`,
+      cause: { kind: "account-signed-out", accountId, machineId },
     };
   };
   /**
@@ -3311,21 +3322,23 @@ export const createServer = (
   const inputRefusal = (
     instanceId: string,
     origin: NeutralOrigin
-  ): string | undefined => {
+  ): { reason: string; refusal?: SendRefusal } | undefined => {
     const [row] = db.getInstancesByIds([instanceId]);
     if (row?.lastError === CLAUDE_CONVERSATION_GONE) {
-      return CLAUDE_CONVERSATION_GONE;
+      return { reason: CLAUDE_CONVERSATION_GONE };
     }
     // A send to a session whose process is gone wakes it ({@link wakeForSend}),
     // fresh when its harness never began a conversation (core `relaunchOf`);
     // one whose account can't run on its machine is not woken, and says why.
     if (row && wakesForSend(row)) {
-      const refused = accountStartRefusal(row.machineId, row, sessionName(row));
-      if (refused) {
-        return refused;
+      const launch = launchAccount(row.machineId, row, sessionName(row));
+      if ("refusal" in launch) {
+        return { reason: launch.refusal, refusal: launch.cause };
       }
     }
-    return row ? workItems.refusal(row, origin) : "This session is gone.";
+    return row
+      ? workItems.refusal(row, origin)
+      : { reason: "This session is gone." };
   };
   /**
    * A session's standing instructions reach it through the one send path,
@@ -3766,11 +3779,20 @@ export const createServer = (
     return read;
   };
 
-  /** A send that will never be read, and why. Final. */
-  const failSend = (row: SentMessageRow, reason: string): void => {
+  /** A send that will never be read, and why (what refused it, when the hub did). Final. */
+  const failSend = (
+    row: SentMessageRow,
+    reason: string,
+    refusal?: SendRefusal
+  ): void => {
     const anchor = anchorFor(row.instanceId, row.uuid);
     unanswered.get(row.instanceId)?.delete(row.uuid);
-    changeSend(row, { state: "failed", reason, anchor: anchor ?? null });
+    changeSend(row, {
+      state: "failed",
+      reason,
+      refusal: refusal ?? null,
+      anchor: anchor ?? null,
+    });
     if (row.state === "pending") {
       tellSender(row, reason);
     }
@@ -6016,8 +6038,8 @@ export const createServer = (
     const refused = keepAlive
       ? undefined
       : inputRefusal(instanceId, message.origin);
-    if (refused === CLAUDE_CONVERSATION_GONE) {
-      throw new WorkItemRefusal(409, refused);
+    if (refused?.reason === CLAUDE_CONVERSATION_GONE) {
+      throw new WorkItemRefusal(409, refused.reason);
     }
     const [target] = db.getInstancesByIds([instanceId]);
     // Kept, not woken: the session has no process and this sender may not
@@ -6087,7 +6109,10 @@ export const createServer = (
           }
         : {
             state: "failed" as const,
-            reason: refused ?? `machine ${machineId} is not connected`,
+            reason: refused?.reason ?? `machine ${machineId} is not connected`,
+            refusal: refused
+              ? (refused.refusal ?? null)
+              : { kind: "machine-away" as const, machineId },
             anchor: anchors.get(instanceId) ?? null,
           }),
     });
@@ -6309,7 +6334,7 @@ export const createServer = (
     );
     if (refused) {
       db.takeOwedSend(send.uuid);
-      failSend(send, refused);
+      failSend(send, refused.reason, refused.refusal);
       return;
     }
     if (row.status === "sleeping") {
@@ -6338,7 +6363,10 @@ export const createServer = (
         continue;
       }
       if (db.takeOwedSend(send.uuid) !== undefined) {
-        failSend(send, `machine ${machineId} is not connected`);
+        failSend(send, `machine ${machineId} is not connected`, {
+          kind: "machine-away",
+          machineId,
+        });
       }
     }
   };
@@ -13691,7 +13719,7 @@ export const createServer = (
         fromSession: requester.id,
       });
       if (retired) {
-        throw new WorkItemRefusal(409, retired);
+        throw new WorkItemRefusal(409, retired.reason);
       }
       const result = control.args?.[1] as PermissionResult;
       if (control.method === RESOLVE_PERMISSION) {

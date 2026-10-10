@@ -121,6 +121,8 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
+    /* The title's text stands where the controls' text does: their inset. */
+    padding-inline-start: var(--space-2);
   }
   .side-head:has(:global([role="tablist"])) .identity {
     padding-inline-start: var(--space-1);
@@ -131,11 +133,13 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  /* What is on show, in the title role, as every sheet's title is. */
+  /* What is on show is a name in a toolbar row of 30px label-type
+     controls and the switch's label-type tabs: the label role (DESIGN.md,
+     The Role, Not Size Rule). The title role is a sheet's own head
+     (.kit-sheet-head), which stands over its content, not in a bar. */
   .title {
     color: var(--ink-strong);
-    font: var(--type-title);
-    letter-spacing: -0.01em;
+    font: var(--type-label);
   }
   .subtitle {
     color: var(--ink-muted);

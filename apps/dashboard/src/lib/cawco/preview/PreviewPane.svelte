@@ -1,13 +1,19 @@
 <script lang="ts">
-  import type { CanvasChoices } from "@cawco/core";
+  import {
+    type CanvasChoices,
+    machineLabel,
+    PREVIEW_DOWN_META,
+    type PreviewDown,
+  } from "@cawco/core";
   import { type Snippet, untrack } from "svelte";
   import { toast } from "#lib/cawco/toasts.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import PendingContent, {
     whileIdle,
   } from "#lib/components/ui/button/pending-content.svelte";
+  import { EmptyState } from "#lib/components/ui/empty/index.js";
   import {
-    IconClose,
+    IconAlert,
     IconCursor,
     IconExternalLink,
     IconRefresh,
@@ -20,6 +26,7 @@
     previewChoices,
     sendPreviewChoices,
   } from "../client.svelte";
+  import { conversationHref, resolveSessionTitle } from "../links";
   import { appear, dur } from "../motion/curves.svelte";
   import { closeInto, depart } from "../motion/share.svelte";
   import { watchInput } from "../reload.svelte";
@@ -54,8 +61,15 @@
     onescape,
     switcher,
     sheet = false,
+    linkSession = false,
   }: {
     instanceId: string;
+    /**
+     * The preview is another session's than the conversation beside it (a
+     * thread shows its project's lead's): its states name that session, as
+     * a link to it.
+     */
+    linkSession?: boolean;
     /**
      * Drawn in the phone's sheet over the conversation (SideSheet): a sent
      * setup page puts the sheet away, so Caw's reply under it is read.
@@ -179,6 +193,43 @@
   }
   const frameError = (message: string | null) =>
     message ? { message, again: "reload" as const } : null;
+
+  /*
+   * Nothing serves the page: the proxy answered with its own page, which
+   * names the hop that did not answer (core `PreviewDown`). The pane draws
+   * what happened over the well, in the kit's empty state, with Try again
+   * (a reload of the frame) as its way back; it stands until a load serves
+   * the page again.
+   */
+  let down = $state<PreviewDown | null>(null);
+  function downOf(frame: HTMLIFrameElement): PreviewDown | null {
+    try {
+      const said = frame.contentDocument
+        ?.querySelector(`meta[name="${PREVIEW_DOWN_META}"]`)
+        ?.getAttribute("content");
+      return said === "server" || said === "machine" ? said : null;
+    } catch {
+      // A frame of another origin is a page, not the proxy's.
+      return null;
+    }
+  }
+  const owner = $derived(cawco.instanceIndex.byId.get(instanceId));
+  const ownerMachine = $derived.by(() => {
+    const machine = cawco.machines.find(
+      (one) => one.machineId === owner?.machineId
+    );
+    return machine ? machineLabel(machine.hostname) : "its machine";
+  });
+  const ownerName = $derived(
+    owner
+      ? resolveSessionTitle({
+          title: owner.title,
+          cwd: owner.cwd,
+          id: owner.id,
+        })
+      : "the session"
+  );
+  const downPort = $derived(source && "port" in source ? source.port : null);
 
   $effect(() => {
     if (frameKey) {
@@ -653,6 +704,10 @@
           // A frame of another origin: its input is not ours to hear.
         }
         if (key === frameKey) {
+          down = downOf(event.currentTarget as HTMLIFrameElement);
+          if (down) {
+            retrying = false;
+          }
           announce();
         }
       }}
@@ -675,6 +730,50 @@
       class="kit-skeleton block h-[11px] w-[42%] rounded-[var(--radius-xs)]"
     ></span>
   </div>
+  {#if down}
+    <!-- What happened, why and the way back, where the page would be. -->
+    <div class="down" role="alert" transition:appear>
+      <EmptyState
+        icon={IconAlert}
+        title={down === "server"
+          ? "The page's server stopped answering"
+          : `${ownerMachine} isn't answering`}
+      >
+        {#snippet line()}
+          {#if down === "server"}
+            {downPort
+              ? `Nothing is running on port ${downPort} on ${ownerMachine}, so the page can't load.`
+              : `The page's server on ${ownerMachine} isn't running, so the page can't load.`}
+            {#if linkSession && owner}
+              Open
+              <a
+                class="owner"
+                href={conversationHref(owner.id, cawco.instanceIndex)}
+                >{ownerName}</a
+              >
+              to start it again, then try again.
+            {:else}
+              Start it again, then try again.
+            {/if}
+          {:else}
+            The preview comes from {ownerMachine}, which isn't connected to the
+            hub right now. Once it's back, try again.
+          {/if}
+        {/snippet}
+        {#snippet action()}
+          <Button
+            icon={IconRefresh}
+            label="Try again"
+            onclick={retry}
+            pending={retrying}
+            pendingLabel="Reloading…"
+            size="sm"
+            variant="outline"
+          />
+        {/snippet}
+      </EmptyState>
+    </div>
+  {/if}
   {#if picking}
     <PlacePick oncancel={cancelPick} onpick={pickedPlace} />
   {/if}
@@ -753,6 +852,28 @@
   .cover.ready :global(*),
   .cover.ready :global(*::after) {
     animation-play-state: paused;
+  }
+  /* Nothing serves the page: the kit's empty state stands over the well, on
+     the well's own ground, at the column the page would have started on. */
+  .down {
+    position: absolute;
+    inset: 0;
+    overflow: auto;
+    padding-inline: var(--space-6);
+    background: var(--surface-well);
+  }
+  .owner {
+    color: var(--link-ink);
+    text-decoration: none;
+    transition: opacity var(--dur-control) var(--ease-out);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .owner:hover {
+      color: var(--link-hover);
+    }
+  }
+  .owner:active {
+    opacity: 0.72;
   }
   /* What went wrong, over the foot of the frame, and the one thing to do
      about it. */

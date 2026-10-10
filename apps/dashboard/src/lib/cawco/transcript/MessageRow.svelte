@@ -18,6 +18,8 @@
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { IconFork, IconPenLine } from "#lib/icons.js";
   import { goto } from "$app/navigation";
+  import { hueVar, nameOf } from "../accounts/model.svelte";
+  import { moveTo, movingTo } from "../accounts/switch.svelte";
   import {
     cawco,
     commandRecord,
@@ -30,6 +32,7 @@
     userTurnActions,
   } from "../client.svelte";
   import { conversationHref } from "../links";
+  import { newSession } from "../spawn/new-session.svelte";
   /** Dispatches one stand-alone transcript message to its renderer by type. */
   import type { Message } from "../types";
   import { liftedIds } from "./composer-draft.svelte";
@@ -40,6 +43,7 @@
   import Peer from "./Peer.svelte";
   import Shot from "./Shot.svelte";
   import SystemLine from "./SystemLine.svelte";
+  import { recoveryOf, type SendRecovery } from "./send-recovery.svelte";
   import Thinking from "./Thinking.svelte";
   import { useVoice } from "./voice";
   import Who from "./Who.svelte";
@@ -341,10 +345,26 @@
     }
   });
 
-  /** What the reason line says about this failure. */
-  const reasonLine = $derived(
-    `Couldn't send that message.${reason ? ` ${reason}` : ""}`
+  /** The session this row was sent to. */
+  const target = $derived(cawco.instanceIndex.byId.get(message.instanceId));
+  /**
+   * The way back from a send the hub refused, read against the fleet as it
+   * is now (send-recovery.svelte.ts): its own words, and what recovers it.
+   * A retry that did not go either says its own reason instead.
+   */
+  const recovery = $derived(
+    message.state === "failed" &&
+      retry?.stage !== "failed" &&
+      message.metadata?.sendRefusal &&
+      target
+      ? recoveryOf(message.metadata.sendRefusal, target)
+      : null
   );
+  /** What the reason line says about this failure. */
+  const reasonLine = $derived.by(() => {
+    const said = recovery?.line ?? reason;
+    return `Couldn't send that message.${said ? ` ${said}` : ""}`;
+  });
   /**
    * A retry goes out from this row and says so on its button, pending in
    * place, until the hub answers. One that never reached the hub goes again
@@ -379,6 +399,13 @@
    * losing them (and its height) in one frame.
    */
   const line = $derived(failed && !retrying ? reasonLine : heldLine);
+  /**
+   * The recovery the row offered when Send again went out, held as resolved:
+   * its Send again stays where it was, pending while the retry is out, and
+   * back with why when the retry does not go either.
+   */
+  let heldRecovery = $state<SendRecovery | null>(null);
+  const shownRecovery = $derived(retried ? heldRecovery : recovery);
   function tryAgain(): void {
     const { id } = message;
     if (!id) {
@@ -386,6 +413,7 @@
     }
     heldLine = reasonLine;
     heldEdit = editable;
+    heldRecovery = recovery ? { ...recovery, holds: false, actions: [] } : null;
     retried = true;
     if (unreached) {
       retrySend(id);
@@ -402,6 +430,34 @@
       });
     }
   }
+  /**
+   * Move to an account signed in on the machine, from the failed send
+   * itself: the session moves as its menu moves it (switch.svelte.ts), and
+   * once its row names that account the message goes again by itself — the
+   * reader asked for both in one press. A move the hub refuses says why in
+   * its toast, and the row offers the move again.
+   */
+  let sendAfterMove = $state<string | null>(null);
+  function moveAndSend(accountId: string): void {
+    if (!target) {
+      return;
+    }
+    sendAfterMove = accountId;
+    // biome-ignore lint/complexity/noVoid: the move's own state (movingTo) and its toast are the outcome
+    void moveTo(target, accountId);
+  }
+  $effect(() => {
+    const asked = sendAfterMove;
+    if (!(asked && target)) {
+      return;
+    }
+    if (target.accountId === asked) {
+      sendAfterMove = null;
+      untrack(tryAgain);
+    } else if (movingTo(target) !== asked) {
+      sendAfterMove = null;
+    }
+  });
   function edit(): void {
     actionsShown = false;
     if (message.id) {
@@ -571,7 +627,7 @@
                       {/snippet}
                     </Tip>
                   {/if}
-                  {#if recoverable || retried}
+                  {#if (recoverable || retried) && !shownRecovery}
                     <button
                       aria-busy={retrying || undefined}
                       aria-disabled={retrying || undefined}
@@ -671,8 +727,76 @@
         <div class="failure" data-opens inert={!open} class:open>
           <div class="failure-inner">
             {#if failed || retried}
-              {#if failed || retried}
-                <p class="reason">{line}</p>
+              <p class="reason">{line}</p>
+              <!-- The way back, right under why (send-recovery.svelte.ts):
+                   while what refused it holds, what fixes it; once it no
+                   longer does, Send again. -->
+              {#if shownRecovery &&
+                (shownRecovery.actions.length > 0 || !shownRecovery.holds)}
+                <div class="actions recovery">
+                  {#if shownRecovery.holds}
+                    {#each shownRecovery.actions as action, i (i)}
+                      {#if action.kind === "link"}
+                        <a class="pressable action" href={action.href}
+                          ><span class="label">{action.label}</span></a
+                        >
+                      {:else if action.kind === "move"}
+                        {@const going =
+                          !!target && movingTo(target) === action.account.id}
+                        <button
+                          aria-busy={going || undefined}
+                          aria-disabled={going || undefined}
+                          class="pressable action"
+                          onclick={whileIdle(
+                            () => going,
+                            () => moveAndSend(action.account.id)
+                          )}
+                          type="button"
+                        >
+                          <i
+                            aria-hidden="true"
+                            class="dot"
+                            style:--c={hueVar(action.account.hue)}
+                          ></i>
+                          <PendingContent
+                            label={`Move to ${nameOf(action.account)}`}
+                            pending={going}
+                            pendingLabel={`Moving to ${nameOf(action.account)}…`}
+                          />
+                        </button>
+                      {:else}
+                        <button
+                          class="pressable action"
+                          onclick={() =>
+                            newSession({
+                              machineId: action.machineId,
+                              ...(action.projectId
+                                ? { projectId: action.projectId }
+                                : {}),
+                            })}
+                          type="button"
+                        >
+                          Start a new session
+                        </button>
+                      {/if}
+                    {/each}
+                  {:else}
+                    <button
+                      aria-busy={retrying || undefined}
+                      aria-disabled={retrying || undefined}
+                      class="pressable action"
+                      onclick={whileIdle(() => retrying, tryAgain)}
+                      type="button"
+                    >
+                      <PendingContent
+                        {failed}
+                        label="Send again"
+                        pending={retrying || (retried && !failed)}
+                        pendingLabel="Sending…"
+                      />
+                    </button>
+                  {/if}
+                </div>
               {/if}
             {/if}
           </div>
@@ -969,5 +1093,30 @@
     &:disabled {
       opacity: 0.5;
     }
+  }
+  /* The way back under a refused send: its actions wrap under the reason
+     rather than run past the well. A link among them (the account's
+     sign-in page) is drawn as its siblings are. */
+  .recovery {
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+  a.action {
+    min-width: 0;
+    max-width: 100%;
+    text-decoration: none;
+  }
+  .action .label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* An account's own dot, as its menu draws it (AccountSubmenu). */
+  .action .dot {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--c);
   }
 </style>
