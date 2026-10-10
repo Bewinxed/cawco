@@ -43,7 +43,7 @@ extension Components.Schemas.GetApiProjects200Payload {
         places.filter { place in
             switch place.kind {
             case .checkout, .workspace: true
-            case .hub: false
+            case .hub, .unrecognized: false
             }
         }
     }

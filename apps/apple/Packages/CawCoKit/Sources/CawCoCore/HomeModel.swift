@@ -133,7 +133,7 @@ public final class HomeModel {
         switch fleet.activityPulse(id)?.activity {
         case .working: return .working
         case .blocked: return .blocked
-        case .idle, nil: return .idle
+        case .idle, .unrecognized, nil: return .idle
         }
     }
 

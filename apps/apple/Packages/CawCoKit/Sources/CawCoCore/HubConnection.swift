@@ -78,6 +78,11 @@ public final class HubConnection {
         public static let testFlight = URL(string: "itms-beta://beta.itunes.apple.com/v1/app/6819139448")!
     }
 
+    /// The hub sent a value this app does not know (`HubNewer`): it is newer
+    /// than the app. Everything else still reads; the app says once to update.
+    public private(set) var hubNewer = false
+    @ObservationIgnored private var hubNewerWatch: (any NSObjectProtocol)?
+
     public let ledger = Ledger()
     public let fleet = FleetStore()
     /// Each session's preview, as the hub says it.
@@ -127,6 +132,10 @@ public final class HubConnection {
         workflows = WorkflowsStore(hub: self)
         ledger.applyFrame = { [weak self] id, data in self?.sessions.apply(id, data: data) }
         ledger.rereadHistory = { [weak self] id in self?.sessions.read(id) }
+        hubNewer = HubNewer.met
+        hubNewerWatch = NotificationCenter.default.addObserver(forName: HubNewer.noticed, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.hubNewer = true }
+        }
         if address != nil {
             start()
         }
@@ -584,6 +593,7 @@ public final class HubConnection {
             }
             hub.fleet.fleetRead = true
             if hub.socket == .connected { hub.synced = true }
+            hub.log.notice("fleet read: \(hub.fleet.rows.count) rows, \(hub.fleet.machines.count) machines, hub newer than this app: \(hub.hubNewer)")
             return true
         }
     }

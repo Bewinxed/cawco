@@ -135,6 +135,7 @@ public enum TaskWords {
         case .done: "Done"
         case .failed: "Failed"
         case .cancelled: "Stopped"
+        case .unrecognized: "Unknown"
         }
     }
 

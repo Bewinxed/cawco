@@ -401,6 +401,7 @@ private struct Words {
         case .lfs: "Downloading large files"
         case .install: "Installing dependencies"
         case .start: "Starting the session on \(target)"
+        case .unrecognized: "Moving"
         }
     }
 
@@ -430,6 +431,8 @@ private struct Words {
             // A branch breaks before it, never at its slashes: "cawco/move/gearbox" is one word.
             return [moved, job.stayed].compactMap(\.self).joined(separator: " · ")
                 .replacingOccurrences(of: "/", with: "/\u{2060}")
+        case .unrecognized:
+            return "Done"
         }
     }
 

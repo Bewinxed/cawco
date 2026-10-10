@@ -682,6 +682,525 @@ if (untyped.length) {
   console.warn(`untyped: ${untyped.join(", ")}`);
 }
 
+/**
+ * Open enums. The hub ships nightly and the apps ship through TestFlight
+ * later, so the first hub that adds an enum value meets apps that do not know
+ * it. A closed enum (swift-openapi-generator writes every enum closed, as
+ * JSON Schema has them: apple/swift-openapi-generator#428, "We can't offer an
+ * option to make enums open") throws on it and the whole message is lost.
+ *
+ * So every string enum the app receives is named as its own component and
+ * the generator's `typeOverrides` (SOAR-0014, which takes named components
+ * only) swaps in an enum written here, in Swift, with the same cases plus
+ * `unrecognized(String)`: the generator's case names (its idiomatic naming,
+ * ported below) keep every reader compiling. The JSON is unchanged.
+ *
+ * An enum that tells the branches of an undiscriminated anyOf/oneOf apart (a
+ * property two branches declare differently, or the branch itself) stays
+ * closed there: the generator picks branches by which ones decode, so an open
+ * one would match them all.
+ * What the app only sends (request bodies, parameters, its own socket
+ * messages) stays as the generator writes it.
+ */
+const SENT = new Set([
+  "StreamClientMessage",
+  "Envelope",
+  "SpawnPayload",
+  "StopPayload",
+  "ControlPayload",
+  "FsPayload",
+  "SendPayload",
+]);
+const isStringEnum = (value: unknown): value is Schema =>
+  typeof value === "object" &&
+  value !== null &&
+  (value as Schema).type === "string" &&
+  Array.isArray((value as Schema).enum) &&
+  ((value as Schema).enum as unknown[]).length > 1 &&
+  ((value as Schema).enum as unknown[]).every((v) => typeof v === "string");
+const refName = (schema: Schema): string | undefined =>
+  typeof schema.$ref === "string" && schema.$ref.startsWith(COMPONENT)
+    ? schema.$ref.slice(COMPONENT.length)
+    : undefined;
+
+/** Components the app decodes: what a response or a received frame reaches. */
+const received = new Set<string>();
+const receive = (value: unknown): void => {
+  if (typeof value === "string" && value.startsWith(COMPONENT)) {
+    const name = value.slice(COMPONENT.length);
+    if (!received.has(name)) {
+      received.add(name);
+      receive(components[name]);
+    }
+  } else if (typeof value === "object" && value !== null) {
+    for (const item of Object.values(value)) {
+      receive(item);
+    }
+  }
+};
+for (const item of Object.values(paths)) {
+  for (const op of Object.values(item ?? {})) {
+    receive((op as Operation).responses);
+  }
+}
+for (const name of Object.values(FRAMES).flat()) {
+  if (!SENT.has(name)) {
+    receive(`${COMPONENT}${name}`);
+  }
+}
+
+/**
+ * Enums that tell an undiscriminated union's branches apart stay closed
+ * there: a property two branches both declare, differently, or a branch that
+ * is itself an enum. A named one is copied inline at that place (which the
+ * generator writes closed) and stays open everywhere else.
+ */
+const closedInline = new Set<Schema>();
+/** Where a schema sits: the object or array holding it, and its key there. */
+interface Slot {
+  holder: Record<string | number, unknown>;
+  key: string | number;
+}
+const schemaAt = (slot: Slot): Schema | undefined => {
+  const schema = slot.holder[slot.key];
+  return typeof schema === "object" && schema !== null
+    ? (schema as Schema)
+    : undefined;
+};
+/** A slot's schema with its ref followed. */
+const resolved = (slot: Slot): Schema | undefined => {
+  const schema = schemaAt(slot);
+  const named = schema && refName(schema);
+  return named ? (components[named] as Schema) : schema;
+};
+const close = (slot: Slot): void => {
+  const schema = schemaAt(slot);
+  if (!schema) {
+    return;
+  }
+  const named = refName(schema);
+  if (named) {
+    const { $ref: _, ...siblings } = schema;
+    const copy: Schema = {
+      ...siblings,
+      type: "string",
+      enum: (components[named] as Schema).enum,
+    };
+    slot.holder[slot.key] = copy;
+    closedInline.add(copy);
+  } else {
+    closedInline.add(schema);
+  }
+};
+/** A property as two branches would compare it, and the slot of its enum if it is one. */
+interface Declared {
+  enumSlot?: Slot;
+  signature: string;
+}
+/** A property's enum, itself or its array's items, as the slot holding it. */
+const enumSlotOf = (slot: Slot): Slot | undefined => {
+  const property = resolved(slot);
+  if (isStringEnum(property)) {
+    return slot;
+  }
+  if (property?.type !== "array") {
+    return undefined;
+  }
+  const items = { holder: property as Slot["holder"], key: "items" };
+  return isStringEnum(resolved(items)) ? items : undefined;
+};
+/** A branch's own properties, through refs and allOf. */
+const declared = (
+  branch: Slot,
+  seen: Set<string>,
+  out: Map<string, Declared>
+): void => {
+  const schema = schemaAt(branch);
+  if (!schema) {
+    return;
+  }
+  const named = refName(schema);
+  if (named) {
+    if (!seen.has(named)) {
+      declared(
+        { holder: components, key: named },
+        new Set([...seen, named]),
+        out
+      );
+    }
+    return;
+  }
+  const members = (schema.allOf as Slot["holder"][] | undefined) ?? [];
+  for (const index of members.keys()) {
+    declared(
+      { holder: members as unknown as Slot["holder"], key: index },
+      seen,
+      out
+    );
+  }
+  const properties = schema.properties as Slot["holder"] | undefined;
+  if (!properties) {
+    return;
+  }
+  for (const field of Object.keys(properties)) {
+    const enumSlot = enumSlotOf({ holder: properties, key: field });
+    const signature = enumSlot
+      ? JSON.stringify(
+          [...((resolved(enumSlot)?.enum as string[] | undefined) ?? [])].sort()
+        )
+      : JSON.stringify(resolved({ holder: properties, key: field }) ?? null);
+    out.set(field, { signature, enumSlot });
+  }
+};
+/** One undiscriminated union: closes the enums its branches are told apart by. */
+const closeDiscriminators = (branches: unknown[]): void => {
+  const holder = branches as unknown as Slot["holder"];
+  const fields = branches.map((_, index) => {
+    if (isStringEnum(resolved({ holder, key: index }))) {
+      close({ holder, key: index });
+    }
+    const out = new Map<string, Declared>();
+    declared({ holder, key: index }, new Set(), out);
+    return out;
+  });
+  const names = new Set(fields.flatMap((one) => [...one.keys()]));
+  for (const field of names) {
+    const declarations = fields
+      .map((one) => one.get(field))
+      .filter((one): one is Declared => one !== undefined);
+    if (new Set(declarations.map((one) => one.signature)).size < 2) {
+      continue;
+    }
+    for (const { enumSlot } of declarations) {
+      if (enumSlot) {
+        close(enumSlot);
+      }
+    }
+  }
+};
+const findUnions = (value: unknown): void => {
+  if (typeof value !== "object" || value === null) {
+    return;
+  }
+  const schema = value as Schema;
+  for (const union of UNIONS) {
+    const branches = schema[union];
+    if (Array.isArray(branches) && !schema.discriminator) {
+      closeDiscriminators(branches);
+    }
+  }
+  for (const item of Object.values(schema)) {
+    findUnions(item);
+  }
+};
+findUnions(components);
+
+const pascal = (word: string): string =>
+  word.replace(/(^|[^A-Za-z0-9]+)([A-Za-z0-9])/g, (_, __, c: string) =>
+    c.toUpperCase()
+  );
+/** One open enum per value list, the first schema to use it naming it. */
+const openByValues = new Map<string, string>();
+const openEnums = new Map<string, { values: string[]; description?: string }>();
+const valuesKey = (values: string[]): string =>
+  JSON.stringify([...values].sort());
+for (const name of [...received].sort()) {
+  const schema = components[name];
+  if (isStringEnum(schema)) {
+    const values = schema.enum as string[];
+    openEnums.set(name, {
+      values,
+      description: schema.description as string | undefined,
+    });
+    if (!openByValues.has(valuesKey(values))) {
+      openByValues.set(valuesKey(values), name);
+    }
+  }
+}
+/**
+ * An inline enum's name: its component's and its property's (`InstanceRow`'s
+ * `titleSource` is `InstanceRowTitleSource`), never a bare word like `Type`
+ * that Swift reads as something else.
+ */
+const nameFor = (owner: string, hint: string): string => {
+  const base = `${pascal(owner)}${pascal(hint)}`;
+  for (let n = 1; ; n += 1) {
+    const candidate = n === 1 ? base : `${base}${n}`;
+    if (!(candidate in components || openEnums.has(candidate))) {
+      return candidate;
+    }
+  }
+};
+let hoisted = 0;
+const openUp = (value: unknown, owner: string, hint: string): unknown => {
+  if (Array.isArray(value)) {
+    return value.map((item) => openUp(item, owner, hint));
+  }
+  if (typeof value !== "object" || value === null) {
+    return value;
+  }
+  const schema = value as Schema;
+  if (isStringEnum(schema) && !closedInline.has(schema)) {
+    const values = schema.enum as string[];
+    const { type: _, enum: __, ...siblings } = schema;
+    let name = openByValues.get(valuesKey(values));
+    if (!name) {
+      name = nameFor(owner, hint);
+      openByValues.set(valuesKey(values), name);
+      openEnums.set(name, { values });
+    }
+    hoisted += 1;
+    return { $ref: `${COMPONENT}${name}`, ...siblings };
+  }
+  return Object.fromEntries(
+    Object.entries(schema).map(([key, item]) => {
+      if (key === "properties" && typeof item === "object" && item !== null) {
+        return [
+          key,
+          Object.fromEntries(
+            Object.entries(item).map(([field, property]) => [
+              field,
+              openUp(property, owner, field),
+            ])
+          ),
+        ];
+      }
+      return [key, openUp(item, owner, hint)];
+    })
+  );
+};
+for (const name of [...received].sort()) {
+  if (!openEnums.has(name)) {
+    components[name] = openUp(components[name], name, `${name}Value`);
+  }
+}
+for (const [name, { values, description }] of openEnums) {
+  components[name] = {
+    ...(description ? { description } : {}),
+    type: "string",
+    enum: values,
+  };
+}
+
+/**
+ * The case name swift-openapi-generator gives a raw value under
+ * `namingStrategy: idiomatic` (IdiomaticSafeNameGenerator.swiftMemberName,
+ * then DefensiveSafeNameGenerator for what is left), for the ASCII values
+ * the hub's enums use.
+ */
+const SWIFT_KEYWORDS = new Set(
+  "associatedtype class deinit enum extension func import init inout let operator precedencegroup protocol struct subscript typealias var fileprivate internal private public static defer if guard do repeat else for in while return break continue fallthrough switch case default where catch throw as Any false is nil rethrows super self Self true try throws yield String Error Int Bool Array Type type Protocol await".split(
+    " "
+  )
+);
+const SEPARATORS = new Set(["_", "-", " ", "/", "+"]);
+const BETWEEN_WORDS = new Set(["_", "-", ".", "/", "+", "{", "}"]);
+const ALNUM = /[A-Za-z0-9]/;
+const LETTER = /[A-Za-z]/;
+const UPPER = /[A-Z]/;
+const LOWER = /[a-z]/;
+const LEADING_DIGIT = /^[0-9]/;
+const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const isAlnum = (c: string): boolean => ALNUM.test(c);
+const isUpper = (c: string): boolean => UPPER.test(c);
+const isLower = (c: string): boolean => LOWER.test(c);
+
+/** The generator's naming state machine, one character at a time. */
+interface Naming {
+  /** Lowering the first word's leading capitals ("HTTPProxy" → "httpProxy"). */
+  accumulatingUpper: boolean;
+  allUpper: boolean;
+  chars: string[];
+  out: string;
+  state: "pre" | "first" | "word" | "waiting";
+}
+const namePre = (n: Naming, c: string): void => {
+  n.out += LETTER.test(c) ? c.toLowerCase() : c;
+  if (c === "_") {
+    return;
+  }
+  n.state = "first";
+  n.accumulatingUpper = isUpper(c);
+};
+/** A capital in the first word while lowering its leading capitals. */
+const leadingCapital = (n: Naming, c: string, i: number): string => {
+  const next = n.chars[i + 1];
+  const second = n.chars[i + 2];
+  if (next === undefined || second === undefined) {
+    n.accumulatingUpper = false;
+    return c.toLowerCase();
+  }
+  if ((isUpper(next) && isLower(second)) || SEPARATORS.has(next)) {
+    n.accumulatingUpper = false;
+    return c.toLowerCase();
+  }
+  if (isUpper(next)) {
+    return c.toLowerCase();
+  }
+  n.accumulatingUpper = false;
+  return c;
+};
+const nameFirst = (n: Naming, c: string, i: number): void => {
+  if (isAlnum(c)) {
+    if (n.allUpper) {
+      n.out += c.toLowerCase();
+    } else if (n.accumulatingUpper && isLower(c)) {
+      n.out += c;
+      n.accumulatingUpper = false;
+    } else if (n.accumulatingUpper) {
+      n.out += leadingCapital(n, c, i);
+    } else {
+      n.out += c;
+    }
+    return;
+  }
+  if (SEPARATORS.has(c)) {
+    n.state = "waiting";
+    return;
+  }
+  n.accumulatingUpper = false;
+  if (c === ".") {
+    n.out += "_";
+  } else if (c !== "{" && c !== "}") {
+    n.out += c;
+  }
+};
+const nameWord = (n: Naming, c: string): void => {
+  if (isAlnum(c)) {
+    n.out += n.allUpper ? c.toLowerCase() : c;
+  } else if (SEPARATORS.has(c)) {
+    n.state = "waiting";
+  } else if (c === ".") {
+    n.out += "_";
+  } else if (c !== "{" && c !== "}") {
+    n.out += c;
+  }
+};
+const nameWaiting = (n: Naming, c: string): void => {
+  if (isAlnum(c)) {
+    n.out += c.toUpperCase();
+    n.state = "word";
+  } else if (!BETWEEN_WORDS.has(c)) {
+    n.out += c;
+  }
+};
+const swiftCaseName = (raw: string): string => {
+  if (raw === "") {
+    return "_empty_";
+  }
+  const n: Naming = {
+    accumulatingUpper: false,
+    allUpper: [...raw].every((c) => !isLower(c)),
+    chars: [...raw],
+    out: "",
+    state: "pre",
+  };
+  for (const [i, c] of n.chars.entries()) {
+    if (n.state === "pre") {
+      namePre(n, c);
+    } else if (n.state === "first") {
+      nameFirst(n, c, i);
+    } else if (n.state === "word") {
+      nameWord(n, c);
+    } else {
+      nameWaiting(n, c);
+    }
+  }
+  // The defensive pass: a leading digit, as DefensiveSafeNameGenerator
+  // writes it; any other character it would rewrite is not in the hub's values.
+  const out = LEADING_DIGIT.test(n.out) ? `_${n.out}` : n.out;
+  if (!IDENTIFIER.test(out)) {
+    throw new Error(
+      `enum value ${JSON.stringify(raw)} needs a name rule this port does not have`
+    );
+  }
+  if (out === "_") {
+    return "_underscore_";
+  }
+  return SWIFT_KEYWORDS.has(out) ? `_${out}` : out;
+};
+const UNRECOGNIZED = "unrecognized";
+const swiftString = (text: string): string => JSON.stringify(text);
+const swiftEnum = (name: string, values: string[]): string => {
+  const cases = values.map((value) => ({ value, name: swiftCaseName(value) }));
+  const names = cases.map((c) => c.name);
+  if (new Set(names).size !== names.length || names.includes(UNRECOGNIZED)) {
+    throw new Error(`${name}: case names collide: ${names.join(", ")}`);
+  }
+  const indent = (lines: string[], by: string) => lines.map((l) => `${by}${l}`);
+  return [
+    `    /// \`#/components/schemas/${name}\`.`,
+    `    public enum ${name}: OpenEnum {`,
+    ...cases.map((c) => `        case ${c.name}`),
+    `        /// A value this app does not know: a newer hub's.`,
+    `        case ${UNRECOGNIZED}(String)`,
+    "",
+    "        public init(rawValue: String) {",
+    "            switch rawValue {",
+    ...indent(
+      cases.map((c) => `case ${swiftString(c.value)}: self = .${c.name}`),
+      "            "
+    ),
+    `            default: self = .${UNRECOGNIZED}(rawValue)`,
+    "            }",
+    "        }",
+    "",
+    "        public var rawValue: String {",
+    "            switch self {",
+    ...indent(
+      cases.map((c) => `case .${c.name}: ${swiftString(c.value)}`),
+      "            "
+    ),
+    `            case let .${UNRECOGNIZED}(rawValue): rawValue`,
+    "            }",
+    "        }",
+    "",
+    "        public var isUnrecognized: Bool {",
+    `            if case .${UNRECOGNIZED} = self { true } else { false }`,
+    "        }",
+    "",
+    `        public static let allCases: [Self] = [${cases.map((c) => `.${c.name}`).join(", ")}]`,
+    "",
+    "        public init(from decoder: any Decoder) throws {",
+    "            self = try Self.decodeOpen(from: decoder)",
+    "        }",
+    "",
+    "        public func encode(to encoder: any Encoder) throws {",
+    "            try encodeOpen(to: encoder)",
+    "        }",
+    "    }",
+  ].join("\n");
+};
+const sortedOpen = [...openEnums].sort(([a], [b]) => (a < b ? -1 : 1));
+const openNames = sortedOpen.map(([name]) => name);
+const swiftEnums = [
+  "// Generated by `bun run openapi` in packages/hub, with openapi.json; do not edit.",
+  "// Every string enum the hub sends, open: a value this app does not know reads",
+  "// as `unrecognized(raw)` and the rest of its message still reads (OpenEnum.swift).",
+  "// openapi-generator-config.yaml's typeOverrides puts each in place of the",
+  "// component the generator would write closed.",
+  "",
+  "public enum OpenEnums {",
+  sortedOpen.map(([name, { values }]) => swiftEnum(name, values)).join("\n\n"),
+  "}",
+  "",
+].join("\n");
+const generatorConfig = [
+  "# swift-openapi-generator (build plugin): the hub's wire types and HTTP client,",
+  "# generated at build time from openapi.json beside this file.",
+  "# Written by `bun run openapi` in packages/hub; do not edit.",
+  "generate:",
+  "  - types",
+  "  - client",
+  "accessModifier: public",
+  "namingStrategy: idiomatic",
+  "# Every string enum the hub sends, open (OpenEnums.swift).",
+  "typeOverrides:",
+  "  schemas:",
+  ...openNames.map((name) => `    ${name}: OpenEnums.${name}`),
+  "",
+].join("\n");
+
 const document = {
   openapi: "3.1.0",
   info: {
@@ -726,27 +1245,40 @@ if (leftNulls.length) {
   throw new Error(`null left in a union:\n${leftNulls.join("\n")}`);
 }
 
-const generated = `${JSON.stringify(document, null, 2)}\n`;
+const outputs: [string, string][] = [
+  [OUT, `${JSON.stringify(document, null, 2)}\n`],
+  [join(dirname(OUT), "OpenEnums.swift"), swiftEnums],
+  [join(dirname(OUT), "openapi-generator-config.yaml"), generatorConfig],
+];
 const check = process.argv.includes("--check");
 if (!check) {
   mkdirSync(dirname(OUT), { recursive: true });
-  writeFileSync(OUT, generated);
+  for (const [path, text] of outputs) {
+    writeFileSync(path, text);
+  }
 }
 rmSync(scratch, { recursive: true, force: true });
 if (check) {
-  if (
-    !(await Bun.file(OUT).exists()) ||
-    (await Bun.file(OUT).text()) !== generated
-  ) {
-    console.error(
-      "openapi.json is out of date — run `bun run openapi` in packages/hub"
-    );
+  const current = await Promise.all(
+    outputs.map(async ([path]) =>
+      (await Bun.file(path).exists()) ? Bun.file(path).text() : undefined
+    )
+  );
+  const stale = outputs.filter(([, text], index) => current[index] !== text);
+  if (stale.length) {
+    for (const [path] of stale) {
+      console.error(
+        `${parse(path).base} is out of date — run \`bun run openapi\` in packages/hub`
+      );
+    }
     process.exit(1);
   }
-  console.log("openapi.json is up to date");
+  console.log(
+    "openapi.json, OpenEnums.swift and the generator config are up to date"
+  );
   process.exit(0);
 }
 console.log(
-  `${operations.length} operations, ${Object.keys(components).length} schemas, ${unionsRewritten} null unions rewritten, ${madeOptional} properties made optional → ${OUT}`
+  `${operations.length} operations, ${Object.keys(components).length} schemas, ${unionsRewritten} null unions rewritten, ${madeOptional} properties made optional, ${openEnums.size} open enums (${hoisted} inline uses named) → ${OUT}`
 );
 process.exit(0);

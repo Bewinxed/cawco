@@ -109,6 +109,7 @@ public final class RootViewController: ObservedViewController {
         waiting.content = board
         waiting.waiting = !read
         show(key: "board") { waiting }
+        sayHubNewer(read: read)
         if read, let id = initialSession {
             initialSession = nil
             board.openSession(id)
@@ -132,6 +133,22 @@ public final class RootViewController: ObservedViewController {
             case .keepPro: gate.keepPro()
             }
         }
+    }
+
+    /// Said once per launch, whichever window reads it first.
+    private static var hubNewerSaid = false
+    private static let hubLog = Logger(subsystem: "dev.cawco.app", category: "Hub")
+
+    /// The hub sent a value this app does not know (`hubNewer`): the board
+    /// still reads, and one sticky toast says to update. Swiping it away, or
+    /// opening TestFlight, ends it for the launch.
+    private func sayHubNewer(read: Bool) {
+        guard read, hub.hubNewer, !Self.hubNewerSaid else { return }
+        Self.hubNewerSaid = true
+        Self.hubLog.notice("update notice shown: hub newer than this app")
+        Toast.show("Your hub is newer than this app. Update CawCo to see everything.", kind: .info,
+                   action: .init("Open TestFlight") { UIApplication.shared.open(HubConnection.Incompatible.testFlight) },
+                   sticky: true, in: view)
     }
 
     /// Where a tapped push opens, waiting for the fleet's first read.

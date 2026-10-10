@@ -77,7 +77,7 @@ final class NewSessionFlow {
                            sticky: true, in: presenter()?.view)
             case .cancelled:
                 detached[id] = nil
-            case .starting, .summarising:
+            case .starting, .summarising, .unrecognized:
                 break
             }
         }

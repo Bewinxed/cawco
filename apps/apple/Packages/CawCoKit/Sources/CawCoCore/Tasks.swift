@@ -145,7 +145,8 @@ public final class TasksStore {
             do {
                 let tasks = try await hub.todos(machineId: machineId, sessionKey: sessionId, dir: cwd, harness: .opencode)
                 publish(instanceId, tasks: tasks.map {
-                    SessionTask(id: $0.id, subject: $0.subject, status: .init(rawValue: $0.status.rawValue)!,
+                    // A status a newer hub added reads as pending: not started, not done.
+                    SessionTask(id: $0.id, subject: $0.subject, status: .init(rawValue: $0.status.rawValue) ?? .pending,
                         blockedBy: $0.blockedBy, blocks: $0.blocks, description: $0.description, owner: $0.owner)
                 })
             } catch { publish(instanceId, tasks: []) }

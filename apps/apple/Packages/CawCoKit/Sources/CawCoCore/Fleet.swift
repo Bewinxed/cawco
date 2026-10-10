@@ -21,8 +21,11 @@ extension Components.Schemas.InstanceRow {
     /// hub cannot ask about right now. A stopped session has ended, so it is
     /// listed as ended sessions are (Finished until seen, Recent, its
     /// project's tree); left out, it stood in no list at all, its menu and
-    /// its transcript out of reach. Only a discarded one is off the board.
-    public var isListed: Bool { isLive || status == .error || status == .sleeping || status == .stopped || status == .unknown }
+    /// its transcript out of reach. Only a discarded one is off the board; a
+    /// status a newer hub added stays on it, read as its activity says.
+    public var isListed: Bool {
+        isLive || status == .error || status == .sleeping || status == .stopped || status == .unknown || status.isUnrecognized
+    }
     /// Its machine cannot be reached, so the hub does not know what it is doing.
     public var isStale: Bool { status == .unknown }
     public var isFailed: Bool { status == .error }
@@ -94,7 +97,7 @@ public struct BoardRun: Sendable {
         switch status {
         case .running, .waiting: .running
         case .failed: .error
-        case .done, .cancelled: .stopped
+        case .done, .cancelled, .unrecognized: .stopped
         }
     }
 
@@ -103,7 +106,7 @@ public struct BoardRun: Sendable {
         switch status {
         case .waiting: .blocked
         case .running: .working
-        case .failed, .done, .cancelled: .idle
+        case .failed, .done, .cancelled, .unrecognized: .idle
         }
     }
 
@@ -428,7 +431,7 @@ public final class FleetStore {
     }
 
     public func title(_ row: InstanceRow) -> String {
-        Naming.sessionTitle(title: row.title, cwd: row.cwd, id: row.id)
+        Naming.sessionTitle(title: row.titleSource?.isUnrecognized == true ? row.derivedTitle : row.title, cwd: row.cwd, id: row.id)
     }
 
     /// links.ts `conversationHref`: a known instance's id, otherwise the
@@ -445,7 +448,8 @@ public final class FleetStore {
     }
 
     /// links.ts `catalogTitle`: a stored transcript is called what its hub row
-    /// is titled, when a row for it carries a title of its own (`titleSource`);
+    /// is titled, when a row for it carries a title of its own (`titleSource`;
+    /// one a newer hub added names the hub's derived title instead);
     /// else its own custom title or summary, then its first message. The row
     /// is `instanceForSession`'s: the newest at that machine and folder, else
     /// the newest that holds the session at all.
@@ -454,7 +458,12 @@ public final class FleetStore {
         let located = machineId.map { machine in candidates.filter { $0.machineId == machine && $0.cwd == (info.cwd ?? "") } } ?? []
         let row = (located.isEmpty ? candidates : located)
             .sorted { $0.updatedMs != $1.updatedMs ? $0.updatedMs > $1.updatedMs : $0.id < $1.id }.first
-        let named = (row?.titleSource != nil ? row?.title : nil) ?? info.customTitle ?? info.summary
+        let own: String? = switch row?.titleSource {
+        case nil: nil
+        case .unrecognized: row?.derivedTitle
+        case .agent, .owner: row?.title
+        }
+        let named = own ?? info.customTitle ?? info.summary
         return Naming.sessionTitle(title: named, firstMessage: info.firstPrompt, cwd: info.cwd, id: info.sessionId)
     }
 

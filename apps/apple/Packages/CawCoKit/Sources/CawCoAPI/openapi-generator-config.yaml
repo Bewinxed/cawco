@@ -1,7 +1,127 @@
 # swift-openapi-generator (build plugin): the hub's wire types and HTTP client,
 # generated at build time from openapi.json beside this file.
+# Written by `bun run openapi` in packages/hub; do not edit.
 generate:
   - types
   - client
 accessModifier: public
 namingStrategy: idiomatic
+# Every string enum the hub sends, open (OpenEnums.swift).
+typeOverrides:
+  schemas:
+    AccountHue: OpenEnums.AccountHue
+    AccountKind: OpenEnums.AccountKind
+    AgentRowAuth: OpenEnums.AgentRowAuth
+    AuthState: OpenEnums.AuthState
+    BadgePropsTone: OpenEnums.BadgePropsTone
+    BinaryUpdateLandingOutcome: OpenEnums.BinaryUpdateLandingOutcome
+    BinaryUpdatePhase: OpenEnums.BinaryUpdatePhase
+    BinaryUpdatePolicyChannel: OpenEnums.BinaryUpdatePolicyChannel
+    BlockMetadataCompactResult: OpenEnums.BlockMetadataCompactResult
+    BlockMetadataHandoffKind: OpenEnums.BlockMetadataHandoffKind
+    BlockMetadataReportKind: OpenEnums.BlockMetadataReportKind
+    BlockMetadataToolStatus: OpenEnums.BlockMetadataToolStatus
+    BlockMetadataTrigger: OpenEnums.BlockMetadataTrigger
+    CalendarPropsRange: OpenEnums.CalendarPropsRange
+    CapPeriod: OpenEnums.CapPeriod
+    CatalogTypeSource: OpenEnums.CatalogTypeSource
+    CawHarness: OpenEnums.CawHarness
+    ColumnPropsAlign: OpenEnums.ColumnPropsAlign
+    CommandAckOutcome: OpenEnums.CommandAckOutcome
+    CommandAckStage: OpenEnums.CommandAckStage
+    ContinuationJobStage: OpenEnums.ContinuationJobStage
+    ContinueStep: OpenEnums.ContinueStep
+    DelegateBudgetPer: OpenEnums.DelegateBudgetPer
+    DelegateEventBaseRequestKind: OpenEnums.DelegateEventBaseRequestKind
+    DelegateEventBaseStatus: OpenEnums.DelegateEventBaseStatus
+    DelegateTypeRole: OpenEnums.DelegateTypeRole
+    DiscoveredSkillScope: OpenEnums.DiscoveredSkillScope
+    EffortLevel: OpenEnums.EffortLevel
+    Exclude: OpenEnums.Exclude
+    FleetItemStateState: OpenEnums.FleetItemStateState
+    FleetMcpServerMode: OpenEnums.FleetMcpServerMode
+    FleetMcpServerState: OpenEnums.FleetMcpServerState
+    FleetScope: OpenEnums.FleetScope
+    FolderEntryKind: OpenEnums.FolderEntryKind
+    FsEntryKind: OpenEnums.FsEntryKind
+    FunctionCallCall: OpenEnums.FunctionCallCall
+    FunctionCallReturnType: OpenEnums.FunctionCallReturnType
+    GetApiAccountsPlacement200Strategy: OpenEnums.GetApiAccountsPlacement200Strategy
+    GetApiInstances200Kind: OpenEnums.GetApiInstances200Kind
+    GetApiRulesByIdActivity200Status: OpenEnums.GetApiRulesByIdActivity200Status
+    HarnessKind: OpenEnums.HarnessKind
+    HomeCredentialKind: OpenEnums.HomeCredentialKind
+    HomeStore: OpenEnums.HomeStore
+    HookCommandHandlerShell: OpenEnums.HookCommandHandlerShell
+    HookEvent: OpenEnums.HookEvent
+    InstanceRowEffort: OpenEnums.InstanceRowEffort
+    InstanceRowLaunchDir: OpenEnums.InstanceRowLaunchDir
+    InstanceRowTitleSource: OpenEnums.InstanceRowTitleSource
+    InstanceStatus: OpenEnums.InstanceStatus
+    KeepAliveState: OpenEnums.KeepAliveState
+    KeepAliveTtl: OpenEnums.KeepAliveTtl
+    LandsMode: OpenEnums.LandsMode
+    MachineCapabilityId: OpenEnums.MachineCapabilityId
+    MoveProgressFrameStage: OpenEnums.MoveProgressFrameStage
+    MoveStage: OpenEnums.MoveStage
+    MoveStep: OpenEnums.MoveStep
+    NeutralStatus: OpenEnums.NeutralStatus
+    NeutralTaskPriority: OpenEnums.NeutralTaskPriority
+    OnCap: OpenEnums.OnCap
+    PermissionMode: OpenEnums.PermissionMode
+    PermissionSettledFrameOutcome: OpenEnums.PermissionSettledFrameOutcome
+    PermissionUpdateBehavior: OpenEnums.PermissionUpdateBehavior
+    PermissionUpdateDestination: OpenEnums.PermissionUpdateDestination
+    PlaceKind: OpenEnums.PlaceKind
+    PlacementStrategy: OpenEnums.PlacementStrategy
+    PlanSnapshotSource: OpenEnums.PlanSnapshotSource
+    PlanStepStatus: OpenEnums.PlanStepStatus
+    PostApiInstancesByIdAccount200State: OpenEnums.PostApiInstancesByIdAccount200State
+    PreviewFrameState: OpenEnums.PreviewFrameState
+    ProjectOfferReason: OpenEnums.ProjectOfferReason
+    ProjectStopFrameOutcome: OpenEnums.ProjectStopFrameOutcome
+    RebalanceNoticeHow: OpenEnums.RebalanceNoticeHow
+    RepoInfoVisibility: OpenEnums.RepoInfoVisibility
+    ReposResultError: OpenEnums.ReposResultError
+    RestartHoldReason: OpenEnums.RestartHoldReason
+    RowPropsJustify: OpenEnums.RowPropsJustify
+    RuleAction: OpenEnums.RuleAction
+    RuleMatchKind: OpenEnums.RuleMatchKind
+    RuleTiming: OpenEnums.RuleTiming
+    RuleTrigger: OpenEnums.RuleTrigger
+    RuleWatch: OpenEnums.RuleWatch
+    SendMode: OpenEnums.SendMode
+    SendState: OpenEnums.SendState
+    SessionPulseActivity: OpenEnums.SessionPulseActivity
+    SignInStartVia: OpenEnums.SignInStartVia
+    SigninKind: OpenEnums.SigninKind
+    SigninState: OpenEnums.SigninState
+    SlashCommandKind: OpenEnums.SlashCommandKind
+    SshJoinJobState: OpenEnums.SshJoinJobState
+    StageHooksBy: OpenEnums.StageHooksBy
+    StageKind: OpenEnums.StageKind
+    StagesTemplate: OpenEnums.StagesTemplate
+    StagesViewSource: OpenEnums.StagesViewSource
+    SupervisorEventSource: OpenEnums.SupervisorEventSource
+    SupervisorEventVerdict: OpenEnums.SupervisorEventVerdict
+    TextPropsVariant: OpenEnums.TextPropsVariant
+    ThreadStatus: OpenEnums.ThreadStatus
+    ToolPlatform: OpenEnums.ToolPlatform
+    ToolState: OpenEnums.ToolState
+    Tracker: OpenEnums.Tracker
+    TranscriptBlockState: OpenEnums.TranscriptBlockState
+    TranscriptBranchStatus: OpenEnums.TranscriptBranchStatus
+    TranscriptEventOpenBlock: OpenEnums.TranscriptEventOpenBlock
+    Verb: OpenEnums.Verb
+    WaitReason: OpenEnums.WaitReason
+    WorkItemState: OpenEnums.WorkItemState
+    WorkflowAskAnsweredBy: OpenEnums.WorkflowAskAnsweredBy
+    WorkflowEffectKind: OpenEnums.WorkflowEffectKind
+    WorkflowFailureName: OpenEnums.WorkflowFailureName
+    WorkflowInputType: OpenEnums.WorkflowInputType
+    WorkflowOrigin: OpenEnums.WorkflowOrigin
+    WorkflowRunStatus: OpenEnums.WorkflowRunStatus
+    WorkflowStepKind: OpenEnums.WorkflowStepKind
+    WorkflowStepStatus: OpenEnums.WorkflowStepStatus
+    WorkflowWhenOp: OpenEnums.WorkflowWhenOp
+    WorkspaceState: OpenEnums.WorkspaceState

@@ -24,6 +24,7 @@ final class WorkflowStatusChip: UIView {
         case .done: Tone(ground: Palette.statusDoneBg, ink: Palette.statusDoneInk, glyph: .check, word: "done")
         case .failed: Tone(ground: Palette.statusFailBg, ink: Palette.statusFailInk, glyph: .failed, word: "failed")
         case .cancelled: Tone(ground: Palette.statusIdleBg, ink: Palette.statusIdleInk, glyph: .stop, word: status.rawValue)
+        case .unrecognized: Tone(ground: Palette.statusIdleBg, ink: Palette.statusIdleInk, glyph: .dot, word: "unknown")
         }
         backgroundColor = tone.ground
         let word = KitLabel(TypeScale.typeLabel, ink: tone.ink)

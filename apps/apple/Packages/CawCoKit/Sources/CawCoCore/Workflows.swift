@@ -6,7 +6,43 @@ import OSLog
 
 /// One input a workflow asks for at launch (core `WorkflowInput`).
 public struct WorkflowField: Decodable, Sendable, Equatable {
-    public enum Kind: String, Decodable, Sendable { case path, select, text }
+    /// Open (`OpenEnum`): a kind a newer hub adds reads as `unrecognized`, a text field.
+    public enum Kind: OpenEnum {
+        case path, select, text
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "path": self = .path
+            case "select": self = .select
+            case "text": self = .text
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .path: "path"
+            case .select: "select"
+            case .text: "text"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.path, .select, .text]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
 
     public let name: String
     public let label: String
@@ -207,7 +243,41 @@ public struct WorkflowGraph: Decodable, Sendable, Equatable {
 /// the inputs a program declared, and a drawn workflow's graph.
 public struct WorkflowRow: Decodable, Sendable, Equatable, Identifiable {
     /// A graph the editor compiles, or a program written by hand; fixed at creation.
-    public enum Origin: String, Decodable, Sendable { case editor, code }
+    /// Open (`OpenEnum`): an origin a newer hub adds reads as `unrecognized`, neither tab set.
+    public enum Origin: OpenEnum {
+        case editor, code
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "editor": self = .editor
+            case "code": self = .code
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .editor: "editor"
+            case .code: "code"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.editor, .code]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
 
     public let id: String
     public let name: String

@@ -160,7 +160,7 @@ final class WorkflowLaunchController: KitDialogController {
             let options = [WorkflowSelect.Option(value: "", label: "Choose")] + (field.options ?? []).map { WorkflowSelect.Option(value: $0, label: $0) }
             select.set(options, value: options.contains { $0.value == preset } ? preset : "")
             return select
-        case .path, .text:
+        case .path, .text, .unrecognized:
             let input = WorkflowInput(mono: field.type == .path, height: Size.cInputH)
             input.text = preset
             return input

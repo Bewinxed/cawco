@@ -14690,11 +14690,7 @@
             "type": "number"
           },
           "channel": {
-            "enum": [
-              "nightly",
-              "stable"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/BinaryUpdatePolicyChannel"
           },
           "notes": {
             "type": "string"
@@ -15110,18 +15106,7 @@
                   ]
                 },
                 "kind": {
-                  "enum": [
-                    "ask",
-                    "branch",
-                    "check",
-                    "end",
-                    "jev",
-                    "map",
-                    "start",
-                    "step",
-                    "workflow"
-                  ],
-                  "type": "string"
+                  "$ref": "#/components/schemas/WorkflowStepKind"
                 },
                 "mapIndex": {
                   "type": [
@@ -15661,17 +15646,7 @@
             "type": "object",
             "properties": {
               "status": {
-                "enum": [
-                  "discarded",
-                  "error",
-                  "moving",
-                  "running",
-                  "sleeping",
-                  "starting",
-                  "stopped",
-                  "unknown"
-                ],
-                "type": "string"
+                "$ref": "#/components/schemas/InstanceStatus"
               },
               "sessionId": {
                 "type": [
@@ -15695,15 +15670,7 @@
                 ]
               },
               "effort": {
-                "enum": [
-                  "high",
-                  "low",
-                  "max",
-                  "medium",
-                  "none",
-                  "xhigh"
-                ],
-                "type": "string"
+                "$ref": "#/components/schemas/InstanceRowEffort"
               },
               "canDelegate": {
                 "type": [
@@ -15712,14 +15679,7 @@
                 ]
               },
               "role": {
-                "enum": [
-                  "delegate",
-                  "lead",
-                  "overseer",
-                  "web-facing",
-                  "worker"
-                ],
-                "type": "string"
+                "$ref": "#/components/schemas/DelegateTypeRole"
               },
               "id": {
                 "type": "string"
@@ -15729,12 +15689,7 @@
                 "format": "date-time"
               },
               "kind": {
-                "enum": [
-                  "mainline",
-                  "scratch",
-                  "summariser"
-                ],
-                "type": "string"
+                "$ref": "#/components/schemas/GetApiInstances200Kind"
               },
               "title": {
                 "type": [
@@ -15801,19 +15756,10 @@
                 "type": "string"
               },
               "launchDir": {
-                "enum": [
-                  "known",
-                  "unknown",
-                  "unread"
-                ],
-                "type": "string"
+                "$ref": "#/components/schemas/InstanceRowLaunchDir"
               },
               "titleSource": {
-                "enum": [
-                  "agent",
-                  "owner"
-                ],
-                "type": "string"
+                "$ref": "#/components/schemas/InstanceRowTitleSource"
               },
               "derivedTitle": {
                 "type": [
@@ -15952,17 +15898,7 @@
               "type": "object",
               "properties": {
                 "status": {
-                  "enum": [
-                    "discarded",
-                    "error",
-                    "moving",
-                    "running",
-                    "sleeping",
-                    "starting",
-                    "stopped",
-                    "unknown"
-                  ],
-                  "type": "string"
+                  "$ref": "#/components/schemas/InstanceStatus"
                 },
                 "sessionId": {
                   "type": [
@@ -15986,15 +15922,7 @@
                   ]
                 },
                 "effort": {
-                  "enum": [
-                    "high",
-                    "low",
-                    "max",
-                    "medium",
-                    "none",
-                    "xhigh"
-                  ],
-                  "type": "string"
+                  "$ref": "#/components/schemas/InstanceRowEffort"
                 },
                 "canDelegate": {
                   "type": [
@@ -16003,14 +15931,7 @@
                   ]
                 },
                 "role": {
-                  "enum": [
-                    "delegate",
-                    "lead",
-                    "overseer",
-                    "web-facing",
-                    "worker"
-                  ],
-                  "type": "string"
+                  "$ref": "#/components/schemas/DelegateTypeRole"
                 },
                 "id": {
                   "type": "string"
@@ -16020,12 +15941,7 @@
                   "format": "date-time"
                 },
                 "kind": {
-                  "enum": [
-                    "mainline",
-                    "scratch",
-                    "summariser"
-                  ],
-                  "type": "string"
+                  "$ref": "#/components/schemas/GetApiInstances200Kind"
                 },
                 "title": {
                   "type": [
@@ -16092,19 +16008,10 @@
                   "type": "string"
                 },
                 "launchDir": {
-                  "enum": [
-                    "known",
-                    "unknown",
-                    "unread"
-                  ],
-                  "type": "string"
+                  "$ref": "#/components/schemas/InstanceRowLaunchDir"
                 },
                 "titleSource": {
-                  "enum": [
-                    "agent",
-                    "owner"
-                  ],
-                  "type": "string"
+                  "$ref": "#/components/schemas/InstanceRowTitleSource"
                 },
                 "derivedTitle": {
                   "type": [
@@ -16229,11 +16136,7 @@
             "type": "string"
           },
           "state": {
-            "enum": [
-              "moved",
-              "pending"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/PostApiInstancesByIdAccount200State"
           },
           "why": {
             "type": "string"
@@ -16728,12 +16631,8 @@
                   "type": "string"
                 },
                 "status": {
-                  "description": "`pending` means fired, and no turn has since ended without matching it.",
-                  "enum": [
-                    "armed",
-                    "pending"
-                  ],
-                  "type": "string"
+                  "$ref": "#/components/schemas/GetApiRulesByIdActivity200Status",
+                  "description": "`pending` means fired, and no turn has since ended without matching it."
                 },
                 "totalFires": {
                   "description": "Fires over the session's whole life, which re-arming does not reset.",
@@ -17049,13 +16948,8 @@
                 "type": "string"
               },
               "scope": {
-                "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. MCP goes to `~/.claude.json`'s\n  top-level `mcpServers`, skills to `~/.claude/skills/`, plugins install\n  `--scope user`. The default, and what most rows want.\n- `local` — one project, privately: `~/.claude.json`'s\n  `projects[\"<cwd>\"].mcpServers`, the map Claude Code already keeps per\n  checkout and git never sees; plugins `--scope local`. What a\n  project-bound row should be unless the reader asks to share it.\n- `project` — one project, shared with whoever clones it: `.mcp.json` at\n  the repo root, plugins `--scope project`. It writes inside the working\n  tree, so it is never the default.\n\nSkills have no `local` in Claude Code, so a project-bound skill lands in\n`<cwd>/.claude/skills/` under either scope.",
-                "enum": [
-                  "local",
-                  "project",
-                  "user"
-                ],
-                "type": "string"
+                "$ref": "#/components/schemas/FleetScope",
+                "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. MCP goes to `~/.claude.json`'s\n  top-level `mcpServers`, skills to `~/.claude/skills/`, plugins install\n  `--scope user`. The default, and what most rows want.\n- `local` — one project, privately: `~/.claude.json`'s\n  `projects[\"<cwd>\"].mcpServers`, the map Claude Code already keeps per\n  checkout and git never sees; plugins `--scope local`. What a\n  project-bound row should be unless the reader asks to share it.\n- `project` — one project, shared with whoever clones it: `.mcp.json` at\n  the repo root, plugins `--scope project`. It writes inside the working\n  tree, so it is never the default.\n\nSkills have no `local` in Claude Code, so a project-bound skill lands in\n`<cwd>/.claude/skills/` under either scope."
               }
             },
             "required": [
@@ -17371,13 +17265,8 @@
             "type": "string"
           },
           "scope": {
-            "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. MCP goes to `~/.claude.json`'s\n  top-level `mcpServers`, skills to `~/.claude/skills/`, plugins install\n  `--scope user`. The default, and what most rows want.\n- `local` — one project, privately: `~/.claude.json`'s\n  `projects[\"<cwd>\"].mcpServers`, the map Claude Code already keeps per\n  checkout and git never sees; plugins `--scope local`. What a\n  project-bound row should be unless the reader asks to share it.\n- `project` — one project, shared with whoever clones it: `.mcp.json` at\n  the repo root, plugins `--scope project`. It writes inside the working\n  tree, so it is never the default.\n\nSkills have no `local` in Claude Code, so a project-bound skill lands in\n`<cwd>/.claude/skills/` under either scope.",
-            "enum": [
-              "local",
-              "project",
-              "user"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/FleetScope",
+            "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. MCP goes to `~/.claude.json`'s\n  top-level `mcpServers`, skills to `~/.claude/skills/`, plugins install\n  `--scope user`. The default, and what most rows want.\n- `local` — one project, privately: `~/.claude.json`'s\n  `projects[\"<cwd>\"].mcpServers`, the map Claude Code already keeps per\n  checkout and git never sees; plugins `--scope local`. What a\n  project-bound row should be unless the reader asks to share it.\n- `project` — one project, shared with whoever clones it: `.mcp.json` at\n  the repo root, plugins `--scope project`. It writes inside the working\n  tree, so it is never the default.\n\nSkills have no `local` in Claude Code, so a project-bound skill lands in\n`<cwd>/.claude/skills/` under either scope."
           }
         },
         "required": [
@@ -17467,11 +17356,7 @@
               "type": "boolean"
             },
             "cawHarness": {
-              "enum": [
-                "claude",
-                "opencode"
-              ],
-              "type": "string"
+              "$ref": "#/components/schemas/CawHarness"
             },
             "cawModel": {
               "type": [
@@ -17504,19 +17389,10 @@
               ]
             },
             "capPeriod": {
-              "enum": [
-                "day",
-                "month"
-              ],
-              "type": "string"
+              "$ref": "#/components/schemas/CapPeriod"
             },
             "onCap": {
-              "enum": [
-                "both",
-                "pause",
-                "quiet"
-              ],
-              "type": "string"
+              "$ref": "#/components/schemas/OnCap"
             },
             "accounts": {
               "type": "array",
@@ -17669,11 +17545,7 @@
             "type": "boolean"
           },
           "cawHarness": {
-            "enum": [
-              "claude",
-              "opencode"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/CawHarness"
           },
           "cawModel": {
             "type": [
@@ -17706,19 +17578,10 @@
             ]
           },
           "capPeriod": {
-            "enum": [
-              "day",
-              "month"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/CapPeriod"
           },
           "onCap": {
-            "enum": [
-              "both",
-              "pause",
-              "quiet"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/OnCap"
           },
           "accounts": {
             "type": "array",
@@ -17905,11 +17768,7 @@
             "type": "boolean"
           },
           "cawHarness": {
-            "enum": [
-              "claude",
-              "opencode"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/CawHarness"
           },
           "cawModel": {
             "type": [
@@ -17942,19 +17801,10 @@
             ]
           },
           "capPeriod": {
-            "enum": [
-              "day",
-              "month"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/CapPeriod"
           },
           "onCap": {
-            "enum": [
-              "both",
-              "pause",
-              "quiet"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/OnCap"
           },
           "accounts": {
             "type": "array",
@@ -18066,11 +17916,7 @@
             "type": "boolean"
           },
           "cawHarness": {
-            "enum": [
-              "claude",
-              "opencode"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/CawHarness"
           },
           "cawModel": {
             "type": [
@@ -18103,19 +17949,10 @@
             ]
           },
           "capPeriod": {
-            "enum": [
-              "day",
-              "month"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/CapPeriod"
           },
           "onCap": {
-            "enum": [
-              "both",
-              "pause",
-              "quiet"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/OnCap"
           },
           "accounts": {
             "type": "array",
@@ -18434,18 +18271,7 @@
             ]
           },
           "strategy": {
-            "enum": [
-              "explicit",
-              "fill-first",
-              "fork",
-              "none",
-              "only",
-              "pinned",
-              "soonest-reset",
-              "spread",
-              "type"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/GetApiAccountsPlacement200Strategy"
           },
           "why": {
             "type": "string"
@@ -18878,14 +18704,8 @@
             "type": "string"
           },
           "state": {
-            "description": "A send's row: where its record stands.",
-            "enum": [
-              "cancelled",
-              "failed",
-              "pending",
-              "read"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/TranscriptBlockState",
+            "description": "A send's row: where its record stands."
           },
           "timestamp": {
             "description": "When the turn happened, ISO-8601. A send: when the hub accepted it.\nAnything else: when the harness stored its record. Absent when the\nharness gives none — an invented clock would date a row by when it was read.",
@@ -18942,13 +18762,7 @@
             "type": "string"
           },
           "status": {
-            "enum": [
-              "complete",
-              "error",
-              "running",
-              "starting"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/TranscriptBranchStatus"
           },
           "subagentType": {
             "type": "string"
@@ -19116,13 +18930,8 @@
                     "$ref": "#/components/schemas/ToolGlance"
                   },
                   "openBlock": {
-                    "description": "Which content block the main loop has open right now, from the partials.",
-                    "enum": [
-                      "text",
-                      "thinking",
-                      "tool"
-                    ],
-                    "type": "string"
+                    "$ref": "#/components/schemas/TranscriptEventOpenBlock",
+                    "description": "Which content block the main loop has open right now, from the partials."
                   },
                   "streaming": {
                     "description": "Partial assistant text of the main loop, between partials and the final message.",
@@ -19256,18 +19065,10 @@
                         "type": "number"
                       },
                       "trigger": {
-                        "enum": [
-                          "auto",
-                          "manual"
-                        ],
-                        "type": "string"
+                        "$ref": "#/components/schemas/BlockMetadataTrigger"
                       },
                       "result": {
-                        "enum": [
-                          "failed",
-                          "success"
-                        ],
-                        "type": "string"
+                        "$ref": "#/components/schemas/BlockMetadataCompactResult"
                       },
                       "error": {
                         "type": "string"
@@ -19291,25 +19092,12 @@
                     ]
                   },
                   "permissionMode": {
-                    "description": "How the session answers tool permissions, by the newest `init`.",
-                    "enum": [
-                      "acceptEdits",
-                      "auto",
-                      "bypassPermissions",
-                      "default",
-                      "dontAsk",
-                      "fullSend",
-                      "plan"
-                    ],
-                    "type": "string"
+                    "$ref": "#/components/schemas/PermissionMode",
+                    "description": "How the session answers tool permissions, by the newest `init`."
                   },
                   "sdkStatus": {
-                    "description": "The session's own word on what it is doing: `compacting`, `requesting`, or nothing.",
-                    "enum": [
-                      "compacting",
-                      "requesting"
-                    ],
-                    "type": "string"
+                    "$ref": "#/components/schemas/NeutralStatus",
+                    "description": "The session's own word on what it is doing: `compacting`, `requesting`, or nothing."
                   },
                   "sessionId": {
                     "description": "The harness session key the newest `init` named.",
@@ -20039,11 +19827,7 @@
         "type": "object",
         "properties": {
           "kind": {
-            "enum": [
-              "dir",
-              "file"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/FsEntryKind"
           },
           "name": {
             "type": "string"
@@ -20142,11 +19926,7 @@
             "type": "object",
             "properties": {
               "error": {
-                "enum": [
-                  "gh-missing",
-                  "gh-unauthenticated"
-                ],
-                "type": "string"
+                "$ref": "#/components/schemas/ReposResultError"
               }
             },
             "required": [
@@ -20355,15 +20135,8 @@
             "type": "number"
           },
           "defaultEffort": {
-            "description": "The effort the CLI applies when a spawn omits effort, measured by the\nharness. Null when the model takes none; absent when not measured.",
-            "enum": [
-              "high",
-              "low",
-              "max",
-              "medium",
-              "xhigh"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/EffortLevel",
+            "description": "The effort the CLI applies when a spawn omits effort, measured by the\nharness. Null when the model takes none; absent when not measured."
           },
           "description": {
             "type": "string"
@@ -20470,12 +20243,12 @@
       },
       "AuthState": {
         "description": "Whether a machine's daemon can actually start sessions for a harness. For\nClaude: whether any CawCo account is signed in on the machine.\n`unreadable-credentials` is macOS's own failure: Claude Code keeps an\naccount's credentials in the login keychain, and a daemon outside the GUI\nsession is refused the secret (`errSecInteractionNotAllowed`). Generalized:\nevery harness reports its own auth word through the same three states.",
+        "type": "string",
         "enum": [
           "authenticated",
           "unauthenticated",
           "unreadable-credentials"
-        ],
-        "type": "string"
+        ]
       },
       "NeutralTask": {
         "description": "One task of a session's plan, as every harness can express. Claude Code keeps\na ledger file per task; opencode has a native `todo` list; pi has neither.\nThe dashboard renders this one shape regardless of which answered.",
@@ -20503,21 +20276,11 @@
             "type": "string"
           },
           "priority": {
-            "description": "opencode's todos carry one; Claude Code's ledger does not.",
-            "enum": [
-              "high",
-              "low",
-              "medium"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/NeutralTaskPriority",
+            "description": "opencode's todos carry one; Claude Code's ledger does not."
           },
           "status": {
-            "enum": [
-              "completed",
-              "in_progress",
-              "pending"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/PlanStepStatus"
           },
           "subject": {
             "type": "string"
@@ -20590,23 +20353,11 @@
             "type": "string"
           },
           "effort": {
-            "description": "How hard the model thinks: the same {@link EffortLevel} scale every other effort control uses.",
-            "enum": [
-              "high",
-              "low",
-              "max",
-              "medium",
-              "xhigh"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/EffortLevel",
+            "description": "How hard the model thinks: the same {@link EffortLevel} scale every other effort control uses."
           },
           "harness": {
-            "enum": [
-              "claude",
-              "opencode",
-              "pi"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/HarnessKind"
           },
           "model": {
             "type": "string"
@@ -20616,15 +20367,8 @@
             "type": "string"
           },
           "role": {
-            "description": "The toolset its sessions run in ({@link SESSION_ROLES}): a project type's\n`role:` (delegates/*.md). Absent: a delegate's.",
-            "enum": [
-              "delegate",
-              "lead",
-              "overseer",
-              "web-facing",
-              "worker"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/DelegateTypeRole",
+            "description": "The toolset its sessions run in ({@link SESSION_ROLES}): a project type's\n`role:` (delegates/*.md). Absent: a delegate's."
           },
           "skills": {
             "type": "array",
@@ -20695,13 +20439,7 @@
                 "type": "string"
               },
               "lands": {
-                "enum": [
-                  "branch",
-                  "main",
-                  "none",
-                  "pr"
-                ],
-                "type": "string"
+                "$ref": "#/components/schemas/LandsMode"
               },
               "mcp": {
                 "type": "array",
@@ -20718,11 +20456,7 @@
                 "type": "boolean"
               },
               "source": {
-                "enum": [
-                  "fleet",
-                  "project"
-                ],
-                "type": "string"
+                "$ref": "#/components/schemas/CatalogTypeSource"
               }
             },
             "required": [
@@ -20739,14 +20473,7 @@
             "type": "number"
           },
           "per": {
-            "enum": [
-              "attempt",
-              "day",
-              "month",
-              "task",
-              "week"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/DelegateBudgetPer"
           },
           "turns": {
             "type": "number"
@@ -20835,12 +20562,7 @@
         "type": "object",
         "properties": {
           "kind": {
-            "enum": [
-              "file",
-              "folder",
-              "link"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/FolderEntryKind"
           },
           "path": {
             "description": "From the folder's root, `/` between parts.",
@@ -20996,16 +20718,8 @@
             "type": "string"
           },
           "kind": {
-            "description": "The kind of its stage; null when its stage is not one of the project's.",
-            "enum": [
-              "active",
-              "done",
-              "dropped",
-              "todo",
-              "waiting",
-              "you"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/StageKind",
+            "description": "The kind of its stage; null when its stage is not one of the project's."
           },
           "labels": {
             "type": "array",
@@ -21175,23 +20889,23 @@
       },
       "WorkItemState": {
         "description": "A work item's life. Only `starting` and `running` take messages.",
+        "type": "string",
         "enum": [
           "cancelled",
           "done",
           "failed",
           "running",
           "starting"
-        ],
-        "type": "string"
+        ]
       },
       "Tracker": {
         "description": "Where a project's tasks live: CawCo's files, or (later) an outside tracker.",
+        "type": "string",
         "enum": [
           "cawco",
           "github",
           "linear"
-        ],
-        "type": "string"
+        ]
       },
       "TaskView": {
         "description": "One task, its file read whole, and what its attempts and edges say.",
@@ -21254,16 +20968,8 @@
             "type": "string"
           },
           "kind": {
-            "description": "The kind of its stage; null when its stage is not one of the project's.",
-            "enum": [
-              "active",
-              "done",
-              "dropped",
-              "todo",
-              "waiting",
-              "you"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/StageKind",
+            "description": "The kind of its stage; null when its stage is not one of the project's."
           },
           "labels": {
             "type": "array",
@@ -21272,14 +20978,8 @@
             }
           },
           "lands": {
-            "description": "Where an attempt's work lands, as the file says; null: the project's default.",
-            "enum": [
-              "branch",
-              "main",
-              "none",
-              "pr"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/LandsMode",
+            "description": "Where an attempt's work lands, as the file says; null: the project's default."
           },
           "needsYou": {
             "description": "It waits for you: its stage is of kind `you`, or its last attempt failed.",
@@ -21514,12 +21214,8 @@
             }
           },
           "source": {
-            "description": "`file`: the project's stages.md; `template`: it has none, and the code template stands in.",
-            "enum": [
-              "file",
-              "template"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/StagesViewSource",
+            "description": "`file`: the project's stages.md; `template`: it has none, and the code template stands in."
           },
           "stages": {
             "type": "array",
@@ -21528,17 +21224,8 @@
             }
           },
           "template": {
-            "description": "The template the stages are, word for word, if any.",
-            "enum": [
-              "brand",
-              "code",
-              "design",
-              "launch",
-              "outreach",
-              "seo",
-              "social"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/StagesTemplate",
+            "description": "The template the stages are, word for word, if any."
           },
           "views": {
             "type": "array",
@@ -21569,14 +21256,7 @@
           "who": {
             "type": "array",
             "items": {
-              "enum": [
-                "action",
-                "lead",
-                "routine",
-                "session",
-                "you"
-              ],
-              "type": "string"
+              "$ref": "#/components/schemas/StageHooksBy"
             }
           }
         },
@@ -21617,14 +21297,7 @@
             "type": "number"
           },
           "by": {
-            "enum": [
-              "action",
-              "lead",
-              "routine",
-              "session",
-              "you"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/StageHooksBy"
           },
           "runs": {
             "type": "string"
@@ -21635,6 +21308,7 @@
         }
       },
       "StageKind": {
+        "type": "string",
         "enum": [
           "active",
           "done",
@@ -21642,8 +21316,7 @@
           "todo",
           "waiting",
           "you"
-        ],
-        "type": "string"
+        ]
       },
       "StageView": {
         "type": "object",
@@ -21701,6 +21374,7 @@
         ]
       },
       "StagesTemplate": {
+        "type": "string",
         "enum": [
           "brand",
           "code",
@@ -21709,8 +21383,7 @@
           "outreach",
           "seo",
           "social"
-        ],
-        "type": "string"
+        ]
       },
       "CanvasChoices": {
         "description": "A canvas's choices: what the pane hands the page, and `read_choices` reads.",
@@ -21800,14 +21473,14 @@
       },
       "ProjectOfferReason": {
         "description": "What made the hub offer to make a plain session a project (project-offers.ts);\n`caw` when nothing did: Caw proposed it in conversation and you said yes.",
+        "type": "string",
         "enum": [
           "caw",
           "days",
           "delegates",
           "plan",
           "repo"
-        ],
-        "type": "string"
+        ]
       },
       "AcceptResult": {
         "type": "object",
@@ -21924,24 +21597,20 @@
       },
       "ThreadStatus": {
         "description": "Where a thread stands, derived on every read and never stored: `working`\nwhile the lead session is busy on a turn that thread woke, `needs-you`\nwhile a question the lead asked in it is parked, else `ready`.",
+        "type": "string",
         "enum": [
           "needs-you",
           "ready",
           "working"
-        ],
-        "type": "string"
+        ]
       },
       "SessionPlan": {
         "description": "What `GET /api/instances/:id/plan` answers, and what the live frames keep\na client's copy equal to.",
         "type": "object",
         "properties": {
           "source": {
-            "description": "Where the steps come from: CawCo's own list (`todo_write`'s session\nscope), when the session's native to-do tools are denied (\"CawCo's\nto-dos\" on, and always on pi, which has none); else the harness's own\nlist (Claude Code's task ledger, OpenCode's todos).",
-            "enum": [
-              "cawco",
-              "harness"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/PlanSnapshotSource",
+            "description": "Where the steps come from: CawCo's own list (`todo_write`'s session\nscope), when the session's native to-do tools are denied (\"CawCo's\nto-dos\" on, and always on pi, which has none); else the harness's own\nlist (Claude Code's task ledger, OpenCode's todos)."
           },
           "spec": {
             "$ref": "#/components/schemas/PlanSpec",
@@ -22003,12 +21672,7 @@
             "type": "string"
           },
           "priority": {
-            "enum": [
-              "high",
-              "low",
-              "medium"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/NeutralTaskPriority"
           },
           "status": {
             "$ref": "#/components/schemas/PlanStepStatus"
@@ -22022,12 +21686,12 @@
         ]
       },
       "PlanStepStatus": {
+        "type": "string",
         "enum": [
           "completed",
           "in_progress",
           "pending"
-        ],
-        "type": "string"
+        ]
       },
       "DispatchView": {
         "description": "A project's dispatch: its settings, and what the dispatcher would do now.",
@@ -22103,13 +21767,13 @@
       },
       "LandsMode": {
         "description": "Where a work item's work goes once its checks pass (hub/src/landing.ts):\n`main` onto the repository's default branch, `branch` to a branch of its\nown on origin, `pr` to that branch with a pull request, `none` nowhere (the\nwork is not commits; its outputs are the deliverable).",
+        "type": "string",
         "enum": [
           "branch",
           "main",
           "none",
           "pr"
-        ],
-        "type": "string"
+        ]
       },
       "AttemptStart": {
         "description": "An attempt as it started; or, `queued`, waiting for files a live item owns\n(its ids null until it starts).",
@@ -22219,11 +21883,11 @@
       },
       "CawHarness": {
         "description": "The harnesses a project's Caw can run on: the ones that deny its edit and shell tools.",
+        "type": "string",
         "enum": [
           "claude",
           "opencode"
-        ],
-        "type": "string"
+        ]
       },
       "ProjectSpend": {
         "description": "What a project has spent, as `GET /api/projects/:id/spend` answers it, in\ndollars, read now. Each part has one source: its Caw's turns as they were\nbooked (each turn's cost, from its result), its attempts' and other\nsessions' usage as their machines reported it (a lead's sessions are not\ncounted twice). The parts add up: `monthUsd` is Caw's month, every\nattempt's month and the others' month; Caw's month is its threads' month\nand the turns no thread woke. Days and months are the hub's own (its\nzone, as every \"today\" CawCo shows). What a project's cap counts.",
@@ -22440,20 +22104,20 @@
       },
       "OnCap": {
         "description": "What reaching a project's spend cap does (Projects spec §5.3): `pause`\nstarts no new attempts at its tasks, `quiet` books what would wake its Caw\nwithout a turn, `both` does both. The fleet has a default (Configure,\nSpend); a project may set its own.",
+        "type": "string",
         "enum": [
           "both",
           "pause",
           "quiet"
-        ],
-        "type": "string"
+        ]
       },
       "CapPeriod": {
         "description": "The span a project's cap counts over, in the hub's own zone.",
+        "type": "string",
         "enum": [
           "day",
           "month"
-        ],
-        "type": "string"
+        ]
       },
       "ThreadSaid": {
         "description": "Your message as the hub took it: the thread (new or moved) and the message.",
@@ -22965,24 +22629,10 @@
             "type": "object"
           },
           "call": {
-            "enum": [
-              "formatDate",
-              "formatNumber",
-              "formatString",
-              "pluralize"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/FunctionCallCall"
           },
           "returnType": {
-            "enum": [
-              "any",
-              "array",
-              "boolean",
-              "number",
-              "object",
-              "string"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/FunctionCallReturnType"
           }
         },
         "required": [
@@ -23217,11 +22867,7 @@
             "type": "string"
           },
           "range": {
-            "enum": [
-              "month",
-              "week"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/CalendarPropsRange"
           },
           "rows": {
             "$ref": "#/components/schemas/DataBinding",
@@ -23354,14 +23000,7 @@
             "$ref": "#/components/schemas/DynamicString"
           },
           "tone": {
-            "enum": [
-              "attn",
-              "done",
-              "fail",
-              "live",
-              "neutral"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/BadgePropsTone"
           },
           "unit": {
             "anyOf": [
@@ -23461,13 +23100,7 @@
             "$ref": "#/components/schemas/DynamicString"
           },
           "variant": {
-            "enum": [
-              "body",
-              "label",
-              "meta",
-              "title"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/TextPropsVariant"
           },
           "accessibility": {
             "type": "object",
@@ -23518,13 +23151,7 @@
         "type": "object",
         "properties": {
           "align": {
-            "enum": [
-              "center",
-              "end",
-              "start",
-              "stretch"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/ColumnPropsAlign"
           },
           "children": {
             "$ref": "#/components/schemas/ChildList"
@@ -23536,13 +23163,7 @@
             ]
           },
           "justify": {
-            "enum": [
-              "center",
-              "end",
-              "spaceBetween",
-              "start"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/RowPropsJustify"
           },
           "accessibility": {
             "type": "object",
@@ -23593,13 +23214,7 @@
         "type": "object",
         "properties": {
           "align": {
-            "enum": [
-              "center",
-              "end",
-              "start",
-              "stretch"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/ColumnPropsAlign"
           },
           "children": {
             "$ref": "#/components/schemas/ChildList"
@@ -23668,14 +23283,7 @@
             "$ref": "#/components/schemas/DynamicString"
           },
           "tone": {
-            "enum": [
-              "attn",
-              "done",
-              "fail",
-              "live",
-              "neutral"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/BadgePropsTone"
           },
           "accessibility": {
             "type": "object",
@@ -23849,16 +23457,8 @@
             "type": "string"
           },
           "kind": {
-            "description": "Its stage's kind; null when its stage is not one of the project's.",
-            "enum": [
-              "active",
-              "done",
-              "dropped",
-              "todo",
-              "waiting",
-              "you"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/StageKind",
+            "description": "Its stage's kind; null when its stage is not one of the project's."
           },
           "labels": {
             "type": "array",
@@ -24104,13 +23704,8 @@
             ]
           },
           "state": {
-            "description": "`done` means the script exited 0 and the hub has the machine online.",
-            "enum": [
-              "done",
-              "failed",
-              "running"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/SshJoinJobState",
+            "description": "`done` means the script exited 0 and the hub has the machine online."
           },
           "target": {
             "type": "string"
@@ -24136,11 +23731,7 @@
             "type": "boolean"
           },
           "channel": {
-            "enum": [
-              "nightly",
-              "stable"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/BinaryUpdatePolicyChannel"
           }
         },
         "required": [
@@ -24234,11 +23825,7 @@
             }
           },
           "channel": {
-            "enum": [
-              "nightly",
-              "stable"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/BinaryUpdatePolicyChannel"
           },
           "commit": {
             "type": "string"
@@ -24403,17 +23990,7 @@
         "type": "object",
         "properties": {
           "op": {
-            "enum": [
-              "contains",
-              "eq",
-              "falsy",
-              "gt",
-              "lt",
-              "matches",
-              "neq",
-              "truthy"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/WorkflowWhenOp"
           },
           "path": {
             "type": "string"
@@ -24535,26 +24112,14 @@
                     ]
                   },
                   "harness": {
-                    "enum": [
-                      "claude",
-                      "opencode",
-                      "pi"
-                    ],
-                    "type": "string"
+                    "$ref": "#/components/schemas/HarnessKind"
                   },
                   "model": {
                     "type": "string"
                   },
                   "effort": {
-                    "description": "How hard the model thinks, and how much it spends doing it: Claude Code's\neffort scale, in its own order. Hand-written rather than tunnelled from the\nSDK — nothing in this file imports a harness SDK, and `@cawco/core` has no\ndependencies at all — but it is the SDK's `EffortLevel` verbatim, so the\nclaude adapter hands it straight on.\n\nEffort is not only thinking depth. A lower level also buys fewer and more\nconsolidated tool calls, less preamble and terser confirmations; a higher one\nspends tokens in all of those places. A harness with no such knob reports\n`effort: false` rather than mapping onto this.",
-                    "enum": [
-                      "high",
-                      "low",
-                      "max",
-                      "medium",
-                      "xhigh"
-                    ],
-                    "type": "string"
+                    "$ref": "#/components/schemas/EffortLevel",
+                    "description": "How hard the model thinks, and how much it spends doing it: Claude Code's\neffort scale, in its own order. Hand-written rather than tunnelled from the\nSDK — nothing in this file imports a harness SDK, and `@cawco/core` has no\ndependencies at all — but it is the SDK's `EffortLevel` verbatim, so the\nclaude adapter hands it straight on.\n\nEffort is not only thinking depth. A lower level also buys fewer and more\nconsolidated tool calls, less preamble and terser confirmations; a higher one\nspends tokens in all of those places. A harness with no such knob reports\n`effort: false` rather than mapping onto this."
                   },
                   "delegateType": {
                     "type": "string"
@@ -24732,11 +24297,7 @@
                     "type": "boolean"
                   },
                   "answeredBy": {
-                    "enum": [
-                      "operator",
-                      "supervisor"
-                    ],
-                    "type": "string"
+                    "$ref": "#/components/schemas/WorkflowAskAnsweredBy"
                   },
                   "waitFor": {
                     "type": "number"
@@ -24948,12 +24509,7 @@
             "type": "boolean"
           },
           "type": {
-            "enum": [
-              "path",
-              "select",
-              "text"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/WorkflowInputType"
           }
         },
         "required": [
@@ -25080,11 +24636,11 @@
         ]
       },
       "WorkflowOrigin": {
+        "type": "string",
         "enum": [
           "code",
           "editor"
-        ],
-        "type": "string"
+        ]
       },
       "Problem": {
         "type": "object",
@@ -25222,14 +24778,14 @@
         ]
       },
       "WorkflowRunStatus": {
+        "type": "string",
         "enum": [
           "cancelled",
           "done",
           "failed",
           "running",
           "waiting"
-        ],
-        "type": "string"
+        ]
       },
       "WorkflowAsk": {
         "description": "The question a `waiting` run is parked on. Self-contained on purpose: a\ncode-origin run has no graph to read the question off, so the hub sends the\nwhole thing, on the run detail and on the frame that announces the wait.",
@@ -25239,11 +24795,7 @@
             "type": "boolean"
           },
           "answeredBy": {
-            "enum": [
-              "operator",
-              "supervisor"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/WorkflowAskAnsweredBy"
           },
           "answerSchema": {
             "type": "object",
@@ -25295,6 +24847,7 @@
       },
       "WorkflowEffectKind": {
         "description": "Every effect kind the bridge can carry: one `w.*` call.",
+        "type": "string",
         "enum": [
           "ask",
           "checkpoint",
@@ -25312,8 +24865,7 @@
           "state-set",
           "trace",
           "workflow"
-        ],
-        "type": "string"
+        ]
       },
       "WorkflowFailure": {
         "description": "How a typed rejection crosses the worker boundary and comes back.",
@@ -25332,13 +24884,7 @@
             "type": "string"
           },
           "name": {
-            "enum": [
-              "AskError",
-              "ChildError",
-              "Error",
-              "StepError"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/WorkflowFailureName"
           },
           "stepId": {
             "type": "string"
@@ -25354,14 +24900,8 @@
         "type": "object",
         "properties": {
           "auth": {
-            "description": "`unknown` until a daemon that probes has registered at least once.",
-            "enum": [
-              "authenticated",
-              "unauthenticated",
-              "unknown",
-              "unreadable-credentials"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/AgentRowAuth",
+            "description": "`unknown` until a daemon that probes has registered at least once."
           },
           "binaryUpdate": {
             "$ref": "#/components/schemas/BinaryUpdateState"
@@ -25495,11 +25035,7 @@
             "type": "string"
           },
           "channel": {
-            "enum": [
-              "nightly",
-              "stable"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/BinaryUpdatePolicyChannel"
           },
           "commands": {
             "description": "The ids of the last Install now commands this machine acted on, oldest\nfirst: one delivered again is answered and not acted on twice.",
@@ -25646,6 +25182,7 @@
       },
       "RestartHoldReason": {
         "description": "Kinds of work a restart of the agent or the hub would cut. A turn is not one:\nthe session keeper runs it, and the next agent takes it over where it stands.\n\n- `custody`: the agent is still taking over the sessions the keeper holds.\n- `starting`: a session start the agent is in the middle of.\n- `image`: an image generation the agent is running.\n- `workspace`: a delegate's workspace the agent is cutting or archiving.\n- `command`: a command the hub asked the agent to run (a check, a step).\n- `tool-call`: a tool call the agent relays to its hub.\n- `hub-tool-call`: a CawCo tool call the hub is answering, from any machine.\n- `write`: a message or an answer the agent is handing to a harness.\n- `opencode`: an OpenCode server operation the agent runs (a config apply,\n  a session opening, an MCP change, a handoff between server generations).\n- `opencode-send`: messages the agent holds for OpenCode, not yet handed over.",
+        "type": "string",
         "enum": [
           "command",
           "custody",
@@ -25657,8 +25194,7 @@
           "tool-call",
           "workspace",
           "write"
-        ],
-        "type": "string"
+        ]
       },
       "BinaryUpdateLanding": {
         "description": "The last install or rollback that finished. It is the event a notice\nannounces, so nothing but the finish of an install or rollback sets it, and\nthe next one replaces it: the state's other writes carry it through\nunchanged, and the session keeper moving to the build later is part of the\nsame update, not a new one. Whether a person has seen it is the hub's\nrecord (`POST /api/notices/seen`, as `landed:<machineId>:<at>`), so one\nacknowledgement holds for every tab and device.",
@@ -25673,11 +25209,7 @@
             "type": "string"
           },
           "outcome": {
-            "enum": [
-              "installed",
-              "rolled-back"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/BinaryUpdateLandingOutcome"
           },
           "version": {
             "description": "The build installed, or the build that failed and was rolled back.",
@@ -25691,6 +25223,7 @@
         ]
       },
       "BinaryUpdatePhase": {
+        "type": "string",
         "enum": [
           "available",
           "downloading",
@@ -25702,8 +25235,7 @@
           "ready",
           "waiting-for-channel",
           "waiting-sessions"
-        ],
-        "type": "string"
+        ]
       },
       "RetiringKeeper": {
         "description": "A keeper of an earlier build still holding sessions while the current one takes every new start.",
@@ -25849,16 +25381,7 @@
             "type": "string"
           },
           "state": {
-            "enum": [
-              "applied",
-              "disabled",
-              "failed",
-              "needs-auth",
-              "pending",
-              "removed",
-              "unsupported"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/FleetItemStateState"
           }
         },
         "required": [
@@ -25962,14 +25485,8 @@
             "description": "Who the store is signed in as. Absent when it names nobody."
           },
           "kind": {
-            "description": "`console` for a Claude Console login; `oauth` or `api_key` for any other provider's credential.",
-            "enum": [
-              "api_key",
-              "console",
-              "oauth",
-              "subscription"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/AccountKind",
+            "description": "`console` for a Claude Console login; `oauth` or `api_key` for any other provider's credential."
           },
           "loggedIn": {
             "type": "boolean"
@@ -26132,6 +25649,7 @@
       },
       "PermissionMode": {
         "description": "How a session answers tool permissions. The union is Claude Code's, plus\n`fullSend`, CawCo's own: Claude Code's `bypassPermissions` with the host\nalso answering the safety checks the CLI still raises in that mode. Each\nadapter maps `fullSend` onto its harness; none hands it to an SDK as is.",
+        "type": "string",
         "enum": [
           "acceptEdits",
           "auto",
@@ -26140,28 +25658,27 @@
           "dontAsk",
           "fullSend",
           "plan"
-        ],
-        "type": "string"
+        ]
       },
       "HarnessKind": {
         "description": "The harnesses cawco can spawn sessions on. Adding one is a new adapter.",
+        "type": "string",
         "enum": [
           "claude",
           "opencode",
           "pi"
-        ],
-        "type": "string"
+        ]
       },
       "EffortLevel": {
         "description": "How hard the model thinks, and how much it spends doing it: Claude Code's\neffort scale, in its own order. Hand-written rather than tunnelled from the\nSDK — nothing in this file imports a harness SDK, and `@cawco/core` has no\ndependencies at all — but it is the SDK's `EffortLevel` verbatim, so the\nclaude adapter hands it straight on.\n\nEffort is not only thinking depth. A lower level also buys fewer and more\nconsolidated tool calls, less preamble and terser confirmations; a higher one\nspends tokens in all of those places. A harness with no such knob reports\n`effort: false` rather than mapping onto this.",
+        "type": "string",
         "enum": [
           "high",
           "low",
           "max",
           "medium",
           "xhigh"
-        ],
-        "type": "string"
+        ]
       },
       "MachineCapabilities": {
         "type": "object",
@@ -26193,15 +25710,7 @@
             "type": "boolean"
           },
           "id": {
-            "enum": [
-              "browser",
-              "git",
-              "node",
-              "opencode",
-              "pi",
-              "service-manager"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/MachineCapabilityId"
           },
           "installCommand": {
             "type": "string"
@@ -26267,15 +25776,8 @@
             "type": "string"
           },
           "stage": {
-            "description": "`starting`: the new conversation (in place) or new session is starting.",
-            "enum": [
-              "cancelled",
-              "failed",
-              "started",
-              "starting",
-              "summarising"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/ContinuationJobStage",
+            "description": "`starting`: the new conversation (in place) or new session is starting."
           },
           "summariserInstanceId": {
             "description": "Absent when the source is short enough that nothing is summarised.",
@@ -26575,16 +26077,8 @@
             }
           },
           "stoppedAt": {
-            "description": "Once cancelled: the step it stopped at.",
-            "enum": [
-              "approval",
-              "clone",
-              "install",
-              "lfs",
-              "snapshot",
-              "start"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/MoveStep",
+            "description": "Once cancelled: the step it stopped at."
           },
           "targetInstanceId": {
             "description": "The session the job starts, under this id from the start: its row is on\nthe board from then (status `moving`, named by its New session title or\nits first prompt's words), and the start takes the same row on.",
@@ -26639,6 +26133,7 @@
       },
       "MoveStep": {
         "description": "A stage the job does work in.",
+        "type": "string",
         "enum": [
           "approval",
           "clone",
@@ -26646,8 +26141,7 @@
           "lfs",
           "snapshot",
           "start"
-        ],
-        "type": "string"
+        ]
       },
       "MoveInstall": {
         "description": "What `install` runs, chosen by the lockfile at the repository's root.",
@@ -26672,6 +26166,7 @@
       },
       "MoveStage": {
         "description": "Where a job stands: at one of its steps, or settled.",
+        "type": "string",
         "enum": [
           "approval",
           "cancelled",
@@ -26682,8 +26177,7 @@
           "snapshot",
           "start",
           "started"
-        ],
-        "type": "string"
+        ]
       },
       "PreviewFrame": {
         "type": "object",
@@ -26758,11 +26252,7 @@
             ]
           },
           "state": {
-            "enum": [
-              "closed",
-              "open"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/PreviewFrameState"
           }
         },
         "required": [
@@ -26843,22 +26333,10 @@
             "type": "number"
           },
           "state": {
-            "enum": [
-              "asleep",
-              "cold",
-              "off",
-              "paused-usage",
-              "stopped-cap",
-              "waiting"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/KeepAliveState"
           },
           "ttl": {
-            "enum": [
-              "1h",
-              "5m"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/KeepAliveTtl"
           }
         },
         "required": [
@@ -26981,13 +26459,8 @@
             "$ref": "#/components/schemas/FleetScope"
           },
           "shadowedBy": {
-            "description": "Set when a nearer scope defines the same name and wins. Claude Code's own\nprecedence is local > project > user, and a fleet server quietly shadowed\nby a checkout is the kind of thing a reader should be told, not debug.",
-            "enum": [
-              "local",
-              "project",
-              "user"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/FleetScope",
+            "description": "Set when a nearer scope defines the same name and wins. Claude Code's own\nprecedence is local > project > user, and a fleet server quietly shadowed\nby a checkout is the kind of thing a reader should be told, not debug."
           }
         },
         "required": [
@@ -27098,12 +26571,12 @@
       },
       "FleetScope": {
         "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. MCP goes to `~/.claude.json`'s\n  top-level `mcpServers`, skills to `~/.claude/skills/`, plugins install\n  `--scope user`. The default, and what most rows want.\n- `local` — one project, privately: `~/.claude.json`'s\n  `projects[\"<cwd>\"].mcpServers`, the map Claude Code already keeps per\n  checkout and git never sees; plugins `--scope local`. What a\n  project-bound row should be unless the reader asks to share it.\n- `project` — one project, shared with whoever clones it: `.mcp.json` at\n  the repo root, plugins `--scope project`. It writes inside the working\n  tree, so it is never the default.\n\nSkills have no `local` in Claude Code, so a project-bound skill lands in\n`<cwd>/.claude/skills/` under either scope.",
+        "type": "string",
         "enum": [
           "local",
           "project",
           "user"
-        ],
-        "type": "string"
+        ]
       },
       "DiscoveredSkill": {
         "description": "One skill a machine really has. `plugin` skills come from an installed plugin.",
@@ -27124,13 +26597,7 @@
             "type": "string"
           },
           "scope": {
-            "enum": [
-              "local",
-              "plugin",
-              "project",
-              "user"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/DiscoveredSkillScope"
           }
         },
         "required": [
@@ -27511,12 +26978,8 @@
             "type": "string"
           },
           "compactResult": {
-            "description": "A compaction boundary read back from a harness that stores how it ended\n(opencode): `failed` with the harness's words in `compactError`.",
-            "enum": [
-              "failed",
-              "success"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/BlockMetadataCompactResult",
+            "description": "A compaction boundary read back from a harness that stores how it ended\n(opencode): `failed` with the harness's words in `compactError`."
           },
           "continuation": {
             "description": "A send that is the message a session went on from in a fresh\nconversation (origin {@link import (\"./harness\").CONTINUATION_ORIGIN}):\ndrawn folded under the `continued` line before it, never as a turn.",
@@ -27545,12 +27008,7 @@
             "type": "string"
           },
           "handoffKind": {
-            "enum": [
-              "delegate",
-              "handoff",
-              "start"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/BlockMetadataHandoffKind"
           },
           "hookName": {
             "type": "string"
@@ -27602,28 +27060,15 @@
             "type": "string"
           },
           "permissionMode": {
-            "description": "`init` only, and re-reported every turn: what the session answers tools with.",
-            "enum": [
-              "acceptEdits",
-              "auto",
-              "bypassPermissions",
-              "default",
-              "dontAsk",
-              "fullSend",
-              "plan"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/PermissionMode",
+            "description": "`init` only, and re-reported every turn: what the session answers tools with."
           },
           "preTokens": {
             "type": "number"
           },
           "reportKind": {
-            "description": "Set when a `user.peer` is a delegate's auto-report rather than a hand-off.",
-            "enum": [
-              "failed",
-              "report"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/BlockMetadataReportKind",
+            "description": "Set when a `user.peer` is a delegate's auto-report rather than a hand-off."
           },
           "result": {
             "type": "string"
@@ -27883,12 +27328,7 @@
             "type": "string"
           },
           "toolStatus": {
-            "enum": [
-              "error",
-              "pending",
-              "success"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/BlockMetadataToolStatus"
           },
           "toolUseResult": {
             "description": "The reader's answers to an `AskUserQuestion`, normalised by the harness adapter.",
@@ -27905,11 +27345,7 @@
             "type": "number"
           },
           "trigger": {
-            "enum": [
-              "auto",
-              "manual"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/BlockMetadataTrigger"
           },
           "urgent": {
             "description": "A send made urgently (`SendRecord.mode`): into the running turn, or ahead of it.",
@@ -27944,33 +27380,33 @@
       },
       "AccountHue": {
         "description": "The colour an account is drawn in: the `--account-<name>` token.",
+        "type": "string",
         "enum": [
           "amber",
           "blue",
           "cyan",
           "green",
           "orange"
-        ],
-        "type": "string"
+        ]
       },
       "WaitReason": {
         "description": "Why a session at its account's limit waits for the reset rather than\nmoving: it is a fork (it reads its origin's cache, on its origin's\naccount), moving is switched off, no other account has room, or the reset\ncomes sooner than re-reading its context elsewhere is worth.",
+        "type": "string",
         "enum": [
           "fork",
           "full",
           "off",
           "soon"
-        ],
-        "type": "string"
+        ]
       },
       "ContinueStep": {
         "description": "The steps of continuing a session from a summary, in order: read its\ntranscript, summarise it, start its fresh conversation. Until the last\none is done it goes on in the conversation it has.",
+        "type": "string",
         "enum": [
           "prepare",
           "start",
           "summary"
-        ],
-        "type": "string"
+        ]
       },
       "ShownFile": {
         "description": "A file a sent turn names, as its transcript row shows it.",
@@ -28204,18 +27640,10 @@
                 "type": "number"
               },
               "trigger": {
-                "enum": [
-                  "auto",
-                  "manual"
-                ],
-                "type": "string"
+                "$ref": "#/components/schemas/BlockMetadataTrigger"
               },
               "result": {
-                "enum": [
-                  "failed",
-                  "success"
-                ],
-                "type": "string"
+                "$ref": "#/components/schemas/BlockMetadataCompactResult"
               },
               "error": {
                 "type": "string"
@@ -28239,17 +27667,8 @@
             ]
           },
           "permissionMode": {
-            "description": "How the session answers tool permissions, by the newest `init`.",
-            "enum": [
-              "acceptEdits",
-              "auto",
-              "bypassPermissions",
-              "default",
-              "dontAsk",
-              "fullSend",
-              "plan"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/PermissionMode",
+            "description": "How the session answers tool permissions, by the newest `init`."
           },
           "sdkStatus": {
             "$ref": "#/components/schemas/NeutralStatus",
@@ -28307,14 +27726,8 @@
             "type": "string"
           },
           "kind": {
-            "description": "What the harness says this is, when it knows. Absent → derived from the name and the session's skill list.",
-            "enum": [
-              "builtin",
-              "custom",
-              "mcp",
-              "skill"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/SlashCommandKind",
+            "description": "What the harness says this is, when it knows. Absent → derived from the name and the session's skill list."
           },
           "name": {
             "type": "string"
@@ -28328,11 +27741,11 @@
       },
       "NeutralStatus": {
         "description": "A session's own word on what it is doing right now.",
+        "type": "string",
         "enum": [
           "compacting",
           "requesting"
-        ],
-        "type": "string"
+        ]
       },
       "TranscriptTail": {
         "description": "The live tail: what the turn is doing between frames. The one part of a\ntranscript that moves token by token.",
@@ -28347,13 +27760,8 @@
             "$ref": "#/components/schemas/ToolGlance"
           },
           "openBlock": {
-            "description": "Which content block the main loop has open right now, from the partials.",
-            "enum": [
-              "text",
-              "thinking",
-              "tool"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/TranscriptEventOpenBlock",
+            "description": "Which content block the main loop has open right now, from the partials."
           },
           "streaming": {
             "description": "Partial assistant text of the main loop, between partials and the final message.",
@@ -28434,6 +27842,7 @@
       },
       "Verb": {
         "description": "The whole agent↔hub↔dashboard protocol. Adding a verb is a design decision.",
+        "type": "string",
         "enum": [
           "control",
           "frames",
@@ -28445,8 +27854,7 @@
           "spawn",
           "stop",
           "usage"
-        ],
-        "type": "string"
+        ]
       },
       "DelegateEvent": {
         "description": "One line of what a delegate and its parent said to each other through the\nhub — a `delegate_events` row (packages/hub `db/schema.ts`), read over\n`GET /api/delegate-events` and pushed as a `delegate_event` frame. The hub is\nthe system of record: the transcript markers say the same things, but only\nfor a reader who was watching, and only as text to be parsed back.",
@@ -28591,20 +27999,11 @@
             ]
           },
           "requestKind": {
-            "enum": [
-              "question",
-              "tool"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/DelegateEventBaseRequestKind"
           },
           "status": {
-            "description": "An ask's own state; null on an answer and a report, which settle nothing.",
-            "enum": [
-              "answered",
-              "denied",
-              "pending"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/DelegateEventBaseStatus",
+            "description": "An ask's own state; null on an answer and a report, which settle nothing."
           },
           "toolName": {
             "type": [
@@ -28693,14 +28092,7 @@
             ]
           },
           "state": {
-            "enum": [
-              "cancelled",
-              "done",
-              "failed",
-              "running",
-              "starting"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/WorkItemState"
           },
           "title": {
             "type": "string"
@@ -28828,12 +28220,12 @@
       },
       "ToolPlatform": {
         "description": "The platforms a daemon reports itself as — `platform()` from `node:os`.",
+        "type": "string",
         "enum": [
           "darwin",
           "linux",
           "win32"
-        ],
-        "type": "string"
+        ]
       },
       "ToolRequirement": {
         "description": "A catalog tool another tool needs first, with the version floor it needs.",
@@ -28885,19 +28277,10 @@
             "type": "object",
             "properties": {
               "mode": {
-                "enum": [
-                  "direct",
-                  "oauth"
-                ],
-                "type": "string"
+                "$ref": "#/components/schemas/FleetMcpServerMode"
               },
               "state": {
-                "enum": [
-                  "failed",
-                  "needs-auth",
-                  "signed-in"
-                ],
-                "type": "string"
+                "$ref": "#/components/schemas/FleetMcpServerState"
               },
               "detail": {
                 "type": "string"
@@ -28935,13 +28318,8 @@
             "type": "string"
           },
           "scope": {
-            "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. MCP goes to `~/.claude.json`'s\n  top-level `mcpServers`, skills to `~/.claude/skills/`, plugins install\n  `--scope user`. The default, and what most rows want.\n- `local` — one project, privately: `~/.claude.json`'s\n  `projects[\"<cwd>\"].mcpServers`, the map Claude Code already keeps per\n  checkout and git never sees; plugins `--scope local`. What a\n  project-bound row should be unless the reader asks to share it.\n- `project` — one project, shared with whoever clones it: `.mcp.json` at\n  the repo root, plugins `--scope project`. It writes inside the working\n  tree, so it is never the default.\n\nSkills have no `local` in Claude Code, so a project-bound skill lands in\n`<cwd>/.claude/skills/` under either scope.",
-            "enum": [
-              "local",
-              "project",
-              "user"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/FleetScope",
+            "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. MCP goes to `~/.claude.json`'s\n  top-level `mcpServers`, skills to `~/.claude/skills/`, plugins install\n  `--scope user`. The default, and what most rows want.\n- `local` — one project, privately: `~/.claude.json`'s\n  `projects[\"<cwd>\"].mcpServers`, the map Claude Code already keeps per\n  checkout and git never sees; plugins `--scope local`. What a\n  project-bound row should be unless the reader asks to share it.\n- `project` — one project, shared with whoever clones it: `.mcp.json` at\n  the repo root, plugins `--scope project`. It writes inside the working\n  tree, so it is never the default.\n\nSkills have no `local` in Claude Code, so a project-bound skill lands in\n`<cwd>/.claude/skills/` under either scope."
           }
         },
         "required": [
@@ -28973,13 +28351,8 @@
             "type": "string"
           },
           "scope": {
-            "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. MCP goes to `~/.claude.json`'s\n  top-level `mcpServers`, skills to `~/.claude/skills/`, plugins install\n  `--scope user`. The default, and what most rows want.\n- `local` — one project, privately: `~/.claude.json`'s\n  `projects[\"<cwd>\"].mcpServers`, the map Claude Code already keeps per\n  checkout and git never sees; plugins `--scope local`. What a\n  project-bound row should be unless the reader asks to share it.\n- `project` — one project, shared with whoever clones it: `.mcp.json` at\n  the repo root, plugins `--scope project`. It writes inside the working\n  tree, so it is never the default.\n\nSkills have no `local` in Claude Code, so a project-bound skill lands in\n`<cwd>/.claude/skills/` under either scope.",
-            "enum": [
-              "local",
-              "project",
-              "user"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/FleetScope",
+            "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. MCP goes to `~/.claude.json`'s\n  top-level `mcpServers`, skills to `~/.claude/skills/`, plugins install\n  `--scope user`. The default, and what most rows want.\n- `local` — one project, privately: `~/.claude.json`'s\n  `projects[\"<cwd>\"].mcpServers`, the map Claude Code already keeps per\n  checkout and git never sees; plugins `--scope local`. What a\n  project-bound row should be unless the reader asks to share it.\n- `project` — one project, shared with whoever clones it: `.mcp.json` at\n  the repo root, plugins `--scope project`. It writes inside the working\n  tree, so it is never the default.\n\nSkills have no `local` in Claude Code, so a project-bound skill lands in\n`<cwd>/.claude/skills/` under either scope."
           }
         },
         "required": [
@@ -29023,13 +28396,8 @@
             "type": "string"
           },
           "scope": {
-            "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. MCP goes to `~/.claude.json`'s\n  top-level `mcpServers`, skills to `~/.claude/skills/`, plugins install\n  `--scope user`. The default, and what most rows want.\n- `local` — one project, privately: `~/.claude.json`'s\n  `projects[\"<cwd>\"].mcpServers`, the map Claude Code already keeps per\n  checkout and git never sees; plugins `--scope local`. What a\n  project-bound row should be unless the reader asks to share it.\n- `project` — one project, shared with whoever clones it: `.mcp.json` at\n  the repo root, plugins `--scope project`. It writes inside the working\n  tree, so it is never the default.\n\nSkills have no `local` in Claude Code, so a project-bound skill lands in\n`<cwd>/.claude/skills/` under either scope.",
-            "enum": [
-              "local",
-              "project",
-              "user"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/FleetScope",
+            "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. MCP goes to `~/.claude.json`'s\n  top-level `mcpServers`, skills to `~/.claude/skills/`, plugins install\n  `--scope user`. The default, and what most rows want.\n- `local` — one project, privately: `~/.claude.json`'s\n  `projects[\"<cwd>\"].mcpServers`, the map Claude Code already keeps per\n  checkout and git never sees; plugins `--scope local`. What a\n  project-bound row should be unless the reader asks to share it.\n- `project` — one project, shared with whoever clones it: `.mcp.json` at\n  the repo root, plugins `--scope project`. It writes inside the working\n  tree, so it is never the default.\n\nSkills have no `local` in Claude Code, so a project-bound skill lands in\n`<cwd>/.claude/skills/` under either scope."
           }
         },
         "required": [
@@ -29075,13 +28443,8 @@
             "type": "string"
           },
           "scope": {
-            "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. MCP goes to `~/.claude.json`'s\n  top-level `mcpServers`, skills to `~/.claude/skills/`, plugins install\n  `--scope user`. The default, and what most rows want.\n- `local` — one project, privately: `~/.claude.json`'s\n  `projects[\"<cwd>\"].mcpServers`, the map Claude Code already keeps per\n  checkout and git never sees; plugins `--scope local`. What a\n  project-bound row should be unless the reader asks to share it.\n- `project` — one project, shared with whoever clones it: `.mcp.json` at\n  the repo root, plugins `--scope project`. It writes inside the working\n  tree, so it is never the default.\n\nSkills have no `local` in Claude Code, so a project-bound skill lands in\n`<cwd>/.claude/skills/` under either scope.",
-            "enum": [
-              "local",
-              "project",
-              "user"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/FleetScope",
+            "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. MCP goes to `~/.claude.json`'s\n  top-level `mcpServers`, skills to `~/.claude/skills/`, plugins install\n  `--scope user`. The default, and what most rows want.\n- `local` — one project, privately: `~/.claude.json`'s\n  `projects[\"<cwd>\"].mcpServers`, the map Claude Code already keeps per\n  checkout and git never sees; plugins `--scope local`. What a\n  project-bound row should be unless the reader asks to share it.\n- `project` — one project, shared with whoever clones it: `.mcp.json` at\n  the repo root, plugins `--scope project`. It writes inside the working\n  tree, so it is never the default.\n\nSkills have no `local` in Claude Code, so a project-bound skill lands in\n`<cwd>/.claude/skills/` under either scope."
           }
         },
         "required": [
@@ -29153,11 +28516,7 @@
             "type": "string"
           },
           "via": {
-            "enum": [
-              "cawco",
-              "install"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/SignInStartVia"
           }
         },
         "required": [
@@ -29196,33 +28555,28 @@
       },
       "RuleAction": {
         "description": "What a firing rule does.\n\n- `reply` — send {@link Rule.reply}, verbatim, the way every rule has\n  always fired.\n- `llm` — hand the turn to the supervisor and send back whatever it\n  decides. Only fires at the `turn` timing (the supervisor judges a\n  finished turn, not a half-typed message) and never repeats a fixed\n  reply (it decides fresh every time).",
+        "type": "string",
         "enum": [
           "llm",
           "reply"
-        ],
-        "type": "string"
+        ]
       },
       "RuleMatchKind": {
         "description": "How {@link Rule.pattern} is read.\n\n- `phrase` / `regex` — text to find in what the session said.\n- `meaning` — a yes/no question the hub puts to TypeSafe's Jev (through\n  OpenRouter) about what the session said; the rule fires when the answer\n  is yes. Decided by the hub asynchronously, so nothing here matches it.",
+        "type": "string",
         "enum": [
           "meaning",
           "phrase",
           "regex"
-        ],
-        "type": "string"
+        ]
       },
       "RuleScope": {
         "description": "What narrows a rule from \"every session on the fleet\" to some of them. Every\nfield is optional and they are ANDed; an empty scope is the default and means\neverywhere. `model` is a substring test, so `opus` covers every dated build\nof it.",
         "type": "object",
         "properties": {
           "harness": {
-            "description": "The harnesses cawco can spawn sessions on. Adding one is a new adapter.",
-            "enum": [
-              "claude",
-              "opencode",
-              "pi"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/HarnessKind",
+            "description": "The harnesses cawco can spawn sessions on. Adding one is a new adapter."
           },
           "machineId": {
             "type": "string"
@@ -29237,29 +28591,29 @@
       },
       "RuleTiming": {
         "description": "When the reply is delivered.\n\n- `turn` — the session has stopped and is idle, so the reply wakes it into a\n  new turn. This is the one that makes a session keep working.\n- `message` — queued the moment the assistant message that matched is\n  complete; the session reads it at the next turn boundary without being\n  interrupted.\n- `immediate` — sent the moment the phrase appears mid-stream, optionally\n  interrupting the turn in flight ({@link Rule.interrupt}).",
+        "type": "string",
         "enum": [
           "immediate",
           "message",
           "turn"
-        ],
-        "type": "string"
+        ]
       },
       "RuleTrigger": {
         "description": "What starts a rule's evaluation.\n\n- `pattern` — the phrase/regex match this file has always done: a rule\n  fires when {@link Rule.pattern} shows up.\n- `every-turn` — there is nothing to match; every turn end is itself the\n  trigger. Only the supervisor can act on that (see {@link RuleAction}),\n  since nothing about the turn has been read yet to answer with a fixed\n  reply.",
+        "type": "string",
         "enum": [
           "every-turn",
           "pattern"
-        ],
-        "type": "string"
+        ]
       },
       "RuleWatch": {
         "description": "Which part of the session's output a rule reads.",
+        "type": "string",
         "enum": [
           "both",
           "text",
           "thinking"
-        ],
-        "type": "string"
+        ]
       },
       "RuleDraft": {
         "description": "A rule as it arrives from the dashboard, before the hub gives it an id.",
@@ -29478,23 +28832,11 @@
             ]
           },
           "source": {
-            "description": "Which mechanism produced the verdict.",
-            "enum": [
-              "autopilot",
-              "rule"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/SupervisorEventSource",
+            "description": "Which mechanism produced the verdict."
           },
           "verdict": {
-            "enum": [
-              "ask",
-              "error",
-              "escalate",
-              "reply",
-              "silent",
-              "skipped"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/SupervisorEventVerdict"
           }
         },
         "required": [
@@ -29669,13 +29011,8 @@
             "type": "string"
           },
           "scope": {
-            "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. MCP goes to `~/.claude.json`'s\n  top-level `mcpServers`, skills to `~/.claude/skills/`, plugins install\n  `--scope user`. The default, and what most rows want.\n- `local` — one project, privately: `~/.claude.json`'s\n  `projects[\"<cwd>\"].mcpServers`, the map Claude Code already keeps per\n  checkout and git never sees; plugins `--scope local`. What a\n  project-bound row should be unless the reader asks to share it.\n- `project` — one project, shared with whoever clones it: `.mcp.json` at\n  the repo root, plugins `--scope project`. It writes inside the working\n  tree, so it is never the default.\n\nSkills have no `local` in Claude Code, so a project-bound skill lands in\n`<cwd>/.claude/skills/` under either scope.",
-            "enum": [
-              "local",
-              "project",
-              "user"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/FleetScope",
+            "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. MCP goes to `~/.claude.json`'s\n  top-level `mcpServers`, skills to `~/.claude/skills/`, plugins install\n  `--scope user`. The default, and what most rows want.\n- `local` — one project, privately: `~/.claude.json`'s\n  `projects[\"<cwd>\"].mcpServers`, the map Claude Code already keeps per\n  checkout and git never sees; plugins `--scope local`. What a\n  project-bound row should be unless the reader asks to share it.\n- `project` — one project, shared with whoever clones it: `.mcp.json` at\n  the repo root, plugins `--scope project`. It writes inside the working\n  tree, so it is never the default.\n\nSkills have no `local` in Claude Code, so a project-bound skill lands in\n`<cwd>/.claude/skills/` under either scope."
           }
         },
         "required": [
@@ -29689,6 +29026,7 @@
       },
       "HookEvent": {
         "description": "Every lifecycle point a hook can attach to.",
+        "type": "string",
         "enum": [
           "ConfigChange",
           "CwdChanged",
@@ -29721,8 +29059,7 @@
           "UserPromptSubmit",
           "WorktreeCreate",
           "WorktreeRemove"
-        ],
-        "type": "string"
+        ]
       },
       "HookHandler": {
         "anyOf": [
@@ -29763,11 +29100,7 @@
             "type": "string"
           },
           "shell": {
-            "enum": [
-              "bash",
-              "powershell"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/HookCommandHandlerShell"
           },
           "type": {
             "type": "string",
@@ -29941,13 +29274,8 @@
             "type": "boolean"
           },
           "scope": {
-            "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. MCP goes to `~/.claude.json`'s\n  top-level `mcpServers`, skills to `~/.claude/skills/`, plugins install\n  `--scope user`. The default, and what most rows want.\n- `local` — one project, privately: `~/.claude.json`'s\n  `projects[\"<cwd>\"].mcpServers`, the map Claude Code already keeps per\n  checkout and git never sees; plugins `--scope local`. What a\n  project-bound row should be unless the reader asks to share it.\n- `project` — one project, shared with whoever clones it: `.mcp.json` at\n  the repo root, plugins `--scope project`. It writes inside the working\n  tree, so it is never the default.\n\nSkills have no `local` in Claude Code, so a project-bound skill lands in\n`<cwd>/.claude/skills/` under either scope.",
-            "enum": [
-              "local",
-              "project",
-              "user"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/FleetScope",
+            "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. MCP goes to `~/.claude.json`'s\n  top-level `mcpServers`, skills to `~/.claude/skills/`, plugins install\n  `--scope user`. The default, and what most rows want.\n- `local` — one project, privately: `~/.claude.json`'s\n  `projects[\"<cwd>\"].mcpServers`, the map Claude Code already keeps per\n  checkout and git never sees; plugins `--scope local`. What a\n  project-bound row should be unless the reader asks to share it.\n- `project` — one project, shared with whoever clones it: `.mcp.json` at\n  the repo root, plugins `--scope project`. It writes inside the working\n  tree, so it is never the default.\n\nSkills have no `local` in Claude Code, so a project-bound skill lands in\n`<cwd>/.claude/skills/` under either scope."
           },
           "event": {
             "$ref": "#/components/schemas/HookEvent"
@@ -30030,12 +29358,12 @@
       },
       "PlaceKind": {
         "description": "What a place is: a checkout on a machine, a delegate's workspace (kept\nwhile the workspace is active), or the project's folder on the hub (its\n`machineId` is `\"hub\"` (db `HUB_PLACE_MACHINE`) and its path `projects/<id>`, relative\nto the hub's data folder; every project has one from the moment it is\nmade).",
+        "type": "string",
         "enum": [
           "checkout",
           "hub",
           "workspace"
-        ],
-        "type": "string"
+        ]
       },
       "RunningSession": {
         "description": "One running session of a project, in tree order (parents first).",
@@ -30080,11 +29408,11 @@
       },
       "WorkspaceState": {
         "description": "A workspace's life: `active` while its checkout is kept; `archived` once its boundary and clone are gone.",
+        "type": "string",
         "enum": [
           "active",
           "archived"
-        ],
-        "type": "string"
+        ]
       },
       "Account": {
         "type": "object",
@@ -30154,13 +29482,13 @@
       },
       "AccountKind": {
         "description": "How the account signs in. Claude: a subscription (`claude auth login`) or a\nConsole organization (`claude auth login --console`). Any other provider:\nits own OAuth sign-in through pi-ai (`oauth`), or a key (`api_key`).",
+        "type": "string",
         "enum": [
           "api_key",
           "console",
           "oauth",
           "subscription"
-        ],
-        "type": "string"
+        ]
       },
       "AccountSignin": {
         "description": "One account signed in (or not) on one machine: its one credential there,\nwhich every harness on the machine that speaks its provider uses.",
@@ -30183,13 +29511,8 @@
             ]
           },
           "movedFrom": {
-            "description": "The store it was moved from: `~/.claude`, pi's own `auth.json`, OpenCode's own; null when not moved.",
-            "enum": [
-              "claude",
-              "opencode",
-              "pi"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/HarnessKind",
+            "description": "The store it was moved from: `~/.claude`, pi's own `auth.json`, OpenCode's own; null when not moved."
           },
           "state": {
             "$ref": "#/components/schemas/SigninState"
@@ -30205,12 +29528,12 @@
       },
       "SigninState": {
         "description": "Where an account stands on one machine.",
+        "type": "string",
         "enum": [
           "mismatch",
           "signed-in",
           "signed-out"
-        ],
-        "type": "string"
+        ]
       },
       "ProviderRouting": {
         "description": "One provider's routing. `yours` places the sessions a person starts;\n`delegates` the ones a session starts.",
@@ -30278,13 +29601,13 @@
       },
       "PlacementStrategy": {
         "description": "How a provider's new sessions choose among its accounts.",
+        "type": "string",
         "enum": [
           "fill-first",
           "pinned",
           "soonest-reset",
           "spread"
-        ],
-        "type": "string"
+        ]
       },
       "AccountReading": {
         "description": "An account's freshest limit reading, assembled from what its sessions'\nClaude Code reported: the windows from `rate_limit_event`s, the plan from\n`accountInfo()`.",
@@ -30464,11 +29787,7 @@
                   "$ref": "#/components/schemas/NamedAccount"
                 },
                 "how": {
-                  "enum": [
-                    "added",
-                    "back"
-                  ],
-                  "type": "string"
+                  "$ref": "#/components/schemas/RebalanceNoticeHow"
                 }
               },
               "required": [
@@ -30651,12 +29970,12 @@
       },
       "SigninKind": {
         "description": "How an account of a kind signs in on a machine. `paste-code`: a link to\nauthorise at, and a code pasted back (Claude Code's `claude auth login`).\n`device-code`: a code entered on any device at the provider's page while\nthe machine waits. `api-key`: a key typed once in the dashboard and relayed\nto the machines picked.",
+        "type": "string",
         "enum": [
           "api-key",
           "device-code",
           "paste-code"
-        ],
-        "type": "string"
+        ]
       },
       "ProviderForecast": {
         "description": "A provider's accounts as a forecast: each account's windows, and which\naccount carries a person's new sessions (`yours`) and a session's\n(`delegates`) from now to the 5-hour horizon.",
@@ -30817,7 +30136,12 @@
             "description": "What Claude Code's own initialize response says about a config dir: who it\nis signed in as (absent when nobody is), its plan, and the models it\noffers. Read by a probe (a session that never takes a turn) and by every\nsession as it starts."
           },
           "state": {
-            "$ref": "#/components/schemas/SigninState"
+            "type": "string",
+            "enum": [
+              "mismatch",
+              "signed-in",
+              "signed-out"
+            ]
           }
         },
         "required": [
@@ -30961,14 +30285,8 @@
             "description": "Who an account is. Claude: as Claude Code's initialize response reports it\n(`account.email`, `account.organization` — the organization's name).\nChatGPT: the access token's claims, read on the machine — the email\n(`https://api.openai.com/profile`.email) and, as `organization`, the ChatGPT\naccount id (`https://api.openai.com/auth`.chatgpt_account_id), the\nworkspace the subscription bills. Another OAuth provider: the email its\ncredential names, if any, and its provider id. A key: its last four\ncharacters (`…a1b2`) and, as `organization`, a fingerprint of it\n(`key:` and the first 16 hex of its SHA-256), so the same key on two\nmachines is one account and the key itself never leaves them."
           },
           "kind": {
-            "description": "How the account signs in. Claude: a subscription (`claude auth login`) or a\nConsole organization (`claude auth login --console`). Any other provider:\nits own OAuth sign-in through pi-ai (`oauth`), or a key (`api_key`).",
-            "enum": [
-              "api_key",
-              "console",
-              "oauth",
-              "subscription"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/AccountKind",
+            "description": "How the account signs in. Claude: a subscription (`claude auth login`) or a\nConsole organization (`claude auth login --console`). Any other provider:\nits own OAuth sign-in through pi-ai (`oauth`), or a key (`api_key`)."
           },
           "loggedIn": {
             "type": "boolean"
@@ -30986,11 +30304,7 @@
             "$ref": "#/components/schemas/AccountIdentity"
           },
           "kind": {
-            "enum": [
-              "api_key",
-              "oauth"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/HomeCredentialKind"
           },
           "provider": {
             "description": "The account provider it is for.",
@@ -31013,20 +30327,20 @@
         ]
       },
       "Exclude": {
+        "type": "string",
         "enum": [
           "opencode",
           "pi"
-        ],
-        "type": "string"
+        ]
       },
       "HomeStore": {
         "description": "Where a credential moved into an account came from: a harness's own store on the machine.",
+        "type": "string",
         "enum": [
           "claude",
           "opencode",
           "pi"
-        ],
-        "type": "string"
+        ]
       },
       "UsageLimitsResponse": {
         "description": "What `/api/usage/limits` returns: every machine's latest readings. A\nmachine's Claude limits are those of the account it runs Claude Code on by\ndefault (its `~/.claude` login), else of the first account signed in there.",
@@ -31361,12 +30675,8 @@
             ]
           },
           "source": {
-            "description": "Where the steps come from: CawCo's own list (`todo_write`'s session\nscope), when the session's native to-do tools are denied (\"CawCo's\nto-dos\" on, and always on pi, which has none); else the harness's own\nlist (Claude Code's task ledger, OpenCode's todos).",
-            "enum": [
-              "cawco",
-              "harness"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/PlanSnapshotSource",
+            "description": "Where the steps come from: CawCo's own list (`todo_write`'s session\nscope), when the session's native to-do tools are denied (\"CawCo's\nto-dos\" on, and always on pi, which has none); else the harness's own\nlist (Claude Code's task ledger, OpenCode's todos)."
           },
           "spec": {
             "$ref": "#/components/schemas/PlanSpec",
@@ -32136,23 +31446,23 @@
       },
       "SendMode": {
         "description": "How a send asks to be read: as a turn of its own, as a note the next turn\nfolds in (`shouldQuery: false`), or urgently — into the running turn, or\nahead of it.",
+        "type": "string",
         "enum": [
           "note",
           "turn",
           "urgent"
-        ],
-        "type": "string"
+        ]
       },
       "SendState": {
         "description": "Where a send stands, as the hub alone decides it: waiting for the harness\n(`pending`), taken up by it (`read`), never going to be (`failed`, with\nwhy), or sent again as another send (`replaced`).",
+        "type": "string",
         "enum": [
           "cancelled",
           "failed",
           "pending",
           "read",
           "replaced"
-        ],
-        "type": "string"
+        ]
       },
       "MessageFrame": {
         "type": "object",
@@ -32660,21 +31970,13 @@
             "type": "object",
             "properties": {
               "trigger": {
-                "enum": [
-                  "auto",
-                  "manual"
-                ],
-                "type": "string"
+                "$ref": "#/components/schemas/BlockMetadataTrigger"
               },
               "pre_tokens": {
                 "type": "number"
               },
               "result": {
-                "enum": [
-                  "failed",
-                  "success"
-                ],
-                "type": "string"
+                "$ref": "#/components/schemas/BlockMetadataCompactResult"
               },
               "error": {
                 "type": "string"
@@ -32682,11 +31984,7 @@
             }
           },
           "compact_result": {
-            "enum": [
-              "failed",
-              "success"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/BlockMetadataCompactResult"
           },
           "content": {
             "type": "string"
@@ -32698,14 +31996,7 @@
             "type": "string"
           },
           "effort": {
-            "enum": [
-              "high",
-              "low",
-              "max",
-              "medium",
-              "xhigh"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/EffortLevel"
           },
           "exit_code": {
             "type": "number"
@@ -33048,17 +32339,8 @@
             }
           },
           "permissionMode": {
-            "description": "How a session answers tool permissions. The union is Claude Code's, plus\n`fullSend`, CawCo's own: Claude Code's `bypassPermissions` with the host\nalso answering the safety checks the CLI still raises in that mode. Each\nadapter maps `fullSend` onto its harness; none hands it to an SDK as is.",
-            "enum": [
-              "acceptEdits",
-              "auto",
-              "bypassPermissions",
-              "default",
-              "dontAsk",
-              "fullSend",
-              "plan"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/PermissionMode",
+            "description": "How a session answers tool permissions. The union is Claude Code's, plus\n`fullSend`, CawCo's own: Claude Code's `bypassPermissions` with the host\nalso answering the safety checks the CLI still raises in that mode. Each\nadapter maps `fullSend` onto its harness; none hands it to an SDK as is."
           },
           "rate_limit_info": {
             "$ref": "#/components/schemas/ObservedRateLimitInfo"
@@ -33341,22 +32623,13 @@
             "type": "string"
           },
           "outcome": {
-            "enum": [
-              "started",
-              "withdrawn"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/CommandAckOutcome"
           },
           "reason": {
             "type": "string"
           },
           "stage": {
-            "enum": [
-              "accepted",
-              "applied",
-              "failed"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/CommandAckStage"
           },
           "type": {
             "type": "string",
@@ -33867,16 +33140,8 @@
             ]
           },
           "effort": {
-            "description": "The effort the session actually sends, as its agent last read it back from\nthe harness ({@link import (\"./harness\").EFFORT_READ}): a level, `none` when\nit sends no effort, null until the first reading lands. A restart hands a\nlevel back to the new process, so it keeps working at the one it was on.",
-            "enum": [
-              "high",
-              "low",
-              "max",
-              "medium",
-              "none",
-              "xhigh"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/InstanceRowEffort",
+            "description": "The effort the session actually sends, as its agent last read it back from\nthe harness ({@link import (\"./harness\").EFFORT_READ}): a level, `none` when\nit sends no effort, null until the first reading lands. A restart hands a\nlevel back to the new process, so it keeps working at the one it was on."
           },
           "harness": {
             "description": "Which harness owns {@link sessionId} — what a resume and a catalog read route on.",
@@ -33936,13 +33201,8 @@
             ]
           },
           "launchDir": {
-            "description": "Whether `cwd` is the launch directory: `known`; `unread`, still to be read\nfrom its machine; `unknown`, its machine has no record of its conversation,\nso `cwd` may be a folder its CLI wandered into and the session is named by\nits title (hub `sessionLabel`) and cannot be resumed.",
-            "enum": [
-              "known",
-              "unknown",
-              "unread"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/InstanceRowLaunchDir",
+            "description": "Whether `cwd` is the launch directory: `known`; `unread`, still to be read\nfrom its machine; `unknown`, its machine has no record of its conversation,\nso `cwd` may be a folder its CLI wandered into and the session is named by\nits title (hub `sessionLabel`) and cannot be resumed."
           },
           "machineId": {
             "type": "string"
@@ -33982,15 +33242,8 @@
             ]
           },
           "role": {
-            "description": "The toolset it runs in, when its spawn named one (a project's Caw is\n`lead`); null: derived from how it started.",
-            "enum": [
-              "delegate",
-              "lead",
-              "overseer",
-              "web-facing",
-              "worker"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/DelegateTypeRole",
+            "description": "The toolset it runs in, when its spawn named one (a project's Caw is\n`lead`); null: derived from how it started."
           },
           "runningDelegates": {
             "description": "Hub-derived count of live delegated work items, including descendants and checks.",
@@ -34039,12 +33292,8 @@
             ]
           },
           "titleSource": {
-            "description": "Who gave the session its name: `owner` (a dashboard rename, which the\nsession's own `set_title` cannot replace) or `agent`. Null while nobody has.",
-            "enum": [
-              "agent",
-              "owner"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/InstanceRowTitleSource",
+            "description": "Who gave the session its name: `owner` (a dashboard rename, which the\nsession's own `set_title` cannot replace) or `agent`. Null while nobody has."
           },
           "updatedAt": {
             "description": "When the row last moved.",
@@ -34095,6 +33344,7 @@
       },
       "InstanceStatus": {
         "description": "What a session row is doing, right now, as the hub last heard it.\n\n- `starting` — a spawn went out and hasn't been confirmed live yet.\n- `running` — the owning daemon currently lists the instance.\n- `sleeping` — no live process, but it runs again: on the session id its\n  harness picks back up from, or fresh under its id when it never named\n  one ({@link relaunchOf}). This is what a daemon restart or a quiet drop used\n  to report as `error` with {@link RESTART_RESUMABLE} in `lastError`; that\n  encoding conflated \"gone but fine\" with a real failure, so `sleeping` rows\n  carry `lastError: null` — nothing went wrong, there's just nothing running.\n- `stopped` — deliberate: the operator (or a `stop` call) ended it.\n- `error` — an actual failure. `lastError` is required here, and this is\n  where {@link RESTART_LOST} still lands: a restart with nothing to resume\n  from is a real loss, not a nap.\n- `unknown` — the machine that owns this row can't currently be reached, so\n  the hub can't say which of the above is true.\n- `discarded` — a spin-off torn down on purpose; gone for good.\n- `moving` — its project is moving to its machine for it (move.ts): the hub\n  holds the row from the move's start, under the id the session starts\n  under, and the move's start takes it on to `starting`. No process, and\n  none is claimed: a failed move files it `error`, a cancelled one drops it.",
+        "type": "string",
         "enum": [
           "discarded",
           "error",
@@ -34104,8 +33354,7 @@
           "starting",
           "stopped",
           "unknown"
-        ],
-        "type": "string"
+        ]
       },
       "InstancesDeltaFrame": {
         "type": "object",
@@ -34204,12 +33453,8 @@
             "type": "string"
           },
           "requestKind": {
-            "description": "`tool` for a permission, `question` for an AskUserQuestion-shaped prompt.",
-            "enum": [
-              "question",
-              "tool"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/DelegateEventBaseRequestKind",
+            "description": "`tool` for a permission, `question` for an AskUserQuestion-shaped prompt."
           },
           "suggestions": {
             "type": "array",
@@ -34357,12 +33602,7 @@
                 }
               },
               "behavior": {
-                "enum": [
-                  "allow",
-                  "ask",
-                  "deny"
-                ],
-                "type": "string"
+                "$ref": "#/components/schemas/PermissionUpdateBehavior"
               },
               "destination": {
                 "$ref": "#/components/schemas/PermissionUpdateDestination"
@@ -34426,14 +33666,14 @@
         ]
       },
       "PermissionUpdateDestination": {
+        "type": "string",
         "enum": [
           "cliArg",
           "localSettings",
           "projectSettings",
           "session",
           "userSettings"
-        ],
-        "type": "string"
+        ]
       },
       "PermissionSettledFrame": {
         "type": "object",
@@ -34449,11 +33689,7 @@
             ]
           },
           "outcome": {
-            "enum": [
-              "answered",
-              "cancelled"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/PermissionSettledFrameOutcome"
           },
           "processGeneration": {
             "type": "string"
@@ -34696,20 +33932,8 @@
             "type": "string"
           },
           "verb": {
-            "description": "The whole agent↔hub↔dashboard protocol. Adding a verb is a design decision.",
-            "enum": [
-              "control",
-              "frames",
-              "fs",
-              "heartbeat",
-              "launch",
-              "register",
-              "send",
-              "spawn",
-              "stop",
-              "usage"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/Verb",
+            "description": "The whole agent↔hub↔dashboard protocol. Adding a verb is a design decision."
           }
         },
         "required": [
@@ -34847,13 +34071,8 @@
         "type": "object",
         "properties": {
           "activity": {
-            "description": "Coarse now-state the rail draws without frames.",
-            "enum": [
-              "blocked",
-              "idle",
-              "working"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/SessionPulseActivity",
+            "description": "Coarse now-state the rail draws without frames."
           },
           "at": {
             "description": "ms epoch of the last frame that changed this pulse.",
@@ -35059,12 +34278,7 @@
             ]
           },
           "outcome": {
-            "enum": [
-              "deferred",
-              "failed",
-              "stopped"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/ProjectStopFrameOutcome"
           },
           "projectId": {
             "type": "string"
@@ -35166,11 +34380,7 @@
             ]
           },
           "source": {
-            "enum": [
-              "autopilot",
-              "rule"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/SupervisorEventSource"
           }
         },
         "required": [
@@ -35238,11 +34448,7 @@
             ]
           },
           "stage": {
-            "enum": [
-              "clone",
-              "lfs"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/MoveProgressFrameStage"
           },
           "total": {
             "type": "number"
@@ -35561,18 +34767,7 @@
             ]
           },
           "kind": {
-            "enum": [
-              "ask",
-              "branch",
-              "check",
-              "end",
-              "jev",
-              "map",
-              "start",
-              "step",
-              "workflow"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/WorkflowStepKind"
           },
           "mapIndex": {
             "type": [
@@ -35606,18 +34801,7 @@
             ]
           },
           "status": {
-            "enum": [
-              "cancelled",
-              "failed",
-              "held",
-              "passed",
-              "pending",
-              "running",
-              "skipped",
-              "unknown",
-              "waiting"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/WorkflowStepStatus"
           },
           "title": {
             "description": "What the call that opened the step named it: a `run`/`spawn` step's\ntitle, an `ask`'s question, the workflow a `workflow` call started.\nNull when the call named nothing.",
@@ -35690,12 +34874,7 @@
             "type": "string"
           },
           "visibility": {
-            "enum": [
-              "INTERNAL",
-              "PRIVATE",
-              "PUBLIC"
-            ],
-            "type": "string"
+            "$ref": "#/components/schemas/RepoInfoVisibility"
           }
         },
         "required": [
@@ -35707,14 +34886,593 @@
       },
       "ToolState": {
         "description": "What a probe or an install attempt found. The unit every surface renders.",
+        "type": "string",
         "enum": [
           "failed",
           "installed",
           "installing",
           "missing",
           "unsupported"
-        ],
-        "type": "string"
+        ]
+      },
+      "AgentRowAuth": {
+        "type": "string",
+        "enum": [
+          "authenticated",
+          "unauthenticated",
+          "unknown",
+          "unreadable-credentials"
+        ]
+      },
+      "BadgePropsTone": {
+        "type": "string",
+        "enum": [
+          "attn",
+          "done",
+          "fail",
+          "live",
+          "neutral"
+        ]
+      },
+      "BinaryUpdateLandingOutcome": {
+        "type": "string",
+        "enum": [
+          "installed",
+          "rolled-back"
+        ]
+      },
+      "BinaryUpdatePolicyChannel": {
+        "type": "string",
+        "enum": [
+          "nightly",
+          "stable"
+        ]
+      },
+      "BlockMetadataCompactResult": {
+        "type": "string",
+        "enum": [
+          "failed",
+          "success"
+        ]
+      },
+      "BlockMetadataHandoffKind": {
+        "type": "string",
+        "enum": [
+          "delegate",
+          "handoff",
+          "start"
+        ]
+      },
+      "BlockMetadataReportKind": {
+        "type": "string",
+        "enum": [
+          "failed",
+          "report"
+        ]
+      },
+      "BlockMetadataToolStatus": {
+        "type": "string",
+        "enum": [
+          "error",
+          "pending",
+          "success"
+        ]
+      },
+      "BlockMetadataTrigger": {
+        "type": "string",
+        "enum": [
+          "auto",
+          "manual"
+        ]
+      },
+      "CalendarPropsRange": {
+        "type": "string",
+        "enum": [
+          "month",
+          "week"
+        ]
+      },
+      "CatalogTypeSource": {
+        "type": "string",
+        "enum": [
+          "fleet",
+          "project"
+        ]
+      },
+      "ColumnPropsAlign": {
+        "type": "string",
+        "enum": [
+          "center",
+          "end",
+          "start",
+          "stretch"
+        ]
+      },
+      "CommandAckOutcome": {
+        "type": "string",
+        "enum": [
+          "started",
+          "withdrawn"
+        ]
+      },
+      "CommandAckStage": {
+        "type": "string",
+        "enum": [
+          "accepted",
+          "applied",
+          "failed"
+        ]
+      },
+      "ContinuationJobStage": {
+        "type": "string",
+        "enum": [
+          "cancelled",
+          "failed",
+          "started",
+          "starting",
+          "summarising"
+        ]
+      },
+      "DelegateBudgetPer": {
+        "type": "string",
+        "enum": [
+          "attempt",
+          "day",
+          "month",
+          "task",
+          "week"
+        ]
+      },
+      "DelegateEventBaseRequestKind": {
+        "type": "string",
+        "enum": [
+          "question",
+          "tool"
+        ]
+      },
+      "DelegateEventBaseStatus": {
+        "type": "string",
+        "enum": [
+          "answered",
+          "denied",
+          "pending"
+        ]
+      },
+      "DelegateTypeRole": {
+        "type": "string",
+        "enum": [
+          "delegate",
+          "lead",
+          "overseer",
+          "web-facing",
+          "worker"
+        ]
+      },
+      "DiscoveredSkillScope": {
+        "type": "string",
+        "enum": [
+          "local",
+          "plugin",
+          "project",
+          "user"
+        ]
+      },
+      "FleetItemStateState": {
+        "type": "string",
+        "enum": [
+          "applied",
+          "disabled",
+          "failed",
+          "needs-auth",
+          "pending",
+          "removed",
+          "unsupported"
+        ]
+      },
+      "FleetMcpServerMode": {
+        "type": "string",
+        "enum": [
+          "direct",
+          "oauth"
+        ]
+      },
+      "FleetMcpServerState": {
+        "type": "string",
+        "enum": [
+          "failed",
+          "needs-auth",
+          "signed-in"
+        ]
+      },
+      "FolderEntryKind": {
+        "type": "string",
+        "enum": [
+          "file",
+          "folder",
+          "link"
+        ]
+      },
+      "FsEntryKind": {
+        "type": "string",
+        "enum": [
+          "dir",
+          "file"
+        ]
+      },
+      "FunctionCallCall": {
+        "type": "string",
+        "enum": [
+          "formatDate",
+          "formatNumber",
+          "formatString",
+          "pluralize"
+        ]
+      },
+      "FunctionCallReturnType": {
+        "type": "string",
+        "enum": [
+          "any",
+          "array",
+          "boolean",
+          "number",
+          "object",
+          "string"
+        ]
+      },
+      "HomeCredentialKind": {
+        "type": "string",
+        "enum": [
+          "api_key",
+          "oauth"
+        ]
+      },
+      "HookCommandHandlerShell": {
+        "type": "string",
+        "enum": [
+          "bash",
+          "powershell"
+        ]
+      },
+      "InstanceRowEffort": {
+        "type": "string",
+        "enum": [
+          "high",
+          "low",
+          "max",
+          "medium",
+          "none",
+          "xhigh"
+        ]
+      },
+      "InstanceRowLaunchDir": {
+        "type": "string",
+        "enum": [
+          "known",
+          "unknown",
+          "unread"
+        ]
+      },
+      "InstanceRowTitleSource": {
+        "type": "string",
+        "enum": [
+          "agent",
+          "owner"
+        ]
+      },
+      "KeepAliveState": {
+        "type": "string",
+        "enum": [
+          "asleep",
+          "cold",
+          "off",
+          "paused-usage",
+          "stopped-cap",
+          "waiting"
+        ]
+      },
+      "KeepAliveTtl": {
+        "type": "string",
+        "enum": [
+          "1h",
+          "5m"
+        ]
+      },
+      "MachineCapabilityId": {
+        "type": "string",
+        "enum": [
+          "browser",
+          "git",
+          "node",
+          "opencode",
+          "pi",
+          "service-manager"
+        ]
+      },
+      "MoveProgressFrameStage": {
+        "type": "string",
+        "enum": [
+          "clone",
+          "lfs"
+        ]
+      },
+      "NeutralTaskPriority": {
+        "type": "string",
+        "enum": [
+          "high",
+          "low",
+          "medium"
+        ]
+      },
+      "PermissionSettledFrameOutcome": {
+        "type": "string",
+        "enum": [
+          "answered",
+          "cancelled"
+        ]
+      },
+      "PermissionUpdateBehavior": {
+        "type": "string",
+        "enum": [
+          "allow",
+          "ask",
+          "deny"
+        ]
+      },
+      "PlanSnapshotSource": {
+        "type": "string",
+        "enum": [
+          "cawco",
+          "harness"
+        ]
+      },
+      "PreviewFrameState": {
+        "type": "string",
+        "enum": [
+          "closed",
+          "open"
+        ]
+      },
+      "ProjectStopFrameOutcome": {
+        "type": "string",
+        "enum": [
+          "deferred",
+          "failed",
+          "stopped"
+        ]
+      },
+      "RebalanceNoticeHow": {
+        "type": "string",
+        "enum": [
+          "added",
+          "back"
+        ]
+      },
+      "RepoInfoVisibility": {
+        "type": "string",
+        "enum": [
+          "INTERNAL",
+          "PRIVATE",
+          "PUBLIC"
+        ]
+      },
+      "ReposResultError": {
+        "type": "string",
+        "enum": [
+          "gh-missing",
+          "gh-unauthenticated"
+        ]
+      },
+      "RowPropsJustify": {
+        "type": "string",
+        "enum": [
+          "center",
+          "end",
+          "spaceBetween",
+          "start"
+        ]
+      },
+      "SessionPulseActivity": {
+        "type": "string",
+        "enum": [
+          "blocked",
+          "idle",
+          "working"
+        ]
+      },
+      "SignInStartVia": {
+        "type": "string",
+        "enum": [
+          "cawco",
+          "install"
+        ]
+      },
+      "SlashCommandKind": {
+        "type": "string",
+        "enum": [
+          "builtin",
+          "custom",
+          "mcp",
+          "skill"
+        ]
+      },
+      "SshJoinJobState": {
+        "type": "string",
+        "enum": [
+          "done",
+          "failed",
+          "running"
+        ]
+      },
+      "StageHooksBy": {
+        "type": "string",
+        "enum": [
+          "action",
+          "lead",
+          "routine",
+          "session",
+          "you"
+        ]
+      },
+      "StagesViewSource": {
+        "type": "string",
+        "enum": [
+          "file",
+          "template"
+        ]
+      },
+      "SupervisorEventSource": {
+        "type": "string",
+        "enum": [
+          "autopilot",
+          "rule"
+        ]
+      },
+      "SupervisorEventVerdict": {
+        "type": "string",
+        "enum": [
+          "ask",
+          "error",
+          "escalate",
+          "reply",
+          "silent",
+          "skipped"
+        ]
+      },
+      "TextPropsVariant": {
+        "type": "string",
+        "enum": [
+          "body",
+          "label",
+          "meta",
+          "title"
+        ]
+      },
+      "TranscriptBlockState": {
+        "type": "string",
+        "enum": [
+          "cancelled",
+          "failed",
+          "pending",
+          "read"
+        ]
+      },
+      "TranscriptBranchStatus": {
+        "type": "string",
+        "enum": [
+          "complete",
+          "error",
+          "running",
+          "starting"
+        ]
+      },
+      "TranscriptEventOpenBlock": {
+        "type": "string",
+        "enum": [
+          "text",
+          "thinking",
+          "tool"
+        ]
+      },
+      "WorkflowAskAnsweredBy": {
+        "type": "string",
+        "enum": [
+          "operator",
+          "supervisor"
+        ]
+      },
+      "WorkflowFailureName": {
+        "type": "string",
+        "enum": [
+          "AskError",
+          "ChildError",
+          "Error",
+          "StepError"
+        ]
+      },
+      "WorkflowInputType": {
+        "type": "string",
+        "enum": [
+          "path",
+          "select",
+          "text"
+        ]
+      },
+      "WorkflowStepKind": {
+        "type": "string",
+        "enum": [
+          "ask",
+          "branch",
+          "check",
+          "end",
+          "jev",
+          "map",
+          "start",
+          "step",
+          "workflow"
+        ]
+      },
+      "WorkflowStepStatus": {
+        "type": "string",
+        "enum": [
+          "cancelled",
+          "failed",
+          "held",
+          "passed",
+          "pending",
+          "running",
+          "skipped",
+          "unknown",
+          "waiting"
+        ]
+      },
+      "WorkflowWhenOp": {
+        "type": "string",
+        "enum": [
+          "contains",
+          "eq",
+          "falsy",
+          "gt",
+          "lt",
+          "matches",
+          "neq",
+          "truthy"
+        ]
+      },
+      "GetApiAccountsPlacement200Strategy": {
+        "type": "string",
+        "enum": [
+          "explicit",
+          "fill-first",
+          "fork",
+          "none",
+          "only",
+          "pinned",
+          "soonest-reset",
+          "spread",
+          "type"
+        ]
+      },
+      "GetApiInstances200Kind": {
+        "type": "string",
+        "enum": [
+          "mainline",
+          "scratch",
+          "summariser"
+        ]
+      },
+      "GetApiRulesByIdActivity200Status": {
+        "type": "string",
+        "enum": [
+          "armed",
+          "pending"
+        ]
+      },
+      "PostApiInstancesByIdAccount200State": {
+        "type": "string",
+        "enum": [
+          "moved",
+          "pending"
+        ]
       }
     }
   }

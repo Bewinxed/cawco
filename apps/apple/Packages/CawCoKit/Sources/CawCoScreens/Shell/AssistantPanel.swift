@@ -375,12 +375,12 @@ final class AssistantPanelView: UIView {
     }
 
     /// `.log-verdict`: an 18pt pill, 6pt in, label type, in its tone's ground and ink.
-    private static func pill(_ verdict: SupervisorEvent.VerdictPayload) -> UIView {
+    private static func pill(_ verdict: Components.Schemas.SupervisorEventVerdict) -> UIView {
         let (ground, ink): (UIColor, UIColor) = switch verdict {
         case .reply: (Palette.statusLiveBg, Palette.statusLiveInk)
         case .escalate, .ask: (Palette.statusAttnBg, Palette.statusAttnInk)
         case .error: (Palette.statusFailBg, Palette.statusFailInk)
-        case .silent, .skipped: (Palette.surfaceRecess, Palette.inkMuted)
+        case .silent, .skipped, .unrecognized: (Palette.surfaceRecess, Palette.inkMuted)
         }
         let label = KitLabel(TypeScale.typeLabel, ink: ink)
         label.text = verdict.rawValue
