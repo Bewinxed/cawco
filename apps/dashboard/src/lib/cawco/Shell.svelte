@@ -1556,26 +1556,26 @@
       width: var(--glyph);
       height: var(--glyph);
     }
-    /* Caw's glass (`c-bar-caw-glass-phone`) is a tab tucked into the
-       screen's trailing edge: square on that side, which meets the edge,
-       and round on the other (owner: "it's top right doesn't need to be
-       rounded"). Its top stands where the tabs' tops do, the bar's height
-       less a tab row's, so the room above Caw and the room above the tabs
-       are the same (owner: "the spacing above the tabs isn't equal to the
-       spacing from caw to the top"), and its foot stays clear of the row's
-       floor, the transcript's top edge, by what the row is taller than his
-       glass (owner: "caw is still touching the transcript"). His rim's arcs
-       follow its outline (NeedsCaw). */
+    /* Caw's glass is a tab tucked into the screen's trailing edge: square
+       on that side, which meets the edge, and round on the other (owner:
+       "it's top right doesn't need to be rounded"), a half circle of its
+       height. It spans the tab row, top to floor: `c-bar-caw-glass-phone`
+       across and `c-tab-row-h` tall, its top where the tabs' tops stand, so
+       the room above Caw is the room above the tabs (owner: "the spacing
+       above the tabs isn't equal to the spacing from caw to the top"), and
+       its foot on the row's floor with theirs, so his panel hangs from the
+       floor and covers no tab. His rim's arcs follow its outline
+       (NeedsCaw). */
     .right {
       align-self: stretch;
     }
     .tools {
       align-self: flex-start;
-      block-size: var(--c-bar-caw-glass-phone);
+      block-size: var(--c-tab-row-h);
       margin-block-start: calc(var(--c-top-bar-h) - var(--c-tab-row-h));
       padding: 0;
-      border-radius: calc(var(--c-bar-caw-glass-phone) / 2) 0 0
-        calc(var(--c-bar-caw-glass-phone) / 2);
+      border-radius: calc(var(--c-tab-row-h) / 2) 0 0
+        calc(var(--c-tab-row-h) / 2);
     }
     /* The side that meets the screen's edge draws no edge of its own. */
     .tools::before {
@@ -1584,7 +1584,7 @@
     /* Joined to Caw's panel, the same: its trailing side is the screen's
        edge, square and with no edge drawn, as the panel's is below it. */
     .join {
-      --r: calc(var(--c-bar-caw-glass-phone) / 2);
+      --r: calc(var(--c-tab-row-h) / 2);
       clip-path: shape(
         from 0 var(--h),
         arc to var(--f) calc(var(--h) - var(--f)) of var(--f) ccw,
@@ -1613,7 +1613,7 @@
     .tools :global(.bar-item) {
       inline-size: var(--c-bar-caw-glass-phone);
       min-inline-size: var(--c-bar-caw-glass-phone);
-      block-size: var(--c-bar-caw-glass-phone);
+      block-size: var(--c-tab-row-h);
     }
     .top.floating {
       position: absolute;

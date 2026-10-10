@@ -657,7 +657,7 @@
     --c-bar-item: calc(var(--c-btn-h) - 2 * var(--c-bar-group-pad));
     /* A symbol in the top bar's glass group: the machines glyph and Caw's head. */
     --c-bar-symbol: 20px;
-    /* Caw's own glass on the phone bar: round at its leading side, square at its trailing one, flush with the screen's trailing edge, its top where the tabs' tops stand (c-top-bar-h less c-tab-row-h), which leaves its foot 4px clear of the transcript. */
+    /* Caw's own glass on the phone bar, this wide across. It spans the tab row, top to floor (c-tab-row-h tall): a half circle of that height at its leading side, square at its trailing one, flush with the screen's trailing edge, so his panel hangs from the row's floor and covers no tab. */
     --c-bar-caw-glass-phone: 32px;
     /* Caw's head in his phone glass: the glass less the desktop item's 4px margin round its head on each side. */
     --c-bar-caw-head-phone: 24px;

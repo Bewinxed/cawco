@@ -186,33 +186,44 @@
   };
 
   /*
-   * The phone's glass (`--c-bar-caw-glass-phone`): a half circle at its
+   * The phone's glass spans the tab row (Shell): `--c-bar-caw-glass-phone`
+   * across and `--c-tab-row-h` tall, a half circle of its height at its
    * leading side and square at its trailing corners, centred in the rim's
    * box. The arcs' path is that outline drawn half the stroke in:
-   * clockwise from 12 o'clock along the top edge, down the trailing edge,
-   * back along the bottom edge, then round the half circle back to 12. Each
-   * arc is ARC/360 of the outline's length and ARC_GAP/360 from the next,
-   * as on the circle.
+   * clockwise from 12 o'clock (the half circle's top) along the top edge,
+   * down the trailing edge, back along the bottom edge, then round the half
+   * circle back to 12. Each arc is ARC/360 of the outline's length and
+   * ARC_GAP/360 from the next, as on the circle.
    */
   const MID = RING_BOX / 2;
-  /** The phone's glass, px (`--c-bar-caw-glass-phone`). */
-  const STAND_BOX = 32;
-  /** The outline's half height on the path, half the stroke in from inside the glass's hairline. */
-  const STAND = STAND_BOX / 2 - GLASS_EDGE - RIM_STROKE / 2;
-  const OUTLINE_LENGTH = (4 + Math.PI) * STAND;
+  /** The phone's glass across, px (`--c-bar-caw-glass-phone`). */
+  const STAND_W = 32;
+  /** The phone's glass tall, px: the tab row's height (`--c-tab-row-h`). */
+  const STAND_H = 36;
+  /** Half the stroke in from inside the glass's hairline. */
+  const STAND_IN = GLASS_EDGE + RIM_STROKE / 2;
+  /** The half circle's radius on the path. */
+  const STAND = STAND_H / 2 - STAND_IN;
+  /** The half circle's centre's x on the path: a radius in from the glass's leading edge. */
+  const STAND_CX = MID - STAND_W / 2 + STAND_H / 2;
+  /** The trailing edge's x on the path. */
+  const STAND_RIGHT = MID + STAND_W / 2 - STAND_IN;
+  /** The top and bottom edges' straight run, from the half circle to the trailing edge. */
+  const STAND_RUN = STAND_RIGHT - STAND_CX;
+  const OUTLINE_LENGTH = 2 * STAND_RUN + (2 + Math.PI) * STAND;
   /** The point `s` px along the outline from 12 o'clock. */
   function onOutline(s: number): [number, number] {
-    if (s < STAND) {
-      return [MID + s, MID - STAND];
+    if (s < STAND_RUN) {
+      return [STAND_CX + s, MID - STAND];
     }
-    if (s < 3 * STAND) {
-      return [MID + STAND, MID - STAND + (s - STAND)];
+    if (s < STAND_RUN + 2 * STAND) {
+      return [STAND_RIGHT, MID - STAND + (s - STAND_RUN)];
     }
-    if (s < 4 * STAND) {
-      return [MID + STAND - (s - 3 * STAND), MID + STAND];
+    if (s < 2 * STAND_RUN + 2 * STAND) {
+      return [STAND_RIGHT - (s - STAND_RUN - 2 * STAND), MID + STAND];
     }
-    const rad = Math.PI + (s - 4 * STAND) / STAND;
-    return [MID + STAND * Math.sin(rad), MID - STAND * Math.cos(rad)];
+    const rad = Math.PI + (s - 2 * STAND_RUN - 2 * STAND) / STAND;
+    return [STAND_CX + STAND * Math.sin(rad), MID - STAND * Math.cos(rad)];
   }
   /** Arc `k` on the outline: caps and all, ARC/360 of it long. */
   const outlinePath = (k: number) => {
@@ -258,16 +269,16 @@
   /** The closed standing outline's halves, the same way. */
   const STAND_HALF = {
     high: [
-      `M ${MID - STAND} ${MID}`,
-      `A ${STAND} ${STAND} 0 0 1 ${MID} ${MID - STAND}`,
-      `L ${MID + STAND} ${MID - STAND}`,
-      `L ${MID + STAND} ${MID}`,
+      `M ${STAND_CX - STAND} ${MID}`,
+      `A ${STAND} ${STAND} 0 0 1 ${STAND_CX} ${MID - STAND}`,
+      `L ${STAND_RIGHT} ${MID - STAND}`,
+      `L ${STAND_RIGHT} ${MID}`,
     ].join(" "),
     low: [
-      `M ${MID + STAND} ${MID}`,
-      `L ${MID + STAND} ${MID + STAND}`,
-      `L ${MID} ${MID + STAND}`,
-      `A ${STAND} ${STAND} 0 0 1 ${MID - STAND} ${MID}`,
+      `M ${STAND_RIGHT} ${MID}`,
+      `L ${STAND_RIGHT} ${MID + STAND}`,
+      `L ${STAND_CX} ${MID + STAND}`,
+      `A ${STAND} ${STAND} 0 0 1 ${STAND_CX - STAND} ${MID}`,
     ].join(" "),
   };
 
@@ -787,7 +798,7 @@
     .capsule::after {
       inset: auto;
       inset-inline-end: 0;
-      inset-block-start: calc((var(--c-bar-caw-glass-phone) - 44px) / 2);
+      inset-block-start: calc((var(--c-tab-row-h) - 44px) / 2);
       inline-size: 44px;
       block-size: 44px;
     }
