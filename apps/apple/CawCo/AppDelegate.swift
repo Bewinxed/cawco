@@ -32,6 +32,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         Pro.shared.start()
         #if DEBUG
         PushRegistry.shared.launch(environment: .sandbox)
+        PushProbe.run()
         #else
         PushRegistry.shared.launch(environment: .production)
         #endif
@@ -157,7 +158,8 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
     @objc private func splitDown() { board?.run(.splitDown) }
 }
 
-/// Tap or Open opens what the push names; Approve answers in the background.
+/// Tap or Open opens what the push names; Approve, a question's options and
+/// "Other…", and Reply run in the background (`PushActions`).
 /// The system may call this off the main thread, so it reads the response
 /// where it is called, does the work on the main actor, and says it is done
 /// from there: UIKit asserts that the completion runs on the main thread
@@ -181,13 +183,9 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
         let note = PushNote(response)
         nonisolated(unsafe) let done = completionHandler
         Task { @MainActor in
-            switch note.action {
-            case PushCategories.approve:
-                await PushApproval.approve(note)
-            case UNNotificationDefaultActionIdentifier, PushCategories.open:
+            let handled = await PushActions.perform(note)
+            if !handled, note.action == UNNotificationDefaultActionIdentifier || note.action == PushCategories.open {
                 PushTaps.deliver(note, to: nil)
-            default:
-                break
             }
             done()
         }
