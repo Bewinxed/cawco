@@ -1290,10 +1290,13 @@ export type GitChanges =
  * `ws/<id8>` cut from the repository's default branch (what `origin` names as
  * its HEAD, fetched as the clone is cut), its `origin` the
  * repository's own remote — and the workspace's boundary, which every shell
- * command of its work items runs inside. Args `[cwd, workspaceId]`; answers
- * {@link WorkspaceCheckout}. Machine-scoped; a directory that is not in a git
- * repository with an `origin` is refused, and so is a machine that cannot
- * hold the boundary.
+ * command of its work items runs inside. A repository with no `origin` gets
+ * the hub's remote of `projectId` as its `origin` first, with its default
+ * branch pushed there (Projects spec §5.1: "A project with no outside remote
+ * gets the hub as its remote"). Args `[cwd, workspaceId, projectId | null]`;
+ * answers {@link WorkspaceCheckout}. Machine-scoped; a directory that is not
+ * in a git repository is refused, so is one with no `origin` and no project,
+ * and so is a machine that cannot hold the boundary.
  */
 export const CONTROL_WORKSPACE_CREATE = "workspaceCreate";
 

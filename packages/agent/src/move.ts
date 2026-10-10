@@ -47,6 +47,7 @@ import {
 import { cawcoDataDir, isSecretFileName } from "@cawco/core/paths";
 import { hostEnvironment } from "@cawco/core/session-env";
 import type { Subprocess } from "bun";
+import { useHubCredentialHelper } from "./git-credential";
 
 // ── The hub's git remote ───────────────────────────────────────────────────
 
@@ -81,8 +82,20 @@ const hubOrigin = (): string => {
 };
 
 /** The project's repository on the hub. */
-const hubRepo = (projectId: string): string =>
+export const hubRepo = (projectId: string): string =>
   `${hubOrigin()}/git/${projectId}.git`;
+
+/** Every repository of the hub's git remote is under this: `<hub>/git/`. */
+const hubGitPrefix = (): string => `${hubOrigin()}/git/`;
+
+/** Whether `url` names one of the hub's repositories, as this machine reaches the hub. */
+export const isHubRemote = (url: string): boolean =>
+  Boolean(process.env[CAWCO_ENV.hubUrl]) && url.startsWith(hubGitPrefix());
+
+/** This machine's id and credential for the hub's git remote, or undefined before the first register. */
+export const hubGitLogin = ():
+  | { machineId: string; credential: string }
+  | undefined => hubCredential;
 
 const basicOf = (): string => {
   if (!hubCredential) {
@@ -202,7 +215,7 @@ const configEnv = (pairs: [string, string][]): Record<string, string> => {
   return env;
 };
 
-const LFS_FILTERS: [string, string][] = [
+export const LFS_FILTERS: [string, string][] = [
   ["filter.lfs.clean", "git-lfs clean -- %f"],
   ["filter.lfs.smudge", "git-lfs smudge -- %f"],
   ["filter.lfs.process", "git-lfs filter-process"],
@@ -228,6 +241,28 @@ const hubEnv = (
     ]),
   } as Record<string, string>;
 };
+
+/**
+ * git's environment for a command that reaches any of the hub's
+ * repositories with this machine's credential, env-only as {@link hubEnv}
+ * is: a workspace's clone and fetches, and a workspace's own fetch and push
+ * run on the host (`hub-git.ts`). LFS's lock checks off: the hub has none.
+ */
+export const hubGitEnv = (
+  extra: [string, string][] = []
+): Record<string, string> =>
+  ({
+    ...hostEnvironment(),
+    GIT_TERMINAL_PROMPT: "0",
+    ...configEnv([
+      [
+        `http.${hubGitPrefix()}.extraHeader`,
+        `Authorization: Basic ${basicOf()}`,
+      ],
+      [`lfs.${hubGitPrefix()}.locksverify`, "false"],
+      ...extra,
+    ]),
+  }) as Record<string, string>;
 
 /**
  * git's environment for anything else. `GIT_OPTIONAL_LOCKS=0`: a read
@@ -1382,6 +1417,10 @@ const cloneStep = (request: MoveCloneRequest): Promise<MoveLfsResult> =>
         );
       }
       await checkOut(run, scratch, request, fromHub);
+      if (fromHub) {
+        // Its origin is the hub: a plain `git pull` there authenticates.
+        useHubCredentialHelper(scratch);
+      }
       const lfs = await lfsOf(scratch, snapshot.commit);
       await Bun.write(join(scratch, ".git", MARKER), `${jobId}\n`);
       if (info) {

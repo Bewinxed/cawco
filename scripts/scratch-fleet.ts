@@ -39,9 +39,13 @@ export interface Seen {
   tools: boolean;
 }
 
-/** What the mock answers a request with: its words, one every `everyMs`. */
+/**
+ * What the mock answers a request with: its words, one every `everyMs`; or,
+ * with `tool` (Anthropic messages only), one call of that tool.
+ */
 export interface Reply {
   everyMs: number;
+  tool?: { input: object; name: string };
   words: string[];
 }
 
@@ -114,22 +118,50 @@ const sseStream = (events: string[], everyMs: number) => {
   );
 };
 
-const anthropicEvents = (words: string[]): string[] => {
+const anthropicEvents = (words: string[], tool?: Reply["tool"]): string[] => {
   const ev = (type: string, data: object) =>
     `event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`;
+  const start = ev("message_start", {
+    message: {
+      id: `msg_${crypto.randomUUID()}`,
+      type: "message",
+      role: "assistant",
+      model: "claude-probe",
+      content: [],
+      stop_reason: null,
+      stop_sequence: null,
+      usage: { input_tokens: 10, output_tokens: 1 },
+    },
+  });
+  if (tool) {
+    return [
+      start,
+      ev("content_block_start", {
+        index: 0,
+        content_block: {
+          type: "tool_use",
+          id: `toolu_${crypto.randomUUID().replaceAll("-", "")}`,
+          name: tool.name,
+          input: {},
+        },
+      }),
+      ev("content_block_delta", {
+        index: 0,
+        delta: {
+          type: "input_json_delta",
+          partial_json: JSON.stringify(tool.input),
+        },
+      }),
+      ev("content_block_stop", { index: 0 }),
+      ev("message_delta", {
+        delta: { stop_reason: "tool_use", stop_sequence: null },
+        usage: { output_tokens: 5 },
+      }),
+      ev("message_stop", {}),
+    ];
+  }
   return [
-    ev("message_start", {
-      message: {
-        id: `msg_${crypto.randomUUID()}`,
-        type: "message",
-        role: "assistant",
-        model: "claude-probe",
-        content: [],
-        stop_reason: null,
-        stop_sequence: null,
-        usage: { input_tokens: 10, output_tokens: 1 },
-      },
-    }),
+    start,
     ev("content_block_start", {
       index: 0,
       content_block: { type: "text", text: "" },
@@ -296,7 +328,9 @@ export async function scratchFleet(options: {
         });
       }
       return sseStream(
-        chat ? chatEvents(reply.words) : anthropicEvents(reply.words),
+        chat
+          ? chatEvents(reply.words)
+          : anthropicEvents(reply.words, reply.tool),
         reply.everyMs
       );
     },
@@ -669,7 +703,9 @@ export async function scratchFleet(options: {
   const spawn = async (
     harness: Harness,
     title: string,
-    cwd = workdir
+    cwd = workdir,
+    /** More of the spawn's payload (its `projectId`). */
+    extra: object = {}
   ): Promise<string> => {
     const instanceId = crypto.randomUUID();
     await post({
@@ -684,6 +720,7 @@ export async function scratchFleet(options: {
         model: MODEL[harness],
         title,
         ...(harness === "pi" ? {} : { permissionMode: "bypassPermissions" }),
+        ...extra,
       },
     });
     await until(
@@ -761,6 +798,8 @@ export async function scratchFleet(options: {
     sandbox,
     home,
     sessiondSocket,
+    /** The scratch services' environment: their HOME, hub and machine. */
+    env,
     repo,
     workdir,
     seen,

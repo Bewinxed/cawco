@@ -1664,6 +1664,7 @@ export const createWorkItems = ({
     createdBy: string,
     cwd: string,
     machineId: string,
+    projectId: string | null,
     checksFor?: string
   ): Promise<WorkspaceRow> => {
     const id = crypto.randomUUID();
@@ -1674,6 +1675,7 @@ export const createWorkItems = ({
       const checkout = (await call(machineId, CONTROL_WORKSPACE_CREATE, [
         cwd,
         id,
+        projectId,
       ])) as WorkspaceCheckout;
       return db.createWorkspace({
         id,
@@ -2110,7 +2112,8 @@ export const createWorkItems = ({
       const workspace = await openWorkspace(
         parent.id,
         request.cwd ?? parent.cwd,
-        machineId
+        machineId,
+        projectId
       );
       if (projectId) {
         recordRepository(projectId, workspace);
@@ -2532,6 +2535,7 @@ export const createWorkItems = ({
       item.instanceId,
       repository,
       machineId,
+      projectId,
       workspace.id
     );
     db.addPlace({ projectId, machineId, path: opened.path, kind: "workspace" });

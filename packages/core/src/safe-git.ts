@@ -95,6 +95,9 @@ export const safeGitArgv = (args: readonly string[]): string[] => [
 const ALLOWED_KEYS: readonly RegExp[] = [
   /^core\.(repositoryformatversion|filemode|bare|logallrefupdates|ignorecase|precomposeunicode|symlinks|autocrlf|eol|safecrlf|quotepath)$/,
   /^extensions\.(objectformat|refstorage)$/,
+  // git-lfs writes its format marker into any repository it runs in (a
+  // checkout that smudges a large file); it names no program.
+  /^lfs\.repositoryformatversion$/,
   /^remote\.[^\n]+\.(url|pushurl|fetch|push|tagopt|prune|mirror|skipdefaultupdate)$/,
   /^branch\.[^\n]+\.(remote|merge|rebase|pushremote|description)$/,
   /^(user|author|committer)\.(name|email)$/,

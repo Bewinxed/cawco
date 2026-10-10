@@ -26,48 +26,150 @@ import { WORKSPACE_GIT_TIMEOUT_MS } from "@cawco/core";
 import { isSecretFileName, workspacesDir } from "@cawco/core/paths";
 import {
   repositoryConfigProblem,
-  SAFE_GIT,
+  SAFE_GIT_ENV,
   SAFE_GIT_SHELL,
+  safeGitArgv,
 } from "@cawco/core/safe-git";
+import { hostEnvironment } from "@cawco/core/session-env";
 import { closeBoundary, ensureBoundary, shellQuote } from "./boundary";
 import { prepareClone } from "./clone";
 import { expandHome } from "./fs";
+import { useHubCredentialHelper } from "./git-credential";
+import {
+  hubGitEnv,
+  hubRepo,
+  isHubRemote,
+  LFS_FILTERS,
+  withoutCredential,
+} from "./move";
 import { runWorkflowCommand } from "./workflow-command";
 import { workspaceHolding } from "./workspace-records";
+
+type Git = (root: string, ...args: string[]) => Promise<string>;
+
+/**
+ * git on this host as `safe-git.ts` says, its stdout trimmed, within the
+ * create's one `deadline`; `env` in place of the host's (the hub's
+ * credential, env-only). git's stderr, credential taken out, is the error.
+ */
+const gitUntil =
+  (deadline: number, env: Record<string, string> = hostEnvironment()): Git =>
+  async (root, ...args) => {
+    const late = `workspace git exceeded ${WORKSPACE_GIT_TIMEOUT_MS / 1000}s`;
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) {
+      throw new Error(late);
+    }
+    const child = Bun.spawn(safeGitArgv(args), {
+      cwd: root,
+      env: { ...env, ...SAFE_GIT_ENV },
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+      timeout: remaining,
+      killSignal: "SIGKILL",
+    });
+    const [stdout, stderr, code] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ]);
+    if (code !== 0) {
+      throw new Error(
+        child.signalCode === "SIGKILL"
+          ? late
+          : `git ${args[0]} failed: ${withoutCredential(stderr.trim())}`
+      );
+    }
+    return stdout.trim();
+  };
+
+const SYMREF = /^ref: refs\/heads\/(\S+)\tHEAD$/m;
+
+/** Whether `treeish` marks any file for LFS (`filter=lfs` in a `.gitattributes`). */
+const marksLfs = (git: Git, repo: string, treeish: string): Promise<boolean> =>
+  git(
+    repo,
+    "grep",
+    "-q",
+    "filter=lfs",
+    treeish,
+    "--",
+    ":(glob)**/.gitattributes"
+  ).then(
+    () => true,
+    () => false
+  );
+
+/**
+ * The branch a workspace of `repo`, whose `origin` is the hub, is cut from
+ * and lands on: the one the hub's repository names as its HEAD, when the hub
+ * has it; otherwise the branch `repo` is on, pushed to the hub now with its
+ * large files (as a move's snapshot goes: `git lfs push`, then `git push`),
+ * which the hub then names as its HEAD (git-remote.ts). A project that never
+ * had a remote, or one a move brought only `cawco/move/*` branches of, has
+ * no default branch on the hub until this.
+ */
+const hubBase = async (git: Git, repo: string): Promise<string> => {
+  const listed = await git(repo, "ls-remote", "--symref", "origin");
+  const named = SYMREF.exec(listed)?.[1];
+  const refs = new Set(listed.split("\n").map((line) => line.split("\t")[1]));
+  if (named && refs.has(`refs/heads/${named}`)) {
+    return named;
+  }
+  const branch = await git(repo, "symbolic-ref", "--short", "HEAD").catch(
+    (error: Error) => {
+      throw new Error(
+        `${repo} is on no branch, and the hub's remote of its project has no default branch yet to cut a workspace from: check out its main branch and delegate again.`,
+        { cause: error }
+      );
+    }
+  );
+  if (await marksLfs(git, repo, `refs/heads/${branch}`)) {
+    await git(repo, "lfs", "push", "origin", `refs/heads/${branch}`);
+  }
+  // `--no-verify`: the repository's own pre-push hooks are for its own pushes.
+  await git(
+    repo,
+    "push",
+    "--no-verify",
+    "-q",
+    "origin",
+    `refs/heads/${branch}:refs/heads/${branch}`
+  );
+  // The branch tracks the hub's: a plain `git pull` there brings landed work in.
+  const tracked = await git(repo, "config", "--get", `branch.${branch}.remote`)
+    .then(Boolean)
+    .catch(() => false);
+  if (!tracked) {
+    await git(repo, "config", `branch.${branch}.remote`, "origin");
+    await git(repo, "config", `branch.${branch}.merge`, `refs/heads/${branch}`);
+  }
+  console.info(
+    `[workspace] ${repo}: ${branch} pushed to the hub's remote, its default branch${tracked ? "" : ", and tracks it"}`
+  );
+  return branch;
+};
 
 /**
  * {@link CONTROL_WORKSPACE_CREATE}: a shared clone on `ws/<id8>` from the
  * remote's default branch as it stands now, and its boundary. A boundary that
- * cannot start takes the clone with it.
+ * cannot start takes the clone with it. A repository with no `origin` gets
+ * the hub's remote of `projectId` as its `origin` (Projects spec §5.1: "A
+ * project with no outside remote gets the hub as its remote"), and a
+ * repository whose `origin` is the hub reaches it with this machine's
+ * credential, env-only; the owner's own pulls and pushes there go through
+ * `cawco git-credential`, named in its config.
  */
 export const createWorkspace = async (
   cwd: unknown,
-  workspaceId: unknown
+  workspaceId: unknown,
+  projectId?: unknown
 ): Promise<WorkspaceCheckout> => {
   const dir = expandHome(String(cwd));
   const deadline = Date.now() + WORKSPACE_GIT_TIMEOUT_MS;
-  const git = async (root: string, ...args: string[]): Promise<string> => {
-    const remaining = deadline - Date.now();
-    if (remaining <= 0) {
-      throw new Error(
-        `workspace git exceeded ${WORKSPACE_GIT_TIMEOUT_MS / 1000}s`
-      );
-    }
-    const result = await runWorkflowCommand(
-      root,
-      `${SAFE_GIT} ${args.map(shellQuote).join(" ")}`,
-      remaining
-    );
-    if (result.exitCode !== 0) {
-      throw new Error(
-        result.exitCode === 124
-          ? `workspace git exceeded ${WORKSPACE_GIT_TIMEOUT_MS / 1000}s`
-          : `git ${args[0]} failed: ${result.stderr.trim()}`
-      );
-    }
-    return result.stdout.trim();
-  };
-  const repoRoot = await git(dir, "rev-parse", "--show-toplevel").catch(
+  const plain = gitUntil(deadline);
+  const repoRoot = await plain(dir, "rev-parse", "--show-toplevel").catch(
     (error: Error) => {
       throw new Error(
         `${dir} is not in a git repository, so it cannot have a workspace: ${error.message}`,
@@ -84,14 +186,29 @@ export const createWorkspace = async (
   if (problem) {
     throw new Error(`${repoRoot} cannot have a workspace: ${problem}`);
   }
-  // A workspace starts from origin's default branch and lands there: asked
-  // before anything is made, so a refusal leaves nothing behind.
-  const remotes = (await git(repoRoot, "remote")).split("\n");
-  if (!remotes.includes("origin")) {
-    throw new Error(
-      `${repoRoot} has no origin remote, so a workspace can't be cut from it. Add one with \`git remote add origin <url>\` and delegate again.`
+  // A workspace starts from origin's default branch and lands there.
+  let origin = await plain(repoRoot, "remote", "get-url", "origin").catch(
+    () => undefined
+  );
+  if (!origin) {
+    if (typeof projectId !== "string" || !projectId) {
+      throw new Error(
+        `${repoRoot} has no origin remote and belongs to no project, so it has no hub remote to cut a workspace from. Delegate from a session in a project, or add a remote with \`git remote add origin <url>\`, and delegate again.`
+      );
+    }
+    origin = hubRepo(projectId);
+    await plain(repoRoot, "remote", "add", "origin", origin);
+    console.info(
+      `[workspace] ${repoRoot} had no origin: the hub's remote of project ${projectId} is its origin now`
     );
   }
+  // A clone of a workspace's clone reaches the hub as that workspace does.
+  const hub = isHubRemote(origin);
+  if (hub && !source) {
+    useHubCredentialHelper(repoRoot);
+  }
+  const authed = hub ? gitUntil(deadline, hubGitEnv()) : plain;
+  const known = hub ? await hubBase(authed, repoRoot) : undefined;
   const id = String(workspaceId);
   const id8 = id.slice(0, 8);
   const path = expandHome(`~/.worktrees/${basename(repoRoot)}-${id8}`);
@@ -101,9 +218,15 @@ export const createWorkspace = async (
     await mkdir(state, { recursive: true });
     // Written before the clone: archive-by-id survives a lost reply or an agent restart.
     await writeFile(join(state, "create.json"), JSON.stringify({ path }));
-    const base = await prepareClone(repoRoot, path, git);
-    await git(path, "checkout", "--quiet", "-b", branch, `origin/${base}`);
-    await copyOwnSecrets(repoRoot, path, git);
+    const base = await prepareClone(repoRoot, path, authed, known);
+    // A hub branch's large files come down with the checkout, from the
+    // hub's LFS, whatever filters this machine's own config names.
+    const checkout =
+      hub && (await marksLfs(authed, path, `origin/${base}`))
+        ? gitUntil(deadline, hubGitEnv(LFS_FILTERS))
+        : authed;
+    await checkout(path, "checkout", "--quiet", "-b", branch, `origin/${base}`);
+    await copyOwnSecrets(repoRoot, path, plain);
     const boundary = await ensureBoundary({ id, path });
     return { repoRoot, path, branch, base, boundaryPid: boundary.pid };
   } catch (error) {

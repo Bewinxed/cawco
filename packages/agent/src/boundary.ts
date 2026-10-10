@@ -105,6 +105,13 @@ import { cloneDenies, workspacePolicy } from "@cawco/core/workspace-policy";
 import { rgPath } from "@vscode/ripgrep-universal";
 import { seatbeltProfile, srtSettings } from "./boundary-policy";
 import { cloneInPlace } from "./clone";
+import {
+  closeGitDoor,
+  gitDoorEnv,
+  gitDoorOf,
+  gitHelperDirOf,
+  openGitDoor,
+} from "./hub-git";
 import { type HeldProc, KeeperPool } from "./keepers";
 import { logRelay } from "./log-relay";
 import {
@@ -723,6 +730,7 @@ const armHook = async (
     await writeWhole(held.exec, execScript(id, held, await hostGh()), 0o755);
   }
   await openToolDoor(id);
+  await openGitDoor({ id, path: held.path });
   const armed: Held = { ...held, hook, policy };
   await writeWhole(
     join(stateDir(id), "boundary.json"),
@@ -1314,7 +1322,7 @@ while :; do
   while IFS= read -r req; do
     (
       printf '%s\\n' "$sandbox" > "$req/sandbox"
-      /usr/bin/perl -e 'setpgrp(0, 0); exec @ARGV' /bin/bash --norc --noprofile -c '. "$1/env" >/dev/null 2>&1; eval "$CAWCO_SANDBOX_ENV"; cd "$(cat "$1/cwd")" || exit 1; eval "$(cat "$1/cmd")"; status=$?; pwd -P > "$1/cwd-out"; exit $status' cawco "$req" > "$req/out" 2> "$req/err" < /dev/null &
+      /usr/bin/perl -e 'setpgrp(0, 0); exec @ARGV' /bin/bash --norc --noprofile -c '. "$1/env" >/dev/null 2>&1; eval "$CAWCO_SANDBOX_ENV"; if [ -n "\${CAWCO_GIT_PARAMETERS:-}" ]; then export GIT_CONFIG_PARAMETERS="\${GIT_CONFIG_PARAMETERS:+$GIT_CONFIG_PARAMETERS }$CAWCO_GIT_PARAMETERS"; fi; cd "$(cat "$1/cwd")" || exit 1; eval "$(cat "$1/cmd")"; status=$?; pwd -P > "$1/cwd-out"; exit $status' cawco "$req" > "$req/out" 2> "$req/err" < /dev/null &
       echo $! > "$req/pid"
       wait $!
       echo $? > "$req/status"
@@ -1418,7 +1426,7 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
   const hash = createHash("sha256");
   if (process.platform === "darwin") {
     const profile = seatbeltProfile(policy, {
-      door: toolDoorOf(id),
+      doors: [toolDoorOf(id), gitDoorOf(id)],
       hostSockets: await Promise.all(
         [
           dirname(workspacesDir()),
@@ -2151,6 +2159,7 @@ const commandEnv = (id: string, scratch: string): string[] => [
     GH_CONFIG_DIR: ghConfigOf(id),
     CAWCO_TOOL_SOCKET: toolDoorOf(id),
     CAWCO_WORKSPACE: id,
+    ...gitDoorEnv(id),
   }).map(([name, value]) => `export ${name}=${shellQuote(value)}`),
 ];
 
@@ -2218,9 +2227,9 @@ const execScript = (
   gh: string | undefined
 ): string => {
   const linux = process.platform === "linux";
-  const path = linux
-    ? `printf 'export PATH=%q\\n' "$caller_path"`
-    : `printf 'export PATH=%q\\n' ${shellQuote(`${shimsOf(id)}:`)}"$caller_path"`;
+  // The hub's git helper (`hub-git.ts`) first, then on macOS the shims.
+  const helpers = `${gitHelperDirOf(id)}:${linux ? "" : `${shimsOf(id)}:`}`;
+  const path = `printf 'export PATH=%q\\n' ${shellQuote(helpers)}"$caller_path"`;
   return `#!/bin/bash
 # CawCo workspace ${id}: runs one shell command inside the workspace's boundary.
 # exec [--cwd-out FILE] COMMAND — FILE gets the directory COMMAND ended in.
@@ -2522,6 +2531,7 @@ export const closeBoundary = async (ref: WorkspaceRef): Promise<void> => {
   forgetRetiring(ref.id);
   forgetStubbed(ref.id);
   await closeToolDoor(ref.id);
+  await closeGitDoor(ref.id);
   const held = await readHeld(ref.id).catch(() => undefined);
   const boundaries = [...(held ? [held] : []), ...(await readRetiring(ref.id))];
   const inners: number[] = [];

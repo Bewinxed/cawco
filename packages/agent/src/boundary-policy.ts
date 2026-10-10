@@ -117,8 +117,8 @@ const depth = (path: string): number => path.split("/").filter(Boolean).length;
 
 /** What a macOS profile names besides the policy. */
 export interface SeatbeltPlace {
-  /** The tool door's socket, the one unix socket under CawCo's dirs a command connects to. */
-  readonly door: string;
+  /** The tool door's and the git door's sockets, the unix sockets under CawCo's dirs a command connects to. */
+  readonly doors: readonly string[];
   /**
    * Where a host's key agents and CawCo's own sockets are (CawCo's state,
    * sessiond's dir, launchd's ssh-agent): no command connects to a socket
@@ -140,7 +140,7 @@ export interface SeatbeltPlace {
  * Besides the policy: signals stay inside the sandbox, `launchctl` does not
  * run (so nothing reaches launchd), the scratch dir itself cannot be removed,
  * and no unix socket under {@link SeatbeltPlace.hostSockets} or a credential
- * store is reached but the tool door's. The network is the host's: Seatbelt
+ * store is reached but the tool and git doors'. The network is the host's: Seatbelt
  * cannot judge a destination by the name it resolves.
  */
 export const seatbeltProfile = (
@@ -190,7 +190,10 @@ export const seatbeltProfile = (
         (path) =>
           `(deny network-outbound (remote unix-socket (subpath ${sbString(path)})))`
       ),
-    `(allow network-outbound (remote unix-socket (subpath ${sbString(place.door)})))`,
+    ...place.doors.map(
+      (door) =>
+        `(allow network-outbound (remote unix-socket (subpath ${sbString(door)})))`
+    ),
     "",
   ].join("\n");
 };

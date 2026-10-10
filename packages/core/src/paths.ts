@@ -333,6 +333,15 @@ export const workspaceCacheDir = (): string =>
 export const workspacesDir = (): string =>
   join(homedir(), ".cawco", "workspaces");
 
+/**
+ * The agent's socket that answers `cawco git-credential` outside a session:
+ * this machine's credential for the hub's git remote, so a checkout whose
+ * `origin` is the hub pulls and pushes from a terminal. Under `~/.cawco`,
+ * which no workspace reads or connects into.
+ */
+export const hubCredentialSocket = (): string =>
+  join(homedir(), ".cawco", "git-credential.sock");
+
 /** One workspace's state dir: its executor, hook, policy and boundary record. */
 export const workspaceStateDir = (id: string): string =>
   join(workspacesDir(), id);

@@ -14,6 +14,7 @@ import {
   CAWCO_MDNS_TYPE,
   readEnv,
 } from "@cawco/core";
+import { hubCredentialSocket } from "@cawco/core/paths";
 import { protocolRange, runtimeCommit } from "@cawco/core/runtime";
 import { discoverHub, findExistingHub, type Hub } from "./discover";
 import {
@@ -488,23 +489,35 @@ const runBinaryApply = async (args: Args): Promise<number> => {
  * hub's git remote (git-credential(1), "custom helpers"), which each session
  * is configured with through env-only git config (agent git-credential.ts).
  * `get` answers with the session's own identity, its instance id and session
- * credential, from the environment the session's shell runs in; `store` and
- * `erase` keep nothing. git hands the request on stdin and closes it.
+ * credential, from the environment the session's shell runs in; outside a
+ * session (a checkout whose `origin` is the hub names this helper in its own
+ * config), with this machine's, which the agent answers on its credential
+ * socket (agent hub-git.ts). `store` and `erase` keep nothing. git hands the
+ * request on stdin and closes it.
  */
 const gitCredential = async (args: Args): Promise<number> => {
-  await Bun.stdin.text();
+  const request = await Bun.stdin.text();
   if (args.action !== "get") {
     return 0;
   }
   const instanceId = readEnv(CAWCO_ENV.instanceId);
   const credential = readEnv(CAWCO_ENV.sessionCredential);
-  if (!(instanceId && credential)) {
+  if (instanceId && credential) {
+    process.stdout.write(`username=${instanceId}\npassword=${credential}\n`);
+    return 0;
+  }
+  const answer = await fetch("http://cawco/", {
+    method: "POST",
+    body: request,
+    unix: hubCredentialSocket(),
+  }).catch(() => undefined);
+  if (!answer?.ok) {
     console.error(
-      "cawco: this shell is no CawCo session's, so it has no credential for the hub's git remote."
+      "cawco: this machine's agent gave no credential for the hub's git remote: it is not running, or not connected to this hub."
     );
     return 1;
   }
-  process.stdout.write(`username=${instanceId}\npassword=${credential}\n`);
+  process.stdout.write(await answer.text());
   return 0;
 };
 

@@ -84,6 +84,7 @@ import { harness, harnesses } from "./harnesses";
 import { removeCawcoSessionConfigs } from "./harnesses/opencode";
 import { PI_AUTH_CHECK_INTERVAL_MS } from "./harnesses/pi-auth";
 import { cache as transcriptCache } from "./harnesses/transcript-cache";
+import { serveHubCredential } from "./hub-git";
 import { KeeperWatchdog } from "./keeper-watchdog";
 import { withKeepers } from "./keepers";
 import { endOrphanedSignIns, endSignIns } from "./login";
@@ -1764,6 +1765,12 @@ const attach = (
         // Registered: launches ask on this connection from here, the held
         // spawns below among them, and what went unanswered before goes now.
         launchAsks.connected(askHub);
+        // A checkout whose origin is the hub pulls and pushes with it from a terminal.
+        serveHubCredential().catch((error: unknown) =>
+          console.warn(
+            `[hub-git] the credential socket did not start: ${error instanceof Error ? error.message : String(error)}`
+          )
+        );
         const spawns = heldSpawns.splice(0);
         takeCustody(envelope.payload, spawns);
         sweepAccounts(envelope.payload as RegisterAckPayload);
@@ -2139,10 +2146,12 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
           : runWorkflowCommand(cwd, cmd, timeoutMs, workspace)
     );
     // A workspace is cut in this process, so a restart would cut it too: none starts behind a raised fence.
-    supervisor.registerDaemonFunction(CONTROL_WORKSPACE_CREATE, (cwd, id) =>
-      fenced()
-        ? Promise.reject(new Error(AGENT_RESTARTING))
-        : createWorkspace(cwd, id)
+    supervisor.registerDaemonFunction(
+      CONTROL_WORKSPACE_CREATE,
+      (cwd, id, projectId) =>
+        fenced()
+          ? Promise.reject(new Error(AGENT_RESTARTING))
+          : createWorkspace(cwd, id, projectId)
     );
     supervisor.registerDaemonFunction(
       CONTROL_WORKSPACE_BOUNDARY,

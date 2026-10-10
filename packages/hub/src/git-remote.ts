@@ -74,6 +74,55 @@ const run = async (argv: string[]): Promise<void> => {
   }
 };
 
+/** git's stdout in `repo`, or undefined when it exits non-zero. */
+const read = async (
+  repo: string,
+  args: string[]
+): Promise<string | undefined> => {
+  const child = Bun.spawn(["git", "-C", repo, ...args], {
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "ignore",
+  });
+  const [code, out] = await Promise.all([
+    child.exited,
+    new Response(child.stdout).text(),
+  ]);
+  return code === 0 ? out.trim() : undefined;
+};
+
+/**
+ * The repository's HEAD at a branch it has, after a push: a new bare
+ * repository's HEAD names `init.defaultBranch`, which the project's own
+ * default branch need not be, and a clone or `ls-remote --symref` reads the
+ * default branch off HEAD. When HEAD names no branch the repository has, it
+ * is set to `main`, else `master`, else the first branch by name; never to a
+ * move's `cawco/` branch.
+ */
+const settleHead = async (repo: string): Promise<void> => {
+  if (
+    (await read(repo, ["rev-parse", "-q", "--verify", "HEAD"])) !== undefined
+  ) {
+    return;
+  }
+  const branches = (
+    (await read(repo, [
+      "for-each-ref",
+      "--format=%(refname)",
+      "refs/heads/",
+    ])) ?? ""
+  )
+    .split("\n")
+    .filter((ref) => ref && !ref.startsWith("refs/heads/cawco/"));
+  const head =
+    branches.find((ref) => ref === "refs/heads/main") ??
+    branches.find((ref) => ref === "refs/heads/master") ??
+    branches.sort()[0];
+  if (head) {
+    await run(["git", "-C", repo, "symbolic-ref", "HEAD", head]);
+  }
+};
+
 /** Where the bytes of a CGI's header block end, and how long its terminator is. */
 const headerEnd = (bytes: Uint8Array): { at: number; length: number } => {
   for (let i = 0; i < bytes.length - 1; i += 1) {
@@ -255,7 +304,7 @@ export const gitRemoteRoutes = (deps: GitRemoteDeps) => {
         status: 404,
       });
     }
-    await made;
+    const repo = await made;
     const child = Bun.spawn(["git", "http-backend"], {
       env: cgiEnv(request, projectId, service, user),
       stdin: request.body ?? "ignore",
@@ -275,6 +324,9 @@ export const gitRemoteRoutes = (deps: GitRemoteDeps) => {
           console.warn(
             `[git] ${service} for ${projectId} by ${user} exited ${code}: ${stderr.trim()}`
           );
+        }
+        if (service === "git-receive-pack" && code === 0) {
+          await settleHead(repo);
         }
       })(),
       "git http-backend"

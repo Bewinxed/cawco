@@ -19,6 +19,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CAWCO_ENV } from "@cawco/core";
 import { standalone } from "@cawco/core/runtime";
+import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 
 /**
  * Defined only in the published package's bundle (scripts/build-binary.ts),
@@ -31,7 +32,7 @@ const shellWord = (word: string): string =>
   `'${word.replaceAll("'", "'\\''")}'`;
 
 /** This build's `cawco <verb>` as argv, the way the keeper is launched (sessiond-client.ts). */
-const cawcoCommand = (verb: string): string[] => {
+export const cawcoCommand = (verb: string): string[] => {
   if (standalone) {
     return [process.execPath, verb];
   }
@@ -60,6 +61,44 @@ const hubOrigin = (): string | undefined => {
   const url = new URL(ws);
   url.protocol = url.protocol === "wss:" ? "https:" : "http:";
   return url.origin;
+};
+
+/**
+ * `cawco git-credential` named in the checkout at `repo`'s own config for
+ * the hub's `/git/` URLs (the helper list reset first, so no helper of the
+ * machine's is handed the credential to keep), and LFS lock checks off: a
+ * plain `git pull` and `git push` there authenticate to the hub, with the
+ * session's credential in a session's shell and the machine's elsewhere
+ * (hub-git.ts `serveHubCredential`). Only the helper's name is written; no
+ * credential is. Nothing while this agent knows no hub.
+ */
+export const useHubCredentialHelper = (repo: string): void => {
+  const origin = hubOrigin();
+  if (!origin) {
+    return;
+  }
+  const remote = `${origin}/git/`;
+  const helper = `!${cawcoCommand("git-credential").map(shellWord).join(" ")}`;
+  const config = (...args: string[]) =>
+    Bun.spawnSync(safeGitArgv(["-C", repo, "config", "--local", ...args]), {
+      env: { ...process.env, ...SAFE_GIT_ENV },
+      stderr: "pipe",
+    });
+  const key = `credential.${remote}.helper`;
+  // Exit 5 when there is none to unset.
+  config("--unset-all", key);
+  for (const args of [
+    ["--add", key, ""],
+    ["--add", key, helper],
+    [`lfs.${remote}.locksverify`, "false"],
+  ]) {
+    const ran = config(...args);
+    if (ran.exitCode !== 0) {
+      throw new Error(
+        `git config in ${repo} failed: ${ran.stderr.toString().trim()}`
+      );
+    }
+  }
 };
 
 /**

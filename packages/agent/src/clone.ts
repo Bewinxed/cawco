@@ -91,13 +91,15 @@ const remoteDefault = async (dir: string, run: GitRunner): Promise<string> => {
 /**
  * The remote's default branch, fetched into `dir` as it stands right now, with
  * `origin/HEAD` naming it. Answers the branch's name: what a checkout is cut
- * from and where its work lands.
+ * from and where its work lands. `known`, when given, is that branch already
+ * (the hub's remote of a project whose source just pushed it there).
  */
 export const fetchDefaultBranch = async (
   dir: string,
-  run: GitRunner = git
+  run: GitRunner = git,
+  known?: string
 ): Promise<string> => {
-  const base = await remoteDefault(dir, run);
+  const base = known ?? (await remoteDefault(dir, run));
   await run(
     dir,
     "fetch",
@@ -121,13 +123,15 @@ export const fetchDefaultBranch = async (
  * and `origin` at the source's own remote. Its one remote branch is the
  * remote's default, fetched from the remote now — so a workspace starts where
  * that branch is at the moment it is cut, whatever the source last fetched —
- * with `origin/HEAD` naming it. Answers that branch's name. A clone that
- * cannot be set up is deleted again.
+ * with `origin/HEAD` naming it ({@link fetchDefaultBranch}, `known` passed
+ * on). Answers that branch's name. A clone that cannot be set up is deleted
+ * again.
  */
 export const prepareClone = async (
   source: string,
   dir: string,
-  run: GitRunner = git
+  run: GitRunner = git,
+  known?: string
 ): Promise<string> => {
   const remote = await run(source, "remote", "get-url", "origin");
   await run(
@@ -152,7 +156,7 @@ export const prepareClone = async (
       await run(dir, "update-ref", "-d", ref);
     }
     await run(dir, "remote", "set-url", "origin", remote);
-    return await fetchDefaultBranch(dir, run);
+    return await fetchDefaultBranch(dir, run, known);
   } catch (error) {
     await rm(dir, { recursive: true, force: true });
     throw error;
