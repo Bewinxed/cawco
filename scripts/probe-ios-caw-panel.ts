@@ -362,7 +362,7 @@ xcrun simctl bootstatus ${udid} -b >/dev/null
 xcrun simctl status_bar ${udid} override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3
 xcrun simctl install ${udid} "${app}"
 xcrun simctl ui ${udid} appearance light
-xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-env sandbox -cawco-hub-url http://127.0.0.1:${port} -open-session ${rowSession} >/dev/null`);
+xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-env sandbox -cawco-hub-url http://127.0.0.1:${port} -open-session ${rowSession} -shell-probe >/dev/null`);
   const head = await until(
     `${kind}: Caw counting the ask`,
     async () => caw(await tree(udid)),
@@ -514,7 +514,50 @@ const apart = (a: number[], b: number[]) =>
  * straight down from the glass's trailing flank, and the glass's leading
  * foot flares out into the panel's top edge in the panel's surface.
  */
+/** The phone's row as the shell drew it (`-shell-probe`'s line): Caw's glass, the first tab, the transcript's top. */
+const SHELL_LINE =
+  /caw=(-?[\d.]+),(-?[\d.]+),(-?[\d.]+)x(-?[\d.]+) .*firstTab=(-?[\d.]+),(-?[\d.]+),(-?[\d.]+)x(-?[\d.]+) transcriptTop=(-?[\d.]+)/;
+
+/**
+ * Caw's glass spans the tab row as the tabs do: its top where the tabs'
+ * tops stand, its foot on the row's floor (the transcript's top), which
+ * his panel hangs from (owner: "the spacing above the tabs isn't equal to
+ * the spacing from caw to the top").
+ */
+async function rowChecks() {
+  const text = await mac(
+    `xcrun simctl spawn ${phoneUdid} log show --last 1m --style compact --predicate 'subsystem == "dev.cawco.app" AND category == "Probe"' | grep 'firstTab=' | tail -1`
+  ).catch(() => "");
+  const m = SHELL_LINE.exec(text);
+  if (!m) {
+    check(
+      "phone: Caw's glass spans the tab row",
+      false,
+      "no '-shell-probe' line with Caw's glass and a tab"
+    );
+    return;
+  }
+  const [, glassTop, , glassHeight, , tabTop, , tabHeight, floor] = m
+    .slice(1)
+    .map(Number);
+  const glassBottom = glassTop + glassHeight;
+  const tabBottom = tabTop + tabHeight;
+  const row = `glass top ${glassTop} bottom ${glassBottom}; tab top ${tabTop} bottom ${tabBottom}; tab row's floor (transcript top) ${floor}`;
+  console.log(`  phone row (pt): ${row}`);
+  check(
+    "phone: Caw's glass top is the tabs' top, its foot the row's floor",
+    Math.abs(glassTop - tabTop) <= 0.5 && Math.abs(glassBottom - floor) <= 0.5,
+    row
+  );
+}
+/** The phone simulator, for `rowChecks`. */
+let phoneUdid = "";
+
 async function hangChecks(kind: Kind, udid: string, closed: Pixels) {
+  if (kind === "phone") {
+    phoneUdid = udid;
+    await rowChecks();
+  }
   const hung = await hanging(udid);
   if (!hung) {
     check(

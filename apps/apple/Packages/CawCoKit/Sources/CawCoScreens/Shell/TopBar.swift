@@ -72,8 +72,7 @@ enum TopBar {
     /// with the screen's (Shell.svelte, the phone's one row). A bar item
     /// stands inside the system's margin and could not reach it.
     static func pin(_ cluster: TopBarCluster, to bar: UINavigationBar) {
-        // On the bar's middle, the line its sidebar toggle item stands on.
-        cluster.cawLine = Size.cTopBarH / 2
+        // On the bar's floor, as in the session row (`cawLine`).
         bar.addSubview(cluster)
         NSLayoutConstraint.activate([
             cluster.trailingAnchor.constraint(equalTo: bar.safeAreaLayoutGuide.trailingAnchor),
@@ -435,15 +434,13 @@ final class TopBarCluster: UIView {
     }
 
     /// A phone's Caw: his centre's height over the floor of the row he
-    /// stands in. In the session row his glass's foot stands `cBarPhoneGap`
-    /// over the row's floor, the transcript's top edge, the same gap that
-    /// parts him from the tabs' end (owner: "caw is still touching the
-    /// transcript"); his top is then the bar's 4pt margin under the row's
-    /// top. On a bar (`TopBar.pin`), the bar's middle, where its toggle item
-    /// stands.
-    var cawLine = Size.cBarPhoneGap + NeedsCawButton.standingSide / 2 {
-        didSet { arrange() }
-    }
+    /// stands in. His glass spans the tab row as the tabs do: its top where
+    /// the tabs' tops stand, the bar's height less a row's, so the room above
+    /// him and above the tabs is the same (owner: "the spacing above the tabs
+    /// isn't equal to the spacing from caw to the top"), and its foot on the
+    /// row's floor, which his panel hangs from. The same on the board's bar
+    /// (`TopBar.pin`), so he stands in one place on every page.
+    private var cawLine: Double { NeedsCawButton.standingSide / 2 }
 
     /// Caw's head as this bar shows it.
     var caw: NeedsCawButton { compact ? phoneCaw : groupCaw }
@@ -514,8 +511,8 @@ final class TopBarCluster: UIView {
     private func arrange() {
         for view in stack.arrangedSubviews { stack.removeArrangedSubview(view); view.removeFromSuperview() }
         stack.addArrangedSubview(compact ? phoneCaw : group)
-        // A phone's Caw stands on his row's `cawLine`, which leaves his
-        // glass clear of what is under the row.
+        // A phone's Caw stands on his row's `cawLine`: his glass's foot on
+        // the row's floor, which his panel hangs from.
         stack.alignment = compact ? .bottom : .center
         stack.isLayoutMarginsRelativeArrangement = compact
         stack.directionalLayoutMargins = NSDirectionalEdgeInsets(

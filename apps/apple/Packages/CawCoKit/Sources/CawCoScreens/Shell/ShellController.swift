@@ -308,8 +308,8 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     /// toggle glyph's leading edge `cBarPhoneEdge` from the screen's, its
     /// centre on the tabs' centre line (they stand on the row's floor), in a
     /// 44pt touch area reaching into the screen's edge; Caw's glass flush
-    /// with the other edge, its foot `cBarPhoneGap` over the transcript
-    /// (TopBarCluster `cawLine`).
+    /// with the other edge, spanning the tab row as the tabs do, its foot on
+    /// the row's floor (TopBarCluster `cawLine`).
     private func placeSessionRow() {
         let row = workspaceController.barOverlay
         for part in [sessionBurger, sessionCluster] as [UIView] { row.addSubview(part) }
@@ -370,9 +370,24 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             let top = pages.convert(pages.bounds, to: window).minY
             let box = { (r: CGRect) in "\(r.minX),\(r.minY),\(r.width)x\(r.height)" }
             line += " caw=\(box(glass)) hit=\(box(caw.accessibilityFrame))"
+            // The row's first tab as drawn: its top and foot against Caw's glass's.
+            if let tab = Self.firstTab(in: workspaceController.view) {
+                line += " firstTab=\(box(tab.convert(tab.bounds, to: window)))"
+            }
             line += " transcriptTop=\(top) gap=\(top - glass.maxY) label=\(caw.accessibilityLabel ?? "")"
         }
         Logger(subsystem: "dev.cawco.app", category: "Probe").notice("\(line, privacy: .public)")
+    }
+
+    /// The first tab on screen in the phone's row.
+    private static func firstTab(in view: UIView) -> TabView? {
+        if let tab = view as? TabView, tab.window != nil, !tab.isHidden, tab.alpha > 0.01 {
+            return tab
+        }
+        for child in view.subviews {
+            if let found = firstTab(in: child) { return found }
+        }
+        return nil
     }
 
     /// The focused group's pages: the transcripts' scroller.
