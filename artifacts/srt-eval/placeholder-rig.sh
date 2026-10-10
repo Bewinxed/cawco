@@ -25,7 +25,19 @@
 #    status` empty, every write to them refused inside, opencode 200, and no
 #    srt `/dev/null` mount left in the clone.
 # 4. closeBoundary with the clone kept: no stand-in left, `git status` empty.
-#    Then the archive.
+# 5. info/exclude: a clone as the fixed-names build left it (those names,
+#    OpenCode's rewrites of its `{}` stand-ins, a `.opencode` OpenCode
+#    filled) and the user's own `.mcp.json` and `.vscode/`: once the agent
+#    lists the stand-ins, CawCo's block names only its own, the fixed names
+#    are gone, and git status shows the user's two files alone. Then the
+#    archive.
+#
+# `.gitmodules` rows: before the stand-ins, srt's `/dev/null` sits on a nodev
+# mount, which no one can open, so `git fetch` and `git submodule status`
+# warn "unable to access .gitmodules: Permission denied"; with a readable
+# empty stand-in they are quiet, and writing it is still refused.
+#
+# CawCo's block in info/exclude is printed at each step.
 #
 # Every command run through the executor prints its exit status, so one that
 # prints nothing cannot read as a pass.
@@ -51,6 +63,20 @@ run() {
   (cd "$clone" && "$state/exec" "$1") 2>&1 || status=$?
   echo "[exec exit $status]"
 }
+# Inside the sandbox: reading .gitmodules, `git fetch` and `git submodule
+# status`, which read it, and writing it. EXPECT is "warns" or "quiet".
+gitmodules_rows() { # EXPECT
+  local out=$rig/gitmodules-$1.out
+  run 'stat -c "%F mode=%a" .gitmodules; cat .gitmodules > /dev/null; echo "read .gitmodules: $?"; git fetch -q origin; echo "git fetch: $?"; git submodule status; echo "git submodule status: $?"' | tee "$out"
+  if grep -q 'warning: unable to access' "$out"; then
+    [ "$1" = warns ] && echo "REPRODUCED: git warns it cannot read .gitmodules" || echo "FAILED: git warns it cannot read .gitmodules"
+  else
+    [ "$1" = quiet ] && echo "no warning: .gitmodules reads inside" || echo "UNEXPECTED: no warning before the stand-ins"
+  fi
+  run 'echo "[submodule]" > .gitmodules; echo "write .gitmodules: $?"'
+}
+# The clone's info/exclude, CawCo's block marked.
+exclude_of() { sed 's/^/    /' "$clone/.git/info/exclude"; }
 # Each harness path in the clone, as the host sees it: kind, size, mode, inode, content.
 paths() {
   local p
@@ -147,6 +173,10 @@ paths
 echo "git status --porcelain (host): [$(git -C "$clone" status --porcelain | tr '\n' ' ')]"
 echo "the host's opencode on the clone:"
 oc_check before "$clone" 47591
+echo ".gitmodules inside, srt's /dev/null on a nodev mount:"
+gitmodules_rows warns
+echo "info/exclude, the fixed names:"
+exclude_of
 
 say "2. this checkout's start-up pass, a sleep running in the sandbox"
 run 'sleep 6062 > /dev/null 2>&1 & disown'
@@ -186,6 +216,9 @@ echo "the clone's harness paths now:"
 paths
 mounts
 echo "git status --porcelain (host): [$(git -C "$clone" status --porcelain | tr '\n' ' ')]"
+echo "info/exclude after the pass: the fixed names gone, CawCo's block listing its stand-ins:"
+exclude_of
+grep -qx '.vscode' "$clone/.git/info/exclude" && echo "FAILED: a fixed name is still there" || echo "no fixed name left"
 echo "inside the new sandbox:"
 run 'mkdir .opencode/x 2>&1; echo "mkdir .opencode/x: $?"; echo x > opencode.json; echo "write opencode.json: $?"; git status --porcelain | wc -l | sed "s/^/git status lines inside: /"'
 echo "the host's opencode on the clone, a fresh server:"
@@ -203,7 +236,8 @@ echo "the clone's harness paths, the sandbox running:"
 paths
 mounts
 echo "git status --porcelain (host): [$(git -C "$clone" status --porcelain | tr '\n' ' ')]"
-echo "info/exclude: $(grep -v '^#' "$clone/.git/info/exclude" | tr '\n' ' ')"
+echo "info/exclude, one anchored line per stand-in in CawCo's block:"
+exclude_of
 echo "inside the sandbox, each refused:"
 run 'echo x > opencode.json; echo "echo x > opencode.json: $?"'
 run 'mkdir .opencode/x; echo "mkdir .opencode/x: $?"'
@@ -212,6 +246,8 @@ run 'echo x > .claude/settings.json; echo "write .claude/settings.json: $?"; ech
 run 'touch .claude/hooks/x .claude/commands/x .claude/agents/x; echo "touch in .claude/{hooks,commands,agents}: $?"'
 run 'rm -rf .opencode opencode.jsonc; echo "rm .opencode opencode.jsonc: $?"'
 run 'git add -A && git status --porcelain | wc -l | sed "s/^/git add -A, then status lines: /"'
+echo ".gitmodules inside, its stand-in a readable empty file:"
+gitmodules_rows quiet
 echo "the host's opencode on the clone:"
 oc_check fresh "$clone" 47593
 echo "srt mount points left in the clone (empty, no write bits), then srt's /dev/null mounts in it (none expected):"
@@ -225,6 +261,28 @@ echo "the clone's harness paths after it:"
 paths
 echo "anything else at the clone's root: $(ls -A "$clone" | tr '\n' ' ')"
 echo "git status --porcelain (host): [$(git -C "$clone" status --porcelain | tr '\n' ' ')]"
+echo "info/exclude after it (no CawCo block left):"
+exclude_of
+
+say "5. info/exclude: a live clone of the fixed-names build migrates, a user's own files show"
+# As a clone of 4fbde79e stands: the fixed names, `{}` stand-ins OpenCode
+# rewrote with its $schema, a `.opencode` OpenCode filled; and the user's own
+# untracked `.mcp.json` and `.vscode/settings.json`.
+printf '.gitconfig\n.gitmodules\n.mcp.json\n.vscode\n.idea\n/opencode.json\n/opencode.jsonc\n/.opencode\n' >> "$clone/.git/info/exclude"
+printf '{\n  "$schema": "https://opencode.ai/config.json",}\n' > "$clone/opencode.json"
+printf '{}\n' > "$clone/opencode.jsonc"
+mkdir -p "$clone/.opencode" "$clone/.vscode"
+printf 'node_modules\n' > "$clone/.opencode/.gitignore"
+printf '{"dependencies":{}}\n' > "$clone/.opencode/package.json"
+printf '{"mcpServers":{"mine":{"command":"x"}}}\n' > "$clone/.mcp.json"
+printf '{"editor.tabSize":2}\n' > "$clone/.vscode/settings.json"
+echo "git status before, the fixed names hiding the user's files: [$(git -C "$clone" status --porcelain | tr '\n' ' ')]"
+(cd "$here" && bun -e "import { listStandIns } from './packages/agent/src/stand-ins'; await listStandIns({ id: '$id2', path: '$clone2' }, false); process.exit(0)")
+echo "info/exclude after the agent lists the stand-ins:"
+exclude_of
+status=$(git -C "$clone" status --porcelain | tr '\n' ' ')
+echo "git status after: [$status]"
+[ "$status" = "?? .mcp.json ?? .vscode/ " ] && echo "only the user's own files show" || echo "FAILED: expected the user's .mcp.json and .vscode/ alone"
 (cd "$here" && bun artifacts/srt-eval/rig-workspace.ts archive "$id2" "$clone2")
 [ -e "$clone2" ] && echo "FAILED: the clone is still there" || echo "archived: the clone is gone"
 id2=

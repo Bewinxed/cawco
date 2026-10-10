@@ -128,7 +128,7 @@ import {
   type Todo,
 } from "@opencode-ai/sdk/v2";
 import { JUDGE_SCRIPT } from "../boundary";
-import { excludeSandboxNames, gitIn } from "../checkout-exclude";
+import { gitIn } from "../checkout-exclude";
 import { delegationHubUrl, harnessMcpUrl } from "../delegation";
 import {
   type OpencodeDenySettings,
@@ -160,6 +160,7 @@ import { readAccountSoon } from "../provider-usage";
 import { fenced, holdRestart, withRestartHold } from "../restart";
 import { acknowledgeSessionCredential } from "../session-identity";
 import type { SessiondClient } from "../sessiond-client";
+import { listStandIns } from "../stand-ins";
 import { resolveBin } from "../tools";
 import { workspaceHolding, workspaceRefs } from "../workspace-records";
 import {
@@ -1769,8 +1770,8 @@ const removeCawcoSessionConfigsIn = async (
       lines.filter((line) => !gone.includes(line)).join("\n")
     );
     // The root `/opencode.jsonc` is also a name its sandbox keeps there:
-    // the empty one its boundary makes in its place stays out of status.
-    await excludeSandboxNames(ref.path);
+    // the stand-in its boundary makes in its place stays out of status.
+    await listStandIns(ref, process.platform === "linux");
   }
   return gone.length;
 };

@@ -2,7 +2,7 @@
  * Files cawco writes into a checkout that are not the project's: kept out of
  * git's status through the checkout's own `info/exclude`.
  */
-import { appendFile, mkdir, realpath } from "node:fs/promises";
+import { appendFile, mkdir, realpath, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, relative as relativePath } from "node:path";
 import { projectClaudeDir } from "@cawco/core/paths";
 import { SAFE_GIT_ENV, SAFE_GIT_FLAGS } from "@cawco/core/safe-git";
@@ -35,18 +35,13 @@ export const gitIn = async (
 };
 
 /**
- * What a workspace's sandbox may leave in its clone, as git sees it: for a
- * protected name that does not exist, srt mounts a read-only empty file there
- * for the sandbox's life (its README, "Mandatory Deny Paths"), and `git add
- * -A` then refuses it ("can only add regular files", REPORT.md §5c). srt's own
- * names, unanchored as srt applies them (`DANGEROUS_FILES` and
- * `getDangerousDirectories()` in sandbox-utils.ts at 0.0.79), and the harness
- * project config the workspace's policy denies at the clone's root. At the
- * root the boundary's host makes every one of them a real empty stand-in
- * before each sandbox (`cloneDenies`), so srt leaves no file of its own
- * there; deeper down srt binds only what exists.
+ * The fixed lines earlier builds kept every deny name out of a clone's status
+ * with, whoever made the file: srt's own names, unanchored, and the harness
+ * project config at the root. They hid a user's own untracked `.vscode` or
+ * `.mcp.json` too; each stand-in CawCo made is listed by its own anchored
+ * line in CawCo's block now ({@link excludeStandIns}), and these go.
  */
-const SANDBOX_NAMES = [
+const RETIRED_LINES = new Set([
   ".gitconfig",
   ".gitmodules",
   ".bashrc",
@@ -66,14 +61,17 @@ const SANDBOX_NAMES = [
   "/opencode.json",
   "/opencode.jsonc",
   "/.opencode",
-];
+]);
 
-/**
- * Keeps {@link SANDBOX_NAMES} out of a workspace clone's status, through its
- * own `info/exclude`, each line added once. Written before its boundary
- * starts; a tracked file is the project's own and stays tracked.
- */
-export const excludeSandboxNames = async (clone: string): Promise<void> => {
+/** Where CawCo's own lines in a clone's `info/exclude` begin and end: it rewrites what lies between. */
+const BLOCK_START =
+  "# cawco: the stand-ins it made for the workspace's denied paths";
+const BLOCK_END = "# cawco: end of stand-ins";
+
+const LEADING_SLASH = /^\//;
+
+/** A clone's own `info/exclude`, by its absolute path. */
+const excludeFileOf = async (clone: string): Promise<string> => {
   const exclude = await gitIn(clone, [
     "rev-parse",
     "--path-format=absolute",
@@ -81,21 +79,74 @@ export const excludeSandboxNames = async (clone: string): Promise<void> => {
     "info/exclude",
   ]);
   if (!exclude) {
-    throw new Error(
-      `${clone} has no git dir to keep its sandbox's names out of`
-    );
+    throw new Error(`${clone} has no git dir to keep its stand-ins out of`);
   }
-  const current = await Bun.file(exclude)
+  return exclude;
+};
+
+/** A clone's `info/exclude`: CawCo's block's paths (relative to the clone), and every other line. */
+const readExclude = async (
+  exclude: string
+): Promise<{ readonly listed: string[]; readonly rest: string[] }> => {
+  const text = await Bun.file(exclude)
     .text()
     .catch(() => "");
-  const lines = new Set(current.split("\n").map((each) => each.trim()));
-  const missing = SANDBOX_NAMES.filter((name) => !lines.has(name));
-  if (missing.length === 0) {
+  const listed: string[] = [];
+  const rest: string[] = [];
+  let inside = false;
+  for (const line of text.split("\n")) {
+    if (line === BLOCK_START) {
+      inside = true;
+    } else if (line === BLOCK_END) {
+      inside = false;
+    } else if (inside) {
+      listed.push(line.replace(LEADING_SLASH, ""));
+    } else {
+      rest.push(line);
+    }
+  }
+  return { listed, rest };
+};
+
+/** The stand-ins a clone's `info/exclude` lists in CawCo's block, as last written, relative to the clone. */
+export const excludedStandIns = async (clone: string): Promise<string[]> =>
+  (await readExclude(await excludeFileOf(clone))).listed.filter(Boolean);
+
+/**
+ * CawCo's block in a clone's `info/exclude`, written whole: one anchored line
+ * for each of `paths` (relative to the clone), the stand-ins it made there,
+ * so git never sees them and nothing else is hidden. The lines earlier builds
+ * kept fixed ({@link RETIRED_LINES}) go; every other line stays as it is.
+ * Written only when that changes it.
+ */
+export const excludeStandIns = async (
+  clone: string,
+  paths: readonly string[]
+): Promise<void> => {
+  const exclude = await excludeFileOf(clone);
+  const before = await Bun.file(exclude)
+    .text()
+    .catch(() => "");
+  const { rest } = await readExclude(exclude);
+  const kept = rest.filter((line) => !RETIRED_LINES.has(line.trim()));
+  while (kept.length > 0 && kept.at(-1) === "") {
+    kept.pop();
+  }
+  const block =
+    paths.length > 0
+      ? [
+          BLOCK_START,
+          ...[...new Set(paths)].map((path) => `/${path}`),
+          BLOCK_END,
+        ]
+      : [];
+  const lines = [...kept, ...block];
+  const after = lines.length > 0 ? `${lines.join("\n")}\n` : "";
+  if (after === before) {
     return;
   }
   await mkdir(dirname(exclude), { recursive: true });
-  const lead = current === "" || current.endsWith("\n") ? "" : "\n";
-  await appendFile(exclude, `${lead}${missing.join("\n")}\n`);
+  await writeFile(exclude, after);
 };
 
 /**

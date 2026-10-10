@@ -292,7 +292,11 @@ const makeStandIn = (
  * point an earlier sandbox left, which is no one's config. Nothing is made
  * under a directory that is not the clone's own (a symlink, a file): srt
  * then stands in for the path as it always has. The workspace's
- * `info/exclude` keeps every one out of git's status (`excludeSandboxNames`).
+ * `info/exclude` keeps every one out of git's status, each by its own line
+ * (`listStandIns` in stand-ins.ts). A file's stand-in is readable (0644): one
+ * with no write bits is what srt takes for a mount point an earlier sandbox
+ * left, and covers with `/dev/null`, which a sandbox cannot even read (the
+ * clone's mounts are `nodev`).
  */
 const standIn = (): void => {
   for (const { path, empty } of denies) {

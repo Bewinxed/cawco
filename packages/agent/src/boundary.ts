@@ -101,7 +101,6 @@ import type { ProcSpec } from "@cawco/core/sessiond";
 import { cloneDenies, workspacePolicy } from "@cawco/core/workspace-policy";
 import { rgPath } from "@vscode/ripgrep-universal";
 import { seatbeltProfile, srtSettings } from "./boundary-policy";
-import { excludeSandboxNames } from "./checkout-exclude";
 import { cloneInPlace } from "./clone";
 import { type HeldProc, KeeperPool } from "./keepers";
 import { logRelay } from "./log-relay";
@@ -113,7 +112,12 @@ import {
   judgeProcId,
 } from "./proc-id";
 import type { SessiondClient } from "./sessiond-client";
-import { hasLeftDirs, removeStandIns, rewriteLeftFiles } from "./stand-ins";
+import {
+  hasLeftDirs,
+  listStandIns,
+  removeStandIns,
+  rewriteLeftFiles,
+} from "./stand-ins";
 import { closeToolDoor, openToolDoor, toolDoorOf } from "./tool-door";
 
 /** A running boundary, as a harness uses it. */
@@ -765,6 +769,11 @@ export const rearmHooks = async (): Promise<void> => {
         restartWhenIdle(ref);
       }
     }
+    // Only CawCo's stand-ins in the clone's `info/exclude`: the fixed names
+    // an earlier build wrote there go, and a user's own files show again.
+    await listStandIns(ref, false).catch(
+      said("its clone's stand-ins could not be listed in its info/exclude")
+    );
     const form = await formOf(ref).catch(
       said("its boundary's form could not be checked")
     );
@@ -2325,7 +2334,8 @@ const launch = async (
     await rm(srtTmp, { recursive: true, force: true });
     await mkdir(srtTmp, { recursive: true, mode: 0o700 });
   }
-  await excludeSandboxNames(ref.path);
+  // Linux: the host makes each missing deny path before the sandbox starts.
+  await listStandIns(ref, linux);
   const plan = await planOf(ref, gen);
   for (const [path, content] of plan.files) {
     // biome-ignore lint/performance/noAwaitInLoops: a few small files

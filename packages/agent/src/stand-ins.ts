@@ -17,6 +17,8 @@
  *   makes the dir.
  * - When the workspace closes, each stand-in still exactly as it was made goes
  *   once no mount namespace holds it ({@link removeStandIns}).
+ * - The clone's `info/exclude` lists each stand-in that is CawCo's, and only
+ *   those ({@link listStandIns}).
  *
  * A path git tracks is the project's own and is never touched.
  */
@@ -36,7 +38,7 @@ import type { WorkspaceRef } from "@cawco/core";
 import { mountedAnywhere } from "@cawco/core/mount-table";
 import { projectClaudeDir } from "@cawco/core/paths";
 import { type CloneDeny, cloneDenies } from "@cawco/core/workspace-policy";
-import { gitIn } from "./checkout-exclude";
+import { excludedStandIns, excludeStandIns, gitIn } from "./checkout-exclude";
 
 /**
  * A mount point a sandbox left on the host, by srt's own test
@@ -58,8 +60,20 @@ interface Found extends CloneDeny {
   readonly found: Stats;
 }
 
-/** The clone's deny paths with a stand-in that git does not track and that are there now. */
-const presentIn = async (path: string): Promise<Found[]> => {
+interface Untracked extends CloneDeny {
+  readonly found?: Stats;
+}
+
+/** The clone's deny paths with a stand-in that are there now and git does not track. */
+const presentIn = async (path: string): Promise<Found[]> =>
+  (await untrackedIn(path)).entries.filter(
+    (one): one is Found => one.found !== undefined
+  );
+
+/** The clone's real path, and its deny paths with a stand-in that git does not track, each with what is there now. */
+const untrackedIn = async (
+  path: string
+): Promise<{ readonly clone: string; readonly entries: Untracked[] }> => {
   const clone = await realpath(path);
   const denies = cloneDenies(clone).filter(
     ({ empty }) => empty.kind !== "none"
@@ -77,7 +91,7 @@ const presentIn = async (path: string): Promise<Found[]> => {
     .split("\0")
     .filter(Boolean)
     .map((file) => `${clone}/${file}`);
-  const present = await Promise.all(
+  const entries = await Promise.all(
     denies
       .filter(
         (deny) =>
@@ -85,12 +99,9 @@ const presentIn = async (path: string): Promise<Found[]> => {
             (file) => file === deny.path || file.startsWith(`${deny.path}/`)
           )
       )
-      .map(async (deny) => {
-        const found = await statOf(deny.path);
-        return found ? { ...deny, found } : undefined;
-      })
+      .map(async (deny) => ({ ...deny, found: await statOf(deny.path) }))
   );
-  return present.filter((one): one is Found => one !== undefined);
+  return { clone, entries };
 };
 
 /**
@@ -137,11 +148,101 @@ const asMade = async ({ path, empty, found }: Found): Promise<boolean> => {
 };
 
 /**
+ * OpenCode's own rewrite of the `{}` an earlier build stood in with: it writes
+ * `$schema` into a config that has none (`loadConfig`, packages/opencode/src/
+ * config/config.ts at v1.18.34: `text.replace(/^\s*\{/, '{\n  "$schema":
+ * "https://opencode.ai/config.json",')`).
+ */
+const OPENCODE_REWRITE =
+  '{\n  "$schema": "https://opencode.ai/config.json",}\n';
+
+/** OpenCode's config files and dir, by their path. */
+const OPENCODE_PATH = /\/(opencode\.jsonc?|\.opencode)$/;
+
+/** The empty JSON object an earlier build stood in with for OpenCode's config. */
+const EARLIER_JSON = "{}\n";
+
+/**
+ * What OpenCode writes into a writable `.opencode` dir it loads, as an
+ * earlier build's stand-in was (`ensureGitignore` and `npm.install` in the
+ * same file).
+ */
+const OPENCODE_FILLS = new Set([
+  ".gitignore",
+  "package.json",
+  "package-lock.json",
+  "bun.lock",
+  "node_modules",
+]);
+
+/**
+ * Whether `found` is what CawCo made at `path` or what a harness makes of it:
+ * its stand-in as made, an earlier build's (OpenCode's `{}`, a writable
+ * `.opencode`), or OpenCode's own rewrite of either.
+ */
+const knownForm = async (one: Found): Promise<boolean> => {
+  if (await asMade(one)) {
+    return true;
+  }
+  const { path, found } = one;
+  const opencode = OPENCODE_PATH.test(path);
+  if (!opencode) {
+    return false;
+  }
+  if (found.isDirectory()) {
+    const entries = await readdir(path).catch(() => ["?"]);
+    return entries.every((entry) => OPENCODE_FILLS.has(entry));
+  }
+  const text = found.isFile()
+    ? await readFile(path, "utf8").catch(() => undefined)
+    : undefined;
+  return text === EARLIER_JSON || text === OPENCODE_REWRITE;
+};
+
+/**
+ * Lists the stand-ins in the clone that are CawCo's, each by its own anchored
+ * line in CawCo's block of the clone's `info/exclude` (`excludeStandIns`), so
+ * git never sees them, and a user's own untracked `.vscode` or `.mcp.json`
+ * is never hidden. A deny path at the clone's root that git does not track is
+ * CawCo's when it is missing and `willStandIn` (the boundary's host makes it
+ * before the sandbox starts: Linux), a mount point a sandbox left, already
+ * listed (a harness may have written it since), or in a form CawCo or a
+ * harness makes ({@link knownForm}); else it is someone else's. The clone's
+ * `.git` dir is no part of its status.
+ */
+export const listStandIns = async (
+  ref: WorkspaceRef,
+  willStandIn: boolean
+): Promise<void> => {
+  const { clone, entries } = await untrackedIn(ref.path);
+  const listed = new Set(await excludedStandIns(clone));
+  const own: string[] = [];
+  for (const one of entries) {
+    const name = relative(clone, one.path);
+    if (name.startsWith(".git/")) {
+      continue;
+    }
+    const { found } = one;
+    const ours = found
+      ? listed.has(name) ||
+        leftMountPoint(found) ||
+        // biome-ignore lint/performance/noAwaitInLoops: one path at a time
+        (await knownForm({ ...one, found }))
+      : willStandIn;
+    if (ours) {
+      own.push(name);
+    }
+  }
+  await excludeStandIns(clone, own);
+};
+
+/**
  * Takes away each stand-in in the clone that is still exactly as it was made,
  * and each mount point a sandbox left, then the project's Claude Code dir if
- * that leaves it empty. Run once the workspace's sandboxes are gone; one that
- * any mount namespace still holds stays all the same ({@link mountedAnywhere}),
- * and so does one a host tool has written since.
+ * that leaves it empty; the exclude lines of those gone go with them. Run
+ * once the workspace's sandboxes are gone; one that any mount namespace still
+ * holds stays all the same ({@link mountedAnywhere}), and so does one a host
+ * tool has written since, listed.
  */
 export const removeStandIns = async (ref: WorkspaceRef): Promise<void> => {
   if (!(await statOf(ref.path))) {
@@ -164,4 +265,5 @@ export const removeStandIns = async (ref: WorkspaceRef): Promise<void> => {
   ) {
     await rmdir(claude);
   }
+  await listStandIns(ref, false);
 };
