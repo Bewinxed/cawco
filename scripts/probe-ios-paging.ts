@@ -31,7 +31,10 @@
  *     (b) opening it reads one page, the newest;
  *     (c) the first drag that brings the reader near the first rows held
  *         reads exactly one more page, and the first row in view keeps its
- *         id and its y (within 1pt, axe describe-ui, retried) as it lands;
+ *         id and its y (within 1pt, axe describe-ui, retried) as it lands:
+ *         the row first in view while the page was held is measured again
+ *         after, and stays first unless the loading strip stood above it
+ *         (the rows that join take the strip's room);
  *     (d) dragging on reads a page at a time until the cursor is nil: the
  *         reads are the hub's own page count, never two out at once, and
  *         every page that joined kept the place.
@@ -411,6 +414,8 @@ interface Place {
   rows: string[];
   /** The strip before the first row says it is loading. */
   strip: boolean;
+  /** Every row on screen, in view or not: its top. */
+  tops: Map<string, number>;
 }
 /** Where the transcript stands: its rows in view, read off describe-ui. */
 async function place(): Promise<Place> {
@@ -427,15 +432,19 @@ async function place(): Promise<Place> {
       n.frame.y >= area.top - 0.5 &&
       n.frame.y + n.frame.height <= area.bottom + 0.5
   );
-  const seen = new Map<string, number>();
-  for (const node of inView) {
-    const row = node.label?.match(ROW)?.[1];
-    const y = node.frame?.y;
-    if (row && y !== undefined && !seen.has(row)) {
-      seen.set(row, y);
+  /** Each row's top, from the first of its nodes in `among`. */
+  const topsOf = (among: Node[]) => {
+    const tops = new Map<string, number>();
+    for (const node of among) {
+      const row = node.label?.match(ROW)?.[1];
+      const y = node.frame?.y;
+      if (row && y !== undefined && !tops.has(row)) {
+        tops.set(row, y);
+      }
     }
-  }
-  const rows = [...seen.entries()].sort((a, b) => a[1] - b[1]);
+    return tops;
+  };
+  const rows = [...topsOf(inView).entries()].sort((a, b) => a[1] - b[1]);
   return {
     area,
     first: rows[0] ? { row: rows[0][0], y: rows[0][1] } : undefined,
@@ -443,6 +452,7 @@ async function place(): Promise<Place> {
     strip: inView.some(
       (n) => n.label?.startsWith("Loading transcript") === true
     ),
+    tops: topsOf(nodes),
   };
 }
 /** `place`, asked again until it finds rows in view (describe-ui can answer mid-layout). */
@@ -515,8 +525,24 @@ const logged = () => ({
   ).length,
 });
 
-/** How far each page that joined moved the first row in view, this run. */
-const moves: number[] = [];
+/** One page that joined: how far it moved the first row in view, and whether that row stayed first. */
+interface Move {
+  /** The held first row's top before the page joined and after; undefined once it is off screen. */
+  after?: number;
+  before?: number;
+  /** It is still the first row in view, or the loading strip stood above it (the joined rows take the strip's room). */
+  first: boolean;
+  /** |after - before|, Infinity when the row is not on screen to measure. */
+  moved: number;
+  row?: string;
+}
+/** Every page that joined this run. */
+const moves: Move[] = [];
+const kept = (move: Move) => move.moved <= 1 && move.first;
+const told = (move: Move) =>
+  move.row
+    ? `row-${move.row} at y ${move.before?.toFixed(2) ?? "?"} before, ${move.after === undefined ? "off screen" : `y ${move.after.toFixed(2)}`} after: moved ${move.moved.toFixed(2)}pt${move.first ? "" : ", no longer the first row in view"}`
+    : "no row in view before it joined";
 /** Lets one held page in: the place before it joins, and after. */
 const land = async () => {
   const held = await placed();
@@ -530,12 +556,22 @@ const land = async () => {
   );
   await pause(1500);
   const landed = await placed();
-  const moved =
-    held.first && landed.first?.row === held.first.row
-      ? Math.abs(landed.first.y - held.first.y)
-      : Number.POSITIVE_INFINITY;
-  moves.push(moved);
-  return { held, landed, moved, reads };
+  // The row the reader's place is kept by: the first row in view while the page was held.
+  const row = held.first?.row;
+  const before = row === undefined ? undefined : held.tops.get(row);
+  const after = row === undefined ? undefined : landed.tops.get(row);
+  const move: Move = {
+    row,
+    before,
+    after,
+    moved:
+      before !== undefined && after !== undefined
+        ? Math.abs(after - before)
+        : Number.POSITIVE_INFINITY,
+    first: row !== undefined && (held.strip || landed.first?.row === row),
+  };
+  moves.push(move);
+  return { held, landed, move, reads };
 };
 
 /** A fresh install of `app`, opened on the session: (b), and where it stands. */
@@ -604,8 +640,8 @@ async function nearTheTop(label: string, opened: Place): Promise<Place> {
     );
     check(
       `${label}(c) the first row in view keeps its id and its y`,
-      first.moved <= 1,
-      `held: ${said(first.held)}; landed: ${said(first.landed)}; moved ${first.moved.toFixed(2)}pt`
+      kept(first.move),
+      `${told(first.move)}; held: ${said(first.held)}; landed: ${said(first.landed)}`
     );
   } else {
     check(
@@ -644,7 +680,7 @@ async function toTheStart(
       idle = 0;
       const landed = await land();
       console.log(
-        `  page ${olderReads().length + 1}: moved ${landed.moved.toFixed(2)}pt (row-${landed.held.first?.row ?? "?"}), ${landed.reads - reads} read(s) for one drag`
+        `  page ${olderReads().length + 1}: ${told(landed.move)}${landed.held.strip ? " (loading strip in view)" : ""}, ${landed.reads - reads} read(s) for one drag`
       );
     } else {
       idle += 1;
@@ -672,8 +708,8 @@ async function toTheStart(
   );
   check(
     `${label}(d) every page that joined kept the place`,
-    moves.length > 0 && moves.every((moved) => moved <= 1),
-    `moves: ${moves.map((moved) => moved.toFixed(2)).join(", ") || "none"} pt`
+    moves.length > 0 && moves.every(kept),
+    moves.map(told).join("; ") || "no page joined"
   );
   check(
     `${label}(d) the start is drawn: no loading strip above the first row`,
