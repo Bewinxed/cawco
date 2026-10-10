@@ -543,6 +543,10 @@ export const workspaceCacheEnv = (): Record<string, string> => {
     npm_config_devdir: join(cache, "node-gyp"),
     XDG_CACHE_HOME: join(cache, "xdg"),
     UV_CACHE_DIR: join(cache, "uv"),
+    // The impeccable skill's launcher fetches its engine into
+    // `${IMPECCABLE_HOME:-~/.impeccable}/bin/<version>`: home is read-only
+    // here, so its cache is the workspaces' own, filled once per machine.
+    IMPECCABLE_HOME: join(cache, "impeccable"),
     PLAYWRIGHT_BROWSERS_PATH: hostPlaywrightBrowsers(),
   };
 };
