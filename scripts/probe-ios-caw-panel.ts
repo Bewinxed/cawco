@@ -188,7 +188,11 @@ async function tree(
   const where = point
     ? ` --point ${Math.round(point.x)},${Math.round(point.y)}`
     : "";
-  const raw = await axe(`describe-ui${where} --udid ${udid}`);
+  const raw = await unblocked(
+    udid,
+    `describe-ui${where} --udid ${udid}`,
+    `describe-ui${where}`
+  );
   const nodes: Node[] = [];
   const walk = (at: unknown) => {
     if (Array.isArray(at)) {
@@ -222,27 +226,37 @@ const centre = (f: Frame) => ({ x: f.x + f.width / 2, y: f.y + f.height / 2 });
 const inside = (f: Frame, p: { x: number; y: number }) =>
   p.x >= f.x && p.x <= f.x + f.width && p.y >= f.y && p.y <= f.y + f.height;
 const pause = (ms: number) => Bun.sleep(ms);
+/** One finger's tap at a point, in points. */
+const tap = (udid: string, p: { x: number; y: number }) =>
+  unblocked(
+    udid,
+    `tap -x ${Math.round(p.x)} -y ${Math.round(p.y)} --udid ${udid}`,
+    `tap at (${Math.round(p.x)}, ${Math.round(p.y)})`
+  );
+
 /**
- * One finger's tap at a point, in points. A tap axe cannot place after its
- * tries ("invisible due to a fullscreen dialog": something of the system's
- * over the app, which a freshly booted iPad can put up) leaves what was on
- * screen (a screenshot beside the captures and the tree's labels), presses
+ * Every axe call the probe makes on a simulator (`tree`'s describe-ui,
+ * `tap`). One axe still cannot make after its tries ("invisible due to a
+ * fullscreen dialog": something of the system's over the app, which a
+ * freshly booted iPad can put up) leaves what was on screen (a screenshot
+ * beside the captures, axe-blocked-N.png, and the tree's labels), presses
  * Escape at whatever stands over the app, and tries again after 10s; only
- * a tap still blocked then fails the run.
+ * a call still blocked then fails the run.
  */
-async function tap(udid: string, p: { x: number; y: number }) {
-  const at = `tap -x ${Math.round(p.x)} -y ${Math.round(p.y)} --udid ${udid}`;
+async function unblocked(
+  udid: string,
+  args: string,
+  what: string
+): Promise<string> {
   try {
-    await axe(at);
+    return await axe(args);
   } catch (error) {
     if (!AXE_SESSION.test(String(error))) {
       throw error;
     }
     blocked += 1;
-    console.log(
-      `  tap at (${Math.round(p.x)}, ${Math.round(p.y)}) blocked: what was on screen follows`
-    );
-    await shot(udid, `tap-blocked-${blocked}`).catch(() => undefined);
+    console.log(`  ${what} blocked: what was on screen follows`);
+    await shot(udid, `axe-blocked-${blocked}`).catch(() => undefined);
     const labels = await mac(`${AXE} describe-ui --udid ${udid}`)
       .then(
         (raw) =>
@@ -258,8 +272,9 @@ async function tap(udid: string, p: { x: number; y: number }) {
     // Escape (HID 41) dismisses a system sheet or HUD where one takes keys.
     await mac(`${AXE} key 41 --udid ${udid}`).catch(() => undefined);
     await Bun.sleep(10_000);
-    await axe(at);
-    console.log("  the tap went through after waiting");
+    const answer = await axe(args);
+    console.log(`  ${what} went through after waiting`);
+    return answer;
   }
 }
 let blocked = 0;
@@ -273,11 +288,11 @@ let blocked = 0;
 const AXE_SESSION =
   /No translation object|remote automation session|Timed out creating/;
 /** One axe command on the Mac, tried up to 4 times 2s apart while axe cannot reach the simulator. */
-async function axe(args: string): Promise<string> {
+async function axe(command: string): Promise<string> {
   for (let attempt = 1; ; attempt += 1) {
     try {
       // biome-ignore lint/performance/noAwaitInLoops: each try follows the last one's failure
-      return await mac(`${AXE} ${args}`);
+      return await mac(`${AXE} ${command}`);
     } catch (error) {
       if (attempt >= 4 || !AXE_SESSION.test(String(error))) {
         throw error;

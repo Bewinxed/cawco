@@ -77,6 +77,39 @@ const AXE = (await Bun.file("/opt/homebrew/bin/axe").exists())
   ? "/opt/homebrew/bin/axe"
   : "axe";
 
+/**
+ * A shell command on the Mac. This probe runs on the Mac itself, so it runs
+ * here; the name and the shape are the remote probes' (probe-ios-caw-panel),
+ * so `axe` below is their copy word for word.
+ */
+const mac = (script: string) => run(["bash", "-c", script]);
+
+/**
+ * axe's own failures to reach a simulator's automation session, which a
+ * just-booted or busy simulator gives for a while ("No translation object
+ * returned for simulator… invisible due to a fullscreen dialog", a timed-out
+ * session); nothing was read or touched, so the call is made again.
+ */
+const AXE_SESSION =
+  /No translation object|remote automation session|Timed out creating/;
+/** One axe command on the Mac, tried up to 4 times 2s apart while axe cannot reach the simulator. */
+async function axe(command: string): Promise<string> {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      // biome-ignore lint/performance/noAwaitInLoops: each try follows the last one's failure
+      return await mac(`${AXE} ${command}`);
+    } catch (error) {
+      if (attempt >= 4 || !AXE_SESSION.test(String(error))) {
+        throw error;
+      }
+      console.log(
+        `  axe could not reach the simulator (try ${attempt}): ${String(error).slice(0, 160)}`
+      );
+      await Bun.sleep(2000);
+    }
+  }
+}
+
 /** The simulator: `--udid`, or the booted iPhone. */
 async function device(): Promise<string> {
   const given = option("--udid");
@@ -129,7 +162,7 @@ async function tree(udid: string): Promise<Node[]> {
     });
     walk(o.children);
   };
-  walk(JSON.parse(await run([AXE, "describe-ui", "--udid", udid])));
+  walk(JSON.parse(await axe(`describe-ui --udid ${udid}`)));
   return nodes;
 }
 
@@ -138,16 +171,9 @@ const CAW_LABEL =
   /^(Needs you, \d+|All caught up|Reading the fleet|Connecting…|Hub unreachable)( · \d+ notices?)?$/;
 
 const tap = (udid: string, frame: Frame) =>
-  run([
-    AXE,
-    "tap",
-    "-x",
-    String(Math.round(frame.x + frame.width / 2)),
-    "-y",
-    String(Math.round(frame.y + frame.height / 2)),
-    "--udid",
-    udid,
-  ]);
+  axe(
+    `tap -x ${Math.round(frame.x + frame.width / 2)} -y ${Math.round(frame.y + frame.height / 2)} --udid ${udid}`
+  );
 
 /* ── The recording's frame times ─────────────────────────────────────── */
 
