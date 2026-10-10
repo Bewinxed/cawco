@@ -22,7 +22,10 @@
  *  4. on an iPhone and then an iPad simulator, launches the app with
  *     `-paywall-env sandbox` on "Panel probe" and drives it with axe: taps
  *     Caw, reads the panel, captures it light and dark, taps the transcript
- *     row outside it; on the iPad it also dismisses the notice and approves
+ *     row at a point outside it (a long intro turn first stands the row
+ *     below where the panel hangs); on the phone it then presses the ask's
+ *     row itself, which opens its session; on the iPad it dismisses the
+ *     notice and approves
  *     the ask from the panel;
  *  5. prints `PASS <step>` / `FAIL <step>` per check, saves the captures to a
  *     folder it names, and exits 0 only if every check passed.
@@ -106,7 +109,24 @@ const app = `$HOME/build/cawco-apple/${build}/DerivedData/Build/Products/Debug-i
 const tag = crypto.randomUUID().slice(0, 6);
 const ROW = `panel-row-${tag}`;
 const ASK = `panel-ask-${tag}`;
+const INTRO = `panel-intro-${tag}`;
+/**
+ * The intro turn's reply: long enough that the Bash row after it stands
+ * below where Caw's panel hangs (about 350pt down), so a tap on the row
+ * lands outside the panel without the panel moving.
+ */
+const INTRO_REPLY = [
+  ...Array.from(
+    { length: 14 },
+    (_, n) =>
+      `Line ${n + 1} of the intro: a sentence long enough to fill the width of a phone's transcript. `
+  ),
+  "Intro done.",
+];
 const respond = (request: Seen) => {
+  if (request.tools && request.last.includes(INTRO)) {
+    return { everyMs: 5, words: INTRO_REPLY };
+  }
   // A session's turn (tools offered), started by one of the probe's messages.
   if (request.tools && request.last.includes(ROW)) {
     return {
@@ -382,7 +402,15 @@ async function tapThrough(kind: Kind, udid: string, box: Frame) {
     );
     return;
   }
-  const at = centre(target.frame);
+  // A point on the row's middle line outside the panel's frame, if any.
+  const row = target.frame;
+  const at =
+    [0.5, 0.25, 0.1, 0.75, 0.9]
+      .map((share) => ({
+        x: row.x + row.width * share,
+        y: row.y + row.height / 2,
+      }))
+      .find((point) => !inside(box, point)) ?? centre(row);
   const covered = inside(box, at);
   const under = await tree(udid, at);
   check(
@@ -390,8 +418,8 @@ async function tapThrough(kind: Kind, udid: string, box: Frame) {
     !covered &&
       under.some((n) => n.value === "Collapsed" || n.value === "Expanded"),
     covered
-      ? `the row's centre ${JSON.stringify(at)} is under the panel ${JSON.stringify(box)}; scroll it clear first`
-      : `at the row's centre: ${said(under)}`
+      ? `no point of the row ${JSON.stringify(row)} is outside the panel ${JSON.stringify(box)}`
+      : `at ${JSON.stringify(at)} on the row: ${said(under)}`
   );
   const before = target.value;
   await tap(udid, at);
@@ -413,20 +441,69 @@ async function tapThrough(kind: Kind, udid: string, box: Frame) {
   await shot(udid, `${kind}-after-tap-light`);
 }
 
-/** Opens the panel again, dismisses the notice by its ✕ and approves the ask. */
-async function answerFromPanel(kind: Kind, udid: string) {
-  const reopen = caw(await tree(udid));
-  if (!reopen?.frame) {
+/**
+ * A press on the ask's row itself, off its buttons, opens what it waits in:
+ * the panel closes and "Needs probe" comes to the front, its pending
+ * "Make a file" call in its transcript.
+ */
+async function chooseRow(kind: Kind, udid: string) {
+  let nodes = await tree(udid);
+  const head = caw(nodes);
+  if (head?.value !== "Open" && head?.frame) {
+    await tap(udid, centre(head.frame));
+    await pause(1200);
+    nodes = await tree(udid);
+  }
+  const box = panelBox(nodes);
+  const title = nodes.find(
+    (n) =>
+      n.label === "Needs probe" &&
+      n.frame &&
+      box &&
+      inside(box, centre(n.frame))
+  );
+  if (!title?.frame) {
     check(
-      `${kind}: the notice's ✕ dismisses it`,
+      `${kind}: a press on the ask's row opens its session`,
       false,
-      "Caw not found to reopen the panel"
+      'no "Needs probe" title in the open panel'
     );
     return;
   }
-  await tap(udid, centre(reopen.frame));
-  await pause(1200);
+  await tap(udid, centre(title.frame));
+  await pause(2500);
+  nodes = await tree(udid);
+  const closed =
+    !(approve(nodes) || dismiss(nodes)) && caw(nodes)?.value !== "Open";
+  const call = nodes.find((n) => (n.label ?? "").includes(ASK));
+  check(
+    `${kind}: a press on the ask's row opens its session`,
+    closed && call !== undefined,
+    `${closed ? "the panel closed" : "the panel is still open"}; ${call ? `"${call.label}" on screen` : "no pending call of Needs probe on screen"}`
+  );
+  await shot(udid, `${kind}-chosen-light`);
+}
+
+/**
+ * Opens the panel if it is closed (a tap on Caw toggles it, so an open
+ * panel is left as it is), dismisses the notice by its ✕ and approves the ask.
+ */
+async function answerFromPanel(kind: Kind, udid: string) {
   let nodes = await tree(udid);
+  const head = caw(nodes);
+  if (caw(nodes)?.value !== "Open") {
+    if (!head?.frame) {
+      check(
+        `${kind}: the notice's ✕ dismisses it`,
+        false,
+        "Caw not found to open the panel"
+      );
+      return;
+    }
+    await tap(udid, centre(head.frame));
+    await pause(1200);
+  }
+  nodes = await tree(udid);
   const cross = dismiss(nodes);
   if (cross?.frame) {
     await tap(udid, centre(cross.frame));
@@ -480,6 +557,9 @@ async function pass(
   await tapThrough(kind, udid, box);
   if (last) {
     await answerFromPanel(kind, udid);
+  } else {
+    // Answering takes the ask away, so its row is chosen on the pass that does not answer it.
+    await chooseRow(kind, udid);
   }
 }
 
@@ -494,6 +574,17 @@ try {
   await fleet.accountSignedIn();
 
   const rowSession = await fleet.spawn("claude", "Panel probe");
+  // A long turn first, so the Bash row stands below the open panel.
+  await fleet.send(rowSession, `${INTRO}: say a lot.`);
+  await until(
+    "the row session's intro turn answered",
+    async () =>
+      JSON.stringify(
+        await fleet.api<unknown>(`/api/instances/${rowSession}/transcript`)
+      ),
+    (text) => text.includes("Intro done."),
+    180_000
+  );
   await fleet.send(rowSession, `${ROW}: print a line.`);
   await until(
     "the row session's Bash call answered",

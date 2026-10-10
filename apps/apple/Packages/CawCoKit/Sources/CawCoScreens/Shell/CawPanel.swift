@@ -419,6 +419,19 @@ private final class NeedRow: UIControl {
 
     @objc private func choose() { onChoose() }
 
+    /// A press anywhere on the row but its buttons is the row's own: its
+    /// stacks and labels never take the touch (a press between Deny and
+    /// Approve landed on the actions' stack and did nothing).
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        guard let hit = super.hitTest(point, with: event) else { return nil }
+        var at: UIView? = hit
+        while let view = at, view !== self {
+            if view is UIControl { return hit }
+            at = view.superview
+        }
+        return self
+    }
+
     /// The press tint (app.css `.press-tint`): `surface-fill` while the finger is down.
     override var isHighlighted: Bool {
         didSet { backgroundColor = isHighlighted ? Palette.surfaceFill : nil }
