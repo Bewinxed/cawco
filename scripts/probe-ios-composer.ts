@@ -363,26 +363,32 @@ xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-e
     mac(
       `${AXE} drag --start-x ${sx} --start-y ${y} --end-x ${sx} --end-y ${y - 160} --duration 0.4 --steps 30 --udid ${udid}`
     );
+  /** Escape (HID 41) folds a wheel still up, until none is; whether it went. */
+  const closeWheel = async () => {
+    await until(
+      "the wheel closed",
+      async () => {
+        const up = wheelOf(await tree()).length > 0;
+        if (up) {
+          await mac(`${AXE} key 41 --udid ${udid}`);
+        }
+        return !up;
+      },
+      Boolean,
+      6000
+    ).catch(() => undefined);
+    return wheelOf(await tree()).length === 0;
+  };
+  // From the field's text first: it is most of the pill, and while it is
+  // written in its loupe is the swipe's rival for the finger.
   await drag(sy);
   await pause(1200);
   await swipeLog("the drag from the field's text");
   nodes = await tree();
-  if (wheelOf(nodes).length === 0) {
-    // Again from the pill's own rim, 3pt under the field: tells a field that
-    // keeps the finger from a swipe that never starts at all.
-    const rim = Math.round(field2.y + field2.height + 3);
-    console.log(
-      `  no wheel from the field's text; dragging from the pill's rim at y ${rim}`
-    );
-    await drag(rim);
-    await pause(1200);
-    await swipeLog("the drag from the pill's rim");
-    nodes = await tree();
-  }
   const wheel = wheelOf(nodes);
   const sent = nodes.filter((n) => n.label?.startsWith(marker) === true);
   check(
-    "a swipe up opens the wheel",
+    "a swipe up from the field's text opens the wheel",
     wheel.length > 0,
     `draft row: ${wheel.map((w) => w.label).join(" | ") || "none"}; elements with the sent words (bubble and wheel row): ${sent.length}`
   );
@@ -409,20 +415,24 @@ xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-e
       : `still up: ${left.map((w) => w.label).join(" | ")}`
   );
 
+  // From the pill's own rim, 3pt under the field, with the wheel closed first.
+  const closedForRim = await closeWheel();
+  const rimField = (await fieldFrame()) ?? field2;
+  const rim = Math.round(rimField.y + rimField.height + 3);
+  await drag(rim);
+  await pause(1200);
+  await swipeLog("the drag from the pill's rim");
+  const fromRim = wheelOf(await tree());
+  check(
+    "a swipe up from the pill's rim opens the wheel",
+    closedForRim && fromRim.length > 0,
+    closedForRim
+      ? `from y ${rim}: ${fromRim.map((w) => w.label).join(" | ") || "no draft row"}`
+      : "the wheel could not be closed first, so the drag proves nothing"
+  );
+
   // ── 7. A long press no longer opens it ─────────────────────────────────
-  // From a known closed state: Escape (HID 41) folds a wheel still up.
-  await until(
-    "the wheel closed before the long press",
-    async () => {
-      const up = wheelOf(await tree()).length > 0;
-      if (up) {
-        await mac(`${AXE} key 41 --udid ${udid}`);
-      }
-      return !up;
-    },
-    Boolean,
-    6000
-  ).catch(() => undefined);
+  await closeWheel();
   const before = wheelOf(await tree()).length;
   console.log(
     `  before the long press: ${before === 0 ? "wheel closed" : "wheel STILL UP"}`

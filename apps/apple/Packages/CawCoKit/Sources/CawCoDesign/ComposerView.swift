@@ -176,6 +176,8 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
     private let swipeUp = SwipeUpRecognizer()
     /// Whether the swipe being recognized started on the field's text.
     private var swipeFromField = false
+    /// When the finger the swipe is watching came down.
+    private var swipeTouchedAt: CFTimeInterval = 0
     #if DEBUG
     /// A simulator pass reads the swipe's decisions here (scripts/probe-ios-composer.ts).
     private static let swipeLog = Logger(subsystem: "dev.cawco.app", category: "Swipe")
@@ -1227,6 +1229,7 @@ extension ComposerView {
             return false
         }
         swipeFromField = view.isDescendant(of: field)
+        swipeTouchedAt = CACurrentMediaTime()
         noteSwipe("took the touch on \(type(of: view)), from the field \(swipeFromField), writing \(field.isFirstResponder)")
         Feel.prepare()
         return true
@@ -1256,6 +1259,12 @@ extension ComposerView {
                 return false
             }
         }
+        // On text being written, a finger held still before it moved is
+        // dragging the caret (the field's loupe): that is the text's, not the wheel's.
+        if swipeFromField, field.isFirstResponder, CACurrentMediaTime() - swipeTouchedAt > Motion.durPressHold {
+            noteSwipe("declined: held \(Int((CACurrentMediaTime() - swipeTouchedAt) * 1000))ms before moving, a caret drag")
+            return false
+        }
         noteSwipe("begins: velocity \(Int(velocity.x)),\(Int(velocity.y))")
         return true
     }
@@ -1270,10 +1279,31 @@ extension ComposerView {
         return true
     }
 
-    /// Who the swipe meets on its way, for a simulator pass.
+    /// The field's text interaction (its loupe, which while the field is
+    /// written in takes a moving finger at once to drag the caret) runs
+    /// beside the swipe instead of shutting it out; a swipe that begins
+    /// cancels it (`swiped`). Everything else keeps UIKit's rule: one wins.
     public func gestureRecognizer(_ recognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
-        if recognizer === swipeUp { noteSwipe("meets \(type(of: other)) on \(other.view.map { "\(type(of: $0))" } ?? "nothing")") }
-        return false
+        guard recognizer === swipeUp else { return false }
+        let beside = !(other is UIPanGestureRecognizer) && (other.view?.isDescendant(of: field) ?? false)
+        noteSwipe("meets \(type(of: other)) on \(other.view.map { "\(type(of: $0))" } ?? "nothing")\(beside ? ", side by side" : "")")
+        return beside
+    }
+
+    /// The field's text interaction under way when the swipe began stops:
+    /// no loupe and no caret moving behind the wheel.
+    private func cancelFieldTouches() {
+        var views: [UIView] = [field]
+        var recognizers: [UIGestureRecognizer] = []
+        while let view = views.popLast() {
+            recognizers += view.gestureRecognizers ?? []
+            views += view.subviews
+        }
+        for recognizer in recognizers where recognizer.state == .began || recognizer.state == .changed {
+            noteSwipe("cancels \(type(of: recognizer))")
+            recognizer.isEnabled = false
+            recognizer.isEnabled = true
+        }
     }
 
     fileprivate func noteSwipe(_ line: @autoclosure () -> String) {
@@ -1290,6 +1320,7 @@ extension ComposerView {
         switch pan.state {
         case .began:
             guard wheel == nil, edit == nil else { return }
+            cancelFieldTouches()
             Feel.hold()
             openWheel(keys: false)
             wheel?.swipeBegan(at: y)
