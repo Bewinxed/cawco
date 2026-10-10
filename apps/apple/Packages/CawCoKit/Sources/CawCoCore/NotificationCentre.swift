@@ -1,3 +1,4 @@
+import CawCoPush
 public import Foundation
 public import UserNotifications
 
@@ -55,17 +56,35 @@ public enum NotificationCentre {
         }
     }
 
-    /// A delivered notification: its identifier and its `cawco` object.
+    /// A delivered notification, as plain values: what `PushNote` reads off one.
     public struct Delivered: Sendable {
         public let identifier: String
+        public let date: Date
+        public let title: String
+        public let body: String
+        public let thread: String
+        public let category: String
         public let fields: [String: String]
+
+        init(_ notification: UNNotification) {
+            let content = notification.request.content
+            identifier = notification.request.identifier
+            date = notification.date
+            title = content.title
+            body = content.body
+            thread = content.threadIdentifier
+            category = content.categoryIdentifier
+            fields = PushNote.fields(content.userInfo)
+        }
     }
 
     // MARK: Changes: queued, not waited for
 
-    /// The categories the hub's pushes name, made on the queue by `make`.
-    public static func setCategories(_ make: @escaping @Sendable () -> Set<UNNotificationCategory>) {
-        queue.async { UNUserNotificationCenter.current().setNotificationCategories(make()) }
+    /// The categories the hub's pushes name, and the question categories a
+    /// delivered push still names (CawCoPush `PushCategory.install`, which
+    /// waits on the centre's answers here, on the queue).
+    public static func installCategories() {
+        queue.async { PushCategory.install(adding: nil, pruning: true) }
     }
 
     public static func removePending(_ identifiers: [String]) {
@@ -132,11 +151,22 @@ public enum NotificationCentre {
         await withCheckedContinuation { done in
             queue.async {
                 UNUserNotificationCenter.current().getDeliveredNotifications { notes in
-                    done.resume(returning: notes.map {
-                        Delivered(identifier: $0.request.identifier, fields: PushNote.fields($0.request.content.userInfo))
-                    })
+                    done.resume(returning: notes.map(Delivered.init))
                 }
             }
         }
     }
+
+    #if DEBUG
+    /// Each registered category's identifier and its actions' titles, for `PushProbe`.
+    public static func categories() async -> [String: [String]] {
+        await withCheckedContinuation { done in
+            queue.async {
+                UNUserNotificationCenter.current().getNotificationCategories { categories in
+                    done.resume(returning: Dictionary(uniqueKeysWithValues: categories.map { ($0.identifier, $0.actions.map(\.title)) }))
+                }
+            }
+        }
+    }
+    #endif
 }

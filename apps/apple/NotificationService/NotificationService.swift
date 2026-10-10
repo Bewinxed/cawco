@@ -6,7 +6,9 @@ import UserNotifications
 /// and body with this device's push key (`"e"`, CawCoPush `SealedAlert`);
 /// Cawrier and APNs carry only that and a safe alert. Opened, the
 /// notification shows what the agent is asking; not opened (no key on this
-/// device, a push sealed with another key), it shows as it arrived.
+/// device, a push sealed with another key), it shows as it arrived. A
+/// question the hub let be answered inline carries its options sealed too,
+/// and leaves here with a category of its own that offers them.
 final class NotificationService: UNNotificationServiceExtension {
     private struct Pending {
         let handler: (UNNotificationContent) -> Void
@@ -60,6 +62,19 @@ final class NotificationService: UNNotificationServiceExtension {
         content.subtitle = alert.subtitle ?? ""
         content.body = alert.body
         log.notice("push \(request.identifier, privacy: .public) opened: title \(alert.title.count) characters, subtitle \(alert.subtitle?.count ?? 0), body \(alert.body.count)")
+        answerable(content, options: alert.options)
         return content
+    }
+
+    /// A question the hub let be answered from the push (push.ts
+    /// `inlineOptions`) gets its own category, an action per option and
+    /// "Other…", registered before the push is handed back so it shows with
+    /// them. Without options it stays as the hub named it, Open only.
+    private func answerable(_ content: UNMutableNotificationContent, options: [SealedAlert.Option]?) {
+        guard content.categoryIdentifier == PushCategory.question, let options, !options.isEmpty else { return }
+        let category = PushCategory.answering(options)
+        PushCategory.install(adding: category, pruning: false)
+        content.categoryIdentifier = category.identifier
+        log.notice("question push answers inline: category \(category.identifier, privacy: .public), \(options.count) options")
     }
 }

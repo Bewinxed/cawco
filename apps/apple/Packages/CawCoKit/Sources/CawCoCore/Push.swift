@@ -35,23 +35,36 @@ public struct PushNote: Sendable {
     public let delivered: Date
     public let title: String
     public let thread: String
-    /// The action the operator chose (`OPEN`, `APPROVE`, or the system's default and dismiss).
+    /// The category it showed with: the hub's, or a question's own (CawCoPush `PushCategory`).
+    public let category: String
+    /// The action the operator chose (CawCoPush `PushAction`, or the system's default and dismiss).
     public let action: String
+    /// What the operator typed, for a text action (Reply, a question's "Other…").
+    public let text: String?
     /// The `cawco` object's string fields; a JSON null is absent.
     let fields: [String: String]
 
     public init(_ response: UNNotificationResponse) {
-        self.init(response.notification, action: response.actionIdentifier)
+        self.init(response.notification, action: response.actionIdentifier,
+                  text: (response as? UNTextInputNotificationResponse)?.userText)
     }
 
-    public init(_ notification: UNNotification, action: String) {
+    public init(_ notification: UNNotification, action: String, text: String? = nil) {
         let content = notification.request.content
-        id = notification.request.identifier
-        delivered = notification.date
-        title = content.title
-        thread = content.threadIdentifier
+        self.init(id: notification.request.identifier, delivered: notification.date, title: content.title,
+                  thread: content.threadIdentifier, category: content.categoryIdentifier, action: action, text: text,
+                  fields: Self.fields(content.userInfo))
+    }
+
+    init(id: String, delivered: Date, title: String, thread: String, category: String, action: String, text: String?, fields: [String: String]) {
+        self.id = id
+        self.delivered = delivered
+        self.title = title
+        self.thread = thread
+        self.category = category
         self.action = action
-        fields = Self.fields(content.userInfo)
+        self.text = text
+        self.fields = fields
     }
 
     static func fields(_ userInfo: [AnyHashable: Any]) -> [String: String] {
@@ -61,6 +74,7 @@ public struct PushNote: Sendable {
     public var kind: String? { fields["kind"] }
     var requestId: String? { fields["requestId"] }
     var instanceId: String? { fields["instanceId"] }
+    var machineId: String? { fields["machineId"] }
 
     /// One delivery: a tap reaches the app both as a scene's connection
     /// option and through the notification centre's delegate, and is routed once.
@@ -86,31 +100,16 @@ public struct PushNote: Sendable {
     }
 }
 
-/// The notification categories the hub's pushes name (push.ts `PUSH_CATEGORIES`).
+/// The notification categories the hub's pushes name (push.ts
+/// `PUSH_CATEGORIES`), defined with the extension in CawCoPush `PushCategory`.
 public enum PushCategories {
-    public static let open = "OPEN"
-    public static let approve = "APPROVE"
-    static let permissionOpenOnly = "CAWCO_PERMISSION_OPEN"
+    /// The action that opens what the push names.
+    public static var open: String { PushAction.open }
 
+    /// The fixed categories, and the question categories a delivered push
+    /// still names: at launch, and each time the app comes to the front.
     public static func register() {
-        NotificationCentre.setCategories { all() }
-    }
-
-    /// "Approve" is the only label for the grant (WORDS.md); there is no Deny.
-    private static func all() -> Set<UNNotificationCategory> {
-        let openAction = UNNotificationAction(identifier: Self.open, title: "Open", options: [.foreground])
-        let approveAction = UNNotificationAction(identifier: Self.approve, title: "Approve", options: [.authenticationRequired])
-        func openOnly(_ id: String) -> UNNotificationCategory {
-            UNNotificationCategory(identifier: id, actions: [openAction], intentIdentifiers: [])
-        }
-        return [
-            UNNotificationCategory(identifier: "CAWCO_PERMISSION", actions: [openAction, approveAction], intentIdentifiers: []),
-            openOnly(permissionOpenOnly),
-            openOnly("CAWCO_QUESTION"),
-            openOnly("CAWCO_TASK"),
-            openOnly("CAWCO_ATTEMPT"),
-            UNNotificationCategory(identifier: "CAWCO_TEST", actions: [], intentIdentifiers: []),
-        ]
+        NotificationCentre.installCategories()
     }
 }
 
@@ -420,6 +419,8 @@ public final class PushRegistry {
     public func becameActive() async {
         await readAuthorization()
         NotificationCentre.setBadge(0)
+        // After the removal below, queued behind it: a question category goes with its push.
+        defer { PushCategories.register() }
         guard let hub = HubConnection.keptAddress, let parked = await PushPending.read(hub) else { return }
         let waiting = Set(parked.map(\.requestId))
         let gone = await NotificationCentre.delivered().compactMap { note -> String? in
@@ -436,6 +437,21 @@ public final class PushRegistry {
     public func readAuthorization() async {
         authorization = await NotificationCentre.authorization()
     }
+
+    #if DEBUG
+    /// `PushProbe`: this device's pairing and push key registered with the
+    /// kept hub as a launch registers them, without Cawrier's enrolment (a
+    /// simulator has no purchase). Nil, or the reason it didn't register.
+    func probeRegister() async -> String? {
+        guard let hub = HubConnection.keptAddress else { return "No hub is kept on this device." }
+        do {
+            let pairing = try Pairing.kept()
+            return await register(hub: hub, pairing: pairing, quiet: nil)
+        } catch {
+            return String(describing: error)
+        }
+    }
+    #endif
 
     /// Registers the pairing with `hub`; `quiet` is sent only from the toggle,
     /// so a launch's registration keeps what the operator set. Nil, or the hub's reason.
@@ -640,52 +656,192 @@ enum PushPending {
     }
 }
 
-/// Approve from the lock screen, in the time iOS gives a background action:
-/// exactly the one request the push named, through the same `permission.answer`
-/// command the app's own Approve sends.
+/// What a push's actions do from the lock screen, in the time iOS gives a
+/// background action, through the same commands the app's own controls send:
+///
+/// - Approve: exactly the one request the push named, `permission.answer`
+///   allowing it, as the card's Approve.
+/// - An option, or "Other…" with the operator's words: the question's answer,
+///   `permission.answer` with the answers folded into its input, as the
+///   card's Answer (`NeedsYouStore.answerQuestion`).
+/// - Reply: the operator's words to the push's session, the composer's `send`
+///   (`SessionsStore.steer`); the hub's refusal is its reason.
+///
+/// Each waits up to `window` for the hub's word that it was applied (for a
+/// send, accepted). Anything short of that leaves a local notification in the
+/// push's place saying what happened.
 @MainActor
-public enum PushApproval {
-    /// How long the hub has to say the answer was applied.
+public enum PushActions {
+    /// How long the hub has to say the action was applied.
     static let window: Duration = .seconds(20)
     private static let log = Logger(subsystem: "dev.cawco.app", category: "Push")
 
-    public static func approve(_ note: PushNote) async {
-        guard note.kind == "ask", let requestId = note.requestId, let instanceId = note.instanceId,
-              let hub = HubConnection.keptAddress else { return }
+    /// Runs the action `note` names. False when it names none of these (a
+    /// tap, Open, a dismissal): the caller routes those.
+    public static func perform(_ note: PushNote) async -> Bool {
+        switch note.action {
+        case PushAction.approve:
+            await approve(note)
+        case PushAction.answerOther:
+            await answer(note, .words(note.text ?? ""))
+        case PushAction.reply:
+            await reply(note)
+        default:
+            guard let option = PushAction.option(note.action) else { return false }
+            await answer(note, .option(option))
+        }
+        return true
+    }
+
+    // MARK: Approve
+
+    private static func approve(_ note: PushNote) async {
+        guard note.kind == "ask", let requestId = note.requestId else { return }
         let deadline = ContinuousClock.now + window
-        guard let parked = await PushPending.read(hub) else {
-            log.error("approve \(requestId, privacy: .public): /api/pending unreadable")
-            await notApproved(note)
-            return
-        }
-        guard let match = parked.first(where: { $0.requestId == requestId && $0.instanceId == instanceId }), let ask = match.ask else {
-            log.notice("approve \(requestId, privacy: .public): no longer parked")
-            await post(note, title: note.title, body: "Already answered.", category: nil)
-            return
-        }
-        let connection = HubConnection()
+        guard let found = await parked(note, deadline: deadline, failed: { await notApproved(note) }) else { return }
+        let (connection, match, ask) = found
         defer { connection.disconnect() }
-        guard await until(deadline, { connection.socket == .connected }) else {
-            log.error("approve \(requestId, privacy: .public): the hub socket did not open")
-            await notApproved(note)
-            return
-        }
         connection.needs.answer(ask, machineId: match.machineId, .allow)
-        guard let commandId = connection.needs.answers["\(ask.instanceId):\(ask.requestId)"] else {
-            await notApproved(note)
-            return
-        }
-        _ = await until(deadline) {
-            let stage = connection.ledger.commands[commandId]?.stage
-            return stage == .applied || stage == .failed
-        }
-        let stage = connection.ledger.commands[commandId]?.stage
-        log.notice("approve \(requestId, privacy: .public): command \(commandId, privacy: .public) \(stage?.rawValue ?? "unanswered", privacy: .public)")
+        let stage = await settled(connection.needs.answers["\(ask.instanceId):\(ask.requestId)"], on: connection, deadline: deadline)
+        log.notice("approve \(requestId, privacy: .public): \(stage?.rawValue ?? "unanswered", privacy: .public)")
         if stage != .applied { await notApproved(note) }
     }
 
     private static func notApproved(_ note: PushNote) async {
-        await post(note, title: nil, body: "\(note.title): not approved. Open to answer.", category: PushCategories.permissionOpenOnly)
+        await post(note, title: nil, body: "\(note.title): not approved. Open to answer.", category: PushCategory.permissionOpenOnly)
+    }
+
+    // MARK: Answer
+
+    enum Pick {
+        /// An option's id: its index among the question's options (push.ts `inlineOptions`).
+        case option(String)
+        /// The operator's own words, the card's "Other".
+        case words(String)
+    }
+
+    /// The parked question's answer, read off the hub's own copy of the ask:
+    /// an option by its index there, so the label sent is the hub's.
+    private static func answer(_ note: PushNote, _ pick: Pick) async {
+        guard note.kind == "ask", let requestId = note.requestId else { return }
+        if case let .words(words) = pick, words.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            await notAnswered(note, "Nothing was written.")
+            return
+        }
+        let deadline = ContinuousClock.now + window
+        guard let found = await parked(note, deadline: deadline, failed: { await notAnswered(note, nil) }) else { return }
+        let (connection, match, ask) = found
+        defer { connection.disconnect() }
+        guard ask.questions.count == 1, let question = ask.questions.first else {
+            await notAnswered(note, "This question has more than one part.")
+            return
+        }
+        let label: String
+        switch pick {
+        case let .option(id):
+            guard let index = Int(id), question.options.indices.contains(index) else {
+                await notAnswered(note, "That option is no longer offered.")
+                return
+            }
+            label = question.options[index].label
+        case let .words(words):
+            label = words.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        guard connection.needs.answerQuestion(ask, machineId: match.machineId, answers: [question.question: [label]]) else {
+            await notAnswered(note, nil)
+            return
+        }
+        let stage = await settled(connection.needs.answers["\(ask.instanceId):\(ask.requestId)"], on: connection, deadline: deadline)
+        log.notice("answer \(requestId, privacy: .public): \(stage?.rawValue ?? "unanswered", privacy: .public)")
+        if stage != .applied {
+            await notAnswered(note, connection.needs.answerSent(for: ask)?.reason)
+        }
+    }
+
+    private static func notAnswered(_ note: PushNote, _ reason: String?) async {
+        await post(note, title: nil, body: "\(note.title): answer not sent. \(sentence(reason))Open to answer.", category: PushCategory.question)
+    }
+
+    // MARK: Reply
+
+    /// The operator's words to the push's session, as the composer sends them.
+    private static func reply(_ note: PushNote) async {
+        let words = (note.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let instanceId = note.instanceId, !instanceId.isEmpty else { return }
+        guard !words.isEmpty else {
+            await notSent(note, words, "Nothing was written.")
+            return
+        }
+        guard let machineId = note.machineId, !machineId.isEmpty else {
+            await notSent(note, words, "That session is no longer on the hub.")
+            return
+        }
+        guard HubConnection.keptAddress != nil else {
+            await notSent(note, words, "No hub is kept on this device.")
+            return
+        }
+        let deadline = ContinuousClock.now + window
+        let connection = HubConnection()
+        defer { connection.disconnect() }
+        guard await until(deadline, { connection.socket == .connected }) else {
+            log.error("reply to \(instanceId, privacy: .public): the hub socket did not open")
+            await notSent(note, words, "The hub couldn't be reached.")
+            return
+        }
+        let commandId = connection.sessions.steer(sessionId: instanceId, machineId: machineId, text: words)
+        let stage = await settled(commandId, on: connection, deadline: deadline)
+        log.notice("reply to \(instanceId, privacy: .public): command \(commandId, privacy: .public) \(stage?.rawValue ?? "unanswered", privacy: .public)")
+        guard stage == .accepted || stage == .applied else {
+            await notSent(note, words, connection.ledger.commands[commandId]?.reason ?? "The hub never acknowledged it.")
+            return
+        }
+    }
+
+    /// In the push's place, with its own category, so Reply is there to try again.
+    private static func notSent(_ note: PushNote, _ words: String, _ reason: String) async {
+        let said = words.isEmpty ? "" : " “\(words)”"
+        await post(note, title: nil, body: "\(note.title): reply not sent.\(said) \(sentence(reason))", category: note.category)
+    }
+
+    // MARK: The hub
+
+    /// The ask the push names, still parked, and a connection to answer it
+    /// on, open. Otherwise nil, having said why: "Already answered." when the
+    /// hub no longer holds it, `failed` when the hub couldn't be read or reached.
+    private static func parked(_ note: PushNote, deadline: ContinuousClock.Instant,
+                               failed: () async -> Void) async -> (HubConnection, PushPending.Parked, ParkedAsk)? {
+        guard let requestId = note.requestId, let instanceId = note.instanceId, let hub = HubConnection.keptAddress else { return nil }
+        guard let parked = await PushPending.read(hub) else {
+            log.error("\(note.action, privacy: .public) \(requestId, privacy: .public): /api/pending unreadable")
+            await failed()
+            return nil
+        }
+        guard let match = parked.first(where: { $0.requestId == requestId && $0.instanceId == instanceId }), let ask = match.ask else {
+            log.notice("\(note.action, privacy: .public) \(requestId, privacy: .public): no longer parked")
+            await post(note, title: note.title, body: "Already answered.", category: nil)
+            return nil
+        }
+        let connection = HubConnection()
+        guard await until(deadline, { connection.socket == .connected }) else {
+            log.error("\(note.action, privacy: .public) \(requestId, privacy: .public): the hub socket did not open")
+            connection.disconnect()
+            await failed()
+            return nil
+        }
+        return (connection, match, ask)
+    }
+
+    /// The command's last stage by `deadline`; nil when nothing was sent.
+    private static func settled(_ commandId: String?, on connection: HubConnection, deadline: ContinuousClock.Instant) async -> Ledger.Stage? {
+        guard let commandId else { return nil }
+        _ = await until(deadline) { connection.ledger.commands[commandId]?.isSettled ?? true }
+        return connection.ledger.commands[commandId]?.stage
+    }
+
+    /// `reason` as a sentence with a space after it, or nothing.
+    private static func sentence(_ reason: String?) -> String {
+        guard let reason = reason?.trimmingCharacters(in: .whitespacesAndNewlines), !reason.isEmpty else { return "" }
+        return reason.last.map { ".!?".contains($0) } == true ? "\(reason) " : "\(reason). "
     }
 
     /// A local notification in the push's place (same identifier, same `cawco` data).
@@ -695,6 +851,12 @@ public enum PushApproval {
         local.thread = note.thread
         do {
             try await NotificationCentre.add(local)
+            #if DEBUG
+            // scripts/probe-ios-push-actions.ts reads this: a notice posted while the app is in front shows as a banner only.
+            log.notice("posted in place of \(note.id, privacy: .public) (category \(local.category, privacy: .public)): \(body, privacy: .public)")
+            #else
+            log.notice("posted in place of \(note.id, privacy: .public) (category \(local.category, privacy: .public)), \(body.count) characters")
+            #endif
         } catch {
             log.error("local notification failed: \(String(describing: error), privacy: .public)")
         }

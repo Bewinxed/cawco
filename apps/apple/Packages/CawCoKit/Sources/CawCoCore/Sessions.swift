@@ -321,13 +321,20 @@ public final class SessionsStore {
     /// (a withdrawn queued send), which the hub then retires.
     public func steer(_ row: InstanceRow, text: String, images: [(mediaType: String, data: Data)] = [], texts: [(name: String, content: String)] = [],
                       files: [SentFile] = [], replaces: String? = nil) -> String {
+        steer(sessionId: row.id, machineId: row.machineId, text: text, images: images, texts: texts, files: files, replaces: replaces)
+    }
+
+    /// The same send by the session's ids, for a sender that has no row: a
+    /// push's Reply, which knows the session and its machine from the push.
+    public func steer(sessionId: String, machineId: String, text: String, images: [(mediaType: String, data: Data)] = [],
+                      texts: [(name: String, content: String)] = [], files: [SentFile] = [], replaces: String? = nil) -> String {
         let uuid = UUID().uuidString.lowercased()
         var message: [String: any Sendable] = [
             "type": "user", "uuid": uuid, "origin": ["kind": "human"],
             "message": ["role": "user", "content": text],
         ]
         if let replaces { message["replaces"] = replaces }
-        var body: [String: any Sendable] = ["instanceId": row.id, "message": message]
+        var body: [String: any Sendable] = ["instanceId": sessionId, "message": message]
         if !images.isEmpty {
             body["images"] = images.map { ["mediaType": $0.mediaType, "data": $0.data.base64EncodedString()] as [String: any Sendable] }
         }
@@ -336,7 +343,7 @@ public final class SessionsStore {
                 + files.map { ["kind": "file", "name": $0.name, "mediaType": $0.mediaType, "size": $0.size, "ref": $0.ref] as [String: any Sendable] }
         }
         let payload = try! OpenAPIValueContainer(unvalidatedValue: body)
-        return hub.ledger.submit(kind: .send, sessionId: row.id, machineId: row.machineId, payload: payload, settlesAt: .accepted)
+        return hub.ledger.submit(kind: .send, sessionId: sessionId, machineId: machineId, payload: payload, settlesAt: .accepted)
     }
 
     /// Takes back a send the session has not read yet (`send.withdraw`,

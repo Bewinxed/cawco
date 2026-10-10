@@ -30,6 +30,7 @@ import {
   type Envelope,
   machineLabel,
   type PermissionRequestFrame,
+  questionsOf,
 } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
 import { Elysia, t } from "elysia";
@@ -49,16 +50,25 @@ const REQUEST_TIMEOUT_MS = 10_000;
 /**
  * The app's notification categories (the spec in the Projects plan, §5.5,
  * names their actions). A permission whose tool can run anything, or a plan,
- * is opened to be read, never approved from the lock screen.
+ * is opened to be read, never approved from the lock screen. A push about a
+ * session (`task` with one, `attempt`) offers Reply; a task no session has
+ * worked on yet only opens. A question the app can answer inline goes as
+ * `question` with its options sealed (`inlineOptions`): the app's
+ * notification service extension opens them and gives that one push a
+ * category of its own, an action per option and "Other…".
  */
 export const PUSH_CATEGORIES = {
   permission: "CAWCO_PERMISSION",
   permissionOpenOnly: "CAWCO_PERMISSION_OPEN",
   question: "CAWCO_QUESTION",
   task: "CAWCO_TASK",
+  taskOpenOnly: "CAWCO_TASK_OPEN",
   attempt: "CAWCO_ATTEMPT",
   test: "CAWCO_TEST",
 } as const;
+
+/** A question with more options than this is opened to be answered: three and "Other…" fill the four actions a category shows. */
+const MAX_INLINE_OPTIONS = 3;
 
 /** Tools whose approval must be read in full: a push never offers Approve for them. */
 const OPEN_ONLY_TOOLS = new Set([
@@ -79,19 +89,38 @@ export type PushData =
       requestId: string;
       workflowRunId: string | null;
     }
-  | { kind: "task"; projectId: string; taskId: string }
+  | {
+      kind: "task";
+      /** The session of the task's newest attempt, which Reply writes to; null before any. */
+      instanceId: string | null;
+      machineId: string | null;
+      projectId: string;
+      taskId: string;
+    }
   | {
       kind: "attempt";
       instanceId: string;
+      /** Null when the attempt's session is no longer on the hub. */
+      machineId: string | null;
       projectId: string;
       taskId: string;
       workItemId: string;
     }
   | { kind: "test" };
 
-/** An alert's words; `subtitle` is the item's project, absent when it is the title. */
+/** One option of a question answered from the push: its action is `ANSWER_<id>`, `id` its index among the question's options. */
+export interface PushOption {
+  readonly id: string;
+  readonly label: string;
+}
+
+/**
+ * An alert's words; `subtitle` is the item's project, absent when it is the
+ * title. `options` are a question's, sealed with the rest: the agent wrote them.
+ */
 interface Alert {
   readonly body: string;
+  readonly options?: readonly PushOption[];
   readonly subtitle?: string;
   readonly title: string;
 }
@@ -175,18 +204,25 @@ const longestCut = (
 
 /**
  * The sealed alert's plaintext, `{"v":1,…}` as UTF-8, cut to fit the payload:
- * the body first, then the title; the visible alert is never cut. Its sealed
- * size is the same for every device, so it is fitted once per push.
+ * the body first, then the title; the visible alert and a question's options
+ * are never cut. Its sealed size is the same for every device, so it is
+ * fitted once per push.
  */
 const plaintextOf = (notification: Notification): Plaintext => {
   const room =
     MAX_PAYLOAD_BYTES - byteLength(JSON.stringify(payloadOf(notification, "")));
   // Base64 writes each 3 bytes as 4 characters, padded to a whole 4.
   const limit = Math.floor(room / 4) * 3 - IV_BYTES - TAG_BYTES;
-  const { subtitle } = notification.sealed;
+  const { subtitle, options } = notification.sealed;
   const encode = (title: string, body: string): Plaintext =>
     utf8.encode(
-      JSON.stringify({ v: 1, title, ...(subtitle ? { subtitle } : {}), body })
+      JSON.stringify({
+        v: 1,
+        title,
+        ...(subtitle ? { subtitle } : {}),
+        body,
+        ...(options ? { options } : {}),
+      })
     );
   const fits = (title: string, body: string) =>
     encode(title, body).length <= limit;
@@ -266,6 +302,31 @@ const askCategory = (
   return OPEN_ONLY_TOOLS.has(tool) || tool.startsWith("mcp__")
     ? PUSH_CATEGORIES.permissionOpenOnly
     : PUSH_CATEGORIES.permission;
+};
+
+/**
+ * The options a question push answers with, or undefined when it is opened
+ * to be answered: a session's AskUserQuestion (core `questionsOf`, the
+ * reading the app's card and the dashboard share) of one question with one to
+ * {@link MAX_INLINE_OPTIONS} options. Several questions, more options, or a
+ * workflow run's question (answered on its run's page) stay Open only.
+ */
+const inlineOptions = (
+  payload: Partial<PermissionRequestFrame> & { workflowRunId?: string },
+  instanceId: string
+): PushOption[] | undefined => {
+  if (!instanceId || payload.workflowRunId) {
+    return undefined;
+  }
+  const questions = questionsOf(payload.toolName ?? "", payload.input ?? {});
+  const options = questions?.length === 1 ? questions[0].options : [];
+  if (options.length === 0 || options.length > MAX_INLINE_OPTIONS) {
+    return undefined;
+  }
+  return options.map((option, index) => ({
+    id: String(index),
+    label: option.label,
+  }));
 };
 
 /**
@@ -443,6 +504,22 @@ export const createPush = ({ db, task }: PushServices) => {
     return host ? `${harness} on ${machineLabel(host)}` : harness;
   };
 
+  /** An ask's visible name: the owner's title for its session, its workflow's name, else {@link sessionName}. */
+  const askName = (
+    row: { title: string | null; titleSource: string | null } | undefined,
+    workflowRunId: string | undefined,
+    instanceId: string
+  ): string => {
+    const owned = row?.titleSource === "owner" ? row.title?.trim() : undefined;
+    const run = workflowRunId ? db.getWorkflowRun(workflowRunId) : undefined;
+    return (
+      owned ||
+      (run ? db.getWorkflow(run.workflowId)?.name : undefined) ||
+      sessionName(instanceId) ||
+      "A session"
+    );
+  };
+
   return {
     /**
      * A session (or a workflow) is blocked on you: a permission or a question.
@@ -466,25 +543,22 @@ export const createPush = ({ db, task }: PushServices) => {
       asked.add(requestId);
       const instanceId = envelope.instanceId ?? payload.instanceId ?? "";
       const [row] = instanceId ? db.getInstancesByIds([instanceId]) : [];
-      const run = payload.workflowRunId
-        ? db.getWorkflowRun(payload.workflowRunId)
-        : undefined;
-      const owned =
-        row?.titleSource === "owner" ? row.title?.trim() : undefined;
-      const name =
-        owned ||
-        (run ? db.getWorkflow(run.workflowId)?.name : undefined) ||
-        sessionName(instanceId) ||
-        "A session";
       const projectId = row?.projectId ?? null;
       const project = projectName(projectId);
       // The ask's presentation, stamped as it parked (ask-presentation.ts):
       // the session as the board names it, and the needs-you card's line.
       const { asker, summary } = (payload as PermissionRequestFrame)
         .presentation;
+      const options = inlineOptions(payload, instanceId);
       moment({
-        shown: alertOf(name, project),
-        sealed: alertOf(asker, project, summary),
+        shown: alertOf(
+          askName(row, payload.workflowRunId, instanceId),
+          project
+        ),
+        sealed: {
+          ...alertOf(asker, project, summary),
+          ...(options ? { options } : {}),
+        },
         category: askCategory(payload),
         collapseId: collapse("ask", requestId),
         threadId: projectId ?? instanceId,
@@ -519,13 +593,26 @@ export const createPush = ({ db, task }: PushServices) => {
             return;
           }
           const alert = alertOf(view.title, projectName(projectId));
+          // The newest attempt's session, still on the hub: Reply writes to it.
+          const attempt = db
+            .projectAttempts(projectId)
+            .find((item) => item.taskId === id);
+          const [row] = attempt
+            ? db.getInstancesByIds([attempt.instanceId])
+            : [];
           moment({
             shown: alert,
             sealed: alert,
-            category: PUSH_CATEGORIES.task,
+            category: row ? PUSH_CATEGORIES.task : PUSH_CATEGORIES.taskOpenOnly,
             collapseId: collapse("task", `${projectId}:${id}`),
             threadId: projectId,
-            data: { kind: "task", projectId, taskId: id },
+            data: {
+              kind: "task",
+              instanceId: row?.id ?? null,
+              machineId: row?.machineId ?? null,
+              projectId,
+              taskId: id,
+            },
           });
         })
         .catch(() => undefined);
@@ -562,6 +649,7 @@ export const createPush = ({ db, task }: PushServices) => {
             data: {
               kind: "attempt",
               instanceId: item.instanceId,
+              machineId: row?.machineId ?? null,
               projectId,
               taskId,
               workItemId: item.id,
