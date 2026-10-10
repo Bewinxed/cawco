@@ -1324,8 +1324,8 @@
   const ssrCount = $derived(browser ? undefined : built.rows.length);
 
   let scroller = $state<HTMLElement | undefined>();
-  /** virtua's imperative handle — `scrollToIndex` reaches the true last row even
-      as rows are still being measured, which a one-shot scrollTop cannot. */
+  /** virtua's imperative handle: its sizes, its cache, and `scrollToIndex` for
+      a row that is not the tail (the tray's reveal). */
   let list = $state<VirtualizerHandle | undefined>();
   /** The box around the list; its first child is virtua's container. */
   let listing = $state<HTMLElement>();
@@ -1339,36 +1339,44 @@
    */
   let spare = $state(0);
   /**
-   * Keeps `spare` on the list's height, whatever changed it — a row measured,
-   * arriving, or leaving (a parked ask's call taken out moves no row's size,
-   * only the list's). The height is the one virtua writes to its container's
-   * style, heard through a MutationObserver as the microtask behind that
-   * write, and the tail pinned again from the whole height, before the frame
-   * is painted. virtua writes it from inside its own ResizeObserver callback,
-   * so the container is never observed for size (THE PIN, below).
+   * Puts `spare` on the list's height as virtua last wrote it to its
+   * container's style, and the padding on the page; says whether it moved.
+   * The pin calls it before it reads the height, so a list that grew is
+   * whole in the frame it grew.
+   */
+  function keepWhole(): boolean {
+    const inner = listing?.firstElementChild as HTMLElement | null | undefined;
+    const height = Number.parseFloat(inner?.style.height ?? "");
+    if (!Number.isFinite(height)) {
+      return false;
+    }
+    const whole = Math.ceil(height - 0.001) - height;
+    const next = whole < 0.001 ? 0 : whole;
+    if (Math.abs(next - spare) <= 0.001) {
+      return false;
+    }
+    spare = next;
+    flushSync();
+    return true;
+  }
+  /**
+   * Keeps `spare` on the list's height whatever changed it, and the tail on
+   * the foot when the pin did not see the change: a row taken out at the end
+   * (a parked ask's call) moves no row's size, only the list's, and virtua
+   * says nothing of it. The height is heard through a MutationObserver on
+   * virtua's container's style, as the microtask behind virtua's write,
+   * before the frame is painted. virtua writes it from inside its own
+   * ResizeObserver callback, so the container is never observed for size
+   * (THE PIN, below). A change the pin saw is already whole by then.
    */
   function wholeHeight(node: HTMLElement) {
-    const inner = node.firstElementChild as HTMLElement | null;
+    const inner = node.firstElementChild;
     if (!inner) {
       return;
     }
-    const fraction = (): number | null => {
-      const height = Number.parseFloat(inner.style.height);
-      if (!Number.isFinite(height)) {
-        return null;
-      }
-      const whole = Math.ceil(height - 0.001) - height;
-      return whole < 0.001 ? 0 : whole;
-    };
-    spare = fraction() ?? spare;
+    keepWhole();
     const watch = new MutationObserver(() => {
-      const next = fraction();
-      if (next === null || Math.abs(next - spare) <= 0.001) {
-        return;
-      }
-      spare = next;
-      flushSync();
-      if (active && landed && atBottom && !jumping) {
+      if (keepWhole() && pinned()) {
         pinBottom();
       }
     });
@@ -1736,14 +1744,11 @@
   }
 
   /**
-   * Put the last row fully in view, above the floating composer stack.
-   *
-   * `scrollToIndex(…, 'end')` seats the last row's foot on the VIEWPORT's foot,
-   * which is behind the composer: the clearance is padding under the list, and
-   * virtua's box math stops at the list. So the landing is two moves — virtua
-   * measures its way to the true last row, then one more frame runs the scroller
-   * to its own maximum, past the padding band, which is exactly the height of
-   * the composer column.
+   * The tail is the scroller's own maximum, past the padding band under the
+   * list, which is exactly the height of the composer column: the last row
+   * fully in view, above the floating composer stack. (`scrollToIndex(…,
+   * 'end')` seats the last row's foot on the VIEWPORT's foot, behind the
+   * composer: virtua's box math stops at the list.)
    */
   /** The frame the next write to the tail is waiting for, and this
    *  component's LAST WRITE — the tag that tells its own scroll events from
@@ -1773,15 +1778,13 @@
   /**
    * WHILE A ROW OPENS, ITS EDGE IS THE SCROLL.
    *
-   * A tool call opens its own height (`Row`'s `open`), so the bottom of the
-   * list moves on every frame of that animation. For exactly as long as a
-   * row is opening — or a reasoning block is folding — the view is pinned to
-   * the bottom in the list's own resize, the same frame the row grows,
-   * rather than a frame behind it: the row's growth is what moves it. One
-   * motion, at the row's own curve.
+   * A tool call opens its own height (`Row`'s `open`), a reasoning block
+   * folds, a failed send's reason unfolds: the bottom of the list moves on
+   * every frame of the motion. virtua measures the row on every one of those
+   * frames, so the pin (`onresize`, below) puts the view back in the frame
+   * the row grew: the row's growth is what moves it. One motion, at the row's
+   * own curve.
    */
-  let opening = 0;
-  const resizing = new Set<Element>();
 
   /**
    * Pin the viewport to the bottom. Called from the list's own resize (see the
@@ -1809,39 +1812,9 @@
     }
   }
 
-  /** Svelte scopes keyframe names, so a call's opening is matched by suffix. */
-  const isOpening = (name: string): boolean => name.endsWith("row-open");
-
   /** A thinking row opening or closing on the kit's reveal. */
   const isThinking = (event: Event): boolean =>
     !!(event.target as Element).closest('[data-slot="thinking-steps-content"]');
-
-  function startResizing(row: Element): void {
-    resizing.add(row);
-    opening = resizing.size;
-    // The paced loop and the pin must never both be writing scrollTop.
-    stopFollow();
-  }
-
-  function endResizing(row: Element): void {
-    resizing.delete(row);
-    opening = resizing.size;
-    if (opening === 0 && atBottom) {
-      followBottom();
-    }
-  }
-
-  function onanimationstart(event: AnimationEvent): void {
-    if (isOpening(event.animationName)) {
-      startResizing(event.target as Element);
-    }
-  }
-
-  function onanimationend(event: AnimationEvent): void {
-    if (isOpening(event.animationName)) {
-      endResizing(event.target as Element);
-    }
-  }
 
   /**
    * A disclosure the READER opens — a tool's body, a branch, a note — holds
@@ -1852,41 +1825,13 @@
    * motion, and keeps the pin.
    */
   function onrevealstart(event: Event): void {
-    if (isThinking(event)) {
-      startResizing(event.target as Element);
-      return;
-    }
-    if ((event.target as Element).getAttribute("data-state") === "open") {
+    if (
+      !isThinking(event) &&
+      (event.target as Element).getAttribute("data-state") === "open"
+    ) {
       stopFollow();
       tickets.clear();
       atBottom = false;
-    }
-  }
-
-  function onrevealend(event: Event): void {
-    if (isThinking(event)) {
-      endResizing(event.target as Element);
-    }
-  }
-
-  /**
-   * A row that grows on a transition of its own (`data-opens`: a failed
-   * send's reason and actions unfolding) is a row opening too: the tail is
-   * pinned to its edge for exactly as long as its rows track moves.
-   */
-  const opensRow = (event: TransitionEvent): boolean =>
-    event.propertyName === "grid-template-rows" &&
-    (event.target as Element).hasAttribute("data-opens");
-
-  function ontransitionrun(event: TransitionEvent): void {
-    if (opensRow(event)) {
-      startResizing(event.target as Element);
-    }
-  }
-
-  function ontransitionend(event: TransitionEvent): void {
-    if (opensRow(event)) {
-      endResizing(event.target as Element);
     }
   }
 
@@ -1895,109 +1840,67 @@
     if (!node) {
       return;
     }
-    node.addEventListener("animationcancel", onanimationend);
     node.addEventListener("revealstart", onrevealstart);
-    node.addEventListener("revealend", onrevealend);
-    node.addEventListener("transitionrun", ontransitionrun);
-    node.addEventListener("transitionend", ontransitionend);
-    node.addEventListener("transitioncancel", ontransitionend);
-    const removed = new MutationObserver(() => {
-      const before = resizing.size;
-      for (const element of resizing) {
-        if (!element.isConnected) {
-          resizing.delete(element);
-        }
-      }
-      if (before !== resizing.size) {
-        opening = resizing.size;
-        if (opening === 0 && atBottom) {
-          followBottom();
-        }
-      }
-    });
-    removed.observe(node, { childList: true, subtree: true });
     return () => {
-      removed.disconnect();
-      node.removeEventListener("animationcancel", onanimationend);
       node.removeEventListener("revealstart", onrevealstart);
-      node.removeEventListener("revealend", onrevealend);
-      node.removeEventListener("transitionrun", ontransitionrun);
-      node.removeEventListener("transitionend", ontransitionend);
-      node.removeEventListener("transitioncancel", ontransitionend);
       if (landingFrame !== null) {
         cancelAnimationFrame(landingFrame);
       }
       stopFollow();
-      resizing.clear();
-      opening = 0;
     };
   });
 
   /**
+   * Whether the tail is this transcript's to hold: landed at it, the reader
+   * still there, no jump gliding to it. A pane being worked in holds it for
+   * as long as the reader stays; a pane beside it (the grid) holds it only
+   * until its list is first drawn — its landing, which no scroll of virtua's
+   * chases for it any more — and from then on keeps where it stands while
+   * its rows come in on the scheduler's turns, as it always has.
+   */
+  const pinned = (): boolean =>
+    landed && atBottom && !jumping && (active || !shown);
+
+  /**
    * THE PIN. While the reader is at the tail, the list getting taller is
-   * followed: put back on the foot in the frame a row grew or the scroller's
-   * box changed (`onresize`, below), and a frame after a write virtua made in
-   * a task.
+   * followed, by this and nothing else: one writer of the tail's offset, in
+   * the frame the list grew.
    *
-   * A row growing (an answer streaming in, a row settling taller) and the
-   * scroller's own box changing (the window, the composer column's
-   * clearance) are both measured by virtua's one ResizeObserver, and virtua
-   * says so through `onresize` (virtua 0.53.2, made for "stay at the bottom":
-   * inokawa/virtua#301, #408). That call comes inside virtua's observer,
-   * after the frame's layout and before its paint, and the pin waits two
-   * microtasks behind it — still before the paint, so the tail is put back in
-   * the frame it grew. It waits because virtua is not done there: a scroll
-   * virtua was asked for (`land`'s `scrollToIndex`) aims again at every
-   * measurement, in a microtask virtua queues behind this same call, at the
-   * row that was last when it was asked — and keeps aiming for as long as
-   * rows measure less than 150ms apart, which is the whole of a streamed
-   * reply. Pinned in the call itself, that aim came after the pin every frame
-   * and held the view at the old last row, the reply growing under the
-   * composer by 1,500px. The pin flushes Svelte before it reads, so the
-   * height it reads is the one the frame will paint.
+   * A row growing (an answer streaming in, a row arriving, a row opening or
+   * settling taller) and the scroller's own box changing (the window, the
+   * composer column's clearance) are all measured by virtua's one
+   * ResizeObserver, and virtua says so through `onresize` (virtua 0.53.2,
+   * made for "stay at the bottom": inokawa/virtua#301, #408). That call comes
+   * inside virtua's observer, after the frame's layout and before its paint.
+   * The list's new height is still Svelte state there, so the pin flushes it
+   * into virtua's container first, keeps the list whole (`keepWhole`), and
+   * reads the height the frame will paint.
    *
-   * virtua does not call `onresize` for a row taken out of the list (a parked
-   * ask's call, a tail row that went): only the length changed, and nothing
-   * was measured. So virtua's own container is watched as well — the element
-   * whose height virtua sets — through a MutationObserver on its style, NOT a
-   * ResizeObserver. virtua resizes that container from inside its own
-   * ResizeObserver callback; observing it with another one asked for a
-   * notification the browser could not deliver in the same loop, which is
-   * the "ResizeObserver loop completed with undelivered notifications" every
-   * arriving row used to raise. A style mutation is delivered as a microtask
-   * right behind virtua's write, still before the frame is painted.
+   * It pins in the call itself. It used to wait two microtasks: the landing
+   * asked virtua to `scrollToIndex` the last row, and virtua aims such a
+   * scroll again at every measurement, in a microtask it queues behind this
+   * call, at the row that was last when it was asked, for as long as rows
+   * measure under 150ms apart — the whole of a streamed reply. Pinned in the
+   * call, that aim wrote after it every frame (the reply grew 1,500px under
+   * the composer in 3 of 5 runs); pinned two microtasks later, the two wrote
+   * every frame and the pin won by ordering. The landing is the pin's now
+   * (`land`), so no scroll of virtua's is left aiming at the tail, and the
+   * pin is the last write of the frame by being the only one.
+   *
+   * Nothing else writes the tail while it streams. A row taken out at the end
+   * (a parked ask's call, a tail row that went) is the browser's: the list
+   * gets shorter, and the offset is clamped to the new end. What that leaves
+   * of a pixel is `keepWhole`'s (`wholeHeight`). The strip above the list is
+   * `keepPlace`'s.
    */
   function onresize(): void {
-    queueMicrotask(() =>
-      queueMicrotask(() => {
-        if (!(active && landed && atBottom) || jumping) {
-          return;
-        }
-        flushSync();
-        pinBottom();
-      })
-    );
-  }
-
-  $effect(() => {
-    const container = listing?.firstElementChild;
-    if (!(active && container)) {
+    if (!pinned()) {
       return;
     }
-    const follow = (): void => {
-      if (!(landed && atBottom)) {
-        return;
-      }
-      if (opening > 0) {
-        pinBottom();
-      } else if (following === null) {
-        followBottom();
-      }
-    };
-    const grew = new MutationObserver(follow);
-    grew.observe(container, { attributes: true, attributeFilter: ["style"] });
-    return () => grew.disconnect();
-  });
+    flushSync();
+    keepWhole();
+    pinBottom();
+  }
 
   /**
    * THE REVEAL. A transcript opening draws its rows once, where they stay.
@@ -2141,38 +2044,37 @@
   });
 
   /**
-   * Put the view at the tail in the next frame, before it paints. Nothing is
-   * read here: this is called from the list's observers, and those fire
-   * inside whatever task changed the list — a finger lifting off a swipe
-   * between tabs among them — where reading the scroller forced a layout
-   * into that task. The frame's callbacks read it anyway, before its layout.
+   * Put the view at the tail in the next frame, before it paints: the
+   * reader's own scroll came to rest there (`onscrollend`). Nothing is read
+   * in the task that called it; the frame's callbacks read the scroller
+   * anyway, before its layout.
    */
   function followBottom(): void {
-    if (!scroller || opening > 0 || following !== null) {
+    if (!scroller || following !== null) {
       return;
     }
     following = requestAnimationFrame(() => {
       following = null;
-      if (atBottom && opening === 0) {
+      if (atBottom) {
         pinBottom();
       }
     });
   }
 
   function land(): void {
-    if (landed && opening > 0) {
-      return;
-    }
     if (!landed) {
       // A place the rows do not hold yet — a reload's first rows are the
       // newest page — is read back to before the list is drawn (the reveal).
+      // The tail is the pin's: put there now, at the rows' estimated sizes,
+      // and put back on every measurement that follows (`onresize`) until the
+      // list is drawn, focused or not (`pinned`).
+      landed = true;
       if (anchorIndex() >= 0) {
         restore();
       } else {
-        list?.scrollToIndex(rows.length - 1, { align: "end" });
         atBottom = true;
+        pinBottom();
       }
-      landed = true;
       settle();
       return;
     }
@@ -2192,18 +2094,11 @@
   /** The already-landed half of `land`, in the frame after it was called for. */
   function landInFrame(): void {
     landingFrame = null;
-    if (!scroller) {
-      return;
-    }
-    // `scrollToIndex` is virtua's far-row measuring power: a tail more than
-    // two viewports off — a tab back from a long absence, the jump back from
-    // far up — is measured its way to before the view is put there.
-    const gap =
-      scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop;
-    if (gap > scroller.clientHeight * 2) {
-      list?.scrollToIndex(rows.length - 1, { align: "end" });
-    }
-    if (!(active && atBottom)) {
+    // A tail far off — a tab back from a long absence, the jump back from far
+    // up — lands at the rows' estimated sizes; the rows it lands among are
+    // measured in that frame's layout, and the pin puts the view back on the
+    // true end before the frame is painted (`onresize`).
+    if (!(scroller && active && atBottom)) {
       return;
     }
     pinBottom();
@@ -2232,37 +2127,33 @@
     settle();
   });
 
-  // Follow the tail while the reader is already at the bottom — a scroll up to
-  // read history is never yanked back by the next frame. `clearance` is a
-  // dependency too: when the composer column grows (a tray, a chip row), the
-  // row that was flush with the composer is now behind it, so the tail re-lands.
+  // The landings: the first, once there are rows, and the pane coming back to
+  // be worked in at the tail, once, as `active` rises — the rows it caught up
+  // on while it was not were measured with no pin running (`pinned`), so it
+  // is put on their end. Nothing else lands here: what grows the tail while
+  // the reader is at it — a row, a streamed word, the composer column's
+  // clearance — is the pin's, in the frame it grew (`onresize`). This effect
+  // used to re-land on every row and every streamed frame, a frame behind
+  // the pin, a second writer of the same offset.
   //
-  // `active` is read FIRST, before the tail it follows. Reading `session.streaming`
-  // ahead of the guard re-ran this effect on every streamed frame of a pane
-  // nobody was looking at — the same cost `rows` above stops paying, arriving
-  // by the other door. Guarding first means an off-screen pane has no
-  // dependency on the stream at all; and because `active` is itself tracked,
-  // switching back re-runs this once, on rows that have just caught up.
+  // A landed pane depends on `active` alone, never on its rows or its
+  // stream: an off-screen pane re-runs nothing as its session streams.
   $effect(() => {
-    if (!active && landed) {
+    if (landed) {
+      if (active && untrack(() => atBottom)) {
+        // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — this effect does not await the land, it only arms it.
+        void tick().then(() => {
+          if (active && atBottom) {
+            land();
+          }
+        });
+      }
       return;
     }
-    // Read, not used: these two are this effect's tracked dependencies, read
-    // in this order and only after the `active` guard above — see the doc
-    // comment above this effect for why the order and the guard matter.
-    // biome-ignore lint/complexity/noVoid: see comment above — a bare reference would look unused and get "cleaned up".
-    void rows.length;
-    if (active) {
-      // biome-ignore lint/complexity/noVoid: track streaming only while focused
-      void session.streaming;
-    }
-    if (rows.length === 0) {
-      return;
-    }
-    if (!landed || atBottom) {
+    if (rows.length > 0) {
       // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — this effect does not await the land, it only arms it.
       void tick().then(() => {
-        if (!landed || (active && atBottom)) {
+        if (!landed) {
           land();
         }
       });
@@ -2784,8 +2675,6 @@
 <div
   aria-label="Session transcript"
   class="tr tx-columns"
-  {onanimationend}
-  {onanimationstart}
   {onscroll}
   role="log"
   bind:this={scroller}
