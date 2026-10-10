@@ -43,7 +43,7 @@
  * the simulator it created (deleted at the end), the worktree it added.
  * `--keep` keeps the fleet's sandbox. Exits 0 only if every check passed.
  */
-import { mkdir } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { scratchFleet, until } from "./scratch-fleet";
 
@@ -110,7 +110,7 @@ interface Build {
   label: "before" | "after";
 }
 
-/** Compiles the checkout at `dir` on the Mac; its app, or exits on failure. */
+/** Compiles the checkout at `dir` on the Mac; its app, or throws on failure. */
 async function compile(dir: string, label: Build["label"]): Promise<Build> {
   console.log(`  compiling ${label} (${dir})`);
   const build = Bun.spawn(
@@ -126,7 +126,8 @@ async function compile(dir: string, label: Build["label"]): Promise<Build> {
     code === 0 ? "BUILT iOS and BUILT iOS 18.5" : `build-both.sh exited ${code}`
   );
   if (code !== 0) {
-    process.exit(1);
+    // Thrown, so the caller takes away the `--before` worktree before it exits.
+    throw new Error(`build-both.sh exited ${code} for ${label}`);
   }
   // The Mac-side build folder build-both.sh used (its BUILD naming).
   const top = (
@@ -147,6 +148,12 @@ try {
       await Bun.$`git -C ${root} rev-parse --short ${beforeRev}`.text()
     ).trim();
     beforeTree = join(root, ".probe", `disclosure-before-${short}`);
+    // A run stopped before its cleanup left its worktree here: `worktree add` refuses the path.
+    await Bun.$`git -C ${root} worktree remove --force ${beforeTree}`
+      .quiet()
+      .nothrow();
+    await rm(beforeTree, { recursive: true, force: true });
+    await Bun.$`git -C ${root} worktree prune`.quiet();
     await Bun.$`git -C ${root} worktree add --detach ${beforeTree} ${beforeRev}`.quiet();
     builds.push(await compile(beforeTree, "before"));
   }
