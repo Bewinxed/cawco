@@ -733,93 +733,191 @@ const armHook = async (
 };
 
 /**
- * Writes every held workspace's hook and its script again, in this build's
- * form, and serves its tool door. The agent does this as it starts, before it
- * adopts or launches a session: a running CLI reads its workspace's hook on
- * every tool call, so one an earlier build wrote must not outlive that
- * build's runtime. A running boundary of an older form is handed over here,
- * behind the gate, and its handover arms the new one ({@link handOver}); one
- * whose handover fails is armed as it is and tried again at each look
- * ({@link replaceSoon}). An older boundary an earlier agent left running
- * beside the current one is closed once nothing runs in it
- * ({@link closeWhenIdle}).
+ * Writes one workspace's hook and its script again, in this build's form,
+ * and serves its tool door: whether it was armed. A running boundary of an
+ * older form is handed over here, behind the gate, and its handover arms the
+ * new one ({@link handOver}); one whose handover fails is armed as it is and
+ * tried again at each look ({@link replaceSoon}). An older boundary an
+ * earlier agent left running beside the current one is closed once nothing
+ * runs in it ({@link closeWhenIdle}). Never throws: what fails is said.
  */
-export const rearmHooks = async (): Promise<void> => {
-  const ids = await readdir(workspacesDir()).catch(
-    (error: NodeJS.ErrnoException) => {
-      if (error.code === "ENOENT") {
-        return [];
-      }
-      throw error;
-    }
+const rearmOne = async (id: string): Promise<boolean> => {
+  const said = (what: string) => (error: unknown) => {
+    console.warn(
+      `[workspace] ${id}: ${what}: ${error instanceof Error ? error.message : String(error)}`
+    );
+  };
+  if ((await readRetiring(id)).length > 0) {
+    closeWhenIdle(id);
+  }
+  const held = await readHeld(id).catch(
+    said("its boundary hook could not be written again")
   );
-  let armed = 0;
-  for (const id of ids) {
-    const said = (what: string) => (error: unknown) => {
-      console.warn(
-        `[workspace] ${id}: ${what}: ${error instanceof Error ? error.message : String(error)}`
-      );
-    };
-    // biome-ignore lint/performance/noAwaitInLoops: a few small writes per workspace, one workspace at a time
-    if ((await readRetiring(id)).length > 0) {
-      closeWhenIdle(id);
-    }
-    const held = await readHeld(id).catch(
-      said("its boundary hook could not be written again")
-    );
-    if (!held) {
-      continue;
-    }
-    // A gate an agent left as it died names no process this one waits for.
-    await rm(gateOf(id), { force: true });
-    const ref = { id, path: held.path };
-    if (process.platform === "linux") {
-      // Before anything is armed: each mount point a running sandbox left
-      // where a file stands in holds that file's stand-in now, in place; one
-      // where a dir stands in goes with its boundary, once nothing runs in it
-      // (`stand-ins.ts`).
-      const dirsLeft = await rewriteLeftFiles(ref).catch((error: unknown) => {
-        said("the mount points its sandbox left could not be rewritten")(error);
-        return false;
-      });
-      if (dirsLeft) {
-        restartWhenIdle(ref);
-      }
-    }
-    // Only CawCo's stand-ins in the clone's `info/exclude`: the fixed names
-    // an earlier build wrote there go, and a user's own files show again.
-    await listStandIns(ref, false).catch(
-      said("its clone's stand-ins could not be listed in its info/exclude")
-    );
-    const form = await formOf(ref).catch(
-      said("its boundary's form could not be checked")
-    );
-    const stale = form !== undefined && held.form !== form;
-    if (stale && (await running(id, held))) {
-      // Handed over now, behind the gate: the executor an earlier build left
-      // may not reach this boundary (Nightly C wrote its srt executor over
-      // every anchor from before srt), so a command waits at the gate and
-      // runs through the new boundary rather than being refused.
-      await writeFile(gateOf(id), String(process.pid));
-      try {
-        await ensureBoundary(ref);
-        armed += 1;
-        continue;
-      } catch (error) {
-        said("its older boundary could not be handed over yet")(error);
-        replaceSoon(ref);
-      } finally {
-        await rm(gateOf(id), { force: true });
-      }
-    }
-    try {
-      await armHook(id, held);
-      armed += 1;
-    } catch (error) {
-      said("its boundary hook could not be written again")(error);
+  if (!held) {
+    return false;
+  }
+  // A gate an agent left as it died names no process this one waits for.
+  await rm(gateOf(id), { force: true });
+  const ref = { id, path: held.path };
+  if (process.platform === "linux") {
+    // Before anything is armed: each mount point a running sandbox left
+    // where a file stands in holds that file's stand-in now, in place; one
+    // where a dir stands in goes with its boundary, once nothing runs in it
+    // (`stand-ins.ts`).
+    const dirsLeft = await rewriteLeftFiles(ref).catch((error: unknown) => {
+      said("the mount points its sandbox left could not be rewritten")(error);
+      return false;
+    });
+    if (dirsLeft) {
+      restartWhenIdle(ref);
     }
   }
-  console.info(`[workspace] boundary hooks written for ${armed} workspace(s)`);
+  // Only CawCo's stand-ins in the clone's `info/exclude`: the fixed names
+  // an earlier build wrote there go, and a user's own files show again.
+  await listStandIns(ref, false).catch(
+    said("its clone's stand-ins could not be listed in its info/exclude")
+  );
+  const form = await formOf(ref).catch(
+    said("its boundary's form could not be checked")
+  );
+  const stale = form !== undefined && held.form !== form;
+  if (stale && (await running(id, held))) {
+    // Handed over now, behind the gate: the executor an earlier build left
+    // may not reach this boundary (Nightly C wrote its srt executor over
+    // every anchor from before srt), so a command waits at the gate and
+    // runs through the new boundary rather than being refused.
+    await writeFile(gateOf(id), String(process.pid));
+    try {
+      await ensureNow(ref);
+      return true;
+    } catch (error) {
+      said("its older boundary could not be handed over yet")(error);
+      replaceSoon(ref);
+    } finally {
+      await rm(gateOf(id), { force: true });
+    }
+  }
+  try {
+    await armHook(id, held);
+    return true;
+  } catch (error) {
+    said("its boundary hook could not be written again")(error);
+    return false;
+  }
+};
+
+/**
+ * How many workspaces are armed at once at start-up. Our call: each is a few
+ * small writes and a keeper round trip or two, and a machine holds hundreds
+ * of workspace folders; one at a time took 78 s for 421 on obelisk
+ * (2026-10-10), against the update's 180 s window to register.
+ */
+const REARM_CONCURRENCY = 16;
+
+/** Runs at most `limit` of the works handed to it at once, the rest in the order handed. */
+const bounded = (limit: number) => {
+  let active = 0;
+  const waiting: (() => void)[] = [];
+  return async <T>(work: () => Promise<T>): Promise<T> => {
+    if (active < limit) {
+      active += 1;
+    } else {
+      await new Promise<void>((resolve) => waiting.push(resolve));
+    }
+    try {
+      return await work();
+    } finally {
+      const next = waiting.shift();
+      if (next) {
+        next();
+      } else {
+        active -= 1;
+      }
+    }
+  };
+};
+
+/** Each workspace's rewrite in this build's form, once begun, by id ({@link hookArmed}). */
+const rearming = new Map<string, Promise<void>>();
+/** The workspaces with nothing running at start-up: each is armed when a session there first needs it. */
+const unarmed = new Set<string>();
+/** The start-up reading every gate waits for first: until it is read, no workspace is known armed or not. */
+let rearmListed: Promise<void> = Promise.resolve();
+
+/**
+ * Waits until workspace `id`'s hook is in this build's form, arming it now
+ * when the start left it for later. Every session there waits on it before
+ * it is adopted or launched (`#adoptClaimed`, {@link ensureBoundary}), and
+ * on its own workspace's alone.
+ */
+export const hookArmed = async (id: string): Promise<void> => {
+  await rearmListed;
+  if (unarmed.delete(id)) {
+    rearming.set(
+      id,
+      rearmOne(id).then(() => undefined)
+    );
+  }
+  await rearming.get(id);
+};
+
+/**
+ * Writes every held workspace's hook and its script again, in this build's
+ * form, as the agent starts (fd2d7601): a running CLI reads its workspace's
+ * hook on every tool call, so one an earlier build wrote must not outlive
+ * that build's runtime, and no session is adopted or launched in a
+ * workspace before its own is rewritten ({@link hookArmed}).
+ *
+ * Nothing else waits on it: the agent registers and takes custody of other
+ * sessions meanwhile (it took 78 s on obelisk with 421 folders, one at a
+ * time, and the update nearly rolled back). The workspaces whose boundary
+ * runs, on any keeper, read once from the keepers' listing, are armed now,
+ * {@link REARM_CONCURRENCY} at a time: that is where a CLI runs. Any other,
+ * with no boundary running, has no command to run: it is armed the moment
+ * a session there is adopted or launched, so the start's work grows with
+ * what runs, not with every workspace folder ever made. What it returns
+ * settles once those armed now are done.
+ */
+export const rearmHooks = (): Promise<void> => {
+  const started = Date.now();
+  const listing = (async () => {
+    const ids = await readdir(workspacesDir()).catch(
+      (error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") {
+          return [] as string[];
+        }
+        throw error;
+      }
+    );
+    const live = (await keepers.held()).filter((proc) => proc.alive);
+    const now = ids.filter((id) =>
+      live.some((proc) => isBoundaryOf(proc.procId, id))
+    );
+    for (const id of ids) {
+      if (!now.includes(id)) {
+        unarmed.add(id);
+      }
+    }
+    return { now, later: ids.length - now.length };
+  })();
+  let armed = 0;
+  const limit = bounded(REARM_CONCURRENCY);
+  const armNow = async (id: string): Promise<void> => {
+    if (await limit(() => rearmOne(id))) {
+      armed += 1;
+    }
+  };
+  rearmListed = listing.then(({ now }) => {
+    for (const id of now) {
+      rearming.set(id, armNow(id));
+    }
+  });
+  return listing.then(async ({ now, later }) => {
+    await Promise.all(now.map((id) => rearming.get(id)));
+    console.info(
+      `[workspace] boundary hooks written for ${armed} of ${now.length} workspace(s) with a boundary running, in ${Date.now() - started} ms; ${later} with none are armed when a session there starts`
+    );
+  });
 };
 
 /**
@@ -1088,10 +1186,18 @@ const starting = new Map<string, Promise<Boundary>>();
 
 /**
  * The workspace's boundary, running: the one already held, or a new one
- * (after a reboot or a sessiond restart). Throws — with the reason — when
+ * (after a reboot or a sessiond restart), once the workspace's hook is in
+ * this build's form ({@link hookArmed}): every spawn, restore, wake and
+ * command in a workspace comes through here. Throws — with the reason — when
  * this machine cannot hold one.
  */
-export const ensureBoundary = (ref: WorkspaceRef): Promise<Boundary> => {
+export const ensureBoundary = async (ref: WorkspaceRef): Promise<Boundary> => {
+  await hookArmed(ref.id);
+  return ensureNow(ref);
+};
+
+/** {@link ensureBoundary} with the hook already armed: the start-up rewrite's own hand-over ({@link rearmOne}). */
+const ensureNow = (ref: WorkspaceRef): Promise<Boundary> => {
   const pending = starting.get(ref.id);
   if (pending) {
     return pending;

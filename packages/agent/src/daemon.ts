@@ -1863,7 +1863,14 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
   Effect.gen(function* () {
     // First: CLIs already running read their workspace's hook on every shell
     // call, and one an earlier build wrote runs what this build no longer has.
-    yield* Effect.promise(() => rearmHooks());
+    // Begun, not awaited: registration and custody go on meanwhile, and each
+    // session waits for its own workspace's hook alone before it is adopted
+    // or launched (boundary.ts `hookArmed`).
+    rearmHooks().catch((error: unknown) =>
+      console.warn(
+        `[workspace] boundary hooks could not be written again: ${error instanceof Error ? error.message : String(error)}`
+      )
+    );
     checkBoundaryHost();
     const url = process.env[CAWCO_ENV.hubUrl] ?? DEFAULT_HUB_URL;
     // Re-pinned by the rediscovery trigger below (discovered hubs only), read fresh by every attempt

@@ -91,7 +91,7 @@ import {
 } from "@cawco/core/sessiond";
 import { Effect } from "effect";
 import { withFiles } from "./attachments";
-import { type Boundary, boundaryFor, shellQuote } from "./boundary";
+import { type Boundary, boundaryFor, hookArmed, shellQuote } from "./boundary";
 import { carryRefusal, carrySessions } from "./claude-sessions";
 import { fetchDefaultBranch, hostGit } from "./clone";
 import { harnessMcpUrl } from "./delegation";
@@ -2757,6 +2757,13 @@ export class SessionSupervisor {
       this.#ingested.set(row.instanceId, mark);
     } else {
       this.#ingested.delete(row.instanceId);
+    }
+    // A held CLI in a workspace is attached only once that workspace's hook
+    // is in this build's form, which the agent writes as it starts; others'
+    // are not waited for.
+    const workspace = await workspaceHolding(expandHome(row.cwd));
+    if (workspace) {
+      await hookArmed(workspace.id);
     }
     const holder: { session: HarnessSession | null } = { session: null };
     const ctx = this.#context(
