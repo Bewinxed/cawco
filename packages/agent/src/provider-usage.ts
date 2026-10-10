@@ -62,7 +62,7 @@ const readWindows = async (accountId: string): Promise<Read | undefined> => {
     return undefined;
   }
   if (held.provider === "openai-codex") {
-    await freshen(accountId).catch(() => undefined);
+    await freshen(accountId, true).catch(() => undefined);
     const now = readHeld(accountId);
     if (now?.credential.type !== "oauth") {
       return { ok: false, error: "the account holds no ChatGPT sign-in here" };

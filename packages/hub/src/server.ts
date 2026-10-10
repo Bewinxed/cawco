@@ -83,6 +83,7 @@ import {
   ACCOUNT_MOVE,
   ACCOUNT_READ,
   type Account,
+  type AccountBorrowFrame,
   type AccountIdentity,
   type AccountJoined,
   type AccountJoinedOn,
@@ -109,8 +110,10 @@ import {
   CLAUDE_PROVIDER,
   CONFIGURE_BINARY_UPDATES,
   CONTINUATION_ORIGIN,
+  CONTROL_ACCOUNT_LENT,
   CONTROL_BEGIN_ACCOUNT_LOGIN,
   CONTROL_BEGIN_PROVIDER_LOGIN,
+  CONTROL_BORROW_ACCOUNT,
   CONTROL_CARRY_SESSIONS,
   CONTROL_COMPLETE_ACCOUNT_LOGIN,
   CONTROL_COMPLETE_PROVIDER_LOGIN,
@@ -123,6 +126,7 @@ import {
   CONTROL_INTERRUPT,
   CONTROL_JOIN_ACCOUNT_LOGIN,
   CONTROL_JOIN_PROVIDER_ACCOUNT,
+  CONTROL_LEND_ACCOUNT,
   CONTROL_LIST_SESSIONS,
   CONTROL_MODEL_CATALOG,
   CONTROL_MOVE_HOME_CREDENTIAL,
@@ -5338,7 +5342,8 @@ export const createServer = (
   const settleMove = async (
     move: LoginMove,
     answer: Awaited<ReturnType<typeof callAgent>>,
-    ranFrom: string[]
+    ranFrom: string[],
+    lentBy?: string
   ): Promise<void> => {
     const at = Date.now();
     const { machineId, store } = move;
@@ -5380,10 +5385,206 @@ export const createServer = (
     db.accounts.removeMove(move);
     moveResults.set(key, { ...done, kept });
     const { moved, running } = await repinOnto(move, repinned, ranFrom);
+    const borrowed = lentBy
+      ? ` (its own login had expired; the account's is used, from ${machineName(lentBy)})`
+      : "";
     console.log(
-      `[hub] moved ${what} (${move.identity.email}) into account ${move.accountId}, kept in ${kept}; ${moved} session(s) that ran on it re-pinned to it, ${running} when their process ends`
+      `[hub] moved ${what} (${move.identity.email}) into account ${move.accountId}${borrowed}, kept in ${kept}; ${moved} session(s) that ran on it re-pinned to it, ${running} when their process ends`
     );
     publishUsage(machineId);
+  };
+
+  /** How long a lender gets to refresh and lend an account's sign-in. */
+  const LEND_TIMEOUT_MS = 60_000;
+
+  /** The machines `accountId` is signed in on in CawCo, other than `machineId`: who could lend it there. */
+  const lendersOf = (accountId: string, machineId: string): string[] =>
+    db.accounts
+      .signins()
+      .filter(
+        (one) =>
+          one.accountId === accountId &&
+          one.machineId !== machineId &&
+          one.state === "signed-in"
+      )
+      .map((one) => one.machineId);
+
+  /** Why an account's lender cannot lend it now, in a sentence. */
+  const lenderAway = (accountId: string, lender: string): string => {
+    const account = db.accounts.get(accountId);
+    return `${account ? accountName(account) : `Account ${accountId}`} is refreshed by ${machineName(lender)}, which is offline.`;
+  };
+
+  /**
+   * A machine's own credential of a moving identity did not answer
+   * ({@link HomeLoginMoved.expired}): the account's working sign-in, held by
+   * another machine, is lent to it ({@link CONTROL_LEND_ACCOUNT}, then
+   * {@link CONTROL_BORROW_ACCOUNT}), so its harness runs on the account with
+   * nobody signing in again there. With no machine signed in to the account
+   * the move fails as it always did.
+   */
+  const borrowInto = async (
+    move: LoginMove,
+    expired: string
+  ): Promise<{
+    answer: Awaited<ReturnType<typeof callAgent>>;
+    lender?: string;
+  }> => {
+    const lenders = lendersOf(move.accountId, move.machineId);
+    const failures: string[] = [];
+    for (const lender of lenders) {
+      if (!registry.agent(lender)) {
+        failures.push(lenderAway(move.accountId, lender));
+        continue;
+      }
+      // biome-ignore lint/performance/noAwaitInLoops: one lender at a time; the first that lends is the one used
+      const lent = await callAgent(
+        lender,
+        CONTROL_LEND_ACCOUNT,
+        [move.accountId],
+        LEND_TIMEOUT_MS
+      );
+      if (typeof lent === "string" || !lent.ok) {
+        failures.push(
+          `${machineName(lender)} did not lend it: ${typeof lent === "string" ? lent : (lent.error ?? "no answer")}`
+        );
+        continue;
+      }
+      const answer = await callAgent(
+        move.machineId,
+        CONTROL_BORROW_ACCOUNT,
+        [
+          move.accountId,
+          lender,
+          lent.result,
+          move.store,
+          move.storeProvider,
+          move.identity,
+        ],
+        MOVE_TIMEOUT_MS
+      );
+      return { answer, lender };
+    }
+    const error = [`The account did not answer: ${expired}.`, ...failures].join(
+      " "
+    );
+    return {
+      answer: {
+        kind: "control_result",
+        ok: false,
+        requestId: "",
+        error,
+      },
+    };
+  };
+
+  /**
+   * Borrowers whose ask found their lender away, by lender: brought a fresh
+   * sign-in once it connects again ({@link lendToWaiting}), so nothing asks
+   * again on a timer meanwhile.
+   */
+  const awaitingLender = new Map<
+    string,
+    Map<string, { accountId: string; borrower: string }>
+  >();
+
+  /** Answers a borrower ({@link CONTROL_ACCOUNT_LENT}) with a lender's fresh sign-in or why there is none. */
+  const answerBorrower = (
+    borrower: string,
+    requestId: string | null,
+    accountId: string,
+    answer: unknown
+  ): void => {
+    detach(
+      callAgent(
+        borrower,
+        CONTROL_ACCOUNT_LENT,
+        [requestId, answer, accountId],
+        SIGNIN_TIMEOUT_MS
+      ),
+      "lent sign-in"
+    );
+  };
+
+  /** One lend of `accountId` by `lender`: its fresh sign-in, or why not, in a sentence. */
+  const lendOnce = async (
+    accountId: string,
+    lender: string
+  ): Promise<unknown> => {
+    if (!registry.agent(lender)) {
+      return { error: lenderAway(accountId, lender) };
+    }
+    const lent = await callAgent(
+      lender,
+      CONTROL_LEND_ACCOUNT,
+      [accountId],
+      LEND_TIMEOUT_MS
+    );
+    if (lent === "offline") {
+      return { error: lenderAway(accountId, lender) };
+    }
+    if (typeof lent === "string" || !lent.ok) {
+      const account = db.accounts.get(accountId);
+      return {
+        error: `${account ? accountName(account) : `Account ${accountId}`} is refreshed by ${machineName(lender)}, which did not lend it: ${typeof lent === "string" ? "it did not answer" : (lent.error ?? "no answer")}.`,
+      };
+    }
+    return lent.result;
+  };
+
+  /**
+   * A borrower near its borrowed sign-in's expiry ({@link AccountBorrowFrame}):
+   * its lender asked for a fresh one, which goes back to the borrower. A
+   * lender that is away is said to the borrower once, and the borrower is
+   * brought a fresh sign-in when the lender connects again.
+   */
+  const answerBorrow = async (
+    borrower: string,
+    frame: AccountBorrowFrame
+  ): Promise<void> => {
+    const { accountId, lender, requestId } = frame;
+    const signed = lendersOf(accountId, borrower).includes(lender);
+    const answer = signed
+      ? await lendOnce(accountId, lender)
+      : {
+          error: `Account ${accountId} is not signed in on ${machineName(lender)} in CawCo any more, so nothing lends it to ${machineName(borrower)}.`,
+        };
+    if (signed && !registry.agent(lender)) {
+      const waiting = awaitingLender.get(lender) ?? new Map();
+      waiting.set(`${borrower}\u0000${accountId}`, { accountId, borrower });
+      awaitingLender.set(lender, waiting);
+    }
+    if (answer && typeof answer === "object" && "error" in answer) {
+      console.warn(
+        `[hub] ${machineName(borrower)}'s borrowed sign-in of account ${accountId} was not refreshed: ${String(answer.error)}`
+      );
+    } else {
+      console.log(
+        `[hub] ${machineName(borrower)}'s borrowed sign-in of account ${accountId} refreshed from ${machineName(lender)}`
+      );
+    }
+    answerBorrower(borrower, requestId, accountId, answer);
+  };
+
+  /** A lender connected again: each borrower that found it away is brought a fresh sign-in, once. */
+  const lendToWaiting = (lender: string): void => {
+    const waiting = awaitingLender.get(lender);
+    if (!waiting) {
+      return;
+    }
+    awaitingLender.delete(lender);
+    for (const { accountId, borrower } of waiting.values()) {
+      lendOnce(accountId, lender)
+        .then((answer) => {
+          if (answer && typeof answer === "object" && !("error" in answer)) {
+            console.log(
+              `[hub] ${machineName(lender)} is back: ${machineName(borrower)}'s borrowed sign-in of account ${accountId} refreshed`
+            );
+            answerBorrower(borrower, null, accountId, answer);
+          }
+        })
+        .catch(console.error);
+    }
   };
 
   /**
@@ -5586,7 +5787,16 @@ export const createServer = (
             [move.accountId, move.store, move.storeProvider, move.identity],
             MOVE_TIMEOUT_MS
           );
-    await settleMove(move, answer, ranFrom);
+    const expired =
+      typeof answer === "object" && answer.ok
+        ? (answer.result as HomeLoginMoved).expired
+        : undefined;
+    if (expired === undefined) {
+      await settleMove(move, answer, ranFrom);
+    } else {
+      const borrowed = await borrowInto(move, expired);
+      await settleMove(move, borrowed.answer, ranFrom, borrowed.lender);
+    }
     sleepMovedFrom();
     publishInstances(machineId);
   };
@@ -19428,6 +19638,8 @@ export const createServer = (
                 homeStamps.set(message.machineId, homeStores);
                 adoptHomeCredentials(message.machineId).catch(console.error);
               }
+              // A lender back: what its borrowers could not get while it was away.
+              lendToWaiting(message.machineId);
               // Every other provider's accounts on this machine, as their
               // stores there say, and the providers it knows.
               const { providerAccounts, providers } =
@@ -19516,6 +19728,13 @@ export const createServer = (
                   message.machineId,
                   message.payload as MoveProgressFrame
                 );
+                break;
+              }
+              if (kind === "account_borrow") {
+                answerBorrow(
+                  message.machineId,
+                  message.payload as AccountBorrowFrame
+                ).catch(console.error);
                 break;
               }
               if (kind === "control_result" && !message.requestId) {

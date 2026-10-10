@@ -554,10 +554,69 @@ export interface HomeLogin {
 /** Where a moved login now is: the account's store, as its owner names it. */
 export interface HomeLoginMoved {
   /**
+   * Set instead of a move when the machine's own credential did not answer
+   * (its refresh refused, run out): why. Nothing was moved and the original
+   * is as it was; the hub then lends the account's working sign-in to the
+   * machine when another machine holds it ({@link CONTROL_BORROW_ACCOUNT}).
+   */
+  expired?: string;
+  /**
    * Claude: `the macOS Keychain` or `the credentials file`, as Claude Code
    * names its stores. Any other provider: `the account's credential file`.
    */
   store: string;
+}
+
+/**
+ * One account, one grant: a machine whose own sign-in of an account's
+ * identity has expired runs on the account's working sign-in, held and
+ * refreshed only by the machine that holds it (the lender). The borrower's
+ * store holds the lender's access token and its expiry, never a refresh
+ * token ({@link BORROWED_REFRESH} where one would be), and asks the hub for
+ * a fresh one near its expiry ({@link AccountBorrowFrame}); the hub asks the
+ * lender ({@link CONTROL_LEND_ACCOUNT}) and answers the borrower
+ * ({@link CONTROL_ACCOUNT_LENT}). Refresh tokens rotate, so a second
+ * refresher would sign the first out; an access token used by two machines
+ * signs nobody out.
+ *
+ * - Lend (args: account id) refreshes the account's own sign-in when it is
+ *   near its expiry and answers a {@link LentAccess}; refused by a machine
+ *   whose own copy is borrowed, or that holds no sign-in of the account.
+ * - Borrow (args: account id, lender machine id, a {@link LentAccess}, the
+ *   store and the provider in it whose own credential expired, the identity)
+ *   writes the lent access into the account's store, checks it answers, and
+ *   then removes the expired entry from that store, as a move does; it
+ *   answers a {@link HomeLoginMoved}.
+ * - Lent (args: the {@link AccountBorrowFrame}'s request id, a
+ *   {@link LentAccess} or `{ error }`) answers a borrower's ask: the fresh
+ *   access written into its store, or why there is none.
+ */
+export const CONTROL_LEND_ACCOUNT = "lendAccount";
+export const CONTROL_BORROW_ACCOUNT = "borrowAccount";
+export const CONTROL_ACCOUNT_LENT = "accountLent";
+
+/** Where a borrowed credential's refresh token would be: it has none. */
+export const BORROWED_REFRESH = "cawco-borrowed";
+
+/** A lender's access token for one account, as a borrower's store keeps it: never its refresh token. */
+export interface LentAccess {
+  access: string;
+  /** The ChatGPT account the token is for, where the credential names one. */
+  accountId?: string;
+  /** Epoch ms. */
+  expires: number;
+  identity: AccountIdentity;
+  provider: AccountProvider;
+}
+
+/** A borrower near its borrowed access token's expiry, asking the hub for a fresh one from its lender. */
+export interface AccountBorrowFrame {
+  accountId: string;
+  instanceId?: undefined;
+  kind: "account_borrow";
+  /** The machine that lent it, as the borrower's store names it. */
+  lender: string;
+  requestId: string;
 }
 
 /**

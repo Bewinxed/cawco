@@ -19590,6 +19590,9 @@
             "$ref": "#/components/schemas/MoveProgressFrame"
           },
           {
+            "$ref": "#/components/schemas/AccountBorrowFrame"
+          },
+          {
             "$ref": "#/components/schemas/WorkflowFrame"
           }
         ],
@@ -19630,6 +19633,7 @@
             "supervisor_status": "#/components/schemas/SupervisorStatusFrame",
             "moves": "#/components/schemas/MovesFrame",
             "move_progress": "#/components/schemas/MoveProgressFrame",
+            "account_borrow": "#/components/schemas/AccountBorrowFrame",
             "workflow": "#/components/schemas/WorkflowFrame"
           }
         }
@@ -34936,6 +34940,34 @@
           "kind",
           "stage",
           "total"
+        ]
+      },
+      "AccountBorrowFrame": {
+        "description": "A borrower near its borrowed access token's expiry, asking the hub for a fresh one from its lender.",
+        "type": "object",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "account_borrow"
+            ]
+          },
+          "lender": {
+            "description": "The machine that lent it, as the borrower's store names it.",
+            "type": "string"
+          },
+          "requestId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "accountId",
+          "kind",
+          "lender",
+          "requestId"
         ]
       },
       "WorkflowFrame": {

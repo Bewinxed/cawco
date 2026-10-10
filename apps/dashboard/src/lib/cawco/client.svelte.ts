@@ -2908,6 +2908,10 @@ function handleFrame(frame: FramePayload): void {
   if (frame.kind === "move_progress") {
     return;
   }
+  // A borrower's ask for a fresh sign-in travels machine → hub only.
+  if (frame.kind === "account_borrow") {
+    return;
+  }
 
   const target = session(frame.instanceId);
 

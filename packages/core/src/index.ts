@@ -1122,6 +1122,8 @@ export type FramePayload =
   | import("./move").MovesFrame
   /** Daemon-originated: how far a move's clone or large files are. */
   | import("./move").MoveProgressFrame
+  /** Daemon-originated: a borrowed sign-in near its expiry, asking for a fresh one. */
+  | import("./accounts").AccountBorrowFrame
   /** Hub-originated workflow run transition (§7.2). */
   | import("./workflow").WorkflowFrame;
 

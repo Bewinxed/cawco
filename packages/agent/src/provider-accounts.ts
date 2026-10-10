@@ -14,16 +14,19 @@
  * grant: refresh tokens rotate, so copies sign each other out, and OpenCode's
  * copy carries a marker where a rotating refresh token would be.
  */
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { chmod, mkdir, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
+  type AccountBorrowFrame,
   type AccountIdentity,
   type AccountJoinedOn,
   type AccountReport,
+  BORROWED_REFRESH,
   type HomeCredential,
   type HomeLoginMoved,
+  type LentAccess,
   type ProviderSigninChallenge,
   type ProviderSigninResult,
   sameIdentity,
@@ -209,14 +212,24 @@ const FRESH_FOR_MS = 15 * 60_000;
  * Refreshes the account's OAuth credential through pi-ai's own refresh when
  * it has less than {@link FRESH_FOR_MS} left; a key, or a credential with
  * time left, is left as it is. Every refresh of every account goes through
- * here, one at a time per account.
+ * here, one at a time per account. A borrowed sign-in is never refreshed
+ * here: a fresh access token is asked of its lender ({@link borrowFresh}).
+ * `periodic`: asked by a timer, not by something that needs the sign-in now.
  */
-export const freshen = async (accountId: string): Promise<void> => {
+export const freshen = async (
+  accountId: string,
+  periodic = false
+): Promise<void> => {
   const held = readHeld(accountId);
   if (held?.credential.type !== "oauth") {
     return;
   }
   if (held.credential.expires - Date.now() > FRESH_FOR_MS) {
+    return;
+  }
+  const lender = lenderOf(held.credential);
+  if (lender) {
+    await borrowFresh(accountId, lender, held.credential.access, periodic);
     return;
   }
   const runtime = await runtimeOf(accountId, held.provider);
@@ -227,7 +240,7 @@ export const freshen = async (accountId: string): Promise<void> => {
 export const freshenAll = async (): Promise<void> => {
   for (const account of credentialAccountIds()) {
     // biome-ignore lint/performance/noAwaitInLoops: one refresh at a time keeps the providers' token endpoints calm
-    await freshen(account).catch((error: unknown) =>
+    await freshen(account, true).catch((error: unknown) =>
       console.warn(
         `[accounts] ${account}: refresh failed: ${error instanceof Error ? error.message : String(error)}`
       )
@@ -376,6 +389,219 @@ const planOf = async (held: Held): Promise<string | null> => {
   }
   const read = await readChatgptUsage(held.credential.access, claims.accountId);
   return read.ok && read.plan ? read.plan : claims.plan;
+};
+
+// ── One grant, lent ──────────────────────────────────────────────────────
+
+/** The machine a borrowed sign-in was lent by, kept on it beside its access token. */
+const LENDER = "cawcoLender";
+
+/** The machine that lent `credential`, when it is borrowed ({@link BORROWED_REFRESH}). */
+export const lenderOf = (credential: Credential): string | undefined => {
+  if (credential.type !== "oauth" || credential.refresh !== BORROWED_REFRESH) {
+    return undefined;
+  }
+  const lender = (credential as Record<string, unknown>)[LENDER];
+  return typeof lender === "string" && lender ? lender : undefined;
+};
+
+/** A lent access token as the borrower's store keeps it: no refresh token, ever. */
+const borrowedCredential = (lender: string, lent: LentAccess): Credential =>
+  ({
+    type: "oauth",
+    access: lent.access,
+    refresh: BORROWED_REFRESH,
+    expires: lent.expires,
+    ...(lent.accountId ? { accountId: lent.accountId } : {}),
+    [IDENTITY]: lent.identity,
+    [LENDER]: lender,
+  }) as unknown as Credential;
+
+/** Where a borrower's asks go: the daemon's socket to the hub. */
+let askHub: ((frame: AccountBorrowFrame) => void) | undefined;
+export const setBorrowAsk = (
+  send: (frame: AccountBorrowFrame) => void
+): void => {
+  askHub = send;
+};
+
+/** How long the hub gets to bring a lender's fresh access token. */
+const LEND_WAIT_MS = 60_000;
+
+/** Asks waiting on the hub's answer, by request id. */
+const lendWaits = new Map<
+  string,
+  {
+    accountId: string;
+    lender: string;
+    settle: (outcome: Error | undefined) => void;
+  }
+>();
+/** The ask under way per account: callers at once share it. */
+const asking = new Map<string, Promise<void>>();
+/**
+ * Why the last ask for each account failed, with the access token it was
+ * asked for: a timer does not ask again for the same token
+ * ({@link freshen}'s `periodic`), so a lender that is away is said once, not
+ * every minute. Something that needs the sign-in now asks again.
+ */
+const lendRefused = new Map<string, { access: string; why: string }>();
+
+/**
+ * A borrowed sign-in near its expiry: a fresh access token asked of its
+ * lender through the hub, written into the account's store when it comes.
+ */
+const borrowFresh = (
+  accountId: string,
+  lender: string,
+  access: string,
+  periodic: boolean
+): Promise<void> => {
+  const refused = lendRefused.get(accountId);
+  if (periodic && refused?.access === access) {
+    return Promise.resolve();
+  }
+  const under = asking.get(accountId);
+  if (under) {
+    return under;
+  }
+  const ask = new Promise<void>((resolve, reject) => {
+    if (!askHub) {
+      reject(new Error("The agent is not connected to the hub yet."));
+      return;
+    }
+    const requestId = randomUUID();
+    const timer = setTimeout(
+      () =>
+        lendWaits
+          .get(requestId)
+          ?.settle(
+            new Error(
+              `The hub did not bring a fresh sign-in for account ${accountId} from its lender in time.`
+            )
+          ),
+      LEND_WAIT_MS
+    );
+    lendWaits.set(requestId, {
+      accountId,
+      lender,
+      settle: (outcome) => {
+        clearTimeout(timer);
+        lendWaits.delete(requestId);
+        if (outcome) {
+          reject(outcome);
+        } else {
+          resolve();
+        }
+      },
+    });
+    askHub({ kind: "account_borrow", accountId, lender, requestId });
+  })
+    .then(
+      () => {
+        lendRefused.delete(accountId);
+      },
+      (error: unknown) => {
+        const why = error instanceof Error ? error.message : String(error);
+        lendRefused.set(accountId, { access, why });
+        throw error instanceof Error ? error : new Error(why);
+      }
+    )
+    .finally(() => asking.delete(accountId));
+  asking.set(accountId, ask);
+  return ask;
+};
+
+/**
+ * The hub's answer to a borrower: a lender's fresh access token written into
+ * the account's store, or why there is none. `requestId` null: the lender
+ * came back and the hub brings what an earlier ask could not get.
+ */
+export const accountLent = async (
+  requestId: string | null,
+  answer: LentAccess | { error: string },
+  accountId?: string
+): Promise<{ written: boolean }> => {
+  const wait = requestId ? lendWaits.get(requestId) : undefined;
+  const target = wait?.accountId ?? accountId;
+  if (!target) {
+    return { written: false };
+  }
+  if ("error" in answer) {
+    wait?.settle(new Error(answer.error));
+    return { written: false };
+  }
+  const written = await serial(target, async () => {
+    const held = readHeld(target);
+    const lender = held ? lenderOf(held.credential) : undefined;
+    const as = held ? identityOf(held.provider, held.credential) : undefined;
+    if (
+      !(held && lender) ||
+      held.provider !== answer.provider ||
+      !(as && sameIdentity(as, answer.identity)) ||
+      (wait && wait.lender !== lender)
+    ) {
+      return false;
+    }
+    await writeHeld(target, {
+      provider: held.provider,
+      credential: borrowedCredential(lender, answer),
+    });
+    return true;
+  });
+  if (written) {
+    lendRefused.delete(target);
+    wait?.settle(undefined);
+  } else {
+    wait?.settle(
+      new Error(
+        `Account ${target}'s store here is not a borrowed sign-in of ${answer.identity.email} any more.`
+      )
+    );
+  }
+  return { written };
+};
+
+/**
+ * The account's working sign-in, lent: refreshed here first when it is near
+ * its expiry (this machine's own refresh, the grant's only refresher), then
+ * its access token, its expiry and who it is. Never its refresh token.
+ */
+export const lendAccount = async (accountId: string): Promise<LentAccess> => {
+  const held = readHeld(accountId);
+  if (!held) {
+    throw new Error("This machine holds no sign-in of the account.");
+  }
+  if (held.credential.type !== "oauth") {
+    throw new Error("Only a sign-in is lent, never a key.");
+  }
+  if (lenderOf(held.credential)) {
+    throw new Error(
+      "This machine's sign-in of the account is itself borrowed."
+    );
+  }
+  await freshen(accountId);
+  const now = readHeld(accountId);
+  if (now?.credential.type !== "oauth") {
+    throw new Error("The account's sign-in is gone from this machine.");
+  }
+  const identity = identityOf(now.provider, now.credential);
+  if (!identity) {
+    throw new Error("The account's sign-in does not say who it is.");
+  }
+  const { credential } = now;
+  const chatgptAccount =
+    (typeof credential.accountId === "string" ? credential.accountId : null) ??
+    (now.provider === "openai-codex"
+      ? chatgptClaims(credential.access).accountId
+      : null);
+  return {
+    access: credential.access,
+    expires: credential.expires,
+    identity,
+    provider: now.provider,
+    ...(chatgptAccount ? { accountId: chatgptAccount } : {}),
+  };
 };
 
 // ── Signing in ───────────────────────────────────────────────────────────
@@ -605,7 +831,8 @@ export const forgetProviderAccount = async (
   signIns.get(accountId)?.abort.abort();
   signIns.delete(accountId);
   const held = readHeld(accountId);
-  if (held) {
+  // A borrowed sign-in is its lender's grant: dropped here, never signed out.
+  if (held && !lenderOf(held.credential)) {
     await (await runtimeOf(accountId, held.provider)).logout(held.provider);
   }
   for (const key of runtimes.keys()) {
@@ -769,12 +996,24 @@ const moveLog = (line: string): void => {
   console.log(`[move-login] ${line}`);
 };
 
+/** A borrowed sign-in answers while its access token, refreshed by its lender only, has time left. */
+const borrowedAnswers = async (
+  accountId: string
+): Promise<string | undefined> => {
+  await freshen(accountId);
+  const now = readHeld(accountId);
+  return now?.credential.type === "oauth" && now.credential.expires > Date.now()
+    ? undefined
+    : "the borrowed sign-in has run out";
+};
+
 /**
  * Whether the account answers with the credential just written: ChatGPT's
  * usage endpoint for a ChatGPT sign-in, OpenCode Go's for its key, pi-ai's
  * own request auth for any other OAuth sign-in (refreshed by it if it has
- * run out), and the store giving the key back for any other key (no
- * provider-neutral endpoint answers for a key without spending it).
+ * run out), a borrowed sign-in by its time left ({@link borrowedAnswers}),
+ * and the store giving the key back for any other key (no provider-neutral
+ * endpoint answers for a key without spending it).
  * Undefined when it answers; else why not.
  */
 const answers = async (accountId: string): Promise<string | undefined> => {
@@ -800,6 +1039,9 @@ const answers = async (accountId: string): Promise<string | undefined> => {
       return go?.error ?? undefined;
     }
     return held.credential.key ? undefined : "the store gave no key back";
+  }
+  if (lenderOf(held.credential)) {
+    return await borrowedAnswers(accountId);
   }
   const auth = await (await runtimeOf(accountId, held.provider))
     .getAuth(held.provider)
@@ -867,21 +1109,122 @@ export const moveHomeCredential = async (
     error instanceof Error ? error.message : String(error)
   );
   if (refused) {
-    return undo(`The account did not answer: ${refused}.`);
+    // Its own sign-in does not answer: nothing moves, and the hub lends the
+    // account's working one here when another machine holds it.
+    await serial(accountId, () => writeHeld(accountId, undefined));
+    moveLog(
+      `not moved, the account's copy removed: it did not answer: ${refused}`
+    );
+    return { store: "nothing", expired: refused };
   }
+  if (!(await dropHomeEntry(path, storeProvider, read))) {
+    return undo(`${store} changed its own ${storeProvider} during the move.`);
+  }
+  moveLog(`moved; ${store}'s own store no longer holds ${storeProvider}`);
+  return { store: "the account's credential file" };
+};
+
+/**
+ * The entry a move took, removed from its store when it is still the one
+ * taken (the same refresh token, the same key); false when the store changed
+ * it meanwhile, and it stays.
+ */
+const dropHomeEntry = async (
+  path: string,
+  storeProvider: string,
+  taken: Credential
+): Promise<boolean> => {
   const now = readJson(path);
   const still = now[storeProvider];
   const unchanged =
     still &&
-    (read.type === "oauth"
-      ? still.refresh === read.refresh
-      : (still.key ?? null) === read.key);
+    (taken.type === "oauth"
+      ? still.refresh === taken.refresh
+      : (still.key ?? null) === taken.key);
   if (!unchanged) {
-    return undo(`${store} changed its own ${storeProvider} during the move.`);
+    return false;
   }
   const { [storeProvider]: _moved, ...rest } = now;
   await writeJson(path, rest);
-  moveLog(`moved; ${store}'s own store no longer holds ${storeProvider}`);
+  return true;
+};
+
+/**
+ * A machine whose own sign-in of the account's identity expired
+ * ({@link HomeLoginMoved.expired}) runs on the account's working one, lent
+ * by `lender`: the lent access token written into the account's store here
+ * (never a refresh token), checked to answer, and then the expired entry
+ * removed from its store, as a move removes the entry it took.
+ */
+export const borrowAccount = async (
+  accountId: string,
+  lender: string,
+  lent: LentAccess,
+  store: "pi" | "opencode",
+  storeProvider: string,
+  expected: AccountIdentity
+): Promise<HomeLoginMoved> => {
+  const path = store === "pi" ? piStorePath() : opencodeStorePath();
+  const entry = readJson(path)[storeProvider];
+  const read = entry ? credentialOf(store, entry) : undefined;
+  const held = readHeld(accountId);
+  const heldAs = held ? identityOf(held.provider, held.credential) : undefined;
+  if (!read && held && heldAs && sameIdentity(heldAs, expected)) {
+    moveLog(
+      `already borrowed: account ${accountId} holds ${store}'s ${storeProvider}`
+    );
+    return { store: "the account's credential file" };
+  }
+  if (!read) {
+    throw new Error(
+      `${store}'s own store on this machine holds no ${storeProvider} credential; nothing was borrowed.`
+    );
+  }
+  const provider = providerOfEntry(store, storeProvider, read);
+  const identity = identityOf(provider, read);
+  if (
+    !(
+      identity &&
+      sameIdentity(identity, expected) &&
+      sameIdentity(lent.identity, expected)
+    ) ||
+    lent.provider !== provider
+  ) {
+    throw new Error(
+      `The lent sign-in is not ${store}'s own ${storeProvider} (${expected.email}); nothing was borrowed.`
+    );
+  }
+  if (held) {
+    throw new Error(
+      "The account already holds a credential on this machine; nothing was borrowed."
+    );
+  }
+  moveLog(`writing the account ${accountId}'s sign-in, lent by ${lender}`);
+  await serial(accountId, () =>
+    writeHeld(accountId, {
+      provider,
+      credential: borrowedCredential(lender, lent),
+    })
+  );
+  const undo = async (why: string): Promise<never> => {
+    await serial(accountId, () => writeHeld(accountId, undefined));
+    moveLog(`not borrowed, the account's copy removed: ${why}`);
+    throw new Error(
+      `${why} Nothing was borrowed; ${store}'s own ${storeProvider} on this machine is as it was.`
+    );
+  };
+  const refused = await answers(accountId).catch((error: unknown) =>
+    error instanceof Error ? error.message : String(error)
+  );
+  if (refused) {
+    return undo(`The lent sign-in did not answer: ${refused}.`);
+  }
+  if (!(await dropHomeEntry(path, storeProvider, read))) {
+    return undo(`${store} changed its own ${storeProvider} meanwhile.`);
+  }
+  moveLog(
+    `borrowed; ${store}'s own store no longer holds its expired ${storeProvider}`
+  );
   return { store: "the account's credential file" };
 };
 

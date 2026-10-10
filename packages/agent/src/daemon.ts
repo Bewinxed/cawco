@@ -11,6 +11,7 @@ import type {
   HarnessReport,
   HeartbeatAckPayload,
   HeartbeatPayload,
+  LentAccess,
   ProviderInfo,
   RegisterAckPayload,
   SessionCustody,
@@ -21,10 +22,13 @@ import {
   CAWCO_ENV,
   CAWCO_HUB_PORT,
   CONFIGURE_BINARY_UPDATES,
+  CONTROL_ACCOUNT_LENT,
   CONTROL_BEGIN_PROVIDER_LOGIN,
+  CONTROL_BORROW_ACCOUNT,
   CONTROL_COMPLETE_PROVIDER_LOGIN,
   CONTROL_FORGET_PROVIDER_ACCOUNT,
   CONTROL_JOIN_PROVIDER_ACCOUNT,
+  CONTROL_LEND_ACCOUNT,
   CONTROL_MOVE_CANCEL,
   CONTROL_MOVE_CLONE,
   CONTROL_MOVE_HOME_CREDENTIAL,
@@ -99,7 +103,9 @@ import {
 import { servingPreviews } from "./preview";
 import { parseProcId, SESSION_PROC_KINDS } from "./proc-id";
 import {
+  accountLent,
   beginProviderLogin,
+  borrowAccount,
   completeProviderLogin,
   dropOpencodeMarkers,
   endProviderSignIns,
@@ -108,10 +114,12 @@ import {
   freshenAll,
   homeStoresStamp,
   joinProviderAccount,
+  lendAccount,
   moveHomeCredential,
   piProviders,
   providerAccountReports,
   readHomeCredentials,
+  setBorrowAsk,
   setProviderKey,
 } from "./provider-accounts";
 import {
@@ -304,6 +312,32 @@ const registerProviderAccounts = (supervisor: SessionSupervisor): void => {
           expected as AccountIdentity
         )
       )()
+  );
+  supervisor.registerDaemonFunction(CONTROL_LEND_ACCOUNT, (id) =>
+    lendAccount(id as string)
+  );
+  supervisor.registerDaemonFunction(
+    CONTROL_BORROW_ACCOUNT,
+    (id, lender, lent, store, storeProvider, expected) =>
+      changing(() =>
+        borrowAccount(
+          id as string,
+          lender as string,
+          lent as LentAccess,
+          store as "pi" | "opencode",
+          storeProvider as string,
+          expected as AccountIdentity
+        )
+      )()
+  );
+  supervisor.registerDaemonFunction(
+    CONTROL_ACCOUNT_LENT,
+    (requestId, answer, accountId) =>
+      accountLent(
+        (requestId as string | null) ?? null,
+        answer as LentAccess | { error: string },
+        (accountId as string | undefined) ?? undefined
+      )
   );
 };
 
@@ -1937,7 +1971,10 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
     // account's OpenCode store), the refresh pi sessions ask for, and
     // OpenCode's own store cleared of the markers CawCo kept there before.
     registerProviderAccounts(supervisor);
-    setAccountFreshener(freshen);
+    setAccountFreshener((accountId) => freshen(accountId));
+    setBorrowAsk((frame) =>
+      supervisor.emit({ verb: "frames", machineId: "", payload: frame })
+    );
     yield* Effect.promise(() =>
       dropOpencodeMarkers().catch((error: unknown) =>
         console.warn(
