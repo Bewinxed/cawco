@@ -137,14 +137,18 @@ final class NeedsCawButton: UIControl {
         face.hover(hover.state == .began || hover.state == .changed)
     }
 
+    /// The glass's own edge, pt: GlassCapsule's hairline border.
+    private static let glassEdge: CGFloat = 1
+
     /// The arcs ON his glass's rim, a dial's ticks on its edge (owner: "lines
     /// along the rim of the circle … just like a dial thing"): the stroke's
-    /// outer edge on the glass's edge, half the stroke in; arc k from
-    /// k × (arc + arcGap)° clockwise from 12 o'clock.
+    /// outer edge just inside the glass's hairline (laid across it, its outer
+    /// half met the bar and read as cut off); arc k from k × (arc + arcGap)°
+    /// clockwise from 12 o'clock.
     override func layoutSubviews() {
         super.layoutSubviews()
         let centre = CGPoint(x: bounds.midX, y: bounds.midY)
-        let rim = CGFloat(glassSide) / 2 - Size.cCawRing / 2
+        let rim = CGFloat(glassSide) / 2 - Self.glassEdge - Size.cCawRing / 2
         if standing {
             layoutOutline(centre: centre, rim: rim)
             return

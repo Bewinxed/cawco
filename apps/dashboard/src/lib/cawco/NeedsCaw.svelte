@@ -147,13 +147,16 @@
   const RING_BOX = 36;
   /** The arcs' stroke, px (`--c-caw-ring`). */
   const RIM_STROKE = 2;
+  /** The glass's own edge, px: its hairline border (Shell `.tools::before`). */
+  const GLASS_EDGE = 1;
   /**
    * The arcs lie ON the glass's rim, a dial's ticks on its edge (owner:
    * "lines along the rim of the circle … just like a dial thing"): the
-   * stroke's outer edge on the glass's outer edge, half the stroke in, so
-   * even one arc reads as a tick on the rim and not a mark inside it.
+   * stroke's outer edge just inside the glass's hairline, so even one arc
+   * reads as a tick on the rim and not a mark inside it. Laid across the
+   * hairline itself, its outer half met the bar and read as cut off.
    */
-  const RIM = RING_BOX / 2 - RIM_STROKE / 2;
+  const RIM = RING_BOX / 2 - GLASS_EDGE - RIM_STROKE / 2;
   /** The first lap's arcs, the second lap's on top of them, and past both the closed ring. */
   const ringClosed = $derived(count > 2 * ARCS);
   const arcCount = $derived(ringClosed ? 0 : Math.min(count, ARCS));
@@ -200,8 +203,8 @@
   const MID = RING_BOX / 2;
   /** The phone's glass, px (`--c-bar-caw-glass-phone`). */
   const STAND_BOX = 32;
-  /** The outline's half height on the path, half the stroke in from the glass's edge. */
-  const STAND = STAND_BOX / 2 - RIM_STROKE / 2;
+  /** The outline's half height on the path, half the stroke in from inside the glass's hairline. */
+  const STAND = STAND_BOX / 2 - GLASS_EDGE - RIM_STROKE / 2;
   const OUTLINE_LENGTH = (4 + Math.PI) * STAND;
   /** The point `s` px along the outline from 12 o'clock. */
   function onOutline(s: number): [number, number] {
