@@ -303,7 +303,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         case .run: RunView.self
         case .compaction: CompactionDividerView.self
         case .livetool: LiveToolView.self
-        case .notice, .empty: NoticeView.self
+        case .notice, .retry, .empty: NoticeView.self
         }
     }
 
@@ -334,7 +334,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             case .run: return view.dequeueConfiguredReusableCell(using: run, for: index, item: id)
             case .compaction: return view.dequeueConfiguredReusableCell(using: compaction, for: index, item: id)
             case .livetool: return view.dequeueConfiguredReusableCell(using: live, for: index, item: id)
-            case .notice, .empty: return view.dequeueConfiguredReusableCell(using: notice, for: index, item: id)
+            case .notice, .retry, .empty: return view.dequeueConfiguredReusableCell(using: notice, for: index, item: id)
             }
         }
     }
@@ -393,6 +393,10 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         env.replacement = { [weak self] id in self?.replacements[id] }
         env.canEditQueued = { [weak self] id in self?.canEditQueued(id) ?? false }
         env.editQueued = { [weak self] id in self?.onEditQueued(id) }
+        env.readOlder = { [weak self] in
+            guard let self, let id = transcript?.id else { return }
+            hub?.sessions.readOlderPage(id)
+        }
     }
 
     deinit {
@@ -641,6 +645,10 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             env.agentName = agent
             request()
         }
+        // Read here so the screen hears of them: an older page on its way, one
+        // that could not be read, and whether any is left (the strip before
+        // the first row, and when the next page is asked for).
+        _ = (transcript.loadingOlder, transcript.olderFault, transcript.cursor)
         let tail = transcript.tail
         let next = tail?.streaming ?? ""
         if next != received {
@@ -827,14 +835,49 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         }
         out += queuedItems(false)
 
+        // Why the page before the first row could not be read (Transcript.svelte `.older`).
+        let fault = transcript.olderFault.map { fault in
+            Item(id: Self.olderId, top: 0, kind: .retry("\(fault.reason == .offline ? "This machine is offline" : "The turns before these couldn't be read"): \(fault.message)"),
+                 print: "failed\(fault.message)")
+        }
+        // The reader's place is at a row older than the rows held, with history
+        // left to read: nothing is drawn until a page holds it.
+        let sought = pendingPosition.flatMap { $0.following ? nil : $0.anchor }
+        seeking = sought.map { anchor in !out.contains { $0.id == anchor } } ?? false
+            && rowCount > 0 && transcript.cursor != nil && transcript.olderFault == nil && !transcript.loading
+        older = transcript.cursor == nil ? "" : fault?.print ?? "loading"
         if out.isEmpty {
-            let loading = transcript.loading || prepared == nil
-            out = [loading ? Item(id: "notice:loading", top: 0, kind: .notice("Loading transcript…"), print: "loading")
-                : Item(id: "notice:empty", top: 0, kind: .empty, print: "empty")]
+            // Empty is what is drawn: with a page before it, the transcript is still loading.
+            let loading = transcript.loading || prepared == nil || transcript.cursor != nil
+            out = [fault
+                ?? (loading ? Item(id: "notice:loading", top: 0, kind: .notice("Loading transcript…"), print: "loading")
+                    : Item(id: "notice:empty", top: 0, kind: .empty, print: "empty"))]
             settledCount = out.count
+        } else if transcript.cursor != nil {
+            // Before the first row, while there is a page before it: the
+            // transcript's loading line, or why that page could not be read and
+            // the way to ask again. The reader sees it only at the very top; a
+            // page is asked for a view before that (`askOlder`).
+            out.insert(fault ?? Item(id: Self.olderId, top: 0, kind: .notice("Loading transcript…"), print: "loading"), at: 0)
+            settledCount += 1
         }
         return out
     }
+
+    /// The strip before the first row (`build`): never a row the reader's place is kept by.
+    private static let olderId = "notice:older"
+    /// What the strip before the first row says: nothing (no page before
+    /// it), loading, or why a page failed. Part of what the list's settled
+    /// rows were built from (`settledStamp`).
+    private var older = ""
+    /// The place to restore is at a row older than the rows held, and the
+    /// pages before them are being read until one holds it (Transcript.svelte
+    /// "THE READER'S PLACE IS READ BACK TO"). A page that cannot be read ends
+    /// the search: the list is drawn with what it holds, the failure at its top.
+    private var seeking = false
+
+    /// What the list's settled rows are built from: the prepared generation, and the strip before them.
+    private var settledStamp: String? { settled.map { "\($0.stamp)|\(older)" } }
 
     /// A landed answer's settled items take the live row's key (rows.ts
     /// `keepLive`): the cells that drew it streaming go on drawing it.
@@ -1004,6 +1047,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             drewThisFrame = false
             collection.layoutIfNeeded()
         }
+        askOlder()
         let warming = inSight && warm(since: now, frame: link.targetTimestamp - link.timestamp)
         let took = CACurrentMediaTime() - now
         Pace.spent(took, in: env.sessionId, items: items.count, cells: collection.visibleCells.count)
@@ -1102,7 +1146,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         // A named state stands in the area instead of the transcript (SessionPane `namedState`).
         if let transcript {
             let blank = !transcript.loading && transcript.fault == nil && !transcript.missing && blocks.isEmpty
-                && queued.isEmpty && hub != nil && hub?.fleet.byId[transcript.id] == nil
+                && transcript.cursor == nil && queued.isEmpty && hub != nil && hub?.fleet.byId[transcript.id] == nil
             let named: PaneState.State? = transcript.fault.map { .fault($0) }
                 ?? (transcript.missing ? .missing(transcript.id) : blank ? .blank : nil)
             if let named { paneState.show(named) }
@@ -1118,8 +1162,11 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         // built (a frame of a streamed reply): only the tail, and the rows that
         // read the fleet, are looked at. A long session's history is not
         // walked again for every frame of its tail.
-        let quiet = fresh && fed == nil && listedStamp != nil && listedStamp == settled?.stamp
+        let quiet = fresh && fed == nil && listedStamp != nil && listedStamp == settledStamp
             && before.settled.count == tailStart
+        // The prepared rows stand after the strip before the first row, when it is drawn.
+        let lead = built.first?.id == Self.olderId ? 1 : 0
+        let previous = items
         let section: (settled: [String], tail: [String])
         var changed: [String] = []
         /// The items this frame drew from that the list may not have yet.
@@ -1132,7 +1179,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
                 prints[id] = nil
             }
             var touched = tail
-            for i in settled?.fleet ?? [] where i < tailStart { touched.append(built[i]) }
+            for i in settled?.fleet ?? [] where i + lead < tailStart { touched.append(built[i + lead]) }
             for item in touched {
                 if prints[item.id] != item.print, dataSource.indexPath(for: item.id) != nil { changed.append(item.id) }
                 items[item.id] = item
@@ -1154,7 +1201,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             prints = Dictionary(uniqueKeysWithValues: built.map { ($0.id, $0.print) })
             looked = built
         }
-        listedStamp = fed == nil ? settled?.stamp : nil
+        listedStamp = fed == nil ? settledStamp : nil
         collection.alpha = fed == nil || rowCount == 0 ? 1 : 0
         if !quiet { store.keep(items.keys) }
         // A row is drawn arriving (Row.svelte; arrivals.svelte.ts, THE ARRIVAL
@@ -1222,11 +1269,18 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             : Set(before.settled).union(before.tail).isDisjoint(with: section.settled + section.tail)
         let from = collection.contentOffset
         // Rows shifted in front (older history) never move the reader: the
-        // first row on screen keeps its place (Transcript `frontOnly`, `restore`).
-        let anchor: (id: String, into: CGFloat)? = follow || !landed ? nil : collection.indexPathsForVisibleItems.sorted().first.flatMap { index in
-            guard let id = dataSource.itemIdentifier(for: index), let frame = collection.layoutAttributesForItem(at: index)?.frame else { return nil }
-            return (id, collection.contentOffset.y - frame.minY)
-        }
+        // first row of the conversation on screen keeps its place (Transcript
+        // `frontOnly`, `restore`). Not the strip before the first row: it
+        // stands at the top whatever joins under it. A row's margin above it is
+        // part of its cell and changes when the rows that join in front take it
+        // into their group (a page that ended inside a run of calls): what is
+        // kept in place is what the reader reads, so the change goes with it.
+        let anchor: (id: String, into: CGFloat)? = follow || !landed ? nil : collection.indexPathsForVisibleItems.sorted().lazy.compactMap { index in
+            guard let id = self.dataSource.itemIdentifier(for: index), id != Self.olderId,
+                  let frame = self.collection.layoutAttributesForItem(at: index)?.frame else { return nil }
+            let margin = CGFloat((self.items[id]?.top ?? 0) - (previous[id]?.top ?? 0))
+            return (id, self.collection.contentOffset.y - frame.minY + margin)
+        }.first
         // A first screen built down from a restored anchor stands at it.
         var pivot: (id: String, into: CGFloat)?
         if let position = pendingPosition, !position.following, let id = position.anchor {
@@ -1282,6 +1336,8 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         guard let count = fed else { return all }
         // No rows yet (a page not read, an empty session): the notice stands alone.
         guard rowCount > 0 else { return all }
+        // The place to restore is in a page not read yet: nothing is built until one holds it.
+        guard !seeking else { return [] }
         let view = visibleBox.height
         let pivot = pendingPosition.flatMap { $0.following ? nil : $0.anchor }.flatMap { all.firstIndex(of: $0) }
         let reach = pivot.map { all.count - $0 } ?? all.count
@@ -1506,9 +1562,41 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         animator.startAnimation()
     }
 
+    // MARK: Older pages
+
+    /// OLDER PAGES COME AS THE READER NEARS THEM, ONE AT A TIME
+    /// (Transcript.svelte `askOlder`). The view holds the newest page and
+    /// whatever its reader has scrolled up to. The next older page is asked
+    /// for when less than one view of rows stands between the top of the view
+    /// and the first row held (points for the web's pixels). A list shorter
+    /// than its view is inside that distance by definition, so it fills, a
+    /// page at a time, until it can scroll or the conversation's start is in
+    /// hand; an empty newest page with a page before it reads that page.
+    /// While the place to restore is in a page not read yet (`seeking`), the
+    /// pages are read back to it whatever the distance.
+    ///
+    /// Never for a pane nobody is looking at, not while a page is on its way
+    /// or the newest is being read, not again for a page that failed (its
+    /// strip's Try again asks), and not until the page that last landed is in
+    /// the list: asked between its landing and its rows, the reader would
+    /// still seem to stand at the top and the next page would be read unasked.
+    private func askOlder() {
+        guard let transcript, let sessions = hub?.sessions, transcript.cursor != nil, !transcript.loading,
+              !transcript.loadingOlder, transcript.olderFault == nil,
+              transcript.blockRevision == revision, current, !dirty, inView else { return }
+        if !seeking {
+            guard landed, fed == nil || rowCount == 0 else { return }
+            // From the first row of the conversation: the strip before it is not a row.
+            let strip = dataSource.indexPath(for: Self.olderId).flatMap { collection.layoutAttributesForItem(at: $0)?.frame.maxY } ?? 0
+            let above = collection.contentOffset.y + collection.adjustedContentInset.top - strip
+            guard above < visibleBox.height else { return }
+        }
+        sessions.readOlderPage(transcript.id)
+    }
+
     public var restorationPosition: TranscriptPosition {
         if let pendingPosition { return pendingPosition }
-        guard !following, let index = collection.indexPathsForVisibleItems.sorted().first,
+        guard !following, let index = collection.indexPathsForVisibleItems.sorted().first(where: { dataSource.itemIdentifier(for: $0) != Self.olderId }),
               let id = dataSource.itemIdentifier(for: index),
               let frame = collection.layoutAttributesForItem(at: index)?.frame else {
             return TranscriptPosition(following: following, anchor: nil, offset: 0)
@@ -1589,7 +1677,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     private func updateDock() {
         let rowsDrawn = rowCount > 0
         latestButton.show(landed && farFromLatest && rowsDrawn)
-        catchUp.show(transcript?.loading == true && rowsDrawn)
+        catchUp.show((transcript?.loading == true || seeking) && rowsDrawn)
         compacting.show(isCompacting)
     }
 

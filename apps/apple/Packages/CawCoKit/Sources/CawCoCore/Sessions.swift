@@ -13,9 +13,20 @@ public final class SessionTranscript {
     public internal(set) var tail: Components.Schemas.TranscriptTail?
     public internal(set) var facts: Components.Schemas.TranscriptFacts?
     public internal(set) var location: Components.Schemas.TranscriptWhere?
+    /// Where the page older than `blocks` begins: the `before` the hub named,
+    /// or nil once the conversation's start is in hand.
     public internal(set) var cursor: String?
     public internal(set) var loading = true
+    /// An older page is being read: one at a time (client.svelte.ts
+    /// `hydrating`, `SessionsStore.readOlderPage`).
     public internal(set) var loadingOlder = false
+    /// Why the last older page could not be read (client.svelte.ts
+    /// `olderFault`). The cursor stays where it was, so asking again asks for
+    /// the same page.
+    public internal(set) var olderFault: ReadFault?
+    /// Bumped by every newest page adopted (client.svelte.ts `reads`): an
+    /// older page that lands after one belongs to the transcript it replaced.
+    @ObservationIgnored var reads = 0
     /// Why the read failed, when it did (client.svelte.ts `readFault`).
     public internal(set) var fault: ReadFault?
     /// The hub answered 404: nothing it or any machine holds goes by this id.
@@ -143,11 +154,7 @@ public final class SessionsStore {
                     transcript.loading = false
                     transcript.missing = true
                     return
-                case let .away(machine):
-                    // A 503 naming a machine is the hub saying that machine is not connected.
-                    let host = hub.fleet.machines.first { $0.machineId == machine }?.hostname ?? machine
-                    throw Fault(ReadFault(reason: .offline, machineId: machine,
-                                          message: "\(host) is offline — its stored transcript can't be read right now."))
+                case let .away(machine): throw Fault(offline(machine))
                 }
                 guard !Task.isCancelled else { return }
                 // What this client was told about its own actions stays under what the hub holds.
@@ -159,15 +166,20 @@ public final class SessionsStore {
                 transcript.location = page._where
                 hub.tasks.refresh(id)
                 transcript.cursor = page.cursor
+                // A new newest page is a new read: an older page still on its
+                // way belongs to the transcript this one replaced, and so does
+                // what was said of one. Nothing older is read here: the view
+                // asks for it a page at a time, as its reader nears the first
+                // rows it holds (`readOlderPage`).
+                transcript.reads += 1
+                transcript.olderFault = nil
                 transcript.blockRevision += 1
                 transcript.historyRevision += 1
                 transcript.loading = false
                 // The history page and its seq are one atomic view of the hub.
                 // Resume after it, including events that arrived during the read.
                 if let seq = page.seq { hub.ledger.adoptPage(id, seq: seq) }
-                log.info("page adopted for \(id, privacy: .public): \(page.blocks.count) blocks at seq \(page.seq ?? -1)")
-                // The older pages fill in behind the newest (client.svelte.ts `readOlder`).
-                await readOlder(transcript, client: client)
+                log.info("page adopted for \(id, privacy: .public): \(page.blocks.count) blocks at seq \(page.seq ?? -1), older \(page.cursor ?? "none", privacy: .public)")
             } catch {
                 guard !Task.isCancelled else { return }
                 transcript.loading = false
@@ -219,21 +231,57 @@ public final class SessionsStore {
         ReadFault(reason: .failed, machineId: nil, message: try await String(collecting: body, upTo: 64_000))
     }
 
-    /// Every page older than what the transcript holds, each prepended as it
-    /// lands, until the conversation's start or a read again under it.
-    private func readOlder(_ transcript: SessionTranscript, client: Client) async {
+    /// A 503 naming a machine is the hub saying that machine is not connected.
+    private func offline(_ machine: String) -> ReadFault {
+        let host = hub.fleet.machines.first { $0.machineId == machine }?.hostname ?? machine
+        return ReadFault(reason: .offline, machineId: machine, message: "\(host) is offline — its stored transcript can't be read right now.")
+    }
+
+    /// The one page older than what a transcript holds, put in front of it
+    /// (client.svelte.ts `readOlderPage`). Asked for by whoever is reading
+    /// near the first rows held, never ahead of a reader. One page is out at
+    /// a time: asked while one is, it does nothing, and nothing is asked once
+    /// the conversation's start is in hand or while the newest page is itself
+    /// being read. An answer that comes back to a transcript read again
+    /// since, or to a cursor that has moved, is dropped. A page that could
+    /// not be read leaves the cursor where it was and says why
+    /// (`olderFault`): asking again asks for the same page.
+    public func readOlderPage(_ id: String) {
+        guard let transcript = transcripts[id], !transcript.loadingOlder, let before = transcript.cursor,
+              !transcript.loading, let client = hub.client else { return }
+        let reads = transcript.reads
         transcript.loadingOlder = true
-        defer { transcript.loadingOlder = false }
-        while let before = transcript.cursor, !Task.isCancelled {
-            // TRANSCRIPT_OLDER_PAGE (apps/dashboard/src/lib/config.ts): 250 rows a page behind the newest.
-            guard case let .read(page) = try? await Self.page(client, id: transcript.id, before: before),
-                  transcript.cursor == before, !Task.isCancelled else { return }
-            let held = Set(transcript.blocks.map(\.id))
-            transcript.blocks.insert(contentsOf: page.blocks.filter { !held.contains($0.id) }, at: 0)
-            transcript.branches.insert(contentsOf: page.branches, at: 0)
-            transcript.cursor = page.cursor
-            transcript.blockRevision += 1
-            transcript.historyRevision += 1
+        transcript.olderFault = nil
+        log.info("older page asked for \(id, privacy: .public) before \(before, privacy: .public)")
+        Task { [weak self] in
+            let answer: Result<PageAnswer, any Error>
+            do {
+                let read = try await Self.page(client, id: id, before: before)
+                answer = .success(read)
+            } catch { answer = .failure(error) }
+            // The read is over before anything it brought is written: whoever
+            // its page wakes may ask for the next one in that same pass.
+            transcript.loadingOlder = false
+            guard let self, transcripts[id] === transcript, transcript.reads == reads, transcript.cursor == before else { return }
+            switch answer {
+            case let .success(.read(page)):
+                let held = Set(transcript.blocks.map(\.id))
+                transcript.blocks.insert(contentsOf: page.blocks.filter { !held.contains($0.id) }, at: 0)
+                let branched = Set(transcript.branches.map(\.value1.toolUseId))
+                transcript.branches.insert(contentsOf: page.branches.filter { !branched.contains($0.value1.toolUseId) }, at: 0)
+                transcript.cursor = page.cursor
+                transcript.blockRevision += 1
+                transcript.historyRevision += 1
+                log.info("older page read for \(id, privacy: .public): \(page.blocks.count) blocks, older \(page.cursor ?? "none", privacy: .public)")
+                return
+            case .success(.missing):
+                transcript.olderFault = ReadFault(reason: .failed, machineId: nil, message: "The hub no longer holds the page before these.")
+            case let .success(.away(machine)):
+                transcript.olderFault = offline(machine)
+            case let .failure(error):
+                transcript.olderFault = (error as? Fault)?.fault ?? ReadFault(reason: .failed, machineId: nil, message: error.localizedDescription)
+            }
+            log.error("older page for \(id, privacy: .public) failed: \(transcript.olderFault?.message ?? "", privacy: .public)")
         }
     }
 
