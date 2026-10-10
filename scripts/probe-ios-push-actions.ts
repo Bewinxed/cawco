@@ -62,6 +62,7 @@
  * Prints `PASS <step>` / `FAIL <step>` per check and exits 0 only if every
  * check passed.
  */
+import { mkdir } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import type { DbShape, WorkItemRow } from "../packages/hub/src/db";
 import { MACHINE, scratchFleet, until } from "./scratch-fleet";
@@ -75,6 +76,10 @@ const AXE = "/opt/homebrew/bin/axe";
 const BUNDLE = "dev.cawco.app";
 const BUILT_IOS = /^BUILT iOS$/m;
 const BUILT_IOS_18 = /^BUILT iOS 18\.5$/m;
+// Inside the checkout it runs from (git-ignored), so whoever reads the run
+// reads the captures beside it.
+const out = join(root, ".probe", `ios-push-actions-${Date.now()}`);
+await mkdir(out, { recursive: true });
 console.log(
   `  at ${(await Bun.$`git -C ${root} log -1 --format=%h\ %s`.text()).trim()}`
 );
@@ -491,57 +496,85 @@ print(best[1], best[2])
 xcrun simctl create "CawCo probe push actions" "$TYPE" "$RUNTIME"`)
   ).trim();
   console.log(`  simulator ${udid}`);
+  // The permission prompt is SpringBoard's, not the app's. From iOS 26.5
+  // SpringBoard's accessibility server refuses clients that aren't apps, so
+  // a tool's view of the screen has no prompt in it, and the switch Apple
+  // ships for that is this preference, read when SpringBoard starts
+  // (software-mansion/argent d091421: "When set, the server skips the
+  // entitlement check"). Set on this probe's own simulator, then
+  // SpringBoard restarted once.
   await mac(`xcrun simctl boot ${udid}
 xcrun simctl bootstatus ${udid} -b >/dev/null
+xcrun simctl spawn ${udid} defaults write com.apple.Accessibility IgnoreAXServerEntitlements -bool true
+xcrun simctl spawn ${udid} launchctl kickstart -k system/com.apple.SpringBoard >/dev/null 2>&1 || true
+sleep 5
 xcrun simctl install ${udid} "${app}"`);
 
-  // The app registers its pairing and key with the hub; iOS asks first.
+  // ── The real path: iOS asks, the probe allows, APNs gives a token, the
+  // app registers its pairing and push key with the hub (PushProbe). ──────
   const registerStart = await macNow();
   await launch("-push-probe-register");
-  const allow = await until(
-    "the notifications prompt's Allow",
-    async () => {
-      const nodes = JSON.parse(
-        await mac(`${AXE} describe-ui --udid ${udid}`)
-      ) as unknown;
-      const found: { x: number; y: number }[] = [];
-      const walk = (at: unknown) => {
-        if (Array.isArray(at)) {
-          for (const child of at) {
-            walk(child);
-          }
-          return;
-        }
-        if (!at || typeof at !== "object") {
-          return;
-        }
-        const o = at as Record<string, unknown>;
-        const frame = o.frame as
-          | { x: number; y: number; width: number; height: number }
-          | undefined;
-        if ((o.AXLabel ?? o.label) === "Allow" && frame) {
-          found.push({
-            x: frame.x + frame.width / 2,
-            y: frame.y + frame.height / 2,
-          });
-        }
-        walk(o.children);
-      };
-      walk(nodes);
-      return found[0];
-    },
-    (point) => point !== undefined,
-    30_000
-  ).catch(() => undefined);
-  if (allow) {
-    await mac(
-      `${AXE} tap -x ${Math.round(allow.x)} -y ${Math.round(allow.y)} --udid ${udid}`
+  const asking = await awaitLine(
+    registerStart,
+    /probe register: asking/,
+    60_000
+  );
+  check(
+    "the app asks for notifications",
+    asking.match !== null,
+    asking.match
+      ? "PushProbe's register hook ran and called requestAuthorization"
+      : "no `probe register: asking` line: the DEBUG hook never ran"
+  );
+  // Tapped by its label: a permission prompt's buttons are often missing
+  // from `describe-ui` while a label tap still lands (alex-hall/AXhandle:
+  // "Native alert buttons … frequently don't appear in describe-ui at all
+  // … AXe's label tap still lands"). It waits up to 30 s for the prompt.
+  const tapped = await mac(
+    `${AXE} tap --label Allow --wait-timeout 30 --udid ${udid} 2>&1`
+  ).then(
+    (text) => ({ ok: true, said: text.trim() }),
+    (error: unknown) => ({
+      ok: false,
+      said: error instanceof Error ? error.message : String(error),
+    })
+  );
+  const authorized = await awaitLine(
+    registerStart,
+    /probe authorization: (.*)/,
+    60_000
+  );
+  const allowed = authorized.match?.[1]?.trim() === "allowed";
+  if (!allowed) {
+    const shot = join(out, "permission-prompt.png");
+    const png = await mac(`F=$(mktemp -d)
+xcrun simctl io ${udid} screenshot "$F/s.png" >/dev/null 2>&1
+base64 < "$F/s.png"
+rm -rf "$F"`).catch(() => "");
+    if (png) {
+      await Bun.write(shot, Buffer.from(png.replace(/\s/g, ""), "base64"));
+    }
+    console.log(
+      `  the screen when it wasn't allowed: ${png ? shot : "no capture"}`
     );
   }
+  check(
+    "notifications allowed through the prompt",
+    allowed,
+    `axe tap --label Allow: ${tapped.ok ? "tapped" : "failed"} (${tapped.said.slice(0, 200) || "no output"}); app: ${authorized.match?.[1]?.trim() ?? "no authorization line"}`
+  );
   const registered = await awaitLine(
     registerStart,
     /probe registered: (.*)/,
     60_000
+  );
+  const token = registered.log.match(/probe token: (\S+)/)?.[1];
+  check(
+    "APNs gives the simulator a token",
+    token !== undefined,
+    token
+      ? `token ${token}`
+      : `no token line; the app said: ${registered.match?.[1]?.trim() ?? "nothing"}`
   );
   const devices = await fleet
     .api<{ devices: { id: string; platform: string }[] }>("/api/push")
@@ -549,7 +582,7 @@ xcrun simctl install ${udid} "${app}"`);
   check(
     "the app registers its push key with the hub",
     registered.match?.[1]?.trim() === "ok" && devices.devices.length === 1,
-    `app: ${registered.match?.[1]?.trim() ?? "no registration line"} (Allow ${allow ? "tapped" : "not shown"}); hub devices: ${devices.devices.map((d) => `${d.id} ${d.platform}`).join(", ") || "none"}`
+    `app: ${registered.match?.[1]?.trim() ?? "no registration line"}; hub devices: ${devices.devices.map((d) => `${d.id} ${d.platform}`).join(", ") || "none"}`
   );
   if (devices.devices.length === 0) {
     throw new Error("no device registered with the hub");

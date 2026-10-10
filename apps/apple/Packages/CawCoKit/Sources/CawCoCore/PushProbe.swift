@@ -5,9 +5,9 @@ import OSLog
 /// The push actions' simulator probe (scripts/probe-ios-push-actions.ts),
 /// in DEBUG builds only, by launch argument:
 ///
-/// - `-push-probe-register`: asks for notifications, then registers this
-///   device's pairing and push key with the kept hub (`probeRegister`), so the
-///   hub seals its pushes for this simulator.
+/// - `-push-probe-register`: asks for notifications, waits for this launch's
+///   APNs token, then registers this device's pairing and push key with the
+///   kept hub (`probeRegister`), so the hub seals its pushes for this simulator.
 /// - `-push-probe-list`: logs every delivered notification, its category and
 ///   that category's actions.
 /// - `-push-probe-act <notification id> <action> [<text>]`: runs the action
@@ -38,10 +38,31 @@ public enum PushProbe {
         }
     }
 
+    /// The real path, each step logged as it is reached: iOS asks (the probe
+    /// answers its alert), APNs gives this launch a token, then the pairing and
+    /// push key register with the hub. A step that doesn't come says so in
+    /// `probe registered:`, and nothing after it runs.
     private static func register() async {
+        log.notice("probe register: asking for notifications")
         let granted = (try? await NotificationCentre.requestAuthorization([.alert, .sound, .badge])) ?? false
         log.notice("probe authorization: \(granted ? "allowed" : "not allowed", privacy: .public)")
-        let problem = await PushRegistry.shared.probeRegister()
+        guard granted else {
+            log.notice("probe registered: notifications not allowed")
+            return
+        }
+        let push = PushRegistry.shared
+        await push.readAuthorization()
+        if push.token == nil { push.requestToken() }
+        let deadline = ContinuousClock.now + .seconds(30)
+        while push.token == nil, !push.tokenFailed, ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(250))
+        }
+        guard let token = push.token else {
+            log.notice("probe registered: no APNs token (\(push.tokenFailed ? "APNs refused the registration" : "none in 30 s", privacy: .public))")
+            return
+        }
+        log.notice("probe token: …\(String(token.suffix(6)), privacy: .public)")
+        let problem = await push.probeRegister()
         log.notice("probe registered: \(problem ?? "ok", privacy: .public)")
     }
 
