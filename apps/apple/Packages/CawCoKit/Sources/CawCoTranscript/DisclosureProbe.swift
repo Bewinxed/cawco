@@ -48,9 +48,20 @@ final class DisclosureProbe {
         func y(_ value: CGFloat?) -> String { value.map { String(format: "%.2f", $0 - origin) } ?? "nil" }
         let row = frame(watched.row)
         let ms = Int((CACurrentMediaTime() - watched.start) * 1000)
+        // The row below as the layout has it: where, whether it is among the
+        // elements in the list's view, and whether its cell is one the list shows.
+        let layout = list.collectionViewLayout
+        let belowCell = watched.below.flatMap(cell)
+        let index = belowCell.flatMap { list.indexPath(for: $0) }
+        let model = index.flatMap { layout.layoutAttributesForItem(at: $0)?.frame.minY }
+        let inRect = index.map { at in layout.layoutAttributesForElements(in: list.bounds)?.contains { $0.indexPath == at } ?? false }
+        let shown = belowCell.map { list.visibleCells.contains($0) }
         let line = "\(label) \(watched.serial) ms=\(ms) above=\(y(frame(watched.above)?.minY)) top=\(y(row?.minY))"
             + " foot=\(y(row?.maxY)) below=\(y(frame(watched.below)?.minY)) offset=\(String(format: "%.2f", origin))"
             + " size=\(String(format: "%.2f", list.contentSize.height)) inset=\(String(format: "%.2f", list.contentInset.bottom))"
+            + " belowLayout=\(y(model)) belowInRect=\(inRect.map { $0 ? "yes" : "no" } ?? "nil")"
+            + " belowVisible=\(shown.map { $0 ? "yes" : "no" } ?? "nil")"
+            + " height=\(String(format: "%.2f", list.bounds.height))"
         Self.log.notice("\(line, privacy: .public)")
     }
 }

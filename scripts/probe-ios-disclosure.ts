@@ -68,7 +68,7 @@ const TURN_ASKED = /disclosure turn (\d)/;
 const TOOL_TURN = /seq (\d)01/;
 const BEGIN_LINE = /\bbegin \d+ (open|shut) /;
 const SAMPLE_LINE =
-  /\b(?:base|f) \d+ ms=(-?\d+) above=(\S+) top=(\S+) foot=(\S+) below=(\S+) offset=(\S+) size=\S+ inset=(\S+)/;
+  /\b(?:base|f) \d+ ms=(-?\d+) above=(\S+) top=(\S+) foot=(\S+) below=(\S+) offset=(\S+) size=\S+ inset=(\S+)(?: belowLayout=(\S+) belowInRect=(\S+) belowVisible=(\S+) height=(\S+))?/;
 /** What a `--before` build's checks say: printed, not counted. */
 const sayBefore = (step: string, ok: boolean, detail: string) =>
   console.log(`  (before) ${ok ? "pass" : "FAIL"} ${step}: ${detail}`);
@@ -248,11 +248,16 @@ const drag = (x: number, fromY: number, toY: number) =>
 interface Sample {
   above: number | null;
   below: number | null;
+  /** The row below as the layout has it, and what the list does with it (printed, not checked). */
+  belowLayout: number | null;
+  belowSeen: string;
   foot: number | null;
   inset: number;
   ms: number;
   offset: number;
   top: number | null;
+  /** The list's view height. */
+  view: number | null;
 }
 
 /** The trace of the newest toggle logged since `since` (the Mac's clock). */
@@ -285,6 +290,10 @@ async function trace(
         below: num(m[5]),
         offset: Number(m[6]),
         inset: Number(m[7]),
+        belowLayout: num(m[8]),
+        // In the layout's elements for the view / among the cells the list shows.
+        belowSeen: m[9] === undefined ? "  -" : `${m[9]}/${m[10]}`,
+        view: num(m[11]),
       });
     }
   }
@@ -376,10 +385,14 @@ function judge(
   }
   const s = t.samples;
   console.log(`  ${name}: ${t.open ? "open" : "shut"}, ${s.length} samples`);
-  console.log("       ms   above     top    foot   below  offset   inset");
+  // below(layout): the row below as the layout has it; rect/cells: whether it
+  // is in the layout's elements for the view, and among the cells shown.
+  console.log(
+    "       ms   above     top    foot   below  offset   inset  below(layout) rect/cells    view"
+  );
   for (const x of s) {
     console.log(
-      `   ${String(x.ms).padStart(6)} ${fmt(x.above)} ${fmt(x.top)} ${fmt(x.foot)} ${fmt(x.below)} ${fmt(x.offset)} ${fmt(x.inset)}`
+      `   ${String(x.ms).padStart(6)} ${fmt(x.above)} ${fmt(x.top)} ${fmt(x.foot)} ${fmt(x.below)} ${fmt(x.offset)} ${fmt(x.inset)}        ${fmt(x.belowLayout)} ${x.belowSeen.padStart(10)} ${fmt(x.view)}`
     );
   }
   const above = drift(s, "above");
