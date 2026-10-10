@@ -44,6 +44,14 @@
   inherits: true;
   initial-value: 0px;
 }
+/* The neck Caw's phone panel hangs through, from his glass's foot to the
+   row's floor (Shell `.tools`), registered so NeedsCaw reads it in px as
+   the panel's side offset; none on the wide bar. */
+@property --caw-neck {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 0px;
+}
 /* The edge fades of a scroller (.kit-edge-fade: the tab track, the board,
    a view's pane), registered so the scroll-driven animation can
    interpolate them as lengths. */

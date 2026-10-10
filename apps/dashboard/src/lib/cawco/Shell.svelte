@@ -1556,35 +1556,44 @@
       width: var(--glyph);
       height: var(--glyph);
     }
-    /* Caw's glass is a tab tucked into the screen's trailing edge: square
-       on that side, which meets the edge, and round on the other (owner:
-       "it's top right doesn't need to be rounded"), a half circle of its
-       height. It spans the tab row, top to floor: `c-bar-caw-glass-phone`
-       across and `c-tab-row-h` tall, its top where the tabs' tops stand, so
-       the room above Caw is the room above the tabs (owner: "the spacing
-       above the tabs isn't equal to the spacing from caw to the top"), and
-       its foot on the row's floor with theirs, so his panel hangs from the
-       floor and covers no tab. His rim's arcs follow its outline
-       (NeedsCaw). */
+    /* Caw's glass (`c-bar-caw-glass-phone`) is a tab tucked into the
+       screen's trailing edge: square on that side, which meets the edge,
+       and round on the other (owner: "it's top right doesn't need to be
+       rounded"). It tops with the tabs and stands clear of the floor: its
+       top where the tabs' tops stand, the bar's height less a tab row's
+       (owner: "the spacing above the tabs isn't equal to the spacing from
+       caw to the top"), and its foot the neck (`--caw-neck`, what the row
+       is taller than his glass) over the row's floor, the transcript's top
+       edge (owner: "caw is still touching the transcript"). Open, his panel
+       hangs from the floor through that neck (`.join`). His rim's arcs
+       follow its outline (NeedsCaw). */
     .right {
       align-self: stretch;
     }
     .tools {
+      --caw-neck: calc(var(--c-tab-row-h) - var(--c-bar-caw-glass-phone));
       align-self: flex-start;
-      block-size: var(--c-tab-row-h);
+      block-size: var(--c-bar-caw-glass-phone);
       margin-block-start: calc(var(--c-top-bar-h) - var(--c-tab-row-h));
       padding: 0;
-      border-radius: calc(var(--c-tab-row-h) / 2) 0 0
-        calc(var(--c-tab-row-h) / 2);
+      border-radius: calc(var(--c-bar-caw-glass-phone) / 2) 0 0
+        calc(var(--c-bar-caw-glass-phone) / 2);
     }
     /* The side that meets the screen's edge draws no edge of its own. */
     .tools::before {
       border-inline-end-width: 0;
     }
     /* Joined to Caw's panel, the same: its trailing side is the screen's
-       edge, square and with no edge drawn, as the panel's is below it. */
+       edge, square and with no edge drawn, as the panel's is below it. And
+       it reaches on down through the neck to the row's floor, at the
+       glass's width and in its surface, where it flares out into the
+       panel's top edge: the panel hangs from the floor (NeedsCaw's side
+       offset is the neck), so it covers no tab. The neck is the join's, so
+       it is there only while he is joined, and comes and goes with it on
+       the panel's clock. */
     .join {
-      --r: calc(var(--c-tab-row-h) / 2);
+      --r: calc(var(--c-bar-caw-glass-phone) / 2);
+      inset-block-end: calc(-1px - var(--caw-neck));
       clip-path: shape(
         from 0 var(--h),
         arc to var(--f) calc(var(--h) - var(--f)) of var(--f) ccw,
@@ -1613,7 +1622,7 @@
     .tools :global(.bar-item) {
       inline-size: var(--c-bar-caw-glass-phone);
       min-inline-size: var(--c-bar-caw-glass-phone);
-      block-size: var(--c-tab-row-h);
+      block-size: var(--c-bar-caw-glass-phone);
     }
     .top.floating {
       position: absolute;
