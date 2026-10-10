@@ -467,6 +467,10 @@ final class DelegateView: RailRow, RowContent, Disclosing {
     private let jump = UIButton(type: .system)
     private let brief = WrapLabel(wrap: .pretty) // Delegate `p.brief`
     private let status = BeatLine()
+    /// The line under the head with the 4pt above it (Delegate `.now`): it
+    /// comes in as the card folds shut (its report's headline) and goes as it
+    /// opens, on the body's own clock, so the card's foot moves one way.
+    private let statusReveal: Reveal
     private let asks = UIStackView()
     private let inner: InnerWell
     private let report = ReportCard()
@@ -481,6 +485,9 @@ final class DelegateView: RailRow, RowContent, Disclosing {
         inner = InnerWell(env: env)
         let box = UIView()
         reveal = Reveal(box)
+        let line = UIView()
+        line.pin(status, insets: UIEdgeInsets(top: Space.space1, left: 0, bottom: 0, right: 0))
+        statusReveal = Reveal(line)
         super.init(env: env)
         kind.layer.borderWidth = 1
         let spacer = UIView()
@@ -499,7 +506,7 @@ final class DelegateView: RailRow, RowContent, Disclosing {
         ])
         body.addArrangedSubview(head)
         body.addArrangedSubview(hung(brief))
-        body.addArrangedSubview(status)
+        body.addArrangedSubview(statusReveal)
         asks.axis = .vertical
         asks.spacing = Space.spaceRow
         body.addArrangedSubview(asks)
@@ -523,7 +530,9 @@ final class DelegateView: RailRow, RowContent, Disclosing {
     func toggled(open: Bool) -> (() -> Void, () -> Void) {
         chevron.set(open: open, animated: true)
         if let id { env.watchDelegate(id, open) }
-        if let block { configureBody(block, open: open) }
+        if let block, configureBody(block, open: open) != statusReveal.isOpen {
+            _ = statusReveal.toggle(open: !statusReveal.isOpen, over: open ? Motion.durReveal : Motion.durExit)
+        }
         return reveal.toggle(open: open)
     }
 
@@ -663,41 +672,41 @@ final class DelegateView: RailRow, RowContent, Disclosing {
         asks.isHidden = f.asks.isEmpty
         let open = env.isOpen(key)
         chevron.set(open: open, animated: false)
-        configureBody(block, open: open)
+        statusReveal.set(open: configureBody(block, open: open))
         reveal.set(open: open)
         let trigger = (body.arrangedSubviews.first as? UIStackView)?.arrangedSubviews.first
         trigger?.accessibilityLabel = "\(label) \(type)"
         trigger?.accessibilityValue = (open ? "Expanded" : "Collapsed") + ", " + (pill.accessibilityLabel ?? "")
     }
 
-    /// The line under the head, and — open — the delegate's transcript and report.
-    private func configureBody(_ block: Block, open: Bool) {
+    /// The line under the head, and — open — the delegate's transcript and
+    /// report. Returns whether the line under the head is drawn; its box
+    /// (`statusReveal`) is the caller's to set or move.
+    private func configureBody(_ block: Block, open: Bool) -> Bool {
         let f = facts(block)
+        var shown = true
         switch f.phase {
         case .working:
             let tool = id.flatMap { env.hub?.fleet.pulse($0)?.currentTool }
             status.set(tool.map { "\($0.name) \($0.glance)".trimmingCharacters(in: .whitespaces) } ?? "working", beat: true)
-            status.isHidden = false
         case .spawning:
             status.set("starting", beat: true)
-            status.isHidden = false
         case .failed where !f.failure.isEmpty:
             status.set(f.failure, beat: false, ink: Palette.statusFailInk)
-            status.isHidden = false
         default:
             if let report = f.report, !open {
                 status.set(headline(report.body), beat: false, ink: report.failed ? Palette.statusFailInk : Palette.inkStrong)
-                status.isHidden = false
-            } else { status.isHidden = true }
+            } else { shown = false }
         }
         // Each line under the head brings its own 4pt above it (Delegate
-        // `.brief`, `.now`); a line that is not drawn brings none.
+        // `.brief`, `.now`); a line that is not drawn brings none. The status
+        // line's is inside its box, so it comes and goes with the line.
         if let head = body.arrangedSubviews.first, let briefBox = brief.superview {
-            let under = !briefBox.isHidden || !status.isHidden || !asks.isHidden
+            let under = !briefBox.isHidden || (!asks.isHidden && !shown)
             body.setCustomSpacing(under ? Space.space1 : 0, after: head)
-            body.setCustomSpacing(status.isHidden ? 0 : Space.space1, after: briefBox)
+            body.setCustomSpacing(0, after: briefBox)
         }
-        guard open else { return }
+        guard open else { return shown }
         let builder = Builder(agentName: f.row?.harness ?? (block.toolInput["harness"] as? String) ?? "delegate", cache: env.cache)
         if let id, let transcript = env.delegateTranscript(id) {
             let blocks = transcript.blocks.compactMap(Block.init)
@@ -726,6 +735,7 @@ final class DelegateView: RailRow, RowContent, Disclosing {
                                   body: report.body, failed: report.failed)
             self.report.isHidden = false
         } else { self.report.isHidden = true }
+        return shown
     }
 }
 

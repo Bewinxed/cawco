@@ -659,15 +659,11 @@ final class DocRow: UIView {
     @objc private func toggle() {
         let open = !reveal.isOpen
         chevron.set(open: open, animated: true)
-        let (layout, done) = reveal.toggle(open: open)
-        let animator = Motion.easeOut.animator(open ? Motion.durReveal : Motion.durExit) {
-            layout()
-            var view: UIView? = self
-            while let next = view?.superview, !(next is UICollectionView) { view = next }
-            view?.superview?.layoutIfNeeded()
-            (view?.superview as? UICollectionView)?.collectionViewLayout.invalidateLayout()
-            view?.layoutIfNeeded()
-        }
+        // The transcript steps the file's body and its row (Reveal), and holds the reader's place.
+        reveal.driver?.readerToggled()
+        let (fade, done) = reveal.toggle(open: open)
+        guard !UIAccessibility.isReduceMotionEnabled else { fade(); done(); return }
+        let animator = Motion.easeOut.animator(open ? Motion.durReveal : Motion.durExit) { fade() }
         animator.addCompletion { _ in done() }
         animator.startAnimation()
     }

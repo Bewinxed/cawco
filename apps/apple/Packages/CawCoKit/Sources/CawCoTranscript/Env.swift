@@ -196,6 +196,13 @@ final class RowStore {
     /// its height is measured again.
     func forget(_ id: String) { entries[id]?.height = nil }
 
+    /// The row `view` stands in, off the screen, changed where it stands (a
+    /// body moving while its row is out of every cell).
+    func forget(holding view: UIView) {
+        let root = sequence(first: view, next: { $0.superview }).reduce(view) { $1 }
+        for (id, entry) in entries where entry.view === root { entries[id]?.height = nil }
+    }
+
     /// What the row for `id` reads beyond its item changed (a queued message
     /// lifted into the composer, a preview opened): it is set again the next
     /// time a cell stands it.

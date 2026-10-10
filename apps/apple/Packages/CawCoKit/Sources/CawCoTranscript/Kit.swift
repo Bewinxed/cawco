@@ -365,16 +365,36 @@ extension UIView {
     }
 }
 
+/// What moves a Reveal a frame at a time: the transcript, which lays its
+/// row out again at each step and holds the reader's place around it.
+@MainActor
+protocol RevealDriver: AnyObject {
+    /// `reveal` began opening or folding shut: it is stepped from now on.
+    func revealMoved(_ reveal: Reveal)
+    /// The reader opened or shut a body where they stand: the list lets go of the tail.
+    func readerToggled()
+}
+
 /// A body that grows open from nothing and folds shut where it stands
 /// (collapsible-content.svelte `reveal`): open over --dur-reveal, shut over
 /// --dur-exit, both on --ease-out, the content fading with it when `fades`.
-/// Its height is its content's when open, nothing when shut; the transcript
-/// animates its row's size on the same clock.
+/// Its height is its content's when open, nothing when shut.
+///
+/// The height between is stepped a frame at a time by the transcript that
+/// holds it (`RevealDriver`), which lays the row out at each step: the row's
+/// foot, and every row under it, are where the body's edge is in that same
+/// frame. Left to the list's own resizing, the row's size changed on the
+/// list's clock and not the body's, and the rows around it jumped. The
+/// content keeps its own height throughout, clipped by the box; under
+/// Reduce Motion the first step is the last.
 final class Reveal: UIView {
     let content: UIView
-    private var shut: NSLayoutConstraint!
+    /// The box's height while it is shut or between: nothing shut, the step's height moving.
+    private var cap: NSLayoutConstraint!
     private(set) var isOpen = false
     var fades = false
+    /// The motion under way: the height it left from, when, and over how long.
+    private var motion: (from: CGFloat, start: CFTimeInterval, duration: TimeInterval)?
 
     init(_ content: UIView) {
         self.content = content
@@ -383,14 +403,16 @@ final class Reveal: UIView {
         clipsToBounds = true
         content.translatesAutoresizingMaskIntoConstraints = false
         addSubview(content)
+        // Under its words' own resistance (750): a capped box clips its
+        // content rather than squeezing it.
         let bottom = content.bottomAnchor.constraint(equalTo: bottomAnchor)
-        bottom.priority = .defaultHigh
-        shut = heightAnchor.constraint(equalToConstant: 0)
+        bottom.priority = .defaultHigh - 1
+        cap = heightAnchor.constraint(equalToConstant: 0)
         NSLayoutConstraint.activate([
             content.leadingAnchor.constraint(equalTo: leadingAnchor),
             content.trailingAnchor.constraint(equalTo: trailingAnchor),
             content.topAnchor.constraint(equalTo: topAnchor),
-            bottom, shut,
+            bottom, cap,
         ])
         content.isHidden = true
     }
@@ -398,24 +420,83 @@ final class Reveal: UIView {
     @available(*, unavailable)
     required init?(coder _: NSCoder) { fatalError("built in code") }
 
-    /// Sets the state at once (a row configured, drawn already open).
+    /// The height the box stands at now, on screen.
+    var shownHeight: CGFloat { motion != nil || !isOpen ? cap.constant : bounds.height }
+
+    /// Sets the state at once (a row configured, drawn already open). A row
+    /// configured again while its body moves to this same state keeps moving.
     func set(open: Bool) {
+        if motion != nil, open == isOpen { return }
+        motion = nil
         isOpen = open
-        shut.isActive = !open
+        cap.constant = 0
+        cap.isActive = !open
         content.isHidden = !open
         content.alpha = 1
     }
 
-    /// The state the next layout pass draws, and what to animate with it.
-    func toggle(open: Bool) -> (layout: () -> Void, done: () -> Void) {
+    /// Begins opening or folding shut from where the box stands: its height
+    /// does not change here, but at each of the driver's steps (`advance`).
+    /// Returns what to fade with it, on the same curve and clock. `duration`:
+    /// a box that moves with another one keeps that one's clock.
+    func toggle(open: Bool, over duration: TimeInterval? = nil) -> (layout: () -> Void, done: () -> Void) {
+        let from = shownHeight
         isOpen = open
-        if open {
-            content.isHidden = false
-            if fades { content.alpha = 0 }
-            shut.isActive = false
-            return ({ self.content.alpha = 1 }, {})
+        cap.constant = from
+        cap.isActive = true
+        content.isHidden = false
+        if open, fades { content.alpha = 0 }
+        if open { measure() }
+        let still = UIAccessibility.isReduceMotionEnabled || window == nil
+        motion = (from, CACurrentMediaTime(), still ? 0 : duration ?? (open ? Motion.durReveal : Motion.durExit))
+        if let driver {
+            driver.revealMoved(self)
+        } else {
+            // In no list: nothing stands around it to move.
+            _ = advance(.infinity)
         }
-        shut.isActive = true
-        return ({ if self.fades { self.content.alpha = 0 } }, { if !self.isOpen { self.content.isHidden = true; self.content.alpha = 1 } })
+        return (open ? { self.content.alpha = 1 } : { if self.fades { self.content.alpha = 0 } }, {})
+    }
+
+    /// The transcript this box stands in.
+    var driver: RevealDriver? {
+        sequence(first: self as UIView, next: { $0.superview }).dropFirst().lazy.compactMap { $0 as? RevealDriver }.first
+    }
+
+    /// The height the motion left from, while it moves.
+    var travel: CGFloat? { motion?.from }
+
+    /// Steps the height to where the curve is at `now`; false once it has
+    /// arrived (the last step lands the end state).
+    func advance(_ now: CFTimeInterval) -> Bool {
+        guard let motion else { return false }
+        let x = motion.duration > 0 ? (now - motion.start) / motion.duration : 1
+        guard x < 1 else {
+            self.motion = nil
+            cap.constant = 0
+            cap.isActive = !isOpen
+            if !isOpen {
+                content.isHidden = true
+                content.alpha = 1
+            }
+            return false
+        }
+        // Open, the content stands at its own height under the cap: that is where the edge goes.
+        let to = isOpen ? content.bounds.height : 0
+        cap.constant = motion.from + (to - motion.from) * Motion.easeOut.value(at: x)
+        return true
+    }
+
+    /// Lays the content out at the box's width before it opens, so its height
+    /// is known from the first step (two passes, as a cell measures: every
+    /// text learns its width, then the measure).
+    private func measure() {
+        let width = bounds.width
+        guard width > 0 else { return }
+        content.frame = CGRect(x: 0, y: 0, width: width, height: max(content.bounds.height, 1))
+        content.layoutIfNeeded()
+        let size = content.systemLayoutSizeFitting(CGSize(width: width, height: 0), withHorizontalFittingPriority: .required,
+                                                   verticalFittingPriority: .fittingSizeLevel)
+        content.frame.size.height = size.height
     }
 }

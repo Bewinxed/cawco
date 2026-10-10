@@ -134,6 +134,9 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     private final class Layout: UICollectionViewCompositionalLayout {
         /// Where the list is to stand once an update's rows are in; nil leaves it.
         var stand: (() -> CGFloat?)?
+        /// Where the list stands while a body opens or folds shut under the
+        /// reader (`revealMoved`): whatever the list's own resizing proposes.
+        var hold: CGFloat?
 
         /// The offset that stands the list's foot at the foot of its view.
         var foot: CGFloat {
@@ -157,12 +160,12 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         }
 
         private func settle() {
-            guard let view = collectionView, let y = stand?(), abs(view.contentOffset.y - y) > 0.5 else { return }
+            guard let view = collectionView, let y = stand?() ?? hold, abs(view.contentOffset.y - y) > 0.5 else { return }
             view.contentOffset.y = y
         }
 
         override func targetContentOffset(forProposedContentOffset proposed: CGPoint) -> CGPoint {
-            guard let y = stand?() else { return super.targetContentOffset(forProposedContentOffset: proposed) }
+            guard let y = stand?() ?? hold else { return super.targetContentOffset(forProposedContentOffset: proposed) }
             return CGPoint(x: proposed.x, y: y)
         }
     }
@@ -586,6 +589,12 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     /// The glide to a revealed report has settled. Rows it passed were sized
     /// on the way, so the row is centred once more where it now stands.
     public func scrollViewDidEndScrollingAnimation(_ scrollView: UIScrollView) {
+        if settlingFoot {
+            settlingFoot = false
+            gliding = false
+            drainSlack()
+            place(scrollView)
+        }
         guard let want = revealing else { return }
         revealing = nil
         gliding = false
@@ -593,6 +602,9 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         place(scrollView)
         settled(want)
     }
+
+    /// A drag let go in the blank room under the foot is gliding back to it.
+    private var settlingFoot = false
 
     /// Where a revealed row came to rest, for the log.
     private func settled(_ id: String) {
@@ -981,6 +993,8 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             committed = true
         }
         restoreIfReady()
+        stepReveals(now)
+        drainSlack()
         // The tail is not held under the reader's finger, nor while the list
         // coasts: a slow drag moves less in a frame than the distance that lets
         // go of the tail, and pinning it each frame would never let it leave.
@@ -1195,7 +1209,12 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             for id in changed {
                 if let index = dataSource.indexPath(for: id), let item = items[id],
                    let cell = collection.cellForItem(at: index) as? ItemCell {
-                    cell.redraw(item)
+                    // A row whose body is moving is sized by the body's steps, not the list's own animation.
+                    if moving.contains(where: { Self.cell(of: $0) === cell }) {
+                        UIView.performWithoutAnimation { cell.redraw(item) }
+                    } else {
+                        cell.redraw(item)
+                    }
                 } else {
                     unseen.append(id)
                 }
@@ -1246,10 +1265,12 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
                abs(collection.contentOffset.y - (frame.minY + anchor.into)) > 0.5 {
                 collection.contentOffset.y = frame.minY + anchor.into
             }
+            // A body moving under the reader holds the place the update stood the list at.
+            if layout.hold != nil { layout.hold = collection.contentOffset.y }
             if let id = folding, let index = dataSource.indexPath(for: id),
                let cell = collection.cellForItem(at: index) as? HostCell<ThinkingView>, let row = cell.row {
                 folding = nil
-                animate(row, open: false, in: cell)
+                animate(row, open: false)
             }
             if !landed, fed == nil || rowCount == 0, transcript?.loading == false, prepared != nil { landed = true }
             guard follow else { return }
@@ -1338,6 +1359,22 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     /// arrival still waiting to be drawn draws still (arrivals.svelte.ts).
     public func scrollViewWillBeginDragging(_: UIScrollView) {
         arriving = [:]
+        // A body still moving goes on moving; the list is the reader's.
+        layout.hold = nil
+    }
+
+    /// A drag let go past the rows' foot, in the blank room a fold left
+    /// (`slack`), comes to rest at the foot rather than in the blank.
+    public func scrollViewWillEndDragging(_: UIScrollView, withVelocity _: CGPoint, targetContentOffset target: UnsafeMutablePointer<CGPoint>) {
+        guard slack > 0 else { return }
+        target.pointee.y = min(target.pointee.y, realFoot)
+    }
+
+    public func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
+        guard !decelerate, slack > 0, scrollView.contentOffset.y > realFoot + 0.5 else { return }
+        gliding = true
+        settlingFoot = true
+        scrollView.setContentOffset(CGPoint(x: 0, y: realFoot), animated: true)
     }
 
     // MARK: Rows before they are on the screen
@@ -1440,48 +1477,99 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
 
     private func toggle(_ key: String, from view: UIView) {
         guard let row = view as? Disclosing else { return }
-        // The reader is acting where they stand: a restored place is theirs now.
-        pendingPosition = nil
         if open.contains(key) { open.remove(key) } else { open.insert(key) }
-        // A disclosure the reader opens holds its header where they pressed it and
-        // opens downward: the transcript lets go of the tail (Transcript `onrevealstart`).
-        if !row.disclosed { following = false }
-        let cell = sequence(first: view as UIView, next: { $0.superview }).first { $0 is UICollectionViewCell } as? UICollectionViewCell
-        animate(row, open: !row.disclosed, in: cell)
+        readerToggled()
+        animate(row, open: !row.disclosed)
         dirty = true
     }
 
     /// A body grows open (--dur-reveal) or folds shut (--dur-exit) on
-    /// --ease-out, its row's height on the same clock; at once under Reduce Motion.
-    private func animate(_ row: Disclosing, open: Bool, in cell: UICollectionViewCell?) {
+    /// --ease-out: its height and its row's are stepped together a frame at a
+    /// time (Reveal, `stepReveals`); what fades with it fades on the same
+    /// curve and clock. At once under Reduce Motion.
+    private func animate(_ row: Disclosing, open: Bool) {
         #if DEBUG
-        if let cell, let index = collection.indexPath(for: cell), let id = dataSource.itemIdentifier(for: index) {
+        if let cell = Self.cell(of: row), let index = collection.indexPath(for: cell), let id = dataSource.itemIdentifier(for: index) {
             probe.begin(collection, row: id, open: open, ids: dataSource.snapshot().itemIdentifiers) { id in
                 self.dataSource.indexPath(for: id).flatMap { self.collection.cellForItem(at: $0) }
             }
         }
         #endif
         // Main-actor closures from a main-actor view, run on the main actor by the animator.
-        nonisolated(unsafe) let (layout, shown) = row.toggled(open: open)
+        nonisolated(unsafe) let (fade, shown) = row.toggled(open: open)
         // The body's elements joined or left the row: VoiceOver reads the
         // row's elements again (until told, it kept the closed row's).
         let done: @MainActor () -> Void = {
             shown()
             UIAccessibility.post(notification: .layoutChanged, argument: nil)
         }
-        (cell as? ItemCell)?.forget()
-        let change: @MainActor () -> Void = {
-            layout()
-            cell?.contentView.layoutIfNeeded()
-            cell?.invalidateIntrinsicContentSize()
-            self.collection.layoutIfNeeded()
-        }
         guard !UIAccessibility.isReduceMotionEnabled, window != nil else {
-            change(); done(); return
+            fade(); done(); return
         }
-        let animator = Motion.easeOut.animator(open ? Motion.durReveal : Motion.durExit, animations: change)
+        let animator = Motion.easeOut.animator(open ? Motion.durReveal : Motion.durExit) { fade() }
         animator.addCompletion { _ in done() }
         animator.startAnimation()
+    }
+
+    /// The bodies opening or folding shut, stepped each frame until they arrive.
+    private var moving: [Reveal] = []
+
+    /// Blank room held under the list's foot, past its last row. A body
+    /// folding shut near the foot leaves less list below the reader than the
+    /// screen shows: rather than the list coming down to meet its shorter foot
+    /// (every row above the fold moving), the reader's place stays and the
+    /// room past the foot stands blank until they scroll or rows arrive into
+    /// it (`drainSlack`).
+    private var slack: CGFloat = 0 {
+        didSet { if slack != oldValue { collection.contentInset.bottom = Space.space5 + slack } }
+    }
+
+    /// The foot the list's rows reach, without the blank room (`bottomOffset` less `slack`).
+    private var realFoot: CGFloat {
+        let inset = collection.adjustedContentInset
+        return max(-inset.top, collection.contentSize.height - collection.bounds.height + inset.bottom - slack)
+    }
+
+    /// The blank room is let go of as soon as the reader's place no longer
+    /// needs it: they scrolled up, or rows arrived under the foot. It is never
+    /// grown here, so it never moves the list.
+    private func drainSlack() {
+        guard slack > 0, moving.isEmpty else { return }
+        let need = max(0, collection.contentOffset.y - realFoot)
+        if need < slack - 0.5 { slack = need < 0.5 ? 0 : need }
+    }
+
+    /// Steps every moving body to where its curve is at `now` and lays each
+    /// one's row out again at that height, in this same frame and without
+    /// animation, so the row's foot and the rows under it are where the body's
+    /// edge is. The list's own resizing ran later, on its own clock (WWDC22
+    /// "What's new in UIKit": invalidations are "coalesced … into a single
+    /// update performed at the optimal time", "resized with animation" by
+    /// default), and the rows around the body jumped. While the list does not
+    /// follow the tail, it stands where it stood (`layout.hold`).
+    private func stepReveals(_ now: CFTimeInterval) {
+        guard !moving.isEmpty else { return }
+        UIView.performWithoutAnimation {
+            moving = moving.filter { reveal in
+                let still = reveal.advance(now)
+                if let cell = Self.cell(of: reveal) {
+                    cell.forget()
+                    cell.invalidateIntrinsicContentSize()
+                } else {
+                    // Off the screen: measured again when a cell next stands it.
+                    store.forget(holding: reveal)
+                }
+                return still
+            }
+            collection.layoutIfNeeded()
+            if let held = layout.hold, abs(collection.contentOffset.y - held) > 0.5 { collection.contentOffset.y = held }
+        }
+        if moving.isEmpty { layout.hold = nil }
+    }
+
+    /// The list's cell `view` stands in.
+    private static func cell(of view: UIView) -> ItemCell? {
+        sequence(first: view, next: { $0.superview }).dropFirst().lazy.compactMap { $0 as? ItemCell }.first
     }
 
     // MARK: Following and position
@@ -1498,6 +1586,9 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         pendingPosition = nil
         following = true
         farFromLatest = false
+        // At the tail, the foot is the rows' own.
+        slack = 0
+        layout.hold = nil
         scrollToBottom()
     }
 
@@ -1564,15 +1655,18 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         pendingPosition = nil
         gliding = false
         revealing = nil
+        drainSlack()
         place(scrollView)
     }
 
     /// Where the reader stands against the tail: following it, or far enough
     /// from it for "Jump to latest".
     private func place(_ scrollView: UIScrollView) {
-        // From the tail as the reader can reach it: past the inset the composer stands in.
-        let distance = scrollView.contentSize.height + scrollView.adjustedContentInset.bottom - scrollView.contentOffset.y - scrollView.bounds.height
-        following = distance <= Space.space8
+        // From the tail as the reader can reach it: past the inset the composer
+        // stands in, short of any blank room a fold left (`slack`). Standing in
+        // that room is not following: the tail would pull the list down out of it.
+        let distance = scrollView.contentSize.height + scrollView.adjustedContentInset.bottom - slack - scrollView.contentOffset.y - scrollView.bounds.height
+        following = slack == 0 && distance <= Space.space8
         // Hysteresis: up past three quarters of a screen, and it stays until back at the tail.
         farFromLatest = !following && (farFromLatest || distance > 0.75 * scrollView.bounds.height)
     }
@@ -1641,6 +1735,37 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         weak var owner: TranscriptView?
         init(_ owner: TranscriptView) { self.owner = owner }
         @objc func tick(_ link: CADisplayLink) { owner?.frame(link) }
+    }
+}
+
+extension TranscriptView: RevealDriver {
+    func readerToggled() {
+        // The reader is acting where they stand: a restored place is theirs now.
+        pendingPosition = nil
+        // A disclosure the reader opens holds its header where they pressed it
+        // and opens downward (Transcript `onrevealstart`); one they fold shut
+        // holds it too, and the rows above it never move: either way the
+        // transcript lets go of the tail.
+        following = false
+    }
+
+    func revealMoved(_ reveal: Reveal) {
+        if !moving.contains(where: { $0 === reveal }) { moving.append(reveal) }
+        // Following the tail, the foot stays pinned and the rows above make the
+        // room (a reasoning block folding shut is the transcript's own motion).
+        // Otherwise the list stands where it is, with room under its foot for
+        // all the fold can take away, so it never has to come down to meet it.
+        if !following {
+            let at = layout.hold ?? collection.contentOffset.y
+            layout.hold = at
+            if !reveal.isOpen, let from = reveal.travel {
+                let inset = collection.adjustedContentInset
+                let shortest = max(-inset.top, collection.contentSize.height - from - collection.bounds.height + inset.bottom - slack)
+                slack = max(slack, at - shortest)
+            }
+        }
+        // The first step is this frame's (and, under Reduce Motion, the last).
+        stepReveals(CACurrentMediaTime())
     }
 }
 
