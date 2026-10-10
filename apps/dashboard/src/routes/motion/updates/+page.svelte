@@ -314,7 +314,7 @@
   <div class="notices" data-states="notices">
     {#each NOTICES as notice (notice.kind)}
       <div class="kit-pop panel" data-notice={notice.kind}>
-        <UpdateCard {notice} onaction={noop} ondismiss={noop} />
+        <UpdateCard alone={false} {notice} onaction={noop} ondismiss={noop} />
       </div>
     {/each}
   </div>
@@ -322,7 +322,12 @@
   <h1>Updated, with notes written before sections</h1>
   <div class="notices" data-states="notice-plain">
     <div class="kit-pop panel" data-notice="plain">
-      <UpdateCard notice={UPDATED_PLAIN} onaction={noop} ondismiss={noop} />
+      <UpdateCard
+        alone
+        notice={UPDATED_PLAIN}
+        onaction={noop}
+        ondismiss={noop}
+      />
     </div>
   </div>
 
@@ -330,7 +335,12 @@
   <!-- As the panel has it: the row in a `reflow`, a row under it. -->
   <div class="kit-pop panel" data-states="notice-reload" {@attach reflow()}>
     <div data-flip="box">
-      <UpdateCard notice={reloadRow} onaction={rowAction} ondismiss={noop} />
+      <UpdateCard
+        alone={false}
+        notice={reloadRow}
+        onaction={rowAction}
+        ondismiss={noop}
+      />
     </div>
     <div class="under" data-flip="box">
       The next row of the panel follows the row's edge
@@ -338,7 +348,7 @@
   </div>
   <div class="notices" data-states="update-card">
     <div class="kit-pop panel">
-      <UpdateCard notice={UPDATED} onaction={noop} ondismiss={noop} />
+      <UpdateCard alone notice={UPDATED} onaction={noop} ondismiss={noop} />
     </div>
   </div>
 </main>

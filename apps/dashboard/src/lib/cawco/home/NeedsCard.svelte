@@ -16,7 +16,13 @@
    */
   import { questionsOf } from "@cawco/core";
   import { Button } from "#lib/components/ui/button/index.js";
-  import { IconClose, IconDollar, IconTick, IconWorkflow } from "#lib/icons.js";
+  import {
+    IconClose,
+    IconDollar,
+    IconFolder,
+    IconTick,
+    IconWorkflow,
+  } from "#lib/icons.js";
   import { isTyping } from "#lib/utils/typing.js";
   import {
     cawco,
@@ -25,6 +31,7 @@
     submitCommand,
   } from "../client.svelte";
   import { conversationHref } from "../links";
+  import OsMark from "../OsMark.svelte";
   import SessionMark from "../SessionMark.svelte";
   import { capLine } from "../usage";
   import { choices } from "./choices.svelte";
@@ -64,17 +71,13 @@
         return capLine(item.cap);
     }
   });
-  /** Its last line: the kind, then where it is (machine · project). */
-  const meta = $derived.by(() => {
-    switch (item.kind) {
-      case "ask":
-        return `${item.isQuestion ? "Question" : "Permission"} · ${item.place}${item.stale ? " · machine offline" : ""}`;
-      case "run":
-        return `Workflow · ${item.place}`;
-      default:
-        return "Budget";
-    }
-  });
+  /**
+   * A run's and a budget's last line: the kind, then where it is. An ask's
+   * is drawn in the markup: its project, its kind, its machine by its mark.
+   */
+  const meta = $derived(
+    item.kind === "run" ? `Workflow · ${item.place}` : "Budget"
+  );
   /**
    * The row stands but cannot be answered yet: the hub is not live, or its
    * session's machine is offline. It keeps its place, dimmed, and its
@@ -152,29 +155,59 @@
     <span class="wait">{span(clock.now - item.raisedAt)}</span>
   {/if}
   <span class="want">{want}</span>
-  <span class="meta">{meta}</span>
+  {#if item.kind === "ask"}
+    <!-- Where it came from: the project first, in its mark and strong ink;
+         then what it asks for; then the machine, by its OS mark. -->
+    <span class="meta where">
+      {#if item.project}
+        <span class="project">
+          <IconFolder
+            aria-hidden="true"
+            class="mark"
+            style="color: var(--mark-{item.project.hue})"
+          />
+          <span class="project-name">{item.project.name}</span>
+        </span>
+        <span aria-hidden="true" class="dot">·</span>
+      {/if}
+      <span>{item.isQuestion ? "Question" : "Permission"}</span>
+      <span aria-hidden="true" class="dot">·</span>
+      <span class="machine">
+        <OsMark class="mark" os={item.machine.os} />
+        <span class="machine-name">{item.machine.name}</span>
+      </span>
+      {#if item.stale}
+        <span aria-hidden="true" class="dot">·</span>
+        <span>machine offline</span>
+      {/if}
+    </span>
+  {:else}
+    <span class="meta">{meta}</span>
+  {/if}
   {#if item.kind === "ask" && answerable}
     <div class="peers">
       <Button
         aria-label="Deny {item.ask} on {item.title}"
+        class="peer deny"
         disabled={held}
         onclick={() => answer("deny")}
         {onkeydown}
         size="sm"
         variant="secondary"
       >
-        <IconClose class="text-[var(--ink-muted)]" />
+        <IconClose />
         Deny
       </Button>
       <Button
         aria-label="Approve {item.ask} on {item.title}"
+        class="peer approve"
         disabled={held}
         onclick={() => answer("allow")}
         {onkeydown}
         size="sm"
         variant="secondary"
       >
-        <IconTick class="text-[var(--ink-strong)]" />
+        <IconTick />
         Approve
       </Button>
     </div>
@@ -272,14 +305,76 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  /* Equal peers at opposite ends, with nothing between them. */
+  /* The meta line of an ask: the project leads in its mark and strong ink,
+     the machine follows by its OS mark; the machine's name gives way first. */
+  .where {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-inline-size: 0;
+  }
+  .where > * {
+    flex: none;
+  }
+  .project,
+  .machine {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-inline-size: 0;
+  }
+  .machine {
+    flex: 0 1 auto;
+  }
+  .where :global(.mark) {
+    inline-size: 14px;
+    block-size: 14px;
+    flex: none;
+  }
+  .project-name {
+    font: var(--type-label);
+    font-size: var(--text-meta);
+    color: var(--ink-strong);
+  }
+  .machine-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .dot {
+    color: var(--ink-muted);
+  }
+  /* Deny then Approve together at the trailing edge, the same size, each
+     tinted by what it does: Deny in the fail status's fill and ink, Approve
+     in the live status's. Equal in salience (The Peer Rule): the same fill
+     strength, and neither changes under the pointer, as the grant variant
+     holds still, so neither is made the more inviting. On a finger the gap
+     opens (The 44 Touch Rule), the separation the rule's opposite ends
+     gave a rushed thumb. */
   .peers {
     position: relative;
     grid-row: 4;
     grid-column: 2 / 4;
     display: flex;
-    justify-content: space-between;
-    gap: var(--space-8);
+    justify-content: flex-end;
+    gap: var(--space-2);
     margin-top: var(--space-2);
+  }
+  @media (pointer: coarse) {
+    .peers {
+      gap: var(--space-4);
+    }
+  }
+  .peers > :global(.peer) {
+    border-color: transparent;
+  }
+  .peers > :global(.deny),
+  .peers > :global(.deny:hover) {
+    background: var(--status-fail-bg);
+    color: var(--status-fail-ink);
+  }
+  .peers > :global(.approve),
+  .peers > :global(.approve:hover) {
+    background: var(--status-live-bg);
+    color: var(--status-live-ink);
   }
 </style>

@@ -59,6 +59,7 @@
   import { type CawFile, type CawHead, stageCaw } from "./home/Caw.svelte";
   import CawFace from "./home/CawFace.svelte";
   import CawPanel from "./home/CawPanel.svelte";
+  import { liveFeed } from "./home/caw-feed.svelte";
   import { cawNotices } from "./home/caw-notices.svelte";
   import {
     CAW_HEAD_CENTRE,
@@ -735,6 +736,7 @@
     bind:ref={content}
   >
     <CawPanel
+      feed={liveFeed}
       onchoose={() => {
         open = false;
       }}
@@ -756,32 +758,7 @@
     padding: 0;
     -webkit-tap-highlight-color: transparent;
   }
-  /* The panel hangs from his glass (`kit-hang`): its edge is the recipe's
-     `::after`, drawn inside its box over the kit's 6px pad, so the pad
-     takes the border's pixel back and the rows stand where they did. Its
-     top shows its own surface across the cut, so its shadow has no night
-     ring (`shadow-overlay-hung`): the ring is the edge's own pixel, hidden
-     under the drawn edge, and across the cut (and down a phone's screen
-     edge, where no edge is drawn) it was a seam. */
-  :global(.kit-pop.caw-pop) {
-    width: min(380px, calc(100vw - 24px));
-    padding: 7px;
-    box-shadow: var(--shadow-overlay-hung);
-  }
-  /* On a phone his glass is a tab tucked into the screen's trailing edge,
-     and the panel hanging from it is too: its trailing side is the screen's
-     edge, square and with no edge drawn there, as his glass's, and it keeps
-     the phone's 12px margin on its leading side. */
-  @media (max-width: 899px) {
-    :global(.kit-pop.caw-pop) {
-      width: min(380px, calc(100vw - 12px - env(safe-area-inset-right, 0px)));
-      border-end-end-radius: 0;
-    }
-    :global(.kit-pop.caw-pop)::after {
-      border-inline-end-width: 0;
-    }
-  }
-  /* The lower half of his rim gives way to the panel while it hangs (the
+  /* The panel's own frame (`.caw-pop`) is CawPanel's. The lower half of his rim gives way to the panel while it hangs (the
      rim's script, "While his panel hangs"): it fades out as the panel grows
      and back as it folds, on the panel's own clock. */
   .rim.foot {

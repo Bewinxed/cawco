@@ -1,138 +1,222 @@
 <script lang="ts">
   /**
-   * Logins moved into CawCo from a machine's own Claude Code, pi or OpenCode
-   * store, nobody has acknowledged yet: one row of Caw's panel (NeedsCaw,
-   * NoticeRow), one entry each: the account's tile in the row's leading
-   * column, then its name, where it came from, and, while a machine that
-   * could use it still lacks it, a link to the account to sign it in there,
-   * each on its own line so none runs into another; the name gives way
-   * first. The ✕ on the first tile acknowledges every entry shown.
+   * Logins moved into CawCo nobody has acknowledged yet, as one group of
+   * Caw's panel (B1; macOS Notification Center's app group): a head with the
+   * first account's tile, how many moved and its ✕, which acknowledges them
+   * all; one line saying what happened and what it means; then each login
+   * as an entry in the text column with its own ✕ (MovedLogin), the head's
+   * count falling with it.
+   *
+   * The logins still to sign in on some machine stand open: they are what
+   * there is to do. The ones signed in everywhere fold behind one toggle
+   * (the update's notes' fold, transitions-dev Accordion expand), so the
+   * group never outgrows the panel with nothing to do in it: five open
+   * entries and two asks were 696px against the panel's 560.
    */
   import AccountTile from "#lib/cawco/accounts/AccountTile.svelte";
-  import { type MovedLogin, nameOf } from "#lib/cawco/accounts/model.svelte.js";
-  import { IconChevronRight } from "#lib/icons.js";
+  import type { MovedLogin as Moved } from "#lib/cawco/accounts/model.svelte.js";
+  import { reflowsFrom, reread } from "#lib/cawco/motion/rows.svelte.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { IconChevronDown } from "#lib/icons.js";
+  import { plural } from "../updates/model";
+  import MovedLogin from "./MovedLogin.svelte";
   import NoticeRow from "./NoticeRow.svelte";
 
-  let { moved, ondismiss }: { moved: MovedLogin[]; ondismiss: () => void } =
-    $props();
+  let {
+    moved,
+    ondismiss,
+    onchoose,
+  }: {
+    moved: Moved[];
+    /** These logins were acknowledged. */
+    ondismiss: (ids: string[]) => void;
+    onchoose: () => void;
+  } = $props();
 
   const first = $derived(moved[0]);
+  const heading = $derived(`${plural(moved.length, "login")} moved into CawCo`);
+  /** Still to sign in on some machine: always shown. */
+  const todo = $derived(moved.filter((one) => one.missing > 0));
+  /** Signed in everywhere: folded behind the toggle. */
+  const done = $derived(moved.filter((one) => one.missing === 0));
+  let open = $state(false);
+
+  /** The fold moved the rows after it: every `reflow` around reads them again. */
+  function settled(event: TransitionEvent): void {
+    if (
+      event.target === event.currentTarget &&
+      event.propertyName === "grid-template-rows"
+    ) {
+      reread(reflowsFrom((event.currentTarget as HTMLElement).parentElement));
+    }
+  }
 </script>
 
-<NoticeRow
-  dismissLabel="Dismiss moved logins"
-  label="Logins moved into CawCo"
-  {ondismiss}
->
-  {#snippet lead()}
-    {#if first}
-      <AccountTile
-        hue={first.account.hue}
-        provider={first.account.provider}
-        size={28}
-      />
+{#snippet entry(
+  one: Moved
+)}
+  <li data-flip>
+    <MovedLogin {onchoose} ondismiss={() => ondismiss([one.id])} {one} />
+  </li>
+{/snippet}
+
+<div class="group">
+  <NoticeRow
+    dismissLabel="Dismiss all {plural(moved.length, "moved login")}"
+    label={heading}
+    ondismiss={() => ondismiss(moved.map((one) => one.id))}
+  >
+    {#snippet lead()}
+      {#if first}
+        <AccountTile
+          hue={first.account.hue}
+          provider={first.account.provider}
+          size={28}
+        />
+      {/if}
+    {/snippet}
+    <h3 class="head">{heading}</h3>
+    <p class="explainer">
+      Found signed in on your machines and kept as fleet accounts; any session
+      can use them now.
+    </p>
+  </NoticeRow>
+  <div class="entries">
+    {#if todo.length > 0}
+      <ul class="list">
+        {#each todo as one (one.id)}
+          {@render entry(one)}
+        {/each}
+      </ul>
     {/if}
-  {/snippet}
-  <ul class="moves">
-    {#each moved as one, at (one.id)}
-      <li class="move" data-flip class:later={at > 0}>
-        {#if at > 0}
-          <span class="tile">
-            <AccountTile
-              hue={one.account.hue}
-              provider={one.account.provider}
-              size={28}
-            />
-          </span>
-        {/if}
-        <span class="name">{nameOf(one.account)}</span>
-        <span class="from">{one.from}</span>
-        {#if one.missing}
-          <a class="there" href="/config/accounts/{one.account.id}"
-            >Sign in there<IconChevronRight aria-hidden="true" /></a
-          >
-        {/if}
-      </li>
-    {/each}
-  </ul>
-</NoticeRow>
+    {#if done.length > 0}
+      <div class="more" data-flip>
+        <Button
+          aria-controls="moved-done"
+          aria-expanded={open}
+          class="toggle"
+          onclick={() => {
+            open = !open;
+          }}
+          size="xs"
+          variant="ghost"
+        >
+          {open ? "Hide" : "Show"}
+          {done.length}
+          signed in everywhere
+          <IconChevronDown
+            aria-hidden="true"
+            class="chev"
+            data-icon="inline-end"
+          />
+        </Button>
+      </div>
+      <div
+        class="fold"
+        data-open={open || undefined}
+        id="moved-done"
+        inert={!open}
+        ontransitionend={settled}
+      >
+        <div class="fold-inner">
+          <ul class="list">
+            {#each done as one (one.id)}
+              {@render entry(one)}
+            {/each}
+          </ul>
+        </div>
+      </div>
+    {/if}
+  </div>
+</div>
 
 <style>
-  .moves {
+  /* The heading of the group: label type in strong ink, its explainer in
+     muted meta; the entries under it read a step lower (MovedLogin). */
+  .head {
+    margin: 0;
+    padding-inline-end: var(--x-room);
+    font: var(--type-label);
+    color: var(--ink-strong);
+  }
+  .explainer {
+    margin: 0;
+    font: var(--type-meta);
+    color: var(--ink-muted);
+  }
+  /* No indent: each entry is a row of the panel, its tile in the one lead
+     column, its words in the one text column, its ✕ at the one trailing
+     edge. */
+  .entries {
     display: flex;
     flex-direction: column;
-    gap: var(--space-3);
-    min-width: 0;
+    margin-block-start: calc(-1 * var(--space-2));
+    padding-block-end: var(--space-2);
+  }
+  .list {
+    display: flex;
+    flex-direction: column;
     margin: 0;
     padding: 0;
     list-style: none;
   }
-  /* The first entry's tile is the row's lead; each later entry's tile stands
-     in that same leading column, its lines in the text column. */
-  .move {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    row-gap: 2px;
-    align-items: center;
-    min-width: 0;
-  }
-  .tile {
+  /* The toggle in the text column, its end at the trailing edge. */
+  .more {
     display: flex;
-    grid-row: 1 / span 3;
-    align-self: start;
+    justify-content: flex-end;
+    padding-inline: calc(var(--space-3) + 28px + var(--space-3)) var(--space-3);
   }
-  .name,
-  .from {
-    min-width: 0;
+  /* The fold (UpdateCard's notes' recipe): the grid row is the track, the
+     inner box clips, fades and cross-blurs; shutting is quicker than
+     opening; the chevron flips with it. */
+  .fold {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows var(--dur-exit) var(--ease-out);
   }
-  .name {
+  .fold[data-open] {
+    grid-template-rows: 1fr;
+    transition-duration: var(--dur-panel);
+  }
+  .fold-inner {
+    min-block-size: 0;
     overflow: hidden;
-    font: var(--type-label);
-    color: var(--ink-strong);
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    opacity: 0;
+    filter: blur(var(--fold-blur));
+    transition:
+      opacity var(--dur-exit) var(--ease-out),
+      filter var(--dur-exit) var(--ease-out);
   }
-  /* Where it came from wraps rather than losing the machine. */
-  .from {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    overflow-wrap: anywhere;
+  .fold[data-open] > .fold-inner {
+    opacity: 1;
+    filter: blur(0);
+    transition-duration: var(--dur-panel);
   }
-  .there {
-    justify-self: start;
-    display: inline-flex;
-    align-items: center;
-    gap: 2px;
-    margin-block-start: 2px;
-    border-radius: var(--radius-xs);
-    font: var(--type-label);
-    color: var(--link-ink);
-    text-decoration: none;
-    white-space: nowrap;
-    transition: opacity var(--dur-control) var(--ease-out);
+  .more :global(.chev) {
+    transition: transform var(--dur-panel) var(--ease-out);
   }
-  @media (hover: hover) and (pointer: fine) {
-    .there:hover {
-      color: var(--link-hover);
+  .more :global(.chev path) {
+    vector-effect: non-scaling-stroke;
+  }
+  .more :global(.toggle[aria-expanded="true"] .chev) {
+    transform: scaleY(-1);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .fold,
+    .more :global(.chev) {
+      transition: none;
+    }
+    .fold-inner {
+      filter: none;
+      transition: opacity var(--dur-fade) var(--ease-out);
     }
   }
-  .there:active {
-    opacity: 0.72;
-  }
-  .there :global(svg) {
-    width: 12px;
-    height: 12px;
-  }
-  /* A later entry: its tile in the row's leading column, its lines in the
-     text column. */
-  .move.later {
-    grid-template-columns: 28px minmax(0, 1fr);
-    column-gap: var(--space-3);
-    margin-inline-start: calc(-28px - var(--space-3));
-  }
-  .later .name,
-  .later .from,
-  .later .there {
-    grid-column: 2;
+  /* A finger's 44px area (`touch-hit`) reaches 10px past the toggle: the
+     row opens its gap on touch so the area stays inside the group and the
+     panel never scrolls for it (The 44 Touch Rule). */
+  @media (pointer: coarse) {
+    .more {
+      padding-block-end: var(--space-1);
+    }
   }
 </style>

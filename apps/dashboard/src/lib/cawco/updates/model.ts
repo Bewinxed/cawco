@@ -53,6 +53,11 @@ export interface ReleaseNotes {
    * so the rows it shows stand where they stand in the whole.
    */
   summary: string;
+  /**
+   * The notes in one line, by section: "4 new · 3 improved · 2 fixed";
+   * notes written before sections, "5 changes".
+   */
+  tally: string;
 }
 
 /** Bullets the summary holds at most. */
@@ -104,11 +109,23 @@ export function releaseNotes(notes: string | undefined): ReleaseNotes | null {
     return null;
   }
   const lead = { ...first, items: first.items.slice(0, SUMMARY_ITEMS) };
+  const count = sections.reduce(
+    (sum, section) => sum + section.items.length,
+    0
+  );
   return {
     full: markdownOf(sections),
     summary: markdownOf([lead]),
-    count: sections.reduce((sum, section) => sum + section.items.length, 0),
+    count,
     shown: lead.items.length,
+    tally: sections.every((section) => section.heading)
+      ? sections
+          .map(
+            (section) =>
+              `${section.items.length} ${section.heading?.toLowerCase()}`
+          )
+          .join(" · ")
+      : plural(count, "change"),
   };
 }
 

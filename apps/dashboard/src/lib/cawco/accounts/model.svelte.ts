@@ -232,9 +232,20 @@ export interface MovedLogin {
   /** "from OpenCode on gauntlet". */
   from: string;
   id: string;
-  /** Some online machine that could use it isn't signed in to it yet. */
-  missing: boolean;
+  /** Online machines that could use it and aren't signed in to it yet. */
+  missing: number;
+  /** What it is called in the notice: a key leads with its provider ("Anthropic key ••••4DEY"). */
+  name: string;
 }
+
+/**
+ * An account's name where nothing around it says what it is: a key with no
+ * nickname goes by four characters, so its provider and "key" lead.
+ */
+export const namedForNotice = (account: Account): string =>
+  account.kind === "api_key" && !account.label
+    ? `${account.provider === CLAUDE_PROVIDER ? "Anthropic" : providerName(account.provider)} key ${nameOf(account)}`
+    : nameOf(account);
 
 /** Every move whose notice nobody has acknowledged, newest first. */
 export function movedLogins(seen: ReadonlySet<string>): MovedLogin[] {
@@ -261,12 +272,13 @@ export function movedLogins(seen: ReadonlySet<string>): MovedLogin[] {
           at: signin.movedAt,
           from: `from ${STORE_WORDS[signin.movedFrom ?? "claude"]} on ${machineLabel(from.hostname)}`,
           id,
-          missing: machinesFor(account.provider).some(
+          missing: machinesFor(account.provider).filter(
             (machine) =>
               machineOnline(machine) &&
               signinState(view.signins, account.id, machine.machineId) !==
                 "signed-in"
-          ),
+          ).length,
+          name: namedForNotice(account),
         },
       ];
     })

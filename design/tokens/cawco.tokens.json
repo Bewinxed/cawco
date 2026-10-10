@@ -2960,6 +2960,11 @@
       "$type": "dimension",
       "$value": "8px"
     },
+    "fold-blur": {
+      "$type": "dimension",
+      "$value": "2px",
+      "$description": "How soft a fold's content is while it folds shut or opens (Caw's panel: the update's notes, the logins signed in everywhere). transitions-dev Accordion expand: the inner panel cross-blurs 2px as its grid row goes 0fr to 1fr."
+    },
     "transition-control": {
       "$type": "transition",
       "$value": "background-color {motion.dur-control} {motion.ease-out}, border-color {motion.dur-control} {motion.ease-out}, color {motion.dur-control} {motion.ease-out}"

@@ -879,6 +879,8 @@
     /* The first stretch of its nesting line over which a child's icon fades in as it leaves its parent's (motion/branch). */
     --ride-fade: 14px;
     --pop-rise: 8px;
+    /* How soft a fold's content is while it folds shut or opens (Caw's panel: the update's notes, the logins signed in everywhere). transitions-dev Accordion expand: the inner panel cross-blurs 2px as its grid row goes 0fr to 1fr. */
+    --fold-blur: 2px;
     --transition-control:
       background-color var(--dur-control) var(--ease-out),
       border-color var(--dur-control) var(--ease-out),

@@ -755,4 +755,6 @@ public enum Motion {
     /// The first stretch of its nesting line over which a child's icon fades in as it leaves its parent's (motion/branch).
     public static let rideFade: Double = 14
     public static let popRise: Double = 8
+    /// How soft a fold's content is while it folds shut or opens (Caw's panel: the update's notes, the logins signed in everywhere). transitions-dev Accordion expand: the inner panel cross-blurs 2px as its grid row goes 0fr to 1fr.
+    public static let foldBlur: Double = 2
 }

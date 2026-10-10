@@ -18,11 +18,9 @@ class CawNotices {
   readonly rebalanced = $derived(
     notices.known ? rebalancesUnseen(notices.seen) : []
   );
-  /** The rows under Notices: one per kind with anything in it. */
+  /** The notices standing: the update, and each moved login and rebalance. */
   readonly count = $derived(
-    (this.updated ? 1 : 0) +
-      (this.moved.length > 0 ? 1 : 0) +
-      (this.rebalanced.length > 0 ? 1 : 0)
+    (this.updated ? 1 : 0) + this.moved.length + this.rebalanced.length
   );
   /** Every notice id standing, for his beat on a new one. */
   readonly keys = $derived([

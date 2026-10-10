@@ -22,6 +22,8 @@ export { default as IconArrowRight } from "~icons/solar/arrow-right-linear";
 /** A link that opens in another tab. */
 export { default as IconArrowUpRight } from "~icons/solar/arrow-right-up-linear";
 export { default as IconArrowUp } from "~icons/solar/arrow-up-linear";
+/** What happened that nobody asked for: Caw's Notices section (CawPanel). */
+export { default as IconNotices } from "~icons/solar/bell-bold-duotone";
 export {
   default as IconBolt,
   default as IconSkill,

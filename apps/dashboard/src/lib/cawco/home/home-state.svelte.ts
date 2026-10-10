@@ -38,7 +38,9 @@ import {
   resolveSessionTitle,
 } from "../links";
 import { signInWarning } from "../machine";
+import { type MarkHue, markHue } from "../mark";
 import { heldOrder } from "../motion/held-order.svelte";
+import { folderOf } from "../projects";
 import { rail } from "../rail.svelte";
 import { threadTabId } from "../thread-tabs";
 import { hasParent, rooted, tree } from "../tree";
@@ -200,9 +202,13 @@ export interface AskItem {
   isQuestion: boolean;
   key: string;
   kind: "ask";
+  /** Its machine: the name the fleet gives it and the daemon's `platform-arch` fingerprint (OsMark). */
+  machine: { name: string; os: string };
   machineId: string;
   /** machine · project */
   place: string;
+  /** The project it runs in, named as the rail names it, with its mark's hue; null outside any. */
+  project: ProjectMarking | null;
   /** When the hub parked it, ms epoch. */
   raisedAt: number | undefined;
   request: BlockedRequest["request"];
@@ -313,6 +319,29 @@ export function projectOfRow(row: InstanceRow): string {
     projectsFor(cawco.projects, top)[0]?.name ??
     projectOf(top.machineId, top.cwd)
   );
+}
+
+/** A project as a row names it: its name and the hue its mark wears in the rail. */
+export interface ProjectMarking {
+  hue: MarkHue;
+  name: string;
+}
+
+/**
+ * The project a place is in, with its mark's hue: a fleet project's is the
+ * rail's (`markHue(folderOf(project))`), a bare folder's its own path's.
+ */
+export function projectAt(
+  machineId: string,
+  cwd: string | null | undefined
+): ProjectMarking | null {
+  const folder = cwd ?? "";
+  const [project] = projectsFor(cawco.projects, { machineId, cwd: folder });
+  if (project) {
+    return { name: project.name, hue: markHue(folderOf(project)) };
+  }
+  const name = projectOf(machineId, cwd);
+  return name ? { name, hue: markHue(folder) } : null;
 }
 
 /** "machine · project". */
@@ -681,6 +710,8 @@ class Home {
   readonly needs = $derived.by<NeedsItem[]>(() => {
     const asks: NeedsItem[] = cawco.blocked.map((item) => {
       const row = cawco.instanceIndex.byId.get(item.instanceId);
+      // The project is the top of its chain's, as the rail places it (`projectOfRow`).
+      const top = row ? topsIn(cawco.instanceIndex.byId)(row) : undefined;
       const questions = questionsOf(item.request.toolName, item.request.input);
       // A project's Caw asks in a thread: the card is the thread's.
       const thread =
@@ -696,6 +727,16 @@ class Home {
         machineId: item.machineId,
         title: thread?.title ?? (row ? instanceTitle(row) : item.hostname),
         place: row ? placeOfRow(row) : placeOf(item.machineId, item.cwd),
+        project: projectAt(
+          top?.machineId ?? item.machineId,
+          top ? top.cwd : item.cwd
+        ),
+        machine: {
+          name: machineName(item.machineId),
+          os:
+            cawco.machines.find((one) => one.machineId === item.machineId)
+              ?.os ?? "",
+        },
         isQuestion: Boolean(questions),
         ask: item.request.presentation.summary,
         raisedAt: item.request.raisedAt,
