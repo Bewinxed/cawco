@@ -22,12 +22,16 @@
  *              queued: its item keeps running, its turn is handed back once
  *              and the send read once; then killed twice in quick
  *              succession, and its item fails;
- *   stale-credential — a wake held at the agent's door (the agent frozen):
- *              the dashboard starting it again meanwhile is refused and mints
- *              nothing, so the held wake starts on its own credential and the
- *              send is read once; with its credential revoked instead, the
- *              start fails once with its reason, no start follows on its own,
- *              the send stays owed, and a person's next message runs it;
+ *   stale-credential — a wake held at the agent's door (the agent frozen),
+ *              which asks the hub for its credential as it starts: a second
+ *              launch from the dashboard meanwhile is refused and mints
+ *              nothing; with the session's credential revoked meanwhile, the
+ *              wake runs once on a fresh one and its send is read once; with
+ *              its account signed out meanwhile, the hub refuses it as it
+ *              starts, it fails once with the hub's sentence, no start
+ *              follows on its own, its send is failed in that sentence (the
+ *              hub's rule for a session whose account cannot run there), and
+ *              signed in again a person's next message runs;
  *   held-restart — the agent killed and started again while a wake is held
  *              at its door: the session runs after the restart, once;
  *   stuck-opencode — the agent restarts beside an OpenCode server generation
@@ -51,6 +55,7 @@ import { join } from "node:path";
 import { SessiondClient } from "../packages/agent/src/sessiond-client";
 import { processStart } from "../packages/core/src/process-identity";
 import {
+  ACCOUNT,
   HARNESSES,
   type Harness,
   MACHINE,
@@ -560,64 +565,126 @@ const secondLaunchWhileHeld = async () => {
   };
 };
 
+/** The session's credential as the hub keeps it: installed and pending, by hash. */
+const identityOf = (id: string) =>
+  fleet.query<{ credential_hash: string | null; pending_hash: string | null }>(
+    "SELECT credential_hash, pending_hash FROM session_identities WHERE instance_id = ?",
+    id
+  )[0];
+
 /**
- * A wake held at the agent's door while its credential is revoked: its start
- * fails once with the reason, nothing starts it again on its own for a
- * minute, its send stays owed, and a person's next message runs both.
+ * A wake held at the agent's door while the session's credential is revoked
+ * (a hash the hub would take replaced by one nobody holds): its start asks
+ * the hub for a credential as it starts, runs on that fresh one, once, and
+ * its send is read once.
  */
 const revokedLaunch = async () => {
   const id = await asleepSession("revoked");
   const queued = mark("claude", "revoked", "queued");
+  const startsBefore = await agentSaid(id, INSTALLED);
+  const revoked = createHash("sha256")
+    .update(crypto.randomUUID())
+    .digest("hex");
   fleet.freeze("agent", true);
   let uuid: string;
   try {
     uuid = await wakeWhileFrozen(id, queued);
     fleet.write(
-      "UPDATE session_identities SET pending_hash = ? WHERE instance_id = ?",
-      createHash("sha256").update(crypto.randomUUID()).digest("hex"),
+      "UPDATE session_identities SET credential_hash = NULL, pending_hash = ? WHERE instance_id = ?",
+      revoked,
       id
     );
   } finally {
     fleet.freeze("agent", false);
   }
+  const read = await readOnce(uuid, queued);
+  const identity = identityOf(id);
+  const outcome = {
+    read,
+    startsSinceHeld: (await agentSaid(id, INSTALLED)) - startsBefore,
+    refused: await agentSaid(id, REFUSED),
+    ranOnFresh:
+      identity?.credential_hash !== null &&
+      identity?.credential_hash !== revoked &&
+      identity?.pending_hash === null,
+    row: fleet.instance(id),
+  };
+  return {
+    ok:
+      read.turns === 1 &&
+      read.send?.state === "read" &&
+      outcome.startsSinceHeld === 1 &&
+      outcome.refused === 0 &&
+      outcome.ranOnFresh &&
+      outcome.row?.status === "running",
+    outcome,
+  };
+};
+
+/**
+ * A wake held at the agent's door while the account it runs on is signed
+ * out on its machine: the hub refuses it as it starts, so it fails once with
+ * the hub's sentence, and nothing starts it again on its own for a minute.
+ * Its send is owed again, and then failed with that same sentence by the
+ * hub's rule for a session whose account cannot run there (server.ts
+ * `inputRefusal`): said, never left queued. Signed in again, a person's next
+ * message runs it.
+ */
+const refusedLaunch = async () => {
+  const id = await asleepSession("refused");
+  const queued = mark("claude", "refused", "queued");
+  fleet.freeze("agent", true);
+  let uuid: string;
+  try {
+    uuid = await wakeWhileFrozen(id, queued);
+    fleet.write(
+      "UPDATE account_signins SET state = 'signed-out' WHERE account_id = ?",
+      ACCOUNT
+    );
+  } finally {
+    fleet.freeze("agent", false);
+  }
   const failed = await until(
-    "the held start failed",
+    "the held start refused",
     () => fleet.instance(id),
     (row) => row?.status === "error",
     120_000
-  );
+  ).catch(() => fleet.instance(id));
   const failedAt = Date.now();
   // A minute in which nothing may start it again on its own.
   await Bun.sleep(60_000);
   const quiet = {
     row: fleet.instance(id),
-    starts: await agentSaid(id, INSTALLED),
     failures: await agentSaid(id, START_FAILED),
     send: fleet.sendRow(uuid),
     quietForMs: Date.now() - failedAt,
   };
-  const next = mark("claude", "revoked", "next");
+  fleet.write(
+    "UPDATE account_signins SET state = 'signed-in' WHERE account_id = ?",
+    ACCOUNT
+  );
+  const next = mark("claude", "refused", "next");
   const nextUuid = await fleet.send(id, `${next}: say ok.`);
   const nextRead = await readOnce(nextUuid, next);
-  const queuedRead = await readOnce(uuid, queued);
   const outcome = {
     failedWith: failed?.last_error,
     quiet,
     nextRead,
-    queuedRead,
+    queuedTurns: turnsOf(queued),
   };
   return {
     ok:
-      (failed?.last_error ?? "").includes(REFUSED) &&
+      failed?.status === "error" &&
+      Boolean(failed.last_error) &&
+      !(failed.last_error ?? "").includes(REFUSED) &&
       quiet.row?.spawned_at === failed?.spawned_at &&
       quiet.row?.status === "error" &&
       quiet.failures === 1 &&
-      quiet.send?.state === "pending" &&
-      quiet.send.owed !== null &&
+      quiet.send?.state === "failed" &&
+      quiet.send.reason === failed?.last_error &&
+      outcome.queuedTurns === 0 &&
       nextRead.turns === 1 &&
-      nextRead.send?.state === "read" &&
-      queuedRead.turns === 1 &&
-      queuedRead.send?.state === "read",
+      nextRead.send?.state === "read",
     outcome,
   };
 };
@@ -625,11 +692,16 @@ const revokedLaunch = async () => {
 const staleCredentialCase = async (label: string) => {
   const second = await secondLaunchWhileHeld();
   const revoked = await revokedLaunch();
+  const refused = await refusedLaunch();
   report(
     label,
-    second.ok && revoked.ok,
-    { secondLaunch: second.outcome, revoked: revoked.outcome },
-    "a second launch while one was held minted nothing and the held one ran once on its own credential; a revoked one failed once, stayed failed, and its send was owed and then read once"
+    second.ok && revoked.ok && refused.ok,
+    {
+      secondLaunch: second.outcome,
+      revoked: revoked.outcome,
+      refused: refused.outcome,
+    },
+    "a second launch while one was held minted nothing; a held wake whose credential was revoked ran once on a fresh one; one the hub refused as it started failed once with the hub's sentence, its send said failed in that sentence, and the next message ran once signed in again"
   );
 };
 

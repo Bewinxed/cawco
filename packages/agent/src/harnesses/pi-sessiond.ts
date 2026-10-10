@@ -349,11 +349,10 @@ export async function spawnPi(
     throw new Error("pi host did not start");
   }
   const session = new PiRemoteSession(client, ctx, proc.pid, 0);
-  const { sessionCredential: _credential, ...hostSpec } = spec;
   const form = ctx.boundary ? gateForm("pi") : undefined;
   await session.write({
     type: "start",
-    spec: { ...hostSpec, cwd: ctx.cwd },
+    spec: { ...spec, cwd: ctx.cwd },
     ...(ctx.boundary ? { boundary: ctx.boundary, gateForm: form } : {}),
   });
   await session.request({ type: "snapshot" });

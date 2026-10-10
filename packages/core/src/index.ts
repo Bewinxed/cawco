@@ -100,7 +100,31 @@ export type Verb =
   | "control"
   | "frames"
   | "fs"
-  | "usage";
+  | "usage"
+  | "launch";
+
+/**
+ * `launch`, agent → hub: a launch the hub sent this machine is starting now,
+ * and asks for what it runs on ({@link LaunchGrant}), by the process
+ * generation its spawn named. Asked as the agent starts its process, however
+ * long the spawn was held (custody, an update, a queue), so what it carries
+ * is the hub's as of that moment.
+ */
+export interface LaunchAsk {
+  processGeneration: string;
+}
+
+/**
+ * `launch`, hub → agent, under the ask's `requestId`: the launch's session
+ * credential, minted now, and the account it runs on as its row says now;
+ * or why it may not run, a sentence for the person, which its start fails
+ * with once.
+ */
+export type LaunchGrant =
+  | (Pick<SpawnPayload, "accountDir" | "homeLoginMove"> & {
+      sessionCredential: string;
+    })
+  | { refusal: string };
 
 /**
  * Every message on every hop. `payload` is whatever the verb carries — a neutral
@@ -142,11 +166,11 @@ export interface SpawnPayload {
    * server, whose `XDG_DATA_HOME` (and so OpenCode's own store, holding the
    * account's credential alone) is `opencode-accounts/<id>` beside the
    * session credentials, hidden from every workspace boundary.
-   * Set by the hub on every launch of a session on an account — the first and
-   * every revive, restore and relaunch — and never by a client. A Claude
-   * launch without one (or a {@link homeLoginMove}) is refused on the
-   * machine; a pi or OpenCode launch without one runs from the machine's own
-   * stores.
+   * A launch learns it as it starts, from the hub's {@link LaunchGrant}, and
+   * runs on that alone; a reattach is sent it, as the account its process
+   * already runs on. Never set by a client. A Claude launch without one (or
+   * a {@link homeLoginMove}) is refused on the machine; a pi or OpenCode
+   * launch without one runs from the machine's own stores.
    */
   accountDir?: { accountId: string };
   /**
@@ -195,10 +219,11 @@ export interface SpawnPayload {
    * The machine's own Claude Code login is moving into this account
    * (`POST /api/accounts/move-login`) and has not moved yet, so this Claude
    * session runs on that login: Claude Code with no `CLAUDE_CONFIG_DIR`, in
-   * the machine's own store, where the credential still is. Set by the hub
-   * alone, on a Claude launch with no {@link accountDir}, and only while
-   * that move is pending. A machine that has moved the login by the time the
-   * launch starts runs the session in the account's dir instead.
+   * the machine's own store, where the credential still is. Granted by the
+   * hub alone, as a Claude launch with no {@link accountDir} starts
+   * ({@link LaunchGrant}), and only while that move is pending. A machine
+   * that has moved the login by the time the launch starts runs the session
+   * in the account's dir instead.
    */
   homeLoginMove?: { accountId: string };
   /** Hub ingest cursor for a recovery sent after the registration handover. */
@@ -271,8 +296,6 @@ export interface SpawnPayload {
    */
   scratch?: { worktree?: boolean; baseCwd?: string };
   scratchWorktree?: ScratchWorktree;
-  /** Hub-minted session credential: delivery only, never transcript or instance metadata. */
-  sessionCredential?: string;
   /**
    * Skill names to load natively before the first prompt. Each harness loads
    * them via its own mechanism — opencode sends `/skill` commands, claude pushes

@@ -34,6 +34,8 @@ import type {
   HookDraft,
   IngestMark,
   InstanceRow,
+  LaunchAsk,
+  LaunchGrant,
   MachineHookScript,
   MachineMemorySet,
   ModelInfo,
@@ -2552,12 +2554,11 @@ export const createServer = (
     binaryUpdateStates.get(machineId)?.phase === "installing";
 
   /**
-   * Sends a start as it was asked (`envelope`), its launch minted now
-   * ({@link bounded}: its credential, its account, its workspace); or, while
-   * its machine is installing an update, keeps it on its row as asked, and
-   * mints it when it goes ({@link flushOwedStarts}). A credential minted when
-   * a start was kept would be the one that start carries hours later, and any
-   * launch of the session meanwhile replaces it.
+   * Sends a start as it was asked (`envelope`), bound now ({@link bounded}:
+   * its workspace, its generation, in flight from here); or, while its
+   * machine is installing an update, keeps it on its row as asked, and binds
+   * it when it goes ({@link flushOwedStarts}). Either way its credential and
+   * account are the hub's as of its start ({@link grantLaunch}).
    */
   const sendSpawn = (
     agent: NonNullable<ReturnType<typeof registry.agent>>,
@@ -2581,10 +2582,12 @@ export const createServer = (
    * machine registers and when its update state changes, and does nothing while
    * it is still installing. A start the person has since stopped is dropped.
    *
-   * Each is minted as it goes ({@link bounded}), on the account its row runs
-   * on now. One that cannot be (its account was signed out there while the
-   * machine updated, or its launch is refused) fails once with the reason:
-   * the row and its work item say so, and what it was sent stays owed.
+   * Each is bound as it goes ({@link bounded}), on the account its row runs
+   * on now, and its machine asks for its credential as it starts it
+   * ({@link grantLaunch}). One that may not go (its account was signed out
+   * there while the machine updated, or its launch is refused) fails once
+   * with the reason: the row and its work item say so, and what it was sent
+   * stays owed.
    */
   const flushOwedStarts = (machineId: string): void => {
     const agent = registry.agent(machineId);
@@ -2606,7 +2609,7 @@ export const createServer = (
         continue;
       }
       const asked = JSON.parse(owed.envelope) as Envelope<SpawnPayload>;
-      const launch = mintOwed(machineId, owed.id, asked.payload);
+      const launch = boundOwed(machineId, owed.id, asked.payload);
       if (!launch) {
         continue;
       }
@@ -2617,10 +2620,10 @@ export const createServer = (
   };
 
   /**
-   * A kept start minted as it goes ({@link flushOwedStarts}), or, when it
-   * cannot be, failed once with the reason ({@link processFailed}).
+   * A kept start bound as it goes ({@link flushOwedStarts}), or, when it may
+   * not go, failed once with the reason ({@link processFailed}).
    */
-  const mintOwed = (
+  const boundOwed = (
     machineId: string,
     instanceId: string,
     asked: SpawnPayload
@@ -2633,7 +2636,7 @@ export const createServer = (
       if (refused) {
         throw new Error(refused);
       }
-      // Minted now, and in flight from here ({@link mintLaunch}).
+      // In flight from here ({@link launchGoes}).
       return bounded(asked);
     } catch (problem) {
       const reason =
@@ -4814,22 +4817,95 @@ export const createServer = (
     }
   };
   /**
-   * The credential a launch of `stored` carries, minted now, and the launch
-   * in flight from here ({@link launches}): each path that builds a launch
-   * has asked {@link inFlightRefusal} first.
+   * A launch of `stored` on its way, in flight from here ({@link launches}):
+   * each path that builds a launch has asked {@link inFlightRefusal} first.
+   * It carries no credential: its machine asks for one as it starts it
+   * ({@link grantLaunch}).
    */
-  const mintLaunch = (
+  const launchGoes = (
     payload: SpawnPayload,
     stored: ReturnType<typeof db.getInstancesByIds>[number]
-  ): string => {
-    const credential = identities.mint(payload.instanceId);
+  ): void => {
     launches.set(payload.instanceId, {
       machineId: stored.machineId,
       generation: processGeneration(stored),
       at: Date.now(),
       replaces: payload.relaunch === true,
     });
-    return credential;
+  };
+  /**
+   * MINTED AT DISPATCH. A machine starting a launch asks for what it runs
+   * on: the session's credential, minted now, and its account as its row
+   * says now. However long the launch was held on its way (custody on the
+   * machine, an update, its queue), nothing it runs on is older than this.
+   * A credential minted when the launch was sent was replaced by every
+   * launch minted after it, and a wake held 2.7 hours ran on one the hub no
+   * longer took (2026-10-10).
+   *
+   * Only the launch the row is on now may ask, from the machine it runs on;
+   * a stopped, discarded or replaced one is refused in a sentence its start
+   * fails with. A hub that restarted while the launch was on its way has it
+   * on record (the row's generation) and takes it as in flight again.
+   */
+  const grantLaunch = (
+    machineId: string,
+    instanceId: string | undefined,
+    asked: LaunchAsk | undefined
+  ): LaunchGrant => {
+    const read = askingLaunch(machineId, instanceId, asked);
+    if ("refusal" in read) {
+      return read;
+    }
+    const stored = takeOwedMove(read);
+    const where = launchAccount(machineId, stored, sessionName(stored));
+    if ("refusal" in where) {
+      return { refusal: where.refusal };
+    }
+    let account: Pick<SpawnPayload, "accountDir" | "homeLoginMove"> = {};
+    if (where.homeLoginMove) {
+      account = { homeLoginMove: where.homeLoginMove };
+    } else if (where.accountId) {
+      account = { accountDir: { accountId: where.accountId } };
+    }
+    return { sessionCredential: identities.mint(read.id), ...account };
+  };
+  /**
+   * The row of the launch asking ({@link grantLaunch}), when it is the one
+   * the row is on now, from the machine it runs on; why it may not ask,
+   * otherwise. One the hub has no record of in flight (it restarted since the
+   * launch went) is in flight again from here.
+   */
+  const askingLaunch = (
+    machineId: string,
+    instanceId: string | undefined,
+    asked: LaunchAsk | undefined
+  ): ReturnType<typeof db.getInstancesByIds>[number] | { refusal: string } => {
+    const [read] = instanceId ? db.getInstancesByIds([instanceId]) : [];
+    const owned = instanceId
+      ? db.ownedInstance(instanceId, machineId)
+      : undefined;
+    if (!(read && owned) || owned.endIntent) {
+      return {
+        refusal:
+          "This session is no longer this machine's to start: it was stopped, discarded or moved.",
+      };
+    }
+    const launch = launches.get(read.id);
+    const current =
+      asked?.processGeneration === processGeneration(read) &&
+      (!launch ||
+        (launch.machineId === machineId &&
+          launch.generation === asked.processGeneration));
+    if (!current) {
+      return {
+        refusal:
+          "This start of the session is no longer the one the hub has on its way: it was settled or started again since.",
+      };
+    }
+    if (!launch) {
+      launchGoes({ instanceId: read.id, cwd: read.cwd }, read);
+    }
+    return read;
   };
   /** The sessions whose launch to `machineId` is on its way: a process the machine is about to have. */
   const launchingOn = (machineId: string): string[] =>
@@ -4902,7 +4978,6 @@ export const createServer = (
     knownRow?: InstanceRow
   ): SpawnPayload => {
     const {
-      sessionCredential: _callerCredential,
       scratchWorktree: _callerWorktree,
       account: _pick,
       accountDir: _callerDir,
@@ -4920,16 +4995,17 @@ export const createServer = (
     const row = knownRow ?? stored;
     const workspace = row ? workItems.workspaceOf(row) : undefined;
     const harness = payload.harness ?? row?.harness ?? "claude";
-    // A credential is minted for a process about to be launched, and for no
-    // other: minting replaces the hash the hub accepts, so a mint for a
-    // reattach (which launches nothing) cut off the process already holding
-    // the old one. A reattached process proves its own credential.
-    const sessionCredential = payload.reattachOnly
-      ? undefined
-      : mintLaunch(payload, stored);
+    // A launch carries no credential and no account: its machine asks for
+    // both as it starts it ({@link grantLaunch}). It is refused here when it
+    // may run nowhere, before it goes. A reattach launches nothing: it is
+    // sent the account its process runs on, and that process proves its own
+    // credential.
+    const where = accountDirOf(stored, payload.reattachOnly);
+    if (!payload.reattachOnly) {
+      launchGoes(payload, stored);
+    }
     noteEffortAsked(payload);
     noteFork(payload, stored);
-    const launchesIn = accountDirOf(stored, payload.reattachOnly);
     // A process launched now runs where this launch says, whatever the one
     // before it ran from.
     if (!payload.reattachOnly) {
@@ -4945,8 +5021,7 @@ export const createServer = (
       processGeneration: processGeneration(stored),
       ...(stored.keepAliveTurn ? { keepAliveTurn: stored.keepAliveTurn } : {}),
       ...(workspace ? { workspace } : {}),
-      ...(sessionCredential ? { sessionCredential } : {}),
-      ...launchesIn,
+      ...(payload.reattachOnly ? where : {}),
     };
   };
 
@@ -19709,6 +19784,27 @@ export const createServer = (
                 db.putOpenCodeGoLimits(message.machineId, openCodeGo);
               }
               publishUsage(message.machineId);
+              break;
+            }
+            // A launch starting on its machine: what it runs on, minted now.
+            case "launch": {
+              const grant = grantLaunch(
+                message.machineId,
+                message.instanceId,
+                message.payload as LaunchAsk | undefined
+              );
+              if ("refusal" in grant) {
+                console.warn(
+                  `[hub] launch of ${message.instanceId} refused at its start: ${grant.refusal}`
+                );
+              }
+              sendFrame(ws, {
+                verb: "launch",
+                machineId: message.machineId,
+                instanceId: message.instanceId,
+                requestId: message.requestId,
+                payload: grant,
+              } satisfies Envelope<LaunchGrant>);
               break;
             }
             case "frames": {

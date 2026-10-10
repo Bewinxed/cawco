@@ -26,6 +26,7 @@ import type {
   GitChanges,
   HarnessKind,
   IngestMark,
+  LaunchGrant,
   NeutralMessage,
   NeutralResultMessage,
   NeutralSessionInfo,
@@ -247,6 +248,29 @@ const accountReading = (message: NeutralMessage): boolean =>
 const warn = (message: string): void => {
   Effect.runFork(Effect.logWarning(message));
 };
+
+/**
+ * How long one part of taking a session into this agent's hands may take
+ * before what waits on it stops waiting: one harness's custody reattach
+ * (daemon `takeCustody`), a spawn waiting on its session's earlier start or
+ * attach ({@link SessionSupervisor.#priorUnsettled}), and the hub's answer to
+ * a launch's ask for its credential. Ours: nearly four times the 23 s
+ * obelisk's Claude reattach of 138 rows took (2026-10-01), and each session
+ * is let go as soon as its own part is decided, so only something that has
+ * stopped answering costs this much.
+ */
+export const CUSTODY_BOUND_MS = 90_000;
+
+/** Whether `pending` settles within `ms`; it runs on either way. */
+const settlesWithin = (pending: Promise<unknown>, ms: number) =>
+  new Promise<boolean>((resolve) => {
+    const timer = setTimeout(() => resolve(false), ms);
+    const settled = () => {
+      clearTimeout(timer);
+      resolve(true);
+    };
+    pending.then(settled, settled);
+  });
 
 /** Read-only custody probes can be abandoned; an adoption keeps its claim until it settles. */
 const custodyProbe = async <T>(
@@ -804,6 +828,15 @@ export class SessionSupervisor {
   emit: (envelope: Envelope) => void = () => {
     // replaced once the daemon has a hub connection to emit onto
   };
+  /**
+   * Asks the hub what a launch starting now runs on ({@link LaunchGrant}),
+   * through whichever connection is up; the daemon's to fill in. Settles,
+   * granted or refused, within the custody bound.
+   */
+  launchGrant: (payload: SpawnPayload) => Promise<LaunchGrant> = () =>
+    Promise.resolve({
+      refusal: "This machine's agent has no hub to ask for the launch.",
+    });
   /** Re-probes this machine's harnesses and tools and reports them on a beat, so a changed auth state reaches the fleet. */
   reannounce: () => void = () => {
     // replaced once the daemon has a hub connection to reannounce onto
@@ -1791,21 +1824,46 @@ export class SessionSupervisor {
   }
 
   /**
+   * What a launch runs on, asked of the hub as its process is about to start
+   * ({@link launchGrant}): its credential, minted now, and its account. A
+   * launch held on its way (custody, an update, its queue) so never runs on
+   * a credential the hub has since replaced. A refusal is the start's
+   * failure, in the hub's sentence, and the throw says it once.
+   */
+  async #granted(
+    payload: SpawnPayload
+  ): Promise<Exclude<LaunchGrant, { refusal: string }>> {
+    const grant = await this.launchGrant(payload);
+    if ("refusal" in grant) {
+      throw new Error(grant.refusal);
+    }
+    // Known before the process can print it: nothing it sends carries it.
+    rememberCredential(payload.instanceId, grant.sessionCredential);
+    return grant;
+  }
+
+  /**
    * THE CREDENTIAL GATE, for every harness. A session is published only once
    * the hub has acknowledged its own credential, the one its CawCo tools
    * send: a process this agent launched installs the credential the hub
-   * minted for this spawn (`launched`), and one it attached to proves the one
-   * it already holds. Nothing has been sent to the session yet, so a session
-   * that cannot is stopped before its first turn, and the throw is its
-   * spawn's failure with the reason.
+   * granted as it started ({@link #granted}), and one it attached to proves
+   * the one it already holds. Nothing has been sent to the session yet, so a
+   * session that cannot is stopped before its first turn, and the throw is
+   * its spawn's failure with the reason.
    */
   async #admit(
     instanceId: string,
     session: HarnessSession,
-    launched: { credential: string | undefined } | undefined
+    launched: { credential: string } | undefined
   ): Promise<void> {
     try {
-      if (!launched) {
+      if (launched) {
+        // Remembered for redaction as it was granted ({@link #granted}).
+        await session.control(INSTALL_SESSION_CREDENTIAL, [
+          launched.credential,
+          "initial",
+        ]);
+      } else {
         // A harness that can read the credential its held process carries
         // says it, so this agent redacts it too (a pi host's was recorded
         // when this agent installed it).
@@ -1815,15 +1873,6 @@ export class SessionSupervisor {
         if (held?.credential) {
           rememberCredential(instanceId, held.credential);
         }
-      } else if (launched.credential) {
-        // Known before the session can print it: nothing it sends carries it.
-        rememberCredential(instanceId, launched.credential);
-        await session.control(INSTALL_SESSION_CREDENTIAL, [
-          launched.credential,
-          "initial",
-        ]);
-      } else {
-        throw new Error("The hub sent this spawn no session credential.");
       }
     } catch (problem) {
       const message =
@@ -1874,11 +1923,44 @@ export class SessionSupervisor {
     return false;
   }
 
+  /**
+   * A spawn whose session's earlier start or attach has not settled within
+   * {@link CUSTODY_BOUND_MS}: it stops waiting, says so, and does not run.
+   * Running it would put a second process, or a second `Query` on the child
+   * being attached, beside one that may yet finish (the claim exists to keep
+   * that from happening); the earlier one keeps its claim and publishes the
+   * session if it ever finishes. A launch fails once with the reason, so the
+   * hub files it and owes its sends; a reattach probe says nothing, as one
+   * that found nothing does, and the hub attaches again from its own reading.
+   */
+  #priorUnsettled(payload: SpawnPayload): void {
+    const { instanceId, requestId: ack } = payload;
+    const message = `This session's earlier start or attach on this machine has not finished after ${CUSTODY_BOUND_MS / 1000} s, so this start was not run beside it.`;
+    warn(
+      `spawn ${instanceId}: stopped waiting on its earlier start or attach: ${message}`
+    );
+    if (ack) {
+      this.sink({
+        kind: "control_result",
+        instanceId,
+        requestId: ack,
+        ok: false,
+        error: message,
+      });
+    }
+    if (!payload.reattachOnly) {
+      this.#fail(instanceId, new Error(message), payload.processGeneration);
+    }
+  }
+
   async #spawn(payload: SpawnPayload): Promise<void> {
     const id = payload.instanceId;
     const prior = this.#adopting.get(id);
     if (prior) {
-      await prior;
+      if (!(await settlesWithin(prior, CUSTODY_BOUND_MS))) {
+        this.#priorUnsettled(payload);
+        return;
+      }
       if (this.#reuseRecovery(payload)) {
         return;
       }
@@ -2026,22 +2108,35 @@ export class SessionSupervisor {
       if (payload.ingested) {
         this.#ingested.set(instanceId, payload.ingested);
       }
+      // A launch runs on what the hub grants it now, as its process starts,
+      // and on nothing it was sent ({@link #granted}). A reattach launches
+      // nothing: its process holds its credential, and runs where it runs.
+      const grant = payload.reattachOnly
+        ? undefined
+        : await this.#granted(payload);
+      const spec: SpawnPayload = grant
+        ? {
+            ...payload,
+            accountDir: grant.accountDir,
+            homeLoginMove: grant.homeLoginMove,
+          }
+        : payload;
       const holder: { session: HarnessSession | null } = { session: null };
       const ctx = this.#context(
         instanceId,
         workdir,
         adapter,
         holder,
-        payload.processGeneration,
+        spec.processGeneration,
         boundary,
-        payload.sessionCredential,
-        !!payload.reattachOnly
+        grant?.sessionCredential,
+        !!spec.reattachOnly
       );
 
-      if (payload.resume) {
+      if (spec.resume) {
         this.#resumable.set(instanceId, {
           adapter,
-          sessionKey: payload.resume.sessionKey,
+          sessionKey: spec.resume.sessionKey,
           cwd: workdir,
         });
       } else {
@@ -2049,25 +2144,23 @@ export class SessionSupervisor {
       }
       this.#failures.delete(instanceId);
       this.#unsentFailures.delete(instanceId);
-      const session = payload.reattachOnly
-        ? await adapter.reattach?.(payload, ctx)
-        : await adapter.spawn(payload, ctx);
+      const session = spec.reattachOnly
+        ? await adapter.reattach?.(spec, ctx)
+        : await adapter.spawn(spec, ctx);
       if (!session) {
         this.#recoveryUnavailable(
-          payload,
+          spec,
           "The harness found no live session to reattach."
         );
         return;
       }
       holder.session = session;
-      await this.#applyStoredPermissionMode(session, payload.permissionMode);
+      await this.#applyStoredPermissionMode(session, spec.permissionMode);
       // A reattach attaches to a process that already holds its credential.
       await this.#admit(
         instanceId,
         session,
-        payload.reattachOnly
-          ? undefined
-          : { credential: payload.sessionCredential }
+        grant ? { credential: grant.sessionCredential } : undefined
       );
       // Refused its input while it was starting: it is not a session to
       // hand work to, and the refusal has said so.

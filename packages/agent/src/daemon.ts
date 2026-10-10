@@ -11,6 +11,8 @@ import type {
   HarnessReport,
   HeartbeatAckPayload,
   HeartbeatPayload,
+  LaunchAsk,
+  LaunchGrant,
   LentAccess,
   ProviderInfo,
   RegisterAckPayload,
@@ -131,6 +133,7 @@ import { outbound, redactConsole } from "./redaction";
 import { fenced, setRestartSource } from "./restart";
 import { TranscriptSearchService } from "./search";
 import {
+  CUSTODY_BOUND_MS,
   type CustodyDecided,
   resumableSessions,
   SessionSupervisor,
@@ -158,13 +161,85 @@ const CLAUDE_LOGIN_CHECK_INTERVAL_MS = 60_000;
 const ACCOUNT_REFRESH_INTERVAL = Duration.seconds(60);
 
 /**
- * How long one harness's part of a custody takeover may take before the
- * sessions it has not decided are settled without it (daemon `takeCustody`).
- * Ours: nearly four times the 23 s obelisk's Claude reattach of 138 rows took
- * (2026-10-01), and each session is let go as soon as its own row is decided,
- * so only a reattach that stops answering costs this much.
+ * The launches this agent has asked its hub what to run on ({@link
+ * LaunchGrant}), until each is answered. They outlive a connection: one asked
+ * while the hub is away, or whose answer went with a dropped connection, is
+ * asked again on the next connection once it has registered. One not
+ * answered within {@link CUSTODY_BOUND_MS} of its first ask is refused, in a
+ * sentence its start fails with.
  */
-const CUSTODY_UNIT_MS = 90_000;
+class LaunchAsks {
+  readonly #machineId: string;
+  readonly #pending = new Map<
+    string,
+    { envelope: Envelope<LaunchAsk>; settle: (grant: LaunchGrant) => void }
+  >();
+  #send: ((envelope: Envelope) => void) | undefined;
+
+  constructor(machine: string) {
+    this.#machineId = machine;
+  }
+
+  ask(payload: SpawnPayload): Promise<LaunchGrant> {
+    const { instanceId, processGeneration } = payload;
+    if (!processGeneration) {
+      return Promise.resolve({
+        refusal: "The hub sent this launch no process generation.",
+      });
+    }
+    const requestId = crypto.randomUUID();
+    const envelope: Envelope<LaunchAsk> = {
+      verb: "launch",
+      machineId: this.#machineId,
+      instanceId,
+      requestId,
+      payload: { processGeneration },
+    };
+    return new Promise<LaunchGrant>((resolve) => {
+      const settle = (grant: LaunchGrant) => {
+        clearTimeout(timer);
+        this.#pending.delete(requestId);
+        resolve(grant);
+      };
+      const timer = setTimeout(
+        () =>
+          settle({
+            refusal: `The hub did not answer for this launch's credential within ${CUSTODY_BOUND_MS / 1000} s.`,
+          }),
+        CUSTODY_BOUND_MS
+      );
+      this.#pending.set(requestId, { envelope, settle });
+      this.#send?.(envelope);
+    });
+  }
+
+  /** A connection registered: every ask not yet answered goes on it, and every one after. */
+  connected(carry: (envelope: Envelope) => void): void {
+    this.#send = carry;
+    for (const { envelope } of this.#pending.values()) {
+      carry(envelope);
+    }
+  }
+
+  /** That connection ended: what is asked from here waits for the next. */
+  disconnected(carry: (envelope: Envelope) => void): void {
+    if (this.#send === carry) {
+      this.#send = undefined;
+    }
+  }
+
+  /** The hub's answer to an ask, settled; whether `envelope` was one. */
+  answer(envelope: Envelope): boolean {
+    if (envelope.verb !== "launch") {
+      return false;
+    }
+    const pending = envelope.requestId
+      ? this.#pending.get(envelope.requestId)
+      : undefined;
+    pending?.settle(envelope.payload as LaunchGrant);
+    return true;
+  }
+}
 
 /** The words of an error a log line says, its name when it carries no message. */
 const errorWords = (error: unknown): string =>
@@ -889,6 +964,8 @@ const attach = (
   identity: MachineIdentity,
   url: string,
   sessions: () => ReturnType<typeof readSessions>,
+  /** What launches ask the hub as they start; this connection carries them once registered. */
+  launchAsks: LaunchAsks,
   /**
    * Called once the socket is open and the register has gone out — the moment
    * this connection counts as up. {@link reconnecting} reads it to tell a
@@ -992,9 +1069,16 @@ const attach = (
       }
     };
     registrationDeadline = setTimeout(registrationExpired, 120_000);
+    /** This connection's way to ask the hub what a launch runs on, once it has registered. */
+    const askHub = (envelope: Envelope): void => {
+      if (socket.readyState === WebSocket.OPEN) {
+        send(socket, envelope);
+      }
+    };
     socket.addEventListener(
       "close",
       () => {
+        launchAsks.disconnected(askHub);
         supervisor.resetStopSequence();
         clearTimeout(registrationDeadline);
         // A new epoch first, so the aborted attempt's failure is for an epoch
@@ -1407,7 +1491,7 @@ const attach = (
      * THE CUSTODY TRANSACTION, ONE HARNESS AT A TIME. What sessiond hands
      * back is taken by one unit per harness, Claude's held children in one
      * reattach and pi's in another, each built here, fresh, and bounded by
-     * {@link CUSTODY_UNIT_MS}; each session is let go ({@link release}) the
+     * {@link CUSTODY_BOUND_MS}; each session is let go ({@link release}) the
      * moment its own custody is known. A unit that fails or runs out of time
      * settles only its own sessions: a held child stays for the hub to attach
      * again (`session-lifecycle.ts`), and a session with no child starts.
@@ -1447,7 +1531,7 @@ const attach = (
       const bounded = (): AbortSignal =>
         AbortSignal.any([
           takeover.signal,
-          AbortSignal.timeout(CUSTODY_UNIT_MS),
+          AbortSignal.timeout(CUSTODY_BOUND_MS),
         ]);
       /** A held spawn whose session has no child to take back starts one, ahead of what waited for it; a reattach launches nothing. */
       const startUnheld = (envelope: Envelope): void => {
@@ -1463,7 +1547,7 @@ const attach = (
         ids: string[]
       ): void => {
         const why = signal.aborted
-          ? `did not settle within ${CUSTODY_UNIT_MS / 1000} s`
+          ? `did not settle within ${CUSTODY_BOUND_MS / 1000} s`
           : `failed: ${errorWords(problem)}`;
         Effect.runFork(
           Effect.logWarning(
@@ -1677,6 +1761,9 @@ const attach = (
           identity.machineId,
           (envelope.payload as RegisterAckPayload).machineCredential
         );
+        // Registered: launches ask on this connection from here, the held
+        // spawns below among them, and what went unanswered before goes now.
+        launchAsks.connected(askHub);
         const spawns = heldSpawns.splice(0);
         takeCustody(envelope.payload, spawns);
         sweepAccounts(envelope.payload as RegisterAckPayload);
@@ -1704,8 +1791,23 @@ const attach = (
       return false;
     };
 
+    /** An envelope for a session whose custody is not decided waits for it; whether this one does. */
+    const waitsForCustody = (envelope: Envelope): boolean => {
+      const waiting = envelope.instanceId
+        ? undecided.get(envelope.instanceId)
+        : undefined;
+      if (!waiting) {
+        return false;
+      }
+      // A resume behind the ACK must join adoption too: the candidate read
+      // yields before #adopting claims rows, so dispatching it here can
+      // replace the very sessiond child this connection is taking over.
+      waiting.push(envelope);
+      return true;
+    };
+
     const onEnvelope = (envelope: Envelope): void => {
-      if (refusedByHub(envelope)) {
+      if (launchAsks.answer(envelope) || refusedByHub(envelope)) {
         return;
       }
       receiveStop(envelope);
@@ -1728,17 +1830,9 @@ const attach = (
         );
         return;
       }
-      const waiting = envelope.instanceId
-        ? undecided.get(envelope.instanceId)
-        : undefined;
-      if (waiting) {
-        // A resume behind the ACK must join adoption too: the candidate read
-        // yields before #adopting claims rows, so dispatching it here can
-        // replace the very sessiond child this connection is taking over.
-        waiting.push(envelope);
-        return;
+      if (!waitsForCustody(envelope)) {
+        supervisor.dispatch(envelope);
       }
-      supervisor.dispatch(envelope);
     };
     // Every frame is read in order through the socket's line, a part's worth
     // per turn of the loop; a message too long for one frame arrives as parts.
@@ -2139,6 +2233,10 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
       `cawco agent ${identity.machineId} connecting to ${url}`
     );
     const sessions = sessionsReader();
+    // A launch asks for its credential and account as it starts; the asks
+    // outlive any one connection, as the supervisor does.
+    const launchAsks = new LaunchAsks(identity.machineId);
+    supervisor.launchGrant = (payload) => launchAsks.ask(payload);
     // The connection — and only the connection — is what the loop re-enters.
     // The supervisor above it keeps its sessions and the scanner keeps its
     // dedup set across every reconnect; an interrupt still unwinds through this
@@ -2146,7 +2244,15 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
     yield* reconnecting(
       (markLive) =>
         Effect.scoped(
-          attach(scanner, supervisor, identity, hubUrl, sessions, markLive)
+          attach(
+            scanner,
+            supervisor,
+            identity,
+            hubUrl,
+            sessions,
+            launchAsks,
+            markLive
+          )
         ),
       rediscover
         ? {

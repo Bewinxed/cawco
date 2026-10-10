@@ -12,7 +12,14 @@
  */
 import { Database } from "bun:sqlite";
 import { existsSync } from "node:fs";
-import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readdir,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { parseProcId } from "../packages/agent/src/proc-id";
 import { SessiondClient } from "../packages/agent/src/sessiond-client";
@@ -154,8 +161,13 @@ const chatEvents = (words: string[]): string[] => {
   ];
 };
 
+/** A unix socket's longest path, in bytes, its NUL apart (`sun_path` is 108). */
+const SOCKET_PATH_MAX = 107;
+/** What srt's longest socket adds to the runtime dir: `/cawco-srt/<12 hex>/claude-socks-<16 hex>.sock`. */
+const SRT_SOCKET_TAIL = 58;
+
 export const MACHINE = "scratch-fleet";
-const ACCOUNT = "acct-scratch-fleet";
+export const ACCOUNT = "acct-scratch-fleet";
 export const MODEL: Record<Harness, string> = {
   claude: "claude-haiku-4-5",
   opencode: "mockoc/mock-oc",
@@ -198,8 +210,10 @@ export async function scratchFleet(options: {
   const root = resolve(import.meta.dir, "..");
   // On real disk, not /tmp: a delegate's workspace boundary mounts paths from
   // its home, and a /tmp private to whatever runs this is not one it sees.
+  const scratch =
+    process.env.XDG_CACHE_HOME ?? join(process.env.HOME ?? "/tmp", ".cache");
   const sandbox = join(
-    process.env.XDG_CACHE_HOME ?? join(process.env.HOME ?? "/tmp", ".cache"),
+    scratch,
     `${options.name}-${crypto.randomUUID().slice(0, 8)}`
   );
   const home = join(sandbox, "home");
@@ -208,6 +222,20 @@ export async function scratchFleet(options: {
   const sessiondSocket = join(sandbox, "sessiond.sock");
   await mkdir(join(home, ".config", "cawco"), { recursive: true });
   await mkdir(join(sandbox, "hub"), { recursive: true });
+  // The agent's XDG_RUNTIME_DIR, where a delegate's workspace boundary puts
+  // srt's temp dir and its proxy sockets (boundary.ts `srtTmpOf`). The
+  // longest is `<runtime>/cawco-srt/<12 hex>/claude-socks-<16 hex>.sock`, the
+  // runtime dir and 58 bytes, and a socket path holds 107 (108 with its NUL).
+  // So it sits beside the sandbox, not in it: `sf-XXXXXX` in the same scratch
+  // dir is 31 bytes under ~/.cache, as short as the runtime dir the boundary
+  // handover rig ran real srt boundaries under. Mode 700, as a runtime dir is.
+  const runtime = await mkdtemp(join(scratch, "sf-"));
+  await chmod(runtime, 0o700);
+  if (runtime.length + SRT_SOCKET_TAIL > SOCKET_PATH_MAX) {
+    console.warn(
+      `… ${runtime} is too long for a workspace boundary's srt sockets (${runtime.length + SRT_SOCKET_TAIL} > ${SOCKET_PATH_MAX} bytes): a delegate's boundary will not start here`
+    );
+  }
 
   const freePort = async (): Promise<number> => {
     const lease = Bun.serve({
@@ -373,6 +401,7 @@ export async function scratchFleet(options: {
     XDG_DATA_HOME: join(home, ".local", "share"),
     XDG_CACHE_HOME: join(home, ".cache"),
     XDG_STATE_HOME: join(home, ".local", "state"),
+    XDG_RUNTIME_DIR: runtime,
     CAWCO_DB_PATH: dbPath,
     CAWCO_HUB_PORT: String(hubPort),
     CAWCO_PREVIEW_PORT: String(previewPort),
@@ -714,13 +743,16 @@ export async function scratchFleet(options: {
     await killSessiond();
     await mock.stop(true);
   };
-  /** Deletes the sandbox, unless `keep`. */
+  /** Deletes the sandbox and the runtime dir beside it, unless `keep`. */
   const clean = async (keep: boolean) => {
     if (keep) {
-      console.log(`The sandbox is kept for reading: ${sandbox}`);
+      console.log(
+        `The sandbox is kept for reading: ${sandbox} (runtime dir ${runtime})`
+      );
       return;
     }
     await rm(sandbox, { recursive: true, force: true });
+    await rm(runtime, { recursive: true, force: true });
   };
 
   return {

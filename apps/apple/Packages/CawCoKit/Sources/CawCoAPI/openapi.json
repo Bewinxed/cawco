@@ -19647,7 +19647,7 @@
             "type": "string"
           },
           "accountDir": {
-            "description": "The account the hub placed the session on, and so the store it runs\nfrom on the machine: Claude Code in the account's own\n`~/.cawco/accounts/<id>/claude`, never the machine's `~/.claude`; pi on a\nruntime whose `openai-codex` sign-in is the account's\n`~/.cawco/accounts/<id>/pi/auth.json`; OpenCode in the account's own\nserver, whose `XDG_DATA_HOME` (and so OpenCode's own store, holding the\naccount's credential alone) is `opencode-accounts/<id>` beside the\nsession credentials, hidden from every workspace boundary.\nSet by the hub on every launch of a session on an account — the first and\nevery revive, restore and relaunch — and never by a client. A Claude\nlaunch without one (or a {@link homeLoginMove}) is refused on the\nmachine; a pi or OpenCode launch without one runs from the machine's own\nstores.",
+            "description": "The account the hub placed the session on, and so the store it runs\nfrom on the machine: Claude Code in the account's own\n`~/.cawco/accounts/<id>/claude`, never the machine's `~/.claude`; pi on a\nruntime whose `openai-codex` sign-in is the account's\n`~/.cawco/accounts/<id>/pi/auth.json`; OpenCode in the account's own\nserver, whose `XDG_DATA_HOME` (and so OpenCode's own store, holding the\naccount's credential alone) is `opencode-accounts/<id>` beside the\nsession credentials, hidden from every workspace boundary.\nA launch learns it as it starts, from the hub's {@link LaunchGrant}, and\nruns on that alone; a reattach is sent it, as the account its process\nalready runs on. Never set by a client. A Claude launch without one (or\na {@link homeLoginMove}) is refused on the machine; a pi or OpenCode\nlaunch without one runs from the machine's own stores.",
             "type": "object",
             "properties": {
               "accountId": {
@@ -19728,7 +19728,7 @@
             "type": "string"
           },
           "homeLoginMove": {
-            "description": "The machine's own Claude Code login is moving into this account\n(`POST /api/accounts/move-login`) and has not moved yet, so this Claude\nsession runs on that login: Claude Code with no `CLAUDE_CONFIG_DIR`, in\nthe machine's own store, where the credential still is. Set by the hub\nalone, on a Claude launch with no {@link accountDir}, and only while\nthat move is pending. A machine that has moved the login by the time the\nlaunch starts runs the session in the account's dir instead.",
+            "description": "The machine's own Claude Code login is moving into this account\n(`POST /api/accounts/move-login`) and has not moved yet, so this Claude\nsession runs on that login: Claude Code with no `CLAUDE_CONFIG_DIR`, in\nthe machine's own store, where the credential still is. Granted by the\nhub alone, as a Claude launch with no {@link accountDir} starts\n({@link LaunchGrant}), and only while that move is pending. A machine\nthat has moved the login by the time the launch starts runs the session\nin the account's dir instead.",
             "type": "object",
             "properties": {
               "accountId": {
@@ -19864,10 +19864,6 @@
           "scratchWorktree": {
             "$ref": "#/components/schemas/ScratchWorktree",
             "description": "Creation provenance, stored by the agent and carried durably on its hub row."
-          },
-          "sessionCredential": {
-            "description": "Hub-minted session credential: delivery only, never transcript or instance metadata.",
-            "type": "string"
           },
           "skills": {
             "description": "Skill names to load natively before the first prompt. Each harness loads\nthem via its own mechanism — opencode sends `/skill` commands, claude pushes\nthem into the input stream — so the delegate session sees the skill the same\nway it would if the user had typed the slash command.",
@@ -28285,6 +28281,7 @@
           "frames",
           "fs",
           "heartbeat",
+          "launch",
           "register",
           "send",
           "spawn",
@@ -34389,6 +34386,7 @@
               "frames",
               "fs",
               "heartbeat",
+              "launch",
               "register",
               "send",
               "spawn",
