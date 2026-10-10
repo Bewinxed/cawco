@@ -295,25 +295,40 @@ start_before() {
 }
 # A session that ran before the update: the very same process still holds it, the machine's agent took it over
 # again (the hub lists it as running only when the agent reports it), and nothing else holds it.
+# Each of these loops reads its list on fd 3: as_user's `podman exec -i` reads stdin, and on the loop's own stdin it
+# swallowed the rest of the list, so only the first entry was ever checked (run-4: one of seven accepted starts).
 survived() {
   local container=$1 file=$2 id pid
-  while read -r id pid; do
+  while read -r -u 3 id pid; do
     [[ "$(child_pids "$container" "$id")" == "$pid" ]]
     as_user "$container" kill -0 "$pid"
     wait_until 120 "session_running $id"
-  done < "$file"
+  done 3< "$file"
+}
+# The live children of one kind of start on every keeper, each with the keeper holding it, and the hub's rows of that
+# kind with their status: what a count that does not add up is read from.
+starts_said() {
+  local container=$1 prefix=$2
+  echo "children: $(keeper_lists "$container" | jsonl "d => d.flatMap(k => k.procs.filter(p => p.alive && p.procId.startsWith('$prefix-')).map(p => p.procId + '@' + k.endpoint)).sort().join(' ')")"
+  echo "rows: $(hub_api /api/instances | json "d => d.filter(r => r.id.startsWith('$prefix-')).map(r => r.id + ':' + r.status).sort().join(' ')")"
 }
 # Every start accepted during the update runs once: one child under its id, none extra on the machine.
 accepted_ran_once() {
-  local machine=$1 container=$2 prefix=$3 accepted=$4 id
+  local machine=$1 container=$2 prefix=$3 accepted=$4 id twice
   [[ "$(wc -l < "$accepted")" -ge 1 ]]
   wait_until 180 '[[ "$(phase '"$machine"')" != installing ]]'
-  while read -r id; do
+  while read -r -u 3 id; do
     wait_until 120 "session_running $id"
     [[ "$(child_pids "$container" "$id")" =~ ^[0-9]+$ ]]
-  done < "$accepted"
-  # One child per running session of this kind on the hub, and no process outside the session holder.
-  [[ "$(children_with "$container" "$prefix-")" == "$(hub_api /api/instances | json "d => d.filter(r => r.id.startsWith('$prefix-') && r.status === 'running').length")" ]]
+  done 3< "$accepted"
+  # No start of this kind ran twice: no id has more than one live child, on any keeper.
+  twice=$(keeper_lists "$container" | jsonl "d => { const n = {}; for (const p of d.flatMap(k => k.procs)) { if (p.alive && p.procId.startsWith('$prefix-')) { n[p.procId] = (n[p.procId] ?? 0) + 1; } } return Object.keys(n).filter(id => n[id] > 1).join(' '); }")
+  [[ -z $twice ]] || { echo "more than one live child under: $twice"; starts_said "$container" "$prefix"; return 1; }
+  # One child per running session of this kind on the hub, once the hub's rows have caught up with the children (the
+  # last start the loop sent may still be on its way to running when the loop stops), and no process outside the
+  # session holder.
+  wait_until 60 '[[ "$(children_with "'"$container"'" "'"$prefix"'-")" == "$(hub_api /api/instances | json "d => d.filter(r => r.id.startsWith(\"'"$prefix"'-\") && r.status === \"running\").length")" ]]' \
+    || { starts_said "$container" "$prefix"; return 1; }
   [[ "$(as_user "$container" sh -c 'pgrep -x sleep | wc -l')" == "$(children_total "$container")" ]]
 }
 # The main process of a keeper's unit (the current keeper's when no unit is named).
@@ -321,7 +336,7 @@ keeper_pid() { as_user "$1" systemctl --user show -p MainPID --value "${2:-$(cur
 # Asks the hub, from inside its own container, to stop a session, the way the dashboard does.
 stop_session() { as_user "$hubc" env BUN_BE_BUN=1 /home/cawco/.local/bin/cawco /shared/stage2-stop-session.ts http://127.0.0.1:3456 "$1" "$2"; }
 untouched() { as_user "$1" sh -c 'test ! -e "$HOME/.local/share/cawco" && test ! -e "$HOME/.local/bin/cawco" && echo untouched'; }
-export -f as_user as_user_tty hub_api api_on spawn_child start_session stop_session start_loop keeper_list keeper_lists jsonl child_pids children_with children_total holder_of held_on current_endpoint endpoint_of unit_of current_unit session_running start_before survived accepted_ran_once keeper_pid untouched json machine_id build_version phase field retiring wait_until publish
+export -f as_user as_user_tty hub_api api_on spawn_child start_session stop_session start_loop keeper_list keeper_lists jsonl child_pids children_with children_total holder_of held_on current_endpoint endpoint_of unit_of current_unit session_running start_before survived starts_said accepted_ran_once keeper_pid untouched json machine_id build_version phase field retiring wait_until publish
 
 boot() {
   local c=$1 ip=$2 name=$3 linger=${4:-linger}
@@ -874,9 +889,9 @@ legacy_handed_over() {
   wait_until 180 '[[ "$(current_endpoint "$joinerc")" == "$(endpoint_of 0.0.1-test.2)" ]]'
   [[ "$(as_user "$joinerc" readlink /home/cawco/.local/share/cawco/binary/keeper)" == versions/0.0.1-test.2 ]]
   # The legacy keeper's socket was set aside under its build; it holds the sessions that ran before the update.
-  while read -r id pid; do
+  while read -r -u 3 id pid; do
     [[ "$(holder_of "$joinerc" "$id")" == legacy-sessiond-0.0.1-test.1.sock ]]
-  done < "$out/joiner-before.txt"
+  done 3< "$out/joiner-before.txt"
   # Its unit no longer starts with the machine, and the agent's unit no longer requires it: the new keeper's unit,
   # enabled, requires the agent's from its own side.
   [[ "$(as_user "$joinerc" systemctl --user is-enabled cawco-sessiond.service)" == disabled ]]
@@ -1352,9 +1367,9 @@ handover_on_joined_machine() {
   [[ "$(holder_of "$joinerc" handover-new)" == "$(endpoint_of "$new")" ]]
   # The old sessions run on: the same processes, still on the keeper before, which is the same process.
   survived "$joinerc" "$out/handover-before.txt"
-  while read -r id pid; do
+  while read -r -u 3 id pid; do
     [[ "$(holder_of "$joinerc" "$id")" == "$oldend" ]]
-  done < "$out/handover-before.txt"
+  done 3< "$out/handover-before.txt"
   [[ "$(keeper_pid "$joinerc" "$oldunit")" == "$oldpid" ]]
   # The agent restarts in the middle of the handover: it takes back the sessions on both keepers.
   as_user "$joinerc" systemctl --user restart cawco-agent.service
