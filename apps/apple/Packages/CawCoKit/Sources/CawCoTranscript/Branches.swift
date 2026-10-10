@@ -22,7 +22,7 @@ enum RowFactory {
         case .run: RunView(env: env)
         case .compaction: CompactionDividerView(env: env)
         case .livetool: LiveToolView(env: env)
-        case .notice, .empty: NoticeView(env: env)
+        case .notice, .retry, .empty: NoticeView(env: env)
         }
     }
 
@@ -40,7 +40,7 @@ enum RowFactory {
         case .run: view is RunView
         case .compaction: view is CompactionDividerView
         case .livetool: view is LiveToolView
-        case .notice, .empty: view is NoticeView
+        case .notice, .retry, .empty: view is NoticeView
         }
     }
 }
@@ -942,18 +942,23 @@ final class NoticeView: UIView, RowContent {
     /// `.kit-empty-title` balances; the line and `.empty` are `p`s, pretty.
     private let title = WrapLabel(wrap: .balance)
     private let line = WrapLabel(wrap: .pretty)
+    /// Under a page before the first row that could not be read: asks for it
+    /// again (Transcript.svelte `.older`'s Button, `outline`, `sm`).
+    private let retry: UIButton
     private let column = UIStackView()
     private var inset: (top: NSLayoutConstraint, bottom: NSLayoutConstraint)!
     /// The window width the title's fluid size was set for, while it shows.
     private var titleViewport: Double??
 
-    init(env _: RowEnv) {
+    init(env: RowEnv) {
+        retry = KitButton.make("Try again", variant: .outline, height: .sm) { [weak env] in env?.readOlder() }
         super.init(frame: .zero)
         column.axis = .vertical
         column.alignment = .leading
         column.spacing = Space.space2
-        for view in [mark, title, line] { column.addArrangedSubview(view) }
+        for view in [mark, title, line, retry] { column.addArrangedSubview(view) }
         column.setCustomSpacing(Space.space2 + Space.space1, after: mark)
+        retry.isHidden = true
         column.translatesAutoresizingMaskIntoConstraints = false
         addSubview(column)
         let top = column.topAnchor.constraint(equalTo: topAnchor)
@@ -968,12 +973,21 @@ final class NoticeView: UIView, RowContent {
     required init?(coder _: NSCoder) { fatalError("built in code") }
 
     func configure(_ item: Item) {
+        retry.isHidden = true
         switch item.kind {
         case let .notice(text):
             mark.isHidden = true
             title.isHidden = true
             titleViewport = nil
             line.attributedText = Styled.string(text, TypeScale.typeMeta, color: Palette.inkMuted, lineBreak: .byWordWrapping)
+            inset.top.constant = Space.space5
+            inset.bottom.constant = -Space.space5
+        case let .retry(why):
+            mark.isHidden = true
+            title.isHidden = true
+            titleViewport = nil
+            line.attributedText = Styled.string(why, TypeScale.typeMeta, color: Palette.inkMuted, lineBreak: .byWordWrapping)
+            retry.isHidden = false
             inset.top.constant = Space.space5
             inset.bottom.constant = -Space.space5
         case .empty:
@@ -986,7 +1000,7 @@ final class NoticeView: UIView, RowContent {
             inset.bottom.constant = -Space.space6
         default: return
         }
-        accessibilityElements = [title, line].filter { !$0.isHidden }
+        accessibilityElements = [title, line, retry].filter { !$0.isHidden }
     }
 
     private func setTitle() {

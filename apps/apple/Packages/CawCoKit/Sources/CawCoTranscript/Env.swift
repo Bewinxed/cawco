@@ -42,6 +42,9 @@ final class RowEnv {
     var canEditQueued: (String) -> Bool = { _ in false }
     /// Lifts a queued message's words into the composer.
     var editQueued: (String) -> Void = { _ in }
+    /// Asks again for the page before the first row, which could not be read
+    /// (`SessionsStore.readOlderPage`).
+    var readOlder: () -> Void = {}
     /// Rendered blocks, shared by every list this transcript draws.
     let cache = BlockCache()
 
