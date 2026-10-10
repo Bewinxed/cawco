@@ -1209,9 +1209,9 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             for id in changed {
                 if let index = dataSource.indexPath(for: id), let item = items[id],
                    let cell = collection.cellForItem(at: index) as? ItemCell {
-                    // A row whose body is moving is sized by the body's steps, not the list's own animation.
+                    // A row whose body is moving is sized by the body's steps, not the list's own resizing.
                     if moving.contains(where: { Self.cell(of: $0) === cell }) {
-                        UIView.performWithoutAnimation { cell.redraw(item) }
+                        quietly { cell.redraw(item) }
                     } else {
                         cell.redraw(item)
                     }
@@ -1542,19 +1542,25 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     /// Steps every moving body to where its curve is at `now` and lays each
     /// one's row out again at that height, in this same frame and without
     /// animation, so the row's foot and the rows under it are where the body's
-    /// edge is. The list's own resizing ran later, on its own clock (WWDC22
-    /// "What's new in UIKit": invalidations are "coalesced … into a single
-    /// update performed at the optimal time", "resized with animation" by
-    /// default), and the rows around the body jumped. While the list does not
-    /// follow the tail, it stands where it stood (`layout.hold`).
+    /// edge is. While the list does not follow the tail, it stands where it
+    /// stood (`layout.hold`).
+    ///
+    /// The row's new height goes to the layout as a row measured while
+    /// scrolling does (`resize`), and the layout pass that follows places
+    /// every row on the screen and takes away the ones pushed off it. Not
+    /// through the list's own resizing (`invalidateIntrinsicContentSize`),
+    /// which is an update of its own ("coalesced … into a single update
+    /// performed at the optimal time", "resized with animation" by default,
+    /// WWDC22 "What's new in UIKit"): run on its own clock, the rows around the
+    /// body jumped; run each frame, a row it pushed past the screen's foot was
+    /// left standing where it last was, until the reader scrolled.
     private func stepReveals(_ now: CFTimeInterval) {
         guard !moving.isEmpty else { return }
-        UIView.performWithoutAnimation {
+        quietly {
             moving = moving.filter { reveal in
                 let still = reveal.advance(now)
                 if let cell = Self.cell(of: reveal) {
-                    cell.forget()
-                    cell.invalidateIntrinsicContentSize()
+                    resize(cell)
                 } else {
                     // Off the screen: measured again when a cell next stands it.
                     store.forget(holding: reveal)
@@ -1565,6 +1571,27 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             if let held = layout.hold, abs(collection.contentOffset.y - held) > 0.5 { collection.contentOffset.y = held }
         }
         if moving.isEmpty { layout.hold = nil }
+    }
+
+    /// The layout takes `cell`'s height as it stands now, the way it takes a
+    /// row's measured height as the row comes on the screen: the cell's fitted
+    /// attributes, and the layout's own invalidation for them.
+    private func resize(_ cell: ItemCell) {
+        guard let index = collection.indexPath(for: cell), let original = layout.layoutAttributesForItem(at: index),
+              let asked = original.copy() as? UICollectionViewLayoutAttributes else { return }
+        let fitted = cell.remeasure(asked)
+        guard layout.shouldInvalidateLayout(forPreferredLayoutAttributes: fitted, withOriginalAttributes: original) else { return }
+        layout.invalidateLayout(with: layout.invalidationContext(forPreferredLayoutAttributes: fitted, withOriginalAttributes: original))
+    }
+
+    /// Runs `change` with the list's own resizing off and nothing animated: a
+    /// moving body's row is sized by its steps alone (`stepReveals`), and a
+    /// constraint changing in it asks the list for nothing.
+    func quietly(_ change: () -> Void) {
+        let mode = collection.selfSizingInvalidation
+        collection.selfSizingInvalidation = .disabled
+        UIView.performWithoutAnimation(change)
+        collection.selfSizingInvalidation = mode
     }
 
     /// The list's cell `view` stands in.

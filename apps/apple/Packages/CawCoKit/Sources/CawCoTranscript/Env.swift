@@ -307,6 +307,14 @@ final class HostCell<Content: RowContent>: UICollectionViewCell, ItemCell {
         if let shown { store?.forget(shown.id) }
     }
 
+    func remeasure(_ attributes: UICollectionViewLayoutAttributes) -> UICollectionViewLayoutAttributes {
+        forget()
+        let fitted = preferredLayoutAttributesFitting(attributes)
+        // The list's own ask for its size in the layout pass that follows is this one's answer.
+        stood = true
+        return fitted
+    }
+
     /// A row the store holds measured at this width stands at that height:
     /// it was laid out there, so nothing in it is laid out again. A row that
     /// changed where it stands (a picture or a diff arrived, a body opened,
@@ -361,4 +369,7 @@ protocol ItemCell: UICollectionViewCell {
     func redraw(_ item: Item)
     /// Its row changed without a new item: its kept height no longer stands.
     func forget()
+    /// Its row changed size where it stands (a body moving): measured now at
+    /// the width `attributes` give it, and the fitted attributes returned.
+    func remeasure(_ attributes: UICollectionViewLayoutAttributes) -> UICollectionViewLayoutAttributes
 }

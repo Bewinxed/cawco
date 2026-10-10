@@ -373,6 +373,8 @@ protocol RevealDriver: AnyObject {
     func revealMoved(_ reveal: Reveal)
     /// The reader opened or shut a body where they stand: the list lets go of the tail.
     func readerToggled()
+    /// Runs `change` with the list's own resizing off: the box's row is sized by its steps alone.
+    func quietly(_ change: () -> Void)
 }
 
 /// A body that grows open from nothing and folds shut where it stands
@@ -440,19 +442,23 @@ final class Reveal: UIView {
     /// Returns what to fade with it, on the same curve and clock. `duration`:
     /// a box that moves with another one keeps that one's clock.
     func toggle(open: Bool, over duration: TimeInterval? = nil) -> (layout: () -> Void, done: () -> Void) {
-        let from = shownHeight
-        isOpen = open
-        cap.constant = from
-        cap.isActive = true
-        content.isHidden = false
-        if open, fades { content.alpha = 0 }
-        if open { measure() }
-        let still = UIAccessibility.isReduceMotionEnabled || window == nil
-        motion = (from, CACurrentMediaTime(), still ? 0 : duration ?? (open ? Motion.durReveal : Motion.durExit))
+        let begin = {
+            let from = self.shownHeight
+            self.isOpen = open
+            self.cap.constant = from
+            self.cap.isActive = true
+            self.content.isHidden = false
+            if open, self.fades { self.content.alpha = 0 }
+            if open { self.measure() }
+            let still = UIAccessibility.isReduceMotionEnabled || self.window == nil
+            self.motion = (from, CACurrentMediaTime(), still ? 0 : duration ?? (open ? Motion.durReveal : Motion.durExit))
+        }
         if let driver {
+            driver.quietly(begin)
             driver.revealMoved(self)
         } else {
             // In no list: nothing stands around it to move.
+            begin()
             _ = advance(.infinity)
         }
         return (open ? { self.content.alpha = 1 } : { if self.fades { self.content.alpha = 0 } }, {})
