@@ -36,6 +36,7 @@
  * runs it on bun.
  */
 import {
+  chmodSync,
   type FSWatcher,
   lstatSync,
   mkdirSync,
@@ -251,7 +252,11 @@ const makeStandIn = (
   if (empty.kind === "dir") {
     mkdirSync(path);
   } else {
-    writeFileSync(path, empty.text, { flag: "wx", mode: 0o644 });
+    writeFileSync(path, empty.text, { flag: "wx" });
+    // Writable whatever the umask: an empty file with no write bits is what
+    // srt takes for a mount point an earlier sandbox left (leftMountPoint),
+    // and would cover with /dev/null and remove.
+    chmodSync(path, 0o644);
   }
 };
 
@@ -286,7 +291,8 @@ const standIn = (): void => {
  * host git runs or reads (its config, hooks, submodules' git dirs) and the
  * harness project config a host harness loads at the workspace's next
  * session (Claude Code's project settings, hooks, commands and agents,
- * OpenCode's config, `.mcp.json`). The guard covers these whatever DENIES
+ * OpenCode's config, `.mcp.json`), and srt's own mandatory names at the
+ * clone's root, each given a stand-in too. The guard covers these whatever DENIES
  * names, and every path DENIES names besides (`cloneDenies` in
  * workspace-policy.ts, the policy's list, which names the same).
  */
@@ -305,6 +311,18 @@ const PROTECTED = [
   "opencode.jsonc",
   ".opencode",
   ".mcp.json",
+  // srt's own mandatory names at the clone's root (`DANGEROUS_FILES`,
+  // `getDangerousDirectories()` in sandbox-utils.js at 0.0.79).
+  ".gitconfig",
+  ".gitmodules",
+  ".bashrc",
+  ".bash_profile",
+  ".zshrc",
+  ".zprofile",
+  ".profile",
+  ".ripgreprc",
+  ".vscode",
+  ".idea",
 ];
 
 /**

@@ -57,14 +57,42 @@ export type CloneDenyEmpty =
 export interface CloneDeny {
   readonly empty: CloneDenyEmpty;
   readonly path: string;
+  /**
+   * Denied by srt itself at the clone's root, whatever the policy says (its
+   * mandatory names), rather than by the policy: given a stand-in and
+   * guarded like the rest, never added to the policy's write denies.
+   */
+  readonly srt?: true;
 }
 
 const DIR = { kind: "dir" } as const;
 const EMPTY_JSON = { kind: "file", text: "{}\n" } as const;
+const EMPTY = { kind: "file", text: "" } as const;
 
 /**
- * Every path in a clone the workspace's policy denies writing, each with
- * its stand-in. What host git runs or reads from a clone: its config, its
+ * srt's own mandatory deny names at its working directory, the clone, that
+ * the policy does not name already (`DANGEROUS_FILES` and
+ * `getDangerousDirectories()` in sandbox-utils.js at 0.0.79; `.mcp.json`,
+ * `.claude/commands` and `.claude/agents` are the policy's too). An empty
+ * file is what each of these files' readers takes as nothing set (git an
+ * empty `.gitmodules` as no submodules).
+ */
+const SRT_FILES = [
+  ".gitconfig",
+  ".gitmodules",
+  ".bashrc",
+  ".bash_profile",
+  ".zshrc",
+  ".zprofile",
+  ".profile",
+  ".ripgreprc",
+];
+const SRT_DIRS = [".vscode", ".idea"];
+
+/**
+ * Every path in a clone the workspace's policy denies writing, and srt's own
+ * mandatory names at its root ({@link SRT_FILES}, {@link SRT_DIRS}), each
+ * with its stand-in. What host git runs or reads from a clone: its config, its
  * hooks, its submodules' git dirs. And the harness project config the host
  * loads at the workspace's next session, outside any boundary: Claude Code's
  * project settings (hooks), hooks, commands and agents, OpenCode's config
@@ -97,6 +125,16 @@ export const cloneDenies = (clone: string): readonly CloneDeny[] => [
     path: join(clone, ".mcp.json"),
     empty: { kind: "file", text: '{"mcpServers":{}}\n' },
   },
+  ...SRT_FILES.map((name) => ({
+    path: join(clone, name),
+    empty: EMPTY,
+    srt: true as const,
+  })),
+  ...SRT_DIRS.map((name) => ({
+    path: join(clone, name),
+    empty: DIR,
+    srt: true as const,
+  })),
 ];
 
 const unique = (paths: string[]): string[] => [...new Set(paths)];
@@ -220,7 +258,11 @@ export const workspacePolicy = async (
       ...caches,
     ]),
     denyWrite: unique([
-      ...denied(cloneDenies(workspace.path).map(({ path }) => path)),
+      ...denied(
+        cloneDenies(workspace.path)
+          .filter((deny) => !deny.srt)
+          .map(({ path }) => path)
+      ),
       ...stores,
     ]),
   };

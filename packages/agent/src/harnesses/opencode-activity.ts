@@ -1,6 +1,14 @@
 import type { OpencodeClient } from "@opencode-ai/sdk/v2";
 
-type ActivityState = "busy" | "idle" | "unobserved";
+/**
+ * A session's activity as its generation's server last said it. `failed` is
+ * decided: the server refuses the session's directory (it runs nothing
+ * there), or its reattach ended failed and was filed so. It is neither busy
+ * nor unknown: one session's failure never holds the machine. What is
+ * still being recovered counts on its own, as a pending recovery
+ * (opencode.ts `#operationsPending`).
+ */
+type ActivityState = "busy" | "failed" | "idle" | "unobserved";
 type StatusMap = Readonly<Record<string, unknown>>;
 const STATUS_TIMEOUT_MS = 10_000;
 const SAMPLE_BUDGET_MS = 3000;
@@ -151,7 +159,7 @@ export class OpencodeActivity {
     }
   }
 
-  #observe(id: string, directory: string, state: "busy" | "idle"): void {
+  #observe(id: string, directory: string, state: ActivityState): void {
     const entry = this.#session(id, directory);
     entry.sequence += 1;
     entry.afterRequest = this.#directory(directory).requested;
@@ -170,6 +178,39 @@ export class OpencodeActivity {
   }
   observeIdle(id: string, directory: string): void {
     this.#observe(id, directory, "idle");
+  }
+  /** Its reattach ended failed and was filed so: decided, until the server next says otherwise. */
+  observeFailed(id: string, directory: string): void {
+    this.#observe(id, directory, "failed");
+  }
+
+  /**
+   * Whether `directory` says nothing about what this generation runs: every
+   * session known in it is decided failed, so a read of it that fails
+   * leaves nothing unknown.
+   */
+  #onlyFailed(directory: string): boolean {
+    for (const entry of this.#sessions.values()) {
+      if (entry.directory === directory && entry.state !== "failed") {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /** Every session known in `directory`, decided failed by the server's refusal of it. */
+  #refuse(snapshot: DirectorySnapshot): void {
+    for (const entry of this.#sessions.values()) {
+      if (
+        entry.directory === snapshot.directory &&
+        snapshot.request > entry.afterRequest &&
+        snapshot.request >= entry.lastRequest
+      ) {
+        entry.state = "failed";
+        entry.observedAt = snapshot.sampledAt;
+        entry.lastRequest = snapshot.request;
+      }
+    }
   }
 
   /** Text/tool progress during an already busy turn does not change its activity ordering. */
@@ -321,6 +362,9 @@ export class OpencodeActivity {
         sessionId,
         sampledAt: snapshot.sampledAt,
       };
+      if (snapshot.kind === "refused") {
+        this.#refuse(snapshot);
+      }
       if (snapshot.kind !== "available") {
         return { ...base, kind: snapshot.kind, reason: snapshot.reason };
       }
@@ -332,12 +376,20 @@ export class OpencodeActivity {
   }
 
   snapshot(): ActivitySnapshot {
+    // Decided sessions are not busy: idle ones, and failed ones.
     const instances = [...this.#sessions]
-      .filter(([, entry]) => entry.state !== "idle")
+      .filter(
+        ([, entry]) => entry.state === "busy" || entry.state === "unobserved"
+      )
       .flatMap(([id]) => [...(this.#bindings.get(id) ?? [id])]);
-    // A directory its server refuses is as unknown as one it cannot reach.
+    // Unknown: a directory the server could not be reached for that holds a
+    // session not decided failed. One it refuses is its sessions' failure,
+    // decided ({@link #refuse}), never unknown activity.
     const unreachableDirectories = [...this.#directories]
-      .filter(([, entry]) => entry.latest && entry.latest.kind !== "available")
+      .filter(
+        ([directory, entry]) =>
+          entry.latest?.kind === "unreachable" && !this.#onlyFailed(directory)
+      )
       .map(([directory]) => directory);
     const lifetime = instances.length ? 15_000 : 45_000;
     if (
@@ -396,6 +448,43 @@ export class OpencodeActivity {
   stop(): void {
     this.#stopped = true;
     clearTimeout(this.#timer);
+  }
+
+  /**
+   * One sampling round's read of a directory, applied to every session in
+   * it: each takes the reading, or reads again when it is newer than the
+   * reading. Whether the directory is covered.
+   */
+  async #observeDirectory(
+    client: OpencodeClient,
+    snapshot: DirectorySnapshot & { kind: "available" | "refused" },
+    round: object
+  ): Promise<boolean> {
+    const { directory } = snapshot;
+    for (const [id, entry] of this.#sessions) {
+      if (entry.directory !== directory) {
+        continue;
+      }
+      if (
+        snapshot.request <= entry.afterRequest ||
+        snapshot.request < entry.lastRequest
+      ) {
+        // biome-ignore lint/performance/noAwaitInLoops: stale observations for this session join a fresh shared directory request
+        const observed = await this.sessionState(client, id, directory, round);
+        if (observed.kind === "unreachable") {
+          return this.#onlyFailed(directory);
+        }
+        continue;
+      }
+      // Refused, the directory runs nothing: its sessions are decided.
+      entry.state =
+        snapshot.kind === "refused"
+          ? "failed"
+          : statusState(snapshot.statuses[id]);
+      entry.observedAt = snapshot.sampledAt;
+      entry.lastRequest = snapshot.request;
+    }
+    return true;
   }
 
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: inventory coverage and independently ordered directory observations form one sampling round
@@ -460,38 +549,17 @@ export class OpencodeActivity {
           roundStarted,
           round
         );
-        if (snapshot.kind !== "available") {
-          return false;
+        // Unread, it is covered only when all it holds is decided failed.
+        if (snapshot.kind === "unreachable") {
+          return this.#onlyFailed(directory);
         }
-        for (const id of Object.keys(snapshot.statuses)) {
-          sessions.set(id, directory);
-          this.#session(id, directory);
-        }
-        for (const [id, entry] of this.#sessions) {
-          if (entry.directory !== directory) {
-            continue;
+        if (snapshot.kind === "available") {
+          for (const id of Object.keys(snapshot.statuses)) {
+            sessions.set(id, directory);
+            this.#session(id, directory);
           }
-          if (
-            snapshot.request <= entry.afterRequest ||
-            snapshot.request < entry.lastRequest
-          ) {
-            // biome-ignore lint/performance/noAwaitInLoops: stale observations for this session join a fresh shared directory request
-            const observed = await this.sessionState(
-              client,
-              id,
-              directory,
-              round
-            );
-            if (observed.kind !== "decided") {
-              return false;
-            }
-            continue;
-          }
-          entry.state = statusState(snapshot.statuses[id]);
-          entry.observedAt = snapshot.sampledAt;
-          entry.lastRequest = snapshot.request;
         }
-        return true;
+        return this.#observeDirectory(client, snapshot, round);
       })
     );
     // A sampling deadline does not abort a request shared with ongoing recovery.

@@ -7366,18 +7366,23 @@ export class OpencodeHarness implements Harness {
           generations: this.#liveGenerations(),
         };
       }
+      const { round } = wave;
       try {
         // biome-ignore lint/performance/noAwaitInLoops: an unreachable server is tried again, within the budget
-        return await this.#reattachOnce(spec, ctx, wave.round);
+        return await this.#reattachOnce(spec, ctx, round);
       } catch (error) {
         if (
           error instanceof HarnessRecoveryRefused ||
-          error instanceof SessionAddressRefused ||
-          error instanceof OpencodeReattachFailed
+          error instanceof SessionAddressRefused
         ) {
           throw error;
         }
+        if (error instanceof OpencodeReattachFailed) {
+          await this.#decideFailed(spec, ctx, round);
+          throw error;
+        }
         if (Date.now() >= deadline) {
+          await this.#decideFailed(spec, ctx, round);
           throw new OpencodeReattachFailed(
             `OpenCode could not be reached to reattach session ${spec.resume?.sessionKey ?? ctx.instanceId} within ${RECOVERY_RETRY_BUDGET_MS / 1000} s: ${errorText(error)}`,
             { cause: error }
@@ -7392,6 +7397,29 @@ export class OpencodeHarness implements Harness {
       }
     }
     return undefined;
+  }
+
+  /**
+   * A reattach that ended failed, filed as that session's failure, is
+   * decided in every generation it was looked for in: neither busy nor
+   * unknown there (`OpencodeActivity.observeFailed`), so it holds nothing of
+   * the machine's. Until it ended it was a pending recovery, and counted.
+   */
+  async #decideFailed(
+    spec: SpawnPayload,
+    ctx: HarnessContext,
+    round: RecoveryRound
+  ): Promise<void> {
+    const key = spec.resume?.sessionKey;
+    if (!key) {
+      return;
+    }
+    const generations = await round.generations.catch(
+      () => [] as ServerIdentity[]
+    );
+    for (const generation of generations) {
+      this.#activity(generation).observeFailed(key, ctx.cwd);
+    }
   }
 
   async #reattachOnce(
