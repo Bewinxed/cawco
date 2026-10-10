@@ -30,7 +30,7 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "#lib/components/ui/popover/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
-  import { IconKey, IconSubagents, IconUsage } from "#lib/icons.js";
+  import { IconKey, IconRefresh, IconUsage } from "#lib/icons.js";
   import { cn } from "#lib/utils.js";
   import ClaudeIcon from "~icons/logos/claude-icon";
   import AccountName from "./accounts/AccountName.svelte";
@@ -75,6 +75,23 @@
 
   /** The popover or the sheet stands open. */
   let open = $state(false);
+  /**
+   * The strip was last pressed with a pointer, not a key. A pointer's open
+   * leaves focus on the strip, so no ring lands on the first thing inside
+   * (the house ring is for the keyboard); a key's open moves focus in.
+   */
+  let byPointer = false;
+  const pressed = () => {
+    byPointer = true;
+  };
+  const keyed = () => {
+    byPointer = false;
+  };
+  const keepFocus = (event: Event) => {
+    if (byPointer) {
+      event.preventDefault();
+    }
+  };
   /** A session was opened from it: it goes away, as a menu does. */
   const putAway = () => {
     open = false;
@@ -270,7 +287,13 @@
   <!-- Two lines: its name and the time that matters, then what nothing
        else says (its status, the sessions the carrier holds, where
        delegates start) and the one reset that binds it. -->
-  <div class="row" data-account={ring.id} class:limit={ring.state === "limit"}>
+  {@const reset = bindReset(ring, now)}
+  <div
+    class="row"
+    data-account={ring.id}
+    data-flyover-anchor
+    class:limit={ring.state === "limit"}
+  >
     {#if ring.state === "stale"}
       <Tip label={staleTip(ring, now)} side="top">
         {#snippet children(
@@ -310,23 +333,28 @@
           {#snippet children(
             props
           )}
-            <!-- The house delegated-work glyph, named "Delegates": the word
-                 doesn't fit beside a status, its sessions and its reset at
-                 320px. -->
+            <!-- The word alone: with the glyph it doesn't fit beside "takes
+                 over in 1h 20m" and the short reset at 320px. -->
             <button
               {...props}
-              aria-label="Delegates"
-              class={cn(badgeVariants({ variant: "secondary" }), "tag")}
+              class={cn(badgeVariants({ variant: "secondary" }), "tag px-1")}
               data-delegates-tag
               type="button"
             >
-              <IconSubagents aria-hidden="true" />
+              Delegates
             </button>
           {/snippet}
         </Tip>
       {/if}
+      {#if reset}
+        <!-- The reset glyph and the time; "resets in 1h 33m" read out. -->
+        <span class="reset" data-reset>
+          <IconRefresh aria-hidden="true" />
+          <span class="sr-only">{reset.said}</span>
+          <span aria-hidden="true">{reset.at}</span>
+        </span>
+      {/if}
     </span>
-    <span class="reset" data-reset>{bindReset(ring, now)}</span>
   </div>
 {/snippet}
 
@@ -360,9 +388,10 @@
     {/if}
     <div class="accounts" data-accounts>
       {#if claude}
-        <div class="group">
+        <div class="group orgs">
           <!-- An organization of more than two accounts is a group under its
-               name; the rest follow, ungrouped. -->
+               name; the rest follow, ungrouped, after the same gap a group's
+               name stands after. -->
           {#each orgGroups(claude.accounts) as group (group.org ?? "")}
             <div class="rows" data-org-group={group.org ?? ""}>
               {#if group.org}
@@ -391,7 +420,7 @@
             {@render row(
               openCode,
               openCodeRowTime(openCode, now),
-              openCodeStatus(openCode, now),
+              openCodeStatus(openCode),
               null,
               true
             )}
@@ -445,10 +474,12 @@
       <Drawer.Trigger
         aria-label={triggerLabel}
         class="strip-hit press-tint touch-hit"
+        onkeydown={keyed}
+        onpointerdown={pressed}
       >
         {@render face()}
       </Drawer.Trigger>
-      <Drawer.Content class="usage-sheet">
+      <Drawer.Content class="usage-sheet" onOpenAutoFocus={keepFocus}>
         <Drawer.Header>
           <Drawer.Title>Usage limits</Drawer.Title>
         </Drawer.Header>
@@ -457,13 +488,19 @@
     </Drawer.Root>
   {:else}
     <Popover.Root bind:open>
-      <Popover.Trigger aria-label={triggerLabel} class="strip-hit press-tint">
+      <Popover.Trigger
+        aria-label={triggerLabel}
+        class="strip-hit press-tint"
+        onkeydown={keyed}
+        onpointerdown={pressed}
+      >
         {@render face()}
       </Popover.Trigger>
       <Popover.Content
         align="start"
         class="usage-pop w-[min(20rem,calc(100vw-16px))] gap-0 rounded-[var(--radius-lg)] p-0 shadow-lg"
         collisionPadding={8}
+        onOpenAutoFocus={keepFocus}
         side="top"
         sideOffset={6}
       >
@@ -703,6 +740,14 @@
   .pop-note + .pop-note {
     border-block-start: 1px solid var(--border-hairline);
   }
+  /* Claude's accounts, a block per organization and one for the rest: the
+     same gap stands before every block, the first one's after the head's
+     hairline, so the accounts after a group read apart from it as a group
+     after its name does, with no label of their own. */
+  .orgs {
+    gap: var(--space-3);
+    padding-block-start: var(--space-3);
+  }
   .provider {
     display: flex;
     align-items: center;
@@ -714,14 +759,14 @@
   .pop-head .provider {
     padding: 0;
   }
+  /* Rows stand edge to edge: one pitch, the row's own height. */
   .rows {
     display: flex;
     flex-direction: column;
-    gap: 2px;
   }
   /* An organization's name over its accounts: meta, no chrome of its own. */
   .org {
-    padding: 2px var(--space-1) 0;
+    padding: 0 var(--space-1) 2px;
     font: var(--type-meta);
     color: var(--ink-muted);
   }
@@ -735,16 +780,18 @@
     cursor: help;
   }
   /* An account, on two lines beside its ring: its name and the time that
-     matters, then a short status and the one reset that binds it. 40px. */
+     matters, then a short status and the one reset that binds it. 40px
+     (44px on touch) whatever line 2 holds: line 1 is one label line, line 2
+     is always the kit badge's height (1.25rem, its h-5), so line 2 starts
+     at the same offset on every row, chip or no chip, tint or no tint. */
   .row {
     display: grid;
     grid-template-columns: 24px minmax(0, 1fr) auto;
-    grid-template-rows: auto auto;
-    column-gap: 10px;
-    row-gap: 1px;
+    grid-template-rows: auto 1.25rem;
+    column-gap: var(--space-2);
     align-content: center;
-    align-items: baseline;
-    min-block-size: 40px;
+    align-items: center;
+    block-size: 40px;
     padding: 0 var(--space-1);
     border-radius: var(--radius-sm);
     transition: background-color var(--dur-fade) var(--ease-out);
@@ -771,12 +818,16 @@
     color: var(--ink-strong);
   }
   /* What only this account can say: its status, the sessions it carries,
-     where new delegates start. */
+     where new delegates start; then, at its end, its reset. It spans the
+     name's column and the time's, so its words have the row's whole width
+     and never the time column's leftovers. */
   .line2 {
     display: flex;
+    grid-column: 2 / 4;
     align-items: center;
     gap: var(--space-1);
     min-inline-size: 0;
+    block-size: 100%;
   }
   .status {
     min-inline-size: 0;
@@ -786,17 +837,30 @@
     font: var(--type-meta);
     color: var(--ink-row);
   }
+  /* The Delegates badge: the glyph and the word, in meta. */
   .tag {
-    font: var(--type-meta);
-  }
-  .reset {
     flex: none;
-    align-self: center;
-    justify-self: end;
+    font: var(--type-meta);
+    line-height: 1;
+    cursor: help;
+  }
+  /* The reset: the refresh glyph and the time, end-aligned under the row's
+     time. */
+  .reset {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 2px;
+    margin-inline-start: auto;
     white-space: nowrap;
     font: var(--type-meta);
     font-variant-numeric: tabular-nums;
     color: var(--ink-muted);
+
+    & :global(svg) {
+      inline-size: 12px;
+      block-size: 12px;
+    }
   }
   .foot {
     flex: none;
@@ -822,8 +886,11 @@
   :global(.usage-sheet) .group {
     padding: 8px 12px;
   }
+  :global(.usage-sheet) .orgs {
+    padding-block-start: var(--space-3);
+  }
   :global(.usage-sheet) .row {
-    min-block-size: 44px;
+    block-size: 44px;
     padding: 0 6px;
   }
   :global(.usage-sheet) .foot :global(a) {

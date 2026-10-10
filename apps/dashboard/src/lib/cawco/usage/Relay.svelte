@@ -4,9 +4,10 @@
    * one bar. Each carry span is a band in its account's colour, laid from
    * now to the 5-hour horizon on a recessed groove, 2px between bands. A
    * span nobody can carry draws nothing (the groove shows through); an
-   * account out of date draws its band at 40%; an account at its limit
-   * draws its band only from the moment it's back, when that is inside the
-   * horizon. Hour ticks under it.
+   * account out of date draws its band at --account-stale-opacity; an
+   * account at its limit draws its band only from the moment it's back,
+   * when that is inside the horizon. Hour ticks under it, each a hairline
+   * at its hour's place on the bar.
    *
    * Motion: a new reading eases the bands' widths (--dur-panel, ease-out); a
    * band arriving fades in (--dur-fade), one leaving fades out (--dur-exit).
@@ -101,7 +102,37 @@
   const bandOut = (node: Element) =>
     fade(node, { duration: instant ? 0 : dur("--dur-exit"), easing: easeOut });
 
-  const TICKS = ["now", "+1h", "+2h", "+3h", "+4h", "+5h"];
+  /**
+   * Each hour where it falls on the bar, by the bar's own mapping: the
+   * segments share the bar's width less their 2px gaps in proportion to
+   * their spans, so an hour inside the k-th segment sits at its share of
+   * that width plus the k gaps before it. "now" and "+5h" are the bar's ends.
+   */
+  const ticks = $derived.by(() => {
+    const total = segments.reduce((sum, seg) => sum + seg.ms, 0);
+    const gaps = Math.max(0, segments.length - 1);
+    return [0, 1, 2, 3, 4, 5].map((hour) => {
+      const text = hour === 0 ? "now" : `+${hour}h`;
+      if (hour === 0 || hour === 5 || total === 0) {
+        return { hour, text, at: hour === 5 ? "100%" : "0%" };
+      }
+      const t = (hour / 5) * total;
+      let before = 0;
+      let k = 0;
+      for (const seg of segments) {
+        if (t <= before + seg.ms) {
+          break;
+        }
+        before += seg.ms;
+        k += 1;
+      }
+      return {
+        hour,
+        text,
+        at: `calc((100% - ${gaps} * var(--relay-gap)) * ${(t / total).toFixed(6)} + ${k} * var(--relay-gap))`,
+      };
+    });
+  });
 </script>
 
 <div class="relay" data-relay>
@@ -129,26 +160,37 @@
     {/each}
   </div>
   <div aria-hidden="true" class="ticks">
-    {#each TICKS as tick (tick)}
-      <span>{tick}</span>
+    {#each ticks as tick (tick.hour)}
+      <span
+        class="tick"
+        data-tick={tick.hour}
+        style:inset-inline-start={tick.at}
+        class:end={tick.hour === 5}
+        class:start={tick.hour === 0}
+      >
+        <span class="mark" data-tick-mark></span>
+        <span class="label" data-tick-label>{tick.text}</span>
+      </span>
     {/each}
   </div>
 </div>
 
 <style>
   .relay {
+    --relay-gap: 2px;
     display: flex;
     flex-direction: column;
-    gap: var(--space-1);
   }
-  /* The groove the bands stand in: the recess of a progress track. */
+  /* The groove the bands stand in: the empty track a ring is drawn on, so
+     the groove and the gap nobody carries show on the raised surface in
+     both schemes (by night the deep recess all but met it). */
   .bar {
     display: flex;
-    gap: 2px;
+    gap: var(--relay-gap);
     block-size: var(--space-2);
     overflow: hidden;
     border-radius: var(--radius-hair);
-    background: var(--surface-recess-deep);
+    background: var(--border-control);
 
     @media (hover: none), (pointer: coarse), (max-width: 640px) {
       block-size: var(--space-3);
@@ -166,22 +208,57 @@
     background: var(--c);
   }
   .band.stale {
-    opacity: 0.4;
+    opacity: var(--account-stale-opacity);
   }
   .instant .band,
   .instant .blank {
     transition: none;
   }
+  /* Under the bar: a hairline at each hour, its label centred on it; "now"
+     starts at the bar's start and "+5h" ends at its end. One meta line
+     under the marks. */
   .ticks {
-    display: flex;
-    justify-content: space-between;
+    position: relative;
+    block-size: calc(var(--space-1) + var(--text-meta) * var(--leading-meta));
     font: var(--type-meta);
     font-variant-numeric: tabular-nums;
     color: var(--ink-subtle);
   }
+  .tick {
+    position: absolute;
+    inset-block: 0;
+    translate: -50% 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    transition: inset-inline-start var(--dur-panel) var(--ease-out);
+
+    &.start {
+      translate: none;
+      align-items: flex-start;
+    }
+    &.end {
+      translate: -100% 0;
+      align-items: flex-end;
+    }
+  }
+  .mark {
+    flex: none;
+    inline-size: 1px;
+    block-size: 3px;
+    background: var(--ink-subtle);
+  }
+  .label {
+    margin-block-start: 1px;
+    white-space: nowrap;
+  }
+  .relay:has(.instant) .tick {
+    transition: none;
+  }
   @media (prefers-reduced-motion: reduce) {
     .band,
-    .blank {
+    .blank,
+    .tick {
       transition: none;
     }
   }

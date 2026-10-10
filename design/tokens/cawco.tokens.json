@@ -441,6 +441,16 @@
       "$type": "color",
       "$value": "{color.mark-6}"
     },
+    "account-rose": {
+      "$type": "color",
+      "$value": "{color.mark-8}",
+      "$description": "Not a hue a person picks (core AccountHue has five): the usage surfaces give it to an account whose own hue an account shown with it already wears, after the five, so accounts shown together never share a colour."
+    },
+    "account-violet": {
+      "$type": "color",
+      "$value": "{color.mark-7}",
+      "$description": "The second such hue, after account-rose."
+    },
     "account-reserved": {
       "$type": "color",
       "$description": "The part of an account's week rim that sits under its reserve, once the reserve is reached: a mid neutral that reads on paper and at night.",
@@ -2937,6 +2947,11 @@
       "$type": "number",
       "$value": "0.81",
       "$description": "The duotone second layer of a status glyph in an alert row (join/JoinedRow): the lowest at which it holds 3:1 on the recess in both schemes for the ink-strong, done and attn glyph inks, the attn glyph by day being the floor. Every other Solar glyph keeps 0.5."
+    },
+    "account-stale-opacity": {
+      "$type": "number",
+      "$value": "0.7",
+      "$description": "An account whose reading is out of date: its rings and its relay band draw at this opacity, the lowest at which every account hue holds 3:1 on the raised surface in both schemes (by day 0.7 is the floor for mark-2 to mark-7, at night 0.65)."
     },
     "ride-fade": {
       "$type": "dimension",

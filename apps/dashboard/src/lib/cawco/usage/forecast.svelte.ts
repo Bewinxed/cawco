@@ -111,7 +111,9 @@ const openCode = $derived.by((): RingAccount | null => {
         row.harness === "opencode" &&
         (row.status === "running" || row.status === "starting")
     ),
-    state.now
+    state.now,
+    // Shown beside Claude's accounts: never in a hue one of them wears.
+    claude?.accounts.map((ring) => ring.hue) ?? []
   );
 });
 

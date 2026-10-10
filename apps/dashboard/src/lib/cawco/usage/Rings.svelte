@@ -9,7 +9,8 @@
    * a sector clockwise from 12 o'clock for the share left, over a track disc;
    * the outer rim, a hairline outside it, is its week, drawn the same way.
    * Both in the account's colour. At its limit the spent window's fill is
-   * gone; a reading out of date draws at 40%. Past its weekly reserve the
+   * gone; a reading out of date draws at --account-stale-opacity (3:1 on
+   * the raised surface for every hue). Past its weekly reserve the
    * part of the rim under the reserve is the reserved neutral, with a notch
    * cut where the reserve sits, in the ground's paint (`--ring-ground`).
    *
@@ -193,7 +194,7 @@
     opacity: 0;
   }
   .stale .arc {
-    opacity: 0.4;
+    opacity: var(--account-stale-opacity);
   }
   .refill .arc {
     transition: stroke-dashoffset var(--dur-settle) var(--ease-out);

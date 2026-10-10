@@ -39,6 +39,11 @@
     "(hover: none), (pointer: coarse), (max-width: 640px)"
   );
 
+  /**
+   * Each account's own hue as the hub stores it: past five they repeat, as
+   * the hub's assignment does once the five are taken (bewinxed@gmail.com
+   * wears design@'s amber); the rings' shownHues tells them apart.
+   */
   const HUES = ["amber", "blue", "cyan", "green", "orange"] as const;
 
   interface Seed {
@@ -276,13 +281,16 @@
         severity: "normal",
       },
     ];
+    const shown = rings.accounts.filter((ring) => ring.w5 || ring.week);
     usage.stage({
       forecast,
-      claude: {
-        ...rings,
-        accounts: rings.accounts.filter((ring) => ring.w5 || ring.week),
-      },
-      openCode: openCodeRing({ fetchedAt: now, windows: go }, [], now),
+      claude: { ...rings, accounts: shown },
+      openCode: openCodeRing(
+        { fetchedAt: now, windows: go },
+        [],
+        now,
+        shown.map((ring) => ring.hue)
+      ),
     });
   }
 
@@ -306,7 +314,11 @@
   const ownStrip = $derived(narrow.current);
   const phoneFrame = $derived(!narrow.current && view === "phone");
 
-  /** Opens the strip's popover or sheet, once it has drawn. */
+  /**
+   * Opens the strip's popover or sheet, once it has drawn, as a press of the
+   * pointer does (a pointerdown, then the click): the strip opens a pointer's
+   * press with no focus ring, as it does for a person.
+   */
   function openStrip() {
     const scope = ownStrip
       ? document.querySelector("[data-bench-strip]")
@@ -314,6 +326,7 @@
     const hit = scope?.querySelector<HTMLElement>(
       ".strip-hit:not([data-state='open']):not([aria-expanded='true'])"
     );
+    hit?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
     hit?.click();
   }
   onMount(() => {

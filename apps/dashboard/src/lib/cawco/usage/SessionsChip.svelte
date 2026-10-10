@@ -10,6 +10,13 @@
    * Hover timing is the rail's session card's (SessionHover): it opens after
    * 350ms of rest and closes 300ms after the pointer leaves both it and the
    * list, so a pointer crossing the gap keeps it open.
+   *
+   * The list hangs from the whole row the chip sits on (its nearest
+   * `[data-flyover-anchor]`), as wide as the row, so it covers the rows under
+   * it whole and never leaves a letter or half a figure showing at its
+   * edges. Opened by a pointer (a rest or a press) it leaves focus where it
+   * is: no ring lands on its first session. Opened from the keyboard, focus
+   * goes to the first session and the house ring shows.
    */
   import { MediaQuery } from "svelte/reactivity";
   import { badgeVariants } from "#lib/components/ui/badge/index.js";
@@ -41,6 +48,17 @@
   let open = $state(false);
   let dwell: ReturnType<typeof setTimeout> | undefined;
   let closing: ReturnType<typeof setTimeout> | undefined;
+  /** The last thing that opened it was a pointer (a rest or a press). */
+  let byPointer = $state(false);
+  let trigger = $state<HTMLElement | null>(null);
+  const anchor = $derived(
+    trigger?.closest<HTMLElement>("[data-flyover-anchor]") ?? null
+  );
+  const keepFocus = (event: Event) => {
+    if (byPointer) {
+      event.preventDefault();
+    }
+  };
 
   const count = $derived(sessions.length);
   const label = $derived(
@@ -55,6 +73,7 @@
     if (!open) {
       clearTimeout(dwell);
       dwell = setTimeout(() => {
+        byPointer = true;
         open = true;
       }, OPEN_AFTER);
     }
@@ -88,20 +107,31 @@
       "sessions-chip pressable touch-hit overflow-visible"
     )}
     data-sessions-chip
+    onkeydown={() => {
+      byPointer = false;
+    }}
+    onpointerdown={() => {
+      byPointer = true;
+    }}
     onpointerenter={rest}
     onpointerleave={leave}
+    bind:ref={trigger}
   >
     <IconChat aria-hidden="true" />
     <span class="num">{count}</span>
   </Popover.Trigger>
   <Popover.Content
     align="start"
-    class="sessions-flyover w-64 gap-0 p-1.5"
+    class="sessions-flyover w-(--bits-popover-anchor-width) gap-0 overflow-hidden p-0"
+    customAnchor={anchor}
     data-sessions-flyover
+    onCloseAutoFocus={keepFocus}
+    onOpenAutoFocus={keepFocus}
     onpointerenter={rest}
     onpointerleave={leave}
     side="bottom"
-    sideOffset={6}
+    sideOffset={-1}
+    trapFocus={!byPointer}
   >
     <ul aria-label={label} class="list">
       {#each sessions as session (session.id)}
@@ -134,14 +164,17 @@
     display: flex;
     flex-direction: column;
   }
-  /* A session: its status glyph, its title, and its project after it. */
+  /* A session: its status glyph, its title, and its project after it. Each
+     is an account row's height (40px, 44px where the rows are), and the
+     list stands 1px into the row above with its 1px edge: it ends on a row's
+     edge, so the rows it covers are covered whole and the rows around it
+     keep every letter. */
   .item {
     display: flex;
     align-items: center;
     gap: var(--space-2);
-    min-block-size: 32px;
-    padding: 0 var(--space-2);
-    border-radius: var(--radius-sm);
+    block-size: 40px;
+    padding: 0 var(--space-3);
     color: var(--ink-strong);
     text-decoration: none;
     transition: background-color var(--dur-control) var(--ease-out);
@@ -151,8 +184,8 @@
         background: var(--surface-hover);
       }
     }
-    @media (hover: none), (pointer: coarse) {
-      min-block-size: 44px;
+    @media (hover: none), (pointer: coarse), (max-width: 640px) {
+      block-size: 44px;
     }
   }
   .title {

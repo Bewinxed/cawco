@@ -67,9 +67,14 @@ export interface RingAccount {
   carryFrom: number | null;
   /** When the span it carries you in ends (it carries now, or next). */
   carryUntil: number | null;
-  /** `var(--account-<hue>)`. */
+  /** `var(--account-<hue>)`, {@link hue}'s token. */
   color: string;
   email: string | null;
+  /**
+   * The hue it is drawn in where it is shown with others: its own, unless an
+   * account shown before it already wears that (see {@link shownHues}).
+   */
+  hue: ShownHue;
   id: string;
   /** Which window is spent, when it is at its limit. */
   limitOn: "5h" | "week" | null;
@@ -93,6 +98,61 @@ export interface RingAccount {
   state: RingState;
   w5: RingWindow | null;
   week: RingWindow | null;
+}
+
+/**
+ * The hues accounts shown together are drawn in: the five a person picks
+ * (core AccountHue), then the usage surfaces' own two (`--account-rose`,
+ * `--account-violet`), which only an account whose own hue is already worn
+ * takes.
+ */
+const SHOWN_HUES = [
+  "amber",
+  "blue",
+  "cyan",
+  "green",
+  "orange",
+  "rose",
+  "violet",
+] as const;
+export type ShownHue = (typeof SHOWN_HUES)[number];
+
+const hueToken = (hue: ShownHue): string => `var(--account-${hue})`;
+
+/**
+ * The hues a set of accounts shown together are drawn in, in their order:
+ * each keeps its own hue unless an account before it (or one in `worn`, the
+ * hues already on screen beside them) wears it; those that can't take the
+ * first of {@link SHOWN_HUES} nobody wears. Two passes, so an account whose
+ * own hue is free keeps it even when a clash before it is resolved. Past
+ * seven accounts on screen at once the hues repeat, in that order.
+ */
+export function shownHues(
+  own: readonly ShownHue[],
+  worn: readonly ShownHue[] = []
+): ShownHue[] {
+  const used = new Set<ShownHue>(worn);
+  const kept = own.map((hue) => {
+    if (used.has(hue)) {
+      return null;
+    }
+    used.add(hue);
+    return hue;
+  });
+  let spare = 0;
+  return kept.map((hue) => {
+    if (hue) {
+      return hue;
+    }
+    const free = SHOWN_HUES.find((one) => !used.has(one));
+    if (free) {
+      used.add(free);
+      return free;
+    }
+    const repeat = SHOWN_HUES[spare % SHOWN_HUES.length] as ShownHue;
+    spare += 1;
+    return repeat;
+  });
 }
 
 /** What accounts/AccountName reads of a ring: its nickname, else its email. */
@@ -270,7 +330,8 @@ function accountRing(
       account.provider === CLAUDE_PROVIDER && account.identity?.organization
         ? account.identity.organization
         : null,
-    color: `var(--account-${account.hue})`,
+    hue: account.hue,
+    color: hueToken(account.hue),
     w5,
     week,
     month: null,
@@ -349,6 +410,15 @@ export function claudeRings(input: {
       now
     )
   );
+  // In the account order, not the carrying order: a clash resolves the same
+  // way whoever carries, so no account changes colour when the relay moves.
+  shownHues(rings.map((ring) => ring.hue)).forEach((hue, i) => {
+    const ring = rings[i];
+    if (ring) {
+      ring.hue = hue;
+      ring.color = hueToken(hue);
+    }
+  });
   const byId = new Map(rings.map((ring) => [ring.id, ring]));
   const spans: CarrySpan[] = forecast.yours;
   const of = (span: CarrySpan | undefined) =>
@@ -395,12 +465,17 @@ export function claudeRings(input: {
   };
 }
 
-/** Opencode's plan as one ring: its own 5-hour, week and month windows. */
+/**
+ * Opencode's plan as one ring: its own 5-hour, week and month windows. It
+ * goes by amber unless a Claude account shown beside it (`worn`) does.
+ */
 export function openCodeRing(
   reading: { fetchedAt: number; stale?: boolean; windows: LimitWindow[] },
   live: InstanceRow[],
-  now: number
+  now: number,
+  worn: readonly ShownHue[]
 ): RingAccount {
+  const [hue = "amber"] = shownHues(["amber"], worn);
   const win = (group: string): RingWindow | null => {
     const w = reading.windows.find((one) => one.group === group);
     if (!w) {
@@ -438,7 +513,8 @@ export function openCodeRing(
     nick: "Go plan",
     email: null,
     org: null,
-    color: "var(--account-amber)",
+    hue,
+    color: hueToken(hue),
     w5,
     week,
     month,
@@ -476,17 +552,26 @@ export const plain = (parts: Part[]): string =>
     })
     .join("");
 
+/**
+ * A time worked out from a reading out of date is a guess, and says so with a
+ * tilde ("~3h 40m"); the out-of-date ring's tooltip says why. Every time the
+ * strip, the popover and the rows show takes it from here, so none says
+ * "seen 1h 40m ago" instead.
+ */
+const guess = (stale: boolean, time: string): string =>
+  stale ? `~${time}` : time;
+
 /** The strip's and the page's figure: how long until nothing can carry you. */
 export const stopText = (c: ClaudeRings, now: number): string =>
   c.stopAt === null || c.stopAt - now >= HORIZON_MS
     ? "5h+"
-    : fmt(c.stopAt - now);
+    : guess(c.stale !== null, fmt(c.stopAt - now));
 
-/** The strip's caption: who is next, else when you're back. */
+/**
+ * The strip's caption: who is next, else when you're back. An account out of
+ * date in the chain is said by the figure's tilde, not here.
+ */
 export function caption(c: ClaudeRings, now: number): Part[] {
-  if (c.stale && c.stale.seenAt !== null) {
-    return [named(c.stale), ` seen ${fmt(now - c.stale.seenAt)} ago`];
-  }
   if (c.next) {
     return ["then ", named(c.next)];
   }
@@ -508,10 +593,9 @@ export function rowTime(r: RingAccount, c: ClaudeRings, now: number): string {
   if (r.state === "limit") {
     return `back in ${until(r.backAt, now)}`;
   }
-  const guess = r.state === "stale" ? "~" : "";
   const left = (out: number | null) =>
     out !== null && out - now < HORIZON_MS
-      ? `${guess}${fmt(out - now)} left`
+      ? `${guess(r.state === "stale", fmt(out - now))} left`
       : "5h+";
   if (r.state === "reserve" || r.id === c.carry?.id) {
     return left(r.bindOut ?? r.carryUntil);
@@ -642,7 +726,7 @@ export function tileSentence(
       ".",
     ];
   }
-  return ["Not carrying anything."];
+  return ["Idle."];
 }
 
 /** A tile's figure, beside its mark, and what the figure is. */
@@ -770,7 +854,7 @@ export const openCodeStop = (o: RingAccount, now: number): string => {
     return "0m";
   }
   return o.bindOut !== null && o.bindOut - now < HORIZON_MS
-    ? fmt(o.bindOut - now)
+    ? guess(o.state === "stale", fmt(o.bindOut - now))
     : "5h+";
 };
 
@@ -780,16 +864,13 @@ export const openCodeRowTime = (o: RingAccount, now: number): string =>
     ? `back in ${until(o.backAt, now)}`
     : openCodeStop(o, now);
 
-export function openCodeStatus(o: RingAccount, now: number): Part[] {
-  if (o.state === "limit") {
-    return ["at its limit"];
-  }
-  if (o.state === "stale" && o.seenAt !== null) {
-    return [`seen ${fmt(now - o.seenAt)} ago`];
-  }
-  return o.bindOut !== null && o.bindOut - now < HORIZON_MS
-    ? ["runs out in ", strong(fmt(o.bindOut - now))]
-    : ["nothing runs out in the next 5 hours"];
+/**
+ * Opencode's row status: at its limit, else nothing. Its row time already
+ * says how long it lasts ("1h 12m", "5h+", a tilde when out of date), so
+ * saying it again here would be the same thing twice.
+ */
+export function openCodeStatus(o: RingAccount): Part[] {
+  return o.state === "limit" ? ["at its limit"] : [];
 }
 
 export function openCodeSentence(o: RingAccount, now: number): Part[] {
@@ -807,21 +888,32 @@ export function openCodeSentence(o: RingAccount, now: number): Part[] {
 }
 
 /**
- * A row's one reset, the window that binds it: "resets in 1h 33m" on the
- * 5-hour, "resets Fri 23:00" on the week (the key's reset column, for the
- * window that matters). Nothing at its limit: the row's time says when.
+ * A row's one reset, the window that binds it: on the row, the reset glyph and
+ * "1h 33m" on the 5-hour or "Fri 23:00" on the week (`at`); read out and in
+ * its tooltip, "resets in 1h 33m", "resets Fri 23:00" (`said`). Null at its
+ * limit: the row's time already says when it's back.
  */
-export function bindReset(r: RingAccount, now: number): string {
-  // At its limit the row's time already says when it's back.
+export function bindReset(
+  r: RingAccount,
+  now: number
+): { at: string; said: string } | null {
   if (r.state === "limit") {
-    return "";
+    return null;
   }
   if (r.bind === "5h") {
     const resets = r.w5?.resetsAt ?? null;
-    return resets === null ? "" : `resets in ${until(resets, now)}`;
+    if (resets === null) {
+      return null;
+    }
+    const at = until(resets, now);
+    return { at, said: `resets in ${at}` };
   }
   const resets = r.week?.resetsAt ?? null;
-  return resets === null ? "" : `resets ${dayTime(resets, now)}`;
+  if (resets === null) {
+    return null;
+  }
+  const at = dayTime(resets, now);
+  return { at, said: `resets ${at}` };
 }
 
 /** One line of the key: glyph | label | value | reset. */
