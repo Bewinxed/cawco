@@ -45,6 +45,8 @@ const CARRIED = 0.5;
 const STILL = 3;
 /** A scroll this soon (ms) after a wheel, a key or a touch is the reader's own. */
 const OWN_SCROLL = 200;
+/** How long (ms) a scroll stands still before the ghost is aimed in full again. */
+const SCROLL_END = 100;
 
 /** A row's box in the container's own coordinates. */
 export interface LaidOut {
@@ -212,7 +214,7 @@ export function highlight(options: HighlightOptions) {
      * the container's own untransformed pixels: a list inside a popover that
      * is still scaling in is measured at its real size, not its drawn one.
      */
-    const toLocal = (clientX: number, clientY: number) => {
+    const frameOf = () => {
       const frame = container.getBoundingClientRect();
       // Drawn size over laid-out size; the laid-out size is the resolved
       // one, fractional, so an untransformed list is exactly 1.
@@ -221,21 +223,34 @@ export function highlight(options: HighlightOptions) {
         const size = Number.parseFloat(laid);
         return size > 0 && Math.abs(drawn - size) > 0.01 ? drawn / size : 1;
       };
-      const sx = across(frame.width, styles.width);
-      const sy = across(frame.height, styles.height);
       return {
-        x:
-          (clientX - frame.left) / sx -
-          container.clientLeft +
-          container.scrollLeft,
-        y:
-          (clientY - frame.top) / sy -
-          container.clientTop +
-          container.scrollTop,
-        sx,
-        sy,
+        left: frame.left,
+        top: frame.top,
+        borderLeft: container.clientLeft,
+        borderTop: container.clientTop,
+        sx: across(frame.width, styles.width),
+        sy: across(frame.height, styles.height),
       };
     };
+    /** A point in the frame `frameOf` measured, at the list's scroll now. */
+    const inFrame = (
+      frame: ReturnType<typeof frameOf>,
+      clientX: number,
+      clientY: number
+    ) => ({
+      x:
+        (clientX - frame.left) / frame.sx -
+        frame.borderLeft +
+        container.scrollLeft,
+      y:
+        (clientY - frame.top) / frame.sy -
+        frame.borderTop +
+        container.scrollTop,
+      sx: frame.sx,
+      sy: frame.sy,
+    });
+    const toLocal = (clientX: number, clientY: number) =>
+      inFrame(frameOf(), clientX, clientY);
     /**
      * A row's box in the same space: where the list laid it out, when it
      * says, or else where the page laid it out, transforms ignored. A row a
@@ -619,6 +634,7 @@ export function highlight(options: HighlightOptions) {
     };
     const onLeave = () => {
       cancelAnimationFrame(settling);
+      forgetScroll();
       pointer = null;
       if (!hovered) {
         showGhost(null);
@@ -629,17 +645,87 @@ export function highlight(options: HighlightOptions) {
     const onInput = () => {
       lastInput = performance.now();
     };
+    /**
+     * A scroll the reader makes carries the rows under a still pointer, and
+     * the ghost follows to the row the pointer is on, frame by frame. The
+     * rows do not move in the list's own space while it scrolls, so their
+     * boxes are measured once, when the scroll begins, with the list's
+     * frame; each scroll frame then reads only the scroll offset and checks
+     * the pointer against those boxes, and the ghost is placed again only
+     * when the row under the pointer changes. Re-aimed in full every frame
+     * (`nearest`: what is drawn under the pointer, every row's style and
+     * box), the tab track's scroll spent half its script here. Once the
+     * scroll has stood still for `SCROLL_END`, the pointer is aimed in full
+     * (a row covered by another surface is not the pointer's), and the
+     * boxes are let go: anything that moves the rows (`laidOut`, a resize)
+     * lets them go too.
+     */
+    let scrolling: {
+      frame: ReturnType<typeof frameOf>;
+      rows: { box: Omit<Box, "r">; row: HTMLElement }[];
+    } | null = null;
+    let scrollEnd: ReturnType<typeof setTimeout> | undefined;
+    const forgetScroll = () => {
+      clearTimeout(scrollEnd);
+      scrolling = null;
+    };
+    const aimScrolling = (at: { x: number; y: number }) => {
+      if (!scrolling) {
+        const shares = new Map<HTMLElement, { x: number; y: number }>();
+        scrolling = {
+          frame: frameOf(),
+          rows: rowsNow().flatMap((row) => {
+            const box =
+              getComputedStyle(row).pointerEvents === "none"
+                ? undefined
+                : placeOf(row, shares);
+            return box ? [{ row, box }] : [];
+          }),
+        };
+      }
+      const local = inFrame(scrolling.frame, at.x, at.y);
+      let best: HTMLElement | null = null;
+      let bestDistance = Number.POSITIVE_INFINITY;
+      for (const { row, box } of scrolling.rows) {
+        if (!reaches(box, local)) {
+          continue;
+        }
+        const dx = local.x - (box.x + box.w / 2);
+        const dy = local.y - (box.y + box.h / 2);
+        const distance = {
+          x: Math.abs(dx),
+          y: Math.abs(dy),
+          xy: Math.hypot(dx, dy),
+        }[axis];
+        if (distance < bestDistance) {
+          best = row;
+          bestDistance = distance;
+        }
+      }
+      if (best !== ghostRow) {
+        showGhost(best);
+      }
+      clearTimeout(scrollEnd);
+      scrollEnd = setTimeout(() => {
+        scrolling = null;
+        if (pointer && ghostRow) {
+          onMove({ clientX: pointer.x, clientY: pointer.y }, true);
+        }
+      }, SCROLL_END);
+    };
     const onScroll = () => {
       if (!pointer) {
         return;
       }
       if (performance.now() - lastInput < OWN_SCROLL) {
-        if (ghostRow) {
-          onMove({ clientX: pointer.x, clientY: pointer.y }, true);
+        if (ghostRow && !hovered) {
+          cancelAnimationFrame(settling);
+          aimScrolling(pointer);
         }
         return;
       }
       // Nobody scrolled: the list moved itself under the pointer.
+      forgetScroll();
       settle();
     };
     container.addEventListener("pointermove", onPointer);
@@ -706,6 +792,7 @@ export function highlight(options: HighlightOptions) {
       pendingResize = requestAnimationFrame(onResize);
     });
     const onResize = () => {
+      forgetScroll();
       if (skipped) {
         return;
       }
@@ -739,6 +826,7 @@ export function highlight(options: HighlightOptions) {
       $effect(() => {
         laidOut();
         untrack(() => {
+          forgetScroll();
           if (pointer && !hovered) {
             onMove({ clientX: pointer.x, clientY: pointer.y }, true);
           } else if (ghostRow) {
@@ -750,6 +838,7 @@ export function highlight(options: HighlightOptions) {
     }
 
     return () => {
+      forgetScroll();
       cancelAnimationFrame(pendingResize);
       cancelAnimationFrame(pendingHide);
       cancelAnimationFrame(pendingSync);

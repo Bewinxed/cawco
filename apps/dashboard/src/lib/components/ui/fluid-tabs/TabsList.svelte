@@ -369,6 +369,12 @@
    * overshoot. A sideways trackpad swipe is the browser's own scroll and
    * is left alone.
    */
+  /** Whether a tab stands past the track's viewport: there is somewhere to scroll. */
+  const overflows = $derived(
+    [...rects.rects.values()].some(
+      (rect) => rect.left + rect.width > rects.viewport.width + 0.5
+    )
+  );
   const GLIDE = 0.3;
   const STIFFNESS = ((2 * Math.PI) / GLIDE) ** 2;
   const DAMPING = (4 * Math.PI) / GLIDE;
@@ -406,7 +412,7 @@
     };
 
     const onwheel = (event: WheelEvent) => {
-      if (event.deltaX !== 0 || el.scrollWidth <= el.clientWidth) {
+      if (event.deltaX !== 0) {
         stop();
         return;
       }
@@ -431,11 +437,25 @@
       const max = el.scrollWidth - el.clientWidth;
       target = Math.max(0, Math.min(max, target + delta));
     };
-    el.addEventListener("wheel", onwheel, { passive: false });
+    // Not passive: a vertical wheel is the track's own, turned sideways, and
+    // must not also scroll whatever holds the track. Held only while the
+    // track overflows (its tabs' measured boxes and its viewport say when),
+    // so a track with nothing to scroll never holds a wheel for the main
+    // thread to answer before the page scrolls.
+    const stopListening = $effect.root(() => {
+      $effect(() => {
+        if (!overflows) {
+          stop();
+          return;
+        }
+        el.addEventListener("wheel", onwheel, { passive: false });
+        return () => el.removeEventListener("wheel", onwheel);
+      });
+    });
     return {
       destroy() {
         stop();
-        el.removeEventListener("wheel", onwheel);
+        stopListening();
       },
     };
   }

@@ -458,12 +458,6 @@
     if (touch.current || event.pointerType !== "mouse" || pinned || menuOpen) {
       return;
     }
-    // The tab came under a pointer at rest: nobody pointed at it. Clicking a
-    // tab and then splitting (`mod+\`) slid its neighbour under the pointer
-    // and opened that neighbour's card, which nothing had asked for.
-    if (movedTo?.x === event.clientX && movedTo.y === event.clientY) {
-      return;
-    }
     clearTimeout(timer);
     // The handlers sit on the whole tab, its buttons included, so moving onto
     // them is not leaving it; the card hangs from the whole tab.
@@ -484,6 +478,25 @@
     menuFor = id;
     clearTimeout(timer);
     if (detailsOpen && !pinned) {
+      closeDetails();
+    }
+  }
+  /**
+   * The strip scrolled: a card the pointer opened by hovering its tab
+   * closes, since that tab has moved out from under the pointer, and it
+   * does not open again until the pointer moves (`hoverTab`, a tab come
+   * under a pointer at rest). Following its tab instead, it was placed
+   * again every frame of the scroll, measured, moved and repainted: two
+   * thirds of the main thread's work in a tab strip's scroll. A pinned card
+   * stays and follows its tab.
+   */
+  function scrolledUnderCard() {
+    if (pinned) {
+      return;
+    }
+    // A card about to open on hover would open on a tab that has moved on.
+    clearTimeout(timer);
+    if (detailsOpen) {
       closeDetails();
     }
   }
@@ -1123,7 +1136,11 @@
   value={leaf.active ?? ""}
   variant="folder"
 >
-  <TabsList aria-label="Open sessions in this group" scrollable>
+  <TabsList
+    aria-label="Open sessions in this group"
+    onscroll={scrolledUnderCard}
+    scrollable
+  >
     {#each tabs as tab, i (tab.key)}
       {@const chosen = leaf.active === tab.id}
       {@const drawn = look(i)}
@@ -1144,6 +1161,14 @@
         oncontextmenucapture={anchorMenu}
         onpointerdown={(event) => pullMenu(tab.id, event)}
         onpointerenter={(event) => {
+          // A tab that came under a pointer at rest was not pointed at:
+          // nothing to warm and no card to open. Clicking a tab and then
+          // splitting (`mod+\`) slid its neighbour under the pointer and
+          // opened that neighbour's card; a scroll of the strip carried
+          // tab after tab under it and warmed each one's conversation.
+          if (movedTo?.x === event.clientX && movedTo.y === event.clientY) {
+            return;
+          }
           rebuildScheduler.prepare(tab.id);
           hoverTab(tab.id, event);
         }}
@@ -1479,6 +1504,14 @@
     flex-direction: column;
     width: 100%;
     max-height: inherit;
+  }
+  /* A pinned card follows its tab as the strip scrolls, frame by frame: its
+     wrapper moves on its own layer, so each step is the compositor's, not a
+     repaint of the card. */
+  :global(
+    [data-bits-floating-content-wrapper]:has(> .session-details-popover)
+  ) {
+    will-change: transform;
   }
   /* The glide to another tab: the wrapper's move, the card's height and the
      cut in its top edge, together. */
