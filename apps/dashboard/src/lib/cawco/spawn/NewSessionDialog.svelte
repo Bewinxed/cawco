@@ -104,6 +104,7 @@
   import { deriveModelEntries, type ModelEntry } from "./model-entries";
   import { lastSpawnAt, lastUsedAt, recordModelUse } from "./modelUse.svelte";
   import NsPopoverGroup from "./NsPopoverGroup.svelte";
+  import type { SpawnPrefill } from "./new-session.svelte";
   import type {
     LeadChip,
     MachineItem,
@@ -125,7 +126,7 @@
     onexitcontinue,
   }: {
     open: boolean;
-    prefill?: { machineId?: string; cwd?: string; projectId?: string };
+    prefill?: SpawnPrefill;
     /**
      * Continue in new session: the form starts a session seeded with a summary
      * of this one. Mutually exclusive with `prefill` — the source says where.
@@ -942,6 +943,11 @@
       moveStep = false;
       moveAt = undefined;
       moveEditing = false;
+      // A refused send picked up here: its words and what rode them are
+      // the first prompt (the kept draft, read back after, yields to it).
+      if (prefill?.prompt) {
+        firstMessage.restore(prefill.prompt.text, prefill.prompt.extras);
+      }
       if (continueFrom && restore) {
         ({ repo, projectId, harness, effort, permissionMode } = restore);
         // Its words and what rode them, as they were submitted.

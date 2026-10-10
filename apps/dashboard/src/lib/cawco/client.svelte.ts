@@ -3646,29 +3646,36 @@ function resentAttachments(message: Message): SendPayload["attachments"] {
 }
 
 /**
+ * A failed send as a send carries it — its words, texts, files and pictures,
+ * from its record — for sending it again or starting a session with it.
+ */
+export async function failedSendPayload(
+  message: Message
+): Promise<{ text: string; extras: SendExtras }> {
+  const images = await Promise.all(
+    (message.metadata?.images ?? []).flatMap(({ src, mediaType }) =>
+      src ? [imageBytes(src, mediaType)] : []
+    )
+  );
+  return {
+    text: message.content,
+    extras: { attachments: resentAttachments(message), images },
+  };
+}
+
+/**
  * Sends again, as a new send that replaces it, a send the hub failed — from
  * any screen, after any reload: the words and pictures are the row's own,
  * from its record. The hub retires the failed one (`replaced`) as it takes
  * this one, and every screen folds the old row away as the new one arrives.
  */
 export async function retryFailed(message: Message): Promise<void> {
-  const images = await Promise.all(
-    (message.metadata?.images ?? []).flatMap(({ src, mediaType }) =>
-      src ? [imageBytes(src, mediaType)] : []
-    )
-  );
+  const { text, extras } = await failedSendPayload(message);
   retries[message.id as string] = submitCommand(
     message.instanceId,
     session(message.instanceId).machineId,
     "send",
-    {
-      text: message.content,
-      extras: {
-        attachments: resentAttachments(message),
-        images,
-      },
-      replaces: message.id,
-    }
+    { text, extras, replaces: message.id }
   );
 }
 

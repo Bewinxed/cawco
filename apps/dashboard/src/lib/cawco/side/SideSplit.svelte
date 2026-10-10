@@ -88,8 +88,22 @@
   /** The preview on show, for the sheet's Escape (its selection mode). */
   let previewPane = $state<ReturnType<typeof PreviewPane>>();
   let sidePane = $state<ReturnType<typeof Resizable.Pane>>();
+  /** The conversation's own width for the surface, in percent: read untracked. */
   let savedWidth = 45;
   let resizing = $state(false);
+  /** The surface's widest share: the transcript keeps 30% of the split. */
+  const SIDE_MAX = 70;
+  /**
+   * The divider's width (the kit handle's `w-px`): the panes share what is
+   * left of the split beside it, so their percentages are of that.
+   */
+  const DIVIDER = 1;
+  /** The surface's floor, 320px, as a share of the panes' room; null until measured. */
+  const sideMin = $derived(
+    width > DIVIDER ? (320 / (width - DIVIDER)) * 100 : null
+  );
+  /** The split can hold the surface at its floor. */
+  const fits = $derived(sideMin !== null && sideMin <= SIDE_MAX);
 
   // --- what the surface holds --------------------------------------------------
 
@@ -139,6 +153,30 @@
    * over 300ms on every visit.
    */
   const desktopOpen = $derived(open && !phone);
+  /**
+   * The surface's share while it is open: the conversation's own width, held
+   * to the 320px floor and the 70% ceiling. Closed, or in a split too narrow
+   * to hold the floor at all, it is 0: the pane collapses.
+   *
+   * It is also the pane's `defaultSize`, which is what paneforge (1.0.2)
+   * rebuilds the group's layout from whenever a pane's constraints change
+   * (`panesArrayChanged`): the floor is a share of the measured width, so a
+   * change of width is one, and with a fixed default of 0 the surface
+   * snapped shut on it. Its own Reactive Size example keeps `defaultSize`
+   * with a pixel floor for this reason (paneforge.com/docs/examples/reactive-size).
+   * `savedWidth` is read untracked, so a drag never rebuilds the layout.
+   */
+  const sideSize = $derived(
+    desktopOpen && fits && sideMin !== null
+      ? Math.min(
+          SIDE_MAX,
+          Math.max(
+            untrack(() => savedWidth),
+            sideMin
+          )
+        )
+      : 0
+  );
   /** The split is sliding: the reader is watching it open or close. */
   let sliding = $state(false);
   let mounted = $state(false);
@@ -165,7 +203,7 @@
     savedWidth = stored > 0 ? Math.min(70, stored) : 45;
   });
   $effect(() => {
-    const opening = desktopOpen;
+    const opening = desktopOpen && fits;
     const pane = sidePane;
     if (!pane) {
       return;
@@ -177,11 +215,12 @@
     const seen = untrack(() => visible && !fromRow) && motionOk.current;
     sliding = seen;
     let settle = 0;
-    // The size is this conversation's own (`savedWidth`); the split's
-    // `minSize` holds the surface to its 320px floor.
+    // The size is this conversation's own, held to the floor (`sideSize`):
+    // paneforge refuses a resize under a pane's `minSize` outright rather
+    // than clamping it, so the size asked for is one it takes.
     const frame = requestAnimationFrame(() => {
       if (opening) {
-        pane.resize(savedWidth);
+        pane.resize(untrack(() => sideSize));
       } else {
         pane.collapse();
       }
@@ -278,7 +317,11 @@
   bind:clientWidth={width}
 >
   <Resizable.PaneGroup class="side-group" direction="horizontal">
-    <Resizable.Pane class="transcript-pane" defaultSize={100} minSize={30}>
+    <Resizable.Pane
+      class="transcript-pane"
+      defaultSize={100 - sideSize}
+      minSize={100 - SIDE_MAX}
+    >
       {@render children()}
     </Resizable.Pane>
     <Resizable.Handle
@@ -291,12 +334,18 @@
       class="side-pane"
       collapsedSize={0}
       collapsible
-      defaultSize={0}
-      maxSize={70}
-      minSize={width ? Math.min(70, (320 / width) * 100) : 30}
+      defaultSize={sideSize}
+      maxSize={SIDE_MAX}
+      minSize={Math.min(SIDE_MAX, sideMin ?? 30)}
       onResize={(size) => {
         share = size;
-        if (size > 0 && desktopOpen) {
+        // The reader's width is kept; the floor holding it up in a narrow
+        // split is not, so a wider one opens at the width they chose.
+        if (
+          size > 0 &&
+          desktopOpen &&
+          (resizing || size > (sideMin ?? 0) + 0.01)
+        ) {
           savedWidth = size;
           localStorage.setItem(`cawco.preview.width.${viewId}`, String(size));
         }

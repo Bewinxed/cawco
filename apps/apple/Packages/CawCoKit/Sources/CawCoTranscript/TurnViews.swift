@@ -340,7 +340,7 @@ final class UserTurnView: UIView, RowContent, FitsWidth, UIGestureRecognizerDele
         reason.attributedText = Styled.string("Couldn't send that message." + (reasonText.map { " \($0)" } ?? ""), TypeScale.typeMeta,
                                               color: Palette.statusFailInk, lineBreak: .byWordWrapping)
         let sending = retried != nil || retrying != nil
-        retry.setAttributedTitle(Styled.string(sending ? "Sending…" : "Try again", TypeScale.typeLabel, color: Palette.inkStrong), for: .normal)
+        retry.setAttributedTitle(Styled.string(sending ? "Sending again…" : "Send again", TypeScale.typeLabel, color: Palette.inkStrong), for: .normal)
         retry.isEnabled = !sending
         failure.isHidden = !failed
         retry.isHidden = !failed || env.hub.map { $0.state != .connected || $0.fleet.byId[env.sessionId]?.isListed != true } ?? true
@@ -453,7 +453,7 @@ final class UserTurnView: UIView, RowContent, FitsWidth, UIGestureRecognizerDele
     private func tryAgain() {
         guard retrying == nil, let block, let hub = env.hub, hub.state == .connected, let row = hub.fleet.byId[env.sessionId], row.isListed else { return }
         let extras = SentMessages.extras(of: block)
-        retry.setAttributedTitle(Styled.string("Sending…", TypeScale.typeLabel, color: Palette.inkStrong), for: .normal)
+        retry.setAttributedTitle(Styled.string("Sending again…", TypeScale.typeLabel, color: Palette.inkStrong), for: .normal)
         retry.isEnabled = false
         retrying = Task { [weak self] in
             var images: [(mediaType: String, data: Data)] = []
@@ -473,12 +473,12 @@ final class UserTurnView: UIView, RowContent, FitsWidth, UIGestureRecognizerDele
     /// The pictures being read for a retry.
     private var retrying: Task<Void, Never>?
 
-    /// The retry could not be put together: the row says why, and Try again stands again.
+    /// The retry could not be put together: the row says why, and Send again stands again.
     private func retryRefused(_ why: String) {
         retrying = nil
         reason.attributedText = Styled.string("Couldn't send that message. \(why)", TypeScale.typeMeta,
                                               color: Palette.statusFailInk, lineBreak: .byWordWrapping)
-        retry.setAttributedTitle(Styled.string("Try again", TypeScale.typeLabel, color: Palette.inkStrong), for: .normal)
+        retry.setAttributedTitle(Styled.string("Send again", TypeScale.typeLabel, color: Palette.inkStrong), for: .normal)
         retry.isEnabled = true
     }
 }

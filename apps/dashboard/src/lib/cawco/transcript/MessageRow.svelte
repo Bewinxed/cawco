@@ -24,6 +24,7 @@
     cawco,
     commandRecord,
     editAndResend,
+    failedSendPayload,
     forkFrom,
     restoreDraft,
     retryFailed,
@@ -43,7 +44,11 @@
   import Peer from "./Peer.svelte";
   import Shot from "./Shot.svelte";
   import SystemLine from "./SystemLine.svelte";
-  import { recoveryOf, type SendRecovery } from "./send-recovery.svelte";
+  import {
+    type RecoveryAction,
+    recoveryOf,
+    type SendRecovery,
+  } from "./send-recovery.svelte";
   import Thinking from "./Thinking.svelte";
   import { useVoice } from "./voice";
   import Who from "./Who.svelte";
@@ -306,7 +311,7 @@
   );
 
   /**
-   * Whether Try again has anything to send. A failed send's words are its
+   * Whether Send again has anything to send. A failed send's words are its
    * record's, so it always does. One that never reached the hub has only this
    * tab's outbox, which is bounded to the ledger's own five minutes — so the
    * offer is gated on the payload being in hand rather than left standing as
@@ -322,7 +327,7 @@
         : "sending…";
     }
     if (failed) {
-      return "not sent";
+      return retrying ? "sending…" : "not sent";
     }
     if (waiting) {
       const here = cawco.session(message.instanceId);
@@ -374,11 +379,8 @@
    * back with why.
    */
   let retried = $state(false);
-  /**
-   * The reason line as it read when the retry went out: held while it is out,
-   * and while the line folds away once it has gone.
-   */
-  let heldLine = $state("");
+  /** What the line says while a send again is out, and folds shut on once it has gone. */
+  const SENDING_AGAIN = "Sending that message again…";
   /** Whether Edit was offered when the retry went out, held the same way. */
   let heldEdit = $state(false);
   /**
@@ -393,12 +395,12 @@
   /** Something to say under the words: the failure, or the retry for it. */
   const open = $derived(failed || retrying);
   /**
-   * What the reason line reads: the failure as it stands, or the line the
-   * retry went out under — kept while the retry is out and while the fold
-   * closes, so the block folds shut on the words it opened with instead of
-   * losing them (and its height) in one frame.
+   * What the reason line reads: the failure as it stands, or, once a send
+   * again has gone out, that it is being sent again — kept while the fold
+   * closes, so the block folds shut on its words instead of losing them (and
+   * its height) in one frame. A send again that does not go either says why.
    */
-  const line = $derived(failed && !retrying ? reasonLine : heldLine);
+  const line = $derived(failed && !retrying ? reasonLine : SENDING_AGAIN);
   /**
    * The recovery the row offered when Send again went out, held as resolved:
    * its Send again stays where it was, pending while the retry is out, and
@@ -411,7 +413,6 @@
     if (!id) {
       return;
     }
-    heldLine = reasonLine;
     heldEdit = editable;
     heldRecovery = recovery ? { ...recovery, holds: false, actions: [] } : null;
     retried = true;
@@ -458,6 +459,31 @@
       sendAfterMove = null;
     }
   });
+  /**
+   * Start a new session with this message: the New session dialog opens
+   * where the work was, with its words and attachments as the first prompt.
+   * Its pictures are read from the hub first; one that can't be read says
+   * why under the row, and the dialog does not open without it.
+   */
+  let starting = $state(false);
+  async function startWith(
+    action: Extract<RecoveryAction, { kind: "new-session" }>
+  ): Promise<void> {
+    starting = true;
+    editError = "";
+    try {
+      newSession({
+        machineId: action.machineId,
+        ...(action.projectId ? { projectId: action.projectId } : {}),
+        prompt: await failedSendPayload(message),
+      });
+    } catch {
+      editError =
+        "Couldn't open a new session with it: a picture it carries couldn't be read from the hub. Press Start a new session again once the hub answers.";
+    } finally {
+      starting = false;
+    }
+  }
   function edit(): void {
     actionsShown = false;
     if (message.id) {
@@ -480,7 +506,7 @@
    * in whole, header and well together.
    */
   const joins = untrack(() => grouped && departed(sent));
-  /** The words, which fly on to the row a Try again draws. */
+  /** The words, which fly on to the row a Send again draws. */
   let words = $state<HTMLElement>();
   function openWell(node: HTMLElement): void {
     if (!(joins && motionOk.current)) {
@@ -637,9 +663,9 @@
                     >
                       <PendingContent
                         {failed}
-                        label="Try again"
+                        label="Send again"
                         pending={retrying || (retried && !failed)}
-                        pendingLabel="Sending…"
+                        pendingLabel="Sending again…"
                       />
                     </button>
                   {/if}
@@ -727,7 +753,9 @@
         <div class="failure" data-opens inert={!open} class:open>
           <div class="failure-inner">
             {#if failed || retried}
-              <p class="reason">{line}</p>
+              <p class="reason" class:going={line === SENDING_AGAIN}>
+                {line}
+              </p>
               <!-- The way back, right under why (send-recovery.svelte.ts):
                    while what refused it holds, what fixes it; once it no
                    longer does, Send again. -->
@@ -766,17 +794,20 @@
                         </button>
                       {:else}
                         <button
+                          aria-busy={starting || undefined}
+                          aria-disabled={starting || undefined}
                           class="pressable action"
-                          onclick={() =>
-                            newSession({
-                              machineId: action.machineId,
-                              ...(action.projectId
-                                ? { projectId: action.projectId }
-                                : {}),
-                            })}
+                          onclick={whileIdle(
+                            () => starting,
+                            () => startWith(action)
+                          )}
                           type="button"
                         >
-                          Start a new session
+                          <PendingContent
+                            label="Start a new session"
+                            pending={starting}
+                            pendingLabel="Opening…"
+                          />
                         </button>
                       {/if}
                     {/each}
@@ -792,7 +823,7 @@
                         {failed}
                         label="Send again"
                         pending={retrying || (retried && !failed)}
-                        pendingLabel="Sending…"
+                        pendingLabel="Sending again…"
                       />
                     </button>
                   {/if}
@@ -1027,6 +1058,11 @@
     font-size: var(--text-meta);
     font-weight: var(--weight-body);
     color: var(--status-fail-ink);
+
+    /* Being sent again is not a failure: it says so in the meta ink. */
+    &.going {
+      color: var(--ink-muted);
+    }
   }
   .actions {
     display: flex;

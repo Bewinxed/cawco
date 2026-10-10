@@ -149,7 +149,7 @@ export function recoveryOf(
       };
     case "workspace-archived":
       return {
-        line: "This work item is finished and its workspace is archived, so its clone is gone. A new session can pick the work up.",
+        line: "This work item is finished, and its files were removed when it finished. The message is kept here; a new session can pick the work up with it.",
         holds: true,
         actions: [
           {

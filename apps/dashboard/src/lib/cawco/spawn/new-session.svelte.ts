@@ -5,10 +5,17 @@
  * is mounted (the wide screen's, the drawer's) and when neither is, and what
  * is typed in it outlives the place it was opened from.
  */
+import type { SendExtras } from "../client.svelte";
+
 export interface SpawnPrefill {
   cwd?: string;
   machineId?: string;
   projectId?: string;
+  /**
+   * The first prompt it opens with, attachments and all: a send another
+   * session refused, picked up by a new one.
+   */
+  prompt?: { text: string; extras: SendExtras };
 }
 
 export const spawning = $state<{

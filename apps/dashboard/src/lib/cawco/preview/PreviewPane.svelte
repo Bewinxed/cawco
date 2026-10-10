@@ -745,13 +745,7 @@
               ? `Nothing is running on port ${downPort} on ${ownerMachine}, so the page can't load.`
               : `The page's server on ${ownerMachine} isn't running, so the page can't load.`}
             {#if linkSession && owner}
-              Open
-              <a
-                class="owner"
-                href={conversationHref(owner.id, cawco.instanceIndex)}
-                >{ownerName}</a
-              >
-              to start it again, then try again.
+              Start it again from its session, then try again.
             {:else}
               Start it again, then try again.
             {/if}
@@ -761,15 +755,28 @@
           {/if}
         {/snippet}
         {#snippet action()}
-          <Button
-            icon={IconRefresh}
-            label="Try again"
-            onclick={retry}
-            pending={retrying}
-            pendingLabel="Reloading…"
-            size="sm"
-            variant="outline"
-          />
+          <div class="down-actions">
+            <Button
+              icon={IconRefresh}
+              label="Try again"
+              onclick={retry}
+              pending={retrying}
+              pendingLabel="Reloading…"
+              size="sm"
+              variant="outline"
+            />
+            {#if down === "server" && linkSession && owner}
+              <!-- The session that serves the page, as the kit draws a link
+                   (Button `link`, as Caw's panel offers its settings). -->
+              <Button
+                class="px-0"
+                href={conversationHref(owner.id, cawco.instanceIndex)}
+                label={`Open ${ownerName}`}
+                size="sm"
+                variant="link"
+              />
+            {/if}
+          </div>
         {/snippet}
       </EmptyState>
     </div>
@@ -862,18 +869,13 @@
     padding-inline: var(--space-6);
     background: var(--surface-well);
   }
-  .owner {
-    color: var(--link-ink);
-    text-decoration: none;
-    transition: opacity var(--dur-control) var(--ease-out);
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .owner:hover {
-      color: var(--link-hover);
-    }
-  }
-  .owner:active {
-    opacity: 0.72;
+  /* Try again, and beside it the session that serves the page; under it
+     when the pane is too narrow for both. */
+  .down-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
   }
   /* What went wrong, over the foot of the frame, and the one thing to do
      about it. */
