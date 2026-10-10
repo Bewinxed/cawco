@@ -160,6 +160,13 @@
     color: var(--ink-row);
     cursor: pointer;
   }
+  /* It lies on the rows it covers, so it takes the raised lift, not the
+     overlay's long drop: that one fell across the next row's name and, at
+     night, made it read as disabled. This one ends within 4px of its edge,
+     inside the next row's top padding. */
+  :global(.kit-pop.sessions-flyover) {
+    box-shadow: var(--shadow-raised);
+  }
   .list {
     display: flex;
     flex-direction: column;

@@ -104,6 +104,13 @@
 
   /** One mark's room in the strip: 16px and the 4px between marks. */
   const SLOT = 20;
+  /**
+   * Where the i-th of n marks starts: a slot apart while they fit, closer
+   * (evenly, overlapping if they must) when the strip is narrower than all
+   * of them and the digits, so the digits are never the part cut.
+   */
+  const slotAt = (i: number, n: number): string =>
+    n < 2 ? "0px" : `min(${i * SLOT}px, (100% - 16px) * ${i / (n - 1)})`;
 
   /** Why there is nothing to draw: a normal state, never a fake 0%. */
   const empty = $derived(
@@ -237,12 +244,12 @@
             <span aria-hidden="true" class="mark"><ClaudeIcon /></span>
             <span
               class="marks"
-              style:inline-size="{claude.accounts.length * SLOT - 4}px"
+              style:flex-basis="{claude.accounts.length * SLOT - 4}px"
             >
               {#each claude.accounts as ring, i (ring.id)}
                 <span
                   class="slot"
-                  style:transform="translateX({i * SLOT}px)"
+                  style:inset-inline-start={slotAt(i, claude.accounts.length)}
                   use:slot={i}
                 >
                   <Rings index={i} reveal {ring} size={16} />
@@ -625,19 +632,25 @@
     inline-size: 16px;
     block-size: 16px;
   }
+  /* The marks are the part of line 1 that gives: they ask for a slot each
+     and shrink to one mark's width, the marks closing up inside (slotAt),
+     so the Claude mark and the digits always stand whole inside the cells'
+     clip. */
   .marks {
     position: relative;
-    flex: none;
+    flex-grow: 0;
+    flex-shrink: 1;
+    min-inline-size: 16px;
     block-size: 16px;
   }
   .slot {
     position: absolute;
     inset-block-start: 0;
-    inset-inline-start: 0;
     display: grid;
-    transition: transform var(--dur-reveal) var(--ease-in-out);
+    transition: inset-inline-start var(--dur-reveal) var(--ease-in-out);
   }
   .digits {
+    flex: none;
     font: var(--weight-strong) var(--text-label) / 16px var(--font-body);
     font-variant-numeric: tabular-nums;
     color: var(--ink-strong);
