@@ -31,14 +31,21 @@
    * on and the clip's Rive is gone. Every drawing keeps two device pixels
    * inside his glass circle (assets/mascot/scripts/head_circle.py).
    *
-   * A tap on him opens his panel: the kit's popover (`kit-pop`), anchored
-   * under his glass as the machines item beside him opens MachinesList
-   * (MachinesButton). It is non-modal: no scrim, no focus trap, nothing of
-   * the page made inert, so the transcript scrolls, the composer takes keys
-   * and the rail's rows open while it stands. A click anywhere else closes
-   * it and still lands where it was aimed; Escape closes it and focus comes
-   * back to him. Inside (CawPanel), Needs you, longest wait first, then the
-   * Notices; choosing a row closes it and opens what the row is.
+   * A tap on him opens his panel: the kit's popover (`kit-pop`), hanging
+   * from the glass he stands on as one shape with it (`kit-hang`,
+   * motion/hang, the session card's own mechanism): its top edge is the
+   * glass's foot, its trailing side runs straight on down from the glass's
+   * trailing flank, and the glass flares out at its bottom-left into the
+   * panel's top edge (Shell `.join`). It grows out of the glass and folds
+   * back into it. While it hangs, the glass takes the panel's surface and
+   * edge, and the arcs on the lower half of his rim, where the glass now
+   * runs on into the panel, fade out (`data-joined`). It is non-modal: no
+   * scrim, no focus trap, nothing of the page made inert, so the transcript
+   * scrolls, the composer takes keys and the rail's rows open while it
+   * stands. A click anywhere else closes it and still lands where it was
+   * aimed; Escape closes it and focus comes back to him. Inside (CawPanel),
+   * Needs you, longest wait first, then the Notices; choosing a row closes
+   * it and opens what the row is.
    */
   import { mergeProps } from "bits-ui";
   import { untrack } from "svelte";
@@ -60,6 +67,7 @@
   } from "./home/caw-still.svelte";
   import { home } from "./home/home-state.svelte";
   import { dur, easeOut, motionOk } from "./motion/curves.svelte";
+  import { hang, type Neck, sameNeck } from "./motion/hang";
 
   /**
    * The phone bar, where his glass is his own (Shell). The server has the
@@ -75,8 +83,6 @@
    * same 4px margin (`--c-bar-caw-head-phone`).
    */
   const head = $derived(phone ? 24 : 20);
-  /** Where the panel stands under the glass he stands on, px. */
-  const GAP = 8;
 
   const needs = $derived(home.needs);
   const count = $derived(needs.length);
@@ -227,14 +233,43 @@
     );
     return `M ${points.join(" L ")}`;
   };
-  /** The whole outline, from 12 o'clock: the ring closed past two laps. */
-  const OUTLINE = [
-    `M ${MID} ${MID - STAND}`,
-    `L ${MID + STAND} ${MID - STAND}`,
-    `L ${MID + STAND} ${MID + STAND}`,
-    `L ${MID} ${MID + STAND}`,
-    `A ${STAND} ${STAND} 0 0 1 ${MID} ${MID - STAND}`,
-  ].join(" ");
+  /*
+   * While his panel hangs from his glass, the glass's lower half is no
+   * outline any more: its foot is the seam into the panel, its trailing
+   * corner runs straight on down into the panel's side, its leading one
+   * flares out into the panel's top edge (Shell `.join`). The arcs there
+   * would run into the seam, so the rim is drawn in two halves, each arc in
+   * the half its middle lies in, and the lower half fades out while the
+   * panel hangs, as a tab's rim gives way to its card's neck (PaneTabs).
+   * The closed ring is the same two halves.
+   */
+  /** The middle of arc `k`, degrees clockwise from 12 o'clock. */
+  const middle = (k: number) => k * (ARC + ARC_GAP) + ARC / 2;
+  /** Whether arc `k` lies on the lower half of his circle (the wide bar's). */
+  const roundLow = (k: number) => Math.cos((middle(k) * Math.PI) / 180) < 0;
+  /** Whether arc `k` lies on the lower half of the phone's standing outline. */
+  const standLow = (k: number) =>
+    onOutline((middle(k) * OUTLINE_LENGTH) / 360)[1] > MID;
+  /** The closed circle's halves, each from its leading end clockwise. */
+  const ROUND_HALF = {
+    high: `M ${onRim(270)} A ${RIM} ${RIM} 0 0 1 ${onRim(90)}`,
+    low: `M ${onRim(90)} A ${RIM} ${RIM} 0 0 1 ${onRim(270)}`,
+  };
+  /** The closed standing outline's halves, the same way. */
+  const STAND_HALF = {
+    high: [
+      `M ${MID - STAND} ${MID}`,
+      `A ${STAND} ${STAND} 0 0 1 ${MID} ${MID - STAND}`,
+      `L ${MID + STAND} ${MID - STAND}`,
+      `L ${MID + STAND} ${MID}`,
+    ].join(" "),
+    low: [
+      `M ${MID + STAND} ${MID}`,
+      `L ${MID + STAND} ${MID + STAND}`,
+      `L ${MID} ${MID + STAND}`,
+      `A ${STAND} ${STAND} 0 0 1 ${MID - STAND} ${MID}`,
+    ].join(" "),
+  };
 
   /**
    * An arc drawing itself in along its own length, and retracting the same
@@ -462,22 +497,68 @@
   /** The panel is closing on a press outside it: the press keeps its focus. */
   let closedOutside = false;
   /**
-   * How far the panel stands under him: GAP under the glass he stands on
-   * (the bar's group, `data-bar-group`, or his own on a phone), read as it
-   * opens.
+   * The glass he stands on, the panel's anchor: the bar's group
+   * (`data-bar-group`), which on a phone holds him alone.
    */
-  let offset = $state(GAP);
-
-  function measure() {
-    if (!capsule) {
+  const glass = $derived(
+    capsule?.closest<HTMLElement>("[data-bar-group]") ?? null
+  );
+  /**
+   * The glass's span in the panel's coordinates. The panel hangs
+   * right-aligned under it, flush with its trailing flank (square there,
+   * the glass's trailing side running straight on down), and the glass's
+   * leading foot flares out into the panel's top edge by its `--flare`.
+   */
+  let neck = $state<Neck>({
+    start: 0,
+    end: 0,
+    flareStart: 0,
+    flareEnd: 0,
+    flush: "end",
+  });
+  /**
+   * How far the flare's 1px stroke runs along the panel's top edge row
+   * before it rises off it (Shell `.join`): a band between radii f and f + 1
+   * leaves a row it is tangent to √(2f + 1) px out.
+   */
+  const flareTail = $derived(Math.sqrt(2 * neck.flareStart + 1));
+  /** The panel stands open from his glass: the glass is one shape with it. */
+  let joined = $state(false);
+  $effect(() => {
+    const node = content;
+    if (!node) {
       return;
     }
-    const own = capsule.getBoundingClientRect().bottom;
-    const glass =
-      capsule.closest("[data-bar-group]")?.getBoundingClientRect().bottom ??
-      own;
-    offset = GAP + Math.max(0, glass - own);
-  }
+    return untrack(() =>
+      hang({
+        neckAt: (left) => {
+          if (!glass) {
+            return null;
+          }
+          const box = glass.getBoundingClientRect();
+          const flare =
+            Number.parseFloat(
+              getComputedStyle(glass).getPropertyValue("--flare")
+            ) || 0;
+          return {
+            start: box.left - left,
+            end: box.right - left,
+            flareStart: flare,
+            flareEnd: 0,
+            flush: "end",
+          };
+        },
+        onneck: (next) => {
+          if (!sameNeck(next, neck)) {
+            neck = next;
+          }
+        },
+        onshown: (shown) => {
+          joined = shown;
+        },
+      })(node)
+    );
+  });
 </script>
 
 <svelte:window
@@ -489,17 +570,61 @@
   }}
 />
 
-<Popover.Root
-  bind:open={
-    () => open,
-    (value) => {
-    if (value) {
-      measure();
-    }
-    open = value;
-  }
-  }
->
+<!-- What waits, on his rim: an arc each, a second lap on top in its own ink
+     past ARCS, closed whole past two laps; the wide bar's circle and the
+     phone's standing outline (the one the width draws is shown, styles
+     below). One half of it: the upper, or the lower that fades while his
+     panel hangs. -->
+{#snippet rim(
+  low: boolean
+)}
+  <svg
+    aria-hidden="true"
+    class={["rim", low && "foot"]}
+    data-count={count}
+    viewBox="0 0 {RING_BOX} {RING_BOX}"
+  >
+    <g class="round">
+      {#each arcSlots.filter((k) => roundLow(k) === low) as k (k)}
+        <path class="arc" d={arcPath(k)} pathLength="1" transition:drawn />
+      {/each}
+      {#each lapSlots.filter((k) => roundLow(k) === low) as k (k)}
+        <path class="arc lap" d={arcPath(k)} pathLength="1" transition:drawn />
+      {/each}
+      {#if ringClosed}
+        <path
+          class="arc lap whole"
+          d={low ? ROUND_HALF.low : ROUND_HALF.high}
+          pathLength="1"
+          transition:drawn
+        />
+      {/if}
+    </g>
+    <g class="standing">
+      {#each arcSlots.filter((k) => standLow(k) === low) as k (k)}
+        <path class="arc" d={outlinePath(k)} pathLength="1" transition:drawn />
+      {/each}
+      {#each lapSlots.filter((k) => standLow(k) === low) as k (k)}
+        <path
+          class="arc lap"
+          d={outlinePath(k)}
+          pathLength="1"
+          transition:drawn
+        />
+      {/each}
+      {#if ringClosed}
+        <path
+          class="arc lap whole"
+          d={low ? STAND_HALF.low : STAND_HALF.high}
+          pathLength="1"
+          transition:drawn
+        />
+      {/if}
+    </g>
+  </svg>
+{/snippet}
+
+<Popover.Root bind:open>
   <Tip label={tipText}>
     {#snippet children(
       tip
@@ -516,6 +641,7 @@
             })}
             aria-label={label}
             class="capsule bar-item touch-hit press-tint"
+            data-joined={joined ? "" : undefined}
             data-needs-caw
             type="button"
             bind:this={capsule}
@@ -541,84 +667,24 @@
                 {/if}
               </span>
             </span>
-            <!-- What waits, on his rim: an arc each, a second lap on top in its
-         own ink past ARCS, closed whole past two laps. -->
-            <svg
-              aria-hidden="true"
-              class="rim"
-              data-count={count}
-              viewBox="0 0 {RING_BOX} {RING_BOX}"
-            >
-              <!-- The wide bar's circle, and the phone's standing outline: the
-               one the width draws is shown (styles below). -->
-              <g class="round">
-                {#each arcSlots as k (k)}
-                  <path
-                    class="arc"
-                    d={arcPath(k)}
-                    pathLength="1"
-                    transition:drawn
-                  />
-                {/each}
-                {#each lapSlots as k (k)}
-                  <path
-                    class="arc lap"
-                    d={arcPath(k)}
-                    pathLength="1"
-                    transition:drawn
-                  />
-                {/each}
-                {#if ringClosed}
-                  <circle
-                    class="arc lap whole"
-                    cx={MID}
-                    cy={MID}
-                    pathLength="1"
-                    r={RIM}
-                    transform="rotate(-90 {MID} {MID})"
-                    transition:drawn
-                  />
-                {/if}
-              </g>
-              <g class="standing">
-                {#each arcSlots as k (k)}
-                  <path
-                    class="arc"
-                    d={outlinePath(k)}
-                    pathLength="1"
-                    transition:drawn
-                  />
-                {/each}
-                {#each lapSlots as k (k)}
-                  <path
-                    class="arc lap"
-                    d={outlinePath(k)}
-                    pathLength="1"
-                    transition:drawn
-                  />
-                {/each}
-                {#if ringClosed}
-                  <path
-                    class="arc lap whole"
-                    d={OUTLINE}
-                    pathLength="1"
-                    transition:drawn
-                  />
-                {/if}
-              </g>
-            </svg>
+            {@render rim(false)}
+            {@render rim(true)}
           </button>
         {/snippet}
       </Popover.Trigger>
     {/snippet}
   </Tip>
   <!-- Non-modal: no scrim, no trap; an outside press closes it and still
-       lands (bits-ui's `interactOutsideBehavior` "close" prevents nothing). -->
+       lands (bits-ui's `interactOutsideBehavior` "close" prevents nothing).
+       It hangs from his glass, flush with its trailing flank: on a phone
+       that is the screen's edge, so nothing holds it off that side. -->
   <Popover.Content
     align="end"
     aria-label="Needs you"
-    class="caw-pop w-[min(380px,calc(100vw-24px))] gap-0"
-    collisionPadding={phone ? 12 : 8}
+    class="caw-pop kit-hang gap-0"
+    collisionPadding={phone ? { top: 12, bottom: 12, left: 12, right: 0 } : 8}
+    customAnchor={glass}
+    data-flush={neck.flush ?? undefined}
     onCloseAutoFocus={(event) => {
       // Closed by a press elsewhere: the focus stays where that press put
       // it (the composer, a rail row). Escape and his own press bring it
@@ -642,7 +708,8 @@
       }
     }}
     side="bottom"
-    sideOffset={offset}
+    sideOffset={0}
+    style="--neck-start: {neck.start}px; --neck-end: {neck.end}px; --neck-flare-start: {neck.flareStart}px; --neck-flare-end: {neck.flareEnd}px; --neck-tail-start: {flareTail}px"
     trapFocus={false}
     bind:ref={content}
   >
@@ -668,11 +735,40 @@
     padding: 0;
     -webkit-tap-highlight-color: transparent;
   }
-  /* The panel rises 8px from 0.92 as it opens (kit-pop's own motion, on
-     --dur-pop and the drawer curve; out on --dur-exit). */
+  /* The panel hangs from his glass (`kit-hang`): its edge is the recipe's
+     `::after`, drawn inside its box over the kit's 6px pad, so the pad
+     takes the border's pixel back and the rows stand where they did. Its
+     top shows its own surface across the cut, so its shadow has no night
+     ring (`shadow-overlay-hung`): the ring is the edge's own pixel, hidden
+     under the drawn edge, and across the cut (and down a phone's screen
+     edge, where no edge is drawn) it was a seam. */
   :global(.kit-pop.caw-pop) {
-    --pop-scale: 0.92;
-    --pop-rise: 8px;
+    width: min(380px, calc(100vw - 24px));
+    padding: 7px;
+    box-shadow: var(--shadow-overlay-hung);
+  }
+  /* On a phone his glass is a tab tucked into the screen's trailing edge,
+     and the panel hanging from it is too: its trailing side is the screen's
+     edge, square and with no edge drawn there, as his glass's, and it keeps
+     the phone's 12px margin on its leading side. */
+  @media (max-width: 899px) {
+    :global(.kit-pop.caw-pop) {
+      width: min(380px, calc(100vw - 12px - env(safe-area-inset-right, 0px)));
+      border-end-end-radius: 0;
+    }
+    :global(.kit-pop.caw-pop)::after {
+      border-inline-end-width: 0;
+    }
+  }
+  /* The lower half of his rim gives way to the panel while it hangs (the
+     rim's script, "While his panel hangs"): it fades out as the panel grows
+     and back as it folds, on the panel's own clock. */
+  .rim.foot {
+    transition: opacity var(--dur-exit) var(--ease-out);
+  }
+  .capsule[data-joined] .rim.foot {
+    opacity: 0;
+    transition-duration: var(--dur-pop);
   }
   /* On a phone his box is his own glass's (Shell). His touch area is a 44px
      square (Apple HIG, Buttons: "a hit region of at least 44x44 pt") at the
