@@ -35,6 +35,10 @@
  *       the scratch hub's device and session) arrives as a user message;
  *     - the top-level session's finished turn pushes CAWCO_TURN (Open,
  *       Reply) with the reply's first line sealed, and Reply on it lands;
+ *     - two turns of one session 3 s apart send two pushes under one
+ *       collapse id, the second replacing the first;
+ *     - a turn that ends with its session in front in the app (launched with
+ *       `-open-session`) pushes nothing: the app marks it looked at;
  *     - a delegate's finished turn pushes nothing;
  *     - a Write permission (a session in default mode) offers Approve, Deny,
  *       Other…, Open; Deny resolves it and the session hears the denial;
@@ -146,6 +150,12 @@ const WRITES: Record<string, string> = {
   [`probe-deny-with ${tag}`]: `redirected-${tag}.txt`,
 };
 const asked = new Set<string>();
+/** Turns the mock answers in words of their own, so each turn's push is told apart. */
+const TURN_WORDS: Record<string, string> = {
+  [`probe-turn-1 ${tag}`]: "Turn one",
+  [`probe-turn-2 ${tag}`]: "Turn two",
+  [`probe-looked ${tag}`]: "Looked at",
+};
 /** The delegate's brief carries this, so its requests are known. */
 const DELEGATE_MARK = `probe-delegate ${tag}`;
 
@@ -203,6 +213,11 @@ const fleet = await scratchFleet({
             input: { file_path: join(fleet.workdir, file), content: "probe" },
           },
         };
+      }
+    }
+    for (const [marker, words] of Object.entries(TURN_WORDS)) {
+      if (seen.tools && seen.last.includes(marker)) {
+        return { everyMs: 20, words: [words] };
       }
     }
     return { everyMs: 20, words: ["ok"] };
@@ -776,6 +791,101 @@ xcrun simctl install ${udid} "${app}"`);
         `${ran.match ? "action ran" : "no action line"}; transcript has "${words}" ${arrived}`
       );
     }
+  }
+
+  // ── 7b. Two turns 3 s apart: two pushes, the second replacing the first ─
+  {
+    await quit();
+    const from = captured.length;
+    await fleet.send(id, `probe-turn-1 ${tag}: say turn one.`);
+    await until(
+      "turn one in the transcript",
+      () => transcriptHas(id, "Turn one"),
+      Boolean,
+      60_000
+    ).catch(() => false);
+    await Bun.sleep(3000);
+    await fleet.send(id, `probe-turn-2 ${tag}: say turn two.`);
+    const turns = await until(
+      "both turns' pushes",
+      () =>
+        captured
+          .slice(from)
+          .filter(
+            (p) =>
+              p.payload.cawco.kind === "turn" &&
+              p.payload.cawco.instanceId === id
+          ),
+      (list) => list.length >= 2,
+      60_000
+    ).catch(() =>
+      captured
+        .slice(from)
+        .filter(
+          (p) =>
+            p.payload.cawco.kind === "turn" && p.payload.cawco.instanceId === id
+        )
+    );
+    const bodies = await Promise.all(
+      turns.map(async (p) => (await opened(p)).body)
+    );
+    check(
+      "two turns 3 s apart send two pushes, the second replacing the first",
+      turns.length === 2 &&
+        bodies[0] === "Turn one" &&
+        bodies[1] === "Turn two" &&
+        turns[0].collapseId === turns[1].collapseId,
+      `${turns.length} pushes: ${turns.map((p, at) => `"${bodies[at]}" collapse ${p.collapseId}`).join(", ") || "none"} (one collapse id is APNs' replace)`
+    );
+  }
+
+  // ── 7c. A session open in front in the app: its turn pushes nothing ────
+  {
+    await launch(`-open-session ${id}`);
+    const inFront = await until(
+      "the session in front in the app",
+      async () =>
+        (await mac(`${AXE} describe-ui --udid ${udid}`)).includes(
+          "steer-message"
+        ),
+      Boolean,
+      120_000
+    ).catch(() => false);
+    const from = captured.length;
+    const sent = Date.now();
+    await fleet.send(id, `probe-looked ${tag}: say looked at.`);
+    const said = await until(
+      "the looked-at turn in the transcript",
+      () => transcriptHas(id, "Looked at"),
+      Boolean,
+      60_000
+    ).catch(() => false);
+    // The hub's look grace, and more.
+    await Bun.sleep(12_000);
+    const pushed = captured
+      .slice(from)
+      .filter(
+        (p) =>
+          p.payload.cawco.kind === "turn" && p.payload.cawco.instanceId === id
+      );
+    const [seen] = fleet.query<{ seen_at: number | null }>(
+      "SELECT seen_at FROM instances WHERE id = ?",
+      id
+    );
+    if (inFront && said) {
+      check(
+        "a turn that ends with its session in front in the app pushes nothing",
+        pushed.length === 0,
+        `${pushed.length} turn pushes; the hub's seen_at ${seen?.seen_at ?? "null"} (${seen?.seen_at && seen.seen_at >= sent ? "marked after the send" : "not marked since the send"})`
+      );
+    } else {
+      check(
+        "a turn that ends with its session in front in the app pushes nothing",
+        false,
+        `nothing to judge: session in front ${inFront}, turn ended ${said}`
+      );
+    }
+    await quit();
   }
 
   // ── 8. A delegate's finished turn pushes nothing ───────────────────────

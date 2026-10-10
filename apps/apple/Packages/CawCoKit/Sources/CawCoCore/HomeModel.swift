@@ -1,3 +1,4 @@
+import CawCoAPI
 import Foundation
 import Observation
 
@@ -369,6 +370,19 @@ public final class HomeModel {
 
     /// Takes rows off Finished without opening them; a refusal puts them back.
     public func archive(_ ids: [String]) {
+        mark(ids, kind: .archive)
+    }
+
+    /// The owner has these in front where they see them, ended
+    /// (home-state.svelte.ts `markOpened`): seen, here at once and on the hub,
+    /// which then sends no push for the turn that just ended.
+    public func look(_ ids: [String]) {
+        mark(ids, kind: .look)
+    }
+
+    /// Marks rows seen here at once and on the hub (home-state.svelte.ts
+    /// `markSeen`); a refusal or a failure takes this device's mark back.
+    private func mark(_ ids: [String], kind: Operations.PostApiSeen.Input.Body.JsonPayload.KindPayload) {
         guard !ids.isEmpty else {
             return
         }
@@ -381,7 +395,7 @@ public final class HomeModel {
                 return
             }
             do {
-                try await hub.markSeen(ids, kind: .archive)
+                try await hub.markSeen(ids, kind: kind)
             } catch {
                 for id in ids where seenHere[id] == at {
                     seenHere[id] = nil
