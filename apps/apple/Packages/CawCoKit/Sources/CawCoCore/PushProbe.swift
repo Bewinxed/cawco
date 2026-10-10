@@ -1,6 +1,8 @@
 #if DEBUG
 import Foundation
 import OSLog
+import UIKit
+import UserNotifications
 
 /// The push actions' simulator probe (scripts/probe-ios-push-actions.ts),
 /// in DEBUG builds only, by launch argument:
@@ -42,9 +44,26 @@ public enum PushProbe {
     /// answers its alert), APNs gives this launch a token, then the pairing and
     /// push key register with the hub. A step that doesn't come says so in
     /// `probe registered:`, and nothing after it runs.
+    ///
+    /// It asks as "Turn on notifications" does (`PushRegistry.turnOn`): from a
+    /// window in front, not from `didFinishLaunching`, where `run()` starts it.
+    /// iOS's word on notifications is logged before the ask, and again if no
+    /// answer has come 45 s after it, so a prompt that never showed tells
+    /// "already decided" from "asked and not shown".
     private static func register() async {
-        log.notice("probe register: asking for notifications")
+        let deadline = ContinuousClock.now + .seconds(30)
+        while !inFront, ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        let before = await NotificationCentre.authorization()
+        log.notice("probe register: asking for notifications (in front \(inFront), authorization \(name(before), privacy: .public))")
+        let waiting = Task {
+            try await Task.sleep(for: .seconds(45))
+            let now = await NotificationCentre.authorization()
+            log.notice("probe register: no answer 45 s after asking (in front \(inFront), authorization \(name(now), privacy: .public))")
+        }
         let granted = (try? await NotificationCentre.requestAuthorization([.alert, .sound, .badge])) ?? false
+        waiting.cancel()
         log.notice("probe authorization: \(granted ? "allowed" : "not allowed", privacy: .public)")
         guard granted else {
             log.notice("probe registered: notifications not allowed")
@@ -64,6 +83,22 @@ public enum PushProbe {
         log.notice("probe token: …\(String(token.suffix(6)), privacy: .public)")
         let problem = await push.probeRegister()
         log.notice("probe registered: \(problem ?? "ok", privacy: .public)")
+    }
+
+    /// A window of this app is in front and taking touches.
+    private static var inFront: Bool {
+        UIApplication.shared.connectedScenes.contains { $0.activationState == .foregroundActive }
+    }
+
+    private static func name(_ status: UNAuthorizationStatus) -> String {
+        switch status {
+        case .notDetermined: "not determined"
+        case .denied: "denied"
+        case .authorized: "authorized"
+        case .provisional: "provisional"
+        case .ephemeral: "ephemeral"
+        @unknown default: "unknown (\(status.rawValue))"
+        }
     }
 
     private static func list(_ label: String) async {

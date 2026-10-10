@@ -511,16 +511,17 @@ xcrun simctl create "CawCo probe push actions" "$TYPE" "$RUNTIME"`)
   // app registers its pairing and push key with the hub (PushProbe). ──────
   const registerStart = await macNow();
   await launch("-push-probe-register");
+  // The hook asks from a window in front, and says iOS's word before it asks.
   const asking = await awaitLine(
     registerStart,
-    /probe register: asking/,
+    /probe register: asking for notifications(.*)/,
     60_000
   );
   check(
     "the app asks for notifications",
     asking.match !== null,
     asking.match
-      ? "PushProbe's register hook ran and called requestAuthorization"
+      ? `PushProbe's register hook called requestAuthorization${asking.match[1]}`
       : "no `probe register: asking` line: the DEBUG hook never ran"
   );
   // Tapped by its label. `tap --label` reads the same tree `describe-ui`
@@ -537,11 +538,15 @@ xcrun simctl create "CawCo probe push actions" "$TYPE" "$RUNTIME"`)
       said: error instanceof Error ? error.message : String(error),
     })
   );
+  // Past the hook's 45 s "no answer" line, which says iOS's word then.
   const authorized = await awaitLine(
     registerStart,
     /probe authorization: (.*)/,
-    60_000
+    75_000
   );
+  const unanswered = authorized.log.match(
+    /probe register: no answer 45 s after asking.*/
+  )?.[0];
   const allowed = authorized.match?.[1]?.trim() === "allowed";
   if (!allowed) {
     const shot = join(out, "permission-prompt.png");
@@ -570,7 +575,7 @@ rm -rf "$F"`).catch(() => "");
   check(
     "notifications allowed through the prompt",
     allowed,
-    `axe tap --label Allow: ${tapped.ok ? "tapped" : "failed"} (${tapped.said.slice(0, 200) || "no output"}); app: ${authorized.match?.[1]?.trim() ?? "no authorization line"}`
+    `axe tap --label Allow: ${tapped.ok ? "tapped" : "failed"} (${tapped.said.slice(0, 200) || "no output"}); app: ${authorized.match?.[1]?.trim() ?? unanswered ?? "no authorization line"}`
   );
   const registered = await awaitLine(
     registerStart,
