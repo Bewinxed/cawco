@@ -487,7 +487,8 @@ const watchedJudges = new Map<string, SessiondClient>();
  * keeps asking it. It and the judge beside it (which OpenCode's plugin
  * imports too) are written into the state dir first.
  *
- * Its form is a hash of what it runs and is handed; one of each form runs,
+ * Its form is a hash of what it runs and is handed, the keeper it runs on and
+ * the dir it listens in; one of each form runs,
  * on its own socket (`judge-<form>.sock` in `workspaceDoorDir`), under its own sessiond id. So a new
  * build's judge starts beside the old one, and the hook is pointed at it only
  * once it answers: a hook already running still reaches the old one, which
@@ -522,15 +523,22 @@ const judgeFor = async (
   // one a retiring keeper runs, which leaves once the hook no longer names it.
   // So the retiring keeper is left holding nothing of the workspace.
   const keeper = basename(await currentEndpoint(sessiondPath()));
-  const form = createHash("sha256")
-    .update([serverText, judgeText, ...handed, keeper].join("\0"))
-    .digest("hex")
-    .slice(0, JUDGE_FORM_LENGTH);
   // In the workspace's socket dir, not its state dir: under a deep HOME the
   // state dir's path passes a socket's length, and the hook's
-  // `pack_sockaddr_un` would cut it to a name nothing listens on. A judge of
-  // this form may be listening there already, so nothing is removed.
-  const socket = join(workspaceDoorDir(id), `judge-${form}.sock`);
+  // `pack_sockaddr_un` would cut it to a name nothing listens on.
+  const place = workspaceDoorDir(id);
+  // Where it listens is part of its form too, as the socket is one of what
+  // it is handed: a judge is found running by its form alone, and one an
+  // earlier build started with the same scripts on the same keeper but in
+  // another place (the state dir, before be056a0e) listens where this hook
+  // would not look. Its form differs, so this build's starts at once beside
+  // it, and the hook names a judge that answers.
+  const form = createHash("sha256")
+    .update([serverText, judgeText, ...handed, keeper, place].join("\0"))
+    .digest("hex")
+    .slice(0, JUDGE_FORM_LENGTH);
+  // A judge of this form may be listening there already, so nothing is removed.
+  const socket = join(place, `judge-${form}.sock`);
   await socketPlace(socket, "the workspace's judge");
   const procId = judgeProcId(id, form);
   // Written each time: OpenCode's plugin imports this build's judge from here.

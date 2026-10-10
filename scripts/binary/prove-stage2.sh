@@ -395,7 +395,7 @@ setup "publish the bad-signature release" "$out/logs/fixture-badsig.log" publish
 setup "publish the unsigned release" "$out/logs/fixture-nosig.log" publish nosig stable 0.0.1-test.1 $sha1111 "$bins/cawco-1" "$key" 10 "$schema" no-signature
 setup "write the broken build" "$out/logs/fixture-broken.log" fixture broken-binary "$out/broken-cawco"
 setup "write the workflow the hub keeps" "$out/logs/fixture-workflow.log" bun -e "await Bun.write('$out/shared/workflow.json', JSON.stringify({name: 'kept-through-rollback', program: 'import { z } from \"zod\"; export const inputs=z.object({name:z.string()}); export default async function(w:Workflow<typeof inputs>){await w.checkpoint(\"binary\",w.inputs);return {name:w.inputs.name};}'}))"
-setup "put the session starter where the machines can read it" "$out/logs/starter.log" cp "$here/stage2-start-session.ts" "$here/stage2-stop-session.ts" "$here/stage2-during-install.ts" "$out/shared/"
+setup "put the session starter where the machines can read it" "$out/logs/starter.log" cp "$here/stage2-start-session.ts" "$here/stage2-stop-session.ts" "$here/stage2-during-install.ts" "$here/stage2-hook-calls.ts" "$out/shared/"
 cat > "$out/shared/reset-hub.sh" <<'EOF'
 # Puts the hub machine back on a known working build. $1 is the last good one: used when its directory is
 # still on disk, otherwise the build `current` names (provided the hub answers on it after the cleanup below).
@@ -1516,7 +1516,34 @@ ws_cannot_read() {
     [[ $said != *cawco-proof-secret* && $said != *sk-ant-* ]] || { echo "ASSERTION FAILED: the command printed what $file holds"; return 1; }
   done
 }
-export -f ws_state ws_json ws_gen ws_exec ws_place ns_of ws_post ws_secrets ws_cannot_read
+# Hands a shell call to the workspace's hook every second, as a work item's claude session does before each Bash
+# call, and runs the command the hook rewrote it to (stage2-hook-calls.ts), until ws_hook_calls_stop; one line per
+# call in $out/ws-hook-calls.txt.
+ws_hook_calls_start() {
+  as_user "$joinerc" rm -f /tmp/ws-hook-calls.stop
+  as_user "$joinerc" env BUN_BE_BUN=1 /home/cawco/.local/bin/cawco /shared/stage2-hook-calls.ts "$(ws_state)" "$(cat "$out/ws-clone")" /tmp/ws-hook-calls.stop > "$out/ws-hook-calls.txt" 2>&1 &
+  wait_until 30 'grep -q " ran$" "$out/ws-hook-calls.txt"'
+}
+ws_hook_calls_stop() {
+  as_user "$joinerc" touch /tmp/ws-hook-calls.stop
+  wait_until 30 'grep -q "^done " "$out/ws-hook-calls.txt"'
+}
+# Every call the hook was handed was answered by a live judge and ran, and calls fell in the window between the new
+# build's agent starting and its handing the workspace's boundary over to its keeper: the agent's first journal line
+# and its "is handed over to" line for this workspace.
+ws_hook_calls_answered() {
+  local window from to inside
+  window=$(as_user "$joinerc" journalctl --user --no-pager -o json -u cawco-agent.service | jsonl "d => { const said = (e) => typeof e.MESSAGE === 'string' ? e.MESSAGE : ''; const h = d.filter(e => said(e).includes('$(cat "$out/ws-id"): its boundary ') && said(e).includes(' is handed over to ')).at(-1); if (!h) return; const first = d.find(e => e._PID === h._PID); const ms = (e) => Math.floor(Number(e.__REALTIME_TIMESTAMP) / 1000); return ms(first) + ' ' + ms(h); }")
+  read -r from to <<< "$window"
+  [[ ${from:-} =~ ^[0-9]+$ && ${to:-} =~ ^[0-9]+$ ]] || { echo "ASSERTION FAILED: the agent's journal names no handover of the workspace's boundary"; return 1; }
+  inside=$(awk -v from="$from" -v to="$to" '$1 ~ /^[0-9]+$/ && $1 >= from && $1 <= to' "$out/ws-hook-calls.txt" | wc -l)
+  echo "the new build's agent started at $from ms and handed the boundary over at $to ms; $inside calls went through the hook between them"
+  # Every call that did not run, and the summary.
+  grep -v ' ran$' "$out/ws-hook-calls.txt" || true
+  (( inside >= 1 )) || { echo "ASSERTION FAILED: no call went through the hook between the agent's start and the handover"; return 1; }
+  grep -qE '^done calls=[0-9]+ ran=[0-9]+ refused=0 failed=0$' "$out/ws-hook-calls.txt" || { echo "ASSERTION FAILED: a call through the workspace's hook was refused or did not run"; return 1; }
+}
+export -f ws_state ws_json ws_gen ws_exec ws_place ns_of ws_post ws_secrets ws_cannot_read ws_hook_calls_start ws_hook_calls_stop ws_hook_calls_answered
 
 workspace_opens() {
   need_hub
@@ -1589,6 +1616,9 @@ workspace_across_update() {
   install_now_request "$hid" > /dev/null
   wait_until 400 '[[ "$(build_version $hid)" == "$WS_BUILD" && "$(phase $hid)" == installed ]]'
   wait_until 120 '[[ "$(field $jid availableVersion)" == "$WS_BUILD" ]]'
+  # From before the install until the boundary is handed over, a shell call goes through the workspace's hook every
+  # second: the window between the agent restarting and the new build's keeper taking the machine among them.
+  ws_hook_calls_start
   install_now_request "$jid" > /dev/null
   wait_until 400 '[[ "$(build_version $jid)" == "$WS_BUILD" && "$(phase $jid)" == installed ]]'
   # The job ran through the update: the same process, in the sandbox it started in.
@@ -1600,6 +1630,9 @@ workspace_across_update() {
   echo "generation $gen is handed over to $new"
   as_user "$joinerc" test -s "$(ws_state)/boundaries/$new/srt.json"
   wait_until 60 '[[ "$(holder_of "$joinerc" "boundary-'"$id"'-'"$new"'")" == "$(endpoint_of "$WS_BUILD")" ]]'
+  # Through all of it, no call the hook was handed was refused.
+  ws_hook_calls_stop
+  ws_hook_calls_answered
   # The next command runs in the new generation's sandbox, and still reads no credential.
   read -r _ new_inner _ <<< "$(ws_place "$new")"
   [[ "$(ws_exec 'readlink /proc/self/ns/pid')" == "$(ns_of "$new_inner")" ]]
