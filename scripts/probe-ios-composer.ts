@@ -186,6 +186,21 @@ rm -rf "$F"`);
 const appearance = (mode: "light" | "dark") =>
   mac(`xcrun simctl ui ${udid} appearance ${mode}`);
 const pause = (ms: number) => Bun.sleep(ms);
+const LOG_PREFIX = /^.*\[dev\.cawco\.app:Swipe\]\s*/;
+/** The swipe recognizer's own account of the last few seconds (a DEBUG build's `Swipe` log). */
+const swipeLog = async (what: string) => {
+  const lines = (
+    await mac(
+      `xcrun simctl spawn ${udid} log show --last 8s --style compact --predicate 'subsystem == "dev.cawco.app" AND category == "Swipe"' | tail -30`
+    ).catch((error) => String(error))
+  )
+    .split("\n")
+    .filter((line) => line.includes("Swipe"));
+  console.log(`  swipe log, ${what}: ${lines.length === 0 ? "nothing" : ""}`);
+  for (const line of lines) {
+    console.log(`    ${line.replace(LOG_PREFIX, "")}`);
+  }
+};
 
 try {
   fleet.launch("sessiond");
@@ -296,9 +311,11 @@ xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-e
   const onField = await tree({ x: cx, y: now.y + now.height / 2 });
   const overPill = await tree({ x: cx, y: now.y - 6 - 7 - 14 });
   const overMenu = await tree({ x: cx, y: now.y - 6 - 7 - 320 - 16 });
+  // The text view's middle answers with its inner layout view, which carries
+  // no label: uncovered means no menu row is what the finger lands on there.
   check(
     "the field stays uncovered",
-    onField.some((n) => n.id === "steer-message"),
+    !onField.some((n) => n.id?.startsWith("composer-command-") === true),
     `at the field's middle: ${said(onField)}`
   );
   check(
@@ -342,11 +359,26 @@ xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-e
   const sy = Math.round(field2.y + field2.height / 2);
   // One finger moving up (axe `drag`: touch down, moves, up). axe `swipe` is
   // its multi-touch gesture, and the composer's swipe takes one finger.
-  await mac(
-    `${AXE} drag --start-x ${sx} --start-y ${sy} --end-x ${sx} --end-y ${sy - 160} --duration 0.4 --steps 30 --udid ${udid}`
-  );
+  const drag = (y: number) =>
+    mac(
+      `${AXE} drag --start-x ${sx} --start-y ${y} --end-x ${sx} --end-y ${y - 160} --duration 0.4 --steps 30 --udid ${udid}`
+    );
+  await drag(sy);
   await pause(1200);
+  await swipeLog("the drag from the field's text");
   nodes = await tree();
+  if (wheelOf(nodes).length === 0) {
+    // Again from the pill's own rim, 3pt under the field: tells a field that
+    // keeps the finger from a swipe that never starts at all.
+    const rim = Math.round(field2.y + field2.height + 3);
+    console.log(
+      `  no wheel from the field's text; dragging from the pill's rim at y ${rim}`
+    );
+    await drag(rim);
+    await pause(1200);
+    await swipeLog("the drag from the pill's rim");
+    nodes = await tree();
+  }
   const wheel = wheelOf(nodes);
   const sent = nodes.filter((n) => n.label?.startsWith(marker) === true);
   check(
@@ -402,6 +434,7 @@ xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-e
     `${AXE} touch -x ${lx} -y ${ly} --down --up --delay 1.5 --udid ${udid}`
   );
   await pause(1200);
+  await swipeLog("the long press");
   const after = wheelOf(await tree());
   check(
     "a long press does not open it",

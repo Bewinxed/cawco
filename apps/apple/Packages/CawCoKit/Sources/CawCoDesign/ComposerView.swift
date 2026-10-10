@@ -1,7 +1,9 @@
 import CawCoCore
 import CoreImage
 import CoreImage.CIFilterBuiltins
+import OSLog
 import UIKit
+import UIKit.UIGestureRecognizerSubclass
 import UniformTypeIdentifiers
 
 /// Something the turn carries beside its typed words (Composer.svelte
@@ -171,9 +173,13 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
         didSet { if grown != oldValue { paint() } }
     }
     /// An upward swipe that starts on the pill: the wheel comes up under the finger.
-    private let swipeUp = UIPanGestureRecognizer()
+    private let swipeUp = SwipeUpRecognizer()
     /// Whether the swipe being recognized started on the field's text.
     private var swipeFromField = false
+    #if DEBUG
+    /// A simulator pass reads the swipe's decisions here (scripts/probe-ios-composer.ts).
+    private static let swipeLog = Logger(subsystem: "dev.cawco.app", category: "Swipe")
+    #endif
 
     /// The `/` menu, while it is up (and while it fades away).
     private var commandMenu: CommandMenu?
@@ -1212,9 +1218,16 @@ extension ComposerView {
     /// with nothing else up.
     public func gestureRecognizer(_ recognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
         guard recognizer === swipeUp else { return true }
-        guard binding != nil, wheel == nil, edit == nil, let view = touch.view else { return false }
-        if view.isDescendant(of: actionBox) || view.isDescendant(of: attach) { return false }
+        guard binding != nil, wheel == nil, edit == nil, let view = touch.view else {
+            noteSwipe("refused the touch: binding \(binding != nil), wheel \(wheel != nil), edit \(edit != nil)")
+            return false
+        }
+        if view.isDescendant(of: actionBox) || view.isDescendant(of: attach) {
+            noteSwipe("refused the touch: on \(type(of: view)) in the send or attach box")
+            return false
+        }
         swipeFromField = view.isDescendant(of: field)
+        noteSwipe("took the touch on \(type(of: view)), from the field \(swipeFromField), writing \(field.isFirstResponder)")
         Feel.prepare()
         return true
     }
@@ -1232,18 +1245,42 @@ extension ComposerView {
         guard recognizer === swipeUp else { return super.gestureRecognizerShouldBegin(recognizer) }
         guard binding != nil, wheel == nil, edit == nil else { return false }
         let velocity = swipeUp.velocity(in: self)
-        guard velocity.y < 0, abs(velocity.y) > abs(velocity.x) else { return false }
+        guard velocity.y < 0, abs(velocity.y) > abs(velocity.x) else {
+            noteSwipe("declined: velocity \(Int(velocity.x)),\(Int(velocity.y)) is not mostly up")
+            return false
+        }
         if swipeFromField, field.isScrollEnabled {
             let end = field.contentSize.height + field.adjustedContentInset.bottom - field.bounds.height
-            if field.contentOffset.y < end - 1 { return false }
+            if field.contentOffset.y < end - 1 {
+                noteSwipe("declined: the draft scrolls and its end is not in view")
+                return false
+            }
         }
+        noteSwipe("begins: velocity \(Int(velocity.x)),\(Int(velocity.y))")
         return true
     }
 
-    /// The field's own scrolling waits for the swipe to be refused, so the
-    /// two never both take one finger.
+    /// The field's own pans (its scrolling, and any its text interaction
+    /// adds) wait for the swipe to be refused, so the two never both take
+    /// one finger. Its taps and presses do not wait: placing the caret and
+    /// selecting stay as quick as they are.
     public func gestureRecognizer(_ recognizer: UIGestureRecognizer, shouldBeRequiredToFailBy other: UIGestureRecognizer) -> Bool {
-        recognizer === swipeUp && other === field.panGestureRecognizer
+        guard recognizer === swipeUp, other is UIPanGestureRecognizer, let view = other.view, view.isDescendant(of: field) else { return false }
+        noteSwipe("\(type(of: other)) on \(type(of: view)) waits for the swipe")
+        return true
+    }
+
+    /// Who the swipe meets on its way, for a simulator pass.
+    public func gestureRecognizer(_ recognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+        if recognizer === swipeUp { noteSwipe("meets \(type(of: other)) on \(other.view.map { "\(type(of: $0))" } ?? "nothing")") }
+        return false
+    }
+
+    fileprivate func noteSwipe(_ line: @autoclosure () -> String) {
+        #if DEBUG
+        let text = line()
+        Self.swipeLog.notice("\(text, privacy: .public)")
+        #endif
     }
 
     /// Began: the wheel comes up with the hold's feel and follows the
@@ -1442,6 +1479,33 @@ final class ComposerField: UITextView {
     @objc private func newLine() {
         super.insertText("\n")
     }
+}
+
+// MARK: The swipe up
+
+/// The composer's swipe up: a pan. A DEBUG build logs each state it goes
+/// through, `.failed` too, which its target never hears
+/// (scripts/probe-ios-composer.ts reads them off the simulator).
+final class SwipeUpRecognizer: UIPanGestureRecognizer {
+    #if DEBUG
+    private static let log = Logger(subsystem: "dev.cawco.app", category: "Swipe")
+
+    override var state: UIGestureRecognizer.State {
+        didSet {
+            guard state != oldValue else { return }
+            let name = switch state {
+            case .possible: "possible"
+            case .began: "began"
+            case .changed: "changed"
+            case .ended: "ended"
+            case .cancelled: "cancelled"
+            case .failed: "failed"
+            @unknown default: "unknown"
+            }
+            if state != .changed { Self.log.notice("state \(name, privacy: .public)") }
+        }
+    }
+    #endif
 }
 
 // MARK: The 34pt boxes
