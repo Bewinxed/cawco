@@ -696,10 +696,12 @@ const armHook = async (
  * form, and serves its tool door. The agent does this as it starts, before it
  * adopts or launches a session: a running CLI reads its workspace's hook on
  * every tool call, so one an earlier build wrote must not outlive that
- * build's runtime. A boundary of an older form is handed over
- * ({@link replaceSoon}) whether or not its hook could be written, and an
- * older boundary an earlier agent left running beside the current one is
- * closed once nothing runs in it ({@link closeWhenIdle}).
+ * build's runtime. A running boundary of an older form is handed over here,
+ * behind the gate, and its handover arms the new one ({@link handOver}); one
+ * whose handover fails is armed as it is and tried again at each look
+ * ({@link replaceSoon}). An older boundary an earlier agent left running
+ * beside the current one is closed once nothing runs in it
+ * ({@link closeWhenIdle}).
  */
 export const rearmHooks = async (): Promise<void> => {
   const ids = await readdir(workspacesDir()).catch(
@@ -729,20 +731,34 @@ export const rearmHooks = async (): Promise<void> => {
     }
     // A gate an agent left as it died names no process this one waits for.
     await rm(gateOf(id), { force: true });
+    const ref = { id, path: held.path };
+    const form = await formOf(ref).catch(
+      said("its boundary's form could not be checked")
+    );
+    const stale = form !== undefined && held.form !== form;
+    if (stale && (await running(await sessiond(), id, held))) {
+      // Handed over now, behind the gate: the executor an earlier build left
+      // may not reach this boundary (Nightly C wrote its srt executor over
+      // every anchor from before srt), so a command waits at the gate and
+      // runs through the new boundary rather than being refused.
+      await writeFile(gateOf(id), String(process.pid));
+      try {
+        await ensureBoundary(ref);
+        armed += 1;
+        continue;
+      } catch (error) {
+        said("its older boundary could not be handed over yet")(error);
+        replaceSoon(ref);
+      } finally {
+        await rm(gateOf(id), { force: true });
+      }
+    }
     try {
       await armHook(id, held);
       armed += 1;
     } catch (error) {
       said("its boundary hook could not be written again")(error);
     }
-    const ref = { id, path: held.path };
-    await formOf(ref)
-      .then((form) => {
-        if (held.form !== form) {
-          replaceSoon(ref);
-        }
-      })
-      .catch(said("its boundary's form could not be checked"));
   }
   console.info(`[workspace] boundary hooks written for ${armed} workspace(s)`);
 };

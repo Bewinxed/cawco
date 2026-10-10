@@ -114,8 +114,8 @@ cleanup() {
     (cd "$here" && bun artifacts/srt-eval/rig-workspace.ts archive "$id" "$clone" >/dev/null 2>&1)
   fi
   for proc in /proc/[0-9]*; do
-    if tr '\0' ' ' < "$proc/cmdline" 2>/dev/null | grep -q sessiond &&
-      tr '\0' '\n' < "$proc/environ" 2>/dev/null | grep -qx "CAWCO_SESSIOND_ENDPOINT=$CAWCO_SESSIOND_ENDPOINT"; then
+    if tr '\0' ' ' 2>/dev/null < "$proc/cmdline" | grep -q sessiond &&
+      tr '\0' '\n' 2>/dev/null < "$proc/environ" | grep -qx "CAWCO_SESSIOND_ENDPOINT=$CAWCO_SESSIOND_ENDPOINT"; then
       kill "${proc#/proc/}"
     fi
   done
@@ -156,20 +156,23 @@ fi
 say "3. with the fix ($(git -C "$here" rev-parse --short HEAD)): the start-up pass"
 (cd "$here" && exec bun artifacts/srt-eval/rig-rearm.ts 120) > "$rig/fixed.log" 2>&1 &
 agent=$!
-# Between the start-up pass and the handover (the next look, 5 s on) the
-# anchor still runs every command, through the executor its own build wrote.
-# With BASE_COMMIT=166af788 the boundary here is the one step 2's agent
-# started before it exited, as an agent restart leaves one.
-armed() { grep -q 'boundary hooks written for' "$rig/fixed.log"; }
-if waitfor 30 armed; then
-  echo "-- a command between the start-up pass and the handover reaches its caller"
-  traced between 'echo "pid namespace: $(readlink /proc/self/ns/pid)"'
-  if [ "$status" -ne 0 ] || ! grep -q '^pid namespace: pid:' "$rig/between.out"; then
-    echo "FAILED: the command between the start-up pass and the handover did not run; what it went through:"
-    went_through between
-  fi
-else
-  echo "FAILED: the start-up pass did not finish within 30 s"
+# The start-up pass hands the older boundary over behind the gate: a command
+# that comes in meanwhile waits, then runs in the new form. Whatever executor
+# the older build left (Nightly C wrote its srt one over the anchor's) is the
+# one it starts in. With BASE_COMMIT=166af788 the boundary here is the one
+# step 2's agent started before it exited, as an agent restart leaves one.
+gate_up=no
+for _ in $(seq 600); do
+  if [ -e "$state/replacing" ]; then gate_up=yes; break; fi
+  grep -q 'boundary hooks written for' "$rig/fixed.log" && break
+  sleep 0.05
+done
+echo "-- a command during the start-up pass's handover reaches its caller (gate up as it started: $gate_up)"
+traced between 'echo "pid namespace: $(readlink /proc/self/ns/pid)"'
+if [ "$status" -ne 0 ] || ! grep -q '^pid namespace: pid:' "$rig/between.out" ||
+  grep -q "^pid namespace: $old_ns$" "$rig/between.out"; then
+  echo "FAILED: the command during the handover did not run in the new form; what it went through:"
+  went_through between
 fi
 # This agent's own handover, not any record an earlier pass left.
 handed() { grep -q "is handed over to" "$rig/fixed.log"; }
