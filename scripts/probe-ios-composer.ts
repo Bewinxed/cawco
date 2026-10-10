@@ -311,8 +311,10 @@ xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-e
   const field2 =
     (await tree()).find((n) => n.id === "steer-message")?.frame ?? f;
   const sy = Math.round(field2.y + field2.height / 2);
+  // One finger moving up (axe `drag`: touch down, moves, up). axe `swipe` is
+  // its multi-touch gesture, and the composer's swipe takes one finger.
   await mac(
-    `${AXE} swipe --start-x ${sx} --start-y ${sy} --end-x ${sx} --end-y ${sy - 160} --duration 0.4 --udid ${udid}`
+    `${AXE} drag --start-x ${sx} --start-y ${sy} --end-x ${sx} --end-y ${sy - 160} --duration 0.4 --steps 30 --udid ${udid}`
   );
   await pause(1200);
   nodes = await tree();
