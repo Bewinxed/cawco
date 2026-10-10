@@ -1326,7 +1326,11 @@ if (role === "sessiond") {
     assert.ok(divider > 0, "the divider is in S0's transcript");
     assert.ok(
       s0Page.blocks[divider + 1]?.metadata?.continuation,
-      "the opening right under it, marked to fold"
+      `the opening right under it, marked to fold: ${JSON.stringify(
+        s0Page.blocks
+          .slice(Math.max(0, divider - 2), divider + 4)
+          .map((block) => [block.type, block.id, block.content.slice(0, 50)])
+      )}`
     );
     assert.ok(
       s0Page.blocks

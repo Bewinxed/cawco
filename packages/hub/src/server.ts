@@ -3701,7 +3701,14 @@ export const createServer = (
       unanswered.set(row.instanceId, waiting);
     }
     anchors.set(row.instanceId, row.uuid);
-    return changeSend(row, { state: "read" });
+    const read = changeSend(row, { state: "read" });
+    // A fresh conversation's opening read: what was kept for the session
+    // while it went on goes now, behind it.
+    const origin = (row.body as SentMessage | null)?.origin;
+    if (origin?.kind === "system" && origin.name === CONTINUATION_ORIGIN) {
+      releaseOwed({ instanceId: row.instanceId });
+    }
+    return read;
   };
 
   /** A send that will never be read, and why. Final. */
@@ -5658,7 +5665,8 @@ export const createServer = (
    * Whether a send to `instanceId` waits at the hub because the session's
    * account is at its limit, where a turn would only be refused: held there
    * until its reset (the at-limit controller's hold), or going on from a
-   * summary in place and not yet handed its opening. What carries it on — the
+   * summary in place and its fresh conversation not yet read its opening
+   * ({@link openingUnread}). What carries it on — the
    * controller's own word at the reset, and the opening — is not held.
    */
   const heldAtLimit = (instanceId: string, origin: NeutralOrigin): boolean => {
@@ -5676,10 +5684,22 @@ export const createServer = (
           (job) =>
             job.sourceInstanceId === instanceId &&
             job.request.target.inPlace !== undefined &&
-            !SETTLED.has(job.stage) &&
-            !db.sendRecord(job.openingUuid)
+            job.stage !== "failed" &&
+            job.stage !== "cancelled" &&
+            openingUnread(job)
         )
     );
+  };
+
+  /**
+   * Whether a continuation in place's fresh conversation has yet to read its
+   * opening: not sent, or sent and pending. Until it has, nothing else
+   * reaches it, so the opening is the first thing it reads ({@link readSend}
+   * lets the rest go then).
+   */
+  const openingUnread = (job: ContinuationRow): boolean => {
+    const opening = db.sendRecord(job.openingUuid);
+    return !opening || opening.state === "pending";
   };
 
   /** What a session held at its account's limit was kept goes, in order, once nothing holds it ({@link heldAtLimit}). */
@@ -9218,7 +9238,8 @@ export const createServer = (
     console.info(
       `[continuation] ${id} goes on in a fresh conversation${move.to ? ` on ${move.to.name}` : ""}; its last one is kept on its row`
     );
-    // What was kept for it while it went on goes now, behind the opening.
+    // What was kept for it while it went on goes once the opening is read
+    // ({@link readSend}); one a restart found read already goes now.
     releaseOwed({ instanceId: id });
     publishInstances(row.machineId);
   };
