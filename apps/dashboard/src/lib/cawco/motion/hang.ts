@@ -18,26 +18,31 @@
  * resize, a scroll, is a write to its floating wrapper's transform), and it
  * plays the card's open and close:
  *
- * A clip that grows down out of the anchor's foot and widens to the card as
- * it deepens, revealing what is in it as the foot passes; nothing inside
- * fades. Open over --dur-pop, close over --dur-exit (The Fast Exit Rule),
- * both on --ease-out: an entrance and an exit, so the strong ease-out (Emil
- * Kowalski, "Entering or exiting → ease-out"; transitions.dev's dropdown,
- * 250ms open and 150ms close on cubic-bezier(0.22, 1, 0.36, 1), the same
- * family).
+ * The card comes down out of the anchor's foot: its floating wrapper is cut
+ * at the card's top edge, the anchor's foot, and the card slides down from
+ * behind that cut by its own height, revealing what is in it as the foot
+ * passes; nothing inside fades. A finger pulling a tab's menu out draws the
+ * same thing (PaneTabs `drawPull`). Open over --dur-pop, close over
+ * --dur-exit (The Fast Exit Rule), both on --ease-out: an entrance and an
+ * exit, so the strong ease-out (Emil Kowalski, "Entering or exiting →
+ * ease-out"; transitions.dev's dropdown, 250ms open and 150ms close on
+ * cubic-bezier(0.22, 1, 0.36, 1), the same family).
  *
- * It runs on the compositor: a WAAPI animation of an inset() in px only.
- * Chromium composites a clip-path animation whose shapes are plain lengths
- * and paints one with calc() or a percentage on the main thread every frame
- * (a trace: compositeFailed, unsupportedProperties clip-path). So the shapes
- * are written in px from the card's measured box. The card is held shut
- * (`data-shown` absent) until bits-ui has placed it, and starts growing only
- * then: started with the mount, the frame that mounted it ate the first part
- * of the growth (33ms at full speed, 200ms on a slow CPU).
+ * It runs on the compositor in every engine: a WAAPI animation of
+ * `translate` alone, under a cut that never moves. The cut was the animated
+ * part before (an inset() clip-path growing out of the anchor's span), which
+ * Chromium composites but WebKit runs on the main thread every frame: "we
+ * don't run them in the compositor" (bugs.webkit.org/show_bug.cgi?id=185816,
+ * still open), while it composites the individual transform properties
+ * (bugs.webkit.org/show_bug.cgi?id=217842). On a phone's Safari the open
+ * stalled behind whatever else the press did. The card is held shut
+ * (`data-shown` absent: up behind the cut) until bits-ui has placed it, and
+ * starts coming down only then: started with the mount, the frame that
+ * mounted it ate the first part of the motion.
  *
  * Interruptible (The Interruptible Rule): a close caught mid-open, or an open
- * caught mid-close, turns back from the clip it has reached. bits-ui holds
- * the card mounted until the close animation ends (it waits on the content's
+ * caught mid-close, turns back from where it has reached. bits-ui holds the
+ * card mounted until the close animation ends (it waits on the content's
  * getAnimations()). With reduced motion nothing here runs and the kit's fade
  * does.
  */
@@ -47,10 +52,6 @@ import { dur, ease, motionOk } from "./curves.svelte";
 
 /** The x of a floating wrapper's `translate(Xpx, Ypx)`. */
 const TRANSLATE_X = /translate(?:3d)?\(\s*(-?[\d.]+)px/;
-/** Room past the card's sides and foot for its whole overlay shadow, px. */
-const CLIP_ROOM = 120;
-/** What a shut clip keeps of the card's height, px: see `shut`. */
-const CLIP_SLIVER = 1;
 /** The event a card fires once it stands open. */
 export const GROWN = "grown";
 
@@ -105,6 +106,11 @@ export interface Hang {
    * nothing left to play (a finger folded it into its anchor).
    */
   folded?: () => boolean;
+  /**
+   * Read once as the card is placed: true while a finger is drawing it out
+   * of its anchor (a tab's pulled menu), which is its open; nothing plays.
+   */
+  held?: () => boolean;
   /** The neck with the card's left edge at `left` (viewport px); null with no anchor. */
   neckAt: (left: number) => Neck | null;
   /** The neck where the card stands now, on every placement: the card draws it. */
@@ -120,7 +126,7 @@ export function hang(options: Hang): Attachment<HTMLElement> {
     if (!wrapper) {
       return;
     }
-    const motion = clipMotion(node, options);
+    const motion = slideMotion(node, options);
     // Untracked: the attachment's own effect runs the first one, and the
     // anchor and neck it reads are not reasons to attach again.
     const sync = () =>
@@ -135,7 +141,7 @@ export function hang(options: Hang): Attachment<HTMLElement> {
         }
         // Placed: the card can grow out of its anchor now, measured where it
         // stands and after the frame that mounted it.
-        motion.placed(neck);
+        motion.placed();
         options.onneck(neck);
       });
     const observer = new MutationObserver(sync);
@@ -148,34 +154,17 @@ export function hang(options: Hang): Attachment<HTMLElement> {
   };
 }
 
-function clipMotion(node: HTMLElement, options: Hang) {
+function slideMotion(node: HTMLElement, options: Hang) {
   let run: Animation | null = null;
-  let at: Neck | null = null;
-  /** The card's foot corners, as it draws them (a flush side's may be square). */
-  const round = () => {
-    const style = getComputedStyle(node);
-    return `round 0px 0px ${style.borderBottomRightRadius} ${style.borderBottomLeftRadius}`;
-  };
-  const open = () =>
-    `inset(0px -${CLIP_ROOM}px -${CLIP_ROOM}px -${CLIP_ROOM}px ${round()})`;
-  // Shut leaves a pixel of the card under the anchor's foot, the anchor's
-  // own surface, so nothing shows: a keyframe with no height at all is a
-  // shape Chromium will not composite, and the whole animation then paints
-  // on the main thread every frame.
-  const shut = (neck: Neck) => {
-    // The box's own fractional size: offsetHeight rounds, and a sliver
-    // rounded away is the degenerate shape again.
-    const { width: w, height: h } = node.getBoundingClientRect();
-    const right = Math.max(0, w - neck.end);
-    const left = Math.max(0, neck.start);
-    const bottom = Math.max(0, h - CLIP_SLIVER);
-    return `inset(0px ${right}px ${bottom}px ${left}px ${round()})`;
-  };
-  /** Where the clip is drawn now, mid-animation or at rest. */
+  let placed = false;
+  const OPEN = "0px 0px";
+  /** Up behind the cut by the card's whole height, its own fractional size. */
+  const shut = () => `0px ${-node.getBoundingClientRect().height}px`;
+  /** Where the card is drawn now, mid-animation or at rest. */
   const drawn = (fallback: string) =>
-    run ? getComputedStyle(node).clipPath : fallback;
+    run ? getComputedStyle(node).translate : fallback;
   const play = (from: string, to: string, ms: number) => {
-    const next = node.animate([{ clipPath: from }, { clipPath: to }], {
+    const next = node.animate([{ translate: from }, { translate: to }], {
       duration: ms,
       easing: ease("--ease-out"),
       fill: "forwards",
@@ -185,18 +174,18 @@ function clipMotion(node: HTMLElement, options: Hang) {
     return next;
   };
   const grow = () => {
-    if (!at) {
+    if (!placed) {
       return;
     }
     node.dataset.shown = "";
     options.onshown?.(true);
     // What waits on the card standing open (SessionDetails asks for its
     // context reading then) hears `grown`.
-    if (!motionOk.current) {
+    if (!motionOk.current || options.held?.()) {
       node.dispatchEvent(new Event(GROWN));
       return;
     }
-    const growth = play(drawn(shut(at)), open(), dur("--dur-pop"));
+    const growth = play(drawn(shut()), OPEN, dur("--dur-pop"));
     growth.finished
       .then(() => {
         if (run === growth) {
@@ -210,10 +199,10 @@ function clipMotion(node: HTMLElement, options: Hang) {
   };
   const fold = () => {
     options.onshown?.(false);
-    if (options.folded?.() || !motionOk.current || !at) {
+    if (options.folded?.() || !motionOk.current || !placed) {
       return;
     }
-    play(drawn(open()), shut(at), dur("--dur-exit"));
+    play(drawn(OPEN), shut(), dur("--dur-exit"));
   };
   let frame = 0;
   const state = new MutationObserver(() => {
@@ -226,9 +215,9 @@ function clipMotion(node: HTMLElement, options: Hang) {
   });
   state.observe(node, { attributes: true, attributeFilter: ["data-state"] });
   return {
-    placed(neck: Neck) {
-      const first = !at;
-      at = neck;
+    placed() {
+      const first = !placed;
+      placed = true;
       if (first) {
         // After the frame that lays the placed card out, so the growth
         // starts on a frame of its own.

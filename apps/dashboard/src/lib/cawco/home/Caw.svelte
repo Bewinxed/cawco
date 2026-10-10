@@ -160,18 +160,42 @@
     rest: () => void;
   }
 
+  type RiveRuntime = Awaited<
+    ReturnType<
+      typeof import("@rive-app/canvas")["RuntimeLoader"]["awaitInstance"]
+    >
+  >;
+  type RiveFile = Awaited<ReturnType<RiveRuntime["load"]>>;
+  /**
+   * Each file a stage draws from, parsed once and kept for every stage after
+   * it: each stage takes its own artboard and view model from it. The bar's
+   * head plays a clip on every press of Caw, and parsing its file again each
+   * time was work in the frames his panel opens on.
+   */
+  const parsed = new Map<CawFile, Promise<RiveFile>>();
+  function parsedFile(rive: RiveRuntime, status: CawFile): Promise<RiveFile> {
+    const cached = parsed.get(status);
+    if (cached) {
+      return cached;
+    }
+    const loading = fileBytes(status).then((buffer) =>
+      rive.load(new Uint8Array(buffer))
+    );
+    // A failed load is not kept: the next stage asks again.
+    loading.catch(() => parsed.delete(status));
+    parsed.set(status, loading);
+    return loading;
+  }
+
   export async function stageCaw(
     status: CawFile,
     canvas: HTMLCanvasElement,
     box: CawBox,
     dark: boolean
   ): Promise<CawStage> {
-    const [module, buffer] = await Promise.all([
-      riveRuntime(),
-      fileBytes(status),
-    ]);
+    const module = await riveRuntime();
     const rive = await module.RuntimeLoader.awaitInstance();
-    const file = await rive.load(new Uint8Array(buffer));
+    const file = await parsedFile(rive, status);
     const artboard = file.artboardByName("Caw");
     const machine = new rive.StateMachineInstance(
       artboard.stateMachineByName("CawStates"),
@@ -238,10 +262,10 @@
       },
       dispose() {
         performance.mark(`caw stage ${status} gone`);
+        // The file stays parsed for the next stage (`parsed`).
         renderer.delete();
         machine.delete();
         artboard.delete();
-        file.unref();
       },
     };
   }

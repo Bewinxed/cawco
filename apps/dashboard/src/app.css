@@ -1089,20 +1089,13 @@
      Its overlay shadow is cut at its top edge, so none falls on the anchor
      or darkens its foot into a seam. */
   .kit-pop.kit-hang {
-    /* Open: cut at its top edge only, with room for the whole overlay
-       shadow past the others (as the pulled menu's `drawPull`). Shut, held
-       until it is placed and grows (`hang`): the anchor's span at the
-       card's top edge, no height at all. */
-    --clip-open: inset(
-      0 -120px -120px round 0 0 var(--radius-lg) var(--radius-lg)
-    );
-    --clip-shut: inset(
-      0 calc(100% - var(--neck-end)) 100% var(--neck-start) round 0 0
-        var(--radius-lg) var(--radius-lg)
-    );
+    /* Cut at its top edge only, with room for the whole overlay shadow past
+       the others (as the pulled menu's `drawPull`). */
     position: relative;
     border: 0;
-    clip-path: var(--clip-open);
+    clip-path: inset(
+      0 -120px -120px round 0 0 var(--radius-lg) var(--radius-lg)
+    );
 
     &[data-flush="start"] {
       border-start-start-radius: 0;
@@ -1138,9 +1131,18 @@
         linear-gradient(#000 0 0) 0 1px / 100% calc(100% - 1px) no-repeat;
     }
   }
+  /* The cut the card comes down from behind (`hang`): its floating wrapper,
+     cut at the card's top edge, the anchor's foot, with room for the whole
+     overlay shadow past the others. It never moves, so the card's slide is
+     all the compositor has to play. In CSS, not the wrapper's own style,
+     which bits-ui writes whole on every placement. */
+  [data-bits-floating-content-wrapper]:has(> .kit-pop.kit-hang) {
+    clip-path: inset(0 -120px -120px);
+  }
   /* Open and close are the card's own (`hang`): the kit's rise, scale and
-     fade do not apply, and until it is placed it is held shut. With reduced
-     motion the kit's fade runs and the card stands open. */
+     fade do not apply, and until it is placed it is held shut, up behind
+     the cut. With reduced motion the kit's fade runs and the card stands
+     open. */
   @media (prefers-reduced-motion: no-preference) {
     .kit-pop.kit-hang,
     .kit-pop.kit-hang[data-state="closed"] {
@@ -1150,7 +1152,7 @@
       transition: none;
     }
     .kit-pop.kit-hang:not([data-shown]) {
-      clip-path: var(--clip-shut);
+      translate: 0 -100%;
     }
     @starting-style {
       .kit-pop.kit-hang[data-state="open"] {

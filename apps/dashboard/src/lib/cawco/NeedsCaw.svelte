@@ -67,7 +67,7 @@
   } from "./home/caw-still.svelte";
   import { home } from "./home/home-state.svelte";
   import { dur, easeOut, motionOk } from "./motion/curves.svelte";
-  import { hang, type Neck, neckStyle, sameNeck } from "./motion/hang";
+  import { GROWN, hang, type Neck, neckStyle, sameNeck } from "./motion/hang";
 
   /**
    * The phone bar, where his glass is his own (Shell). The server has the
@@ -694,11 +694,26 @@
     onOpenAutoFocus={(event) => {
       // Opened by a press, focus goes into the list as it does from a key,
       // but without the ring: a script's focus would draw it after a press.
+      // It goes once the panel stands open (`grown`): taken in the press's
+      // own task, the style and layout it forced held back the open's first
+      // frame.
       if (byPointer) {
         event.preventDefault();
-        content
-          ?.querySelector<HTMLElement>("a.cover, button, .empty")
-          ?.focus({ focusVisible: false, preventScroll: true } as FocusOptions);
+        const panel = content;
+        panel?.addEventListener(
+          GROWN,
+          () => {
+            if (open) {
+              panel
+                .querySelector<HTMLElement>("a.cover, button, .empty")
+                ?.focus({
+                  focusVisible: false,
+                  preventScroll: true,
+                } as FocusOptions);
+            }
+          },
+          { once: true }
+        );
       }
     }}
     side="bottom"

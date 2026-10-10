@@ -2353,7 +2353,7 @@
     "c-bar-caw-glass-phone": {
       "$type": "dimension",
       "$value": "32px",
-      "$description": "Caw's own glass on the phone bar: round at its leading side, square at its trailing one, flush with the screen's trailing edge, centred on the tabs' centre line, which leaves it 2px clear of the transcript."
+      "$description": "Caw's own glass on the phone bar: round at its leading side, square at its trailing one, flush with the screen's trailing edge, its top where the tabs' tops stand (c-top-bar-h less c-tab-row-h), which leaves its foot 4px clear of the transcript."
     },
     "c-bar-caw-head-phone": {
       "$type": "dimension",

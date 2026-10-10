@@ -815,14 +815,93 @@
   /** The menu openings this strip made itself, already at the tab's foot. */
   const anchored = new WeakSet<Event>();
 
+  /* ── Under a finger the menu hangs from its tab ───────────────────
+     As the session card does, and by the same mechanism (motion/hang,
+     `.kit-hang`): its top edge is the tab's foot, its leading edge stands
+     at the phone's 12px margin before the tab (the card's own place,
+     `alignFor`), its top edge is cut across the tab's flared span, the
+     chosen tab draws its flanks' stroke down into it (`.neck`), and it
+     wears the tab's own surface, so tab and menu read as one sheet
+     (owner: "it should have the same continuous styling like the tab").
+     Pulled down, the finger draws it out of the foot 1:1 (`drawPull`),
+     which is its open; held, or from the options action, it comes down out
+     of the foot on its own (`hang`). A mouse's menu opens at the pointer,
+     a plain kit menu. */
+  /** The tab whose menu hangs from it, while it stands open. */
+  let menuHung = $state<string | null>(null);
+  /** The hanging menu's neck: the tab's span and flares in its coordinates. */
+  let menuNeck = $state<Neck>({
+    start: 0,
+    end: 0,
+    flareStart: 0,
+    flareEnd: 0,
+    flush: null,
+  });
+  /** The least width that holds the tab's span and its flare: the margin, the tab, its flare, a corner. */
+  let menuMin = $state(0);
+  /** A finger is drawing the menu out: the pull is its open. */
+  let menuHeld = false;
+  /** A finger put the menu back into its tab: it is already shut. */
+  let menuFolded = false;
+  /** The open menu's surface and its tab, once bits-ui has mounted it. */
+  let menuEl = $state<{ el: HTMLElement; id: string } | null>(null);
+  $effect(() => {
+    const at = menuEl;
+    if (!(at && touch.current)) {
+      return;
+    }
+    return untrack(() =>
+      hang({
+        neckAt: (left) => {
+          const anchor = anchorOf(at.id);
+          return anchor ? neckOf(anchor, left) : null;
+        },
+        onneck: (next) => {
+          if (!sameNeck(next, menuNeck)) {
+            menuNeck = next;
+          }
+        },
+        onshown: (shown) => {
+          if (shown) {
+            menuHung = at.id;
+          } else if (menuHung === at.id) {
+            menuHung = null;
+          }
+        },
+        held: () => menuHeld,
+        folded: () => {
+          const was = menuFolded;
+          menuFolded = false;
+          return was;
+        },
+      })(at.el)
+    );
+  });
+
+  /** The side a tab's hanging card or menu stands flush with it on, if one hangs. */
+  function hungFlush(card: boolean, menu: boolean) {
+    if (card) {
+      return neck.flush ?? undefined;
+    }
+    return menu ? (menuNeck.flush ?? undefined) : undefined;
+  }
+
   /** Opens tab's menu hanging from its foot, under the row. */
   function openMenu(tabNode: HTMLElement) {
     const hit = tabNode.querySelector("[data-session-tab]") ?? tabNode;
     const box = tabNode.getBoundingClientRect();
+    if (touch.current) {
+      menuMin =
+        -alignFor(tabNode) +
+        box.width +
+        flareOf(tabNode) +
+        CARD_CORNER +
+        CARD_RUN;
+    }
     const event = new MouseEvent("contextmenu", {
       bubbles: true,
       cancelable: true,
-      clientX: box.left,
+      clientX: box.left + (touch.current ? alignFor(tabNode) : 0),
       clientY: box.bottom,
     });
     anchored.add(event);
@@ -913,9 +992,12 @@
   }
   /** Where a tab's menu comes to rest: back to its own rules open, or closed. */
   const menuRest = (id: string, el: HTMLElement) => (target: 0 | 1) => {
+    menuHeld = false;
     if (target === 1) {
       releasePull(el);
     } else {
+      // Back in its tab: it leaves from there, with nothing left to play.
+      menuFolded = true;
       setMenu(id, false);
     }
   };
@@ -987,6 +1069,7 @@
         node.setPointerCapture(e.pointerId);
         swallowClick(node);
         if (motionOk.current) {
+          menuHeld = true;
           openMenu(node);
         }
       }
@@ -1011,6 +1094,7 @@
       }
       const shown = el ?? openMenuEl();
       if (!shown) {
+        menuHeld = false;
         return;
       }
       const speed = pullSpeed(samples);
@@ -1028,6 +1112,8 @@
       stop();
       if (pulling && el) {
         settlePull(el, dy / (el.offsetHeight || 1), 0, 0, menuRest(id, el));
+      } else {
+        menuHeld = false;
       }
     };
     const stop = () => {
@@ -1144,6 +1230,8 @@
     {#each tabs as tab, i (tab.key)}
       {@const chosen = leaf.active === tab.id}
       {@const drawn = look(i)}
+      {@const cardHere = detailsOpen && detailId === tab.id}
+      {@const menuHere = menuHung === tab.id}
       <!-- The caret marks where a drop would land, drawn on the side the
            pointer is nearest. Graphite, like every structural mark here:
            the one loud colour belongs to a session asking for something. -->
@@ -1153,10 +1241,8 @@
       <div
         class="tab"
         data-chosen={chosen ? "" : undefined}
-        data-details-open={detailsOpen && detailId === tab.id ? "" : undefined}
-        data-flush={detailsOpen && detailId === tab.id
-          ? (neck.flush ?? undefined)
-          : undefined}
+        data-flush={hungFlush(cardHere, menuHere)}
+        data-hung={cardHere || menuHere ? "" : undefined}
         data-tone={tab.tone}
         oncontextmenucapture={anchorMenu}
         onpointerdown={(event) => pullMenu(tab.id, event)}
@@ -1293,14 +1379,33 @@
               {/snippet}
             </TabItem>
           </ContextMenu.Trigger>
-          <!-- Under a finger it hangs below the tab's foot, from its
-               leading edge, shifted left only when it would pass the
+          <!-- Under a finger it hangs from the tab's foot as one shape with
+               it (`kit-hang`, above), from the card's own 12px margin
+               before the tab, shifted left only when it would pass the
                screen's edge less 12px (as TabOptionsSheet on iOS); a
                mouse's opens beside the pointer. -->
           <ContextMenu.Content
             align="start"
+            class={touch.current ? "kit-hang tab-menu" : undefined}
             collisionPadding={12}
+            data-flush={touch.current
+              ? (menuNeck.flush ?? undefined)
+              : undefined}
             side={touch.current ? "bottom" : "right"}
+            sideOffset={0}
+            style={touch.current
+              ? `${neckStyle(menuNeck)}; --hang-min: ${menuMin}px`
+              : undefined}
+            bind:ref={
+              () => (menuEl?.id === tab.id ? menuEl.el : null),
+              (el) => {
+    if (el) {
+      menuEl = { el, id: tab.id };
+    } else if (menuEl?.id === tab.id) {
+      menuEl = null;
+    }
+  }
+            }
           >
             {#if !(runIdOf(tab.id) || isThreadTab(tab.id))}
               <ContextMenu.Item
@@ -1965,18 +2070,26 @@
     }
   }
 
-  /* ── The tab its card hangs from ─────────────────────────────────
-     While its card is open a tab keeps the card head's surface (the
-     chosen sheet already is it; a hovered tab's card would light to the
-     hover step instead), and the chosen tab draws a 1px stroke in the
-     card's edge from the flare's outer end, up the concave flare and up
-     each flank, fading out by 60% of the tab's height where the rim's
-     taper takes over. It is drawn like the rim's stroke, as a shape on a
-     box one flare wider than the tab each side, and reaches 1px under the
-     tab so it meets the card's own top edge. */
-  .tab[data-details-open] {
+  /* ── The tab its card or its menu hangs from ─────────────────────
+     While its card or a finger's menu hangs from it (`data-hung`) a tab
+     keeps the card head's surface (the chosen sheet already is it; a
+     hovered tab's card would light to the hover step instead), and the
+     chosen tab draws a 1px stroke in the card's edge from the flare's
+     outer end, up the concave flare and up each flank, fading out by 60%
+     of the tab's height where the rim's taper takes over. It is drawn like
+     the rim's stroke, as a shape on a box one flare wider than the tab each
+     side, and reaches 1px under the tab so it meets the card's own top
+     edge. */
+  .tab[data-hung] {
     --tab-fill: var(--surface-recess);
     --tab-hover: var(--surface-recess);
+  }
+  /* The menu hanging from its tab is on the tab's own surface, as the
+     card's head is, so the two read as one sheet; and it is wide enough to
+     hold the tab's span and its flare under its top edge (`menuMin`). */
+  :global(.kit-pop.kit-hang.tab-menu) {
+    min-inline-size: max(12rem, var(--hang-min, 0px));
+    background: var(--surface-recess);
   }
   /* Flush with the pane's edge (`flushAt`): the sheet's foot is square on
      the leading side while its card hangs there, so the tab's flank runs
@@ -1996,7 +2109,7 @@
   .neck {
     display: none;
   }
-  .tab[data-details-open][data-chosen] .neck {
+  .tab[data-hung][data-chosen] .neck {
     --f: var(--flare);
     --h: calc(100% - 1px);
     display: block;
@@ -2032,7 +2145,7 @@
   }
   /* Flush: the leading stroke runs straight down the flank to the card's
      own side; the trailing one keeps its flare. */
-  .tab[data-details-open][data-chosen][data-flush="start"] .neck {
+  .tab[data-hung][data-chosen][data-flush="start"] .neck {
     clip-path: shape(
       from var(--f) 100%,
       line to var(--f) 0,
