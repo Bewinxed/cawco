@@ -601,6 +601,7 @@ public final class NeedsYouStore {
         guard parked[instanceId]?.contains(where: { $0.requestId == requestId }) == true else {
             return
         }
+        Logger(subsystem: "dev.cawco.app", category: "Permission").notice("request \(requestId, privacy: .public) settled: no longer parked")
         parked[instanceId]?.removeAll { $0.requestId == requestId }
         if parked[instanceId]?.isEmpty == true {
             parked[instanceId] = nil

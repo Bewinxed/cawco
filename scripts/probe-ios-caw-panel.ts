@@ -49,6 +49,8 @@ const root = resolve(import.meta.dir, "..");
 const home = process.env.HOME ?? "";
 const SSH = ["ssh", "-F", join(home, ".ssh", "config"), "-o", "BatchMode=yes"];
 const AXE = "/opt/homebrew/bin/axe";
+/** ssh's exit status when it could not reach or keep the Mac. */
+const SSH_FAILED = 255;
 const out = join(root, ".probe", `ios-caw-panel-${Date.now()}`);
 await mkdir(out, { recursive: true });
 console.log(
@@ -64,7 +66,7 @@ const check = (step: string, ok: boolean, detail: string) => {
 };
 
 /** Runs `script` in bash on the Mac; its stdout, or throws with its stderr. */
-async function mac(script: string): Promise<string> {
+async function mac(script: string, retried = false): Promise<string> {
   const child = Bun.spawn([...SSH, "mac", "bash", "-s"], {
     stdin: new TextEncoder().encode(`set -euo pipefail\n${script}\n`),
     stdout: "pipe",
@@ -75,6 +77,12 @@ async function mac(script: string): Promise<string> {
     new Response(child.stderr).text(),
     child.exited,
   ]);
+  // 255 is ssh's own failure (the Mac did not answer), not the script's: once more, after a breath.
+  if (code === SSH_FAILED && !retried) {
+    console.log(`  ssh failed (${err.trim()}); trying once more`);
+    await Bun.sleep(5000);
+    return mac(script, true);
+  }
   if (code !== 0) {
     throw new Error(`mac exited ${code}: ${err.trim() || text.trim()}`);
   }
@@ -519,25 +527,63 @@ async function answerFromPanel(kind: Kind, udid: string) {
       : `${stays ? "still listed" : "gone"}; the ask ${approve(nodes) ? "is" : "is not"} still listed`
   );
   const yes = approve(nodes);
+  const tapped = Date.now();
   if (yes?.frame) {
     await tap(udid, centre(yes.frame));
   }
-  const gone = await until(
+  // The hub's word first, then the panel's, each timed from the tap.
+  const hubAt = await until(
+    `${kind}: the hub settling the ask`,
+    async () => JSON.stringify(await fleet.api<unknown>("/api/pending")),
+    (text) => !text.includes(ASK),
+    60_000
+  )
+    .then(() => Date.now() - tapped)
+    .catch(() => undefined);
+  const panelAt = await until(
     `${kind}: the ask leaving the panel`,
     async () => approve(await tree(udid)),
     (node) => node === undefined,
     60_000
   )
-    .then(() => true)
-    .catch(() => false);
-  const pending = JSON.stringify(await fleet.api<unknown>("/api/pending"));
+    .then(() => Date.now() - tapped)
+    .catch(() => undefined);
+  const secs = (ms: number | undefined) =>
+    ms === undefined
+      ? "not within 60s"
+      : `${(ms / 1000).toFixed(1)}s after the tap`;
   check(
     `${kind}: Approve answers the ask from the panel`,
-    yes !== undefined && gone && !pending.includes(ASK),
-    `${gone ? "the ask left the panel" : "the ask is still listed"}; the hub's pending asks ${pending.includes(ASK) ? "still hold it" : "no longer hold it"}`
+    yes !== undefined && hubAt !== undefined && panelAt !== undefined,
+    `${yes ? "Approve tapped" : "no Approve to tap"}; the hub settled it ${secs(hubAt)}; it left the panel ${secs(panelAt)}`
   );
+  if (panelAt === undefined) {
+    await answerEvidence(udid);
+  }
   await shot(udid, `${kind}-answered-light`);
 }
+
+const STAGE_WORDS =
+  /^(Sending…|The hub has it|The session has it|Couldn't send)/;
+
+/**
+ * Why an answered ask stayed in the panel: the row's own stage words, and the
+ * app's log of the answer, its command's stages and the hub's settle frame.
+ */
+async function answerEvidence(udid: string) {
+  const stage = (await tree(udid)).find((n) => STAGE_WORDS.test(n.label ?? ""));
+  console.log(`  the ask's row says: ${stage?.label ?? "no stage words"}`);
+  const lines = await mac(
+    `xcrun simctl spawn ${udid} log show --last 3m --style compact --predicate 'subsystem == "dev.cawco.app" AND (category == "Permission" OR category == "Ledger" OR category == "Hub")' | tail -40`
+  ).catch((error) => String(error));
+  console.log("  app log (Permission, Ledger, Hub), last 3 minutes:");
+  for (const line of lines
+    .split("\n")
+    .filter((one) => one.includes("dev.cawco.app"))) {
+    console.log(`    ${line.replace(LOG_PREFIX, "")}`);
+  }
+}
+const LOG_PREFIX = /^.*\[dev\.cawco\.app:/;
 
 /**
  * One device's pass. `last`: the pass that also dismisses the notice and
