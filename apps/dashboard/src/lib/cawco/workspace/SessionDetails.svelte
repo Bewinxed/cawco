@@ -184,18 +184,55 @@
    * Once: `editable` re-derives on every change to the running list, and each
    * of those is not a reason to ask again.
    */
+  /*
+   * Asked once the card stands open (its `grown`, PaneTabs `cardMotion`):
+   * the reading re-wraps the stats strip, and its height tween landing
+   * while the card grows resizes the card every frame, which takes the
+   * growth's clip off the compositor. A card already open (moving between
+   * tabs) asks at once.
+   */
+  let rootEl = $state<HTMLElement>();
   let asked: string | null = null;
+  let stopWaiting: () => void = () => undefined;
+  /** An ask waiting for the card to stand open: the strip says "Reading…" meanwhile. */
+  let askPending = $state(false);
+  function whenOpen(ask: () => void) {
+    const card = rootEl?.closest<HTMLElement>(".session-details-popover");
+    if (
+      !card ||
+      ("shown" in card.dataset && card.getAnimations().length === 0)
+    ) {
+      askPending = false;
+      ask();
+      return () => undefined;
+    }
+    askPending = true;
+    const grown = () => {
+      askPending = false;
+      ask();
+    };
+    card.addEventListener("grown", grown, { once: true });
+    return () => {
+      askPending = false;
+      card.removeEventListener("grown", grown);
+    };
+  }
   $effect(() => {
     const id = sessionId;
     const mid = machineId;
-    if (editable && mid && asked !== id) {
-      asked = id;
-      // biome-ignore lint/complexity/noVoid: fire-and-forget — the reading lands in the session's state and the popover follows it
-      untrack(() => void refreshContext(id, mid));
+    if (!(editable && mid && asked !== id && rootEl)) {
+      return;
     }
+    asked = id;
+    // `editable` re-derives on every change to the running list, so only a
+    // new session (or the card closing) ends the wait, never a re-run.
+    stopWaiting();
+    // biome-ignore lint/complexity/noVoid: fire-and-forget — the reading lands in the session's state and the popover follows it
+    stopWaiting = untrack(() => whenOpen(() => void refreshContext(id, mid)));
   });
+  onDestroy(() => stopWaiting());
   const reading = $derived(
-    !!session?.contextPending && stats.totalTokens === null
+    (askPending || !!session?.contextPending) && stats.totalTokens === null
   );
   /** Why there is no reading, when the session said why. */
   const refusal = $derived.by(() => {
@@ -489,7 +526,7 @@
   {/if}
 {/snippet}
 
-<div class="session-details ns-theme" style:--dir={dir}>
+<div class="session-details ns-theme" bind:this={rootEl} style:--dir={dir}>
   <div class="details-body">
     <!-- The head is the tab's own surface, continued through the junction
          where the card hangs from the tab: the folder's label band. -->

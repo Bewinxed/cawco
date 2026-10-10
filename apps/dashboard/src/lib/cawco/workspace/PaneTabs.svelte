@@ -338,9 +338,19 @@
      tab, so its outline runs corner → short run → the chosen sheet's
      concave flare → up the tab's flank: one folder. Its top border is
      cut across the tab's flared span (`--neck-start`, `--neck-end`,
-     `--neck-flare`, in the card's own coordinates), and a stroke runs up
+     `--neck-flare-start`, `--neck-flare-end`, in the card's own
+     coordinates), and a stroke runs up
      the tab's flanks instead (`.neck`). A phone's card stands at the
-     screen's 12px margin; collision does the rest. */
+     screen's 12px margin; collision does the rest.
+
+     Where that leading edge would cross its pane's own leading edge (the
+     sidebar's border, a split's seam: the strip's box, measured), the card
+     stands flush with the tab instead (owner: "when the popover overlays
+     the sidebar it should sit flush with the left border of the tab
+     instead of overlapping the sidebar"): its left edge on the tab's,
+     square, so the outline runs straight down the tab's flank into the
+     card's side, with no flare and no corner on that side; the other side
+     keeps its flare. */
   /** Round the card's corner, and the 4px run before the flare begins. */
   const CARD_CORNER = 12;
   const CARD_RUN = 4;
@@ -350,25 +360,53 @@
   const flareOf = (anchor: HTMLElement) =>
     Number.parseFloat(getComputedStyle(anchor).getPropertyValue("--flare")) ||
     0;
-  const alignOffset = $derived(touch.current ? -CARD_MARGIN : undefined);
+  /** Whether the card's usual leading edge would cross its pane's. */
+  function flushAt(anchor: HTMLElement) {
+    const pane = anchor.closest(".session-tabs");
+    if (!pane) {
+      return false;
+    }
+    const offset = touch.current
+      ? -CARD_MARGIN
+      : -(flareOf(anchor) + CARD_CORNER + CARD_RUN);
+    return (
+      anchor.getBoundingClientRect().left + offset <
+      pane.getBoundingClientRect().left
+    );
+  }
   /** The card's leading edge's offset from its tab's, before collision. */
   function alignFor(anchor: HTMLElement | null) {
-    if (alignOffset !== undefined || !anchor) {
-      return alignOffset ?? 0;
+    if (!anchor || flushAt(anchor)) {
+      return 0;
     }
-    return -(flareOf(anchor) + CARD_CORNER + CARD_RUN);
+    return touch.current
+      ? -CARD_MARGIN
+      : -(flareOf(anchor) + CARD_CORNER + CARD_RUN);
   }
-  /** The tab's span in the card's coordinates, from where the card stands (or will). */
+  /**
+   * The tab's span in the card's coordinates, from where the card stands (or
+   * will), and the flare each side of it: none on a side the card is flush
+   * with.
+   */
   interface Neck {
     end: number;
-    flare: number;
+    flareEnd: number;
+    flareStart: number;
+    flush: boolean;
     start: number;
   }
-  let neck = $state<Neck>({ start: 0, end: 0, flare: 0 });
+  let neck = $state<Neck>({
+    start: 0,
+    end: 0,
+    flareStart: 0,
+    flareEnd: 0,
+    flush: false,
+  });
   function neckOf(anchor: HTMLElement, cardLeft?: number): Neck {
     const box = anchor.getBoundingClientRect();
     const vw = document.documentElement.clientWidth;
     const width = Math.min(CARD_W, vw - 2 * CARD_MARGIN);
+    const flush = flushAt(anchor);
     const left =
       cardLeft ??
       Math.min(
@@ -378,7 +416,13 @@
     // Only a chosen tab wears the sheet's flared foot; another tab's card
     // (hovered open) meets the card square.
     const flare = anchor.hasAttribute("data-chosen") ? flareOf(anchor) : 0;
-    return { start: box.left - left, end: box.right - left, flare };
+    return {
+      start: box.left - left,
+      end: box.right - left,
+      flareStart: flush ? 0 : flare,
+      flareEnd: flare,
+      flush,
+    };
   }
   /** The tab's box, the card's anchor, by the tab's id. */
   function anchorOf(id: string): HTMLElement | null {
@@ -398,6 +442,7 @@
     if (!wrapper) {
       return;
     }
+    const motion = cardMotion(node);
     const sync = () =>
       untrack(() => {
         const at = TRANSLATE_X.exec(wrapper.style.transform);
@@ -405,10 +450,15 @@
           return;
         }
         const next = neckOf(detailAnchor, Number(at[1]));
+        // Placed: the card can grow out of its tab now, measured where it
+        // stands and after the frame that mounted it.
+        motion.placed(next);
         if (
           Math.abs(next.start - neck.start) > 0.5 ||
           Math.abs(next.end - neck.end) > 0.5 ||
-          next.flare !== neck.flare
+          next.flareStart !== neck.flareStart ||
+          next.flareEnd !== neck.flareEnd ||
+          next.flush !== neck.flush
         ) {
           neck = next;
         }
@@ -420,9 +470,133 @@
     node.addEventListener("pointerdown", swipeCardShut);
     return () => {
       observer.disconnect();
+      motion.stop();
       node.removeEventListener("pointerdown", swipeCardShut);
     };
   };
+
+  /* ── The card's open and close ────────────────────────────────────
+     A clip that grows down out of the tab's foot and widens to the card as
+     it deepens, revealing what is in it as the foot passes; nothing inside
+     fades. Open over --dur-pop, close over --dur-exit (The Fast Exit Rule),
+     both on --ease-out: an entrance and an exit, so the strong ease-out
+     (Emil Kowalski, "Entering or exiting → ease-out"; transitions.dev's
+     dropdown, 250ms open and 150ms close on cubic-bezier(0.22, 1, 0.36, 1),
+     the same family).
+
+     It runs on the compositor: a WAAPI animation of an inset() in px only.
+     Chromium composites a clip-path animation whose shapes are plain
+     lengths and paints one with calc() or a percentage on the main thread
+     every frame (a trace: compositeFailed, unsupportedProperties
+     clip-path), which is what dropped frames before. So the shapes are
+     written in px from the card's measured box. The card is held shut
+     (`data-shown` absent) until bits-ui has placed it, and starts growing
+     only then: started with the mount, the frame that mounted it ate the
+     first part of the growth (33ms at full speed, 200ms on a slow CPU).
+
+     Interruptible (The Interruptible Rule): a close caught mid-open, or an
+     open caught mid-close, turns back from the clip it has reached. bits-ui
+     holds the card mounted until the close animation ends (it waits on the
+     content's getAnimations()). With reduced motion nothing here runs and
+     the kit's fade does. A card the finger folded into its tab
+     (`swipeCardShut`) is already shut and leaves at once. */
+  /** Room past the card's sides and foot for its whole overlay shadow, px. */
+  const CLIP_ROOM = 120;
+  /** The event the card fires once it stands open. */
+  const GROWN = "grown";
+  /** What a shut clip keeps of the card's height, px: see `shut`. */
+  const CLIP_SLIVER = 1;
+  /** The card's foot corners, px (radius-lg). */
+  const CLIP_ROUND = "round 0px 0px 12px 12px";
+  /** Set by the finger that folded the card into its tab: nothing left to play. */
+  let folded = false;
+  function cardMotion(node: HTMLElement) {
+    let run: Animation | null = null;
+    let at: Neck | null = null;
+    const open = `inset(0px -${CLIP_ROOM}px -${CLIP_ROOM}px -${CLIP_ROOM}px ${CLIP_ROUND})`;
+    // Shut leaves a pixel of the head under the tab's foot, the tab's
+    // own surface, so nothing shows: a keyframe with no height at all is a
+    // shape Chromium will not composite, and the whole animation then
+    // paints on the main thread every frame.
+    const shut = (neckNow: Neck) => {
+      // The box's own fractional size: offsetHeight rounds, and a sliver
+      // rounded away is the degenerate shape again.
+      const { width: w, height: h } = node.getBoundingClientRect();
+      const right = Math.max(0, w - neckNow.end);
+      const left = Math.max(0, neckNow.start);
+      const bottom = Math.max(0, h - CLIP_SLIVER);
+      return `inset(0px ${right}px ${bottom}px ${left}px ${CLIP_ROUND})`;
+    };
+    /** Where the clip is drawn now, mid-animation or at rest. */
+    const drawn = (fallback: string) =>
+      run ? getComputedStyle(node).clipPath : fallback;
+    const play = (from: string, to: string, ms: number) => {
+      const next = node.animate([{ clipPath: from }, { clipPath: to }], {
+        duration: ms,
+        easing: ease("--ease-out"),
+        fill: "forwards",
+      });
+      run?.cancel();
+      run = next;
+      return next;
+    };
+    const grow = () => {
+      if (!at) {
+        return;
+      }
+      node.dataset.shown = "";
+      // What waits on the card standing open (SessionDetails asks for its
+      // context reading then) hears `grown`.
+      if (!motionOk.current) {
+        node.dispatchEvent(new Event(GROWN));
+        return;
+      }
+      const growth = play(drawn(shut(at)), open, dur("--dur-pop"));
+      growth.finished
+        .then(() => {
+          if (run === growth) {
+            // At rest the card's own rules hold it open.
+            growth.cancel();
+            run = null;
+            node.dispatchEvent(new Event(GROWN));
+          }
+        })
+        .catch(() => undefined);
+    };
+    const fold = () => {
+      if (folded || !motionOk.current || !at) {
+        folded = false;
+        return;
+      }
+      play(drawn(open), shut(at), dur("--dur-exit"));
+    };
+    let frame = 0;
+    const state = new MutationObserver(() => {
+      if (node.dataset.state === "closed") {
+        cancelAnimationFrame(frame);
+        fold();
+      } else if (node.dataset.state === "open" && "shown" in node.dataset) {
+        grow();
+      }
+    });
+    state.observe(node, { attributes: true, attributeFilter: ["data-state"] });
+    return {
+      placed(neckNow: Neck) {
+        const first = !at;
+        at = neckNow;
+        if (first) {
+          // After the frame that lays the placed card out, so the growth
+          // starts on a frame of its own.
+          frame = requestAnimationFrame(grow);
+        }
+      },
+      stop() {
+        cancelAnimationFrame(frame);
+        state.disconnect();
+        run?.cancel();
+      },
+    };
+  }
   function hoverTab(id: string, event: PointerEvent) {
     if (touch.current || event.pointerType !== "mouse" || pinned || menuOpen) {
       return;
@@ -1058,6 +1232,7 @@
           if (target === 0) {
             // Folded into the tab: it leaves from there, with nothing left
             // to play.
+            folded = true;
             closeDetails();
           } else {
             releasePull(el);
@@ -1105,6 +1280,9 @@
         class="tab"
         data-chosen={chosen ? "" : undefined}
         data-details-open={detailsOpen && detailId === tab.id ? "" : undefined}
+        data-flush={detailsOpen && detailId === tab.id && neck.flush
+          ? "start"
+          : undefined}
         data-tone={tab.tone}
         oncontextmenucapture={anchorMenu}
         onpointerdown={(event) => pullMenu(tab.id, event)}
@@ -1382,9 +1560,11 @@
                  auto-focus on a surface that is still open. -->
           <div
             {...props}
+            data-flush={neck.flush ? "start" : undefined}
             data-morph={morphing ? "" : undefined}
             style:--neck-end={`${neck.end}px`}
-            style:--neck-flare={`${neck.flare}px`}
+            style:--neck-flare-end={`${neck.flareEnd}px`}
+            style:--neck-flare-start={`${neck.flareStart}px`}
             style:--neck-start={`${neck.start}px`}
             {@attach trackNeck}
           >
@@ -1431,9 +1611,9 @@
   }
   :global(.kit-pop.session-details-popover) {
     /* Open: cut at its top edge only, with room for the whole overlay
-       shadow past the others (as the pulled menu's `drawPull`). Shut: the
-       tab's span at the card's top edge, no height at all. Both rounded at
-       the foot like the card, so one interpolates into the other. */
+       shadow past the others (as the pulled menu's `drawPull`). Shut, held
+       until it is placed and grows (`cardMotion`): the tab's span at the
+       card's top edge, no height at all. */
     --clip-open: inset(
       0 -120px -120px round 0 0 var(--radius-lg) var(--radius-lg)
     );
@@ -1453,6 +1633,11 @@
     clip-path: var(--clip-open);
     outline: none;
 
+    /* Flush with its tab on the leading side: square there. */
+    &[data-flush="start"] {
+      border-start-start-radius: 0;
+    }
+
     /* A phone's card stands a margin in from each side, under its tab,
        and holds clear of the screen's foot. */
     @media (max-width: 640px) {
@@ -1462,32 +1647,25 @@
       );
     }
   }
-  /* Open and close: a clip that grows down out of the tab's foot and widens
-     to the card as it deepens, revealing what is in it as the foot passes;
-     nothing inside fades. Transitions on data-state, so a close caught
-     mid-open turns back from where it is (The Interruptible Rule), over
-     --dur-pop in and --dur-exit out (The Fast Exit Rule). The kit's rise
-     and scale do not apply; with reduced motion the kit's fade runs and
-     the card stands open. */
+  /* Open and close are the card's own (`cardMotion`): the kit's rise,
+     scale and fade do not apply, and until it is placed it is held shut.
+     With reduced motion the kit's fade runs and the card stands open. */
   @media (prefers-reduced-motion: no-preference) {
-    :global(.kit-pop.session-details-popover) {
-      translate: none;
-      scale: none;
-      transition: clip-path var(--dur-pop) var(--ease-drawer);
-    }
+    :global(.kit-pop.session-details-popover),
     :global(.kit-pop.session-details-popover[data-state="closed"]) {
       opacity: 1;
       translate: none;
       scale: none;
+      transition: none;
+    }
+    :global(.kit-pop.session-details-popover:not([data-shown])) {
       clip-path: var(--clip-shut);
-      transition-duration: var(--dur-exit);
     }
     @starting-style {
       :global(.kit-pop.session-details-popover[data-state="open"]) {
         opacity: 1;
         translate: none;
         scale: none;
-        clip-path: var(--clip-shut);
       }
     }
   }
@@ -1517,7 +1695,6 @@
     }
     :global(.kit-pop.session-details-popover[data-morph]) {
       transition:
-        clip-path var(--dur-pop) var(--ease-drawer),
         --neck-start var(--dur-pop) var(--ease-drawer),
         --neck-end var(--dur-pop) var(--ease-drawer);
     }
@@ -1968,6 +2145,21 @@
     --tab-fill: var(--surface-recess);
     --tab-hover: var(--surface-recess);
   }
+  /* Flush with the pane's edge (`flushAt`): the sheet's foot is square on
+     the leading side while its card hangs there, so the tab's flank runs
+     straight down into the card's side. */
+  .tab[data-flush="start"] :global(.ff-tab.selected)::after {
+    clip-path: shape(
+      from var(--flare) 100%,
+      line to var(--flare) var(--radius),
+      arc to calc(var(--flare) + var(--radius)) 0 of var(--radius) cw,
+      line to calc(100% - var(--flare) - var(--radius)) 0,
+      arc to calc(100% - var(--flare)) var(--radius) of var(--radius) cw,
+      line to calc(100% - var(--flare)) calc(100% - var(--flare)),
+      arc to 100% 100% of var(--flare) ccw,
+      close
+    );
+  }
   .neck {
     display: none;
   }
@@ -2003,6 +2195,25 @@
       to top,
       #000 calc(var(--f) + 2px),
       transparent 60%
+    );
+  }
+  /* Flush: the leading stroke runs straight down the flank to the card's
+     own side; the trailing one keeps its flare. */
+  .tab[data-details-open][data-chosen][data-flush="start"] .neck {
+    clip-path: shape(
+      from var(--f) 100%,
+      line to var(--f) 0,
+      line to calc(var(--f) + 1px) 0,
+      line to calc(var(--f) + 1px) 100%,
+      close,
+      move to 100% 100%,
+      arc to calc(100% - var(--f) - 1px) calc(var(--h) - var(--f)) of
+        calc(var(--f) + 1px) cw,
+      line to calc(100% - var(--f) - 1px) 0,
+      line to calc(100% - var(--f)) 0,
+      line to calc(100% - var(--f)) calc(var(--h) - var(--f)),
+      arc to 100% var(--h) of var(--f) ccw,
+      close
     );
   }
 
@@ -2057,8 +2268,8 @@
   /* The card's edge, with its top cut across the tab's flared span
      (`.session-details-popover` above). Last, after the rim's own. */
   :global(.kit-pop.session-details-popover)::after {
-    --gap-from: calc(var(--neck-start) - var(--neck-flare, 0px));
-    --gap-to: calc(var(--neck-end) + var(--neck-flare, 0px));
+    --gap-from: calc(var(--neck-start) - var(--neck-flare-start, 0px));
+    --gap-to: calc(var(--neck-end) + var(--neck-flare-end, 0px));
     content: "";
     position: absolute;
     inset: 0;

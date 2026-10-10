@@ -233,7 +233,7 @@
       background: var(--surface-raised);
     }
     .tool-chips .off.static:hover {
-      background: transparent;
+      background: var(--surface-recess);
     }
   }
   .swap {
