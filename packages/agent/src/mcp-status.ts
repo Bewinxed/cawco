@@ -2,7 +2,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { type McpServerStatus, query } from "@anthropic-ai/claude-agent-sdk";
 import { type FleetSyncReport, mcpFleetState } from "@cawco/core";
 import { claudeExecutableOptions, idle } from "./auth";
-import { toolEnv } from "./tools";
+import { claudeHomeEnv } from "./tools";
 
 const CONNECT_TIMEOUT_MS = 30_000;
 
@@ -17,7 +17,7 @@ export const readMcpRuntime = async (
     prompt: idle,
     options: {
       persistSession: false,
-      env: toolEnv(),
+      env: claudeHomeEnv(),
       ...claudeExecutableOptions(),
     },
   });

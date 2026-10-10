@@ -1408,6 +1408,12 @@ export interface DbShape {
   ) => "removed" | "primary" | "missing";
   /** A workspace's place, gone with the workspace when it is archived. */
   readonly removeWorkspacePlaces: (machineId: string, clone: string) => void;
+  /**
+   * A marketplace row moved to the name its manifest gives, with every plugin
+   * id after its `@`. Where the new name or id is already a row, that row
+   * stays and the old one goes. Answers the plugin ids that moved, old → new.
+   */
+  readonly renameMarketplace: (from: string, to: string) => [string, string][];
   readonly restoreRemovedSessions: (
     machineId: string,
     held: string[],
@@ -4520,6 +4526,47 @@ const make = async (path: string): Promise<DbShape> => {
     deleteMarketplace: (name) => {
       db.delete(marketplaces).where(eq(marketplaces.name, name)).run();
     },
+    renameMarketplace: (from, to) =>
+      db.transaction((tx) => {
+        const taken = tx
+          .select({ name: marketplaces.name })
+          .from(marketplaces)
+          .where(eq(marketplaces.name, to))
+          .get();
+        if (taken) {
+          tx.delete(marketplaces).where(eq(marketplaces.name, from)).run();
+        } else {
+          tx.update(marketplaces)
+            .set({ name: to })
+            .where(eq(marketplaces.name, from))
+            .run();
+        }
+        const ids = new Set(
+          tx
+            .select({ id: plugins.id })
+            .from(plugins)
+            .all()
+            .map(({ id }) => id)
+        );
+        const moved: [string, string][] = [];
+        for (const id of ids) {
+          const [name, marketplace] = id.split("@");
+          if (marketplace !== from) {
+            continue;
+          }
+          const next = `${name}@${to}`;
+          if (ids.has(next)) {
+            tx.delete(plugins).where(eq(plugins.id, id)).run();
+          } else {
+            tx.update(plugins)
+              .set({ id: next })
+              .where(eq(plugins.id, id))
+              .run();
+          }
+          moved.push([id, next]);
+        }
+        return moved;
+      }),
     putPluginPayload: ({ id, hash, bytes, error, files }) => {
       db.update(plugins)
         .set({

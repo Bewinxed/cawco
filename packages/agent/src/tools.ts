@@ -38,6 +38,24 @@ export const toolEnv = (): Record<string, string | undefined> => ({
   PATH: toolPath(),
 });
 
+/**
+ * {@link toolEnv} for a Claude Code that acts on the user layer, `~/.claude`
+ * (core paths.ts `claudeHome`): the fleet's `claude plugin …` and its MCP
+ * status read. Without either config-dir variable Claude Code reads, so it
+ * runs in `$HOME/.claude`, the dir this daemon's own paths name. A daemon
+ * started from inside a session inherits that session's `CLAUDE_CONFIG_DIR`;
+ * passed on, it had a scratch daemon (its own HOME) register its
+ * `$HOME/.claude/cawco-marketplace` in the operator's real registry.
+ */
+export const claudeHomeEnv = (): Record<string, string | undefined> => {
+  const {
+    CLAUDE_CONFIG_DIR: _dir,
+    CLAUDE_SECURESTORAGE_CONFIG_DIR: _store,
+    ...rest
+  } = toolEnv();
+  return rest;
+};
+
 /** A binary's absolute path, searched wherever this daemon can install one. */
 export const resolveBin = (name: string): string | undefined =>
   Bun.which(name, { PATH: toolPath() }) ?? undefined;

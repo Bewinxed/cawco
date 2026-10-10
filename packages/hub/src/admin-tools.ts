@@ -72,17 +72,20 @@ const marketplaceAction = async (
   name: string | undefined,
   source: string | undefined
 ): Promise<unknown> => {
-  if (!name) {
-    throw new Error("name is required to link or unlink a marketplace");
-  }
-  const path = `/api/fleet/marketplaces/${encodeURIComponent(name)}`;
   if (action === "unlink") {
-    return await api("DELETE", path);
+    if (!name) {
+      throw new Error("name is required to unlink a marketplace");
+    }
+    return await api(
+      "DELETE",
+      `/api/fleet/marketplaces/${encodeURIComponent(name)}`
+    );
   }
   if (!source) {
     throw new Error("source is required to link a marketplace");
   }
-  return await api("PUT", path, { source });
+  // Linked under the name its own marketplace.json gives; the row says it.
+  return await api("POST", "/api/fleet/marketplaces", { source });
 };
 
 const ADMIN_WRITE_TOOL = /^admin_[a-z_]+_write$/;
@@ -325,8 +328,9 @@ export function adminTools() {
           .string()
           .optional()
           .describe(
-            "The marketplace's name in this fleet — the half after the `@` in a plugin " +
-              "id. Required for link and unlink."
+            "The marketplace's name — the half after the `@` in a plugin id. It is " +
+              "always the `name` its own marketplace.json gives: link reads it from " +
+              "the source and answers with it. Required for unlink."
           ),
         source: z
           .string()
@@ -367,7 +371,7 @@ export function adminTools() {
         // differ only in what the caller already believes about the plugin.
         return ok(await api("PUT", path, { enabled: action !== "disable" }));
       },
-      " Order matters: 'link' the marketplace first, then 'install' a plugin from it by its `plugin@marketplace` id; 'refresh' re-fetches one whose upstream moved. The hub resolves the bytes once and distributes them."
+      " Order matters: 'link' the marketplace first, then 'install' a plugin from it by its `plugin@marketplace` id, with the name link answered; 'refresh' re-fetches one whose upstream moved. The hub resolves the bytes once and distributes them."
     ),
 
     // ── MCP servers ──────────────────────────────────────────────────────

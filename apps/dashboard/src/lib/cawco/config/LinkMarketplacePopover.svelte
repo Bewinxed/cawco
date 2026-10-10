@@ -1,7 +1,9 @@
 <script lang="ts">
   /**
    * Link a marketplace: every machine clones it, and nothing is installed
-   * until a plugin is picked from it.
+   * until a plugin is picked from it. It is linked under the name its own
+   * marketplace.json gives, read by the hub as the source is typed: that is
+   * the one name Claude Code registers it and installs its plugins by.
    */
   import type { FleetMarketplace } from "@cawco/core";
   import { tick } from "svelte";
@@ -12,8 +14,11 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { IconShop } from "#lib/icons.js";
-  import { saveMarketplace } from "../fleet";
+  import { linkMarketplace, readMarketplaceName } from "../fleet";
   import Field from "./Field.svelte";
+
+  /** How long typing rests before the source is read. */
+  const READ_AFTER_MS = 400;
 
   let {
     taken,
@@ -34,12 +39,53 @@
   let failed = $state<string | undefined>(undefined);
   let surface = $state<HTMLElement | null>(null);
 
-  const clash = $derived(taken.includes(name.trim()));
-  const ready = $derived(name.trim() !== "" && source.trim() !== "" && !clash);
+  /** What the source's marketplace.json calls it, for the source it was read from. */
+  let read = $state<{ source: string; name?: string; problem?: string } | null>(
+    null
+  );
+
+  const wanted = $derived(source.trim());
+  const own = $derived(read?.source === wanted ? read.name : undefined);
+  const unread = $derived(read?.source === wanted ? read.problem : undefined);
+  const reading = $derived(wanted !== "" && read?.source !== wanted);
+  const differs = $derived(
+    own !== undefined && name.trim() !== "" && name.trim() !== own
+  );
+  const clash = $derived(own !== undefined && taken.includes(own));
+  const ready = $derived(own !== undefined && !clash);
+
+  $effect(() => {
+    const at = wanted;
+    if (at === "") {
+      read = null;
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const found = await readMarketplaceName(at);
+        if (wanted !== at) {
+          return;
+        }
+        read = { source: at, name: found };
+        if (name.trim() === "") {
+          name = found;
+        }
+      } catch (error) {
+        if (wanted === at) {
+          read = {
+            source: at,
+            problem: error instanceof Error ? error.message : String(error),
+          };
+        }
+      }
+    }, READ_AFTER_MS);
+    return () => clearTimeout(timer);
+  });
 
   function reset() {
     name = "";
     source = "";
+    read = null;
     failed = undefined;
   }
 
@@ -51,7 +97,7 @@
     busy = true;
     failed = undefined;
     try {
-      const row = await saveMarketplace(name.trim(), source.trim());
+      const row = await linkMarketplace(wanted);
       onsaved(row);
       // The form closes into the row it made.
       await tick();
@@ -69,6 +115,12 @@
     }
   }
 </script>
+
+{#snippet callsItself()}
+  This marketplace calls itself <span class="font-mono">{own}</span>, and links
+  as <span class="font-mono">{own}</span>: its plugins install as
+  <span class="font-mono">plugin@{own}</span>.
+{/snippet}
 
 <Popover.Root
   onOpenChange={(next) => {
@@ -100,7 +152,7 @@
     bind:ref={surface}
   >
     <form class="form" onsubmit={link}>
-      <Field id="market-source" label="Source">
+      <Field id="market-source" label="Source" problem={unread}>
         {#snippet hint()}
           A GitHub <span class="font-mono">owner/repo</span>, a git URL, or a
           URL that ends in <span class="font-mono">marketplace.json</span>.
@@ -119,11 +171,16 @@
       <Field
         id="market-name"
         label="Name"
-        problem={clash ? `"${name.trim()}" is already linked.` : undefined}
+        problem={clash ? `"${own}" is already linked.` : undefined}
+        warn={differs ? callsItself : undefined}
       >
         {#snippet hint()}
-          What its plugins are installed as —
-          <span class="font-mono">plugin@{name.trim() || "name"}</span>.
+          {#if reading}
+            Reading its marketplace.json…
+          {:else}
+            What its plugins are installed as —
+            <span class="font-mono">plugin@{own ?? "name"}</span>.
+          {/if}
         {/snippet}
         <Input
           aria-invalid={clash ? "true" : undefined}

@@ -57,8 +57,15 @@ const inside = (root: string, rel: string): string => {
 
 /** What a marketplace's manifest says, of the parts that matter here. */
 interface Manifest {
+  name?: unknown;
   plugins?: (MarketplacePluginInfo & { source?: unknown })[];
 }
+
+/** The manifest at a marketplace's root, as Claude Code reads it, or undefined. */
+const readManifest = async (root: string): Promise<Manifest | undefined> =>
+  (await Bun.file(join(root, ".claude-plugin", "marketplace.json"))
+    .json()
+    .catch(() => undefined)) as Manifest | undefined;
 
 /** The directory a hub-directory source names, or undefined for any other form. */
 const hubPath = (source: string): string | undefined => {
@@ -209,6 +216,44 @@ const pluginRoot = async (
   );
 };
 
+/**
+ * What a marketplace calls itself: the `name` of its own `marketplace.json`.
+ * That is the one name the fleet knows it by, because it is the only one
+ * Claude Code addresses it by — "Marketplace identifier … users see it when
+ * installing plugins (for example, `/plugin install my-tool@your-marketplace`).
+ * Each user can register only one marketplace per name"
+ * (https://code.claude.com/docs/en/plugin-marketplaces). The CLI registers it
+ * under that name, clones it into a folder of that name, and installs its
+ * plugins as `plugin@name`, so a row under any other name is one no machine
+ * can find. Fetched the way its plugins are ({@link resolveMarketplacePlugins}).
+ */
+export const marketplaceName = async (source: string): Promise<string> => {
+  const work = await mkdtemp(join(tmpdir(), "cawco-marketplace-"));
+  try {
+    const trimmed = source.trim();
+    // A URL to the manifest itself is the manifest, not an archive.
+    const manifest =
+      HTTP_URL_PREFIX.test(trimmed) &&
+      new URL(trimmed).pathname.endsWith(".json")
+        ? ((await get(trimmed)
+            .then((response) => (response.ok ? response.json() : undefined))
+            .catch(() => undefined)) as Manifest | undefined)
+        : await readManifest(await marketplaceRoot(trimmed, work));
+    if (!manifest) {
+      throw new Error(
+        `${source} has no .claude-plugin/marketplace.json cawco could read`
+      );
+    }
+    const name = typeof manifest.name === "string" ? manifest.name.trim() : "";
+    if (!name) {
+      throw new Error(`${source}'s marketplace.json has no name`);
+    }
+    return name;
+  } finally {
+    await rm(work, { recursive: true, force: true });
+  }
+};
+
 /** One resolved plugin, or the sentence saying why it is not. */
 export type ResolvedPlugin =
   | FleetPluginPayload
@@ -232,10 +277,7 @@ export const resolveMarketplacePlugins = async (
   const work = await mkdtemp(join(tmpdir(), "cawco-plugins-"));
   try {
     const root = await marketplaceRoot(marketplaceSource, work);
-    const manifestPath = join(root, ".claude-plugin", "marketplace.json");
-    const manifest = (await Bun.file(manifestPath)
-      .json()
-      .catch(() => undefined)) as Manifest | undefined;
+    const manifest = await readManifest(root);
     if (!manifest?.plugins) {
       throw new Error(
         `${marketplaceSource} has no .claude-plugin/marketplace.json cawco could read`

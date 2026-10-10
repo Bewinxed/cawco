@@ -64,7 +64,7 @@ import {
 import { expandHome } from "./fs";
 import { readMcpRuntime } from "./mcp-status";
 import { promptWrite } from "./prompt-writes";
-import { resolveBin, toolEnv, toolPath } from "./tools";
+import { claudeHomeEnv, resolveBin, toolEnv, toolPath } from "./tools";
 import {
   guardWorkflowSkillRemoval,
   workflowSkillCollision,
@@ -126,8 +126,6 @@ const PLUGINS_DIR = userLayerPath("plugins");
 /** The CLI's own account of what is linked and what is installed. */
 const KNOWN_MARKETPLACES = join(PLUGINS_DIR, "known_marketplaces.json");
 const INSTALLED_PLUGINS = join(PLUGINS_DIR, "installed_plugins.json");
-/** Where a linked marketplace's clone lands. */
-const MARKETPLACES_DIR = join(PLUGINS_DIR, "marketplaces");
 
 /** Where the local installer puts the CLI when it is not on any PATH. */
 const LOCAL_CLAUDE = userLayerPath("local", "claude");
@@ -144,20 +142,6 @@ const tail = (output: string): string =>
 
 const said = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
-
-/**
- * One marketplace cawco linked, under both of the names it answers to.
- * `name` is the hub config's; `linkedAs` is the one the CLI chose, out of the
- * marketplace's own manifest. They are routinely different — cawco adds
- * `ryanthedev/rtd-claude-inn` and the CLI links it as `rtd` — so a sidecar that
- * kept one bare string left every later sync guessing which of the two it had.
- * Written only once something really is linked, which is what lets `linkedAs`
- * be a name the CLI is known to answer to rather than a hopeful one.
- */
-interface ManagedMarketplace {
-  linkedAs: string;
-  name: string;
-}
 
 interface Sidecar {
   /** The fleet's "CawCo's to-dos" choice, synced from `supervisor_config.cawco_todos`. */
@@ -182,7 +166,13 @@ interface Sidecar {
    * them, so a status reads their rows off their plugins, as the sync did.
    */
   hubOnlyMarketplaces?: string[];
-  marketplaces: ManagedMarketplace[];
+  /**
+   * The marketplaces cawco linked, by their one name: the `name` of their
+   * own `marketplace.json`, which is the fleet row's (the hub links under it)
+   * and the key Claude Code registers them under. Written only once the CLI
+   * lists that name.
+   */
+  marketplaces: string[];
   mcp: string[];
   /** The hash cawco last wrote to `~/.claude/CLAUDE.md`; absent = unmanaged. */
   memory?: string;
@@ -277,39 +267,27 @@ const writeJson = (
 ): Promise<void> => writeAtomic(path, JSON.stringify(value, null, 2), reason);
 
 /**
- * A sidecar written before a marketplace carried both its names has one bare
- * string and no way to tell whose name it is. Kept only when the CLI still
- * lists something under it, because that is the only reading under which it
- * names something on this machine — a leftover cawco name owns nothing, and
- * treating it as a link is what would have a later sync remove a name that was
- * never linked. Config puts the entry back, in full, on the same sync.
+ * The names cawco linked, out of a sidecar from before a marketplace had one
+ * name. That one kept `{ name, linkedAs }`: the hub's name and the CLI's.
+ * What cawco linked is the CLI's, and the hub now links under that same name.
  */
-export const upgradeMarketplaces = (
-  stored: (string | ManagedMarketplace)[] | undefined,
-  linked: Record<string, KnownMarketplace>
-): ManagedMarketplace[] =>
-  (stored ?? []).flatMap((one) => {
-    if (typeof one !== "string") {
-      return [one];
-    }
-    return linked[one] ? [{ name: one, linkedAs: one }] : [];
-  });
+const linkedNames = (
+  stored: (string | { linkedAs: string })[] | undefined
+): string[] =>
+  (stored ?? []).map((one) => (typeof one === "string" ? one : one.linkedAs));
 
 /** What cawco put here last time; unreadable is the same as never written. */
 const readSidecar = async (): Promise<Sidecar> => {
-  // Typed to admit the older shape too, so the upgrade is a fact of the type
-  // rather than a cast: what is on disk may predate a marketplace's two names.
+  // Typed to admit the two-name shape too: a sidecar on disk may predate the
+  // one name.
   const stored = await readJson<
     Partial<Omit<Sidecar, "marketplaces">> & {
-      marketplaces?: (string | ManagedMarketplace)[];
+      marketplaces?: (string | { linkedAs: string })[];
     }
   >(SIDECAR);
   return {
     mcp: stored?.mcp ?? [],
-    marketplaces: upgradeMarketplaces(
-      stored?.marketplaces,
-      await linkedMarketplaces()
-    ),
+    marketplaces: linkedNames(stored?.marketplaces),
     hubOnlyMarketplaces: stored?.hubOnlyMarketplaces ?? [],
     plugins: stored?.plugins ?? [],
     // Read back like every other record: without it each sync starts from an
@@ -676,7 +654,9 @@ const runClaude = async (
 ): Promise<Ran> =>
   await promptWrite(`plugins ${args[1] ?? "update"}`, async () => {
     const child = Bun.spawn([bin, ...args], {
-      env: { ...toolEnv(), ...extraEnv },
+      // `$HOME/.claude`, the dir every path in this file names, whatever
+      // config dir the daemon itself was started in.
+      env: { ...claudeHomeEnv(), ...extraEnv },
       stdout: "pipe",
       stderr: "pipe",
       timeout: CLI_TIMEOUT_MS,
@@ -738,12 +718,24 @@ const runClaudeCloning = async (bin: string, args: string[]): Promise<Ran> => {
   return await runClaude(bin, args, HTTPS_GITHUB);
 };
 
+/**
+ * Whether the CLI has a marketplace registered under `name`, with the
+ * directory its catalog is in: what a fleet row's per-machine state is, and
+ * exactly what {@link marketplaceCatalog} needs to answer.
+ */
 const isLinked = async (name: string): Promise<boolean> =>
-  (await readJson<Record<string, unknown>>(KNOWN_MARKETPLACES))?.[name] !==
-  undefined;
+  (await linkedEntry(name))?.installLocation !== undefined;
 
-/** One entry of the CLI's own account of what is linked, and where it came from. */
+/**
+ * One entry of the CLI's own account of what is linked: where it came from,
+ * and the directory its catalog is in. Keyed by the marketplace's name, the
+ * `name` of its `marketplace.json`, which is the only name Claude Code
+ * addresses it by (https://code.claude.com/docs/en/plugin-marketplaces:
+ * "This is the `name` from `marketplace.json`, not the source you passed to
+ * `add`").
+ */
 export interface KnownMarketplace {
+  installLocation?: string;
   source?: { source?: string; repo?: string; url?: string; path?: string };
 }
 
@@ -751,6 +743,11 @@ const linkedMarketplaces = async (): Promise<
   Record<string, KnownMarketplace>
 > =>
   (await readJson<Record<string, KnownMarketplace>>(KNOWN_MARKETPLACES)) ?? {};
+
+/** The registry's entry under `name`, if the CLI has one. */
+const linkedEntry = async (
+  name: string
+): Promise<KnownMarketplace | undefined> => (await linkedMarketplaces())[name];
 
 /**
  * `owner/repo`, an ssh remote, an https clone URL and a `marketplace.json` URL
@@ -779,34 +776,17 @@ const sourceKeysOf = (entry: KnownMarketplace): string[] =>
     .map(sourceKey);
 
 /**
- * The name the CLI linked a marketplace under, which comes from the
- * marketplace's own `marketplace.json` and is not necessarily the name cawco
- * calls it: `ryanthedev/rtd-claude-inn` is added and comes back as `rtd`.
- * Everything downstream — the clone's directory, a `plugin@marketplace` id,
- * `marketplace remove` — speaks the CLI's name, so a sync that kept cawco's
- * would report a successful add as a failure and never install a plugin from
- * it. Matched on the source when the name does not hit, because the source is
- * the one thing both sides agree on.
+ * The name the CLI registered `source` under, when it is not `name`: the
+ * marketplace's manifest calls itself something else than the fleet row does.
+ * Only for saying so after an add; nothing is linked or reported under it.
  */
-export const linkedNameIn = (
+const registeredAs = (
   linked: Record<string, KnownMarketplace>,
-  name: string,
   source: string
-): string | undefined => {
-  if (linked[name]) {
-    return name;
-  }
-  const wanted = sourceKey(source);
-  return Object.keys(linked).find((key) =>
-    sourceKeysOf(linked[key]).includes(wanted)
+): string | undefined =>
+  Object.keys(linked).find((key) =>
+    sourceKeysOf(linked[key]).includes(sourceKey(source))
   );
-};
-
-const linkedNameFor = async (
-  name: string,
-  source: string
-): Promise<string | undefined> =>
-  linkedNameIn(await linkedMarketplaces(), name, source);
 
 interface InstalledPlugins {
   /** Plugin id → one entry per scope it is installed at, with its unpacked copy. */
@@ -861,24 +841,20 @@ const hubOnlyStates = (
 };
 
 /**
- * Which of the marketplaces cawco linked last time are cawco's to unlink
- * now. What goes is a link, so what is compared is the link: renaming a
- * marketplace in the hub's config changes cawco's name for it and nothing on
- * the machine, and comparing the names instead would unlink the marketplace
- * this same sync just linked. A name config still asks for is not a removal
- * either — nothing linked under it means the add failed, which is its own
- * report and not something to take away.
+ * Which of the marketplaces cawco linked last time are cawco's to unlink now:
+ * the ones config no longer asks this machine to link. A name config still
+ * asks for is not a removal even when nothing is linked under it — the add
+ * failed, which is its own report and not something to take away. Nor is a
+ * name one of config's sources is `registered` under: a manifest renamed
+ * upstream, still the link a row asks for until the hub takes the new name.
  */
-export const toUnlink = (
-  managed: ManagedMarketplace[],
-  kept: ManagedMarketplace[],
-  config: Pick<FleetConfig, "marketplaces">
-): ManagedMarketplace[] => {
-  const keeping = new Set(kept.map(({ linkedAs }) => linkedAs));
+const toUnlink = (
+  managed: readonly string[],
+  config: Pick<FleetConfig, "marketplaces">,
+  registered: ReadonlySet<string>
+): string[] => {
   const asked = new Set(config.marketplaces.map(({ name }) => name));
-  return managed.filter(
-    ({ name, linkedAs }) => !(keeping.has(linkedAs) || asked.has(name))
-  );
+  return managed.filter((name) => !(asked.has(name) || registered.has(name)));
 };
 
 /** What a plugin sync leaves in the sidecar. */
@@ -919,11 +895,12 @@ const syncPlugins = async (
     };
   }
 
-  /**
-   * The report stays keyed by cawco's name, because that is the row the
-   * dashboard has; everything that acts on the machine uses the CLI's.
-   */
-  const marketplaces: ManagedMarketplace[] = [];
+  // One name for a marketplace everywhere: the fleet row's is its manifest's
+  // (the hub links under it), and the CLI registers it under that same name.
+  // So "linked here" is the CLI's own registry holding that name, and that is
+  // also what Browse reads (`marketplaceCatalog`).
+  const marketplaces: string[] = [];
+  const registered = new Set<string>();
   // What this machine links: everything but a directory on the hub's machine,
   // whose path names nothing here. Its plugins come as bytes, and its row is
   // read off them once they are installed.
@@ -933,9 +910,8 @@ const syncPlugins = async (
 
   for (const { name, source } of linkable) {
     // biome-ignore lint/performance/noAwaitInLoops: each `claude plugin marketplace add` mutates the CLI's shared known_marketplaces.json; concurrent runs would race
-    const already = await linkedNameFor(name, source);
-    if (already) {
-      marketplaces.push({ name, linkedAs: already });
+    if (await isLinked(name)) {
+      marketplaces.push(name);
       report.marketplaces[name] = { state: "applied" };
       continue;
     }
@@ -945,32 +921,38 @@ const syncPlugins = async (
       "add",
       source,
     ]);
-    const linkedAs = await linkedNameFor(name, source);
-    if (!linkedAs) {
-      // Nothing was linked, so there is nothing for a later sync to take away.
-      report.marketplaces[name] = { state: "failed", detail: ran.output };
+    const linked = await linkedMarketplaces();
+    if (linked[name]) {
+      marketplaces.push(name);
+      report.marketplaces[name] = { state: "applied" };
       continue;
     }
-    marketplaces.push({ name, linkedAs });
-    report.marketplaces[name] = { state: "applied" };
+    // Not linked under the fleet's name, so nothing for a later sync to take
+    // away under it. A manifest renamed upstream since the hub read it links
+    // under its new name, which the hub takes on its next start.
+    const other = registeredAs(linked, source);
+    if (other) {
+      registered.add(other);
+    }
+    report.marketplaces[name] = {
+      state: "failed",
+      detail: other
+        ? `${source} now calls itself ${other} in its marketplace.json, not ${name}`
+        : ran.output,
+    };
   }
 
   // A hub-only marketplace cawco once linked here is unlinked like a removed
   // one: the link pointed at whatever this machine had at that path, which is
   // not the hub's directory, and its plugins now come from the hub's bytes.
-  for (const { name, linkedAs } of toUnlink(
+  for (const name of toUnlink(
     managed.marketplaces,
-    marketplaces,
-    { marketplaces: linkable }
+    { marketplaces: linkable },
+    registered
   )) {
     // biome-ignore lint/performance/noAwaitInLoops: `claude plugin marketplace remove` mutates the CLI's shared known_marketplaces.json; concurrent runs would race
-    const ran = await runClaude(bin, [
-      "plugin",
-      "marketplace",
-      "remove",
-      linkedAs,
-    ]);
-    report.marketplaces[name] = (await isLinked(linkedAs))
+    const ran = await runClaude(bin, ["plugin", "marketplace", "remove", name]);
+    report.marketplaces[name] = (await isLinked(name))
       ? { state: "failed", detail: ran.output }
       : { state: "removed" };
   }
@@ -1001,8 +983,8 @@ const syncPlugins = async (
       };
       continue;
     }
-    // The CLI's own account, not this run's report: a plugin id names the
-    // marketplace the CLI's way, which is not the key the report is under.
+    // The CLI's own account, not this run's report: a link made by hand
+    // installs as well as one this sync made.
     if (!linked[marketplace]) {
       report.plugins[id] = {
         state: "failed",
@@ -1051,7 +1033,13 @@ const syncPlugins = async (
   hubOnlyStates(hubOnly, report.plugins, report.marketplaces);
 
   return {
-    marketplaces,
+    // A link kept for a row's renamed manifest stays cawco's to take away.
+    marketplaces: [
+      ...marketplaces,
+      ...managed.marketplaces.filter(
+        (name) => registered.has(name) && !marketplaces.includes(name)
+      ),
+    ],
     hubOnlyMarketplaces: hubOnly,
     plugins,
     vendoredPlugins: vendored,
@@ -1376,9 +1364,12 @@ const syncVendoredPlugins = async (
   const held = await readVendoredPlugins();
 
   // Linked once, then refreshed in place: `add` on an already-linked path is an
-  // error, and `update` is what re-reads a directory whose contents moved.
-  const linked = await linkedMarketplaces();
-  if (!linked[VENDOR_NAME]) {
+  // error, and `update` is what re-reads a directory whose contents moved. A
+  // `cawco` registered at any other directory is not this one (a daemon run
+  // with another HOME wrote it), and adding this one replaces it: "adding a
+  // second marketplace with the same name replaces the first"
+  // (https://code.claude.com/docs/en/plugin-marketplaces).
+  if ((await linkedEntry(VENDOR_NAME))?.installLocation !== VENDOR_DIR) {
     await runClaude(bin, ["plugin", "marketplace", "add", VENDOR_DIR]);
   } else if (changed) {
     await runClaude(bin, ["plugin", "marketplace", "update", VENDOR_NAME]);
@@ -2664,13 +2655,13 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
       ? { state: "applied" }
       : { state: "failed", detail: `not in ${CLAUDE_JSON} for ${cwd}` };
   }
-  for (const { name, linkedAs } of managed.marketplaces) {
+  for (const name of managed.marketplaces) {
     // biome-ignore lint/performance/noAwaitInLoops: a read-only status check; kept sequential like the rest of this report rather than fanning out parallel file reads
-    report.marketplaces[name] = (await isLinked(linkedAs))
+    report.marketplaces[name] = (await isLinked(name))
       ? { state: "applied" }
       : {
           state: "failed",
-          detail: `${linkedAs} is not in known_marketplaces.json`,
+          detail: `${name} is not in known_marketplaces.json`,
         };
   }
   for (const id of managed.plugins) {
@@ -3141,16 +3132,25 @@ interface MarketplaceManifest {
 /**
  * What a marketplace linked on this machine offers, read from its clone — the
  * dashboard browses installable plugins with it, so a name must come back with
- * whatever the marketplace says about itself.
+ * whatever the marketplace says about itself. Found the way Claude Code finds
+ * it: the registry entry under its name, and the catalog at that entry's
+ * `installLocation`. The same entry the sync reports the row applied by, so a
+ * machine the rollout counts is one this answers on.
  */
 export const marketplaceCatalog = async (
   name: string
 ): Promise<MarketplacePluginInfo[]> => {
+  const at = (await linkedEntry(name))?.installLocation;
+  if (!at) {
+    throw new Error(`no marketplace ${name} is linked on this machine`);
+  }
   const manifest = await readJson<MarketplaceManifest>(
-    join(MARKETPLACES_DIR, name, ".claude-plugin", "marketplace.json")
+    join(at, ".claude-plugin", "marketplace.json")
   );
   if (!manifest) {
-    throw new Error(`no marketplace ${name} is linked on this machine`);
+    throw new Error(
+      `${name} is linked at ${at}, which has no .claude-plugin/marketplace.json`
+    );
   }
   return (manifest.plugins ?? []).map(
     ({ name: plugin, description, version, category }) => ({

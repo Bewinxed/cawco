@@ -379,6 +379,7 @@ import {
 import { createPlans, planRoutes } from "./plans";
 import {
   isHubDirectory,
+  marketplaceName,
   pluginMarketplace,
   resolveMarketplacePlugins,
 } from "./plugins";
@@ -11766,7 +11767,47 @@ export const createServer = (
       fanOutFleet();
     }
   };
-  detach(reresolveFailed(), "fleet source re-resolve");
+  /**
+   * Every marketplace row under the name its manifest gives. A row linked
+   * before the hub read that name carries whatever the operator typed
+   * ("humanlayer-skills" for humanlayer/skills, which calls itself "skills"),
+   * and no machine can find a marketplace under it: Claude Code registers it,
+   * clones it and installs its plugins by the manifest's name. Its plugin ids
+   * move with it. A source that cannot be read keeps its row as it is, said in
+   * the log.
+   */
+  const nameMarketplacesByManifest = async (): Promise<void> => {
+    let moved = false;
+    for (const { name, source } of db.fleetConfig().marketplaces) {
+      let own: string;
+      try {
+        // biome-ignore lint/performance/noAwaitInLoops: one marketplace fetched at a time, as a resolve does it
+        own = await marketplaceName(source);
+      } catch (error) {
+        console.warn(
+          `[hub] marketplace ${name}: could not read its name from ${source}: ${error instanceof Error ? error.message : String(error)}`
+        );
+        continue;
+      }
+      if (own === name) {
+        continue;
+      }
+      const ids = db.renameMarketplace(name, own);
+      console.log(
+        `[hub] marketplace ${name} renamed to ${own}, the name its marketplace.json gives${ids.length ? `; plugins ${ids.map(([from, to]) => `${from} → ${to}`).join(", ")}` : ""}`
+      );
+      moved = true;
+    }
+    if (moved) {
+      fanOutFleet();
+    }
+  };
+  // Named first, so a plugin re-resolved below is looked up under its row's
+  // current name.
+  detach(
+    nameMarketplacesByManifest().then(reresolveFailed),
+    "fleet marketplace names and source re-resolve"
+  );
 
   /** Each place's path by its id, for a folded hook report to say which place a copy failed in. */
   const placePathById = (): ((placeId: string) => string | undefined) => {
@@ -17067,14 +17108,48 @@ export const createServer = (
           return { ok: true };
         }
       )
-      .put(
-        "/api/fleet/marketplaces/:name",
-        { body: t.Object({ source: t.String() }) },
-        ({ params, body }) => {
-          const marketplace = db.putMarketplace({
-            name: params.name,
-            source: body.source,
-          });
+      // What a source's marketplace calls itself, for the link form to show
+      // before anything is linked.
+      .get(
+        "/api/fleet/marketplace-name",
+        { query: t.Object({ source: t.String({ minLength: 1 }) }) },
+        async ({ query, status }) => {
+          try {
+            return { name: await marketplaceName(query.source) };
+          } catch (error) {
+            return status(
+              400,
+              error instanceof Error ? error.message : String(error)
+            );
+          }
+        }
+      )
+      // Linked under the name its own manifest gives, the one name Claude
+      // Code knows it by (plugins.ts `marketplaceName`), never a typed one.
+      .post(
+        "/api/fleet/marketplaces",
+        { body: t.Object({ source: t.String({ minLength: 1 }) }) },
+        async ({ body, status }) => {
+          const source = body.source.trim();
+          let name: string;
+          try {
+            name = await marketplaceName(source);
+          } catch (error) {
+            return status(
+              400,
+              error instanceof Error ? error.message : String(error)
+            );
+          }
+          const existing = db
+            .fleetConfig()
+            .marketplaces.find((row) => row.name === name);
+          if (existing && existing.source !== source) {
+            return status(
+              409,
+              `A marketplace called ${name} is already linked, from ${existing.source}. A machine holds one marketplace per name.`
+            );
+          }
+          const marketplace = db.putMarketplace({ name, source });
           fanOutFleet();
           return marketplace;
         }

@@ -10766,18 +10766,56 @@
         }
       }
     },
-    "/api/fleet/marketplaces/{name}": {
-      "put": {
+    "/api/fleet/marketplace-name": {
+      "get": {
         "parameters": [
           {
-            "name": "name",
-            "in": "path",
+            "name": "source",
+            "in": "query",
             "required": true,
             "schema": {
+              "minLength": 1,
               "type": "string"
             }
           }
         ],
+        "operationId": "getApiFleetMarketplaceName",
+        "responses": {
+          "200": {
+            "description": "getApiFleetMarketplaceName 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiFleetMarketplaceName200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiFleetMarketplaceName 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiFleetMarketplaceName 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/fleet/marketplaces": {
+      "post": {
         "requestBody": {
           "required": true,
           "content": {
@@ -10786,6 +10824,7 @@
                 "type": "object",
                 "properties": {
                   "source": {
+                    "minLength": 1,
                     "type": "string"
                   }
                 },
@@ -10796,10 +10835,10 @@
             }
           }
         },
-        "operationId": "putApiFleetMarketplacesByName",
+        "operationId": "postApiFleetMarketplaces",
         "responses": {
           "200": {
-            "description": "putApiFleetMarketplacesByName 200",
+            "description": "postApiFleetMarketplaces 200",
             "content": {
               "application/json": {
                 "schema": {
@@ -10808,8 +10847,28 @@
               }
             }
           },
+          "400": {
+            "description": "postApiFleetMarketplaces 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiFleetMarketplaces 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
           "422": {
-            "description": "putApiFleetMarketplacesByName 422",
+            "description": "postApiFleetMarketplaces 422",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -10819,7 +10878,9 @@
             }
           }
         }
-      },
+      }
+    },
+    "/api/fleet/marketplaces/{name}": {
       "delete": {
         "parameters": [
           {
@@ -16876,6 +16937,17 @@
         },
         "required": [
           "ok"
+        ]
+      },
+      "getApiFleetMarketplaceName200": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
         ]
       },
       "deleteApiFleetMarketplacesByName200": {

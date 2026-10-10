@@ -522,14 +522,30 @@ export const mcpSignInIntent = (
   };
 };
 
-export const saveMarketplace = (
-  name: string,
-  source: string
-): Promise<FleetMarketplace> =>
-  put(
-    `/api/fleet/marketplaces/${encodeURIComponent(name)}`,
-    { source },
-    `link ${name}`
+/**
+ * What the marketplace at `source` calls itself: the `name` of its own
+ * `marketplace.json`, read by the hub. The only name it can be linked under,
+ * since it is the one Claude Code registers it and installs its plugins by.
+ */
+export const readMarketplaceName = async (source: string): Promise<string> =>
+  (
+    await send<{ name: string }>(
+      `/api/fleet/marketplace-name?${new URLSearchParams({ source })}`,
+      {},
+      `read ${source}`
+    )
+  ).name;
+
+/** Links the marketplace at `source`, under the name its manifest gives. */
+export const linkMarketplace = (source: string): Promise<FleetMarketplace> =>
+  send<FleetMarketplace>(
+    "/api/fleet/marketplaces",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ source }),
+    },
+    `link ${source}`
   );
 
 export const removeMarketplace = (name: string): Promise<void> =>
