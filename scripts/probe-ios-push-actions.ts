@@ -65,6 +65,7 @@
 import { mkdir } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import type { DbShape, WorkItemRow } from "../packages/hub/src/db";
+import { axeOver, bootForSystemPrompts } from "./ios-sim-axe";
 import { MACHINE, scratchFleet, until } from "./scratch-fleet";
 
 const keep = process.argv.includes("--keep");
@@ -72,7 +73,6 @@ const root = resolve(import.meta.dir, "..");
 const home = process.env.HOME ?? "";
 const onMac = process.platform === "darwin";
 const SSH = ["ssh", "-F", join(home, ".ssh", "config"), "-o", "BatchMode=yes"];
-const AXE = "/opt/homebrew/bin/axe";
 const BUNDLE = "dev.cawco.app";
 const BUILT_IOS = /^BUILT iOS$/m;
 const BUILT_IOS_18 = /^BUILT iOS 18\.5$/m;
@@ -116,6 +116,7 @@ async function mac(script: string): Promise<string> {
   }
   return text;
 }
+const axe = axeOver(mac);
 
 // ── What the mock asks, one tool call per marker ─────────────────────────
 const tag = crypto.randomUUID().slice(0, 6);
@@ -496,19 +497,15 @@ print(best[1], best[2])
 xcrun simctl create "CawCo probe push actions" "$TYPE" "$RUNTIME"`)
   ).trim();
   console.log(`  simulator ${udid}`);
-  // The permission prompt is SpringBoard's, not the app's. From iOS 26.5
-  // SpringBoard's accessibility server refuses clients that aren't apps, so
-  // a tool's view of the screen has no prompt in it, and the switch Apple
-  // ships for that is this preference, read when SpringBoard starts
-  // (software-mansion/argent d091421: "When set, the server skips the
-  // entitlement check"). Set on this probe's own simulator, then
-  // SpringBoard restarted once.
-  await mac(`xcrun simctl boot ${udid}
-xcrun simctl bootstatus ${udid} -b >/dev/null
-xcrun simctl spawn ${udid} defaults write com.apple.Accessibility IgnoreAXServerEntitlements -bool true
-xcrun simctl spawn ${udid} launchctl kickstart -k system/com.apple.SpringBoard >/dev/null 2>&1 || true
-sleep 5
-xcrun simctl install ${udid} "${app}"`);
+  // The permission prompt is SpringBoard's, not the app's: the simulator
+  // boots twice so SpringBoard starts with its accessibility server open to
+  // axe (bootForSystemPrompts says why, and why not a SpringBoard restart).
+  const booted = await mac(bootForSystemPrompts(udid, app));
+  check(
+    "the simulator boots with SpringBoard's AX server open to axe",
+    /^IgnoreAXServerEntitlements 1$/m.test(booted),
+    booted.trim() || "nothing printed"
+  );
 
   // ── The real path: iOS asks, the probe allows, APNs gives a token, the
   // app registers its pairing and push key with the hub (PushProbe). ──────
@@ -526,12 +523,13 @@ xcrun simctl install ${udid} "${app}"`);
       ? "PushProbe's register hook ran and called requestAuthorization"
       : "no `probe register: asking` line: the DEBUG hook never ran"
   );
-  // Tapped by its label: a permission prompt's buttons are often missing
-  // from `describe-ui` while a label tap still lands (alex-hall/AXhandle:
-  // "Native alert buttons … frequently don't appear in describe-ui at all
-  // … AXe's label tap still lands"). It waits up to 30 s for the prompt.
-  const tapped = await mac(
-    `${AXE} tap --label Allow --wait-timeout 30 --udid ${udid} 2>&1`
+  // Tapped by its label. `tap --label` reads the same tree `describe-ui`
+  // prints (AXe AccessibilityPoller.resolveWithPolling →
+  // AccessibilityFetcher.fetchAccessibilityElements), which has the prompt in
+  // it once SpringBoard's AX server is open (above). It waits up to 30 s for
+  // the prompt; axe() tries again while axe can't reach the simulator.
+  const tapped = await axe(
+    `tap --label Allow --wait-timeout 30 --udid ${udid} 2>&1`
   ).then(
     (text) => ({ ok: true, said: text.trim() }),
     (error: unknown) => ({
@@ -556,6 +554,17 @@ rm -rf "$F"`).catch(() => "");
     }
     console.log(
       `  the screen when it wasn't allowed: ${png ? shot : "no capture"}`
+    );
+    // What axe read there: whether the prompt's buttons were in its tree.
+    const tree = await axe(`describe-ui --udid ${udid}`).catch(
+      (error: unknown) => `describe-ui failed: ${String(error)}`
+    );
+    const labels = [...tree.matchAll(/"AXLabel"\s*:\s*"([^"]*)"/g)]
+      .map((m) => m[1])
+      .filter(Boolean)
+      .slice(0, 30);
+    console.log(
+      `  what axe read there: ${labels.length ? labels.join(" | ") : tree.slice(0, 200)}`
     );
   }
   check(
@@ -878,9 +887,7 @@ rm -rf "$F"`).catch(() => "");
     const inFront = await until(
       "the session in front in the app",
       async () =>
-        (await mac(`${AXE} describe-ui --udid ${udid}`)).includes(
-          "steer-message"
-        ),
+        (await axe(`describe-ui --udid ${udid}`)).includes("steer-message"),
       Boolean,
       120_000
     ).catch(() => false);
