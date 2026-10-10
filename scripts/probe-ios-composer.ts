@@ -39,11 +39,13 @@ const root = resolve(import.meta.dir, "..");
 const home = process.env.HOME ?? "";
 const SSH = ["ssh", "-F", join(home, ".ssh", "config"), "-o", "BatchMode=yes"];
 const AXE = "/opt/homebrew/bin/axe";
-const out = join(
-  process.env.XDG_CACHE_HOME ?? join(home, ".cache"),
-  `probe-ios-composer-${Date.now()}`
-);
+// Inside the checkout it runs from (git-ignored), so whoever reads the run
+// reads the captures beside it.
+const out = join(root, ".probe", `ios-composer-${Date.now()}`);
 await mkdir(out, { recursive: true });
+console.log(
+  `  at ${(await Bun.$`git -C ${root} log -1 --format=%h\ %s`.text()).trim()}`
+);
 
 let failures = 0;
 const check = (step: string, ok: boolean, detail: string) => {
@@ -126,9 +128,13 @@ interface Node {
   value?: string;
 }
 
-/** Every element of the app's accessibility tree, flattened. */
-async function tree(): Promise<Node[]> {
-  const raw = await mac(`${AXE} describe-ui --udid ${udid}`);
+/** Every element of the app's accessibility tree, flattened; or with
+ * `point`, the element under that point and what holds it. */
+async function tree(point?: { x: number; y: number }): Promise<Node[]> {
+  const where = point
+    ? ` --point ${Math.round(point.x)},${Math.round(point.y)}`
+    : "";
+  const raw = await mac(`${AXE} describe-ui${where} --udid ${udid}`);
   const nodes: Node[] = [];
   const walk = (at: unknown) => {
     if (Array.isArray(at)) {
@@ -154,11 +160,20 @@ async function tree(): Promise<Node[]> {
 }
 const rowsOf = (nodes: Node[]) =>
   nodes.filter((n) => n.id?.startsWith("composer-command-"));
+/** The wheel's own draft row ("Your draft: …", "Your draft, empty"): the
+ * transcript's bubble carries the sent message's words too, so only this
+ * row says the wheel is up. */
 const wheelOf = (nodes: Node[]) =>
-  nodes.filter(
-    (n) =>
-      n.label?.startsWith("Your draft") || n.label?.startsWith(marker) === true
-  );
+  nodes.filter((n) => n.label?.startsWith("Your draft") === true);
+/** What a point query found, for the report. */
+const said = (nodes: Node[]) =>
+  nodes
+    .filter((n) => n.id || n.label)
+    .map((n) => n.id ?? n.label)
+    .slice(0, 3)
+    .join(" < ") || "nothing labelled";
+const fieldFrame = async () =>
+  (await tree()).find((n) => n.id === "steer-message")?.frame;
 const shot = async (name: string) => {
   const b64 = await mac(`F=$(mktemp -d)
 xcrun simctl io ${udid} screenshot "$F/shot.png" >/dev/null 2>&1
@@ -273,14 +288,28 @@ xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-e
       .map((r) => `${r.label}${r.value ? ` — ${r.value}` : ""}`)
       .join(" | ")}`
   );
-  const now = (await tree()).find((n) => n.id === "steer-message")?.frame ?? f;
-  const lowest = Math.max(
-    ...rows.map((r) => (r.frame ? r.frame.y + r.frame.height : 0))
+  // Where the menu stands, by what the screen shows at three points: the
+  // AX tree also lists the rows scrolled out of the menu's 320pt, so their
+  // frames say nothing about what is on screen. The pill's top is 6pt above
+  // the field's, and the menu's foot 7pt above that.
+  const now = (await fieldFrame()) ?? f;
+  const onField = await tree({ x: cx, y: now.y + now.height / 2 });
+  const overPill = await tree({ x: cx, y: now.y - 6 - 7 - 14 });
+  const overMenu = await tree({ x: cx, y: now.y - 6 - 7 - 320 - 16 });
+  check(
+    "the field stays uncovered",
+    onField.some((n) => n.id === "steer-message"),
+    `at the field's middle: ${said(onField)}`
   );
   check(
-    "the menu stands above the field",
-    rows.length > 0 && lowest <= now.y,
-    `rows end at y ${lowest}, the field starts at y ${now.y}`
+    "the menu stands right above the pill",
+    overPill.some((n) => n.id?.startsWith("composer-command-") === true),
+    `14pt above the menu's foot: ${said(overPill)}`
+  );
+  check(
+    "the menu is at most 320pt tall, its list scrolling inside",
+    !overMenu.some((n) => n.id?.startsWith("composer-command-") === true),
+    `16pt above the menu's highest top: ${said(overMenu)}`
   );
   check(
     "VoiceOver reads each row",
@@ -319,28 +348,54 @@ xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-e
   await pause(1200);
   nodes = await tree();
   const wheel = wheelOf(nodes);
+  const sent = nodes.filter((n) => n.label?.startsWith(marker) === true);
   check(
     "a swipe up opens the wheel",
     wheel.length > 0,
-    `${wheel.length} wheel rows: ${wheel.map((w) => w.label).join(" | ")}; the menu's rows now ${rowsOf(nodes).length}`
+    `draft row: ${wheel.map((w) => w.label).join(" | ") || "none"}; elements with the sent words (bubble and wheel row): ${sent.length}`
+  );
+  // The wheel takes the field's place: the `/` menu over it goes as it opens.
+  check(
+    "the wheel replaces the menu",
+    rowsOf(nodes).length === 0,
+    `the menu's rows while the wheel is up: ${rowsOf(nodes).length}`
   );
   await shot("wheel-dark");
   await appearance("light");
   await pause(800);
   await shot("wheel-light");
 
-  // Dismissed with a tap outside it, high on the screen.
-  await mac(`${AXE} tap -x ${cx} -y 140 --udid ${udid}`);
-  await pause(1200);
+  // Dismissed with a tap outside it, on the transcript halfway up the screen.
+  await mac(`${AXE} tap -x ${cx} -y ${Math.round(sy / 2)} --udid ${udid}`);
+  await pause(1500);
+  const left = wheelOf(await tree());
   check(
     "a tap outside closes it",
-    wheelOf(await tree()).length === 0,
-    "no wheel rows"
+    left.length === 0,
+    left.length === 0
+      ? "the draft row is gone"
+      : `still up: ${left.map((w) => w.label).join(" | ")}`
   );
 
   // ── 7. A long press no longer opens it ─────────────────────────────────
-  const field3 =
-    (await tree()).find((n) => n.id === "steer-message")?.frame ?? f;
+  // From a known closed state: Escape (HID 41) folds a wheel still up.
+  await until(
+    "the wheel closed before the long press",
+    async () => {
+      const up = wheelOf(await tree()).length > 0;
+      if (up) {
+        await mac(`${AXE} key 41 --udid ${udid}`);
+      }
+      return !up;
+    },
+    Boolean,
+    6000
+  ).catch(() => undefined);
+  const before = wheelOf(await tree()).length;
+  console.log(
+    `  before the long press: ${before === 0 ? "wheel closed" : "wheel STILL UP"}`
+  );
+  const field3 = (await fieldFrame()) ?? f;
   const lx = Math.round(field3.x + field3.width / 2);
   const ly = Math.round(field3.y + field3.height / 2);
   await mac(
@@ -350,8 +405,10 @@ xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-e
   const after = wheelOf(await tree());
   check(
     "a long press does not open it",
-    after.length === 0,
-    after.length === 0 ? "no wheel rows" : `${after.length} wheel rows`
+    before === 0 && after.length === 0,
+    before === 0
+      ? `after a 1.5s press on the field: ${after.length === 0 ? "no draft row" : after.map((w) => w.label).join(" | ")}`
+      : "the wheel could not be closed first, so the press proves nothing"
   );
   await shot("long-press-light");
 } catch (error) {
