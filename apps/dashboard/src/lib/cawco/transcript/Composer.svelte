@@ -1334,9 +1334,6 @@
       replaceLifted();
     } else if (busy) {
       onstop();
-    } else if (recall) {
-      // The wheel up: what sits on the line goes, as mod+Enter sends it.
-      wheel?.send();
     } else {
       submit();
     }
@@ -1359,8 +1356,12 @@
     keys: boolean;
     text: string;
     caret: [number, number];
-    measured: ReturnType<typeof measureShape>;
+    measured: ReturnType<typeof measureShape> & { deck: number };
   } | null>(null);
+  /** The pill's buttons, which fold into a deck while the wheel is up. */
+  let ctrls = $state<HTMLElement>();
+  /** The field's box: the draft's row on the wheel. */
+  let fieldWrap = $state<HTMLElement>();
   let wheel = $state<ReturnType<typeof RecallWheel>>();
   /** ↑ pressed while the wheel was folding: it comes up again once folded. */
   let reopen = false;
@@ -1399,9 +1400,123 @@
     return null;
   }
 
+  /**
+   * Where each of the pill's buttons stands in the deck they fold into
+   * while the wheel is up, read before anything is written: Send in front,
+   * where it is; each one behind it slid toward it until it peeks out by
+   * `--c-deck-peek`, a step smaller (`--c-deck-scale`) and dimmer
+   * (`--c-deck-dim`) than the one in front. With reduced motion nothing
+   * slides: the ones behind fade out, and the deck is Send alone. Returns
+   * each button's place, and where the deck starts from the shell's inline
+   * start.
+   */
+  function foldDeck(
+    row: HTMLElement,
+    from: number
+  ): { deck: number; places: DeckPlace[] } {
+    const style = getComputedStyle(row);
+    const peek = Number.parseFloat(style.getPropertyValue("--c-deck-peek"));
+    const scale = Number.parseFloat(style.getPropertyValue("--c-deck-scale"));
+    const dim = Number.parseFloat(style.getPropertyValue("--c-deck-dim"));
+    const cards = [...row.children]
+      .filter((card): card is HTMLElement => card instanceof HTMLElement)
+      .map((card) => ({ card, box: card.getBoundingClientRect() }))
+      .filter(({ box }) => box.width > 0)
+      .reverse();
+    const [front] = cards;
+    if (!front) {
+      return { deck: Number.POSITIVE_INFINITY, places: [] };
+    }
+    const slide = motionOk.current;
+    let { left } = front.box;
+    const places = cards.map(({ card, box }, i) => {
+      const s = slide ? scale ** i : 1;
+      // Its leading edge one peek past the edge of the one in front.
+      const edge = front.box.left - i * peek;
+      const x = slide
+        ? edge + (box.width * s) / 2 - (box.left + box.width / 2)
+        : 0;
+      if (slide) {
+        left = Math.min(left, edge);
+      }
+      return { card, x, s, o: slide ? dim ** i : Number(i === 0) };
+    });
+    return { deck: left - from, places };
+  }
+
+  /** One of the pill's buttons, where it stands in the deck. */
+  interface DeckPlace {
+    card: HTMLElement;
+    o: number;
+    s: number;
+    x: number;
+  }
+  /** The buttons folded into the deck, and their motion, while they are. */
+  let decked: { places: DeckPlace[]; runs: Animation[] } | null = null;
+
+  /**
+   * The buttons slide together into the deck on the wheel's own growth:
+   * its --dur-grow on the drawer curve. Transform and opacity only, by the
+   * Web Animations API, so the buttons' own transitions stay theirs.
+   */
+  function deckIn(places: DeckPlace[]): void {
+    deckOut(0);
+    const timing = {
+      duration: dur("--dur-grow"),
+      easing: CURVE.drawer,
+      fill: "forwards",
+    } as const;
+    decked = {
+      places,
+      runs: places.map(({ card, x, s, o }) =>
+        card.animate(
+          [
+            { translate: "0 0", scale: "1", opacity: 1 },
+            { translate: `${x.toFixed(2)}px 0`, scale: String(s), opacity: o },
+          ],
+          timing
+        )
+      ),
+    };
+  }
+
+  /**
+   * They fan back out to their places from wherever they are, on the
+   * wheel's fold: its --dur-grow-exit on the drawer curve (`ms`: 0 puts
+   * them back at once).
+   */
+  function deckOut(ms = dur("--dur-grow-exit")): void {
+    const was = decked;
+    decked = null;
+    if (!was) {
+      return;
+    }
+    // Where each one is drawn now, read before the motion that held it goes.
+    const from = was.places.map(({ card }) => {
+      const style = getComputedStyle(card);
+      return {
+        translate: style.translate,
+        scale: style.scale,
+        opacity: Number(style.opacity),
+      };
+    });
+    for (const run of was.runs) {
+      run.cancel();
+    }
+    if (ms <= 0) {
+      return;
+    }
+    for (const [i, { card }] of was.places.entries()) {
+      card.animate([from[i], { translate: "0 0", scale: "1", opacity: 1 }], {
+        duration: ms,
+        easing: CURVE.drawer,
+      });
+    }
+  }
+
   function openRecall(keys: boolean): void {
     if (
-      !(recallOf && field && shell && pill && historyButton) ||
+      !(recallOf && field && shell && pill && historyButton && ctrls) ||
       recall ||
       draft.lifted ||
       askOpen
@@ -1409,11 +1524,14 @@
       return;
     }
     // Every size first, before anything is written: one layout per open.
+    const measured = measureShape(shell, pill, historyButton, field);
+    const deck = foldDeck(ctrls, shell.getBoundingClientRect().left);
+    deckIn(deck.places);
     recall = {
       keys,
       text: draft.text,
       caret: [field.selectionStart, field.selectionEnd],
-      measured: measureShape(shell, pill, historyButton, field),
+      measured: { ...measured, deck: deck.deck },
     };
     wheeling = true;
     dismissed = true;
@@ -1423,14 +1541,56 @@
     }
   }
 
-  /** The wheel's pick, into the field: the caret after it, ready to edit. */
-  function recallTake(text: string): void {
+  /**
+   * The field's next fit, while a pick taken off the wheel waits on it
+   * (autosize `measured`): it runs in the fit, so whatever moves with the
+   * field's new height starts in the frame the height does.
+   */
+  let onFit: ((whole: number) => void) | null = null;
+
+  /**
+   * The wheel's pick, into the field. Its first line stays where the
+   * wheel's row stood, the words they share in place, and the field fits
+   * it on the wheel's fold (`.settling`): growing, its top carries the
+   * further lines up; shrinking, the text stands as low as the line and
+   * the field's top comes down to it on the same curve. The caret goes
+   * after it once it has landed (`recallDone`). Resolves to the pill's
+   * height, fitted.
+   */
+  function recallTake(text: string): Promise<number> {
+    const node = field;
+    const was = node?.offsetHeight ?? 0;
+    const base = pill?.offsetHeight ?? 0;
+    deckOut();
     wheeling = false;
+    if (!node || text === draft.text) {
+      draft.text = text;
+      return Promise.resolve(base);
+    }
+    const fitted = new Promise<number>((done) => {
+      onFit = (whole) => {
+        onFit = null;
+        const cap =
+          Number.parseFloat(getComputedStyle(node).maxHeight) ||
+          Number.POSITIVE_INFINITY;
+        const next = folds(whole) ? floor : Math.min(whole, cap);
+        const drop = was - next;
+        if (drop > 0.5 && motionOk.current) {
+          node.animate([{ translate: `0 ${drop}px` }, { translate: "0 0" }], {
+            duration: heightMs(node),
+            easing: CURVE.drawer,
+          });
+        }
+        done(base + next - was);
+      };
+    });
     draft.text = text;
+    return fitted;
   }
 
   /** Back to the draft, the caret where it was, so a key typed lands there. */
   function recallBack(): void {
+    deckOut();
     wheeling = false;
     if (recall && field) {
       field.setSelectionRange(...recall.caret);
@@ -1455,22 +1615,34 @@
     if (was?.keys || took) {
       field?.focus();
     }
-    if (took) {
-      field?.setSelectionRange(draft.text.length, draft.text.length);
+    if (took && field) {
+      // The caret after the pick, ready to edit. A pick past the field's
+      // ceiling scrolls to its end, gliding rather than jumping there.
+      const from = field.scrollTop;
+      field.setSelectionRange(draft.text.length, draft.text.length);
+      const to = field.scrollTop;
+      if (to !== from) {
+        field.scrollTop = from;
+        field.scrollTo({
+          top: to,
+          behavior: motionOk.current ? "smooth" : "instant",
+        });
+      }
     }
     if (send) {
       submit();
     }
   }
 
-  /** The history button: the wheel, or back from it; or keep a queued edit. */
+  /**
+   * The history button: the wheel, or keep a queued edit. While the wheel
+   * is up it is folded into the deck, which takes no press.
+   */
   function onhistory(): void {
     if (swallowClick || askOpen) {
       return;
     }
-    if (recall) {
-      wheel?.back();
-    } else if (draft.lifted) {
+    if (draft.lifted) {
       returnEdit();
     } else {
       openRecall(true);
@@ -1483,6 +1655,7 @@
     // biome-ignore lint/complexity/noVoid: read-only dependency — re-runs when the composer is pointed at another conversation's draft
     void draft;
     untrack(() => {
+      deckOut(0);
       recall = null;
       reopen = false;
       wheeling = false;
@@ -1541,13 +1714,18 @@
   });
 
   /*
-   * A held press on a touch screen. With the keyboard down the composer is
-   * a control you can hold: a touch or a pen resting on it --dur-press-hold
-   * brings the wheel up under it, and dragging while still holding rolls
-   * it. Lifting leaves it up: a tap on a row takes it, a tap outside puts it
-   * away. Moving first is a scroll or a selection, never a hold; while the
-   * field is being typed in (keyboard up) every touch is the field's:
-   * scrolling it, selecting, pasting.
+   * A held press or a swipe up on a touch screen. With the keyboard down the
+   * composer is a control you can hold: a touch or a pen resting on it
+   * --dur-press-hold brings the wheel up under it, and so does one that
+   * swipes up off it; dragging while still down rolls it. A swipe's own
+   * rise is the opening's: the roll starts where the finger turns back
+   * down, so a swipe lifted while still rising leaves the newest message
+   * on the line. Lifting leaves it up: a tap on a row takes it, a tap
+   * outside puts it away. Moving any other way first is a scroll or a
+   * selection; while the field is being typed in (keyboard up) every touch
+   * is the field's: scrolling it, selecting, pasting. The pill takes no pan
+   * while the keyboard is down (`touch-action`), so a swipe on it never
+   * scrolls the page, and a swipe anywhere else is the page's.
    */
   const SLOP = 8;
   let hold = $state.raw<{
@@ -1556,6 +1734,8 @@
     y: number;
     from: number;
     live: boolean;
+    /** A swipe that brought the wheel up and is still rising. */
+    rising: boolean;
     timer: ReturnType<typeof setTimeout>;
     lastY: number;
     lastAt: number;
@@ -1586,6 +1766,7 @@
       y: event.clientY,
       from: event.clientY,
       live: false,
+      rising: false,
       lastY: event.clientY,
       lastAt: 0,
       flick: 0,
@@ -1609,10 +1790,21 @@
       if (!press || event.pointerId !== press.id) {
         return;
       }
+      const now = performance.now();
       if (!press.live) {
-        if (
-          Math.hypot(event.clientX - press.x, event.clientY - press.y) > SLOP
-        ) {
+        const dx = event.clientX - press.x;
+        const dy = event.clientY - press.y;
+        if (dy < -SLOP && -dy > Math.abs(dx)) {
+          // A swipe up: the wheel comes up under the finger.
+          clearTimeout(press.timer);
+          press.live = true;
+          press.rising = true;
+          press.from = event.clientY;
+          press.lastY = event.clientY;
+          press.lastAt = now;
+          felt("hold");
+          openRecall(false);
+        } else if (Math.hypot(dx, dy) > SLOP) {
           clearTimeout(press.timer);
           hold = null;
         } else {
@@ -1621,7 +1813,15 @@
         return;
       }
       event.preventDefault();
-      const now = performance.now();
+      if (press.rising) {
+        if (event.clientY <= press.from) {
+          press.from = event.clientY;
+          press.lastY = event.clientY;
+          press.lastAt = now;
+          return;
+        }
+        press.rising = false;
+      }
       press.flick =
         (event.clientY - press.lastY) / Math.max(1, now - press.lastAt);
       press.lastY = event.clientY;
@@ -2141,6 +2341,7 @@
     const max = askRoom();
     // What else grows out of the pill puts itself away: the ask has it.
     if (recall) {
+      deckOut(0);
       recall = null;
       reopen = false;
       wheeling = false;
@@ -2526,9 +2727,10 @@
          edited. Both stand on the pill's foot, absolutely, so nothing above
          them moves. -->
     <div class="shell" bind:this={shell} class:rolling={!!recall}>
-      {#if recall && shell && pill}
+      {#if recall && shell && fieldWrap}
         <RecallWheel
           draft={recall.text}
+          field={fieldWrap}
           id={recallId}
           keys={recall.keys}
           measured={recall.measured}
@@ -2542,7 +2744,6 @@
           onback={recallBack}
           ondone={recallDone}
           ontake={recallTake}
-          {pill}
           {queuedWord}
           sent={sentHere}
           {shell}
@@ -2612,6 +2813,7 @@
         bind:this={pill}
         class:asking={askOpen}
         class:grown={!!edit || askOpen}
+        class:settling={!!recall && !wheeling}
         class:wheeling={wheeling}
       >
         {#if perch}
@@ -2670,7 +2872,12 @@
 
         <!-- A label, so the pill's padding above and below the 34px field
          focuses it: its touch area is the field's. -->
-        <label class="field touch-hit" inert={askOpen} class:folded>
+        <label
+          class="field touch-hit"
+          inert={askOpen}
+          bind:this={fieldWrap}
+          class:folded
+        >
           <textarea
             aria-activedescendant={recall ? recallActive : activeDescendant}
             aria-autocomplete="list"
@@ -2711,6 +2918,7 @@
               fold: folds,
               measured: (whole) => {
                 natural = whole;
+                onFit?.(whole);
               },
             })}
             {@attach fitHint}
@@ -2752,7 +2960,10 @@
           {/if}
         </label>
 
-        <div class="ctrls">
+        <!-- While the wheel is up its buttons fold into a deck at the pill's
+             trailing end, which is not a control: Esc, ↓ past the draft or
+             a press outside put the wheel away. -->
+        <div class="ctrls" inert={!!recall} bind:this={ctrls}>
           {@render leading?.()}
           <AttachButton {draft} />
           {#if recallOf}
@@ -2782,8 +2993,7 @@
             disabled={!(
               busy ||
               pending ||
-              (draft.hasContent && !draft.uploading) ||
-              recall
+              (draft.hasContent && !draft.uploading)
             )}
             onclick={whileIdle(() => pending, onaction)}
             type="button"
@@ -3115,6 +3325,24 @@
       }
     }
   }
+  /* A pick taken off the recall wheel fits the field as the wheel folds
+     away: the fold's clock and curve (RecallWheel). */
+  @media (prefers-reduced-motion: no-preference) {
+    .settling textarea {
+      transition-duration: var(--dur-grow-exit);
+      transition-timing-function: var(--ease-drawer);
+    }
+  }
+  /* The draft as the recall wheel's first row: its text, and what a folded
+     one says is out of sight, roll down off the field's line as the wheel
+     rolls up, leaving as every row leaves, cut at the line's foot. The
+     wheel writes `--roll-y` and `--roll-o` on the field's box while the
+     roll is off the draft; with neither, nothing here applies. */
+  .field > :is(textarea, .more) {
+    translate: 0 var(--roll-y);
+    opacity: var(--roll-o);
+    clip-path: inset(-100vh -100vw var(--roll-y));
+  }
   /* One line, always: the field is sized from its value, so a hint that
      wrapped would be clipped to its first line. The hint shown is one the
      field's width holds (fitHint, which measures with this tracking). The
@@ -3338,6 +3566,12 @@
       color: var(--ink-strong);
     }
   }
+  /* In the recall wheel's deck it is a card like its neighbours (Attach,
+     Autopilot), so its edge peeks out from behind Send. */
+  .ctrls[inert] .history-btn {
+    background: var(--surface-raised);
+    box-shadow: inset 0 0 0 1px var(--border-control);
+  }
   @media (hover: hover) and (pointer: fine) {
     .history-btn:hover {
       background: var(--surface-hover);
@@ -3435,16 +3669,17 @@
     }
   }
 
-  /* The wheel's rows stand in the field's place, and an ask's card over
-     it: its own text, caret and hint are clear meanwhile. */
-  .wheeling textarea,
-  .wheeling textarea::placeholder,
+  /* An ask's card stands over the field: its own text, caret and hint are
+     clear meanwhile. While the wheel is up the field's text is the draft's
+     row (RecallWheel), with no caret. */
   .asking textarea,
   .asking textarea::placeholder {
     color: transparent;
     caret-color: transparent;
   }
-  .wheeling .more,
+  .wheeling textarea {
+    caret-color: transparent;
+  }
   .asking .more {
     visibility: hidden;
   }
@@ -3472,16 +3707,17 @@
     bottom: 0;
   }
 
-  /* The grown shape and its frosted fade (grown.ts), made as it grows:
-     behind the pill, the bands under the shape. The drop and the bands
-     come in once it stands still. */
-  .shell :global(.grown-halo) {
+  /* The grown shape and its far edge's blur (grown.ts), made as it grows:
+     the shape behind the pill, the blur's layers over the wheel's rows, so
+     the farthest go out of focus into the edge. The drop (a copy of the
+     outline under it, its shadow fixed) and the blur come in by their
+     opacity once it stands still. */
+  .shell :global(:is(.grown-halo, .grown-drop)) {
     position: absolute;
     z-index: 1;
     inset-inline: 0;
     bottom: 0;
     pointer-events: none;
-    transition: filter var(--dur-fade) var(--ease-out);
 
     & :global(svg) {
       display: block;
@@ -3490,25 +3726,37 @@
       overflow: visible;
     }
   }
+  /* Faded out, the drop and the blur are not drawn at all: a clear layer's
+     shadow or backdrop still cost a frame in six on WebKit as the shape
+     moved under it. */
+  .shell :global(:is(.grown-drop, .grown-band)) {
+    opacity: 0;
+    visibility: hidden;
+    transition:
+      opacity var(--dur-fade) var(--ease-out),
+      visibility 0s linear var(--dur-fade);
+  }
+  .shell :global(:is(.grown-drop, .grown-band).settled) {
+    opacity: 1;
+    visibility: visible;
+    transition:
+      opacity var(--dur-fade) var(--ease-out),
+      visibility 0s;
+  }
+  .shell :global(.grown-drop) {
+    filter: drop-shadow(var(--shadow-drop)) drop-shadow(var(--shadow-drop-near));
+  }
   /* While the wheel is up the grown shape is part of the composer: its
      margins take a press (rolling the wheel) and never pan the page. */
   .shell.rolling :global(.grown-halo) {
     pointer-events: auto;
     touch-action: none;
   }
-  .shell :global(.grown-halo.settled) {
-    filter: drop-shadow(var(--shadow-drop)) drop-shadow(var(--shadow-drop-near));
-  }
   .shell :global(.grown-band) {
     position: absolute;
-    z-index: 0;
+    z-index: 4;
     inset-inline: 0;
     pointer-events: none;
-    opacity: 0;
-    transition: opacity var(--dur-fade) var(--ease-out);
-  }
-  .shell :global(.grown-band.settled) {
-    opacity: 1;
   }
 
   /* The row the composer grows while a queued message is edited: what is

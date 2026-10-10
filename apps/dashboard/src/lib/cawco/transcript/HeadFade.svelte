@@ -6,20 +6,9 @@
   rows. A pane draws it beside FootFade, in the transcript's own layer, so the
   transcript's overlays stand above it and only its rows pass under.
 
-  A progressive blur is a stack of uniform ones: each layer blurs the whole
-  band and a linear mask keeps only its slice, the radius doubling layer by
-  layer toward the edge (kennethnym.com/blog/progressive-blur-in-css: "each
-  section is a div that takes up the whole progressive blur area. to only blur
-  a specific area within a section ... we can use a combination of mask and
-  linear-gradient"). The mask is applied after the filter, so a slice's edge is
-  soft, not cut (joshwcomeau.com/css/backdrop-filter: "The masking algorithm
-  happens after the filters, in all browsers").
-
-  The slices are bounded at inOutCubic(j / 5), j = 0…5, read from the band's
-  sharp end up to the edge: 0, 3.2, 25.6, 74.4, 96.8, 100% (the stops of
-  jh3y's easing gradients). Layer k fades in over [q(k), q(k+1)], holds to
-  q(k+2) and fades out by q(k+3); the strongest holds to the edge. CawCoKit's
-  HeadFade carries the same slices.
+  The blur is the app's progressive blur (progressive-blur.ts): its layers,
+  their blurs and their slices are drawn from there, as the recall wheel's
+  far edge draws them.
 
   Scrolled to the very top there is nothing under it and it is clear; it comes
   in over the first `--c-head-fade` of scroll. The pane names the transcript's
@@ -28,11 +17,19 @@
   an ancestor below full opacity is a backdrop root, and the layers in it would
   have only each other to blur.
 -->
+<script lang="ts">
+  import { layerBlur, layerMask, PROGRESSIVE_BLUR } from "./progressive-blur";
+</script>
+
 <div aria-hidden="true" class="head-fade">
-  <div class="layer"></div>
-  <div class="layer"></div>
-  <div class="layer"></div>
-  <div class="layer"></div>
+  {#each PROGRESSIVE_BLUR as layer, k (k)}
+    <div
+      class="layer"
+      style="-webkit-backdrop-filter: {layerBlur(
+        layer
+      )}; backdrop-filter: {layerBlur(layer)}; mask-image: {layerMask(layer)}"
+    ></div>
+  {/each}
 </div>
 
 <style>
@@ -47,31 +44,12 @@
   .layer {
     position: absolute;
     inset: 0;
-    -webkit-backdrop-filter: blur(var(--blur));
-    backdrop-filter: blur(var(--blur));
-    mask-image: linear-gradient(to top, var(--slice));
     /* Clear while nothing is under it: at rest, and whenever the transcript
        does not scroll (its timeline is inactive). */
     opacity: 0;
     animation: head-fade linear both;
     animation-timeline: --transcript-head;
     animation-range: 0 var(--c-head-fade);
-  }
-  .layer:nth-child(1) {
-    --blur: calc(var(--c-head-fade-blur) / 8);
-    --slice: transparent 0%, #000 3.2%, #000 25.6%, transparent 74.4%;
-  }
-  .layer:nth-child(2) {
-    --blur: calc(var(--c-head-fade-blur) / 4);
-    --slice: transparent 3.2%, #000 25.6%, #000 74.4%, transparent 96.8%;
-  }
-  .layer:nth-child(3) {
-    --blur: calc(var(--c-head-fade-blur) / 2);
-    --slice: transparent 25.6%, #000 74.4%, #000 96.8%, transparent 100%;
-  }
-  .layer:nth-child(4) {
-    --blur: var(--c-head-fade-blur);
-    --slice: transparent 74.4%, #000 96.8%;
   }
   @keyframes head-fade {
     to {

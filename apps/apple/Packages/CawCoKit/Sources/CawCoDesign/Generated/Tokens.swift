@@ -498,8 +498,16 @@ public enum Size {
     public static let cTabRowH: Double = 36
     /// A transcript's head blur, on every width: rows scrolled up under the tab strip go out of focus over this length at the transcript's top edge (c-head-fade-blur at the edge, sharp at its end), so they never meet the tab's rim edge-on. It comes in over the first c-head-fade of scroll; scrolled to the very top there is none and the first row is sharp (HeadFade on the web and in CawCoKit).
     public static let cHeadFade: Double = 24
-    /// The head blur's radius at the transcript's top edge, its strongest layer. The layers under it halve (2, 1, 0.5px) toward the band's end, their slices bounded at inOutCubic positions (HeadFade on the web and in CawCoKit). A blur, never a colour.
+    /// The head blur's radius at the transcript's top edge, its strongest layer. The layers under it halve (2, 1, 0.5px) toward the band's end, their slices bounded at inOutCubic positions (HeadFade on the web and in CawCoKit). A blur, never a colour. The recall wheel's far edge goes out of focus with the same layers, over a row and the room above it (grown.ts).
     public static let cHeadFadeBlur: Double = 4
+    /// A pick taken off the recall wheel: the row on the line gives way to the field's own text in place, blurring out by this much as it fades, so the words it shares with the field read as one and only the rest dissolves (transitions.dev, text swap soft).
+    public static let cRecallCrossBlur: Double = 2
+    /// While the recall wheel is up, the composer's buttons fold into a deck at the pill's trailing end, Send in front: how far each button peeks out past the one in front of it (Composer).
+    public static let cDeckPeek: Double = 4
+    /// A button in the recall wheel's deck, against the one in front of it: its size (Composer).
+    public static let cDeckScale: Double = 0.94
+    /// A button in the recall wheel's deck, against the one in front of it: its opacity (Composer).
+    public static let cDeckDim: Double = 0.75
     /// The widest a session tab grows: its title, padding and close control. Below it a tab is as wide as its title; only a title past it ends in an ellipsis, and a row of tabs that will not fit scrolls (PaneTabs).
     public static let cTabMaxW: Double = 240
     /// The top bar's icon group's inset round its items, and the bar's round its controls: the 44px bar less the 36px control height, halved. The group is a capsule and its items sit concentric inside it.

@@ -8,18 +8,20 @@
  * It grows as one piece: the whole pill rises at full width, its top corners
  * rounding all the way, the side with the history button a little ahead, so
  * the top leans toward the button and levels out as it rises; then its
- * shoulders curve in, by as much as a wheel row shrinks at that height. What
- * stands in it (the wheel's rows, the editing row) is clipped to it, so it
- * comes up out of the button with the shape and folds back into it.
+ * shoulders curve in. What stands in it (the wheel's rows, the editing row)
+ * is clipped to it, so it comes up out of the button with the shape and
+ * folds back into it. The wheel's rows run between its sides at their height
+ * (`inset`), so they follow the shoulders' curve.
  *
  * Its edge is the pill's border (`--border-control`), and stays the border
  * while the field has keyboard focus: the grown composer draws no ring.
  *
- * The top fades out over the transcript, frosted progressively: a stack of
- * bands, each blurring twice the one above, each cut to the shape and masked
- * in its own box (a parent clipping or masking them would cut them off from
- * the transcript they blur). The bands and the drop come in once the shape
- * stands still; nothing that moves carries a backdrop filter.
+ * Its far edge goes out of focus (`frosted`): the app's progressive blur
+ * (progressive-blur.ts) over its top band, a row and the room over it, above
+ * what stands in the shape, so the farthest rows blur into the edge with the
+ * transcript behind it. Each layer is cut to the shape on its own. The blur
+ * and the drop come in once the shape stands still; nothing that moves
+ * carries a backdrop filter.
  *
  * Every size is measured once, before it is made (`measureShape`); a frame
  * only writes.
@@ -29,13 +31,13 @@
  * top is solid to the edge (`fade: false`), since its first line is the
  * ask's title, not an oldest row going out of sight.
  */
-import { easeDrawer, motionOk } from "../motion/curves.svelte";
+import { dur, easeDrawer, motionOk } from "../motion/curves.svelte";
+import { layerBlur, layerMask, PROGRESSIVE_BLUR } from "./progressive-blur";
 
-/** How much narrower each wheel row is than the one below it, as a share. */
-export const SHRINK = 0.022;
-/** The frosted bands' blurs, top band first (px), and each band's height. */
-const BLURS = [0.5, 1, 2, 4, 8, 16];
-const BAND = 6;
+/** How far the shoulders curve in for each row of height, as a share of the width. */
+const TAPER = 0.022;
+/** Points sampled along each curve of a side, for `inset`. */
+const SAMPLES = 48;
 
 /** The composer's sizes, read once before anything is written. */
 export interface ShapeSize {
@@ -75,14 +77,24 @@ export class GrownShape {
   readonly #halo: HTMLDivElement;
   readonly #svg: SVGSVGElement;
   readonly #path: SVGPathElement;
+  /** Its drop, a copy of the outline under it that only fades. */
+  readonly #drop: HTMLDivElement;
+  readonly #dropSvg: SVGSVGElement;
+  readonly #dropPath: SVGPathElement;
+  /** Until when the drop can be seen: for good while it is up, then as it fades out. */
+  #dropUntil = 0;
   readonly #mid: SVGStopElement;
   readonly #edge: SVGStopElement;
   readonly #bands: HTMLDivElement[] = [];
   readonly #clips = new Map<HTMLElement, () => ClipBox>();
   readonly #taper: boolean;
   readonly #fade: boolean;
+  /** The sides' inset by height, grown, and the reach it was worked out for. */
+  #sides: { ext: number; at: number[]; inset: number[] } | null = null;
   #frame = 0;
   #done: (() => void) | null = null;
+  /** What the drop and the blur wait on after the next morph lands, besides it. */
+  #after: Promise<void> | null = null;
 
   constructor(
     host: HTMLElement,
@@ -104,23 +116,30 @@ export class GrownShape {
     const fill = `grown-fill-${made}`;
     const edge = `grown-edge-${made}`;
     if (frosted && fade) {
-      for (const [i, px] of BLURS.entries()) {
+      for (const layer of PROGRESSIVE_BLUR) {
         const band = document.createElement("div");
         band.className = "grown-band";
-        band.style.backdropFilter = `blur(${px}px)`;
-        band.style.setProperty("-webkit-backdrop-filter", `blur(${px}px)`);
-        // Each band fades in over its first step and out over its last,
-        // overlapping the next; the last holds to its foot.
-        const mask =
-          i === BLURS.length - 1
-            ? `linear-gradient(transparent, #000 ${BAND}px)`
-            : `linear-gradient(transparent, #000 ${BAND}px, transparent ${2 * BAND}px)`;
-        band.style.maskImage = mask;
-        band.style.setProperty("-webkit-mask-image", mask);
+        band.setAttribute("aria-hidden", "true");
+        band.style.backdropFilter = layerBlur(layer);
+        band.style.setProperty("-webkit-backdrop-filter", layerBlur(layer));
+        band.style.maskImage = layerMask(layer);
+        band.style.setProperty("-webkit-mask-image", layerMask(layer));
         host.append(band);
         this.#bands.push(band);
       }
     }
+    // The drop is its own copy of the outline, its shadow fixed, coming in
+    // and out by its opacity alone: a shadow's filter changing under the
+    // far edge's backdrop blur brought WebKit's compositor down (Playwright
+    // WebKit, ten opens and folds: a filter transition on the shape crashed
+    // the page; an opacity transition on this copy did not).
+    this.#drop = document.createElement("div");
+    this.#drop.className = "grown-drop";
+    this.#drop.setAttribute("aria-hidden", "true");
+    this.#drop.innerHTML = `<svg><path fill="url(#${fill})"/></svg>`;
+    host.append(this.#drop);
+    this.#dropSvg = this.#drop.querySelector("svg") as SVGSVGElement;
+    this.#dropPath = this.#drop.querySelector("path") as SVGPathElement;
     this.#halo = document.createElement("div");
     this.#halo.className = "grown-halo";
     this.#halo.setAttribute("aria-hidden", "true");
@@ -156,13 +175,90 @@ export class GrownShape {
     this.paint();
   }
 
-  /** How far the shoulders curve in, grown: as far as the top row shrinks. */
+  /** How far the shoulders curve in, grown. */
   taper(ext = this.ext): number {
     if (!this.#taper) {
       return 0;
     }
     const { row, w, headroom } = this.#size;
-    return (SHRINK * (Math.max(0, (ext - headroom) / row) + 0.5) * w) / 2;
+    return (TAPER * (Math.max(0, (ext - headroom) / row) + 0.5) * w) / 2;
+  }
+
+  /**
+   * The drop and the blur come in once the next morph has landed and `still`
+   * has resolved too: what stands in the shape has stopped moving. Rows
+   * still rolling under a fresh shadow and backdrop blur cost WebKit a
+   * frame in three (Playwright WebKit: every slow frame of an open fell
+   * after the shape landed, while the roll's spring settled).
+   */
+  settleAfter(still: Promise<void>): void {
+    this.#after = still;
+  }
+
+  /** The band at the top that goes out of focus: a row and the room over it. */
+  get edge(): number {
+    return this.#size.row + this.#size.headroom;
+  }
+
+  /**
+   * How far in from the shell's inline edges the grown shape's sides stand
+   * at `h` px above its foot: the outline's own curves, worked out once per
+   * reach and read off a table, so a frame only does arithmetic.
+   */
+  inset(h: number): number {
+    if (this.#sides?.ext !== this.ext) {
+      this.#sides = this.#side();
+    }
+    const { at, inset } = this.#sides;
+    const y = this.#size.base + this.ext - h;
+    if (y <= at[0]) {
+      return inset[0];
+    }
+    for (let i = 1; i < at.length; i += 1) {
+      if (y <= at[i]) {
+        const t = (y - at[i - 1]) / (at[i] - at[i - 1] || 1);
+        return lerp(inset[i - 1], inset[i], t);
+      }
+    }
+    return 0;
+  }
+
+  /**
+   * The grown outline's right side, top down, as (y from its top, inset)
+   * pairs: the top corner's quarter, the shoulder's curve, then straight
+   * down the pill. The sides are mirror images grown.
+   */
+  #side(): { ext: number; at: number[]; inset: number[] } {
+    const { w, r } = this.#size;
+    const { ext } = this;
+    const k = this.taper();
+    const R = w - k;
+    const at: number[] = [];
+    const inset: number[] = [];
+    const push = (x: number, y: number) => {
+      at.push(y);
+      inset.push(w - x);
+    };
+    // The corner: Q from (R - r, 0) through (R, 0) to (R, r).
+    for (let i = 0; i <= SAMPLES; i += 1) {
+      const t = i / SAMPLES;
+      const u = 1 - t;
+      push(u * u * (R - r) + 2 * u * t * R + t * t * R, t * t * r);
+    }
+    // The shoulder: C from (R, r) through (R, r + (ext - r) * 0.35) and
+    // (w, ext - (ext - r) * 0.55) to (w, ext), the pill's top.
+    const y1 = r + (ext - r) * 0.35;
+    const y2 = ext - (ext - r) * 0.55;
+    for (let i = 1; i <= SAMPLES; i += 1) {
+      const t = i / SAMPLES;
+      const u = 1 - t;
+      const b = [u * u * u, 3 * u * u * t, 3 * u * t * t, t * t * t];
+      push(
+        b[0] * R + b[1] * R + b[2] * w + b[3] * w,
+        b[0] * r + b[1] * y1 + b[2] * y2 + b[3] * ext
+      );
+    }
+    return { ext, at, inset };
   }
 
   /** Cut `el` to the shape, in the box `box` says it stands in. */
@@ -221,9 +317,18 @@ export class GrownShape {
   /** Writes the shape where it is now. Writes only. */
   paint(): number {
     const { d, height, up } = this.outline(this.open);
-    this.#halo.style.height = `${height}px`;
-    this.#svg.setAttribute("viewBox", `0 0 ${this.#size.w} ${height}`);
-    this.#path.setAttribute("d", d);
+    const view = `0 0 ${this.#size.w} ${height}`;
+    // The drop follows only while it can be seen: redrawing its shadow every
+    // frame of a growth it is clear for cost WebKit a frame in six.
+    const drawn = performance.now() < this.#dropUntil;
+    for (const [box, svg, path] of [
+      [this.#halo, this.#svg, this.#path],
+      ...(drawn ? [[this.#drop, this.#dropSvg, this.#dropPath] as const] : []),
+    ] as const) {
+      box.style.height = `${height}px`;
+      svg.setAttribute("viewBox", view);
+      path.setAttribute("d", d);
+    }
     // Behind every row it is solid; only the grown top fades, where the
     // oldest row is fading already.
     if (this.#fade) {
@@ -242,51 +347,72 @@ export class GrownShape {
     return height;
   }
 
-  /** The drop and the frosted bands, once it stands grown. */
+  /** The drop and the far edge's blur, once it stands grown. */
   #settle(): void {
     if (this.open !== 1) {
       return;
     }
+    this.#dropUntil = Number.POSITIVE_INFINITY;
     const height = this.paint();
-    for (const [i, band] of this.#bands.entries()) {
-      const top = i * BAND;
-      const tall = (i === this.#bands.length - 1 ? 3 : 2) * BAND;
-      band.style.bottom = `${height - top - tall}px`;
+    // Every layer covers the whole band and keeps its own slice of it.
+    const tall = Math.min(this.edge, height);
+    const box = { left: 0, bottom: height - tall, height: tall };
+    for (const band of this.#bands) {
+      band.style.bottom = `${box.bottom}px`;
       band.style.height = `${tall}px`;
-      band.style.clipPath = this.#cut(height, {
-        left: 0,
-        bottom: height - top - tall,
-        height: tall,
-      });
+      band.style.clipPath = this.#cut(height, box);
       band.classList.add("settled");
     }
-    this.#halo.classList.add("settled");
+    this.#drop.classList.add("settled");
   }
 
   /**
    * Grows or folds to `open`, reaching `ext` above the pill, over `ms` on
-   * the drawer curve. Turns back from wherever it is drawn. With reduced
-   * motion it lands at once.
+   * the drawer curve; with `base`, its foot glides to that height on the
+   * same curve (a field growing or shrinking under it as it folds). Turns
+   * back from wherever it is drawn. With reduced motion it lands at once.
    */
-  morphTo(open: number, ext: number, ms: number): Promise<void> {
+  morphTo(
+    open: number,
+    ext: number,
+    ms: number,
+    base = this.#size.base
+  ): Promise<void> {
     cancelAnimationFrame(this.#frame);
     this.#done?.();
-    this.#halo.classList.remove("settled");
+    // A drop that was up follows the shape while it fades out.
+    if (this.#dropUntil === Number.POSITIVE_INFINITY) {
+      this.#dropUntil = performance.now() + dur("--dur-fade");
+    }
+    this.#drop.classList.remove("settled");
     for (const band of this.#bands) {
       band.classList.remove("settled");
     }
     const fromOpen = this.open;
     const fromExt = this.ext;
+    const fromBase = this.#size.base;
     return new Promise((done) => {
       this.#done = done;
       const land = () => {
         this.#done = null;
-        this.#settle();
+        const after = this.#after;
+        this.#after = null;
+        if (after) {
+          // Once what moves in it stands still too, unless it has moved on.
+          after.then(() => {
+            if (!this.#done) {
+              this.#settle();
+            }
+          });
+        } else {
+          this.#settle();
+        }
         done();
       };
       if (!motionOk.current || ms <= 0) {
         this.open = open;
         this.ext = ext;
+        this.#size.base = base;
         this.paint();
         land();
         return;
@@ -297,6 +423,7 @@ export class GrownShape {
         const t = Math.min(1, (now - start) / ms);
         this.open = lerp(fromOpen, open, t);
         this.ext = lerp(fromExt, ext, easeDrawer(t));
+        this.#size.base = lerp(fromBase, base, easeDrawer(t));
         this.paint();
         if (t < 1) {
           this.#frame = requestAnimationFrame(frame);
@@ -312,6 +439,7 @@ export class GrownShape {
     cancelAnimationFrame(this.#frame);
     this.#done?.();
     this.#halo.remove();
+    this.#drop.remove();
     for (const band of this.#bands) {
       band.remove();
     }
@@ -322,9 +450,14 @@ export class GrownShape {
   }
 }
 
-/** Where the field's last line stands in the shell: the line the wheel's pick sits on. */
+/**
+ * Where the field stands in the shell: its foot is the foot of its last
+ * line, the line the wheel's pick sits on; `height` is the whole field's,
+ * every line of the draft in it.
+ */
 export interface LineBox {
   bottom: number;
+  height: number;
   left: number;
   width: number;
 }
@@ -358,6 +491,7 @@ export function measureShape(
     line: {
       left: text.left - box.left,
       bottom: box.bottom - text.bottom,
+      height: text.height,
       width: field.clientWidth,
     },
   };

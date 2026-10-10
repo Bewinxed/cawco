@@ -4,36 +4,48 @@
    * down into the field as ghost text, on a wheel grown up out of the
    * history button (grown.ts). The row on the field's line is the pick, its
    * words and time in the selected ink; the reader's own draft is the first
-   * row, the newest message the next, and older ones stand above, each a
-   * little smaller, leaning back and softer than the one below it.
+   * row, the newest message the next, and older ones stand above, each
+   * leaning back and a little fainter than the one below it, as many as the
+   * shape holds, up to its top, where they go out of focus into its edge.
+   * Each row runs between the shape's sides at its height, less the pill's
+   * padding, so the rows follow its shoulders as they roll; on the field's
+   * line it stops short of the pill's buttons, folded into a deck at the
+   * trailing end while it is up (Composer).
+   *
+   * The draft is the field's own text, not a copy: rolling up, the field's
+   * words leave downward as every row leaves the line, and rolling back to
+   * the draft brings them back up into place on the same spring (`--roll-y`,
+   * `--roll-o` on the field, Composer). An empty draft's row is a hint, the
+   * field's own hint fading out under it.
    *
    * It is mounted while it is up. ↑ and ↓ step (the composer hands it its
    * keys, `key`), a scroll or a drag rolls it, Enter takes the pick into
    * the field unsent, mod+Enter sends it as it is, Esc rolls back to the
    * draft (clearing a search first), and ↓ past the draft closes. With the
    * composer empty, typing searches what was sent (recall.ts) and the best
-   * match lands on the line. A held press on a touch screen brings it up
-   * under the finger and drags it (`follow`, `release`); a tap on a row
-   * takes it, and a tap anywhere else puts it away.
+   * match lands on the line. On a touch screen a held press or a swipe up
+   * brings it up under the finger and drags it (`follow`, `release`); a tap
+   * on a row takes it, and a tap anywhere else puts it away.
    *
    * It rolls on the app's 0.3s glide spring, critically damped (the tab
    * track's, fluid-tabs/TabsList), and every entry it lands on is a detent
    * the reader hears and feels (feel.svelte.ts). Its sizes are read once,
-   * by the composer before it opens (grown.ts `measureShape`); a frame only
-   * writes. With reduced motion it steps without
-   * rolling and stands up without growing, with the same outcomes.
+   * by the composer before it opens (grown.ts `measureShape`), and the
+   * shape's sides are its own outline's arithmetic; a frame only writes.
+   * With reduced motion it steps without rolling and stands up without
+   * growing, with the same outcomes.
    */
   import { onMount, tick, untrack } from "svelte";
-  import { dur, motionOk } from "#lib/cawco/motion/curves.svelte.js";
+  import { dur, ease, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import { IconSearch } from "#lib/icons.js";
   import { formatAgeShort } from "#lib/utils/time.js";
   import { felt } from "../feel.svelte";
-  import { GrownShape, type LineBox, SHRINK, type ShapeSize } from "./grown";
+  import { GrownShape, type LineBox, type ShapeSize } from "./grown";
   import { marked, oneLine, type Part, type Sent, SentIndex } from "./recall";
 
   let {
     shell,
-    pill,
+    field,
     measured,
     draft,
     id,
@@ -49,12 +61,14 @@
   }: {
     /** The box the shape and the rows stand in, the pill at its foot. */
     shell: HTMLElement;
-    pill: HTMLElement;
+    /** The field's box: its text is the draft's row. */
+    field: HTMLElement;
     /**
-     * The composer's sizes and its field's last line, read by the composer
-     * before it wrote anything for the wheel (grown.ts `measureShape`).
+     * The composer's sizes, its field, and where the deck of its buttons
+     * starts (from the shell's inline start), read by the composer before
+     * it wrote anything for the wheel (grown.ts `measureShape`).
      */
-    measured: { size: ShapeSize; line: LineBox };
+    measured: { size: ShapeSize; line: LineBox; deck: number };
     /** The composer's text when it came up: the first row. */
     draft: string;
     /** The list's id; each row's is the list's and its place. */
@@ -71,8 +85,11 @@
     queuedWord?: string;
     /** The row on the line, for the field's `aria-activedescendant`. */
     active?: string;
-    /** The pick goes into the field (`send`: and is sent as it is). */
-    ontake: (text: string, send: boolean) => void;
+    /**
+     * The pick goes into the field (`send`: and is sent as it is). Resolves
+     * to the pill's height once the field has fitted the pick.
+     */
+    ontake: (text: string, send: boolean) => Promise<number>;
     /** Back to the draft, as it was. */
     onback: () => void;
     /** Folded away: the composer can let it go. */
@@ -80,15 +97,18 @@
   } = $props();
 
   /**
-   * Rows above the field's line, at most: five where the window has the
-   * room (the phone breakpoint, 640px, both ways), three on a phone or in a
-   * short window. Read once, as it opens.
+   * How many rows the shape reaches above the pill: five where the window
+   * has the room (the phone breakpoint, 640px, both ways), three on a phone
+   * or in a short window. Read once, as it opens. A taller draft stands the
+   * shape that much higher, and the rows fill it all.
    */
   const ROOMY = "(width >= 640px) and (height >= 640px)";
   let above = 3;
-  /** How far each row up leans back (deg), and how much softer it goes (px). */
+  /** How far each row up leans back (deg), up to the fifth row's lean. */
   const LEAN = 6;
-  const SOFT = 0.3;
+  const LEAN_ROWS = 5;
+  /** The rows' perspective (px), from the line's foot at the shape's middle. */
+  const DEPTH = 900;
   /** The tab track's glide: critically damped at a 0.3s response. */
   const GLIDE = 0.3;
   const STIFFNESS = ((2 * Math.PI) / GLIDE) ** 2;
@@ -173,9 +193,13 @@
   let shape: GrownShape | null = null;
   /** Sizes, read once as it opens. */
   let row = $state(0);
-  let box = $state({ left: 0, bottom: 0, width: 0, height: 0 });
+  let box = $state({ bottom: 0, width: 0, height: 0 });
+  /** The shape's far edge, which the rows fade out over. */
+  let edge = $state(0);
   /** Called once the roll stands still (back to the draft, then close). */
   let settled: (() => void) | null = null;
+  /** The field's hint fading out under an empty draft's row, while it is up. */
+  let hintFade: Animation | null = null;
 
   /** The room over the top row, grown. */
   let headroom = 0;
@@ -187,33 +211,98 @@
     return tall * row + headroom;
   };
 
-  /** A ghost row `o` rows above the line. */
-  const ghost = (o: number) => 0.7 * (1 - o * 0.1);
   /**
-   * How strongly a row `off` rows from the line shows: at full strength on
-   * it, a ghost fading as it rises above it, leaving below it.
+   * The draft's row is the field's own text, every line of it: it is as
+   * tall as the field. An empty draft's row is its hint, one row.
    */
-  function presence(off: number): number {
+  const ownText = untrack(() => draft !== "");
+  const draftTall = () => (ownText ? measured.line.height : row);
+  /** How far up the line's foot row `k`'s foot stands with the roll at 0. */
+  const rest = (k: number) => (k === 0 ? 0 : draftTall() + (k - 1) * row);
+  /** How far the rows have rolled down past the line's foot, the roll at `p`. */
+  function rolled(p: number): number {
+    if (p <= 0) {
+      return p * row;
+    }
+    return p <= 1 ? p * draftTall() : draftTall() + (p - 1) * row;
+  }
+
+  /** A row `up` rows above the line, faint by how far up it stands. */
+  const ghost = (up: number) => 0.75 - 0.04 * up;
+  /**
+   * How strongly a row shows: at full strength on the line, fainter row by
+   * row as it stands `up` rows above it, and gone as it leaves `off` rows
+   * below it.
+   */
+  function presence(up: number, off: number): number {
     if (off < 0) {
       return Math.max(0, 1 + off * 1.6);
     }
-    return Math.max(0, off < 1 ? 1 + (ghost(1) - 1) * off : ghost(off));
+    return Math.max(0, up < 1 ? 1 + (ghost(1) - 1) * up : ghost(up));
   }
 
-  /** Places one row `off` rows above the line. Writes only. */
-  function place(node: HTMLElement, off: number): void {
-    if (off > above + 0.6 || off < -1.2) {
+  /**
+   * The inline insets of a row whose foot stands `y` px over the line's
+   * foot, leaning back `lean` degrees: the shape's sides at the row's
+   * middle as it is drawn, less the pill's padding. On the field's line it
+   * stops short of the buttons' deck, and of a search's chip.
+   */
+  function edges(y: number, lean: number): [number, number] {
+    const { line, size, deck } = measured;
+    const pad = line.left;
+    // Its top leans away, and the perspective draws it lower.
+    const th = (lean * Math.PI) / 180;
+    const top =
+      ((y + row * Math.cos(th)) * DEPTH) / (DEPTH + row * Math.sin(th));
+    const side = (shape?.inset(line.bottom + (y + top) / 2) ?? 0) + pad;
+    const onLine = Math.max(0, 1 - Math.abs(y) / row);
+    if (onLine === 0) {
+      return [side, side];
+    }
+    const gap = size.headroom;
+    let stop = size.w - deck + gap;
+    if (query.trim()) {
+      stop = Math.max(
+        stop,
+        size.w - (line.left + line.width - chipWidth) + gap
+      );
+    }
+    return [side, side + Math.max(0, stop - side) * onLine];
+  }
+
+  /** Places row `k` where the roll has it. Writes only. */
+  function place(node: HTMLElement, k: number): void {
+    const y = rest(k) - rolled(pos);
+    const off = k - pos;
+    if (y > box.height || off < -1.2) {
       node.style.visibility = "hidden";
       return;
     }
     node.style.visibility = "visible";
-    const up = Math.max(0, off);
-    node.style.transform = `translateY(${-off * row}px) rotateX(${up * LEAN}deg) scale(${1 - up * SHRINK})`;
-    // Each row up is a little softer than the one below it: the words go
-    // out of focus row by row instead of being cut by a fade.
-    const blur = Math.max(0, up - 1) * SOFT;
-    node.style.filter = blur > 0.05 ? `blur(${blur.toFixed(2)}px)` : "";
-    node.style.opacity = String(presence(off));
+    const up = Math.max(0, y / row);
+    const lean = Math.min(up, LEAN_ROWS) * LEAN;
+    node.style.transform = `translateY(${-y}px) rotateX(${lean}deg)`;
+    const [start, end] = edges(y, lean);
+    node.style.left = `${start}px`;
+    node.style.right = `${end}px`;
+    node.style.opacity = String(presence(up, off));
+  }
+
+  /**
+   * The field's text as the draft's row: down by as far as the rows have
+   * rolled past it, leaving as a row leaves; home and untouched at 0.
+   */
+  function placeDraft(): void {
+    if (!ownText) {
+      return;
+    }
+    if (pos === 0) {
+      field.style.removeProperty("--roll-y");
+      field.style.removeProperty("--roll-o");
+      return;
+    }
+    field.style.setProperty("--roll-y", `${rolled(pos).toFixed(2)}px`);
+    field.style.setProperty("--roll-o", String(presence(0, -Math.max(0, pos))));
   }
 
   /** The roll stands at `at`, and aims there. */
@@ -222,11 +311,15 @@
     target = at;
   }
 
-  /** Places every row where the roll has it. Writes only. */
+  /** Places every row, and the draft, where the roll has it. Writes only. */
   function draw(): void {
     const nodes = ghosts?.children ?? [];
     for (let k = 0; k < nodes.length; k += 1) {
-      place(nodes[k] as HTMLElement, k - pos);
+      place(nodes[k] as HTMLElement, k);
+    }
+    placeDraft();
+    if (closing) {
+      return;
     }
     const k = clamp(Math.round(pos));
     if (k !== detent) {
@@ -238,18 +331,27 @@
       pick = k;
     }
     // Nearing the oldest row read so far, the page before it is read.
-    if (more && target >= pickable - above && !query.trim()) {
+    const fit = Math.ceil(box.height / row) + 1;
+    if (more && target >= pickable - fit && !query.trim()) {
       older();
     }
   }
 
   /** Rolls toward the nearest row to `target` on the glide spring. */
+  /** The first time the roll stands still: the shape's drop and blur may come in. */
+  let rested: (() => void) | null = null;
+  function atRest(): void {
+    rested?.();
+    rested = null;
+  }
+
   function roll(): void {
     cancelAnimationFrame(frame);
     if (!motionOk.current) {
       stand(clamp(Math.round(target)));
       draw();
       settled?.();
+      atRest();
       return;
     }
     lastAt = 0;
@@ -264,6 +366,7 @@
         speed = 0;
         draw();
         settled?.();
+        atRest();
         return;
       }
       draw();
@@ -287,9 +390,34 @@
     stand(clamp(query.trim() ? 0 : 1));
     speed = 0;
     draw();
-    // The shape keeps only the room the matches need.
-    if (shape && extFor() !== shape.ext) {
-      shape.morphTo(1, extFor(), dur("--dur-fade"));
+    // The shape keeps only the room the matches need, and the rows stand
+    // up to its top.
+    const ext = extFor();
+    if (shape && ext !== shape.ext) {
+      box.height = shape.base + ext - measured.line.bottom;
+      shape.morphTo(1, ext, dur("--dur-fade"));
+    }
+  }
+
+  /** Rolls back to the draft; resolves once it stands there. */
+  function rollHome(): Promise<void> {
+    if (pos === 0 && speed === 0) {
+      return Promise.resolve();
+    }
+    return new Promise((done) => {
+      settled = done;
+      target = 0;
+      roll();
+    });
+  }
+
+  /** The field's hint comes back as the rows go. */
+  function showHint(): void {
+    const fade = hintFade;
+    hintFade = null;
+    if (fade) {
+      fade.reverse();
+      fade.finished.then(() => fade.cancel());
     }
   }
 
@@ -302,13 +430,18 @@
       return;
     }
     closing = true;
-    cancelAnimationFrame(frame);
     settled = null;
     const line = ghosts?.children[Math.round(pos)] as HTMLElement | undefined;
+    let base = shape?.base;
+    let home = Promise.resolve();
     if (text === undefined) {
       onback();
       felt("close");
+      // The draft rolls home on the wheel's own spring as the shape folds.
+      home = rollHome();
+      showHint();
     } else {
+      cancelAnimationFrame(frame);
       // The ghost on the line becomes the field's own text.
       if (line && motionOk.current) {
         await line.animate([{ opacity: line.style.opacity }, { opacity: 1 }], {
@@ -316,13 +449,36 @@
           fill: "forwards",
         }).finished;
       }
-      ontake(text, andSend);
-    }
-    if (line) {
-      line.style.visibility = "hidden";
+      field.style.removeProperty("--roll-y");
+      field.style.removeProperty("--roll-o");
+      hintFade?.cancel();
+      hintFade = null;
+      const fitted = ontake(text, andSend);
+      // The field's text stands where the ghost stood: the ghost blurs out
+      // over it, so what they share reads as one and only the rest (a
+      // longer pick's further lines, flattened onto the row) dissolves.
+      if (line && motionOk.current) {
+        const blur = getComputedStyle(shell).getPropertyValue(
+          "--c-recall-cross-blur"
+        );
+        line.animate(
+          [
+            { opacity: 1, filter: "blur(0)" },
+            { opacity: 0, filter: `blur(${blur})` },
+          ],
+          {
+            duration: dur("--dur-fade"),
+            easing: ease("--ease-out"),
+            fill: "forwards",
+          }
+        );
+      } else if (line) {
+        line.style.visibility = "hidden";
+      }
+      base = await fitted;
     }
     // It folds back into the button it came out of, the rows inside it,
-    // fading as they go.
+    // fading as they go, its foot on the pill as the field fits.
     if (ghosts && motionOk.current) {
       ghosts.animate([{ opacity: 1 }, { opacity: 0 }], {
         duration: dur("--dur-fade"),
@@ -330,9 +486,10 @@
       });
     }
     if (shape) {
-      await tick();
-      shape.base = pill.offsetHeight;
-      await shape.morphTo(0, shape.ext, dur("--dur-grow-exit"));
+      await Promise.all([
+        shape.morphTo(0, shape.ext, dur("--dur-grow-exit"), base),
+        home,
+      ]);
     }
     ondone(andSend);
   }
@@ -347,13 +504,6 @@
       close();
     } else {
       close(chosen.entry?.text, andSend);
-    }
-  }
-
-  /** Sends the row on the line as it is (the Send button, as mod+Enter). */
-  export function send(): void {
-    if (!closing) {
-      take(true);
     }
   }
 
@@ -533,20 +683,47 @@
     const { size, line } = measured;
     ({ row, headroom } = size);
     above = matchMedia(ROOMY).matches ? 5 : 3;
-    box = { ...line, height: row * (above + 1) };
     shape = new GrownShape(shell, size, extFor(), { frosted: true });
+    ({ edge } = shape);
+    // The rows stand from the field's line up to the shape's top, across it.
+    box = {
+      bottom: line.bottom,
+      width: size.w,
+      height: size.base + shape.ext - line.bottom,
+    };
     if (ghosts) {
-      shape.clip(ghosts, () => box);
+      shape.clip(ghosts, () => ({ left: 0, ...box }));
     }
     draw();
     if (keys) {
       felt("open");
     }
+    // An empty draft's hint gives way to the row that stands for it.
+    if (!ownText) {
+      hintFade = field.animate([{ opacity: 1 }, { opacity: 0 }], {
+        duration: dur("--dur-fade"),
+        easing: ease("--ease-out"),
+        fill: "forwards",
+      });
+    }
+    ghosts?.animate([{ opacity: 0 }, { opacity: 1 }], {
+      duration: dur("--dur-fade"),
+      easing: ease("--ease-out"),
+    });
+    // Its drop and its far edge's blur come in once the rows stand still too.
+    shape.settleAfter(
+      new Promise((done) => {
+        rested = done;
+      })
+    );
     shape.morphTo(1, shape.ext, dur("--dur-grow"));
     // The newest message rolls down into the field as it grows.
     spinTo(1);
     return () => {
       cancelAnimationFrame(frame);
+      field.style.removeProperty("--roll-y");
+      field.style.removeProperty("--roll-o");
+      hintFade?.cancel();
       shape?.remove();
     };
   });
@@ -581,12 +758,11 @@
   role="listbox"
   tabindex="-1"
   bind:this={ghosts}
-  style:--chip-room="{query.trim() ? chipWidth : 0}px"
+  style:--edge="{edge}px"
   style:bottom="{box.bottom}px"
   style:height="{box.height}px"
-  style:left="{box.left}px"
+  style:perspective="{DEPTH}px"
   style:width="{box.width}px"
-  class:filtering={!!query.trim()}
 >
   {#each rows as entry, k (entry.key)}
     <!-- The keys are the field's (↑ ↓ Enter); a click is the pointer's way
@@ -602,6 +778,7 @@
       tabindex="-1"
       class:draft={entry.kind === "draft"}
       class:none={entry.kind === "none"}
+      class:own={entry.kind === "draft" && ownText}
     >
       <span class="t">
         {#if entry.kind === "none"}
@@ -635,8 +812,8 @@
     class="chip-line"
     style:bottom="{box.bottom}px"
     style:height="{row}px"
-    style:left="{box.left}px"
-    style:width="{box.width}px"
+    style:left="{measured.line.left}px"
+    style:width="{measured.line.width}px"
   >
     <span class="qchip" bind:offsetWidth={chipWidth}>
       <IconSearch aria-hidden="true" />
@@ -647,23 +824,24 @@
 {/if}
 
 <style>
-  /* The rows stand on the field's line and above it, each one row tall,
-     set as the field sets its text. The oldest fades out at the top edge
-     instead of being cut through. */
+  /* The rows stand on the field's line and above it to the shape's top,
+     across the shape, each one row tall, set as the field sets its text.
+     They fade out over the shape's far edge as it goes out of focus
+     (grown.ts), instead of being cut through. Each row's inline edges are
+     the roll's (`place`). */
   .ghosts {
     position: absolute;
     z-index: 3;
+    inset-inline-start: 0;
     overflow: hidden;
-    perspective: 900px;
     perspective-origin: 50% 100%;
-    mask-image: linear-gradient(transparent, #000 var(--space-4));
+    mask-image: linear-gradient(transparent, #000 var(--edge));
     touch-action: none;
     user-select: none;
     cursor: ns-resize;
   }
   .ghost {
     position: absolute;
-    inset-inline: 0;
     bottom: 0;
     height: var(--c-composer-field);
     padding-block: calc((var(--c-composer-field) - 1lh) / 2);
@@ -695,6 +873,12 @@
     white-space: nowrap;
     transition: color var(--dur-control) var(--ease-out);
   }
+  /* A draft of your own is drawn by the field itself (its row is read
+     out, not drawn twice). */
+  .own,
+  .own .m {
+    color: transparent;
+  }
   /* The pick: what sits on the field's line, what Enter or a tap takes,
      its words and its time in the selected ink. The reader's own draft on
      the line is not a pick and keeps the field's ink. */
@@ -712,10 +896,6 @@
     background: var(--selection);
     color: inherit;
     border-radius: var(--radius-hair);
-  }
-  /* While searching, every row stops short of the query chip. */
-  .filtering .ghost {
-    inset-inline-end: calc(var(--chip-room) + var(--space-2));
   }
   /* The query, on the field's line at its end, wherever the rows roll. */
   .chip-line {

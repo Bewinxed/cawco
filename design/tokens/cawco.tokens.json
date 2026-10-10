@@ -2328,7 +2328,27 @@
     "c-head-fade-blur": {
       "$type": "dimension",
       "$value": "4px",
-      "$description": "The head blur's radius at the transcript's top edge, its strongest layer. The layers under it halve (2, 1, 0.5px) toward the band's end, their slices bounded at inOutCubic positions (HeadFade on the web and in CawCoKit). A blur, never a colour."
+      "$description": "The head blur's radius at the transcript's top edge, its strongest layer. The layers under it halve (2, 1, 0.5px) toward the band's end, their slices bounded at inOutCubic positions (HeadFade on the web and in CawCoKit). A blur, never a colour. The recall wheel's far edge goes out of focus with the same layers, over a row and the room above it (grown.ts)."
+    },
+    "c-recall-cross-blur": {
+      "$type": "dimension",
+      "$value": "2px",
+      "$description": "A pick taken off the recall wheel: the row on the line gives way to the field's own text in place, blurring out by this much as it fades, so the words it shares with the field read as one and only the rest dissolves (transitions.dev, text swap soft)."
+    },
+    "c-deck-peek": {
+      "$type": "dimension",
+      "$value": "4px",
+      "$description": "While the recall wheel is up, the composer's buttons fold into a deck at the pill's trailing end, Send in front: how far each button peeks out past the one in front of it (Composer)."
+    },
+    "c-deck-scale": {
+      "$type": "number",
+      "$value": "0.94",
+      "$description": "A button in the recall wheel's deck, against the one in front of it: its size (Composer)."
+    },
+    "c-deck-dim": {
+      "$type": "number",
+      "$value": "0.75",
+      "$description": "A button in the recall wheel's deck, against the one in front of it: its opacity (Composer)."
     },
     "c-tab-max-w": {
       "$type": "dimension",
