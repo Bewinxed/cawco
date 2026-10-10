@@ -1,0 +1,122 @@
+{
+  "stills": [
+    {
+      "file": "artifacts/head-fade/web/after-desktop-top.png",
+      "scrollTop": 0,
+      "layers": ["0", "0", "0", "0"]
+    },
+    {
+      "file": "artifacts/head-fade/web/after-desktop-scrolled.png",
+      "scrollTop": 298,
+      "layers": ["1", "1", "1", "1"]
+    },
+    {
+      "file": "artifacts/head-fade/web/before-desktop-scrolled.png",
+      "scrollTop": 298,
+      "layers": []
+    },
+    {
+      "file": "artifacts/head-fade/web/after-phone-top.png",
+      "scrollTop": 0,
+      "layers": ["0", "0", "0", "0"]
+    },
+    {
+      "file": "artifacts/head-fade/web/after-phone-scrolled.png",
+      "scrollTop": 287,
+      "layers": ["1", "1", "1", "1"]
+    },
+    {
+      "file": "artifacts/head-fade/web/before-phone-scrolled.png",
+      "scrollTop": 287,
+      "layers": []
+    }
+  ],
+  "sharpness": {
+    "desktop": {
+      "scrolled": [0.022, 1.252, null, 0.324, 0.229, 0.518, 1, null],
+      "top": [null, null, null, 1, 1, 1, 1, 1]
+    },
+    "phone": {
+      "scrolled": [0.026, 0.1, null, null, null, null, 1, 1],
+      "top": [null, null, null, null, 1, 1, 1, 1]
+    }
+  },
+  "frames": {
+    "after-desktop": {
+      "rafFrames": 365,
+      "rafOver16_7ms": 0,
+      "rafOver33ms": 0,
+      "rafP95ms": 16.7,
+      "states": {
+        "STATE_NO_UPDATE_DESIRED": 179,
+        "STATE_DROPPED": 1,
+        "STATE_PRESENTED_ALL": 372,
+        "STATE_PRESENTED_PARTIAL": 136
+      },
+      "presentedPipelineOver16_7ms": 182,
+      "draws": 327,
+      "drawGapsOver16_7ms": 8
+    },
+    "before-desktop": {
+      "rafFrames": 365,
+      "rafOver16_7ms": 0,
+      "rafOver33ms": 0,
+      "rafP95ms": 16.7,
+      "states": {
+        "STATE_NO_UPDATE_DESIRED": 178,
+        "STATE_DROPPED": 2,
+        "STATE_PRESENTED_ALL": 372,
+        "STATE_PRESENTED_PARTIAL": 136
+      },
+      "presentedPipelineOver16_7ms": 182,
+      "draws": 327,
+      "drawGapsOver16_7ms": 2
+    },
+    "after-phone": {
+      "rafFrames": 365,
+      "rafOver16_7ms": 0,
+      "rafOver33ms": 0,
+      "rafP95ms": 16.7,
+      "states": {
+        "STATE_NO_UPDATE_DESIRED": 205,
+        "STATE_PRESENTED_ALL": 320,
+        "STATE_PRESENTED_PARTIAL": 158
+      },
+      "presentedPipelineOver16_7ms": 158,
+      "draws": 320,
+      "drawGapsOver16_7ms": 1
+    },
+    "before-phone": {
+      "rafFrames": 365,
+      "rafOver16_7ms": 0,
+      "rafOver33ms": 0,
+      "rafP95ms": 16.7,
+      "states": {
+        "STATE_NO_UPDATE_DESIRED": 205,
+        "STATE_PRESENTED_ALL": 320,
+        "STATE_PRESENTED_PARTIAL": 158
+      },
+      "presentedPipelineOver16_7ms": 158,
+      "draws": 320,
+      "drawGapsOver16_7ms": 0
+    }
+  },
+  "videos": [
+    {
+      "file": "artifacts/head-fade/web/after-desktop-scroll.mp4",
+      "frames": 242
+    },
+    {
+      "file": "artifacts/head-fade/web/before-desktop-scroll.mp4",
+      "frames": 242
+    },
+    {
+      "file": "artifacts/head-fade/web/after-phone-scroll.mp4",
+      "frames": 241
+    },
+    {
+      "file": "artifacts/head-fade/web/before-phone-scroll.mp4",
+      "frames": 241
+    }
+  ]
+}

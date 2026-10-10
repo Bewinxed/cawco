@@ -59,6 +59,7 @@
   } from "./transcript/Composer.svelte";
   import { ComposerDraft } from "./transcript/composer-draft.svelte";
   import FootFade from "./transcript/FootFade.svelte";
+  import HeadFade from "./transcript/HeadFade.svelte";
   import { keepDraft } from "./transcript/keep-draft.svelte";
   import ProjectOffer from "./transcript/ProjectOffer.svelte";
   import { parkedAsks } from "./transcript/present";
@@ -1076,6 +1077,7 @@
                 {visible}
               />
             </div>
+            <HeadFade />
           {/if}
           <!-- The skeleton stands in for rows still on their way and goes the
                moment they are drawn: its rows are not where the real ones fall, so
@@ -1192,6 +1194,8 @@
        standing over this area's foot. Without it a desk's placeholder
        painted over the composer and took its clicks until the rows came. */
     isolation: isolate;
+    /* The transcript's scroll, in reach of its head blur (HeadFade). */
+    timeline-scope: --transcript-head;
   }
 
   /* One named state, or the transcript, filling the area. */

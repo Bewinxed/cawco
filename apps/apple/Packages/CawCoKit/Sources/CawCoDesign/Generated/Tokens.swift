@@ -496,6 +496,10 @@ public enum Size {
     public static let cTabLead: Double = 12
     /// A session tab row: its list's 4px pad over 32px tabs (PaneTabs).
     public static let cTabRowH: Double = 36
+    /// A transcript's head blur, on every width: rows scrolled up under the tab strip go out of focus over this length at the transcript's top edge (c-head-fade-blur at the edge, sharp at its end), so they never meet the tab's rim edge-on. It comes in over the first c-head-fade of scroll; scrolled to the very top there is none and the first row is sharp (HeadFade on the web and in CawCoKit).
+    public static let cHeadFade: Double = 24
+    /// The head blur's radius at the transcript's top edge, its strongest layer. The layers under it halve (2, 1, 0.5px) toward the band's end, their slices bounded at inOutCubic positions (HeadFade on the web and in CawCoKit). A blur, never a colour.
+    public static let cHeadFadeBlur: Double = 4
     /// The widest a session tab grows: its title, padding and close control. Below it a tab is as wide as its title; only a title past it ends in an ellipsis, and a row of tabs that will not fit scrolls (PaneTabs).
     public static let cTabMaxW: Double = 240
     /// The top bar's icon group's inset round its items, and the bar's round its controls: the 44px bar less the 36px control height, halved. The group is a capsule and its items sit concentric inside it.
