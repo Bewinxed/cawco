@@ -27,6 +27,9 @@ nonisolated struct Item: Sendable {
         case compaction(Compaction)
         case livetool(name: String, glance: String)
         case notice(String)
+        /// The page before the first row could not be read: why, and "Try
+        /// again" under it (Transcript.svelte `.older`).
+        case retry(String)
         /// The read said the conversation is empty (EmptyState).
         case empty
     }
