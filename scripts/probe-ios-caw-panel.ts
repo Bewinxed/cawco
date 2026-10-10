@@ -577,12 +577,24 @@ const STAGE_WORDS =
  * app's log of the answer, its command's stages and the hub's settle frame.
  */
 async function answerEvidence(udid: string) {
-  const stage = (await tree(udid)).find((n) => STAGE_WORDS.test(n.label ?? ""));
+  const nodes = await tree(udid);
+  const stage = nodes.find((n) => STAGE_WORDS.test(n.label ?? ""));
   console.log(`  the ask's row says: ${stage?.label ?? "no stage words"}`);
+  // Every "Approve …" the tree holds, and where: the panel's, or another surface's.
+  for (const node of nodes.filter(
+    (n) => n.label?.startsWith("Approve") === true
+  )) {
+    console.log(
+      `  "${node.label}" (${node.id ?? "no id"}) at ${JSON.stringify(node.frame)}`
+    );
+  }
+  console.log(
+    `  Caw reads "${caw(nodes)?.label ?? "not found"}" (${caw(nodes)?.value ?? "no value"})`
+  );
   const lines = await mac(
-    `xcrun simctl spawn ${udid} log show --last 3m --style compact --predicate 'subsystem == "dev.cawco.app" AND (category == "Permission" OR category == "Ledger" OR category == "Hub")' | tail -40`
+    `xcrun simctl spawn ${udid} log show --last 3m --style compact --predicate 'subsystem == "dev.cawco.app" AND (category == "Permission" OR category == "Ledger" OR category == "Hub" OR category == "CawPanel")' | tail -60`
   ).catch((error) => String(error));
-  console.log("  app log (Permission, Ledger, Hub), last 3 minutes:");
+  console.log("  app log (Permission, Ledger, Hub, CawPanel), last 3 minutes:");
   for (const line of lines
     .split("\n")
     .filter((one) => one.includes("dev.cawco.app"))) {

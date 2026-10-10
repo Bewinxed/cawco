@@ -1,6 +1,7 @@
 import CawCoCore
 import CawCoDesign
 import CawCoMascot
+import OSLog
 import UIKit
 
 /// Everything that wants the operator, in one place under Caw (CawPanel.svelte,
@@ -25,6 +26,7 @@ final class CawPanel: UIView, UIGestureRecognizerDelegate {
     /// Its width beside a wide screen's bar, pt; a phone's is the screen's less `edge` each side.
     static let wide: CGFloat = 380
     static let tallest: CGFloat = 560
+    private static let log = Logger(subsystem: "dev.cawco.app", category: "CawPanel")
 
     /// A row chosen: the panel has begun to close.
     var onChoose: (HomeModel.NeedsItem) -> Void = { _ in }
@@ -138,7 +140,12 @@ final class CawPanel: UIView, UIGestureRecognizerDelegate {
         if needs.isEmpty, notices.isEmpty {
             list.addArrangedSubview(Self.empty(quiet))
         }
-        if open { place(animated: true) }
+        Self.log.notice("panel rows: \(needs.count) needs, \(notices.count) notices, open \(self.open)")
+        if open {
+            place(animated: true)
+            // Its rows changed under VoiceOver and every reader of the tree: they are read again.
+            UIAccessibility.post(notification: .layoutChanged, argument: nil)
+        }
     }
 
     /// A section's head: its name and how many, in the meta ink.
