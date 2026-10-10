@@ -174,28 +174,18 @@ const said = (nodes: Node[]) =>
     .join(" < ") || "nothing labelled";
 const fieldFrame = async () =>
   (await tree()).find((n) => n.id === "steer-message")?.frame;
-const shot = async (name: string) => {
-  const b64 = await mac(`F=$(mktemp -d)
-xcrun simctl io ${udid} screenshot "$F/shot.png" >/dev/null 2>&1
-base64 < "$F/shot.png"
-rm -rf "$F"`);
-  const file = join(out, `${name}.png`);
-  await Bun.write(file, Buffer.from(b64.replace(/\s/g, ""), "base64"));
-  console.log(`  capture: ${file}`);
-};
-/**
- * The darkest luminance (0 black, 1 white) where the status bar's clock
- * stands, in a fresh capture: low means dark ink. The capture is read as
- * a BMP (`sips` on the Mac), whose pixels need no decoder.
- */
-const statusBarInk = async (): Promise<number> => {
-  const points = (await tree())[0]?.frame?.width ?? 402;
-  const b64 = await mac(`F=$(mktemp -d)
-xcrun simctl io ${udid} screenshot "$F/s.png" >/dev/null 2>&1
-sips -s format bmp "$F/s.png" --out "$F/s.bmp" >/dev/null 2>&1
-base64 < "$F/s.bmp"
-rm -rf "$F"`);
-  const bmp = Buffer.from(b64.replace(/\s/g, ""), "base64");
+/** The status bar's ink in one frame: the darkest luminance (0 black, 1 white) where the clock stands, and where wifi and battery stand. */
+interface Ink {
+  clock: number;
+  icons: number;
+}
+const BMP_MARK = "--BMP--";
+/** The darkest luminance in a box of points, read off a BMP's pixels (no decoder needed). */
+const darkestIn = (
+  bmp: Buffer,
+  points: number,
+  box: { x0: number; x1: number; y0: number; y1: number }
+) => {
   const offset = bmp.readUInt32LE(10);
   const width = bmp.readInt32LE(18);
   const signed = bmp.readInt32LE(22);
@@ -204,10 +194,17 @@ rm -rf "$F"`);
   const stride = Math.ceil((width * bytes) / 4) * 4;
   const scale = width / points;
   let darkest = 1;
-  // The clock: 20–140pt across, 10–48pt down, left of the island.
-  for (let y = Math.round(10 * scale); y < Math.round(48 * scale); y += 1) {
+  for (
+    let y = Math.round(box.y0 * scale);
+    y < Math.round(box.y1 * scale);
+    y += 1
+  ) {
     const row = signed > 0 ? height - 1 - y : y;
-    for (let x = Math.round(20 * scale); x < Math.round(140 * scale); x += 1) {
+    for (
+      let x = Math.round(box.x0 * scale);
+      x < Math.round(box.x1 * scale);
+      x += 1
+    ) {
       const at = offset + row * stride + x * bytes;
       const lum =
         (0.0722 * bmp[at] + 0.7152 * bmp[at + 1] + 0.2126 * bmp[at + 2]) / 255;
@@ -215,6 +212,39 @@ rm -rf "$F"`);
     }
   }
   return darkest;
+};
+/**
+ * Saves a capture as `name.png` and reads the status bar's ink off that
+ * same frame: one screenshot, saved as it is and converted (`sips`) to a
+ * BMP for its pixels, so what is measured is what is saved.
+ */
+const shot = async (name: string): Promise<Ink> => {
+  const points = (await tree())[0]?.frame?.width ?? 402;
+  const both = await mac(`F=$(mktemp -d)
+xcrun simctl io ${udid} screenshot "$F/s.png" >/dev/null 2>&1
+sips -s format bmp "$F/s.png" --out "$F/s.bmp" >/dev/null 2>&1
+base64 < "$F/s.png"
+echo "${BMP_MARK}"
+base64 < "$F/s.bmp"
+rm -rf "$F"`);
+  const [png, bmpText] = both.split(BMP_MARK);
+  const file = join(out, `${name}.png`);
+  await Bun.write(file, Buffer.from(png.replace(/\s/g, ""), "base64"));
+  const bmp = Buffer.from(bmpText.replace(/\s/g, ""), "base64");
+  // The clock left of the island; wifi and battery right of it.
+  const ink = {
+    clock: darkestIn(bmp, points, { x0: 20, x1: 140, y0: 10, y1: 48 }),
+    icons: darkestIn(bmp, points, {
+      x0: points - 110,
+      x1: points - 12,
+      y0: 10,
+      y1: 48,
+    }),
+  };
+  console.log(
+    `  capture: ${file} (status bar ink: clock ${ink.clock.toFixed(2)}, icons ${ink.icons.toFixed(2)})`
+  );
+  return ink;
 };
 const appearance = (mode: "light" | "dark") =>
   mac(`xcrun simctl ui ${udid} appearance ${mode}`);
@@ -312,8 +342,11 @@ print(best[1], best[2])
 xcrun simctl create "CawCo probe composer" "$TYPE" "$RUNTIME"`)
   ).trim();
   console.log(`  simulator ${udid}`);
+  // The status bar held still (as captures are): a clock ticking over a
+  // minute redraws on its own, in whatever style it last had.
   await mac(`xcrun simctl boot ${udid}
 xcrun simctl bootstatus ${udid} -b >/dev/null
+xcrun simctl status_bar ${udid} override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3
 xcrun simctl install ${udid} "${app}"
 xcrun simctl ui ${udid} appearance light
 xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-env sandbox -cawco-hub-url http://127.0.0.1:${port} -open-session ${id} >/dev/null`);
@@ -489,12 +522,13 @@ xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-e
   await appearance("light");
   // Long enough for the status bar to redraw in the new appearance.
   await pause(2500);
-  await shot("wheel-light");
-  const ink = await statusBarInk();
+  // Measured on the very PNG saved as wheel-light: dark ink in light, at
+  // the clock and at the icons both (a style the app set would turn both).
+  const ink = await shot("wheel-light");
   check(
-    "the status bar reads dark on light",
-    ink < 0.35,
-    `darkest luminance in the clock's place: ${ink.toFixed(2)} (cream is about 0.95)`
+    "the status bar reads dark on light, in wheel-light.png itself",
+    ink.clock < 0.35 && ink.icons < 0.35,
+    `darkest luminance: clock ${ink.clock.toFixed(2)}, wifi and battery ${ink.icons.toFixed(2)} (cream is about 0.95)`
   );
 
   // ↓ rolls the wheel forward to the draft: it must be on the line, on screen.
