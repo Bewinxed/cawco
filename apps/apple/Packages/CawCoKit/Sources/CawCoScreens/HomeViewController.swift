@@ -387,7 +387,6 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             guard let self else { return }
             cell.line.configure(hub: hub, ready: home.ready)
         }
-<<<<<<< HEAD
         let hubNewer = UICollectionView.CellRegistration<UpdateNoticeCell, Item> { [weak self] cell, _, _ in
             guard let self else { return }
             cell.ground = variant.ground
