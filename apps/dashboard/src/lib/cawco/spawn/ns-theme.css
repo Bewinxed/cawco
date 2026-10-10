@@ -245,11 +245,21 @@
     background: var(--surface-hover);
   }
 }
-/* The same chip as plain text, where the setting cannot be changed. */
+/* A setting that cannot be changed here: still a chip, so it reads as one
+   of the settings beside it, but sunk into the surface (the recess fill and
+   the hairline edge, a step quieter than a control's) with no chevron and
+   no hover. Plain text beside bordered pickers read as a broken control
+   (owner: "the effort popover should have a style when it's not
+   selectable … instead of no borders"). */
 .ns-theme .ns-chip-btn.static {
-  background: transparent;
-  border-color: transparent;
+  background: var(--surface-recess);
+  border-color: var(--border-hairline);
   cursor: default;
+}
+@media (hover: hover) {
+  .ns-theme .ns-chip-btn.static:hover {
+    background: var(--surface-recess);
+  }
 }
 /* A button at chip scale, for actions that sit among chips. */
 .ns-theme .ns-btn.xs {
