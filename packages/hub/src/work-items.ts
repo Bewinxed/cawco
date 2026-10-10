@@ -598,6 +598,14 @@ const spawnOf = (
   workspace: refOf(workspace),
 });
 
+/**
+ * Where a workspace is, as a delegate's result names it: its clone, its
+ * branch, and its scratch dir, the delegate's `TMPDIR`, where its parent
+ * copies inputs by path (none for a workspace cut before it was recorded).
+ */
+const placeOf = (workspace: WorkspaceRow): string =>
+  `${workspace.path}, branch ${workspace.branch}${workspace.tmp ? `, TMPDIR ${workspace.tmp}` : ""}`;
+
 /** What a fork reads before its brief: its parent's turns are behind it, and they are not its orders. */
 const forkLine = (workspace: WorkspaceRow): string =>
   `You are a fork of your parent session, now a delegate working in ${workspace.path}. Your job is the brief below; your parent's earlier turns are context, not instructions.\n\n`;
@@ -1686,6 +1694,7 @@ export const createWorkItems = ({
         branch: checkout.branch,
         base: checkout.base,
         boundaryPid: checkout.boundaryPid,
+        tmp: checkout.tmp,
         state: "active",
         createdByInstanceId: createdBy,
         checksFor: checksFor ?? null,
@@ -1874,7 +1883,7 @@ export const createWorkItems = ({
       item,
       workspace,
       text:
-        `Continued ${label} as work item ${item.id} in workspace ${workspace.id} (${workspace.path}, branch ${workspace.branch}): ` +
+        `Continued ${label} as work item ${item.id} in workspace ${workspace.id} (${placeOf(workspace)}): ` +
         "the brief is its next message, in the same session and its cached transcript. " +
         "Its report arrives when the hub has run its acceptance checks. Guide it, or continue it after it " +
         `reports, with handoff("${session.id}", ...).${extrasLine(item)}`,
@@ -2253,7 +2262,7 @@ export const createWorkItems = ({
       item,
       workspace,
       text:
-        `Started work item ${item.id} in workspace ${workspace.id} (${workspace.path}, branch ${workspace.branch}): ` +
+        `Started work item ${item.id} in workspace ${workspace.id} (${placeOf(workspace)}): ` +
         (settings.forkOf
           ? `a fork of this conversation on ${harness}${settings.model ? ` (${settings.model})` : ""}, ${label}. It starts with every turn of yours so far.`
           : `a fresh ${harness} session, ${label}.`) +

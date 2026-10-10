@@ -821,6 +821,8 @@ export interface DelegateResult {
   title: string;
   workItemId: string | null;
   workspaceId: string | null;
+  /** The workspace's scratch dir on its machine, the delegate's `TMPDIR`: where inputs for it are copied. */
+  workspaceTmp: string | null;
 }
 
 /** A work item as the hub answers for it (`GET /api/work-items/:id`). */
@@ -1465,6 +1467,7 @@ export const handoffActions = ({
       title: string;
       workItemId: string | null;
       workspaceId: string | null;
+      workspaceTmp: string | null;
     };
     return {
       id: started.instanceId,
@@ -1475,6 +1478,7 @@ export const handoffActions = ({
         : started.text,
       workItemId: started.workItemId,
       workspaceId: started.workspaceId,
+      workspaceTmp: started.workspaceTmp,
     };
   },
 

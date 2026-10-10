@@ -925,11 +925,12 @@ export const workspaces = sqliteTable("workspaces", {
     .$type<number[]>()
     .notNull()
     .default([]),
-  /** Directories outside the checkout the workspace's work wrote to. */
-  scratchPaths: text("scratch_paths", { mode: "json" })
-    .$type<string[]>()
-    .notNull()
-    .default([]),
+  /**
+   * The workspace's scratch dir on its machine, its commands' `TMPDIR`, as
+   * the machine named it when the workspace was cut. Null for a workspace
+   * cut before this was recorded.
+   */
+  tmp: text("tmp"),
   createdByInstanceId: text("created_by_instance_id").notNull(),
   /**
    * The workspace whose checks this one runs, on a machine other than that

@@ -445,9 +445,8 @@ export const workspacePolicy = async (
   const caches = [...workspaceCaches(), ...(await darwinUserDirs())];
   const allowRead = real([
     workspace.path,
-    // Its state dir's read-only part and its scratch dir, side by side: the
-    // state dir itself (its hook, executor, policy, boundary record) is the
-    // host's.
+    // Its state dir's read-only part and its scratch dir: the state dir
+    // itself (its hook, executor, policy, boundary record) is the host's.
     workspaceReadOnlyDir(workspace.id),
     workspaceScratchDir(workspace.id),
     // Its door sockets, under the runtime dir on Linux (`workspaceDoorDir`).

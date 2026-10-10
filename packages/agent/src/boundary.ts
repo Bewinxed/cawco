@@ -85,6 +85,7 @@ import {
 } from "@cawco/core/keepers";
 import {
   AGENT_SOCKET_ENV,
+  scratchSocketProblem,
   sessionIdentityDir,
   workspaceCacheDir,
   workspaceCacheEnv,
@@ -93,6 +94,7 @@ import {
   workspacePolicyFile,
   workspaceReadOnlyDir,
   workspaceScratchDir,
+  workspaceScratchRoot,
   workspaceStateDir,
   workspacesDir,
 } from "@cawco/core/paths";
@@ -152,7 +154,7 @@ export interface Boundary {
   readonly pid: number;
   /** The workspace's policy file, which every harness judges its file tools by (`workspace-policy.ts`). */
   readonly policy: string;
-  /** The workspace's scratch dir, its `TMPDIR`: `~/.cawco/workspaces/<id>/tmp`, on disk and outside the clone. */
+  /** The workspace's scratch dir, its `TMPDIR`: `~/.cawco/tmp/<id8>` (`workspaceScratchDir`), on disk and outside the clone. */
   readonly scratch: string;
 }
 
@@ -2277,6 +2279,7 @@ const ready = (
 const writableInside = (): string[] => [
   workspaceCacheDir(),
   workspacesDir(),
+  workspaceScratchRoot(),
   join(homedir(), ".worktrees"),
   "/tmp",
   "/private/tmp",
@@ -2302,8 +2305,8 @@ const hostGh = async (): Promise<string | undefined> => {
 
 /**
  * Where the executor keeps `gh`'s token for workspace `id`: its state dir,
- * which no workspace reads (`workspacePolicy` gives back only its `ro` and
- * `tmp` parts), and which goes with the workspace ({@link closeBoundary}).
+ * which no workspace reads (`workspacePolicy` gives back only its `ro`
+ * part), and which goes with the workspace ({@link closeBoundary}).
  */
 const ghTokenCacheOf = (id: string): string => join(stateDir(id), "gh-token");
 
@@ -2480,10 +2483,16 @@ exit "$status"
 
 /**
  * The folders a boundary needs before it starts: its state dir, the part of
- * it a command reads (with the empty git template), its scratch dir beside
- * that, and the caches it writes. Never nested in one another (srt #446).
+ * it a command reads (with the empty git template), its scratch dir, and the
+ * caches it writes. Never nested in one another (srt #446). A HOME so long
+ * that a browser's socket in the scratch dir cannot fit is said in the log:
+ * everything else in the workspace still runs.
  */
 const makeDirs = async (id: string): Promise<void> => {
+  const tooLong = scratchSocketProblem(id);
+  if (tooLong) {
+    console.warn(`[workspace] ${id}: ${tooLong}`);
+  }
   await mkdir(sessionIdentityDir(), { recursive: true, mode: 0o700 });
   await Promise.all(
     [
@@ -2714,7 +2723,7 @@ const launch = async (
  * other boundary process of the workspace; on macOS everything carrying the
  * workspace's marker. Stops serving its tool door. On Linux, once its
  * sandboxes are gone, the deny stand-ins in its clone go
- * (`stand-ins.ts`). Then its state goes, and on Linux
+ * (`stand-ins.ts`). Then its state and its scratch dir go, and on Linux
  * srt's temp dirs with the sockets srt leaves there (REPORT.md §5o).
  * Its judges go last, on every keeper that runs one: with the state dir gone
  * there is no workspace to start one again for ({@link watchJudge}); then
@@ -2761,6 +2770,8 @@ export const closeBoundary = async (ref: WorkspaceRef): Promise<void> => {
     );
   }
   await rm(stateDir(ref.id), { recursive: true, force: true });
+  // Its scratch dir, with whatever its commands left there.
+  await rm(scratchOf(ref.id), { recursive: true, force: true });
   await signalAll((procId) => isJudgeOf(procId, ref.id));
   // Its sockets' dir, once nothing listens there (`workspaceDoorDir`; on
   // macOS the read-only dir, gone with the state dir).

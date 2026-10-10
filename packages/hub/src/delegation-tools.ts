@@ -713,6 +713,7 @@ export function handoffTools(deps: HandoffDeps) {
           title: result.title,
           workItemId: result.workItemId,
           workspaceId: result.workspaceId,
+          ...(result.workspaceTmp ? { workspaceTmp: result.workspaceTmp } : {}),
           ...(result.queued ? { queued: result.queued } : {}),
         };
         return {

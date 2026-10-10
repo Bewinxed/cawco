@@ -23,7 +23,11 @@ import type {
   WorkspaceRef,
 } from "@cawco/core";
 import { WORKSPACE_GIT_TIMEOUT_MS } from "@cawco/core";
-import { isSecretFileName, workspacesDir } from "@cawco/core/paths";
+import {
+  isSecretFileName,
+  workspaceScratchDir,
+  workspacesDir,
+} from "@cawco/core/paths";
 import {
   repositoryConfigProblem,
   SAFE_GIT_ENV,
@@ -228,7 +232,14 @@ export const createWorkspace = async (
     await checkout(path, "checkout", "--quiet", "-b", branch, `origin/${base}`);
     await copyOwnSecrets(repoRoot, path, plain);
     const boundary = await ensureBoundary({ id, path });
-    return { repoRoot, path, branch, base, boundaryPid: boundary.pid };
+    return {
+      repoRoot,
+      path,
+      branch,
+      base,
+      boundaryPid: boundary.pid,
+      tmp: workspaceScratchDir(id),
+    };
   } catch (error) {
     await archiveWorkspace({ id, path });
     throw error;
@@ -437,10 +448,11 @@ export const archiveWorkspace = async (ref: unknown): Promise<void> => {
     request.path ??
     (saved ? (JSON.parse(saved) as { path: string }).path : undefined);
   if (!path) {
-    await rm(join(workspacesDir(), request.id), {
-      recursive: true,
-      force: true,
-    });
+    await Promise.all(
+      [join(workspacesDir(), request.id), workspaceScratchDir(request.id)].map(
+        (dir) => rm(dir, { recursive: true, force: true })
+      )
+    );
     return;
   }
   const workspace: WorkspaceRef = { id: request.id, path };

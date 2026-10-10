@@ -353,18 +353,51 @@ export const workspaceStateDir = (id: string): string =>
   join(workspacesDir(), id);
 
 /**
- * A workspace's scratch dir, its `/tmp`: beside its state, so on disk (never
- * tmpfs) and outside its clone (never in git status).
+ * Where every workspace's scratch dir is, one dir per workspace: under home,
+ * so on disk (never tmpfs, which is RAM, and workspaces build large trees
+ * there), and outside every clone (never in git status). Short, because
+ * tools put unix sockets in `$TMPDIR` ({@link SCRATCH_SOCKET_SUFFIX}).
+ */
+export const workspaceScratchRoot = (): string =>
+  join(homedir(), ".cawco", "tmp");
+
+/**
+ * The longest name a tool puts a unix socket at under `$TMPDIR` that a
+ * workspace runs: Chromium's process singleton,
+ * `org.chromium.Chromium.XXXXXX/SingletonSocket` (45 bytes with its `/`),
+ * which aborts the browser at launch when the whole path passes
+ * {@link UNIX_SOCKET_PATH_MAX} ("Socket path too long",
+ * process_singleton_posix.cc).
+ */
+export const SCRATCH_SOCKET_SUFFIX =
+  "org.chromium.Chromium.XXXXXX/SingletonSocket";
+
+/**
+ * A workspace's scratch dir, its `TMPDIR`: in {@link workspaceScratchRoot},
+ * named by the id's first 8 characters, as its clone (`<repo>-<id8>`),
+ * branch (`ws/<id8>`) and door dir are. `~/.cawco/tmp/<id8>` is 34 bytes
+ * under `/home/bewinxed`, so a socket at {@link SCRATCH_SOCKET_SUFFIX} in it
+ * fits {@link UNIX_SOCKET_PATH_MAX} with room for a HOME 28 bytes longer.
+ * Never inside the state dir: under it the path took 71 bytes and every
+ * Chromium launch in a workspace aborted.
  */
 export const workspaceScratchDir = (id: string): string =>
-  join(workspaceStateDir(id), "tmp");
+  join(workspaceScratchRoot(), id.slice(0, 8));
+
+/** Why a socket in workspace `id`'s scratch dir would not fit, or nothing ({@link socketPathProblem}). */
+export const scratchSocketProblem = (id: string): string | undefined =>
+  socketPathProblem(
+    join(workspaceScratchDir(id), SCRATCH_SOCKET_SUFFIX),
+    `A socket in workspace ${id}'s scratch dir, as Chromium makes one,`,
+    "run the agent with a shorter HOME"
+  );
 
 /**
  * The part of a workspace's state dir a command inside its boundary reads:
  * the runner's FIFO, the empty git template, the tool door's socket and, on
- * macOS, the shims. Read-only inside, and a sibling of the scratch dir, never
- * its parent: srt binds a writable dir nested in a read carve-out back
- * read-only (srt #446).
+ * macOS, the shims. Read-only inside, and never a parent of the scratch dir:
+ * srt binds a writable dir nested in a read carve-out back read-only (srt
+ * #446).
  */
 export const workspaceReadOnlyDir = (id: string): string =>
   join(workspaceStateDir(id), "ro");
@@ -400,17 +433,16 @@ export const UNIX_SOCKET_PATH_MAX = process.platform === "darwin" ? 103 : 107;
  */
 export const socketPathProblem = (
   path: string,
-  what: string
+  what: string,
+  fix = process.platform === "linux"
+    ? "give the agent a short XDG_RUNTIME_DIR"
+    : "run the agent with a shorter HOME"
 ): string | undefined => {
   const bytes = Buffer.byteLength(path);
   if (bytes <= UNIX_SOCKET_PATH_MAX) {
     return;
   }
-  return `${what} ${path} is ${bytes} bytes, past the ${UNIX_SOCKET_PATH_MAX} a unix socket's path holds: ${
-    process.platform === "linux"
-      ? "give the agent a short XDG_RUNTIME_DIR"
-      : "run the agent with a shorter HOME"
-  }`;
+  return `${what} ${path} is ${bytes} bytes, past the ${UNIX_SOCKET_PATH_MAX} a unix socket's path holds: ${fix}`;
 };
 
 /** The name of a workspace's policy file in its state dir. */

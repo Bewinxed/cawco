@@ -18079,11 +18079,11 @@
               "type": "number"
             }
           },
-          "scratchPaths": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
+          "tmp": {
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "createdByInstanceId": {
             "type": "string"
@@ -18107,8 +18107,8 @@
           "path",
           "ports",
           "repoRoot",
-          "scratchPaths",
-          "state"
+          "state",
+          "tmp"
         ]
       },
       "getApiAccounts200": {

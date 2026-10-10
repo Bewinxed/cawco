@@ -1356,6 +1356,11 @@ export interface WorkspaceCheckout {
   path: string;
   /** The repository the clone was cut from. */
   repoRoot: string;
+  /**
+   * The workspace's scratch dir on its machine, its commands' `TMPDIR`
+   * (`workspaceScratchDir`): where inputs for the delegate are copied.
+   */
+  tmp: string;
 }
 
 /** A workspace as the machine that holds it is told about it. */
