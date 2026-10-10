@@ -14,7 +14,9 @@
 #    (LEGACY_COMMIT, default d51a0359), with `sleep 6061 & disown` in it.
 # 2. The agent's start-up pass of the last build before the fix (BASE_COMMIT,
 #    default a7a370f4, Nightly C): it fails with "could not be written again:
-#    ENOENT … ro/tools.sock" and replaces nothing.
+#    ENOENT … ro/tools.sock" and replaces nothing. BASE_COMMIT=166af788
+#    hands the anchor over and exits instead, so step 3 meets a boundary
+#    whose agent is gone, as an agent restart leaves one.
 # 3. The same pass from this checkout: no ENOENT, the hook is written, a
 #    boundary of this build's form starts beside the old one, a new command
 #    runs in it and cannot read ~/.claude/.credentials.json, and the sleep
@@ -46,6 +48,27 @@ run() {
   local status=0
   "$state/exec" "$1" || status=$?
   echo "[exec exit $status]"
+}
+# A command through the executor, traced, so a silent run shows which FIFO
+# it went to and what status it read: NAME.out, NAME.err (with the trace),
+# and `status`.
+traced() {
+  status=0
+  PS4='+exec: ' bash -x "$state/exec" "$2" > "$rig/$1.out" 2> "$rig/$1.err" || status=$?
+  cat "$rig/$1.out"
+  grep -v '^+' "$rig/$1.err" >&2 || true
+  echo "[exec exit $status]"
+}
+went_through() {
+  echo "--- the executor's trace"
+  cat "$rig/$1.err"
+  echo "--- boundary.json: $(cat "$state/boundary.json")"
+  echo "--- the executor's $(grep -m1 '^fifo=' "$state/exec" || echo "fifo: none (an older executor: $(sed -n 2p "$state/exec"))")"
+  echo "--- ro/: $(ls -l "$state/ro" | tr '\n' ' ')"
+  for place in "$state"/boundaries/*/sandbox; do echo "--- $place: $(cat "$place" 2>/dev/null)"; done
+  echo "--- requests left in tmp/: $(ls -A "$state/tmp" | tr '\n' ' ')"
+  echo "--- the agent's log"
+  cat "$rig/fixed.log"
 }
 # The ripgrep srt is handed in a checkout: part of the boundary's form (D3).
 rg_of() {
@@ -135,21 +158,21 @@ say "3. with the fix ($(git -C "$here" rev-parse --short HEAD)): the start-up pa
 agent=$!
 # Between the start-up pass and the handover (the next look, 5 s on) the
 # anchor still runs every command, through the executor its own build wrote.
+# With BASE_COMMIT=166af788 the boundary here is the one step 2's agent
+# started before it exited, as an agent restart leaves one.
 armed() { grep -q 'boundary hooks written for' "$rig/fixed.log"; }
 if waitfor 30 armed; then
   echo "-- a command between the start-up pass and the handover reaches its caller"
-  status=0
-  between=$("$state/exec" 'echo "pid namespace: $(readlink /proc/self/ns/pid)"' 2>&1) || status=$?
-  echo "$between"
-  echo "[exec exit $status]"
-  if [ "$status" -ne 0 ] || ! grep -q '^pid namespace: pid:' <<< "$between"; then
-    echo "FAILED: the command between the start-up pass and the handover did not run"
+  traced between 'echo "pid namespace: $(readlink /proc/self/ns/pid)"'
+  if [ "$status" -ne 0 ] || ! grep -q '^pid namespace: pid:' "$rig/between.out"; then
+    echo "FAILED: the command between the start-up pass and the handover did not run; what it went through:"
+    went_through between
   fi
 else
   echo "FAILED: the start-up pass did not finish within 30 s"
 fi
-# This agent's own handover of the anchor, not any record an earlier pass left.
-handed() { grep -q "its boundary $anchor (form [^)]*) is handed over to" "$rig/fixed.log"; }
+# This agent's own handover, not any record an earlier pass left.
+handed() { grep -q "is handed over to" "$rig/fixed.log"; }
 if waitfor 30 handed; then
   gen=$(field gen "$state/boundary.json")
   echo "handed over within 30 s: boundary.json now gen=$gen pid=$(field pid "$state/boundary.json") form=$(field form "$state/boundary.json")"
@@ -162,25 +185,11 @@ echo "state dir: $(ls "$state" | tr '\n' ' ')"
 echo "ro/: $(ls "$state/ro" | tr '\n' ' ')"
 echo "boundaries/${gen:-?}/: $(ls "$state/boundaries/${gen:-none}" 2>/dev/null | tr '\n' ' ')"
 echo "-- a new command runs in the new form"
-# Traced, so a silent run shows which FIFO it went to and what status it read.
-status=0
-PS4='+exec: ' bash -x "$state/exec" 'echo "pid namespace: $(readlink /proc/self/ns/pid)"; head -c0 ~/.claude/.credentials.json 2>/dev/null && echo "~/.claude/.credentials.json READ (OPEN)" || echo "~/.claude/.credentials.json denied (BLOCKED)"' \
-  > "$rig/new.out" 2> "$rig/new.err" || status=$?
-cat "$rig/new.out"
-grep -v '^+' "$rig/new.err" >&2 || true
-echo "[exec exit $status]"
+traced new 'echo "pid namespace: $(readlink /proc/self/ns/pid)"; head -c0 ~/.claude/.credentials.json 2>/dev/null && echo "~/.claude/.credentials.json READ (OPEN)" || echo "~/.claude/.credentials.json denied (BLOCKED)"'
 if [ "$status" -ne 0 ] || ! grep -q '^~/.claude/.credentials.json denied (BLOCKED)$' "$rig/new.out" ||
   ! grep -q '^pid namespace: pid:' "$rig/new.out" || grep -q "^pid namespace: $old_ns$" "$rig/new.out"; then
   echo "FAILED: the new command did not run in the new form; what it went through:"
-  echo "--- the executor's trace"
-  cat "$rig/new.err"
-  echo "--- boundary.json: $(cat "$state/boundary.json")"
-  echo "--- the executor's $(grep -m1 '^fifo=' "$state/exec")"
-  echo "--- ro/: $(ls -l "$state/ro" | tr '\n' ' ')"
-  echo "--- boundaries/${gen:-?}/sandbox: $(cat "$state/boundaries/${gen:-none}/sandbox" 2>/dev/null)"
-  echo "--- requests left in tmp/: $(ls -A "$state/tmp" | tr '\n' ' ')"
-  echo "--- the agent's log"
-  cat "$rig/fixed.log"
+  went_through new
 fi
 echo "-- the job runs on in the old namespace, and the old boundary with it"
 sleep 12
