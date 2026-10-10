@@ -8,7 +8,7 @@
    * until its ✕ (NoticeRow) or its act acknowledges it: Caw's mark in the
    * notice's status, the title (with the failure glyph when it says one),
    * the release notes as their sections and lists, what it says machine by
-   * machine, the quiet way to Configure › Updates, and its one act (Retry,
+   * machine, the link to Configure › Updates, and its one act (Retry,
    * Install now, Reload) when it has one (updates/model `noticeFor`).
    *
    * Reload turns the row into its goodbye (../updates/goodbye): his mark
@@ -132,11 +132,11 @@
         <div class="actions">
           {#if configure}
             <Button
-              class="quiet"
+              class="settings"
               href="/config/updates"
               label="Configure update behaviour"
               size="sm"
-              variant="ghost"
+              variant="link"
             />
           {/if}
           {#if notice.action}
@@ -198,8 +198,8 @@
   .closing {
     color: var(--ink-muted);
   }
-  /* The quiet way to the settings just before the act, packed to the
-     trailing edge. */
+  /* The way to the settings, a link in the link ink (the kit's `link`
+     button), just before the act, packed to the trailing edge. */
   .actions {
     display: flex;
     align-items: center;
@@ -207,15 +207,9 @@
     gap: var(--space-1);
     margin-top: var(--space-1);
   }
-  .actions > :global(.quiet) {
+  .actions > :global(.settings) {
     min-inline-size: 0;
     flex-shrink: 1;
-    color: var(--ink-muted);
-  }
-  @media (hover: hover) {
-    .actions > :global(.quiet:hover) {
-      color: var(--ink-strong);
-    }
   }
   /* The goodbye's one line, beside his waiting mark and centred on it. */
   .line {

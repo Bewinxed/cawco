@@ -138,7 +138,12 @@
 </div>
 
 <style>
+  /* The kit's edge fade at its full length on every width: a phone's short
+     fade (the recipe's, for a narrow track's edge) lands in the gap between
+     a row's words and its buttons and shows nothing; the panel's foot must
+     read as "more below". */
   .list {
+    --fade-len: 40px;
     display: flex;
     flex-direction: column;
     max-block-size: min(560px, calc(100dvh - 120px));

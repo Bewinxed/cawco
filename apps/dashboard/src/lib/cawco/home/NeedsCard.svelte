@@ -219,13 +219,15 @@
     position: relative;
     pointer-events: none;
   }
+  /* The mark centred in the panel's one leading column, a notice's tile
+     wide (NoticeRow), so both groups' words start on one line. */
   .lead {
     grid-row: 1;
     grid-column: 1;
     align-self: center;
     display: grid;
     place-items: center;
-    inline-size: 18px;
+    inline-size: 28px;
     block-size: 18px;
     color: var(--ink-muted);
   }
