@@ -751,6 +751,9 @@ final class TabView: UIView {
     /// across the top tapering to 0.5pt down the sides, with a soft glow at
     /// half its strength, gone by 90% of the tab's height (`rimFade`).
     private let rimHost = CALayer()
+    /// The rim's reach: off the phone's row it stops at a tucked shoulder's
+    /// crest, stroke and glow (`layoutRim`).
+    private let rimClip = CALayer()
     private let rim = CAShapeLayer()
     private let rimFade = CAGradientLayer()
     /// The glow: the outline's own shadow (`0 0 6px`, half the rim's
@@ -820,7 +823,9 @@ final class TabView: UIView {
         rimHost.addSublayer(glowHost)
         rimHost.addSublayer(rim)
         rimFade.colors = [UIColor.black.cgColor, UIColor.black.cgColor, UIColor.clear.cgColor]
-        layer.addSublayer(rimHost)
+        rimClip.masksToBounds = true
+        rimClip.addSublayer(rimHost)
+        layer.addSublayer(rimClip)
         label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         label.isUserInteractionEnabled = false
         status.isUserInteractionEnabled = false
@@ -1179,21 +1184,27 @@ final class TabView: UIView {
     /// ring cut from two rounded rectangles thins with the corner's radius,
     /// then tapering over the next `spill` down each side to 0.5pt (1pt all
     /// round, solid), open at the foot; faded out by 90% of the tab's height
-    /// unless solid. Off the phone's row a tucked edge's side stops below
-    /// its shoulder: the neighbour's side is the one outline where the two
-    /// meet, and nothing of it is drawn under the neighbour.
+    /// unless solid. Off the phone's row a tucked card's rim stops at that
+    /// shoulder's crest, stroke and glow (`rimClip`): the neighbour's stroke
+    /// alone runs down into the notch between the two shoulders, one outline
+    /// where they meet (PaneTabs.svelte, the desk's `.rim` clip).
     private func layoutRim() {
         let spill = Self.spill
         let card = cardRect
-        rimHost.frame = CGRect(x: card.minX - spill, y: card.minY - spill, width: card.width + 2 * spill, height: card.height + spill)
+        let corners = shoulders
+        let reach = CGRect(x: card.minX - spill, y: card.minY - spill, width: card.width + 2 * spill, height: card.height + spill)
+        var clip = reach
+        if !phoneRow, tucked == .leading {
+            clip = CGRect(x: card.minX + corners.leading, y: reach.minY, width: reach.maxX - card.minX - corners.leading, height: reach.height)
+        } else if !phoneRow, tucked == .trailing {
+            clip = CGRect(x: reach.minX, y: reach.minY, width: card.maxX - corners.trailing - reach.minX, height: reach.height)
+        }
+        rimClip.frame = clip
+        rimHost.frame = reach.offsetBy(dx: -clip.minX, dy: -clip.minY)
         rim.frame = rimHost.bounds
         let outline = CGRect(x: spill, y: spill, width: card.width, height: card.height)
         let solid = solidRim
-        let corners = shoulders
-        let side = solid ? 1.0 : 0.5
-        let leadingSide = !phoneRow && tucked == .leading ? 0 : side
-        let trailingSide = !phoneRow && tucked == .trailing ? 0 : side
-        rim.path = Self.ring(outline, leading: corners.leading, trailing: corners.trailing, top: solid ? 1 : 1.5, leadingSide: leadingSide, trailingSide: trailingSide, taper: spill).cgPath
+        rim.path = Self.ring(outline, leading: corners.leading, trailing: corners.trailing, top: solid ? 1 : 1.5, side: solid ? 1 : 0.5, taper: spill).cgPath
         // The glow is the outline's shadow, shown only outside the outline.
         let shape = Self.outline(outline, leading: corners.leading, trailing: corners.trailing)
         glowHost.frame = rimHost.bounds
@@ -1225,11 +1236,10 @@ final class TabView: UIView {
 
     /// The outline's stroke, inside it: `top` wide across the top and round
     /// both shoulders (`leading` and `trailing` their radii, 0 square),
-    /// narrowing over `taper` below them to `leadingSide` and `trailingSide`
-    /// down each side, open at the foot (the web's `shape()` for
-    /// `.rim::after`). The stroke's inner edge turns on a radius `top` less
-    /// than its shoulder's, none when square.
-    static func ring(_ rect: CGRect, leading: Double, trailing: Double, top: Double, leadingSide: Double, trailingSide: Double, taper: Double) -> UIBezierPath {
+    /// narrowing over `taper` below them to `side` down each side, open at
+    /// the foot (the web's `shape()` for `.rim::after`). The stroke's inner
+    /// edge turns on a radius `top` less than its shoulder's, none when square.
+    static func ring(_ rect: CGRect, leading: Double, trailing: Double, top: Double, side: Double, taper: Double) -> UIBezierPath {
         let path = UIBezierPath()
         let lead = max(leading, top)
         let trail = max(trailing, top)
@@ -1239,14 +1249,14 @@ final class TabView: UIView {
         path.addLine(to: CGPoint(x: rect.maxX - trailing, y: rect.minY))
         path.addArc(withCenter: CGPoint(x: rect.maxX - trailing, y: rect.minY + trailing), radius: trailing, startAngle: .pi * 1.5, endAngle: 0, clockwise: true)
         path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
-        path.addLine(to: CGPoint(x: rect.maxX - trailingSide, y: rect.maxY))
-        path.addLine(to: CGPoint(x: rect.maxX - trailingSide, y: rect.minY + trail + taper))
+        path.addLine(to: CGPoint(x: rect.maxX - side, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.maxX - side, y: rect.minY + trail + taper))
         path.addLine(to: CGPoint(x: rect.maxX - top, y: rect.minY + trail))
         path.addArc(withCenter: CGPoint(x: rect.maxX - trail, y: rect.minY + trail), radius: trail - top, startAngle: 0, endAngle: .pi * 1.5, clockwise: false)
         path.addLine(to: CGPoint(x: rect.minX + lead, y: rect.minY + top))
         path.addArc(withCenter: CGPoint(x: rect.minX + lead, y: rect.minY + lead), radius: lead - top, startAngle: .pi * 1.5, endAngle: .pi, clockwise: false)
-        path.addLine(to: CGPoint(x: rect.minX + leadingSide, y: rect.minY + lead + taper))
-        path.addLine(to: CGPoint(x: rect.minX + leadingSide, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX + side, y: rect.minY + lead + taper))
+        path.addLine(to: CGPoint(x: rect.minX + side, y: rect.maxY))
         path.close()
         return path
     }

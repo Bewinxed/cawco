@@ -1580,12 +1580,12 @@
      It is drawn on the tab's card, edge for edge (TabsList
      `--card-in-start`, `--card-in-end`; the shoulders' `--r-start`,
      `--r-end`). On the desk a card tucked under a neighbour starts where
-     that neighbour's edge stands, its own shoulder rounded there, so the
-     rim does too, and its side on that edge stops below the shoulder: the
-     neighbour's side is the one outline where the two meet, and nothing of
-     it is drawn under the neighbour. The phone's row runs a tucked card
-     under its neighbour square (`--tuck: 0px`), where the neighbour's card
-     covers that side. */
+     that neighbour's edge stands, its own shoulder rounded there, a notch
+     of shelf between the two (bf08800e). Its rim stops at that shoulder's
+     crest, stroke and glow: the neighbour's stroke alone runs down into
+     the notch, one outline where the two meet. The phone's row runs a
+     tucked card under its neighbour square (`--tuck: 0px`), where the
+     neighbour's card covers the rest of its rim. */
   .tab {
     --tone: var(--ink-muted);
     --rim-mix: calc(
@@ -1595,11 +1595,13 @@
     );
   }
   @media (min-width: 900px) {
-    .tab[data-tucked="start"] {
-      --side-start: 0px;
+    .tab[data-tucked="start"] .rim {
+      clip-path: inset(
+        0 0 0 calc(var(--spill) + var(--r-start, var(--radius)))
+      );
     }
-    .tab[data-tucked="end"] {
-      --side-end: 0px;
+    .tab[data-tucked="end"] .rim {
+      clip-path: inset(0 calc(var(--spill) + var(--r-end, var(--radius))) 0 0);
     }
   }
   .tab[data-tone="working"] {
@@ -1653,8 +1655,7 @@
     /* The stroke as a shape, so it holds its full width across the top
        and round both shoulders, where a shadow's would thin with the
        corner's radius, and only then tapers, over the next --spill down
-       each side, to its side width (`--side-start`, `--side-end`, none on
-       a desk tab's tucked edge). Each shoulder takes its own radius
+       each side, to its side width. Each shoulder takes its own radius
        (`--r-start`, `--r-end`, the strip's `--radius` unless the host
        squares it); the stroke's inner edge turns on one `--top` less, none
        on a square shoulder (`--in-*`). */
@@ -1663,8 +1664,6 @@
       --side: 0.5px;
       --rs: var(--r-start, var(--radius));
       --re: var(--r-end, var(--radius));
-      --ss: var(--side-start, var(--side));
-      --se: var(--side-end, var(--side));
       --in-start: max(var(--rs), var(--top));
       --in-end: max(var(--re), var(--top));
       background: color-mix(in oklab, var(--tone) var(--rim-mix), transparent);
@@ -1675,16 +1674,16 @@
         line to calc(100% - var(--re)) 0,
         arc to 100% var(--re) of var(--re) cw,
         line to 100% 100%,
-        line to calc(100% - var(--se)) 100%,
-        line to calc(100% - var(--se)) calc(var(--in-end) + var(--spill)),
+        line to calc(100% - var(--side)) 100%,
+        line to calc(100% - var(--side)) calc(var(--in-end) + var(--spill)),
         line to calc(100% - var(--top)) var(--in-end),
         arc to calc(100% - var(--in-end)) var(--top) of
           calc(var(--in-end) - var(--top)) ccw,
         line to var(--in-start) var(--top),
         arc to var(--top) var(--in-start) of calc(var(--in-start) - var(--top))
           ccw,
-        line to var(--ss) calc(var(--in-start) + var(--spill)),
-        line to var(--ss) 100%,
+        line to var(--side) calc(var(--in-start) + var(--spill)),
+        line to var(--side) 100%,
         close
       );
       transition: background-color var(--dur-panel) var(--ease-out);
