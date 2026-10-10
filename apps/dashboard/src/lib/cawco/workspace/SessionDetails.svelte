@@ -13,6 +13,9 @@
   import { IconCheck } from "#lib/icons.js";
   import Down from "~icons/solar/alt-arrow-down-linear";
   import Link from "~icons/solar/link-bold-duotone";
+  import AccountSwitch from "../accounts/AccountSwitch.svelte";
+  import { nameOf } from "../accounts/model.svelte";
+  import { movingTo } from "../accounts/switch.svelte";
   import {
     cawco,
     latestCommandFor,
@@ -226,7 +229,15 @@
     }
     return value >= 1000 ? `${Math.round(value / 1000)}k` : `${value}`;
   }
-  type Slot = "model" | "permission" | "effort";
+  /**
+   * The account the session is moving to, by name: what the account's
+   * feedback line says while the move is in flight.
+   */
+  const accountName = (id: string | null | undefined) => {
+    const account = cawco.accounts?.accounts.find((one) => one.id === id);
+    return account ? nameOf(account) : "another account";
+  };
+  type Slot = "model" | "permission" | "effort" | "account";
   const kinds = {
     model: "set-model",
     permission: "set-permission-mode",
@@ -288,6 +299,9 @@
   });
 
   function pending(slot: Slot) {
+    if (slot === "account") {
+      return row ? movingTo(row) !== undefined : false;
+    }
     if (slot === "permission" && relaunching) {
       return true;
     }
@@ -295,6 +309,11 @@
     return record?.stage === "submitted" || record?.stage === "accepted";
   }
   function failure(slot: Slot) {
+    // A refused move is moveTo's toast, the one place the menu and the card
+    // both say it.
+    if (slot === "account") {
+      return null;
+    }
     if (slot === "permission" && relaunchFailure) {
       return relaunchFailure;
     }
@@ -309,16 +328,18 @@
    * Only a change seen going from pending to settled while the card is on
    * this session counts — opening the card shows no old news.
    */
-  const SLOTS: Slot[] = ["model", "effort", "permission"];
-  const DONE: Record<Slot, string> = {
-    model: "Model changed",
-    effort: "Effort changed",
-    permission: "Permission changed",
+  const SLOTS: Slot[] = ["model", "effort", "permission", "account"];
+  const DONE: Record<Slot, () => string> = {
+    model: () => "Model changed",
+    effort: () => "Effort changed",
+    permission: () => "Permission changed",
+    account: () => `Moved to ${accountName(row?.accountId)}`,
   };
   let done = $state<Record<Slot, boolean>>({
     model: false,
     effort: false,
     permission: false,
+    account: false,
   });
   const holds = new Map<Slot, ReturnType<typeof setTimeout>>();
   let doneFor = untrack(() => sessionId);
@@ -326,6 +347,7 @@
     model: pending("model"),
     effort: pending("effort"),
     permission: pending("permission"),
+    account: pending("account"),
   }));
   $effect(() => {
     const id = sessionId;
@@ -333,11 +355,13 @@
       model: pending("model"),
       effort: pending("effort"),
       permission: pending("permission"),
+      account: pending("account"),
     };
     const failed = {
       model: failure("model") !== null,
       effort: failure("effort") !== null,
       permission: failure("permission") !== null,
+      account: failure("account") !== null,
     };
     untrack(() => {
       const moved = id !== doneFor;
@@ -453,73 +477,79 @@
     </p>
   {:else if pending(slot)}
     <p class="feedback" role="status" in:crossIn out:crossOut>
-      Applying change…
+      {slot === "account" && row
+        ? `Moving to ${accountName(movingTo(row))}…`
+        : "Applying change…"}
     </p>
   {:else if done[slot]}
     <p class="feedback done" role="status" in:crossIn out:crossOut>
       <IconCheck aria-hidden="true" />
-      {DONE[slot]}
+      {DONE[slot]()}
     </p>
   {/if}
 {/snippet}
 
 <div class="session-details ns-theme" style:--dir={dir}>
   <div class="details-body">
-    <div class="identity">
-      <div class="title">
-        <h2 id={`${uid}-title`} {title}>
-          <TextMorph as="span" duration={morphMs} text={title} />
-        </h2>
-        <button
-          aria-label="Copy link"
-          class="icon-action touch-hit"
-          onclick={() =>
-            copyToClipboard("Link", new URL(href, location.origin).href)}
-          type="button"
-        >
-          <Link />
-        </button>
+    <!-- The head is the tab's own surface, continued through the junction
+         where the card hangs from the tab: the folder's label band. -->
+    <div class="head">
+      <div class="identity">
+        <div class="title">
+          <h2 id={`${uid}-title`} {title}>
+            <TextMorph as="span" duration={morphMs} text={title} />
+          </h2>
+          <button
+            aria-label="Copy link"
+            class="icon-action touch-hit"
+            onclick={() =>
+              copyToClipboard("Link", new URL(href, location.origin).href)}
+            type="button"
+          >
+            <Link />
+          </button>
+        </div>
+        {#if harness}
+          <span
+            aria-label={harnessNames[harness]}
+            class="harness"
+            role="img"
+            title={harnessNames[harness]}
+          >
+            {#key harness}
+              <span class="harness-mark" in:harnessIn>
+                <HarnessLogo {harness} />
+              </span>
+            {/key}
+          </span>
+        {/if}
       </div>
-      {#if harness}
-        <span
-          aria-label={harnessNames[harness]}
-          class="harness"
-          role="img"
-          title={harnessNames[harness]}
-        >
-          {#key harness}
-            <span class="harness-mark" in:harnessIn>
-              <HarnessLogo {harness} />
-            </span>
-          {/key}
-        </span>
-      {/if}
+      <p class="meta" bind:this={metaEl}>
+        <SessionStatus duration={morphMs} {sessionId} />
+        {#if machine?.hostname || machineId}
+          <span aria-hidden="true" class="sep">·</span>
+          <span class="host"
+            ><TextMorph
+              as="span"
+              duration={morphMs}
+              text={machine?.hostname || machineId || ""}
+            /></span
+          >
+        {/if}
+        {#if cwd}
+          <span aria-hidden="true" class="sep">·</span>
+          <button
+            aria-label={`Copy working directory ${cwd}`}
+            class="cwd"
+            onclick={() => copyToClipboard("Working directory", cwd)}
+            title={cwd}
+            type="button"
+          >
+            <TextMorph as="span" duration={morphMs} text={shortPath(cwd)} />
+          </button>
+        {/if}
+      </p>
     </div>
-    <p class="meta" bind:this={metaEl}>
-      <SessionStatus duration={morphMs} {sessionId} />
-      {#if machine?.hostname || machineId}
-        <span aria-hidden="true" class="sep">·</span>
-        <span class="host"
-          ><TextMorph
-            as="span"
-            duration={morphMs}
-            text={machine?.hostname || machineId || ""}
-          /></span
-        >
-      {/if}
-      {#if cwd}
-        <span aria-hidden="true" class="sep">·</span>
-        <button
-          aria-label={`Copy working directory ${cwd}`}
-          class="cwd"
-          onclick={() => copyToClipboard("Working directory", cwd)}
-          title={cwd}
-          type="button"
-        >
-          <TextMorph as="span" duration={morphMs} text={shortPath(cwd)} />
-        </button>
-      {/if}
-    </p>
 
     {#if harness}
       <div class="configuration">
@@ -583,12 +613,21 @@
             }}
           />
         </div>
+        <!-- The account the session bills, on its own line: an email needs
+             more room than the settings row has, and the eye travels from
+             it to its limit in the stats below. -->
+        {#if row?.accountId}
+          <div class="account">
+            <AccountSwitch instance={row} readonly={!editable} />
+          </div>
+        {/if}
         <!-- One line is always held for what a change says, so its pending,
              done and failed lines arriving or leaving never resize the card. -->
         <div class="feedback-slot">
           {@render feedback("model")}
           {@render feedback("effort")}
           {@render feedback("permission")}
+          {@render feedback("account")}
           {#if !editable}
             <p class="feedback">
               Controls unlock while the session is running.
@@ -683,6 +722,13 @@
     touch-action: pan-y;
     scrollbar-width: thin;
     scrollbar-color: var(--border-control) transparent;
+  }
+  /* A finger's vertical drag on the head is the card's own (a swipe up
+     folds it back into its tab, PaneTabs `swipeCardShut`), never the
+     body's scroll, which would take the touch away from it. */
+  .head {
+    background: var(--surface-recess);
+    touch-action: pan-x;
   }
   .identity {
     display: flex;
@@ -792,8 +838,17 @@
   .settings :global(.ns-chip-btn) {
     gap: 4px;
   }
-  .settings :global(.ns-chip-btn) {
+  .settings :global(.ns-chip-btn),
+  .account :global(.ns-chip-btn) {
     height: 28px;
+  }
+  .account {
+    display: flex;
+    min-width: 0;
+    margin-top: 4px;
+  }
+  .account :global(.ns-chip-btn) {
+    gap: 6px;
   }
   /* The model list, sized to its widest row and scrolled in whole rows. */
   :global(.ns-theme.ns-pop:has(> .model-pop)) {
@@ -965,22 +1020,25 @@
     }
   }
   @media (max-width: 640px) {
-    /* The sheet that holds the card clears the home indicator itself
-       (PaneTabs.svelte `.session-details-sheet`). The footer's button takes
-       the row, 44px tall under a finger: `.footer` makes it outrank the
-       kit's `.ns-theme .ns-btn.xs` (0,3,0). */
+    /* The footer's button takes the row, 44px tall under a finger:
+       `.footer` makes it outrank the kit's `.ns-theme .ns-btn.xs` (0,3,0). */
     .footer .ns-btn {
       flex: 1;
       height: 44px;
     }
     /* A phone's row is ~350px: the three chips fit it whole, the model's
        name included, with the chips' sides and gaps drawn in. */
-    .settings :global(.ns-chip-btn) {
+    .settings :global(.ns-chip-btn),
+    .account :global(.ns-chip-btn) {
       height: 44px;
       padding-inline: 6px;
     }
+    .account :global(.ns-chip-btn) {
+      padding-inline: 10px;
+    }
     /* A bordered chip already reads as tappable; its chevron is the room
-       the model's name needs. */
+       the model's name needs. The account chip keeps its own: it is the
+       only hint that its line opens anything. */
     .settings :global(.ns-chip-btn > svg.chevron) {
       display: none;
     }
