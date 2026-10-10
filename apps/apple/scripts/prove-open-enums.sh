@@ -172,9 +172,27 @@ echo "unknown-value lines: $unknowns (one per enum, field and value)"
 echo "update notices shown: $notices"
 echo "unreadable/reads-stopped lines: $stopped"
 
+shot() { # <name>: the simulator's screen, needing no axe
+  "${MAC[@]}" "xcrun simctl io $UDID screenshot /tmp/prove-open-enums-$UDID-$1.png >/dev/null && cat /tmp/prove-open-enums-$UDID-$1.png && rm /tmp/prove-open-enums-$UDID-$1.png" >"$OUT/$1.png"
+  echo "captured $OUT/$1.png"
+}
+# axe on a just-booted simulator times out creating its automation session:
+# it gets 20 s, then up to 6 tries 10 s apart.
+axe_ui() { # <out file>
+  local try
+  for try in 1 2 3 4 5 6; do
+    if "${MAC[@]}" "$AXE describe-ui --udid $UDID" >"$1" 2>"$1.err"; then return 0; fi
+    echo "axe describe-ui try $try: $(tail -1 "$1.err")"
+    sleep 10
+  done
+  echo "FAILED: axe describe-ui after 6 tries"
+  return 1
+}
+# The notice is sticky: it is captured first, before axe is asked anything.
 sleep 2
-"${MAC[@]}" "$AXE describe-ui --udid $UDID" >"$OUT/ui-with-notice.json"
-"${MAC[@]}" "xcrun simctl io $UDID screenshot /tmp/prove-open-enums-$UDID-1.png >/dev/null && cat /tmp/prove-open-enums-$UDID-1.png && rm /tmp/prove-open-enums-$UDID-1.png" >"$OUT/with-notice.png"
+shot with-notice
+sleep 20
+axe_ui "$OUT/ui-with-notice.json" || exit 1
 grep -q "Your hub is newer than this app" "$OUT/ui-with-notice.json" &&
   echo "screen: the update notice is on screen" || echo "screen: notice text NOT found in axe describe-ui"
 grep -q "Derived title of the user row" "$OUT/ui-with-notice.json" &&
@@ -183,8 +201,8 @@ grep -q "Derived title of the user row" "$OUT/ui-with-notice.json" &&
 # A swipe up past 45 pt takes a top toast away.
 "${MAC[@]}" "$AXE swipe --start-x 200 --start-y 110 --end-x 200 --end-y 10 --udid $UDID"
 sleep 2
-"${MAC[@]}" "$AXE describe-ui --udid $UDID" >"$OUT/ui-dismissed.json"
-"${MAC[@]}" "xcrun simctl io $UDID screenshot /tmp/prove-open-enums-$UDID-2.png >/dev/null && cat /tmp/prove-open-enums-$UDID-2.png && rm /tmp/prove-open-enums-$UDID-2.png" >"$OUT/dismissed.png"
+axe_ui "$OUT/ui-dismissed.json" || exit 1
+shot dismissed
 grep -q "Your hub is newer than this app" "$OUT/ui-dismissed.json" &&
   echo "screen: notice still showing after the swipe" || echo "screen: notice dismissed"
 
