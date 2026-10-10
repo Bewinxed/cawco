@@ -29,6 +29,7 @@
    * its body and its foot come up out of a slight blur one after the other
    * as the shape grows (`shown`), and sink back as it folds.
    */
+  import { ToggleGroup } from "bits-ui";
   import { onMount, tick } from "svelte";
   import DiffView from "#lib/components/features/DiffView.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -83,6 +84,8 @@
     onanswer: (result: PermissionResult) => string | null;
   } = $props();
 
+  /** Names each question's lede, which labels its option group. */
+  const claimId = $props.id();
   const input = $derived(request.input as Record<string, unknown>);
   const questions = $derived(questionsOf(request.toolName, input));
   const presentation = $derived(request.presentation);
@@ -111,51 +114,153 @@
 
   /**
    * Which question the digits answer. A card usually asks one thing and this
-   * never moves; when it asks several, the digits follow the first question
-   * still unanswered, and only that question's keycaps are lit — a keycap that
-   * cannot be pressed is the defect this whole handler exists to fix.
+   * never moves; when it asks several, it is the question keyboard focus is
+   * in, and without focus in the card the first question still unanswered.
+   * Only that question's keycaps are lit — a keycap that cannot be pressed is
+   * the defect this whole handler exists to fix.
    */
   let current = $state(0);
 
+  /**
+   * Each question's options are one bits-ui toggle group (WAI-ARIA's
+   * composite widget): one tab stop per question, the arrows moving inside
+   * it, Space or Enter pressing the option under focus — `single` for a
+   * question with one answer, `multiple` for a multi-select. Not RadioGroup:
+   * its arrows pick the option they land on once the question has an answer
+   * (bits-ui 2.19 `RadioGroupItemState.onfocus`), so an arrow would change
+   * the answer and move the card on; here an arrow only moves.
+   *
+   * "Other" is one of its group's chips, under a value no option label can
+   * be, so the arrows reach it too.
+   */
+  const OTHER = "\u0000other";
+
+  /** Focus to a question's tab stop: the option it last left from, or its first. */
+  async function focusQuestion(index: number): Promise<void> {
+    await tick();
+    const group = card?.querySelectorAll("[data-toggle-group-root]")[index];
+    group?.querySelector<HTMLElement>('[tabindex="0"]')?.focus();
+  }
+
+  /**
+   * The digits move on to the first question still unanswered, and so does
+   * focus when it is in the card: 1, 2, 1, Enter answers three questions,
+   * as Space, Space, Space does from the chips.
+   */
   function advance(): void {
     if (!questions) {
       return;
     }
     const next = questions.findIndex((q) => !isAnswered(q));
-    if (next !== -1) {
-      current = next;
+    if (next === -1) {
+      return;
+    }
+    current = next;
+    if (card?.contains(document.activeElement)) {
+      focusQuestion(next);
     }
   }
 
-  function toggle(index: number, label: string): void {
+  /** The options a question's chips show pressed, with Other while it holds the answer or its field is open. */
+  function pressedOf(q: UserQuestion, index: number): string[] {
+    const chosen = asList(answers[q.question]).filter((l) =>
+      q.options.some((o) => o.label === l)
+    );
+    return otherPicked(q) || otherAt === index ? [...chosen, OTHER] : chosen;
+  }
+
+  /**
+   * A single answer, picked: re-picking the chosen option clears it (the
+   * group's own toggle), so a mis-keyed digit is undoable with the same digit
+   * rather than only by picking something else.
+   */
+  function setSingle(index: number, label: string): void {
     const q = questions?.[index];
     if (!(q && answerable)) {
       return;
     }
     current = index;
-    if (!q.multiSelect) {
-      // Re-picking the chosen option clears it, so a mis-keyed digit is undoable
-      // with the same digit rather than only by picking something else.
-      const chosen = answers[q.question] === label;
-      answers = { ...answers, [q.question]: chosen ? "" : label };
-      // A picked option is the answer: the field's own goes back to waiting.
-      if (otherAt === index) {
-        otherAt = null;
-        otherField?.blur();
-      }
-      if (!chosen) {
-        advance();
-      }
+    answers = { ...answers, [q.question]: label };
+    // A picked option is the answer: the field's own goes back to waiting.
+    if (otherAt === index) {
+      otherAt = null;
+    }
+    if (label) {
+      advance();
+    }
+  }
+
+  /** A multi-select's options, as its group holds them; the reader's own words stay among them. */
+  function setMulti(index: number, labels: string[]): void {
+    const q = questions?.[index];
+    if (!(q && answerable)) {
       return;
     }
-    const value = answers[q.question];
-    const list = asList(value);
+    current = index;
+    const own = otherPicked(q) ? [others[q.question].trim()] : [];
     answers = {
       ...answers,
-      [q.question]: list.includes(label)
-        ? list.filter((l) => l !== label)
-        : [...list, label],
+      [q.question]: [...labels.filter((l) => l !== OTHER), ...own],
     };
+  }
+
+  /** A digit's press: the option wearing that keycap, toggled as its chip would be. */
+  function toggle(index: number, label: string): void {
+    const q = questions?.[index];
+    if (!q) {
+      return;
+    }
+    if (!q.multiSelect) {
+      setSingle(index, answers[q.question] === label ? "" : label);
+      return;
+    }
+    const list = pressedOf(q, index);
+    setMulti(
+      index,
+      list.includes(label) ? list.filter((l) => l !== label) : [...list, label]
+    );
+  }
+
+  /**
+   * The keys an option takes before its group does. Once every question has
+   * an answer, Enter sends — the window's handler does it, so the group must
+   * not press the option under focus first. ↑/↓ step through the options as
+   * ←/→ do: the chips wrap, so either axis means "the next one", and a
+   * horizontal group reads only ←/→, so the step goes to it as its own key.
+   */
+  const CROSS_STEPS: Record<string, number | undefined> = {
+    ArrowDown: 1,
+    ArrowUp: -1,
+  };
+
+  function optionKey(event: KeyboardEvent): void {
+    if (event.key === "Enter" && allAnswered) {
+      event.preventDefault();
+      return;
+    }
+    const step = CROSS_STEPS[event.key];
+    const chip = event.target;
+    if (!(step && chip instanceof HTMLElement)) {
+      return;
+    }
+    event.preventDefault();
+    const forward = step > 0 !== (getComputedStyle(chip).direction === "rtl");
+    chip.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: forward ? "ArrowRight" : "ArrowLeft",
+        bubbles: true,
+      })
+    );
+  }
+
+  /** "Other" opens its field instead of pressing: its answer is what is written there. */
+  function otherChipKey(event: KeyboardEvent, index: number): void {
+    if (event.key === " " || (event.key === "Enter" && !allAnswered)) {
+      event.preventDefault();
+      openOther(index);
+      return;
+    }
+    optionKey(event);
   }
 
   const isSelected = (question: string, label: string): boolean => {
@@ -209,13 +314,20 @@
     otherField?.focus();
   }
 
-  /** The keys the field's line answers: Enter sends or moves on, Esc puts it down. */
+  /**
+   * The keys the field's line answers: Enter sends or moves on to the next
+   * question still unanswered, Esc puts it down and hands focus back to its
+   * question's chips. Shift+Tab out of it reaches those chips on its own:
+   * they are the tab stop before it.
+   */
   function otherKey(event: KeyboardEvent): void {
     if (event.key === "Escape") {
       event.preventDefault();
       event.stopPropagation();
+      if (otherAt !== null) {
+        focusQuestion(otherAt);
+      }
       otherAt = null;
-      otherField?.blur();
       return;
     }
     if (event.key !== "Enter" || event.shiftKey || event.isComposing) {
@@ -227,9 +339,9 @@
       submitQuestion();
       return;
     }
-    otherAt = null;
-    otherField?.blur();
+    // Focus is still in the field here, so `advance` carries it on.
     advance();
+    otherAt = null;
   }
 
   // A permission blocks the turn that asked it, so its answer must land exactly
@@ -328,7 +440,9 @@
 
   /**
    * The keys the card already advertises: a digit picks the option wearing that
-   * keycap, Enter sends once every question has an answer. They are heard only
+   * keycap on the `current` question, Enter sends once every question has an
+   * answer. Tab, Shift+Tab, the arrows and Space are the option groups' own
+   * (bits-ui's roving focus); these are the rest. They are heard only
    * from inside the card's own pane (its workspace group, `[data-leaf]`): a key
    * pressed with focus elsewhere, or on nothing at all, is not meant for it.
    * Escape is never one of them: it closes menus, dialogs and peeks all over
@@ -372,11 +486,21 @@
       toggle(current, option.label);
       return;
     }
-    if (event.key === "Enter" && allAnswered) {
+    if (event.key === "Enter" && allAnswered && !onButton(event.target)) {
       event.preventDefault();
       submitQuestion();
     }
   }
+
+  /**
+   * A button of its own under focus — Dismiss, the minimize chevron, a row in
+   * the transcript — keeps its Enter: focused on Dismiss, Enter dismisses
+   * rather than sends. The option chips are the card's own answer and send.
+   */
+  const onButton = (target: EventTarget | null): boolean =>
+    target instanceof Element &&
+    !!target.closest("button, a[href]") &&
+    !target.closest("[data-toggle-group-root]");
 
   function submitQuestion(): void {
     if (!(answerable && allAnswered)) {
@@ -529,36 +653,76 @@
       {/if}
       {#each questions as q, qi (q.question)}
         {@const own = q.options.length}
-        <p class="lede" bind:this={ledes[qi]}>{q.question}</p>
-        <div class="qopts kit-chips">
+        <p class="lede" id="{claimId}-q{qi}" bind:this={ledes[qi]}>
+          {q.question}
+        </p>
+        {#snippet chips()}
           {#each q.options as opt, i (opt.label)}
             {@const live = ownsKeys && qi === current && i < 9}
-            <button
+            {@const sel = isSelected(q.question, opt.label)}
+            <ToggleGroup.Item
               aria-keyshortcuts={live ? String(i + 1) : undefined}
-              aria-pressed={isSelected(q.question, opt.label)}
-              class="kit-chip touch-hit"
-              onclick={() => toggle(qi, opt.label)}
+              class="kit-chip touch-hit{sel ? " sel" : ""}"
+              onkeydown={optionKey}
               type="button"
-              class:sel={isSelected(q.question, opt.label)}
+              value={opt.label}
             >
               <span class="kit-keycap">{i + 1}</span><span>{opt.label}</span>
-            </button>
+            </ToggleGroup.Item>
           {/each}
           <!-- The reader's own answer, written in the field it opens. -->
           {#if own < 9}
             {@const live = ownsKeys && qi === current}
-            <button
+            <ToggleGroup.Item
               aria-keyshortcuts={live ? String(own + 1) : undefined}
-              aria-pressed={otherPicked(q) || otherAt === qi}
-              class="kit-chip touch-hit"
-              onclick={() => openOther(qi)}
+              class="kit-chip touch-hit{otherPicked(q) || otherAt === qi
+                ? " sel"
+                : ""}"
+              onclick={(event: MouseEvent) => {
+                event.preventDefault();
+                openOther(qi);
+              }}
+              onkeydown={(event: KeyboardEvent) => otherChipKey(event, qi)}
               type="button"
-              class:sel={otherPicked(q) || otherAt === qi}
+              value={OTHER}
             >
               <span class="kit-keycap">{own + 1}</span><span>Other</span>
-            </button>
+            </ToggleGroup.Item>
           {/if}
-        </div>
+        {/snippet}
+        <!-- One tab stop per question; focus in it makes it the one the
+             digits answer, and the rail moves to it. -->
+        {#if q.multiSelect}
+          <ToggleGroup.Root
+            aria-labelledby="{claimId}-q{qi}"
+            class="qopts kit-chips"
+            onfocusin={() => {
+              current = qi;
+            }}
+            type="multiple"
+            bind:value={
+              () => pressedOf(q, qi),
+              (labels) => setMulti(qi, labels)
+            }
+          >
+            {@render chips()}
+          </ToggleGroup.Root>
+        {:else}
+          <ToggleGroup.Root
+            aria-labelledby="{claimId}-q{qi}"
+            class="qopts kit-chips"
+            onfocusin={() => {
+              current = qi;
+            }}
+            type="single"
+            bind:value={
+              () => pressedOf(q, qi)[0] ?? "",
+              (label) => setSingle(qi, label)
+            }
+          >
+            {@render chips()}
+          </ToggleGroup.Root>
+        {/if}
         {#if otherAt === qi}
           <!-- The reader's own answer, a field under the choices it stands
                in for, before the card's actions. -->
@@ -921,8 +1085,14 @@
   }
   /* The chip row is the kit's option-chip recipe (.kit-chips / .kit-chip in
      app.css); the card only sets where it sits. */
-  .qopts {
+  .body :global(.qopts) {
     margin-block: 2px var(--space-2);
+  }
+  /* The chips stand flush in a scroller that clips (`.body`), so the kit's
+     ring sits on each chip's own border box (The One Ring Rule) rather than
+     outside it, where the scroller's edge would cut it. */
+  .body :global(.qopts .kit-chip:focus-visible) {
+    outline-offset: var(--focus-ring-inset);
   }
   .qact {
     display: flex;

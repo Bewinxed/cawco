@@ -1,0 +1,341 @@
+{
+  "steps": [
+    {
+      "step": "start in the pane",
+      "keys": "",
+      "active": "div#pane-start \"Transcript (a focusable region in the pa\"",
+      "question": null,
+      "ring": true,
+      "rail": 1,
+      "selection": [[], [], []],
+      "answersSent": 0
+    },
+    {
+      "step": "Tab into the card → Q1",
+      "keys": "Tab",
+      "active": "button#bits-c16 \"1Postgres\"",
+      "question": 1,
+      "ring": true,
+      "rail": 1,
+      "selection": [[], [], []],
+      "answersSent": 0,
+      "ringGeometry": {
+        "outline": "2px solid oklch(0.55 0.165 33)",
+        "offset": "-2px",
+        "border": "oklch(0.89 0.013 82)",
+        "chipLeft": 288,
+        "bodyLeft": 288
+      }
+    },
+    {
+      "step": "Tab → Q2",
+      "keys": "Tab",
+      "active": "button#bits-c21 \"1Fly.io\"",
+      "question": 2,
+      "ring": true,
+      "rail": 2,
+      "selection": [[], [], []],
+      "answersSent": 0
+    },
+    {
+      "step": "Tab → Q3",
+      "keys": "Tab",
+      "active": "button#bits-c25 \"1Typecheck\"",
+      "question": 3,
+      "ring": true,
+      "rail": 3,
+      "selection": [[], [], []],
+      "answersSent": 0
+    },
+    {
+      "step": "Shift+Tab ×2 → Q1",
+      "keys": "Shift+Tab Shift+Tab",
+      "active": "button#bits-c16 \"1Postgres\"",
+      "question": 1,
+      "ring": true,
+      "rail": 1,
+      "selection": [[], [], []],
+      "answersSent": 0
+    },
+    {
+      "step": "↓↓ on Q1",
+      "keys": "ArrowDown ArrowDown",
+      "active": "button#bits-c18 \"3MySQL\"",
+      "question": 1,
+      "ring": true,
+      "rail": 1,
+      "selection": [[], [], []],
+      "answersSent": 0
+    },
+    {
+      "step": "Space picks MySQL; focus advances to Q2",
+      "keys": "Space",
+      "active": "button#bits-c21 \"1Fly.io\"",
+      "question": 2,
+      "ring": true,
+      "rail": 2,
+      "selection": [["MySQL"], [], []],
+      "answersSent": 0
+    },
+    {
+      "step": "digit 2 on Q2 picks Hetzner; focus advances to Q3",
+      "keys": "2",
+      "active": "button#bits-c25 \"1Typecheck\"",
+      "question": 3,
+      "ring": true,
+      "rail": 3,
+      "selection": [["MySQL"], ["Hetzner"], []],
+      "answersSent": 0
+    },
+    {
+      "step": "Space on Q3 (multi) toggles Typecheck",
+      "keys": "Space",
+      "active": "button#bits-c25 \"1Typecheck\"",
+      "question": 3,
+      "ring": true,
+      "rail": 3,
+      "selection": [["MySQL"], ["Hetzner"], ["Typecheck"]],
+      "answersSent": 0
+    },
+    {
+      "step": "↓ then Space toggles Lint too",
+      "keys": "ArrowDown Space",
+      "active": "button#bits-c26 \"2Lint\"",
+      "question": 3,
+      "ring": true,
+      "rail": 3,
+      "selection": [["MySQL"], ["Hetzner"], ["Typecheck", "Lint"]],
+      "answersSent": 0,
+      "ringGeometry": {
+        "outline": "2px solid oklch(0.55 0.165 33)",
+        "offset": "-2px",
+        "border": "oklch(0.645 0.175 33)",
+        "chipLeft": 406.921875,
+        "bodyLeft": 288
+      }
+    },
+    {
+      "step": "Tab past Q3 → Answer",
+      "keys": "Tab",
+      "active": "button \"Answer\"",
+      "question": null,
+      "ring": true,
+      "rail": 3,
+      "selection": [["MySQL"], ["Hetzner"], ["Typecheck", "Lint"]],
+      "answersSent": 0
+    },
+    {
+      "step": "Tab → Dismiss",
+      "keys": "Tab",
+      "active": "button \"Dismiss\"",
+      "question": null,
+      "ring": true,
+      "rail": 3,
+      "selection": [["MySQL"], ["Hetzner"], ["Typecheck", "Lint"]],
+      "answersSent": 0
+    },
+    {
+      "step": "Shift+Tab ×3 → Q2",
+      "keys": "Shift+Tab Shift+Tab Shift+Tab",
+      "active": "button#bits-c21 \"1Fly.io\"",
+      "question": 2,
+      "ring": true,
+      "rail": 2,
+      "selection": [["MySQL"], ["Hetzner"], ["Typecheck", "Lint"]],
+      "answersSent": 0
+    },
+    {
+      "step": "Enter sends",
+      "keys": "Enter",
+      "active": "button#bits-c21 \"1Fly.io\"",
+      "question": 2,
+      "ring": true,
+      "rail": 2,
+      "selection": [["MySQL"], ["Hetzner"], ["Typecheck", "Lint"]],
+      "answersSent": 1
+    },
+    {
+      "step": "pass 2: start in the pane",
+      "keys": "",
+      "active": "div#pane-start \"Transcript (a focusable region in the pa\"",
+      "question": null,
+      "ring": true,
+      "rail": 1,
+      "selection": [[], [], []],
+      "answersSent": 1
+    },
+    {
+      "step": "digit 1 → Q1 Postgres",
+      "keys": "1",
+      "active": "div#pane-start \"Transcript (a focusable region in the pa\"",
+      "question": null,
+      "ring": true,
+      "rail": 2,
+      "selection": [["Postgres"], [], []],
+      "answersSent": 1
+    },
+    {
+      "step": "digit 2 → Q2 Hetzner",
+      "keys": "2",
+      "active": "div#pane-start \"Transcript (a focusable region in the pa\"",
+      "question": null,
+      "ring": true,
+      "rail": 3,
+      "selection": [["Postgres"], ["Hetzner"], []],
+      "answersSent": 1
+    },
+    {
+      "step": "digit 1 → Q3 Typecheck",
+      "keys": "1",
+      "active": "div#pane-start \"Transcript (a focusable region in the pa\"",
+      "question": null,
+      "ring": true,
+      "rail": 3,
+      "selection": [["Postgres"], ["Hetzner"], ["Typecheck"]],
+      "answersSent": 1
+    },
+    {
+      "step": "Enter sends",
+      "keys": "Enter",
+      "active": "div#pane-start \"Transcript (a focusable region in the pa\"",
+      "question": null,
+      "ring": true,
+      "rail": 3,
+      "selection": [["Postgres"], ["Hetzner"], ["Typecheck"]],
+      "answersSent": 2
+    }
+  ],
+  "payloads": [
+    {
+      "behavior": "allow",
+      "updatedInput": {
+        "questions": [
+          {
+            "question": "Which database should the service use?",
+            "header": "Database",
+            "multiSelect": false,
+            "options": [
+              {
+                "label": "Postgres",
+                "description": ""
+              },
+              {
+                "label": "SQLite",
+                "description": ""
+              },
+              {
+                "label": "MySQL",
+                "description": ""
+              }
+            ]
+          },
+          {
+            "question": "Where should it deploy?",
+            "header": "Deploy",
+            "multiSelect": false,
+            "options": [
+              {
+                "label": "Fly.io",
+                "description": ""
+              },
+              {
+                "label": "Hetzner",
+                "description": ""
+              }
+            ]
+          },
+          {
+            "question": "Which checks run on every push?",
+            "header": "Checks",
+            "multiSelect": true,
+            "options": [
+              {
+                "label": "Typecheck",
+                "description": ""
+              },
+              {
+                "label": "Lint",
+                "description": ""
+              },
+              {
+                "label": "Build",
+                "description": ""
+              }
+            ]
+          }
+        ],
+        "answers": {
+          "Which database should the service use?": "MySQL",
+          "Where should it deploy?": "Hetzner",
+          "Which checks run on every push?": ["Typecheck", "Lint"]
+        }
+      }
+    },
+    {
+      "behavior": "allow",
+      "updatedInput": {
+        "questions": [
+          {
+            "question": "Which database should the service use?",
+            "header": "Database",
+            "multiSelect": false,
+            "options": [
+              {
+                "label": "Postgres",
+                "description": ""
+              },
+              {
+                "label": "SQLite",
+                "description": ""
+              },
+              {
+                "label": "MySQL",
+                "description": ""
+              }
+            ]
+          },
+          {
+            "question": "Where should it deploy?",
+            "header": "Deploy",
+            "multiSelect": false,
+            "options": [
+              {
+                "label": "Fly.io",
+                "description": ""
+              },
+              {
+                "label": "Hetzner",
+                "description": ""
+              }
+            ]
+          },
+          {
+            "question": "Which checks run on every push?",
+            "header": "Checks",
+            "multiSelect": true,
+            "options": [
+              {
+                "label": "Typecheck",
+                "description": ""
+              },
+              {
+                "label": "Lint",
+                "description": ""
+              },
+              {
+                "label": "Build",
+                "description": ""
+              }
+            ]
+          }
+        ],
+        "answers": {
+          "Which database should the service use?": "Postgres",
+          "Where should it deploy?": "Hetzner",
+          "Which checks run on every push?": ["Typecheck"]
+        }
+      }
+    }
+  ],
+  "failures": []
+}
