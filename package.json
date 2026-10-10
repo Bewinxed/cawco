@@ -9,6 +9,7 @@
   ],
   "scripts": {
     "agent": "bun run --filter '@cawco/agent' start",
+    "apple-ops:check": "bun scripts/apple-ops-check.ts",
     "build": "bun run --filter '*' build",
     "cawco": "bun packages/cli/src/cli.ts",
     "claude-paths:check": "bun scripts/claude-paths-check.ts",
@@ -22,7 +23,7 @@
     "lint": "ultracite check",
     "lint:changed": "git diff --name-only --diff-filter=ACMR HEAD | xargs -r bunx biome check",
     "lint:fix": "ultracite fix",
-    "typecheck": "bun run --filter '*' typecheck && bun run --filter '@cawco/hub' openapi:check && bun run --filter '@cawco/hub' roles:check && bun run --filter '@cawco/hub' a2ui:check && bun run --filter '@cawco/core' tools:check && bun run claude-paths:check && bunx tsc --project scripts/tsconfig.binary.json"
+    "typecheck": "bun run --filter '*' typecheck && bun run --filter '@cawco/hub' openapi:check && bun run --filter '@cawco/hub' roles:check && bun run --filter '@cawco/hub' a2ui:check && bun run --filter '@cawco/core' tools:check && bun run claude-paths:check && bun run apple-ops:check && bunx tsc --project scripts/tsconfig.binary.json"
   },
   "overrides": {
     "@types/bun": "^1.4.2",
