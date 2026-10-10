@@ -481,9 +481,26 @@ const build = async (current: Request): Promise<void> => {
       ).json()) as { entries: unknown[] }
     ).entries.length;
     // The hub ↔ agent contract this build speaks, as the build itself says: a joined machine installs it only when
-    // it overlaps its hub's.
+    // it overlaps its hub's. The proof build runs only under a scratch HOME and an isolated loopback hub
+    // (scripts/binary/proof-entry.ts), and inherits no credentials, so build-info is asked under exactly those.
+    const infoHome = join(staging, "binary-info-home");
+    await mkdir(infoHome, { recursive: true });
     const { protocol } = JSON.parse(
-      await run([proofBinary, "build-info"], checkout, true)
+      await run(
+        [
+          "env",
+          "-i",
+          `PATH=${process.env.PATH ?? ""}`,
+          `HOME=${infoHome}`,
+          "HOST=127.0.0.1",
+          "CAWCO_HUB_PORT=43456",
+          "CAWCO_HUB_URL=http://127.0.0.1:43456",
+          proofBinary,
+          "build-info",
+        ],
+        checkout,
+        true
+      )
     ) as Pick<ReleaseManifest, "protocol">;
     const manifest: ReleaseManifest = {
       version,
