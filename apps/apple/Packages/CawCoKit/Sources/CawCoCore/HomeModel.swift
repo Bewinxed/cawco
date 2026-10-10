@@ -368,11 +368,40 @@ public final class HomeModel {
         public let at: Double
     }
 
+    /// Recent as last worked out, and the rows it left out (Working, Finished, Needs you): it is
+    /// worked out again only when those change or `recentChanged` drops it. Thousands of stored
+    /// transcripts go into it, and Home redraws on every pulse and every tick of `now`, which
+    /// Recent never reads.
+    @ObservationIgnored private var recentMemo: (shown: Set<String>, items: [RecentItem])?
+    /// Moves when anything Recent was worked out from changes: the board reads it, so a list
+    /// handed the remembered Recent still redraws when Recent would come out differently.
+    private var recentRevision = 0
+
     /// Everything else that can be opened: idle and sleeping sessions, and the stored transcripts.
     private func recent(working: [InstanceRow], finished: [InstanceRow]) -> [RecentItem] {
+        _ = recentRevision
         var shown = Set(working.map(\.id))
         shown.formUnion(finished.map(\.id))
         shown.formUnion(needs.compactMap(\.instanceId))
+        if let memo = recentMemo, memo.shown == shown {
+            return memo.items
+        }
+        // Every observed value it reads is heard: the first change drops what it worked out.
+        let items = withObservationTracking {
+            workOutRecent(leaving: shown)
+        } onChange: { [weak self] in
+            Task { @MainActor in self?.recentChanged() }
+        }
+        recentMemo = (shown, items)
+        return items
+    }
+
+    private func recentChanged() {
+        recentMemo = nil
+        recentRevision &+= 1
+    }
+
+    private func workOutRecent(leaving shown: Set<String>) -> [RecentItem] {
         // Thousands of transcripts stand in a handful of folders: each
         // folder's place is worked out once.
         var places: [String: String] = [:]
