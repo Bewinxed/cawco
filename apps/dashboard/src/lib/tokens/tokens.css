@@ -656,8 +656,6 @@
     --c-bar-caw-head-phone: 24px;
     /* The stroke of the arcs on Caw's rim in the top bar, one for each thing waiting on the operator. */
     --c-caw-ring: 2px;
-    /* Jump, the first item of the top bar's glass group: wide enough to read as a place to type, not a button. */
-    --c-bar-search-w: 180px;
     /* A page head under the top bar. */
     --c-page-head-h: 96px;
     --c-sidebar-w: 248px;

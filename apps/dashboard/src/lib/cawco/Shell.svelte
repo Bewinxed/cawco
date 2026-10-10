@@ -969,8 +969,6 @@
                     type="button"
                   >
                     <IconSearch aria-hidden="true" />
-                    <span class="jump-word">Jump</span>
-                    <kbd>⌘K</kbd>
                   </button>
                 {/snippet}
               </Tip>
@@ -1428,32 +1426,9 @@
       background: var(--surface-hover);
     }
   }
-  /* Jump, the group's search (Apple HIG, Toolbars: "an optional search
-     field" on the trailing edge): an item of the glass like the others,
-     `c-bar-search-w` wide so it reads as a place to type, a 16px search
-     glyph leading (a field's, lighter than the icons' 20px symbols so the
-     word leads), "Jump" in the placeholder's ink and ⌘K a trailing hint. */
-  .tools .jump {
-    justify-content: flex-start;
-    gap: var(--space-2);
-    inline-size: var(--c-bar-search-w);
-    padding-inline: var(--space-2);
-    font: var(--type-body);
-    color: var(--ink-muted);
-    cursor: text;
-  }
-  .jump :global(svg) {
-    flex: none;
-    inline-size: 16px;
-    block-size: 16px;
-  }
-  .jump-word {
-    flex: 1 1 auto;
-    text-align: start;
-  }
-  .jump kbd {
-    font: var(--type-meta);
-  }
+  /* Jump is the group's search glyph alone, an item of the glass like the
+     machines and Caw; its tip names it and ⌘K (owner: the search integrated
+     into the group, not "the whole expanded thing with 'jump'"). */
 
   @media (hover: hover) and (pointer: fine) {
     .burger:hover {

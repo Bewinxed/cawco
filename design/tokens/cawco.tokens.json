@@ -2350,11 +2350,6 @@
       "$value": "2px",
       "$description": "The stroke of the arcs on Caw's rim in the top bar, one for each thing waiting on the operator."
     },
-    "c-bar-search-w": {
-      "$type": "dimension",
-      "$value": "180px",
-      "$description": "Jump, the first item of the top bar's glass group: wide enough to read as a place to type, not a button."
-    },
     "c-page-head-h": {
       "$type": "dimension",
       "$value": "96px",

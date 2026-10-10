@@ -508,8 +508,6 @@ public enum Size {
     public static let cBarCawHeadPhone: Double = 24
     /// The stroke of the arcs on Caw's rim in the top bar, one for each thing waiting on the operator.
     public static let cCawRing: Double = 2
-    /// Jump, the first item of the top bar's glass group: wide enough to read as a place to type, not a button.
-    public static let cBarSearchW: Double = 180
     /// A page head under the top bar.
     public static let cPageHeadH: Double = 96
     public static let cSidebarW: Double = 248
