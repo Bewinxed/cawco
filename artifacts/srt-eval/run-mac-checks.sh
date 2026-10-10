@@ -81,6 +81,10 @@ clone=$(printf '%s' "$created" | sed -n 's/.*"path":"\([^"]*\)".*/\1/p')
 state=$HOME/.cawco/workspaces/$id
 echo "workspace $id: $clone"
 r() { (cd "$clone" && "$state/exec" "$@"); }
+# The workspace's scratch dir, as its commands see it: their TMPDIR.
+tmp=$(r 'printf %s "$TMPDIR"')
+echo "its TMPDIR: $tmp"
+[ -d "$tmp" ] || { echo "a command inside has no TMPDIR on disk"; fail=$((fail + 1)); }
 
 step "the generated profile (whole in $checkout/macos-boundary.sb; first lines)"
 profile=$(ls "$state"/boundaries/*/boundary.sb 2>/dev/null | head -1)
@@ -218,6 +222,27 @@ r 'test -n "${SSH_AUTH_SOCK:-}"' && row "SSH_AUTH_SOCK set" OPEN || row "SSH_AUT
 r "python3 -c 'import socket,sys; s=socket.socket(socket.AF_UNIX); s.settimeout(3); s.connect(sys.argv[1])' '$CAWCO_SESSIOND_ENDPOINT' 2>/dev/null" && row "connect sessiond" OPEN || row "connect sessiond" BLOCKED
 agent_sock=$(ls -d /private/tmp/com.apple.launchd.*/Listeners 2>/dev/null | head -1)
 if [ -n "$agent_sock" ]; then r "python3 -c 'import socket,sys; s=socket.socket(socket.AF_UNIX); s.settimeout(3); s.connect(sys.argv[1])' '$agent_sock' 2>/dev/null" && row "connect launchd's ssh-agent" OPEN || row "connect launchd's ssh-agent" BLOCKED; fi
+# Sockets under ~/.cawco that are not this workspace's own scratch dir's: one
+# in another workspace's scratch dir (a sibling of this one's), one in this
+# workspace's state dir. Each listens on the host for the row's length.
+other_tmp=$(dirname "$tmp")/check$(printf %s "$id" | cut -c1-3)
+mkdir -p "$other_tmp"
+for place in "another workspace's scratch dir:$other_tmp/other.sock" "this workspace's state dir:$state/host.sock"; do
+  label="connect a socket in ${place%%:*}" sock=${place#*:}
+  rm -f "$sock"
+  /usr/bin/python3 -c 'import socket, sys, time
+s = socket.socket(socket.AF_UNIX); s.bind(sys.argv[1]); s.listen(1); time.sleep(60)' "$sock" &
+  listener=$!
+  for _ in $(seq 50); do [ -S "$sock" ] && break; sleep 0.1; done
+  if [ ! -S "$sock" ]; then
+    works "$label" "FAIL (the host's listener at $sock did not start)"
+  else
+    r "/usr/bin/python3 -c 'import socket,sys; s=socket.socket(socket.AF_UNIX); s.settimeout(3); s.connect(sys.argv[1])' '$sock' 2>/dev/null" && row "$label" OPEN || row "$label" BLOCKED
+  fi
+  kill "$listener" 2>/dev/null; wait "$listener" 2>/dev/null
+  rm -f "$sock"
+done
+rm -rf "$other_tmp"
 r "kill -0 $$ 2>/dev/null" && row "signal a process outside" OPEN || row "signal a process outside" BLOCKED
 r '/bin/launchctl print gui/$(id -u) >/dev/null 2>&1' && row "launchctl" OPEN || row "launchctl" BLOCKED
 source_hooks=$(cd "$source_repo" && git rev-parse --path-format=absolute --git-path hooks)
@@ -305,7 +330,25 @@ if [ -n "$xcode_dir" ]; then
     esac
   fi
 fi
-cat > "$state/tmp/pw-check.mjs" <<'JS'
+# A tool's own socket in $TMPDIR: bound, then connected to, inside.
+cat > "$tmp/sock-check.py" <<'PY'
+import os, socket
+path = os.path.join(os.environ["TMPDIR"], "sock-check.sock")
+if os.path.exists(path):
+    os.unlink(path)
+server = socket.socket(socket.AF_UNIX)
+server.bind(path)
+server.listen(1)
+client = socket.socket(socket.AF_UNIX)
+client.settimeout(3)
+client.connect(path)
+conn, _ = server.accept()
+client.sendall(b"ok")
+print(conn.recv(2).decode(), path)
+os.unlink(path)
+PY
+checked "bind and connect a unix socket in \$TMPDIR" r 'set -o pipefail; /usr/bin/python3 "$TMPDIR/sock-check.py" 2>&1 | tail -3'
+cat > "$tmp/pw-check.mjs" <<'JS'
 import { createServer } from "node:http";
 import { chromium } from "playwright-core";
 const server = createServer((_req, res) => { res.setHeader("content-type", "text/html"); res.end("<h1 id=ok>inside the boundary</h1>"); });

@@ -164,8 +164,12 @@ export interface SeatbeltPlace {
  * run (so nothing reaches launchd), the scratch dir itself cannot be removed,
  * no keychain service is looked up ({@link KEYCHAIN_MACH_SERVICES}), and no
  * unix socket under {@link SeatbeltPlace.hostSockets} or a credential store
- * is reached but the tool and git doors'. The network is the host's: Seatbelt
- * cannot judge a destination by the name it resolves.
+ * is reached but the tool and git doors' and those in the workspace's own
+ * scratch dir: tools put their own sockets in `$TMPDIR` and connect back to
+ * them (a browser's process singleton, a language server), and the scratch
+ * dir lies under CawCo's state, where every other workspace's scratch dir
+ * stays out of reach. The network is the host's: Seatbelt cannot judge a
+ * destination by the name it resolves.
  */
 export const seatbeltProfile = (
   policy: Policy,
@@ -219,7 +223,7 @@ export const seatbeltProfile = (
         (path) =>
           `(deny network-outbound (remote unix-socket (subpath ${sbString(path)})))`
       ),
-    ...place.doors.map(
+    ...[...place.doors, policy.scratch].map(
       (door) =>
         `(allow network-outbound (remote unix-socket (subpath ${sbString(door)})))`
     ),
