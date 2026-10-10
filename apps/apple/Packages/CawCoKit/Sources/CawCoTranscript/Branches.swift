@@ -471,6 +471,10 @@ final class DelegateView: RailRow, RowContent, Disclosing {
     /// comes in as the card folds shut (its report's headline) and goes as it
     /// opens, on the body's own clock, so the card's foot moves one way.
     private let statusReveal: Reveal
+    /// The 4pt above the asks when they are the first line under the head
+    /// (no brief, no status line): it goes as the status line comes, on the
+    /// same clock, so the 4pt passes from one to the other without a step.
+    private let asksGap: Reveal
     private let asks = UIStackView()
     private let inner: InnerWell
     private let report = ReportCard()
@@ -488,6 +492,10 @@ final class DelegateView: RailRow, RowContent, Disclosing {
         let line = UIView()
         line.pin(status, insets: UIEdgeInsets(top: Space.space1, left: 0, bottom: 0, right: 0))
         statusReveal = Reveal(line)
+        let gap = UIView()
+        gap.translatesAutoresizingMaskIntoConstraints = false
+        gap.heightAnchor.constraint(equalToConstant: Space.space1).isActive = true
+        asksGap = Reveal(gap)
         super.init(env: env)
         kind.layer.borderWidth = 1
         let spacer = UIView()
@@ -509,6 +517,7 @@ final class DelegateView: RailRow, RowContent, Disclosing {
         body.addArrangedSubview(statusReveal)
         asks.axis = .vertical
         asks.spacing = Space.spaceRow
+        body.addArrangedSubview(asksGap)
         body.addArrangedSubview(asks)
         body.setCustomSpacing(Space.space1, after: head)
         inner.column.insertArrangedSubview(empty, at: 0)
@@ -530,10 +539,20 @@ final class DelegateView: RailRow, RowContent, Disclosing {
     func toggled(open: Bool) -> (() -> Void, () -> Void) {
         chevron.set(open: open, animated: true)
         if let id { env.watchDelegate(id, open) }
-        if let block, configureBody(block, open: open) != statusReveal.isOpen {
-            _ = statusReveal.toggle(open: !statusReveal.isOpen, over: open ? Motion.durReveal : Motion.durExit)
+        if let block {
+            // The lines under the head move on the body's clock.
+            let shown = configureBody(block, open: open)
+            let clock = open ? Motion.durReveal : Motion.durExit
+            if shown != statusReveal.isOpen { _ = statusReveal.toggle(open: shown, over: clock) }
+            let gap = asksLead(statusShown: shown)
+            if gap != asksGap.isOpen { _ = asksGap.toggle(open: gap, over: clock) }
         }
         return reveal.toggle(open: open)
+    }
+
+    /// Whether the asks are the first line under the head, bringing its 4pt.
+    private func asksLead(statusShown: Bool) -> Bool {
+        (brief.superview?.isHidden ?? true) && !statusShown && !asks.isHidden
     }
 
     override func didMoveToWindow() {
@@ -672,7 +691,9 @@ final class DelegateView: RailRow, RowContent, Disclosing {
         asks.isHidden = f.asks.isEmpty
         let open = env.isOpen(key)
         chevron.set(open: open, animated: false)
-        statusReveal.set(open: configureBody(block, open: open))
+        let shown = configureBody(block, open: open)
+        statusReveal.set(open: shown)
+        asksGap.set(open: asksLead(statusShown: shown))
         reveal.set(open: open)
         let trigger = (body.arrangedSubviews.first as? UIStackView)?.arrangedSubviews.first
         trigger?.accessibilityLabel = "\(label) \(type)"
@@ -700,10 +721,10 @@ final class DelegateView: RailRow, RowContent, Disclosing {
         }
         // Each line under the head brings its own 4pt above it (Delegate
         // `.brief`, `.now`); a line that is not drawn brings none. The status
-        // line's is inside its box, so it comes and goes with the line.
+        // line's and the leading asks' are inside their boxes (`statusReveal`,
+        // `asksGap`), so they come and go with the line.
         if let head = body.arrangedSubviews.first, let briefBox = brief.superview {
-            let under = !briefBox.isHidden || (!asks.isHidden && !shown)
-            body.setCustomSpacing(under ? Space.space1 : 0, after: head)
+            body.setCustomSpacing(briefBox.isHidden ? 0 : Space.space1, after: head)
             body.setCustomSpacing(0, after: briefBox)
         }
         guard open else { return shown }
