@@ -1,3 +1,4 @@
+import CawCoAPI
 import CawCoCore
 import CawCoDesign
 import CawCoMascot
@@ -30,6 +31,12 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     private var editNote: String?
     private var opened = true
     private var shownOnce = false
+    /// What `supportedCommands` last answered: every command with its prose.
+    /// Nil until the session has answered once.
+    private var supported: [Components.Schemas.SlashCommand]?
+    private var commandsPending = false
+    private var commandsAt = Date.distantPast
+    private static let commandsLog = Logger(subsystem: "dev.cawco.app", category: "Commands")
     var onClose: () -> Void = {}
     var onReturnToFleet: () -> Void = {}
     /// Opens another session, or a run's board row (`BoardRun.prefix + runId`), as a board row opens.
@@ -64,6 +71,66 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         composerBinding.queuedWords = { [weak self] id in self?.transcriptView.queuedWords(id) }
         composerBinding.flashQueued = { [weak self] id in self?.transcriptView.flashQueued(id) }
         composerBinding.onReplaceQueued = { [weak self] id, text in self?.replaceQueued(id, with: text) }
+        composerBinding.commands = { [weak self] in self?.availableCommands() ?? [] }
+        composerBinding.onMenu = { [weak self] in self?.refreshCommands() }
+    }
+
+    // MARK: The `/` menu
+
+    /// One session's `/` menu (client.svelte.ts `availableCommands`): every
+    /// name it listed, wearing whatever `supportedCommands` has since said
+    /// about it, ordered skills, plugin commands, built-ins, MCP prompts,
+    /// each family by name. The init frame's list leads until the session
+    /// answers, with the details it has pushed meanwhile.
+    private func availableCommands() -> [ComposerCommand] {
+        let facts = transcript.facts?.commands
+        let detailed = supported ?? facts?.detailed ?? []
+        let details = Dictionary(detailed.map { ($0.name, $0) }, uniquingKeysWith: { first, _ in first })
+        let listed = facts.map { $0.names.isEmpty ? detailed.map(\.name) : $0.names } ?? detailed.map(\.name)
+        let names = supported?.map(\.name) ?? listed
+        // An answer whose commands carry kinds says which are skills itself.
+        let tagged = supported.flatMap { answer -> [String]? in
+            answer.contains { $0.kind != nil } ? answer.filter { $0.kind?.rawValue == "skill" }.map(\.name) : nil
+        }
+        let skills = tagged ?? facts?.skills ?? []
+        return names.map { name in
+            let known = details[name]
+            return ComposerCommand(name: name, description: known?.description, argumentHint: known?.argumentHint,
+                                   kind: known?.kind.flatMap { Self.commandKind($0.rawValue) }, skills: skills)
+        }.sorted { $0.kind != $1.kind ? $0.kind < $1.kind : $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
+    private static func commandKind(_ raw: String) -> ComposerCommand.Kind? {
+        switch raw {
+        case "skill": .skill
+        case "custom": .custom
+        case "builtin": .builtin
+        case "mcp": .mcp
+        default: nil
+        }
+    }
+
+    /// The menu asks the session what it has each time a `/` word starts,
+    /// at most once every three seconds (client.svelte.ts `refreshCommands`);
+    /// the init frame's list is the free prefill until it answers.
+    private func refreshCommands() {
+        guard !commandsPending, Date.now.timeIntervalSince(commandsAt) >= 3,
+              let machineId = hub.fleet.byId[sessionId]?.machineId else { return }
+        commandsPending = true
+        Task { [weak self, hub, sessionId] in
+            do {
+                let answer = try await hub.supportedCommands(instanceId: sessionId, machineId: machineId)
+                self?.supported = answer
+                self?.composerBinding.publish()
+            } catch {
+                // A session in custody (handed back after an agent restart) refuses for a moment; the next `/` asks again.
+                if !error.localizedDescription.contains("(custody)") {
+                    Self.commandsLog.error("supportedCommands on \(sessionId, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
+                }
+            }
+            self?.commandsAt = .now
+            self?.commandsPending = false
+        }
     }
 
     @available(*, unavailable)

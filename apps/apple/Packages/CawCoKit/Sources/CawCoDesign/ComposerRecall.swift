@@ -734,7 +734,7 @@ final class QueryChip: UIView {
 /// The recall wheel, while it is up: its list (the draft and what was sent,
 /// newest first, or the matches of what the reader types), where it has
 /// rolled to, and the views it rolls them in. Opened by ↑, the history
-/// button or a hold; ↑ and ↓ roll it, Return takes the row on the field's
+/// button or a swipe up from the composer; ↑ and ↓ roll it, Return takes the row on the field's
 /// line into the composer, ⌘Return sends it as it is, Escape goes back to
 /// the draft (clearing a filter first), and with an empty draft what is
 /// typed filters it.
@@ -749,7 +749,7 @@ final class RecallWheel: NSObject, UIGestureRecognizerDelegate {
     private let entries: [RecallEntry]
     let draft: String
     private let caret: NSRange
-    /// Whether keys reach the wheel (↑ or the history button); a hold leaves the keyboard down.
+    /// Whether keys reach the wheel (↑ or the history button); a swipe leaves the keyboard as it was.
     let keys: Bool
     private(set) var closing = false
     /// Dismissed: whatever a fold still under way would do next is dropped.
@@ -781,11 +781,11 @@ final class RecallWheel: NSObject, UIGestureRecognizerDelegate {
     private let spring = FrameTicker()
     private var outside: OutsideTouch?
 
-    // A drag on the rows, or a hold still down on the composer.
+    // A drag on the rows, or the swipe up from the composer that brought it up.
     private var lastY = 0.0
     private var lastTime = 0.0
     private var flick = 0.0
-    private var holdOrigin = 0.0
+    private var swipeOrigin = 0.0
     private var scrolled = 0.0
 
     init(composer: ComposerView, entries: [RecallEntry], draft: String, caret: NSRange, keys: Bool) {
@@ -1147,31 +1147,37 @@ final class RecallWheel: NSObject, UIGestureRecognizerDelegate {
         false
     }
 
-    /// A hold on the composer brought it up: where the finger is now.
-    func holdBegan(at y: Double) {
-        holdOrigin = y
+    /// A swipe up from the composer brought it up: where the finger is now.
+    func swipeBegan(at y: Double) {
+        swipeOrigin = y
         lastY = y
         lastTime = CACurrentMediaTime()
         flick = 0
     }
 
-    func holdMoved(to y: Double) {
+    /// The rows follow the finger. While it is still going up, finishing the
+    /// swipe that opened the wheel, the newest message holds the field's line
+    /// and the swipe's top is where following starts; dragging back down
+    /// pulls older messages down into the field, as dragging the rows does.
+    func swipeMoved(to y: Double) {
         guard !closing else { return }
         let now = CACurrentMediaTime()
         flick = (y - lastY) / max(1, (now - lastTime) * 1000)
         lastY = y
         lastTime = now
-        // Dragging down pulls older messages down into the field, as dragging the rows does.
+        swipeOrigin = min(swipeOrigin, y)
         spring.stop()
-        pos = clampSoft(1 + (y - holdOrigin) / Recall.row)
+        pos = clampSoft(1 + (y - swipeOrigin) / Recall.row)
         target = pos
         draw(pos)
     }
 
-    /// Lifting leaves it up: a tap on a row takes it, a tap outside dismisses.
-    func holdEnded() {
+    /// Lifting leaves it up: a tap on a row takes it, a tap outside
+    /// dismisses. A swipe that only ever went up was the opening alone, so
+    /// its upward speed lands on nothing: the newest message stays on the line.
+    func swipeEnded() {
         guard !closing else { return }
-        target = clamp(Double(Recall.round(pos + flick * 6)))
+        target = lastY <= swipeOrigin ? clamp(1) : clamp(Double(Recall.round(pos + flick * 6)))
         kick()
     }
 

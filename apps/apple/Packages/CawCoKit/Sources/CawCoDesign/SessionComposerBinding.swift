@@ -34,6 +34,12 @@ public final class SessionComposerBinding {
     public var onPasteItems: ([NSItemProvider]) -> Void = { _ in }
     /// A tap on a file whose upload failed: upload it again.
     public var onRetryFile: (String) -> Void = { _ in }
+    /// What the session offers behind `/` (client.svelte.ts `commandsOf`),
+    /// read each time the menu filters. The pane `publish()`es when it changes.
+    public var commands: () -> [ComposerCommand] = { [] }
+    /// A `/` word started: ask the session for its commands' details
+    /// (client.svelte.ts `refreshCommands`, throttled there).
+    public var onMenu: () -> Void = {}
 
     // MARK: Recall and the queued message
 

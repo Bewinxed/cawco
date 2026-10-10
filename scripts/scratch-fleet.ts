@@ -724,6 +724,8 @@ export async function scratchFleet(options: {
   };
 
   return {
+    /** The hub's own address, `http://127.0.0.1:<port>`. */
+    base,
     sandbox,
     home,
     sessiondSocket,

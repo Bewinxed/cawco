@@ -81,10 +81,13 @@ public enum ComposerAttachment: Sendable, Equatable {
 /// - Parked prompts stand in their own column above (`prompts`), 11pt apart,
 ///   so a card coming or going never moves the pill.
 /// - Recall (composer-recall, "Wheel"): ↑ in an empty field or with the
-///   caret at its start, the history button, or a hold on the composer while
-///   the keyboard is down brings up what the reader sent here; ↑ in an empty
-///   field while their newest message is queued and can be withdrawn lifts
-///   that message's words into the field to edit instead (ComposerQueuedEdit.swift).
+///   caret at its start, the history button, or a swipe up that starts on
+///   the pill brings up what the reader sent here; ↑ in an empty field while
+///   their newest message is queued and can be withdrawn lifts that
+///   message's words into the field to edit instead (ComposerQueuedEdit.swift).
+/// - Commands (Composer.svelte `.menu`): a `/` starting the word under the
+///   caret opens the session's commands and skills above the pill, filtered
+///   as the word is typed (ComposerCommands.swift).
 @MainActor
 public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizerDelegate {
     /// What the action box does now.
@@ -167,7 +170,17 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
     var grown = false {
         didSet { if grown != oldValue { paint() } }
     }
-    private let holdPress = UILongPressGestureRecognizer()
+    /// An upward swipe that starts on the pill: the wheel comes up under the finger.
+    private let swipeUp = UIPanGestureRecognizer()
+    /// Whether the swipe being recognized started on the field's text.
+    private var swipeFromField = false
+
+    /// The `/` menu, while it is up (and while it fades away).
+    private var commandMenu: CommandMenu?
+    /// Escape closed the menu over this `/` word; typing opens it again.
+    private var menuDismissed = false
+    /// The menu was open as of the last look, so its opening is told once.
+    private var menuWasOpen = false
 
     /// The field's face: the body face at 16pt on the UI leading (20pt lines).
     static let fieldRole = TypeRole(weight: .regular, size: 16 ... 16, leading: TypeScale.leadingUi, family: FontFamily.fontBody)
@@ -368,13 +381,14 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
         controls.setContentHuggingPriority(.required, for: .horizontal)
         controls.setContentCompressionResistancePriority(.required, for: .horizontal)
 
-        // A hold on the composer, keyboard down, brings the wheel up under the finger; a touch or a pen, never a pointer.
-        holdPress.minimumPressDuration = Motion.durPressHold
-        holdPress.allowableMovement = 8
-        holdPress.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.direct.rawValue), NSNumber(value: UITouch.TouchType.pencil.rawValue)]
-        holdPress.delegate = self
-        holdPress.addTarget(self, action: #selector(held(_:)))
-        pill.addGestureRecognizer(holdPress)
+        // A swipe up that starts on the pill brings the wheel up under the
+        // finger; a touch or a pen, never a pointer or a trackpad's scroll.
+        swipeUp.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.direct.rawValue), NSNumber(value: UITouch.TouchType.pencil.rawValue)]
+        swipeUp.allowedScrollTypesMask = []
+        swipeUp.maximumNumberOfTouches = 1
+        swipeUp.delegate = self
+        swipeUp.addTarget(self, action: #selector(swiped(_:)))
+        pill.addGestureRecognizer(swipeUp)
         field.onDeleteBackward = { [weak self] in self?.wheelBackspace() ?? true }
     }
 
@@ -405,6 +419,7 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
         fitHint()
         maskField()
         edit?.relayout()
+        placeMenu()
     }
 
     // MARK: The binding
@@ -422,9 +437,12 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
             if let next { render(next) }
             return
         }
-        // The wheel and a queued message's words belong to the conversation they came from.
+        // The wheel, a queued message's words and the `/` menu belong to the conversation they came from.
         wheel?.dismiss()
         edit?.dismiss()
+        closeMenu(animated: false)
+        menuWasOpen = false
+        menuDismissed = false
         let shown = field.text ?? ""
         binding?.composer = nil
         binding = next
@@ -464,6 +482,8 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
         }
         syncPrompts(source.prompts)
         renderAction(animated: window != nil)
+        // The session's commands may have changed (their details landed): a `/` word being typed shows them.
+        if menuWasOpen { syncMenu() }
     }
 
     /// The draft as the pane set it (restored, sent, an attachment added).
@@ -480,6 +500,8 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
         endFlight()
         setField(source.draft)
         attachments = source.attachments
+        // A sent or replaced draft takes its `/` word with it.
+        syncMenu()
     }
 
     /// Only the attachments changed (a file's upload moved along): the
@@ -669,6 +691,16 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
         hold?.cancel()
         holding = false
         textChanged(animated: true)
+        menuDismissed = false
+        syncMenu()
+    }
+
+    /// The caret moved (a tap, an arrow key): the `/` word under it, if any,
+    /// is what the menu filters by, and a menu Escape closed may open again
+    /// (Composer.svelte `noteCaret`).
+    public func textViewDidChangeSelection(_: UITextView) {
+        menuDismissed = false
+        syncMenu()
     }
 
     public func textViewDidBeginEditing(_: UITextView) {
@@ -677,6 +709,8 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
 
     public func textViewDidEndEditing(_: UITextView) {
         refold(animated: true)
+        // Blurred, the menu goes (Composer.svelte `onblur`).
+        syncMenu()
     }
 
     public func scrollViewDidScroll(_: UIScrollView) {
@@ -691,8 +725,8 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
     }
 
     /// The hint in full where the field holds it on one line, else its first
-    /// part. Commands and mentions are not on this composer yet, so only the
-    /// first part ever names what the field does.
+    /// part. Mentions are not on this composer yet, and the web's full hint
+    /// names them, so only the first part is shown.
     private func fitHint() {
         hint.text = Self.hintShort
     }
@@ -984,7 +1018,16 @@ extension ComposerView {
     fileprivate var recallKeys: [UIKeyCommand] {
         guard field.isFirstResponder else { return [] }
         var keys: [UIKeyCommand] = []
-        if let wheel, !wheel.closing {
+        if let commandMenu, !commandMenu.closing {
+            // The `/` menu's keys (Composer.svelte `onkeydown`): ↑ ↓ move, Return and Tab take, Escape closes.
+            keys = [
+                UIKeyCommand(input: UIKeyCommand.inputUpArrow, modifierFlags: [], action: #selector(menuUp)),
+                UIKeyCommand(input: UIKeyCommand.inputDownArrow, modifierFlags: [], action: #selector(menuDown)),
+                UIKeyCommand(input: "\r", modifierFlags: [], action: #selector(menuTake)),
+                UIKeyCommand(input: "\t", modifierFlags: [], action: #selector(menuTake)),
+                UIKeyCommand(input: UIKeyCommand.inputEscape, modifierFlags: [], action: #selector(menuEscape)),
+            ]
+        } else if let wheel, !wheel.closing {
             keys = [
                 UIKeyCommand(input: UIKeyCommand.inputUpArrow, modifierFlags: [], action: #selector(recallUp)),
                 UIKeyCommand(input: UIKeyCommand.inputDownArrow, modifierFlags: [], action: #selector(recallDown)),
@@ -1025,9 +1068,16 @@ extension ComposerView {
         if let wheel { wheel.escape() } else { edit?.returnEdit(nil) }
     }
 
-    /// Return from the field (the software keyboard's too).
+    /// Return from the field (the software keyboard's too): with the `/`
+    /// menu up it takes the highlighted row, as Enter does on the web.
     func returned() {
-        if let wheel, !wheel.closing { wheel.take(send: false) } else { submit() }
+        if let commandMenu, !commandMenu.closing {
+            commandMenu.chooseHighlighted()
+        } else if let wheel, !wheel.closing {
+            wheel.take(send: false)
+        } else {
+            submit()
+        }
     }
 
     /// A backspace the field is about to take; false keeps it from the field.
@@ -1051,6 +1101,7 @@ extension ComposerView {
     private func openWheel(keys: Bool) {
         guard let binding, wheel == nil, edit == nil else { return }
         endFlight()
+        closeMenu(animated: false)
         // Focus first, so a folded draft opens to its height before anything is measured.
         if keys { field.becomeFirstResponder() }
         (superview ?? self).layoutIfNeeded()
@@ -1155,50 +1206,161 @@ extension ComposerView {
         return LiftEnd(box: box, scroll: field.contentOffset.y, attributes: LiftEnd.wrapping(Self.fieldRole.attributes(color: Palette.inkStrong)))
     }
 
-    // MARK: The hold
+    // MARK: The swipe
 
-    /// Only a hold that starts off the field while it is being written in,
-    /// and off the attach and send boxes, with nothing else up.
+    /// Only a swipe that starts on the pill, off the attach and send boxes,
+    /// with nothing else up.
     public func gestureRecognizer(_ recognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
-        guard recognizer === holdPress else { return true }
+        guard recognizer === swipeUp else { return true }
         guard binding != nil, wheel == nil, edit == nil, let view = touch.view else { return false }
         if view.isDescendant(of: actionBox) || view.isDescendant(of: attach) { return false }
-        if field.isFirstResponder, view.isDescendant(of: field) { return false }
+        swipeFromField = view.isDescendant(of: field)
         Feel.prepare()
         return true
     }
 
-    /// The field's own presses wait for the hold to fail while it is not
-    /// being written in, so a hold never starts editing or a selection.
-    public func gestureRecognizer(_ recognizer: UIGestureRecognizer, shouldBeRequiredToFailBy other: UIGestureRecognizer) -> Bool {
-        recognizer === holdPress && !field.isFirstResponder && (other.view?.isDescendant(of: field) ?? false)
+    /// Up, and more up than sideways: down is the keyboard's interactive
+    /// dismissal and the transcript's, sideways is the tab strip's.
+    ///
+    /// Over a draft long enough to scroll, a finger moving up reads on down
+    /// the draft; once its end is in view that finger has nothing left to
+    /// scroll, so it is the wheel's. Up on the pill's own edge, or over a
+    /// draft that does not scroll, is always the wheel's. (Waiting for the
+    /// text's end rather than refusing the field outright keeps the whole
+    /// pill a target: its chrome is a 6pt rim and the three boxes.)
+    override public func gestureRecognizerShouldBegin(_ recognizer: UIGestureRecognizer) -> Bool {
+        guard recognizer === swipeUp else { return super.gestureRecognizerShouldBegin(recognizer) }
+        guard binding != nil, wheel == nil, edit == nil else { return false }
+        let velocity = swipeUp.velocity(in: self)
+        guard velocity.y < 0, abs(velocity.y) > abs(velocity.x) else { return false }
+        if swipeFromField, field.isScrollEnabled {
+            let end = field.contentSize.height + field.adjustedContentInset.bottom - field.bounds.height
+            if field.contentOffset.y < end - 1 { return false }
+        }
+        return true
     }
 
-    @objc private func held(_ press: UILongPressGestureRecognizer) {
-        let y = press.location(in: self).y
-        switch press.state {
+    /// The field's own scrolling waits for the swipe to be refused, so the
+    /// two never both take one finger.
+    public func gestureRecognizer(_ recognizer: UIGestureRecognizer, shouldBeRequiredToFailBy other: UIGestureRecognizer) -> Bool {
+        recognizer === swipeUp && other === field.panGestureRecognizer
+    }
+
+    /// Began: the wheel comes up with the hold's feel and follows the
+    /// finger from here; lifting leaves it up (RecallWheel `swipeEnded`).
+    @objc private func swiped(_ pan: UIPanGestureRecognizer) {
+        let y = pan.location(in: self).y
+        switch pan.state {
         case .began:
             guard wheel == nil, edit == nil else { return }
             Feel.hold()
             openWheel(keys: false)
-            wheel?.holdBegan(at: y)
+            wheel?.swipeBegan(at: y)
         case .changed:
-            wheel?.holdMoved(to: y)
+            wheel?.swipeMoved(to: y)
         case .ended, .cancelled, .failed:
-            wheel?.holdEnded()
+            wheel?.swipeEnded()
         default:
             break
         }
     }
 
-    /// The rows above the pill and the edit row's Keep it, which stand
-    /// outside the composer's bounds, where a touch lands on them.
+    /// The rows above the pill, the edit row's Keep it and the `/` menu,
+    /// which stand outside the composer's bounds, where a touch lands on them.
     fileprivate func grownHit(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-        for view in [wheel?.ghostsView, edit?.keepButton].compactMap(\.self) where view.window != nil && !view.isHidden {
+        let menu: UIView? = commandMenu?.closing == false ? commandMenu : nil
+        for view in [menu, wheel?.ghostsView, edit?.keepButton].compactMap(\.self) where view.window != nil && !view.isHidden {
             let inside = convert(point, to: view)
             if view.point(inside: inside, with: event), let hit = view.hitTest(inside, with: event) { return hit }
         }
         return nil
+    }
+}
+
+// MARK: The `/` menu
+
+extension ComposerView {
+    /// The `/` word under the caret, while the field is being written in and
+    /// the wheel is not up.
+    private var slashToken: SlashToken? {
+        guard field.isFirstResponder, binding != nil, wheel == nil, flight == nil else { return nil }
+        return SlashToken(text: field.text ?? "", caret: field.selectedRange)
+    }
+
+    /// Opens, filters or closes the menu for the word under the caret
+    /// (Composer.svelte `menuOpen`): open while a `/` word is being typed,
+    /// Escape has not closed it, and something matches. The session is asked
+    /// for its commands each time a `/` word starts (`onmenu`), even before
+    /// anything matches, so a list that was empty fills in as the answer lands.
+    func syncMenu() {
+        let token = menuDismissed ? nil : slashToken
+        if token != nil, !menuWasOpen { binding?.onMenu() }
+        menuWasOpen = token != nil
+        guard let token, let binding else { return closeMenu(animated: true) }
+        let sections = CommandSection.sections(binding.commands(), query: token.query)
+        guard !sections.isEmpty else { return closeMenu(animated: true) }
+        if let menu = commandMenu {
+            menu.show(sections)
+            placeMenu()
+            return
+        }
+        let menu = CommandMenu()
+        menu.onChoose = { [weak self] command in self?.choose(command) }
+        addSubview(menu)
+        commandMenu = menu
+        menu.show(sections)
+        placeMenu()
+        menu.appear()
+    }
+
+    /// Takes the menu down; a fade under way finishes on its own.
+    func closeMenu(animated: Bool) {
+        guard let menu = commandMenu else { return }
+        commandMenu = nil
+        if animated {
+            menu.disappear { menu.removeFromSuperview() }
+        } else {
+            menu.removeFromSuperview()
+        }
+    }
+
+    /// Over the pill, the gap the web's `bottom: calc(100% + space-2)` keeps,
+    /// as wide as the pill and as tall as its rows up to 320pt, or the room
+    /// left under the window's safe top.
+    fileprivate func placeMenu() {
+        guard let menu = commandMenu else { return }
+        let gap = Space.space2
+        let box = ring.convert(ring.bounds, to: self)
+        let ceiling: Double = window.map { Double(convert(CGPoint(x: 0, y: $0.safeAreaInsets.top + Space.space3), from: $0).y) }
+            ?? Double(box.minY) - gap - CommandMenu.maxHeight
+        menu.bounds.size.width = box.width
+        let height = menu.height(within: max(Size.cBtnHLg, Double(box.minY) - gap - ceiling))
+        // Through bounds and centre: an entrance still in flight keeps its transform.
+        menu.bounds = CGRect(x: 0, y: 0, width: box.width, height: height)
+        menu.center = CGPoint(x: box.midX, y: box.minY - gap - height / 2)
+    }
+
+    /// Puts the chosen command where the `/` word was, with a space after
+    /// it, the caret after the space (Composer.svelte `choose`).
+    private func choose(_ command: ComposerCommand) {
+        guard let token = slashToken else { return }
+        let insert = "\(command.insert) "
+        let text = ((field.text ?? "") as NSString).replacingCharacters(in: NSRange(location: token.from, length: token.to - token.from), with: insert)
+        field.text = text
+        field.selectedRange = NSRange(location: token.from + (insert as NSString).length, length: 0)
+        if edit == nil { binding?.draft = text }
+        textChanged(animated: true)
+        syncMenu()
+    }
+
+    @objc fileprivate func menuUp() { commandMenu?.step(-1) }
+    @objc fileprivate func menuDown() { commandMenu?.step(1) }
+    @objc fileprivate func menuTake() { commandMenu?.chooseHighlighted() }
+
+    /// Escape: the `/` word stays, the menu goes until the next keystroke or caret move.
+    @objc fileprivate func menuEscape() {
+        menuDismissed = true
+        syncMenu()
     }
 }
 

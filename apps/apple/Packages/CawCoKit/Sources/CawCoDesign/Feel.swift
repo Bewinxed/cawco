@@ -25,7 +25,7 @@ public enum SoundPreference {
 /// What the composer's motion is felt and heard as (composer-recall
 /// `felt`): each entry the wheel lands on is a detent, Cuelume's `select`
 /// rising toward older entries and falling toward newer, with a selection
-/// haptic; a hold coming up is `open` and a medium impact; a queued message
+/// haptic; a swipe bringing it up is `open` and a medium impact; a queued message
 /// lifted out or given back is a light impact, with `select` or `close`.
 /// Every sound plays at the subtle emphasis.
 ///
@@ -54,7 +54,7 @@ public enum Feel {
         selection.prepare()
     }
 
-    /// A hold on the composer brought the wheel up.
+    /// A swipe up from the composer brought the wheel up.
     public static func hold() {
         Cues.shared.play(.open)
         medium.impactOccurred()
