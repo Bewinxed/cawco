@@ -21,7 +21,10 @@
  *  3. forwards the scratch hub to the Mac's loopback (`ssh -R`);
  *  4. on an iPhone and then an iPad simulator, launches the app with
  *     `-paywall-env sandbox` on "Panel probe" and drives it with axe: taps
- *     Caw, reads the panel, captures it light and dark, taps the transcript
+ *     Caw, reads the panel and how it hangs from his glass (0pt at the join,
+ *     the trailing flank straight down, the leading foot's flare in the
+ *     panel's surface), captures it light and dark (and on the phone records
+ *     it closing and opening), taps the transcript
  *     row at a point outside it (a long intro turn first stands the row
  *     below where the panel hangs); on the phone it then presses the ask's
  *     row itself, which opens its session; on the iPad it dismisses the
@@ -42,6 +45,7 @@ import {
   type Seen,
   scratchFleet,
   until,
+  untilGone,
 } from "./scratch-fleet";
 
 const keep = process.argv.includes("--keep");
@@ -360,10 +364,13 @@ xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-e
     `  ${kind}: transcript row ${row ? `"${row.label}" ${row.value} at ${JSON.stringify(row.frame)}` : "not found"}`
   );
 
+  // The screen before the panel opens: what stands where the glass will flare.
+  const closed = await pixels(udid);
   await tap(udid, centre(head.frame));
   await pause(1200);
   nodes = await tree(udid);
   const box = panelBox(nodes);
+  await hangChecks(kind, udid, closed);
   check(
     `${kind}: tapping Caw opens the panel`,
     caw(nodes)?.value === "Open" && box !== undefined,
@@ -397,7 +404,160 @@ xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-e
   await shot(udid, `${kind}-panel-dark`);
   await mac(`xcrun simctl ui ${udid} appearance light`);
   await pause(1500);
+  if (kind === "phone") {
+    await recordOpenClose(udid, head.frame);
+  }
   return box;
+}
+
+/** Where the panel hangs, as the app logged it (CawPanel `place`), in the window's points. */
+interface Hanging {
+  flare: number;
+  glass: Frame;
+  panel: Frame;
+}
+const HANGS =
+  /panel hangs: glass (-?[\d.]+) (-?[\d.]+) (-?[\d.]+) (-?[\d.]+) panel (-?[\d.]+) (-?[\d.]+) (-?[\d.]+) (-?[\d.]+) flare (-?[\d.]+)/;
+async function hanging(udid: string): Promise<Hanging | undefined> {
+  const text = await mac(
+    `xcrun simctl spawn ${udid} log show --last 2m --style compact --predicate 'subsystem == "dev.cawco.app" AND category == "CawPanel"' | grep 'panel hangs' | tail -1`
+  ).catch(() => "");
+  const m = HANGS.exec(text);
+  if (!m) {
+    return;
+  }
+  const n = m.slice(1).map(Number);
+  return {
+    glass: { x: n[0], y: n[1], width: n[2], height: n[3] },
+    panel: { x: n[4], y: n[5], width: n[6], height: n[7] },
+    flare: n[8],
+  };
+}
+
+/** A screenshot's pixels (a BMP, read without a decoder), and the screen's width in points. */
+interface Pixels {
+  bmp: Buffer;
+  points: number;
+}
+async function pixels(udid: string): Promise<Pixels> {
+  const points = (await tree(udid))[0]?.frame?.width ?? 402;
+  const text = await mac(`F=$(mktemp -d)
+xcrun simctl io ${udid} screenshot "$F/s.png" >/dev/null 2>&1
+sips -s format bmp "$F/s.png" --out "$F/s.bmp" >/dev/null 2>&1
+base64 < "$F/s.bmp"
+rm -rf "$F"`);
+  return { bmp: Buffer.from(text.replace(/\s/g, ""), "base64"), points };
+}
+/** The mean colour, [r, g, b] 0–255, of the 2pt square centred on a point. */
+function colourAt({ bmp, points }: Pixels, x: number, y: number): number[] {
+  const offset = bmp.readUInt32LE(10);
+  const width = bmp.readInt32LE(18);
+  const signed = bmp.readInt32LE(22);
+  const height = Math.abs(signed);
+  const bytes = bmp.readUInt16LE(28) / 8;
+  const stride = Math.ceil((width * bytes) / 4) * 4;
+  const scale = width / points;
+  const sum = [0, 0, 0];
+  let count = 0;
+  for (
+    let py = Math.round((y - 1) * scale);
+    py < Math.round((y + 1) * scale);
+    py += 1
+  ) {
+    const row = signed > 0 ? height - 1 - py : py;
+    for (
+      let px = Math.round((x - 1) * scale);
+      px < Math.round((x + 1) * scale);
+      px += 1
+    ) {
+      const at = offset + row * stride + px * bytes;
+      sum[0] += bmp[at + 2];
+      sum[1] += bmp[at + 1];
+      sum[2] += bmp[at];
+      count += 1;
+    }
+  }
+  return sum.map((v) => Math.round(v / Math.max(1, count)));
+}
+const apart = (a: number[], b: number[]) =>
+  Math.max(...a.map((v, i) => Math.abs(v - b[i])));
+
+/**
+ * The panel hangs from the glass as one shape (DESIGN.md, "Caw's panel"):
+ * its top edge is the glass's foot with no gap, its trailing side runs
+ * straight down from the glass's trailing flank, and the glass's leading
+ * foot flares out into the panel's top edge in the panel's surface.
+ */
+async function hangChecks(kind: Kind, udid: string, closed: Pixels) {
+  const hung = await hanging(udid);
+  if (!hung) {
+    check(
+      `${kind}: the panel hangs from the glass's foot`,
+      false,
+      "no 'panel hangs' line in the app's log"
+    );
+    return;
+  }
+  const { glass, panel, flare } = hung;
+  const foot = glass.y + glass.height;
+  check(
+    `${kind}: the panel hangs from the glass's foot, 0pt between`,
+    Math.abs(panel.y - foot) <= 0.5,
+    `glass foot y ${foot.toFixed(2)}, panel top y ${panel.y.toFixed(2)}`
+  );
+  check(
+    `${kind}: its trailing side runs straight down from the glass's`,
+    Math.abs(panel.x + panel.width - (glass.x + glass.width)) <= 0.5,
+    `glass trailing x ${(glass.x + glass.width).toFixed(2)}, panel trailing x ${(panel.x + panel.width).toFixed(2)}`
+  );
+  // Inside the flare: just left of the glass's leading flank, just above its foot.
+  const open = await pixels(udid);
+  const inFlare = { x: glass.x - 3, y: foot - 2 };
+  const flareOpen = colourAt(open, inFlare.x, inFlare.y);
+  const flareShut = colourAt(closed, inFlare.x, inFlare.y);
+  const surface = colourAt(open, panel.x + 4, panel.y + 4);
+  check(
+    `${kind}: the glass's foot flares out into the panel (flare ${flare}pt)`,
+    apart(flareOpen, surface) <= 10,
+    `at (${inFlare.x.toFixed(1)}, ${inFlare.y.toFixed(1)}): rgb(${flareOpen}) open, rgb(${flareShut}) shut; the panel's surface rgb(${surface})`
+  );
+}
+
+/**
+ * A recording of the panel closing and opening twice on the phone
+ * (simctl's recordVideo, at the display's rate), saved beside the captures,
+ * with ffprobe's word on its frames where the Mac has ffprobe.
+ */
+async function recordOpenClose(udid: string, cawFrame: Frame) {
+  const file = `/tmp/caw-panel-${udid}.mov`;
+  const pid = (
+    await mac(
+      `rm -f ${file}; nohup xcrun simctl io ${udid} recordVideo --codec=h264 --force ${file} >/dev/null 2>&1 </dev/null & echo $!`
+    )
+  ).trim();
+  await pause(1500);
+  // Close, open, close, open: it ends open, as the pass that follows needs.
+  for (const step of ["close", "open", "close", "open"]) {
+    // biome-ignore lint/performance/noAwaitInLoops: each tap waits for the one before it to play out
+    await tap(udid, centre(cawFrame));
+    await pause(1200);
+    console.log(`  phone: recorded ${step}`);
+  }
+  const report = await mac(`kill -INT ${pid}
+for i in $(seq 1 30); do kill -0 ${pid} 2>/dev/null || break; sleep 0.5; done
+if command -v ffprobe >/dev/null; then
+  ffprobe -v error -select_streams v:0 -count_frames -show_entries stream=r_frame_rate,avg_frame_rate,nb_read_frames,duration -of default=nw=1 ${file} | tr '\\n' ' '
+else
+  echo "no ffprobe on the Mac"
+fi`).catch((error) => String(error));
+  const movie = await mac(`base64 < ${file}; rm -f ${file}`).catch(() => "");
+  const saved = join(out, "phone-open-close.mov");
+  if (movie.trim()) {
+    await Bun.write(saved, Buffer.from(movie.replace(/\s/g, ""), "base64"));
+  }
+  console.log(
+    `  recording: ${movie.trim() ? saved : "none saved"} (${report.trim()})`
+  );
 }
 
 /**
@@ -546,12 +706,9 @@ async function answerFromPanel(kind: Kind, udid: string) {
   )
     .then(() => Date.now() - tapped)
     .catch(() => undefined);
-  // `until` takes an undefined read as "no reading yet", so the read says
-  // whether the ask is gone rather than handing back the element it lacks.
-  const panelAt = await until(
+  const panelAt = await untilGone(
     `${kind}: the ask leaving the panel`,
-    async () => approve(await tree(udid)) === undefined,
-    (gone) => gone,
+    async () => approve(await tree(udid)),
     60_000
   )
     .then(() => Date.now() - tapped)

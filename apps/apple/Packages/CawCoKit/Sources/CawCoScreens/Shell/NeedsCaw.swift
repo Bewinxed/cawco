@@ -56,7 +56,8 @@ final class NeedsCawButton: UIControl {
     let standing: Bool
     private var glassSide: Double { standing ? Self.standingSide : Self.side }
     private let headSide: Double
-    private let capsule: GlassCapsule?
+    /// His own glass on a phone; on the wide bar he stands on the group's.
+    let capsule: GlassCapsule?
     private let face: CawBeat
     /// What waits, on his circle's rim (NeedsCaw.svelte, The count): an arc
     /// for each, `arc`° long with `arcGap`° between, from 12 o'clock
@@ -67,12 +68,35 @@ final class NeedsCawButton: UIControl {
     static let arc = 30.0
     static let arcGap = 8.0
     static let arcs = 9
-    /// One layer per arc, one per second-lap arc over it, and one for the
-    /// closed ring, each drawn along itself.
+    /// One layer per arc, one per second-lap arc over it, and the closed
+    /// ring's two halves, each drawn along itself.
     private let arcLayers = (0 ..< NeedsCawButton.arcs).map { _ in CAShapeLayer() }
     private let lapLayers = (0 ..< NeedsCawButton.arcs).map { _ in CAShapeLayer() }
-    private let wholeRing = CAShapeLayer()
+    private let wholeHigh = CAShapeLayer()
+    private let wholeLow = CAShapeLayer()
+    /// While his panel hangs from his glass, the glass's lower half is no
+    /// outline any more: its foot is the seam into the panel, its trailing
+    /// corner runs on down into the panel's side, its leading one flares out
+    /// into the panel's top edge. So the rim is drawn in two halves, each arc
+    /// in the half its middle lies in, and the lower half fades out while
+    /// the panel hangs (NeedsCaw.svelte `.rim.foot`, `data-joined`).
+    private let upperHalf = CALayer()
+    private let lowerHalf = CALayer()
     private(set) var count = 0
+
+    /// Whether arc `k`'s middle lies on the lower half of his circle, or of
+    /// the phone's standing outline (NeedsCaw.svelte `roundLow`, `standLow`).
+    private static func lowArc(_ k: Int, standing: Bool) -> Bool {
+        let middle = Double(k) * (arc + arcGap) + arc / 2
+        guard standing else { return cos(middle * .pi / 180) < 0 }
+        // Along the outline of half height 1, from 12 o'clock: the top edge,
+        // the trailing side, the foot, then the leading half circle.
+        let s = middle / 360 * (4 + .pi)
+        if s < 1 { return false }
+        if s < 3 { return s > 2 }
+        if s < 4 { return true }
+        return cos(.pi + (s - 4)) < 0
+    }
 
     init(standing: Bool) {
         self.standing = standing
@@ -94,12 +118,22 @@ final class NeedsCawButton: UIControl {
         }
         face.translatesAutoresizingMaskIntoConstraints = false
         addSubview(face)
-        for ring in arcLayers + lapLayers + [wholeRing] {
+        for half in [upperHalf, lowerHalf] {
+            half.actions = ["bounds": NSNull(), "position": NSNull()]
+            layer.addSublayer(half)
+        }
+        for (k, (ring, lap)) in zip(arcLayers, lapLayers).enumerated() {
+            let half = Self.lowArc(k, standing: standing) ? lowerHalf : upperHalf
+            half.addSublayer(ring)
+            half.addSublayer(lap)
+        }
+        upperHalf.addSublayer(wholeHigh)
+        lowerHalf.addSublayer(wholeLow)
+        for ring in arcLayers + lapLayers + [wholeHigh, wholeLow] {
             ring.fillColor = nil
             ring.lineWidth = Size.cCawRing
             ring.lineCap = .round
             ring.strokeEnd = 0
-            layer.addSublayer(ring)
         }
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (button: NeedsCawButton, _: UITraitCollection) in
             button.inkRing()
@@ -143,6 +177,8 @@ final class NeedsCawButton: UIControl {
     /// clockwise from 12 o'clock.
     override func layoutSubviews() {
         super.layoutSubviews()
+        upperHalf.frame = bounds
+        lowerHalf.frame = bounds
         let centre = CGPoint(x: bounds.midX, y: bounds.midY)
         let rim = CGFloat(glassSide) / 2 - Self.glassEdge - Size.cCawRing / 2
         if standing {
@@ -160,7 +196,9 @@ final class NeedsCawButton: UIControl {
             ring.path = path
             lap.path = path
         }
-        wholeRing.path = UIBezierPath(arcCenter: centre, radius: rim, startAngle: top, endAngle: top + 2 * .pi, clockwise: true).cgPath
+        // The closed circle's halves, each from its leading end clockwise: over the top, and under the foot.
+        wholeHigh.path = UIBezierPath(arcCenter: centre, radius: rim, startAngle: .pi, endAngle: 2 * .pi, clockwise: true).cgPath
+        wholeLow.path = UIBezierPath(arcCenter: centre, radius: rim, startAngle: 0, endAngle: .pi, clockwise: true).cgPath
     }
 
     /// The standing glass's arcs (NeedsCaw.svelte `outlinePath`): the outline
@@ -192,13 +230,21 @@ final class NeedsCawButton: UIControl {
             ring.path = path.cgPath
             lap.path = path.cgPath
         }
-        let whole = UIBezierPath()
-        whole.move(to: CGPoint(x: centre.x, y: centre.y - rim))
-        whole.addLine(to: CGPoint(x: centre.x + rim, y: centre.y - rim))
-        whole.addLine(to: CGPoint(x: centre.x + rim, y: centre.y + rim))
-        whole.addLine(to: CGPoint(x: centre.x, y: centre.y + rim))
-        whole.addArc(withCenter: centre, radius: rim, startAngle: .pi / 2, endAngle: -.pi / 2, clockwise: true)
-        wholeRing.path = whole.cgPath
+        // The closed outline's halves (NeedsCaw.svelte `STAND_HALF`): from the
+        // leading side's middle over the top to the trailing side's, and from
+        // there down, along the foot and round back.
+        let high = UIBezierPath()
+        high.move(to: CGPoint(x: centre.x - rim, y: centre.y))
+        high.addArc(withCenter: centre, radius: rim, startAngle: .pi, endAngle: 3 * .pi / 2, clockwise: true)
+        high.addLine(to: CGPoint(x: centre.x + rim, y: centre.y - rim))
+        high.addLine(to: CGPoint(x: centre.x + rim, y: centre.y))
+        wholeHigh.path = high.cgPath
+        let low = UIBezierPath()
+        low.move(to: CGPoint(x: centre.x + rim, y: centre.y))
+        low.addLine(to: CGPoint(x: centre.x + rim, y: centre.y + rim))
+        low.addLine(to: CGPoint(x: centre.x, y: centre.y + rim))
+        low.addArc(withCenter: centre, radius: rim, startAngle: .pi / 2, endAngle: .pi, clockwise: true)
+        wholeLow.path = low.cgPath
     }
 
     /// The first lap takes the scheme's attention ink; the second lap and
@@ -209,9 +255,28 @@ final class NeedsCawButton: UIControl {
         for ring in arcLayers {
             ring.strokeColor = ink
         }
-        for ring in lapLayers + [wholeRing] {
+        for ring in lapLayers + [wholeHigh, wholeLow] {
             ring.strokeColor = lapInk
         }
+    }
+
+    /// His panel hangs from his glass (true) or folds back (false): the
+    /// lower half of his rim fades out over `durPop` as it grows and back
+    /// over `durExit` as it folds, on `easeOut`, on the panel's clock.
+    func setJoined(_ on: Bool) {
+        let target: Float = on ? 0 : 1
+        let now = lowerHalf.presentation()?.opacity ?? lowerHalf.opacity
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        lowerHalf.opacity = target
+        CATransaction.commit()
+        guard window != nil, now != target else { return }
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = now
+        fade.toValue = target
+        fade.duration = on ? Motion.durPop : Motion.durExit
+        fade.timingFunction = Motion.easeOut.function
+        lowerHalf.add(fade, forKey: "joined")
     }
 
     /// An arc drawn in, or retracted, along its own length over `durPanel` on
@@ -259,7 +324,8 @@ final class NeedsCawButton: UIControl {
             show(ring, !closed && next > k, animated: animated)
             show(lap, !closed && next > Self.arcs + k, animated: animated)
         }
-        show(wholeRing, closed, animated: animated)
+        show(wholeHigh, closed, animated: animated)
+        show(wholeLow, closed, animated: animated)
     }
 
     /// His needs-you beat, once; nothing with less motion.

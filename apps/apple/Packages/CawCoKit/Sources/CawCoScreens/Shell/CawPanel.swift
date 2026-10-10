@@ -14,18 +14,30 @@ import UIKit
 /// view over its columns, with nothing under it, so the rest of the app keeps
 /// working while it is open (owner: "that goes against the multitasking
 /// approach we have"). A tap anywhere outside it closes it and still lands on
-/// whatever it fell on (`dismissal`). It is `.kit-pop`'s card: the raised
-/// surface, a 1pt control border, `radiusLg` and the overlay shadow, grown out
-/// of Caw from the pop scale and rise over `durPop` on the drawer curve and
-/// gone over `durExit`; with less motion it fades.
+/// whatever it fell on (`dismissal`).
+///
+/// It hangs from the glass Caw stands on as one shape with it (DESIGN.md,
+/// "Caw's panel"; a `HangCard`): its top edge is the glass's foot, its
+/// trailing side runs straight on down from the glass's trailing flank,
+/// square there, and the glass's leading foot flares out by `radiusLg` into
+/// its top edge. On a phone his glass is a tab tucked into the screen's
+/// trailing edge and the panel is too: its trailing side is the screen's
+/// edge, square at top and foot with no edge drawn there, and its leading
+/// side keeps the phone's 12pt margin. While it hangs the glass takes its
+/// material and edge (`GlassCapsule.setJoined`) and the lower half of his
+/// rim fades out (`NeedsCawButton.setJoined`). It grows out of the glass
+/// over `durPop` and folds back over `durExit` on `easeOut`; with less
+/// motion it fades.
 final class CawPanel: UIView, UIGestureRecognizerDelegate {
-    /// Its top under Caw's glass, pt.
-    static let gap: CGFloat = 8
-    /// Kept from the screen's edges, pt.
+    /// Kept from a wide screen's edges, pt.
     static let edge: CGFloat = 8
-    /// Its width beside a wide screen's bar, pt; a phone's is the screen's less `edge` each side.
+    /// A phone's margin on its leading side (DESIGN.md, "Caw's panel": 12px).
+    static let phoneMargin: CGFloat = 12
+    /// Its width at most, pt.
     static let wide: CGFloat = 380
     static let tallest: CGFloat = 560
+    /// Its content stands this far in from its drawn edge (DESIGN.md, "Caw's panel": 7px).
+    static let inset: CGFloat = 7
     private static let log = Logger(subsystem: "dev.cawco.app", category: "CawPanel")
 
     /// A row chosen: the panel has begun to close.
@@ -38,11 +50,12 @@ final class CawPanel: UIView, UIGestureRecognizerDelegate {
     var onOpenChange: (Bool) -> Void = { _ in }
 
     private(set) var open = false
-    private weak var source: UIView?
-    private let card = UIView()
+    /// The glass it hangs from, and Caw standing on it.
+    private weak var glass: GlassCapsule?
+    private weak var head: NeedsCawButton?
+    private let card = HangCard()
     private let scroll = UIScrollView()
     private let list = UIStackView()
-    private var motion: UIViewPropertyAnimator?
     /// What the rows said last: they are made again only when that changes.
     private var drawn = ""
 
@@ -54,28 +67,20 @@ final class CawPanel: UIView, UIGestureRecognizerDelegate {
     init() {
         super.init(frame: .zero)
         isHidden = true
-        layer.cornerRadius = Radius.radiusLg
-        layer.cornerCurve = .continuous
-        boxShadow = Shadow.shadowOverlay
         card.frame = bounds
         card.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        card.backgroundColor = Palette.surfaceRaised
-        card.layer.cornerRadius = Radius.radiusLg
-        card.layer.cornerCurve = .continuous
-        card.layer.borderWidth = 1
-        card.clipsToBounds = true
         card.accessibilityContainerType = .semanticGroup
         card.accessibilityLabel = "Notifications"
         card.accessibilityIdentifier = "caw-panel"
         addSubview(card)
-        scroll.frame = card.bounds
+        scroll.frame = card.content.bounds
         scroll.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         scroll.alwaysBounceVertical = false
         scroll.showsHorizontalScrollIndicator = false
-        card.addSubview(scroll)
+        card.content.addSubview(scroll)
         list.axis = .vertical
         list.isLayoutMarginsRelativeArrangement = true
-        list.directionalLayoutMargins = NSDirectionalEdgeInsets(top: Space.space2, leading: Space.space2, bottom: Space.space2, trailing: Space.space2)
+        list.directionalLayoutMargins = NSDirectionalEdgeInsets(top: Self.inset, leading: Self.inset, bottom: Self.inset, trailing: Self.inset)
         list.translatesAutoresizingMaskIntoConstraints = false
         scroll.addSubview(list)
         NSLayoutConstraint.activate([
@@ -85,17 +90,11 @@ final class CawPanel: UIView, UIGestureRecognizerDelegate {
             list.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor),
             list.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor),
         ])
-        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (panel: CawPanel, _: UITraitCollection) in panel.paint() }
-        paint()
     }
 
     @available(*, unavailable)
     required init?(coder _: NSCoder) {
         fatalError("CawPanel is built in code")
-    }
-
-    private func paint() {
-        card.layer.borderColor = Palette.borderControl.resolvedColor(with: traitCollection).cgColor
     }
 
     // MARK: Rows
@@ -197,28 +196,35 @@ final class CawPanel: UIView, UIGestureRecognizerDelegate {
 
     // MARK: Where it stands
 
-    /// Under Caw's glass: across a phone less `edge` each side; beside a
-    /// wide bar `wide` across, its end on his. As tall as its rows, up to
-    /// what the screen leaves under him or `tallest`, its list scrolling past that.
+    /// On the glass's foot with no gap, flush with its trailing flank: on a
+    /// phone the screen's edge, its leading side `phoneMargin` in; on a wide
+    /// screen `wide` across, kept `edge` inside the screen. As tall as its
+    /// rows, up to what the screen leaves under the glass or `tallest`, its
+    /// list scrolling past that. The neck is the glass's span along its top
+    /// edge, flared on the leading side by the glass's `flare`.
     private func place(animated: Bool = false) {
-        guard let host = superview, let source, source.window != nil else { return }
-        let cap = source.convert(source.bounds, to: host)
+        guard let host = superview, let glass, glass.window != nil else { return }
+        let cap = Self.restingBox(of: glass, in: host)
         let compact = host.traitCollection.horizontalSizeClass == .compact
-        let width = compact ? host.bounds.width - 2 * Self.edge : min(Self.wide, host.bounds.width - 2 * Self.edge)
-        let x = compact ? Self.edge : min(max(Self.edge, cap.maxX - width), host.bounds.width - Self.edge - width)
-        let top = cap.maxY + Self.gap
+        let width = compact
+            ? min(Self.wide, cap.maxX - Self.phoneMargin)
+            : min(Self.wide, cap.maxX - Self.edge)
+        let x = cap.maxX - width
+        let top = cap.maxY
         let room = host.bounds.height - host.safeAreaInsets.bottom - Self.edge - top
         let fit = list.systemLayoutSizeFitting(
             CGSize(width: width, height: UIView.layoutFittingCompressedSize.height),
             withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel
         ).height
         let size = CGSize(width: width, height: max(0, min(ceil(fit), room, Self.tallest)))
-        // It grows from the point on its top edge under Caw.
-        let anchor = CGPoint(x: min(1, max(0, (cap.midX - x) / width)), y: 0)
+        card.openEnd = compact
+        card.hang(from: HangNeck(start: cap.minX - x, end: cap.maxX - x, flareStart: glass.flare, flareEnd: 0, flush: .end))
+        // Where it hangs, in the shell's points (the window's): the probe reads the join off this.
+        let box = { (r: CGRect) in String(format: "%.2f %.2f %.2f %.2f", r.minX, r.minY, r.width, r.height) }
+        let line = "panel hangs: glass \(box(cap)) panel \(box(CGRect(origin: CGPoint(x: x, y: top), size: size))) flare \(glass.flare)"
+        Self.log.notice("\(line, privacy: .public)")
         let apply = {
-            self.layer.anchorPoint = anchor
-            self.bounds = CGRect(origin: .zero, size: size)
-            self.layer.position = CGPoint(x: x + anchor.x * size.width, y: top)
+            self.frame = CGRect(origin: CGPoint(x: x, y: top), size: size)
             self.scroll.contentSize = CGSize(width: width, height: ceil(fit))
         }
         if animated, !UIAccessibility.isReduceMotionEnabled {
@@ -228,63 +234,52 @@ final class CawPanel: UIView, UIGestureRecognizerDelegate {
         }
     }
 
+    /// A view's box in `host` as it stands at rest: from each view's centre
+    /// and bounds, so the press that opens the panel, still scaling Caw (and
+    /// the phone's glass inside him) as it lifts, never moves the neck.
+    private static func restingBox(of view: UIView, in host: UIView) -> CGRect {
+        let local = CGRect(x: view.center.x - view.bounds.width / 2, y: view.center.y - view.bounds.height / 2,
+                           width: view.bounds.width, height: view.bounds.height)
+        guard let parent = view.superview, parent !== host else { return local }
+        let outer = restingBox(of: parent, in: host)
+        return local.offsetBy(dx: outer.minX - parent.bounds.minX, dy: outer.minY - parent.bounds.minY)
+    }
+
     /// Caw moved under it (a rotation, the rail stepping aside): it follows him.
     func follow() {
-        guard open, motion == nil else { return }
+        guard open else { return }
         place()
     }
 
     // MARK: Open and close
 
-    /// Where it comes from and goes back to: the pop scale, `popRise` up toward Caw.
-    private var away: CGAffineTransform {
-        UIAccessibility.isReduceMotionEnabled ? .identity
-            : CGAffineTransform(translationX: 0, y: -Motion.popRise).scaledBy(x: Motion.popScale, y: Motion.popScale)
-    }
-
-    func show(from source: UIView) {
-        self.source = source
+    /// Grows out of `glass`, the glass `head` stands on.
+    func show(from head: NeedsCawButton, glass: GlassCapsule) {
+        if let previous = self.glass, previous !== glass { previous.setJoined(false) }
+        if let previous = self.head, previous !== head { previous.setJoined(false) }
+        self.head = head
+        self.glass = glass
         superview?.bringSubviewToFront(self)
-        motion?.stopAnimation(true)
-        if isHidden {
-            alpha = 0
-            transform = .identity
-            place()
-            transform = away
-        } else {
-            place()
-        }
         isHidden = false
+        place()
+        layoutIfNeeded()
         setOpen(true)
-        let move = Motion.easeDrawer.animator(Motion.durPop) {
-            self.alpha = 1
-            self.transform = .identity
-        }
-        move.addCompletion { [weak self] _ in self?.motion = nil }
-        motion = move
-        move.startAnimation()
+        glass.setJoined(true)
+        head.setJoined(true)
+        card.grow()
         UIAccessibility.post(notification: .layoutChanged, argument: list.arrangedSubviews.first)
     }
 
     func close() {
         guard open else { return }
         setOpen(false)
-        motion?.stopAnimation(true)
-        let leaving = away
-        let move = Motion.easeOut.animator(Motion.durExit) {
-            self.alpha = 0
-            self.transform = leaving
-        }
-        move.addCompletion { [weak self] _ in
-            guard let self else { return }
-            motion = nil
-            guard !open else { return }
+        glass?.setJoined(false)
+        head?.setJoined(false)
+        card.fold { [weak self] in
+            guard let self, !open else { return }
             isHidden = true
-            transform = .identity
         }
-        motion = move
-        move.startAnimation()
-        UIAccessibility.post(notification: .layoutChanged, argument: source)
+        UIAccessibility.post(notification: .layoutChanged, argument: head)
     }
 
     private func setOpen(_ next: Bool) {

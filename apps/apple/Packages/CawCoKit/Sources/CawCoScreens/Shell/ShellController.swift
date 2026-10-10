@@ -145,9 +145,10 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         for cluster in [mainCluster, compactCluster, sessionCluster] {
             cluster.onJump = { [weak self] source in self?.openJump(.view(source)) }
             cluster.onMachines = { [weak self] source in self?.openMachines(from: source) }
-            cluster.onCaw = { [weak self] head in
-                guard let self else { return }
-                if cawPanel.open { cawPanel.close() } else { cawPanel.show(from: head) }
+            cluster.onCaw = { [weak self, weak cluster] head in
+                guard let self, let cluster else { return }
+                // It hangs from the glass he stands on: his own tab on a phone, the bar's group on a wide screen.
+                if cawPanel.open { cawPanel.close() } else { cawPanel.show(from: head, glass: cluster.glass) }
             }
         }
         cawPanel.onChoose = { [weak self] item in self?.openWaiting(item) }

@@ -448,6 +448,10 @@ final class TopBarCluster: UIView {
     /// Caw's head as this bar shows it.
     var caw: NeedsCawButton { compact ? phoneCaw : groupCaw }
 
+    /// The glass he stands on, which his panel hangs from: his own tab on a
+    /// phone, the bar's glass group on a wide screen (NeedsCaw.svelte `glass`).
+    var glass: GlassCapsule { compact ? phoneCaw.capsule ?? group : group }
+
     /// Where the first drawn control starts, in the cluster's own space.
     let leadingEdge = 0.0
 
