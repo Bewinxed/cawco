@@ -59,7 +59,8 @@ checked() {
   local label=$1 s e status
   shift
   s=$(date +%s); "$@"; status=$?; e=$(date +%s)
-  if [ "$status" -eq 0 ]; then works "$label ($((e - s))s)" PASS; else works "$label ($((e - s))s)" "FAIL (exit $status)"; fi
+  if [ "$status" -eq 0 ]; then row_status=PASS; else row_status="FAIL (exit $status)"; fi
+  works "$label ($((e - s))s)" "$row_status"
 }
 # bootstrap_look_up of the mach service $1 from this process: prints the
 # kern_return_t, exits 0 when the service was reached (1100 is a sandbox
@@ -233,16 +234,62 @@ step "still working"
 noise=$(r 'pwd -P >/dev/null; cd .. && cd - >/dev/null' 2>&1 | grep -c "getcwd\|shell-init\|error retrieving current directory")
 echo "a command's shell reads its directory: $noise getcwd line(s)"
 [ "$noise" -eq 0 ] || { echo "a command's shell cannot read its directory"; open=$((open + 1)); }
-checked "git commit in the clone" r 'set -o pipefail; date +%s > srt-mac-probe.txt && git add -A && git commit -qm "srt mac probe" && git log --oneline -1'
+# Where a failed xcodebuild wrote what the boundary refused, found from here:
+# Seatbelt does not log these denials. Reruns the same build (the shim adds
+# -packageCachePath and the DerivedData default) with its whole output, then
+# once with CFFIXED_USER_HOME at a scratch home, which moves every path
+# Foundation derives from the home dir, and lists where "manifests" landed
+# there and in the workspace cache. fs_usage only where sudo needs no password.
+xcodebuild_diagnosis() {
+  local cache xhome trace
+  cache=$(r 'printf %s "$(dirname "$XDG_CACHE_HOME")"')
+  echo "    Seatbelt denials in the unified log since $1:"
+  log show --start "$1" --style compact --predicate 'sender == "Sandbox"' 2>/dev/null | grep -E 'deny.*(xcodebuild|swift|XCBBuildService|SWBBuildService)' | grep -v mach-lookup | sed -E 's/.*(deny\([0-9]+\) [a-z*-]+ .*)/\1/' | sort | uniq -c | sort -rn | head -10 | sed 's/^/      /'
+  echo "    the same build, its defaults and errors:"
+  if sudo -n true 2>/dev/null; then
+    trace=$scratch/fs_usage.txt
+    sudo -n fs_usage -w -f filesys > "$trace" 2>&1 &
+    local tracer=$!
+    sleep 1
+  fi
+  r "cd '$xcode_dir' && xcodebuild -scheme '$xcode_scheme' -destination 'generic/platform=iOS Simulator' build" > "$scratch/xcb.out" 2>&1
+  if [ -n "${tracer:-}" ]; then
+    sudo -n kill "$tracer" 2>/dev/null; wait "$tracer" 2>/dev/null
+    echo "    fs_usage, paths naming manifests or org.swift.swiftpm:"
+    grep -E 'manifests|org\.swift\.swiftpm' "$trace" | grep -E 'xcodebuild|SWBBuild|XCBBuild|swift' | awk '{ for (i = 1; i <= NF; i++) if ($i ~ /^\//) print $i }' | sort | uniq -c | sort -rn | head -10 | sed 's/^/      /'
+  else
+    echo "    (no passwordless sudo: fs_usage not run)"
+  fi
+  sed -n '/^User defaults from command line:/,/^$/p' "$scratch/xcb.out" | sed 's/^/      /'
+  grep -iE 'error|couldn.t|not permitted|denied' "$scratch/xcb.out" | head -8 | sed 's/^/      /'
+  echo "    dirs named manifests or ManifestLoading in the workspace cache ($cache):"
+  find "$cache" -maxdepth 6 -type d \( -name manifests -o -name ManifestLoading -o -name repositories \) 2>/dev/null | sed 's/^/      /'
+  xhome=$(r 'printf %s "$TMPDIR"')/xcode-home
+  r "mkdir -p '$xhome' && cd '$xcode_dir' && CFFIXED_USER_HOME='$xhome' xcodebuild -scheme '$xcode_scheme' -destination 'generic/platform=iOS Simulator' build" > "$scratch/xcb-home.out" 2>&1
+  echo "    with CFFIXED_USER_HOME=$xhome: exit $?; what it made there:"
+  find "$xhome" -maxdepth 6 -type d \( -name manifests -o -name ManifestLoading -o -name org.swift.swiftpm \) 2>/dev/null | sed "s|^$xhome|      ~xhome|"
+  grep -iE 'error|couldn.t|not permitted|denied|BUILD (SUCCEEDED|FAILED)' "$scratch/xcb-home.out" | head -5 | sed 's/^/      /'
+}
+
+checked "git commit in the clone" r'set -o pipefail; date +%s > srt-mac-probe.txt && git add -A && git commit -qm "srt mac probe" && git log --oneline -1'
 if [ -n "$swift_package" ]; then
   checked "swift build ($swift_package)" r "set -o pipefail; cd '$swift_package' && swift build 2>&1 | tail -3"
 fi
 if [ -n "$xcode_dir" ]; then
   if [ "$xcode_scheme" = auto ]; then
-    xcode_scheme=$(r "cd '$xcode_dir' && xcodebuild -list -json 2>/dev/null" | perl -MJSON::PP -0777 -ne 'my $j = eval { decode_json($_) } or exit; my $s = ($j->{workspace} // $j->{project} // {})->{schemes} // []; print $s->[0] // ""')
+    # A package's first product is one of the schemes Xcode makes for it.
+    xcode_scheme=$(r "cd '$xcode_dir' && swift package dump-package 2>/dev/null" | perl -MJSON::PP -0777 -ne 'my $j = eval { decode_json($_) } or exit; print $j->{products}[0]{name} // ""')
     echo "xcodebuild scheme in $xcode_dir: ${xcode_scheme:-none found}"
   fi
-  checked "xcodebuild simulator build ($xcode_dir, ${xcode_scheme:-no scheme})" r "set -o pipefail; cd '$xcode_dir' && xcodebuild -scheme '$xcode_scheme' -destination 'generic/platform=iOS Simulator' build 2>&1 | tail -3"
+  if [ -z "$xcode_scheme" ]; then
+    works "xcodebuild simulator build ($xcode_dir)" "FAIL (no scheme)"
+  else
+    before=$(date '+%Y-%m-%d %H:%M:%S')
+    checked "xcodebuild simulator build ($xcode_dir, $xcode_scheme)" r "set -o pipefail; cd '$xcode_dir' && xcodebuild -scheme '$xcode_scheme' -destination 'generic/platform=iOS Simulator' build 2>&1 | tail -3"
+    case "${row_status:-}" in
+      FAIL*) xcodebuild_diagnosis "$before" ;;
+    esac
+  fi
 fi
 cat > "$state/tmp/pw-check.mjs" <<'JS'
 import { createServer } from "node:http";
