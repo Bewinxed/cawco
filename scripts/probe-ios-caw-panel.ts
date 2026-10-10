@@ -223,8 +223,36 @@ const inside = (f: Frame, p: { x: number; y: number }) =>
   p.x >= f.x && p.x <= f.x + f.width && p.y >= f.y && p.y <= f.y + f.height;
 const pause = (ms: number) => Bun.sleep(ms);
 /** One finger's tap at a point, in points. */
-const tap = (udid: string, p: { x: number; y: number }) =>
-  axe(`tap -x ${Math.round(p.x)} -y ${Math.round(p.y)} --udid ${udid}`);
+/**
+ * One finger's tap at a point, in points. A tap axe still cannot place
+ * after its tries ("invisible due to a fullscreen dialog") leaves what was
+ * over the app: a screenshot beside the captures and the tree's labels.
+ */
+async function tap(udid: string, p: { x: number; y: number }) {
+  try {
+    await axe(`tap -x ${Math.round(p.x)} -y ${Math.round(p.y)} --udid ${udid}`);
+  } catch (error) {
+    blocked += 1;
+    console.log(
+      `  tap at (${Math.round(p.x)}, ${Math.round(p.y)}) blocked: what was on screen follows`
+    );
+    await shot(udid, `tap-blocked-${blocked}`).catch(() => undefined);
+    const labels = await mac(`${AXE} describe-ui --udid ${udid}`)
+      .then(
+        (raw) =>
+          JSON.stringify(JSON.parse(raw))
+            .match(/"AXLabel":"[^"]*"/g)
+            ?.slice(0, 30)
+            .join(" ") ?? "no labels"
+      )
+      .catch(
+        (reason) => `describe-ui failed too: ${String(reason).slice(0, 160)}`
+      );
+    console.log(`  the tree's first labels: ${labels}`);
+    throw error;
+  }
+}
+let blocked = 0;
 
 /**
  * axe's own failures to reach a simulator's automation session, which a
@@ -620,7 +648,9 @@ async function hangChecks(kind: Kind, udid: string, closed: Pixels) {
   const inFlare = { x: glass.x - 3, y: panel.y - 2 };
   const flareOpen = colourAt(open, inFlare.x, inFlare.y);
   const flareShut = colourAt(closed, inFlare.x, inFlare.y);
-  const surface = colourAt(open, panel.x + 4, panel.y + 4);
+  // The panel's own surface: the middle of its top padding, clear of its
+  // rounded corners (a corner sample read the corner's cut) and its text.
+  const surface = colourAt(open, panel.x + panel.width / 2, panel.y + 4);
   check(
     `${kind}: the glass's foot flares out into the panel (flare ${flare}pt)`,
     apart(flareOpen, surface) <= 10,
