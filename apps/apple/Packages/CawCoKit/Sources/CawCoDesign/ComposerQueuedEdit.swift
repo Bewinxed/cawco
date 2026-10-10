@@ -299,7 +299,7 @@ final class QueuedEdit {
         ring.insertSubview(halo, belowSubview: composer.pill)
         self.halo = halo
         let row = EditRow(keyboard: EditRow.keyboard)
-        row.onKeep = { [weak self] in self?.giveBack(nil) }
+        row.onKeep = { [weak self] in self?.returnEdit(nil) }
         // Inset past the shoulders' curve, set from the shape's own taper.
         inset = (Recall.taper(width: geometry.width, extra: Recall.editExtra) + Radius.radiusLg + 8).rounded()
         row.frame = CGRect(x: inset, y: -Recall.editExtra, width: max(0, geometry.width - 2 * inset), height: Recall.editExtra)
@@ -328,7 +328,7 @@ final class QueuedEdit {
 
     /// Gives the words back to their bubble: `replacement` takes their
     /// place, or they go back as they were.
-    func giveBack(_ replacement: String?) {
+    func returnEdit(_ replacement: String?) {
         guard !leaving else { return }
         leaving = true
         let words = replacement ?? entry.text

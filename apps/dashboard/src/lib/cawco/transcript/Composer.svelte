@@ -1284,7 +1284,7 @@
       }
       if (event.key === "Escape") {
         event.preventDefault();
-        giveBack();
+        returnEdit();
         return true;
       }
       return false;
@@ -1471,7 +1471,7 @@
     if (recall) {
       wheel?.back();
     } else if (draft.lifted) {
-      giveBack();
+      returnEdit();
     } else {
       openRecall(true);
     }
@@ -1777,7 +1777,7 @@
    * The words go back to their bubble: as they were, or as `replaced` says
    * they now are. What stepped aside comes back into the field.
    */
-  async function giveBack(replaced?: string): Promise<void> {
+  async function returnEdit(replaced?: string): Promise<void> {
     const lift = draft.lifted;
     if (!(lift && field)) {
       return;
@@ -1832,7 +1832,7 @@
       return;
     }
     if (words === lift.words.trim()) {
-      giveBack();
+      returnEdit();
       return;
     }
     try {
@@ -1842,7 +1842,7 @@
       if (draft.lifted !== lift) {
         return;
       }
-      giveBack(words);
+      returnEdit(words);
       watchReplace(draft, {
         id: lift.id,
         instanceId: lift.instanceId,
@@ -1902,7 +1902,7 @@
       liftAsk.message = null;
       if (draft.lifted?.id !== asked.id) {
         if (draft.lifted) {
-          giveBack();
+          returnEdit();
         }
         liftQueued(asked);
       }
@@ -2146,7 +2146,7 @@
       wheeling = false;
     }
     if (draft.lifted) {
-      giveBack();
+      returnEdit();
     }
     if (document.activeElement === field) {
       askRefocus = true;
@@ -2567,7 +2567,7 @@
           </span>
           <Button
             class="keep touch-hit"
-            onclick={() => giveBack()}
+            onclick={() => returnEdit()}
             size="xs"
             variant="ghost"
           >

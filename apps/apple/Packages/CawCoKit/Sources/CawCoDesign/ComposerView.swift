@@ -843,9 +843,9 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
             let words = field.text.trimmingCharacters(in: .whitespacesAndNewlines)
             // Unchanged, it simply goes back: nothing to withdraw and send again.
             if words == edit.entry.text.trimmingCharacters(in: .whitespacesAndNewlines) {
-                edit.giveBack(nil)
+                edit.returnEdit(nil)
             } else if !words.isEmpty {
-                edit.giveBack(words)
+                edit.returnEdit(words)
             }
             return
         }
@@ -1022,7 +1022,7 @@ extension ComposerView {
     @objc private func recallSend() { wheel?.take(send: true) }
 
     @objc private func recallEscape() {
-        if let wheel { wheel.escape() } else { edit?.giveBack(nil) }
+        if let wheel { wheel.escape() } else { edit?.returnEdit(nil) }
     }
 
     /// Return from the field (the software keyboard's too).
@@ -1040,7 +1040,7 @@ extension ComposerView {
         if let wheel {
             wheel.backToDraft()
         } else if let edit {
-            edit.giveBack(nil)
+            edit.returnEdit(nil)
         } else if binding != nil {
             openWheel(keys: true)
         }
