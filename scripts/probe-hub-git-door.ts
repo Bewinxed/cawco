@@ -65,6 +65,8 @@ const owner: Record<string, string> = {
   XDG_CONFIG_HOME: fleet.env.XDG_CONFIG_HOME as string,
   XDG_DATA_HOME: fleet.env.XDG_DATA_HOME as string,
   XDG_CACHE_HOME: fleet.env.XDG_CACHE_HOME as string,
+  // As a login shell has it: `cawco git-credential` finds the agent there.
+  XDG_RUNTIME_DIR: fleet.env.XDG_RUNTIME_DIR as string,
 };
 const shIn =
   (env: Record<string, string>) =>
@@ -130,7 +132,11 @@ try {
   const answer = await fetch("http://cawco/", {
     method: "POST",
     body: `protocol=http\nhost=${new URL(fleet.base).host}\n`,
-    unix: join(home, ".cawco", "git-credential.sock"),
+    unix: join(
+      fleet.env.XDG_RUNTIME_DIR as string,
+      "cawco",
+      "git-credential.sock"
+    ),
   });
   const login = Object.fromEntries(
     (await answer.text())

@@ -84,6 +84,7 @@ import {
   workspaceCacheDir,
   workspaceCacheEnv,
   workspaceCaches,
+  workspaceDoorDir,
   workspacePolicyFile,
   workspaceReadOnlyDir,
   workspaceScratchDir,
@@ -128,7 +129,12 @@ import {
   removeStandIns,
   rewriteLeftFiles,
 } from "./stand-ins";
-import { closeToolDoor, openToolDoor, toolDoorOf } from "./tool-door";
+import {
+  closeToolDoor,
+  openToolDoor,
+  socketPlace,
+  toolDoorOf,
+} from "./tool-door";
 
 /** A running boundary, as a harness uses it. */
 export interface Boundary {
@@ -452,7 +458,7 @@ const watchedJudges = new Map<string, SessiondClient>();
  * imports too) are written into the state dir first.
  *
  * Its form is a hash of what it runs and is handed; one of each form runs,
- * on its own socket (`judge-<form>.sock`), under its own sessiond id. So a new
+ * on its own socket (`judge-<form>.sock` in `workspaceDoorDir`), under its own sessiond id. So a new
  * build's judge starts beside the old one, and the hook is pointed at it only
  * once it answers: a hook already running still reaches the old one, which
  * leaves on its own once the hook has not named it for as long as a hook
@@ -490,7 +496,12 @@ const judgeFor = async (
     .update([serverText, judgeText, ...handed, keeper].join("\0"))
     .digest("hex")
     .slice(0, JUDGE_FORM_LENGTH);
-  const socket = join(stateDir(id), `judge-${form}.sock`);
+  // In the workspace's socket dir, not its state dir: under a deep HOME the
+  // state dir's path passes a socket's length, and the hook's
+  // `pack_sockaddr_un` would cut it to a name nothing listens on. A judge of
+  // this form may be listening there already, so nothing is removed.
+  const socket = join(workspaceDoorDir(id), `judge-${form}.sock`);
+  await socketPlace(socket, "the workspace's judge");
   const procId = judgeProcId(id, form);
   // Written each time: OpenCode's plugin imports this build's judge from here.
   await Promise.all([
@@ -2524,7 +2535,8 @@ const launch = async (
  * (`stand-ins.ts`). Then its state goes, and on Linux
  * srt's temp dirs with the sockets srt leaves there (REPORT.md §5o).
  * Its judges go last, on every keeper that runs one: with the state dir gone
- * there is no workspace to start one again for ({@link watchJudge}).
+ * there is no workspace to start one again for ({@link watchJudge}); then
+ * the dir its sockets were in.
  */
 export const closeBoundary = async (ref: WorkspaceRef): Promise<void> => {
   forgetStale(ref.id);
@@ -2568,4 +2580,7 @@ export const closeBoundary = async (ref: WorkspaceRef): Promise<void> => {
   }
   await rm(stateDir(ref.id), { recursive: true, force: true });
   await signalAll((procId) => isJudgeOf(procId, ref.id));
+  // Its sockets' dir, once nothing listens there (`workspaceDoorDir`; on
+  // macOS the read-only dir, gone with the state dir).
+  await rm(workspaceDoorDir(ref.id), { recursive: true, force: true });
 };

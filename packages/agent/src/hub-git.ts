@@ -46,7 +46,7 @@ import {
   safeGitArgv,
 } from "@cawco/core/safe-git";
 import { hubGitEnv, hubGitLogin, isHubRemote, withoutCredential } from "./move";
-import { prepareDoor } from "./tool-door";
+import { prepareDoor, socketPlace } from "./tool-door";
 
 /** A workspace's git door. */
 export const gitDoorOf = (id: string): string =>
@@ -402,8 +402,8 @@ export const openGitDoor = async (ref: WorkspaceRef): Promise<void> => {
 };
 
 /**
- * Stops serving workspace `id`'s git door. Its door dir goes too when it is
- * one of its own (under the runtime dir): the tool door closes first.
+ * Stops serving workspace `id`'s git door. The dir it is in goes once the
+ * workspace's judges are gone too (boundary.ts `closeBoundary`).
  */
 export const closeGitDoor = async (id: string): Promise<void> => {
   const server = doors.get(id);
@@ -412,9 +412,6 @@ export const closeGitDoor = async (id: string): Promise<void> => {
     await new Promise<void>((done) => server.close(() => done()));
   }
   await rm(gitDoorOf(id), { force: true });
-  if (workspaceDoorDir(id) !== workspaceReadOnlyDir(id)) {
-    await rm(workspaceDoorDir(id), { recursive: true, force: true });
-  }
 };
 
 const shellWord = (word: string): string =>
@@ -482,6 +479,7 @@ export const serveHubCredential = async (): Promise<void> => {
     return;
   }
   const path = hubCredentialSocket();
+  await socketPlace(path, "the agent's credential socket");
   await rm(path, { force: true });
   credentialServer = Bun.serve({
     unix: path,

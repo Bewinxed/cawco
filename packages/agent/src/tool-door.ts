@@ -13,7 +13,7 @@
  */
 import { mkdir, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { UNIX_SOCKET_PATH_MAX, workspaceDoorDir } from "@cawco/core/paths";
+import { socketPathProblem, workspaceDoorDir } from "@cawco/core/paths";
 import { harnessMcpUrl } from "./delegation";
 
 /** A workspace's door socket. */
@@ -21,19 +21,24 @@ export const toolDoorOf = (id: string): string =>
   join(workspaceDoorDir(id), "tools.sock");
 
 /**
- * A door socket's place, ready to listen on: refused up front when its path
- * is longer than a unix socket's holds (the listen would fail, or bind a cut
- * name), its dir made (0700, as a runtime dir is), and a socket an earlier
- * agent left removed.
+ * A workspace socket's place: refused up front when its path is longer than
+ * a unix socket's holds (the listen would fail, or bind a cut name that no
+ * caller reaches), and its dir made (0700, as a runtime dir is).
  */
-export const prepareDoor = async (path: string): Promise<void> => {
-  const bytes = Buffer.byteLength(path);
-  if (bytes > UNIX_SOCKET_PATH_MAX) {
-    throw new Error(
-      `the workspace door ${path} is ${bytes} bytes, past the ${UNIX_SOCKET_PATH_MAX} a unix socket's path holds: give the agent a short XDG_RUNTIME_DIR`
-    );
+export const socketPlace = async (
+  path: string,
+  what: string
+): Promise<void> => {
+  const problem = socketPathProblem(path, what);
+  if (problem) {
+    throw new Error(problem);
   }
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+};
+
+/** A door socket's place ({@link socketPlace}), with a socket an earlier agent left removed. */
+export const prepareDoor = async (path: string): Promise<void> => {
+  await socketPlace(path, "the workspace door");
   await rm(path, { force: true });
 };
 

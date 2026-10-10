@@ -336,11 +336,17 @@ export const workspacesDir = (): string =>
 /**
  * The agent's socket that answers `cawco git-credential` outside a session:
  * this machine's credential for the hub's git remote, so a checkout whose
- * `origin` is the hub pulls and pushes from a terminal. Under `~/.cawco`,
- * which no workspace reads or connects into.
+ * `origin` is the hub pulls and pushes from a terminal. Beside sessiond's
+ * own socket (`sessiondEndpoint`): `$XDG_RUNTIME_DIR/cawco` on Linux, where
+ * a deep HOME cannot push it past a socket path's length, else `~/.cawco`.
+ * No workspace reads or connects into either.
  */
-export const hubCredentialSocket = (): string =>
-  join(homedir(), ".cawco", "git-credential.sock");
+export const hubCredentialSocket = (): string => {
+  const runtime = process.env.XDG_RUNTIME_DIR;
+  return process.platform === "linux" && runtime
+    ? join(runtime, "cawco", "git-credential.sock")
+    : join(homedir(), ".cawco", "git-credential.sock");
+};
 
 /** One workspace's state dir: its executor, hook, policy and boundary record. */
 export const workspaceStateDir = (id: string): string =>
@@ -364,13 +370,14 @@ export const workspaceReadOnlyDir = (id: string): string =>
   join(workspaceStateDir(id), "ro");
 
 /**
- * Where a workspace's door sockets are (its tool door and git door). On
- * Linux, a dir of its own under `$XDG_RUNTIME_DIR`, as srt keeps its own
- * sockets there: a unix socket's path holds at most 107 bytes, and one in
- * the read-only dir under a deep HOME passes that. Named by the id's first 8
- * characters, as its clone (`<repo>-<id8>`) and branch (`ws/<id8>`) are.
- * Elsewhere, and without a runtime dir, the read-only dir. Read inside the
- * boundary either way.
+ * Where a workspace's unix sockets are: its tool door, its git door and its
+ * judges'. On Linux, a dir of its own under `$XDG_RUNTIME_DIR`, as srt keeps
+ * its own sockets there: a socket's path holds at most
+ * {@link UNIX_SOCKET_PATH_MAX} bytes, and one in the state dir under a deep
+ * HOME passes that. Named by the id's first 8 characters, as its clone
+ * (`<repo>-<id8>`) and branch (`ws/<id8>`) are. Elsewhere, and without a
+ * runtime dir, the read-only dir. The doors are read inside the boundary
+ * either way; the judges are asked from the host.
  */
 export const workspaceDoorDir = (id: string): string => {
   const runtime = process.env.XDG_RUNTIME_DIR;
@@ -379,8 +386,32 @@ export const workspaceDoorDir = (id: string): string => {
     : workspaceReadOnlyDir(id);
 };
 
-/** The most bytes a unix socket's path holds (`sun_path` is 108, its NUL included). */
-export const UNIX_SOCKET_PATH_MAX = 107;
+/**
+ * The most bytes a unix socket's path holds: `sun_path` is 108 bytes on
+ * Linux and 104 on macOS, its NUL included. A longer one is cut short by
+ * whoever packs it (perl's `pack_sockaddr_un` among them), so a listener
+ * and a caller never meet.
+ */
+export const UNIX_SOCKET_PATH_MAX = process.platform === "darwin" ? 103 : 107;
+
+/**
+ * Why `path` cannot be a unix socket's, or nothing: refused up front, in
+ * words that say what to change.
+ */
+export const socketPathProblem = (
+  path: string,
+  what: string
+): string | undefined => {
+  const bytes = Buffer.byteLength(path);
+  if (bytes <= UNIX_SOCKET_PATH_MAX) {
+    return;
+  }
+  return `${what} ${path} is ${bytes} bytes, past the ${UNIX_SOCKET_PATH_MAX} a unix socket's path holds: ${
+    process.platform === "linux"
+      ? "give the agent a short XDG_RUNTIME_DIR"
+      : "run the agent with a shorter HOME"
+  }`;
+};
 
 /** The name of a workspace's policy file in its state dir. */
 export const WORKSPACE_POLICY_NAME = "policy.json";

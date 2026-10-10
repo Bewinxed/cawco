@@ -162,6 +162,8 @@ const owner: Record<string, string> = {
   XDG_CONFIG_HOME: fleet.env.XDG_CONFIG_HOME as string,
   XDG_DATA_HOME: fleet.env.XDG_DATA_HOME as string,
   XDG_CACHE_HOME: fleet.env.XDG_CACHE_HOME as string,
+  // As a login shell has it: `cawco git-credential` finds the agent there.
+  XDG_RUNTIME_DIR: fleet.env.XDG_RUNTIME_DIR as string,
 };
 const sh = async (cwd: string, command: string): Promise<string> => {
   const ran = await Bun.$`sh -c ${command}`
@@ -263,6 +265,13 @@ const diagnose = async (why: string): Promise<void> => {
     // biome-ignore lint/performance/noAwaitInLoops: printed in order
     console.log(`── ${name}\n${await tail(join(fleet.sandbox, name), 40)}`);
   }
+  const runtime = fleet.env.XDG_RUNTIME_DIR as string;
+  const sockets = await Bun.$`find ${runtime} -maxdepth 3 -type s`
+    .quiet()
+    .nothrow();
+  console.log(
+    `── sockets under the agent's runtime dir ${runtime}\n${sockets.stdout.toString().trim() || "(none)"}`
+  );
   const [newest] = await transcripts(home);
   console.log(
     `── newest transcript ${newest ?? "(none)"}\n${
@@ -473,7 +482,11 @@ try {
   const answer = await fetch("http://cawco/", {
     method: "POST",
     body: `protocol=http\nhost=${new URL(fleet.base).host}\n`,
-    unix: join(home, ".cawco", "git-credential.sock"),
+    unix: join(
+      fleet.env.XDG_RUNTIME_DIR as string,
+      "cawco",
+      "git-credential.sock"
+    ),
   });
   const login = Object.fromEntries(
     (await answer.text())
