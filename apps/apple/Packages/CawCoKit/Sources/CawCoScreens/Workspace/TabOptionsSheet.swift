@@ -9,8 +9,9 @@ import UIKit
 /// foot under the finger 1:1, a rounded body swelling out of it, at first
 /// the width of the tab's flared foot and then widening into the options
 /// panel, the two joined on each side by one smooth curve, the way a drop of
-/// liquid joins what it hangs from. The shape takes the tab's own surface
-/// and lifts to the kit's raised surface, its border and its overlay shadow
+/// liquid joins what it hangs from. The shape is the tab's own surface, the
+/// chosen tab's sheet, tab and options alike, so no seam runs along the
+/// tab's foot; it lifts off the page by its border and its overlay shadow
 /// over the first stretch of the pull, so the tab and the drop read as one
 /// thing off the page from the start; the tab's title and rim stand on it
 /// where they stood. Past fully out a third of the travel shows, no more
@@ -182,8 +183,8 @@ final class TabOptionsSheet: UIView {
     /// How far the body has come out of the tab's foot at `at` (0 in it, 1
     /// open, past 1 stretched); how far it has widened (0 the tab's foot, 1
     /// the panel); how far it has settled into its open shape (0 a drop, 1
-    /// the folder's); and how far it has lifted off the page (the raised
-    /// surface, its border and shadow).
+    /// the folder's); and how far it has lifted off the page (its border and
+    /// shadow).
     private func reach(_ at: Double) -> (travel: Double, widen: Double, settled: Double, lift: Double) {
         let q = max(0, at)
         let height = panel.height
@@ -201,9 +202,9 @@ final class TabOptionsSheet: UIView {
     /// card under it; then it widens to the panel over the next `widenShare`.
     static let neckShare = 0.2
     static let widenShare = 0.55
-    /// The share of the travel over which the shape lifts off the page: the
-    /// chosen tab is the page's own surface, so a drop in it would show only
-    /// as a shadow.
+    /// The share of the travel over which the shape lifts off the page, its
+    /// border and shadow coming in: the chosen tab is the page's own surface,
+    /// so the drop shows by its edge from the first stretch.
     static let liftShare = 0.15
 
     /// The one outline at `at`: the tab's shoulders and sides, each side
@@ -312,8 +313,7 @@ final class TabOptionsSheet: UIView {
         CATransaction.setDisableActions(true)
         shape.frame = bounds
         shape.path = path
-        let raised = Palette.surfaceRaised.resolvedColor(with: traits)
-        shape.fillColor = Self.mix(tabSurface, raised, lift).cgColor
+        shape.fillColor = tabSurface.cgColor
         shape.strokeColor = Palette.borderControl.resolvedColor(with: traits).withAlphaComponent(lift).cgColor
         shadow.paint(traits)
         shadow.update(path, in: bounds)
@@ -339,15 +339,6 @@ final class TabOptionsSheet: UIView {
             let ink = list.frame.minY + row.frame.midY + min(row.frame.height / 2, 10)
             row.alpha = min(across, Self.clamp01((travel - ink) / 8))
         }
-    }
-
-    /// `a` toward `b` by `t`, both already resolved.
-    private static func mix(_ a: UIColor, _ b: UIColor, _ t: Double) -> UIColor {
-        var (ar, ag, ab, aa) = (CGFloat(0), CGFloat(0), CGFloat(0), CGFloat(0))
-        var (br, bg, bb, ba) = (CGFloat(0), CGFloat(0), CGFloat(0), CGFloat(0))
-        a.getRed(&ar, green: &ag, blue: &ab, alpha: &aa)
-        b.getRed(&br, green: &bg, blue: &bb, alpha: &ba)
-        return UIColor(red: ar + (br - ar) * t, green: ag + (bg - ag) * t, blue: ab + (bb - ab) * t, alpha: aa + (ba - aa) * t)
     }
 
     // MARK: The finger
