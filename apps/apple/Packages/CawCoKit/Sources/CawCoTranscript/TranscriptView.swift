@@ -40,6 +40,8 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     private let paneState = PaneState()
 
     private let collection: UICollectionView
+    /// The rows going out of focus under the tab strip at the list's top edge (HeadFade.svelte).
+    private let headFade: HeadFade
     private var dataSource: UICollectionViewDiffableDataSource<Int, String>!
     private let env = RowEnv()
     /// Every row's view, kept laid out for its item (RowStore).
@@ -233,6 +235,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         }
         self.layout = layout
         collection = UICollectionView(frame: .zero, collectionViewLayout: layout)
+        headFade = HeadFade(collection)
         super.init(frame: frame)
         Self.warm()
         // The session pane's ground (SessionPane.svelte `.pane`): the recess, not the page.
@@ -245,11 +248,18 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         collection.accessibilityLabel = "Session transcript"
         collection.translatesAutoresizingMaskIntoConstraints = false
         addSubview(collection)
+        // Over the rows, under the docks (placeDock) and the pane's state: only rows pass under it.
+        addSubview(headFade)
         NSLayoutConstraint.activate([
             collection.leadingAnchor.constraint(equalTo: safeAreaLayoutGuide.leadingAnchor),
             collection.trailingAnchor.constraint(equalTo: safeAreaLayoutGuide.trailingAnchor),
             collection.topAnchor.constraint(equalTo: topAnchor),
             collection.bottomAnchor.constraint(equalTo: bottomAnchor),
+            // The list's visible top edge: its adjusted inset is the safe area's.
+            headFade.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor),
+            headFade.leadingAnchor.constraint(equalTo: leadingAnchor),
+            headFade.trailingAnchor.constraint(equalTo: trailingAnchor),
+            headFade.heightAnchor.constraint(equalToConstant: HeadFade.height),
         ])
         makeDataSource()
         wireEnv()

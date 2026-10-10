@@ -68,6 +68,7 @@
   import type { ComposerAsk, ComposerFoot } from "./transcript/Composer.svelte";
   import { ComposerDraft } from "./transcript/composer-draft.svelte";
   import FootFade from "./transcript/FootFade.svelte";
+  import HeadFade from "./transcript/HeadFade.svelte";
   import Transcript from "./transcript/Transcript.svelte";
   import TranscriptSkeleton from "./transcript/TranscriptSkeleton.svelte";
   import { CAW_EVENT, setVoice } from "./transcript/voice";
@@ -642,6 +643,7 @@
               {visible}
             />
           </div>
+          <HeadFade />
         {/if}
         <!-- The skeleton stands in for rows still on their way and goes the
              moment they are drawn: its rows are not where the real ones fall, so
@@ -741,6 +743,8 @@
     min-height: 0;
     overflow: hidden;
     isolation: isolate;
+    /* The transcript's scroll, in reach of its head blur (HeadFade). */
+    timeline-scope: --transcript-head;
   }
   .state {
     display: flex;
