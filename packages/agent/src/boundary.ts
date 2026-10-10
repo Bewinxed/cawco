@@ -2156,8 +2156,9 @@ fi`
 /**
  * What every command runs with besides its caller's environment: the
  * workspaces' own cache (`workspaceCacheEnv`), its scratch dir as `TMPDIR`,
- * the empty git template, gh's empty config dir ({@link ghConfigOf}), the
- * tool and git doors (hub-git.ts `gitDoorEnv`), and `CAWCO_WORKSPACE`, by which a
+ * the empty git template, gh's empty config dir ({@link ghConfigOf}), git
+ * without its system config, the tool and git doors (hub-git.ts
+ * `gitDoorEnv`), and `CAWCO_WORKSPACE`, by which a
  * script tells that it runs inside one; never a key agent's socket
  * ({@link AGENT_SOCKET_ENV}).
  */
@@ -2168,6 +2169,12 @@ const commandEnv = (id: string, scratch: string, clone: string): string[] => [
     TMPDIR: scratch,
     GIT_TEMPLATE_DIR: gitTemplateOf(id),
     GH_CONFIG_DIR: ghConfigOf(id),
+    // No system gitconfig: Apple's git (Command Line Tools) and Homebrew's
+    // each ship one naming `credential.helper=osxkeychain`, so a push asked
+    // the keychain before gh's helper. The user's own gitconfig, where gh's
+    // helper is named, still applies; GIT_CONFIG_COUNT is not touched, since
+    // srt and the session already hand git their own entries through it.
+    GIT_CONFIG_NOSYSTEM: "1",
     CAWCO_TOOL_SOCKET: toolDoorOf(id),
     CAWCO_WORKSPACE: id,
     ...gitDoorEnv(id, clone),

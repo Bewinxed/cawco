@@ -10,7 +10,9 @@
 # SOURCE_REPO is a git repository to cut the workspace from (~/anbar), and
 # OTHER_REPO_ENV a secret file of another repository. SWIFT_PACKAGE (a dir
 # in the clone, e.g. AnbarKit) gets `swift build`; XCODE_DIR and XCODE_SCHEME
-# (a dir in the clone and a scheme) get a simulator `xcodebuild build`.
+# (a dir in the clone and a scheme, or `auto` for the dir's first scheme) get
+# a simulator `xcodebuild build`. Each of those, git push and Playwright is a
+# working row: a failure fails the run, as an OPEN escape row does.
 # It starts its own sessiond on a scratch socket, creates one workspace through
 # the product code (rig-workspace.ts), runs everything through the workspace's
 # executor, then archives the workspace and stops what it started.
@@ -41,7 +43,22 @@ landing_cmd() {
   return 1
 }
 step() { printf '\n== %s\n' "$1"; }
-timed() { local s e status; s=$(date +%s); "$@"; status=$?; e=$(date +%s); echo "exit=$status wall=$((e - s))s"; }
+# A working row: runs the command, shows its output, PASS on exit 0.
+checked() {
+  local label=$1 s e status
+  shift
+  s=$(date +%s); "$@"; status=$?; e=$(date +%s)
+  if [ "$status" -eq 0 ]; then works "$label ($((e - s))s)" PASS; else works "$label ($((e - s))s)" "FAIL (exit $status)"; fi
+}
+# bootstrap_look_up of the mach service $1 from this process: prints the
+# kern_return_t, exits 0 when the service was reached (1100 is a sandbox
+# refusal, 1102 a service this macOS does not have).
+MACH_PROBE='import ctypes, sys
+libc = ctypes.CDLL("/usr/lib/libSystem.B.dylib")
+port = ctypes.c_uint(0)
+kr = libc.bootstrap_look_up(ctypes.c_uint.in_dll(libc, "bootstrap_port"), sys.argv[1].encode(), ctypes.byref(port))
+print(kr)
+sys.exit(0 if kr == 0 else 1)'
 
 (cd "$checkout" && exec bun packages/cli/src/cli.ts sessiond > "$scratch/sessiond.log" 2>&1) &
 sessiond=$!
@@ -54,8 +71,10 @@ echo "workspace $id: $clone"
 r() { (cd "$clone" && "$state/exec" "$@"); }
 
 step "the generated profile (whole in $checkout/macos-boundary.sb; first lines)"
-cp "$state/boundary.sb" "$checkout/macos-boundary.sb"
-head -12 "$state/boundary.sb"
+profile=$(ls "$state"/boundaries/*/boundary.sb 2>/dev/null | head -1)
+cp "$profile" "$checkout/macos-boundary.sb"
+head -12 "$profile"
+grep -A12 '^(deny mach-lookup' "$profile"
 
 step "gh and git push, with no GH_TOKEN in the caller"
 # No cache: the executor asks gh for its token on the host, outside Seatbelt.
@@ -65,6 +84,11 @@ if [ -n "$login" ]; then works "gh api user (token read on the host)" "PASS ($lo
 [ -s "$state/gh-token" ] && works "the executor wrote its gh-token cache" PASS || works "the executor wrote its gh-token cache" FAIL
 login=$(r 'gh api user -q .login' 2>"$scratch/gh.err")
 if [ -n "$login" ]; then works "gh api user (token from the cache)" "PASS ($login)"; else works "gh api user (token from the cache)" FAIL; sed 's/^/    /' "$scratch/gh.err"; fi
+helpers=$(r "git config --show-origin --get-regexp '^credential\..*helper\$'" 2>&1)
+echo "git's credential helpers inside:"; printf '%s\n' "$helpers" | sed 's/^/    /'
+if printf '%s' "$helpers" | grep -q osxkeychain; then works "no osxkeychain helper inside" FAIL; else works "no osxkeychain helper inside" PASS; fi
+trustd_kr=$(r "/usr/bin/python3 -c '$MACH_PROBE' com.apple.trustd.agent" 2>/dev/null)
+[ "$trustd_kr" = 0 ] && works "mach-lookup com.apple.trustd.agent (TLS)" PASS || works "mach-lookup com.apple.trustd.agent (TLS)" "FAIL (kr $trustd_kr)"
 origin=$(git -C "$clone" remote get-url origin)
 if r "git push --dry-run origin HEAD:refs/heads/cawco-mac-check-$id" > "$scratch/push.out" 2>&1; then
   works "git push --dry-run to $origin" PASS
@@ -107,6 +131,25 @@ made_uv_dir=no; [ -d "$uv_credentials" ] || { mkdir -p "$uv_credentials" && made
 printf probe > "$uv_credentials/.cawco-probe-$id"
 r "cat '$uv_credentials/.cawco-probe-$id' >/dev/null 2>&1" && row "read uv's credentials store" OPEN || row "read uv's credentials store" BLOCKED
 rm -f "$uv_credentials/.cawco-probe-$id"; [ "$made_uv_dir" = yes ] && rmdir "$uv_credentials" 2>/dev/null
+# The keychain through securityd, which reads the login keychain past the file
+# deny. "host:" is the same ask outside the boundary, for comparison; over ssh
+# the login keychain may be locked, so the mach rows below are the proof that
+# holds whatever its state.
+gh_ask='printf "protocol=https\nhost=github.com\n\n" | git credential-osxkeychain get'
+host_has=$(cd "$clone" && /bin/bash -c "$gh_ask" 2>/dev/null | grep -c '^password=.')
+r "$gh_ask" > "$scratch/kc.out" 2>&1; kc=$?
+if [ "$kc" -ne 0 ] || ! grep -q '^password=.' "$scratch/kc.out"; then row "git credential-osxkeychain get (host: $host_has password)" BLOCKED; else row "git credential-osxkeychain get (host: $host_has password)" OPEN; fi
+for kind in generic internet; do
+  host_found=no; security "find-$kind-password" -s github.com >/dev/null 2>&1 && host_found=yes
+  r "security find-$kind-password -s github.com" > "$scratch/kc.out" 2>&1; kc=$?
+  if [ "$kc" -ne 0 ] || [ ! -s "$scratch/kc.out" ]; then row "security find-$kind-password -s github.com (host found: $host_found)" BLOCKED; else row "security find-$kind-password -s github.com (host found: $host_found)" OPEN; sed 's/^/    /' "$scratch/kc.out" | head -3; fi
+done
+# Every keychain service the profile denies, looked up from inside.
+for service in $(sed -n '/^(deny mach-lookup/,/^)/s/.*(global-name "\([^"]*\)").*/\1/p' "$profile"); do
+  host_kr=$(/usr/bin/python3 -c "$MACH_PROBE" "$service" 2>/dev/null)
+  inside_kr=$(r "/usr/bin/python3 -c '$MACH_PROBE' '$service'" 2>/dev/null)
+  if [ "$inside_kr" = 0 ]; then row "mach-lookup $service (host $host_kr, inside $inside_kr)" OPEN; else row "mach-lookup $service (host $host_kr, inside $inside_kr)" BLOCKED; fi
+done
 r "head -c0 \"\$(ls -d ~/.cawco/accounts/*/claude/.credentials.json 2>/dev/null | head -1)\" 2>/dev/null" && row "read ~/.cawco/accounts" OPEN || row "read ~/.cawco/accounts" BLOCKED
 r 'test -n "$(ls -A ~/.cawco/accounts 2>/dev/null)"' && row "list ~/.cawco/accounts" OPEN || row "list ~/.cawco/accounts" BLOCKED
 r 'head -c0 ~/.claude.json 2>/dev/null' && row "read ~/.claude.json" OPEN || row "read ~/.claude.json" BLOCKED
@@ -133,12 +176,16 @@ step "still working"
 noise=$(r 'pwd -P >/dev/null; cd .. && cd - >/dev/null' 2>&1 | grep -c "getcwd\|shell-init\|error retrieving current directory")
 echo "a command's shell reads its directory: $noise getcwd line(s)"
 [ "$noise" -eq 0 ] || { echo "a command's shell cannot read its directory"; open=$((open + 1)); }
-timed r 'set -o pipefail; date +%s > srt-mac-probe.txt && git add -A && git commit -qm "srt mac probe" && git log --oneline -1'
+checked "git commit in the clone" r 'set -o pipefail; date +%s > srt-mac-probe.txt && git add -A && git commit -qm "srt mac probe" && git log --oneline -1'
 if [ -n "$swift_package" ]; then
-  timed r "set -o pipefail; cd '$swift_package' && swift build 2>&1 | tail -3"
+  checked "swift build ($swift_package)" r "set -o pipefail; cd '$swift_package' && swift build 2>&1 | tail -3"
 fi
 if [ -n "$xcode_dir" ]; then
-  timed r "set -o pipefail; cd '$xcode_dir' && xcodebuild -scheme '$xcode_scheme' -destination 'generic/platform=iOS Simulator' build 2>&1 | tail -3"
+  if [ "$xcode_scheme" = auto ]; then
+    xcode_scheme=$(r "cd '$xcode_dir' && xcodebuild -list -json 2>/dev/null" | perl -MJSON::PP -0777 -ne 'my $j = eval { decode_json($_) } or exit; my $s = ($j->{workspace} // $j->{project} // {})->{schemes} // []; print $s->[0] // ""')
+    echo "xcodebuild scheme in $xcode_dir: ${xcode_scheme:-none found}"
+  fi
+  checked "xcodebuild simulator build ($xcode_dir, ${xcode_scheme:-no scheme})" r "set -o pipefail; cd '$xcode_dir' && xcodebuild -scheme '$xcode_scheme' -destination 'generic/platform=iOS Simulator' build 2>&1 | tail -3"
 fi
 cat > "$state/tmp/pw-check.mjs" <<'JS'
 import { createServer } from "node:http";
@@ -152,7 +199,7 @@ console.log(JSON.stringify({ text: await page.textContent("#ok") }));
 await browser.close();
 server.close();
 JS
-timed r 'set -o pipefail; mkdir -p "$TMPDIR/pw" && cd "$TMPDIR/pw" && { [ -f package.json ] || echo "{}" > package.json; } && bun add playwright-core@1.63.0 >/dev/null 2>&1 && cp "$TMPDIR/pw-check.mjs" . && bun pw-check.mjs 2>&1 | tail -3'
+checked "Playwright Chromium loads a page" r 'set -o pipefail; mkdir -p "$TMPDIR/pw" && cd "$TMPDIR/pw" && { [ -f package.json ] || echo "{}" > package.json; } && bun add playwright-core@1.63.0 >/dev/null 2>&1 && cp "$TMPDIR/pw-check.mjs" . && bun pw-check.mjs 2>&1 | tail -3'
 
 step "overhead (exec true, n=20)"
 for _ in $(seq 20); do s=$(perl -MTime::HiRes=time -e 'printf "%d", time*1000'); r true; e=$(perl -MTime::HiRes=time -e 'printf "%d", time*1000'); echo $((e - s)); done | sort -n | awk '{ a[NR] = $1 } END { printf "median %d ms   p90 %d ms   (n=%d)\n", a[int((NR + 1) / 2)], a[int(NR * 0.9 + 0.5)], NR }'

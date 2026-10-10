@@ -115,6 +115,29 @@ const sbString = (path: string): string =>
 
 const depth = (path: string): number => path.split("/").filter(Boolean).length;
 
+/**
+ * The keychain's mach services. Seatbelt's `allow default` lets any command
+ * look them up, and securityd reads the login keychain on its caller's
+ * behalf, past the file deny: `git credential-osxkeychain get` or `security
+ * find-internet-password` would hand a workspace a stored password. These are
+ * the names sandy-seatbelt's baseline denies so "common Keychain APIs [do
+ * not become] credential deputies" (docs.rs/crate/sandy-seatbelt, baseline.rs),
+ * with `com.apple.security.authhost`, which the keychain layers of isol8 and
+ * tftio-silent-critic allow beside them. `com.apple.trustd*`, which verifies
+ * TLS certificates, is not among them.
+ */
+const KEYCHAIN_MACH_SERVICES = [
+  "com.apple.SecurityServer",
+  "com.apple.securityd",
+  "com.apple.securityd.xpc",
+  "com.apple.securityd.general",
+  "com.apple.securityd.systemkeychain",
+  "com.apple.security.keychaind",
+  "com.apple.secd",
+  "com.apple.security.agent",
+  "com.apple.security.authhost",
+];
+
 /** What a macOS profile names besides the policy. */
 export interface SeatbeltPlace {
   /** The tool door's and the git door's sockets, the unix sockets under CawCo's dirs a command connects to. */
@@ -139,8 +162,9 @@ export interface SeatbeltPlace {
  *
  * Besides the policy: signals stay inside the sandbox, `launchctl` does not
  * run (so nothing reaches launchd), the scratch dir itself cannot be removed,
- * and no unix socket under {@link SeatbeltPlace.hostSockets} or a credential
- * store is reached but the tool and git doors'. The network is the host's: Seatbelt
+ * no keychain service is looked up ({@link KEYCHAIN_MACH_SERVICES}), and no
+ * unix socket under {@link SeatbeltPlace.hostSockets} or a credential store
+ * is reached but the tool and git doors'. The network is the host's: Seatbelt
  * cannot judge a destination by the name it resolves.
  */
 export const seatbeltProfile = (
@@ -184,6 +208,11 @@ export const seatbeltProfile = (
     // Its contents are the workspace's to write; the scratch dir itself stays.
     `(deny file-write-unlink (literal ${sbString(policy.scratch)}))`,
     '(deny process-exec (literal "/bin/launchctl"))',
+    "(deny mach-lookup",
+    ...KEYCHAIN_MACH_SERVICES.map(
+      (service) => `  (global-name ${sbString(service)})`
+    ),
+    ")",
     ...[...new Set([...place.hostSockets, ...policy.denyRead])]
       .filter((path) => path !== policy.home)
       .map(
