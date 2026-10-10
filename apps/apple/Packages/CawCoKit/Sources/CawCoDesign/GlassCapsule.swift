@@ -212,7 +212,9 @@ private final class GlassJoin: UIView {
         let w = bounds.width
         let full = bounds.height
         let h = full - 1
-        guard w > f + 2 * r, h > f else { return }
+        // Room for the flare and the round corners: one on a squared glass
+        // (the phone's tab, exactly the flare and one corner wide), two on a pill.
+        guard w >= f + (squaredTrailing ? r : 2 * r), h >= max(f, r) else { return }
         outline.frame = bounds
         surface.frame = bounds
         // The outline: up the flare's concave curve, round the glass's

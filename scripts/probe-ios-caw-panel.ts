@@ -188,7 +188,7 @@ async function tree(
   const where = point
     ? ` --point ${Math.round(point.x)},${Math.round(point.y)}`
     : "";
-  const raw = await mac(`${AXE} describe-ui${where} --udid ${udid}`);
+  const raw = await axe(`describe-ui${where} --udid ${udid}`);
   const nodes: Node[] = [];
   const walk = (at: unknown) => {
     if (Array.isArray(at)) {
@@ -224,7 +224,33 @@ const inside = (f: Frame, p: { x: number; y: number }) =>
 const pause = (ms: number) => Bun.sleep(ms);
 /** One finger's tap at a point, in points. */
 const tap = (udid: string, p: { x: number; y: number }) =>
-  mac(`${AXE} tap -x ${Math.round(p.x)} -y ${Math.round(p.y)} --udid ${udid}`);
+  axe(`tap -x ${Math.round(p.x)} -y ${Math.round(p.y)} --udid ${udid}`);
+
+/**
+ * axe's own failures to reach a simulator's automation session, which a
+ * just-booted or busy simulator gives for a while ("No translation object
+ * returned for simulator… invisible due to a fullscreen dialog", a timed-out
+ * session); nothing was read or touched, so the call is made again.
+ */
+const AXE_SESSION =
+  /No translation object|remote automation session|Timed out creating/;
+/** One axe command on the Mac, tried up to 4 times 2s apart while axe cannot reach the simulator. */
+async function axe(args: string): Promise<string> {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      // biome-ignore lint/performance/noAwaitInLoops: each try follows the last one's failure
+      return await mac(`${AXE} ${args}`);
+    } catch (error) {
+      if (attempt >= 4 || !AXE_SESSION.test(String(error))) {
+        throw error;
+      }
+      console.log(
+        `  axe could not reach the simulator (try ${attempt}): ${String(error).slice(0, 160)}`
+      );
+      await Bun.sleep(2000);
+    }
+  }
+}
 
 /** The moved login's row (MovedLogins.svelte): the account's name is its entry, its ✕ "Dismiss moved logins". */
 const NOTICE = "Probe";
