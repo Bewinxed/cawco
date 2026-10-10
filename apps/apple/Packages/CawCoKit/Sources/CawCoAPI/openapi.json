@@ -13309,7 +13309,9 @@
                       "blue",
                       "cyan",
                       "green",
-                      "orange"
+                      "orange",
+                      "rose",
+                      "violet"
                     ]
                   }
                 },
@@ -13406,7 +13408,9 @@
                       "blue",
                       "cyan",
                       "green",
-                      "orange"
+                      "orange",
+                      "rose",
+                      "violet"
                     ]
                   },
                   "order": {
@@ -27512,7 +27516,9 @@
           "blue",
           "cyan",
           "green",
-          "orange"
+          "orange",
+          "rose",
+          "violet"
         ]
       },
       "WaitReason": {

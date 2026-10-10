@@ -1193,8 +1193,12 @@
     {#if home.limitsShown}
       <UsageMeter />
     {/if}
-    <div class="flex items-center gap-1" data-flip>
-      <Sidebar.Menu aria-label="User" class="min-w-0 flex-1">
+    <!-- The reader's name stands whole: the menu is never narrower than its
+         name, and where the rail can't hold it beside the four settings (at
+         the default 228px and below) the settings drop together to a line
+         of their own, at its end. -->
+    <div class="flex flex-wrap items-center gap-1" data-flip>
+      <Sidebar.Menu aria-label="User" class="w-auto min-w-0 flex-[1_0_auto]">
         <Sidebar.MenuItem>
           <Sidebar.MenuButton class={NAV_ROW}>
             <!-- No picture of the reader yet: Caw stands in. -->
@@ -1212,26 +1216,28 @@
         </Sidebar.MenuItem>
       </Sidebar.Menu>
       <!-- Configure, the theme and sound: the settings in the corner. -->
-      <Tip label="Configure">
-        {#snippet children(
-          tip
-        )}
-          <Button
-            {...tip}
-            aria-current={configuring ? "page" : undefined}
-            aria-label="Configure"
-            class="configure"
-            href={configureHref}
-            size="icon-sm"
-            variant="ghost"
-          >
-            <IconSettings class="size-4" />
-          </Button>
-        {/snippet}
-      </Tip>
-      <ThemeSwitcher />
-      <SoundSwitcher />
-      <CawLoopSwitcher />
+      <div class="ms-auto flex items-center gap-1">
+        <Tip label="Configure">
+          {#snippet children(
+            tip
+          )}
+            <Button
+              {...tip}
+              aria-current={configuring ? "page" : undefined}
+              aria-label="Configure"
+              class="configure"
+              href={configureHref}
+              size="icon-sm"
+              variant="ghost"
+            >
+              <IconSettings class="size-4" />
+            </Button>
+          {/snippet}
+        </Tip>
+        <ThemeSwitcher />
+        <SoundSwitcher />
+        <CawLoopSwitcher />
+      </div>
     </div>
   </Sidebar.Footer>
   <SessionHover within={railEl} />

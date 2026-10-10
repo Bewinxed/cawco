@@ -54,9 +54,7 @@ public enum Palette {
     public static let accountGreen = Palette.named("account-green")
     public static let accountCyan = Palette.named("account-cyan")
     public static let accountBlue = Palette.named("account-blue")
-    /// Not a hue a person picks (core AccountHue has five): the usage surfaces give it to an account whose own hue an account shown with it already wears, after the five, so accounts shown together never share a colour.
     public static let accountRose = Palette.named("account-rose")
-    /// The second such hue, after account-rose.
     public static let accountViolet = Palette.named("account-violet")
     /// The part of an account's week rim that sits under its reserve, once the reserve is reached: a mid neutral that reads on paper and at night.
     public static let accountReserved = Palette.named("account-reserved")

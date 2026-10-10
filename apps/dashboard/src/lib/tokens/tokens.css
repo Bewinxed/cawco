@@ -52,9 +52,7 @@
     --account-green: var(--mark-4);
     --account-cyan: var(--mark-5);
     --account-blue: var(--mark-6);
-    /* Not a hue a person picks (core AccountHue has five): the usage surfaces give it to an account whose own hue an account shown with it already wears, after the five, so accounts shown together never share a colour. */
     --account-rose: var(--mark-8);
-    /* The second such hue, after account-rose. */
     --account-violet: var(--mark-7);
     /* The part of an account's week rim that sits under its reserve, once the reserve is reached: a mid neutral that reads on paper and at night. */
     --account-reserved: light-dark(var(--neutral-9), var(--neutral-8));

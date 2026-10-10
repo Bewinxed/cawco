@@ -35,6 +35,8 @@ export const SWATCHES: readonly AccountHue[] = [
   "green",
   "amber",
   "blue",
+  "rose",
+  "violet",
 ];
 
 /** A new account's colour: the first swatch none of its provider's accounts wears. */

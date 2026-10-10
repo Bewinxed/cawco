@@ -1,5 +1,5 @@
 <script lang="ts">
-  /** The five account colours; the chosen one ringed. */
+  /** The seven account colours; the chosen one ringed. */
   import type { AccountHue } from "@cawco/core";
   import { hueVar, SWATCHES } from "./model.svelte";
 
@@ -14,6 +14,8 @@
     cyan: "Cyan",
     green: "Green",
     orange: "Orange",
+    rose: "Rose",
+    violet: "Violet",
   };
 </script>
 

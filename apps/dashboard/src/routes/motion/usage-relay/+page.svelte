@@ -40,9 +40,10 @@
   );
 
   /**
-   * Each account's own hue as the hub stores it: past five they repeat, as
-   * the hub's assignment does once the five are taken (bewinxed@gmail.com
-   * wears design@'s amber); the rings' shownHues tells them apart.
+   * Each account's stored hue, as the owner's were assigned when there were
+   * five: past five they repeat (bewinxed@gmail.com wears design@'s amber),
+   * and an existing account keeps its hue; the rings' shownHues tells them
+   * apart.
    */
   const HUES = ["amber", "blue", "cyan", "green", "orange"] as const;
 

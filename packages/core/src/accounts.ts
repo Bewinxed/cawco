@@ -164,14 +164,28 @@ export const providerChoices = (
 };
 
 /** The colour an account is drawn in: the `--account-<name>` token. */
-export type AccountHue = "amber" | "blue" | "cyan" | "green" | "orange";
+export type AccountHue =
+  | "amber"
+  | "blue"
+  | "cyan"
+  | "green"
+  | "orange"
+  | "rose"
+  | "violet";
 
+/**
+ * Every account colour, in the order a new account takes the first one no
+ * account wears: seven, so seven accounts (six Claude logins and the opencode
+ * Go plan, say) are told apart at a glance.
+ */
 export const ACCOUNT_HUES: readonly AccountHue[] = [
   "amber",
   "blue",
   "cyan",
   "green",
   "orange",
+  "rose",
+  "violet",
 ];
 
 /**

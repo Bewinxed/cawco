@@ -12,9 +12,11 @@
  * (emphasis, an account's dot) and nothing is a " · " chain.
  */
 import {
+  ACCOUNT_HUES,
   type Account,
   type AccountBench,
   type AccountForecast,
+  type AccountHue,
   accountName,
   type CarrySpan,
   CLAUDE_PROVIDER,
@@ -74,7 +76,7 @@ export interface RingAccount {
    * The hue it is drawn in where it is shown with others: its own, unless an
    * account shown before it already wears that (see {@link shownHues}).
    */
-  hue: ShownHue;
+  hue: AccountHue;
   id: string;
   /** Which window is spent, when it is at its limit. */
   limitOn: "5h" | "week" | null;
@@ -100,38 +102,24 @@ export interface RingAccount {
   week: RingWindow | null;
 }
 
-/**
- * The hues accounts shown together are drawn in: the five a person picks
- * (core AccountHue), then the usage surfaces' own two (`--account-rose`,
- * `--account-violet`), which only an account whose own hue is already worn
- * takes.
- */
-const SHOWN_HUES = [
-  "amber",
-  "blue",
-  "cyan",
-  "green",
-  "orange",
-  "rose",
-  "violet",
-] as const;
-export type ShownHue = (typeof SHOWN_HUES)[number];
-
-const hueToken = (hue: ShownHue): string => `var(--account-${hue})`;
+const hueToken = (hue: AccountHue): string => `var(--account-${hue})`;
 
 /**
  * The hues a set of accounts shown together are drawn in, in their order:
- * each keeps its own hue unless an account before it (or one in `worn`, the
- * hues already on screen beside them) wears it; those that can't take the
- * first of {@link SHOWN_HUES} nobody wears. Two passes, so an account whose
- * own hue is free keeps it even when a clash before it is resolved. Past
- * seven accounts on screen at once the hues repeat, in that order.
+ * each keeps its stored hue unless an account before it (or one in `worn`,
+ * the hues already on screen beside them) wears it; those that can't take
+ * the first of core's seven {@link ACCOUNT_HUES} nobody wears. Two passes, so
+ * an account whose own hue is free keeps it even when a clash before it is
+ * resolved. A new account is already stored in a hue nobody wears; this is
+ * for the ones that aren't: an account from before there were seven, one
+ * given a worn swatch by hand, and the opencode Go plan, which has no stored
+ * hue. Past seven accounts on screen at once the hues repeat, in that order.
  */
 export function shownHues(
-  own: readonly ShownHue[],
-  worn: readonly ShownHue[] = []
-): ShownHue[] {
-  const used = new Set<ShownHue>(worn);
+  own: readonly AccountHue[],
+  worn: readonly AccountHue[] = []
+): AccountHue[] {
+  const used = new Set<AccountHue>(worn);
   const kept = own.map((hue) => {
     if (used.has(hue)) {
       return null;
@@ -144,12 +132,12 @@ export function shownHues(
     if (hue) {
       return hue;
     }
-    const free = SHOWN_HUES.find((one) => !used.has(one));
+    const free = ACCOUNT_HUES.find((one) => !used.has(one));
     if (free) {
       used.add(free);
       return free;
     }
-    const repeat = SHOWN_HUES[spare % SHOWN_HUES.length] as ShownHue;
+    const repeat = ACCOUNT_HUES[spare % ACCOUNT_HUES.length] as AccountHue;
     spare += 1;
     return repeat;
   });
@@ -473,7 +461,7 @@ export function openCodeRing(
   reading: { fetchedAt: number; stale?: boolean; windows: LimitWindow[] },
   live: InstanceRow[],
   now: number,
-  worn: readonly ShownHue[]
+  worn: readonly AccountHue[]
 ): RingAccount {
   const [hue = "amber"] = shownHues(["amber"], worn);
   const win = (group: string): RingWindow | null => {

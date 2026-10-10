@@ -225,7 +225,8 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
           provider,
           kind,
           label: label ?? null,
-          // The first hue nobody has, so two accounts are told apart at a glance.
+          // The first of the seven hues nobody has, so up to seven accounts are
+          // told apart at a glance. An existing account keeps the hue it has.
           hue:
             hue ??
             ACCOUNT_HUES.find((one) => !taken.includes(one)) ??

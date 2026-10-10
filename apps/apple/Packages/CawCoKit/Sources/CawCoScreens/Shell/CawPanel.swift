@@ -618,6 +618,8 @@ private final class AccountTileView: UIView {
         case "green": Palette.accountGreen
         case "cyan": Palette.accountCyan
         case "blue": Palette.accountBlue
+        case "rose": Palette.accountRose
+        case "violet": Palette.accountViolet
         default: Palette.accountOrange
         }
     }

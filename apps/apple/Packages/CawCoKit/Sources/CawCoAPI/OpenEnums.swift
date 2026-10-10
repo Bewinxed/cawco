@@ -12,6 +12,8 @@ public enum OpenEnums {
         case cyan
         case green
         case orange
+        case rose
+        case violet
         /// A value this app does not know: a newer hub's.
         case unrecognized(String)
 
@@ -22,6 +24,8 @@ public enum OpenEnums {
             case "cyan": self = .cyan
             case "green": self = .green
             case "orange": self = .orange
+            case "rose": self = .rose
+            case "violet": self = .violet
             default: self = .unrecognized(rawValue)
             }
         }
@@ -33,6 +37,8 @@ public enum OpenEnums {
             case .cyan: "cyan"
             case .green: "green"
             case .orange: "orange"
+            case .rose: "rose"
+            case .violet: "violet"
             case let .unrecognized(rawValue): rawValue
             }
         }
@@ -41,7 +47,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.amber, .blue, .cyan, .green, .orange]
+        public static let allCases: [Self] = [.amber, .blue, .cyan, .green, .orange, .rose, .violet]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

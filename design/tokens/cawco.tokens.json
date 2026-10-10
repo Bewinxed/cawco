@@ -443,13 +443,11 @@
     },
     "account-rose": {
       "$type": "color",
-      "$value": "{color.mark-8}",
-      "$description": "Not a hue a person picks (core AccountHue has five): the usage surfaces give it to an account whose own hue an account shown with it already wears, after the five, so accounts shown together never share a colour."
+      "$value": "{color.mark-8}"
     },
     "account-violet": {
       "$type": "color",
-      "$value": "{color.mark-7}",
-      "$description": "The second such hue, after account-rose."
+      "$value": "{color.mark-7}"
     },
     "account-reserved": {
       "$type": "color",
