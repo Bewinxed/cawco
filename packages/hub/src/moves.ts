@@ -49,7 +49,6 @@ import {
   type MovesFrame,
   moveBranch,
   moveSize,
-  moveSourceName,
   type PermissionResult,
   type SendPayload,
   type SpawnPayload,
@@ -818,26 +817,24 @@ export const createMoves = (deps: MovesDeps) => {
     ];
   };
 
-  /** Step 2's lines: what happens to the folder, what it copies, and how big files go. */
+  /**
+   * Step 2's lines, the owner's pick D ("Plain + details", move design's
+   * Owner's picks): what happens to the folder, and how big files go. How
+   * much it fetches is said once, by step 1's reading line.
+   */
   const askLines = (
     s: MoveInspection,
-    from: MoveJob["from"],
     source: string,
     target: string
   ): string[] => {
     const big = s.bigFiles;
     const bigBytes = big.reduce((sum, file) => sum + file.bytes, 0);
-    const largeToo =
-      s.lfs.bytes > 0 ? `, plus ${sizeWords(s.lfs.bytes)} of large files` : "";
-    const copies = `It ${from.kind === "hub" ? "copies" : "fetches"} ${sizeWords(s.bytes)} from ${moveSourceName(from)}${largeToo}.`;
     const travels =
       big.length === 1
         ? `1 big file (${sizeWords(bigBytes)}) travels separately, so the move stays quick.`
         : `${big.length} big files (${sizeWords(bigBytes)}) travel separately, so the move stays quick.`;
     return [
       `CawCo saves the folder as it is now and copies it to ${target}. Your files on ${source} stay where they are.`,
-      // A folder that is no repository yet has no history to size.
-      ...(s.isGit && s.bytes > 0 ? [copies] : []),
       ...(big.length > 0 ? [travels] : []),
     ];
   };
@@ -877,18 +874,14 @@ export const createMoves = (deps: MovesDeps) => {
    * needs a yes, `key` names what the yes covers: the folder and the
    * destination, whether it becomes a repository, and which files go to LFS.
    */
-  const askFor = (
-    planned: Placed,
-    steps: MoveStep[],
-    from: MoveJob["from"]
-  ): MoveAsk => {
+  const askFor = (planned: Placed, steps: MoveStep[]): MoveAsk => {
     const { inspection: s, machineId: sourceMachineId } = planned.source;
     const { inspection: t, machineId: targetMachineId } = planned.target;
     const source = deps.machineName(sourceMachineId);
     const target = deps.machineName(targetMachineId);
     const big = s.bigFiles;
     const gitInit = !s.isGit;
-    const lines = askLines(s, from, source, target);
+    const lines = askLines(s, source, target);
     const details = askDetails(s, t, steps, source);
     const key = steps.includes("approval")
       ? createHash("sha256")
@@ -929,7 +922,7 @@ export const createMoves = (deps: MovesDeps) => {
     const from = fromOf(source.inspection);
     return {
       ...estimated,
-      ask: askFor(placed, await stepsFor(placed, from), from),
+      ask: askFor(placed, await stepsFor(placed, from)),
     };
   };
 
@@ -998,7 +991,7 @@ export const createMoves = (deps: MovesDeps) => {
     const { project, source, target } = planned;
     const from = fromOf(source.inspection);
     const steps = await stepsFor(planned, from);
-    const ask = askFor(planned, steps, from);
+    const ask = askFor(planned, steps);
     // A yes given in New session covers what the person read there, only.
     if (
       request.approved !== undefined &&

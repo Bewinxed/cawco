@@ -6,7 +6,7 @@
  * every screen on the `moves` frame (`cawco.moves`).
  */
 import type { MoveEstimate, MoveJob, MoveRequest } from "@cawco/core";
-import { cawco } from "./client.svelte";
+import { cawco, heardMove } from "./client.svelte";
 
 /** The hub's refusal, in its own words, or the status when it gave none. */
 async function refusal(response: Response): Promise<Error> {
@@ -57,7 +57,11 @@ export async function startMove(
   return (await response.json()) as MoveJob;
 }
 
-/** Cancel: the step in flight stops; the job says what it left on disk (`kept`). */
+/**
+ * Cancel: the step in flight stops; the job says what it left on disk
+ * (`kept`). From any stage, failed included, every screen reads it stopped
+ * from the hub's answer on, not from its next frame.
+ */
 export async function cancelMove(id: string): Promise<MoveJob> {
   const response = await fetch(`/api/moves/${encodeURIComponent(id)}`, {
     method: "DELETE",
@@ -65,7 +69,9 @@ export async function cancelMove(id: string): Promise<MoveJob> {
   if (!response.ok) {
     throw await refusal(response);
   }
-  return (await response.json()) as MoveJob;
+  const job = (await response.json()) as MoveJob;
+  heardMove(job);
+  return job;
 }
 
 /** Retry: a failed job runs the step it failed at again, and on from there. */
@@ -76,7 +82,9 @@ export async function retryMove(id: string): Promise<MoveJob> {
   if (!response.ok) {
     throw await refusal(response);
   }
-  return (await response.json()) as MoveJob;
+  const job = (await response.json()) as MoveJob;
+  heardMove(job);
+  return job;
 }
 
 /** The move whose session is `instanceId`, while the hub keeps it. */

@@ -168,6 +168,17 @@ public final class FleetStore {
     /// few minutes after: the board frame's on connect, then each `moves` frame.
     public internal(set) var moves: [Components.Schemas.MoveJob] = []
 
+    /// A move as the hub just answered a Cancel or a Retry (move.svelte.ts
+    /// `heardMove`): it stands in the table at once, so no screen reads an
+    /// older stage than that answer while its `moves` frame is on its way.
+    func heard(_ job: Components.Schemas.MoveJob) {
+        guard let at = moves.firstIndex(where: { $0.id == job.id }) else {
+            moves.append(job)
+            return
+        }
+        if moves[at].updatedAt <= job.updatedAt { moves[at] = job }
+    }
+
     /// The move whose session is `instanceId`, while the hub keeps it.
     public func move(for instanceId: String) -> Components.Schemas.MoveJob? {
         moves.first { $0.targetInstanceId == instanceId }

@@ -50,11 +50,15 @@ extension HubConnection {
         }
     }
 
-    /// Cancel: the step in flight stops; the job says what it left on disk (`kept`).
+    /// Cancel: the step in flight stops; the job says what it left on disk
+    /// (`kept`). From any stage, failed included, every screen reads it
+    /// stopped from the hub's answer on, not from its next frame.
     public func cancelMove(id: String) async throws -> Components.Schemas.MoveJob {
         switch try await api.moves.cancel(.init(path: .init(id: id))) {
         case let .ok(ok):
-            return try ok.body.json
+            let job = try ok.body.json
+            fleet.heard(job)
+            return job
         case let .notFound(refused):
             throw ControlError(message: try await Self.moveText(try refused.body.plainText))
         case let .conflict(refused):
@@ -69,8 +73,8 @@ extension HubConnection {
     /// Retry: a failed job runs the step it failed at again, and on from there.
     public func retryMove(id: String) async throws {
         switch try await api.moves.retry(.init(path: .init(id: id))) {
-        case .ok:
-            return
+        case let .ok(ok):
+            fleet.heard(try ok.body.json)
         case let .notFound(refused):
             throw ControlError(message: try await Self.moveText(try refused.body.plainText))
         case let .conflict(refused):

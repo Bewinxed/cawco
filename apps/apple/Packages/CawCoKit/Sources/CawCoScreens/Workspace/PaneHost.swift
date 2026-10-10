@@ -53,6 +53,7 @@ final class PaneHost {
     /// Ends what a closed tab held.
     func drop(_ id: String) {
         parked[id] = nil
+        forgetName(id)
         (built.removeValue(forKey: id) as? SessionViewController)?.close()
     }
 
@@ -71,6 +72,11 @@ final class PaneHost {
     func keep(_ ids: Set<String>) {
         for id in built.keys where !ids.contains(id) { drop(id) }
         parked = parked.filter { ids.contains($0.key) }
+        let names = names.filter { ids.contains($0.key) }
+        if names.count != self.names.count {
+            self.names = names
+            saveNames()
+        }
     }
 
     func session(_ id: String) -> SessionViewController? { built[id] as? SessionViewController }
@@ -118,7 +124,41 @@ final class PaneHost {
     }
 
     func detailsTitle(_ id: String) -> String {
-        hub.fleet.byId[id].map(hub.fleet.title) ?? title(id) ?? String(id.prefix(8))
+        label(id)
+    }
+
+    // MARK: What a tab is called (session-name.ts, working-set.svelte.ts `titleOf`)
+
+    private static let namesKey = "cawco-tab-names"
+    /// What each open tab was last called by the fleet, kept across launches
+    /// as the workspace's tabs are: a tab whose row is gone (a cancelled
+    /// move's, which the hub drops) keeps the prompt's words, not its id.
+    private var names = UserDefaults.standard.dictionary(forKey: PaneHost.namesKey) as? [String: String] ?? [:]
+
+    /// The one name a tab, its details and its pane go by: the row's own
+    /// title (remembered), else the name it last had, else its stored
+    /// transcript's, else its row's folder, else its id.
+    func label(_ id: String) -> String {
+        let fleet = hub.fleet
+        let row = fleet.byId[id]
+        if let row, let title = row.title, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let name = fleet.title(row)
+            if names[id] != name {
+                names[id] = name
+                saveNames()
+            }
+            return name
+        }
+        return names[id] ?? title(id) ?? row.map(fleet.title) ?? String(id.prefix(8))
+    }
+
+    private func forgetName(_ id: String) {
+        guard names.removeValue(forKey: id) != nil else { return }
+        saveNames()
+    }
+
+    private func saveNames() {
+        UserDefaults.standard.set(names, forKey: Self.namesKey)
     }
 
     /// The details' MCP count leads to the fleet's MCP configuration.

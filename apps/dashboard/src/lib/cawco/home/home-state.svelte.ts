@@ -1029,14 +1029,23 @@ class Home {
     )
   );
 
-  /** What a wide screen opens with nothing open: the longest wait, else the latest work. */
+  /**
+   * What a wide screen opens with nothing open: the longest wait, else the
+   * latest work. Never a session whose move was just cancelled: its tab
+   * closed for the fleet page (move design §2c), and its row is on its way out.
+   */
   readonly landing = $derived.by<string | null>(() => {
     const ask = this.needs.find((item) => item.kind === "ask");
     if (ask?.kind === "ask") {
       return ask.instanceId;
     }
+    const cancelled = new Set(
+      cawco.moves
+        .filter((job) => job.stage === "cancelled")
+        .map((job) => job.targetInstanceId)
+    );
     const [latest] = [...cawco.runningRows]
-      .filter(listed)
+      .filter((row) => listed(row) && !cancelled.has(row.id))
       .sort((a, b) => lastAt(b) - lastAt(a));
     return latest?.id ?? null;
   });

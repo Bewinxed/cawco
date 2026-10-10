@@ -2184,6 +2184,20 @@ export function followContinuations(
   continuationFollower = follower;
 }
 
+/**
+ * A move as the hub just answered a Cancel or a Retry: it stands in the table
+ * at once, so no screen reads an older stage than that answer while the
+ * `moves` frame carrying it is still on its way. The frame replaces it.
+ */
+export function heardMove(job: MoveJob): void {
+  const at = state.moves.findIndex((one) => one.id === job.id);
+  const held = state.moves[at];
+  if (held && Date.parse(held.updatedAt) > Date.parse(job.updatedAt)) {
+    return;
+  }
+  state.moves = at === -1 ? [...state.moves, job] : state.moves.with(at, job);
+}
+
 function adoptContinuations(table: ContinuationJob[]): void {
   if (equal(state.continuations, table)) {
     return;
@@ -2885,8 +2899,8 @@ function handleFrame(frame: FramePayload): void {
     return;
   }
 
-  // Every project move, whole, on each change. A move's progress travels
-  // machine → hub only, and never reaches a screen as its own frame.
+  // Every project move, whole, on each change (and `heardMove` between). A
+  // move's progress travels machine → hub only, never as its own frame.
   if (frame.kind === "moves") {
     state.moves = frame.moves;
     return;

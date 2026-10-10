@@ -351,7 +351,8 @@ final class MoveWaitView: UIView {
         var under: [UIView] = []
         if let detail = error.detail, !detail.isEmpty {
             let line = KitLabel(TypeScale.typeCode, ink: Palette.statusFailInk, lines: 0)
-            line.lineBreakMode = .byCharWrapping
+            // Breaks between words, as the web's; a token wider than the line still breaks.
+            line.lineBreakMode = .byWordWrapping
             line.text = detail
             under.append(line)
         }
