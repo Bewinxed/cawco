@@ -45,6 +45,15 @@ export interface TurnExtras {
 
 /** Known surviving custody requires an operator decision, not another probe or a replacement. */
 export class HarnessRecoveryRefused extends Error {}
+/**
+ * A reattach that cannot succeed for its own session: its server answered
+ * for that session or its directory with an error, or stayed out of reach
+ * past its budget. Not retried. The message names the harness and the
+ * generation asked. A custody reattach that ends on this is settled as
+ * unavailable, so the hub owes its sends and its next start is a start of its
+ * own; a start that ends on it fails once, with these words.
+ */
+export class ReattachFailed extends Error {}
 /** A refusal is final for its launch attempt, including recovery attempts. */
 export class SessionAddressRefused extends Error {}
 export class HubContractRefused extends SessionAddressRefused {}

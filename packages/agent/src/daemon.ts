@@ -7,6 +7,7 @@ import type {
   AuthState,
   BuildInfo,
   Envelope,
+  HarnessKind,
   HarnessReport,
   HeartbeatAckPayload,
   HeartbeatPayload,
@@ -120,7 +121,11 @@ import {
 import { outbound, redactConsole } from "./redaction";
 import { fenced, setRestartSource } from "./restart";
 import { TranscriptSearchService } from "./search";
-import { resumableSessions, SessionSupervisor } from "./session";
+import {
+  type CustodyDecided,
+  resumableSessions,
+  SessionSupervisor,
+} from "./session";
 import { SessiondClient, serviceManaged } from "./sessiond-client";
 import { probeTools } from "./tools";
 import { UsageScanner } from "./usage/scanner";
@@ -143,9 +148,39 @@ const CLAUDE_LOGIN_CHECK_INTERVAL_MS = 60_000;
 /** How often every provider account's OAuth sign-in is checked for a refresh it needs. */
 const ACCOUNT_REFRESH_INTERVAL = Duration.seconds(60);
 
+/**
+ * How long one harness's part of a custody takeover may take before the
+ * sessions it has not decided are settled without it (daemon `takeCustody`).
+ * Ours: nearly four times the 23 s obelisk's Claude reattach of 138 rows took
+ * (2026-10-01), and each session is let go as soon as its own row is decided,
+ * so only a reattach that stops answering costs this much.
+ */
+const CUSTODY_UNIT_MS = 90_000;
+
 /** The words of an error a log line says, its name when it carries no message. */
 const errorWords = (error: unknown): string =>
   error instanceof Error ? error.message || error.name : String(error);
+
+/**
+ * `pending`'s outcome, or `signal`'s reason once it is aborted, whichever is
+ * first. The work itself runs on: this bounds the wait, not the work, and the
+ * caller settles what the work had not decided.
+ */
+const untilAborted = <T>(
+  pending: Promise<T>,
+  signal: AbortSignal
+): Promise<T> =>
+  new Promise<T>((resolve, reject) => {
+    if (signal.aborted) {
+      reject(signal.reason);
+      return;
+    }
+    const abort = () => reject(signal.reason);
+    signal.addEventListener("abort", abort, { once: true });
+    pending
+      .then(resolve, reject)
+      .finally(() => signal.removeEventListener("abort", abort));
+  });
 
 /** OpenCode, told the machine's provider accounts changed, when it takes such a change. */
 const tellOpencodeAccountsChanged = (): void => {
@@ -1267,18 +1302,32 @@ const attach = (
     const heldSpawns: Envelope[] = [];
     let awaitingRegisterAck = true;
     /**
-     * WHAT IS SENT TO A SESSION WHILE ITS CUSTODY IS TAKEN WAITS FOR IT.
+     * WHAT IS SENT TO A SESSION WHILE ITS CUSTODY IS TAKEN WAITS FOR IT, AND
+     * FOR NOTHING ELSE.
      *
      * A held spawn names a session this daemon is about to attach to or start,
      * and until that settles the supervisor holds nothing under its id. A send
      * the hub routed meanwhile (a delegate's report to its parent, an
      * operator's message) failed `no session` and was dropped, though the
      * session was attached seconds later: 19:48:13 send failed, 19:48:29
-     * attached. So every envelope for a held session waits here, in order, and
-     * goes to the supervisor after the attach or the spawn it was waiting on.
+     * attached. So every envelope for a held session waits here, in order,
+     * and goes to the supervisor once that session's own custody is decided
+     * ({@link release}). It used to wait for the whole machine's: one OpenCode
+     * server answering HTTP 500 to every request held every Claude wake on
+     * obelisk for 4.5 hours (2026-10-10).
      */
-    const custodyIds = new Set<string>();
-    const custodyWaiting: Envelope[] = [];
+    const undecided = new Map<string, Envelope[]>();
+    /** One session's custody is decided: what waited for it goes to the supervisor, in order. */
+    const release = (instanceId: string): void => {
+      const waiting = undecided.get(instanceId);
+      if (!waiting) {
+        return;
+      }
+      undecided.delete(instanceId);
+      for (const envelope of waiting) {
+        supervisor.dispatch(envelope);
+      }
+    };
     /**
      * The restores the hub sent ahead of its ack that go straight to the
      * supervisor rather than wait here: a held opencode session's reattach,
@@ -1293,13 +1342,14 @@ const attach = (
      * attempt of a machine's custody past its 120 seconds for 4.5 hours, and no
      * Claude session there could start (obelisk, 2026-10-10). A session's own
      * envelopes go to the supervisor behind its reattach, which runs one
-     * session's envelopes in order.
+     * session's envelopes in order; a reattach that fails is settled
+     * unavailable there, its sends owed (`recovery_unavailable`).
      */
     const reattaching: Envelope[] = [];
     supervisor.registerDaemonFunction("sessionCustody", async () => ({
       custody: await readCustody(supervisor.stopSequence, [
         ...supervisor.custodyInstanceIds,
-        ...custodyIds,
+        ...undecided.keys(),
       ]),
       attached: supervisor.instanceIds,
     }));
@@ -1312,90 +1362,141 @@ const attach = (
         )
     );
 
+    /**
+     * THE CUSTODY TRANSACTION, ONE HARNESS AT A TIME. What sessiond hands
+     * back is taken by one unit per harness, Claude's held children in one
+     * reattach and pi's in another, each built here, fresh, and bounded by
+     * {@link CUSTODY_UNIT_MS}; each session is let go ({@link release}) the
+     * moment its own custody is known. A unit that fails or runs out of time
+     * settles only its own sessions: a held child stays for the hub to attach
+     * again (`session-lifecycle.ts`), and a session with no child starts.
+     * Custody is complete once every unit has settled, and nothing waits past
+     * that on any one of them. An OpenCode reattach is no unit of it: it is
+     * its own session's ({@link reattaching}).
+     */
     const takeCustody = (ackPayload: unknown, spawns: Envelope[]): void => {
       clearTimeout(registrationDeadline);
-      const named = spawns.map((envelope) =>
-        custodyRow(envelope.payload as SpawnPayload)
+      const harnessOf = (envelope: Envelope): HarnessKind =>
+        (envelope.payload as SpawnPayload).harness ?? "claude";
+      const units = new Map(
+        spawns.map((envelope) => [
+          (envelope.payload as SpawnPayload).instanceId,
+          harnessOf(envelope),
+        ])
       );
-      /**
-       * What waited for one session's custody goes to the supervisor now,
-       * in order, behind that session's own attach, spawn or reattach (the
-       * supervisor runs one session's envelopes in order), and what comes
-       * for it from here goes straight there. No session's envelopes wait
-       * for another's.
-       */
-      const release = (id: string): Promise<void>[] => {
-        custodyIds.delete(id);
-        const own = custodyWaiting.filter(
-          (envelope) => envelope.instanceId === id
-        );
-        custodyWaiting.splice(
-          0,
-          custodyWaiting.length,
-          ...custodyWaiting.filter((envelope) => envelope.instanceId !== id)
-        );
-        return own.map((envelope) => supervisor.dispatch(envelope));
-      };
+      custodyEpoch = supervisor.beginCustody([...units.keys()]);
+      const epoch = custodyEpoch;
+      supervisor.custodyUnits(epoch, units);
       // Dispatched once, for this connection, and never awaited: each
-      // reattach ends as its own session's attach or failure ({@link
-      // reattaching}).
+      // reattach ends as its own session's attach or failure, and what
+      // waited for that session goes behind it ({@link reattaching}).
       for (const envelope of reattaching.splice(0)) {
-        // biome-ignore lint/complexity/noVoid: the supervisor files the reattach's outcome as that session's own
-        void supervisor.dispatch(envelope);
-        // biome-ignore lint/complexity/noVoid: queued behind its own session's reattach
-        void Promise.all(
-          release((envelope.payload as SpawnPayload).instanceId)
-        );
+        supervisor.dispatch(envelope);
+        release((envelope.payload as SpawnPayload).instanceId);
       }
-      const recoverAttempt = async (signal: AbortSignal) => {
-        const { attached, failed } = await supervisor.reattachFrom(
-          ackPayload,
-          named,
-          signal
-        );
-        signal.throwIfAborted();
-        // Every held row is decided here: each session's spawn, when it has
-        // one, then what waited for that session alone.
-        const outcomes = spawns.flatMap((envelope) => {
-          const spawn = envelope.payload as SpawnPayload;
-          const launched =
-            attached.includes(spawn.instanceId) ||
-            failed.has(spawn.instanceId) ||
-            spawn.reattachOnly
-              ? []
-              : [supervisor.dispatch(envelope)];
-          return [...launched, ...release(spawn.instanceId)];
-        });
-        // Explicit stops sent behind the ack are handled before the listing.
-        await Promise.all(outcomes);
-        signal.throwIfAborted();
-        await Promise.all(
-          custodyWaiting
-            .splice(0)
-            .map((envelope) => supervisor.dispatch(envelope))
-        );
-        const freshCustody = await readCustody(supervisor.stopSequence, [
-          ...supervisor.custodyInstanceIds,
-          ...custodyIds,
-        ]);
-        signal.throwIfAborted();
-        send(socket, {
-          verb: "heartbeat",
-          machineId: identity.machineId,
-          payload: {
-            at: Date.now(),
-            instances: supervisor.instanceIds,
-            custody: freshCustody,
-            custodyComplete: true,
-          } satisfies HeartbeatPayload,
-        });
-        return attached;
+      const takeover = new AbortController();
+      recoveryController = takeover;
+      /** The connection ended: the next register's custody decides instead. */
+      const ended = (): boolean =>
+        takeover.signal.aborted || socket.readyState !== WebSocket.OPEN;
+      const settle = (instanceId: string): void => {
+        supervisor.custodySettled(epoch, instanceId);
+        release(instanceId);
       };
-      const custodyRecovered = (epoch: number, adopted: string[]) => {
+      const bounded = (): AbortSignal =>
+        AbortSignal.any([
+          takeover.signal,
+          AbortSignal.timeout(CUSTODY_UNIT_MS),
+        ]);
+      /** A held spawn whose session has no child to take back starts one, ahead of what waited for it; a reattach launches nothing. */
+      const startUnheld = (envelope: Envelope): void => {
+        if (!(envelope.payload as SpawnPayload).reattachOnly) {
+          supervisor.dispatch(envelope);
+        }
+      };
+      /** A unit that ended without deciding all its sessions, said once with why. */
+      const sayUndecided = (
+        unit: string,
+        signal: AbortSignal,
+        problem: unknown,
+        ids: string[]
+      ): void => {
+        const why = signal.aborted
+          ? `did not settle within ${CUSTODY_UNIT_MS / 1000} s`
+          : `failed: ${errorWords(problem)}`;
+        Effect.runFork(
+          Effect.logWarning(
+            `custody: ${unit} ${why}; let go undecided: ${ids.join(", ")}`
+          )
+        );
+      };
+      const adopted: string[] = [];
+      const unsettled: string[] = [];
+
+      /** Claude's or pi's held children, taken back from sessiond in one reattach. */
+      const sessiondUnit = async (
+        kind: (typeof SESSION_PROC_KINDS)[number],
+        envelopes: Envelope[]
+      ): Promise<void> => {
+        const left = new Map(
+          envelopes.map((envelope) => [
+            (envelope.payload as SpawnPayload).instanceId,
+            envelope,
+          ])
+        );
+        const rows = [...left.values()].map((envelope) =>
+          custodyRow(envelope.payload as SpawnPayload)
+        );
+        const decided: CustodyDecided = (instanceId, outcome) => {
+          const envelope = left.get(instanceId);
+          if (!envelope) {
+            return;
+          }
+          left.delete(instanceId);
+          if (outcome === "absent") {
+            startUnheld(envelope);
+          }
+          settle(instanceId);
+        };
+        const signal = bounded();
+        try {
+          adopted.push(
+            ...(await untilAborted(
+              supervisor.reattachFrom(kind, ackPayload, rows, signal, decided),
+              signal
+            ))
+          );
+        } catch (problem) {
+          if (ended()) {
+            return;
+          }
+          sayUndecided(`the ${kind} reattach`, signal, problem, [
+            ...left.keys(),
+          ]);
+        }
+        // What the reattach did not decide: a held child stays for the hub
+        // to attach again (session-lifecycle.ts); a session it starts
+        // afresh starts.
+        for (const [instanceId, envelope] of [...left]) {
+          left.delete(instanceId);
+          unsettled.push(instanceId);
+          startUnheld(envelope);
+          settle(instanceId);
+        }
+      };
+
+      const custodyRecovered = () => {
         if (adopted.length > 0) {
           Effect.runFork(
             Effect.logInfo(
               `attached to ${adopted.length} surviving session(s): ${adopted.join(", ")}`
+            )
+          );
+        }
+        if (unsettled.length > 0) {
+          Effect.runFork(
+            Effect.logWarning(
+              `custody: ${unsettled.length} held session(s) settled without being taken back: ${unsettled.join(", ")}`
             )
           );
         }
@@ -1406,55 +1507,46 @@ const attach = (
             )
           );
         }
-        custodyIds.clear();
-        for (const envelope of custodyWaiting.splice(0)) {
-          supervisor.dispatch(envelope);
-        }
         // biome-ignore lint/complexity/noVoid: the harnesses' reconnects are theirs; registration never waits on them
         void reconnectAfterHubRestart(url, ackPayload);
       };
-      // biome-ignore lint/complexity/noVoid: each bounded attempt publishes readiness; no control reply waits for recovery.
-      void (async () => {
-        let attempt = 0;
-        while (socket.readyState === WebSocket.OPEN) {
-          custodyEpoch = supervisor.beginCustody(
-            named.map((row) => row.instanceId)
-          );
-          const epoch = custodyEpoch;
-          recoveryController = new AbortController();
-          const controller = recoveryController;
-          let timer: ReturnType<typeof setTimeout> | undefined;
-          try {
-            // biome-ignore lint/performance/noAwaitInLoops: recovery attempts are serialized and back off; overlapping attempts may not publish readiness.
-            const adopted = await Promise.race([
-              recoverAttempt(controller.signal),
-              new Promise<never>((_, reject) => {
-                timer = setTimeout(() => {
-                  const problem = new Error(
-                    "Machine custody recovery did not complete within 120 seconds"
-                  );
-                  controller.abort(problem);
-                  reject(problem);
-                }, 120_000);
-              }),
-            ]);
-            if (socket.readyState !== WebSocket.OPEN) {
-              return;
-            }
-            custodyRecovered(epoch, adopted);
-            return;
-          } catch (problem) {
-            controller.abort(problem);
-            supervisor.failCustody(epoch, problem);
-          } finally {
-            clearTimeout(timer);
-          }
-          attempt += 1;
-          await Bun.sleep(
-            Math.min(30_000, 1000 * 2 ** Math.min(attempt - 1, 5))
-          );
+
+      /** Every unit settled: the machine's custody, read fresh, is complete. */
+      const complete = async (): Promise<void> => {
+        if (ended()) {
+          return;
         }
-      })();
+        const freshCustody = await readCustody(supervisor.stopSequence, [
+          ...supervisor.custodyInstanceIds,
+          ...undecided.keys(),
+        ]);
+        if (ended()) {
+          return;
+        }
+        send(socket, {
+          verb: "heartbeat",
+          machineId: identity.machineId,
+          payload: {
+            at: Date.now(),
+            instances: supervisor.instanceIds,
+            custody: freshCustody,
+            custodyComplete: true,
+          } satisfies HeartbeatPayload,
+        });
+        custodyRecovered();
+      };
+
+      // biome-ignore lint/complexity/noVoid: each unit settles its own sessions; no control reply waits for the transaction
+      void Promise.all([
+        ...SESSION_PROC_KINDS.flatMap((kind) => {
+          const mine = spawns.filter(
+            (envelope) => harnessOf(envelope) === kind
+          );
+          return mine.length > 0 ? [sessiondUnit(kind, mine)] : [];
+        }),
+      ])
+        .then(complete)
+        .catch((problem: unknown) => supervisor.failCustody(epoch, problem));
     };
 
     /**
@@ -1558,13 +1650,13 @@ const attach = (
       const instanceId = spawn?.instanceId;
       if (adoptable(spawn)) {
         heldSpawns.push(envelope);
-        custodyIds.add(spawn.instanceId);
+        undecided.set(spawn.instanceId, undecided.get(spawn.instanceId) ?? []);
         return true;
       }
       if (reattachOnly || opencodeSpawn) {
         reattaching.push(envelope);
         if (instanceId) {
-          custodyIds.add(instanceId);
+          undecided.set(instanceId, undecided.get(instanceId) ?? []);
         }
         return true;
       }
@@ -1595,11 +1687,14 @@ const attach = (
         );
         return;
       }
-      if (envelope.instanceId && custodyIds.has(envelope.instanceId)) {
+      const waiting = envelope.instanceId
+        ? undecided.get(envelope.instanceId)
+        : undefined;
+      if (waiting) {
         // A resume behind the ACK must join adoption too: the candidate read
         // yields before #adopting claims rows, so dispatching it here can
         // replace the very sessiond child this connection is taking over.
-        custodyWaiting.push(envelope);
+        waiting.push(envelope);
         return;
       }
       supervisor.dispatch(envelope);
@@ -1628,7 +1723,7 @@ const attach = (
               instances: supervisor.instanceIds,
               custody: await readCustody(supervisor.stopSequence, [
                 ...supervisor.custodyInstanceIds,
-                ...custodyIds,
+                ...undecided.keys(),
               ]),
               ...(changedPiAuth() ? { harnesses: reportedHarnesses } : {}),
               ...(latestBinaryUpdate()

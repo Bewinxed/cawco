@@ -1301,7 +1301,11 @@ export interface DbShape {
   readonly reconcileHeartbeat: (
     machineId: string,
     liveIds: string[],
-    /** The processes sessiond still holds for the machine: alive, whether attached yet or not. */
+    /**
+     * What is there or on its way: the processes sessiond still holds,
+     * attached yet or not, and the sessions whose launch to the machine is in
+     * flight (server.ts `launches`).
+     */
     heldIds: string[],
     graceMs: number
   ) => { promoted: string[]; settled: (typeof instances.$inferSelect)[] };

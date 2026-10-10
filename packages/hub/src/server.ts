@@ -2537,7 +2537,14 @@ export const createServer = (
   const holdingStarts = (machineId: string): boolean =>
     binaryUpdateStates.get(machineId)?.phase === "installing";
 
-  /** Sends a start, or, while its machine is installing an update, keeps it on its row. */
+  /**
+   * Sends a start as it was asked (`envelope`), its launch minted now
+   * ({@link bounded}: its credential, its account, its workspace); or, while
+   * its machine is installing an update, keeps it on its row as asked, and
+   * mints it when it goes ({@link flushOwedStarts}). A credential minted when
+   * a start was kept would be the one that start carries hours later, and any
+   * launch of the session meanwhile replaces it.
+   */
   const sendSpawn = (
     agent: NonNullable<ReturnType<typeof registry.agent>>,
     machineId: string,
@@ -2547,7 +2554,7 @@ export const createServer = (
       db.oweSpawn(envelope.instanceId, JSON.stringify(envelope), Date.now());
       return;
     }
-    sendFrame(agent, envelope);
+    sendFrame(agent, { ...envelope, payload: bounded(envelope.payload) });
     // What waited for this start goes right behind it, in the order taken.
     if (envelope.instanceId) {
       releaseOwed({ instanceId: envelope.instanceId });
@@ -2559,6 +2566,11 @@ export const createServer = (
    * each exactly once: the row's claim is taken before the send. Runs when the
    * machine registers and when its update state changes, and does nothing while
    * it is still installing. A start the person has since stopped is dropped.
+   *
+   * Each is minted as it goes ({@link bounded}), on the account its row runs
+   * on now. One that cannot be (its account was signed out there while the
+   * machine updated, or its launch is refused) fails once with the reason:
+   * the row and its work item say so, and what it was sent stays owed.
    */
   const flushOwedStarts = (machineId: string): void => {
     const agent = registry.agent(machineId);
@@ -2579,29 +2591,42 @@ export const createServer = (
       ) {
         continue;
       }
+      const asked = JSON.parse(owed.envelope) as Envelope<SpawnPayload>;
+      const launch = mintOwed(machineId, owed.id, asked.payload);
+      if (!launch) {
+        continue;
+      }
+      sendFrame(agent, { ...asked, payload: launch });
+      // What it was sent while its start was held goes right behind it.
+      releaseOwed({ instanceId: owed.id });
+    }
+  };
+
+  /**
+   * A kept start minted as it goes ({@link flushOwedStarts}), or, when it
+   * cannot be, failed once with the reason ({@link processFailed}).
+   */
+  const mintOwed = (
+    machineId: string,
+    instanceId: string,
+    asked: SpawnPayload
+  ): SpawnPayload | undefined => {
+    try {
       // Its account may have been signed out there while the machine updated.
-      const [stored] = db.getInstancesByIds([owed.id]);
+      const [stored] = db.getInstancesByIds([instanceId]);
       const refused =
         stored && accountStartRefusal(machineId, stored, sessionName(stored));
       if (refused) {
-        console.warn(`[hub] not starting ${owed.id}: ${refused}`);
-        db.failInstance(owed.id, refused);
-        forgetPending(owed.id, refused);
-        publishInstances(machineId);
-        continue;
+        throw new Error(refused);
       }
-      const envelope = JSON.parse(owed.envelope) as Envelope<SpawnPayload>;
-      sendFrame(agent, envelope);
-      // In flight from its mint ({@link launches}); held on its row until
-      // now, it is on its way from here, whatever its machine's last socket.
-      launches.set(owed.id, {
-        machineId,
-        generation: envelope.payload.processGeneration ?? "",
-        at: Date.now(),
-        replaces: envelope.payload.relaunch === true,
-      });
-      // What it was sent while its start was held goes right behind it.
-      releaseOwed({ instanceId: owed.id });
+      // Minted now, and in flight from here ({@link mintLaunch}).
+      return bounded(asked);
+    } catch (problem) {
+      const reason =
+        problem instanceof Error ? problem.message : String(problem);
+      console.warn(`[hub] not starting ${instanceId}: ${reason}`);
+      processFailed(machineId, instanceId, reason);
+      return undefined;
     }
   };
 
@@ -4689,9 +4714,9 @@ export const createServer = (
    * its credential ({@link launchSettled} from the ack), when the machine
    * says the session is up for a launch that replaces nothing, when it fails,
    * sleeps or stops, when its machine's socket closes, and when its machine
-   * names it nowhere any more ({@link settleLaunchesOn}). A start owed while
-   * its machine installs an update is in flight from its mint as well
-   * (`db.owesSpawn`).
+   * names it nowhere any more ({@link settleLaunchesOn}). A start kept while
+   * its machine installs an update is in flight from when it is kept
+   * (`db.owesSpawn`), and minted when it goes ({@link flushOwedStarts}).
    */
   const launches = new Map<
     string,
@@ -5141,7 +5166,7 @@ export const createServer = (
       verb: "spawn",
       machineId,
       instanceId,
-      payload: bounded(revive),
+      payload: revive,
     });
     publishInstances(machineId);
   };
@@ -7975,7 +8000,7 @@ export const createServer = (
       verb: "spawn",
       machineId,
       instanceId: payload.instanceId,
-      payload: bounded(payload),
+      payload,
     } satisfies Envelope<SpawnPayload>);
     if (!peekResume(payload)) {
       awaitingFirstTurn.add(payload.instanceId);
@@ -9491,7 +9516,7 @@ export const createServer = (
       verb: "spawn",
       machineId: row.machineId,
       instanceId: row.id,
-      payload: bounded(settled.payload),
+      payload: settled.payload,
     });
   };
 
@@ -14680,10 +14705,11 @@ export const createServer = (
       ...openedAccount(payload, placed),
     });
     if (holdingStarts(message.machineId)) {
-      // The row says starting; the start goes out when the machine can take it.
+      // The row says starting; the start goes out, minted then, when the
+      // machine can take it ({@link flushOwedStarts}).
       db.oweSpawn(
         message.instanceId,
-        JSON.stringify({ ...message, payload: bounded(payload) }),
+        JSON.stringify({ ...message, payload }),
         Date.now()
       );
     } else {

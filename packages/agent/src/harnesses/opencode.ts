@@ -139,7 +139,11 @@ import {
 import { GATE_FORM_ENV, gateForm } from "../gate-form";
 import { sessionGitEnv } from "../git-credential";
 import type { Harness, HarnessContext, HarnessSession } from "../harness";
-import { HarnessRecoveryRefused, SessionAddressRefused } from "../harness";
+import {
+  HarnessRecoveryRefused,
+  ReattachFailed,
+  SessionAddressRefused,
+} from "../harness";
 import { isMachineAgent } from "../machine-agent";
 import { gaugeTables } from "../memory";
 import { OPENCODE_SERVER_PROC_ID, parseProcId } from "../proc-id";
@@ -679,14 +683,15 @@ export const RECOVERY_TIMEOUT_MS = 10_000;
  */
 const RECOVERY_RETRY_BUDGET_MS = 120_000;
 
-/**
- * A reattach that cannot succeed for its own session: the server answered
- * for that session or its directory with an HTTP error, so the server is up
- * and refuses it, or it stayed out of reach past
- * {@link RECOVERY_RETRY_BUDGET_MS}. Not retried; it is the session's failure,
- * in the server's words, filed as any failed reattach is.
- */
-class OpencodeReattachFailed extends Error {}
+/** The generations a recovery round asked, as a custody line names them. */
+const generationsAsked = async (round: RecoveryRound): Promise<string> => {
+  const asked = await round.generations.catch(() => [] as ServerIdentity[]);
+  return asked.length > 0 ? asked.map(generationName).join(", ") : "none live";
+};
+
+/** One server generation, as a custody line names it. */
+const generationName = (identity: ServerIdentity): string =>
+  `${identity.procId}/${identity.pid} at ${identity.url}`;
 
 /**
  * How long the first request for a directory may take on a server: it boots
@@ -7348,6 +7353,18 @@ export class OpencodeHarness implements Harness {
     return recovery;
   }
 
+  /**
+   * A held session taken back from the server generation running it, or
+   * opened on its account's server when none runs its turn. Each attempt is
+   * {@link #reattachOnce} on a round of its own (the live generations read
+   * again), its every request bounded by {@link RECOVERY_TIMEOUT_MS}. A
+   * server that answers for the session with an error refuses it at once; one
+   * out of reach is tried again, a little later each time, until
+   * {@link RECOVERY_RETRY_BUDGET_MS}. Either ends on {@link ReattachFailed},
+   * naming the generations asked: a server that answers every request with
+   * an error (one answered HTTP 500 for 4.5 hours, 2026-10-10) holds this
+   * session alone, never the machine.
+   */
   async #recover(
     spec: SpawnPayload,
     ctx: HarnessContext,
@@ -7377,14 +7394,14 @@ export class OpencodeHarness implements Harness {
         ) {
           throw error;
         }
-        if (error instanceof OpencodeReattachFailed) {
+        if (error instanceof ReattachFailed) {
           await this.#decideFailed(spec, ctx, round);
           throw error;
         }
         if (Date.now() >= deadline) {
           await this.#decideFailed(spec, ctx, round);
-          throw new OpencodeReattachFailed(
-            `OpenCode could not be reached to reattach session ${spec.resume?.sessionKey ?? ctx.instanceId} within ${RECOVERY_RETRY_BUDGET_MS / 1000} s: ${errorText(error)}`,
+          throw new ReattachFailed(
+            `OpenCode could not be reached to reattach session ${spec.resume?.sessionKey ?? ctx.instanceId} within ${RECOVERY_RETRY_BUDGET_MS / 1000} s on generation ${await generationsAsked(round)}: ${errorText(error)}`,
             { cause: error }
           );
         }
@@ -7470,8 +7487,8 @@ export class OpencodeHarness implements Harness {
       if (busy.length === 0) {
         for (const generation of states) {
           if (generation.state.kind === "refused") {
-            throw new OpencodeReattachFailed(
-              `OpenCode session ${resume.sessionKey} cannot be reattached: ${generation.state.reason}`
+            throw new ReattachFailed(
+              `OpenCode session ${resume.sessionKey} cannot be reattached on generation ${generationName(generation.identity)}: ${generation.state.reason}`
             );
           }
         }
@@ -7520,8 +7537,8 @@ export class OpencodeHarness implements Harness {
         return;
       }
       if (session.response && !session.response.ok) {
-        throw new OpencodeReattachFailed(
-          `OpenCode answered HTTP ${session.response.status} for session ${resume.sessionKey} in ${ctx.cwd}: ${JSON.stringify(session.error)}`
+        throw new ReattachFailed(
+          `OpenCode generation ${generationName(identity)} answered HTTP ${session.response.status} for session ${resume.sessionKey} in ${ctx.cwd}: ${JSON.stringify(session.error)}`
         );
       }
       if (session.error || !session.data) {

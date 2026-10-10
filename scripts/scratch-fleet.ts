@@ -418,6 +418,32 @@ export async function scratchFleet(options: {
     }
     console.log(`… ${role} (pid ${child.pid}) stopped with ${signal}`);
   };
+  /**
+   * Freezes a role's process where it stands (SIGSTOP), or lets it run on
+   * (SIGCONT): what reaches it meanwhile waits at its door, read when it runs.
+   */
+  const freeze = (role: Role, frozen: boolean) => {
+    const child = procs[role];
+    if (!child || child.exitCode !== null) {
+      throw new Error(`${role} is not running`);
+    }
+    child.kill(frozen ? "SIGSTOP" : "SIGCONT");
+    console.log(`… ${role} (pid ${child.pid}) ${frozen ? "frozen" : "thawed"}`);
+  };
+  /** The log files a role's launches wrote so far, read whole, oldest first. */
+  const logs = async (role: Role): Promise<string> => {
+    const files = (await readdir(sandbox))
+      .filter((file) => file.startsWith(`${role}-`))
+      .sort(
+        (a, b) =>
+          Number(a.split("-")[1]?.split(".")[0]) -
+          Number(b.split("-")[1]?.split(".")[0])
+      );
+    const texts = await Promise.all(
+      files.map((file) => Bun.file(join(sandbox, file)).text())
+    );
+    return texts.join("\n");
+  };
   /** Every descendant of `pid`, read from /proc. */
   const descendants = async (pid: number): Promise<number[]> => {
     const children = new Map<number, number[]>();
@@ -699,11 +725,15 @@ export async function scratchFleet(options: {
 
   return {
     sandbox,
+    home,
+    sessiondSocket,
     repo,
     workdir,
     seen,
     launch,
     stop,
+    freeze,
+    logs,
     killTree,
     killSessiond,
     sessionPid,

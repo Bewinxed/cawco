@@ -103,6 +103,7 @@ import {
   HeldProcessRefused,
   HubContractRefused,
   type KeeperRefused,
+  ReattachFailed,
   SessionAddressRefused,
 } from "./harness";
 import { harnesses, harness as harnessOf } from "./harnesses";
@@ -112,7 +113,7 @@ import { isMachineAgent } from "./machine-agent";
 import { prepareFleetMcp } from "./mcp-launcher";
 import { gaugeGroup, gaugeTables } from "./memory";
 import { startPreview, stopPreview, stopPreviews } from "./preview";
-import { parseProcId, SESSION_PROC_KINDS } from "./proc-id";
+import { parseProcId, type SESSION_PROC_KINDS } from "./proc-id";
 import { type PromptWriteNotice, withPromptWrites } from "./prompt-writes";
 import { rememberCredential } from "./redaction";
 import { fenced } from "./restart";
@@ -179,6 +180,16 @@ interface Claimed {
   /** Lets go of the claim, for a reattach waiting on this row. */
   settle: () => void;
 }
+
+/**
+ * One held session's custody, known: its child attached; held but not
+ * attached (the hub attaches it again); or absent, sessiond holding no child
+ * for it, so its spawn starts one.
+ */
+export type CustodyDecided = (
+  instanceId: string,
+  outcome: "attached" | "failed" | "absent"
+) => void;
 
 /**
  * The context the supervisor hands an adapter, plus the one thing only an
@@ -558,7 +569,14 @@ export class SessionSupervisor {
   #custodyState: AgentBusyReport["recovery"] = "recovering";
   #custodyError: string | undefined;
   #custodyEpoch = 0;
+  /** The sessions whose custody is not decided yet, each let go as its own harness settles it. */
   #custodyInstances = new Set<string>();
+  /**
+   * The harness each undecided session's custody waits on, from the register
+   * ack on ({@link custodyUnits}). Undefined before it: until the hub has
+   * answered, no harness's custody is known.
+   */
+  #custodyHarnesses: Map<string, HarnessKind> | undefined;
 
   constructor() {
     gaugeTables("supervisor", {
@@ -589,7 +607,9 @@ export class SessionSupervisor {
       }
       return totals;
     });
-    this.#adapter("opencode").setCustodyReadiness?.(() => this.custodyReady);
+    this.#adapter("opencode").setCustodyReadiness?.(() =>
+      this.harnessCustodyReady("opencode")
+    );
     setInterval(() => {
       this.#sweepIdle().catch((error: unknown) =>
         warn(`the idle sweep failed: ${error}`)
@@ -983,12 +1003,54 @@ export class SessionSupervisor {
     return this.#custodyState === "ready";
   }
 
+  /**
+   * Whether `harness`'s custody is decided: the machine's is, or the register
+   * ack has named what each harness takes back and none of it is this
+   * harness's still. What waits on one harness's sessions (OpenCode's ending
+   * and runner readings) waits on that harness alone, never on another's
+   * reattach.
+   */
+  harnessCustodyReady(harness: HarnessKind): boolean {
+    if (this.custodyReady) {
+      return true;
+    }
+    const undecided = this.#custodyHarnesses;
+    return (
+      this.#custodyState === "recovering" &&
+      undecided !== undefined &&
+      ![...undecided.values()].includes(harness)
+    );
+  }
+
   beginCustody(instanceIds: readonly string[]): number {
     this.#custodyState = "recovering";
     this.#custodyError = undefined;
     this.#custodyInstances = new Set(instanceIds);
+    this.#custodyHarnesses = undefined;
     this.#custodyEpoch += 1;
     return this.#custodyEpoch;
+  }
+
+  /**
+   * What the register ack hands this epoch to take back: each session the
+   * hub named, by the harness that reattaches it. From here a harness's
+   * custody is decided once none of its sessions is left.
+   */
+  custodyUnits(epoch: number, units: ReadonlyMap<string, HarnessKind>): void {
+    if (epoch !== this.#custodyEpoch) {
+      return;
+    }
+    this.#custodyHarnesses = new Map(units);
+    this.#custodyInstances = new Set(units.keys());
+  }
+
+  /** One session's custody decided (attached, refused, absent or settled unattached): it is no longer waited on. */
+  custodySettled(epoch: number, instanceId: string): void {
+    if (epoch !== this.#custodyEpoch) {
+      return;
+    }
+    this.#custodyInstances.delete(instanceId);
+    this.#custodyHarnesses?.delete(instanceId);
   }
 
   /** Whether custody is ready now: false when the hub refused its contract (reported as a failure) or a newer epoch began. */
@@ -1004,6 +1066,7 @@ export class SessionSupervisor {
     this.#custodyState = "ready";
     this.#custodyError = undefined;
     this.#custodyInstances.clear();
+    this.#custodyHarnesses = new Map();
     return true;
   }
 
@@ -1022,19 +1085,21 @@ export class SessionSupervisor {
   }
 
   /**
-   * A recovery that did not complete: the register went unanswered, an
-   * attempt failed or ran out of time, or the hub refused the contract. Said
-   * to every session it named and in the log, and idle-gated operations stay
-   * held. Only for the epoch in progress: one that completed was recovered,
-   * and losing the connection after that begins a new one (`loseCustody`).
+   * A recovery that could not be decided: the register went unanswered, or
+   * the hub refused the contract. Said to every session it named and in the
+   * log, and idle-gated operations stay held. Only for the epoch in
+   * progress: one that completed was recovered, and losing the connection
+   * after that begins a new one (`loseCustody`). A harness whose reattach
+   * fails or runs out of time is not this: it settles its own sessions and
+   * custody goes on (daemon.ts `takeCustody`).
    *
    * What happens next depends on the cause. An unanswered register is sent
-   * again, and a failed attempt is made again, on the same connection
-   * (daemon.ts `registrationExpired`, `takeCustody`). A refused contract is
-   * not: the hub answers every register with the contract its build has
-   * (server.ts `registerAck`), and this agent reads it once per connection,
-   * from that connection's first register ack (daemon.ts `beforeAck`), so
-   * only a new connection to a hub on a build with the contract changes it.
+   * again on the same connection (daemon.ts `registrationExpired`). A
+   * refused contract is not: the hub answers every register with the
+   * contract its build has (server.ts `registerAck`), and this agent reads it
+   * once per connection, from that connection's first register ack (daemon.ts
+   * `beforeAck`), so only a new connection to a hub on a build with the
+   * contract changes it.
    */
   failCustody(epoch: number, problem: unknown): void {
     if (epoch !== this.#custodyEpoch || this.#custodyState === "ready") {
@@ -1046,7 +1111,7 @@ export class SessionSupervisor {
     const next =
       problem instanceof HubContractRefused
         ? "It's tried again when the hub next restarts and this machine registers"
-        : "Recovery retries while connected";
+        : "The register is sent again while connected";
     const message = `Machine custody recovery failed: ${this.#custodyError.replace(FINAL_STOP, "")}. ${next}; idle-gated operations remain held.`;
     const ids = [...this.#custodyInstances];
     for (const instanceId of ids) {
@@ -2077,6 +2142,26 @@ export class SessionSupervisor {
         }
         return;
       }
+      // A held session its harness could not take back (its server refused
+      // it, or stayed out of reach past its budget) is settled as
+      // unavailable: the hub owes its sends at once, and its next start is a
+      // start of its own. A start that ends so falls through and fails once,
+      // below.
+      if (error instanceof ReattachFailed && payload.reattachOnly === true) {
+        this.#failures.set(instanceId, error.message);
+        warn(`custody ${instanceId} settled unattached: ${error.message}`);
+        this.#recoveryUnavailable(payload, error.message);
+        if (ack) {
+          this.sink({
+            kind: "control_result",
+            instanceId,
+            requestId: ack,
+            ok: false,
+            error: error.message,
+          });
+        }
+        return;
+      }
       // A probe that found nothing to attach says nothing to the hub, but
       // why it found nothing goes in the journal; a held process refused at
       // attach was stopped, and that is its failure.
@@ -2445,57 +2530,13 @@ export class SessionSupervisor {
     this.#realPromptEpoch.delete(instanceId);
   }
 
-  /**
-   * REATTACH (design §4.1, §7). The agent has restarted; sessiond is still
-   * holding the children. Each one the caller names is attached to at once: a
-   * full SDK `Query` on the same process, whether it is idle, mid-turn or
-   * running background work. No relaunch, so nothing it runs is cut off.
-   *
-   * The `Query` reads from the hub's own ingest mark (§7's ledger), so what
-   * the child wrote while no agent was reading reaches the hub exactly once.
-   * No mark, or one from another process, follows from head: the honest-loss
-   * rule, which replays nothing rather than double what history shows.
-   *
-   * Three steps, and only the middle one decides what busy questions hear:
-   *  1. CLAIM every row sessiond is holding, without yielding.
-   *  2. DECIDE whether each claimed child is mid-turn, all at once, off the
-   *     runtime ({@link SessiondAdoption.turnRunning}). Machine readiness stays
-   *     held by the custody transaction until every recovery has an outcome,
-   *     and a running turn is in `#busy` from then on — attached or not yet.
-   *  3. ATTACH them one at a time. On obelisk this took 23 s for 138 rows
-   *     (2026-10-01), and a busy answer that waited for it, or read `#busy`
-   *     before it reached a working row, read 0 while two sessions worked.
-   *
-   * Returns the instance ids attached. A row sessiond is not holding is not
-   * one of them: no process, nothing to attach to, and the hub's own
-   * `sleeping`/`restore` path owns it from there.
-   */
-  async reattach(
-    rows: Claimed["row"][],
-    /**
-     * The hub's ingest ledger off the register ack. Absent — a hub that has
-     * nothing of this machine — means every row follows from head.
-     */
-    ingested?: Record<string, IngestMark>,
-    signal?: AbortSignal,
-    failed = new Set<string>()
-  ): Promise<string[]> {
-    return (
-      await Promise.all(
-        SESSION_PROC_KINDS.map((kind) =>
-          this.#reattachHarness(kind, rows, ingested, signal, failed)
-        )
-      )
-    ).flat();
-  }
-
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one custody transaction claims, decides and adopts sessions, restoring maintenance identity before any pulse
   async #reattachHarness(
     kind: HarnessKind,
     rows: Claimed["row"][],
-    ingested?: Record<string, IngestMark>,
-    signal?: AbortSignal,
-    failed = new Set<string>()
+    ingested: Record<string, IngestMark> | undefined,
+    signal: AbortSignal,
+    decided: CustodyDecided
   ): Promise<string[]> {
     const adapter = this.#adapter(kind);
     const candidate = adapter as Harness & Partial<SessiondAdoption>;
@@ -2513,7 +2554,7 @@ export class SessionSupervisor {
     const adopted: string[] = [];
     try {
       const welcome = await custodyProbe(claude.custodyCandidates(), signal);
-      signal?.throwIfAborted();
+      signal.throwIfAborted();
       const held = new Map(
         welcome.procs
           .filter((proc) => proc.alive)
@@ -2537,9 +2578,11 @@ export class SessionSupervisor {
       // attach, and is waited for after this one's own rows. Nothing in this
       // loop yields, so no other reattach can claim a row between its check
       // and its `#adopting.set`.
+      const absent: string[] = [];
       for (const row of rows) {
         const proc = held.get(row.instanceId);
         if (!proc) {
+          absent.push(row.instanceId);
           continue;
         }
         if (row.keepAliveTurn) {
@@ -2552,11 +2595,17 @@ export class SessionSupervisor {
         // Admitted when this daemon spawned or attached to it.
         if (this.#sessions.has(row.instanceId)) {
           adopted.push(row.instanceId);
+          decided(row.instanceId, "attached");
           continue;
         }
         const claim = Promise.withResolvers<void>();
         this.#adopting.set(row.instanceId, claim.promise);
         claimed.push({ row, proc, running: false, settle: claim.resolve });
+      }
+      // Claimed, every child sessiond holds: what it does not hold has no
+      // process to take back, and is decided now.
+      for (const instanceId of absent) {
+        decided(instanceId, "absent");
       }
 
       // 2. DECIDE, every claimed row at once.
@@ -2568,16 +2617,16 @@ export class SessionSupervisor {
               signal
             );
           } catch (problem) {
-            signal?.throwIfAborted();
+            signal.throwIfAborted();
             entry.failed = true;
-            failed.add(entry.row.instanceId);
             this.#sessionRecoveryFailed(
               entry.row.instanceId,
               problem,
               entry.row.processGeneration
             );
+            decided(entry.row.instanceId, "failed");
           }
-          signal?.throwIfAborted();
+          signal.throwIfAborted();
           if (entry.running) {
             this.#busy.add(entry.row.instanceId);
             // The hub forgot this session's pulse at the register: the rail's
@@ -2587,9 +2636,9 @@ export class SessionSupervisor {
         })
       );
 
-      // 3. ATTACH, one at a time.
+      // 3. ATTACH, one at a time, each let go as soon as it is attached.
       for (const entry of claimed) {
-        signal?.throwIfAborted();
+        signal.throwIfAborted();
         if (entry.failed) {
           continue;
         }
@@ -2597,8 +2646,8 @@ export class SessionSupervisor {
           // biome-ignore lint/performance/noAwaitInLoops: rows are attached one at a time: each mutates the shared #ingested map
           await this.#adoptClaimed(claude, welcome.epoch, entry, ingested);
           adopted.push(entry.row.instanceId);
+          decided(entry.row.instanceId, "attached");
         } catch (problem) {
-          failed.add(entry.row.instanceId);
           // A child refused at attach (its credential, its boundary hook) was
           // stopped: an end, not a recovery the hub retries.
           if (problem instanceof HeldProcessRefused) {
@@ -2615,6 +2664,7 @@ export class SessionSupervisor {
             );
           }
           entry.settle();
+          decided(entry.row.instanceId, "failed");
         }
       }
     } finally {
@@ -2623,15 +2673,16 @@ export class SessionSupervisor {
     // Another reattach's rows, once it is done with them. One it failed to
     // attach is tried again here, as a reattach of its own.
     for (const row of elsewhere) {
-      signal?.throwIfAborted();
+      signal.throwIfAborted();
       // biome-ignore lint/performance/noAwaitInLoops: each row waits on whichever reattach holds it
       await custodyProbe(
         this.#adopting.get(row.instanceId) ?? Promise.resolve(),
         signal
       );
-      signal?.throwIfAborted();
+      signal.throwIfAborted();
       if (this.#sessions.has(row.instanceId)) {
         adopted.push(row.instanceId);
+        decided(row.instanceId, "attached");
       } else {
         adopted.push(
           ...(await this.#reattachHarness(
@@ -2639,7 +2690,7 @@ export class SessionSupervisor {
             [row],
             ingested,
             signal,
-            failed
+            decided
           ))
         );
       }
@@ -2742,22 +2793,47 @@ export class SessionSupervisor {
   }
 
   /**
-   * The reattach as the register ack hands it over (design §7, step 4): the
-   * ack's payload in, the instance ids attached out.
+   * REATTACH (design §4.1, §7), one harness's sessions, as the register ack
+   * hands them over (step 4). The agent has restarted; sessiond is still
+   * holding the children. Each one the caller names is attached to at once: a
+   * full SDK `Query` on the same process, whether it is idle, mid-turn or
+   * running background work. No relaunch, so nothing it runs is cut off.
+   *
+   * The `Query` reads from the hub's own ingest mark (§7's ledger, off the
+   * ack), so what the child wrote while no agent was reading reaches the hub
+   * exactly once. No mark, or one from another process, follows from head:
+   * the honest-loss rule, which replays nothing rather than double what
+   * history shows.
+   *
+   * Three steps, and only the middle one decides what busy questions hear:
+   *  1. CLAIM every row sessiond is holding, without yielding.
+   *  2. DECIDE whether each claimed child is mid-turn, all at once, off the
+   *     runtime ({@link SessiondAdoption.turnRunning}). A running turn is in
+   *     `#busy` from then on — attached or not yet.
+   *  3. ATTACH them one at a time. On obelisk this took 23 s for 138 rows
+   *     (2026-10-01), and a busy answer that waited for it, or read `#busy`
+   *     before it reached a working row, read 0 while two sessions worked.
+   *
+   * `decided` hears each row the moment its custody is known: attached,
+   * failed (its child is held but could not be attached; the hub tries again),
+   * or absent (sessiond holds no child for it). What waits on one session
+   * waits for that alone, never for the rows after it or another harness.
+   * Rows `signal` cuts off are the caller's to settle.
    */
   async reattachFrom(
+    kind: (typeof SESSION_PROC_KINDS)[number],
     ackPayload: unknown,
     rows: Claimed["row"][],
-    signal?: AbortSignal
-  ): Promise<{ attached: string[]; failed: Set<string> }> {
-    const failed = new Set<string>();
-    const attached = await this.reattach(
+    signal: AbortSignal,
+    decided: CustodyDecided
+  ): Promise<string[]> {
+    return await this.#reattachHarness(
+      kind,
       rows,
       readIngested(ackPayload),
       signal,
-      failed
+      decided
     );
-    return { attached, failed };
   }
 
   /** The harness session a spin-off turned out to be writing, from its init frame. */
