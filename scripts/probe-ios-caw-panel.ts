@@ -222,16 +222,22 @@ const centre = (f: Frame) => ({ x: f.x + f.width / 2, y: f.y + f.height / 2 });
 const inside = (f: Frame, p: { x: number; y: number }) =>
   p.x >= f.x && p.x <= f.x + f.width && p.y >= f.y && p.y <= f.y + f.height;
 const pause = (ms: number) => Bun.sleep(ms);
-/** One finger's tap at a point, in points. */
 /**
- * One finger's tap at a point, in points. A tap axe still cannot place
- * after its tries ("invisible due to a fullscreen dialog") leaves what was
- * over the app: a screenshot beside the captures and the tree's labels.
+ * One finger's tap at a point, in points. A tap axe cannot place after its
+ * tries ("invisible due to a fullscreen dialog": something of the system's
+ * over the app, which a freshly booted iPad can put up) leaves what was on
+ * screen (a screenshot beside the captures and the tree's labels), presses
+ * Escape at whatever stands over the app, and tries again after 10s; only
+ * a tap still blocked then fails the run.
  */
 async function tap(udid: string, p: { x: number; y: number }) {
+  const at = `tap -x ${Math.round(p.x)} -y ${Math.round(p.y)} --udid ${udid}`;
   try {
-    await axe(`tap -x ${Math.round(p.x)} -y ${Math.round(p.y)} --udid ${udid}`);
+    await axe(at);
   } catch (error) {
+    if (!AXE_SESSION.test(String(error))) {
+      throw error;
+    }
     blocked += 1;
     console.log(
       `  tap at (${Math.round(p.x)}, ${Math.round(p.y)}) blocked: what was on screen follows`
@@ -249,7 +255,11 @@ async function tap(udid: string, p: { x: number; y: number }) {
         (reason) => `describe-ui failed too: ${String(reason).slice(0, 160)}`
       );
     console.log(`  the tree's first labels: ${labels}`);
-    throw error;
+    // Escape (HID 41) dismisses a system sheet or HUD where one takes keys.
+    await mac(`${AXE} key 41 --udid ${udid}`).catch(() => undefined);
+    await Bun.sleep(10_000);
+    await axe(at);
+    console.log("  the tap went through after waiting");
   }
 }
 let blocked = 0;
