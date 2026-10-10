@@ -1330,28 +1330,49 @@
   /** The box around the list; its first child is virtua's container. */
   let listing = $state<HTMLElement>();
   /**
-   * The part of a pixel that makes the list a whole number of pixels tall,
-   * laid above its first row. The list is the sum of its rows' measured
-   * heights, which is rarely whole, and a scroll offset is: pinned to the
-   * bottom, the last row stood off the foot by the list's fraction (a row
-   * arriving moved the tail 0.56px). Taken up at the top, where no reader
-   * sees a sub-pixel, it puts the tail on the foot exactly, every time.
+   * The part of a pixel that makes the scroll range a whole number of pixels,
+   * laid above the list's first row. A scroll offset is whole (at a device
+   * pixel ratio of 1, in Chromium and WebKit alike), and the range it moves
+   * over — the content's height less the scroller's own box — rarely is: the
+   * list is the sum of its rows' measured heights, and the box is whatever
+   * the pane's layout left it (733.359375px in WebKit, 732.859375px in
+   * Chromium, where `clientHeight` says 733 for both). Pinned at the largest
+   * whole offset, the last row stood off the foot by what was left over: a row
+   * arriving moved the tail 0.56px, and in WebKit the tail rested 0.359px
+   * above the foot, where virtua took the growing row for one above the view
+   * and held its top (its store's `shouldKeep`), a write of its own on every
+   * frame of a reply. Taken up at the top, where no reader sees a sub-pixel,
+   * it puts the tail on the foot exactly, every time.
    */
   let spare = $state(0);
+  /** The room past the end for what rises past the composer (the markup). */
+  let parkedRoom = $state<HTMLElement>();
   /**
-   * Puts `spare` on the list's height as virtua last wrote it to its
-   * container's style, and the padding on the page; says whether it moved.
-   * The pin calls it before it reads the height, so a list that grew is
-   * whole in the frame it grew.
+   * Puts `spare` on the scroll range as it stands, and the padding on the
+   * page; says whether it moved. The pin calls it before it reads the height,
+   * so a list that grew is whole in the frame it grew.
+   *
+   * The range is the content less the box. The padding under the list is in
+   * both and drops out, so what is left is virtua's viewport (the box's
+   * content height, `getViewportSize`) against what stands above the foot's
+   * padding: the strip before the list, the list as virtua sizes it
+   * (`getScrollSize`: from its store, exact, where the height it writes to
+   * its container's style reads back in Chromium cut to six significant
+   * digits, 2129.05 for 2129.046875), and the parked room. None of them is
+   * read off the layout: this runs in whatever task virtua's write landed in.
    */
   function keepWhole(): boolean {
-    const inner = listing?.firstElementChild as HTMLElement | null | undefined;
-    const height = Number.parseFloat(inner?.style.height ?? "");
-    if (!Number.isFinite(height)) {
+    const height = list?.getScrollSize() ?? 0;
+    const viewport = list?.getViewportSize() ?? 0;
+    if (!(viewport > 0 && height > viewport && parkedRoom)) {
       return false;
     }
-    const whole = Math.ceil(height - 0.001) - height;
-    const next = whole < 0.001 ? 0 : whole;
+    const parked =
+      Number.parseFloat(
+        getComputedStyle(parkedRoom).getPropertyValue("--parked-room")
+      ) || 0;
+    const over = (((viewport - olderRoom - height - parked) % 1) + 1) % 1;
+    const next = over < 0.001 || over > 0.999 ? 0 : over;
     if (Math.abs(next - spare) <= 0.001) {
       return false;
     }
@@ -2834,7 +2855,7 @@
        is: the tail's pin follows the list and the rows, not this, so the
        view holds still as a card parks, and the reader can scroll on to the
        last row, clear above it. -->
-  <div aria-hidden="true" class="parked-room"></div>
+  <div aria-hidden="true" class="parked-room" bind:this={parkedRoom}></div>
   <!-- Floating above the composer column, at zero height in the flow, so
        nothing here coming or going moves a row: the catch-up, from the switch
        until it has appended, and — scrolled away from the tail — the way back. -->
