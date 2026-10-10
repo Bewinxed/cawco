@@ -77,8 +77,12 @@ import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import type { WorkspaceRef } from "@cawco/core";
 import { WORKSPACE_BOUNDARY_START_TIMEOUT_MS } from "@cawco/core";
-import { binaryRoot } from "@cawco/core/binary-installation";
-import { currentEndpoint, machineEndpoint } from "@cawco/core/keepers";
+import { binaryRoot, readUpdateState } from "@cawco/core/binary-installation";
+import {
+  currentEndpoint,
+  currentKeeper,
+  machineEndpoint,
+} from "@cawco/core/keepers";
 import {
   AGENT_SOCKET_ENV,
   sessionIdentityDir,
@@ -100,6 +104,7 @@ import {
 import {
   embeddedFile,
   materializeExecutable,
+  runtimeVersion,
   standalone,
 } from "@cawco/core/runtime";
 import type { ProcSpec } from "@cawco/core/sessiond";
@@ -857,8 +862,11 @@ const armHook = async (
  * Writes one workspace's hook and its script again, in this build's form,
  * and serves its tool door: whether it was armed. A running boundary of an
  * older form is handed over here, behind the gate, and its handover arms the
- * new one ({@link handOver}); one whose handover fails is armed as it is and
- * tried again at each look ({@link replaceSoon}). An older boundary an
+ * new one ({@link handOver}); while this build's keeper is still owed the
+ * machine's endpoint (an update's agent starts before its keeper does), it is
+ * armed as it is and handed over once that keeper is the machine's ({@link
+ * ownKeeperOwed}); one whose handover fails is armed as it is and tried again
+ * at each look ({@link replaceSoon}). An older boundary an
  * earlier agent left running beside the current one is closed once nothing
  * runs in it ({@link closeWhenIdle}). Never throws: what fails is said.
  */
@@ -1237,6 +1245,32 @@ const keepers = new KeeperPool();
 /** The keeper every new boundary and judge starts on: the current one. */
 const sessiond = (): Promise<SessiondClient> => keepers.current();
 
+/**
+ * Whether the machine's endpoint is still owed to this build's own keeper: on
+ * a binary install, the keeper it names (core keepers.ts: the current one) is
+ * not this build's, and this build's keeper has not failed to start
+ * (`keeperFailedVersion`). An update restarts this agent first and hands the
+ * keeper over only once the build answers (binary-apply.ts `settle`), and an
+ * agent whose keeper is behind has a helper hand it over (binary-update.ts
+ * `#advanceKeeper`); meanwhile the keeper the endpoint names is about to
+ * retire, so a boundary replaced onto it would be replaced a second time. A
+ * replacement waits for this build's keeper instead.
+ */
+const ownKeeperOwed = async (): Promise<boolean> => {
+  if (!standalone) {
+    return false;
+  }
+  const current = await currentKeeper();
+  if (
+    !current ||
+    (current.keeper.kind === "build" &&
+      current.keeper.version === runtimeVersion)
+  ) {
+    return false;
+  }
+  return (await readUpdateState())?.keeperFailedVersion !== runtimeVersion;
+};
+
 const refusal = (id: string, why: string): Error =>
   new Error(`workspace ${id} cannot run a delegate on this machine: ${why}`);
 
@@ -1349,6 +1383,9 @@ const ensure = async (ref: WorkspaceRef): Promise<Boundary> => {
   if (!git.isDirectory()) {
     await cloneInPlace(ref.path);
   }
+  // Asked before the keeper is: the endpoint only ever moves on to this
+  // build's keeper, so a keeper dialled after "not owed" is this build's.
+  const owed = await ownKeeperOwed();
   const client = await sessiond();
   const held = await readHeld(ref.id);
   const holder = held ? await running(ref.id, held) : undefined;
@@ -1359,6 +1396,19 @@ const ensure = async (ref: WorkspaceRef): Promise<Boundary> => {
   // One of an older form, or one a retiring keeper holds, is handed over to
   // one of this build's form on the current keeper.
   if (held.form !== (await formOf(ref)) || holder.epoch !== client.epoch) {
+    if (owed) {
+      // The keeper the endpoint names now retires as soon as this build's
+      // takes the endpoint: the boundary runs on as it is, armed, and is
+      // handed over once, at the first look after this build's keeper is
+      // the machine's ({@link handOverStale}).
+      if (!stale.has(ref.id)) {
+        console.info(
+          `[workspace] ${ref.id}: its boundary ${held.pid} (form ${held.form ?? "none"}) is handed over once this build's session keeper is the machine's`
+        );
+      }
+      replaceSoon(ref);
+      return armHook(ref.id, held);
+    }
     if (process.platform === "linux" && (await hasLeftDirs(ref.path))) {
       // A boundary started beside it would bind the same mount point and
       // keep it; this one is replaced whole once nothing runs in it.
@@ -1918,9 +1968,14 @@ const sandboxesGone = async (inners: readonly number[]): Promise<boolean> => {
  * sandbox but what was there when its runner was ready. The gate goes up
  * first, as for a handover, so a command arriving meanwhile waits and runs
  * through the new one. A workspace with no boundary running, or no such
- * mount point left, is forgotten: its next start makes the stand-in.
+ * mount point left, is forgotten: its next start makes the stand-in. Not
+ * while this build's keeper is owed the machine's endpoint ({@link
+ * ownKeeperOwed}): the new one starts on the keeper that stays.
  */
 const restartStubbed = async (): Promise<void> => {
+  if (await ownKeeperOwed()) {
+    return;
+  }
   for (const ref of [...stubbed.values()]) {
     try {
       // biome-ignore lint/performance/noAwaitInLoops: one workspace at a time
@@ -1989,7 +2044,15 @@ const restartIfIdle = async (
   }
 };
 
+/**
+ * Hands over each {@link stale} boundary that still runs. Not while this
+ * build's keeper is owed the machine's endpoint ({@link ownKeeperOwed}): each
+ * waits for it, so its one handover lands on the keeper that stays.
+ */
 const handOverStale = async (): Promise<void> => {
+  if (stale.size === 0 || (await ownKeeperOwed())) {
+    return;
+  }
   for (const ref of [...stale.values()]) {
     if (starting.has(ref.id)) {
       continue;
@@ -2100,6 +2163,13 @@ const forgetRetiring = (id: string): void => {
  *   which starts the judge on the current keeper (its form names its keeper,
  *   {@link judgeFor}) and points the hook at it once it answers; the one
  *   before leaves once the hook no longer names it.
+ *
+ * A handover of an older form waits for this build's keeper ({@link
+ * ownKeeperOwed}), so none lands on a keeper that is about to retire. What
+ * still runs on one when a keeper is handed over: a boundary whose form this
+ * build keeps (it is not handed over as the agent starts), one started fresh
+ * (none was running) before this build's keeper took the endpoint, a judge,
+ * and everything a `--keeper-only` handover leaves behind.
  *
  * One listing of each keeper, whatever the number of workspaces.
  */
