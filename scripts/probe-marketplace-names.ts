@@ -9,9 +9,14 @@
  * 2. jakubkrehel/skills (which calls itself `interfaces`) is linked through
  *    the hub's route: the name read answers `interfaces`, and the row is
  *    `interfaces`, whatever an operator would have typed.
- * 3. After the agent's sync, both rows are applied on the machine, which is
- *    the CLI's registry holding that very name; Browse (`marketplaceCatalog`)
- *    lists each one's plugins; and a plugin installed from each is applied.
+ *    So are a directory on the hub (`probe-local`) and a marketplace.json
+ *    served by URL (`probe-url`).
+ * 3. After the agent's sync, every row is applied on the machine: for the
+ *    GitHub and URL rows that is the CLI's registry holding that very name,
+ *    and the hub directory is linked nowhere but the hub's machine. Browse,
+ *    answered by the hub from each row's source, lists every one's plugins,
+ *    the hub directory's included; a plugin installed from each is applied;
+ *    and the URL row's relative plugin is refused with the docs' reason.
  * 4. The agent runs with a `CLAUDE_CONFIG_DIR` of someone else's (as a daemon
  *    started from inside a session does): nothing lands in it. A `cawco`
  *    already registered at another HOME's directory is replaced by the
@@ -44,6 +49,17 @@ for (const key of Object.keys(process.env)) {
   }
 }
 
+/**
+ * The hub runs as a machine of its own: with the agent's id it would take
+ * the agent for its own machine (core machine-id.ts, hub `isHubMachine`) and
+ * have it link the hub's directory, which is the case this probe needs not.
+ */
+const launchHub = () => {
+  fleet.env.CAWCO_MACHINE_ID = `${MACHINE}-hub`;
+  fleet.launch("hub");
+  fleet.env.CAWCO_MACHINE_ID = MACHINE;
+};
+
 const failures: string[] = [];
 const check = (label: string, ok: boolean, detail = "") => {
   console.log(
@@ -72,54 +88,68 @@ const send = async (method: string, path: string, body?: unknown) => {
   return JSON.parse(text) as unknown;
 };
 
-/** One control call to the agent, answered over a dashboard socket of its own. */
-const control = async <T>(method: string, args: unknown[]): Promise<T> => {
-  const socket = new WebSocket(
-    `${fleet.base.replace("http", "ws")}/ws/dashboard`
-  );
-  await new Promise<void>((done, fail) => {
-    socket.onopen = () => done();
-    socket.onerror = () => fail(new Error("dashboard socket did not open"));
+/** Browse, as the dashboard asks it: the hub reads the row's source. */
+const browse = async (name: string) =>
+  (await send(
+    "GET",
+    `/api/fleet/marketplaces/${encodeURIComponent(name)}/plugins`
+  )) as { name: string }[];
+
+const install = (id: string) =>
+  send("PUT", `/api/fleet/plugins/${encodeURIComponent(id)}`, {
+    enabled: true,
   });
-  const requestId = crypto.randomUUID();
-  try {
-    return await new Promise<T>((done, fail) => {
-      const timer = setTimeout(
-        () => fail(new Error(`${method}: no answer`)),
-        60_000
-      );
-      socket.onmessage = (event) => {
-        // The hub sends `{ verb: "frames", payload }`, one frame or several.
-        const { payload } = JSON.parse(String(event.data)) as {
-          payload?: unknown;
-        };
-        const frame = (Array.isArray(payload) ? payload : [payload]).find(
-          (one: { kind?: string; requestId?: string } | undefined) =>
-            one?.kind === "control_result" && one.requestId === requestId
-        ) as { ok?: boolean; result?: unknown; error?: string } | undefined;
-        if (!frame) {
-          return;
-        }
-        clearTimeout(timer);
-        if (frame.ok) {
-          done(frame.result as T);
-        } else {
-          fail(new Error(frame.error ?? `${method} failed`));
-        }
-      };
-      socket.send(
-        JSON.stringify({
-          verb: "control",
-          machineId: MACHINE,
-          requestId,
-          payload: { requestId, method, args },
-        })
-      );
-    });
-  } finally {
-    socket.close();
-  }
+
+/**
+ * A marketplace that is a directory on the hub: no machine but the hub's own
+ * links it, so a scratch agent (which is not the hub's machine) holds no copy.
+ */
+const localMarket = join(fleet.sandbox, "hub-market");
+const writeLocalMarket = async () => {
+  await Bun.write(
+    join(localMarket, ".claude-plugin", "marketplace.json"),
+    JSON.stringify({
+      name: "probe-local",
+      owner: { name: "probe" },
+      plugins: [{ name: "local-one", source: "./plugins/local-one" }],
+    })
+  );
+  await Bun.write(
+    join(localMarket, "plugins", "local-one", ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "local-one", version: "1.0.0" })
+  );
+  await Bun.write(
+    join(localMarket, "plugins", "local-one", "skills", "hello", "SKILL.md"),
+    "---\ndescription: Says hello\n---\n\nSay hello.\n"
+  );
 };
+
+/**
+ * A marketplace added by its marketplace.json URL: one plugin with a source of
+ * its own (a GitHub subdirectory) and one with a relative path, which the docs
+ * say cannot resolve there.
+ */
+const urlMarket = Bun.serve({
+  hostname: "127.0.0.1",
+  port: 0,
+  fetch: () =>
+    Response.json({
+      name: "probe-url",
+      owner: { name: "probe" },
+      plugins: [
+        {
+          name: "show-me",
+          source: {
+            source: "git-subdir",
+            url: "https://github.com/humanlayer/skills",
+            path: "plugins/show-me",
+          },
+        },
+        { name: "relative-one", source: "./plugins/relative-one" },
+      ],
+    }),
+});
+const urlSource = `http://127.0.0.1:${urlMarket.port}/marketplace.json`;
 
 interface AgentRow {
   fleet?: {
@@ -135,7 +165,7 @@ const report = async () =>
 
 try {
   // ── 1. A row under a typed name, renamed at hub start ────────────────
-  fleet.launch("hub");
+  launchHub();
   await fleet.hubUp();
   const catalog = (await fetch(
     "https://raw.githubusercontent.com/humanlayer/skills/HEAD/.claude-plugin/marketplace.json"
@@ -156,7 +186,7 @@ try {
     Date.now()
   );
   await fleet.stop("hub");
-  fleet.launch("hub");
+  launchHub();
   await fleet.hubUp();
   const renamed = await until(
     "the seeded row renamed",
@@ -199,6 +229,18 @@ try {
     linked.name === "interfaces",
     JSON.stringify(linked)
   );
+  await writeLocalMarket();
+  const local = (await send("POST", "/api/fleet/marketplaces", {
+    source: localMarket,
+  })) as { name: string };
+  const byUrl = (await send("POST", "/api/fleet/marketplaces", {
+    source: urlSource,
+  })) as { name: string };
+  check(
+    "a hub directory and a marketplace.json URL link under their names",
+    local.name === "probe-local" && byUrl.name === "probe-url",
+    `${local.name}, ${byUrl.name}`
+  );
 
   // ── 3. The machine: registry, Browse, install ────────────────────────
   // A `cawco` some other HOME's daemon registered here, as obelisk's
@@ -229,11 +271,12 @@ try {
   fleet.launch("agent");
   await fleet.agentUp();
   const synced = await until(
-    "both marketplaces applied on the agent",
+    "every marketplace applied on the agent",
     report,
     (fleetNow) =>
-      fleetNow?.marketplaces?.skills?.state === "applied" &&
-      fleetNow.marketplaces.interfaces?.state === "applied",
+      ["skills", "interfaces", "probe-local", "probe-url"].every(
+        (name) => fleetNow?.marketplaces?.[name]?.state === "applied"
+      ),
     300_000
   );
   check(
@@ -251,37 +294,55 @@ try {
     Object.keys(registry).join(", ")
   );
 
-  for (const name of ["skills", "interfaces"]) {
+  check(
+    "the hub-directory marketplace is not linked on the agent",
+    registry["probe-local"] === undefined,
+    Object.keys(registry).join(", ")
+  );
+
+  const listings: Partial<Record<string, string[]>> = {};
+  for (const name of ["skills", "interfaces", "probe-local", "probe-url"]) {
     // biome-ignore lint/performance/noAwaitInLoops: one Browse at a time, as the dashboard does
-    const listed = await control<{ name: string }[]>("marketplaceCatalog", [
-      name,
-    ]);
+    listings[name] = (await browse(name)).map((one) => one.name);
     check(
       `Browse lists ${name}'s plugins`,
-      listed.length > 0,
-      listed.map((one) => one.name).join(", ")
+      (listings[name]?.length ?? 0) > 0,
+      listings[name]?.join(", ")
     );
   }
 
-  const browsed = await control<{ name: string }[]>("marketplaceCatalog", [
-    "interfaces",
-  ]);
-  const picked = `${browsed[0]?.name}@interfaces`;
-  await send("PUT", `/api/fleet/plugins/${encodeURIComponent(picked)}`, {
-    enabled: true,
-  });
+  const picked = `${listings.interfaces?.[0]}@interfaces`;
+  const wanted = [
+    picked,
+    `${seeded}@skills`,
+    "local-one@probe-local",
+    "show-me@probe-url",
+  ];
+  for (const id of [...wanted, "relative-one@probe-url"]) {
+    // biome-ignore lint/performance/noAwaitInLoops: installs one at a time, as an operator clicks them
+    await install(id);
+  }
   const installed = await until(
-    "both plugins applied on the agent",
+    "every plugin applied on the agent",
     report,
     (fleetNow) =>
-      fleetNow?.plugins?.[picked]?.state === "applied" &&
-      fleetNow.plugins[`${seeded}@skills`]?.state === "applied",
+      wanted.every((id) => fleetNow?.plugins?.[id]?.state === "applied"),
     300_000
   );
   check(
     "a plugin from each marketplace installs",
     true,
     JSON.stringify(installed?.plugins)
+  );
+  const refused = (
+    (await send("GET", "/api/fleet")) as {
+      config: { plugins: { id: string; error?: string }[] };
+    }
+  ).config.plugins.find((one) => one.id === "relative-one@probe-url");
+  check(
+    "a relative plugin of a marketplace.json URL is refused with the docs' reason",
+    refused?.error?.includes("relative paths won't resolve") === true,
+    refused?.error ?? "no error"
   );
 
   // ── 4. Someone else's CLAUDE_CONFIG_DIR stays untouched ──────────────
@@ -299,6 +360,7 @@ try {
   failures.push(error instanceof Error ? error.message : String(error));
   console.log(`FAIL ${failures.at(-1)}`);
 } finally {
+  urlMarket.stop(true);
   await fleet.close();
   await fleet.clean(failures.length > 0);
 }

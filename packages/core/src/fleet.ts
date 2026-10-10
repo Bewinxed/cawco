@@ -830,8 +830,6 @@ export interface MachineHookScript {
  * - `syncFleetConfig(config: FleetConfig) => FleetSyncReport` — converge and
  *   report. Idempotent; the hub sends it on register and after any change.
  * - `fleetStatus() => FleetSyncReport` — report without changing anything.
- * - `marketplaceCatalog(name: string) => MarketplacePluginInfo[]` — what a
- *   linked marketplace offers, read from its clone on that machine.
  * - `inspectConfig(cwd?: string) => ConfigInspection` — what the machine
  *   really has, and what a session in `cwd` would see. Read-only.
  * - `readSkillFiles(name: string, cwd?: string) => SkillFile[]` — the files
@@ -845,7 +843,6 @@ export interface MachineHookScript {
  */
 export const FLEET_SYNC = "syncFleetConfig";
 export const FLEET_STATUS = "fleetStatus";
-export const MARKETPLACE_CATALOG = "marketplaceCatalog";
 export const INSPECT_CONFIG = "inspectConfig";
 export const READ_SKILL_FILES = "readSkillFiles";
 export const READ_MEMORY_FILE = "readMemoryFile";

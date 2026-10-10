@@ -10880,6 +10880,53 @@
         }
       }
     },
+    "/api/fleet/marketplaces/{name}/plugins": {
+      "get": {
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiFleetMarketplacesByNamePlugins",
+        "responses": {
+          "200": {
+            "description": "getApiFleetMarketplacesByNamePlugins 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiFleetMarketplacesByNamePlugins200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiFleetMarketplacesByNamePlugins 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiFleetMarketplacesByNamePlugins 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/fleet/marketplaces/{name}": {
       "delete": {
         "parameters": [
@@ -16949,6 +16996,12 @@
         "required": [
           "name"
         ]
+      },
+      "getApiFleetMarketplacesByNamePlugins200": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/MarketplacePluginInfo"
+        }
       },
       "deleteApiFleetMarketplacesByName200": {
         "type": "object",
@@ -28922,6 +28975,27 @@
           "ruleId",
           "source",
           "verdict"
+        ]
+      },
+      "MarketplacePluginInfo": {
+        "description": "One installable plugin, as a linked marketplace's `marketplace.json` lists it.",
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
         ]
       },
       "SkillVersion": {

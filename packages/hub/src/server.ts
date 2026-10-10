@@ -379,6 +379,7 @@ import {
 import { createPlans, planRoutes } from "./plans";
 import {
   isHubDirectory,
+  marketplaceCatalog,
   marketplaceName,
   pluginMarketplace,
   resolveMarketplacePlugins,
@@ -17152,6 +17153,31 @@ export const createServer = (
           const marketplace = db.putMarketplace({ name, source });
           fanOutFleet();
           return marketplace;
+        }
+      )
+      // Browse: what a linked marketplace offers, read by the hub from the
+      // row's source, the same fetch its installs resolve from. No machine's
+      // copy is asked: a directory on the hub is a copy no other machine has.
+      .get(
+        "/api/fleet/marketplaces/:name/plugins",
+        async ({ params, status }) => {
+          const row = db
+            .fleetConfig()
+            .marketplaces.find(({ name }) => name === params.name);
+          if (!row) {
+            return status(
+              404,
+              `No marketplace called ${params.name} is linked.`
+            );
+          }
+          try {
+            return await marketplaceCatalog(row.source);
+          } catch (error) {
+            return status(
+              400,
+              error instanceof Error ? error.message : String(error)
+            );
+          }
         }
       )
       .delete("/api/fleet/marketplaces/:name", ({ params }) => {

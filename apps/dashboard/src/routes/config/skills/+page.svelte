@@ -21,7 +21,6 @@
   import { configStore, upsert } from "#lib/cawco/config/store.svelte.js";
   import { confirm } from "#lib/cawco/confirm.svelte.js";
   import {
-    catalogHost,
     formatBytes,
     marketplaceCatalog,
     refreshPlugin,
@@ -275,14 +274,10 @@
     if (listings[name] || reading[name]) {
       return;
     }
-    const host = catalogHost(machines, name);
-    if (!host) {
-      return;
-    }
     reading[name] = true;
     delete unread[name];
     try {
-      listings[name] = await marketplaceCatalog(host.machineId, name);
+      listings[name] = await marketplaceCatalog(name);
     } catch (err) {
       unread[name] = message(err);
     } finally {
@@ -510,7 +505,6 @@
     {:else}
       <RowList label="Marketplaces">
         {#each marketplaces as row (row.name)}
-          {@const host = catalogHost(machines, row.name)}
           <SectionRow
             actions={[
               {
@@ -536,12 +530,9 @@
             {/snippet}
             {#snippet trailing()}
               <Button
-                disabled={!host}
                 onclick={() => browse(row.name)}
                 size="sm"
-                title={host
-                  ? `Read from ${host.hostname}`
-                  : "No machine that is online has this marketplace yet"}
+                title={`Read from ${row.source}`}
                 variant="ghost"
               >
                 <IconSearch />

@@ -81,7 +81,6 @@ import {
   INSPECT_CONFIG,
   INSTALL_SESSION_CREDENTIAL,
   identityOf,
-  MARKETPLACE_CATALOG,
   MESSAGES_HELD,
   MESSAGES_READ,
   RATE_LIMIT_READ,
@@ -138,7 +137,6 @@ import {
   fleetHoldings,
   fleetStatus,
   inspectConfig,
-  marketplaceCatalog,
   readHookScript,
   readMemoryFile,
   readSkillFiles,
@@ -3145,8 +3143,6 @@ export class ClaudeHarness implements Harness {
           ? await readSessionContext(file)
           : { reason: "transcript missing" };
       }
-      case MARKETPLACE_CATALOG:
-        return marketplaceCatalog(args[0] as string);
       case READ_MEMORY_FILE:
         return readMemoryFile();
       case READ_HOOK_SCRIPT:

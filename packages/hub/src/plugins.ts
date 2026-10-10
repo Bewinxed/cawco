@@ -67,6 +67,74 @@ const readManifest = async (root: string): Promise<Manifest | undefined> =>
     .json()
     .catch(() => undefined)) as Manifest | undefined;
 
+/**
+ * Why a plugin of a marketplace added by its marketplace.json URL cannot have
+ * a relative source, in the docs' words
+ * (https://code.claude.com/docs/en/plugin-marketplaces).
+ */
+const URL_RELATIVE_REASON =
+  "relative paths won't resolve, because only that file is downloaded " +
+  "(a marketplace added by its marketplace.json URL; give the plugin a " +
+  "github, url or git-subdir source)";
+
+/** A source that is the URL of a marketplace.json itself, not of a repository. */
+const isManifestUrl = (source: string): boolean =>
+  HTTP_URL_PREFIX.test(source) && new URL(source).pathname.endsWith(".json");
+
+/**
+ * A marketplace as fetched: its manifest, and the directory it stands in.
+ * A marketplace.json URL has no directory: "URL-based marketplaces only
+ * download the `marketplace.json` file itself. They don't download plugin
+ * files from the server" (https://code.claude.com/docs/en/plugin-marketplaces),
+ * so neither does the hub, and a plugin there resolves only from a source of
+ * its own.
+ */
+interface Fetched {
+  manifest: Manifest;
+  root?: string;
+}
+
+const fetchMarketplace = async (
+  source: string,
+  work: string
+): Promise<Fetched> => {
+  const trimmed = source.trim();
+  if (isManifestUrl(trimmed)) {
+    const response = await get(trimmed);
+    if (!response.ok) {
+      throw new Error(`${trimmed} answered ${response.status}`);
+    }
+    const manifest = (await response.json().catch(() => undefined)) as
+      | Manifest
+      | undefined;
+    if (!manifest || typeof manifest !== "object") {
+      throw new Error(`${trimmed} is not a marketplace.json cawco could read`);
+    }
+    return { manifest };
+  }
+  const root = await marketplaceRoot(trimmed, work);
+  const manifest = await readManifest(root);
+  if (!manifest) {
+    throw new Error(
+      `${source} has no .claude-plugin/marketplace.json cawco could read`
+    );
+  }
+  return { manifest, root };
+};
+
+/** A fetch of the marketplace in a work directory of its own, gone after `use`. */
+const withMarketplace = async <T>(
+  source: string,
+  use: (fetched: Fetched, work: string) => Promise<T>
+): Promise<T> => {
+  const work = await mkdtemp(join(tmpdir(), "cawco-marketplace-"));
+  try {
+    return await use(await fetchMarketplace(source, work), work);
+  } finally {
+    await rm(work, { recursive: true, force: true });
+  }
+};
+
 /** The directory a hub-directory source names, or undefined for any other form. */
 const hubPath = (source: string): string | undefined => {
   const trimmed = source.trim();
@@ -151,7 +219,7 @@ const marketplaceRoot = async (
  */
 const pluginRoot = async (
   entry: { name?: string; source?: unknown },
-  marketplace: string,
+  marketplace: string | undefined,
   work: string
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one branch per plugin source kind (vendored path, github repo, git-subdir/url archive) — see the file-level comment on why the hub resolves these itself.
 ): Promise<string> => {
@@ -161,6 +229,11 @@ const pluginRoot = async (
   if (typeof source === "string") {
     if (isAbsolute(source)) {
       throw new Error(`${entry.name}'s source is an absolute path`);
+    }
+    if (!marketplace) {
+      throw new Error(
+        `${entry.name}'s source is the relative path ${source}, and ${URL_RELATIVE_REASON}`
+      );
     }
     return inside(marketplace, source);
   }
@@ -227,32 +300,37 @@ const pluginRoot = async (
  * plugins as `plugin@name`, so a row under any other name is one no machine
  * can find. Fetched the way its plugins are ({@link resolveMarketplacePlugins}).
  */
-export const marketplaceName = async (source: string): Promise<string> => {
-  const work = await mkdtemp(join(tmpdir(), "cawco-marketplace-"));
-  try {
-    const trimmed = source.trim();
-    // A URL to the manifest itself is the manifest, not an archive.
-    const manifest =
-      HTTP_URL_PREFIX.test(trimmed) &&
-      new URL(trimmed).pathname.endsWith(".json")
-        ? ((await get(trimmed)
-            .then((response) => (response.ok ? response.json() : undefined))
-            .catch(() => undefined)) as Manifest | undefined)
-        : await readManifest(await marketplaceRoot(trimmed, work));
-    if (!manifest) {
-      throw new Error(
-        `${source} has no .claude-plugin/marketplace.json cawco could read`
-      );
-    }
+export const marketplaceName = (source: string): Promise<string> =>
+  withMarketplace(source, ({ manifest }) => {
     const name = typeof manifest.name === "string" ? manifest.name.trim() : "";
     if (!name) {
       throw new Error(`${source}'s marketplace.json has no name`);
     }
-    return name;
-  } finally {
-    await rm(work, { recursive: true, force: true });
-  }
-};
+    return Promise.resolve(name);
+  });
+
+/**
+ * What a linked marketplace offers, read by the hub from its source: what
+ * Browse lists. The same fetch every install is resolved from
+ * ({@link resolveMarketplacePlugins}), so the list is what an install gets,
+ * whichever machine has a copy — a marketplace that is a directory on the
+ * hub has none anywhere else.
+ */
+export const marketplaceCatalog = (
+  source: string
+): Promise<MarketplacePluginInfo[]> =>
+  withMarketplace(source, ({ manifest }) =>
+    Promise.resolve(
+      (manifest.plugins ?? []).map(
+        ({ name, description, version, category }) => ({
+          name,
+          description,
+          version,
+          category,
+        })
+      )
+    )
+  );
 
 /** One resolved plugin, or the sentence saying why it is not. */
 export type ResolvedPlugin =
@@ -274,43 +352,35 @@ export const resolveMarketplacePlugins = async (
   if (names.length === 0) {
     return [];
   }
-  const work = await mkdtemp(join(tmpdir(), "cawco-plugins-"));
   try {
-    const root = await marketplaceRoot(marketplaceSource, work);
-    const manifest = await readManifest(root);
-    if (!manifest?.plugins) {
-      throw new Error(
-        `${marketplaceSource} has no .claude-plugin/marketplace.json cawco could read`
-      );
-    }
-
-    const resolved: ResolvedPlugin[] = [];
-    for (const name of names) {
-      const entry = manifest.plugins.find((plugin) => plugin.name === name);
-      if (!entry) {
-        resolved.push({
-          name,
-          error: `${marketplaceSource} lists no plugin called ${name}`,
-        });
-        continue;
+    return await withMarketplace(marketplaceSource, async (fetched, work) => {
+      const { manifest, root } = fetched;
+      const resolved: ResolvedPlugin[] = [];
+      for (const name of names) {
+        const entry = manifest.plugins?.find((plugin) => plugin.name === name);
+        if (!entry) {
+          resolved.push({
+            name,
+            error: `${marketplaceSource} lists no plugin called ${name}`,
+          });
+          continue;
+        }
+        try {
+          // biome-ignore lint/performance/noAwaitInLoops: plugins of one marketplace are fetched one at a time to stay a good citizen of the source (github/CDN) and to keep each plugin's error attributable to its own name.
+          const dir = await pluginRoot(entry, root, work);
+          const { files, hash, bytes } = await readTree(dir, `plugin ${name}`);
+          resolved.push({ name, marketplace, hash, bytes, files });
+        } catch (error) {
+          resolved.push({
+            name,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
       }
-      try {
-        // biome-ignore lint/performance/noAwaitInLoops: plugins of one marketplace are fetched one at a time to stay a good citizen of the source (github/CDN) and to keep each plugin's error attributable to its own name.
-        const dir = await pluginRoot(entry, root, work);
-        const { files, hash, bytes } = await readTree(dir, `plugin ${name}`);
-        resolved.push({ name, marketplace, hash, bytes, files });
-      } catch (error) {
-        resolved.push({
-          name,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
-    return resolved;
+      return resolved;
+    });
   } catch (error) {
     const said = error instanceof Error ? error.message : String(error);
     return names.map((name) => ({ name, error: said }));
-  } finally {
-    await rm(work, { recursive: true, force: true });
   }
 };

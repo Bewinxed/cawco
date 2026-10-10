@@ -18,7 +18,6 @@ import {
   type FleetPlugin,
   type FleetSkillMeta,
   type FsEntry,
-  MARKETPLACE_CATALOG,
   type MachineHookScript,
   type MachineMemorySet,
   type MarketplacePluginInfo,
@@ -26,8 +25,7 @@ import {
   type McpSSEServerConfig,
   parseAgentFrontMatter,
 } from "@cawco/core";
-import { CONTROL_TIMEOUT_MS } from "#lib/config.js";
-import { type Machine, machineControl, machineFs } from "./client.svelte";
+import { machineFs } from "./client.svelte";
 import type { ListedVersion } from "./config/PreviousVersions.svelte";
 
 /** The fleet's user-scope CLAUDE.md, as the hub stores it (NEW.md §11). */
@@ -290,21 +288,6 @@ export function formatBytes(bytes: number): string {
   const mb = kb / 1024;
   return `${mb < 10 ? mb.toFixed(1) : Math.round(mb)} MB`;
 }
-
-/**
- * A machine that can answer for a marketplace: online, and its last report says
- * the marketplace is really linked there. Any one will do — the clone is the
- * same on all of them.
- */
-export const catalogHost = (
-  machines: readonly Machine[],
-  name: string
-): Machine | undefined =>
-  machines.find(
-    (machine) =>
-      machine.status === "online" &&
-      machine.fleet?.marketplaces?.[name]?.state === "applied"
-  );
 
 /**
  * What the hub said went wrong. Elysia answers a refused write with a bare
@@ -1029,17 +1012,15 @@ export const syncFleet = (machineId?: string): Promise<unknown> =>
   );
 
 /**
- * What a linked marketplace offers, read from its clone on one machine. A
- * machine-scoped control like `listRepos`: the answer is the same everywhere
- * the marketplace is linked, so the caller picks any online machine that has it.
+ * What a linked marketplace offers, read by the hub from its source: the
+ * same fetch its installs resolve from, so the list is what an install gets,
+ * and no machine has to hold a copy (a directory on the hub has none elsewhere).
  */
 export const marketplaceCatalog = (
-  machineId: string,
   name: string
 ): Promise<MarketplacePluginInfo[]> =>
-  machineControl<MarketplacePluginInfo[]>(
-    machineId,
-    MARKETPLACE_CATALOG,
-    [name],
-    CONTROL_TIMEOUT_MS
+  send<MarketplacePluginInfo[]>(
+    `/api/fleet/marketplaces/${encodeURIComponent(name)}/plugins`,
+    {},
+    `read ${name}`
   );

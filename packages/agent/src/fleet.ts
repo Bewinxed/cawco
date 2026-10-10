@@ -42,7 +42,6 @@ import type {
   MachineHookScript,
   MachineMemoryDoc,
   MachineMemorySet,
-  MarketplacePluginInfo,
   SkillFile,
 } from "@cawco/core";
 import { hookProblem, memoryDocProblem } from "@cawco/core";
@@ -720,8 +719,7 @@ const runClaudeCloning = async (bin: string, args: string[]): Promise<Ran> => {
 
 /**
  * Whether the CLI has a marketplace registered under `name`, with the
- * directory its catalog is in: what a fleet row's per-machine state is, and
- * exactly what {@link marketplaceCatalog} needs to answer.
+ * directory its catalog is in: what a fleet row's per-machine state is.
  */
 const isLinked = async (name: string): Promise<boolean> =>
   (await linkedEntry(name))?.installLocation !== undefined;
@@ -897,8 +895,7 @@ const syncPlugins = async (
 
   // One name for a marketplace everywhere: the fleet row's is its manifest's
   // (the hub links under it), and the CLI registers it under that same name.
-  // So "linked here" is the CLI's own registry holding that name, and that is
-  // also what Browse reads (`marketplaceCatalog`).
+  // So "linked here" is the CLI's own registry holding that name.
   const marketplaces: string[] = [];
   const registered = new Set<string>();
   // What this machine links: everything but a directory on the hub's machine,
@@ -3122,42 +3119,4 @@ export const readSkillFiles = async (
     });
   }
   return files;
-};
-
-/** What a linked marketplace's own manifest lists. */
-interface MarketplaceManifest {
-  plugins?: MarketplacePluginInfo[];
-}
-
-/**
- * What a marketplace linked on this machine offers, read from its clone — the
- * dashboard browses installable plugins with it, so a name must come back with
- * whatever the marketplace says about itself. Found the way Claude Code finds
- * it: the registry entry under its name, and the catalog at that entry's
- * `installLocation`. The same entry the sync reports the row applied by, so a
- * machine the rollout counts is one this answers on.
- */
-export const marketplaceCatalog = async (
-  name: string
-): Promise<MarketplacePluginInfo[]> => {
-  const at = (await linkedEntry(name))?.installLocation;
-  if (!at) {
-    throw new Error(`no marketplace ${name} is linked on this machine`);
-  }
-  const manifest = await readJson<MarketplaceManifest>(
-    join(at, ".claude-plugin", "marketplace.json")
-  );
-  if (!manifest) {
-    throw new Error(
-      `${name} is linked at ${at}, which has no .claude-plugin/marketplace.json`
-    );
-  }
-  return (manifest.plugins ?? []).map(
-    ({ name: plugin, description, version, category }) => ({
-      name: plugin,
-      description,
-      version,
-      category,
-    })
-  );
 };
