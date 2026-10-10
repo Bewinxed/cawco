@@ -18,11 +18,28 @@ set -u
 source_repo=$1 other_env=$2 swift_package=${3:-} xcode_dir=${4:-} xcode_scheme=${5:-}
 here=$(cd "$(dirname "$0")" && pwd)
 checkout=$(cd "$here/../.." && pwd)
-export PATH=/opt/homebrew/bin:$HOME/.bun/bin:$PATH
+# The agent service's PATH has these first (packages/cli/src/service.ts `servicePath`).
+export PATH=$HOME/.local/bin:$HOME/.bun/bin:/opt/homebrew/bin:$PATH
+# A workspace's gh and git get their token from the executor alone.
+unset GH_TOKEN GITHUB_TOKEN
 scratch=$(mktemp -d)
 export CAWCO_SESSIOND_ENDPOINT=$scratch/sessiond.sock
 open=0
+fail=0
 row() { printf '%-50s %s\n' "$1" "$2"; [ "$2" = OPEN ] && open=$((open + 1)); return 0; }
+works() { printf '%-50s %s\n' "$1" "$2"; [ "${2%% *}" = FAIL ] && fail=$((fail + 1)); return 0; }
+# The first command in a PATH dir under home whose real path matches the glob $1.
+landing_cmd() {
+  local dir file real
+  for dir in $(printf '%s' "$PATH" | tr ':' '\n' | grep "^$HOME/"); do
+    for file in "$dir"/*; do
+      real=$(perl -MCwd=abs_path -e 'print abs_path($ARGV[0]) // ""' "$file" 2>/dev/null)
+      # shellcheck disable=SC2254
+      case "$real" in $1) basename "$file"; return 0 ;; esac
+    done
+  done
+  return 1
+}
 step() { printf '\n== %s\n' "$1"; }
 timed() { local s e status; s=$(date +%s); "$@"; status=$?; e=$(date +%s); echo "exit=$status wall=$((e - s))s"; }
 
@@ -40,7 +57,56 @@ step "the generated profile (whole in $checkout/macos-boundary.sb; first lines)"
 cp "$state/boundary.sb" "$checkout/macos-boundary.sb"
 head -12 "$state/boundary.sb"
 
+step "gh and git push, with no GH_TOKEN in the caller"
+# No cache: the executor asks gh for its token on the host, outside Seatbelt.
+rm -f "$state/gh-token"
+login=$(r 'gh api user -q .login' 2>"$scratch/gh.err")
+if [ -n "$login" ]; then works "gh api user (token read on the host)" "PASS ($login)"; else works "gh api user (token read on the host)" FAIL; sed 's/^/    /' "$scratch/gh.err"; fi
+[ -s "$state/gh-token" ] && works "the executor wrote its gh-token cache" PASS || works "the executor wrote its gh-token cache" FAIL
+login=$(r 'gh api user -q .login' 2>"$scratch/gh.err")
+if [ -n "$login" ]; then works "gh api user (token from the cache)" "PASS ($login)"; else works "gh api user (token from the cache)" FAIL; sed 's/^/    /' "$scratch/gh.err"; fi
+origin=$(git -C "$clone" remote get-url origin)
+if r "git push --dry-run origin HEAD:refs/heads/cawco-mac-check-$id" > "$scratch/push.out" 2>&1; then
+  works "git push --dry-run to $origin" PASS
+else
+  works "git push --dry-run to $origin" FAIL
+  tail -5 "$scratch/push.out" | sed 's/^/    /'
+fi
+
+step "home toolchains"
+echo "tool trees the policy reads back beyond the PATH dirs:"
+(cd "$checkout" && bun artifacts/srt-eval/home-toolchains.ts) | sed 's/^/    /'
+if command -v uv >/dev/null; then
+  r 'uv --version' > "$scratch/tool.out" 2>&1 && works "uv --version ($(command -v uv))" PASS || { works "uv --version ($(command -v uv))" FAIL; tail -3 "$scratch/tool.out" | sed 's/^/    /'; }
+else
+  works "uv --version" "FAIL (no uv on PATH)"
+fi
+for kind in '*/pipx/venvs/*' '*/uv/tools/*' '*/.local/share/claude/*'; do
+  cmd=$(landing_cmd "$kind")
+  if [ -z "$cmd" ]; then
+    echo "no command on a home PATH dir lands in $kind"
+    [ "$kind" = '*/pipx/venvs/*' ] && works "a pipx command" "FAIL (none installed)"
+    continue
+  fi
+  r "$cmd --version >/dev/null 2>&1 || $cmd --help >/dev/null 2>&1" > "$scratch/tool.out" 2>&1 && works "$cmd (lands in $kind)" PASS || { works "$cmd (lands in $kind)" FAIL; r "$cmd --version" 2>&1 | tail -3 | sed 's/^/    /'; }
+done
+
 step "escapes (writes verified here, outside the sandbox)"
+for gh_file in hosts.yml config.yml; do
+  if [ -e "$HOME/.config/gh/$gh_file" ]; then
+    r "cat ~/.config/gh/$gh_file >/dev/null 2>&1" && row "cat ~/.config/gh/$gh_file" OPEN || row "cat ~/.config/gh/$gh_file" BLOCKED
+  else
+    echo "(no ~/.config/gh/$gh_file on this Mac to read)"
+  fi
+done
+r "cat '$state/gh-token' >/dev/null 2>&1" && row "cat the gh-token cache" OPEN || row "cat the gh-token cache" BLOCKED
+# uv's credentials store, inside the uv tree the policy now reads back: a probe
+# file put there on the host, never the owner's own credentials.
+uv_credentials=${UV_CREDENTIALS_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/uv/credentials}
+made_uv_dir=no; [ -d "$uv_credentials" ] || { mkdir -p "$uv_credentials" && made_uv_dir=yes; }
+printf probe > "$uv_credentials/.cawco-probe-$id"
+r "cat '$uv_credentials/.cawco-probe-$id' >/dev/null 2>&1" && row "read uv's credentials store" OPEN || row "read uv's credentials store" BLOCKED
+rm -f "$uv_credentials/.cawco-probe-$id"; [ "$made_uv_dir" = yes ] && rmdir "$uv_credentials" 2>/dev/null
 r "head -c0 \"\$(ls -d ~/.cawco/accounts/*/claude/.credentials.json 2>/dev/null | head -1)\" 2>/dev/null" && row "read ~/.cawco/accounts" OPEN || row "read ~/.cawco/accounts" BLOCKED
 r 'test -n "$(ls -A ~/.cawco/accounts 2>/dev/null)"' && row "list ~/.cawco/accounts" OPEN || row "list ~/.cawco/accounts" BLOCKED
 r 'head -c0 ~/.claude.json 2>/dev/null' && row "read ~/.claude.json" OPEN || row "read ~/.claude.json" BLOCKED
@@ -97,4 +163,8 @@ step "archive"
 kill "$sessiond" 2>/dev/null
 rm -rf "$scratch"
 echo
-if [ "$open" -eq 0 ]; then echo "every escape row BLOCKED"; else echo "$open escape row(s) OPEN"; exit 1; fi
+if [ "$open" -eq 0 ]; then echo "every escape row BLOCKED"; else echo "$open escape row(s) OPEN"; fi
+[ "$fail" -eq 0 ] || echo "$fail working row(s) FAIL"
+status=0; [ "$open" -eq 0 ] && [ "$fail" -eq 0 ] || status=1
+echo "EXIT $status"
+exit "$status"

@@ -9,8 +9,8 @@
  * - Reads: the whole home dir is denied, and back come the workspace's own
  *   trees (its clone, its state dir's read-only part and its scratch dir, the
  *   shared workspace cache, the
- *   objects dir its clone borrows), the toolchains on PATH and the Node
- *   package trees their commands link into (`homeToolchains`), the user's git
+ *   objects dir its clone borrows), the toolchains on PATH and the tool
+ *   trees their commands link into (`homeToolchains`), the user's git
  *   config, Playwright's browsers, the cawco binary, and the user layer of
  *   Claude Code (CLAUDE.md, memories, skills, plugins, agents, commands,
  *   rules, output styles, workflows, themes, plans). A Claude session also
@@ -24,7 +24,7 @@
  *   writing, even inside an allowed tree. On Linux so are the host's runtime
  *   dirs, with every daemon's socket, and the journal.
  */
-import { readdir, readFile, realpath, stat } from "node:fs/promises";
+import { open, readdir, readFile, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { delimiter, dirname, isAbsolute, join, resolve } from "node:path";
 import { binaryRoot } from "./binary-installation";
@@ -40,6 +40,7 @@ import {
   workspaceCaches,
   workspaceReadOnlyDir,
   workspaceScratchDir,
+  xdgDataHome,
 } from "./paths";
 import { type Policy, resolveDenied, resolveReal } from "./workspace-judge";
 
@@ -193,50 +194,170 @@ const alternatesOf = async (clone: string): Promise<string[]> => {
 
 const NODE_MODULES = "/node_modules";
 
+const within = (path: string, root: string): boolean =>
+  path === root || path.startsWith(`${root}/`);
+
+/** A script's `#!` line, up to its interpreter's absolute path. */
+const SHEBANG = /^#![ \t]*(\/[^\s]+)/;
+/** How much of a command {@link interpreterOf} reads for its `#!` line. */
+const SHEBANG_BYTES = 512;
+
+/** The interpreter `path` names on its `#!` line by an absolute path, as a real path; none for a binary or `#!/usr/bin/env`. */
+const interpreterOf = async (path: string): Promise<string | undefined> => {
+  const file = await open(path, "r").catch(() => undefined);
+  if (!file) {
+    return;
+  }
+  try {
+    const head = Buffer.alloc(SHEBANG_BYTES);
+    const { bytesRead } = await file.read(head, 0, SHEBANG_BYTES, 0);
+    const named = SHEBANG.exec(head.subarray(0, bytesRead).toString("latin1"));
+    return named?.[1]
+      ? await realpath(named[1]).catch(() => undefined)
+      : undefined;
+  } catch {
+    // A directory, or a file this process may not read: no interpreter.
+  } finally {
+    await file.close();
+  }
+};
+
+/**
+ * The dirs under home where each dir directly below is one tool's own tree:
+ * the XDG data dir (`~/.local/share/uv`, `~/.local/share/claude`), `~/.local`
+ * (`~/.local/pipx`) and, on macOS, Application Support. Deepest first, so a
+ * landing is judged by the deepest one that holds it.
+ */
+const toolRoots = (home: string): string[] =>
+  unique([
+    xdgDataHome(),
+    join(home, ".local", "share"),
+    join(home, ".local"),
+    join(home, "Library", "Application Support"),
+  ]).sort((a, b) => b.length - a.length);
+
+/**
+ * The tool tree a command landing at `landing` runs from: the outermost
+ * `node_modules` it lies in (its packages resolve their dependencies up to
+ * it); else the dir right below the deepest {@link toolRoots} entry that
+ * holds it, never a root itself or `~/.local/state`, where shells keep their
+ * histories; else, for a landing elsewhere under home, the dir right below
+ * home when that dir is a Python virtual environment (`pyvenv.cfg`). Anything
+ * else under home is the owner's own files or a harness's state, never a
+ * tool's.
+ */
+const toolTreeOf = async (
+  landing: string,
+  home: string,
+  roots: readonly string[]
+): Promise<string | undefined> => {
+  const at = landing.indexOf(`${NODE_MODULES}/`);
+  if (at >= 0) {
+    return landing.slice(0, at + NODE_MODULES.length);
+  }
+  const root = roots.find((dir) => landing.startsWith(`${dir}/`));
+  if (root) {
+    const tree = join(root, landing.slice(root.length + 1).split("/")[0] ?? "");
+    return roots.includes(tree) || tree === join(home, ".local", "state")
+      ? undefined
+      : tree;
+  }
+  const top = join(home, landing.slice(home.length + 1).split("/")[0] ?? "");
+  return top !== landing &&
+    (await stat(join(top, "pyvenv.cfg")).then(
+      () => true,
+      () => false
+    ))
+    ? top
+    : undefined;
+};
+
 /**
  * The toolchains on this process's PATH that live under the home dir, never
- * the home dir itself, and the Node package trees their commands link into:
- * a global npm or bun install puts each command in a PATH dir as a link into
- * a `node_modules` tree elsewhere under home (`~/.bun/bin/node-gyp` to
- * `~/node_modules/node-gyp/bin/node-gyp.js`), and the package needs its
- * dependencies beside it. Seatbelt judges a link by where it lands, so
- * without the tree the command is refused (EPERM) wherever it runs from, a
- * native dependency's `node-gyp` among them. A tree in a git work tree is a
- * clone's, never a toolchain.
+ * the home dir itself, and the tool trees under home their commands run
+ * from. A global npm or bun install, a `uv tool` or pipx install, Claude
+ * Code's own installer, each put a command in a PATH dir as a link into a
+ * tree elsewhere under home (`~/.bun/bin/node-gyp` to `~/node_modules`,
+ * `~/.local/bin/hf` to `~/.local/share/uv/tools/…`, `~/.local/bin/claude` to
+ * `~/.local/share/claude/versions/…`), and the command needs its tree: its
+ * dependencies, its virtual environment, the interpreter its `#!` line names
+ * (a uv tool's runs `~/.local/share/uv/python/…`). Seatbelt judges a link by
+ * where it lands, so without the tree the command is refused (EPERM)
+ * wherever it runs from; srt shows it as missing. Each tree is
+ * {@link toolTreeOf} the command's landing and of its interpreter's, read
+ * only. Never a tree in a git work tree, a clone's (a `.git` in the tree's
+ * parent, the tree or any dir down to the landing), and never one that is or
+ * lies in a credential store; a store inside a tree stays denied, the deeper
+ * entry deciding.
  */
-const homeToolchains = async (home: string): Promise<string[]> => {
+export const homeToolchains = async (home: string): Promise<string[]> => {
   const dirs = (process.env.PATH ?? "")
     .split(delimiter)
     .filter((entry) => entry.startsWith(`${home}/`));
-  const landings = await Promise.all(
+  const commands = await Promise.all(
     dirs.map(async (dir) => {
       const names = await readdir(dir).catch(() => []);
-      return Promise.all(
-        names.map((name) => realpath(join(dir, name)).catch(() => ""))
-      );
+      return names.map((name) => join(dir, name));
     })
   );
-  // The outermost `node_modules` a command lands in: its packages resolve
-  // their dependencies up to it.
-  const trees = unique(
-    landings.flat().flatMap((path) => {
-      const at = path.indexOf(`${NODE_MODULES}/`);
-      return path.startsWith(`${home}/`) && at >= 0
-        ? [path.slice(0, at + NODE_MODULES.length)]
+  const landings = unique(
+    (
+      await Promise.all(
+        commands.flat().map(async (command) => {
+          const landing = await realpath(command).catch(() => undefined);
+          if (!landing) {
+            return [];
+          }
+          const interpreter = await interpreterOf(landing);
+          return interpreter ? [landing, interpreter] : [landing];
+        })
+      )
+    )
+      .flat()
+      .filter(
+        (landing) =>
+          landing.startsWith(`${home}/`) &&
+          !dirs.some((dir) => within(landing, dir))
+      )
+  );
+  const roots = toolRoots(home);
+  const stores = credentialStores().flatMap((store) => [
+    store,
+    resolveDenied(store),
+  ]);
+  const gits = new Map<string, Promise<boolean>>();
+  const hasGit = (dir: string): Promise<boolean> => {
+    let found = gits.get(dir);
+    if (!found) {
+      found = stat(join(dir, ".git")).then(
+        () => true,
+        () => false
+      );
+      gits.set(dir, found);
+    }
+    return found;
+  };
+  const inWorkTree = async (
+    tree: string,
+    landing: string
+  ): Promise<boolean> => {
+    const chain = [dirname(tree)];
+    for (let dir = dirname(landing); within(dir, tree); dir = dirname(dir)) {
+      chain.push(dir);
+    }
+    return (await Promise.all(chain.map(hasGit))).some(Boolean);
+  };
+  const trees = await Promise.all(
+    landings.map(async (landing) => {
+      const tree = await toolTreeOf(landing, home, roots);
+      return tree &&
+        !stores.some((store) => within(tree, store)) &&
+        !(await inWorkTree(tree, landing))
+        ? [tree]
         : [];
     })
   );
-  const outsideClones = await Promise.all(
-    trees.map(async (tree) =>
-      (await stat(join(dirname(tree), ".git")).then(
-        () => true,
-        () => false
-      ))
-        ? []
-        : [tree]
-    )
-  );
-  return [...dirs, ...outsideClones.flat()];
+  return unique([...dirs, ...trees.flat()]);
 };
 
 /**

@@ -31,8 +31,11 @@
  * plugin's `bash` tool, pi by its bash tool's operations, a workflow's
  * `runCommand`. The GitHub CLI's keyring is the host's, so the executor reads
  * its token on the host side, from a copy it keeps in the workspace's state
- * dir ({@link ghToken}), and hands it in as `GH_TOKEN`: pushes and `gh` keep
- * working inside. `cawco tools` reaches the hub's tools through the
+ * dir ({@link ghToken}), and hands it in as `GH_TOKEN`, with an empty config
+ * dir of gh's own ({@link ghConfigOf}): pushes, through git's `gh auth
+ * git-credential` helper, and `gh` keep working inside, on both OSes. The
+ * hub lands a workspace's commits the same way: its `git push` is a command
+ * the workspace's agent runs through this executor (`runWorkflowCommand`). `cawco tools` reaches the hub's tools through the
  * workspace's tool door (`tool-door.ts`).
  *
  * sessiond holds the boundary and the workspace's judge, so an agent restart
@@ -206,6 +209,18 @@ const fifoOf = (id: string, gen: string | undefined): string =>
  * template hooks unless it has none to copy (REPORT.md §5g).
  */
 const gitTemplateOf = (id: string): string => join(roOf(id), "git-template");
+
+/**
+ * `gh`'s config dir inside the boundary (`GH_CONFIG_DIR`): empty and
+ * read-only there. gh reads `config.yml` from its config dir as it starts and
+ * takes a missing one as nothing set, but quits on any other error ("failed
+ * to create root command: failed to read configuration"). The host's
+ * `~/.config/gh` is under the home deny: srt shows it as missing, Seatbelt
+ * answers EPERM, so on macOS every `gh` inside quit before it read
+ * `GH_TOKEN`, git's `gh auth git-credential` helper with it, and a push went
+ * out anonymous (Nightly C, 2026-10-10). Here it finds no config on both.
+ */
+const ghConfigOf = (id: string): string => join(roOf(id), "gh");
 
 const WHITESPACE = /\s+/;
 
@@ -703,6 +718,8 @@ const armHook = async (
     await writeShims(id, await bunRuntime(id));
   }
   if (!held.identity) {
+    // A boundary started before gh had a config dir of its own gets it here.
+    await mkdir(ghConfigOf(id), { recursive: true });
     await writeWhole(held.exec, execScript(id, held, await hostGh()), 0o755);
   }
   await openToolDoor(id);
@@ -2014,7 +2031,8 @@ fi`
 /**
  * What every command runs with besides its caller's environment: the
  * workspaces' own cache (`workspaceCacheEnv`), its scratch dir as `TMPDIR`,
- * the empty git template, the tool door, and `CAWCO_WORKSPACE`, by which a
+ * the empty git template, gh's empty config dir ({@link ghConfigOf}), the
+ * tool door, and `CAWCO_WORKSPACE`, by which a
  * script tells that it runs inside one; never a key agent's socket
  * ({@link AGENT_SOCKET_ENV}).
  */
@@ -2024,6 +2042,7 @@ const commandEnv = (id: string, scratch: string): string[] => [
     ...workspaceCacheEnv(),
     TMPDIR: scratch,
     GIT_TEMPLATE_DIR: gitTemplateOf(id),
+    GH_CONFIG_DIR: ghConfigOf(id),
     CAWCO_TOOL_SOCKET: toolDoorOf(id),
     CAWCO_WORKSPACE: id,
   }).map(([name, value]) => `export ${name}=${shellQuote(value)}`),
@@ -2163,6 +2182,7 @@ const makeDirs = async (id: string): Promise<void> => {
       stateDir(id),
       roOf(id),
       gitTemplateOf(id),
+      ghConfigOf(id),
       scratchOf(id),
       ...workspaceCaches(),
     ].map((path) => mkdir(path, { recursive: true }))

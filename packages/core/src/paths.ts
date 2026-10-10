@@ -295,7 +295,7 @@ export const sessionIdentityDir = (): string =>
 
 const xdgConfigHome = (): string =>
   process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config");
-const xdgDataHome = (): string =>
+export const xdgDataHome = (): string =>
   process.env.XDG_DATA_HOME ?? join(homedir(), ".local", "share");
 
 /** CawCo's config dir: the CLI's `config.json`, the hub's env file, the release signing key. */
@@ -492,8 +492,15 @@ export const credentialStores = (): string[] => {
     join(home, ".gemini"),
     join(xdgConfigHome(), "github-copilot"),
     // Other tools' tokens. `gh` gets its token from the executor as
-    // `GH_TOKEN`; git's credential helpers run outside.
+    // `GH_TOKEN`, and an empty config dir of its own (`GH_CONFIG_DIR`), so
+    // `gh auth git-credential` hands git that token inside.
     join(xdgConfigHome(), "gh", "hosts.yml"),
+    // uv's plaintext credentials store (`uv auth login`): "$XDG_DATA_HOME/uv/
+    // credentials or $HOME/.local/share/uv/credentials on Unix"
+    // (docs.astral.sh/uv/reference/cli, `uv auth dir`). The uv dir around it
+    // is a tool tree a workspace reads (`homeToolchains`).
+    join(xdgDataHome(), "uv", "credentials"),
+    ...(process.env.UV_CREDENTIALS_DIR ? [process.env.UV_CREDENTIALS_DIR] : []),
     join(home, ".git-credentials"),
     join(home, ".netrc"),
     join(home, ".npmrc"),
