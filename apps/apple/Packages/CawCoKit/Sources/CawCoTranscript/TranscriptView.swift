@@ -1197,6 +1197,14 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         // The prepared rows stand after the strip before the first row, when it is drawn.
         let lead = built.first?.id == Self.olderId ? 1 : 0
         let previous = items
+        /// Whether the cell standing `item` draws it differently now: what it
+        /// draws (its print), or the margin above it, which is part of its
+        /// cell (HostCell `top`) and changes when rows join in front and take
+        /// it into their group. A cell on screen keeps its margin until it is
+        /// drawn again, and the keep-place anchor counts on it taking the new one.
+        func redrawn(_ item: Item) -> Bool {
+            prints[item.id] != item.print || previous[item.id].map { $0.top != item.top } ?? false
+        }
         let section: (settled: [String], tail: [String])
         var changed: [String] = []
         /// The items this frame drew from that the list may not have yet.
@@ -1211,7 +1219,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             var touched = tail
             for i in settled?.fleet ?? [] where i + lead < tailStart { touched.append(built[i + lead]) }
             for item in touched {
-                if prints[item.id] != item.print, dataSource.indexPath(for: item.id) != nil { changed.append(item.id) }
+                if redrawn(item), dataSource.indexPath(for: item.id) != nil { changed.append(item.id) }
                 items[item.id] = item
                 prints[item.id] = item.print
             }
@@ -1224,7 +1232,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             let ids = firstScreen(of: all)
             let tailIds = Set(all[tailStart...])
             section = (ids.filter { !tailIds.contains($0) }, ids.filter { tailIds.contains($0) })
-            for item in built where prints[item.id] != item.print {
+            for item in built where redrawn(item) {
                 if dataSource.indexPath(for: item.id) != nil { changed.append(item.id) }
             }
             items = next
@@ -1308,8 +1316,9 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         // `frontOnly`, `restore`). Not the strip before the first row: it
         // stands at the top whatever joins under it. A row's margin above it is
         // part of its cell and changes when the rows that join in front take it
-        // into their group (a page that ended inside a run of calls): what is
-        // kept in place is what the reader reads, so the change goes with it.
+        // into their group (a page that ended inside a run of calls; the cell
+        // is drawn again with it, `redrawn`): what is kept in place is what
+        // the reader reads, so the change goes with it.
         let anchor: (id: String, into: CGFloat)? = follow || !landed ? nil : collection.indexPathsForVisibleItems.sorted().lazy.compactMap { index in
             guard let id = self.dataSource.itemIdentifier(for: index), id != Self.olderId,
                   let frame = self.collection.layoutAttributesForItem(at: index)?.frame else { return nil }
