@@ -83,14 +83,33 @@ const SIDECAR = userLayerPath("cawco-fleet.json");
 const SKILLS_DIR = userLayerPath("skills");
 
 /**
- * The fleet's OWN marketplace, written from the bytes the hub resolved. All of
- * it cawco's, like a skill's directory — rewritten whole whenever the set
- * changes, and never edited by anything else.
+ * The fleet's OWN marketplaces, written from the bytes the hub resolved: one
+ * per fleet marketplace, `<root>/<marketplace>/`, registered as
+ * `cawco-<marketplace>`. All of it cawco's, like a skill's directory, and
+ * never edited by anything else. One per source marketplace because a
+ * plugin's identity is `plugin@marketplace`: its cache folder
+ * (`cache/<marketplace>/<plugin>/<version>/`) and its data folder ("For a
+ * plugin installed as `formatter@my-marketplace`, the directory is
+ * `~/.claude/plugins/data/formatter-my-marketplace/`",
+ * https://code.claude.com/docs/en/plugins-reference) both key on it, so two
+ * plugins of one name from two marketplaces need two marketplaces here too.
  */
-export const VENDOR_DIR = userLayerPath("cawco-marketplace");
+export const VENDOR_ROOT = userLayerPath("cawco-marketplaces");
 
-/** What that marketplace is called once linked, and the half after every `@`. */
-const VENDOR_NAME = "cawco";
+/** What the vendored copy of fleet marketplace `marketplace` is registered as. */
+const vendorName = (marketplace: string): string => `cawco-${marketplace}`;
+
+/** Where it is written. */
+const vendorDir = (marketplace: string): string =>
+  join(VENDOR_ROOT, marketplace);
+
+/**
+ * Before one vendored marketplace per fleet marketplace, every vendored
+ * plugin went into this one, as `<plugin>@cawco`, a folder per plugin name.
+ * A sync moves what it finds there to the new ids ({@link moveLegacyVendored}).
+ */
+const LEGACY_VENDOR_DIR = userLayerPath("cawco-marketplace");
+const LEGACY_VENDOR_NAME = "cawco";
 
 /** The user-scope memory every session on this machine reads (NEW.md §11). */
 const MEMORY_PATH = userLayerPath("CLAUDE.md");
@@ -198,9 +217,9 @@ interface Sidecar {
   /** Skill name → the hash of the files written, which is what makes a sync a no-op. */
   skills: Record<string, string>;
   /**
-   * Plugin name → the hash of the vendored files written under
-   * {@link VENDOR_DIR}. Same purpose as `skills`, and the reason a sync that
-   * changes nothing rewrites nothing.
+   * Fleet plugin id (`plugin@marketplace`) → the hash of the vendored files
+   * written under {@link VENDOR_ROOT}. Same purpose as `skills`, and the
+   * reason a sync that changes nothing rewrites nothing.
    */
   vendoredPlugins?: Record<string, string>;
 }
@@ -292,7 +311,14 @@ const readSidecar = async (): Promise<Sidecar> => {
     // Read back like every other record: without it each sync starts from an
     // empty one, so it reinstalls every vendored plugin and never uninstalls a
     // plugin the fleet dropped.
-    vendoredPlugins: stored?.vendoredPlugins ?? {},
+    // Keyed by plugin name alone before each marketplace had its own vendored
+    // copy; those records name `<plugin>@cawco` installs, which the next sync
+    // moves (moveLegacyVendored) and records under their fleet ids.
+    vendoredPlugins: Object.fromEntries(
+      Object.entries(stored?.vendoredPlugins ?? {}).filter(([id]) =>
+        id.includes("@")
+      )
+    ),
     // A sidecar written before skills existed names none, which is the truth.
     skills: stored?.skills ?? {},
     ...(stored?.memory ? { memory: stored.memory } : {}),
@@ -803,6 +829,14 @@ const marketplaceOf = (id: string): string => id.split("@").pop() ?? "";
 /** And the half before it, which is what a vendored plugin is called. */
 const pluginNameOf = (id: string): string => id.split("@")[0] ?? id;
 
+/** The fleet's id for a payload: `plugin@marketplace`, as the hub's config has it. */
+const payloadId = (plugin: FleetPluginPayload): string =>
+  `${plugin.name}@${plugin.marketplace}`;
+
+/** The id a fleet plugin is installed under here, out of its vendored marketplace. */
+const vendoredIdOf = (id: string): string =>
+  `${pluginNameOf(id)}@${vendorName(marketplaceOf(id))}`;
+
 /**
  * Why a plugin of a hub-only marketplace is not on this machine. The bytes the
  * hub carries are its only way here: the marketplace is a directory on the
@@ -965,11 +999,11 @@ const syncPlugins = async (
     managed.vendoredPlugins ?? {},
     report.plugins
   );
-  const carried = new Set(payloads.map(({ name }) => name));
+  const carried = new Set(payloads.map(payloadId));
 
   const linked = await linkedMarketplaces();
   for (const { id, error } of wantedPlugins) {
-    if (carried.has(pluginNameOf(id))) {
+    if (carried.has(id)) {
       continue;
     }
     const marketplace = marketplaceOf(id);
@@ -1013,7 +1047,7 @@ const syncPlugins = async (
     }
     // A vendored plugin is uninstalled under the name it was installed with;
     // `syncVendoredPlugins` has already done that one.
-    if (!carried.has(pluginNameOf(id))) {
+    if (!carried.has(id)) {
       // biome-ignore lint/performance/noAwaitInLoops: `claude plugin uninstall` mutates the CLI's shared installed_plugins.json; concurrent runs would race
       await runClaude(bin, [
         "plugin",
@@ -1106,72 +1140,119 @@ export const writeSkill = async (
   }
 };
 
+/** A name that is one path segment: a fleet marketplace's or a plugin's, from a manifest off the internet. */
+const isSafeSegment = (name: string): boolean =>
+  isSafeSkillPath(name) && !name.includes("/");
+
+/** The payloads by the fleet marketplace each came from. */
+const byMarketplace = (
+  plugins: readonly FleetPluginPayload[]
+): Map<string, FleetPluginPayload[]> => {
+  const groups = new Map<string, FleetPluginPayload[]>();
+  for (const plugin of plugins) {
+    groups.set(plugin.marketplace, [
+      ...(groups.get(plugin.marketplace) ?? []),
+      plugin,
+    ]);
+  }
+  return groups;
+};
+
 /**
- * Writes the fleet's own marketplace from the bytes the hub resolved.
+ * Writes one vendored marketplace from the bytes the hub resolved for one
+ * fleet marketplace.
  *
- * The whole directory is rewritten rather than patched, because it has exactly
- * one author and the manifest has to agree with what is beside it. Every plugin
- * is vendored as a relative `source`, which is a form the CLI already installs
- * from — the official marketplace vendors its own the same way — so the install
- * that follows reaches the network for nothing.
+ * Per plugin, not the whole directory at once. The hub leaves out the bytes of
+ * anything this machine already holds, so a rewrite of everything would erase
+ * the plugins whose content it deliberately did not resend. Every plugin is
+ * vendored as a relative `source`, which is a form the CLI already installs
+ * from — the official marketplace vendors its own the same way — so the
+ * install that follows reaches the network for nothing.
  */
-export const writeVendoredMarketplace = async (
-  plugins: FleetPluginPayload[],
-  // Named rather than assumed so a test can write somewhere that is not the
-  // operator's own `~/.claude`, which this machine is running sessions out of.
-  into: string = VENDOR_DIR
+const writeVendoredMarketplace = async (
+  marketplace: string,
+  plugins: readonly FleetPluginPayload[],
+  into: string
 ): Promise<void> => {
+  for (const plugin of plugins) {
+    if (!plugin.files) {
+      continue;
+    }
+    if (!isSafeSegment(plugin.name)) {
+      throw new Error(`unsafe plugin name ${plugin.name}`);
+    }
+    const dir = join(into, "plugins", plugin.name);
+    // biome-ignore lint/performance/noAwaitInLoops: each plugin's directory is torn down before its own files are written; parallel plugins could interleave a rm with another plugin's write to a stale dir handle
+    await rm(dir, { recursive: true, force: true });
+    for (const file of plugin.files) {
+      // The same refusal a skill's files get: a path out of the directory is a
+      // file the fleet would write somewhere nobody asked it to.
+      if (!isSafeSkillPath(file.path)) {
+        throw new Error(`unsafe path ${file.path}`);
+      }
+      // biome-ignore lint/performance/noAwaitInLoops: must run after this plugin's own rm above completes
+      await writeSkillFile(dir, file);
+    }
+  }
+
+  // What the fleet no longer carries goes, whether or not its bytes arrived.
+  const wanted = new Set(plugins.map(({ name }) => name));
+  const present = await readdir(join(into, "plugins")).catch(
+    () => [] as string[]
+  );
+  for (const name of present) {
+    if (!wanted.has(name)) {
+      // biome-ignore lint/performance/noAwaitInLoops: removals are independent, but this pass mirrors the write loop above rather than adding a second concurrency strategy for the same directory
+      await rm(join(into, "plugins", name), { recursive: true, force: true });
+    }
+  }
+
+  await Bun.write(
+    join(into, ".claude-plugin", "marketplace.json"),
+    `${JSON.stringify(
+      {
+        name: vendorName(marketplace),
+        owner: { name: "cawco" },
+        plugins: plugins.map((plugin) => ({
+          name: plugin.name,
+          source: `./plugins/${plugin.name}`,
+          description: `Carried by the cawco fleet (${marketplace}).`,
+        })),
+      },
+      null,
+      2
+    )}\n`
+  );
+};
+
+/**
+ * Writes every vendored marketplace the payloads name, and takes away the
+ * folder of each one the fleet no longer carries anything from.
+ */
+const writeVendoredMarketplaces = async (
+  plugins: readonly FleetPluginPayload[]
+): Promise<void> => {
+  const groups = byMarketplace(plugins);
   await promptWrite("plugins marketplace files", async () => {
-    // Per plugin, not the whole directory at once. The hub leaves out the bytes
-    // of anything this machine already holds, so a rewrite of everything would
-    // erase the plugins whose content it deliberately did not resend — and it
-    // would rewrite megabytes to change one of them in any case.
-    for (const plugin of plugins) {
-      if (!plugin.files) {
-        continue;
+    for (const [marketplace, group] of groups) {
+      if (!isSafeSegment(marketplace)) {
+        throw new Error(`unsafe marketplace name ${marketplace}`);
       }
-      const dir = join(into, "plugins", plugin.name);
-      // biome-ignore lint/performance/noAwaitInLoops: each plugin's directory is torn down before its own files are written; parallel plugins could interleave a rm with another plugin's write to a stale dir handle
-      await rm(dir, { recursive: true, force: true });
-      for (const file of plugin.files) {
-        // The same refusal a skill's files get: a path out of the directory is a
-        // file the fleet would write somewhere nobody asked it to.
-        if (!isSafeSkillPath(file.path)) {
-          throw new Error(`unsafe path ${file.path}`);
-        }
-        // biome-ignore lint/performance/noAwaitInLoops: must run after this plugin's own rm above completes
-        await writeSkillFile(dir, file);
-      }
+      // biome-ignore lint/performance/noAwaitInLoops: one marketplace's folder at a time, like its plugins'
+      await writeVendoredMarketplace(
+        marketplace,
+        group,
+        vendorDir(marketplace)
+      );
     }
-
-    // What the fleet no longer carries goes, whether or not its bytes arrived.
-    const wanted = new Set(plugins.map(({ name }) => name));
-    const present = await readdir(join(into, "plugins")).catch(
+    for (const present of await readdir(VENDOR_ROOT).catch(
       () => [] as string[]
-    );
-    for (const name of present) {
-      if (!wanted.has(name)) {
-        // biome-ignore lint/performance/noAwaitInLoops: removals are independent, but this pass mirrors the write loop above rather than adding a second concurrency strategy for the same directory
-        await rm(join(into, "plugins", name), { recursive: true, force: true });
+    )) {
+      if (!groups.has(present)) {
+        // biome-ignore lint/performance/noAwaitInLoops: removals are independent and few
+        await rm(vendorDir(present), { recursive: true, force: true });
       }
     }
-
-    await Bun.write(
-      join(into, ".claude-plugin", "marketplace.json"),
-      `${JSON.stringify(
-        {
-          name: VENDOR_NAME,
-          owner: { name: "cawco" },
-          plugins: plugins.map((plugin) => ({
-            name: plugin.name,
-            source: `./plugins/${plugin.name}`,
-            description: `Carried by the cawco fleet (${plugin.marketplace}).`,
-          })),
-        },
-        null,
-        2
-      )}\n`
-    );
   });
 };
 
@@ -1298,19 +1379,103 @@ export const skillDrift = (
     : `edited on this machine (now ${disk.slice(0, 7)}), and the fleet's copy changed since (now ${fleet.slice(0, 7)}) — adopt this machine's copy or overwrite it with the fleet's`;
 };
 
-/** What the vendored marketplace holds on this disk now: plugin name → hash. */
+/**
+ * What the vendored marketplaces hold on this disk now, by fleet plugin id
+ * (`plugin@marketplace`) → hash: the key the hub leaves bytes out by.
+ */
 const readVendoredPlugins = async (): Promise<Record<string, string>> => {
-  const root = join(VENDOR_DIR, "plugins");
-  const names = await readdir(root).catch(() => [] as string[]);
   const held: Record<string, string> = {};
-  for (const name of names) {
-    // biome-ignore lint/performance/noAwaitInLoops: one plugin directory read at a time keeps the disk reads bounded
-    const hash = await treeHash(join(root, name));
-    if (hash) {
-      held[name] = hash;
+  for (const marketplace of await readdir(VENDOR_ROOT).catch(
+    () => [] as string[]
+  )) {
+    const root = join(vendorDir(marketplace), "plugins");
+    for (const name of await readdir(root).catch(() => [] as string[])) {
+      // biome-ignore lint/performance/noAwaitInLoops: one plugin directory read at a time keeps the disk reads bounded
+      const hash = await treeHash(join(root, name));
+      if (hash) {
+        held[`${name}@${marketplace}`] = hash;
+      }
     }
   }
   return held;
+};
+
+/** `~/.claude/plugins/data/<id>`: the id with every byte outside `a-zA-Z0-9_-` as `-` (plugins-reference). */
+const pluginDataDir = (id: string): string =>
+  join(PLUGINS_DIR, "data", id.replace(/[^a-zA-Z0-9_-]/g, "-"));
+
+/**
+ * Moves every `<plugin>@cawco` install, from when all vendored plugins shared
+ * one marketplace, to the id it has now, `<plugin>@cawco-<marketplace>`. The
+ * old one is uninstalled keeping its data (`--keep-data`), and its data folder
+ * moves to the new id's; one the fleet no longer carries is just uninstalled.
+ * Then the shared marketplace is unlinked and its folder goes. Answers the new
+ * ids whose old one the user had disabled, for the install to leave disabled.
+ * A name two fleet marketplaces carry goes to the first; the other installs
+ * fresh, as it never could before.
+ */
+const moveLegacyVendored = async (
+  bin: string,
+  payloads: readonly FleetPluginPayload[]
+): Promise<Set<string>> => {
+  const disabled = new Set<string>();
+  const installed =
+    (await readJson<InstalledPlugins>(INSTALLED_PLUGINS))?.plugins ?? {};
+  const legacy = Object.entries(installed).flatMap(([id, entries]) =>
+    marketplaceOf(id) === LEGACY_VENDOR_NAME &&
+    entries.some((entry) => entry.scope === "user")
+      ? [id]
+      : []
+  );
+  const enabled =
+    (
+      await readJson<{ enabledPlugins?: Record<string, unknown> }>(
+        SETTINGS_PATH
+      )
+    )?.enabledPlugins ?? {};
+  for (const old of legacy) {
+    const heir = payloads.find(({ name }) => name === pluginNameOf(old));
+    // biome-ignore lint/performance/noAwaitInLoops: `claude plugin uninstall` mutates the CLI's shared installed_plugins.json; concurrent runs would race
+    await runClaude(bin, [
+      "plugin",
+      "uninstall",
+      old,
+      "--scope",
+      "user",
+      "--keep-data",
+      "-y",
+    ]);
+    if (!heir) {
+      await rm(pluginDataDir(old), { recursive: true, force: true });
+      console.log(`[fleet] ${old}: uninstalled, the fleet carries it no more`);
+      continue;
+    }
+    const next = vendoredIdOf(payloadId(heir));
+    const from = pluginDataDir(old);
+    const to = pluginDataDir(next);
+    if ((await dirExists(from)) && !(await dirExists(to))) {
+      await rename(from, to);
+    }
+    if (enabled[old] === false) {
+      disabled.add(next);
+    }
+    console.log(
+      `[fleet] ${old} moved to ${next}${enabled[old] === false ? ", disabled as it was" : ""}`
+    );
+  }
+  if (await linkedEntry(LEGACY_VENDOR_NAME)) {
+    await runClaude(bin, [
+      "plugin",
+      "marketplace",
+      "remove",
+      LEGACY_VENDOR_NAME,
+    ]);
+    console.log(
+      `[fleet] the shared ${LEGACY_VENDOR_NAME} marketplace unlinked`
+    );
+  }
+  await rm(LEGACY_VENDOR_DIR, { recursive: true, force: true });
+  return disabled;
 };
 
 /**
@@ -1332,9 +1497,10 @@ export const fleetHoldings = async (): Promise<FleetHoldings> => ({
  * Installs the vendored plugins, and answers with what each one came to.
  *
  * Keyed by the FLEET's id — `name@marketplace`, the id the hub's config used —
- * while the CLI installs `name@cawco`, because the marketplace it comes from
- * on this machine is the one written above. The dashboard's rows are the
- * fleet's, not this machine's private arrangement for satisfying them.
+ * while the CLI installs `name@cawco-<marketplace>`, because the marketplace
+ * it comes from on this machine is the one written above. The dashboard's
+ * rows are the fleet's, not this machine's private arrangement for satisfying
+ * them.
  */
 const syncVendoredPlugins = async (
   bin: string,
@@ -1345,41 +1511,61 @@ const syncVendoredPlugins = async (
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: writes, links and installs every vendored plugin and reports each one's outcome, missing bytes included
 ): Promise<Record<string, string>> => {
   const written: Record<string, string> = {};
-  const byName = new Map(payloads.map((plugin) => [plugin.name, plugin]));
+  const byId = new Map(payloads.map((plugin) => [payloadId(plugin), plugin]));
+  const groups = byMarketplace(payloads);
+  const present = await readdir(VENDOR_ROOT).catch(() => [] as string[]);
 
   // The hub read this disk just before it built this sync (READ_FLEET_HOLDINGS)
   // and left out the bytes of exactly what it held; whatever came with files
   // is what the disk lacked.
-  const changed =
-    payloads.some((plugin) => plugin.files !== undefined) ||
-    Object.keys(managed).some((name) => !byName.has(name)) ||
-    !(await dirExists(VENDOR_DIR));
+  const changed = new Set([
+    ...payloads
+      .filter((plugin) => plugin.files !== undefined)
+      .map(({ marketplace }) => marketplace),
+    ...Object.keys(managed)
+      .filter((id) => !byId.has(id))
+      .map(marketplaceOf),
+    ...[...groups.keys()].filter(
+      (marketplace) => !present.includes(marketplace)
+    ),
+  ]);
+  const gone = present.filter((marketplace) => !groups.has(marketplace));
 
-  if (changed) {
-    await writeVendoredMarketplace(payloads);
+  if (changed.size > 0 || gone.length > 0) {
+    await writeVendoredMarketplaces(payloads);
   }
   const held = await readVendoredPlugins();
 
-  // Linked once, then refreshed in place: `add` on an already-linked path is an
-  // error, and `update` is what re-reads a directory whose contents moved. A
-  // `cawco` registered at any other directory is not this one (a daemon run
-  // with another HOME wrote it), and adding this one replaces it: "adding a
-  // second marketplace with the same name replaces the first"
+  // Each linked once, then refreshed in place: `add` on an already-linked path
+  // is an error, and `update` is what re-reads a directory whose contents
+  // moved. One registered at any other directory is not this one (a daemon
+  // run with another HOME wrote it), and adding this one replaces it: "adding
+  // a second marketplace with the same name replaces the first"
   // (https://code.claude.com/docs/en/plugin-marketplaces).
-  if ((await linkedEntry(VENDOR_NAME))?.installLocation !== VENDOR_DIR) {
-    await runClaude(bin, ["plugin", "marketplace", "add", VENDOR_DIR]);
-  } else if (changed) {
-    await runClaude(bin, ["plugin", "marketplace", "update", VENDOR_NAME]);
+  for (const marketplace of groups.keys()) {
+    const name = vendorName(marketplace);
+    // biome-ignore lint/performance/noAwaitInLoops: `claude plugin marketplace add` mutates the CLI's shared known_marketplaces.json; concurrent runs would race
+    if ((await linkedEntry(name))?.installLocation !== vendorDir(marketplace)) {
+      await runClaude(bin, [
+        "plugin",
+        "marketplace",
+        "add",
+        vendorDir(marketplace),
+      ]);
+    } else if (changed.has(marketplace)) {
+      await runClaude(bin, ["plugin", "marketplace", "update", name]);
+    }
   }
 
+  const disabled = await moveLegacyVendored(bin, payloads);
+
   for (const { id } of wanted) {
-    const name = pluginNameOf(id);
-    const plugin = byName.get(name);
+    const plugin = byId.get(id);
     if (!plugin) {
       continue;
     }
-    const vendoredId = `${name}@${VENDOR_NAME}`;
-    if (held[name] !== plugin.hash) {
+    const vendoredId = vendoredIdOf(id);
+    if (held[id] !== plugin.hash) {
       // Neither on this disk nor in this sync: the disk changed between the
       // hub's read and this write. The report claims nothing for it, so the
       // next sync's read finds it missing and carries the bytes.
@@ -1392,7 +1578,7 @@ const syncVendoredPlugins = async (
 
     const already =
       // biome-ignore lint/performance/noAwaitInLoops: the install this loop runs mutates the CLI's shared installed_plugins.json; concurrent plugins would race
-      managed[name] === plugin.hash && (await isInstalled(vendoredId));
+      managed[id] === plugin.hash && (await isInstalled(vendoredId));
     const ran = already
       ? undefined
       : await runClaude(bin, [
@@ -1411,6 +1597,16 @@ const syncVendoredPlugins = async (
       };
       continue;
     }
+    // Moved from a `<plugin>@cawco` the user had turned off: off it stays.
+    if (ran && disabled.has(vendoredId)) {
+      await runClaude(bin, [
+        "plugin",
+        "disable",
+        vendoredId,
+        "--scope",
+        "user",
+      ]);
+    }
 
     // The copy this one replaces. A machine that installed the plugin the old
     // way — from its upstream marketplace — is still carrying it, and leaving
@@ -1428,23 +1624,36 @@ const syncVendoredPlugins = async (
         "-y",
       ]);
     }
-    written[name] = plugin.hash;
+    written[id] = plugin.hash;
     report[id] = { state: "applied" };
   }
 
-  for (const name of Object.keys(managed)) {
-    if (byName.has(name)) {
+  for (const id of Object.keys(managed)) {
+    if (byId.has(id)) {
       continue;
     }
     // biome-ignore lint/performance/noAwaitInLoops: `claude plugin uninstall` mutates the CLI's shared installed_plugins.json; concurrent runs would race
     await runClaude(bin, [
       "plugin",
       "uninstall",
-      `${name}@${VENDOR_NAME}`,
+      vendoredIdOf(id),
       "--scope",
       "user",
       "-y",
     ]);
+  }
+  // A vendored marketplace the fleet carries nothing from any more: its
+  // plugins are uninstalled above and its folder is gone, so its link goes.
+  for (const marketplace of gone) {
+    // biome-ignore lint/performance/noAwaitInLoops: `claude plugin marketplace remove` mutates the CLI's shared known_marketplaces.json; concurrent runs would race
+    if (await linkedEntry(vendorName(marketplace))) {
+      await runClaude(bin, [
+        "plugin",
+        "marketplace",
+        "remove",
+        vendorName(marketplace),
+      ]);
+    }
   }
   return written;
 };
@@ -2662,13 +2871,10 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
         };
   }
   for (const id of managed.plugins) {
-    // A vendored plugin is installed out of cawco's own marketplace, under
-    // that marketplace's name, and the upstream id is uninstalled for it.
-    const name = pluginNameOf(id);
+    // A vendored plugin is installed out of cawco's own copy of its
+    // marketplace, under that copy's name, and the upstream id is uninstalled.
     const installedAs =
-      managed.vendoredPlugins?.[name] === undefined
-        ? id
-        : `${name}@${VENDOR_NAME}`;
+      managed.vendoredPlugins?.[id] === undefined ? id : vendoredIdOf(id);
     // biome-ignore lint/performance/noAwaitInLoops: a read-only status check; kept sequential like the rest of this report rather than fanning out parallel file reads
     report.plugins[id] = (await isInstalled(installedAs))
       ? { state: "applied" }

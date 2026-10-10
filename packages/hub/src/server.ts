@@ -11275,7 +11275,10 @@ export const createServer = (
             placedSkills: placedCopies(config.skills, places, machineId),
             placedMcp: placedCopies(mcpRows, places, machineId),
             pluginPayloads: config.pluginPayloads?.map((plugin) =>
-              held.plugins?.[plugin.name] === plugin.hash
+              // Keyed by the fleet's id: two marketplaces may each carry a
+              // plugin of the same name, and a machine holds both.
+              held.plugins?.[`${plugin.name}@${plugin.marketplace}`] ===
+              plugin.hash
                 ? { ...plugin, files: undefined }
                 : plugin
             ),

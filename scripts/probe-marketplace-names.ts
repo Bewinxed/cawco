@@ -17,13 +17,18 @@
  *    answered by the hub from each row's source, lists every one's plugins,
  *    the hub directory's included; a plugin installed from each is applied;
  *    and the URL row's relative plugin is refused with the docs' reason.
- * 4. The agent runs with a `CLAUDE_CONFIG_DIR` of someone else's (as a daemon
- *    started from inside a session does): nothing lands in it. A `cawco`
- *    already registered at another HOME's directory is replaced by the
- *    agent's own `$HOME/.claude/cawco-marketplace`.
+ * 4. Two plugins called show-me, from `skills` and `probe-url`, both apply,
+ *    each installed as `show-me@cawco-<marketplace>` with its own vendored
+ *    folder and cache folder. A disabled `show-me@cawco`, from when every
+ *    vendored plugin shared one marketplace, moves to its new id on the first
+ *    sync: logged, still disabled, its data folder with it, and the shared
+ *    `cawco` marketplace unlinked and its folder gone.
+ * 5. The agent runs with a `CLAUDE_CONFIG_DIR` of someone else's (as a daemon
+ *    started from inside a session does): nothing lands in it.
  *
  *   bun scripts/probe-marketplace-names.ts
  */
+import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { CLAUDE_DIR_NAME } from "../packages/core/src/claude-dirs";
@@ -87,6 +92,26 @@ const send = async (method: string, path: string, body?: unknown) => {
   }
   return JSON.parse(text) as unknown;
 };
+
+/** The `claude` CLI on the scratch agent's own HOME, as the agent runs it. */
+const cli = (args: string[]): string => {
+  const env = Object.fromEntries(
+    Object.entries(fleet.env).filter(([key]) => key !== "CLAUDE_CONFIG_DIR")
+  );
+  const ran = Bun.spawnSync(["claude", ...args], {
+    env,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  return `${ran.stdout.toString()}${ran.stderr.toString()}`;
+};
+
+/** `claude plugin list --json` on the scratch agent's HOME. */
+const pluginList = (): {
+  enabled: boolean;
+  id: string;
+  installPath: string;
+}[] => JSON.parse(cli(["plugin", "list", "--json"]));
 
 /** Browse, as the dashboard asks it: the hub reads the row's source. */
 const browse = async (name: string) =>
@@ -242,30 +267,79 @@ try {
     `${local.name}, ${byUrl.name}`
   );
 
-  // ── 3. The machine: registry, Browse, install ────────────────────────
-  // A `cawco` some other HOME's daemon registered here, as obelisk's
-  // registry holds one at a scratch agent's HOME: the sync replaces it.
-  const stray = join(
-    fleet.sandbox,
-    "stray-home",
-    CLAUDE_DIR_NAME,
-    "cawco-marketplace"
+  // ── 3. Browse (answered by the hub) and installs, before any sync ────
+  const listings: Partial<Record<string, string[]>> = {};
+  for (const name of ["skills", "interfaces", "probe-local", "probe-url"]) {
+    // biome-ignore lint/performance/noAwaitInLoops: one Browse at a time, as the dashboard does
+    listings[name] = (await browse(name)).map((one) => one.name);
+    check(
+      `Browse lists ${name}'s plugins`,
+      (listings[name]?.length ?? 0) > 0,
+      listings[name]?.join(", ")
+    );
+  }
+  const picked = `${listings.interfaces?.[0]}@interfaces`;
+  // Two plugins called show-me, from two marketplaces.
+  const wanted = [
+    picked,
+    `${seeded}@skills`,
+    "local-one@probe-local",
+    "show-me@probe-url",
+    "show-me@skills",
+  ];
+  for (const id of [...wanted, "relative-one@probe-url"]) {
+    // biome-ignore lint/performance/noAwaitInLoops: installs one at a time, as an operator clicks them
+    await install(id);
+  }
+  // Carried before the machine's first sync, as a deployed hub's rows are.
+  await until(
+    "the hub carrying every wanted plugin",
+    () =>
+      fleet.query<{ id: string; hash: string | null }>(
+        "SELECT id, hash FROM plugins"
+      ),
+    (rows) =>
+      wanted.every((id) => rows.some((row) => row.id === id && row.hash)),
+    300_000
   );
-  await mkdir(join(stray, ".claude-plugin"), { recursive: true });
+
+  // ── 4. A `show-me@cawco` from when vendored plugins shared one marketplace
+  const legacyDir = userLayer(fleet.home, "cawco-marketplace");
   await Bun.write(
-    join(stray, ".claude-plugin", "marketplace.json"),
-    JSON.stringify({ name: "cawco", owner: { name: "cawco" }, plugins: [] })
-  );
-  await Bun.write(
-    userLayer(fleet.home, "plugins", "known_marketplaces.json"),
+    join(legacyDir, ".claude-plugin", "marketplace.json"),
     JSON.stringify({
-      cawco: {
-        source: { source: "directory", path: stray },
-        installLocation: stray,
-        lastUpdated: new Date().toISOString(),
-      },
+      name: "cawco",
+      owner: { name: "cawco" },
+      plugins: [{ name: "show-me", source: "./plugins/show-me" }],
     })
   );
+  await Bun.write(
+    join(legacyDir, "plugins", "show-me", ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "show-me", version: "0.0.1" })
+  );
+  await Bun.write(
+    join(legacyDir, "plugins", "show-me", "skills", "legacy", "SKILL.md"),
+    "---\ndescription: The old copy\n---\n\nOld.\n"
+  );
+  for (const args of [
+    ["plugin", "marketplace", "add", legacyDir],
+    ["plugin", "install", "show-me@cawco", "--scope", "user"],
+    ["plugin", "disable", "show-me@cawco", "--scope", "user"],
+  ]) {
+    cli(args);
+  }
+  await Bun.write(
+    userLayer(fleet.home, "plugins", "data", "show-me-cawco", "marker"),
+    "kept"
+  );
+  const before = pluginList();
+  check(
+    "a disabled show-me@cawco is installed before the sync",
+    before.some((one) => one.id === "show-me@cawco" && !one.enabled),
+    JSON.stringify(before.map(({ id, enabled }) => ({ id, enabled })))
+  );
+
+  // ── 5. The machine: registry, installs, the move ─────────────────────
   fleet.launch("sessiond");
   await fleet.sessiondUp();
   fleet.launch("agent");
@@ -300,28 +374,6 @@ try {
     Object.keys(registry).join(", ")
   );
 
-  const listings: Partial<Record<string, string[]>> = {};
-  for (const name of ["skills", "interfaces", "probe-local", "probe-url"]) {
-    // biome-ignore lint/performance/noAwaitInLoops: one Browse at a time, as the dashboard does
-    listings[name] = (await browse(name)).map((one) => one.name);
-    check(
-      `Browse lists ${name}'s plugins`,
-      (listings[name]?.length ?? 0) > 0,
-      listings[name]?.join(", ")
-    );
-  }
-
-  const picked = `${listings.interfaces?.[0]}@interfaces`;
-  const wanted = [
-    picked,
-    `${seeded}@skills`,
-    "local-one@probe-local",
-    "show-me@probe-url",
-  ];
-  for (const id of [...wanted, "relative-one@probe-url"]) {
-    // biome-ignore lint/performance/noAwaitInLoops: installs one at a time, as an operator clicks them
-    await install(id);
-  }
   const installed = await until(
     "every plugin applied on the agent",
     report,
@@ -345,17 +397,82 @@ try {
     refused?.error ?? "no error"
   );
 
-  // ── 4. Someone else's CLAUDE_CONFIG_DIR stays untouched ──────────────
+  // Both show-me, each under its own vendored marketplace.
+  const after = pluginList();
+  const listedIds = after.map(({ id }) => id);
+  check(
+    "show-me from both marketplaces is installed under its own id",
+    listedIds.includes("show-me@cawco-skills") &&
+      listedIds.includes("show-me@cawco-probe-url"),
+    listedIds.join(", ")
+  );
+  const paths = after
+    .filter(({ id }) => id.startsWith("show-me@cawco-"))
+    .map(({ installPath }) => installPath);
+  check(
+    "each has its own cache folder",
+    paths.length === 2 && paths[0] !== paths[1],
+    paths.join(" | ")
+  );
+  const folders = ["skills", "probe-url"].map((marketplace) =>
+    userLayer(
+      fleet.home,
+      "cawco-marketplaces",
+      marketplace,
+      "plugins",
+      "show-me"
+    )
+  );
+  check(
+    "each has its own vendored folder",
+    folders.every((folder) => existsSync(folder)),
+    folders.join(" | ")
+  );
+
+  // The old show-me@cawco moved: gone, its marketplace unlinked, its state
+  // and data kept by the id it moved to.
+  const agentLog = await fleet.logs("agent");
+  const moved =
+    /show-me@cawco moved to (show-me@cawco-[\w-]+)(, disabled as it was)?/.exec(
+      agentLog
+    );
+  const heir = moved?.[1] ?? "";
+  check("the move is logged", Boolean(moved), moved?.[0] ?? "no line");
+  const now = (await Bun.file(
+    userLayer(fleet.home, "plugins", "known_marketplaces.json")
+  ).json()) as Partial<Record<string, unknown>>;
+  check(
+    "show-me@cawco and the shared cawco marketplace are gone",
+    !(
+      listedIds.includes("show-me@cawco") ||
+      "cawco" in now ||
+      existsSync(legacyDir)
+    ),
+    `${listedIds.join(", ")}; registry ${Object.keys(now).join(", ")}`
+  );
+  check(
+    "it stays disabled under its new id",
+    after.some((one) => one.id === heir && !one.enabled),
+    heir
+  );
+  const marker = userLayer(
+    fleet.home,
+    "plugins",
+    "data",
+    heir.replace(/[^a-zA-Z0-9_-]/g, "-"),
+    "marker"
+  );
+  check(
+    "its data folder moved with it",
+    await Bun.file(marker).exists(),
+    marker
+  );
+
+  // ── 6. Someone else's CLAUDE_CONFIG_DIR stays untouched ──────────────
   const leaked = await Bun.file(
     join(operatorDir, "plugins", "known_marketplaces.json")
   ).exists();
   check("nothing written into the inherited CLAUDE_CONFIG_DIR", !leaked);
-  const vendor = registry.cawco?.installLocation;
-  check(
-    "a stray cawco is replaced by the agent's own HOME's",
-    vendor === userLayer(fleet.home, "cawco-marketplace"),
-    vendor ?? "absent"
-  );
 } catch (error) {
   failures.push(error instanceof Error ? error.message : String(error));
   console.log(`FAIL ${failures.at(-1)}`);

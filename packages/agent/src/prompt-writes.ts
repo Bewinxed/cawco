@@ -57,7 +57,7 @@ const CLAUDE_DIR_REASONS: readonly [string, string][] = [
   [inClaudeDir("skills"), "skills"],
   [inClaudeDir("agents"), "agent definitions"],
   [inClaudeDir("plugins"), "plugins"],
-  [inClaudeDir("cawco-marketplace"), "plugins"],
+  [inClaudeDir("cawco-marketplaces"), "plugins"],
   [inClaudeDir("cawco-hooks"), "hooks"],
 ];
 

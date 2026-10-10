@@ -25437,7 +25437,8 @@
                 "type": "object"
               },
               "plugins": {
-                "type": "object"
+                "type": "object",
+                "description": "By the fleet's plugin id, `plugin@marketplace`."
               }
             }
           },

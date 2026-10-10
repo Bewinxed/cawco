@@ -660,6 +660,7 @@ export interface FleetSyncReport {
    */
   have?: {
     skills?: Record<string, string>;
+    /** By the fleet's plugin id, `plugin@marketplace`. */
     plugins?: Record<string, string>;
   };
   /**
