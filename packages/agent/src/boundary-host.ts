@@ -31,7 +31,8 @@
  * working directory.
  *
  * A plain Bun script, never a module of cawco, importing nothing of it but
- * core's dependency-free dir names (`claude-dirs.ts`): a binary install runs
+ * core's dependency-free dir names (`claude-dirs.ts`) and mount table
+ * (`mount-table.ts`): a binary install runs
  * its bundle (srt inside) on cawco's own runtime (`BUN_BE_BUN=1`), a checkout
  * runs it on bun.
  */
@@ -58,6 +59,7 @@ import {
   type SandboxRuntimeConfig,
 } from "@anthropic-ai/sandbox-runtime";
 import { projectClaudeRelative } from "@cawco/core/claude-dirs";
+import { mountedAnywhere, mountPointsOf } from "@cawco/core/mount-table";
 import type { Subprocess } from "bun";
 
 const quote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`;
@@ -184,7 +186,7 @@ const runner = readFileSync(runnerFile, "utf8");
 /** A clone-side deny path and what stands in for it, as `cloneDenies` (workspace-policy.ts) lists them. */
 interface Deny {
   readonly empty:
-    | { readonly kind: "dir" }
+    | { readonly kind: "dir"; readonly readOnly?: true }
     | { readonly kind: "file"; readonly text: string }
     | { readonly kind: "none" };
   readonly path: string;
@@ -232,7 +234,16 @@ const above = (path: string): string[] => {
   return dirs;
 };
 
-/** {@link standIn} for one path: its parents made as the clone's own directories, then the path itself. */
+/**
+ * {@link standIn} for one path: its parents made as the clone's own
+ * directories, then the path itself. A mount point an earlier sandbox left
+ * (`left`) may still be held by that sandbox: an older boundary runs on
+ * beside this one until nothing runs in it (`handOver` in boundary.ts), and
+ * unlinking the file it binds would drop its deny there. So a file's stand-in
+ * is written into it in place, its inode kept, and a dir's is made only once
+ * no mount namespace holds it (`mountedAnywhere`); until then srt covers it
+ * again, and the agent replaces this boundary once nothing runs in it.
+ */
 const makeStandIn = (
   path: string,
   empty: Exclude<Deny["empty"], { kind: "none" }>,
@@ -246,11 +257,24 @@ const makeStandIn = (
       throw new Error(`${dir} is not a directory of the clone`);
     }
   }
+  if (left && empty.kind === "file") {
+    chmodSync(path, 0o644);
+    writeFileSync(path, empty.text, { flag: "r+" });
+    return;
+  }
   if (left) {
+    if (mountedAnywhere(path)) {
+      throw new Error(
+        "an earlier sandbox still holds the mount point left there"
+      );
+    }
     rmSync(path);
   }
   if (empty.kind === "dir") {
     mkdirSync(path);
+    if (empty.readOnly) {
+      chmodSync(path, 0o555);
+    }
   } else {
     writeFileSync(path, empty.text, { flag: "wx" });
     // Writable whatever the umask: an empty file with no write bits is what
@@ -363,25 +387,6 @@ const mountinfoSpelling = (path: string): string =>
 /** A process's entry in `/proc`. */
 const PID = /^\d+$/;
 
-/** The mount points of `pid`'s mount namespace, as `/proc/<pid>/mountinfo` spells them (octal escapes read). */
-const mountPoints = (pid: number): Set<string> | undefined => {
-  try {
-    return new Set(
-      readFileSync(`/proc/${pid}/mountinfo`, "utf8")
-        .split("\n")
-        .map((line) =>
-          (line.split(" ")[4] ?? "").replace(/\\([0-7]{3})/g, (_, code) =>
-            String.fromCharCode(Number.parseInt(code, 8))
-          )
-        )
-        .filter(Boolean)
-    );
-  } catch {
-    // The sandbox is gone: it has no mount table.
-    return undefined;
-  }
-};
-
 const pidNamespace = (pid: string | number): string | undefined => {
   try {
     return readlinkSync(`/proc/${pid}/ns/pid`);
@@ -457,7 +462,7 @@ const startSandbox = async (): Promise<Sandbox | undefined> => {
         const idle = readdirSync("/proc").filter(
           (pid) => PID.test(pid) && pidNamespace(pid) === space
         );
-        const mounted = mountPoints(inner) ?? new Set<string>();
+        const mounted = mountPointsOf(inner) ?? new Set<string>();
         // Guarded: each bind srt made, and each path the host changed while
         // the sandbox started, whose bind is gone already ({@link guard}
         // stops this sandbox for it at once). One srt did not bind, the same
@@ -496,7 +501,7 @@ const guard = (): void => {
   if (!sandbox || sandbox.detached) {
     return;
   }
-  const mounted = mountPoints(sandbox.inner);
+  const mounted = mountPointsOf(sandbox.inner);
   const lost = mounted && sandbox.guarded.find((path) => !mounted.has(path));
   if (lost) {
     sandbox.detached = lost;

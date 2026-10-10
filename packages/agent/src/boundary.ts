@@ -107,6 +107,7 @@ import {
   judgeProcId,
 } from "./proc-id";
 import { ensureSessiond, SessiondClient } from "./sessiond-client";
+import { hasLeftDirs, removeStandIns, rewriteLeftFiles } from "./stand-ins";
 import { closeToolDoor, openToolDoor, toolDoorOf } from "./tool-door";
 
 /** A running boundary, as a harness uses it. */
@@ -740,6 +741,19 @@ export const rearmHooks = async (): Promise<void> => {
     // A gate an agent left as it died names no process this one waits for.
     await rm(gateOf(id), { force: true });
     const ref = { id, path: held.path };
+    if (process.platform === "linux") {
+      // Before anything is armed: each mount point a running sandbox left
+      // where a file stands in holds that file's stand-in now, in place; one
+      // where a dir stands in goes with its boundary, once nothing runs in it
+      // (`stand-ins.ts`).
+      const dirsLeft = await rewriteLeftFiles(ref).catch((error: unknown) => {
+        said("the mount points its sandbox left could not be rewritten")(error);
+        return false;
+      });
+      if (dirsLeft) {
+        restartWhenIdle(ref);
+      }
+    }
     const form = await formOf(ref).catch(
       said("its boundary's form could not be checked")
     );
@@ -1089,6 +1103,13 @@ const ensure = async (ref: WorkspaceRef): Promise<Boundary> => {
     return start(client, ref);
   }
   if (held.form !== (await formOf(ref))) {
+    if (process.platform === "linux" && (await hasLeftDirs(ref.path))) {
+      // A boundary started beside it would bind the same mount point and
+      // keep it; this one is replaced whole once nothing runs in it.
+      forgetStale(ref.id);
+      restartWhenIdle(ref);
+      return armHook(ref.id, held);
+    }
     const fresh = await handOver(client, ref, held);
     forgetStale(ref.id);
     return fresh;
@@ -1601,6 +1622,117 @@ const lookAtStale = async (): Promise<void> => {
   if (retiring.size > 0) {
     await closeRetiring(client);
   }
+  if (stubbed.size > 0) {
+    await restartStubbed(client);
+  }
+};
+
+/**
+ * The workspaces whose running sandbox holds an srt mount point, a file,
+ * where a dir stands in (`stand-ins.ts`): left by a sandbox started before
+ * the stand-ins, or covered again by one started beside it. Unlinking it on
+ * the host would drop the deny inside that sandbox, so the boundary is
+ * replaced once nothing runs in it, and its new host makes the dir.
+ */
+const stubbed = new Map<string, WorkspaceRef>();
+
+/** Replaces workspace `ref`'s boundary once nothing runs in it ({@link stubbed}). */
+const restartWhenIdle = (ref: WorkspaceRef): void => {
+  stubbed.set(ref.id, ref);
+  lookSoon();
+};
+
+const forgetStubbed = (id: string): void => {
+  stubbed.delete(id);
+  stopLooking();
+};
+
+/** Waits for each sandbox init in `inners` to be gone, up to {@link STOP_TIMEOUT_MS}; answers whether all are. */
+const sandboxesGone = async (inners: readonly number[]): Promise<boolean> => {
+  const deadline = Date.now() + STOP_TIMEOUT_MS;
+  for (;;) {
+    if (!inners.some((pid) => existsSync(`/proc/${pid}`))) {
+      return true;
+    }
+    if (Date.now() >= deadline) {
+      return false;
+    }
+    // biome-ignore lint/performance/noAwaitInLoops: polls until the sandboxes are gone, or the deadline passes
+    await Bun.sleep(20);
+  }
+};
+
+/**
+ * Replaces each {@link stubbed} workspace's boundary when nothing runs in it:
+ * no older boundary beside it, no executor on its way in, nothing in its
+ * sandbox but what was there when its runner was ready. The gate goes up
+ * first, as for a handover, so a command arriving meanwhile waits and runs
+ * through the new one. A workspace with no boundary running, or no such
+ * mount point left, is forgotten: its next start makes the stand-in.
+ */
+const restartStubbed = async (client: SessiondClient): Promise<void> => {
+  for (const ref of [...stubbed.values()]) {
+    try {
+      // biome-ignore lint/performance/noAwaitInLoops: one workspace at a time
+      const held = await readHeld(ref.id);
+      const alive = (await client.list()).procs
+        .filter((proc) => proc.alive && isBoundaryOf(proc.procId, ref.id))
+        .map((proc) => proc.procId);
+      if (!held || alive.length === 0 || !(await hasLeftDirs(ref.path))) {
+        forgetStubbed(ref.id);
+        continue;
+      }
+      if (
+        alive.some((procId) => procId !== boundaryProcId(ref.id, held.gen)) ||
+        starting.has(ref.id)
+      ) {
+        // An older boundary closes first, once idle ({@link closeIdle}).
+        continue;
+      }
+      const restart = restartIfIdle(client, ref, held);
+      starting.set(ref.id, restart);
+      await restart.finally(() => starting.delete(ref.id));
+    } catch (error) {
+      console.warn(
+        `[workspace] ${ref.id}: its boundary could not be started again around its harness config yet: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+};
+
+/** {@link restartStubbed}'s one workspace: its boundary as it is while anything runs in it, else a new one. */
+const restartIfIdle = async (
+  client: SessiondClient,
+  ref: WorkspaceRef,
+  held: Held
+): Promise<Boundary> => {
+  const gate = gateOf(ref.id);
+  await writeFile(gate, String(process.pid));
+  try {
+    const seen = await snapshot();
+    if (
+      executors(seen, ref.id).length > 0 ||
+      (await busyOld(seen, ref.id, { ...held, executors: [] }, undefined))
+    ) {
+      return held;
+    }
+    const place = await readPlace(ref.id, held.gen);
+    await stopBoundary(client, ref.id, held);
+    if (!(await sandboxesGone(place ? [place.inner] : []))) {
+      throw new Error(
+        `its sandbox ${place?.inner} was still there ${STOP_TIMEOUT_MS / 1000}s after it was stopped`
+      );
+    }
+    await cleanGeneration(ref.id, held);
+    const fresh = await start(client, ref);
+    forgetStubbed(ref.id);
+    console.info(
+      `[workspace] ${ref.id}: its boundary ${held.pid} held an srt mount point where a dir stands in, had nothing running and is replaced by ${fresh.pid}`
+    );
+    return fresh;
+  } finally {
+    await rm(gate, { force: true });
+  }
 };
 
 const handOverStale = async (client: SessiondClient): Promise<void> => {
@@ -1680,7 +1812,12 @@ const closeWhenIdle = (id: string): void => {
 };
 
 const stopLooking = (): void => {
-  if (stale.size === 0 && retiring.size === 0 && staleTimer) {
+  if (
+    stale.size === 0 &&
+    retiring.size === 0 &&
+    stubbed.size === 0 &&
+    staleTimer
+  ) {
     clearInterval(staleTimer);
     staleTimer = undefined;
   }
@@ -2164,6 +2301,11 @@ const launch = async (
     path: ref.path,
     form: plan.form,
   };
+  if (linux && (await hasLeftDirs(ref.path))) {
+    // Its host left a mount point where a dir stands in: an older boundary
+    // beside it held one there ({@link stubbed}).
+    restartWhenIdle(ref);
+  }
   // armHook writes the executor.
   return armHook(ref.id, held);
 };
@@ -2172,20 +2314,28 @@ const launch = async (
  * Kills the workspace's boundaries, the current one and every older one
  * still beside it, with every process in them ({@link stopBoundary}), and any
  * other boundary process of the workspace; on macOS everything carrying the
- * workspace's marker. Stops serving its tool door, then its state goes, and
- * on Linux srt's temp dirs with the sockets srt leaves there (REPORT.md §5o).
+ * workspace's marker. Stops serving its tool door. On Linux, once its
+ * sandboxes are gone, the deny stand-ins in its clone go
+ * (`stand-ins.ts`). Then its state goes, and on Linux
+ * srt's temp dirs with the sockets srt leaves there (REPORT.md §5o).
  * Its judges go last: with the state dir gone there is no workspace to start
  * one again for ({@link watchJudge}).
  */
 export const closeBoundary = async (ref: WorkspaceRef): Promise<void> => {
   forgetStale(ref.id);
   forgetRetiring(ref.id);
+  forgetStubbed(ref.id);
   await closeToolDoor(ref.id);
   const client = await sessiond();
   const held = await readHeld(ref.id).catch(() => undefined);
   const boundaries = [...(held ? [held] : []), ...(await readRetiring(ref.id))];
+  const inners: number[] = [];
   for (const boundary of boundaries) {
     // biome-ignore lint/performance/noAwaitInLoops: one boundary at a time
+    const place = await readPlace(ref.id, boundary.gen);
+    if (place) {
+      inners.push(place.inner);
+    }
     await stopBoundary(client, ref.id, boundary);
     await cleanGeneration(ref.id, boundary);
   }
@@ -2198,6 +2348,18 @@ export const closeBoundary = async (ref: WorkspaceRef): Promise<void> => {
   await signalAll((procId) => isBoundaryOf(procId, ref.id));
   if (process.platform === "darwin") {
     await killMarked(ref.id);
+  } else if (await sandboxesGone(inners)) {
+    // Only once no sandbox holds a mount on them: each goes if it is still
+    // exactly as it was made (`stand-ins.ts`).
+    await removeStandIns(ref).catch((error: unknown) => {
+      console.warn(
+        `[workspace] ${ref.id}: its clone's deny stand-ins could not be taken away: ${error instanceof Error ? error.message : String(error)}`
+      );
+    });
+  } else {
+    console.warn(
+      `[workspace] ${ref.id}: its sandbox was still there ${STOP_TIMEOUT_MS / 1000}s after it was stopped, so its clone's deny stand-ins are left`
+    );
   }
   await rm(stateDir(ref.id), { recursive: true, force: true });
   await signalAll((procId) => isJudgeOf(procId, ref.id));

@@ -50,7 +50,8 @@ import { type Policy, resolveDenied, resolveReal } from "./workspace-judge";
  * clone without `.git/config` is no clone).
  */
 export type CloneDenyEmpty =
-  | { readonly kind: "dir" }
+  /** `readOnly`: made with no write bits, so no host tool fills it. */
+  | { readonly kind: "dir"; readonly readOnly?: true }
   | { readonly kind: "file"; readonly text: string }
   | { readonly kind: "none" };
 
@@ -69,6 +70,27 @@ export interface CloneDeny {
 const DIR = { kind: "dir" } as const;
 const EMPTY_JSON = { kind: "file", text: "{}\n" } as const;
 const EMPTY = { kind: "file", text: "" } as const;
+
+/**
+ * OpenCode's empty config: its schema alone. OpenCode writes `$schema` into a
+ * config file that has none ("if (!data.$schema) { … fs.writeFileString(
+ * options.path, updated)", `loadConfig` in packages/opencode/src/config/
+ * config.ts at v1.18.34), so a `{}` stand-in is written over on the host.
+ */
+const OPENCODE_EMPTY = {
+  kind: "file",
+  text: '{"$schema":"https://opencode.ai/config.json"}\n',
+} as const;
+
+/**
+ * OpenCode's config dir, empty and read-only. OpenCode writes a `.gitignore`
+ * into each `.opencode` dir it loads and installs `@opencode-ai/plugin` there
+ * (`ensureGitignore`, `npm.install` in the same file); without write bits
+ * both fail quietly (the first catches PermissionDenied, the second is a
+ * background fork that logs a warning), and the clone loads as one without
+ * `.opencode` does (OpenCode 1.18.34: `/config` and `/agent` the same).
+ */
+const OPENCODE_DIR = { kind: "dir", readOnly: true } as const;
 
 /**
  * srt's own mandatory deny names at its working directory, the clone, that
@@ -119,9 +141,9 @@ export const cloneDenies = (clone: string): readonly CloneDeny[] => [
     path: projectClaudeDir(clone, name),
     empty: DIR,
   })),
-  { path: join(clone, "opencode.json"), empty: EMPTY_JSON },
-  { path: join(clone, "opencode.jsonc"), empty: EMPTY_JSON },
-  { path: join(clone, ".opencode"), empty: DIR },
+  { path: join(clone, "opencode.json"), empty: OPENCODE_EMPTY },
+  { path: join(clone, "opencode.jsonc"), empty: OPENCODE_EMPTY },
+  { path: join(clone, ".opencode"), empty: OPENCODE_DIR },
   {
     path: join(clone, ".mcp.json"),
     empty: { kind: "file", text: '{"mcpServers":{}}\n' },
