@@ -1029,7 +1029,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         Pace.spent(took, in: env.sessionId, items: items.count, cells: collection.visibleCells.count)
         // Work this frame, or work the next one has: the frame runs on. A dirty
         // pane that owes its drawing (`owing`) waits for the screen, not the frame.
-        let busy = committed || streaming || feeding || gliding || revealing != nil
+        let busy = committed || streaming || feeding || gliding || revealing != nil || !moving.isEmpty
             || (dirty && (yielding || !Self.owing.contains(self)))
             || collection.isDragging || collection.isDecelerating || collection.isTracking
             || collection.contentOffset != offsetBefore || collection.contentSize != sizeBefore
@@ -1791,8 +1791,10 @@ extension TranscriptView: RevealDriver {
                 slack = max(slack, at - shortest)
             }
         }
-        // The first step is this frame's (and, under Reduce Motion, the last).
+        // The first step is this frame's (and, under Reduce Motion, the last);
+        // the frame runs on for the rest, a sleeping one woken for them.
         stepReveals(CACurrentMediaTime())
+        wake()
     }
 }
 
