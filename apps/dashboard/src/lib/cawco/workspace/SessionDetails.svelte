@@ -649,15 +649,12 @@
               restartsOnFullSend: !bypasses(session?.permissionMode),
             }}
           />
-        </div>
-        <!-- The account the session bills, on its own line: an email needs
-             more room than the settings row has, and the eye travels from
-             it to its limit in the stats below. -->
-        {#if row?.accountId}
-          <div class="account">
+          <!-- The account the session bills: the group's fourth setting,
+               wrapping with the others when the row runs out. -->
+          {#if row?.accountId}
             <AccountSwitch instance={row} readonly={!editable} />
-          </div>
-        {/if}
+          {/if}
+        </div>
         <!-- One line is always held for what a change says, so its pending,
              done and failed lines arriving or leaving never resize the card. -->
         <div class="feedback-slot">
@@ -852,40 +849,45 @@
     width: 16px;
     height: 16px;
   }
+  /* ── The body: one surface ──────────────────────────────────────
+     Two levels in the card and no more (owner: "why don't we have proper
+     heirachy y and have the controls as a coherent group?"): the head on
+     the tab's own surface, and everything under it on the card's one
+     body surface (`surface-raised`, the kit-pop's) with no fill of its
+     own: the controls, the meters, the action. Sections part by space,
+     and by one hairline, between the controls and the meters; the action
+     follows the meters by space alone. The head's edge is the hairline
+     at the top of the controls. */
   .configuration {
     position: relative;
     border-top: 1px solid var(--border-hairline);
-    padding: var(--space-3) var(--space-5);
+    /* No pad at the foot: the held feedback line (`.feedback-slot`) is
+       the space under the group. */
+    padding: var(--space-4) var(--space-5) 0;
   }
-  /* Model, effort and permission on one line, never wrapping: the model chip
-     gives up room (its name ellipsized), effort and permission keep theirs. */
+  /* The four settings (model, effort, permission, account) as one group:
+     the same chip height and the same gap across and down, wrapping as a
+     unit when the card runs out of row. The model chip gives up room
+     first (its name ellipsized) before anything wraps. */
   .settings {
     display: flex;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 4px;
+    gap: var(--space-1);
     min-width: 0;
   }
   .settings :global(.model-chip) {
     flex: 0 1 auto;
     min-width: 0;
   }
+  .settings :global(.tool-chips) {
+    gap: var(--space-1);
+  }
   /* The card's width holds the longest names whole ("Opus 5.5 · 1M",
      "medium", "Accept edits") with the chips' insides drawn in a little. */
   .settings :global(.ns-chip-btn) {
-    gap: 4px;
-  }
-  .settings :global(.ns-chip-btn),
-  .account :global(.ns-chip-btn) {
+    gap: var(--space-1);
     height: 28px;
-  }
-  .account {
-    display: flex;
-    min-width: 0;
-    margin-top: 4px;
-  }
-  .account :global(.ns-chip-btn) {
-    gap: 6px;
   }
   /* The model list, sized to its widest row and scrolled in whole rows. */
   :global(.ns-theme.ns-pop:has(> .model-pop)) {
@@ -958,9 +960,8 @@
     display: flex;
     align-items: center;
     gap: var(--space-4);
-    padding: var(--space-3) var(--space-5);
+    padding: var(--space-3) var(--space-5) 0;
     border-top: 1px solid var(--border-hairline);
-    background: var(--surface-recess);
     font-size: var(--text-meta);
     font-weight: var(--weight-body);
     line-height: var(--leading-body);
@@ -975,7 +976,7 @@
      part to a line, and no part ever gets narrower than its own text. */
   .context,
   .limit {
-    --row-paint: var(--surface-recess);
+    --row-paint: var(--surface-raised);
     display: flex;
     flex-wrap: wrap;
     align-items: center;
@@ -1000,7 +1001,7 @@
     color: var(--ink-strong);
   }
   /* Context and the provider's limit, each a word, a 4px bar and a figure
-     (usage/LimitBar); the bar's pace gap shows the strip's own surface. */
+     (usage/LimitBar); the bar's pace gap shows the body's own surface. */
   .stat-label,
   .stat-figure {
     flex: none;
@@ -1036,7 +1037,8 @@
     min-width: 0;
     overflow-wrap: anywhere;
   }
-  /* The modal's action row (SessionFooter): right-aligned, 8px apart. */
+  /* The action row (SessionFooter's): right-aligned, 8px apart, on the
+     body's surface under the meters, parted from them by space alone. */
   .footer {
     flex: none;
     display: flex;
@@ -1044,8 +1046,6 @@
     justify-content: flex-end;
     gap: 8px;
     padding: var(--space-4) var(--space-5);
-    border-top: 1px solid var(--border-hairline);
-    background: var(--surface-raised);
   }
   @media (hover: hover) {
     .icon-action:hover {
@@ -1065,18 +1065,14 @@
     }
     /* A phone's row is ~350px: the three chips fit it whole, the model's
        name included, with the chips' sides and gaps drawn in. */
-    .settings :global(.ns-chip-btn),
-    .account :global(.ns-chip-btn) {
+    .settings :global(.ns-chip-btn) {
       height: 44px;
       padding-inline: 6px;
     }
-    .account :global(.ns-chip-btn) {
-      padding-inline: 10px;
-    }
     /* A bordered chip already reads as tappable; its chevron is the room
        the model's name needs. The account chip keeps its own: it is the
-       only hint that its line opens anything. */
-    .settings :global(.ns-chip-btn > svg.chevron) {
+       only hint that it opens anything. */
+    .settings :global(.ns-chip-btn:not(.account-chip) > svg.chevron) {
       display: none;
     }
   }
