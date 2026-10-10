@@ -638,12 +638,14 @@ public final class NeedsYouStore {
     /// Sends `answer` as the `permission.answer` command the session's own
     /// card sends. The ask stays parked, its card showing the command's
     /// stage, until the daemon confirms (`applied`); a refusal leaves it
-    /// parked to answer again.
+    /// parked to answer again. A denial says `message` when it is given (a
+    /// push's "Other…": what to do instead, which the agent reads), else the
+    /// words the card's Deny says.
     @discardableResult
-    public func answer(_ ask: ParkedAsk, machineId: String, _ answer: Answer) -> Bool {
+    public func answer(_ ask: ParkedAsk, machineId: String, _ answer: Answer, message: String? = nil) -> Bool {
         let result: [String: (any Sendable)?] = switch answer {
         case .allow: ["behavior": "allow", "updatedInput": ask.input.value]
-        case .deny: ["behavior": "deny", "message": ask.isQuestion ? "The user dismissed the question without answering it." : "User denied permission"]
+        case .deny: ["behavior": "deny", "message": message ?? (ask.isQuestion ? "The user dismissed the question without answering it." : "User denied permission")]
         }
         return submit(ask, machineId: machineId, result: result)
     }

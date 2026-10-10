@@ -64,6 +64,8 @@ public enum PushProbe {
                             category: found.category, action: action, text: text, fields: found.fields)
         let handled = await PushActions.perform(note)
         log.notice("probe acted \(id, privacy: .public) \(action, privacy: .public): handled \(handled)")
+        // A notice posted in the push's place lands through `willPresent` first.
+        try? await Task.sleep(for: .seconds(2))
         await list("after")
     }
 }

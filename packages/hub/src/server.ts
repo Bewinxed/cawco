@@ -3887,6 +3887,8 @@ export const createServer = (
   const noteInterrupt = (instanceId: string): void => {
     unanswered.delete(instanceId);
     workItems.interrupted(instanceId);
+    // A turn its owner stopped is not one that waits on them: no push.
+    push.interrupted(instanceId);
   };
 
   /**
@@ -3903,6 +3905,7 @@ export const createServer = (
     }
     turnsWritten.add(instanceId);
     db.openTurn(instanceId, Date.now());
+    push.turnBegan(instanceId);
   };
 
   /** The session's turn ended with its result: nothing of it is left to hand back. */
@@ -21055,8 +21058,19 @@ export const createServer = (
                     if (delegate) {
                       handBack(delegate);
                     }
-                    // Nothing waits on whether a rule answered a turn that is not held.
-                    detach(answered(), "rule answer");
+                    // Nothing waits on whether a rule answered a turn that is
+                    // not held, but the owner's push does: a turn a rule or the
+                    // supervisor answered goes on, and waits on no one.
+                    const owners =
+                      row && !parentId && neutral.subtype !== "aborted";
+                    detach(
+                      answered().then((replied) => {
+                        if (owners && !replied) {
+                          push.turnEnded(turnId, text || harnessError, endedAt);
+                        }
+                      }),
+                      "rule answer"
+                    );
                   }
                   // A plain session past one conversation is offered a project, once.
                   if (row && !failed) {

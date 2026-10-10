@@ -21,6 +21,9 @@ public import UserNotifications
 public enum PushAction {
     public static let open = "OPEN"
     public static let approve = "APPROVE"
+    public static let deny = "DENY"
+    /// Text the operator typed, sent as a permission's denial: what to do instead.
+    public static let denyWith = "DENY_WITH"
     /// Text the operator typed, sent to the push's session as their next message.
     public static let reply = "REPLY"
     /// Text the operator typed, sent as a question's answer (the card's "Other").
@@ -41,6 +44,7 @@ public enum PushCategory {
     public static let permission = "CAWCO_PERMISSION"
     public static let permissionOpenOnly = "CAWCO_PERMISSION_OPEN"
     public static let question = "CAWCO_QUESTION"
+    public static let turn = "CAWCO_TURN"
     public static let task = "CAWCO_TASK"
     public static let taskOpenOnly = "CAWCO_TASK_OPEN"
     public static let attempt = "CAWCO_ATTEMPT"
@@ -48,12 +52,19 @@ public enum PushCategory {
     /// A question's own category: `CAWCO_QUESTION.` and a hash of its options.
     private static let answeringPrefix = question + "."
 
-    /// "Approve" is the only label for the grant (WORDS.md); there is no Deny.
-    /// Approve, an answer and a reply act without opening the app, and only on
-    /// an unlocked device (`.authenticationRequired`).
+    /// "Approve" is the only label for the grant (WORDS.md). A permission
+    /// offers Approve, Deny, "Other…" (a denial in the operator's words) and
+    /// Open, in that order: a banner shows the first two. Every action but
+    /// Open runs without opening the app, and only on an unlocked device
+    /// (`.authenticationRequired`). A permission the hub sends Open only
+    /// (push.ts `OPEN_ONLY_TOOLS`) is read in full before it is answered.
     public static func fixed() -> Set<UNNotificationCategory> {
         let open = UNNotificationAction(identifier: PushAction.open, title: "Open", options: [.foreground])
         let approve = UNNotificationAction(identifier: PushAction.approve, title: "Approve", options: [.authenticationRequired])
+        let deny = UNNotificationAction(identifier: PushAction.deny, title: "Deny", options: [.destructive, .authenticationRequired])
+        let denyWith: UNNotificationAction = UNTextInputNotificationAction(
+            identifier: PushAction.denyWith, title: "Other…", options: [.authenticationRequired],
+            textInputButtonTitle: "Send", textInputPlaceholder: "What to do instead")
         let reply: UNNotificationAction = UNTextInputNotificationAction(
             identifier: PushAction.reply, title: "Reply", options: [.authenticationRequired],
             textInputButtonTitle: "Send", textInputPlaceholder: "Message")
@@ -61,9 +72,10 @@ public enum PushCategory {
             UNNotificationCategory(identifier: id, actions: actions, intentIdentifiers: [])
         }
         return [
-            category(permission, [open, approve]),
+            category(permission, [approve, deny, denyWith, open]),
             category(permissionOpenOnly, [open]),
             category(question, [open]),
+            category(turn, [open, reply]),
             category(task, [open, reply]),
             category(taskOpenOnly, [open]),
             category(attempt, [open, reply]),
