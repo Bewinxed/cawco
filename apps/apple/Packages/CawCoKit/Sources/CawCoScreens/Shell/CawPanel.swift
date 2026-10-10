@@ -32,8 +32,6 @@ final class CawPanel: UIView, UIGestureRecognizerDelegate {
     var onDismiss: (Notice) -> Void = { _ in }
     /// The update notice's one act (Retry, Install now).
     var onAct: (Notice) -> Void = { _ in }
-    /// A notice's link to Configure: the panel has begun to close.
-    var onConfigure: () -> Void = {}
     /// Opened or closed: Caw says so.
     var onOpenChange: (Bool) -> Void = { _ in }
 
@@ -134,11 +132,6 @@ final class CawPanel: UIView, UIGestureRecognizerDelegate {
                 let row = NoticeRow(notice)
                 row.onDismiss = { [weak self] in self?.onDismiss(notice) }
                 row.onAct = { [weak self] in self?.onAct(notice) }
-                row.onConfigure = { [weak self] in
-                    guard let self else { return }
-                    close()
-                    onConfigure()
-                }
                 list.addArrangedSubview(row)
             }
         }
@@ -441,31 +434,6 @@ private final class NeedRow: UIControl {
 private final class NoticeRow: UIView {
     var onDismiss: () -> Void = {}
     var onAct: () -> Void = {}
-    /// A link to Configure: update behaviour, or an account to sign in.
-    var onConfigure: () -> Void = {}
-
-    /// A text link in the link ink (MovedLogins `.there`, UpdateCard's
-    /// `variant="link"`): its words in the label role, a chevron after them
-    /// where it leads on; its 44pt touch height kept, its press dims it.
-    private static func link(_ words: String, chevron: Bool, label: String, action: @escaping () -> Void) -> UIView {
-        var config = UIButton.Configuration.plain()
-        config.attributedTitle = AttributedString(words, attributes: TypeScale.typeLabel.container(color: Palette.linkInk))
-        if chevron {
-            config.image = Glyph.chevronRight.image.resized(to: Size.iconSm)
-            config.imagePlacement = .trailing
-            config.imagePadding = 2
-            config.imageColorTransformer = UIConfigurationColorTransformer { _ in Palette.linkInk }
-        }
-        config.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0)
-        let button = UIButton(configuration: config, primaryAction: UIAction { _ in action() })
-        button.houseStyle()
-        button.configurationUpdateHandler = { $0.alpha = $0.isHighlighted ? 0.72 : 1 }
-        button.contentHorizontalAlignment = .leading
-        button.heightAnchor.constraint(greaterThanOrEqualToConstant: Size.cBtnHLg).isActive = true
-        button.accessibilityLabel = label
-        let row = UIStackView(arrangedSubviews: [button, UIView()])
-        return row
-    }
 
     init(_ notice: Notice) {
         super.init(frame: .zero)
@@ -492,31 +460,15 @@ private final class NoticeRow: UIView {
                 said.text = line
                 column.addArrangedSubview(said)
             }
-            if entry.signIn {
-                column.addArrangedSubview(Self.link("Sign in there", chevron: true, label: "Sign in \(entry.title) there") { [weak self] in
-                    self?.onConfigure()
-                })
-            }
         }
         if let closing = notice.closing {
             let said = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
             said.text = closing
             column.addArrangedSubview(said)
         }
-        // UpdateCard `.actions`: the way to Configure, then its one act at the end.
-        if notice.configure || notice.action != nil {
-            let actions = UIStackView()
-            actions.alignment = .center
-            actions.spacing = Space.space2
-            if notice.configure {
-                actions.addArrangedSubview(Self.link("Configure update behaviour", chevron: false, label: "Configure update behaviour") { [weak self] in
-                    self?.onConfigure()
-                })
-            }
-            actions.addArrangedSubview(UIView())
-            if let action = notice.action {
-                actions.addArrangedSubview(KitButton.make(action.label, variant: .action, height: .sm) { [weak self] in self?.onAct() })
-            }
+        if let action = notice.action {
+            let act = KitButton.make(action.label, variant: .action, height: .sm) { [weak self] in self?.onAct() }
+            let actions = UIStackView(arrangedSubviews: [act, UIView()])
             column.setCustomSpacing(Space.space2, after: column.arrangedSubviews[column.arrangedSubviews.count - 1])
             column.addArrangedSubview(actions)
         }

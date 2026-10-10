@@ -157,8 +157,6 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         }
         cawPanel.onDismiss = { [weak self] notice in self?.home.dismiss(notice) }
         cawPanel.onAct = { [weak self] notice in self?.home.act(notice) }
-        // Configure › Updates and an account's page are the web's `/config/…`; here, Configure, as "N MCP" leads.
-        cawPanel.onConfigure = { [weak self] in self?.go(.configure) }
         cawPanel.onOpenChange = { [weak self] _ in self?.refreshBars() }
         TopBar.install(on: detail.navigationItem, crumb: mainCrumb, cluster: mainCluster, burger: railToggle)
         TopBar.install(on: board.navigationItem, crumb: compactCrumb, cluster: compactCluster, burger: burger, showsCrumb: false)
