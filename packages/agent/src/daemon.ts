@@ -14,7 +14,7 @@ import type {
   LaunchAsk,
   LaunchGrant,
   LentAccess,
-  ProviderInfo,
+  MachineProviderLists,
   RegisterAckPayload,
   SessionCustody,
   SpawnPayload,
@@ -50,7 +50,6 @@ import {
   CONTROL_WORKSPACE_BUNDLE,
   CONTROL_WORKSPACE_CREATE,
   CONTROL_WORKSPACE_MIGRATE,
-  joinProviders,
   UPDATE_CAWCO,
 } from "@cawco/core";
 import { readInstallation } from "@cawco/core/binary-installation";
@@ -285,16 +284,26 @@ const tellOpencodeAccountsChanged = (): void => {
 let providerAccountsChanged: () => void = tellOpencodeAccountsChanged;
 
 /**
- * The providers an account can be for here: pi-ai's joined with OpenCode's.
- * Rejects when either list could not be read: a list read in part is not the
- * machine's list.
+ * The providers an account can be for here, as each harness lists them,
+ * each read on its own ({@link readPart}): one that could not be read is
+ * left out and named in the log, and the hub keeps its last list. Read
+ * together, OpenCode's server not answering (a machine whose agent does not
+ * own it) left pi's providers out of every beat too.
  */
-const machineProviders = async (): Promise<ProviderInfo[]> => {
+const machineProviders = async (): Promise<
+  MachineProviderLists | undefined
+> => {
   const [pi, opencode] = await Promise.all([
-    piProviders(),
-    harness("opencode")?.providerList?.() ?? [],
+    readPart("pi's providers", piProviders),
+    readPart(
+      "OpenCode's providers",
+      async () => (await harness("opencode")?.providerList?.()) ?? []
+    ),
   ]);
-  return joinProviders(pi, opencode);
+  if (!(pi || opencode)) {
+    return undefined;
+  }
+  return { ...(pi ? { pi } : {}), ...(opencode ? { opencode } : {}) };
 };
 
 /**
@@ -1181,15 +1190,15 @@ const attach = (
     // Each part settles on its own (`readPart`): a part that could not be
     // read is left out of the beat, and the hub keeps what it last read of
     // it. A harness left out of `harnesses` keeps its last report there
-    // (`mergeAgentHarnesses`), absent `tools` merge nothing, absent
-    // `providers` leave the machine's last list.
+    // (`mergeAgentHarnesses`), absent `tools` merge nothing, and a harness
+    // absent from `providers` leaves its last list (`machineProviders`).
     supervisor.reannounce = () => {
       // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — reannounce doesn't await its own send
       void (async () => {
         const [detected, tools, providers] = await Promise.all([
           Promise.all(harnesses().map(readHarness)),
           readPart("tools", probeTools),
-          readPart("providers", machineProviders),
+          machineProviders(),
         ]);
         if (socket.readyState !== WebSocket.OPEN) {
           return;

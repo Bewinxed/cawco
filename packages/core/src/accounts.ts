@@ -776,6 +776,32 @@ export const providerOf = (
   model: string | null | undefined
 ): AccountProvider | undefined => accountProvidersOf(harness, model)[0];
 
+/** A provider pi-ai speaks on a machine, with how it signs in. */
+export interface PiProvider {
+  deviceCode: boolean;
+  id: string;
+  key: boolean;
+  name: string;
+  oauth: boolean;
+}
+
+/** A provider OpenCode's server lists on a machine. */
+export interface OpencodeProvider {
+  id: string;
+  name: string;
+}
+
+/**
+ * The providers each harness on a machine lists, each read on its own: a
+ * harness whose list could not be read is left out, and the hub keeps its
+ * last list, so OpenCode's server being down neither hides pi's providers
+ * nor reads as OpenCode having none.
+ */
+export interface MachineProviderLists {
+  opencode?: OpencodeProvider[];
+  pi?: PiProvider[];
+}
+
 /**
  * pi-ai's providers joined with OpenCode's, by id, and ChatGPT by its one
  * alias (pi-ai `openai-codex` is OpenCode `openai` with OAuth). `pi` lists
@@ -783,14 +809,8 @@ export const providerOf = (
  * pi-ai's `anthropic` is left out: Claude subscriptions are Claude Code's.
  */
 export const joinProviders = (
-  pi: readonly {
-    deviceCode: boolean;
-    id: string;
-    key: boolean;
-    name: string;
-    oauth: boolean;
-  }[],
-  opencode: readonly { id: string; name: string }[]
+  pi: readonly PiProvider[],
+  opencode: readonly OpencodeProvider[]
 ): ProviderInfo[] => {
   const opencodeIds = new Map(opencode.map((one) => [one.id, one]));
   const joined: ProviderInfo[] = pi

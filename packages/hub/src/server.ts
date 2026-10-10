@@ -176,8 +176,10 @@ import {
   INSTALL_SESSION_CREDENTIAL,
   interruptLine,
   isEffortLevel,
+  joinProviders,
   LIMITED_PROVIDERS,
   LIVE_CREDENTIAL_ENROLLMENT_REFUSAL,
+  type MachineProviderLists,
   MCP_OAUTH_RETURN_PATH,
   MESSAGES_HELD,
   MESSAGES_READ,
@@ -6795,14 +6797,21 @@ export const createServer = (
     return `${named ? `The account "${named}"` : "The account you were adding"} was removed while ${machineName(machineId)} was signing it in, so that sign-in was undone. Add the account again to sign it in.`;
   };
 
-  /** Each machine's word on the providers an account can be for, from its last beat. */
-  const machineProviders = new Map<string, ProviderInfo[]>();
+  /**
+   * Each machine's harnesses' word on the providers an account can be for,
+   * each harness's from the last beat that carried it: a harness a beat
+   * leaves out (its list could not be read) keeps its last list.
+   */
+  const machineProviders = new Map<string, MachineProviderLists>();
 
   /** Every provider any machine knows, one entry each, the first machine's word on it. */
   const knownProviders = (): ProviderInfo[] => {
     const byId = new Map<string, ProviderInfo>();
-    for (const providers of machineProviders.values()) {
-      for (const provider of providers) {
+    for (const lists of machineProviders.values()) {
+      for (const provider of joinProviders(
+        lists.pi ?? [],
+        lists.opencode ?? []
+      )) {
         if (!byId.has(provider.id)) {
           byId.set(provider.id, provider);
         }
@@ -19821,7 +19830,10 @@ export const createServer = (
                 syncAccounts(message.machineId, "providers", providerAccounts);
               }
               if (providers) {
-                machineProviders.set(message.machineId, providers);
+                machineProviders.set(message.machineId, {
+                  ...machineProviders.get(message.machineId),
+                  ...providers,
+                });
               }
               // When the conversations a harness's server lists last moved,
               // read after the register so the register never waits on that

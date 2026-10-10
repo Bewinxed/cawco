@@ -430,11 +430,12 @@ export interface HeartbeatPayload {
    */
   providerAccounts?: import("./accounts").AccountReport[];
   /**
-   * The providers an account can be for on this machine: pi-ai's joined with
-   * OpenCode's ({@link import("./accounts").joinProviders}). Rides the beat
+   * The providers an account can be for on this machine, as each harness
+   * lists them ({@link import("./accounts").MachineProviderLists}); the hub
+   * joins them ({@link import("./accounts").joinProviders}). Rides the beat
    * `harnesses` rides.
    */
-  providers?: import("./accounts").ProviderInfo[];
+  providers?: import("./accounts").MachineProviderLists;
   /**
    * When each conversation in a catalog read from a harness's server
    * (OpenCode's) last changed, ms epoch, by session id. Rides one beat per
