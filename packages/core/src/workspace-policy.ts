@@ -11,7 +11,8 @@
  *   shared workspace cache, the
  *   objects dir its clone borrows), the toolchains on PATH and the tool
  *   trees their commands link into (`homeToolchains`), the user's git
- *   config, Playwright's browsers, the cawco binary, and the user layer of
+ *   config, Playwright's browsers, the cawco binary, on macOS the selected
+ *   Xcode bundle (`darwinDeveloperBundle`), and the user layer of
  *   Claude Code (CLAUDE.md, memories, skills, plugins, agents, commands,
  *   rules, output styles, workflows, themes, plans). A Claude session also
  *   reads its own `projects/<slug>/` dir, which the judge adds from the
@@ -32,6 +33,7 @@ import type { WorkspaceRef } from "./harness";
 import {
   claudeHome,
   credentialStores,
+  darwinDeveloperBundle,
   darwinUserDirs,
   hostPlaywrightBrowsers,
   projectClaudeDir,
@@ -456,6 +458,7 @@ export const workspacePolicy = async (
     join(home, ".gitconfig"),
     join(home, ".config", "git"),
     hostPlaywrightBrowsers(),
+    ...(await darwinDeveloperBundle()),
     binaryRoot(),
     ...[...USER_LAYER_DIRS, ...USER_LAYER_FILES].map((name) =>
       join(claudeHome(), name)

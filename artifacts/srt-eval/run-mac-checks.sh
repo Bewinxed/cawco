@@ -260,14 +260,22 @@ xcodebuild_diagnosis() {
     echo "    (no passwordless sudo: fs_usage not run)"
   fi
   sed -n '/^User defaults from command line:/,/^$/p' "$scratch/xcb.out" | sed 's/^/      /'
-  grep -iE 'error|couldn.t|not permitted|denied' "$scratch/xcb.out" | head -8 | sed 's/^/      /'
+  grep -E 'error:|couldn.t|not permitted|denied|must be enabled|swift-plugin-server|sandbox' "$scratch/xcb.out" | sort | uniq -c | sort -rn | head -12 | sed 's/^/      /'
+  echo "    its last lines:"
+  tail -15 "$scratch/xcb.out" | sed 's/^/      /'
+  echo "    the selected Xcode and its platforms' plugin servers, as the host resolves them:"
+  developer=$(xcode-select -p 2>/dev/null)
+  for path in "$developer" "$developer"/Platforms/*.platform "$developer"/Platforms/*.platform/Developer/usr/bin/swift-plugin-server; do
+    [ -e "$path" ] || [ -L "$path" ] || continue
+    printf '      %s -> %s\n' "$path" "$(perl -MCwd=abs_path -e 'print abs_path($ARGV[0]) // "?"' "$path")"
+  done
   echo "    dirs named manifests or ManifestLoading in the workspace cache ($cache):"
   find "$cache" -maxdepth 6 -type d \( -name manifests -o -name ManifestLoading -o -name repositories \) 2>/dev/null | sed 's/^/      /'
   echo "    the home the shim gives xcodebuild ($state/ro/xcode-home/Library), its own entries:"
   ls -l "$state/ro/xcode-home/Library" 2>/dev/null | grep -E ' (Caches|Logs|org\.swift\.swiftpm) ' | sed 's/^/      /'
 }
 
-checked "git commit in the clone" r'set -o pipefail; date +%s > srt-mac-probe.txt && git add -A && git commit -qm "srt mac probe" && git log --oneline -1'
+checked "git commit in the clone" r 'set -o pipefail; date +%s > srt-mac-probe.txt && git add -A && git commit -qm "srt mac probe" && git log --oneline -1'
 if [ -n "$swift_package" ]; then
   checked "swift build ($swift_package)" r "set -o pipefail; cd '$swift_package' && swift build 2>&1 | tail -3"
 fi

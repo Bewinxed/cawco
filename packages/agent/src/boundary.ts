@@ -626,7 +626,13 @@ const shimsOf = (id: string): string => join(roOf(id), "bin");
  *   `IDECustomDerivedDataLocation` default, which every action takes, where
  *   `-derivedDataPath` is refused by some (`-showsdks`, exit 64); its
  *   package cache through `-packageCachePath`, which only a build or a
- *   package resolution takes. It runs with a home of its own
+ *   package resolution takes. A build skips Xcode's macro and package
+ *   plugin trust checks (`-skipMacroValidation`,
+ *   `-skipPackagePluginValidation`), as the boundary's evaluation built with
+ *   (REPORT.md, results/macos-run.txt): they ask whether the owner trusts a
+ *   macro or plugin before it runs on the host, read from the host's
+ *   `~/Library/org.swift.swiftpm/security`, which the boundary hides, and a
+ *   workspace's build runs them inside the boundary. It runs with a home of its own
  *   ({@link writeXcodeHome}), so what Foundation puts under `~/Library/Caches`
  *   (SwiftPM's manifest cache among it) lands in the workspaces' cache.
  * - `log`, which Seatbelt refuses outright, asks the agent to run `log show`
@@ -765,6 +771,7 @@ for arg in "$@"; do
 done
 [ -n "$flags" ] || args+=('OTHER_SWIFT_FLAGS=$(inherited) -disable-sandbox')
 [ -z "$builds" ] || [ -n "$packages" ] || args+=(-packageCachePath ${swiftpm}/xcode)
+[ -z "$builds" ] || args+=(-skipMacroValidation -skipPackagePluginValidation)
 # A home of its own, whose Caches, Logs and org.swift.swiftpm are the workspaces' cache.
 mkdir -p ${XCODE_OWN_LIBRARY.map((name) => shellQuote(join(xcodeLibraryCache(), name))).join(" ")} || exit 1
 export CFFIXED_USER_HOME=${shellQuote(xcodeHomeOf(id))}

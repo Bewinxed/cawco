@@ -444,6 +444,26 @@ export const workspaceCaches = (): string[] => [
 ];
 
 /**
+ * macOS: the Xcode bundle `xcode-select -p` names (`…/Xcode-27.2-beta.app`
+ * for `…/Xcode-27.2-beta.app/Contents/Developer`), as a real path, with every
+ * platform and toolchain in it: a workspace builds with the Xcode the owner
+ * selected, wherever it is installed, under home included. None elsewhere, or
+ * when no developer dir is selected or it is not in an app bundle (the
+ * Command Line Tools alone, outside home).
+ */
+export const darwinDeveloperBundle = async (): Promise<string[]> => {
+  if (process.platform !== "darwin") {
+    return [];
+  }
+  const selected = await Bun.$`/usr/bin/xcode-select -p`.quiet().nothrow();
+  const developer = selected.stdout.toString().trim();
+  const at = developer.lastIndexOf(".app/");
+  return selected.exitCode === 0 && at > 0
+    ? [developer.slice(0, at + ".app".length)]
+    : [];
+};
+
+/**
  * macOS: the user's temp and cache folders (`getconf DARWIN_USER_TEMP_DIR`,
  * `DARWIN_USER_CACHE_DIR`), which Apple's build tools write wherever they
  * run, so a workspace writes them too. None elsewhere.
