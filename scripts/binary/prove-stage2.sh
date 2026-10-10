@@ -20,7 +20,7 @@ TERM_SOCKET=/tmp/conmon-term.XXXXXX
 (( ${#out} + ${#TERM_SOCKET} <= 107 )) || { echo "the output path is ${#out} characters; podman's console socket under it, $out$TERM_SOCKET, must fit 107, so it may be at most $(( 107 - ${#TERM_SOCKET} ))" >&2; exit 2; }
 here=$(dirname "$(realpath "$0")")
 python3 -c 'import pexpect' 2> /dev/null || { echo "python3 with pexpect is needed to answer the installer's prompts (pip install pexpect)" >&2; exit 2; }
-for need in cawco-1 cawco-2 cawco-3 cawco-4 cawco-5 cawco-6 cawco-7 cawco-8 cawco-9 keys/test-release-private.pem keys/test-release-public.pem; do
+for need in cawco-1 cawco-2 cawco-3 cawco-4 cawco-5 cawco-6 cawco-7 cawco-8 cawco-9 cawco-10 keys/test-release-private.pem keys/test-release-public.pem; do
   [[ -e "$bins/$need" ]] || { echo "missing $bins/$need: run build-stage2.ts first" >&2; exit 2; }
 done
 free_gb=$(df -BG --output=avail "$out" | tail -n 1 | tr -dc 0-9)
@@ -338,10 +338,12 @@ stop_session() { as_user "$hubc" env BUN_BE_BUN=1 /home/cawco/.local/bin/cawco /
 untouched() { as_user "$1" sh -c 'test ! -e "$HOME/.local/share/cawco" && test ! -e "$HOME/.local/bin/cawco" && echo untouched'; }
 export -f as_user as_user_tty hub_api api_on spawn_child start_session stop_session start_loop keeper_list keeper_lists jsonl child_pids children_with children_total holder_of held_on current_endpoint endpoint_of unit_of current_unit session_running start_before survived starts_said accepted_ran_once keeper_pid untouched json machine_id build_version phase field retiring wait_until publish
 
+# boot CONTAINER IP HOSTNAME [linger|nolinger] [EXTRA PODMAN RUN OPTION...]
 boot() {
   local c=$1 ip=$2 name=$3 linger=${4:-linger}
+  shift $(( $# < 4 ? $# : 4 ))
   $P run -d --name "$c" --hostname "$name" --systemd=always --network "$net" --ip "$ip" \
-    --mount "type=bind,src=$out/shared,dst=/shared,ro" "localhost/$prefix-machine:latest" /sbin/init > /dev/null
+    --mount "type=bind,src=$out/shared,dst=/shared,ro" "$@" "localhost/$prefix-machine:latest" /sbin/init > /dev/null
   wait_until 90 "[[ \$($P exec $c systemctl is-system-running 2>/dev/null) =~ ^(running|degraded)\$ ]]"
   [[ $linger == nolinger ]] && return 0
   $P exec "$c" loginctl enable-linger cawco
@@ -357,13 +359,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends python3 && rm -
 EOF
 # A machine with nothing CawCo uses: no git, Bun, Node or openssl. Its only package
 # source is a local folder holding openssl, so the installer's own package-manager
-# step runs for real with no network.
+# step runs for real with no network, and git, which the workspace checks install on
+# the joined machine (a workspace is a git clone). It has what a workspace's srt
+# boundary runs on (packages/agent/src/boundary.ts HOST_TOOLS, srt's own
+# checkLinuxDependencies): bubblewrap and socat; srt's ripgrep ships in the build.
+# The installer offers git only at a terminal and installs nothing without one
+# (offerTools in packages/cli/src/binary-install.ts), so git stays uninstalled.
 cat > "$out/image-machine/Containerfile" <<'EOF'
 FROM docker.io/library/ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \
- && apt-get install -y --no-install-recommends systemd systemd-sysv dbus dbus-user-session curl sudo socat \
- && apt-get install -y --download-only openssl \
+ && apt-get install -y --no-install-recommends systemd systemd-sysv dbus dbus-user-session curl sudo socat bubblewrap \
+ && apt-get install -y --download-only openssl git \
  && mkdir /debs && cp /var/cache/apt/archives/*.deb /debs/ \
  && apt-get install -y --no-install-recommends dpkg-dev \
  && (cd /debs && dpkg-scanpackages . > Packages) \
@@ -563,6 +570,14 @@ systemctl --user list-units --all --no-legend 'cawco-sessiond*' 2>&1
 grep -H 'Requires\|After\|Before\|RequiredBy' "$HOME/.config/systemd/user/cawco-agent.service" "$HOME/.config/systemd/user"/cawco-sessiond*.service 2>&1
 echo "== versions/"
 ls -la versions
+for w in "$HOME"/.cawco/workspaces/*/; do
+  [ -d "$w" ] || continue
+  echo "== workspace $w"
+  ls -la "$w" "$w/boundaries" "$w"/boundaries/* 2>&1
+  for f in "${w}boundary.json" "$w"retiring-*.json; do
+    [ -f "$f" ] && { echo "-- $f"; cat "$f"; echo; }
+  done
+done
 for m in "$data"/cawco.db.migrating "$data"/cawco.db.migrated-* "$data"/cawco.db.pre-*; do
   [ -e "$m" ] || continue
   echo "== $m"
@@ -577,7 +592,15 @@ setup "start the release host" "$out/logs/release-host.log" $P run -d --name "$r
   --mount "type=bind,src=$out/release,dst=/srv/release,ro" "localhost/$prefix-host:latest" \
   python3 -m http.server 8000 --directory /srv/release --bind "$release_ip"
 setup "boot the hub machine" "$out/logs/boot-hub.log" boot "$hubc" "$hub_ip" hub
-setup "boot the joining machine" "$out/logs/boot-joiner.log" boot "$joinerc" "$joiner_ip" joiner
+# The joined machine opens a delegate workspace, whose srt boundary is a bwrap sandbox with its own pid namespace
+# and a fresh /proc. The kernel refuses that /proc mount in a user namespace while the /proc it can see has paths
+# masked or bound read-only over it, which podman does by default ("bwrap: Can't mount proc on /newroot/proc:
+# Operation not permitted"; github.com/containers/bubblewrap/issues/505: "The fix was to add --security-opt
+# unmask=ALL"). Unmasking only stops hiding those /proc and /sys paths: the container is rootless, so its root is
+# the host user and reads nothing that user cannot; it gains no capability, seccomp and the user namespace stay as
+# they are, it sits on the internal network with no route out, and it is removed when the proof ends. Nested user
+# namespaces need nothing more: podman's default seccomp allows unshare, clone and mount.
+setup "boot the joining machine" "$out/logs/boot-joiner.log" boot "$joinerc" "$joiner_ip" joiner linger --security-opt unmask=ALL
 setup "boot the spare machine (no lingering)" "$out/logs/boot-fresh.log" boot "$freshc" "$fresh_ip" fresh nolinger
 setup "boot the second hub machine" "$out/logs/boot-hub2.log" boot "$hub2c" "$hub2_ip" hub2
 # The refusal checks compare this machine before and after a refused install, so it must already hold what the
@@ -1437,6 +1460,192 @@ agent_cannot_start_whole_recovery() {
 }
 export -f agent_cannot_start_whole_recovery
 check "a helper killed after the swap of a build whose agent cannot start is put back whole, though its hub runs" agent_cannot_start_whole_recovery 900 "Install now applies the newer build"
+
+# ---------------------------------------------------------------- a delegate workspace's boundary across an update
+# A delegate's workspace on the joined machine, opened the product's own way: a session there delegates through the
+# hub (`POST /api/work-items`, all `delegate` sends), the hub has the machine cut the clone and start its srt
+# boundary (CONTROL_WORKSPACE_CREATE, packages/agent/src/workspace.ts), and the work item's session, the proof
+# harness's held `sleep`, starts in it. Every command goes in through the workspace's executor,
+# ~/.cawco/workspaces/<id>/exec, as every harness runs its shell commands. Then the machine updates with the
+# workspace open: a job left running in it runs on in its sandbox, the next command runs in a boundary of a new
+# generation on the new build's keeper, and the older boundary closes once the job ends (boundary.ts handOver,
+# closeIdle). Build 10 is the build it updates to. The checks clean up after themselves: the workspace is archived
+# through the hub at the end.
+export WS_REPO=/home/cawco/proof-repo WS_ORIGIN=/home/cawco/proof-origin.git
+export WS_BUILD=0.0.1-nightly.10+aaaaaaaaaaaa WS_COMMIT=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+# The workspace's state dir on the joined machine, and what its boundary record says.
+ws_state() { echo "/home/cawco/.cawco/workspaces/$(cat "$out/ws-id")"; }
+ws_json() { as_user "$joinerc" sh -c 'cat "$1" 2> /dev/null || true' sh "$(ws_state)/$1" | json "$2"; }
+ws_gen() { ws_json boundary.json 'd => d.gen'; }
+# Runs one command through the workspace's executor, from its clone, as a harness's shell tool does.
+ws_exec() { as_user "$joinerc" sh -c 'cd "$1" && exec "$2" "$3"' sh "$(cat "$out/ws-clone")" "$(ws_state)/exec" "$1"; }
+# A boundary generation's sandbox, as its srt host names it: `OUTER INNER IDLE...`.
+ws_place() { as_user "$joinerc" cat "$(ws_state)/boundaries/$1/sandbox"; }
+ns_of() { as_user "$joinerc" readlink "/proc/$1/ns/pid"; }
+# A POST to the hub, answering its body and a last line `HTTP <status>`, so a refusal shows the hub's words.
+ws_post() { as_user "$hubc" curl -sS -w '\nHTTP %{http_code}' "http://127.0.0.1:3456$1" -X POST -H 'content-type: application/json' -d "$2"; }
+# Every credential a command must not read: a planted key, and the machine's CawCo account credential.
+ws_secrets() { printf '%s\n' /home/cawco/.ssh/id_ed25519 "/home/cawco/.cawco/accounts/$(cat "$out/account-id")/claude/.credentials.json"; }
+ws_cannot_read() {
+  local file rc said
+  for file in $(ws_secrets); do
+    as_user "$joinerc" test -s "$file"
+    rc=0
+    said=$(ws_exec "cat '$file'" 2>&1) || rc=$?
+    echo "cat $file through the executor: exit $rc: $said"
+    [[ $rc != 0 ]] || { echo "ASSERTION FAILED: the command read $file"; return 1; }
+    [[ $said != *cawco-proof-secret* && $said != *sk-ant-* ]] || { echo "ASSERTION FAILED: the command printed what $file holds"; return 1; }
+  done
+}
+export -f ws_state ws_json ws_gen ws_exec ws_place ns_of ws_post ws_secrets ws_cannot_read
+
+workspace_opens() {
+  need_hub
+  put_policy nightly false
+  local answer body id gen outer inner
+  # git, from the machine's own package source: a workspace is a git clone of a repository with an origin.
+  as_user "$joinerc" sh -c 'sudo apt-get update > /dev/null && sudo apt-get install -y git > /dev/null && git --version'
+  as_user "$joinerc" sh -c 'set -e
+    rm -rf "$1" "$2"
+    git init -q --bare -b main "$2"
+    git init -q -b main "$1"
+    cd "$1"
+    printf "proof\n" > README.md
+    git add README.md
+    git -c user.name=proof -c user.email=proof@cawco.test commit -qm "A repository to delegate in"
+    git remote add origin "$2"
+    git push -q origin main' sh "$WS_REPO" "$WS_ORIGIN"
+  # The session that delegates, on the joined machine.
+  start_session "$jid" wsparent-1 > /dev/null
+  wait_until 60 'session_running wsparent-1'
+  answer=$(ws_post /api/work-items "{\"parentInstanceId\":\"wsparent-1\",\"title\":\"Prove the workspace boundary\",\"prompt\":\"The stage 2 proof's workspace.\",\"harness\":\"claude\",\"model\":\"stub\",\"cwd\":\"$WS_REPO\",\"machineId\":\"$jid\",\"lands\":\"none\",\"checks\":[{\"name\":\"Run true\",\"command\":\"true\"}]}")
+  echo "the hub answered the delegation: $answer"
+  [[ "$answer" == *"HTTP 200" ]]
+  body=$(sed '$d' <<< "$answer")
+  json 'd => d.workspaceId' <<< "$body" > "$out/ws-id"
+  json 'd => d.workItemId' <<< "$body" > "$out/ws-item"
+  json 'd => d.instanceId' <<< "$body" > "$out/ws-delegate"
+  id=$(cat "$out/ws-id")
+  [[ -n $id ]]
+  # Its boundary: the record names a generation, whose dir holds the srt settings it started with, and the joined
+  # machine's keeper holds its srt host under that generation's id.
+  gen=$(ws_gen)
+  [[ $gen =~ ^[0-9a-f]{8}$ ]] || { echo "the boundary record names no generation: '$gen'"; return 1; }
+  ws_json boundary.json 'd => d.path' > "$out/ws-clone"
+  as_user "$joinerc" test -d "$(cat "$out/ws-clone")/.git"
+  as_user "$joinerc" test -s "$(ws_state)/boundaries/$gen/srt.json"
+  as_user "$joinerc" cat "$(ws_state)/boundaries/$gen/srt.json" | json 'd => `srt settings: ${d.filesystem.denyRead.length} read denies, ${d.filesystem.allowWrite.length} writable paths`'
+  [[ "$(child_pids "$joinerc" "boundary-$id-$gen")" =~ ^[0-9]+$ ]]
+  wait_until 60 'session_running "$(cat "$out/ws-delegate")"'
+  # A command through the executor runs in the clone, as the workspace, in the sandbox's own pid namespace.
+  [[ "$(ws_exec 'cat README.md')" == proof ]]
+  [[ "$(ws_exec 'printf %s "$CAWCO_WORKSPACE"')" == "$id" ]]
+  read -r outer inner _ <<< "$(ws_place "$gen")"
+  [[ "$(ws_exec 'readlink /proc/self/ns/pid')" == "$(ns_of "$inner")" ]]
+  [[ "$(ns_of "$inner")" != "$(as_user "$joinerc" readlink /proc/self/ns/pid)" ]]
+  # A credential planted in the home dir, which the host reads, and the account's own: neither reads inside.
+  as_user "$joinerc" sh -c 'mkdir -p -m 700 "$HOME/.ssh" && umask 077 && printf "%s\n" "$1" > "$HOME/.ssh/id_ed25519"' sh "cawco-proof-secret-$RANDOM$RANDOM"
+  as_user "$joinerc" grep -q cawco-proof-secret /home/cawco/.ssh/id_ed25519
+  ws_cannot_read
+}
+export -f workspace_opens
+check "a delegate workspace on the joined machine opens with its srt boundary, and a command through its executor cannot read a planted credential" workspace_opens 900 "each machine that runs the proof's sessions is signed in to a CawCo account in its own dir"
+
+workspace_across_update() {
+  need_hub
+  local id gen old_inner old_ns job new new_inner
+  id=$(cat "$out/ws-id")
+  gen=$(ws_gen)
+  read -r _ old_inner _ <<< "$(ws_place "$gen")"
+  old_ns=$(ns_of "$old_inner")
+  # A job one command leaves running in the workspace: the command ends, the job runs on in the sandbox.
+  ws_exec 'nohup sleep 2999 > /dev/null 2>&1 &'
+  wait_until 30 '[[ "$(as_user "$joinerc" pgrep -fx "sleep 2999" | wc -l)" == 1 ]]'
+  job=$(as_user "$joinerc" pgrep -fx 'sleep 2999')
+  [[ "$(ns_of "$job")" == "$old_ns" ]]
+  # Build 10 reaches the hub's machine, then the joined machine, which installs it with the workspace open.
+  publish ok nightly "$WS_BUILD" "$WS_COMMIT" "$bins/cawco-10" "$key" 47 "$schema"
+  learn
+  wait_until 300 '[[ "$(phase $hid)" != installing && "$(phase $jid)" != installing ]]'
+  install_now_request "$hid" > /dev/null
+  wait_until 400 '[[ "$(build_version $hid)" == "$WS_BUILD" && "$(phase $hid)" == installed ]]'
+  wait_until 120 '[[ "$(field $jid availableVersion)" == "$WS_BUILD" ]]'
+  install_now_request "$jid" > /dev/null
+  wait_until 400 '[[ "$(build_version $jid)" == "$WS_BUILD" && "$(phase $jid)" == installed ]]'
+  # The job ran through the update: the same process, in the sandbox it started in.
+  as_user "$joinerc" kill -0 "$job"
+  [[ "$(ns_of "$job")" == "$old_ns" ]]
+  # The new build's agent hands the boundary over: a new generation, held by the new build's keeper.
+  wait_until 180 '[[ -n "$(ws_gen)" && "$(ws_gen)" != "'"$gen"'" ]]'
+  new=$(ws_gen)
+  echo "generation $gen is handed over to $new"
+  as_user "$joinerc" test -s "$(ws_state)/boundaries/$new/srt.json"
+  wait_until 60 '[[ "$(holder_of "$joinerc" "boundary-'"$id"'-'"$new"'")" == "$(endpoint_of "$WS_BUILD")" ]]'
+  # The next command runs in the new generation's sandbox, and still reads no credential.
+  read -r _ new_inner _ <<< "$(ws_place "$new")"
+  [[ "$(ws_exec 'readlink /proc/self/ns/pid')" == "$(ns_of "$new_inner")" ]]
+  [[ "$(ns_of "$new_inner")" != "$old_ns" ]]
+  [[ "$(ws_exec 'cat README.md')" == proof ]]
+  ws_cannot_read
+  # The older boundary runs on while the job does.
+  as_user "$joinerc" test -e "$(ws_state)/retiring-$gen.json"
+  [[ "$(child_pids "$joinerc" "boundary-$id-$gen")" =~ ^[0-9]+$ ]]
+  as_user "$joinerc" kill -0 "$old_inner"
+  # Once the job ends it closes by itself: its sandbox, its srt host, its record and its files go.
+  as_user "$joinerc" kill "$job"
+  wait_until 120 '[[ -z "$(child_pids "$joinerc" "boundary-'"$id"'-'"$gen"'")" ]] && ! as_user "$joinerc" test -e "$(ws_state)/retiring-'"$gen"'.json" && ! as_user "$joinerc" test -e "$(ws_state)/boundaries/'"$gen"'"'
+  ! as_user "$joinerc" kill -0 "$old_inner" 2> /dev/null
+  # The current one is untouched.
+  [[ "$(ws_gen)" == "$new" ]]
+  [[ "$(child_pids "$joinerc" "boundary-$id-$new")" =~ ^[0-9]+$ ]]
+  [[ "$(ws_exec 'readlink /proc/self/ns/pid')" == "$(ns_of "$new_inner")" ]]
+}
+export -f workspace_across_update
+check "a workspace open across an update keeps its job running, its next command runs in the new build's boundary, and the old boundary closes once the job ends" workspace_across_update 1500 "a delegate workspace on the joined machine opens with its srt boundary, and a command through its executor cannot read a planted credential" "$WS_BUILD"
+
+workspace_clean_clone() {
+  need_hub
+  local clone listing broken
+  clone=$(cat "$out/ws-clone")
+  listing=$(as_user "$joinerc" sh -c 'ls -la "$1" "$1/.claude" "$1/.opencode" "$1/.git/hooks" 2>&1' sh "$clone")
+  echo "$listing"
+  # What a sandbox leaves where nothing stood (bwrap's mount point: an empty file, no write bits, one link,
+  # srt's own isStaleBwrapMountPoint), anywhere in the clone; an empty file at a harness config name, which a host
+  # harness would read as its config; and a file where a dir stands in (`cloneDenies`, workspace-policy.ts).
+  broken=$(as_user "$joinerc" sh -c '
+    clone=$1
+    find "$clone" -path "$clone/.git/objects" -prune -o -type f -size 0 ! -perm /222 -links 1 -printf "%p: an empty file with no write bits, as a sandbox leaves a mount point\n"
+    find "$clone" -path "$clone/.git/objects" -prune -o -type f -size 0 \( -name settings.json -o -name settings.local.json -o -name opencode.json -o -name opencode.jsonc -o -name .mcp.json -o -name config \) -printf "%p: an empty file at a harness or git config name\n"
+    for dir in .git/hooks .git/modules .claude/hooks .claude/commands .claude/agents .opencode .vscode .idea; do
+      if [ -e "$clone/$dir" ] && [ ! -d "$clone/$dir" ]; then echo "$clone/$dir: not a dir, where a dir stands in"; fi
+    done' sh "$clone")
+  [[ -z $broken ]] || { echo "ASSERTION FAILED:"; echo "$broken"; return 1; }
+  # The stand-ins are kept out of git's status: the clone reads as git left it.
+  [[ -z "$(as_user "$joinerc" git -C "$clone" -c core.hooksPath=/dev/null -c core.fsmonitor=false status --porcelain)" ]]
+}
+export -f workspace_clean_clone
+check "no stand-in leaves a broken file in the workspace's clone, and git status there is empty" workspace_clean_clone 300 "a delegate workspace on the joined machine opens with its srt boundary, and a command through its executor cannot read a planted credential"
+
+workspace_archived() {
+  need_hub
+  local id answer
+  id=$(cat "$out/ws-id")
+  as_user "$joinerc" pkill -x -f 'sleep 2999' || true
+  # The work item's session stops, its item ends, and the workspace is archived through the hub.
+  stop_session "$jid" "$(cat "$out/ws-delegate")" > /dev/null
+  wait_until 120 '[[ ! "$(hub_api "/api/work-items/$(cat "$out/ws-item")" | json "d => d.state")" =~ ^(starting|running)$ ]]'
+  answer=$(ws_post "/api/workspaces/$id/archive" '{}')
+  echo "the hub answered the archive: $answer"
+  [[ "$answer" == *"HTTP 200" ]]
+  stop_session "$jid" wsparent-1 > /dev/null
+  # Nothing of it is left on the machine: no boundary or judge on any keeper, no state dir, no clone.
+  wait_until 60 '[[ "$(keeper_lists "$joinerc" | jsonl "d => d.flatMap(k => k.procs).filter(p => p.alive && (p.procId.startsWith(\"boundary-$id\") || p.procId.startsWith(\"judge-$id\"))).length")" == 0 ]]'
+  as_user "$joinerc" test ! -e "$(ws_state)"
+  as_user "$joinerc" test ! -e "$(cat "$out/ws-clone")"
+  wait_until 60 '[[ -z "$(child_pids "$joinerc" wsparent-1)" && -z "$(child_pids "$joinerc" "$(cat "$out/ws-delegate")")" ]]'
+}
+export -f workspace_archived
+check "the proof's workspace is archived through the hub, and nothing of it is left on the joined machine" workspace_archived 300 "a delegate workspace on the joined machine opens with its srt boundary, and a command through its executor cannot read a planted credential"
 
 # ---------------------------------------------------------------- the keeper's children cgroup
 # A keeper's unit delegates the pids controller (Delegate=pids, DelegateSubgroup=keeper): systemd starts the

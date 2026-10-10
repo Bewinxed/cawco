@@ -1,5 +1,5 @@
 /**
- * Builds what prove-stage2.sh needs: a throwaway key pair, and nine real
+ * Builds what prove-stage2.sh needs: a throwaway key pair, and ten real
  * linux-x64 builds of the repository's entry point with that key's public
  * half embedded as the release key. Usage:
  *   bun scripts/binary/build-stage2.ts /ABSOLUTE/OUTPUT/DIR
@@ -9,7 +9,7 @@
  * keeper, `cawco-sessiond.service`, on the machine's endpoint itself, as the
  * fleet's machines were installed. Each machine's first update is then the
  * fleet's own: an older agent applies a build whose keeper runs beside its
- * own, and that build's agent hands the keeper over. Builds 2 to 9 are this
+ * own, and that build's agent hands the keeper over. Builds 2 to 10 are this
  * tree's.
  */
 import { mkdir, rm } from "node:fs/promises";
@@ -128,6 +128,12 @@ const builds = [
     "9",
     "0.0.1-nightly.9+999999999999",
     "9999999999999999999999999999999999999999",
+  ],
+  // The build a joined machine updates to with a delegate workspace open: its next command runs in this build's boundary.
+  [
+    "10",
+    "0.0.1-nightly.10+aaaaaaaaaaaa",
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   ],
 ] as const;
 for (const [index, [name, version, commit]] of builds.entries()) {
