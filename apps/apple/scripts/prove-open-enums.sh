@@ -7,7 +7,7 @@
 #
 # 1. Compiles the app: build-both.sh ios --compile-only (BUILT iOS, BUILT iOS 18.5).
 # 2. Starts a scratch hub here on loopback, its database seeded with three
-#    sleeping sessions, one titled by `title_source = 'user'`, a value the
+#    running sessions, one titled by `title_source = 'user'`, a value the
 #    app's enum (agent, owner) does not have.
 # 3. Opens a reverse tunnel so 127.0.0.1:<port> on the Mac (and so in its
 #    simulator) is that hub.
@@ -15,7 +15,8 @@
 #    -paywall-env sandbox and the hub's address, and streams its log.
 # 5. Prints the log lines that prove it (the unknown value, logged once; the
 #    fleet read with its row count; the update notice shown), reads the screen
-#    with axe, screenshots it, swipes the notice away, reads and screenshots
+#    with axe (opening Recent if the rows sit there), screenshots it, taps the
+#    notice's ✕ (its "Dismiss" element), reads and screenshots
 #    again. Screenshots land in $OUT.
 #
 # Stops only what it started: the hub (by PID), the tunnel (by PID), the log
@@ -95,7 +96,7 @@ for (const row of rows) {
     session_id: `${row.id}-session`,
     harness: "claude",
     cwd: "/tmp/prove-open-enums",
-    status: "sleeping",
+    status: "running",
     machine_removed: 0,
     created_at: now,
     updated_at: now,
@@ -188,27 +189,69 @@ axe_ui() { # <out file>
   echo "FAILED: axe describe-ui after 6 tries"
   return 1
 }
-# The notice is sticky: it is captured first, before axe is asked anything.
-sleep 2
-shot with-notice
+# The centre of the first element in an axe tree whose label is $2, as "x y".
+center_of() { # <tree.json> <label>
+  python3 - "$1" "$2" <<'PY'
+import json, sys
+tree, want = json.load(open(sys.argv[1])), sys.argv[2]
+def walk(node):
+    if isinstance(node, list):
+        for item in node:
+            hit = walk(item)
+            if hit: return hit
+        return None
+    label = node.get("AXLabel") or ""
+    if label == want or label.startswith(want):
+        f = node["frame"]
+        return f"{f['x'] + f['width'] / 2:.0f} {f['y'] + f['height'] / 2:.0f}"
+    return walk(node.get("children") or [])
+hit = walk(tree)
+print(hit or "")
+PY
+}
+tap_label() { # <tree.json> <label>
+  local at
+  at=$(center_of "$1" "$2")
+  [[ -n $at ]] || { echo "no '$2' element in $1"; return 1; }
+  "${MAC[@]}" "$AXE tap -x ${at% *} -y ${at#* } --udid $UDID" >/dev/null
+  echo "tapped '$2' at $at"
+}
+# The notice stays until its ✕: there is time for axe to wake (20 s, then retries).
 sleep 20
 axe_ui "$OUT/ui-with-notice.json" || exit 1
+# The seeded rows on screen: open Recent if the board folded them there.
+if ! grep -q "Derived title of the user row" "$OUT/ui-with-notice.json"; then
+  tap_label "$OUT/ui-with-notice.json" "Recent" && sleep 2 && axe_ui "$OUT/ui-with-notice.json"
+fi
+shot with-notice
 grep -q "Your hub is newer than this app" "$OUT/ui-with-notice.json" &&
   echo "screen: the update notice is on screen" || echo "screen: notice text NOT found in axe describe-ui"
-grep -q "Derived title of the user row" "$OUT/ui-with-notice.json" &&
-  echo "screen: the 'user' row shows its derived title" || echo "screen: derived title not in the visible tree (the row may be off this tab)"
+rows_seen=0
+for title in "Owner named session" "Agent named session" "Derived title of the user row"; do
+  if grep -q "$title" "$OUT/ui-with-notice.json"; then echo "screen: row '$title'"; rows_seen=$((rows_seen + 1)); fi
+done
+echo "screen: $rows_seen of 3 seeded rows visible beside the notice"
+grep -q "Hub-only title" "$OUT/ui-with-notice.json" &&
+  echo "screen: the 'user' row shows the hub's title (wrong: unknown source means the derived title)"
+grep -q '"Dismiss"' "$OUT/ui-with-notice.json" &&
+  echo "screen: the notice's ✕ reads 'Dismiss'" || echo "screen: no 'Dismiss' element"
 
-# A swipe up past 45 pt takes a top toast away.
-"${MAC[@]}" "$AXE swipe --start-x 200 --start-y 110 --end-x 200 --end-y 10 --udid $UDID"
+# Only the ✕ closes it.
+tap_label "$OUT/ui-with-notice.json" "Dismiss" || exit 1
 sleep 2
 axe_ui "$OUT/ui-dismissed.json" || exit 1
 shot dismissed
-grep -q "Your hub is newer than this app" "$OUT/ui-dismissed.json" &&
-  echo "screen: notice still showing after the swipe" || echo "screen: notice dismissed"
+dismissed=0
+if grep -q "Your hub is newer than this app" "$OUT/ui-dismissed.json"; then
+  echo "screen: notice still showing after its ✕"
+else
+  echo "screen: notice dismissed by its ✕"
+  dismissed=1
+fi
 
 echo "captures: $OUT/with-notice.png $OUT/dismissed.png (and the axe trees beside them)"
-if [[ $unknowns -ge 1 && $notices -eq 1 && $stopped -eq 0 ]]; then
-  echo "PASS open enums: board read, one update notice, no reads stopped"
+if [[ $unknowns -ge 1 && $notices -eq 1 && $stopped -eq 0 && $rows_seen -ge 1 && $dismissed -eq 1 ]]; then
+  echo "PASS open enums: board read ($rows_seen rows on screen), one update notice, closed by its ✕, no reads stopped"
 else
   echo "FAIL open enums"
   exit 1

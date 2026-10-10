@@ -32,14 +32,18 @@ public enum Toast {
     /// `description`: a second line under the message, in muted ink.
     /// `sticky`: it stays until swiped away or its action is taken
     /// (`duration: Infinity`), for a toast that carries the way to recover.
-    public static func show(_ message: String, description: String? = nil, kind: Kind = .plain, action: Action? = nil, sticky: Bool = false, in view: UIView?) {
+    /// `closable`: a notice closed only by its ✕ (DESIGN.md, Update notice):
+    /// it never times out and does not swipe away; the ✕ is a 20pt pill chip
+    /// on its top leading corner, 44pt under a finger, read as "Dismiss".
+    public static func show(_ message: String, description: String? = nil, kind: Kind = .plain, action: Action? = nil,
+                            sticky: Bool = false, closable: Bool = false, in view: UIView?) {
         guard let scene = view?.window?.windowScene ?? UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first else { return }
         let layer = layers[ObjectIdentifier(scene)] ?? {
             let made = ToastWindow(windowScene: scene)
             layers[ObjectIdentifier(scene)] = made
             return made
         }()
-        layer.add(message, description: description, kind: kind, action: action, sticky: sticky)
+        layer.add(message, description: description, kind: kind, action: action, sticky: sticky || closable, closable: closable)
         UIAccessibility.post(notification: .announcement, argument: message)
     }
 
@@ -75,9 +79,9 @@ private final class ToastWindow: UIWindow {
     /// Up to 640pt a toast drops from the top, under the top bar; wider it sits in the bottom-right corner.
     private var narrow: Bool { bounds.width <= 640 }
 
-    func add(_ message: String, description: String?, kind: Toast.Kind, action: Toast.Action?, sticky: Bool) {
+    func add(_ message: String, description: String?, kind: Toast.Kind, action: Toast.Action?, sticky: Bool, closable: Bool) {
         guard let host = rootViewController?.view else { return }
-        let toast = ToastView(message: message, description: description, kind: kind, action: action)
+        let toast = ToastView(message: message, description: description, kind: kind, action: action, closable: closable)
         toast.onDismiss = { [weak self, weak toast] velocity in
             guard let self, let toast else { return }
             remove(toast, thrown: velocity)
@@ -143,6 +147,47 @@ private final class ToastWindow: UIWindow {
 
 private final class PassThroughView: UIView {}
 
+/// A closable notice's ✕ (DESIGN.md, Update notice): a 20pt pill chip on the
+/// raised surface in the control edge, a 12pt close glyph in muted ink, and a
+/// 44pt touch area; VoiceOver reads it as "Dismiss".
+private final class ToastCloseChip: UIButton {
+    init(_ run: @escaping @MainActor () -> Void) {
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        var config = UIButton.Configuration.plain()
+        config.image = Glyph.close.image.resized(to: Size.iconSm)
+        config.contentInsets = .zero
+        configuration = config
+        tintColor = Palette.inkMuted
+        backgroundColor = Palette.surfaceRaised
+        layer.cornerRadius = Size.cBadgeH / 2
+        layer.borderWidth = 1
+        accessibilityLabel = "Dismiss"
+        accessibilityIdentifier = "toast-dismiss"
+        addAction(UIAction { _ in run() }, for: .touchUpInside)
+        NSLayoutConstraint.activate([
+            widthAnchor.constraint(equalToConstant: Size.cBadgeH),
+            heightAnchor.constraint(equalToConstant: Size.cBadgeH),
+        ])
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (chip: ToastCloseChip, _: UITraitCollection) in chip.paint() }
+        paint()
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        fatalError("ToastCloseChip is built in code")
+    }
+
+    private func paint() {
+        layer.borderColor = Palette.borderControl.resolvedColor(with: traitCollection).cgColor
+    }
+
+    override func point(inside point: CGPoint, with _: UIEvent?) -> Bool {
+        let grow = (Size.cBtnHLg - Size.cBadgeH) / 2
+        return bounds.insetBy(dx: -grow, dy: -grow).contains(point)
+    }
+}
+
 private final class ToastView: UIView {
     var onDismiss: (CGFloat?) -> Void = { _ in }
     /// Under a finger: it does not time out.
@@ -150,7 +195,10 @@ private final class ToastView: UIView {
     private var start = CGPoint.zero
     private var began = Date()
 
-    init(message: String, description: String?, kind: Toast.Kind, action: Toast.Action?) {
+    /// A closable toast's ✕ (`Toast.show(closable:)`).
+    private var close: ToastCloseChip?
+
+    init(message: String, description: String?, kind: Toast.Kind, action: Toast.Action?, closable: Bool) {
         super.init(frame: .zero)
         backgroundColor = Palette.surfaceRaised
         layer.cornerRadius = Radius.radiusLg
@@ -207,9 +255,20 @@ private final class ToastView: UIView {
             row.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
             row.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
         ])
-        addGestureRecognizer(UIPanGestureRecognizer(target: self, action: #selector(panned(_:))))
-        // With an action the button is its own element; without, the toast reads as one.
-        isAccessibilityElement = action == nil
+        if closable {
+            // Only its ✕ closes it: no swipe, floating on the lead's top corner.
+            let chip = ToastCloseChip { [weak self] in self?.onDismiss(nil) }
+            addSubview(chip)
+            NSLayoutConstraint.activate([
+                chip.centerXAnchor.constraint(equalTo: leadingAnchor),
+                chip.centerYAnchor.constraint(equalTo: topAnchor),
+            ])
+            close = chip
+        } else {
+            addGestureRecognizer(UIPanGestureRecognizer(target: self, action: #selector(panned(_:))))
+        }
+        // With an action or a ✕ those are their own elements; without, the toast reads as one.
+        isAccessibilityElement = action == nil && !closable
         accessibilityLabel = [message, description].compactMap { $0 }.joined(separator: ". ")
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: ToastView, _: UITraitCollection) in view.paint() }
         paint()
@@ -222,6 +281,13 @@ private final class ToastView: UIView {
 
     private func paint() {
         layer.borderColor = Palette.borderControl.resolvedColor(with: traitCollection).cgColor
+    }
+
+    /// The ✕ hangs over the corner: its whole touch area counts as the toast's.
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        if super.point(inside: point, with: event) { return true }
+        guard let close else { return false }
+        return close.point(inside: convert(point, to: close), with: event)
     }
 
     /// Tracks the finger 1:1; past 45pt or on a flick faster than 0.11pt/ms it goes.

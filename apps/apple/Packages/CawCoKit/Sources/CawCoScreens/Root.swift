@@ -140,15 +140,15 @@ public final class RootViewController: ObservedViewController {
     private static let hubLog = Logger(subsystem: "dev.cawco.app", category: "Hub")
 
     /// The hub sent a value this app does not know (`hubNewer`): the board
-    /// still reads, and one sticky toast says to update. Swiping it away, or
-    /// opening TestFlight, ends it for the launch.
+    /// still reads, and one notice says to update. Only its ✕ closes it (or
+    /// opening TestFlight), and it does not come back this launch.
     private func sayHubNewer(read: Bool) {
         guard read, hub.hubNewer, !Self.hubNewerSaid else { return }
         Self.hubNewerSaid = true
         Self.hubLog.notice("update notice shown: hub newer than this app")
         Toast.show("Your hub is newer than this app. Update CawCo to see everything.", kind: .info,
                    action: .init("Open TestFlight") { UIApplication.shared.open(HubConnection.Incompatible.testFlight) },
-                   sticky: true, in: view)
+                   closable: true, in: view)
     }
 
     /// Where a tapped push opens, waiting for the fleet's first read.
