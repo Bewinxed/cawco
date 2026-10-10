@@ -53,7 +53,14 @@ export interface Reply {
 
 export const delay = (ms: number) => Bun.sleep(ms);
 
-/** Reads until `accept` holds, every half second, or throws naming `label`. */
+/**
+ * Reads until `accept` holds, every half second, or throws naming `label`.
+ *
+ * A read that throws counts as no reading yet (a service still starting), and
+ * so does one that returns `undefined`: `accept` never sees it. So a wait for
+ * something to be gone cannot return `undefined` as its "gone"; that is
+ * `untilGone`, built on this.
+ */
 export async function until<T>(
   label: string,
   read: () => T | Promise<T>,
@@ -72,6 +79,25 @@ export async function until<T>(
     }
     await delay(500);
   }
+}
+
+/**
+ * Reads until `read` finds nothing (returns `undefined`), every half second,
+ * or throws naming `label`: `until` asked whether it is gone, since `until`
+ * itself takes an undefined read as no reading yet. A read that throws is
+ * still no reading yet, never "gone".
+ */
+export async function untilGone(
+  label: string,
+  read: () => unknown,
+  ms = 120_000
+): Promise<void> {
+  await until(
+    label,
+    async () => (await read()) === undefined,
+    (gone) => gone,
+    ms
+  );
 }
 
 const textOf = (content: unknown): string => {
