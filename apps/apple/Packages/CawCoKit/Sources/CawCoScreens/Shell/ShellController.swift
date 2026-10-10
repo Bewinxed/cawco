@@ -156,7 +156,10 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             hub.needs.answer(ask, machineId: item.machineId, answer)
         }
         cawPanel.onDismiss = { [weak self] notice in self?.home.dismiss(notice) }
-        cawPanel.onAct = { [weak self] notice in self?.home.act(notice) }
+        cawPanel.onAct = { [weak self] notice in
+            if notice.action == .openTestFlight { UIApplication.shared.open(HubConnection.Incompatible.testFlight) }
+            self?.home.act(notice)
+        }
         cawPanel.onOpenChange = { [weak self] _ in self?.refreshBars() }
         TopBar.install(on: detail.navigationItem, crumb: mainCrumb, cluster: mainCluster, burger: railToggle)
         TopBar.install(on: board.navigationItem, crumb: compactCrumb, cluster: compactCluster, burger: burger, showsCrumb: false)
@@ -924,13 +927,14 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         let online = fleet.machines.filter { $0.status == "online" }.count
         let tone = MachineHealth.tone(fleet.machines, hubBuild: fleet.hubBuild)
         for cluster in [mainCluster, compactCluster, sessionCluster] {
-            cluster.configure(needs: needs.count, quiet: home.quiet, online: online, tone: tone, panelOpen: cawPanel.open)
+            cluster.configure(needs: needs.count, notices: notices.count, quiet: home.quiet, online: online, tone: tone, panelOpen: cawPanel.open)
         }
         var answers = CawPanel.Answers()
         for item in needs {
             if case let .ask(ask) = item.kind, let sent = hub.needs.answerSent(for: ask) { answers.sent[item.id] = sent }
         }
         cawPanel.configure(needs: needs, answers: answers, notices: notices, quiet: home.quiet, now: home.now, live: home.live)
+        home.noticesShown(notices)
         // Something new needs the operator, or a new notice came: Caw beats once, on the bar in front.
         var fresh = false
         let ids = Set(needs.map(\.id))

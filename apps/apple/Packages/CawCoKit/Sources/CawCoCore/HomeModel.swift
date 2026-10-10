@@ -105,27 +105,39 @@ public final class HomeModel {
         }
     }
 
-    /// Every notice nobody has acknowledged (`Notice`), once the hub's record
-    /// of what was seen has arrived; Caw's panel lists them under Needs you.
+    /// Every notice standing, as Caw's panel lists them under Needs you:
+    /// first the hub being newer than this app (until closed this launch),
+    /// then what the hub keeps until acknowledged, once its record of what
+    /// was seen has arrived.
     public var notices: [Notice] {
-        guard fleet.noticesKnown else { return [] }
-        return Notice.unseen(machines: fleet.machines, accounts: fleet.accounts, policy: fleet.updatePolicy,
-                             commanded: fleet.commanded, seen: fleet.noticesSeen)
+        let local = hub.showsHubNewer ? [Notice.hubNewer] : []
+        guard fleet.noticesKnown else { return local }
+        return local + Notice.unseen(machines: fleet.machines, accounts: fleet.accounts, policy: fleet.updatePolicy,
+                                     commanded: fleet.commanded, seen: fleet.noticesSeen)
     }
 
     /// The notices' sources are all read (the seen record, the accounts and
     /// the update policy): a notice that appears after this is new, and Caw beats for it.
     public var noticesRead: Bool { fleet.noticesKnown && fleet.accounts != nil && fleet.updatePolicy != nil }
 
-    /// Acknowledges a notice everywhere: its ✕ (update-notice.svelte.ts `dismissUpdate`).
+    /// A notice's ✕: acknowledged everywhere (update-notice.svelte.ts
+    /// `dismissUpdate`); the hub being newer is closed for this launch.
     public func dismiss(_ notice: Notice) {
-        hub.acknowledge(notices: notice.acks)
-        if case .update(landedAll: true) = notice.kind { hub.forgetCommanded() }
+        switch notice.kind {
+        case .hubNewer:
+            hub.dismissHubNewer()
+        case .update(landedAll: true):
+            hub.acknowledge(notices: notice.acks)
+            hub.forgetCommanded()
+        default:
+            hub.acknowledge(notices: notice.acks)
+        }
     }
 
-    /// The update notice's act (update-notice.svelte.ts `actOnUpdate`): Retry
+    /// The notice's act (update-notice.svelte.ts `actOnUpdate`): Retry
     /// installs again where it rolled back and acknowledges the rollback;
-    /// Install now installs on every machine that has the build to install.
+    /// Install now installs on every machine that has the build to install;
+    /// Open TestFlight (which the screen opens) closes the hub-newer notice.
     public func act(_ notice: Notice) {
         switch notice.action {
         case .retry:
@@ -134,9 +146,16 @@ public final class HomeModel {
             hub.acknowledge(notices: notice.acks)
         case .installAll:
             for machineId in notice.machineIds { hub.installUpdate(machineId: machineId) }
+        case .openTestFlight:
+            hub.dismissHubNewer()
         case nil:
             break
         }
+    }
+
+    /// The panel lists a notice: the hub-newer one is logged the first time in a launch.
+    public func noticesShown(_ shown: [Notice]) {
+        if shown.contains(where: { if case .hubNewer = $0.kind { true } else { false } }) { hub.hubNewerShown() }
     }
 
     /// Machines that have not answered yet; until none, an empty list proves nothing.

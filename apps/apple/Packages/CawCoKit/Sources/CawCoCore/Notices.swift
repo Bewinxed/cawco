@@ -12,28 +12,57 @@ public struct Notice: Identifiable, Equatable, Sendable {
         case update(landedAll: Bool)
         case movedLogins
         case rebalances
+        /// The hub sent a value this app does not know: it is newer than the
+        /// app. Closed for the launch, on this device only (`HubConnection.showsHubNewer`).
+        case hubNewer
     }
 
-    /// The update notice's one act.
+    /// The notice's one act.
     public enum Action: Equatable, Sendable {
-        case retry, installAll
+        case retry, installAll, openTestFlight
 
         public var label: String {
             switch self {
             case .retry: "Retry"
             case .installAll: "Install now"
+            case .openTestFlight: "Open TestFlight"
             }
         }
     }
 
-    /// One entry of the row: what it says first, then a line each.
+    /// An account's tile (AccountTile.svelte): its provider's mark in the account's hue.
+    public struct Tile: Equatable, Sendable {
+        public let provider: String
+        /// The `account-<hue>` token's name.
+        public let hue: String
+    }
+
+    /// What leads the row (NoticeRow.svelte `lead`): Caw's mark in the
+    /// notice's status (CawStatus's raw value), or an account's tile; its ✕ sits on the lead's corner.
+    public enum Lead: Equatable, Sendable {
+        case caw(String)
+        case account(Tile)
+        case none
+    }
+
+    /// One entry of the row: what it says first, then a line each; an entry
+    /// after the first carries its own account tile, where it has one.
     public struct Entry: Equatable, Sendable {
         public let title: String
         public let lines: [String]
+        public var tile: Tile?
     }
+
+    /// The hub is newer than this app (UpdateNoticeCell's words, now a row of Caw's panel).
+    public static let hubNewer = Notice(
+        id: "hub-newer", kind: .hubNewer, lead: .caw("needs-you"), label: "Your hub is newer than this app", dismissLabel: "Dismiss",
+        failed: false, entries: [Entry(title: "Your hub is newer than this app", lines: ["Update CawCo to see everything."])],
+        closing: nil, action: .openTestFlight, machineIds: [], acks: []
+    )
 
     public let id: String
     public let kind: Kind
+    public let lead: Lead
     /// What VoiceOver calls the row, and its ✕.
     public let label: String
     public let dismissLabel: String
@@ -49,7 +78,7 @@ public struct Notice: Identifiable, Equatable, Sendable {
     public let acks: [String]
 
     public static func == (a: Notice, b: Notice) -> Bool {
-        a.id == b.id && a.entries == b.entries && a.closing == b.closing && a.action == b.action && a.failed == b.failed
+        a.id == b.id && a.entries == b.entries && a.closing == b.closing && a.action == b.action && a.failed == b.failed && a.lead == b.lead
     }
 
     /// Every row under Notices, in the panel's order: the update, the moved logins, the rebalances.
@@ -66,7 +95,7 @@ public struct Notice: Identifiable, Equatable, Sendable {
               let signins = try? Wire.transcode(accounts.signins, as: [Signin].self) else { return out }
         if let moved = movedLogins(people, signins: signins, machines: machines, seen: seen) { out.append(moved) }
         let rebalances = (try? Wire.transcode(accounts.rebalances, as: [Rebalance].self)) ?? []
-        if let rebalanced = rebalanced(rebalances.filter { !seen.contains($0.id) }) { out.append(rebalanced) }
+        if let row = rebalanced(rebalances.filter { !seen.contains($0.id) }, accounts: people) { out.append(row) }
         return out
     }
 
@@ -185,9 +214,10 @@ public struct Notice: Identifiable, Equatable, Sendable {
         }
     }
 
-    private static func update(_ id: String, title: String, failed: Bool = false, lines: [String] = [], closing: String? = nil,
+    /// `caw`: Caw's status at the row's lead (updates/model.ts `caw.status`).
+    private static func update(_ id: String, title: String, caw: String, failed: Bool = false, lines: [String] = [], closing: String? = nil,
                                action: Action? = nil, machines: [UpdateMachine], acks: [String], landedAll: Bool = false) -> Notice {
-        Notice(id: id, kind: .update(landedAll: landedAll), label: title, dismissLabel: "Dismiss the update notice", failed: failed,
+        Notice(id: id, kind: .update(landedAll: landedAll), lead: .caw(caw), label: title, dismissLabel: "Dismiss the update notice", failed: failed,
                entries: [Entry(title: title, lines: lines)], closing: closing, action: action,
                machineIds: machines.map(\.id), acks: acks)
     }
@@ -215,7 +245,7 @@ public struct Notice: Identifiable, Equatable, Sendable {
         if let machine = live.first(where: { $0.state.landed?.outcome == "rolled-back" }) {
             let v = displayVersion(machine.state.landed?.version)
             let cur = displayVersion(machine.state.installedVersion)
-            return update(landingIds([machine])[0], title: "CawCo \(v) did not install on \(machine.name)", failed: true,
+            return update(landingIds([machine])[0], title: "CawCo \(v) did not install on \(machine.name)", caw: "needs-you", failed: true,
                           lines: ["It did not start, so \(machine.name) went back to \(cur) and is running. It will not try \(v) again by itself."],
                           action: .retry, machines: [machine], acks: landingIds([machine]))
         }
@@ -226,7 +256,7 @@ public struct Notice: Identifiable, Equatable, Sendable {
             let silent = "It stopped answering for \(plural(max(1, Int((restart.silentForMs / 60000).rounded())), "minute")) (\(plural(restart.dials, "call")), no reply)"
             let retiring = restart.retiring == true
             return update(id, title: retiring ? "An earlier session keeper on \(machine.name) was removed" : "The session keeper on \(machine.name) was restarted",
-                          failed: true, lines: [
+                          caw: "needs-you", failed: true, lines: [
                               retiring
                                   ? "\(silent). It was the keeper of an earlier build, still holding sessions after an update; new sessions were already starting on the current keeper, and still do."
                                   : "\(silent), so no session could start there. It was restarted and sessions start there again.",
@@ -256,7 +286,7 @@ public struct Notice: Identifiable, Equatable, Sendable {
                     }
                 }
                 let hub = inSet.first { $0.state.hostsHub && !doneOn($0.state) }
-                return update(id, title: "Installing CawCo \(v)", lines: lines,
+                return update(id, title: "Installing CawCo \(v)", caw: "working", lines: lines,
                               closing: hub.map { "The hub restarts with \($0.name). The app reconnects by itself." },
                               machines: inSet, acks: [id])
             }
@@ -267,14 +297,14 @@ public struct Notice: Identifiable, Equatable, Sendable {
             let v = displayVersion(asked[0].state.availableVersion)
             let acks = landingIds(asked)
             return update(acks.first ?? "landed-all:\(v)", title: "CawCo \(v) is running on \(plural(asked.count, "machine"))",
-                          machines: asked, acks: acks, landedAll: true)
+                          caw: "done", machines: asked, acks: acks, landedAll: true)
         }
         // 4. Auto-update is off and a build waits for a person.
         let waiting = live.filter { $0.state.phase == "available" }
         if !policy.autoUpdate, let lead = waiting.first {
             let v = displayVersion(lead.state.availableVersion)
             let id = "ready:\(waiting.count):\(v)"
-            if let notice = unlessSeen(update(id, title: "CawCo \(v) is ready", lines: noteLines(lead.state.notes),
+            if let notice = unlessSeen(update(id, title: "CawCo \(v) is ready", caw: "needs-you", lines: noteLines(lead.state.notes),
                                               closing: "Auto-update is off. It waits until you install it.",
                                               action: .installAll, machines: waiting, acks: [id])) {
                 return notice
@@ -286,7 +316,7 @@ public struct Notice: Identifiable, Equatable, Sendable {
             let v = displayVersion(lead.state.availableVersion)
             let id = "ready:\(held.count):\(v)"
             let closing = "Each machine installs it once its work in flight ends, within \(waitCapMinutes) minutes. Turns keep running through it. \(held.count) \(held.count == 1 ? "is" : "are") waiting now."
-            if let notice = unlessSeen(update(id, title: "CawCo \(v) is ready", lines: noteLines(lead.state.notes), closing: closing,
+            if let notice = unlessSeen(update(id, title: "CawCo \(v) is ready", caw: "ready", lines: noteLines(lead.state.notes), closing: closing,
                                               machines: held, acks: [id])) {
                 return notice
             }
@@ -295,7 +325,7 @@ public struct Notice: Identifiable, Equatable, Sendable {
         let landed = live.filter { $0.state.landed?.outcome == "installed" }
         if let landing = landed.first?.state.landed {
             let acks = landingIds(landed)
-            return update(acks[0], title: "CawCo updated to \(displayVersion(landing.version))", lines: noteLines(landing.notes),
+            return update(acks[0], title: "CawCo updated to \(displayVersion(landing.version))", caw: "sleeping", lines: noteLines(landing.notes),
                           machines: landed, acks: acks)
         }
         return nil
@@ -305,6 +335,8 @@ public struct Notice: Identifiable, Equatable, Sendable {
 
     private nonisolated struct Account: Decodable {
         let id: String
+        let provider: String
+        let hue: String
         let kind: String?
         let label: String?
         let email: String?
@@ -336,17 +368,21 @@ public struct Notice: Identifiable, Equatable, Sendable {
             let id = "moved-login:\(account.id):\(signin.machineId):\(Int64(movedAt))"
             guard !seen.contains(id) else { return nil }
             let store = storeWords[signin.movedFrom ?? "claude"] ?? "Claude Code"
-            return (id, movedAt, Entry(title: name(account), lines: ["from \(store) on \(Naming.machineLabel(from.hostname))"]))
+            return (id, movedAt, Entry(title: name(account), lines: ["from \(store) on \(Naming.machineLabel(from.hostname))"],
+                                       tile: Tile(provider: account.provider, hue: account.hue)))
         }.sorted { $0.at > $1.at }
         guard let first = moved.first else { return nil }
-        return Notice(id: first.id, kind: .movedLogins, label: "Logins moved into CawCo", dismissLabel: "Dismiss moved logins",
-                      failed: false, entries: moved.map(\.entry), closing: nil, action: nil, machineIds: [], acks: moved.map(\.id))
+        return Notice(id: first.id, kind: .movedLogins, lead: first.entry.tile.map(Lead.account) ?? .none, label: "Logins moved into CawCo",
+                      dismissLabel: "Dismiss moved logins", failed: false, entries: moved.map(\.entry), closing: nil, action: nil,
+                      machineIds: [], acks: moved.map(\.id))
     }
 
     // MARK: Rebalances (RebalanceNotices.svelte, core `rebalanceWords`)
 
     private nonisolated struct Named: Decodable {
+        let id: String
         let name: String
+        let hue: String
     }
 
     private nonisolated struct Came: Decodable {
@@ -392,15 +428,20 @@ public struct Notice: Identifiable, Equatable, Sendable {
         let held: [Held]
     }
 
-    /// Every pass nobody has acknowledged, newest first, as one row.
-    private static func rebalanced(_ passes: [Rebalance]) -> Notice? {
+    /// Every pass nobody has acknowledged, newest first, as one row; each
+    /// entry's tile is the first account that came, in its provider's mark.
+    private static func rebalanced(_ passes: [Rebalance], accounts: [Account]) -> Notice? {
         let sorted = passes.sorted { $0.at > $1.at }
         guard let first = sorted.first else { return nil }
         let entries = sorted.map { pass in
-            Entry(title: "\(cameWords(pass.came)) on \(pass.machine)", lines: pass.running.map(runningLine) + pass.held.map(heldLine))
+            let came = pass.came.first?.account
+            let provider = came.flatMap { named in accounts.first { $0.id == named.id }?.provider }
+            return Entry(title: "\(cameWords(pass.came)) on \(pass.machine)", lines: pass.running.map(runningLine) + pass.held.map(heldLine),
+                         tile: came.flatMap { named in provider.map { Tile(provider: $0, hue: named.hue) } })
         }
-        return Notice(id: first.id, kind: .rebalances, label: "Sessions rebalanced", dismissLabel: "Dismiss rebalance notices",
-                      failed: false, entries: entries, closing: nil, action: nil, machineIds: [], acks: sorted.map(\.id))
+        return Notice(id: first.id, kind: .rebalances, lead: entries[0].tile.map(Lead.account) ?? .none, label: "Sessions rebalanced",
+                      dismissLabel: "Dismiss rebalance notices", failed: false, entries: entries, closing: nil, action: nil,
+                      machineIds: [], acks: sorted.map(\.id))
     }
 
     private static func cameWords(_ came: [Came]) -> String {

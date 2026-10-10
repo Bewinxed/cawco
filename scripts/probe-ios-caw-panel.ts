@@ -225,8 +225,14 @@ const tap = (udid: string, p: { x: number; y: number }) =>
 /** The moved login's row (MovedLogins.svelte): the account's name is its entry, its ✕ "Dismiss moved logins". */
 const NOTICE = "Probe";
 const NOTICE_DISMISS = "Dismiss moved logins";
-/** Caw's own label: "Needs you, N". The panel's head reads "Needs you" alone. */
-const CAW_LABEL = /^Needs you, \d+$/;
+/**
+ * Caw's own label: "Needs you, N" (or what he says with nothing waiting),
+ * then " · N notices" while any stands. The panel's head reads "Needs you" alone.
+ */
+const CAW_LABEL =
+  /^(Needs you, \d+|All caught up|Reading the fleet|Connecting…|Hub unreachable)( · \d+ notices?)?$/;
+/** With the seeded ask and moved login: his rim counts the ask, his label adds the notice. */
+const CAW_SEEDED = "Needs you, 1 · 1 notice";
 const caw = (nodes: Node[]) =>
   nodes.find((n) => CAW_LABEL.test(n.label ?? "") && n.frame);
 const approve = (nodes: Node[]) =>
@@ -330,13 +336,13 @@ xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-e
   const head = await until(
     `${kind}: Caw counting the ask`,
     async () => caw(await tree(udid)),
-    (node) => node?.label === "Needs you, 1",
+    (node) => node?.label === CAW_SEEDED,
     180_000
   ).catch(() => undefined);
   let nodes = await tree(udid);
   check(
     `${kind}: Caw's rim counts needs-you only`,
-    head?.label === "Needs you, 1",
+    head?.label === CAW_SEEDED,
     `Caw reads "${caw(nodes)?.label ?? "not found"}" with one ask and one notice waiting`
   );
   if (!head?.frame) {

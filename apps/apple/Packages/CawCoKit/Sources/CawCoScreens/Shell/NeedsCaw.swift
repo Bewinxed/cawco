@@ -244,11 +244,14 @@ final class NeedsCawButton: UIControl {
         }
     }
 
-    /// The Needs you count (needs-you only, never notices), what he says with
-    /// none (`HomeModel.quiet`), and his panel's state for VoiceOver.
-    func configure(count next: Int, quiet: String, open: Bool) {
+    /// The Needs you count (needs-you only: the rim never counts notices),
+    /// what he says with none (`HomeModel.quiet`), "· N notices" after it
+    /// while any notice stands (NeedsCaw.svelte `noticeWords`), and his
+    /// panel's state for VoiceOver.
+    func configure(count next: Int, notices: Int, quiet: String, open: Bool) {
         count = next
-        accessibilityLabel = next > 0 ? "Needs you, \(next)" : quiet
+        let noticeWords = notices > 0 ? " · \(notices) \(notices == 1 ? "notice" : "notices")" : ""
+        accessibilityLabel = (next > 0 ? "Needs you, \(next)" : quiet) + noticeWords
         accessibilityValue = open ? "Open" : nil
         let animated = window != nil
         let closed = next > 2 * Self.arcs

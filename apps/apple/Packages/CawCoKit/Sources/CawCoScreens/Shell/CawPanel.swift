@@ -440,22 +440,35 @@ private final class NeedRow: UIControl {
 
 // MARK: A notice
 
-/// One notice row (NoticeRow.svelte, UpdateCard, MovedLogins,
-/// RebalanceNotices): each entry's title and its lines, the update's
-/// closing words and its one act, and the row's ✕, which acknowledges every
-/// entry it shows on every device.
+/// One notice row (NoticeRow.svelte, with UpdateCard, MovedLogins and
+/// RebalanceNotices in it): its 28pt lead (Caw's mark in the notice's
+/// status, or the first account's tile), the entries beside it (a later
+/// entry with its own tile), the update's closing words, its one act at the
+/// trailing edge, and the ✕ (`NoticeCloseButton`, the 20pt pill) on the
+/// lead's top corner, 8pt out from it. The ✕ is the one way it leaves and
+/// acknowledges every entry the row shows; its 44pt target reaches past
+/// the row, so the row answers for it there too.
 private final class NoticeRow: UIView {
     var onDismiss: () -> Void = {}
     var onAct: () -> Void = {}
+    private var close: NoticeCloseButton!
+
+    /// The lead's side (NoticeRow's `lead`, AccountTile at 28).
+    static let lead = 28.0
 
     init(_ notice: Notice) {
         super.init(frame: .zero)
         let column = UIStackView()
         column.axis = .vertical
         column.spacing = 2
+        var reading: [Any] = []
         for (at, entry) in notice.entries.enumerated() {
+            let entryColumn = UIStackView()
+            entryColumn.axis = .vertical
+            entryColumn.spacing = 2
             let title = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong, lines: 0)
             title.text = entry.title
+            reading.append(title)
             if at == 0, notice.failed {
                 // The failure glyph before the title (UpdateCard `.title`).
                 let glyph = GlyphView(.alert, size: Size.iconMd, tint: Palette.statusFailGlyph)
@@ -463,48 +476,142 @@ private final class NoticeRow: UIView {
                 let head = UIStackView(arrangedSubviews: [glyph, title])
                 head.spacing = Space.space1
                 head.alignment = .center
-                column.addArrangedSubview(head)
+                entryColumn.addArrangedSubview(head)
             } else {
-                column.addArrangedSubview(title)
+                entryColumn.addArrangedSubview(title)
             }
-            if at > 0 { column.setCustomSpacing(Space.space3, after: column.arrangedSubviews[column.arrangedSubviews.count - 2]) }
             for line in entry.lines {
                 let said = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
                 said.text = line
-                column.addArrangedSubview(said)
+                entryColumn.addArrangedSubview(said)
+                reading.append(said)
             }
+            // A later entry stands beside its own tile (MovedLogins `.later`).
+            if at > 0, let tile = entry.tile {
+                let beside = UIStackView(arrangedSubviews: [AccountTileView(tile, side: Self.lead), entryColumn])
+                beside.spacing = Space.space3
+                beside.alignment = .top
+                column.addArrangedSubview(beside)
+            } else {
+                column.addArrangedSubview(entryColumn)
+            }
+            if at > 0 { column.setCustomSpacing(Space.space3, after: column.arrangedSubviews[column.arrangedSubviews.count - 2]) }
         }
         if let closing = notice.closing {
             let said = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
             said.text = closing
             column.addArrangedSubview(said)
+            reading.append(said)
         }
         if let action = notice.action {
             let act = KitButton.make(action.label, variant: .action, height: .sm) { [weak self] in self?.onAct() }
-            let actions = UIStackView(arrangedSubviews: [act, UIView()])
+            let actions = UIStackView(arrangedSubviews: [UIView(), act])
+            actions.alignment = .center
             column.setCustomSpacing(Space.space2, after: column.arrangedSubviews[column.arrangedSubviews.count - 1])
             column.addArrangedSubview(actions)
+            reading.append(act)
         }
-        accessibilityLabel = notice.label
-        let close = RowActionButton(.close)
-        close.accessibilityLabel = notice.dismissLabel
-        close.addAction(UIAction { [weak self] _ in self?.onDismiss() }, for: .touchUpInside)
-        let row = UIStackView(arrangedSubviews: [column, close])
-        row.spacing = Space.space2
-        row.alignment = .top
-        row.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(row)
+        let lead = Self.leadView(notice.lead)
+        column.translatesAutoresizingMaskIntoConstraints = false
+        close = NoticeCloseButton(label: notice.dismissLabel) { [weak self] in self?.onDismiss() }
+        addSubview(lead)
+        addSubview(column)
+        addSubview(close)
+        let pad = Space.space3
         NSLayoutConstraint.activate([
-            row.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Space.space3),
-            row.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Space.space1),
-            row.topAnchor.constraint(equalTo: topAnchor, constant: Space.space2),
-            row.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -Space.space2),
+            lead.topAnchor.constraint(equalTo: topAnchor, constant: pad),
+            lead.leadingAnchor.constraint(equalTo: leadingAnchor, constant: pad),
+            lead.widthAnchor.constraint(equalToConstant: Self.lead),
+            lead.heightAnchor.constraint(equalToConstant: Self.lead),
+            bottomAnchor.constraint(greaterThanOrEqualTo: lead.bottomAnchor, constant: Space.space2),
+            column.topAnchor.constraint(equalTo: topAnchor, constant: pad),
+            column.leadingAnchor.constraint(equalTo: lead.trailingAnchor, constant: Space.space3),
+            column.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -pad),
+            column.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -Space.space2),
+            // On the lead's top corner, 8pt out from it (NoticeRow `.x`), inside the row's inset.
+            close.topAnchor.constraint(equalTo: lead.topAnchor, constant: -8),
+            close.leadingAnchor.constraint(equalTo: lead.leadingAnchor, constant: -8),
         ])
+        // The words, the act and the ✕ each read on their own; the lead is a picture.
+        reading.append(close as Any)
+        accessibilityElements = reading
         accessibilityIdentifier = "caw-notice"
     }
 
     @available(*, unavailable)
     required init?(coder _: NSCoder) {
         fatalError("NoticeRow is built in code")
+    }
+
+    /// Caw's mark in the notice's status, an account's tile, or the lead's room alone.
+    private static func leadView(_ lead: Notice.Lead) -> UIView {
+        let view: UIView = switch lead {
+        case let .caw(status): CawMark(status: CawStatus(rawValue: status) ?? .sleeping, side: Self.lead)
+        case let .account(tile): AccountTileView(tile, side: Self.lead)
+        case .none: UIView()
+        }
+        view.translatesAutoresizingMaskIntoConstraints = false
+        view.isAccessibilityElement = false
+        return view
+    }
+
+    /// The ✕'s 44pt target, where it reaches past the row.
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        super.point(inside: point, with: event) || close.point(inside: convert(point, to: close), with: event)
+    }
+
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        if isUserInteractionEnabled, !isHidden, close.point(inside: convert(point, to: close), with: event) {
+            return close
+        }
+        return super.hitTest(point, with: event)
+    }
+}
+
+/// An account's tile (AccountTile.svelte): its provider's mark in one ink,
+/// the account's colour, on that colour at a low alpha, at the small radius.
+private final class AccountTileView: UIView {
+    init(_ tile: Notice.Tile, side: Double) {
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        let hue = Self.hue(tile.hue)
+        backgroundColor = hue.withAlphaComponent(0.18)
+        layer.cornerRadius = Radius.radiusSm
+        layer.cornerCurve = .continuous
+        isAccessibilityElement = false
+        NSLayoutConstraint.activate([
+            widthAnchor.constraint(equalToConstant: side),
+            heightAnchor.constraint(equalToConstant: side),
+        ])
+        guard let logo = BrandLogo.provider(tile.provider) else { return }
+        // `mono`: the mark in the account's ink, whatever its own colours.
+        let mark = UIImageView(image: logo.image.withRenderingMode(.alwaysTemplate))
+        mark.tintColor = hue
+        mark.contentMode = .scaleAspectFit
+        mark.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(mark)
+        let glyph = side >= 32 ? 18.0 : 16.0
+        NSLayoutConstraint.activate([
+            mark.centerXAnchor.constraint(equalTo: centerXAnchor),
+            mark.centerYAnchor.constraint(equalTo: centerYAnchor),
+            mark.widthAnchor.constraint(equalToConstant: glyph),
+            mark.heightAnchor.constraint(equalToConstant: glyph),
+        ])
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        fatalError("AccountTileView is built in code")
+    }
+
+    /// The `account-<hue>` token (core AccountHue).
+    private static func hue(_ name: String) -> UIColor {
+        switch name {
+        case "amber": Palette.accountAmber
+        case "green": Palette.accountGreen
+        case "cyan": Palette.accountCyan
+        case "blue": Palette.accountBlue
+        default: Palette.accountOrange
+        }
     }
 }

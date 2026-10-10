@@ -14,10 +14,11 @@
 # 4. On a fresh simulator: installs the build, launches it with
 #    -paywall-env sandbox and the hub's address, and streams its log.
 # 5. Prints the log lines that prove it (the unknown value, logged once; the
-#    fleet read with its row count; the update notice shown), reads the screen
-#    with axe (opening Recent if the rows sit there), screenshots it, taps the
-#    notice's ✕ (its "Dismiss" element), reads and screenshots
-#    again. Screenshots land in $OUT.
+#    fleet read with its row count; the update notice shown in Caw's panel),
+#    reads the board with axe (opening Recent if the rows sit there), taps
+#    Caw (his label ends " · 1 notice") and finds the notice in his panel,
+#    taps the notice's ✕ (its "Dismiss" element), reads and screenshots
+#    each step. Screenshots land in $OUT.
 #
 # Stops only what it started: the hub (by PID), the tunnel (by PID), the log
 # stream (by PID on the Mac), and the simulator it created (deleted).
@@ -216,23 +217,56 @@ tap_label() { # <tree.json> <label>
   "${MAC[@]}" "$AXE tap -x ${at% *} -y ${at#* } --udid $UDID" >/dev/null
   echo "tapped '$2' at $at"
 }
+# Caw's head: his label ends " · N notice(s)" while any notice stands (NeedsCawButton), as "x y".
+caw_at() { # <tree.json>
+  python3 - "$1" <<'PY'
+import json, re, sys
+tree = json.load(open(sys.argv[1]))
+want = re.compile(r"^(Needs you, \d+|All caught up|Reading the fleet|Connecting…|Hub unreachable) · \d+ notices?$")
+def walk(node):
+    if isinstance(node, list):
+        for item in node:
+            hit = walk(item)
+            if hit: return hit
+        return None
+    if want.match(node.get("AXLabel") or ""):
+        f = node["frame"]
+        return f"{f['x'] + f['width'] / 2:.0f} {f['y'] + f['height'] / 2:.0f}|{node['AXLabel']}"
+    return walk(node.get("children") or [])
+print(walk(tree) or "")
+PY
+}
 # The notice stays until its ✕: there is time for axe to wake (20 s, then retries).
 sleep 20
-axe_ui "$OUT/ui-with-notice.json" || exit 1
-# The seeded rows on screen: open Recent if the board folded them there.
-if ! grep -q "Derived title of the user row" "$OUT/ui-with-notice.json"; then
-  tap_label "$OUT/ui-with-notice.json" "Recent" && sleep 2 && axe_ui "$OUT/ui-with-notice.json"
+axe_ui "$OUT/ui-board.json" || exit 1
+# The seeded rows on the board, the panel closed: open Recent if the board folded them there.
+if ! grep -q "Derived title of the user row" "$OUT/ui-board.json"; then
+  tap_label "$OUT/ui-board.json" "Recent" && sleep 2 && axe_ui "$OUT/ui-board.json"
 fi
-shot with-notice
-grep -q "Your hub is newer than this app" "$OUT/ui-with-notice.json" &&
-  echo "screen: the update notice is on screen" || echo "screen: notice text NOT found in axe describe-ui"
+shot board
+grep -q "Your hub is newer than this app" "$OUT/ui-board.json" &&
+  echo "screen: the notice is on the board (wrong: it is Caw's panel's)"
 rows_seen=0
 for title in "Owner named session" "Agent named session" "Derived title of the user row"; do
-  if grep -q "$title" "$OUT/ui-with-notice.json"; then echo "screen: row '$title'"; rows_seen=$((rows_seen + 1)); fi
+  if grep -q "$title" "$OUT/ui-board.json"; then echo "screen: row '$title'"; rows_seen=$((rows_seen + 1)); fi
 done
-echo "screen: $rows_seen of 3 seeded rows visible beside the notice"
-grep -q "Hub-only title" "$OUT/ui-with-notice.json" &&
+echo "screen: $rows_seen of 3 seeded rows on the board"
+grep -q "Hub-only title" "$OUT/ui-board.json" &&
   echo "screen: the 'user' row shows the hub's title (wrong: unknown source means the derived title)"
+
+# Caw's panel holds it: his label counts it, a tap on him opens the panel.
+caw=$(caw_at "$OUT/ui-board.json")
+[[ -n $caw ]] || { echo "FAILED: no Caw labelled '… · N notice(s)' on the board"; exit 1; }
+echo "screen: Caw reads '${caw#*|}'"
+at=${caw%%|*}
+"${MAC[@]}" "$AXE tap -x ${at% *} -y ${at#* } --udid $UDID" >/dev/null
+echo "tapped Caw at $at"
+sleep 2
+axe_ui "$OUT/ui-with-notice.json" || exit 1
+shot with-notice
+in_panel=0
+grep -q "Your hub is newer than this app" "$OUT/ui-with-notice.json" &&
+  { echo "screen: the update notice is in Caw's panel"; in_panel=1; } || echo "screen: notice text NOT found in Caw's panel"
 grep -q '"Dismiss"' "$OUT/ui-with-notice.json" &&
   echo "screen: the notice's ✕ reads 'Dismiss'" || echo "screen: no 'Dismiss' element"
 
@@ -249,9 +283,9 @@ else
   dismissed=1
 fi
 
-echo "captures: $OUT/with-notice.png $OUT/dismissed.png (and the axe trees beside them)"
-if [[ $unknowns -ge 1 && $notices -eq 1 && $stopped -eq 0 && $rows_seen -ge 1 && $dismissed -eq 1 ]]; then
-  echo "PASS open enums: board read ($rows_seen rows on screen), one update notice, closed by its ✕, no reads stopped"
+echo "captures: $OUT/board.png $OUT/with-notice.png $OUT/dismissed.png (and the axe trees beside them)"
+if [[ $unknowns -ge 1 && $notices -eq 1 && $stopped -eq 0 && $rows_seen -ge 1 && $in_panel -eq 1 && $dismissed -eq 1 ]]; then
+  echo "PASS open enums: board read ($rows_seen rows on screen), one update notice in Caw's panel, closed by its ✕, no reads stopped"
 else
   echo "FAIL open enums"
   exit 1

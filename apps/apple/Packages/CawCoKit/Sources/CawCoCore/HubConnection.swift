@@ -5,7 +5,7 @@ import OpenAPIRuntime
 import OSLog
 
 /// Whether the update notice was closed this launch: one for the app, read by
-/// every window's board, so closing it in one closes it in all.
+/// every window's Caw panel, so closing it in one closes it in all.
 @MainActor
 @Observable
 final class HubNewerNotice {
@@ -97,15 +97,15 @@ public final class HubConnection {
     /// than the app. Everything else still reads; the app says once to update.
     public private(set) var hubNewer = false
 
-    /// The update notice stands on the board: the hub is newer and nobody
+    /// The update notice stands in Caw's panel: the hub is newer and nobody
     /// has closed it this launch, in any window.
     public var showsHubNewer: Bool { hubNewer && !HubNewerNotice.shared.dismissed }
 
-    /// The board drew it: logged the first time in a launch.
+    /// Caw's panel lists it: logged the first time in a launch.
     public func hubNewerShown() {
         guard !HubNewerNotice.shared.logged else { return }
         HubNewerNotice.shared.logged = true
-        log.notice("update notice shown: hub newer than this app")
+        log.notice("update notice shown: hub newer than this app, in Caw's panel")
     }
 
     /// Its ✕ (or Open TestFlight): gone for the rest of the launch, every window.
