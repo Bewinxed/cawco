@@ -8,7 +8,8 @@
 # (for this shell's PATH), ships COMMIT to the Mac as a tree (`git archive`
 # over `ssh mac`) into ~/.worktrees/cawco-mac-check-<sha>, installs it, and runs
 # run-mac-checks.sh there against ~/anbar-ios-fix (which has an origin;
-# swift build and a simulator xcodebuild of its AnbarKit package), with
+# swift build and a simulator xcodebuild of its AnbarKit package; its origin
+# is a local path, so the push row dry-runs to ~/cockpit's GitHub origin), with
 # GH_TOKEN unset in the caller. That script ends with "every escape row
 # BLOCKED" and "EXIT 0" when every escape row is BLOCKED and every working row
 # passes. The tree on the Mac is removed afterwards.
@@ -26,7 +27,7 @@ echo "== the Mac: $commit into ~/$dir"
 git -C "$checkout" archive --format=tar "$commit" |
   ssh mac "rm -rf ~/$dir && mkdir -p ~/$dir && tar -x -C ~/$dir"
 set +e
-ssh mac "env -u GH_TOKEN -u GITHUB_TOKEN bash -lc 'cd ~/$dir && export PATH=\$HOME/.local/bin:\$HOME/.bun/bin:/opt/homebrew/bin:\$PATH && bun install --frozen-lockfile >/dev/null && bash artifacts/srt-eval/run-mac-checks.sh ~/anbar-ios-fix ~/firecrawl/.env apps/ios/AnbarKit apps/ios/AnbarKit auto'"
+ssh mac "env -u GH_TOKEN -u GITHUB_TOKEN bash -lc 'cd ~/$dir && export PATH=\$HOME/.local/bin:\$HOME/.bun/bin:/opt/homebrew/bin:\$PATH && export PUSH_URL=\$(git -C ~/cockpit remote get-url origin) && bun install --frozen-lockfile >/dev/null && bash artifacts/srt-eval/run-mac-checks.sh ~/anbar-ios-fix ~/firecrawl/.env apps/ios/AnbarKit apps/ios/AnbarKit auto'"
 status=$?
 ssh mac "rm -rf ~/$dir"
 exit "$status"

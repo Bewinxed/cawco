@@ -30,17 +30,28 @@ open=0
 fail=0
 row() { printf '%-50s %s\n' "$1" "$2"; [ "$2" = OPEN ] && open=$((open + 1)); return 0; }
 works() { printf '%-50s %s\n' "$1" "$2"; [ "${2%% *}" = FAIL ] && fail=$((fail + 1)); return 0; }
+# A working row this machine's state keeps from running (its reason said).
+skipped=0
+skip() { printf '%-50s %s\n' "$1" "SKIP ($2)"; skipped=$((skipped + 1)); }
 # The first command in a PATH dir under home whose real path matches the glob $1.
-landing_cmd() {
+# Every one, as "NAME<tab>REAL PATH" lines.
+landing_cmds() {
   local dir file real
   for dir in $(printf '%s' "$PATH" | tr ':' '\n' | grep "^$HOME/"); do
     for file in "$dir"/*; do
       real=$(perl -MCwd=abs_path -e 'print abs_path($ARGV[0]) // ""' "$file" 2>/dev/null)
       # shellcheck disable=SC2254
-      case "$real" in $1) basename "$file"; return 0 ;; esac
+      case "$real" in $1) printf '%s\t%s\n' "$(basename "$file")" "$real" ;; esac
     done
   done
-  return 1
+}
+# Where the code of a tool installed editable lives, for a command at real
+# path $1 in a venv's bin: the dir its direct_url.json names (PEP 610,
+# "dir_info": {"editable": true}). Nothing for any other command.
+editable_source() {
+  local venv=${1%/bin/*}
+  [ -f "$venv/pyvenv.cfg" ] || return 0
+  perl -MJSON::PP -0777 -ne 'my $j = eval { decode_json($_) } or next; if ($j->{dir_info}{editable}) { (my $u = $j->{url}) =~ s{^file://}{}; print "$u\n"; exit }' "$venv"/lib/python*/site-packages/*.dist-info/direct_url.json 2>/dev/null
 }
 step() { printf '\n== %s\n' "$1"; }
 # A working row: runs the command, shows its output, PASS on exit 0.
@@ -77,34 +88,60 @@ head -12 "$profile"
 grep -A12 '^(deny mach-lookup' "$profile"
 
 step "gh and git push, with no GH_TOKEN in the caller"
+# The rows that need a token need the host's own gh login: one that is not
+# signed in, or whose token GitHub refuses, is the machine's state, not the
+# product's, and those rows are SKIPped with that reason.
+echo "the host's gh login (gh auth status, outside the boundary):"
+gh auth status --hostname github.com 2>&1 | sed 's/^/    /'
+no_login=
+gh auth status --hostname github.com >/dev/null 2>&1 || no_login="host gh not signed in"
 # No cache: the executor asks gh for its token on the host, outside Seatbelt.
 rm -f "$state/gh-token"
-login=$(r 'gh api user -q .login' 2>"$scratch/gh.err")
-if [ -n "$login" ]; then works "gh api user (token read on the host)" "PASS ($login)"; else works "gh api user (token read on the host)" FAIL; sed 's/^/    /' "$scratch/gh.err"; fi
-[ -s "$state/gh-token" ] && works "the executor wrote its gh-token cache" PASS || works "the executor wrote its gh-token cache" FAIL
-login=$(r 'gh api user -q .login' 2>"$scratch/gh.err")
-if [ -n "$login" ]; then works "gh api user (token from the cache)" "PASS ($login)"; else works "gh api user (token from the cache)" FAIL; sed 's/^/    /' "$scratch/gh.err"; fi
+if [ -n "$no_login" ]; then
+  skip "gh api user (token read on the host)" "$no_login"
+  skip "the executor wrote its gh-token cache" "$no_login"
+  skip "gh api user (token from the cache)" "$no_login"
+else
+  login=$(r 'gh api user -q .login' 2>"$scratch/gh.err")
+  if [ -n "$login" ]; then works "gh api user (token read on the host)" "PASS ($login)"; else works "gh api user (token read on the host)" FAIL; sed 's/^/    /' "$scratch/gh.err"; fi
+  [ -s "$state/gh-token" ] && works "the executor wrote its gh-token cache" PASS || works "the executor wrote its gh-token cache" FAIL
+  login=$(r 'gh api user -q .login' 2>"$scratch/gh.err")
+  if [ -n "$login" ]; then works "gh api user (token from the cache)" "PASS ($login)"; else works "gh api user (token from the cache)" FAIL; sed 's/^/    /' "$scratch/gh.err"; fi
+fi
 helpers=$(r "git config --show-origin --get-regexp '^credential\..*helper\$'" 2>&1)
 echo "git's credential helpers inside:"; printf '%s\n' "$helpers" | sed 's/^/    /'
-# Which helper answers a GitHub login inside: gh's, by GH_TOKEN, and git runs
-# no osxkeychain on the way (its trace names every helper it starts).
-r 'printf "protocol=https\nhost=github.com\n\n" | GIT_TRACE=1 git credential fill' > "$scratch/fill.out" 2> "$scratch/fill.trace"
-if grep -q '^password=.' "$scratch/fill.out" && ! grep -q osxkeychain "$scratch/fill.trace"; then
-  works "a GitHub login comes from gh's helper, no osxkeychain" PASS
+# Which helpers a GitHub login runs inside (git's trace names every helper it
+# starts): gh's, and never osxkeychain; with a login, gh's answers.
+r 'printf "protocol=https\nhost=github.com\n\n" | GIT_TERMINAL_PROMPT=0 GIT_TRACE=1 git credential fill' > "$scratch/fill.out" 2> "$scratch/fill.trace"
+grep "run_command" "$scratch/fill.trace" | sed 's/.*run_command: /    runs: /' | head -5
+if grep -q 'auth git-credential' "$scratch/fill.trace" && ! grep -q osxkeychain "$scratch/fill.trace"; then
+  works "a GitHub login runs gh's helper, no osxkeychain" PASS
 else
-  works "a GitHub login comes from gh's helper, no osxkeychain" FAIL
-  grep -E "run_command|osxkeychain" "$scratch/fill.trace" | head -5 | sed 's/^/    /'
+  works "a GitHub login runs gh's helper, no osxkeychain" FAIL
+fi
+if [ -n "$no_login" ]; then
+  skip "gh's helper answers a GitHub login" "$no_login"
+else
+  grep -q '^password=.' "$scratch/fill.out" && works "gh's helper answers a GitHub login" PASS || works "gh's helper answers a GitHub login" FAIL
 fi
 rm -f "$scratch/fill.out"
 trustd_kr=$(r "/usr/bin/python3 -c '$MACH_PROBE' com.apple.trustd.agent" 2>/dev/null)
 [ "$trustd_kr" = 0 ] && works "mach-lookup com.apple.trustd.agent (TLS)" PASS || works "mach-lookup com.apple.trustd.agent (TLS)" "FAIL (kr $trustd_kr)"
-origin=$(git -C "$clone" remote get-url origin)
-if r "git push --dry-run origin HEAD:refs/heads/cawco-mac-check-$id" > "$scratch/push.out" 2>&1; then
-  works "git push --dry-run to $origin" PASS
-else
-  works "git push --dry-run to $origin" FAIL
-  tail -5 "$scratch/push.out" | sed 's/^/    /'
-fi
+# A dry run sends nothing, but asks the remote for push access with the login.
+push_url=${PUSH_URL:-$(git -C "$clone" remote get-url origin)}
+case "$push_url" in
+  https://github.com/*)
+    if [ -n "$no_login" ]; then
+      skip "git push --dry-run to $push_url" "$no_login"
+    elif r "git push --dry-run '$push_url' HEAD:refs/heads/cawco-mac-check-$id" > "$scratch/push.out" 2>&1; then
+      works "git push --dry-run to $push_url" PASS
+    else
+      works "git push --dry-run to $push_url" FAIL
+      tail -5 "$scratch/push.out" | sed 's/^/    /'
+    fi
+    ;;
+  *) works "git push --dry-run" "FAIL (no https GitHub remote to push to: $push_url; set PUSH_URL)" ;;
+esac
 
 step "home toolchains"
 echo "tool trees the policy reads back beyond the PATH dirs:"
@@ -115,10 +152,21 @@ else
   works "uv --version" "FAIL (no uv on PATH)"
 fi
 for kind in '*/pipx/venvs/*' '*/uv/tools/*' '*/.local/share/claude/*'; do
-  cmd=$(landing_cmd "$kind")
+  # The first command of the kind that is not installed editable. One that is
+  # runs its code from a clone of its own, another repository, which the
+  # boundary refuses by design; it is named, never run.
+  cmd=
+  while IFS=$'\t' read -r name real; do
+    source_dir=$(editable_source "$real")
+    if [ -n "$source_dir" ]; then
+      echo "$name: installed editable, its code in $source_dir (another repository: refused by design, not run)"
+    elif [ -z "$cmd" ]; then
+      cmd=$name
+    fi
+  done < <(landing_cmds "$kind")
   if [ -z "$cmd" ]; then
-    echo "no command on a home PATH dir lands in $kind"
-    [ "$kind" = '*/pipx/venvs/*' ] && works "a pipx command" "FAIL (none installed)"
+    echo "no command on a home PATH dir lands in $kind but editable ones"
+    [ "$kind" = '*/pipx/venvs/*' ] && works "a pipx command" "FAIL (none installed but editable ones)"
     continue
   fi
   r "$cmd --version >/dev/null 2>&1 || $cmd --help >/dev/null 2>&1" > "$scratch/tool.out" 2>&1 && works "$cmd (lands in $kind)" PASS || { works "$cmd (lands in $kind)" FAIL; r "$cmd --version" 2>&1 | tail -3 | sed 's/^/    /'; }
@@ -221,6 +269,7 @@ rm -rf "$scratch"
 echo
 if [ "$open" -eq 0 ]; then echo "every escape row BLOCKED"; else echo "$open escape row(s) OPEN"; fi
 [ "$fail" -eq 0 ] || echo "$fail working row(s) FAIL"
+[ "$skipped" -eq 0 ] || echo "$skipped working row(s) SKIPped for this machine's state (see each row's reason)"
 status=0; [ "$open" -eq 0 ] && [ "$fail" -eq 0 ] || status=1
 echo "EXIT $status"
 exit "$status"

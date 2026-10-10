@@ -285,8 +285,12 @@ const toolTreeOf = async (
  * (a uv tool's runs `~/.local/share/uv/python/…`). Seatbelt judges a link by
  * where it lands, so without the tree the command is refused (EPERM)
  * wherever it runs from; srt shows it as missing. Each tree is
- * {@link toolTreeOf} the command's landing and of its interpreter's, read
- * only. Never a tree in a git work tree, a clone's (a `.git` in the tree's
+ * {@link toolTreeOf} the command's landing and of its interpreter's, and,
+ * for a command in a Python venv, the prefix of the Python the venv was made
+ * from ({@link venvBaseOf}: a pipx venv on pyenv's `~/.pyenv/versions/…`),
+ * read only. A tool installed editable, its code in a clone of its own
+ * (`~/glm-ocr`), stays refused: that clone is another repository. Never a
+ * tree in a git work tree, a clone's (a `.git` in the tree's
  * parent, the tree or any dir down to the landing), and never one that is or
  * lies in a credential store; a store inside a tree stays denied, the deeper
  * entry deciding.
@@ -348,17 +352,53 @@ export const homeToolchains = async (home: string): Promise<string[]> => {
     }
     return (await Promise.all(chain.map(hasGit))).some(Boolean);
   };
+  const allowed = async (tree: string, landing: string): Promise<string[]> =>
+    tree.startsWith(`${home}/`) &&
+    !stores.some((store) => within(tree, store)) &&
+    !(await inWorkTree(tree, landing))
+      ? [tree]
+      : [];
   const trees = await Promise.all(
     landings.map(async (landing) => {
-      const tree = await toolTreeOf(landing, home, roots);
-      return tree &&
-        !stores.some((store) => within(tree, store)) &&
-        !(await inWorkTree(tree, landing))
-        ? [tree]
-        : [];
+      const [tree, base] = await Promise.all([
+        toolTreeOf(landing, home, roots),
+        venvBaseOf(landing),
+      ]);
+      return [
+        ...(tree ? await allowed(tree, landing) : []),
+        ...(base ? await allowed(base, join(base, "bin")) : []),
+      ];
     })
   );
   return unique([...dirs, ...trees.flat()]);
+};
+
+/** `pyvenv.cfg`'s `home = …` line: the dir of the interpreter a venv was made from. */
+const VENV_HOME = /^home\s*=\s*(.+?)\s*$/m;
+
+/**
+ * The prefix of the Python a venv was made from, when `landing` is a command
+ * in the venv's `bin` (`<venv>/bin/<command>`), as a real path: `pyvenv.cfg`
+ * names its `bin` dir as `home` (docs.python.org/3/library/venv.html: "a
+ * home key pointing to the Python installation from which the command was
+ * run"), and the interpreter loads its standard library and, from a shared
+ * build, `libpython` from the prefix above it (a pipx venv made from pyenv's
+ * `~/.pyenv/versions/3.12.0`). None for a landing outside a venv.
+ */
+const venvBaseOf = async (landing: string): Promise<string | undefined> => {
+  const cfg = await readFile(
+    join(dirname(dirname(landing)), "pyvenv.cfg"),
+    "utf8"
+  ).catch(() => undefined);
+  const named = cfg ? VENV_HOME.exec(cfg)?.[1] : undefined;
+  if (!(named && isAbsolute(named))) {
+    return;
+  }
+  const real = await realpath(named).catch(() => undefined);
+  if (!real) {
+    return;
+  }
+  return real.endsWith("/bin") ? dirname(real) : real;
 };
 
 /**
