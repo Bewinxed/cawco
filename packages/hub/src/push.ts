@@ -485,7 +485,22 @@ export const createPush = ({ db, task }: PushServices) => {
     );
   };
 
-  /** Sends unless the same collapse id went out a moment ago. */
+  /** Sends now; a push already shown under its collapse id is replaced by it (`apns-collapse-id`). */
+  const replace = (notification: Notification): void => {
+    recent.set(notification.collapseId, Date.now());
+    deliver(notification).catch((error: unknown) =>
+      console.warn(
+        `[push] ${notification.collapseId}: ${error instanceof Error ? error.message : String(error)}`
+      )
+    );
+  };
+
+  /**
+   * Sends unless the same collapse id went out a moment ago: a failed attempt
+   * that moves its task into a `you` stage reaches here twice, as the task
+   * and as the attempt, under one collapse id, and is one moment. A push
+   * whose every send is news (a session's finished turn) goes by `replace`.
+   */
   const moment = (notification: Notification): void => {
     const now = Date.now();
     for (const [id, at] of recent) {
@@ -496,12 +511,7 @@ export const createPush = ({ db, task }: PushServices) => {
     if (recent.has(notification.collapseId)) {
       return;
     }
-    recent.set(notification.collapseId, now);
-    deliver(notification).catch((error: unknown) =>
-      console.warn(
-        `[push] ${notification.collapseId}: ${error instanceof Error ? error.message : String(error)}`
-      )
-    );
+    replace(notification);
   };
 
   const projectName = (projectId: string | null | undefined): string | null =>
@@ -620,10 +630,11 @@ export const createPush = ({ db, task }: PushServices) => {
      * no result and never comes here). Pushes when the session is one the
      * owner started: top level, not a delegate, a workflow's step, a
      * project's lead or a continuation's worker; and not stopped by them.
-     * It waits {@link LOOK_GRACE_MS} first: a dashboard that has the session
-     * in front marks it looked at as the turn ends, and then nothing goes.
-     * The app does not mark looks, so a session open in the app still pushes.
-     * One collapse id per session: a newer turn's push replaces the older.
+     * It waits {@link LOOK_GRACE_MS} first: a dashboard or an app that has
+     * the session in front marks it looked at as the turn ends (`/api/seen`
+     * `look`), and then nothing goes. One collapse id per session, sent by
+     * `replace`, never held back: a newer turn's push replaces the older on
+     * the device however soon after it comes.
      */
     turnEnded(
       instanceId: string,
@@ -647,7 +658,7 @@ export const createPush = ({ db, task }: PushServices) => {
           return;
         }
         const project = projectName(row.projectId);
-        moment({
+        replace({
           shown: alertOf(
             sessionName(instanceId) ?? "A session",
             project,

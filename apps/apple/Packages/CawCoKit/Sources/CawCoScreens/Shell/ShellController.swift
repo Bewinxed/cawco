@@ -67,6 +67,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     /// Places opened once, kept so coming back finds them as they were left.
     private var pages: [ShellDestination: UIViewController] = [:]
     private var watcher: ShellWatcher!
+    private var lookWatcher: ShellWatcher!
 
     private static let railKey = "cawco-rail-width"
     static let railMin = 216.0
@@ -193,6 +194,8 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             openProbeSession()
             #endif
         }
+        // Apart from the bars: a pulse of a conversation in front wakes only this read.
+        lookWatcher = ShellWatcher(hub: hub, home: home) { [weak self] in self?.lookAtFront() }
     }
 
     #if DEBUG
@@ -259,6 +262,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         }
         railEdge.delegate = railEdgeGate
         view.addGestureRecognizer(railEdge)
+        NotificationCenter.default.addObserver(self, selector: #selector(sceneActivated(_:)), name: UIScene.didActivateNotification, object: nil)
     }
 
     // MARK: Edge swipe
@@ -600,7 +604,49 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         let latest = hub.fleet.rows.filter { $0.isLive && (home.delegates || $0.parentInstanceId == nil) }.max { hub.fleet.lastAt($0) < hub.fleet.lastAt($1) }?.id
         guard let landing = ask ?? latest else { return }
         workspace.land(landing)
+        picked.insert(landing)
         showWorkspace(animated: false)
+    }
+
+    // MARK: What the owner looks at
+
+    /// Conversations the shell put in front itself (`landIfEmpty`), until
+    /// they leave the front: the owner did not pick them, so having them in
+    /// front is not looking at them (SessionSurface.svelte `picked`).
+    private var picked: Set<String> = []
+
+    /// What the owner looks at counts as opened, SessionSurface.svelte's rule
+    /// ported: a finished conversation is seen when it is in front where the
+    /// owner can see it (its group's chosen tab on a wide screen, the one
+    /// shown on a phone), with the conversations the page in front and the
+    /// window's scene active. Only one that ended since it was last seen
+    /// (`endedUnseen`, the rule Finished lists by) is marked, so a turn that
+    /// ends while it is watched is seen as it ends, and the hub then sends no
+    /// push for it (push.ts `turnEnded`); a working one is never marked ahead
+    /// of its end, and nothing is sent twice.
+    private func lookAtFront() {
+        let tabs = workspace.leaves.compactMap(\.active)
+        // One the shell picked that has left the front was switched away
+        // from: it never puts one back, so in front again it is the owner's doing.
+        picked.formIntersection(tabs)
+        let front = compact ? workspace.activeSessionId.map { [$0] } ?? [] : tabs
+        // Read before the checks below, so the watcher wakes when a turn in front ends.
+        let unseen = front.filter { id in
+            guard let row = hub.fleet.byId[id] else { return false }
+            return home.endedUnseen(row) && !picked.contains(id)
+        }
+        guard isViewLoaded, view.window?.windowScene?.activationState == .foregroundActive else { return }
+        let shown = compact
+            ? compactNav.topViewController === workspaceController
+            : destination == .fleet && detail.shown === workspaceController
+        guard shown, !unseen.isEmpty else { return }
+        home.look(unseen)
+    }
+
+    /// The window came to the front (SessionSurface.svelte's `visibilitychange`).
+    @objc private func sceneActivated(_ note: Notification) {
+        guard let scene = note.object as? UIScene, scene === view.window?.windowScene else { return }
+        lookAtFront()
     }
 
     // MARK: Width changes
