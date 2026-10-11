@@ -1211,10 +1211,17 @@ const SAMPLE_SECONDS = 3;
 /** A call graph line's sample count, after its tree marks. */
 const GRAPH_COUNT = /^[\s+!:|]*(\d+) /;
 /**
+ * The share of the main thread's samples a frame needs to be printed: a
+ * fifth, so the graph shows past where a loop's stack splits (at a half, run
+ * 13's stopped at `UIScrollView layoutSubviews`, 935 of 1796).
+ */
+const HOT_SHARE = 0.2;
+/**
  * What the app's main thread is doing while a read waits on it: macOS
  * `sample` on the simulator app's process (a process of the Mac's own), the
- * main thread's call graph cut to its hot path (the frames in at least half
- * its samples), then the heaviest tops of stack over the whole process.
+ * main thread's call graph cut to its hot path (the frames in at least
+ * `HOT_SHARE` of its samples), then the heaviest tops of stack over the
+ * whole process.
  */
 async function sampleApp(udid: string) {
   const text =
@@ -1237,10 +1244,10 @@ rm -f "$F"`).catch((error) => String(error));
   const clean = (line: string) =>
     line.replace(/\s+\[0x[0-9a-f,]+\]/g, "").slice(0, 240);
   console.log(
-    `  ${udid}: a read out for ${SAMPLE_AFTER_MS / 1000}s; ${lines[0]?.startsWith("PID") ? `the app (${lines[0]}) sampled for ${SAMPLE_SECONDS}s, its main thread's hot path (frames in at least half of its ${total} samples):` : `not sampled: ${text.trim().slice(0, 300)}`}`
+    `  ${udid}: a read out for ${SAMPLE_AFTER_MS / 1000}s; ${lines[0]?.startsWith("PID") ? `the app (${lines[0]}) sampled for ${SAMPLE_SECONDS}s, its main thread's hot path (frames in at least ${HOT_SHARE * 100}% of its ${total} samples):` : `not sampled: ${text.trim().slice(0, 300)}`}`
   );
   for (const line of graph.filter(
-    (one) => Number(GRAPH_COUNT.exec(one)?.[1] ?? 0) >= total / 2
+    (one) => Number(GRAPH_COUNT.exec(one)?.[1] ?? 0) >= total * HOT_SHARE
   )) {
     console.log(`    ${clean(line)}`);
   }

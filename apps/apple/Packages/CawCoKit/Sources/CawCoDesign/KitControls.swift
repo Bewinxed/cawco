@@ -323,13 +323,38 @@ public final class KitSpinner: UIView {
     override public func didMoveToWindow() {
         super.didMoveToWindow()
         tintColorDidChange()
-        guard window != nil else { return layer.removeAnimation(forKey: "spin") }
+        turn()
+    }
+
+    override public var isHidden: Bool {
+        didSet { if isHidden != oldValue { turn() } }
+    }
+
+    override public var alpha: CGFloat {
+        didSet { if (alpha < 0.01) != (oldValue < 0.01) { turn() } }
+    }
+
+    /// It turns only while it can be seen: in a window, shown and not
+    /// clear. The places that use it keep it in their layout and hide it
+    /// between waits (a pending button, the paywall's busy states), and a
+    /// hidden spinner left turning drew a frame every refresh for nothing
+    /// and kept the app from ever going idle (XCTest, rdar://25562105).
+    private func turn() {
+        let seen = window != nil && !isHidden && alpha >= 0.01
+        let turning = layer.animation(forKey: "spin") != nil
+        guard seen != turning else { return }
+        guard seen else {
+            layer.removeAnimation(forKey: "spin")
+            LoopLog.off("spin", self)
+            return
+        }
         let spin = CABasicAnimation(keyPath: "transform.rotation.z")
         spin.fromValue = 0
         spin.toValue = 2 * Double.pi
         spin.duration = 1
         spin.repeatCount = .infinity
         layer.add(spin, forKey: "spin")
+        LoopLog.on("spin", self)
     }
 }
 

@@ -21,7 +21,7 @@ public enum LoopCensus {
     /// Walked once a second on the main thread, so a view is named only when something is found on it.
     private static func visit(_ view: UIView, hidden: Bool, into found: inout [String]) {
         let hidden = hidden || view.isHidden || view.alpha < 0.01
-        let name = { "\(type(of: view)) \"\(label(of: view))\"\(hidden ? " (hidden)" : "")" }
+        let name = { "\(type(of: view)) \"\(label(of: view))\" in \(owner(of: view))\(hidden ? " (hidden)" : "")" }
         if let rive = view as? RiveUIView, !rive.isPaused {
             found.append("Rive drawing in \(name())")
         }
@@ -46,6 +46,17 @@ public enum LoopCensus {
             keys += forEver(on: sublayer)
         }
         return keys
+    }
+
+    /// The nearest view over `view` with a label or id of its own, by type and name: where it stands.
+    private static func owner(of view: UIView) -> String {
+        var at = view.superview
+        while let one = at {
+            let name = one.accessibilityLabel.flatMap { $0.isEmpty ? nil : $0 } ?? one.accessibilityIdentifier.flatMap { $0.isEmpty ? nil : $0 }
+            if let name { return "\(type(of: one)) \"\(name)\"" }
+            at = one.superview
+        }
+        return "no labelled view"
     }
 
     /// The view's own label or id, or the nearest one over it.

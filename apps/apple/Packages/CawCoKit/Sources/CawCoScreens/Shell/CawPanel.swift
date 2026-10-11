@@ -84,15 +84,16 @@ final class CawPanel: UIView, UIGestureRecognizerDelegate {
         list.axis = .vertical
         list.isLayoutMarginsRelativeArrangement = true
         list.directionalLayoutMargins = NSDirectionalEdgeInsets(top: Self.inset, leading: Self.inset, bottom: Self.inset, trailing: Self.inset)
-        list.translatesAutoresizingMaskIntoConstraints = false
+        // Laid by frame, with the scroll's content size, from the one
+        // measure `place` takes: no constraint ties it to the scroll view.
+        // Pinned to the scroll's content guide as well as sized by hand, the
+        // two wrote its content size against each other, and on an iPad the
+        // scroll view's own layout never settled: the main thread stayed in
+        // `UIScrollView._applyConstrainedContentSizeIfNecessary` from the tap
+        // that opened the panel (FB13170980 is the same seam).
+        list.translatesAutoresizingMaskIntoConstraints = true
         scroll.addSubview(list)
-        NSLayoutConstraint.activate([
-            list.leadingAnchor.constraint(equalTo: scroll.contentLayoutGuide.leadingAnchor),
-            list.trailingAnchor.constraint(equalTo: scroll.contentLayoutGuide.trailingAnchor),
-            list.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor),
-            list.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor),
-            list.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor),
-        ])
+        scroll.contentInsetAdjustmentBehavior = .never
     }
 
     @available(*, unavailable)
@@ -237,7 +238,8 @@ final class CawPanel: UIView, UIGestureRecognizerDelegate {
         Self.log.notice("\(line, privacy: .public)")
         let apply = {
             self.frame = CGRect(origin: CGPoint(x: x, y: top), size: size)
-            self.scroll.contentSize = CGSize(width: width, height: ceil(fit))
+            self.list.frame = CGRect(x: 0, y: 0, width: width, height: ceil(fit))
+            self.scroll.contentSize = self.list.frame.size
         }
         if animated, !UIAccessibility.isReduceMotionEnabled {
             Motion.easeOut.animator(Motion.durMorph) { apply(); self.layoutIfNeeded() }.startAnimation()
