@@ -333,11 +333,23 @@ final class CawPanel: UIView, UIGestureRecognizerDelegate {
         #endif
         place()
         layoutIfNeeded()
+        // A Caw mark draws for a moment after it loads, then pauses: one
+        // that loaded while the panel was hidden never painted (CawMark
+        // `redraw`), and its notice's lead stood empty.
+        Self.reveal(in: list)
         setOpen(true)
         glass.setJoined(true)
         head.setJoined(true)
         card.grow()
         UIAccessibility.post(notification: .layoutChanged, argument: list.arrangedSubviews.first)
+    }
+
+    /// Draws again every mark under `view` that paints only while drawn (`RedrawsOnReveal`).
+    private static func reveal(in view: UIView) {
+        for sub in view.subviews {
+            if let mark = sub as? RedrawsOnReveal { mark.redraw() }
+            reveal(in: sub)
+        }
     }
 
     func close() {
@@ -735,13 +747,24 @@ private final class NoticeRow: UIView {
     /// Caw's mark in the notice's status, an account's tile, or the lead's room alone.
     private static func leadView(_ lead: Notice.Lead) -> UIView {
         let view: UIView = switch lead {
-        case let .caw(status): CawMark(status: CawStatus(rawValue: status) ?? .sleeping, side: Self.lead)
+        case let .caw(status): CawMark(status: Self.status(status), side: Self.lead)
         case let .account(tile): AccountTileView(tile, side: Self.lead)
         case .none: UIView()
         }
         view.translatesAutoresizingMaskIntoConstraints = false
         view.isAccessibilityElement = false
         return view
+    }
+
+    /// The mascot's status for a notice's Caw, one for one (UpdateCard.svelte `CawMark status`).
+    private static func status(_ lead: Notice.CawLead) -> CawStatus {
+        switch lead {
+        case .needsYou: .needsYou
+        case .working: .working
+        case .done: .done
+        case .ready: .ready
+        case .sleeping: .sleeping
+        }
     }
 
     /// The ✕'s 44pt target, where it reaches past the row.

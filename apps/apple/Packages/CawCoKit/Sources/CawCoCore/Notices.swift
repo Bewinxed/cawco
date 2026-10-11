@@ -38,11 +38,20 @@ public struct Notice: Identifiable, Equatable, Sendable {
     }
 
     /// What leads the row (NoticeRow.svelte `lead`): Caw's mark in the
-    /// notice's status (CawStatus's raw value), or an account's tile; its ✕ sits on the lead's corner.
+    /// notice's status, or an account's tile.
     public enum Lead: Equatable, Sendable {
-        case caw(String)
+        case caw(CawLead)
         case account(Tile)
         case none
+    }
+
+    /// The statuses an update notice's Caw takes (updates/model.ts `caw.status`).
+    public enum CawLead: String, Equatable, Sendable {
+        case needsYou = "needs-you"
+        case working
+        case done
+        case ready
+        case sleeping
     }
 
     /// One entry of the row: what it says first, then a line each; an entry
@@ -53,9 +62,11 @@ public struct Notice: Identifiable, Equatable, Sendable {
         public var tile: Tile?
     }
 
-    /// The hub is newer than this app (UpdateNoticeCell's words, now a row of Caw's panel).
+    /// The hub is newer than this app (UpdateNoticeCell's words, now a row of
+    /// Caw's panel): the web's notice for a tab older than the dashboard
+    /// serving it (updates/model.ts `reloadNotice`), Caw sleeping at its lead.
     public static let hubNewer = Notice(
-        id: "hub-newer", kind: .hubNewer, lead: .caw("needs-you"), label: "Your hub is newer than this app", dismissLabel: "Dismiss",
+        id: "hub-newer", kind: .hubNewer, lead: .caw(.sleeping), label: "Your hub is newer than this app", dismissLabel: "Dismiss",
         failed: false, entries: [Entry(title: "Your hub is newer than this app", lines: ["Update CawCo to see everything."])],
         closing: nil, action: .openTestFlight, machineIds: [], acks: []
     )
@@ -215,7 +226,7 @@ public struct Notice: Identifiable, Equatable, Sendable {
     }
 
     /// `caw`: Caw's status at the row's lead (updates/model.ts `caw.status`).
-    private static func update(_ id: String, title: String, caw: String, failed: Bool = false, lines: [String] = [], closing: String? = nil,
+    private static func update(_ id: String, title: String, caw: CawLead, failed: Bool = false, lines: [String] = [], closing: String? = nil,
                                action: Action? = nil, machines: [UpdateMachine], acks: [String], landedAll: Bool = false) -> Notice {
         Notice(id: id, kind: .update(landedAll: landedAll), lead: .caw(caw), label: title, dismissLabel: "Dismiss the update notice", failed: failed,
                entries: [Entry(title: title, lines: lines)], closing: closing, action: action,
@@ -245,7 +256,7 @@ public struct Notice: Identifiable, Equatable, Sendable {
         if let machine = live.first(where: { $0.state.landed?.outcome == "rolled-back" }) {
             let v = displayVersion(machine.state.landed?.version)
             let cur = displayVersion(machine.state.installedVersion)
-            return update(landingIds([machine])[0], title: "CawCo \(v) did not install on \(machine.name)", caw: "needs-you", failed: true,
+            return update(landingIds([machine])[0], title: "CawCo \(v) did not install on \(machine.name)", caw: .needsYou, failed: true,
                           lines: ["It did not start, so \(machine.name) went back to \(cur) and is running. It will not try \(v) again by itself."],
                           action: .retry, machines: [machine], acks: landingIds([machine]))
         }
@@ -256,7 +267,7 @@ public struct Notice: Identifiable, Equatable, Sendable {
             let silent = "It stopped answering for \(plural(max(1, Int((restart.silentForMs / 60000).rounded())), "minute")) (\(plural(restart.dials, "call")), no reply)"
             let retiring = restart.retiring == true
             return update(id, title: retiring ? "An earlier session keeper on \(machine.name) was removed" : "The session keeper on \(machine.name) was restarted",
-                          caw: "needs-you", failed: true, lines: [
+                          caw: .needsYou, failed: true, lines: [
                               retiring
                                   ? "\(silent). It was the keeper of an earlier build, still holding sessions after an update; new sessions were already starting on the current keeper, and still do."
                                   : "\(silent), so no session could start there. It was restarted and sessions start there again.",
@@ -286,7 +297,7 @@ public struct Notice: Identifiable, Equatable, Sendable {
                     }
                 }
                 let hub = inSet.first { $0.state.hostsHub && !doneOn($0.state) }
-                return update(id, title: "Installing CawCo \(v)", caw: "working", lines: lines,
+                return update(id, title: "Installing CawCo \(v)", caw: .working, lines: lines,
                               closing: hub.map { "The hub restarts with \($0.name). The app reconnects by itself." },
                               machines: inSet, acks: [id])
             }
@@ -297,14 +308,14 @@ public struct Notice: Identifiable, Equatable, Sendable {
             let v = displayVersion(asked[0].state.availableVersion)
             let acks = landingIds(asked)
             return update(acks.first ?? "landed-all:\(v)", title: "CawCo \(v) is running on \(plural(asked.count, "machine"))",
-                          caw: "done", machines: asked, acks: acks, landedAll: true)
+                          caw: .done, machines: asked, acks: acks, landedAll: true)
         }
         // 4. Auto-update is off and a build waits for a person.
         let waiting = live.filter { $0.state.phase == "available" }
         if !policy.autoUpdate, let lead = waiting.first {
             let v = displayVersion(lead.state.availableVersion)
             let id = "ready:\(waiting.count):\(v)"
-            if let notice = unlessSeen(update(id, title: "CawCo \(v) is ready", caw: "needs-you", lines: noteLines(lead.state.notes),
+            if let notice = unlessSeen(update(id, title: "CawCo \(v) is ready", caw: .needsYou, lines: noteLines(lead.state.notes),
                                               closing: "Auto-update is off. It waits until you install it.",
                                               action: .installAll, machines: waiting, acks: [id])) {
                 return notice
@@ -316,7 +327,7 @@ public struct Notice: Identifiable, Equatable, Sendable {
             let v = displayVersion(lead.state.availableVersion)
             let id = "ready:\(held.count):\(v)"
             let closing = "Each machine installs it once its work in flight ends, within \(waitCapMinutes) minutes. Turns keep running through it. \(held.count) \(held.count == 1 ? "is" : "are") waiting now."
-            if let notice = unlessSeen(update(id, title: "CawCo \(v) is ready", caw: "ready", lines: noteLines(lead.state.notes), closing: closing,
+            if let notice = unlessSeen(update(id, title: "CawCo \(v) is ready", caw: .ready, lines: noteLines(lead.state.notes), closing: closing,
                                               machines: held, acks: [id])) {
                 return notice
             }
@@ -325,7 +336,7 @@ public struct Notice: Identifiable, Equatable, Sendable {
         let landed = live.filter { $0.state.landed?.outcome == "installed" }
         if let landing = landed.first?.state.landed {
             let acks = landingIds(landed)
-            return update(acks[0], title: "CawCo updated to \(displayVersion(landing.version))", caw: "sleeping", lines: noteLines(landing.notes),
+            return update(acks[0], title: "CawCo updated to \(displayVersion(landing.version))", caw: .sleeping, lines: noteLines(landing.notes),
                           machines: landed, acks: acks)
         }
         return nil
