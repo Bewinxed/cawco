@@ -12,6 +12,7 @@ import {
   CAWCO_ENV,
   CONTROL_INTERRUPT,
   MESSAGES_HELD,
+  MESSAGES_READ,
   mcpGatewayPort,
 } from "@cawco/core";
 import { standalone } from "@cawco/core/runtime";
@@ -99,6 +100,15 @@ export class PiRemoteSession implements HarnessSession {
   /** The gate form the host reports it started on ({@link PiHostState.gateForm}). */
   #hostForm: string | undefined;
   readonly #frames: { seq: number; message: NeutralMessage }[] = [];
+  /**
+   * The sends the host has been handed and pi has not read, by uuid: from
+   * {@link send} (or the host's own list, {@link applyState}) until the
+   * host says each read or refused. A send steered into a turn as it ends
+   * waits in pi's queue past the turn's end, so the host's `busy` going off
+   * says nothing of it; stopping the host before pi reads it loses it
+   * ({@link holding}).
+   */
+  readonly #unread = new Set<string>();
 
   constructor(
     client: SessiondClient,
@@ -142,6 +152,7 @@ export class PiRemoteSession implements HarnessSession {
               ctx.failed(new Error(event.error));
               break;
             case "rejected":
+              this.#unread.delete(event.uuid);
               ctx.rejected(event.uuid, new Error(event.error));
               break;
             case "reply": {
@@ -170,6 +181,8 @@ export class PiRemoteSession implements HarnessSession {
           }
           this.#pending.clear();
           this.#exited = true;
+          // Gone with the host: the supervisor hands back what it never read.
+          this.#unread.clear();
           this.#setBusy(false);
           ctx.closed?.();
         },
@@ -179,6 +192,11 @@ export class PiRemoteSession implements HarnessSession {
   }
 
   #frame(seq: number, message: NeutralMessage): void {
+    if (message.type === "system" && message.subtype === MESSAGES_READ) {
+      for (const uuid of message.read ?? []) {
+        this.#unread.delete(uuid);
+      }
+    }
     if (message.type === "result" && seq <= this.#recoveryHead) {
       message.recovered = true;
     }
@@ -208,6 +226,11 @@ export class PiRemoteSession implements HarnessSession {
   applyState(state: PiHostState): void {
     this.sessionId = state.sessionId;
     this.#hostForm = state.gateForm;
+    // What the host holds unread when it answers: the reads after it come
+    // as frames. One sent since it answered is in the set already.
+    for (const uuid of state.held) {
+      this.#unread.add(uuid);
+    }
     this.#setBusy(state.busy);
     if (state.sessionId) {
       this.#ctx.session(state.sessionId);
@@ -284,14 +307,22 @@ export class PiRemoteSession implements HarnessSession {
   }
 
   send(message: SentMessage, extras: TurnExtras): void {
+    this.#unread.add(message.uuid);
     this.#setBusy(true);
     this.write({ type: "send", message, extras }).catch((error: unknown) => {
       // A refused write has been said, and its send is kept for the next
       // start ({@link KeeperRefused}); any other failure is this send's.
+      this.#unread.delete(message.uuid);
       if (!(error instanceof KeeperRefused)) {
         this.#ctx.rejected(message.uuid, error);
       }
     });
+  }
+
+  holding(): string | undefined {
+    return this.#unread.size > 0
+      ? `it holds ${this.#unread.size} send(s) it has not read yet`
+      : undefined;
   }
   control(method: string, args: unknown[]): Promise<unknown> {
     return this.request({ type: "control", method, args });

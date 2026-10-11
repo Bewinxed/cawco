@@ -1278,6 +1278,16 @@ class ClaudeSession implements HarnessSession {
    */
   #background = new Set<string>();
   /**
+   * The sends the CLI has been handed and has not started, by uuid: from
+   * {@link send} (or a `queued` lifecycle an attach replays) until its
+   * `started`, `cancelled` or `completed` lifecycle, a withdrawal, or a
+   * refused write. The CLI holds them in a queue of its own, which a turn's
+   * `result` does not empty: a send handed in the last moments of a turn is
+   * started as the next turn after that `result`. Stopping the process before
+   * then loses it ({@link holding}).
+   */
+  readonly #unread = new Set<string>();
+  /**
    * How many wake-ups the session has scheduled for itself (a cron, a loop's
    * next tick), as the CLI listed them when its last turn ended: its `Stop`
    * hook carries them (`session_crons`). Their timers live in the CLI
@@ -1632,11 +1642,18 @@ class ClaudeSession implements HarnessSession {
         ) {
           this.#lastRequestAt = Date.now();
         }
+        let started = false;
         if ((message as { type: string }).type === "command_lifecycle") {
           const lifecycle = message as unknown as CommandLifecycle;
           const uuid = lifecycle.command_uuid;
+          if (lifecycle.state === "queued") {
+            this.#unread.add(uuid);
+          } else {
+            this.#unread.delete(uuid);
+          }
           if (lifecycle.state === "started") {
             turn.running = true;
+            started = true;
           }
           this.#delivery.get(uuid)?.resolve();
           this.#delivery.delete(uuid);
@@ -1644,7 +1661,10 @@ class ClaudeSession implements HarnessSession {
         // A turn the CLI starts on its own — a background task's notification,
         // a message it held from the last turn — is a turn all the same: the
         // frames are the evidence, and a send into it waits like any other.
-        if (runsTurn(message)) {
+        // A send it starts is one from the moment it is read, before the
+        // model's first word: read, it is no longer anything to hand back,
+        // and only the turn it opens keeps the process from being stopped.
+        if (started || runsTurn(message)) {
           turn.running = true;
           // biome-ignore lint/suspicious/noUnnecessaryConditions: Turn.busy is mutated by Turn.start()/.end() elsewhere; the checker doesn't see that cross-class mutation
           if (!turn.busy) {
@@ -1814,6 +1834,8 @@ class ClaudeSession implements HarnessSession {
         delivery.resolve();
       }
       this.#delivery.clear();
+      // Gone with the process: the supervisor hands back what it never read.
+      this.#unread.clear();
       ctx.closed?.();
     }
   }
@@ -2137,6 +2159,9 @@ class ClaudeSession implements HarnessSession {
   }
 
   holding(): string | undefined {
+    if (this.#unread.size > 0) {
+      return `it holds ${this.#unread.size} send(s) it has not read yet`;
+    }
     if (!this.#stored) {
       return "its conversation is not stored, so nothing could wake it";
     }
@@ -2173,6 +2198,7 @@ class ClaudeSession implements HarnessSession {
       extras.images
     );
     this.#delivery.set(message.uuid, Promise.withResolvers<void>());
+    this.#unread.add(message.uuid);
 
     // A mid-turn injection: the model reads it at the next tool boundary without
     // losing work. The CLI queues it and says `started` when it is read, as it
@@ -2187,6 +2213,7 @@ class ClaudeSession implements HarnessSession {
       void this.#handle.streamInput(stream).catch((error: unknown) => {
         this.#delivery.get(message.uuid)?.resolve();
         this.#delivery.delete(message.uuid);
+        this.#unread.delete(message.uuid);
         this.#ctx.rejected(message.uuid, error);
       });
       return;
@@ -2258,6 +2285,7 @@ class ClaudeSession implements HarnessSession {
     if (this.#input.withdraw(uuid)) {
       this.#delivery.get(uuid)?.resolve();
       this.#delivery.delete(uuid);
+      this.#unread.delete(uuid);
       // biome-ignore lint/suspicious/noUnnecessaryConditions: the pump and adoption set running for a turn in flight; the checker only sees its initial value here
       if (!this.#turn.running && this.#delivery.size === 0) {
         this.#turn.end();
@@ -2283,7 +2311,11 @@ class ClaudeSession implements HarnessSession {
         >;
       }
     ).request({ subtype: "cancel_async_message", message_uuid: uuid });
-    return reply?.response?.cancelled === true ? "withdrawn" : "started";
+    if (reply?.response?.cancelled !== true) {
+      return "started";
+    }
+    this.#unread.delete(uuid);
+    return "withdrawn";
   }
 
   /**
