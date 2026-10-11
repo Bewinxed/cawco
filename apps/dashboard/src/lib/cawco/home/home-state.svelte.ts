@@ -40,22 +40,37 @@ import {
 import { signInWarning } from "../machine";
 import { heldOrder } from "../motion/held-order.svelte";
 import { rail } from "../rail.svelte";
-import { threadTabId } from "../thread-tabs";
+import { threadIdOf, threadTabId } from "../thread-tabs";
 import { hasParent, rooted, tree } from "../tree";
-import { runHref } from "../workflow-runs";
+import { runHref, runIdOf } from "../workflow-runs";
 import { workflowState } from "../workflow-state.svelte";
 import { choices } from "./choices.svelte";
 
 /* ── Seen, on the hub ──────────────────────────────────────────────────
    What "finished since you last looked" means is the owner's looking on
    any device: each session and run carries `seenAt` from the hub, and
-   every dashboard hears it change on the frames it already reads. */
+   every dashboard hears it change on the frames it already reads. Every
+   time read against it is the hub's too (`endedAt`): no device's clock,
+   and no machine's, is ever compared with the hub's. */
+
+/** One mark this dashboard made that the hub has not yet echoed back. */
+interface SeenMark {
+  /** The hub's stamp of the mark, once its answer is in: the `seenAt` its echo carries. */
+  at?: number;
+  /** Tells this mark from a later one on the same row. */
+  mark: number;
+  /** The end it marked seen, on the hub's clock (`endedAt`). */
+  through: number;
+}
 
 /**
  * What this dashboard marked seen and the hub has not yet echoed back: the
  * row leaves Finished in the click that archived it, not a round trip later.
+ * Each goes once the row's `seenAt` reaches the hub's stamp of it, so a
+ * later change on the hub (an unarchive on another device) is never masked.
  */
-const seenHere = $state<Record<string, number>>({});
+const seenHere = $state<Record<string, SeenMark>>({});
+let seenMarks = 0;
 
 /**
  * What this dashboard unarchived and the hub has not yet echoed back: the
@@ -73,34 +88,68 @@ const epochOf = (value: string | number | Date | null | undefined): number => {
 export const seenAt = (row: InstanceRow): number =>
   clearedHere[row.id] === epochOf(row.seenAt)
     ? 0
-    : Math.max(epochOf(row.seenAt), seenHere[row.id] ?? 0);
+    : Math.max(epochOf(row.seenAt), seenHere[row.id]?.through ?? 0);
+
+/**
+ * Drops each mark the hub has echoed: the row's `seenAt` has reached the
+ * hub's stamp of it, or the row is gone. Called on the hub's answer and
+ * on every change to the rows (`HomeState`'s effect).
+ */
+function settleSeen(): void {
+  for (const [id, mark] of Object.entries(seenHere)) {
+    if (mark.at === undefined) {
+      continue;
+    }
+    const row = cawco.instanceIndex.byId.get(id);
+    if (!row || epochOf(row.seenAt) >= mark.at) {
+      delete seenHere[id];
+    }
+  }
+}
 
 /**
  * Marks sessions (and runs, as `run:<id>`) seen on the hub: `look`, the
  * owner had it in front after it ended; `archive`, taken off Finished
  * without opening it, which the hub refuses for anything still doing
- * something (core `archiveRefusal`). A refusal puts the rows back.
+ * something (core `archiveRefusal`). A refusal puts the rows back. Here
+ * it is seen through the end it shows now, on the hub's clock; a turn
+ * that ends while the mark is on its way is news again.
  */
 function markSeen(ids: string[], kind: "archive" | "look"): void {
   if (ids.length === 0) {
     return;
   }
-  const at = Date.now();
+  seenMarks += 1;
+  const mark = seenMarks;
   for (const id of ids) {
-    seenHere[id] = at;
+    const row = cawco.instanceIndex.byId.get(id);
+    seenHere[id] = { mark, through: (row && endedAt(row)) ?? 0 };
     delete clearedHere[id];
   }
-  const undo = () => {
-    for (const id of ids) {
-      if (seenHere[id] === at) {
+  const ours = (id: string) => seenHere[id]?.mark === mark;
+  postSeen(
+    ids,
+    kind,
+    () => {
+      for (const id of ids.filter(ours)) {
         delete seenHere[id];
       }
+    },
+    (at) => {
+      for (const id of ids.filter(ours)) {
+        (seenHere[id] as SeenMark).at = at;
+      }
+      settleSeen();
     }
-  };
-  postSeen(ids, kind, undo);
+  );
 }
 
-function postSeen(ids: string[], kind: string, undo: () => void): void {
+function postSeen(
+  ids: string[],
+  kind: string,
+  undo: () => void,
+  marked?: (at: number) => void
+): void {
   fetch("/api/seen", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -110,6 +159,11 @@ function postSeen(ids: string[], kind: string, undo: () => void): void {
       if (!response.ok) {
         undo();
         console.error("[cawco] not marked seen:", await response.text());
+        return;
+      }
+      const { at } = (await response.json()) as { at: number | null };
+      if (at !== null) {
+        marked?.(at);
       }
     })
     .catch((error) => {
@@ -125,7 +179,7 @@ function postSeen(ids: string[], kind: string, undo: () => void): void {
  */
 export function unarchive(rows: InstanceRow[]): void {
   const ids = rows.map((row) => row.id);
-  const before: Record<string, number | undefined> = {};
+  const before: Record<string, SeenMark | undefined> = {};
   for (const row of rows) {
     before[row.id] = seenHere[row.id];
     clearedHere[row.id] = epochOf(row.seenAt);
@@ -135,7 +189,7 @@ export function unarchive(rows: InstanceRow[]): void {
     for (const row of rows) {
       delete clearedHere[row.id];
       if (before[row.id] !== undefined) {
-        seenHere[row.id] = before[row.id] as number;
+        seenHere[row.id] = before[row.id] as SeenMark;
       }
     }
   });
@@ -463,15 +517,27 @@ export function lastAt(row: InstanceRow): number {
 }
 
 /**
- * When a session (or run) last ended: its failure, else the end of its turn
- * as its pulse says; `undefined` while it works or waits on the reader.
+ * When a session (or run, or thread) last ended, on the hub's clock as
+ * `seenAt` is; `undefined` while it works or waits on the reader. A
+ * session: the end of its turn as the hub took it (`turnEndedAt`), or for
+ * a failed one the hub's last change to its row. A pulse's time is its
+ * machine's clock, so it is never read here. A run or a thread: its own
+ * last move, which the hub stamps.
  */
 function endedAt(row: InstanceRow): number | undefined {
-  if (isFailed(row)) {
-    return lastAt(row);
+  if (runIdOf(row.id) || threadIdOf(row.id)) {
+    if (isFailed(row)) {
+      return lastAt(row);
+    }
+    return cawco.activityOf(row.id) === "idle"
+      ? cawco.pulseAt(row.id)
+      : undefined;
   }
-  return cawco.activityOf(row.id) === "idle"
-    ? cawco.pulseAt(row.id)
+  if (isFailed(row)) {
+    return epochOf(row.updatedAt);
+  }
+  return cawco.activityOf(row.id) === "idle" && row.turnEndedAt
+    ? epochOf(row.turnEndedAt)
     : undefined;
 }
 
@@ -650,6 +716,10 @@ class Home {
         ) {
           this.#ready = true;
         }
+      });
+      // The hub's echo of a mark (a row's `seenAt` reaching it) drops it.
+      $effect(() => {
+        settleSeen();
       });
     });
   }

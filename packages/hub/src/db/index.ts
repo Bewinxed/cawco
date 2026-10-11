@@ -944,6 +944,8 @@ export interface DbShape {
     instanceId: string,
     repeat: boolean
   ) => RuleState;
+  /** The session's turn ended at `at`, on the hub's clock (`turnEndedAt`). */
+  readonly noteTurnEnded: (id: string, at: Date) => void;
   /** Files an offer; false when the session was already offered one. */
   readonly offerProject: (offer: {
     instanceId: string;
@@ -6207,6 +6209,13 @@ const make = async (path: string): Promise<DbShape> => {
       db.update(instances)
         .set({ turnOpenAt: null })
         .where(and(eq(instances.id, id), isNotNull(instances.turnOpenAt)))
+        .run();
+    },
+    // `updatedAt` deliberately untouched: a turn's end is not the session moving.
+    noteTurnEnded: (id, at) => {
+      db.update(instances)
+        .set({ turnEndedAt: at })
+        .where(eq(instances.id, id))
         .run();
     },
     handBackTurn: (id, from, at) =>

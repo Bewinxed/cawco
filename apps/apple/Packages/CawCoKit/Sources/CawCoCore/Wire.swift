@@ -98,6 +98,8 @@ extension Components.Schemas.InstanceRow {
     var updatedMs: Double { epochMs(updatedAt?.value1, updatedAt?.value2, updatedAt?.value3) }
     /// When the owner last looked at it or archived it, on any device, ms epoch.
     var seenMs: Double { epochMs(seenAt?.value1, seenAt?.value2, seenAt?.value3) }
+    /// When its latest turn ended, on the hub's clock as `seenMs` is, ms epoch (0 when it never did).
+    var turnEndedMs: Double { epochMs(turnEndedAt?.value1, turnEndedAt?.value2, turnEndedAt?.value3) }
 }
 
 /// One socket message, as the hub's two dialects put it on `/ws/dashboard`: a

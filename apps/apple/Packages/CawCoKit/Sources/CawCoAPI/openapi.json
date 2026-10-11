@@ -15879,6 +15879,10 @@
                 "type": "string",
                 "format": "date-time"
               },
+              "turnEndedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
               "permissionMode": {
                 "type": [
                   "null",
@@ -16128,6 +16132,10 @@
                   ]
                 },
                 "seenAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "turnEndedAt": {
                   "type": "string",
                   "format": "date-time"
                 },
@@ -33441,6 +33449,24 @@
           "titleSource": {
             "$ref": "#/components/schemas/InstanceRowTitleSource",
             "description": "Who gave the session its name: `owner` (a dashboard rename, which the\nsession's own `set_title` cannot replace) or `agent`. Null while nobody has."
+          },
+          "turnEndedAt": {
+            "description": "When its latest turn ended, on the hub's clock, as `seenAt` is: the\ntwo together say whether it ended since the owner last looked. Null on\none whose turn never ended.",
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              {
+                "type": "number"
+              }
+            ]
           },
           "updatedAt": {
             "description": "When the row last moved.",

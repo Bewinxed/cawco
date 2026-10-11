@@ -482,11 +482,13 @@ public final class HubConnection {
     /// Marks sessions and runs (`run:<id>`) seen on the hub: `look`, the owner
     /// had it in front after it ended; `archive`, taken off Finished without
     /// opening it, which the hub refuses for anything still doing something.
-    func markSeen(_ ids: [String], kind: Operations.PostApiSeen.Input.Body.JsonPayload.KindPayload) async throws {
+    /// Marks rows seen on the hub; the hub's stamp of the mark, ms epoch (the
+    /// `seenAt` its echo carries), nil for an unarchive.
+    func markSeen(_ ids: [String], kind: Operations.PostApiSeen.Input.Body.JsonPayload.KindPayload) async throws -> Double? {
         guard let client else {
             throw URLError(.notConnectedToInternet)
         }
-        _ = try await client.postApiSeen(body: .json(.init(ids: ids, kind: kind))).ok
+        return try await client.postApiSeen(body: .json(.init(ids: ids, kind: kind))).ok.body.json.at
     }
 
     /// Reads the hub's accounts, their sign-ins and catalogs (client.svelte.ts

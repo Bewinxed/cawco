@@ -76,6 +76,8 @@ public final class HomeModel {
                 self?.now = Date.now.timeIntervalSince1970 * 1000
             }
         }
+        // Watches this device's marks for the hub's echo from here on.
+        settleSeen()
     }
 
     public func stop() { ticker?.cancel(); ticker = nil }
@@ -288,27 +290,72 @@ public final class HomeModel {
         }
     }
 
-    /// When a session last ended: its failure, else the end of its turn; nil while it works or waits.
+    /// When a session (or run) last ended, on the hub's clock as `seenMs` is
+    /// (home-state.svelte.ts `endedAt`); nil while it works or waits. A
+    /// session: the end of its turn as the hub took it (`turnEndedMs`), or
+    /// for a failed one the hub's last change to its row. A pulse's time is
+    /// its machine's clock, so it is never read here. A run: its own last
+    /// move, which the hub stamps.
     private func endedAt(_ row: InstanceRow) -> Double? {
-        if row.isFailed {
-            return fleet.lastAt(row)
+        if fleet.run(row.id) != nil {
+            if row.isFailed {
+                return fleet.lastAt(row)
+            }
+            return activity(row.id) == .idle ? fleet.pulseAt(row.id) : nil
         }
-        return activity(row.id) == .idle ? fleet.pulseAt(row.id) : nil
+        if row.isFailed {
+            return row.updatedMs
+        }
+        guard activity(row.id) == .idle, row.turnEndedMs > 0 else {
+            return nil
+        }
+        return row.turnEndedMs
     }
 
-    /// It ended after the owner last saw it, on any device.
+    /// It ended after the owner last saw it, on any device: both times the hub's.
     public func endedUnseen(_ row: InstanceRow) -> Bool {
         guard let ended = endedAt(row) else {
             return false
         }
-        return ended > max(row.seenMs, seenHere[row.id] ?? 0)
+        return ended > max(row.seenMs, seenHere[row.id]?.through ?? 0)
     }
 
     // MARK: Archive
 
+    /// One mark this device made that the hub has not yet echoed back.
+    private struct SeenMark {
+        /// Tells this mark from a later one on the same row.
+        let mark: Int
+        /// The end it marked seen, on the hub's clock (`endedAt`).
+        let through: Double
+        /// The hub's stamp of the mark, once its answer is in: the `seenAt` its echo carries.
+        var at: Double?
+    }
+
     /// What this device marked seen and the hub has not yet echoed back: the
-    /// row leaves Finished in the gesture that archived it.
-    private var seenHere: [String: Double] = [:]
+    /// row leaves Finished in the gesture that archived it. Each goes once the
+    /// row's `seenAt` reaches the hub's stamp of it (`settleSeen`), so a later
+    /// change on the hub is never masked (home-state.svelte.ts `seenHere`).
+    private var seenHere: [String: SeenMark] = [:]
+    @ObservationIgnored private var seenMarks = 0
+
+    /// Drops each mark the hub has echoed: its row's `seenAt` has reached the
+    /// hub's stamp of it, or the row is gone. Watches what it read, so the
+    /// echo, or the hub's answer, runs it again (home-state.svelte.ts `settleSeen`).
+    private func settleSeen() {
+        let echoed = withObservationTracking {
+            seenHere.compactMap { id, mark -> String? in
+                guard let at = mark.at else { return nil }
+                guard let row = fleet.byId[id] ?? fleet.runRows.first(where: { $0.id == id }) else { return id }
+                return row.seenMs >= at ? id : nil
+            }
+        } onChange: { [weak self] in
+            Task { @MainActor in self?.settleSeen() }
+        }
+        for id in echoed {
+            seenHere[id] = nil
+        }
+    }
 
     /// What hangs directly under each session and run.
     private var children: [String: [String]] {
@@ -383,13 +430,17 @@ public final class HomeModel {
 
     /// Marks rows seen here at once and on the hub (home-state.svelte.ts
     /// `markSeen`); a refusal or a failure takes this device's mark back.
+    /// Here a row is seen through the end it shows now, on the hub's clock;
+    /// a turn that ends while the mark is on its way is news again.
     private func mark(_ ids: [String], kind: Operations.PostApiSeen.Input.Body.JsonPayload.KindPayload) {
         guard !ids.isEmpty else {
             return
         }
-        let at = Date.now.timeIntervalSince1970 * 1000
+        seenMarks += 1
+        let mark = seenMarks
         for id in ids {
-            seenHere[id] = at
+            let row = fleet.byId[id] ?? fleet.runRows.first { $0.id == id }
+            seenHere[id] = SeenMark(mark: mark, through: row.flatMap { endedAt($0) } ?? 0)
         }
         let said = "\(kind.rawValue) \(ids.joined(separator: ","))"
         Task { [weak self] in
@@ -398,11 +449,15 @@ public final class HomeModel {
             }
             let log = Logger(subsystem: "dev.cawco.app", category: "Seen")
             do {
-                try await hub.markSeen(ids, kind: kind)
+                let at = try await hub.markSeen(ids, kind: kind)
                 log.notice("seen \(said, privacy: .public): marked")
+                // The echo may be in already; `settleSeen` hears this change either way.
+                for id in ids where seenHere[id]?.mark == mark {
+                    seenHere[id]?.at = at
+                }
             } catch {
                 log.error("seen \(said, privacy: .public): not marked: \(String(describing: error), privacy: .public)")
-                for id in ids where seenHere[id] == at {
+                for id in ids where seenHere[id]?.mark == mark {
                     seenHere[id] = nil
                 }
             }
