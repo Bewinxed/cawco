@@ -409,7 +409,7 @@
   /**
    * What stopped the transcript arriving, from whichever side saw it. The
    * pane's own read reports through `failure`; a read the store started for
-   * itself — a socket backfill — reports through the session's
+   * itself — a socket backfill, a peek — reports through the session's
    * `readFault`. Either one is a card with a button, never a skeleton.
    */
   const fault = $derived(

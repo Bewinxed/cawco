@@ -158,7 +158,7 @@ export interface StreamHost {
   // biome-ignore lint/style/useConsistentMethodSignatures: property-style signatures check contravariantly; client.svelte.ts's streamHost object literal implements this port and a switch could reject that assignment.
   applyFrame(sessionId: string, frame: unknown): void;
   clearTimer?: (handle: number) => void;
-  /** Whether the dashboard follows this session's stream: a tab, a watched delegate. */
+  /** Whether the dashboard follows this session's stream: a tab, the peek, a watched delegate. */
   // biome-ignore lint/style/useConsistentMethodSignatures: property-style signatures check contravariantly; client.svelte.ts's streamHost object literal implements this port and a switch could reject that assignment.
   follows(sessionId: string): boolean;
   /**

@@ -808,7 +808,7 @@
 <div class="strip" data-variant={variant}>
   {#if touch.current}
     <!-- On touch every account rises in the house sheet, as a tab's details
-         do; with a fine pointer it is a popover by the strip. -->
+         and a peek do; with a fine pointer it is a popover by the strip. -->
     <Drawer.Root bind:open>
       <Drawer.Trigger
         aria-label={triggerLabel}

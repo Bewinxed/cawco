@@ -6,7 +6,10 @@
    * budget their glyphs), then the title and its wait, what it wants in the
    * words it is asked, and the kind and where. The row itself opens it (the
    * session at the request, the run, the project's spend) and the panel
-   * closes (`onchoose`). A permission is answered here too, with Deny and
+   * closes (`onchoose`). In the wide layout (a desk, an iPad; not a phone)
+   * a session's ask offers Peek at the title line's end, after its wait:
+   * the session's tail, read before answering, and the panel closes as it
+   * does when a row is chosen. A permission is answered here too, with Deny and
    * Approve as equal peers (DESIGN.md, The Peer Rule): same size, type and
    * fill strength, tinted fail and done, told apart by hue and glyph;
    * "Always allow" never appears.
@@ -17,10 +20,12 @@
    */
   import { questionsOf } from "@cawco/core";
   import { Button } from "#lib/components/ui/button/index.js";
+  import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import {
     IconClose,
     IconDollar,
     IconFolder,
+    IconMaximize,
     IconTick,
     IconWorkflow,
   } from "#lib/icons.js";
@@ -37,6 +42,7 @@
   import { capLine } from "../usage";
   import { choices } from "./choices.svelte";
   import { clock, type NeedsItem, span } from "./home-state.svelte";
+  import { openPeek, peekable } from "./peek.svelte";
 
   let {
     item,
@@ -85,6 +91,21 @@
    * answer waits; nothing is sent until it can land.
    */
   const held = $derived(stale || (item.kind === "ask" && item.stale));
+  /**
+   * A session's ask can be peeked, in the wide layout: a thread is opened,
+   * not peeked (it is the conversation itself), and a run and a budget have
+   * no tail.
+   */
+  const peeks = $derived(item.kind === "ask" && !item.thread && peekable());
+
+  function peekAsk(): void {
+    if (item.kind !== "ask") {
+      return;
+    }
+    onchoose();
+    openPeek({ viewId: item.instanceId, href, title: item.title });
+  }
+
   /** A permission answered on the row, under the `answer` choice. */
   const answerable = $derived(
     item.kind === "ask" && !item.isQuestion && choices.answer === "a"
@@ -125,6 +146,7 @@
 <div
   class="row"
   data-flip
+  data-peek={peeks || undefined}
   data-share="pane:{item.kind === "ask" ? item.instanceId : item.key}"
   data-stale={held || undefined}
 >
@@ -154,6 +176,27 @@
   <span class="name">{item.title}</span>
   {#if item.raisedAt !== undefined}
     <span class="wait">{span(clock.now - item.raisedAt)}</span>
+  {/if}
+  {#if peeks}
+    <!-- Glance → peek → dive: read what led here before answering. -->
+    <span class="end">
+      <Tip label="Peek">
+        {#snippet children(
+          tip
+        )}
+          <button
+            {...tip}
+            aria-label="Peek {item.title}"
+            class="peek touch-hit pointer-hit focus-inset"
+            onclick={peekAsk}
+            {onkeydown}
+            type="button"
+          >
+            <IconMaximize aria-hidden="true" />
+          </button>
+        {/snippet}
+      </Tip>
+    </span>
   {/if}
   <span class="want">{want}</span>
   {#if item.kind === "ask"}
@@ -220,6 +263,8 @@
      what it wants, two lines at most; then the kind and where; a
      permission's peers under them. */
   .row {
+    --peek-ink: calc((24px - 16px) / 2 + 16px * 1.25 / 24);
+    --peek-room: calc(24px - var(--peek-ink) + var(--space-2));
     position: relative;
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
@@ -284,6 +329,66 @@
     font: var(--type-meta);
     color: var(--ink-muted);
     font-variant-numeric: tabular-nums;
+  }
+  /* Peek, the title line's trailing cell, as a notice's ✕ is (NoticeRow):
+     a 24px box round the 16px glyph, centred on the label line, hanging past
+     the trailing edge by `--peek-ink` (the box's padding round the glyph
+     plus the glyph's side bearing: Maximize's arrow ends at 22.75 of 24), so
+     its ink ends on the panel's one trailing edge, where a wait's figures and
+     Approve's fill end. The wait and, with no wait, the title keep its room
+     clear (`--peek-room`), `space-2` short of its box. */
+  .row[data-peek] > .wait {
+    margin-inline-end: var(--peek-room);
+  }
+  .row[data-peek]:not(:has(> .wait)) > .name {
+    padding-inline-end: var(--peek-room);
+  }
+  .end {
+    position: absolute;
+    inset-block-start: calc(var(--space-2) + (1lh - 24px) / 2);
+    inset-inline-end: calc(var(--space-3) - var(--peek-ink));
+    display: flex;
+    font: var(--type-label);
+  }
+  .peek {
+    display: grid;
+    place-items: center;
+    inline-size: 24px;
+    block-size: 24px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-xs);
+    background: transparent;
+    color: var(--ink-muted);
+    cursor: pointer;
+    transition:
+      background-color var(--dur-control) var(--ease-out),
+      color var(--dur-control) var(--ease-out),
+      transform var(--dur-toggle) var(--ease-out);
+  }
+  .peek > :global(svg) {
+    inline-size: 16px;
+    block-size: 16px;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .peek:active {
+      transform: scale(var(--press-scale));
+    }
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .peek:hover {
+      background: var(--surface-hover);
+      color: var(--ink-strong);
+    }
+  }
+  /* An iPad's finger gets the house's 44px area (`touch-hit`), whole and
+     centred where the box stood before it hung: moved back inboard by
+     `--peek-ink`, so the list never grows a sideways scroll for it. */
+  @media (pointer: coarse) {
+    .peek::after {
+      inset-inline-start: calc((24px - 44px) / 2 - var(--peek-ink));
+      inset-inline-end: calc((24px - 44px) / 2 + var(--peek-ink));
+    }
   }
   .want {
     grid-row: 2;

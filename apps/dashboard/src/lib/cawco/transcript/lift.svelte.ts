@@ -50,8 +50,8 @@ export function askLift(message: Message): void {
 
 /**
  * The conversations a composer is writing to right now, counted: only there
- * can a queued message be lifted (a preview of a conversation has no
- * composer to lift it into).
+ * can a queued message be lifted (a peek or a preview of a conversation has
+ * no composer to lift it into).
  */
 const writing = new SvelteMap<string, number>();
 

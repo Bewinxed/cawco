@@ -2,7 +2,8 @@
  * What Caw's panel looks like to the eye, read from its pixels and its
  * computed styles: probe-caw-notices's pixel checks.
  *
- *  - `trailing`: every row's last control (a wait, Approve, Clear all, each
+ *  - `trailing`: every row's last control (a wait, or Peek after it in the
+ *    wide layout, Approve, Clear all, each
  *    ✕, the update footer's last button, each sign-in link, the fold
  *    toggle), with its box's right edge and the x of its rightmost painted
  *    pixel in a capture of the page, so the panel's one trailing edge is
@@ -161,7 +162,8 @@ const readTrailing = (page: Page) =>
           filled: h.rgba(getComputedStyle(e).backgroundColor)[3] > 0,
         }));
     return [
-      ...pick(".row .wait", (e) => `time ${h.label(e)}`),
+      ...pick(".row:not([data-peek]) .wait", (e) => `time ${h.label(e)}`),
+      ...pick(".row .end .peek", (e) => `peek ${h.label(e)}`),
       ...pick(".peers .approve", () => "Approve"),
       ...pick(".head .clear", () => "Clear all"),
       ...pick(".notice > .end .x", (e) => `✕ ${h.label(e)}`),

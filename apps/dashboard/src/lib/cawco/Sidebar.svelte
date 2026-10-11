@@ -792,6 +792,7 @@
       href={rowHref(row.id)}
       instance={row}
       machineId={row.machineId}
+      peek={false}
       title={sessionName(row)}
       trail={ageOf(row)}
     />

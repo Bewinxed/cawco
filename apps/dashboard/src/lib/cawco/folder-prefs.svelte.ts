@@ -27,8 +27,8 @@ function read(): Record<string, FolderPref> {
     : {};
 }
 
-// Module scope, so every surface that draws a folder — rail, board, tabs — is
-// reading the same answer rather than its own copy of it.
+// Module scope, so every surface that draws a folder — rail, board, peek pane,
+// tabs — is reading the same answer rather than its own copy of it.
 const prefs = $state<Record<string, FolderPref>>(read());
 const PROJECT_KEY = "cawco-project-folds";
 const folds = $state<Record<string, true>>(readJson(PROJECT_KEY, {}));

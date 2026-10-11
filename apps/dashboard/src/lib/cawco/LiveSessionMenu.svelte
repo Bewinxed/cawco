@@ -3,8 +3,8 @@
    * Right-click (long-press on touch, the menu key on a focused row) on a
    * session, wherever one is listed: the rail, a project's page, the Fleet
    * board. Keep and Discard are what a spin-off is waiting on, so they only
-   * appear on one (NEW.md §1). Fork needs a conversation and its machine,
-   * Stop a live process.
+   * appear on one (NEW.md §1). Fork and Stop decide as the peek header's menu
+   * does: Fork needs a conversation and its machine, Stop a live process.
    *
    * The row is the trigger itself: `children` is handed the trigger's props
    * and spreads them on its own root element, so a table row stays a `<tr>`.

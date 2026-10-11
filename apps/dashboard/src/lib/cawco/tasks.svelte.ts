@@ -29,8 +29,8 @@ export interface TaskSnapshot {
  */
 export const TASK_LEDGER_TOOLS = new Set(["TaskCreate", "TaskUpdate"]);
 
-// Module scope, so the header pill and the board row are both reading one
-// answer per session rather than each fetching their own.
+// Module scope, so the header pill, the board row and the peek pane are all
+// reading one answer per session rather than each fetching their own.
 const snapshots = $state<Record<string, TaskSnapshot>>({});
 
 /** This session's ledger as it was last read, or nothing if it never was. */

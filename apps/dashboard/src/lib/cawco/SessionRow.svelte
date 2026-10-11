@@ -51,9 +51,11 @@
    * it (`.press-tint`).
    *
    * A parent folds the rows under it (`fold`): its mark says their count
-   * and is the switch (motion/branch). A finished row can be archived
-   * (`onarchive`): a pointer has a button at the row's end, a finger swipes
-   * the row away, and both have it in the menu.
+   * and is the switch (motion/branch). Peek (`peek`) rises at the row's end
+   * for a live session, in the wide layout only (a desk and an iPad; a
+   * phone has none). A finished row can be archived (`onarchive`): a
+   * pointer has a button left of Peek, a finger swipes the row away, and
+   * both have it in the menu.
    *
    * At rest nothing here is a stacking context (no transform, filter or
    * opacity on the link): a parent's mark stands over the rows folding
@@ -62,10 +64,11 @@
   import type { NeutralSessionInfo } from "@cawco/core";
   import type { Attachment } from "svelte/attachments";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
-  import { IconArchive } from "#lib/icons.js";
+  import { IconArchive, IconMaximize } from "#lib/icons.js";
   import { cn } from "#lib/utils.js";
   import { shownAccount } from "./accounts/switch.svelte";
   import type { InstanceRow } from "./client.svelte";
+  import { openPeek, peekable } from "./home/peek.svelte";
   import { swipeToArchive } from "./home/swipe-archive";
   import LiveSessionMenu from "./LiveSessionMenu.svelte";
   import SessionMark, { sessionStatus, statusWord } from "./SessionMark.svelte";
@@ -89,6 +92,7 @@
     done = false,
     context = false,
     compact = false,
+    peek = true,
     fold = null,
     onarchive,
   }: {
@@ -116,6 +120,8 @@
     context?: boolean;
     /** One line, for a tree in the rail: no meta line, the age in a column. */
     compact?: boolean;
+    /** A live session offers Peek at the row's end. */
+    peek?: boolean;
     /** The rows under it, when it is a parent (tree.ts). */
     fold?: {
       count: number;
@@ -137,16 +143,23 @@
     instance?.cwd || info?.cwd || instance?.machineId || machineId
   );
   /**
+   * Peek rises at the row's end: a live session's, not a workflow run's or
+   * a thread's (a thread is opened: it is the conversation itself), and
+   * only in the wide layout (peek.svelte.ts).
+   */
+  const peeks = $derived(peek && instance !== null && !run && !thread);
+  const showPeek = $derived(peeks && peekable());
+  /**
    * The trailing column's width (the wider of the age and the count), on its
-   * row as `--trail-w`: what rises over the row's end on hover (Archive)
-   * stands left of it, so a row without it is not measured: a
+   * row as `--trail-w`: what rises over the row's end on hover (Peek,
+   * Archive) stands left of it, so a row with neither is not measured: a
    * tree in the rail wrote the width on every row it drew, and each write
    * restyled its row. Written from a size observer, after layout: read
    * where the row renders (`bind:offsetWidth`), it laid the page out in the
    * middle of the update that opened a tree, once a row.
    */
   const trailWidth: Attachment<HTMLElement> | undefined = $derived(
-    onarchive ? watchTrail : undefined
+    showPeek || onarchive ? watchTrail : undefined
   );
 </script>
 
@@ -161,6 +174,7 @@
     data-context={context || undefined}
     data-current={active || undefined}
     data-flip
+    data-peek={showPeek || undefined}
     data-stale={stale || undefined}
     {@attach onarchive ? swipeToArchive(onarchive) : undefined}
   >
@@ -235,11 +249,32 @@
           <button
             {...tip}
             aria-label="Archive {title}"
-            class="row-action touch-hit focus-inset"
+            class="row-action archive touch-hit focus-inset"
             onclick={onarchive}
             type="button"
           >
             <IconArchive aria-hidden="true" />
+          </button>
+        {/snippet}
+      </Tip>
+    {/if}
+    {#if showPeek && instance}
+      {@const live = instance}
+      <!-- Glance → peek → dive: the tail of this one, without leaving the
+           list. A workflow run has no tail of its own: its card is its
+           steps. -->
+      <Tip label="Peek">
+        {#snippet children(
+          tip
+        )}
+          <button
+            {...tip}
+            aria-label="Peek {title}"
+            class="row-action peek touch-hit focus-inset"
+            onclick={() => openPeek({ viewId: live.id, href, title })}
+            type="button"
+          >
+            <IconMaximize aria-hidden="true" />
           </button>
         {/snippet}
       </Tip>
@@ -313,8 +348,9 @@
   }
   /* Hover and selection are the list's (highlight: the rail's one ghost,
      the list's own pill), so a row never paints a second one under them. */
-  /* Archive sits at the row's end. A fine pointer finds it on hover or
-     focus; a touch screen swipes instead. */
+  /* Peek and Archive sit at the row's end. A fine pointer finds them on
+     hover or focus; a touch screen always shows Peek, since there is no
+     hover, and swipes instead of Archive. */
   .row-action {
     display: inline-grid;
     flex: none;
@@ -333,12 +369,12 @@
     width: 16px;
     height: 16px;
   }
-  /* At a desk it takes no room until wanted: it rises over the row's
+  /* At a desk they take no room until wanted: they rise over the row's
      words, block-centred on the row, a step left of the trailing column
      (the row's end padding, then the column's measured width), so neither
-     the age nor the count is ever under it. The row's corner is
-     --radius-sm; it stands further in from the edges than that, so it
-     keeps the small control's own radius. */
+     the age nor the count is ever under them. The row's corner is
+     --radius-sm; they stand further in from its edges than that, so they
+     keep the small control's own radius. */
   .item {
     --action-size: 28px;
     --action-end: calc(var(--space-3) + var(--trail-w, 0px) + var(--space-1));
@@ -359,25 +395,41 @@
     .item:focus-within .row-action {
       opacity: 1;
     }
-    /* The words yield the button's room while it shows, so the title never
-       runs under it; a row without Archive reserves nothing. */
-    .item[data-archivable]:is(:hover, :focus-within) .words {
+    /* Archive rises beside Peek, a step left of it. */
+    .item[data-peek] .archive {
+      right: calc(var(--action-end) + var(--action-size) + var(--space-1));
+    }
+    /* The words yield the buttons' room while they show, so the title never
+       runs under them; a row with neither reserves nothing. */
+    .item:is([data-archivable], [data-peek]):is(:hover, :focus-within) .words {
       margin-inline-end: calc(var(--action-size) + var(--space-1));
     }
-    /* It stands on the row's ghost, by day the hover step itself: its own
+    .item[data-archivable][data-peek]:is(:hover, :focus-within) .words {
+      margin-inline-end: calc(2 * (var(--action-size) + var(--space-1)));
+    }
+    /* They stand on the row's ghost, by day the hover step itself: their own
        hover is the step past it. */
     .row-action:hover {
       background: light-dark(var(--surface-fill-strong), var(--surface-fill));
       color: var(--ink-strong);
     }
   }
-  /* A finger swipes the row away instead: no button for it. */
+  /* A finger swipes the row away instead: no button for it. Peek stays,
+     always shown, in the row's flow at its end, with the house's 44px of
+     touch area (`touch-hit`). */
   @media not ((hover: hover) and (pointer: fine)) {
-    .row-action {
+    .archive {
       display: none;
     }
   }
-  /* A finger drawing the row left: the row and its Archive follow it, and
+  /* A phone has no peek: the button is never drawn there (peek.svelte.ts),
+     and this holds before the page is live. */
+  @media (max-width: 899px) {
+    .peek {
+      display: none;
+    }
+  }
+  /* A finger drawing the row left: the row and its Peek follow it, and
      "Archive" is uncovered behind them, as wide as the drag. Let go short
      of the commit point, they slide back. Up and down stays the list's.
      Moved only while a finger is on it: a `translate` at rest, even of

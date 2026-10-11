@@ -454,7 +454,7 @@ Two scales, one token language. The plan reserves compact for the transcript and
 | `rules/[id]` | `comfortable` | A five-section authoring form; forms take the roomier scale so field grouping stays legible. |
 | `usage` | `comfortable` | Read as a glance against a threshold; the whole surface fits without compression. |
 
-**Dependents of the transcript inherit compact.** The permission stack is transcript-derived and renders at the compact scale wherever it appears, including when it surfaces on `session`. That inheritance is a property of that component, not a second density class on a surface — each of the seven surfaces above carries exactly one class.
+**Dependents of the transcript inherit compact.** The permission stack and the peek pane are transcript-derived and render at the compact scale wherever they appear, including when they surface on `session`. The peek appears only in the wide layout, desktop and iPad, not phones. That inheritance is a property of those components, not a second density class on a surface — each of the seven surfaces above carries exactly one class.
 
 **Compact is a fine-pointer affordance only.** Under `@media (pointer: coarse)` or at narrow widths, the compact scale relaxes: every row and control clears WCAG 2.2 SC 2.5.8 Target Size (Minimum), Level AA — 24×24 CSS pixels (W3C Recommendation, 12 December 2024) — and the approve/deny pair targets 44×44, matching the floor the codebase already gives every control on a coarse pointer (`apps/dashboard/src/app.css` `.touch-hit`, and 44px menu items and nav rows). Text inputs never render below 16px, or iOS zooms the viewport on focus.
 

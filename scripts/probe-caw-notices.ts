@@ -36,6 +36,13 @@
  *     and reads the transcript's permission card: Approve and Deny apart
  *     (32px at least), one untinted fill, Approve outlined 1px in the done
  *     ink and Deny in the fail ink, and neither changing under the pointer;
+ *  5c. Peek, desktop and iPad, not phones: at 1440 a home row's Peek is
+ *     hidden at rest and shown on hover, and opens the peek with the
+ *     session's tail, its Approve and Deny apart, untinted, outlined in the
+ *     done and fail inks, labels in ink-strong, still under the pointer;
+ *     Peek on the panel's Needs-you row opens it and closes the panel; at
+ *     1024×1366 with touch the row's Peek shows without hover and opens, and
+ *     the panel's row offers it; at 390 with touch there is none;
  *  6. dismisses one moved login and reads the hub's notices record: only its
  *     id was added; then Clear all, and reads that every notice's id was.
  *
@@ -150,17 +157,27 @@ const LOGINS = [
 ] as const;
 
 const ASK = "notices-probe-ask";
-const respond = (request: Seen) =>
-  request.tools && request.last.includes(ASK)
-    ? {
-        everyMs: 5,
-        words: [],
-        tool: {
-          name: "Bash",
-          input: { command: `touch ${ASK}.txt`, description: "Make a file" },
-        },
-      }
-    : { everyMs: 10, words: ["Done."] };
+/** A session that keeps working while it is peeked: a word a second. */
+const WORK = "notices-probe-work";
+const respond = (request: Seen) => {
+  if (request.tools && request.last.includes(ASK)) {
+    return {
+      everyMs: 5,
+      words: [],
+      tool: {
+        name: "Bash",
+        input: { command: `touch ${ASK}.txt`, description: "Make a file" },
+      },
+    };
+  }
+  if (request.tools && request.last.includes(WORK)) {
+    return {
+      everyMs: 1000,
+      words: Array.from({ length: 1200 }, (_, i) => `step ${i}. `),
+    };
+  }
+  return { everyMs: 10, words: ["Done."] };
+};
 const fleet = await scratchFleet({ name: "probe-caw-notices", respond });
 
 /** A Claude account's own dir under `home`, signed in with a fake login as `email`. */
@@ -846,6 +863,241 @@ try {
     await page.screenshot({
       path: join(out, `caw-notices-transcript-card-${width}.png`),
     });
+    await context.close();
+  }
+
+  // ── 5c. Peek: desktop and iPad, not phones ────────────────────────────
+  const tablet = {
+    viewport: { width: 1024, height: 1366 },
+    hasTouch: true,
+    isMobile: true,
+    deviceScaleFactor: 2,
+  };
+  /** The home's first session row that offers Peek, once the board is in. */
+  const rowPeek = ".item[data-peek] button.peek";
+  const readPeekButton = (tab: Page) =>
+    tab.evaluate((selector) => {
+      const button = document.querySelector(selector);
+      if (!button) {
+        return null;
+      }
+      const s = getComputedStyle(button);
+      const r = button.getBoundingClientRect();
+      const hit = getComputedStyle(button, "::after");
+      return {
+        label: button.getAttribute("aria-label"),
+        opacity: s.opacity,
+        display: s.display,
+        size: `${Math.round(r.width)}×${Math.round(r.height)}`,
+        hit: `${hit.inset}`,
+      };
+    }, rowPeek);
+  /** The open peek: its title, what its tail says, and its answer row. */
+  const readPeek = (tab: Page) =>
+    tab.evaluate(() => {
+      const sheet = document.querySelector(".peek-sheet");
+      if (!sheet) {
+        return null;
+      }
+      const approve = sheet.querySelector(".choice .approve");
+      const deny = sheet.querySelector(".choice .deny");
+      const inkOf = (token: string) => {
+        const swatch = document.createElement("span");
+        swatch.style.color = `var(${token})`;
+        document.body.append(swatch);
+        const ink = getComputedStyle(swatch).color;
+        swatch.remove();
+        return ink;
+      };
+      const side = (e: Element | null) => {
+        if (!e) {
+          return null;
+        }
+        const s = getComputedStyle(e);
+        return {
+          border: `${s.borderTopWidth} ${s.borderTopColor}`,
+          fill: s.backgroundColor,
+          label: s.color,
+        };
+      };
+      return {
+        direction: sheet.getAttribute("data-vaul-drawer-direction"),
+        title: sheet.querySelector("h2")?.textContent?.trim(),
+        text: (sheet as HTMLElement).innerText.replace(/\s+/g, " ").trim(),
+        approve: side(approve),
+        deny: side(deny),
+        done: inkOf("--status-done-ink"),
+        fail: inkOf("--status-fail-ink"),
+        strong: inkOf("--ink-strong"),
+        gap:
+          approve && deny
+            ? Math.round(
+                (approve.getBoundingClientRect().left -
+                  deny.getBoundingClientRect().right) *
+                  100
+              ) / 100
+            : null,
+      };
+    });
+  /** The peek stands open on `title`, its tail saying `said`. */
+  const peekShows = async (
+    tab: Page,
+    at: string,
+    title: string,
+    said: string
+  ) => {
+    await tab.waitForFunction(
+      (words) =>
+        document.querySelector(".peek-sheet")?.textContent?.includes(words) ===
+        true,
+      said,
+      { timeout: 60_000 }
+    );
+    await tab.waitForTimeout(700);
+    const peek = await readPeek(tab);
+    check(
+      `peek opens with the session's tail (${at})`,
+      peek !== null && peek.title === title && peek.text.includes(said),
+      JSON.stringify({
+        direction: peek?.direction,
+        title: peek?.title,
+        tail: peek?.text.slice(-160),
+      })
+    );
+    return peek;
+  };
+  /** The ask's peek: its tail, and its Approve/Deny in The Peer Rule's apart form. */
+  const peekOpens = async (tab: Page, at: string) => {
+    await tab.waitForSelector(".peek-sheet .choice .approve", {
+      timeout: 60_000,
+    });
+    const peek = await peekShows(tab, at, "Fix tray chip overflow", ASK);
+    check(
+      `peek's Approve/Deny: apart, untinted, outlined in done and fail inks, one label ink (${at})`,
+      Boolean(
+        peek?.approve &&
+          peek.deny &&
+          peek.approve.border === `1px ${peek.done}` &&
+          peek.deny.border === `1px ${peek.fail}` &&
+          peek.approve.fill === peek.deny.fill &&
+          peek.approve.label === peek.strong &&
+          peek.deny.label === peek.strong &&
+          (peek.gap ?? 0) >= 32
+      ),
+      JSON.stringify({
+        approve: peek?.approve,
+        deny: peek?.deny,
+        done: peek?.done,
+        fail: peek?.fail,
+        strong: peek?.strong,
+        gap: peek?.gap,
+      })
+    );
+    return peek;
+  };
+
+  // A session at work, so the home's Working list has a row to peek (the
+  // parked ask is in neither Working nor Finished).
+  const WORK_TITLE = "Tidy the rail's ages";
+  const workSession = await fleet.spawn("claude", WORK_TITLE, fleet.workdir, {
+    permissionMode: "default",
+  });
+  await fleet.send(workSession, `${WORK}: keep going.`);
+
+  {
+    // A desk: Peek rises on a row's hover, and opens the peek.
+    const context = await browser.newContext(desk);
+    const page = await context.newPage();
+    await page.goto(base, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector(rowPeek, { state: "attached", timeout: 60_000 });
+    await page.mouse.move(1, 1);
+    await page.waitForTimeout(400);
+    const rest = await readPeekButton(page);
+    await page.hover(".item[data-peek] > a.row");
+    await page.waitForTimeout(400);
+    const hovered = await readPeekButton(page);
+    check(
+      "row Peek hidden at rest, shown on hover (1440)",
+      rest?.opacity === "0" && hovered?.opacity === "1",
+      `rest ${JSON.stringify(rest)} → hovered ${JSON.stringify(hovered)}`
+    );
+    await page.screenshot({ path: join(out, "peek-row-hover-1440.png") });
+    await page.click(rowPeek);
+    await peekShows(page, "row, 1440", WORK_TITLE, "step ");
+    await page.mouse.move(1, 1);
+    await page.screenshot({ path: join(out, "peek-open-row-1440.png") });
+
+    // From Caw's panel: Peek on the Needs-you row opens the peek, the panel closes.
+    await openPanel(page, base);
+    await page.screenshot({ path: join(out, "peek-panel-row-1440.png") });
+    await page.click(".caw-pop .row .end button.peek");
+    const peek = await peekOpens(page, "panel, 1440");
+    const panelGone = await page.evaluate(
+      () => document.querySelector(".caw-pop[data-shown]") === null
+    );
+    check("Peek from the panel closes the panel (1440)", panelGone, "");
+    if (peek?.approve) {
+      await page.hover(".peek-sheet .choice .approve");
+      await page.waitForTimeout(300);
+      const under = await readPeek(page);
+      check(
+        "peek's peers: neither changes under the pointer (1440)",
+        under?.approve?.fill === peek.approve.fill &&
+          under?.approve?.border === peek.approve.border,
+        `rest ${JSON.stringify(peek.approve)} → hovered ${JSON.stringify(under?.approve)}`
+      );
+    }
+    await page.mouse.move(1, 1);
+    await page.screenshot({ path: join(out, "peek-open-ask-1440.png") });
+    await context.close();
+  }
+
+  {
+    // An iPad: Peek always shown on the row, with 44px to touch, and opens.
+    const context = await browser.newContext(tablet);
+    const page = await context.newPage();
+    await page.goto(base, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector(rowPeek, { state: "attached", timeout: 60_000 });
+    await page.waitForTimeout(600);
+    const shown = await readPeekButton(page);
+    check(
+      "row Peek shown without hover (1024×1366 touch)",
+      shown?.opacity === "1" && shown.display !== "none",
+      JSON.stringify(shown)
+    );
+    await page.screenshot({ path: join(out, "peek-row-1024.png") });
+    await page.tap(rowPeek);
+    await peekShows(page, "row, 1024×1366 touch", WORK_TITLE, "step ");
+    await page.screenshot({ path: join(out, "peek-open-1024.png") });
+    await openPanel(page, base);
+    const panelPeek = await page.locator(".caw-pop .row button.peek").count();
+    check(
+      "the panel's Needs-you row offers Peek (1024×1366 touch)",
+      panelPeek === 1,
+      `${panelPeek}`
+    );
+    await page.screenshot({ path: join(out, "peek-panel-row-1024.png") });
+    await context.close();
+  }
+
+  {
+    // A phone: no Peek anywhere.
+    const context = await browser.newContext(phone);
+    const page = await context.newPage();
+    await openPanel(page, base);
+    const counts = await page.evaluate(() => ({
+      rows: document.querySelectorAll(".item").length,
+      asks: document.querySelectorAll(".caw-pop .row").length,
+      peeks: document.querySelectorAll("button.peek, [aria-label^='Peek ']")
+        .length,
+      sheet: document.querySelector(".peek-sheet") !== null,
+    }));
+    check(
+      "no Peek on a phone, rows or panel (390 touch)",
+      counts.asks === 1 && counts.peeks === 0 && !counts.sheet,
+      JSON.stringify(counts)
+    );
+    await page.screenshot({ path: join(out, "peek-none-390.png") });
     await context.close();
   }
 

@@ -50,6 +50,14 @@ export const ACTIVITY_LABEL: Record<Activity, string> = {
 };
 
 /**
+ * The fourth word the rails use, and deliberately not an {@link Activity}: a
+ * session that has lost its process reports no activity at all, so a resumable
+ * row (`isResumable`) means this instead of claiming to be idle. A row says it
+ * in its tooltip and dims its mark; the word is never a pill.
+ */
+export const SLEEPING_LABEL = "Sleeping";
+
+/**
  * A session the operator (or a policy) ended on purpose (`stopped`): not a
  * failure, and not asleep. A row says it where it says its status word.
  */
@@ -71,12 +79,12 @@ export const SLEEPING_HINT =
   "Sleeping — it resumes when you open or message it.";
 
 /**
- * A word the rails use for the status the old system could not admit at all: a row
+ * The fifth word, for the status the old system could not admit at all: a row
  * whose owning machine the hub cannot currently reach (`isStale`). It is not
  * idle — nothing said the session stopped working — and not asleep — nothing
  * said the process is gone. Rendering it as either would be exactly the stale
- * confidence ARCHITECTURE.md's derived-liveness law exists to rule out. As a
- * sleeping row does, a row says it in its tooltip and dims its mark.
+ * confidence ARCHITECTURE.md's derived-liveness law exists to rule out. Same
+ * as {@link SLEEPING_LABEL}: a row says it in its tooltip and dims its mark.
  */
 export const UNKNOWN_LABEL = "Unknown";
 
