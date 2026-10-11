@@ -115,6 +115,12 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
 
         /// The page has a ground of its own; in the rail the home has none and stands on the sidebar's.
         var ground: UIColor { self == .page ? Palette.surfaceRecess : Palette.sidebar }
+
+        /// Whether its rows offer Peek: only in the rail. The page is the
+        /// split view's compact column (a phone, or an iPad narrowed to compact
+        /// width in Split View or Slide Over), where Peek isn't worth its room;
+        /// the rail stands only on a wide iPad or a Mac.
+        var peeks: Bool { self == .rail }
     }
 
     private let variant: Variant
@@ -418,7 +424,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
                 } : nil
                 return SessionMenus.live(now, context: context, onArchive: archive, copy: copy)
             }
-            cell.actions.configure(title: content.title, peeks: content.peek != nil, archives: content.archives)
+            cell.actions.configure(title: content.title, peeks: variant.peeks && content.peek != nil, archives: content.archives)
             cell.actions.onPeek = { [weak self] in self?.peek(content) }
             cell.actions.onArchive = { [weak self] in
                 guard let self else { return }
@@ -462,8 +468,8 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         let recentRow = UICollectionView.CellRegistration<RecentRowCell, Item> { [weak self] cell, _, item in
             guard let self, case let .recent(id) = item, let content = recentContent(id) else { return }
             cell.row.configure(content)
-            cell.actions.configure(title: content.title, peeks: content.peek != nil, archives: false)
-            cell.actions.onPeek = { [weak self] in self?.peek(content) }
+            // Recent is the page's alone, and the page offers no Peek.
+            cell.actions.configure(title: content.title, peeks: false, archives: false)
             // LiveSessionMenu for a session the hub holds, StoredSessionMenu for a stored transcript.
             cell.row.menu = { [weak self] copy in
                 guard let self, let context = sessionMenus?(), let recent = recentItems[id] else { return nil }

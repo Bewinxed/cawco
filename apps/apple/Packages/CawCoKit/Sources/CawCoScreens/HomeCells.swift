@@ -346,10 +346,12 @@ final class RowActionButton: UIControl {
 }
 
 /// What stands at a session row's end beside the row itself (HomeRow.svelte):
-/// Peek, for a live session, and on a pointer Archive, for a finished one.
-/// A touch screen always shows Peek, in its own room after the row; a
-/// pointer finds both on hover, risen over the row's words a step left of
-/// its trailing column.
+/// Peek, for a live session where the home offers it (the rail's, not the
+/// phone page's: `HomeViewController.Variant.peeks`), and on a pointer
+/// Archive, for a finished one. A touch screen shows Peek in its own room
+/// after the row, and with no Peek the row runs to the cell's end; a pointer
+/// finds both on hover, risen over the row's words a step left of its
+/// trailing column.
 @MainActor
 final class RowActions: NSObject {
     let peek = RowActionButton(.maximize)
