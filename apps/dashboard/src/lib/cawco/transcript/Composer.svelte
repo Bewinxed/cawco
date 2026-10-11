@@ -1367,7 +1367,12 @@
   let reopen = false;
   /** The wheel's row on the field's line, for a screen reader. */
   let recallActive = $state<string>();
-  /** The grown shape is the composer: the pill's own surface steps aside. */
+  /**
+   * The wheel is up and not yet folding: the field has no caret, and a
+   * pick fits the field on the fold's clock once it is off (`.settling`).
+   * The pill's own surface steps aside for as long as the wheel is mounted
+   * (`.recalling`): its shape is the composer until it has folded away.
+   */
   let wheeling = $state(false);
   /**
    * The field's hint fading back in after the wheel has folded away (its
@@ -3302,8 +3307,10 @@
     box-shadow: var(--shadow-tile);
 
     /* While it is grown, the grown shape is the composer: the pill's own
-       surface steps aside. */
-    &.wheeling,
+       surface steps aside. The wheel's shape stays the composer until it
+       has folded back into the pill's outline, so the pill's edge never
+       comes back across the rows folding with it. */
+    &.recalling,
     &.grown {
       outline: none;
       background: transparent;

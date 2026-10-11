@@ -27,6 +27,10 @@
  * - pop: the largest one-frame change of the pixels round the pill (where
  *   only the drop and the pill's own shadow change as it folds), as a share
  *   of their whole change over the fold (≤ 1/8).
+ * - edgePutAway, edgeTake: over every frame of the fold (put away, and a
+ *   pick taken), rows whose words stand across the pill's top edge (0),
+ *   frames the pill's border is drawn while rows are (0), and the rows
+ *   wholly inside the pill (the field's own line);
  * Captures: <dir>/<engine>-<size>/{open,mid-open,mid-close}.png, the mid
  * frames at 50% of --dur-grow and of --dur-grow-exit.
  */
@@ -155,7 +159,28 @@ const frameRead = (page) =>
     const intoDeck = rows
       .filter((r) => r.inkBottom > deckTop + 1 && r.inkTop < deckBottom - 1)
       .map((r) => r.right - deckLeft);
+    // The pill's top edge, and whether its border is drawn: a row's words
+    // standing across that edge have it drawn through them.
+    const pill = document.querySelector(".cin");
+    const pillTop = pill.getBoundingClientRect().top;
+    const border = getComputedStyle(pill).borderTopColor;
+    const across = rows
+      .filter((r) => r.inkTop < pillTop - 0.5 && r.inkBottom > pillTop + 0.5)
+      .map((r) => ({
+        text: r.text,
+        inkTop: +r.inkTop.toFixed(1),
+        inkBottom: +r.inkBottom.toFixed(1),
+        pillTop: +pillTop.toFixed(1),
+      }));
     return {
+      folding: !document.querySelector(".cin.wheeling"),
+      pillTop,
+      // Transparent (alpha 0) while the pill's surface steps aside.
+      borderDrawn: !["transparent", ",0)", "/0)"].some((clear) =>
+        border.split(" ").join("").endsWith(clear)
+      ),
+      lowestInk: rows.length ? Math.max(...rows.map((r) => r.inkBottom)) : null,
+      across,
       deckLeft,
       rows,
       intoDeck: intoDeck.length ? Math.max(...intoDeck) : null,
@@ -665,8 +690,52 @@ async function run(engine, v) {
     frames: all.length,
     bad: all.flatMap((f) => f.metaBad).slice(0, 4),
   };
+  r.edgePutAway = edgeOf(closing);
+  // A pick taken: the row on the line, tapped; the wheel folds from there.
+  const taking = [];
+  await open(page, v);
+  if (v.touch) {
+    await stepRead(page, grow / 2, taking);
+    await lift(page);
+  }
+  await stepRead(page, 1500, taking);
+  await page.evaluate(() => {
+    const field = document.querySelector(".cin textarea");
+    document
+      .getElementById(field.getAttribute("aria-activedescendant"))
+      ?.click();
+  });
+  await stepRead(page, 1200, taking);
+  r.edgeTake = edgeOf(taking);
   await browser.close();
   return r;
+}
+
+/**
+ * Over every frame of a fold (the wheel's rows still drawn, the pill's
+ * surface asked back): rows whose words stand across the pill's top edge,
+ * frames the pill's border is drawn while any row is, and the rows wholly
+ * inside the pill (the field's own line).
+ */
+function edgeOf(frames) {
+  const fold = frames.filter((f) => f.folding && f.rows.length > 0);
+  const across = fold.flatMap((f) => f.across);
+  return {
+    foldFrames: fold.length,
+    framesWithRowAcross: fold.filter((f) => f.across.length > 0).length,
+    firstAcross: across[0] ?? null,
+    framesBorderDrawnOverRows: fold.filter((f) => f.borderDrawn).length,
+    // Below the edge and wholly inside the pill: the row on the field's line.
+    insidePill: [
+      ...new Set(
+        fold.flatMap((f) =>
+          f.rows
+            .filter((row) => row.inkTop >= f.pillTop - 0.5)
+            .map((row) => row.text)
+        )
+      ),
+    ],
+  };
 }
 
 const report = {};

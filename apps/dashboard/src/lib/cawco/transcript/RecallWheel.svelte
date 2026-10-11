@@ -215,12 +215,14 @@
 
   /** The room over the top row, grown. */
   let headroom = 0;
+  /** The pill's own room over the field: from the field's top to the pill's edge. */
+  let sill = 0;
   /** How far above the pill the shape reaches: what the rows need, never less than one. */
   const extFor = () => {
     const tall = query.trim()
       ? Math.min(Math.max(pickable - 1, 1), above)
       : above;
-    return tall * row + headroom;
+    return tall * row + headroom + sill;
   };
 
   /**
@@ -298,7 +300,9 @@
 
   /** Places row `k` where the roll has it. Writes only. */
   function place(node: HTMLElement, k: number): void {
-    const y = rest(k) - rolled(pos);
+    // The rows over the one on the line stand from the pill's top edge,
+    // never across it: the pill comes back under them as it folds.
+    const y = rest(k) - rolled(pos) + sill * Math.min(1, Math.max(0, k - pos));
     const off = k - pos;
     if (y > box.height || off < -1.2) {
       node.style.visibility = "hidden";
@@ -732,6 +736,7 @@
   onMount(() => {
     const { size, line } = measured;
     ({ row, headroom } = size);
+    sill = Math.max(0, size.base - line.bottom - line.height);
     above = matchMedia(ROOMY).matches ? 5 : 3;
     // Solid to its edge: nothing behind it shows through.
     shape = new GrownShape(shell, size, extFor(), { fade: false });
