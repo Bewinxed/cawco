@@ -16,8 +16,10 @@
  *     probe", which ran one Bash call (a transcript row to tap), and "Needs
  *     probe", started in the `default` permission mode, whose Bash call the
  *     hub parks as a permission ask; then files the probe account's sign-in
- *     as a login moved in from the machine's own Claude Code store, which
- *     the hub serves as a moved-login notice;
+ *     as a login moved in from the machine's own Claude Code store, and a
+ *     second account ("Design") moved in from OpenCode's and not signed in
+ *     there, which the hub serves as one moved-logins group (the probe's
+ *     entry folded as signed in everywhere, Design's open);
  *  3. forwards the scratch hub to the Mac's loopback (`ssh -R`);
  *  4. on an iPhone and then an iPad simulator, launches the app with
  *     `-paywall-env sandbox` on "Panel probe" and drives it with Maestro (its
@@ -28,8 +30,8 @@
  *     it closing and opening), taps the transcript
  *     row at a point outside it (a long intro turn first stands the row
  *     below where the panel hangs); on the phone it then presses the ask's
- *     row itself, which opens its session; on the iPad it dismisses the
- *     notice and approves
+ *     row itself, which opens its session; on the iPad it dismisses Design
+ *     by its entry's ✕, then the rest by the group's ✕, and approves
  *     the ask from the panel;
  *  5. prints `PASS <step>` / `FAIL <step>` per check, saves the captures to a
  *     folder it names, and exits 0 only if every check passed. A read that
@@ -431,9 +433,17 @@ function maestroTimes(): string {
     .join("\n");
 }
 
-/** The moved login's row (MovedLogins.svelte): the account's name is its entry, its ✕ "Dismiss moved logins". */
+/**
+ * The moved logins' group (MovedLogins.svelte): its head's ✕ "Dismiss all 2
+ * moved logins" acknowledges both; each login is an entry with its own ✕
+ * ("Dismiss <name>"). The probe's own account is signed in on the scratch
+ * machine, so its entry folds behind "Show 1 signed in everywhere"; the
+ * second login ("Design") is still to sign in there and stands open.
+ */
 const NOTICE = "Probe";
-const NOTICE_DISMISS = "Dismiss moved logins";
+const NOTICE_OPEN = "Design";
+const GROUP_DISMISS = /^Dismiss all \d+ moved logins?$/;
+const FOLD = /^(Show|Hide) \d+ signed in everywhere$/;
 /**
  * Caw's own label: "Needs you, N" (or what he says with nothing waiting),
  * then " · N notices" while any stands. The panel's head reads "Needs you" alone.
@@ -446,8 +456,22 @@ const caw = (nodes: Node[]) =>
   nodes.find((n) => CAW_LABEL.test(n.label ?? "") && n.frame);
 const approve = (nodes: Node[]) =>
   nodes.find((n) => n.label?.startsWith("Approve ") === true);
+/** The group's ✕, which acknowledges every moved login. */
 const dismiss = (nodes: Node[]) =>
-  nodes.find((n) => n.label === NOTICE_DISMISS);
+  nodes.find((n) => GROUP_DISMISS.test(n.label ?? ""));
+/** One entry's ✕, which acknowledges that login alone. */
+const dismissEntry = (nodes: Node[], name: string) =>
+  nodes.find((n) => n.label === `Dismiss ${name}`);
+/** The panel's own labels, from its group on: what a failed read of it reports. */
+const panelLabels = (nodes: Node[]) => {
+  const at = nodes.findIndex((n) => n.label === "Notifications");
+  return nodes
+    .slice(Math.max(0, at))
+    .map((n) => n.label)
+    .filter(Boolean)
+    .slice(0, 40)
+    .join(" | ");
+};
 /** The panel's box: its group, or else what it holds. */
 const panelBox = (nodes: Node[]): Frame | undefined => {
   const group = nodes.find((n) => n.label === "Notifications" && n.frame);
@@ -594,21 +618,7 @@ xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-e
       nodes.some((n) => n.label?.startsWith("Deny ") === true),
     ask ? `"${ask.label}" and its Deny` : "no Approve button"
   );
-  check(
-    `${kind}: the panel lists the notice, under Needs you`,
-    dismiss(nodes) !== undefined &&
-      nodes.some((n) => n.label === NOTICE) &&
-      nodes.some((n) => n.label?.startsWith("from Claude Code on ") === true) &&
-      (dismiss(nodes)?.frame?.y ?? 0) >
-        (ask?.frame?.y ?? Number.POSITIVE_INFINITY) - 1,
-    dismiss(nodes)
-      ? `"${NOTICE}", "${nodes.find((n) => n.label?.startsWith("from Claude Code on ") === true)?.label ?? "no from-line"}", its ✕ at y ${Math.round(dismiss(nodes)?.frame?.y ?? 0)}, the ask's Approve at y ${Math.round(ask?.frame?.y ?? 0)}`
-      : `no "${NOTICE_DISMISS}"; labels: ${nodes
-          .map((n) => n.label)
-          .filter(Boolean)
-          .slice(0, 40)
-          .join(" | ")}`
-  );
+  await movedLoginsListed(kind, udid, nodes, ask);
   await shot(udid, `${kind}-panel-light`);
   await mac(`xcrun simctl ui ${udid} appearance dark`);
   await pause(1500);
@@ -1058,8 +1068,87 @@ async function chooseRow(kind: Kind, udid: string) {
 }
 
 /**
+ * The moved logins' group under the ask, once the fold holding the login
+ * signed in everywhere is open: its head and ✕, Design's entry and ✕, and
+ * the probe's entry with its ✕ and where it came from.
+ */
+async function movedLoginsListed(
+  kind: Kind,
+  udid: string,
+  before: Node[],
+  ask: Node | undefined
+) {
+  let nodes = before;
+  const fold = nodes.find((n) => FOLD.test(n.label ?? "") && n.frame);
+  if (fold?.frame && fold.label?.startsWith("Show ")) {
+    await tap(udid, centre(fold.frame));
+    await pause(1200);
+    nodes = await tree(udid);
+  }
+  const group = dismiss(nodes);
+  const from = nodes.find(
+    (n) => n.label?.startsWith("from Claude Code on ") === true
+  );
+  const listed =
+    nodes.some((n) => n.label === "2 logins moved into CawCo") &&
+    dismissEntry(nodes, NOTICE_OPEN) !== undefined &&
+    dismissEntry(nodes, NOTICE) !== undefined &&
+    nodes.some((n) => n.label === NOTICE) &&
+    from !== undefined;
+  const under =
+    (group?.frame?.y ?? 0) > (ask?.frame?.y ?? Number.POSITIVE_INFINITY) - 1;
+  check(
+    `${kind}: the panel lists the moved logins' group, under Needs you`,
+    group !== undefined && listed && under,
+    group
+      ? `"${group.label}", "${NOTICE_OPEN}" ${dismissEntry(nodes, NOTICE_OPEN) ? "with" : "without"} its ✕, the fold ${fold ? `"${fold.label}" opened` : "not found"}, "${NOTICE}" ${dismissEntry(nodes, NOTICE) ? "with" : "without"} its ✕, "${from?.label ?? "no from-line"}"; the group's ✕ at y ${Math.round(group.frame?.y ?? 0)}, the ask's Approve at y ${Math.round(ask?.frame?.y ?? 0)}`
+      : `no group ✕ ("Dismiss all N moved logins"); the panel's labels: ${panelLabels(nodes)}`
+  );
+}
+
+/**
+ * Design's entry ✕ acknowledges that login alone (the group stays with the
+ * other); then the group's ✕ acknowledges the rest. The screen as it stands after.
+ */
+async function dismissMovedLogins(kind: Kind, udid: string): Promise<Node[]> {
+  let nodes = await tree(udid);
+  const entry = dismissEntry(nodes, NOTICE_OPEN);
+  if (entry?.frame) {
+    await tap(udid, centre(entry.frame));
+    await pause(1500);
+  }
+  nodes = await tree(udid);
+  const entryStays = dismissEntry(nodes, NOTICE_OPEN) !== undefined;
+  const groupLeft = dismiss(nodes);
+  check(
+    `${kind}: an entry's ✕ dismisses that login alone`,
+    entry !== undefined && !entryStays && groupLeft !== undefined,
+    entry === undefined
+      ? `no "Dismiss ${NOTICE_OPEN}" to tap; the panel's labels: ${panelLabels(nodes)}`
+      : `"${NOTICE_OPEN}" ${entryStays ? "still listed" : "gone"}; the group ${groupLeft ? `stays ("${groupLeft.label}")` : "is gone too"}`
+  );
+  const cross = dismiss(nodes);
+  if (cross?.frame) {
+    await tap(udid, centre(cross.frame));
+    await pause(1500);
+  }
+  nodes = await tree(udid);
+  const stays =
+    dismiss(nodes) !== undefined || nodes.some((n) => n.label === NOTICE);
+  check(
+    `${kind}: the group's ✕ dismisses every moved login`,
+    cross !== undefined && !stays && approve(nodes) !== undefined,
+    cross === undefined
+      ? `no group ✕ to tap; the panel's labels: ${panelLabels(nodes)}`
+      : `${stays ? "still listed" : "gone"}; the ask ${approve(nodes) ? "is" : "is not"} still listed`
+  );
+  return nodes;
+}
+
+/**
  * Opens the panel if it is closed (a tap on Caw toggles it, so an open
- * panel is left as it is), dismisses the notice by its ✕ and approves the ask.
+ * panel is left as it is), dismisses the moved logins by their ✕s and
+ * approves the ask.
  */
 async function answerFromPanel(kind: Kind, udid: string) {
   let nodes = await tree(udid);
@@ -1067,7 +1156,7 @@ async function answerFromPanel(kind: Kind, udid: string) {
   if (caw(nodes)?.value !== "Open") {
     if (!head?.frame) {
       check(
-        `${kind}: the notice's ✕ dismisses it`,
+        `${kind}: the moved logins' ✕s dismiss them`,
         false,
         "Caw not found to open the panel"
       );
@@ -1076,21 +1165,7 @@ async function answerFromPanel(kind: Kind, udid: string) {
     await tap(udid, centre(head.frame));
     await pause(1200);
   }
-  nodes = await tree(udid);
-  const cross = dismiss(nodes);
-  if (cross?.frame) {
-    await tap(udid, centre(cross.frame));
-    await pause(1500);
-  }
-  nodes = await tree(udid);
-  const stays = dismiss(nodes) !== undefined;
-  check(
-    `${kind}: the notice's ✕ dismisses it`,
-    cross !== undefined && !stays && approve(nodes) !== undefined,
-    cross === undefined
-      ? "no ✕ to tap"
-      : `${stays ? "still listed" : "gone"}; the ask ${approve(nodes) ? "is" : "is not"} still listed`
-  );
+  nodes = await dismissMovedLogins(kind, udid);
   const yes = approve(nodes);
   const tapped = Date.now();
   if (yes?.frame) {
@@ -1454,12 +1529,32 @@ try {
     ACCOUNT,
     MACHINE
   );
+  // A second login moved in, from OpenCode's store, and not signed in on the
+  // scratch machine: its entry stands open with its to-do, while the probe's
+  // own (signed in there) folds as signed in everywhere.
+  fleet.write(
+    "INSERT OR IGNORE INTO accounts (id, provider, kind, label, hue, \"order\", never_backup, created_at) VALUES (?, 'anthropic', 'console', ?, 'green', 1, 0, ?)",
+    `${ACCOUNT}-design`,
+    NOTICE_OPEN,
+    Date.now()
+  );
+  fleet.write(
+    "INSERT OR REPLACE INTO account_signins (account_id, machine_id, state, moved_at, moved_from, checked_at) VALUES (?, ?, 'signed-out', ?, 'opencode', ?)",
+    `${ACCOUNT}-design`,
+    MACHINE,
+    Date.now(),
+    Date.now()
+  );
   const accounts = await fleet.api<{
     signins: { accountId: string; movedAt: number | null }[];
   }>("/api/accounts");
-  const moved =
-    accounts.signins.find((one) => one.accountId === ACCOUNT)?.movedAt ?? null;
-  check("hub serves the moved login", moved !== null, `movedAt ${moved}`);
+  const movedIn = accounts.signins.filter((one) => one.movedAt !== null);
+  check(
+    "hub serves both moved logins",
+    movedIn.some((one) => one.accountId === ACCOUNT) &&
+      movedIn.some((one) => one.accountId === `${ACCOUNT}-design`),
+    `moved in: ${movedIn.map((one) => one.accountId).join(", ") || "none"}`
+  );
 
   // ── 3. The tunnel ──────────────────────────────────────────────────────
   const port = Number(new URL(fleet.base).port);

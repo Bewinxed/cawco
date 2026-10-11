@@ -252,7 +252,7 @@ public final class HomeModel {
                     kind: .ask(ask),
                     machineId: machineId,
                     title: row.map(fleet.title) ?? fleet.machineName(machineId),
-                    place: fleet.placeOf(machineId, row?.cwd),
+                    place: Naming.unbroken(fleet.placeOf(machineId, row?.cwd)),
                     raisedAt: ask.raisedAt
                 )
                 item.stale = row?.isStale == true

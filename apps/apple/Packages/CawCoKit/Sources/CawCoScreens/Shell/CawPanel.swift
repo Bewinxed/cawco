@@ -61,6 +61,10 @@ final class CawPanel: UIView, UIGestureRecognizerDelegate {
     private let card = HangCard()
     private let scroll = UIScrollView()
     private let list = UIStackView()
+    /// The house edge fade where the list runs past what the panel holds
+    /// (CawPanel.svelte `kit-edge-fade-block`), at its full 40pt on every
+    /// width: a phone's short fade lands in a row's gap and shows nothing.
+    private var fade: EdgeFade?
     /// What the rows said last: they are made again only when that changes.
     private var drawn = ""
     /// The groups whose signed-in-everywhere fold stands open: it stays open
@@ -99,6 +103,7 @@ final class CawPanel: UIView, UIGestureRecognizerDelegate {
         list.translatesAutoresizingMaskIntoConstraints = true
         scroll.addSubview(list)
         scroll.contentInsetAdjustmentBehavior = .never
+        fade = EdgeFade(scroll, length: 40)
     }
 
     @available(*, unavailable)

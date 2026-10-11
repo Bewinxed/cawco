@@ -43,7 +43,9 @@ public final class NoticeCloseButton: UIButton {
         addGestureRecognizer(UIHoverGestureRecognizer(target: self, action: #selector(hovered(_:))))
         accessibilityLabel = label
         accessibilityIdentifier = "notice-dismiss"
-        addAction(UIAction { _ in action() }, for: .touchUpInside)
+        // Its primary action: a finger's touch-up inside, and VoiceOver's or
+        // Full Keyboard Access's activation, which send no touch.
+        addAction(UIAction { _ in action() }, for: .primaryActionTriggered)
         NSLayoutConstraint.activate([
             widthAnchor.constraint(equalToConstant: Self.side),
             heightAnchor.constraint(equalToConstant: Self.side),

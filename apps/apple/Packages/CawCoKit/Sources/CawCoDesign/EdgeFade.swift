@@ -10,9 +10,14 @@ public final class EdgeFade {
     private weak var scroll: UIScrollView?
     private let mask = CAGradientLayer()
     private var watching: [NSKeyValueObservation] = []
+    /// A length set by the place (`--fade-len` on the element); nil: the kit's by width.
+    private let length: Double?
 
-    public init(_ scroll: UIScrollView) {
+    /// `length`: a fixed fade length, for a place whose foot must read as
+    /// "more below" on every width (Caw's panel, 40pt).
+    public init(_ scroll: UIScrollView, length: Double? = nil) {
         self.scroll = scroll
+        self.length = length
         mask.startPoint = CGPoint(x: 0.5, y: 0)
         mask.endPoint = CGPoint(x: 0.5, y: 1)
         mask.colors = [UIColor.clear.cgColor, UIColor.black.cgColor, UIColor.black.cgColor, UIColor.clear.cgColor]
@@ -35,7 +40,7 @@ public final class EdgeFade {
         let height = scroll.bounds.height
         if height > 0 {
             let screen = scroll.window?.bounds.width ?? scroll.bounds.width
-            let length = screen < 640 ? 16.0 : 40.0
+            let length = self.length ?? (screen < 640 ? 16.0 : 40.0)
             let inset = scroll.adjustedContentInset
             let above = max(0, scroll.contentOffset.y + inset.top)
             let below = max(0, scroll.contentSize.height + inset.bottom - scroll.contentOffset.y - height)

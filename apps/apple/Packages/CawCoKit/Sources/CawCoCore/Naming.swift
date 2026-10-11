@@ -17,6 +17,14 @@ public enum Naming {
         return name
     }
 
+    /// A name that never breaks inside itself where words wrap round it: a
+    /// word joiner (U+2060) after each hyphen, so "Omars-MacBook-Pro" wraps
+    /// before it as a whole, never as "Omars-" / "MacBook-Pro". For the
+    /// words a person reads; never for a name matched or sent.
+    public static func unbroken(_ name: String) -> String {
+        name.replacingOccurrences(of: "-", with: "-\u{2060}")
+    }
+
     private static let titleLimit = 80
 
     /// A session's first message as a title: a slash command's echo shows the
