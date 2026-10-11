@@ -1,10 +1,16 @@
 <script lang="ts" module>
   /**
    * Rim width and the gap inside it, in px, per size: the rim reads at 16px;
-   * at 56px (the usage popover's dial wall) the week is a 6px band 3px off
-   * the disc, so weeks compare by eye from cell to cell.
+   * at the dial wall's sizes (32, 40, 56) the week is a band wide enough,
+   * and far enough off the disc, that weeks compare by eye from cell to cell.
    */
-  const RIMS = { 16: [1.5, 1], 24: [2, 1.5], 56: [6, 3] } as const;
+  const RIMS = {
+    16: [1.5, 1],
+    24: [2, 1.5],
+    32: [3.5, 1.5],
+    40: [4.5, 2],
+    56: [6, 3],
+  } as const;
 </script>
 
 <script lang="ts">
@@ -36,7 +42,7 @@
     index = 0,
   }: {
     ring: RingAccount;
-    size: 16 | 24 | 56;
+    size: keyof typeof RIMS;
     /** Draw the arcs from empty as it mounts (the strip and the page). */
     reveal?: boolean;
     /** Its place among the marks it appears with: the reveal's stagger. */

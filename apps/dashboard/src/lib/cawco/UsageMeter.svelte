@@ -111,48 +111,26 @@
    * sheet, so every cell holds the longest time line on one line.
    */
   const across = $derived(touch.current ? 3 : 4);
-  /** The wall's tracks before its cells: its organization's head. */
-  const headTracks = (block: WallBlock): number => (block.head ? 1 : 0);
-  /** The row cell `i` stands in. */
-  const rowOf = (i: number): number => Math.floor(i / across);
+  /** The tracks a cell's parts stand on: its dial, its name, its time and week. */
+  const TRACKS = 3;
   /**
-   * Where cell `i` stands: on its column, its row's four tracks, one track
-   * lower from the joined row on, where the joined run's head stands.
+   * Where cell `i` of a block stands: on its column, on its row's tracks,
+   * under its block's head when it has one.
    */
-  const placeOf = (block: WallBlock, i: number) => {
-    const row = rowOf(i);
-    const joined = block.join !== null && row >= rowOf(block.join);
-    return {
-      column: `${(i % across) + 1}`,
-      row: `${1 + headTracks(block) + row * 4 + (joined ? 1 : 0)} / span 4`,
-    };
-  };
-  /** The joined run's head: over its columns, on the track above its row. */
-  const joinHeadOf = (block: WallBlock, join: number) => {
-    const first = (join % across) + 1;
-    const track = 1 + headTracks(block) + rowOf(join) * 4;
-    return {
-      column: `${first} / -1`,
-      row: `${track}`,
-      /** The hairline: in the gap before its first column, from the head down. */
-      seam: { column: `${first}`, row: `${track} / span 5` },
-    };
-  };
+  const placeOf = (block: WallBlock, i: number) => ({
+    column: `${(i % across) + 1}`,
+    row: `${1 + (block.head ? 1 : 0) + Math.floor(i / across) * TRACKS} / span ${TRACKS}`,
+  });
   /** A cell: its account, and whether an organization's head stands over it. */
   interface WallCell {
     grouped: boolean;
     ring: RingAccount;
   }
-  /**
-   * An organization's cells under its name, or (null) the ungrouped ones;
-   * from `join` on, ungrouped accounts that went on along the
-   * organization's last row (null: none did).
-   */
+  /** An organization's cells under its name, or (null) the ungrouped ones. */
   interface WallBlock {
     cells: WallCell[];
     /** Its head: the organization's name, "Other" under groups, or none. */
     head: string | null;
-    join: number | null;
     org: string | null;
   }
   /** The ungrouped accounts' head, where a group's head stands above. */
@@ -172,8 +150,8 @@
   const roomOf = (ring: RingAccount): number =>
     (ring.bind === "week" ? ring.week?.left : ring.w5?.left) ?? 0;
   /**
-   * The time each cell says first: the latest forecast stop first ("over
-   * 5h" before any time), ties to the most room; accounts at their limit
+   * The time each cell says first: the latest forecast stop first ("5h+
+   * left" before any time), ties to the most room; accounts at their limit
    * last, the one back soonest first; then the carrying order. Read across
    * a row, the times run down.
    */
@@ -196,46 +174,24 @@
     });
   };
   /**
-   * Claude's accounts as blocks, `across` wide, each ranked by its time.
-   * Where the last organization's last row leaves two or more places, the
-   * ungrouped accounts go on along it, on the same columns, under their
-   * own "Other" head after a hairline in the gap; the rest stand in a
-   * block of their own under the same head.
+   * Claude's accounts as blocks, each ranked by its time and starting its
+   * own row: an organization's under its name, then the ungrouped ones,
+   * under "Other" where a group stands above them.
    */
   const wall = $derived.by((): WallBlock[] => {
     if (!claude) {
       return [];
     }
-    const blocks: WallBlock[] = [];
-    for (const group of orgGroups(claude.accounts)) {
-      const cells = ranked(group.accounts, claude).map((ring) => ({
+    const groups = orgGroups(claude.accounts);
+    return groups.map((group, i) => ({
+      org: group.org,
+      head: group.org ?? (i > 0 ? OTHER : null),
+      cells: ranked(group.accounts, claude).map((ring) => ({
         ring,
         grouped: group.org !== null,
-      }));
-      const last = blocks.at(-1);
-      const free = last ? (across - (last.cells.length % across)) % across : 0;
-      if (group.org === null && last && free >= 2) {
-        last.join = last.cells.length;
-        last.cells.push(...cells.splice(0, free));
-      }
-      if (cells.length > 0) {
-        blocks.push({
-          org: group.org,
-          head: group.org ?? (blocks.length > 0 ? OTHER : null),
-          cells,
-          join: null,
-        });
-      }
-    }
-    return blocks;
+      })),
+    }));
   });
-  /** Whether the row cell `i` stands in holds a session count. */
-  const countRow = (block: WallBlock, i: number): boolean => {
-    const start = i - (i % across);
-    return block.cells
-      .slice(start, start + across)
-      .some((one) => one.ring.sessions.length > 0);
-  };
 
   /** An email domain's top level ("gmail.com" → "gmail"). */
   const TOP_DOMAIN = /\.[^.]+$/;
@@ -255,10 +211,9 @@
     return count;
   });
   /**
-   * A cell's name on two lines: its first line, then, only where an
-   * ungrouped account shares that first line with another shown with it,
-   * its domain's stem ("@gmail"). Under an organization's head the head
-   * tells them apart.
+   * A cell's name: its first line, then, only where an ungrouped account
+   * shares that first line with another shown with it, its domain's stem
+   * ("@gmail"). Under an organization's head the head tells them apart.
    */
   const cellName = (
     ring: RingAccount,
@@ -583,20 +538,18 @@
   ring: RingAccount,
   grouped: boolean,
   time: string,
-  lowered: boolean,
-  joined: boolean,
   place: { column: string; row: string }
 )}
-  <!-- A cell of the dial wall: the sessions it runs at its top corner, off
-       the dial; the double dial at 56px (its disc the 5-hour window, its
-       rim the week); its name on two lines; how long it lasts; its week.
-       Its four parts are its row's four tracks (subgrid), so every time and
-       every week stand on one line across the row. A re-ranking slides it
-       to its new place (motion/rows). -->
+  <!-- A cell of the dial wall: the sessions it runs beside the dial's
+       top-right; the double dial at 56px (its disc the 5-hour window, its
+       rim the week); its name on one line; how long it lasts, and its week
+       under that when it has one. Its three parts are its row's three
+       tracks (subgrid), so every time stands on one line across the row. A
+       re-ranking slides it to its new place (motion/rows). -->
   {@const name = cellName(ring, grouped)}
   {@const week = weekText(ring)}
   <div
-    class={["cell-d", joined && "joined", lowered && "lowered"]}
+    class="cell-d"
     data-account={ring.id}
     data-bind={ring.bind}
     data-flip
@@ -606,16 +559,6 @@
     class:carrying={ring.id === claude?.carry?.id}
     class:limit={ring.state === "limit"}
   >
-    {#if ring.sessions.length > 0}
-      <span class="cell-chip">
-        <SessionsChip
-          account={ring.name}
-          name={`${name.local}${name.domain}`}
-          onopen={putAway}
-          sessions={ring.sessions}
-        />
-      </span>
-    {/if}
     <span class="dial">
       {#if ring.state === "stale"}
         <Tip label={staleTip(ring, now)} side="top">
@@ -636,15 +579,31 @@
       {:else}
         <Rings {ring} size={56} />
       {/if}
+      {#if ring.sessions.length > 0}
+        <span class="cell-chip">
+          <SessionsChip
+            account={ring.name}
+            name={`${name.local}${name.domain}`}
+            onopen={putAway}
+            sessions={ring.sessions}
+          />
+        </span>
+      {/if}
     </span>
-    <!-- Two lines in every cell: the first line, then the domain's stem
-         only where it tells two accounts apart. -->
+    <!-- The first line, then the domain's stem right after it only where
+         it tells two accounts apart. -->
     <span class="nm" data-name>
       <span class="nm-local">{name.local}</span>
-      <span class="nm-domain">{name.domain}</span>
+      {#if name.domain}
+        <span class="nm-domain">{name.domain}</span>
+      {/if}
     </span>
-    <span class="line" data-time>{time}</span>
-    <span class="line" data-week>{week}</span>
+    <span class="lines">
+      <span class="line" data-time>{time}</span>
+      {#if week}
+        <span class="line" data-week>{week}</span>
+      {/if}
+    </span>
   </div>
 {/snippet}
 
@@ -692,9 +651,7 @@
           data-burn-week={claude.burnWeek}
         >
           <!-- An organization of more than two accounts is a group under its
-               name; the rest follow, ungrouped, along its last row after a
-               hairline when two places are left there, else after the same
-               gap a group's name stands after. -->
+               name; the rest follow, ungrouped, on rows of their own. -->
           {#each wall as block (block.org ?? "")}
             <div
               class="wall"
@@ -707,34 +664,10 @@
                 </h4>
               {/if}
               {#each block.cells as one, i (one.ring.id)}
-                {#if i === block.join}
-                  {@const at = joinHeadOf(block, i)}
-                  <!-- The ungrouped run along the group's last row says why
-                       it stands there, over its own columns, a hairline from
-                       its head down setting it apart from the group's. -->
-                  <span
-                    aria-hidden="true"
-                    class="seam"
-                    data-seam
-                    style:grid-column={at.seam.column}
-                    style:grid-row={at.seam.row}
-                  ></span>
-                  <h4
-                    class="org"
-                    data-flyover-edge
-                    data-org-head
-                    style:grid-column={at.column}
-                    style:grid-row={at.row}
-                  >
-                    {OTHER}
-                  </h4>
-                {/if}
                 {@render cell(
                   one.ring,
                   one.grouped,
                   cellTime(one.ring, claude, now),
-                  countRow(block, i),
-                  i === block.join,
                   placeOf(block, i)
                 )}
               {/each}
@@ -760,14 +693,10 @@
             opencode Go
           </h3>
           <div class="wall" data-flyover-span>
-            {@render cell(
-              openCode,
-              true,
-              cellTime(openCode, null, now),
-              openCode.sessions.length > 0,
-              false,
-              { column: "1", row: "1 / span 4" }
-            )}
+            {@render cell(openCode, true, cellTime(openCode, null, now), {
+              column: "1",
+              row: `1 / span ${TRACKS}`,
+            })}
           </div>
         </section>
       {/if}
@@ -1133,8 +1062,7 @@
     cursor: help;
   }
   /* The dial wall: an organization's name across it, then its cells on
-     four columns, one pitch apart; every row of it, a joined one too, on
-     the same columns. */
+     four columns, one pitch apart. */
   .wall {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1149,14 +1077,14 @@
   :global(.usage-sheet) .wall {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
-  /* A cell: the dial over its name, its time and its week, centred, in
-     meta, on four tracks of its row (subgrid). The carrier wears a hairline
-     ring; an account at its limit the limit wash, which the dial's reserve
-     notch takes as its ground. */
+  /* A cell: the dial over its name, then its time over its week, centred,
+     in meta, on three tracks of its row (subgrid). The carrier wears a
+     hairline ring; an account at its limit the limit wash, which the dial's
+     reserve notch takes as its ground. */
   .cell-d {
     position: relative;
     display: grid;
-    grid-row: span 4;
+    grid-row: span 3;
     grid-template-rows: subgrid;
     row-gap: 2px;
     justify-items: center;
@@ -1175,43 +1103,25 @@
     --ring-ground: var(--meter-wash-over);
   }
   .dial {
+    position: relative;
     display: grid;
   }
-  /* The session count, 16px, stands in its cell's top corner, beside the
-     dial's top-right, 4px or more off the week rim: in a row that has one
-     the dials stand space-3 lower, what a two-digit count needs in the
-     narrowest cell (85px, the sheet at 320). */
-  .cell-d.lowered .dial {
-    margin-block-start: var(--space-3);
-  }
-  /* The ungrouped run along an organization's last row: a hairline in the
-     column gap before its first cell, from its "Other" head to the foot of
-     its row, so the head reads as its own and the group's cells stay the
-     group's. */
-  .seam {
-    justify-self: start;
-    inline-size: 1px;
-    margin-inline-start: calc(var(--space-1) / -2 - 0.5px);
-    background: var(--border-control);
-  }
-  /* Its touch area reaches the full 44px up and down, and space-5 / 2 to
-     either side: a count in the last column stays inside the wall's
-     padding, so the accounts never scroll sideways. */
+  /* The session count, 16px, stands beside the dial's top-right: level
+     with the cell's top edge, starting where the dial's box ends, 4px off
+     the week rim. Its touch area reaches the full 44px up and down, and
+     space-5 / 2 to either side: a count in the last column stays inside
+     the wall's padding, so the accounts never scroll sideways. */
   .cell-chip {
     --hit-gap-x: var(--space-5);
     position: absolute;
-    inset-block-start: 0;
-    inset-inline-end: 0;
+    inset-block-start: calc(-1 * var(--space-1));
+    inset-inline-start: 100%;
     display: grid;
   }
-  /* Two lines in every cell, so every row's times stand level: the first
-     line strong, the domain's stem (where it is needed) quiet. A name
-     never ends in an ellipsis; one longer than the cell wraps. */
+  /* One line: the first line strong, the domain's stem (where it is
+     needed) quiet right after it, going under it only when the two don't
+     fit. A name never ends in an ellipsis; one longer than the cell wraps. */
   .nm {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    min-block-size: 2lh;
     max-inline-size: 100%;
     overflow-wrap: anywhere;
     font: var(--type-meta);
@@ -1221,7 +1131,16 @@
     color: var(--ink-strong);
   }
   .nm-domain {
+    display: inline-block;
     color: var(--ink-muted);
+  }
+  /* The time, and the week under it when there is one. */
+  .lines {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    max-inline-size: 100%;
   }
   /* One line each: the cell is as wide as the longest of them. */
   .line {

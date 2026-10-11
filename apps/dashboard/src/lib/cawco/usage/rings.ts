@@ -611,7 +611,8 @@ export function stopOf(
 
 /**
  * The time under a dial-wall cell's name, one shape for every account: its
- * forecast stop ("1h 20m left", "over 5h"; `stopOf`), or at its limit when
+ * forecast stop ("1h 20m left"; `stopOf`), "5h+ left" when it won't run out
+ * inside the five hours (no stop), or at its limit when
  * it's back ("back in 4h 50m"); a reading out of date puts a tilde before
  * it ("~1h 20m left"), and the dial's tooltip says why. Who takes over when
  * is the relay bar's to say.
@@ -629,7 +630,7 @@ export function cellTime(
   const out = stopOf(r, c, now);
   return guess(
     r.state === "stale",
-    out === null ? "over 5h" : `${fmt(out - now)} left`
+    out === null ? "5h+ left" : `${fmt(out - now)} left`
   );
 }
 
