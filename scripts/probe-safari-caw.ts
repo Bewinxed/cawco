@@ -10,11 +10,13 @@
  *
  *  1. takes the booted iPhone simulator (or `--udid`), and opens the
  *     dashboard URL in its Safari (`xcrun simctl openurl`);
- *  2. finds Caw in the accessibility tree by his label (axe describe-ui:
- *     "Needs you, N", "All caught up", … and " · N notices");
+ *  2. finds Caw in the page by his label ("Needs you, N", "All caught up", …
+ *     and " · N notices"), read by idb's guest reader (`idb ui describe-all
+ *     --api axbridge`), the one reader that reaches into the page Safari's
+ *     web content process draws;
  *  3. for each run: records the screen (`xcrun simctl io recordVideo`), taps
- *     Caw (axe tap), lets the panel open, stops the recording, and taps him
- *     again to close it;
+ *     Caw (idb's synthesized touch), lets the panel open, stops the
+ *     recording, and taps him again to close it;
  *  4. reads each recording's video track itself: the media timescale from
  *     its `mdhd` and every frame's duration from its `stts` (a QuickTime
  *     movie is the same box tree as an MP4), so no ffprobe is needed;
@@ -26,7 +28,9 @@
  * The recorder writes a frame only when the screen changed, so a still
  * screen shows as one long interval; the open is the run of short ones after
  * the tap. Safari must already be past its first-launch screens on the
- * simulator. Recordings are kept in the folder it names.
+ * simulator, and the Mac needs idb (`brew install facebook/fb/idb`); the
+ * companion it starts for the simulator is stopped at the end. Recordings
+ * are kept in the folder it names.
  */
 import { mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
@@ -73,42 +77,84 @@ async function run(cmd: string[]): Promise<string> {
   return text;
 }
 
-const AXE = (await Bun.file("/opt/homebrew/bin/axe").exists())
-  ? "/opt/homebrew/bin/axe"
-  : "axe";
-
 /**
  * A shell command on the Mac. This probe runs on the Mac itself, so it runs
  * here; the name and the shape are the remote probes' (probe-ios-caw-panel),
- * so `axe` below is their copy word for word.
+ * so the idb calls below are their copy word for word.
  */
 const mac = (script: string) => run(["bash", "-c", script]);
 
 /**
- * axe's own failures to reach a simulator's automation session, which a
- * just-booted or busy simulator gives for a while ("No translation object
- * returned for simulator… invisible due to a fullscreen dialog", a timed-out
- * session); nothing was read or touched, so the call is made again.
+ * idb on the Mac (`brew install facebook/fb/idb`), its companion named
+ * outright: the client looks for it on PATH, which a non-login shell there
+ * lacks. `--retry-verdict` has a failed call say whether it may be sent again.
  */
-const AXE_SESSION =
-  /No translation object|remote automation session|Timed out creating/;
-/** One axe command on the Mac, tried up to 4 times 2s apart while axe cannot reach the simulator. */
-async function axe(command: string): Promise<string> {
+const IDB =
+  "/opt/homebrew/bin/idb --companion-path /opt/homebrew/bin/idb_companion --retry-verdict";
+/**
+ * The companion's word that a failed call changed nothing and may be sent
+ * again as it was (idb's RetryVerdict: `safe`, or `safe_after_reread`).
+ */
+const RETRY_SAFE = /^retry: safe(_after_reread)? /m;
+/** One idb command on the Mac, sent again up to 3 times, 0.5s apart (idb `ui wait`'s poll interval), while the companion says it may be. */
+async function idb(command: string): Promise<string> {
   for (let attempt = 1; ; attempt += 1) {
     try {
       // biome-ignore lint/performance/noAwaitInLoops: each try follows the last one's failure
-      return await mac(`${AXE} ${command}`);
+      return await mac(`${IDB} ${command}`);
     } catch (error) {
-      if (attempt >= 4 || !AXE_SESSION.test(String(error))) {
+      if (attempt >= 4 || !RETRY_SAFE.test(String(error))) {
         throw error;
       }
       console.log(
-        `  axe could not reach the simulator (try ${attempt}): ${String(error).slice(0, 160)}`
+        `  idb may send it again (try ${attempt}): ${String(error).replace(/\s+/g, " ").slice(0, 160)}`
       );
-      await Bun.sleep(2000);
+      await Bun.sleep(500);
     }
   }
 }
+
+/** One idb read: the elements (each with its `children`) and the screen they stand on, in points. */
+interface ScreenRead {
+  elements: unknown[];
+  screen: { height: number; width: number };
+}
+/**
+ * The screen as idb's guest reader reads it (`--api axbridge`), from inside
+ * the simulator: the frontmost app's whole tree, or with `point` the element
+ * under it. The host's reader (axe's) reaches neither a page in Safari, which
+ * another process draws, nor the iPad's app once its panel opens ("No
+ * translation object"), so a read the companion served any other way is refused.
+ */
+async function screenRead(
+  udid: string,
+  point?: { x: number; y: number }
+): Promise<ScreenRead> {
+  const what = point
+    ? `describe-point ${Math.round(point.x)} ${Math.round(point.y)}`
+    : "describe-all";
+  const read = JSON.parse(
+    await idb(`ui ${what} --udid ${udid} --api axbridge --format complete`)
+  ) as Partial<ScreenRead> & { backend?: string | null };
+  if (!(read.backend?.startsWith("axbridge") && read.elements && read.screen)) {
+    throw new Error(
+      `idb's read was not its guest reader's (backend ${read.backend ?? "not named"}): upgrade idb on the Mac (brew upgrade facebook/fb/idb)`
+    );
+  }
+  return read as ScreenRead;
+}
+/** One finger's tap at a point, in points: a synthesized touch. */
+const tap = (udid: string, p: { x: number; y: number }) =>
+  idb(`ui tap ${Math.round(p.x)} ${Math.round(p.y)} --api hid --udid ${udid}`);
+/**
+ * The companion idb starts for `udid` (`idb_companion --udid <udid>
+ * --grpc-domain-sock …`), as `pgrep -f` matches it: the bracket keeps it off
+ * the shell running the match, whose own command line holds the pattern.
+ */
+const companionOf = (udid: string) => `[i]db_companion.* --udid ${udid} `;
+/** That companion, stopped. */
+const stopCompanion = (udid: string) =>
+  mac(`pkill -f "${companionOf(udid)}" || true`);
 
 /** The simulator: `--udid`, or the booted iPhone. */
 async function device(): Promise<string> {
@@ -142,7 +188,7 @@ interface Node {
   label?: string;
 }
 
-/** Every labelled element of the screen's accessibility tree, flattened. */
+/** Every element of the screen's accessibility tree, the page's with Safari's, flattened. */
 async function tree(udid: string): Promise<Node[]> {
   const nodes: Node[] = [];
   const walk = (at: unknown) => {
@@ -162,18 +208,13 @@ async function tree(udid: string): Promise<Node[]> {
     });
     walk(o.children);
   };
-  walk(JSON.parse(await axe(`describe-ui --udid ${udid}`)));
+  walk((await screenRead(udid)).elements);
   return nodes;
 }
 
 /** Caw's own label (NeedsCaw `label`). */
 const CAW_LABEL =
   /^(Needs you, \d+|All caught up|Reading the fleet|Connecting…|Hub unreachable)( · \d+ notices?)?$/;
-
-const tap = (udid: string, frame: Frame) =>
-  axe(
-    `tap -x ${Math.round(frame.x + frame.width / 2)} -y ${Math.round(frame.y + frame.height / 2)} --udid ${udid}`
-  );
 
 /* ── The recording's frame times ─────────────────────────────────────── */
 
@@ -297,15 +338,32 @@ function openBurst(durations: number[], leadMs: number): number[] {
 /* ── The runs ────────────────────────────────────────────────────────── */
 
 const phone = await device();
+/** A companion already serving the simulator is another's: only one this probe starts is stopped. */
+const ours =
+  (await mac(`pgrep -f "${companionOf(phone)}" || true`)).trim() === "";
+const cleanUp = async () => {
+  if (ours) {
+    await stopCompanion(phone).catch((error) =>
+      console.log(`  idb companion cleanup: ${error}`)
+    );
+  }
+};
+
 await run(["xcrun", "simctl", "openurl", phone, url]);
 console.log(`  opened ${url} in Safari; waiting for Caw`);
 let caw: Node | undefined;
 let seen: Node[] = [];
-for (let attempt = 0; attempt < 30 && !caw?.frame; attempt += 1) {
-  // biome-ignore lint/performance/noAwaitInLoops: polling the screen until the page has loaded
-  await Bun.sleep(1000);
-  seen = await tree(phone);
-  caw = seen.find((node) => CAW_LABEL.test(node.label ?? "") && node.frame);
+try {
+  for (let attempt = 0; attempt < 30 && !caw?.frame; attempt += 1) {
+    // biome-ignore lint/performance/noAwaitInLoops: polling the screen until the page has loaded
+    await Bun.sleep(1000);
+    seen = await tree(phone);
+    caw = seen.find((node) => CAW_LABEL.test(node.label ?? "") && node.frame);
+  }
+} catch (error) {
+  console.error(`FAIL the screen could not be read: ${error}`);
+  await cleanUp();
+  process.exit(1);
 }
 if (!caw?.frame) {
   const capture = join(out, "no-caw.png");
@@ -320,46 +378,54 @@ if (!caw?.frame) {
   console.error(
     `FAIL Caw was not found on the screen: is the dashboard loaded and narrow (a phone)?\n  on screen: ${labels || "no labels"}\n  capture: ${capture}`
   );
+  await cleanUp();
   process.exit(1);
 }
 console.log(`  Caw: "${caw.label}" at ${JSON.stringify(caw.frame)}`);
-const cawFrame = caw.frame;
+const cawAt = {
+  x: caw.frame.x + caw.frame.width / 2,
+  y: caw.frame.y + caw.frame.height / 2,
+};
 
 const summaries: { dropped: number; frames: number; max: number }[] = [];
-for (let n = 0; n < RUNS; n += 1) {
-  const file = join(out, `open-${n}.mov`);
-  const recorder = Bun.spawn(
-    [
-      "xcrun",
-      "simctl",
-      "io",
-      phone,
-      "recordVideo",
-      "--codec=h264",
-      "--force",
-      file,
-    ],
-    { stdout: "ignore", stderr: "pipe" }
-  );
-  // biome-ignore lint/performance/noAwaitInLoops: one recording at a time
-  await Bun.sleep(LEAD_MS);
-  await tap(phone, cawFrame);
-  await Bun.sleep(OPEN_MS);
-  recorder.kill("SIGINT");
-  await recorder.exited;
-  // Close the panel: his press toggles it.
-  await tap(phone, cawFrame);
-  await Bun.sleep(800);
+try {
+  for (let n = 0; n < RUNS; n += 1) {
+    const file = join(out, `open-${n}.mov`);
+    const recorder = Bun.spawn(
+      [
+        "xcrun",
+        "simctl",
+        "io",
+        phone,
+        "recordVideo",
+        "--codec=h264",
+        "--force",
+        file,
+      ],
+      { stdout: "ignore", stderr: "pipe" }
+    );
+    // biome-ignore lint/performance/noAwaitInLoops: one recording at a time
+    await Bun.sleep(LEAD_MS);
+    await tap(phone, cawAt);
+    await Bun.sleep(OPEN_MS);
+    recorder.kill("SIGINT");
+    await recorder.exited;
+    // Close the panel: his press toggles it.
+    await tap(phone, cawAt);
+    await Bun.sleep(800);
 
-  const durations = frameDurations(await Bun.file(file).arrayBuffer());
-  const burst = openBurst(durations, LEAD_MS);
-  const total = burst.reduce((sum, ms) => sum + ms, 0);
-  const max = burst.length > 0 ? Math.max(...burst) : 0;
-  const dropped = burst.filter((ms) => ms > DROPPED_MS).length;
-  summaries.push({ frames: burst.length + 1, max, dropped });
-  console.log(
-    `run ${n}: ${burst.length + 1} frames over ${total.toFixed(0)} ms, longest ${max.toFixed(1)} ms, ${dropped} over ${DROPPED_MS} ms; intervals ${burst.map((ms) => ms.toFixed(0)).join(" ")}`
-  );
+    const durations = frameDurations(await Bun.file(file).arrayBuffer());
+    const burst = openBurst(durations, LEAD_MS);
+    const total = burst.reduce((sum, ms) => sum + ms, 0);
+    const max = burst.length > 0 ? Math.max(...burst) : 0;
+    const dropped = burst.filter((ms) => ms > DROPPED_MS).length;
+    summaries.push({ frames: burst.length + 1, max, dropped });
+    console.log(
+      `run ${n}: ${burst.length + 1} frames over ${total.toFixed(0)} ms, longest ${max.toFixed(1)} ms, ${dropped} over ${DROPPED_MS} ms; intervals ${burst.map((ms) => ms.toFixed(0)).join(" ")}`
+    );
+  }
+} finally {
+  await cleanUp();
 }
 
 const sorted = (values: number[]) => [...values].sort((a, b) => a - b);

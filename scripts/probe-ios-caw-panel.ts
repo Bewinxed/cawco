@@ -20,7 +20,8 @@
  *     the hub serves as a moved-login notice;
  *  3. forwards the scratch hub to the Mac's loopback (`ssh -R`);
  *  4. on an iPhone and then an iPad simulator, launches the app with
- *     `-paywall-env sandbox` on "Panel probe" and drives it with axe: taps
+ *     `-paywall-env sandbox` on "Panel probe" and drives it with idb (its
+ *     guest reader reads the screen, its synthesized touches tap): taps
  *     Caw, reads the panel and how it hangs from his glass (0pt at the join,
  *     the trailing flank straight down, the leading foot's flare in the
  *     panel's surface), captures it light and dark (and on the phone records
@@ -34,8 +35,9 @@
  *     folder it names, and exits 0 only if every check passed.
  *
  * It stops only what it started: the fleet's processes by PID, the tunnel,
- * and the simulators it created (deleted at the end). `--keep` keeps the
- * fleet's sandbox for reading.
+ * the idb companion of each simulator it created, and those simulators
+ * (deleted at the end). `--keep` keeps the fleet's sandbox for reading. The
+ * Mac needs idb (`brew install facebook/fb/idb`).
  */
 import { mkdir } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
@@ -52,7 +54,6 @@ const keep = process.argv.includes("--keep");
 const root = resolve(import.meta.dir, "..");
 const home = process.env.HOME ?? "";
 const SSH = ["ssh", "-F", join(home, ".ssh", "config"), "-o", "BatchMode=yes"];
-const AXE = "/opt/homebrew/bin/axe";
 /** ssh's exit status when it could not reach or keep the Mac. */
 const SSH_FAILED = 255;
 const out = join(root, ".probe", `ios-caw-panel-${Date.now()}`);
@@ -185,14 +186,7 @@ async function tree(
   udid: string,
   point?: { x: number; y: number }
 ): Promise<Node[]> {
-  const where = point
-    ? ` --point ${Math.round(point.x)},${Math.round(point.y)}`
-    : "";
-  const raw = await unblocked(
-    udid,
-    `describe-ui${where} --udid ${udid}`,
-    `describe-ui${where}`
-  );
+  const read = await screenRead(udid, point);
   const nodes: Node[] = [];
   const walk = (at: unknown) => {
     if (Array.isArray(at)) {
@@ -213,7 +207,7 @@ async function tree(
     });
     walk(o.children);
   };
-  walk(JSON.parse(raw));
+  walk(read.elements);
   return nodes;
 }
 const said = (nodes: Node[]) =>
@@ -226,102 +220,77 @@ const centre = (f: Frame) => ({ x: f.x + f.width / 2, y: f.y + f.height / 2 });
 const inside = (f: Frame, p: { x: number; y: number }) =>
   p.x >= f.x && p.x <= f.x + f.width && p.y >= f.y && p.y <= f.y + f.height;
 const pause = (ms: number) => Bun.sleep(ms);
-/** One finger's tap at a point, in points. */
-const tap = (udid: string, p: { x: number; y: number }) =>
-  unblocked(
-    udid,
-    `tap -x ${Math.round(p.x)} -y ${Math.round(p.y)} --udid ${udid}`,
-    `tap at (${Math.round(p.x)}, ${Math.round(p.y)})`
-  );
-
 /**
- * Every axe call the probe makes on a simulator (`tree`'s describe-ui,
- * `tap`). One axe still cannot make after its tries ("invisible due to a
- * fullscreen dialog": something of the system's over the app, which a
- * freshly booted iPad can put up) leaves what was on screen (a screenshot
- * beside the captures, axe-blocked-N.png, and the tree's labels), presses
- * Escape at whatever stands over the app, and tries again after 10s; only
- * a call still blocked then fails the run.
+ * idb on the Mac (`brew install facebook/fb/idb`), its companion named
+ * outright: the client looks for it on PATH, which a non-login shell there
+ * lacks. `--retry-verdict` has a failed call say whether it may be sent again.
  */
-async function unblocked(
-  udid: string,
-  args: string,
-  what: string
-): Promise<string> {
-  try {
-    return await axe(args);
-  } catch (error) {
-    if (!AXE_SESSION.test(String(error))) {
-      throw error;
-    }
-    blocked += 1;
-    console.log(`  ${what} blocked: what was on screen follows`);
-    await shot(udid, `axe-blocked-${blocked}`).catch(() => undefined);
-    const labels = await mac(`${AXE} describe-ui --udid ${udid}`)
-      .then(
-        (raw) =>
-          JSON.stringify(JSON.parse(raw))
-            .match(/"AXLabel":"[^"]*"/g)
-            ?.slice(0, 30)
-            .join(" ") ?? "no labels"
-      )
-      .catch(
-        (reason) => `describe-ui failed too: ${String(reason).slice(0, 160)}`
-      );
-    console.log(`  the tree's first labels: ${labels}`);
-    // Escape (HID 41) dismisses a system sheet or HUD where one takes keys.
-    await mac(`${AXE} key 41 --udid ${udid}`).catch(() => undefined);
-    await Bun.sleep(10_000);
-    try {
-      const answer = await axe(args);
-      console.log(`  ${what} went through after waiting`);
-      return answer;
-    } catch (again) {
-      if (!AXE_SESSION.test(String(again))) {
-        throw again;
-      }
-    }
-    // Nothing over the app and still no translation: the host's
-    // CoreSimulatorBridge is wedged, and launchd respawns it when killed
-    // (https://github.com/getsentry/XcodeBuildMCP/issues/458).
-    console.log(
-      "  still blocked with nothing over the app: restarting CoreSimulatorBridge"
-    );
-    await mac(
-      "pgrep -f /usr/libexec/CoreSimulatorBridge | xargs kill -9; sleep 3"
-    ).catch(() => undefined);
-    const answer = await axe(args);
-    console.log(`  ${what} went through after the bridge restarted`);
-    return answer;
-  }
-}
-let blocked = 0;
-
+const IDB =
+  "/opt/homebrew/bin/idb --companion-path /opt/homebrew/bin/idb_companion --retry-verdict";
 /**
- * axe's own failures to reach a simulator's automation session, which a
- * just-booted or busy simulator gives for a while ("No translation object
- * returned for simulator… invisible due to a fullscreen dialog", a timed-out
- * session); nothing was read or touched, so the call is made again.
+ * The companion's word that a failed call changed nothing and may be sent
+ * again as it was (idb's RetryVerdict: `safe`, or `safe_after_reread`).
  */
-const AXE_SESSION =
-  /No translation object|remote automation session|Timed out creating/;
-/** One axe command on the Mac, tried up to 4 times 2s apart while axe cannot reach the simulator. */
-async function axe(command: string): Promise<string> {
+const RETRY_SAFE = /^retry: safe(_after_reread)? /m;
+/** One idb command on the Mac, sent again up to 3 times, 0.5s apart (idb `ui wait`'s poll interval), while the companion says it may be. */
+async function idb(command: string): Promise<string> {
   for (let attempt = 1; ; attempt += 1) {
     try {
       // biome-ignore lint/performance/noAwaitInLoops: each try follows the last one's failure
-      return await mac(`${AXE} ${command}`);
+      return await mac(`${IDB} ${command}`);
     } catch (error) {
-      if (attempt >= 4 || !AXE_SESSION.test(String(error))) {
+      if (attempt >= 4 || !RETRY_SAFE.test(String(error))) {
         throw error;
       }
       console.log(
-        `  axe could not reach the simulator (try ${attempt}): ${String(error).slice(0, 160)}`
+        `  idb may send it again (try ${attempt}): ${String(error).replace(/\s+/g, " ").slice(0, 160)}`
       );
-      await Bun.sleep(2000);
+      await Bun.sleep(500);
     }
   }
 }
+
+/** One idb read: the elements (each with its `children`) and the screen they stand on, in points. */
+interface ScreenRead {
+  elements: unknown[];
+  screen: { height: number; width: number };
+}
+/**
+ * The screen as idb's guest reader reads it (`--api axbridge`), from inside
+ * the simulator: the frontmost app's whole tree, or with `point` the element
+ * under it. The host's reader (axe's) reaches neither a page in Safari, which
+ * another process draws, nor the iPad's app once its panel opens ("No
+ * translation object"), so a read the companion served any other way is refused.
+ */
+async function screenRead(
+  udid: string,
+  point?: { x: number; y: number }
+): Promise<ScreenRead> {
+  const what = point
+    ? `describe-point ${Math.round(point.x)} ${Math.round(point.y)}`
+    : "describe-all";
+  const read = JSON.parse(
+    await idb(`ui ${what} --udid ${udid} --api axbridge --format complete`)
+  ) as Partial<ScreenRead> & { backend?: string | null };
+  if (!(read.backend?.startsWith("axbridge") && read.elements && read.screen)) {
+    throw new Error(
+      `idb's read was not its guest reader's (backend ${read.backend ?? "not named"}): upgrade idb on the Mac (brew upgrade facebook/fb/idb)`
+    );
+  }
+  return read as ScreenRead;
+}
+/** One finger's tap at a point, in points: a synthesized touch. */
+const tap = (udid: string, p: { x: number; y: number }) =>
+  idb(`ui tap ${Math.round(p.x)} ${Math.round(p.y)} --api hid --udid ${udid}`);
+/**
+ * The companion idb starts for `udid` (`idb_companion --udid <udid>
+ * --grpc-domain-sock …`), as `pgrep -f` matches it: the bracket keeps it off
+ * the shell running the match, whose own command line holds the pattern.
+ */
+const companionOf = (udid: string) => `[i]db_companion.* --udid ${udid} `;
+/** That companion, stopped. */
+const stopCompanion = (udid: string) =>
+  mac(`pkill -f "${companionOf(udid)}" || true`);
 
 /** The moved login's row (MovedLogins.svelte): the account's name is its entry, its ✕ "Dismiss moved logins". */
 const NOTICE = "Probe";
@@ -466,12 +435,7 @@ xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-e
     await restChecks(udid);
   }
   // The screen before the panel opens: what stands where the glass will flare.
-  const screen = nodes[0]?.frame?.width;
-  if (!screen) {
-    check(`${kind}: the screen reads`, false, "describe-ui gave no window");
-    return;
-  }
-  const closed = await pixels(udid, screen);
+  const closed = await pixels(udid, (await screenRead(udid)).screen.width);
   await tap(udid, centre(head.frame));
   await pause(1200);
   nodes = await tree(udid);
@@ -1166,6 +1130,9 @@ try {
 } finally {
   for (const udid of sims) {
     // biome-ignore lint/performance/noAwaitInLoops: one ssh session at a time, each simulator torn down in turn
+    await stopCompanion(udid).catch((error) =>
+      console.log(`  idb companion cleanup: ${error}`)
+    );
     await mac(`xcrun simctl terminate ${udid} dev.cawco.app >/dev/null 2>&1 || true
 xcrun simctl shutdown ${udid} >/dev/null 2>&1 || true
 xcrun simctl delete ${udid}`).catch((error) =>
