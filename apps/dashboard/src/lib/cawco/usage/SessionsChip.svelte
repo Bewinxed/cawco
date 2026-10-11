@@ -16,7 +16,11 @@
    * `[data-flyover-anchor]`, a cell of the usage popover's dial wall), as
    * wide as the row: where the cell stands in a wall (`[data-flyover-span]`)
    * the row is the wall's whole width at the cell's height, so a session's
-   * title and project read whole. It is as tall as its sessions. Opened by
+   * title and project read whole. It is as tall as its sessions, unless its
+   * foot would cut through a line of words under it (a cell's name, time or
+   * week, below its dial; a head, `[data-flyover-edge]`, in
+   * `[data-flyover-scope]`): then it reaches that cell's or line's foot, so
+   * it covers whole rows of words or none. Opened by
    * a pointer (a rest or a press) it leaves focus where it
    * is: no ring lands on its first session. Opened from the keyboard, focus
    * goes to the first session and the house ring shows.
@@ -80,6 +84,54 @@
       event.preventDefault();
     }
   };
+
+  /** The list, and the height it reaches to so it never cuts words (0: its own). */
+  let list = $state<HTMLElement | null>(null);
+  let reach = $state(0);
+  $effect(() => {
+    if (!(open && list && row)) {
+      reach = 0;
+      return;
+    }
+    const items = list;
+    const cell = row;
+    const scope = cell.closest<HTMLElement>("[data-flyover-scope]");
+    if (!scope) {
+      return;
+    }
+    const frame = requestAnimationFrame(() => {
+      // It stands a pitch (4px) under the row, with a 1px edge each side.
+      const top = cell.getBoundingClientRect().bottom + 4;
+      const zones = [
+        ...[...scope.querySelectorAll<HTMLElement>("[data-flyover-anchor]")]
+          .filter((one) => one !== cell)
+          .map((one) => ({
+            top: (
+              one.querySelector("[data-name]") ?? one
+            ).getBoundingClientRect().top,
+            bottom: one.getBoundingClientRect().bottom,
+          })),
+        ...[...scope.querySelectorAll<HTMLElement>("[data-flyover-edge]")].map(
+          (one) => {
+            const at = one.getBoundingClientRect();
+            return { top: at.top, bottom: at.bottom };
+          }
+        ),
+      ];
+      let end = top + items.offsetHeight + 2;
+      for (let moved = true; moved; ) {
+        moved = false;
+        for (const zone of zones) {
+          if (zone.top < end - 0.5 && end < zone.bottom - 0.5) {
+            end = zone.bottom;
+            moved = true;
+          }
+        }
+      }
+      reach = end - top > items.offsetHeight + 2.5 ? end - top : 0;
+    });
+    return () => cancelAnimationFrame(frame);
+  });
 
   const count = $derived(sessions.length);
   const label = $derived(
@@ -151,9 +203,10 @@
     onpointerleave={leave}
     side="bottom"
     sideOffset={4}
+    style={reach > 0 ? `min-block-size: ${reach}px` : undefined}
     trapFocus={!byPointer}
   >
-    <ul aria-label={label} class="list">
+    <ul aria-label={label} class="list" bind:this={list}>
       {#each sessions as session (session.id)}
         <li>
           <a

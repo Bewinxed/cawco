@@ -100,9 +100,38 @@
   const now = $derived(usage.now);
   const shown = $derived(Boolean(claude || openCode));
 
+  /** Touch, or a phone's width: the limits open in the house bottom sheet. */
+  const touch = new MediaQuery(
+    "(hover: none), (pointer: coarse), (max-width: 640px)"
+  );
+
   // ── the dial wall ──
-  /** Cells across the wall. */
-  const ACROSS = 4;
+  /**
+   * Cells across the wall: four in the popover (`c-panel-w`), three in the
+   * sheet, so every cell holds the longest time line on one line.
+   */
+  const across = $derived(touch.current ? 3 : 4);
+  /** The wall's tracks before its cells: its organization's head. */
+  const headTracks = (block: WallBlock): number => (block.head ? 1 : 0);
+  /** The row cell `i` stands in. */
+  const rowOf = (i: number): number => Math.floor(i / across);
+  /**
+   * Where cell `i` stands: on its column, its row's four tracks, one track
+   * lower from the joined row on, where the joined run's head stands.
+   */
+  const placeOf = (block: WallBlock, i: number) => {
+    const row = rowOf(i);
+    const joined = block.join !== null && row >= rowOf(block.join);
+    return {
+      column: `${(i % across) + 1}`,
+      row: `${1 + headTracks(block) + row * 4 + (joined ? 1 : 0)} / span 4`,
+    };
+  };
+  /** The joined run's head: over its columns, on the track above its row. */
+  const joinHeadOf = (block: WallBlock, join: number) => ({
+    column: `${(join % across) + 1} / -1`,
+    row: `${1 + headTracks(block) + rowOf(join) * 4}`,
+  });
   /** A cell: its account, and whether an organization's head stands over it. */
   interface WallCell {
     grouped: boolean;
@@ -115,9 +144,13 @@
    */
   interface WallBlock {
     cells: WallCell[];
+    /** Its head: the organization's name, "Other" under groups, or none. */
+    head: string | null;
     join: number | null;
     org: string | null;
   }
+  /** The ungrouped accounts' head, where a group's head stands above. */
+  const OTHER = "Other";
   /**
    * The moment the wall ranks at: the last reading's, so the minute moving
    * on, which shortens every running account's time but no idle one's,
@@ -157,11 +190,11 @@
     });
   };
   /**
-   * Claude's accounts as blocks, four across, each ranked by room. Where
-   * the last organization's last row leaves two or more places, the
-   * ungrouped accounts go on along it, on the same columns, after a
-   * hairline in the gap; the rest stand in a block of their own after the
-   * group gap.
+   * Claude's accounts as blocks, `across` wide, each ranked by its time.
+   * Where the last organization's last row leaves two or more places, the
+   * ungrouped accounts go on along it, on the same columns, under their
+   * own "Other" head after a hairline in the gap; the rest stand in a
+   * block of their own under the same head.
    */
   const wall = $derived.by((): WallBlock[] => {
     if (!claude) {
@@ -174,22 +207,27 @@
         grouped: group.org !== null,
       }));
       const last = blocks.at(-1);
-      const free = last ? (ACROSS - (last.cells.length % ACROSS)) % ACROSS : 0;
+      const free = last ? (across - (last.cells.length % across)) % across : 0;
       if (group.org === null && last && free >= 2) {
         last.join = last.cells.length;
         last.cells.push(...cells.splice(0, free));
       }
       if (cells.length > 0) {
-        blocks.push({ org: group.org, cells, join: null });
+        blocks.push({
+          org: group.org,
+          head: group.org ?? (blocks.length > 0 ? OTHER : null),
+          cells,
+          join: null,
+        });
       }
     }
     return blocks;
   });
   /** Whether the row cell `i` stands in holds a session count. */
   const countRow = (block: WallBlock, i: number): boolean => {
-    const start = i - (i % ACROSS);
+    const start = i - (i % across);
     return block.cells
-      .slice(start, start + ACROSS)
+      .slice(start, start + across)
       .some((one) => one.ring.sessions.length > 0);
   };
 
@@ -230,13 +268,6 @@
           : "",
     };
   };
-  /** The space inside a figure ("1h 20m"). */
-  const FIGURE_SPACE = /(\d[hm]) (?=\d)/g;
-  /**
-   * A cell's time with its figure held together: in a narrow cell "back
-   * in", "over" or "left" takes a line of its own, never half the figure.
-   */
-  const unbroken = (time: string): string => time.replace(FIGURE_SPACE, "$1 ");
   /** Its week, one style in every cell: "wk 62%" left, "wk 0%" at its limit. */
   const weekText = (ring: RingAccount): string => {
     if (ring.limitOn === "week") {
@@ -270,6 +301,93 @@
    */
   const slotAt = (i: number, n: number): string =>
     n < 2 ? "0px" : `min(${i * SLOT}px, (100% - 16px) * ${i / (n - 1)})`;
+  /** The room the marks have in the strip, as laid out (`roomFor`). */
+  let marksRoom = $state(Number.POSITIVE_INFINITY);
+  /** How many marks stand a slot apart in that room. */
+  const marksFit = $derived(Math.max(1, Math.floor((marksRoom + 4) / SLOT)));
+  /**
+   * The strip's marks: every account while they stand a slot apart, else
+   * as many as do, less one place for a "+N" count of the rest. The
+   * popover shows them all.
+   */
+  const stripMarks = $derived.by(() => {
+    const all = claude?.accounts ?? [];
+    return all.length > marksFit ? all.slice(0, marksFit - 1) : all;
+  });
+  const stripMore = $derived(
+    (claude?.accounts.length ?? 0) - stripMarks.length
+  );
+  /**
+   * The accounts, when they scroll, end on a whole cell or section, never a
+   * sliver of one, with the edge fade over that fold: their height is the
+   * deepest cell or section foot that fits the room the popover or sheet
+   * gives them. When everything fits they take their own height.
+   */
+  const wholeRows = (node: HTMLElement) => {
+    let frame = 0;
+    const fold = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        node.style.maxBlockSize = "";
+        const room = node.clientHeight;
+        if (node.scrollHeight <= room + 1) {
+          return;
+        }
+        // Layout offsets, not drawn boxes: the popover is still scaling in
+        // from 0.92 when this first runs, and a transform moves no foot.
+        const footOf = (one: HTMLElement) => {
+          let top = 0;
+          for (
+            let at: HTMLElement | null = one;
+            at && at !== node;
+            at = at.offsetParent as HTMLElement | null
+          ) {
+            top += at.offsetTop;
+          }
+          return top + one.offsetHeight;
+        };
+        const feet = [
+          ...node.querySelectorAll<HTMLElement>(
+            "[data-flyover-anchor], [data-flyover-edge], .group"
+          ),
+        ]
+          .map(footOf)
+          .filter((foot) => foot <= room + 0.5);
+        const deepest = Math.max(0, ...feet);
+        if (deepest > 0) {
+          node.style.maxBlockSize = `${deepest}px`;
+        }
+      });
+    };
+    const sizes = new ResizeObserver(fold);
+    const watch = () => {
+      sizes.disconnect();
+      for (const child of node.children) {
+        sizes.observe(child);
+      }
+    };
+    watch();
+    const children = new MutationObserver(() => {
+      watch();
+      fold();
+    });
+    children.observe(node, { childList: true });
+    window.addEventListener("resize", fold);
+    return () => {
+      cancelAnimationFrame(frame);
+      sizes.disconnect();
+      children.disconnect();
+      window.removeEventListener("resize", fold);
+    };
+  };
+  /** Reads the room the marks span is given (it asks for every account's). */
+  const roomFor = (node: HTMLElement) => {
+    const sizes = new ResizeObserver(([entry]) => {
+      marksRoom = entry.contentRect.width;
+    });
+    sizes.observe(node);
+    return () => sizes.disconnect();
+  };
 
   /** Why there is nothing to draw: a normal state, never a fake 0%. */
   const empty = $derived(
@@ -385,11 +503,6 @@
       },
     };
   }
-
-  /** Touch, or a phone's width: the limits open in the house bottom sheet. */
-  const touch = new MediaQuery(
-    "(hover: none), (pointer: coarse), (max-width: 640px)"
-  );
 </script>
 
 {#snippet face()}
@@ -403,17 +516,34 @@
             <span aria-hidden="true" class="mark"><ClaudeIcon /></span>
             <span
               class="marks"
+              data-strip-marks
               style:flex-basis="{claude.accounts.length * SLOT - 4}px"
+              {@attach roomFor}
             >
-              {#each claude.accounts as ring, i (ring.id)}
+              {#each stripMarks as ring, i (ring.id)}
                 <span
                   class="slot"
-                  style:inset-inline-start={slotAt(i, claude.accounts.length)}
+                  style:inset-inline-start={slotAt(
+                    i,
+                    stripMarks.length + (stripMore > 0 ? 1 : 0)
+                  )}
                   use:slot={i}
                 >
                   <Rings index={i} reveal {ring} size={16} />
                 </span>
               {/each}
+              {#if stripMore > 0}
+                <!-- The rest, counted: the popover shows every one. -->
+                <span
+                  class="slot more"
+                  data-strip-more
+                  style:inset-inline-start={slotAt(
+                    stripMarks.length,
+                    stripMarks.length + 1
+                  )}
+                  >+{stripMore}</span
+                >
+              {/if}
             </span>
             <span
               class="digits"
@@ -422,7 +552,7 @@
               ><Figure text={stopText(claude, now)} /></span
             >
           </span>
-          <span class="cap" data-strip-caption
+          <span class="cap" data-next={claude.next?.id} data-strip-caption
             ><Words parts={caption(claude, now)} /></span
           >
         </span>
@@ -448,7 +578,8 @@
   grouped: boolean,
   time: string,
   lowered: boolean,
-  joined: boolean
+  joined: boolean,
+  place: { column: string; row: string }
 )}
   <!-- A cell of the dial wall: the sessions it runs at its top corner, off
        the dial; the double dial at 56px (its disc the 5-hour window, its
@@ -464,6 +595,8 @@
     data-bind={ring.bind}
     data-flip
     data-flyover-anchor
+    style:grid-column={place.column}
+    style:grid-row={place.row}
     class:carrying={ring.id === claude?.carry?.id}
     class:limit={ring.state === "limit"}
   >
@@ -503,7 +636,7 @@
       <span class="nm-local">{name.local}</span>
       <span class="nm-domain">{name.domain}</span>
     </span>
-    <span class="line" data-time>{unbroken(time)}</span>
+    <span class="line" data-time>{time}</span>
     <span class="line" data-week>{week}</span>
   </div>
 {/snippet}
@@ -541,7 +674,9 @@
     <div
       class={["accounts kit-edge-fade-block", sheet && "kit-sheet-scroll"]}
       data-accounts
+      data-flyover-scope
       {@attach reflow()}
+      {@attach wholeRows}
     >
       {#if claude}
         <div
@@ -559,23 +694,44 @@
               data-flyover-span
               data-org-group={block.org ?? ""}
             >
-              {#if block.org}
-                <h4 class="org" data-org-head>{block.org}</h4>
+              {#if block.head}
+                <h4 class="org" data-flyover-edge data-org-head>
+                  {block.head}
+                </h4>
               {/if}
               {#each block.cells as one, i (one.ring.id)}
+                {#if i === block.join}
+                  {@const at = joinHeadOf(block, i)}
+                  <!-- The ungrouped run along the group's last row says why
+                       it stands there, over its own columns. -->
+                  <h4
+                    class="org"
+                    data-flyover-edge
+                    data-org-head
+                    style:grid-column={at.column}
+                    style:grid-row={at.row}
+                  >
+                    {OTHER}
+                  </h4>
+                {/if}
                 {@render cell(
                   one.ring,
                   one.grouped,
                   cellTime(one.ring, claude, now),
                   countRow(block, i),
-                  i === block.join
+                  i === block.join,
+                  placeOf(block, i)
                 )}
               {/each}
             </div>
           {/each}
+          <!-- The dial's key: what the disc and the ring measure. -->
+          <p class="key" data-dial-key data-flyover-edge>
+            Disc: 5-hour window left · Ring: week left
+          </p>
           {#if delegates.length > 0}
             <!-- Where new delegates start, said whole: no word to hover. -->
-            <p class="delegates" data-delegates>
+            <p class="delegates" data-delegates data-flyover-edge>
               <IconSubagents aria-hidden="true" />
               <Words parts={delegates} />
             </p>
@@ -584,7 +740,7 @@
       {/if}
       {#if openCode}
         <section class="group">
-          <h3 class="provider">
+          <h3 class="provider" data-flyover-edge>
             <span aria-hidden="true" class="mark"><OpenCodeLogo /></span>
             opencode Go
           </h3>
@@ -594,7 +750,8 @@
               true,
               cellTime(openCode, null, now),
               openCode.sessions.length > 0,
-              false
+              false,
+              { column: "1", row: "1 / span 4" }
             )}
           </div>
         </section>
@@ -665,7 +822,7 @@
       </Popover.Trigger>
       <Popover.Content
         align="start"
-        class="usage-pop w-[min(20rem,calc(100vw-16px))] gap-0 rounded-[var(--radius-lg)] p-0 shadow-lg"
+        class="usage-pop w-[min(var(--c-panel-w),calc(100vw-16px))] gap-0 rounded-[var(--radius-lg)] p-0 shadow-lg"
         collisionPadding={8}
         onOpenAutoFocus={keepFocus}
         side="top"
@@ -801,6 +958,16 @@
     inset-block-start: 0;
     display: grid;
     transition: inset-inline-start var(--dur-reveal) var(--ease-in-out);
+  }
+  /* "+N": the accounts past what stands a slot apart, in meta. */
+  .slot.more {
+    place-items: center;
+    min-inline-size: 16px;
+    block-size: 16px;
+    font: var(--type-meta);
+    font-variant-numeric: tabular-nums;
+    line-height: 16px;
+    color: var(--ink-muted);
   }
   .digits {
     flex: none;
@@ -961,6 +1128,11 @@
       grid-column: 1 / -1;
     }
   }
+  /* Three across in the sheet: an 85px cell at 320 holds the longest time
+     line, where a fourth column would leave it 63px. */
+  :global(.usage-sheet) .wall {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
   /* A cell: the dial over its name, its time and its week, centred, in
      meta, on four tracks of its row (subgrid). The carrier wears a hairline
      ring; an account at its limit the limit wash, which the dial's reserve
@@ -974,7 +1146,7 @@
     justify-items: center;
     align-items: start;
     min-inline-size: 0;
-    padding: var(--space-1) 2px;
+    padding: var(--space-1) 0;
     border-radius: var(--radius-sm);
     text-align: center;
     transition: background-color var(--dur-fade) var(--ease-out);
@@ -991,10 +1163,10 @@
   }
   /* The session count, 16px, stands in its cell's top corner, beside the
      dial's top-right, 4px or more off the week rim: in a row that has one
-     the dials stand space-5 lower, what a two-digit count at a 63px cell
-     (320px wide) needs. */
+     the dials stand space-3 lower, what a two-digit count needs in the
+     narrowest cell (85px, the sheet at 320). */
   .cell-d.lowered .dial {
-    margin-block-start: var(--space-5);
+    margin-block-start: var(--space-3);
   }
   /* The first ungrouped account going on along an organization's last row:
      a hairline, the cell's height, in the column gap before it. */
@@ -1035,11 +1207,18 @@
   .nm-domain {
     color: var(--ink-muted);
   }
+  /* One line each: the cell is as wide as the longest of them. */
   .line {
     max-inline-size: 100%;
-    text-wrap: balance;
+    white-space: nowrap;
     font: var(--type-meta);
     font-variant-numeric: tabular-nums;
+    color: var(--ink-muted);
+  }
+  /* The dial's key, under the wall, in meta. */
+  .key {
+    padding: 0 var(--space-1);
+    font: var(--type-meta);
     color: var(--ink-muted);
   }
   /* Where new delegates start, in words under the wall. */

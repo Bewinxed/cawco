@@ -637,6 +637,8 @@
     /* A ledger's toolbar zone, holding 32px controls 11px in. */
     --c-toolbar-zone: 55px;
     --c-toolbar-ctl: 32px;
+    /* A side panel or a wide popover: Caw's panel, and the usage popover, whose dial wall needs four 86px cells so the longest time line ("back in 4h 50m", 82px in meta) stands on one line. */
+    --c-panel-w: 380px;
     /* The shell's top bar at every width: 43px and its 1px hairline, the compact bar's height (Apple HIG, Toolbars). Hosted tabs stand on its floor, a tab row's height below its top. */
     --c-top-bar-h: 44px;
     /* The phone bar's sidebar toggle: a bare glyph, its leading edge c-bar-phone-edge from the screen's and its centre on the tabs' centre line, in a 44px touch area. */

@@ -191,7 +191,7 @@
      under the drawn edge, and across the cut (and down a phone's screen
      edge, where no edge is drawn) it was a seam. */
   :global(.kit-pop.caw-pop) {
-    width: min(380px, calc(100vw - 24px));
+    width: min(var(--c-panel-w), calc(100vw - 24px));
     padding: 7px;
     box-shadow: var(--shadow-overlay-hung);
   }
@@ -201,7 +201,10 @@
      the phone's 12px margin on its leading side. */
   @media (max-width: 899px) {
     :global(.kit-pop.caw-pop) {
-      width: min(380px, calc(100vw - 12px - env(safe-area-inset-right, 0px)));
+      width: min(
+        var(--c-panel-w),
+        calc(100vw - 12px - env(safe-area-inset-right, 0px))
+      );
       border-end-end-radius: 0;
     }
     :global(.kit-pop.caw-pop)::after {

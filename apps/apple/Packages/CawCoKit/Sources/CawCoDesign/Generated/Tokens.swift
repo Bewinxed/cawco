@@ -488,6 +488,8 @@ public enum Size {
     /// A ledger's toolbar zone, holding 32px controls 11px in.
     public static let cToolbarZone: Double = 55
     public static let cToolbarCtl: Double = 32
+    /// A side panel or a wide popover: Caw's panel, and the usage popover, whose dial wall needs four 86px cells so the longest time line ("back in 4h 50m", 82px in meta) stands on one line.
+    public static let cPanelW: Double = 380
     /// The shell's top bar at every width: 43px and its 1px hairline, the compact bar's height (Apple HIG, Toolbars). Hosted tabs stand on its floor, a tab row's height below its top.
     public static let cTopBarH: Double = 44
     /// The phone bar's sidebar toggle: a bare glyph, its leading edge c-bar-phone-edge from the screen's and its centre on the tabs' centre line, in a 44px touch area.

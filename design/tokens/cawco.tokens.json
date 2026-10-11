@@ -2313,6 +2313,11 @@
       "$type": "dimension",
       "$value": "32px"
     },
+    "c-panel-w": {
+      "$type": "dimension",
+      "$value": "380px",
+      "$description": "A side panel or a wide popover: Caw's panel, and the usage popover, whose dial wall needs four 86px cells so the longest time line (\"back in 4h 50m\", 82px in meta) stands on one line."
+    },
     "c-top-bar-h": {
       "$type": "dimension",
       "$value": "44px",

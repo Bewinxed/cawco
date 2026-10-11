@@ -178,6 +178,73 @@
     machineId: "nixbox",
   } as unknown as InstanceRow;
 
+  /**
+   * Who carries your new sessions, span by span, as the hub walks it
+   * (forecast.ts carrySequence) under Fill first (placement.ts fillFirst):
+   * the first account in order with headroom (5-hour and week under 100,
+   * not out) carries; the fleet's burn moves onto it; one that runs out is
+   * out until its 5-hour window resets, which starts it again from nothing.
+   */
+  function relayOf(
+    seeds: Seed[],
+    forecasts: AccountForecast[],
+    now: number
+  ): CarrySpan[] {
+    const horizon = now + 5 * HOUR;
+    const burn = forecasts.reduce(
+      (sum, one) =>
+        sum + (one.windows.find((w) => w.kind === "session")?.pace ?? 0),
+      0
+    );
+    const use = seeds.map((seed) => seed.five);
+    const reset = seeds.map((seed) => now + seed.fiveResets);
+    const out: { i: number; until: number }[] = [];
+    const spans: CarrySpan[] = [];
+    const push = (i: number | null, from: number, to: number) => {
+      const accountId = i === null ? null : `acc-${i}`;
+      const last = spans.at(-1);
+      if (last && last.accountId === accountId && last.to === from) {
+        last.to = to;
+      } else if (to > from) {
+        spans.push({ accountId, from, to });
+      }
+    };
+    let t = now;
+    for (let step = 0; step < 64 && t < horizon; step += 1) {
+      reset.forEach((at, i) => {
+        if (at <= t) {
+          use[i] = 0;
+          reset[i] = at + 5 * HOUR;
+        }
+      });
+      const back = Math.min(
+        ...[...out.map((one) => one.until), ...reset].filter((at) => at > t)
+      );
+      const carrier = seeds.findIndex(
+        (seed, i) =>
+          Math.max(use[i] ?? 0, seed.week) < 100 &&
+          !out.some((one) => one.i === i && one.until > t)
+      );
+      if (carrier < 0) {
+        const until = Math.min(horizon, back);
+        push(null, t, until);
+        t = until;
+        continue;
+      }
+      const from = use[carrier] ?? 0;
+      const runsOut =
+        burn > 0 ? t + ((100 - from) / burn) * HOUR : Number.POSITIVE_INFINITY;
+      const until = Math.min(horizon, runsOut, back);
+      push(carrier, t, until);
+      use[carrier] = from + (burn * (until - t)) / HOUR;
+      if (until === runsOut && runsOut < horizon) {
+        out.push({ i: carrier, until: reset[carrier] ?? until + 5 * HOUR });
+      }
+      t = until;
+    }
+    return spans;
+  }
+
   function stageView(n: number) {
     const now = Date.now();
     const seeds = [
@@ -251,16 +318,7 @@
         windows,
       };
     });
-    // design carries, then bewinxed, then jude (out of date), then
-    // marketing; nothing for 20m; rand is back from its limit.
-    const yours: CarrySpan[] = [
-      { accountId: "acc-0", from: now, to: now + 80 * MIN },
-      { accountId: "acc-1", from: now + 80 * MIN, to: now + 170 * MIN },
-      { accountId: "acc-2", from: now + 170 * MIN, to: now + 220 * MIN },
-      { accountId: "acc-3", from: now + 220 * MIN, to: now + 270 * MIN },
-      { accountId: null, from: now + 270 * MIN, to: now + 290 * MIN },
-      { accountId: "acc-4", from: now + 290 * MIN, to: now + 9 * HOUR },
-    ];
+    const yours = relayOf(seeds, forecasts, now);
     // Delegates go where the hub's Spread puts them (placement.ts): the
     // lowest binding use, the higher of the 5-hour and weekly use, ties to
     // the account order.
