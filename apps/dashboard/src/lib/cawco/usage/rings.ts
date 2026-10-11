@@ -666,9 +666,11 @@ export function cellTime(
 }
 
 /**
- * A dial's tooltip, a line per window: what is left of it and, on the window
- * that binds, how long that lasts at this pace; a spent window says when
- * it's back. An out-of-date reading says so first.
+ * A dial's tooltip under its account's name, a short line per limit: what
+ * is left of it and, on the one that binds, how long that lasts at this
+ * pace ("5-hour: 29% left · 1h 12m at this pace"); a spent one says when
+ * it's back. An out-of-date reading adds one line, "Estimate: last reading
+ * 14m ago".
  */
 export function dialTip(
   r: RingAccount,
@@ -676,11 +678,10 @@ export function dialTip(
   now: number
 ): string {
   const time = cellTime(r, c, now);
-  const pace =
-    time.kind === "stop" ? ` · lasts ${time.figure} at this pace` : "";
+  const pace = time.kind === "stop" ? ` · ${time.figure} at this pace` : "";
   const spent =
     r.backAt === null ? "used up" : `used up · back in ${until(r.backAt, now)}`;
-  const window = (
+  const line = (
     label: string,
     limited: boolean,
     left: number | undefined,
@@ -694,11 +695,11 @@ export function dialTip(
       : `${label}: ${left}% left${binds ? pace : ""}`;
   };
   return [
-    r.state === "stale" ? staleTip(r, now) : null,
-    window("5-hour window", r.limitOn === "5h", r.w5?.left, r.bind !== "week"),
-    window("Week", r.limitOn === "week", r.week?.left, r.bind === "week"),
+    line("5-hour", r.limitOn === "5h", r.w5?.left, r.bind !== "week"),
+    line("Week", r.limitOn === "week", r.week?.left, r.bind === "week"),
+    r.state === "stale" ? estimateOf(r, now) : null,
   ]
-    .filter((line) => line !== null)
+    .filter((one) => one !== null)
     .join("\n");
 }
 
@@ -830,21 +831,25 @@ export function orgGroups(accounts: RingAccount[]): OrgGroup[] {
   ];
 }
 
-/** A stale ring's tooltip: how old its reading is, and what that makes it. */
-export const staleTip = (r: RingAccount, now: number): string =>
+/** An out-of-date reading's line in its dial's tooltip: how old it is. */
+const estimateOf = (r: RingAccount, now: number): string =>
   r.seenAt === null
-    ? "No reading yet, so this is an estimate."
-    : `Last reading ${fmt(now - r.seenAt)} ago, so this is an estimate.`;
+    ? "Estimate: no reading yet"
+    : `Estimate: last reading ${fmt(now - r.seenAt)} ago`;
 
 /** The routing's reason as placement applies it (hub placement.ts). */
 const DELEGATE_WHY: Record<string, string> = {
-  "first in your order": "It’s the first in your order with room.",
-  "resets soonest": "Its 5-hour window resets soonest.",
-  pinned: "Delegates are pinned to it.",
+  "first in your order": "it’s the first in your order with room.",
+  "resets soonest": "its 5-hour limit resets soonest.",
+  pinned: "delegates are pinned to it.",
 };
 
-/** The share an account has left on both its windows: the lower of the two. */
-const leftOnBoth = (r: RingAccount): number =>
+/**
+ * What placement's spread compares (hub placement.ts `Usage.binding`, the
+ * higher of an account's 5-hour and week use): the share left on its lower
+ * limit.
+ */
+const lowerLeft = (r: RingAccount): number =>
   Math.min(
     r.limitOn === "5h" ? 0 : (r.w5?.left ?? 100),
     r.limitOn === "week" ? 0 : (r.week?.left ?? 100)
@@ -852,29 +857,31 @@ const leftOnBoth = (r: RingAccount): number =>
 
 /**
  * The tooltip on the delegates' mark, by the cell of the account new
- * delegates start on: why, in the words of the rule placement applies, so
- * the wall cannot contradict it. Spread takes the lowest binding use, the
- * higher of an account's 5-hour and weekly use (hub placement.ts `spread`,
- * `Usage.binding`): the most left on both windows; an account with more
- * left that it passed over was held back, past its reserve (placement's
- * `pastReserve`) or not one delegates may run on.
+ * delegates start on: why, saying exactly what placement computes, so the
+ * wall cannot contradict it. Spread takes the lowest binding use, the higher
+ * of an account's 5-hour and week use (hub placement.ts `spread`): the
+ * account whose lower limit has the most left. One with more left that it
+ * passed over was held back, past its reserve (placement's `pastReserve`)
+ * or not one delegates may run on.
  */
 export function delegateTip(c: ClaudeRings, to: RingAccount): string {
   if (c.delegateWhy !== "most room left") {
     const why = DELEGATE_WHY[c.delegateWhy];
     return why
-      ? `New delegates start here. ${why}`
+      ? `New delegates start here: ${why}`
       : "New delegates start here.";
   }
+  const left = lowerLeft(to);
   const passed = c.accounts.filter(
-    (r) => r.id !== to.id && leftOnBoth(r) > leftOnBoth(to)
+    (r) => r.id !== to.id && lowerLeft(r) > left
   );
+  const lead = `New delegates start here: its lower limit has ${left}% left,`;
   if (passed.length === 0) {
-    return "New delegates start here. It has the most room on both windows.";
+    return `${lead} more than any other account’s.`;
   }
   return passed.every((r) => r.state === "reserve")
-    ? "New delegates start here. It has the most room on both windows outside your reserve."
-    : "New delegates start here. It has the most room on both windows of the accounts they can use.";
+    ? `${lead} more than any account’s outside your reserve.`
+    : `${lead} more than any other account’s delegates can use.`;
 }
 
 /** A tile's sentence: the same status, said whole. */

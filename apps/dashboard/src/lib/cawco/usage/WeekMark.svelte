@@ -1,37 +1,65 @@
 <script lang="ts">
   /**
-   * The week's mark before a cell's week figure: the dial's rim on its own,
-   * an outline ring 10px across, its stroke the 32px dial's rim at this
-   * size, in the line's ink, so "62%" reads as what the rim measures.
+   * The week's mark before a week figure: the dial's rim in small, 10px
+   * across, its arc filled clockwise from 12 o'clock to what is left of the
+   * week in the rim's own shade (the account's hue toward
+   * `account-week-toward`, as Rings draws it), over the empty track's grey.
+   * At the week's limit only the track shows.
    */
-  import { RIMS } from "./Rings.svelte";
+  import type { RingAccount } from "./rings";
 
-  const [rim] = RIMS[32];
-  /** The 32px dial's rim in the 24-unit box both draw in. */
-  const width = (rim * 24) / 32;
+  let { ring }: { ring: RingAccount } = $props();
+
+  const left = $derived(ring.limitOn === "week" ? 0 : (ring.week?.left ?? 0));
 </script>
 
 <svg
   aria-hidden="true"
   class="week-mark"
+  data-week-left={left}
   height="10"
-  viewBox="0 0 24 24"
+  viewBox="0 0 10 10"
   width="10"
+  style:--c={ring.color}
 >
+  <circle class="track" cx="5" cy="5" r="4" />
   <circle
-    cx="12"
-    cy="12"
-    fill="none"
-    r={12 - width / 2}
-    stroke="currentColor"
-    stroke-width={width}
+    class="arc"
+    cx="5"
+    cy="5"
+    pathLength="100"
+    r="4"
+    style:stroke-dashoffset={(100 - left).toFixed(2)}
   />
 </svg>
 
 <style>
   .week-mark {
     display: inline-block;
-    margin-inline-end: var(--space-1);
+    flex: none;
     vertical-align: middle;
+  }
+  circle {
+    fill: none;
+    stroke-width: 2;
+    transform: rotate(-90deg);
+    transform-origin: 5px 5px;
+  }
+  .track {
+    stroke: var(--border-control);
+  }
+  .arc {
+    stroke: color-mix(
+      in oklch,
+      var(--c),
+      var(--account-week-toward) calc(var(--account-week-mix) * 100%)
+    );
+    stroke-dasharray: 100 100;
+    transition: stroke-dashoffset var(--dur-panel) var(--ease-in-out);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .arc {
+      transition: none;
+    }
   }
 </style>

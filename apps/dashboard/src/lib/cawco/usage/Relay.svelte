@@ -16,6 +16,7 @@
    */
   import type { CarrySpan } from "@cawco/core";
   import { fade } from "svelte/transition";
+  import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { dur, easeOut, motionOk } from "../motion/curves.svelte";
   import { usage } from "./forecast.svelte";
   import { fmt, HORIZON_MS, type RingAccount } from "./rings";
@@ -25,12 +26,18 @@
     accounts,
     now,
     stopAt,
+    nameOf,
+    onlight,
   }: {
     spans: CarrySpan[];
     accounts: RingAccount[];
     now: number;
     /** When nothing can carry you (`ClaudeRings.stopAt`), null if never. */
     stopAt: number | null;
+    /** An account by the name its cell shows. */
+    nameOf: (ring: RingAccount) => string;
+    /** A band is hovered or open (its account), or no longer (null). */
+    onlight: (id: string | null) => void;
   } = $props();
 
   type Segment =
@@ -83,6 +90,24 @@
     }
     return out;
   });
+
+  /** Where each segment starts, from now. */
+  const startOf = $derived.by(() => {
+    const at = new Map<string, number>();
+    let sum = 0;
+    for (const seg of segments) {
+      at.set(seg.key, sum);
+      sum += seg.ms;
+    }
+    return at;
+  });
+  /** A moment on the bar: "now", else how far ahead ("+1h 40m"). */
+  const ahead = (ms: number): string => (ms < 60_000 ? "now" : `+${fmt(ms)}`);
+  /** A band's tooltip: its account and its span, "design · now to +1h 40m". */
+  const bandTip = (seg: Segment & { kind: "band" }): string => {
+    const from = startOf.get(seg.key) ?? 0;
+    return `${nameOf(seg.ring)} · ${ahead(from)} to ${ahead(from + seg.ms)}`;
+  };
 
   /** Where nobody can carry you first: the stop, inside the five hours. */
   const stopKey = $derived(
@@ -156,15 +181,49 @@
   >
     {#each segments as seg (seg.key)}
       {#if seg.kind === "band"}
-        <span
-          class="band"
-          data-relay-band={seg.ring.id}
-          style:--c={seg.ring.color}
-          style:flex-grow={seg.ms}
-          class:stale={seg.ring.state === "stale"}
-          in:fade={bandIn()}
-          out:bandOut
-        ></span>
+        {@const tip = bandTip(seg)}
+        {@const id = seg.ring.id}
+        <!-- Hues repeat past seven accounts: each band names its account
+             and its span on a rest or a tap, and lights its cell. -->
+        <Tip
+          label={tip}
+          ontoggle={(open) => onlight(open ? id : null)}
+          side="bottom"
+          tap
+        >
+          {#snippet children(
+            props
+          )}
+            <span
+              {...props}
+              aria-label={tip}
+              class="band"
+              data-relay-band={id}
+              onpointerenter={(event) => {
+                (
+                  props.onpointerenter as
+                    | ((e: PointerEvent) => void)
+                    | undefined
+                )?.(event);
+                onlight(id);
+              }}
+              onpointerleave={(event) => {
+                (
+                  props.onpointerleave as
+                    | ((e: PointerEvent) => void)
+                    | undefined
+                )?.(event);
+                onlight(null);
+              }}
+              role="img"
+              style:--c={seg.ring.color}
+              style:flex-grow={seg.ms}
+              class:stale={seg.ring.state === "stale"}
+              in:fade={bandIn()}
+              out:bandOut
+            ></span>
+          {/snippet}
+        </Tip>
       {:else}
         <span
           aria-hidden="true"

@@ -5,7 +5,7 @@
    * control is passed as a snippet and spreads the trigger's props, so it
    * stays the element it was (button or link) and keeps its own aria-label,
    * which says the same as the label here. A label of several lines breaks
-   * at its newlines.
+   * at its newlines; a `title` stands over it, strong, saying whose it is.
    *
    * With `tap`, a touch press opens it too (and a second one closes it),
    * where a tooltip otherwise answers only a resting pointer or focus. A
@@ -19,13 +19,18 @@
 
   let {
     label,
+    title,
     keys,
     side = "bottom",
     disabled = false,
     tap = false,
+    anchor,
+    ontoggle,
     children,
   }: {
     label: string;
+    /** A strong first line over the label: whose it is. */
+    title?: string;
     /** The shortcut, as it is drawn: "⇧⌘N". */
     keys?: string;
     side?: "top" | "right" | "bottom" | "left";
@@ -33,10 +38,17 @@
     disabled?: boolean;
     /** A touch press opens it, as a resting pointer does. */
     tap?: boolean;
+    /** What it stands beside, where that is more than its trigger. */
+    anchor?: { getBoundingClientRect: () => DOMRect };
+    /** It opened or closed. */
+    ontoggle?: (open: boolean) => void;
     children: Snippet<[Record<string, unknown>]>;
   } = $props();
 
   let open = $state(false);
+  $effect(() => {
+    ontoggle?.(open);
+  });
   /** The pointer rests on a control inside the trigger, which speaks for itself. */
   let inside = $state(false);
   let touched = false;
@@ -77,8 +89,13 @@
       {@render children(withTap(props))}
     {/snippet}
   </Trigger>
-  <Content {side}>
-    <span class="whitespace-pre-line">{label}</span>
+  <Content customAnchor={anchor ?? null} {side}>
+    <span class="whitespace-pre-line"
+      >{#if title}
+        <strong class="block font-medium">{title}</strong>
+      {/if}
+      {label}</span
+    >
     {#if keys}
       <kbd class="font-sans opacity-70">{keys}</kbd>
     {/if}

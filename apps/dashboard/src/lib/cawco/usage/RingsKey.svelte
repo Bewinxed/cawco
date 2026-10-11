@@ -8,6 +8,7 @@
    * figure face.
    */
   import { type KeyRow, keyRows, type Part, type RingAccount } from "./rings";
+  import WeekMark from "./WeekMark.svelte";
 
   let { ring }: { ring: RingAccount } = $props();
 
@@ -28,7 +29,10 @@
 
 <div class="key" style:--c={ring.color}>
   {#each rows as row (row.id)}
-    {#if row.glyph}
+    {#if row.glyph === "rim"}
+      <!-- The week's own mark: the rim in small, filled to what is left. -->
+      <WeekMark {ring} />
+    {:else if row.glyph}
       <svg
         aria-hidden="true"
         class={["glyph", row.glyph]}
@@ -65,21 +69,8 @@
   .disc circle {
     fill: var(--c);
   }
-  /* The week's glyph wears the rim's shade (Rings), so the key matches. */
-  .rim circle {
-    fill: none;
-    stroke: color-mix(
-      in oklch,
-      var(--c),
-      var(--account-week-toward) calc(var(--account-week-mix) * 100%)
-    );
-    stroke-width: 1.5;
-  }
   .disc.limit circle {
     fill: var(--border-control);
-  }
-  .rim.limit circle {
-    stroke: var(--border-control);
   }
   .stale {
     opacity: 0.4;
