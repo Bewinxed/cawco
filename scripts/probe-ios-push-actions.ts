@@ -79,6 +79,12 @@ const SSH = ["ssh", "-F", join(home, ".ssh", "config"), "-o", "BatchMode=yes"];
 const BUNDLE = "dev.cawco.app";
 const BUILT_IOS = /^BUILT iOS$/m;
 const BUILT_IOS_18 = /^BUILT iOS 18\.5$/m;
+/** A thread's head in `sample`'s call graph, which names its dispatch queue. */
+const SAMPLE_THREAD = /\n(?=\s+\d+\s+Thread_)/;
+/** The notification centre's queues, and the app's own (NotificationCentre). */
+const CENTRE_QUEUE = /usernotifications|notification-centre/i;
+/** A notification framework line worth printing: the app's, or a failure. */
+const CENTRE_LINE = /CawCo|dev\.cawco\.app|error|fail|invalid|timed? ?out/i;
 // Inside the checkout it runs from (git-ignored), so whoever reads the run
 // reads the captures beside it.
 const out = join(root, ".probe", `ios-push-actions-${Date.now()}`);
@@ -737,6 +743,50 @@ rm -rf "$F"`).catch(() => "");
     console.log(
       `  CawCo crash reports since the flow began: ${crashes.trim().split("\n").filter(Boolean).join(", ") || "none"}`
     );
+    // Which side went quiet when the notification centre answered nothing.
+    // The centre runs every completion and delegate call on one serial
+    // `…UNUserNotificationServiceConnection.call-out` queue: a thread on it
+    // in the sample is a callout that never returned, and its stack says
+    // whose; no thread on it, with the app's own `dev.cawco.notification-centre`
+    // queue idle too, is a daemon that never replied. A simulator app is a
+    // Mac process, so the Mac's `sample` reads it.
+    const pid = running.trim().split(/\s+/)[0] ?? "";
+    if (/^\d+$/.test(pid)) {
+      const sampled = await mac(`F=$(mktemp -t cawco-sample)
+/usr/bin/sample ${pid} 2 -mayDie -file "$F" >/dev/null 2>&1 || true
+cat "$F"
+rm -f "$F"`).catch((error: unknown) => `sample failed: ${String(error)}`);
+      const sampleFile = join(out, "app-sample.txt");
+      await Bun.write(sampleFile, sampled);
+      const queues = sampled
+        .split(SAMPLE_THREAD)
+        .filter((block) => CENTRE_QUEUE.test(block.split("\n")[0] ?? ""));
+      console.log(
+        `  the app's threads (sample of pid ${pid}): ${sampleFile}; on the centre's queues and the app's notification queue: ${queues.length || "none"}`
+      );
+      for (const block of queues) {
+        for (const line of block.split("\n").slice(0, 30)) {
+          console.log(`    ${line.slice(0, 200)}`);
+        }
+      }
+    } else {
+      console.log(`  the app's threads: no pid to sample (${running.trim()})`);
+    }
+    // The notification framework's own lines, in the app and in its daemon.
+    const centreLog = await mac(
+      `xcrun simctl spawn ${udid} log show --last 6m --info --debug --style compact --predicate 'subsystem BEGINSWITH[c] "com.apple.usernotifications" OR process BEGINSWITH[c] "usernotifications"'`
+    ).catch((error: unknown) => `log show failed: ${String(error)}`);
+    const centreFile = join(out, "notifications-log.txt");
+    await Bun.write(centreFile, centreLog);
+    const centreLines = centreLog
+      .split("\n")
+      .filter((line) => CENTRE_LINE.test(line));
+    console.log(
+      `  the notification framework's and its daemon's lines: ${centreFile}; ${centreLines.length} name the app or an error, the last 30:`
+    );
+    for (const line of centreLines.slice(-30)) {
+      console.log(`    ${line.slice(0, 240)}`);
+    }
   }
   await mac(`rm -f '${crashMark}'`).catch(() => undefined);
   check(
