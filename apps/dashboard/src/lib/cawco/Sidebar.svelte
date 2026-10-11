@@ -654,7 +654,7 @@
   /**
    * One clock for every row in the rail. A row that ticked for itself would
    * put a timer per session on a list of two hundred, and they all read the
-   * same minute. Same rule as LiveSessionRow's module clock.
+   * same minute.
    */
   let now = $state(Date.now());
   $effect(() => {
