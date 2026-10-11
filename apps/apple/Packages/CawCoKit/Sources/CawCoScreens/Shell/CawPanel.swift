@@ -216,7 +216,7 @@ final class CawPanel: UIView, UIGestureRecognizerDelegate {
         #if DEBUG
         ProbeCounts.panelPlaces += 1
         #endif
-        let cap = Self.restingBox(of: glass, in: host)
+        let cap = Self.restingBox(of: glass, under: head, in: host)
         let compact = host.traitCollection.horizontalSizeClass == .compact
         let width = compact
             ? min(Self.wide, cap.maxX - Self.phoneMargin)
@@ -248,15 +248,29 @@ final class CawPanel: UIView, UIGestureRecognizerDelegate {
         }
     }
 
-    /// A view's box in `host` as it stands at rest: from each view's centre
-    /// and bounds, so the press that opens the panel, still scaling Caw (and
-    /// the phone's glass inside him) as it lifts, never moves the neck.
-    private static func restingBox(of view: UIView, in host: UIView) -> CGRect {
-        let local = CGRect(x: view.center.x - view.bounds.width / 2, y: view.center.y - view.bounds.height / 2,
-                           width: view.bounds.width, height: view.bounds.height)
-        guard let parent = view.superview, parent !== host else { return local }
-        let outer = restingBox(of: parent, in: host)
-        return local.offsetBy(dx: outer.minX - parent.bounds.minX, dy: outer.minY - parent.bounds.minY)
+    /// The glass's box in `host` as it stands at rest. The press that opens
+    /// the panel is still scaling Caw (`head`) as it lifts, and on a phone
+    /// his glass stands inside him: from the glass up to him the box is
+    /// walked by each view's centre and bounds, which his scale never moves,
+    /// so the neck stays put. From there up (on a wide screen from the glass
+    /// itself, which he stands on) UIKit converts it, through every
+    /// ancestor's transform and anchor point. The iPad's glass is a bar
+    /// item's view, and the navigation bar places its items' views in
+    /// containers of its own; a walk by centre and bounds through those
+    /// put the glass 2000pt off the screen, its trailing edge at x -1073.
+    private static func restingBox(of glass: UIView, under head: UIView?, in host: UIView) -> CGRect {
+        var box = CGRect(x: glass.center.x - glass.bounds.width / 2, y: glass.center.y - glass.bounds.height / 2,
+                         width: glass.bounds.width, height: glass.bounds.height)
+        var at = glass
+        if let head, glass.isDescendant(of: head) {
+            while at !== head, let parent = at.superview {
+                box = box.offsetBy(dx: parent.center.x - parent.bounds.width / 2 - parent.bounds.minX,
+                                   dy: parent.center.y - parent.bounds.height / 2 - parent.bounds.minY)
+                at = parent
+            }
+        }
+        guard let holder = at.superview else { return box }
+        return holder.convert(box, to: host)
     }
 
     /// Caw moved under it (a rotation, the rail stepping aside): it follows him.
@@ -275,6 +289,21 @@ final class CawPanel: UIView, UIGestureRecognizerDelegate {
         self.glass = glass
         superview?.bringSubviewToFront(self)
         isHidden = false
+        #if DEBUG
+        // The views over the glass that a transform or an anchor point
+        // moves: where a walk by centre and bounds parts from UIKit's.
+        var moved: [String] = []
+        var at: UIView? = glass
+        while let view = at, view !== superview {
+            let anchor = view.layer.anchorPoint
+            let sub = view.superview.map { CATransform3DIsIdentity($0.layer.sublayerTransform) } ?? true
+            if !CATransform3DIsIdentity(view.layer.transform) || anchor != CGPoint(x: 0.5, y: 0.5) || !sub {
+                moved.append("\(type(of: view)) anchor \(anchor) transform \(view.transform) parent's sublayer identity \(sub)")
+            }
+            at = view.superview
+        }
+        Self.log.notice("panel glass moved by: \(moved.isEmpty ? "nothing" : moved.joined(separator: " < "), privacy: .public)")
+        #endif
         place()
         layoutIfNeeded()
         setOpen(true)
