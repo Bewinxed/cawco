@@ -94,9 +94,18 @@ const mac = (script: string) => run(["bash", "-c", script]);
  * the foreground app, which takes in subtrees other processes draw (Safari's
  * page), and not through the host's accessibility translator, which on the
  * iPad fails once Caw's panel opens ("No translation object").
+ *
+ * `MAESTRO_OPTS` carries JVM options into Maestro's launcher, Gradle's start
+ * script, which adds them to the `java` line and prints nothing of its own
+ * (JDK_JAVA_OPTIONS and JAVA_TOOL_OPTIONS each make the JVM print a "Picked
+ * up" line on stderr). `--enable-final-field-mutation=ALL-UNNAMED` is what
+ * JDK 26's warning asks for (JEP 500) when Maestro's classes, all on the class
+ * path, mutate final fields: without it every call's stderr opens with
+ * "WARNING: Final field … has been mutated reflectively", above Maestro's
+ * own error.
  */
 const MAESTRO =
-  'JAVA_HOME="$(/opt/homebrew/bin/brew --prefix openjdk)" MAESTRO_CLI_NO_ANALYTICS=1 MAESTRO_DISABLE_UPDATE_CHECK=true MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED=true /opt/homebrew/bin/maestro';
+  'JAVA_HOME="$(/opt/homebrew/bin/brew --prefix openjdk)" MAESTRO_OPTS=--enable-final-field-mutation=ALL-UNNAMED MAESTRO_CLI_NO_ANALYTICS=1 MAESTRO_DISABLE_UPDATE_CHECK=true MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED=true /opt/homebrew/bin/maestro';
 /** Maestro's runner app: one per simulator, kept up by an `xcodebuild test-without-building` on the Mac. */
 const RUNNER = "dev.mobile.maestro-driver-iosUITests.xctrunner";
 /**
@@ -121,12 +130,39 @@ async function runnerPort(udid: string): Promise<number> {
   runnerPorts.set(udid, port);
   return port;
 }
-/** Each Maestro call's wall time on the Mac, ms: a simulator's first read (it starts the runner), the reads after it, the taps. */
-const maestroMs = {
-  starts: [] as number[],
-  reads: [] as number[],
-  taps: [] as number[],
-};
+/**
+ * One simulator's Maestro calls, for the summary: each call's wall time on
+ * the Mac, ms (its first read, which starts the runner; the reads after it;
+ * the taps), and at each read that came back the foreground app's tree: how
+ * deep it runs, counted as the runner counts it (a leaf is 1; from 60 deep
+ * the runner snapshots the app again child by child), and how many elements
+ * it holds.
+ */
+interface MaestroLog {
+  depths: number[];
+  first?: number;
+  reads: number[];
+  sizes: number[];
+  taps: number[];
+}
+const maestroLogs = new Map<string, MaestroLog>();
+function maestroLog(udid: string): MaestroLog {
+  const known = maestroLogs.get(udid);
+  if (known) {
+    return known;
+  }
+  const log: MaestroLog = { depths: [], reads: [], sizes: [], taps: [] };
+  maestroLogs.set(udid, log);
+  return log;
+}
+/** How deep a tree runs, a leaf being 1: the runner's `AXElement.depth()`. */
+const depthOf = (node: MaestroNode): number =>
+  1 + Math.max(0, ...(node.children ?? []).map(depthOf));
+/** How many elements a tree holds, its top one among them. */
+const sizeOf = (node: MaestroNode): number =>
+  (node.children ?? []).reduce((sum, under) => sum + sizeOf(under), 1);
+/** What Maestro's CLI prints after its error, before the stack (its App.kt). */
+const MAESTRO_STACK = "The stack trace was:";
 
 /** An element of the screen: its label, id and value, and its frame in points. */
 interface Node {
@@ -167,15 +203,39 @@ const frameOf = (bounds: string | undefined): Frame | undefined => {
 async function screenRead(udid: string, named: string): Promise<ScreenRead> {
   const first = !runnerPorts.has(udid);
   const port = await runnerPort(udid);
+  const log = maestroLog(udid);
   const started = Date.now();
+  // A failed read says Maestro's own error, its stack cut, then the tree of
+  // the simulator's last read that came back.
   const text = await mac(
     `${MAESTRO} --device ${udid} --driver-host-port ${port} hierarchy --no-reinstall-driver`
-  );
-  (first ? maestroMs.starts : maestroMs.reads).push(Date.now() - started);
+  ).catch((error: unknown) => {
+    const words = (error instanceof Error ? error.message : String(error))
+      .split(MAESTRO_STACK)[0]
+      .trim();
+    const before =
+      log.depths.length === 0
+        ? "no read of it had come back"
+        : `its last read that came back held ${log.sizes.at(-1)} elements, ${log.depths.at(-1)} deep`;
+    throw new Error(
+      `Maestro's read of ${udid} failed after ${Date.now() - started} ms (${before}): ${words}`
+    );
+  });
+  const ms = Date.now() - started;
+  if (first) {
+    log.first = ms;
+  } else {
+    log.reads.push(ms);
+  }
   const whole = JSON.parse(
     text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1)
   ) as MaestroNode;
-  const foreground = whole.children?.[0]?.attributes;
+  const front = whole.children?.[0];
+  if (front) {
+    log.depths.push(depthOf(front));
+    log.sizes.push(sizeOf(front));
+  }
+  const foreground = front?.attributes;
   const screen = frameOf(foreground?.bounds);
   if (foreground?.accessibilityText !== named || !screen) {
     throw new Error(
@@ -219,7 +279,7 @@ async function tap(udid: string, p: { x: number; y: number }) {
   await mac(
     `curl -sS --fail-with-body --max-time 30 -H 'Content-Type: application/json' -d '{"x":${Math.round(p.x)},"y":${Math.round(p.y)}}' http://127.0.0.1:${port}/touch`
   );
-  maestroMs.taps.push(Date.now() - started);
+  maestroLog(udid).taps.push(Date.now() - started);
 }
 /**
  * The simulator's runner, stopped: its app, and the `xcodebuild` keeping it
@@ -229,15 +289,20 @@ async function tap(udid: string, p: { x: number; y: number }) {
 const stopRunner = (udid: string) =>
   mac(`xcrun simctl terminate ${udid} ${RUNNER} >/dev/null 2>&1 || true
 pkill -f "[x]codebuild test-without-building .*-destination id=${udid} " || true`);
-/** What the Maestro calls took, for the summary. */
+/** What each simulator's Maestro calls took, and how big its app's tree read, for the summary: a line per simulator. */
 function maestroTimes(): string {
-  const ms = (values: number[]) => {
+  const spread = (values: number[], unit: string) => {
     const sorted = [...values].sort((a, b) => a - b);
     return values.length === 0
       ? "none"
-      : `median ${sorted[Math.floor(sorted.length / 2)]} ms, longest ${sorted.at(-1)} ms`;
+      : `median ${sorted[Math.floor(sorted.length / 2)]}${unit}, least ${sorted[0]}${unit}, most ${sorted.at(-1)}${unit}`;
   };
-  return `maestro: ${maestroMs.starts.length} first reads, which start the runner (${ms(maestroMs.starts)}); ${maestroMs.reads.length} reads after (${ms(maestroMs.reads)}); ${maestroMs.taps.length} taps (${ms(maestroMs.taps)})`;
+  return [...maestroLogs]
+    .map(
+      ([udid, log]) =>
+        `maestro ${udid}: first read, which starts the runner, ${log.first ?? "none"} ms; ${log.reads.length} reads after (${spread(log.reads, " ms")}); ${log.taps.length} taps (${spread(log.taps, " ms")}); the app's tree at ${log.depths.length} reads: depth ${spread(log.depths, "")} (the runner's limit 60), elements ${spread(log.sizes, "")}`
+    )
+    .join("\n");
 }
 
 /** The simulator: `--udid`, or the booted iPhone. */
