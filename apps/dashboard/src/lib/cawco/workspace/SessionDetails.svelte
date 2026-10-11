@@ -48,6 +48,7 @@
   import "../spawn/ns-theme.css";
   import { fillState, firstToStop, limitRows, speakingReading } from "../usage";
   import LimitBar from "../usage/LimitBar.svelte";
+  import ProviderLimit from "../usage/ProviderLimit.svelte";
   import SessionStatus from "./SessionStatus.svelte";
   import { contextOf } from "./workspace.svelte";
 
@@ -682,6 +683,7 @@
           <LimitBar
             elapsed={null}
             label="Context"
+            reads="used"
             size={4}
             state={fillState(percent)}
             used={percent}
@@ -699,20 +701,7 @@
       {/if}
     </div>
     {#if providerLimit}
-      {@const m = providerLimit.meter}
-      <div class="limit">
-        <span class="stat-label">{providerLimit.label}</span>
-        <span class="stat-bar">
-          <LimitBar
-            elapsed={m.elapsed}
-            label={providerLimit.label}
-            size={4}
-            state={m.state}
-            used={m.used}
-          />
-        </span>
-        <span class="stat-figure">{Math.round(m.used)}%</span>
-      </div>
+      <ProviderLimit label={providerLimit.label} meter={providerLimit.meter} />
     {/if}
     {#if session?.mcp}
       <a class="tools" href="/config/mcp"
@@ -974,8 +963,7 @@
      by its content: a unit that does not fit beside the others moves to the
      next line. Only a unit wider than the whole strip wraps inside itself, a
      part to a line, and no part ever gets narrower than its own text. */
-  .context,
-  .limit {
+  .context {
     --row-paint: var(--surface-raised);
     display: flex;
     flex-wrap: wrap;
@@ -986,7 +974,6 @@
   .context {
     flex: auto;
   }
-  .limit,
   .tools,
   .cost {
     flex: none;
@@ -1000,24 +987,17 @@
     margin-left: auto;
     color: var(--ink-strong);
   }
-  /* Context and the provider's limit, each a word, a 4px bar and a figure
-     (usage/LimitBar); the bar's pace gap shows the body's own surface. */
-  .stat-label,
-  .stat-figure {
+  /* Context: a word, a 4px bar of what is used (usage/LimitBar) and a
+     figure; the provider's limit is its own unit (usage/ProviderLimit). */
+  .stat-label {
     flex: none;
     white-space: nowrap;
-  }
-  .stat-label {
     color: var(--ink-muted);
   }
   .stat-bar {
     flex: 1;
     min-width: 48px;
     max-width: 96px;
-  }
-  .limit .stat-bar {
-    flex: none;
-    width: 64px;
   }
   /* The still copy and the morph share one cell, so the cell is as wide as
      the wider of the two. */
