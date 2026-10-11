@@ -661,9 +661,11 @@ export async function scratchFleet(options: {
       db.close();
     }
   };
+  /** A write beside the running hub's own: it waits for the hub's lock (busy_timeout) rather than failing on it. */
   const write = (sql: string, ...params: (string | number | null)[]) => {
     const db = new Database(dbPath);
     try {
+      db.exec("PRAGMA busy_timeout = 15000");
       db.query(sql).run(...params);
     } finally {
       db.close();
