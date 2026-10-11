@@ -4013,9 +4013,6 @@ function streamEffectsFor<K extends CommandKind>(
   }
 }
 
-/** The session the board is peeking — subscribed for frames, like an open tab. */
-let peekedId = $state<string | null>(null);
-
 /**
  * Delegates something on screen is reading live: an expanded card, the tray's
  * open panel. A delegate is a full instance, but its parent's transcript is
@@ -4026,22 +4023,19 @@ let peekedId = $state<string | null>(null);
 const watchedDelegates = new Map<string, number>();
 
 /**
- * A session is "open" when a tab the workspace holds or the peek pane is
- * watching it. The workspace's tabs, not the working set: the working set
+ * A session is "open" when a tab the workspace holds is watching it. The
+ * workspace's tabs, not the working set: the working set
  * keeps ten and lets the coldest go, while the tab it let go stays in its
  * strip — and a tab that is not subscribed never streams, however often it
  * is clicked (activating a tab does not visit it).
  */
 function isSubscribed(instanceId: string): boolean {
-  return workspace.openIds.includes(instanceId) || peekedId === instanceId;
+  return workspace.openIds.includes(instanceId);
 }
 
 /** The full set of instance ids this dashboard wants `frame` frames for. */
 function subscriptionIds(): string[] {
   const ids = new Set(workspace.openIds);
-  if (peekedId) {
-    ids.add(peekedId);
-  }
   for (const id of watchedDelegates.keys()) {
     ids.add(id);
   }
@@ -4074,15 +4068,6 @@ export function syncSubscriptions(): void {
   }
   lastSubscriptionKey = key;
   syncStreamSubscriptions(streamState, streamHost, ids);
-}
-
-/** The board peeking a session subscribes it for frames; `null` closes the peek. */
-export function setPeeked(id: string | null): void {
-  if (peekedId === id) {
-    return;
-  }
-  peekedId = id;
-  syncSubscriptions();
 }
 
 /** One more reader of this delegate: its frames stream while any reader remains. */

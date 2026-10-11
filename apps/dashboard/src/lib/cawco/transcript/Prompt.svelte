@@ -530,10 +530,11 @@
 
   /* The permission gate is symmetric: Approve and Deny are recessed peers at
      one fill, apart at the row's two ends, each outlined in its tint (The
-     Peer Rule's transcript form): a tick grants, a cross refuses. */
-  const peer = `${btnBase} flex-1 min-w-0`;
-  const grant = `${peer} approve !text-[var(--ink-strong)]`;
-  const refuse = `${peer} deny !text-[var(--ink-muted)]`;
+     Peer Rule's transcript form): a tick grants, a cross refuses, both
+     labels in the one ink (`ink-strong`), so neither leans. */
+  const peer = `${btnBase} flex-1 min-w-0 !text-[var(--ink-strong)]`;
+  const grant = `${peer} approve`;
+  const refuse = `${peer} deny`;
   const primary = `${btnBase} px-[var(--space-4)]`;
   const dismiss = btnBase;
 

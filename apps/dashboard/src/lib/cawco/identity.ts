@@ -1,6 +1,6 @@
 /**
  * Project identity color — every folder/project owns a stable hue that
- * follows it across the rail, tabs, board cards, and peek pane, so the eye
+ * follows it across the rail, tabs and board cards, so the eye
  * binds work to color before reading a single word.
  *
  * The hue is hashed from the folder's cwd (registered projects hash their

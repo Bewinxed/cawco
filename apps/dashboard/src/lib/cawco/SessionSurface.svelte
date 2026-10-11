@@ -41,7 +41,6 @@
     home as fleetHome,
     markOpened,
   } from "#lib/cawco/home/home-state.svelte.js";
-  import PeekSheet from "#lib/cawco/home/PeekSheet.svelte";
   import { instanceForSession } from "#lib/cawco/links.js";
   import MachinesEmpty from "#lib/cawco/MachinesEmpty.svelte";
   import {
@@ -656,9 +655,6 @@
     <PaneHost entryId={entry.id} entryTail={entry.tail} />
   </div>
 </div>
-
-<!-- One peek for every home: the page, the rail, and each iPad arrangement. -->
-<PeekSheet />
 
 <style>
   .surface {

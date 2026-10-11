@@ -795,6 +795,7 @@ try {
           return {
             border: `${s.borderTopWidth} ${s.borderTopColor}`,
             fill: s.backgroundColor,
+            label: s.color,
           };
         };
         return {
@@ -802,6 +803,7 @@ try {
           deny: side(deny),
           done: inkOf("--status-done-ink"),
           fail: inkOf("--status-fail-ink"),
+          strong: inkOf("--ink-strong"),
           gap:
             Math.round(
               (deny.getBoundingClientRect().left -
@@ -824,6 +826,11 @@ try {
         card.approve.fill === card.deny.fill &&
         card.gap >= 32,
       JSON.stringify(card)
+    );
+    check(
+      `transcript card: both labels in ink-strong (${width})`,
+      card.approve.label === card.strong && card.deny.label === card.strong,
+      `Approve ${card.approve.label}, Deny ${card.deny.label}, ink-strong ${card.strong}`
     );
     if (width === "1440") {
       await page.hover(".choice .approve");
