@@ -1193,26 +1193,32 @@
     {#if home.limitsShown}
       <UsageMeter />
     {/if}
-    <!-- The reader's name stands whole: the menu is never narrower than its
-         name, and where the rail can't hold it beside the four settings (at
-         the default 228px and below) the settings drop together to a line
-         of their own, at its end. -->
-    <div class="flex flex-wrap items-center gap-1" data-flip>
-      <Sidebar.Menu aria-label="User" class="w-auto min-w-0 flex-[1_0_auto]">
+    <!-- One row at every rail width: the product holds no name for the
+         reader (a single operator, called "you"), so the user chip is its
+         avatar alone and says "You" in its tooltip. -->
+    <div class="flex items-center gap-1" data-flip>
+      <Sidebar.Menu aria-label="User" class="w-auto">
         <Sidebar.MenuItem>
-          <Sidebar.MenuButton class={NAV_ROW}>
-            <!-- No picture of the reader yet: Caw stands in. -->
-            <img
-              alt=""
-              class="brand-icon avatar"
-              height="18"
-              src={cawcoIcon}
-              width="18"
-            >
-            <span class="min-w-0 flex-1 truncate text-foreground"
-              >bewinxed</span
-            >
-          </Sidebar.MenuButton>
+          <Tip label="You">
+            {#snippet children(
+              tip
+            )}
+              <Sidebar.MenuButton
+                {...tip}
+                aria-label="You"
+                class="touch-hit size-[30px] justify-center overflow-visible p-0"
+              >
+                <!-- No picture of the reader yet: Caw stands in. -->
+                <img
+                  alt=""
+                  class="brand-icon avatar"
+                  height="18"
+                  src={cawcoIcon}
+                  width="18"
+                >
+              </Sidebar.MenuButton>
+            {/snippet}
+          </Tip>
         </Sidebar.MenuItem>
       </Sidebar.Menu>
       <!-- Configure, the theme and sound: the settings in the corner. -->
