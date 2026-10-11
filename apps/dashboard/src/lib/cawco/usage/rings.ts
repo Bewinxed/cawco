@@ -614,21 +614,42 @@ export function caption(
   return [];
 }
 
+/** When an account stops, and the limit it stops on ("5-hour", "week"). */
+export interface Stop {
+  at: number;
+  limit: string;
+}
+
 /**
- * An account's forecast stop: when it runs out on the window that binds it.
- * One running sessions (and the Go plan, no `c`) at its own pace: the hub's
- * run-out for its binding window, none when every window lasts to its reset
- * (forecast.ts windowForecast). An idle one at the fleet's pace, as if it
- * took over now (`takeover`). Null past the 5-hour horizon.
+ * An account's forecast stop: when it runs out, and on which limit. The
+ * carrier, which takes your new sessions now, and an idle account, as if it
+ * took over now, at the fleet's pace (`takeover`): the pace the relay walk
+ * spends a carrier at, so a cell and its relay band agree. Any other
+ * account running sessions (and the Go plan, no `c`) at its own pace: the
+ * hub's run-out for its binding window, none when every window lasts to its
+ * reset (forecast.ts windowForecast). Null past the 5-hour horizon.
  */
-export function stopOf(
+export function stopFor(
   r: RingAccount,
   c: ClaudeRings | null,
   now: number
-): number | null {
-  const out = !c || r.sessions.length > 0 ? r.bindOut : takeover(r, c, now);
-  return out !== null && out - now < HORIZON_MS ? out : null;
+): Stop | null {
+  const own = !c || (r.sessions.length > 0 && r.id !== c.carry?.id);
+  let stop: Stop | null = null;
+  if (!own) {
+    stop = takeover(r, c, now);
+  } else if (r.bindOut !== null) {
+    stop = { at: r.bindOut, limit: r.bindName };
+  }
+  return stop !== null && stop.at - now < HORIZON_MS ? stop : null;
 }
+
+/** When an account stops (`stopFor`), as a moment. */
+export const stopOf = (
+  r: RingAccount,
+  c: ClaudeRings | null,
+  now: number
+): number | null => stopFor(r, c, now)?.at ?? null;
 
 /**
  * A dial-wall cell's time, a figure alone: how long it lasts (`stop`), or,
@@ -679,6 +700,8 @@ export function dialTip(
 ): string {
   const time = cellTime(r, c, now);
   const pace = time.kind === "stop" ? ` · ${time.figure} at this pace` : "";
+  /** The line the pace goes on: the limit it stops on, else the one that binds. */
+  const stopsOnWeek = (stopFor(r, c, now)?.limit ?? r.bindName) !== "5-hour";
   const spent =
     r.backAt === null ? "used up" : `used up · back in ${until(r.backAt, now)}`;
   const line = (
@@ -695,8 +718,8 @@ export function dialTip(
       : `${label}: ${left}% left${binds ? pace : ""}`;
   };
   return [
-    line("5-hour", r.limitOn === "5h", r.w5?.left, r.bind !== "week"),
-    line("Week", r.limitOn === "week", r.week?.left, r.bind === "week"),
+    line("5-hour", r.limitOn === "5h", r.w5?.left, !stopsOnWeek),
+    line("Week", r.limitOn === "week", r.week?.left, stopsOnWeek),
     r.state === "stale" ? estimateOf(r, now) : null,
   ]
     .filter((one) => one !== null)
@@ -769,7 +792,7 @@ export function takeover(
   r: RingAccount,
   c: ClaudeRings,
   now: number
-): number | null {
+): Stop | null {
   const horizon = now + HORIZON_MS;
   let five: number | null = null;
   if (c.burn > 0 && r.w5) {
@@ -793,8 +816,10 @@ export function takeover(
     const out = now + (r.week.left / c.burnWeek) * HOUR_MS;
     week = r.week.resetsAt === null || out < r.week.resetsAt ? out : null;
   }
-  const outs = [five, week].filter((out): out is number => out !== null);
-  return outs.length > 0 ? Math.min(...outs) : null;
+  if (five !== null && (week === null || five <= week)) {
+    return { at: five, limit: "5-hour" };
+  }
+  return week === null ? null : { at: week, limit: "week" };
 }
 
 /** One group of the accounts: an organization's accounts, or (null) the rest. */
@@ -960,24 +985,19 @@ export function tileFigure(
   if (r.neverBackup && !carrying) {
     return { back: false, figure: "5h+", label: "never a backup" };
   }
-  const out =
-    carrying || r.state === "reserve"
-      ? (r.bindOut ?? r.carryUntil)
-      : (r.carryUntil ?? r.bindOut);
-  const figure = within(out, now);
-  if (r.state === "stale") {
-    return { back: false, figure, label: "last known" };
-  }
+  // The same stop the popover's cell says, naming the limit it runs out on.
+  const stop = stopFor(r, c, now);
+  const figure = stop === null ? "5h+" : fmt(stop.at - now);
+  const label =
+    stop === null
+      ? "lasts past the next 5 hours"
+      : `until its ${stop.limit} limit runs out`;
   return {
     back: false,
     figure,
-    label: r.bind === "5h" ? "left of 5 hours" : `left of the ${r.bindName}`,
+    label: r.state === "stale" ? `last known · ${label}` : label,
   };
 }
-
-/** A time inside the 5-hour horizon, else "5h+". */
-const within = (at: number | null, now: number): string =>
-  at !== null && at - now < HORIZON_MS ? fmt(at - now) : "5h+";
 
 /** Opencode's figure beside its mark, and what it is, as its popover cell says it. */
 export function openCodeFigure(o: RingAccount, now: number): TileFigure {
@@ -989,10 +1009,14 @@ export function openCodeFigure(o: RingAccount, now: number): TileFigure {
       label: `until it’s back · ${o.bindName} at its limit`,
     };
   }
+  const stop = stopFor(o, null, now);
   return {
     back: false,
     figure: time.guess ? `~${time.figure}` : time.figure,
-    label: time.figure === "5h+" ? "nothing runs out" : "until it runs out",
+    label:
+      stop === null
+        ? "lasts past the next 5 hours"
+        : `until its ${stop.limit} limit runs out`,
   };
 }
 
@@ -1025,7 +1049,7 @@ export function leadSentence(c: ClaudeRings, now: number): Part[] {
       ? [strong(c.carry.name), " carries you past the next 5 hours."]
       : [
           strong(c.carry.name),
-          " runs out in ",
+          " carries you for ",
           fig(fmt(carryEnd - now)),
           ...(c.next ? [", then ", strong(c.next.name), "."] : ["."]),
         ];

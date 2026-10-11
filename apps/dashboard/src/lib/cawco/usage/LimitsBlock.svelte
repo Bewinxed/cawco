@@ -13,6 +13,7 @@
    */
   import { Button } from "#lib/components/ui/button/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
+  import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { IconKey, IconRefresh } from "#lib/icons.js";
   import ClaudeIcon from "~icons/logos/claude-icon";
   import AccountName from "../accounts/AccountName.svelte";
@@ -24,6 +25,7 @@
   import Rings from "./Rings.svelte";
   import RingsKey from "./RingsKey.svelte";
   import {
+    delegateTip,
     leadSentence,
     nameFields,
     openCodeFigure,
@@ -204,15 +206,28 @@
       <span aria-hidden="true" class="glyph"><ClaudeIcon /></span>
       <span class="name">Claude</span>
       {#if claude?.delegate}
-        <span class="right" data-delegates
-          ><Words
-            parts={[
-              "Delegates go to ",
-              { strong: claude.delegate.name },
-              claude.delegateWhy ? ` (${claude.delegateWhy})` : "",
-            ]}
-          /></span
-        >
+        {@const why = delegateTip(claude, claude.delegate)}
+        <!-- Where new delegates go; why, on a rest or a tap, in placement's
+             own terms, so the line holds one line on a phone. -->
+        <Tip label={why} side="bottom" tap>
+          {#snippet children(
+            props
+          )}
+            <span
+              {...props}
+              aria-label="Delegates go to {claude.delegate?.name}. {why}"
+              class="right"
+              data-delegates
+              role="img"
+              ><Words
+                parts={[
+                  "Delegates go to ",
+                  { strong: claude.delegate?.name ?? "" },
+                ]}
+              /></span
+            >
+          {/snippet}
+        </Tip>
       {/if}
     </div>
     {#if claude}
@@ -357,6 +372,7 @@
   }
   .right {
     margin-inline-start: auto;
+    white-space: nowrap;
     font: var(--type-meta);
     color: var(--ink-muted);
   }

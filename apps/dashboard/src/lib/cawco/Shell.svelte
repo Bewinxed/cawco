@@ -775,7 +775,8 @@
   });
   const showBanner = $derived.by(() => {
     const s = cawco.status;
-    if (s === "connected") {
+    // A bench (/motion/…) stages its own data and runs with no hub by design.
+    if (s === "connected" || page.url.pathname.startsWith("/motion/")) {
       return false;
     }
     // A socket that errored or was declared disconnected is a known fault —

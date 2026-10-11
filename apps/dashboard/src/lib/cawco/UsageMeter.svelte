@@ -1250,22 +1250,24 @@
     background: var(--surface-hover);
     --ring-ground: var(--surface-hover);
   }
-  /* The dial, centred on the two lines, space-2 before the status slot:
-     the wall's space-1 gap and the rest here. */
+  /* The dial, centred on the two lines, the wall's space-1 gap before the
+     status slot: the slot's marks still stand clear of the ring's ink, the
+     ring curving away from its box at the second line's height. */
   .dial {
     display: grid;
     grid-row: 1 / span 2;
     grid-column: 1;
     align-self: center;
-    margin-inline-end: calc(var(--space-2) - var(--space-1));
   }
-  /* The first line, from the status slot to the share's end: the name (the
-     Go plan's after its mark), then the session count at the line's end,
+  /* The first line, from the time's x to the share's end, so the name and
+     the time start on one x and the status slot stands before both: the
+     name (the Go plan's after its mark), then the session count at the
+     line's end,
      on the share's end x. */
   .l1 {
     display: flex;
     grid-row: 1;
-    grid-column: 2 / span 4;
+    grid-column: 3 / span 3;
     align-items: center;
     gap: var(--space-1);
     min-inline-size: 0;

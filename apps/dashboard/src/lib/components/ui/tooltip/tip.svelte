@@ -89,7 +89,8 @@
       {@render children(withTap(props))}
     {/snippet}
   </Trigger>
-  <Content customAnchor={anchor ?? null} {side}>
+  <!-- 8px clear of the viewport's edges: it never touches one. -->
+  <Content collisionPadding={8} customAnchor={anchor ?? null} {side}>
     <span class="whitespace-pre-line"
       >{#if title}
         <strong class="block font-medium">{title}</strong>

@@ -188,7 +188,7 @@
         <Tip
           label={tip}
           ontoggle={(open) => onlight(open ? id : null)}
-          side="bottom"
+          side="top"
           tap
         >
           {#snippet children(
