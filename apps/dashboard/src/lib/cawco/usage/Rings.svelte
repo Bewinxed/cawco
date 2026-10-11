@@ -135,6 +135,7 @@
     r={(geometry.rd / 2).toFixed(3)}
     stroke-width={geometry.rd.toFixed(3)}
     style:stroke-dashoffset={off(disc)}
+    class:full={disc >= 100}
   />
   <circle
     class="track"
@@ -153,6 +154,7 @@
     r={geometry.rr.toFixed(3)}
     stroke-width={geometry.w.toFixed(3)}
     style:stroke-dashoffset={off(rim)}
+    class:full={rim >= 100}
   />
   <circle
     class="arc reserved"
@@ -162,6 +164,7 @@
     r={geometry.rr.toFixed(3)}
     stroke-width={geometry.w.toFixed(3)}
     style:stroke-dashoffset={off(reserve === null ? 0 : Math.min(rim, reserve))}
+    class:off={reserve === null || Math.min(rim, reserve) <= 0}
   />
   <circle
     class="notch"
@@ -214,8 +217,19 @@
       var(--account-week-toward) calc(var(--account-week-mix) * 100%)
     );
   }
+  /* A whole window is a whole circle: a dash 100 long on a closed circle
+     leaves a ~2% wedge uncovered at its start (the disc), so it is not
+     dashed. */
+  .arc.full {
+    stroke-dasharray: none;
+  }
   .arc.reserved {
     stroke: var(--account-reserved);
+  }
+  /* Nothing reserved: the arc's zero-length dash would still draw a hairline
+     at the top. */
+  .arc.reserved.off {
+    opacity: 0;
   }
   .notch {
     stroke: var(--ring-ground, var(--sidebar));

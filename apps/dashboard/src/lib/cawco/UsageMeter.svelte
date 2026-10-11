@@ -1264,13 +1264,17 @@
      name (the Go plan's after its mark), then the session count at the
      line's end,
      on the share's end x. */
-  .l1 {
+  .cell-d .l1 {
     display: flex;
     grid-row: 1;
     grid-column: 3 / span 3;
     align-items: center;
     gap: var(--space-1);
+    /* Not the strip's .l1 (a 16px, unwrapping line): a name that wraps
+       makes this line taller, the time's line stays beneath it. */
+    block-size: auto;
     min-inline-size: 0;
+    white-space: normal;
   }
   /* The name strong, the domain's stem (where it is needed) quiet right
      after it, going under it only when the two don't fit. A name never
