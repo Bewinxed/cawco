@@ -52,8 +52,7 @@ public enum PushProbe {
     /// "already decided" from "asked and not shown". Each step says how long
     /// it took and what the scenes were, so a hook that never asks shows
     /// whether it waited on a window in front or on iOS's word, which queues
-    /// behind every earlier call on `NotificationCentre`'s serial queue
-    /// (`PushCategory.install` waits up to 5 s on each of its three answers).
+    /// behind every earlier call on `NotificationCentre`'s serial queue.
     private static func register() async {
         let started = ContinuousClock.now
         log.notice("probe register: started (scenes \(scenes, privacy: .public))")

@@ -101,44 +101,101 @@ public enum PushCategory {
 
     /// Registers the fixed categories, the question categories already
     /// registered (only those a delivered push still names, when `pruning`),
-    /// and `adding`. Reads the centre's answers in place, so it blocks the
-    /// calling thread: call it from the extension's own thread or the app's
-    /// notification queue, never the main thread or Swift's concurrent pool.
-    /// Returns once the centre has the new set: it answers in the order it was
-    /// asked, so the read after the write waits for the write.
-    public static func install(adding: UNNotificationCategory?, pruning: Bool) {
-        let center = UNUserNotificationCenter.current()
-        let current: Set<UNNotificationCategory> = answer { done in center.getNotificationCategories { done($0) } } ?? []
-        var named: Set<String>?
-        if pruning {
-            named = answer { done in
-                center.getDeliveredNotifications { notes in done(Set(notes.map(\.request.content.categoryIdentifier))) }
-            }
-            // An unanswered read keeps them all: a push on show must not lose its buttons.
-            if named == nil { log.error("categories: delivered pushes unread; question categories kept") }
-        }
-        var all = fixed()
-        for category in current where category.identifier.hasPrefix(answeringPrefix) && (named?.contains(category.identifier) ?? true) {
-            all.insert(category)
-        }
-        if let adding { all.insert(adding) }
-        center.setNotificationCategories(all)
-        if answer({ done in center.getNotificationCategories { done($0.count) } }) == nil {
-            log.error("categories: the centre did not answer after registering \(all.count) categories")
-        }
+    /// and `adding`; then `installed`, on `queue`.
+    ///
+    /// Each request is sent from `queue` once the one before it is answered:
+    /// the registered categories, the delivered pushes (when `pruning`), the
+    /// new set, then a read of it. The centre answers in the order it was
+    /// asked, so that read's answer means the new set is in. No thread waits
+    /// for an answer: `queue` stays free for the calls queued behind, and an
+    /// answer 5 s late is reported and its step taken without it.
+    public static func install(adding: UNNotificationCategory?, pruning: Bool, on queue: DispatchQueue,
+                               then installed: @escaping @Sendable () -> Void) {
+        Install(adding: adding, pruning: pruning, queue: queue, installed: installed).start()
     }
 
     private static let log = Logger(subsystem: "dev.cawco.app", category: "Push")
 
-    /// The centre's answer to `ask`, waited for on this thread; nil past 5 s.
-    private static func answer<T>(_ ask: (@escaping @Sendable (T) -> Void) -> Void) -> T? {
-        let box = OSAllocatedUnfairLock<T?>(uncheckedState: nil)
-        let done = DispatchSemaphore(value: 0)
-        ask { value in
-            box.withLockUnchecked { $0 = value }
-            done.signal()
+    /// One `install`, step by step. Every step runs on `queue`, one after the
+    /// other, so `registered` is only ever touched there.
+    private final class Install: @unchecked Sendable {
+        let adding: UNNotificationCategory?
+        let pruning: Bool
+        let queue: DispatchQueue
+        let installed: @Sendable () -> Void
+        var registered: Set<UNNotificationCategory> = []
+
+        init(adding: UNNotificationCategory?, pruning: Bool, queue: DispatchQueue, installed: @escaping @Sendable () -> Void) {
+            self.adding = adding
+            self.pruning = pruning
+            self.queue = queue
+            self.installed = installed
         }
-        guard done.wait(timeout: .now() + 5) == .success else { return nil }
-        return box.withLockUnchecked { $0 }
+
+        func start() {
+            PushCategory.ask(on: queue, { reply in
+                UNUserNotificationCenter.current().getNotificationCategories { reply($0) }
+            }, answered: { [self] (current: Set<UNNotificationCategory>?) in
+                registered = current ?? []
+                if pruning { readDelivered() } else { register(named: nil) }
+            })
+        }
+
+        private func readDelivered() {
+            PushCategory.ask(on: queue, { reply in
+                UNUserNotificationCenter.current().getDeliveredNotifications { notes in
+                    reply(Set(notes.map(\.request.content.categoryIdentifier)))
+                }
+            }, answered: { [self] (named: Set<String>?) in
+                // An unanswered read keeps them all: a push on show must not lose its buttons.
+                if named == nil { PushCategory.log.error("categories: delivered pushes unread; question categories kept") }
+                register(named: named)
+            })
+        }
+
+        private func register(named: Set<String>?) {
+            var all = PushCategory.fixed()
+            for category in registered where category.identifier.hasPrefix(PushCategory.answeringPrefix) && (named?.contains(category.identifier) ?? true) {
+                all.insert(category)
+            }
+            if let adding { all.insert(adding) }
+            UNUserNotificationCenter.current().setNotificationCategories(all)
+            let count = all.count
+            PushCategory.ask(on: queue, { reply in
+                UNUserNotificationCenter.current().getNotificationCategories { reply($0.count) }
+            }, answered: { [self] (answer: Int?) in
+                if answer == nil { PushCategory.log.error("categories: the centre did not answer after registering \(count) categories") }
+                installed()
+            })
+        }
+    }
+
+    /// What one request has come to: nothing yet, or settled with the
+    /// centre's answer (nil when 5 s passed first).
+    private struct Asked<T> {
+        var settled = false
+        var answer: T?
+    }
+
+    /// Sends `request` from `queue`; `answered` runs on `queue` with the
+    /// centre's answer, or with nil if 5 s pass after the send without one.
+    /// Once, whichever comes first. Nothing waits: the 5 s is a timer.
+    private static func ask<T>(on queue: DispatchQueue, _ request: @escaping @Sendable (@escaping @Sendable (T) -> Void) -> Void,
+                               answered: @escaping @Sendable (T?) -> Void) {
+        let asked = OSAllocatedUnfairLock<Asked<T>>(uncheckedState: Asked())
+        let settle: @Sendable (T?) -> Void = { answer in
+            let first = asked.withLockUnchecked { state -> Bool in
+                guard !state.settled else { return false }
+                state.settled = true
+                state.answer = answer
+                return true
+            }
+            guard first else { return }
+            queue.async { answered(asked.withLockUnchecked { $0.answer }) }
+        }
+        queue.async {
+            request { settle($0) }
+            queue.asyncAfter(deadline: .now() + 5) { settle(nil) }
+        }
     }
 }
