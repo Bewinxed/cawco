@@ -1515,12 +1515,20 @@
              sheet's flared one). -->
         <span aria-hidden="true" class="rim">
           <span class="rim-top"></span>
-          <span class="rim-side" data-side="start">
+          <span
+            class="rim-side"
+            data-shown={drawn.start >= 0.5 ? "" : undefined}
+            data-side="start"
+          >
             <span class="rim-run"></span>
             <span class="rim-foot"></span>
             <span class="rim-flare"></span>
           </span>
-          <span class="rim-side" data-side="end">
+          <span
+            class="rim-side"
+            data-shown={drawn.end >= 0.5 ? "" : undefined}
+            data-side="end"
+          >
             <span class="rim-run"></span>
             <span class="rim-foot"></span>
             <span class="rim-flare"></span>
@@ -1987,12 +1995,22 @@
     --tn: 1.5;
     --fn: 8;
     --tail: calc(sqrt(2 * var(--fn) * var(--tn) + var(--tn) * var(--tn)) * 1px);
+    /* How much of the choice's clock a side's fade takes as it comes out
+       from under a neighbour or goes under one (`.rim-side`): the two
+       overlap by 2 × hand − 1 of it. */
+    --hand: 0.7;
     display: block;
     position: absolute;
     inset-block: calc(-1 * var(--spill)) 0;
     inset-inline: calc(-1 * var(--F));
     z-index: calc(var(--stack-top) + 1);
     pointer-events: none;
+    /* Its pieces stay inside it: a side tucked under a neighbour stands in
+       by the tuck, and the last tab's would otherwise reach past the track's
+       end and give it scroll room it does not have (6.5px on the desk), so
+       its end fade lay over the last tab at rest. Nothing drawn is cut: every
+       piece's stroke lies inside the outline's box. */
+    overflow: clip;
     opacity: var(--rim-mix);
     filter: drop-shadow(
       0 0 6px color-mix(in oklab, var(--tone) 50%, transparent)
@@ -2041,17 +2059,26 @@
      side under its neighbour stands in by the overlap less the stroke
      (`--tuck-in`), its stroke on the neighbour's own, the one line that
      shows there: on a switch the side going under and the side coming out
-     travel together between the two edges on the same pixels, one fading
-     out as the other fades in, so the seam is one stroke in every frame. */
+     travel together between the two edges on the same pixels, so the seam
+     is one stroke in every frame. Their fades overlap rather than cross:
+     the side coming out fades in over the first `--hand` of the choice's
+     clock and the side going under fades out over the last `--hand`, so
+     the stroke there holds between the two sides' own strengths all the
+     way (cross-faded together, the two half-strength strokes at half way
+     held 2.96:1 against the fills, under the rim's 3:1; fading one after
+     the other, the two whole strokes at half way stood louder than
+     either). A swipe's fraction draws the same: `min(1, shown / --hand)`
+     is the side coming out's first stretch and the side going under's
+     last. */
   .rim-side {
     --s: var(--slope-start);
     --tuck-in: calc(var(--overlap) - var(--t));
-    opacity: var(--start-shown);
+    opacity: min(1, var(--start-shown) / var(--hand));
     translate: calc(var(--tuck-in) * (1 - var(--start-shown))) 0;
 
     &[data-side="end"] {
       --s: var(--slope-end);
-      opacity: var(--end-shown);
+      opacity: min(1, var(--end-shown) / var(--hand));
       translate: calc(var(--tuck-in) * (var(--end-shown) - 1)) 0;
       transform: scaleX(-1);
     }
@@ -2092,10 +2119,20 @@
     );
   }
   @media (prefers-reduced-motion: no-preference) {
+    /* A side going under holds until the last `--hand` of the choice's
+       clock and fades over it; a side coming out (`data-shown`) fades in
+       over the first. Both travel the whole clock. */
     .rim-side {
       transition:
-        opacity var(--choose-dur) var(--choose-ease),
+        opacity calc(var(--choose-dur) * var(--hand)) var(--choose-ease)
+        calc(var(--choose-dur) * (1 - var(--hand))),
         translate var(--choose-dur) var(--choose-ease);
+
+      &[data-shown] {
+        transition:
+          opacity calc(var(--choose-dur) * var(--hand)) var(--choose-ease),
+          translate var(--choose-dur) var(--choose-ease);
+      }
     }
     .rim-foot,
     .rim-flare {
