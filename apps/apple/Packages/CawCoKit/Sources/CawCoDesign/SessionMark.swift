@@ -27,17 +27,25 @@ public enum MarkStatus: Sendable {
 /// - With `onToggle`, the mark's own hit area is the switch; the rest of the
 ///   row still does what the row does.
 /// - Working: the tile echoes, a copy of it growing from under the tile and
-///   fading, on its list's beat (`beat`). With reduced motion, a still dot in
-///   the live ink instead.
+///   fading, on its list's beat (`beat`), `echoes` times from when the mark
+///   took the status; then it rests as reduced motion draws it, a still dot
+///   in the live ink. With reduced motion, that dot from the start.
 /// - Needs you, failed: a dot on the tile's top-right corner in that status's
 ///   ink, the tile cut away round it. The needs-you dot echoes as a working
-///   tile does. Idle or finished: nothing.
+///   tile does, `echoes` times, then stands still. Idle or finished: nothing.
+///
+/// An echo never runs for ever: a loop with nothing new to say costs the
+/// battery a frame each refresh, and XCTest takes an app with an animation
+/// running as never idle (rdar://25562105), so a screen read waits on it
+/// until it times out.
 public final class SessionMarkView: UIView {
     /// The lead slot's tile and its glyph (`--mark-size`, 18px; 12px glyph).
     public static let tile = Size.rowMarkBox
     static let glyph = 12.0
     /// How many beats fit in one loop: the rows start a third of a loop apart (motion/echo `BEATS`).
     static let beats = 3.0
+    /// How many times a status's echo plays before the mark rests on its still dot.
+    static let echoes = 3
 
     private let side: Double
     private let echo = CALayer()
@@ -54,6 +62,10 @@ public final class SessionMarkView: UIView {
     private let hit = MarkSwitch()
 
     private var status = MarkStatus.idle
+    /// The status whose echoes are playing, and the wait that rests them.
+    private var echoing: (status: MarkStatus, rest: Task<Void, Never>)?
+    /// The status whose echoes have played: the mark stands still on it.
+    private var echoed: MarkStatus?
     private var count = 0
     private var open = false
     private var over = false
@@ -146,6 +158,8 @@ public final class SessionMarkView: UIView {
         sprite.glyph = Self.sprite(id)
         hue = Self.hue(place)
         let swapped = (count > 0) != (self.count > 0) || open != self.open
+        // A new status echoes afresh; the same one again stays as it stands.
+        if status != self.status { echoed = nil }
         self.status = status
         self.count = count
         self.open = open
@@ -289,7 +303,7 @@ public final class SessionMarkView: UIView {
         echo.backgroundColor = tile
         echoSheen.colors = overlay
         for card in cards { card.paint(tile: tile, overlay: overlay, traits: traits) }
-        let still = UIAccessibility.isReduceMotionEnabled
+        let still = UIAccessibility.isReduceMotionEnabled || echoed == status
         let ink: UIColor? = switch status {
         case .attn: Palette.statusAttnGlyph
         case .fail: Palette.statusFailGlyph
@@ -312,15 +326,22 @@ public final class SessionMarkView: UIView {
     /// ease-out; then it waits at the tile's own size, under the tile. The
     /// phase comes from the clock, never from when the row arrived: every
     /// echo in a list is timed from one origin plus its place times the gap.
+    /// It plays `echoes` cycles from the first, then the mark rests (`rested`);
+    /// a status whose echoes have played stays still, and one already
+    /// echoing plays on untouched when the row is configured again.
     private func run() {
-        let moving = !UIAccessibility.isReduceMotionEnabled && window != nil
+        let moving = !UIAccessibility.isReduceMotionEnabled && window != nil && echoed != status
         let layerFor: CALayer? = moving ? (status == .live ? echo : status == .attn ? ping : nil) : nil
         for candidate in [echo, ping] where candidate !== layerFor {
             candidate.removeAnimation(forKey: "beat")
             candidate.isHidden = true
         }
-        guard let target = layerFor else { return }
+        guard let target = layerFor else {
+            stopEchoing()
+            return
+        }
         target.isHidden = false
+        if let echoing, echoing.status == status, target.animation(forKey: "beat") != nil { return }
         let loop = Motion.durLoop
         let gap = loop / Self.beats
         let cycle = max(2 * loop, Double(max(1, beat.of)) * gap)
@@ -338,12 +359,39 @@ public final class SessionMarkView: UIView {
         let group = CAAnimationGroup()
         group.animations = [fade, grow]
         group.duration = cycle
-        group.repeatCount = .infinity
+        group.repeatCount = Float(Self.echoes)
         group.isRemovedOnCompletion = false
         let now = target.convertTime(CACurrentMediaTime(), from: nil)
         let phase = (CACurrentMediaTime() - Double(beat.place) * gap).truncatingRemainder(dividingBy: cycle)
         group.beginTime = now - phase
         target.add(group, forKey: "beat")
+        // Its last cycle ends `echoes` cycles from the beat it joined, less the share already past.
+        let mine = status
+        stopEchoing()
+        echoing = (mine, Task { [weak self] in
+            try? await Task.sleep(for: .seconds(cycle * Double(Self.echoes) - phase))
+            guard !Task.isCancelled else { return }
+            self?.rested(mine)
+        })
+        LoopLog.on("echo \(mine.word)", self)
+    }
+
+    /// `status`'s echoes have played: the mark stands still on it, the
+    /// working tile with its still dot in the live ink.
+    private func rested(_ status: MarkStatus) {
+        guard echoing?.status == status, self.status == status else { return }
+        echoing = nil
+        echoed = status
+        LoopLog.off("echo \(status.word)", self)
+        paint()
+    }
+
+    /// No echo runs: none is waited on to rest.
+    private func stopEchoing() {
+        guard let echoing else { return }
+        echoing.rest.cancel()
+        self.echoing = nil
+        LoopLog.off("echo \(echoing.status.word)", self)
     }
 
     /// A stable 1–8 hue from any seed string (mark.ts `markHue`).

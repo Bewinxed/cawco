@@ -32,7 +32,9 @@
  *     notice and approves
  *     the ask from the panel;
  *  5. prints `PASS <step>` / `FAIL <step>` per check, saves the captures to a
- *     folder it names, and exits 0 only if every check passed.
+ *     folder it names, and exits 0 only if every check passed. A read that
+ *     timed out on an app that never went idle prints the app's own log of
+ *     what was looping (`idleEvidence`).
  *
  * It stops only what it started: the fleet's processes by PID, the tunnel,
  * the Maestro runner of each simulator it created, and those simulators
@@ -1140,7 +1142,9 @@ const LOG_PREFIX = /^.*\[dev\.cawco\.app:/;
 
 /**
  * One device's pass. `last`: the pass that also dismisses the notice and
- * approves the ask, which take them away for every device after it.
+ * approves the ask, which take them away for every device after it. A read
+ * that timed out waiting for the app to go idle has the app's word on why
+ * printed under it (`idleEvidence`).
  */
 async function pass(
   kind: Kind,
@@ -1149,17 +1153,73 @@ async function pass(
   rowSession: string,
   last: boolean
 ) {
-  const box = await openPanel(kind, udid, port, rowSession);
-  if (!box) {
-    return;
+  try {
+    const box = await openPanel(kind, udid, port, rowSession);
+    if (!box) {
+      return;
+    }
+    await tapThrough(kind, udid, box);
+    if (last) {
+      await answerFromPanel(kind, udid);
+    } else {
+      // Answering takes the ask away, so its row is chosen on the pass that does not answer it.
+      await chooseRow(kind, udid);
+    }
+  } catch (error) {
+    if (String(error).includes(QUERY_TIMEOUT)) {
+      await idleEvidence(kind, udid);
+    }
+    throw error;
   }
-  await tapThrough(kind, udid, box);
-  if (last) {
-    await answerFromPanel(kind, udid);
-  } else {
-    // Answering takes the ask away, so its row is chosen on the pass that does not answer it.
-    await chooseRow(kind, udid);
+}
+
+/** XCTest's words when a query waited on an app that never went idle (Maestro's AppError: XCTFuture 1000). */
+const QUERY_TIMEOUT = "Timed out while evaluating UI query";
+/** How far back the app's log is read after a timed-out read: past the 187s one read has waited. */
+const EVIDENCE_WINDOW = "6m";
+/** The app's once-a-second census under `-shell-probe` (ShellController `probeShell`, `LoopCensus`). */
+const LOOPS_LINE = /probe loops n=\d+.*/;
+
+/**
+ * Why the app never went idle, from its own log over `EVIDENCE_WINDOW`:
+ * XCTest takes an app with an animation running as never idle
+ * (rdar://25562105). The last `probe loops` lines, with their times (lines
+ * that stop mean the main thread stopped turning); every `Loops` on and off
+ * (`LoopLog`); and how many times the panel was placed (`panel hangs`),
+ * which runs into thousands when a layout pass keeps setting off another.
+ */
+async function idleEvidence(kind: Kind, udid: string) {
+  // Counted on the Mac: a layout loop can log the panel's place thousands of times.
+  const text = await mac(`F=$(mktemp)
+xcrun simctl spawn ${udid} log show --last ${EVIDENCE_WINDOW} --style compact --predicate 'subsystem == "dev.cawco.app" AND ((category == "Probe" AND eventMessage BEGINSWITH "probe loops") OR category == "Loops" OR (category == "CawPanel" AND eventMessage BEGINSWITH "panel hangs"))' > "$F" || true
+echo "PLACED $(grep -c 'panel hangs' "$F" || true) $(grep 'panel hangs' "$F" | head -1 | cut -d' ' -f2) $(grep 'panel hangs' "$F" | tail -1 | cut -d' ' -f2)"
+grep 'probe loops' "$F" | tail -5 || true
+echo "LOOPS $(grep -c ':Loops]' "$F" || true)"
+grep ':Loops]' "$F" | tail -20 || true
+rm -f "$F"`).catch((error) => String(error));
+  const lines = text.split("\n");
+  const placed = (lines.find((one) => one.startsWith("PLACED ")) ?? "PLACED ?")
+    .split(" ")
+    .slice(1);
+  const census = lines.filter((one) => LOOPS_LINE.test(one));
+  const loops = lines.filter((one) => one.includes(":Loops]"));
+  const at = (line: string) => line.split(" ")[1] ?? "";
+  console.log(
+    `  ${kind}: why the app never went idle, from its log over the last ${EVIDENCE_WINDOW}:`
+  );
+  console.log(`    the last ${census.length} 'probe loops' lines:`);
+  for (const line of census) {
+    console.log(`      ${at(line)} ${LOOPS_LINE.exec(line)?.[0] ?? ""}`);
   }
+  console.log(
+    `    ${(lines.find((one) => one.startsWith("LOOPS ")) ?? "LOOPS ?").slice(6)} loop on/off lines, the last ${loops.length}:`
+  );
+  for (const line of loops) {
+    console.log(`      ${at(line)} ${line.replace(LOG_PREFIX, "")}`);
+  }
+  console.log(
+    `    the panel placed ${placed[0] ?? "?"} times${placed[1] ? `, ${placed[1]} to ${placed[2]}` : ""}`
+  );
 }
 
 try {

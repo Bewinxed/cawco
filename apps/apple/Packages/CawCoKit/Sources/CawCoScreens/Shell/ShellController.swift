@@ -359,7 +359,9 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     /// A simulator pass's `-shell-probe`: once a second, in the Probe log,
     /// the tab in front, how many tabs its group has, whether the sidebar's
     /// sheet is up, and on a phone's conversations Caw's glass and touch
-    /// frame (window points) against the top edge of the transcript's pages.
+    /// frame (window points) against the top edge of the transcript's pages;
+    /// then every animation in the scene's windows that repeats for ever and
+    /// every Rive view drawing (`LoopCensus`), on a `probe loops` line.
     private func probeShell() {
         let rail = railSheet.map { !$0.isBeingDismissed } ?? false
         var line = "probe shell tab=\(currentId ?? "none") tabs=\(workspace.focused.tabs.count) rail=\(rail)"
@@ -376,7 +378,11 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             }
             line += " transcriptTop=\(top) gap=\(top - glass.maxY) label=\(caw.accessibilityLabel ?? "")"
         }
-        Logger(subsystem: "dev.cawco.app", category: "Probe").notice("\(line, privacy: .public)")
+        let probe = Logger(subsystem: "dev.cawco.app", category: "Probe")
+        probe.notice("\(line, privacy: .public)")
+        // What keeps the app from going idle this second: a probe whose read timed out prints it.
+        let loops = LoopCensus.running(in: view.window?.windowScene?.windows ?? [])
+        probe.notice("probe loops n=\(loops.count) \(loops.joined(separator: " | "), privacy: .public)")
     }
 
     /// The first tab on screen in the phone's row.
