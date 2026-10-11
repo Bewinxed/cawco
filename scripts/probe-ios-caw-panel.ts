@@ -987,7 +987,7 @@ async function tapThrough(kind: Kind, udid: string, box: Frame) {
     !covered && over.length === 0,
     covered
       ? `no point of the row ${JSON.stringify(row)} is outside the panel ${JSON.stringify(box)}`
-      : `at ${JSON.stringify(at)} on the row "${target.label ?? ""}": ${over.length === 0 ? "the row alone" : `also ${said(over)}`}`
+      : `at ${JSON.stringify(at)} on the row "${target.label ?? ""}" ${JSON.stringify(row)}: ${over.length === 0 ? "the row alone" : `also ${said(over)}; their frames ${over.map((n) => JSON.stringify(n.frame)).join(", ")}`}`
   );
   const before = target.value;
   await tap(udid, at);
