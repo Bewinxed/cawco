@@ -15,10 +15,13 @@
  *     stand-in Cawrier this probe serves (`CAWCO_CAWRIER_ORIGIN`), which keeps
  *     each push's body: the hub's real payload, sealed for the simulator;
  *  3. forwards the scratch hub to the Mac's loopback (`ssh -R`), makes an
- *     iPhone simulator, installs the app and launches it with
- *     `-paywall-env sandbox -push-probe-register`, allows notifications, and
- *     waits for the app's own registration of its pairing and push key with
- *     the hub (PushProbe; a simulator has no purchase for Cawrier);
+ *     iPhone simulator, installs the app, streams the app's log from before
+ *     its first launch (`log stream`, read for every step after), and runs a
+ *     Maestro flow that launches it with `-paywall-env sandbox
+ *     -push-probe-register` and notifications allowed: iOS shows its prompt
+ *     and Maestro taps Allow. It then waits for the app's own registration of
+ *     its pairing and push key with the hub (PushProbe; a simulator has no
+ *     purchase for Cawrier);
  *  4. for each case, quits the app, delivers the hub's payload with
  *     `xcrun simctl push <udid> dev.cawco.app <payload.apns>` (the extension
  *     opens it there), and lists what the notification centre shows;
@@ -56,8 +59,9 @@
  * check rather than failing it as the code's fault.
  *
  * It stops only what it started: the fleet's processes by PID, the stand-in,
- * the tunnel, and the simulator it created (deleted at the end). `--keep`
- * keeps the fleet's sandbox for reading.
+ * the tunnel, the log stream, and the simulator it created (deleted at the
+ * end). `--keep` keeps the fleet's sandbox for reading. The Mac needs Maestro
+ * (/opt/homebrew/bin/maestro, a fleet tool) and brew's openjdk for it.
  *
  * Prints `PASS <step>` / `FAIL <step>` per check and exits 0 only if every
  * check passed.
@@ -65,7 +69,6 @@
 import { mkdir } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import type { DbShape, WorkItemRow } from "../packages/hub/src/db";
-import { axeOver, bootForSystemPrompts } from "./ios-sim-axe";
 import { MACHINE, scratchFleet, until } from "./scratch-fleet";
 
 const keep = process.argv.includes("--keep");
@@ -116,79 +119,103 @@ async function mac(script: string): Promise<string> {
   }
   return text;
 }
-const axe = axeOver(mac);
-
-interface AlertFrame {
-  height: number;
-  width: number;
-  x: number;
-  y: number;
-}
 
 /**
- * Taps the notifications alert's Allow where `describe-ui` draws it: reads
- * the whole-screen tree every second for up to 30 s until an element
- * labelled exactly "Allow" with a frame is in it, then taps the frame's
- * centre. "Don't Allow" is a different label, so it is never the match.
+ * Maestro on the Mac (a fleet tool), with Java from brew's openjdk as its
+ * fleet MCP config sets it, and none of its analytics, AI-analysis notice or
+ * update check (docs.maestro.dev/maestro-cli/environment-variables).
  */
-async function tapAllow(sim: string): Promise<{ ok: boolean; said: string }> {
-  const stopAt = Date.now() + 30_000;
-  let last = "";
-  while (Date.now() < stopAt) {
-    // biome-ignore lint/performance/noAwaitInLoops: each read follows the last one's miss
-    const raw = await axe(`describe-ui --udid ${sim}`).catch(
-      (error: unknown) => `describe-ui failed: ${String(error)}`
-    );
-    last = raw;
-    let found: AlertFrame | undefined;
-    const walk = (at: unknown) => {
-      if (found || !at) {
-        return;
-      }
-      if (Array.isArray(at)) {
-        for (const child of at) {
-          walk(child);
-        }
-        return;
-      }
-      if (typeof at !== "object") {
-        return;
-      }
-      const o = at as Record<string, unknown>;
-      const label = (o.AXLabel ?? o.label) as string | undefined;
-      const frame = o.frame as AlertFrame | undefined;
-      if (label === "Allow" && frame && frame.width > 0) {
-        found = frame;
-        return;
-      }
-      walk(o.children);
-    };
-    try {
-      walk(JSON.parse(raw));
-    } catch {
-      // Not JSON (a failed read): read again.
+const MAESTRO =
+  'JAVA_HOME="$(/opt/homebrew/bin/brew --prefix openjdk)" MAESTRO_CLI_NO_ANALYTICS=true MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED=true MAESTRO_DISABLE_UPDATE_CHECK=true /opt/homebrew/bin/maestro --no-ansi';
+
+/**
+ * Runs `steps` (Maestro flow commands) on the probe's simulator under this
+ * app's id; whether the flow passed, and Maestro's last lines.
+ */
+const flow = async (
+  name: string,
+  steps: string
+): Promise<{ ok: boolean; said: string }> => {
+  const yaml = `appId: ${BUNDLE}\n---\n${steps}`;
+  const b64 = Buffer.from(yaml).toString("base64");
+  const tail = (text: string) =>
+    text.trim().split("\n").slice(-6).join(" / ").slice(0, 400);
+  return await mac(`D=$(mktemp -d)
+trap 'rm -rf "$D"' EXIT
+echo '${b64}' | base64 -D > "$D/${name}.yaml"
+${MAESTRO} --device ${udid} test "$D/${name}.yaml" 2>&1`).then(
+    (text) => ({ ok: true, said: tail(text) }),
+    (error: unknown) => ({ ok: false, said: tail(String(error)) })
+  );
+};
+
+/** The screen as Maestro reads it (`maestro hierarchy`): its JSON, or the failure. */
+const hierarchy = () =>
+  mac(`${MAESTRO} --device ${udid} hierarchy 2>/dev/null`).catch(
+    (error: unknown) => `maestro hierarchy failed: ${String(error)}`
+  );
+
+// ── The app's log, streamed from before its first launch ─────────────────
+/**
+ * Every line `log stream` gave for the app's subsystem (the app and its
+ * extension), in order. Read live rather than with `log show`: on the runs
+ * at 65f13900 and 10e9336b `log show --start` returned none of the hook's
+ * notice lines, though at 65f13900 the prompt the hook asks for right after
+ * its "asking" line was on screen. `log stream` hands each message over as
+ * it is logged ("Stream activities, log data or trace messages", log(1)).
+ */
+const appLog: string[] = [];
+let logStream: ReturnType<typeof Bun.spawn> | undefined;
+let logStreamEnded: string | undefined;
+/** What `log stream` prints first: its filter line, or compact style's column heads. */
+const LOG_HEADER = /Filtering the log data|^Timestamp/;
+/** Where the app's log stands now: what was logged after this is `logSince(it)`. */
+const mark = () => appLog.length;
+const logSince = (from: number) => appLog.slice(from).join("\n");
+/**
+ * Starts `log stream` for the app's subsystem on the simulator and waits for
+ * its header, the proof it is attached; the header line, or throws.
+ */
+const streamAppLog = async () => {
+  const script = `exec xcrun simctl spawn ${udid} log stream --level debug --style compact --predicate 'subsystem == "dev.cawco.app"'`;
+  const child = Bun.spawn(
+    onMac ? ["bash", "-c", script] : [...SSH, "mac", script],
+    {
+      stdout: "pipe",
+      stderr: "pipe",
     }
-    if (found) {
-      const x = Math.round(found.x + found.width / 2);
-      const y = Math.round(found.y + found.height / 2);
-      return axe(`tap -x ${x} -y ${y} --udid ${sim} 2>&1`).then(
-        (text) => ({
-          ok: true,
-          said: `at (${x}, ${y}): ${text.trim()}`,
-        }),
-        (error: unknown) => ({
-          ok: false,
-          said: `at (${x}, ${y}): ${error instanceof Error ? error.message : String(error)}`,
-        })
-      );
+  );
+  logStream = child;
+  const pump = async (from: ReadableStream<Uint8Array>) => {
+    const decoder = new TextDecoder();
+    let rest = "";
+    for await (const chunk of from) {
+      rest += decoder.decode(chunk, { stream: true });
+      const lines = rest.split("\n");
+      rest = lines.pop() ?? "";
+      appLog.push(...lines);
     }
-    await Bun.sleep(1000);
-  }
-  return {
-    ok: false,
-    said: `no "Allow" with a frame in 30 s; last read: ${last.slice(0, 160)}`,
   };
-}
+  pump(child.stdout).catch(() => undefined);
+  pump(child.stderr).catch(() => undefined);
+  child.exited.then((code) => {
+    logStreamEnded = `log stream exited ${code}`;
+  });
+  const header = await until(
+    "the app's log stream attached",
+    () =>
+      appLog.find((line) => LOG_HEADER.test(line)) ??
+      (logStreamEnded ? "" : undefined),
+    (line) => line !== undefined,
+    30_000
+  ).catch(() => undefined);
+  if (!header) {
+    throw new Error(
+      `the app's log never streamed: ${logStreamEnded ?? "no header in 30 s"}; it said: ${appLog.slice(0, 5).join(" / ") || "nothing"}`
+    );
+  }
+  return header;
+};
 
 // ── What the mock asks, one tool call per marker ─────────────────────────
 const tag = crypto.randomUUID().slice(0, 6);
@@ -338,25 +365,22 @@ const opened = async (
   return JSON.parse(new TextDecoder().decode(plain));
 };
 
-/** The Mac's clock, as `log show --start` reads it. */
-const macNow = async () => (await mac("date '+%Y-%m-%d %H:%M:%S'")).trim();
-/** The app's and the extension's push lines since `start`. */
-const logSince = (start: string) =>
-  mac(
-    `xcrun simctl spawn ${udid} log show --start '${start}' --style compact --predicate 'subsystem == "dev.cawco.app" AND (category == "PushProbe" OR category == "Push")' 2>/dev/null || true`
-  );
-/** Waits for a line matching `pattern` since `start`; the whole log, and the match. */
-const awaitLine = async (start: string, pattern: RegExp, ms = 60_000) => {
-  let last = "";
+/**
+ * Waits for a line matching `pattern` logged after `from`, or until `over()`
+ * says nothing more can come; the log since, and the match.
+ */
+const awaitLine = async (
+  from: number,
+  pattern: RegExp,
+  ms = 60_000,
+  over: () => boolean = () => false
+) => {
   const text = await until(
     `a log line ${pattern}`,
-    async () => {
-      last = await logSince(start);
-      return last;
-    },
-    (log) => pattern.test(log),
+    () => logSince(from),
+    (log) => pattern.test(log) || over(),
     ms
-  ).catch(() => last);
+  ).catch(() => logSince(from));
   return { log: text, match: text.match(pattern) };
 };
 const launch = (args: string) =>
@@ -377,7 +401,7 @@ const deliver = async (push: Captured, foreground = false) => {
   } else {
     await quit();
   }
-  const start = await macNow();
+  const from = mark();
   const apns = JSON.stringify({
     ...push.payload,
     "Simulator Target Bundle": BUNDLE,
@@ -388,7 +412,7 @@ echo '${b64}' | base64 -D > "$F"
 xcrun simctl push ${udid} ${BUNDLE} "$F" >/dev/null
 rm -f "$F"`);
   await Bun.sleep(3000);
-  return await logSince(start);
+  return logSince(from);
 };
 /**
  * Whether the notification service extension ran for a delivered push: it
@@ -411,9 +435,9 @@ const LISTED =
 const LISTED_DONE = /probe listed done:/;
 /** What the notification centre shows, as the app lists it. */
 const listed = async (): Promise<Listed[]> => {
-  const start = await macNow();
+  const from = mark();
   await launch("-push-probe-list");
-  const { log } = await awaitLine(start, LISTED_DONE, 30_000);
+  const { log } = await awaitLine(from, LISTED_DONE, 30_000);
   return [...log.matchAll(LISTED)].map((m) => ({
     id: m[1],
     category: m[2],
@@ -428,16 +452,16 @@ const listed = async (): Promise<Listed[]> => {
  * what the notification centre showed after it (the app lists it).
  */
 const act = async (id: string, action: string, text?: string) => {
-  const start = await macNow();
+  const from = mark();
   await launch(
     `-push-probe-act ${id} ${action}${text === undefined ? "" : ` '${text}'`}`
   );
   const ran = await awaitLine(
-    start,
+    from,
     new RegExp(`probe acted ${id} ${action}: handled`),
     60_000
   );
-  const done = await awaitLine(start, AFTER_DONE, 30_000);
+  const done = await awaitLine(from, AFTER_DONE, 30_000);
   const after = [...done.log.matchAll(AFTER)].map((m) => ({
     id: m[1],
     category: m[2],
@@ -569,51 +593,102 @@ print(best[1], best[2])
 xcrun simctl create "CawCo probe push actions" "$TYPE" "$RUNTIME"`)
   ).trim();
   console.log(`  simulator ${udid}`);
-  // The permission prompt is SpringBoard's, not the app's: the simulator
-  // boots twice so SpringBoard starts with its accessibility server open to
-  // axe (bootForSystemPrompts says why, and why not a SpringBoard restart).
-  const booted = await mac(bootForSystemPrompts(udid, app));
+  // One boot. The double boot that set SpringBoard's AX switch
+  // (IgnoreAXServerEntitlements) was for axe, a host-side reader SpringBoard
+  // refuses from iOS 26.5; Maestro reads and taps from its XCTest runner, an
+  // app on the simulator, so nothing is switched.
+  await mac(`xcrun simctl boot ${udid}
+xcrun simctl bootstatus ${udid} -b >/dev/null
+xcrun simctl install ${udid} "${app}"`);
   check(
-    "the simulator boots with SpringBoard's AX server open to axe",
-    /^IgnoreAXServerEntitlements 1$/m.test(booted),
-    booted.trim() || "nothing printed"
+    "the app's log streams from the simulator",
+    true,
+    (await streamAppLog()).trim()
   );
 
-  // ── The real path: iOS asks, the probe allows, APNs gives a token, the
+  // ── The real path: iOS asks, Maestro allows, APNs gives a token, the
   // app registers its pairing and push key with the hub (PushProbe). ──────
-  const registerStart = await macNow();
-  await launch("-push-probe-register");
-  // The hook asks from a window in front, and says iOS's word before it asks.
-  const asking = await awaitLine(
-    registerStart,
-    /probe register: asking for notifications(.*)/,
-    60_000
+  // Maestro taps the prompt's Allow inside a read of the screen made while
+  // SpringBoard is in front and notifications are set to allow
+  // (maestro-ios-xctest-runner SystemPermissionHelper
+  // .handleSystemPermissionAlertIfNeeded, called by ViewHierarchyHandler
+  // .getAppViewHierarchy; docs.maestro.dev permissions: "When the app
+  // requests permissions, the system prompt appears, and Maestro
+  // automatically taps Allow"). So the flow launches the app itself, with
+  // its runner already up, then reads the screen on every poll of a wait for
+  // "Allow" until the prompt has shown. Its `arguments` reach the app as
+  // `-key value`, and a boolean's key as written (Maestro
+  // IOSLaunchArguments.toIOSLaunchArguments). Notifications alone are set:
+  // `all`, launchApp's default, would also run applesimutils for the rest
+  // (LocalSimulatorUtils.setAppleSimutilsPermissions). The wait is optional:
+  // the app's own "probe authorization:" line is the verdict.
+  const registerFrom = mark();
+  const registerAt = Date.now();
+  const crashMark = (await mac("mktemp -t cawco-probe-mark")).trim();
+  let allowance: { ok: boolean; said: string } | undefined;
+  const allowing = flow(
+    "allow-notifications",
+    `- launchApp:
+    appId: ${BUNDLE}
+    permissions:
+      notifications: allow
+    arguments:
+      paywall-env: sandbox
+      cawco-hub-url: "${hub}"
+      "-push-probe-register": true
+- extendedWaitUntil:
+    visible:
+      text: "Allow"
+    timeout: 90000
+    optional: true
+`
+  ).then((result) => {
+    allowance = result;
+    return result;
+  });
+  const flowFailed = () => allowance?.ok === false;
+  // Maestro's first flow on a fresh simulator installs and starts its runner first.
+  const started = await awaitLine(
+    registerFrom,
+    /probe register: started.*/,
+    240_000,
+    flowFailed
   );
+  const front = started.log.match(/probe register: in front .*/)?.[0];
+  check(
+    "the app's register hook runs",
+    started.match !== null,
+    started.match
+      ? `${started.match[0]}${front ? `; ${front}` : ""}`
+      : `no "probe register: started" line ${Math.round((Date.now() - registerAt) / 1000)} s after the flow began; Maestro: ${allowance ? `${allowance.ok ? "passed" : "failed"}: ${allowance.said}` : "still running"}`
+  );
+  // The hook asks from a window in front, and says iOS's word before it asks.
+  const asking = started.match
+    ? await awaitLine(
+        registerFrom,
+        /probe register: asking for notifications(.*)/,
+        60_000
+      )
+    : started;
+  const hookLines = (log: string) =>
+    log.split("\n").filter((line) => line.includes(":PushProbe]"));
   check(
     "the app asks for notifications",
     asking.match !== null,
     asking.match
       ? `PushProbe's register hook called requestAuthorization${asking.match[1]}`
-      : "no `probe register: asking` line: the DEBUG hook never ran"
+      : `no "probe register: asking" line; the hook's last: ${hookLines(asking.log).at(-1)?.slice(0, 200) ?? "none"}`
   );
-  // Tapped where `describe-ui` draws it. On the run at 4593de9d,
-  // `tap --label Allow` answered "No accessibility element matched --label
-  // 'Allow'" while the `describe-ui` right after it listed "Allow" beside
-  // "“CawCo” Would Like to Send You Notifications": the label tap does not
-  // reach SpringBoard's alert, the whole-screen tree does. So the probe reads
-  // the tree until the alert's Allow is in it (up to 30 s) and taps its
-  // frame's centre; axe() tries again while axe can't reach the simulator.
-  const tapped = await tapAllow(udid);
   // Past the hook's 45 s "no answer" line, which says iOS's word then.
-  const authorized = await awaitLine(
-    registerStart,
-    /probe authorization: (.*)/,
-    75_000
-  );
+  const authorized = started.match
+    ? await awaitLine(registerFrom, /probe authorization: (.*)/, 75_000)
+    : started;
   const unanswered = authorized.log.match(
     /probe register: no answer 45 s after asking.*/
   )?.[0];
   const allowed = authorized.match?.[1]?.trim() === "allowed";
+  // The flow ends when its wait sees "Allow", or at its 90 s.
+  const allowedBy = await allowing;
   if (!allowed) {
     const shot = join(out, "permission-prompt.png");
     const png = await mac(`F=$(mktemp -d)
@@ -626,41 +701,54 @@ rm -rf "$F"`).catch(() => "");
     console.log(
       `  the screen when it wasn't allowed: ${png ? shot : "no capture"}`
     );
-    // What axe read there: whether the prompt's buttons were in its tree.
-    const tree = await axe(`describe-ui --udid ${udid}`).catch(
-      (error: unknown) => `describe-ui failed: ${String(error)}`
-    );
-    const labels = [...tree.matchAll(/"AXLabel"\s*:\s*"([^"]*)"/g)]
+    // What Maestro read there: whether the prompt's buttons were in its tree.
+    const tree = await hierarchy();
+    const labels = [
+      ...tree.matchAll(/"(?:accessibilityText|text|title)"\s*:\s*"([^"]+)"/g),
+    ]
       .map((m) => m[1])
-      .filter(Boolean)
       .slice(0, 30);
     console.log(
-      `  what axe read there: ${labels.length ? labels.join(" | ") : tree.slice(0, 200)}`
+      `  what Maestro read there: ${labels.length ? labels.join(" | ") : tree.slice(0, 200)}`
     );
-    // The app's every line and the notification daemon's since the launch,
-    // before the simulator is deleted: where the register hook stopped.
-    const appLog = await mac(
-      `xcrun simctl spawn ${udid} log show --start '${registerStart}' --style compact --info --predicate 'subsystem == "dev.cawco.app" OR process == "usernotificationsd" OR process == "SpringBoard" AND eventMessage CONTAINS[c] "notification"' 2>/dev/null | tail -60 || true`
-    ).catch((error: unknown) => `log show failed: ${String(error)}`);
+    // Every line the app logged since the flow began, whole: where the hook stopped.
     const logFile = join(out, "register-log.txt");
-    await Bun.write(logFile, appLog);
-    console.log(
-      `  the app's and usernotificationsd's lines since launch: ${logFile}`
-    );
-    for (const line of appLog
+    await Bun.write(logFile, logSince(registerFrom));
+    console.log(`  the app's lines since the flow began: ${logFile}`);
+    for (const line of logSince(registerFrom)
       .split("\n")
-      .filter((l) => l.includes("PushProbe"))
-      .slice(-8)) {
-      console.log(`    ${line.slice(0, 200)}`);
+      .filter((l) => l.includes(":PushProbe]") || l.includes(":Push]"))
+      .slice(-20)) {
+      console.log(`    ${line.slice(0, 240)}`);
     }
+    if (logStreamEnded) {
+      console.log(`  the app's log stream: ${logStreamEnded}`);
+    }
+    // Whether the app is still running, and any crash report since the flow
+    // began: the simulator's processes are the Mac's, and their reports land
+    // in the Mac's own DiagnosticReports.
+    const running = await mac(
+      `xcrun simctl spawn ${udid} launchctl list | grep 'UIKitApplication:${BUNDLE}' || echo "not in launchctl list"`
+    ).catch((error: unknown) => `launchctl list failed: ${String(error)}`);
+    console.log(`  the app's process (pid status label): ${running.trim()}`);
+    const crashes = await mac(
+      `find "$HOME/Library/Logs/DiagnosticReports" -maxdepth 1 -name 'CawCo*' -newer '${crashMark}' 2>/dev/null || true`
+    ).catch(() => "");
+    console.log(
+      `  CawCo crash reports since the flow began: ${crashes.trim().split("\n").filter(Boolean).join(", ") || "none"}`
+    );
   }
+  await mac(`rm -f '${crashMark}'`).catch(() => undefined);
   check(
     "notifications allowed through the prompt",
     allowed,
-    `axe tap --label Allow: ${tapped.ok ? "tapped" : "failed"} (${tapped.said.slice(0, 200) || "no output"}); app: ${authorized.match?.[1]?.trim() ?? unanswered ?? "no authorization line"}`
+    `Maestro ${allowedBy.ok ? "passed" : "failed"} (${allowedBy.said || "no output"}); app: ${authorized.match?.[1]?.trim() ?? unanswered ?? "no authorization line"}`
   );
+  if (!started.match) {
+    throw new Error("the app's register hook never ran");
+  }
   const registered = await awaitLine(
-    registerStart,
+    registerFrom,
     /probe registered: (.*)/,
     60_000
   );
@@ -971,13 +1059,17 @@ rm -rf "$F"`).catch(() => "");
   // ── 7c. A session open in front in the app: its turn pushes nothing ────
   {
     await launch(`-open-session ${id}`);
-    const inFront = await until(
-      "the session in front in the app",
-      async () =>
-        (await axe(`describe-ui --udid ${udid}`)).includes("steer-message"),
-      Boolean,
-      120_000
-    ).catch(() => false);
+    // The session's composer (ComposerView's "steer-message") is on screen.
+    const inFront = (
+      await flow(
+        "session-in-front",
+        `- extendedWaitUntil:
+    visible:
+      id: "steer-message"
+    timeout: 120000
+`
+      )
+    ).ok;
     const from = captured.length;
     const sent = Date.now();
     await fleet.send(id, `probe-looked ${tag}: say looked at.`);
@@ -1200,6 +1292,7 @@ xcrun simctl delete ${udid}`).catch((error) =>
       console.log(`  simulator cleanup: ${error}`)
     );
   }
+  logStream?.kill();
   tunnel?.kill();
   await cawrier.stop(true);
   await fleet.close();
