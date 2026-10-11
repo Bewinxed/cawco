@@ -637,6 +637,22 @@ rm -rf "$F"`).catch(() => "");
     console.log(
       `  what axe read there: ${labels.length ? labels.join(" | ") : tree.slice(0, 200)}`
     );
+    // The app's every line and the notification daemon's since the launch,
+    // before the simulator is deleted: where the register hook stopped.
+    const appLog = await mac(
+      `xcrun simctl spawn ${udid} log show --start '${registerStart}' --style compact --info --predicate 'subsystem == "dev.cawco.app" OR process == "usernotificationsd" OR process == "SpringBoard" AND eventMessage CONTAINS[c] "notification"' 2>/dev/null | tail -60 || true`
+    ).catch((error: unknown) => `log show failed: ${String(error)}`);
+    const logFile = join(out, "register-log.txt");
+    await Bun.write(logFile, appLog);
+    console.log(
+      `  the app's and usernotificationsd's lines since launch: ${logFile}`
+    );
+    for (const line of appLog
+      .split("\n")
+      .filter((l) => l.includes("PushProbe"))
+      .slice(-8)) {
+      console.log(`    ${line.slice(0, 200)}`);
+    }
   }
   check(
     "notifications allowed through the prompt",

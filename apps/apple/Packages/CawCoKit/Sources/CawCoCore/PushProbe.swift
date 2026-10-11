@@ -51,10 +51,12 @@ public enum PushProbe {
     /// answer has come 45 s after it, so a prompt that never showed tells
     /// "already decided" from "asked and not shown".
     private static func register() async {
+        log.notice("probe register: started")
         let frontBy = ContinuousClock.now + .seconds(30)
         while !inFront, ContinuousClock.now < frontBy {
             try? await Task.sleep(for: .milliseconds(100))
         }
+        log.notice("probe register: in front \(inFront), reading iOS's word")
         let before = await NotificationCentre.authorization()
         log.notice("probe register: asking for notifications (in front \(inFront), authorization \(name(before), privacy: .public))")
         let waiting = Task {
