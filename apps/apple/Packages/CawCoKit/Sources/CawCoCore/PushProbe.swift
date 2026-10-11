@@ -49,16 +49,24 @@ public enum PushProbe {
     /// window in front, not from `didFinishLaunching`, where `run()` starts it.
     /// iOS's word on notifications is logged before the ask, and again if no
     /// answer has come 45 s after it, so a prompt that never showed tells
-    /// "already decided" from "asked and not shown".
+    /// "already decided" from "asked and not shown". Each step says how long
+    /// it took and what the scenes were, so a hook that never asks shows
+    /// whether it waited on a window in front or on iOS's word, which queues
+    /// behind every earlier call on `NotificationCentre`'s serial queue
+    /// (`PushCategory.install` waits up to 5 s on each of its three answers).
     private static func register() async {
-        log.notice("probe register: started")
-        let frontBy = ContinuousClock.now + .seconds(30)
+        let started = ContinuousClock.now
+        log.notice("probe register: started (scenes \(scenes, privacy: .public))")
+        let frontBy = started + .seconds(30)
         while !inFront, ContinuousClock.now < frontBy {
             try? await Task.sleep(for: .milliseconds(100))
         }
-        log.notice("probe register: in front \(inFront), reading iOS's word")
+        let frontAfter = String(describing: started.duration(to: ContinuousClock.now))
+        log.notice("probe register: in front \(inFront) after \(frontAfter, privacy: .public) (scenes \(scenes, privacy: .public)), reading iOS's word")
+        let reading = ContinuousClock.now
         let before = await NotificationCentre.authorization()
-        log.notice("probe register: asking for notifications (in front \(inFront), authorization \(name(before), privacy: .public))")
+        let readIn = String(describing: reading.duration(to: ContinuousClock.now))
+        log.notice("probe register: asking for notifications (in front \(inFront), authorization \(name(before), privacy: .public), read in \(readIn, privacy: .public))")
         let waiting = Task {
             try await Task.sleep(for: .seconds(45))
             let now = await NotificationCentre.authorization()
@@ -90,6 +98,20 @@ public enum PushProbe {
     /// A window of this app is in front and taking touches.
     private static var inFront: Bool {
         UIApplication.shared.connectedScenes.contains { $0.activationState == .foregroundActive }
+    }
+
+    /// Each connected scene's activation state, or "none".
+    private static var scenes: String {
+        let states = UIApplication.shared.connectedScenes.map { scene -> String in
+            switch scene.activationState {
+            case .unattached: "unattached"
+            case .foregroundActive: "foregroundActive"
+            case .foregroundInactive: "foregroundInactive"
+            case .background: "background"
+            @unknown default: "unknown (\(scene.activationState.rawValue))"
+            }
+        }
+        return states.isEmpty ? "none" : states.joined(separator: ", ")
     }
 
     private static func name(_ status: UNAuthorizationStatus) -> String {
