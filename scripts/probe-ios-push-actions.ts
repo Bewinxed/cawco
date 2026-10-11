@@ -20,8 +20,8 @@
  *     installs the app, streams the app's log from before
  *     its first launch (`log stream`, read for every step after), and runs a
  *     Maestro flow that launches it with `-paywall-env sandbox
- *     -push-probe-register` and notifications allowed: iOS shows its prompt
- *     and Maestro taps Allow. It then waits for the app's own registration of
+ *     -push-probe-register`, waits for iOS's prompt and taps its Allow (the
+ *     flow's own tap; Maestro's auto-tap is off). It then waits for the app's own registration of
  *     its pairing and push key with the hub (PushProbe; a simulator has no
  *     purchase for Cawrier);
  *  4. for each case, quits the app, delivers the hub's payload with
@@ -135,18 +135,23 @@ async function mac(script: string): Promise<string> {
  * Maestro on the Mac (a fleet tool), with Java from brew's openjdk as its
  * fleet MCP config sets it, and none of its analytics, AI-analysis notice or
  * update check (docs.maestro.dev/maestro-cli/environment-variables).
+ * `MAESTRO_OPTS` carries JVM options into Maestro's launcher (Gradle's start
+ * script adds them to the `java` line and prints nothing of its own);
+ * `--enable-final-field-mutation=ALL-UNNAMED` is what JDK 26's "WARNING:
+ * Mutating final fields will be blocked" asks for (JEP 500), so Maestro's
+ * own lines are what it prints (as probe-ios-caw-panel.ts runs it).
  */
 const MAESTRO =
-  'JAVA_HOME="$(/opt/homebrew/bin/brew --prefix openjdk)" MAESTRO_CLI_NO_ANALYTICS=true MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED=true MAESTRO_DISABLE_UPDATE_CHECK=true /opt/homebrew/bin/maestro --no-ansi';
+  'JAVA_HOME="$(/opt/homebrew/bin/brew --prefix openjdk)" MAESTRO_OPTS=--enable-final-field-mutation=ALL-UNNAMED MAESTRO_CLI_NO_ANALYTICS=true MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED=true MAESTRO_DISABLE_UPDATE_CHECK=true /opt/homebrew/bin/maestro --no-ansi';
 
 /**
  * Runs `steps` (Maestro flow commands) on the probe's simulator under this
- * app's id; whether the flow passed, and Maestro's last lines.
+ * app's id; whether the flow passed, Maestro's last lines, and all it said.
  */
 const flow = async (
   name: string,
   steps: string
-): Promise<{ ok: boolean; said: string }> => {
+): Promise<{ ok: boolean; said: string; all: string }> => {
   const yaml = `appId: ${BUNDLE}\n---\n${steps}`;
   const b64 = Buffer.from(yaml).toString("base64");
   const tail = (text: string) =>
@@ -155,8 +160,12 @@ const flow = async (
 trap 'rm -rf "$D"' EXIT
 echo '${b64}' | base64 -D > "$D/${name}.yaml"
 ${MAESTRO} --device ${udid} test "$D/${name}.yaml" 2>&1`).then(
-    (text) => ({ ok: true, said: tail(text) }),
-    (error: unknown) => ({ ok: false, said: tail(String(error)) })
+    (text) => ({ ok: true, said: tail(text), all: text.trim() }),
+    (error: unknown) => ({
+      ok: false,
+      said: tail(String(error)),
+      all: String(error).trim(),
+    })
   );
 };
 
@@ -613,30 +622,38 @@ xcrun simctl install ${udid} "${app}"`);
 
   // ── The real path: iOS asks, Maestro allows, APNs gives a token, the
   // app registers its pairing and push key with the hub (PushProbe). ──────
-  // Maestro taps the prompt's Allow inside a read of the screen made while
-  // SpringBoard is in front and notifications are set to allow
-  // (maestro-ios-xctest-runner SystemPermissionHelper
-  // .handleSystemPermissionAlertIfNeeded, called by ViewHierarchyHandler
-  // .getAppViewHierarchy; docs.maestro.dev permissions: "When the app
-  // requests permissions, the system prompt appears, and Maestro
-  // automatically taps Allow"). So the flow launches the app itself, with
-  // its runner already up, then reads the screen on every poll of a wait for
-  // "Allow" until the prompt has shown. Its `arguments` reach the app as
+  // The flow launches the app (one `simctl launch`, the process whose log
+  // streams: Maestro.launchApp stops it, then IOSDriver.launchApp), waits
+  // for the prompt's "Allow" and taps it itself. Maestro's own tap is not
+  // relied on: its runner taps Allow only when ViewHierarchyHandler's
+  // RunningApp.getForegroundApp() returns SpringBoard; when no app reads as
+  // `.runningForeground` (the app sits inactive behind SpringBoard's alert)
+  // it returns nil, and the handler hands back SpringBoard's tree, Allow
+  // and all, without calling SystemPermissionHelper (Maestro cli-2.11.0;
+  // issue #2331, iOS 18.0: "the notification popup is not clicked"). That
+  // is the run at a0570c26: the prompt shown at once ("Show notification
+  // user authorization prompt" 0.1 s after the ask), an optional wait for
+  // "Allow" that passed, and Allow still on screen 75 s later in the same
+  // process. So notifications are `unset` in the runner, which makes its
+  // helper do nothing (PermissionButtonFinder: `.unset` →
+  // `.noActionRequired`) and runs nothing on the simulator (neither
+  // applesimutils nor simctl knows the key); `all`, launchApp's default,
+  // would set notifications to allow and race the flow's tap. A text
+  // selector matches the whole label (Filters.textMatches, Regex.matches),
+  // so "Allow" is not "Don’t Allow". Its `arguments` reach the app as
   // `-key value`, and a boolean's key as written (Maestro
-  // IOSLaunchArguments.toIOSLaunchArguments). Notifications alone are set:
-  // `all`, launchApp's default, would also run applesimutils for the rest
-  // (LocalSimulatorUtils.setAppleSimutilsPermissions). The wait is optional:
-  // the app's own "probe authorization:" line is the verdict.
+  // IOSLaunchArguments.toIOSLaunchArguments). The app's own "probe
+  // authorization:" line is the verdict.
   const registerFrom = mark();
   const registerAt = Date.now();
   const crashMark = (await mac("mktemp -t cawco-probe-mark")).trim();
-  let allowance: { ok: boolean; said: string } | undefined;
+  let allowance: { ok: boolean; said: string; all: string } | undefined;
   const allowing = flow(
     "allow-notifications",
     `- launchApp:
     appId: ${BUNDLE}
     permissions:
-      notifications: allow
+      notifications: unset
     arguments:
       paywall-env: sandbox
       cawco-hub-url: "${hub}"
@@ -645,10 +662,20 @@ xcrun simctl install ${udid} "${app}"`);
     visible:
       text: "Allow"
     timeout: 90000
-    optional: true
+- tapOn:
+    text: "Allow"
+- extendedWaitUntil:
+    notVisible:
+      text: "Allow"
+    timeout: 15000
 `
   ).then((result) => {
     allowance = result;
+    // Maestro's own account of the flow, every command and its outcome.
+    console.log("  Maestro (allow-notifications):");
+    for (const line of result.all.split("\n")) {
+      console.log(`    ${line.slice(0, 240)}`);
+    }
     return result;
   });
   const flowFailed = () => allowance?.ok === false;
@@ -686,13 +713,18 @@ xcrun simctl install ${udid} "${app}"`);
   );
   // Past the hook's 45 s "no answer" line, which says iOS's word then.
   const authorized = started.match
-    ? await awaitLine(registerFrom, /probe authorization: (.*)/, 75_000)
+    ? await awaitLine(
+        registerFrom,
+        /probe authorization: (.*)/,
+        75_000,
+        flowFailed
+      )
     : started;
   const unanswered = authorized.log.match(
     /probe register: no answer 45 s after asking.*/
   )?.[0];
   const allowed = authorized.match?.[1]?.trim() === "allowed";
-  // The flow ends when its wait sees "Allow", or at its 90 s.
+  // The flow ends once Allow is tapped and gone, or when a step fails.
   const allowedBy = await allowing;
   if (!allowed) {
     const shot = join(out, "permission-prompt.png");
