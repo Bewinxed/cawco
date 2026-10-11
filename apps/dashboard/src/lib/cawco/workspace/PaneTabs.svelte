@@ -2089,7 +2089,7 @@
      hold the tab's span and its flare under its top edge (`menuMin`). */
   :global(.kit-pop.kit-hang.tab-menu) {
     min-inline-size: max(12rem, var(--hang-min, 0px));
-    background: var(--surface-recess);
+    --hang-surface: var(--surface-recess);
   }
   /* Flush with the pane's edge (`flushAt`): the sheet's foot is square on
      the leading side while its card hangs there, so the tab's flank runs

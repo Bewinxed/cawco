@@ -1097,10 +1097,14 @@
      Its overlay shadow is cut at its top edge, so none falls on the anchor
      or darkens its foot into a seam. */
   .kit-pop.kit-hang {
+    /* Its surface, named so the cut across its top edge is drawn in it
+       (`::before`); a card on another surface sets this, not `background`. */
+    --hang-surface: var(--surface-raised);
     /* Cut at its top edge only, with room for the whole overlay shadow past
        the others (as the pulled menu's `drawPull`). */
     position: relative;
     border: 0;
+    background: var(--hang-surface);
     clip-path: inset(
       0 -120px -120px round 0 0 var(--radius-lg) var(--radius-lg)
     );
@@ -1113,8 +1117,6 @@
     }
 
     &::after {
-      --gap-from: calc(var(--neck-start) - var(--neck-flare-start, 0px));
-      --gap-to: calc(var(--neck-end) + var(--neck-flare-end, 0px));
       content: "";
       position: absolute;
       inset: 0;
@@ -1122,21 +1124,37 @@
       border: 1px solid var(--border-control);
       border-radius: inherit;
       pointer-events: none;
-      /* A flare's stroke meets the top edge along it, its last few pixels
-         in the edge's own row (`--neck-tail-*`, √(2·flare + 1) each side
-         with a flare, written by every card through hang's `neckStyle`):
-         the edge fades out across them as the stroke's coverage does,
-         rather than stopping short of them. */
-      mask:
-        linear-gradient(
-          to right,
-          #000 var(--gap-from),
-          transparent calc(var(--gap-from) + var(--neck-tail-start, 0px))
-            calc(var(--gap-to) - var(--neck-tail-end, 0px)),
-          #000 var(--gap-to)
-        )
-        top / 100% 1px no-repeat,
-        linear-gradient(#000 0 0) 0 1px / 100% calc(100% - 1px) no-repeat;
+    }
+    /* The cut: across the neck, the edge's top row is the card's own
+       surface again, drawn over it. A flare's stroke meets the top edge
+       along it, its last few pixels in the edge's own row (`--neck-tail-*`,
+       √(2·flare + 1) each side with a flare, written by every card through
+       hang's `neckStyle`): the edge fades out across them as the stroke's
+       coverage does, rather than stopping short of them. Under that row is
+       the card's surface, so covering the edge with it by a ramp draws
+       what masking the edge out by the same ramp drew, with no mask: a
+       mask drew the whole card's edge through a buffer of its own on every
+       paint, which was most of what was left of the frame Caw's panel
+       started its slide in. */
+    &::before {
+      --gap-from: calc(var(--neck-start) - var(--neck-flare-start, 0px));
+      --gap-to: calc(var(--neck-end) + var(--neck-flare-end, 0px));
+      content: "";
+      position: absolute;
+      /* The neck is measured from the card's left edge (hang `neckAt`). */
+      top: 0;
+      left: var(--gap-from);
+      z-index: 2;
+      inline-size: calc(var(--gap-to) - var(--gap-from));
+      block-size: 1px;
+      background: linear-gradient(
+        to right,
+        transparent,
+        var(--hang-surface) var(--neck-tail-start, 0px)
+          calc(100% - var(--neck-tail-end, 0px)),
+        transparent
+      );
+      pointer-events: none;
     }
   }
   /* The cut the card comes down from behind (`hang`): its floating wrapper,
@@ -1161,6 +1179,13 @@
     }
     .kit-pop.kit-hang:not([data-shown]) {
       translate: 0 -100%;
+    }
+    /* Its own layer for as long as it is mounted: WebKit gave the card one
+       for its slide alone and took it away when the slide ended, and that
+       repainted the whole card, its shadow and its rows, in the frame it
+       landed in (75–80 ms in Playwright WebKit at 3x). */
+    .kit-pop.kit-hang {
+      will-change: translate;
     }
     @starting-style {
       .kit-pop.kit-hang[data-state="open"] {

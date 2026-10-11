@@ -14,9 +14,11 @@
    */
   import { machineLabel } from "@cawco/core";
   import type { BinaryUpdateState } from "@cawco/core/binary-updates";
+  import { MediaQuery } from "svelte/reactivity";
   import type { MovedLogin } from "#lib/cawco/accounts/model.svelte.js";
   import CawPanel from "#lib/cawco/home/CawPanel.svelte";
   import type { CawFeed } from "#lib/cawco/home/caw-feed.svelte.js";
+  import { deviceRatio } from "#lib/cawco/home/device-ratio.svelte.js";
   import type {
     AskItem,
     NeedsItem,
@@ -28,6 +30,7 @@
     neckStyle,
     sameNeck,
   } from "#lib/cawco/motion/hang.js";
+  import { hangShadow } from "#lib/cawco/motion/hung-shadow.js";
   import {
     type Notice,
     noticeFor,
@@ -38,6 +41,8 @@
   import * as Popover from "#lib/components/ui/popover/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
+  import { DRAWER_QUERY } from "#lib/hooks/is-mobile.svelte.js";
+  import { theme } from "#lib/theme.svelte.js";
   import { page } from "$app/state";
 
   /* ── The switches, from the URL ────────────────────────────────────── */
@@ -352,6 +357,23 @@
   });
   $effect(() => {
     glass = document.querySelector<HTMLElement>("[data-bar-group]");
+  });
+  // The panel's shadow, as NeedsCaw draws it (motion/hung-shadow), its
+  // corners by the window's width as CawPanel's are.
+  const drawerWidth = new MediaQuery(DRAWER_QUERY);
+  $effect(() => {
+    const look = [theme.resolved, deviceRatio.current, drawerWidth.current];
+    const corner = Number.parseFloat(
+      getComputedStyle(document.documentElement).getPropertyValue("--radius-lg")
+    );
+    hangShadow(".kit-pop.caw-pop", "--shadow-overlay-hung", [
+      corner,
+      0,
+      look[2] ? 0 : corner,
+      corner,
+    ]).catch((error: unknown) => {
+      console.error("Caw's panel shadow did not draw", error);
+    });
   });
   $effect(() => {
     const node = content;

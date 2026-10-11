@@ -395,9 +395,12 @@
       opacity var(--dur-exit) var(--ease-out),
       filter var(--dur-exit) var(--ease-out);
   }
+  /* Open, no filter at all: a blur(0) is still a filter, and WebKit drew the
+     whole of the notes through one on every paint of the panel. It
+     interpolates with the shut blur as blur(0) would. */
   .fold[data-open] > .fold-inner {
     opacity: 1;
-    filter: blur(0);
+    filter: none;
     transition-duration: var(--dur-panel);
   }
   .fold-body {

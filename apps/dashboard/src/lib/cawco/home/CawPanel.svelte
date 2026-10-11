@@ -43,6 +43,35 @@
     onchoose: () => void;
   } = $props();
 
+  /**
+   * The list runs past what the panel holds: only then does it wear the
+   * house edge fade. A list that fits fades no edge (the recipe's own
+   * rule), but WebKit still drew it through the recipe's mask, opaque, on
+   * every paint, and the panel is painted afresh as it opens.
+   */
+  let overflowing = $state(false);
+  function measured(list: HTMLElement) {
+    const read = () => {
+      overflowing = list.scrollHeight > list.clientHeight;
+    };
+    // Its own box (the window, its cap) and each section's (rows arriving,
+    // notes folding), the sections that come later too.
+    const sized = new ResizeObserver(read);
+    const watch = () => {
+      sized.observe(list);
+      for (const child of list.children) {
+        sized.observe(child);
+      }
+      read();
+    };
+    watch();
+    const rows = new MutationObserver(watch);
+    rows.observe(list, { childList: true, subtree: true });
+    return () => {
+      sized.disconnect();
+      rows.disconnect();
+    };
+  }
   const stale = $derived(!feed.live);
   const needs = $derived(feed.needs);
   const updated = $derived(feed.updated);
@@ -98,9 +127,16 @@
   }
 </script>
 
+<!-- The panel's surface, over its drawn shadow (NeedsCaw, motion/hung-shadow). -->
+<span aria-hidden="true" class="hung-surface"></span>
 <!-- More than the panel holds: the house edge fade at the foot while more
      is below, and at the head once scrolled. -->
-<div class="list kit-edge-fade-block" data-safe-bottom {@attach reflow()}>
+<div
+  class={["list", overflowing && "kit-edge-fade-block"]}
+  data-safe-bottom
+  {@attach reflow()}
+  {@attach measured}
+>
   {#if needs.length > 0}
     <section aria-labelledby="caw-needs" class="section" data-flip="box">
       <div class="head">
@@ -190,11 +226,14 @@
      top shows its own surface across the cut, so its shadow has no night
      ring (`shadow-overlay-hung`): the ring is the edge's own pixel, hidden
      under the drawn edge, and across the cut (and down a phone's screen
-     edge, where no edge is drawn) it was a seam. */
+     edge, where no edge is drawn) it was a seam. That shadow is a picture
+     NeedsCaw draws once (motion/hung-shadow) and lays round the panel as
+     its border-image, not a box-shadow: WebKit blurred the whole panel again
+     on every open, in the frame its slide started on. */
   :global(.kit-pop.caw-pop) {
     width: min(var(--c-panel-w), calc(100vw - 24px));
     padding: 7px;
-    box-shadow: var(--shadow-overlay-hung);
+    box-shadow: none;
   }
   /* On a phone his glass is a tab tucked into the screen's trailing edge,
      and the panel hanging from it is too: its trailing side is the screen's
@@ -211,6 +250,17 @@
     :global(.kit-pop.caw-pop)::after {
       border-inline-end-width: 0;
     }
+  }
+  /* The panel's surface: the card's own box and corners, under its rows and
+     over the shadow picture the card wears as its border-image, which a box
+     paints over its background (motion/hung-shadow). */
+  .hung-surface {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background: var(--hang-surface);
+    pointer-events: none;
   }
   /* The kit's edge fade at its full length on every width: a phone's short
      fade (the recipe's, for a narrow track's edge) lands in the gap between

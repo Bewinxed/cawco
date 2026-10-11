@@ -54,6 +54,7 @@
   import * as Popover from "#lib/components/ui/popover/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { DRAWER_QUERY } from "#lib/hooks/is-mobile.svelte.js";
+  import { theme } from "#lib/theme.svelte.js";
   import { browser } from "$app/env";
   import { page } from "$app/state";
   import { type CawFile, type CawHead, stageCaw } from "./home/Caw.svelte";
@@ -66,9 +67,11 @@
     CAW_STILL_BLEED,
     cawStill,
   } from "./home/caw-still.svelte";
+  import { deviceRatio } from "./home/device-ratio.svelte";
   import { home } from "./home/home-state.svelte";
   import { dur, easeOut, motionOk } from "./motion/curves.svelte";
-  import { GROWN, hang, type Neck, neckStyle, sameNeck } from "./motion/hang";
+  import { GROWN, hang, type Neck, sameNeck, setNeck } from "./motion/hang";
+  import { hangShadow } from "./motion/hung-shadow";
 
   /**
    * The phone bar, where his glass is his own (Shell). The server has the
@@ -312,11 +315,15 @@
   /** A pressed head, squashed while the press lasts. */
   let pressed = $state(false);
 
-  // His ^^ face is drawn ahead, so the frame a smile lands in can show it.
+  // His ^^ face is drawn ahead, so the frame a smile lands in can show it;
+  // and the way back out of it, so its file is read before his first smile
+  // goes out over his open panel, not as it does.
   $effect(() => {
-    cawStill("head-smile", head).drawn.catch(() => {
-      // Drawn again when he smiles.
-    });
+    for (const file of ["head-smile", "head-unsmile"] as const) {
+      cawStill(file, head).drawn.catch(() => {
+        // Drawn again when he smiles.
+      });
+    }
   });
 
   function play(file: CawHead, next: Phase) {
@@ -355,35 +362,88 @@
     }
   }
 
-  /** Plays `file` once on this canvas over his face. */
-  function playClip(file: CawHead) {
-    return (canvas: HTMLCanvasElement) => {
-      const still = untrack(() => cawStill(file, head));
+  /**
+   * The canvas every clip plays on over his face: one, kept, shown only
+   * while a clip's frame is on it (`covered`). A canvas made for each clip
+   * and dropped as it landed was a press's work and a landing's.
+   */
+  let clipCanvas = $state<HTMLCanvasElement | null>(null);
+  // Its backing, its 2d context and a smile's first frame made as it
+  // mounts, not by the first press: the smile is staged on it and drawn
+  // once, unseen (it is hidden until a clip covers his face), then let go.
+  $effect(() => {
+    const canvas = clipCanvas;
+    if (!canvas) {
+      return;
+    }
+    const still = untrack(() => cawStill("head-smile", head));
+    canvas.width = still.backing;
+    canvas.height = still.backing;
+    let here = true;
+    let done: (() => void) | undefined;
+    stageCaw("head-smile", canvas, still.box, still.dark)
+      .then((stage) => {
+        if (!here) {
+          stage.dispose();
+          return;
+        }
+        let stop: (() => void) | undefined;
+        done = () => {
+          stop?.();
+          stage.dispose();
+          done = undefined;
+        };
+        // Let go once the frame's tick has returned: `drawn` is called in
+        // it, before it asks for its next frame.
+        const letGo = () => queueMicrotask(() => done?.());
+        stop = stage.enter(letGo, letGo);
+      })
+      .catch(() => {
+        // Staged again by his first smile.
+      });
+    return () => {
+      here = false;
+      done?.();
+    };
+  });
+  $effect(() => {
+    const playing = clip;
+    const canvas = clipCanvas;
+    if (!(playing && canvas)) {
+      return;
+    }
+    return untrack(() => playClip(playing.file, canvas));
+  });
+
+  /** Plays `file` once on `canvas` over his face; returns its stop. */
+  function playClip(file: CawHead, canvas: HTMLCanvasElement) {
+    const still = cawStill(file, head);
+    if (canvas.width !== still.backing) {
       canvas.width = still.backing;
       canvas.height = still.backing;
-      let here = true;
-      let stop: (() => void) | undefined;
-      let dispose: (() => void) | undefined;
-      stageCaw(file, canvas, still.box, still.dark)
-        .then((stage) => {
-          if (!here) {
-            stage.dispose();
-            return;
-          }
-          dispose = () => stage.dispose();
-          stop = stage.enter(landed, () => {
-            covering = true;
-          });
-        })
-        .catch((error: unknown) => {
-          console.error(`Caw ${file} did not play`, error);
-          landed();
+    }
+    let here = true;
+    let stop: (() => void) | undefined;
+    let dispose: (() => void) | undefined;
+    stageCaw(file, canvas, still.box, still.dark)
+      .then((stage) => {
+        if (!here) {
+          stage.dispose();
+          return;
+        }
+        dispose = () => stage.dispose();
+        stop = stage.enter(landed, () => {
+          covering = true;
         });
-      return () => {
-        here = false;
-        stop?.();
-        dispose?.();
-      };
+      })
+      .catch((error: unknown) => {
+        console.error(`Caw ${file} did not play`, error);
+        landed();
+      });
+    return () => {
+      here = false;
+      stop?.();
+      dispose?.();
     };
   }
 
@@ -490,6 +550,41 @@
   let capsule = $state<HTMLButtonElement | null>(null);
   let content = $state<HTMLElement | null>(null);
   let open = $state(false);
+  /** The open asked for by the press now drawing its own frame, if any. */
+  let opening = 0;
+  /**
+   * Opened once, unseen, just after the page has loaded, and shut again as
+   * soon as bits-ui has placed it: a popover's first open (its first
+   * placement, its layers' first run) cost a first press 30–45 ms frames
+   * that every later one was spared. While it lasts the panel stays shut up
+   * behind the cut and inert, `hang` plays nothing (`quiet`), the glass does
+   * not join it, and focus stays where it is.
+   */
+  let warming = $state(false);
+  let warmed = false;
+  /**
+   * The popover's own open and close. A close is at once. An open waits for
+   * the press's frame (his squash, his smile's first frame) to be drawn and
+   * then comes in a task of its own: opening the popover (its layers, its
+   * focus scope, its placement, `inert` lifted) was work enough to hold
+   * that frame back, and it is the frame the operator is waiting on.
+   */
+  function setOpen(next: boolean) {
+    cancelAnimationFrame(opening);
+    opening = 0;
+    if (!next) {
+      open = false;
+      return;
+    }
+    opening = requestAnimationFrame(() => {
+      setTimeout(() => {
+        if (opening !== 0) {
+          opening = 0;
+          open = true;
+        }
+      });
+    });
+  }
   /**
    * The last thing that could open the panel was a pointer press, not a
    * key (MachinesButton's rule): focus goes in without the ring.
@@ -509,13 +604,46 @@
    * right-aligned under it, flush with its trailing flank (square there,
    * the glass's trailing side running straight on down), and the glass's
    * leading foot flares out into the panel's top edge by its `--flare`.
+   * Written onto the panel's own style as it changes (hang `setNeck`), not
+   * through the popover's props.
    */
-  let neck = $state<Neck>({
+  let neck: Neck = {
     start: 0,
     end: 0,
     flareStart: 0,
     flareEnd: 0,
     flush: "end",
+  };
+  /**
+   * The glass's span on the screen and its flare, read whenever it is laid
+   * out anew (its size, the window's), never in a placement: read there,
+   * just after bits-ui moved the panel, each read made the page lay itself
+   * out again then and there, twice on a first open.
+   */
+  let glassSpan: { left: number; right: number; flare: number } | null = null;
+  $effect(() => {
+    const at = glass;
+    if (!at) {
+      return;
+    }
+    const read = () => {
+      const box = at.getBoundingClientRect();
+      glassSpan = {
+        left: box.left,
+        right: box.right,
+        flare:
+          Number.parseFloat(getComputedStyle(at).getPropertyValue("--flare")) ||
+          0,
+      };
+    };
+    read();
+    const sized = new ResizeObserver(read);
+    sized.observe(at);
+    addEventListener("resize", read);
+    return () => {
+      sized.disconnect();
+      removeEventListener("resize", read);
+    };
   });
   /**
    * How far below his glass's foot the panel hangs: on a phone the neck
@@ -523,14 +651,59 @@
    * tab while his glass stands clear of the floor; none on the wide bar.
    */
   const neckDrop = $derived(
-    open && glass
+    // The phone bar's alone (Shell sets it under DRAWER_QUERY's width), and
+    // the same open or shut: a side offset that changed on every open
+    // placed the panel again in the press's own frame.
+    phone && glass
       ? Number.parseFloat(
           getComputedStyle(glass).getPropertyValue("--caw-neck")
         ) || 0
       : 0
   );
+  /**
+   * The panel's shadow, drawn ahead of any press (motion/hung-shadow): a
+   * picture of `--shadow-overlay-hung` round its corners, the glass's
+   * trailing flank square and, on a phone, its foot at the screen's edge
+   * square (CawPanel `.caw-pop`), drawn again for a new scheme, device ratio
+   * or width.
+   */
+  $effect(() => {
+    const look = [theme.resolved, deviceRatio.current, phone] as const;
+    const corner = Number.parseFloat(
+      getComputedStyle(document.documentElement).getPropertyValue("--radius-lg")
+    );
+    hangShadow(".kit-pop.caw-pop", "--shadow-overlay-hung", [
+      corner,
+      0,
+      look[2] ? 0 : corner,
+      corner,
+    ]).catch((error: unknown) => {
+      console.error("Caw's panel shadow did not draw", error);
+    });
+  });
+
   /** The panel stands open from his glass: the glass is one shape with it. */
   let joined = $state(false);
+  // The unseen first open, after the page's first frame.
+  $effect(() => {
+    if (warmed || !content || !glass) {
+      return;
+    }
+    warmed = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const frame = requestAnimationFrame(() => {
+      timer = setTimeout(() => {
+        if (!open) {
+          warming = true;
+          open = true;
+        }
+      });
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(timer);
+    };
+  });
   $effect(() => {
     const node = content;
     if (!node) {
@@ -538,31 +711,33 @@
     }
     return untrack(() =>
       hang({
-        neckAt: (left) => {
-          if (!glass) {
-            return null;
-          }
-          const box = glass.getBoundingClientRect();
-          const flare =
-            Number.parseFloat(
-              getComputedStyle(glass).getPropertyValue("--flare")
-            ) || 0;
-          return {
-            start: box.left - left,
-            end: box.right - left,
-            flareStart: flare,
-            flareEnd: 0,
-            flush: "end",
-          };
-        },
+        neckAt: (left) =>
+          glassSpan
+            ? {
+                start: glassSpan.left - left,
+                end: glassSpan.right - left,
+                flareStart: glassSpan.flare,
+                flareEnd: 0,
+                flush: "end",
+              }
+            : null,
         onneck: (next) => {
           if (!sameNeck(next, neck)) {
             neck = next;
+            setNeck(node, next);
+          }
+          if (warming && open) {
+            // Placed: shut again, still quiet until the shut has been seen.
+            setOpen(false);
+            requestAnimationFrame(() => {
+              warming = false;
+            });
           }
         },
         onshown: (shown) => {
           joined = shown;
         },
+        quiet: () => warming,
       })(node)
     );
   });
@@ -631,7 +806,7 @@
   </svg>
 {/snippet}
 
-<Popover.Root bind:open>
+<Popover.Root bind:open={() => open, setOpen}>
   <Tip label={tipText}>
     {#snippet children(
       tip
@@ -664,14 +839,7 @@
                 class:covered={covering}
               >
                 <CawFace size={head} status={face} />
-                {#if clip}
-                  {#key clip.id}
-                    <canvas
-                      aria-hidden="true"
-                      {@attach playClip(clip.file)}
-                    ></canvas>
-                  {/key}
-                {/if}
+                <canvas aria-hidden="true" bind:this={clipCanvas}></canvas>
               </span>
             </span>
             {@render rim(false)}
@@ -684,15 +852,26 @@
   <!-- Non-modal: no scrim, no trap; an outside press closes it and still
        lands (bits-ui's `interactOutsideBehavior` "close" prevents nothing).
        It hangs from his glass, flush with its trailing flank: on a phone
-       that is the screen's edge, so nothing holds it off that side. -->
+       that is the screen's edge, so nothing holds it off that side.
+       Mounted from the start and kept (`forceMount`), up behind the cut and
+       inert while shut: mounting it on the press, and placing it, held the
+       press's own frame 80–90 ms in WebKit (the owner: "the pressing on caw
+       is very laggy when it opens"), so a press only opens it. -->
+
   <Popover.Content
     align="end"
     aria-label="Needs you"
     class="caw-pop kit-hang gap-0"
     collisionPadding={phone ? { top: 12, bottom: 12, left: 12, right: 0 } : 8}
     customAnchor={glass}
-    data-flush={neck.flush ?? undefined}
+    data-flush="end"
+    forceMount
+    inert={!open || warming}
     onCloseAutoFocus={(event) => {
+      if (warming) {
+        event.preventDefault();
+        return;
+      }
       // Closed by a press elsewhere: the focus stays where that press put
       // it (the composer, a rail row). Escape and his own press bring it
       // back to him, as the popover does by itself.
@@ -705,25 +884,32 @@
       closedOutside = true;
     }}
     onOpenAutoFocus={(event) => {
+      if (warming) {
+        event.preventDefault();
+        return;
+      }
       // Opened by a press, focus goes into the list as it does from a key,
       // but without the ring: a script's focus would draw it after a press.
-      // It goes once the panel stands open (`grown`): taken in the press's
-      // own task, the style and layout it forced held back the open's first
-      // frame.
+      // It goes once the panel stands open (`grown`), and in a task after
+      // the frame it landed in: taken in the press's own task, the style and
+      // layout it forced held back the open's first frame, and taken in the
+      // landing's, its last.
       if (byPointer) {
         event.preventDefault();
         const panel = content;
         panel?.addEventListener(
           GROWN,
           () => {
-            if (open) {
-              panel
-                .querySelector<HTMLElement>("a.cover, button, .empty")
-                ?.focus({
-                  focusVisible: false,
-                  preventScroll: true,
-                } as FocusOptions);
-            }
+            setTimeout(() => {
+              if (open) {
+                panel
+                  .querySelector<HTMLElement>("a.cover, button, .empty")
+                  ?.focus({
+                    focusVisible: false,
+                    preventScroll: true,
+                  } as FocusOptions);
+              }
+            });
           },
           { once: true }
         );
@@ -731,14 +917,13 @@
     }}
     side="bottom"
     sideOffset={neckDrop}
-    style={neckStyle(neck)}
     trapFocus={false}
     bind:ref={content}
   >
     <CawPanel
       feed={liveFeed}
       onchoose={() => {
-        open = false;
+        setOpen(false);
       }}
       {quiet}
     />
@@ -828,6 +1013,9 @@
     pointer-events: none;
     @media (prefers-reduced-motion: no-preference) {
       transition: transform var(--dur-toggle) var(--ease-out);
+      /* His own layer from the start: made by his first press's squash, it
+         was work in the frame that press was waiting on. */
+      will-change: transform;
     }
   }
   .mug.pressed {
@@ -855,5 +1043,11 @@
     inset: calc(var(--bleed) * -1);
     inline-size: calc(var(--side) + 2 * var(--bleed));
     block-size: calc(var(--side) + 2 * var(--bleed));
+    visibility: hidden;
+  }
+  /* Shown only while a clip's frame is drawn on it: between clips it holds
+     the last one's. */
+  .face.covered canvas {
+    visibility: visible;
   }
 </style>

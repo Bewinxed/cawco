@@ -45,6 +45,11 @@
  * card mounted until the close animation ends (it waits on the content's
  * getAnimations()). With reduced motion nothing here runs and the kit's fade
  * does.
+ *
+ * A card bits-ui keeps mounted while shut (`forceMount`: Caw's panel) is
+ * placed the first time it opens and stays placed; every open after that
+ * grows at once, and every close leaves it up behind the cut, where the
+ * fold's last frame holds it.
  */
 import { untrack } from "svelte";
 import type { Attachment } from "svelte/attachments";
@@ -91,14 +96,30 @@ const flareTail = (flare: number): number =>
  * card writes its neck through this.
  */
 export const neckStyle = (neck: Neck): string =>
-  [
-    `--neck-start: ${neck.start}px`,
-    `--neck-end: ${neck.end}px`,
-    `--neck-flare-start: ${neck.flareStart}px`,
-    `--neck-flare-end: ${neck.flareEnd}px`,
-    `--neck-tail-start: ${flareTail(neck.flareStart)}px`,
-    `--neck-tail-end: ${flareTail(neck.flareEnd)}px`,
-  ].join("; ");
+  neckProperties(neck)
+    .map(([name, value]) => `${name}: ${value}`)
+    .join("; ");
+
+const neckProperties = (neck: Neck): [string, string][] => [
+  ["--neck-start", `${neck.start}px`],
+  ["--neck-end", `${neck.end}px`],
+  ["--neck-flare-start", `${neck.flareStart}px`],
+  ["--neck-flare-end", `${neck.flareEnd}px`],
+  ["--neck-tail-start", `${flareTail(neck.flareStart)}px`],
+  ["--neck-tail-end", `${flareTail(neck.flareEnd)}px`],
+];
+
+/**
+ * The neck written straight onto the card's own style, for a card whose
+ * style nothing else writes: it costs a style change and no render of the
+ * popover's props, which each placement of Caw's panel paid as it first
+ * opened.
+ */
+export function setNeck(node: HTMLElement, neck: Neck): void {
+  for (const [name, value] of neckProperties(neck)) {
+    node.style.setProperty(name, value);
+  }
+}
 
 export interface Hang {
   /**
@@ -117,6 +138,12 @@ export interface Hang {
   onneck: (neck: Neck) => void;
   /** The card starts to stand open (true), or to fold back into its anchor (false). */
   onshown?: (shown: boolean) => void;
+  /**
+   * Read as the card would grow or fold: true while it is opened only to be
+   * placed ahead of its first real open (Caw's panel), so it stays shut up
+   * behind the cut and nothing plays.
+   */
+  quiet?: () => boolean;
 }
 
 /** The card's attachment: on the popover's content, inside its floating wrapper. */
@@ -174,7 +201,7 @@ function slideMotion(node: HTMLElement, options: Hang) {
     return next;
   };
   const grow = () => {
-    if (!placed) {
+    if (!placed || options.quiet?.()) {
       return;
     }
     node.dataset.shown = "";
@@ -198,6 +225,9 @@ function slideMotion(node: HTMLElement, options: Hang) {
       .catch(() => undefined);
   };
   const fold = () => {
+    if (options.quiet?.()) {
+      return;
+    }
     options.onshown?.(false);
     if (options.folded?.() || !motionOk.current || !placed) {
       return;
@@ -205,12 +235,18 @@ function slideMotion(node: HTMLElement, options: Hang) {
     play(drawn(OPEN), shut(), dur("--dur-exit"));
   };
   let frame = 0;
+  // Every open once the card is placed: a card caught mid-close, and a card
+  // kept mounted while shut (Caw's panel), which bits-ui placed once.
   const state = new MutationObserver(() => {
     if (node.dataset.state === "closed") {
       cancelAnimationFrame(frame);
       fold();
-    } else if (node.dataset.state === "open" && "shown" in node.dataset) {
-      grow();
+    } else if (node.dataset.state === "open" && placed) {
+      // On a frame of its own, as a first placement's growth is: the frame
+      // that draws the card open (its layers, its focus scope) is not also
+      // the slide's first.
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(grow);
     }
   });
   state.observe(node, { attributes: true, attributeFilter: ["data-state"] });
@@ -220,8 +256,13 @@ function slideMotion(node: HTMLElement, options: Hang) {
       placed = true;
       if (first) {
         // After the frame that lays the placed card out, so the growth
-        // starts on a frame of its own.
-        frame = requestAnimationFrame(grow);
+        // starts on a frame of its own; and only open (a card kept mounted
+        // while shut is placed as it first opens).
+        frame = requestAnimationFrame(() => {
+          if (node.dataset.state === "open") {
+            grow();
+          }
+        });
       }
     },
     stop() {
