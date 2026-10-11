@@ -86,11 +86,13 @@
     color: var(--ink-muted);
     overflow-wrap: anywhere;
   }
+  /* Its chevron's ink ends on the panel's trailing edge: the link hangs past
+     it by the 12px chevron's side bearing (its stroke ends at 15.75 of 24). */
   .todo {
     display: inline-flex;
     align-items: center;
     gap: 2px;
-    margin-inline-start: auto;
+    margin-inline: auto calc(-12px * 8.25 / 24);
     border-radius: var(--radius-xs);
     font: var(--type-meta);
     color: var(--link-ink);

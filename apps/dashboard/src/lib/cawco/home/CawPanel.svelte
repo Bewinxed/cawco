@@ -291,12 +291,16 @@
     color: var(--ink-muted);
     font-variant-numeric: tabular-nums;
   }
-  /* Clear all: the kit's xs ghost at the panel's one trailing edge, always
-     shown; it rides the head's line without making it taller. */
+  /* Clear all: the kit's xs ghost, always shown, its words ending on the
+     panel's one trailing edge: it hangs past the edge by what stands
+     between its box and its last letter's ink (the kit's 1px transparent
+     border, the xs size's 8px padding and the l's side bearing in Figtree,
+     0.07em), so its box and its hover fill keep their size. It rides the
+     head's line without making it taller. */
   .head > :global(.clear) {
     align-self: center;
     margin-block: -4px;
-    margin-inline-start: auto;
+    margin-inline: auto calc(-1 * (1px + 8px + 0.07em));
   }
   .rows {
     margin: 0;

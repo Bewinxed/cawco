@@ -60,7 +60,13 @@
 </article>
 
 <style>
+  /* `--x-ink`: how far inside its 24px box the ✕'s ink stops, the box's
+     padding round the 12px glyph plus the glyph's own side bearing (Close:
+     its stroke ends at 18.75 of 24). The ✕ hangs past the trailing edge by
+     that much, so its ink ends on the panel's one trailing edge, where a
+     wait's figures and Approve's fill end; its box keeps its size. */
   .notice {
+    --x-ink: calc((24px - 12px) / 2 + 12px * 5.25 / 24);
     --pad-block: var(--space-3);
     position: relative;
     display: grid;
@@ -81,20 +87,21 @@
     inline-size: 28px;
     block-size: 28px;
   }
-  /* The first line pads by `--x-room` so its words stop short of the ✕. */
+  /* The first line pads by `--x-room` so its words stop `space-2` short of
+     the ✕'s box. */
   .body {
-    --x-room: calc(24px + var(--space-2));
+    --x-room: calc(24px - var(--x-ink) + var(--space-2));
     display: flex;
     flex-direction: column;
     gap: 2px;
     min-inline-size: 0;
   }
-  /* The first line's trailing cell: the label line's middle, at the row's
-     trailing edge. */
+  /* The first line's trailing cell: the label line's middle, its ink on the
+     row's trailing edge. */
   .end {
     position: absolute;
     inset-block-start: calc(var(--pad-block) + (1lh - 24px) / 2);
-    inset-inline-end: var(--space-3);
+    inset-inline-end: calc(var(--space-3) - var(--x-ink));
     display: flex;
     font: var(--type-label);
   }
@@ -128,6 +135,15 @@
     .x:hover {
       background: var(--surface-hover);
       color: var(--ink-strong);
+    }
+  }
+  /* A finger's 44px area (`touch-hit`) stays whole and centred where the box
+     stood before it hung: moved back inboard by `--x-ink`, it ends inside the
+     list as it did, so the list never grows a sideways scroll for it. */
+  @media (pointer: coarse) {
+    .x::after {
+      inset-inline-start: calc((24px - 44px) / 2 - var(--x-ink));
+      inset-inline-end: calc((24px - 44px) / 2 + var(--x-ink));
     }
   }
 </style>

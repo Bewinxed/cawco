@@ -327,6 +327,7 @@
           {#if notice.action}
             {@const action = notice.action}
             <Button
+              class="act"
               label={ACTS[action]}
               onclick={() => act(action)}
               size="sm"
@@ -460,10 +461,41 @@
     min-inline-size: 0;
     flex-shrink: 1;
   }
-  /* With the notes open it takes the footer's leading edge; on a phone the
-     buttons wrap under it, still at the trailing edge. */
+  /* With the notes open it takes the footer's leading edge, its words on the
+     text column with the title's: it hangs into the gutter by what stands
+     before its first letter (the kit's 1px transparent border and the sm
+     size's 11px padding), its box kept whole. On a phone the buttons wrap
+     under it, still at the trailing edge. */
   .actions > :global(.leading) {
-    margin-inline-end: auto;
+    margin-inline: calc(-1 * (1px + 11px)) auto;
+  }
+  /* The footer's last control ends its ink on the panel's trailing edge,
+     its box kept whole. Every kit button has a 1px transparent border: the
+     act's fill stops inside it (the kit clips its fill to the padding box),
+     so it hangs past by that pixel; the way to the settings, standing alone,
+     by it and its 11px. Show changes, when last, would hang by it, its 8px
+     end padding and the 16px chevron's side bearing (its stroke ends at
+     19.75 of 24), past the row's own `space-3` and out of the list, which
+     then scrolled sideways: so it hangs by `space-3` exactly, and what its
+     end padding gives up for that its start padding takes, so its box is
+     the sm size's as ever (11px and 8px padding). */
+  .actions > :global(.act) {
+    margin-inline-end: -1px;
+  }
+  .actions > :global(.toggle:last-child) {
+    --end: calc(var(--space-3) - 1px - 16px * 4.25 / 24);
+    padding-inline: calc(11px + 8px - var(--end)) var(--end);
+    margin-inline-end: calc(-1 * var(--space-3));
+  }
+  /* Open, the toggle says so in its words and its flipped chevron, not in
+     the kit ghost's expanded fill: a fill standing while the notes are open
+     would be its ink, its edge hung past the trailing edge. Under the
+     pointer it takes the hover fill as ever. */
+  .actions > :global(.toggle[aria-expanded="true"]:not(:hover)) {
+    background-color: transparent;
+  }
+  .actions > :global(.settings:not(.leading):last-child) {
+    margin-inline-end: calc(-1 * (1px + 11px));
   }
   /* The chevron flips from ⌄ to ⌃ with the fold (scaleY through a flat
      line), its stroke kept even through the flip. */

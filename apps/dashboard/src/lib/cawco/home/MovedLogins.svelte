@@ -146,11 +146,12 @@
   }
   /* No indent: each entry is a row of the panel, its tile in the one lead
      column, its words in the one text column, its ✕ at the one trailing
-     edge. */
+     edge. The heading and its explainer stand apart from the entries by
+     space as well as type: the head's own foot (`space-3`) and the first
+     entry's (`space-1`), 15px, against the 8px between two entries. */
   .entries {
     display: flex;
     flex-direction: column;
-    margin-block-start: calc(-1 * var(--space-2));
     padding-block-end: var(--space-2);
   }
   .list {
@@ -160,11 +161,24 @@
     padding: 0;
     list-style: none;
   }
-  /* The toggle in the text column, its end at the trailing edge. */
+  /* The toggle in the text column, its chevron's ink on the trailing edge:
+     it hangs past the edge by the kit's 1px transparent border, its
+     inline-end padding (the xs size's 6px beside an icon) and the 12px
+     chevron's side bearing (its stroke ends at 19.75 of 24), so its box
+     keeps its size. */
   .more {
     display: flex;
     justify-content: flex-end;
     padding-inline: calc(var(--space-3) + 28px + var(--space-3)) var(--space-3);
+  }
+  .more > :global(.toggle) {
+    margin-inline-end: calc(-1 * (1px + 6px + 12px * 4.25 / 24));
+  }
+  /* Open, it says so in its words and its flipped chevron, not in the kit
+     ghost's expanded fill, which would stand hung past the trailing edge
+     (UpdateCard's toggle, the same). The hover fill stays. */
+  .more > :global(.toggle[aria-expanded="true"]:not(:hover)) {
+    background-color: transparent;
   }
   /* The fold (UpdateCard's notes' recipe): the grid row is the track, the
      inner box clips, fades and cross-blurs; shutting is quicker than

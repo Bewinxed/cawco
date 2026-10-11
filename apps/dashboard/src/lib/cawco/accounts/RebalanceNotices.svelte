@@ -93,11 +93,13 @@
     font: var(--type-meta);
     color: var(--ink-muted);
   }
-  /* No indent: each pass is a row of the panel (MovedLogins' shape). */
+  /* No indent: each pass is a row of the panel (MovedLogins' shape), apart
+     from the head and its explainer by the head's foot and the first
+     entry's, more than the gap between two entries. */
   .entries {
     display: flex;
     flex-direction: column;
-    margin: calc(-1 * var(--space-2)) 0 0;
+    margin: 0;
     padding: 0 0 var(--space-2);
     list-style: none;
   }

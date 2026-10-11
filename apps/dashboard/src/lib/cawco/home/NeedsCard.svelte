@@ -7,8 +7,9 @@
    * words it is asked, and the kind and where. The row itself opens it (the
    * session at the request, the run, the project's spend) and the panel
    * closes (`onchoose`). A permission is answered here too, with Deny and
-   * Approve as equal recessed peers (DESIGN.md, The Peer Rule): same fill,
-   * size and type, told apart by glyph only; "Always allow" never appears.
+   * Approve as equal peers (DESIGN.md, The Peer Rule): same size, type and
+   * fill strength, tinted fail and done, told apart by hue and glyph;
+   * "Always allow" never appears.
    *
    * Nothing is optimistic: an answer is the same `permission.answer` command
    * the session's own card sends, and the row leaves when the hub has taken
@@ -305,8 +306,12 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  /* The meta line of an ask: the project leads in its mark and strong ink,
-     the machine follows by its OS mark; the machine's name gives way first. */
+  /* The meta line of an ask: the project leads, its name a name (label role,
+     strong ink) beside its folder in the project's hue; the machine follows
+     by its OS mark; the machine's name gives way first. Both marks stand at
+     the house's 16px icon size (`icon-md`), the box OsMark is drawn on: at
+     14px its marks were scaled off their pixel grid and read as a smudge at
+     1x. */
   .where {
     display: flex;
     align-items: center;
@@ -327,13 +332,12 @@
     flex: 0 1 auto;
   }
   .where :global(.mark) {
-    inline-size: 14px;
-    block-size: 14px;
+    inline-size: var(--icon-md);
+    block-size: var(--icon-md);
     flex: none;
   }
   .project-name {
     font: var(--type-label);
-    font-size: var(--text-meta);
     color: var(--ink-strong);
   }
   .machine-name {
@@ -345,8 +349,10 @@
   }
   /* Deny then Approve together at the trailing edge, the same size, each
      tinted by what it does: Deny in the fail status's fill and ink, Approve
-     in the live status's. Equal in salience (The Peer Rule): the same fill
-     strength, and neither changes under the pointer, as the grant variant
+     in the done status's, the house's success pair (go, not "working"). Both
+     pairs are their hue's 3-step mixed 24% toward its 9-step, so they are
+     equal in salience (The Peer Rule): the same fill strength, and neither
+     changes under the pointer, as the grant variant
      holds still, so neither is made the more inviting. On a finger the gap
      opens (The 44 Touch Rule), the separation the rule's opposite ends
      gave a rushed thumb. */
@@ -374,7 +380,7 @@
   }
   .peers > :global(.approve),
   .peers > :global(.approve:hover) {
-    background: var(--status-live-bg);
-    color: var(--status-live-ink);
+    background: var(--status-done-bg);
+    color: var(--status-done-ink);
   }
 </style>

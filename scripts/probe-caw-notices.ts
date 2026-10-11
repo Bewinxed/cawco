@@ -21,10 +21,17 @@
  *     notes stand open by default;
  *  4. parks a Bash permission ask and files the five sign-ins on the first
  *     machine as moved in from its own stores;
- *  5. at 1440×900 and at 390×844 with touch, light and dark: reads one
- *     trailing x, one lead column and one text column for every row, and that
- *     the list fits; opens the notes, scrolls to their middle, and reads that
- *     Hide changes stands inside the list and folds them; saves captures;
+ *  5. at 1440×900 and at 390×844 with touch, light and dark: reads the panel
+ *     by eye (caw-panel-ink): every row's last control's rightmost painted
+ *     pixel on one x within 1px, Approve in the done pair and Deny in the
+ *     fail pair, every meta line at 4.5:1 or more, the needs-you dot drawn
+ *     whole; at both widths the ask's 16px marks and its project in label
+ *     type and strong ink, the moved logins' head apart from its entries,
+ *     one lead column and one text column for every row, and that the list
+ *     fits and never scrolls sideways; opens the notes and reads Configure
+ *     update behaviour's words on the title's column and the trailing edge
+ *     again, scrolls to their middle, and reads that Hide changes stands
+ *     inside the list and folds them; saves captures;
  *  6. dismisses one moved login and reads the hub's notices record: only its
  *     id was added; then Clear all, and reads that every notice's id was.
  *
@@ -44,6 +51,7 @@ import {
 import { join, resolve } from "node:path";
 import { type Browser, chromium, type Page } from "playwright-core";
 import { CLAUDE_JSON_NAME } from "../packages/core/src/claude-dirs";
+import { panelReport } from "./caw-panel-ink";
 import {
   ACCOUNT,
   MACHINE,
@@ -225,21 +233,6 @@ const readGrid = (page: Page) =>
     const all = (s: string) => [...pop.querySelectorAll(s)].filter(shown);
     const r = (e: Element) => e.getBoundingClientRect();
     const x = (n: number) => Math.round(n * 100) / 100;
-    const trailing = [
-      ...all(".row .wait").map((e, i) => [`ask ${i + 1} time`, r(e).right]),
-      ...all(".peers .approve").map((e) => ["Approve", r(e).right]),
-      ...all(".head .clear").map((e) => ["Clear all", r(e).right]),
-      ...all(".notice .x").map((e) => [
-        `✕ ${e.getAttribute("aria-label")}`,
-        r(e).right,
-      ]),
-      ...all(".actions > button:last-child").map((e) => [
-        `update ${e.textContent?.trim()}`,
-        r(e).right,
-      ]),
-      ...all(".todo").map((e) => [`link ${e.textContent?.trim()}`, r(e).right]),
-      ...all(".more button").map((e) => ["fold toggle", r(e).right]),
-    ].map(([what, at]) => [what as string, x(at as number)] as const);
     const rows = [
       ...all(".section > .head").map((h) => ({
         row: `head ${h.querySelector(".title")?.textContent}`,
@@ -258,24 +251,19 @@ const readGrid = (page: Page) =>
       })),
     ];
     const list = pop.querySelector(".list") as HTMLElement;
-    const xs = trailing.map(([, at]) => at);
     const deny = pop.querySelector(".peers .deny");
     const approve = pop.querySelector(".peers .approve");
     return {
-      trailing,
-      spread: x(Math.max(...xs) - Math.min(...xs)),
       leads: [...new Set(rows.map((row) => row.lead))],
       texts: [...new Set(rows.map((row) => row.text))],
       rows,
-      fit: { scrollHeight: list.scrollHeight, clientHeight: list.clientHeight },
-      peers:
-        deny && approve
-          ? {
-              gap: x(r(approve).left - r(deny).right),
-              denyBg: getComputedStyle(deny).backgroundColor,
-              approveBg: getComputedStyle(approve).backgroundColor,
-            }
-          : null,
+      fit: {
+        scrollHeight: list.scrollHeight,
+        clientHeight: list.clientHeight,
+        scrollWidth: list.scrollWidth,
+        clientWidth: list.clientWidth,
+      },
+      peersGap: deny && approve ? x(r(approve).left - r(deny).right) : null,
       separator: getComputedStyle(
         pop.querySelector(".section + .section") ?? pop
       ).borderTopColor,
@@ -564,12 +552,79 @@ try {
       const page = await context.newPage();
       await openPanel(page, base);
       const grid = await readGrid(page);
+      const eye = await panelReport(page);
+      const at = `${width}, ${scheme}`;
+      check(
+        `one trailing edge by ink (${at})`,
+        eye.inkSpread <= 1,
+        `spread ${eye.inkSpread}px; ${eye.trailing
+          .map((one) => `${one.what}: ink ${one.ink} (box ${one.box})`)
+          .join("; ")}`
+      );
+      check(
+        `Approve in the done pair, Deny in the fail pair (${at})`,
+        eye.peers !== null &&
+          eye.peers.approve === eye.peers.done &&
+          eye.peers.deny === eye.peers.fail,
+        JSON.stringify(eye.peers)
+      );
+      const metas = eye.contrast.filter((one) => one.role === "meta");
+      check(
+        `every meta line ≥ 4.5:1 (${at})`,
+        metas.length > 0 && metas.every((one) => one.ratio >= 4.5),
+        metas
+          .map((one) => `"${one.text}" ${one.ratio} (painted ${one.seen})`)
+          .join("; ")
+      );
+      check(
+        `the needs-you dot draws whole (${at})`,
+        eye.dot?.whole === true,
+        JSON.stringify(eye.dot)
+      );
       if (scheme === "light") {
         console.log(`  ${width} grid: ${JSON.stringify(grid)}`);
         check(
-          `one trailing edge (${width})`,
-          grid.spread <= 0.5,
-          grid.trailing.map(([w, at]) => `${w} ${at}`).join("; ")
+          `the ask's marks at 16px (${width})`,
+          eye.marks.length > 0 &&
+            eye.marks.every((one) => one.width >= 14 && one.height >= 14),
+          eye.marks
+            .map((one) => `${one.what} ${one.width}×${one.height}`)
+            .join(", ")
+        );
+        const project = await page.evaluate(() => {
+          const name = document.querySelector(
+            ".caw-pop .where > .project .project-name"
+          );
+          if (!name) {
+            return null;
+          }
+          const strong = document.createElement("span");
+          strong.style.color = "var(--ink-strong)";
+          name.append(strong);
+          const style = getComputedStyle(name);
+          const ink = getComputedStyle(strong).color;
+          strong.remove();
+          return {
+            leads: name.closest(".where")?.firstElementChild?.contains(name),
+            font: `${style.fontWeight} ${style.fontSize}`,
+            color: style.color,
+            strong: ink,
+          };
+        });
+        check(
+          `the ask's project leads in label type and strong ink (${width})`,
+          project?.leads === true &&
+            project.font === "500 13px" &&
+            project.color === project.strong,
+          JSON.stringify(project)
+        );
+        check(
+          `moved logins: the head apart from its entries (${width})`,
+          eye.moved !== null &&
+            eye.moved.explainerToFirst !== null &&
+            eye.moved.explainerToFirst >
+              Math.max(...eye.moved.betweenEntries) + 4,
+          JSON.stringify(eye.moved)
         );
         check(
           `one lead column (${width})`,
@@ -582,18 +637,42 @@ try {
           `x ${grid.texts.join(", ")}`
         );
         check(
-          `the list fits (${width})`,
-          grid.fit.scrollHeight <= grid.fit.clientHeight,
-          `${grid.fit.scrollHeight} ≤ ${grid.fit.clientHeight}`
+          `the list fits, and never scrolls sideways (${width})`,
+          grid.fit.scrollHeight <= grid.fit.clientHeight &&
+            grid.fit.scrollWidth <= grid.fit.clientWidth,
+          JSON.stringify(grid.fit)
         );
       }
       await page.screenshot({
         path: join(out, `caw-notices-${scheme}-${width}.png`),
       });
 
-      // The notes open, scrolled to their middle: Hide changes stays in reach.
+      // The notes open: Configure update behaviour's words on the title's
+      // column, and every trailing control still on one edge by ink.
       await page.click(".caw-pop .actions .toggle");
+      // The pointer leaves the toggle, so its hover fill is not read as ink.
+      await page.mouse.move(1, 1);
       await page.waitForTimeout(700);
+      const open = await panelReport(page);
+      const title = open.columns.find((one) => one.what === "update title");
+      const configure = open.columns.find((one) =>
+        one.what.startsWith("Configure")
+      );
+      check(
+        `Configure update behaviour on the text column (${at})`,
+        typeof title?.ink === "number" &&
+          typeof configure?.ink === "number" &&
+          Math.abs(configure.ink - title.ink) <= 1,
+        `title ink x ${title?.ink}, Configure ink x ${configure?.ink} (box ${configure?.box})`
+      );
+      check(
+        `one trailing edge by ink, notes open (${at})`,
+        open.inkSpread <= 1,
+        `spread ${open.inkSpread}px; ${open.trailing
+          .map((one) => `${one.what}: ink ${one.ink}`)
+          .join("; ")}`
+      );
+      // Scrolled to the notes' middle: Hide changes stays in reach.
       await page.evaluate(() => {
         const list = document.querySelector(".caw-pop .list") as HTMLElement;
         const notes = document.querySelector("#update-notes") as HTMLElement;
