@@ -524,20 +524,20 @@
   .tree-mark[data-dot="fail"] {
     --dot: var(--status-fail-glyph);
   }
-  /* Working: a still dot in the live ink, only where the echo that says it
-     does not run: with reduced motion, or once its echoes have played
-     (motion/echo marks the echo `data-rested`). */
+  /* Working: a still dot in the live ink, except while the echo that says it
+     beats (motion/echo marks it `data-beating` for exactly that long). The
+     still dot is the rule, so the mark says its status wherever no echo
+     runs: with reduced motion, once its echoes have played, in a list not
+     rendered. The scheduler sets the attribute, so it is global here. */
   .tree-mark[data-dot="live"] {
     --dot: var(--status-live-glyph);
   }
-  @media (prefers-reduced-motion: no-preference) {
-    .tree-mark[data-dot="live"]:not(:has([data-rested])) {
-      & .dot {
-        display: none;
-      }
-      & .face {
-        mask-image: none;
-      }
+  .tree-mark[data-dot="live"]:has(:global([data-beating])) {
+    & .dot {
+      display: none;
+    }
+    & .face {
+      mask-image: none;
     }
   }
 </style>

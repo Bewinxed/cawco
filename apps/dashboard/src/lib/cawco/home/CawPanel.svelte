@@ -22,6 +22,7 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconNeedsYou, IconNotices } from "#lib/icons.js";
   import RebalanceNotices from "../accounts/RebalanceNotices.svelte";
+  import { echoBeat } from "../motion/echo.svelte";
   import { reflow } from "../motion/rows.svelte";
   import type { Notice } from "../updates/model";
   import CawFace from "./CawFace.svelte";
@@ -107,7 +108,7 @@
         <span class="title" id="caw-needs">Needs you</span>
         <span class="count">{needs.length}</span>
       </div>
-      <ul class="rows">
+      <ul class="rows" {@attach echoBeat()}>
         {#each needs as item (item.key)}
           <li data-flip><NeedsCard {item} {onchoose} {stale} /></li>
         {/each}

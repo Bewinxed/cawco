@@ -8,9 +8,16 @@
  * The rows beat top to bottom, a third of a loop apart, and the list's cycle
  * is long enough for every one of them: two loops, or the rows times the gap.
  *
- * Attach to the list's container:
+ * Attach to the container of every list that draws session marks:
  *
  *   <div {@attach echoBeat()}>
+ *
+ * A mark only moves while this runs its echo: the scheduler marks the echo
+ * `data-beating` for exactly that long, and TreeMark draws the still form
+ * at every other time (the needs-you dot, a working tile's dot in the live
+ * ink). So a mark never goes without its status: in a list with no beat,
+ * in a list not rendered, under reduced motion and once its echoes have
+ * played, it stands still and says it.
  *
  * The phase comes from the clock, never from when a row arrived. Every echo
  * runs the same keyframes on the document's timeline, started at one fixed
@@ -19,10 +26,9 @@
  * restarts for the others, and a row that joins is already in step. Rows
  * under an open parent take their place in the order as they are drawn.
  *
- * An echo plays ECHOES cycles from the beat it joined, then rests: the
- * scheduler marks it `data-rested` and the mark draws what reduced motion
- * draws (TreeMark: the needs-you dot still, a working tile with its still
- * dot in the live ink). A loop with nothing new to say keeps the page from
+ * An echo plays ECHOES cycles from the beat it joined, then rests: it stops
+ * beating and the mark draws its still form, as reduced motion draws it.
+ * A loop with nothing new to say keeps the page from
  * ever going idle and spends a frame at every refresh. The echo element is
  * the status's own (TreeMark draws one per status), so a new status is a
  * new element and echoes afresh, and the same status drawn again keeps its
@@ -30,7 +36,7 @@
  * because its place in the order changed, or started again after the list
  * was hidden, it still ends then (iOS SessionMark `run()`, `rested`).
  *
- * With reduced motion nothing runs here: the mark draws a still dot.
+ * With reduced motion nothing runs here.
  *
  * Nor while the list is not rendered (`watchRendered`: the home board put
  * away under a conversation, `content-visibility: hidden`). An echo there
@@ -51,9 +57,6 @@ const ECHOES = 3;
 
 /** When each echo's last cycle ends, on the document's timeline. */
 const ends = new WeakMap<Element, number>();
-
-/** The echo has played its cycles: the mark rests on its status. */
-const rest = (echo: Element) => echo.setAttribute("data-rested", "");
 
 /**
  * One beat's keyframes, the first `share` of the cycle: the echo leaves the
@@ -107,9 +110,11 @@ export function echoBeat(): Attachment<HTMLElement> {
     const origin = Number(document.timeline.currentTime ?? 0);
     let pending = 0;
 
+    /** The echo stops beating: its mark stands still on its status. */
     const stop = (echo: Element) => {
       beats.get(echo)?.animation.cancel();
       beats.delete(echo);
+      echo.removeAttribute("data-beating");
     };
     /** The reader's motion setting, as it last was. */
     let moving = motionOk.current;
@@ -145,13 +150,9 @@ export function echoBeat(): Attachment<HTMLElement> {
       }
       const now = Number(document.timeline.currentTime ?? 0);
       echoes.forEach((echo, place) => {
-        if (echo.hasAttribute("data-rested")) {
-          return;
-        }
         const end = ends.get(echo);
         if (end !== undefined && now >= end) {
           stop(echo);
-          rest(echo);
           return;
         }
         const beat = beats.get(echo);
@@ -187,11 +188,9 @@ export function echoBeat(): Attachment<HTMLElement> {
         iterations,
       });
       animation.startTime = start;
-      animation.onfinish = () => {
-        stop(echo);
-        rest(echo);
-      };
+      animation.onfinish = () => stop(echo);
       beats.set(echo, { animation, cycle, place });
+      echo.setAttribute("data-beating", "");
     };
 
     const watch = new MutationObserver(schedule);

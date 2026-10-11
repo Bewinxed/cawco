@@ -50,6 +50,16 @@
       </li>
     {/each}
   </ul>
+  <!-- A working mark in no beat: it never echoes, and stands still on its
+       live dot. -->
+  <p data-unbeaten>
+    <TreeMark fill="var(--mark-8)" status="live">
+      {#snippet face()}
+        <span></span>
+      {/snippet}
+    </TreeMark>
+    no beat
+  </p>
 </main>
 
 <style>

@@ -67,6 +67,7 @@
     motionOk,
     popScale,
   } from "./motion/curves.svelte";
+  import { echoBeat } from "./motion/echo.svelte";
   import { fold, unfold } from "./motion/fold.svelte";
   import { departBox, land } from "./motion/share.svelte";
   import TreeMark from "./TreeMark.svelte";
@@ -793,7 +794,7 @@
         </AlertDialog.Header>
       </div>
       {#if rows.some((row) => !row.gone)}
-        <ul aria-label="Running sessions" class="sessions">
+        <ul aria-label="Running sessions" class="sessions" {@attach echoBeat()}>
           {@render branch(null)}
         </ul>
       {/if}
