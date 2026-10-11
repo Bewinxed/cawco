@@ -118,6 +118,78 @@ async function mac(script: string): Promise<string> {
 }
 const axe = axeOver(mac);
 
+interface AlertFrame {
+  height: number;
+  width: number;
+  x: number;
+  y: number;
+}
+
+/**
+ * Taps the notifications alert's Allow where `describe-ui` draws it: reads
+ * the whole-screen tree every second for up to 30 s until an element
+ * labelled exactly "Allow" with a frame is in it, then taps the frame's
+ * centre. "Don't Allow" is a different label, so it is never the match.
+ */
+async function tapAllow(sim: string): Promise<{ ok: boolean; said: string }> {
+  const stopAt = Date.now() + 30_000;
+  let last = "";
+  while (Date.now() < stopAt) {
+    // biome-ignore lint/performance/noAwaitInLoops: each read follows the last one's miss
+    const raw = await axe(`describe-ui --udid ${sim}`).catch(
+      (error: unknown) => `describe-ui failed: ${String(error)}`
+    );
+    last = raw;
+    let found: AlertFrame | undefined;
+    const walk = (at: unknown) => {
+      if (found || !at) {
+        return;
+      }
+      if (Array.isArray(at)) {
+        for (const child of at) {
+          walk(child);
+        }
+        return;
+      }
+      if (typeof at !== "object") {
+        return;
+      }
+      const o = at as Record<string, unknown>;
+      const label = (o.AXLabel ?? o.label) as string | undefined;
+      const frame = o.frame as AlertFrame | undefined;
+      if (label === "Allow" && frame && frame.width > 0) {
+        found = frame;
+        return;
+      }
+      walk(o.children);
+    };
+    try {
+      walk(JSON.parse(raw));
+    } catch {
+      // Not JSON (a failed read): read again.
+    }
+    if (found) {
+      const x = Math.round(found.x + found.width / 2);
+      const y = Math.round(found.y + found.height / 2);
+      return axe(`tap -x ${x} -y ${y} --udid ${sim} 2>&1`).then(
+        (text) => ({
+          ok: true,
+          said: `at (${x}, ${y}): ${text.trim()}`,
+        }),
+        (error: unknown) => ({
+          ok: false,
+          said: `at (${x}, ${y}): ${error instanceof Error ? error.message : String(error)}`,
+        })
+      );
+    }
+    await Bun.sleep(1000);
+  }
+  return {
+    ok: false,
+    said: `no "Allow" with a frame in 30 s; last read: ${last.slice(0, 160)}`,
+  };
+}
+
 // ── What the mock asks, one tool call per marker ─────────────────────────
 const tag = crypto.randomUUID().slice(0, 6);
 const question = (text: string, labels: string[], multiSelect = false) => ({
@@ -524,20 +596,14 @@ xcrun simctl create "CawCo probe push actions" "$TYPE" "$RUNTIME"`)
       ? `PushProbe's register hook called requestAuthorization${asking.match[1]}`
       : "no `probe register: asking` line: the DEBUG hook never ran"
   );
-  // Tapped by its label. `tap --label` reads the same tree `describe-ui`
-  // prints (AXe AccessibilityPoller.resolveWithPolling →
-  // AccessibilityFetcher.fetchAccessibilityElements), which has the prompt in
-  // it once SpringBoard's AX server is open (above). It waits up to 30 s for
-  // the prompt; axe() tries again while axe can't reach the simulator.
-  const tapped = await axe(
-    `tap --label Allow --wait-timeout 30 --udid ${udid} 2>&1`
-  ).then(
-    (text) => ({ ok: true, said: text.trim() }),
-    (error: unknown) => ({
-      ok: false,
-      said: error instanceof Error ? error.message : String(error),
-    })
-  );
+  // Tapped where `describe-ui` draws it. On the run at 4593de9d,
+  // `tap --label Allow` answered "No accessibility element matched --label
+  // 'Allow'" while the `describe-ui` right after it listed "Allow" beside
+  // "“CawCo” Would Like to Send You Notifications": the label tap does not
+  // reach SpringBoard's alert, the whole-screen tree does. So the probe reads
+  // the tree until the alert's Allow is in it (up to 30 s) and taps its
+  // frame's centre; axe() tries again while axe can't reach the simulator.
+  const tapped = await tapAllow(udid);
   // Past the hook's 45 s "no answer" line, which says iOS's word then.
   const authorized = await awaitLine(
     registerStart,
