@@ -680,7 +680,12 @@ xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-e
       nodes.some((n) => n.label?.startsWith("Deny ") === true),
     ask ? `"${ask.label}" and its Deny` : "no Approve button"
   );
-  await movedLoginsListed(kind, udid, nodes, ask);
+  // On the iPad the group is read here, its fold opened. On the phone its
+  // panel spans the screen's width and the open fold stands it over every
+  // transcript row, so the phone reads it after the tap through (`pass`).
+  if (kind === "pad") {
+    await movedLoginsListed(kind, udid, nodes, ask);
+  }
   await shot(udid, `${kind}-panel-light`);
   await mac(`xcrun simctl ui ${udid} appearance dark`);
   await pause(1500);
@@ -1170,6 +1175,22 @@ async function movedLoginsListed(
 }
 
 /**
+ * The phone's read of the moved logins' group, after the tap through: the
+ * panel (closed by that tap) opened again, its fold opened for the group's
+ * checks, and left open for the press on the ask's row (`chooseRow`).
+ */
+async function movedLoginsAfterTap(kind: Kind, udid: string) {
+  let nodes = await tree(udid);
+  const head = caw(nodes);
+  if (head?.value !== "Open" && head?.frame) {
+    await tap(udid, centre(head.frame));
+    await pause(1200);
+    nodes = await tree(udid);
+  }
+  await movedLoginsListed(kind, udid, nodes, approve(nodes));
+}
+
+/**
  * Design's entry ✕ acknowledges that login alone (the group stays with the
  * other); then the group's ✕ acknowledges the rest. The screen as it stands after.
  */
@@ -1355,6 +1376,8 @@ async function pass(
     await tapThrough(kind, udid, box);
     if (kind === "pad") {
       await trayThrough(udid);
+    } else {
+      await movedLoginsAfterTap(kind, udid);
     }
     if (last) {
       await answerFromPanel(kind, udid);
