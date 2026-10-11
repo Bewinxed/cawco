@@ -68,7 +68,7 @@
   import { cn } from "#lib/utils.js";
   import { shownAccount } from "./accounts/switch.svelte";
   import type { InstanceRow } from "./client.svelte";
-  import { openPeek, peekable } from "./home/peek.svelte";
+  import { openPeek, peekable, peekTipOff } from "./home/peek.svelte";
   import { swipeToArchive } from "./home/swipe-archive";
   import LiveSessionMenu from "./LiveSessionMenu.svelte";
   import SessionMark, { sessionStatus, statusWord } from "./SessionMark.svelte";
@@ -263,7 +263,7 @@
       <!-- Glance → peek → dive: the tail of this one, without leaving the
            list. A workflow run has no tail of its own: its card is its
            steps. -->
-      <Tip label="Peek">
+      <Tip disabled={peekTipOff()} label="Peek">
         {#snippet children(
           tip
         )}
@@ -420,6 +420,15 @@
   @media not ((hover: hover) and (pointer: fine)) {
     .archive {
       display: none;
+    }
+  }
+  /* Under a finger Peek's glyph is the house's touch size (`icon-lg`, the
+     bar's symbols), in the muted ink the row's always-shown words and
+     actions use: at 16px its duotone read faint at arm's length. */
+  @media (pointer: coarse) {
+    .peek :global(svg) {
+      width: var(--icon-lg);
+      height: var(--icon-lg);
     }
   }
   /* A phone has no peek: the button is never drawn there (peek.svelte.ts),

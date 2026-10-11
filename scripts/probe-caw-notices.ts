@@ -875,14 +875,67 @@ try {
   };
   /** The home's first session row that offers Peek, once the board is in. */
   const rowPeek = ".item[data-peek] button.peek";
-  const readPeekButton = (tab: Page) =>
-    tab.evaluate((selector) => {
-      const button = document.querySelector(selector);
+  /**
+   * A Peek button: shown or not, its box, its touch area, its glyph's size,
+   * and its ink's contrast on what is painted under it (non-text, 3:1):
+   * the glyph's full-ink arrow, and its duotone half at 50%.
+   */
+  const readPeekButton = (tab: Page, selector = rowPeek) =>
+    tab.evaluate((at) => {
+      const button = document.querySelector(at);
       if (!button) {
         return null;
       }
+      const canvas = document.createElement("canvas");
+      canvas.width = 1;
+      canvas.height = 1;
+      const ctx = canvas.getContext("2d", {
+        willReadFrequently: true,
+      }) as CanvasRenderingContext2D;
+      const rgba = (css: string) => {
+        ctx.clearRect(0, 0, 1, 1);
+        ctx.fillStyle = "#000";
+        ctx.fillStyle = css;
+        ctx.fillRect(0, 0, 1, 1);
+        const [r = 0, g = 0, b = 0, a = 0] = ctx.getImageData(0, 0, 1, 1).data;
+        return [r, g, b, a / 255];
+      };
+      const mix = (top: number[], under: number[]) =>
+        [0, 1, 2].map(
+          (c) =>
+            (top[c] ?? 0) * (top[3] ?? 1) +
+            (under[c] ?? 0) * (1 - (top[3] ?? 1))
+        );
+      // The fills under the button, outermost first, over the page.
+      const fills: number[][] = [];
+      for (let el: Element | null = button; el; el = el.parentElement) {
+        const fill = rgba(getComputedStyle(el).backgroundColor);
+        if (fill[3] > 0) {
+          fills.unshift(fill);
+        }
+      }
+      const ground = fills.reduce(
+        (under, top) => mix(top, under),
+        [255, 255, 255]
+      );
+      const lum = (rgb: number[]) =>
+        rgb
+          .map((v) => {
+            const s = v / 255;
+            return s <= 0.040_45 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+          })
+          .reduce(
+            (sum, c, i) => sum + c * ([0.2126, 0.7152, 0.0722][i] ?? 0),
+            0
+          );
+      const ratio = (a: number[], b: number[]) => {
+        const [hi = 0, lo = 0] = [lum(a), lum(b)].sort((x, y) => y - x);
+        return Math.round(((hi + 0.05) / (lo + 0.05)) * 100) / 100;
+      };
       const s = getComputedStyle(button);
+      const ink = rgba(s.color);
       const r = button.getBoundingClientRect();
+      const glyph = button.querySelector("svg")?.getBoundingClientRect();
       const hit = getComputedStyle(button, "::after");
       return {
         label: button.getAttribute("aria-label"),
@@ -890,8 +943,23 @@ try {
         display: s.display,
         size: `${Math.round(r.width)}×${Math.round(r.height)}`,
         hit: `${hit.inset}`,
+        glyph: glyph ? `${glyph.width}×${glyph.height}` : null,
+        ink: s.color,
+        contrast: ratio(mix(ink, ground), ground),
+        contrastHalf: ratio(
+          mix([ink[0] ?? 0, ink[1] ?? 0, ink[2] ?? 0, 0.5], ground),
+          ground
+        ),
       };
-    }, rowPeek);
+    }, selector);
+  /** A kit tooltip in the page, open or leaving. */
+  const tooltips = (tab: Page) =>
+    tab.evaluate(
+      () =>
+        document.querySelectorAll(
+          '[data-slot="tooltip-content"], [role="tooltip"]'
+        ).length
+    );
   /** The open peek: its title, what its tail says, and its answer row. */
   const readPeek = (tab: Page) =>
     tab.evaluate(() => {
@@ -1003,6 +1071,12 @@ try {
     permissionMode: "default",
   });
   await fleet.send(workSession, `${WORK}: keep going.`);
+  // And one that has finished, so Finished lists an archivable row.
+  const DONE_TITLE = "Name the ages column";
+  const doneSession = await fleet.spawn("claude", DONE_TITLE, fleet.workdir, {
+    permissionMode: "default",
+  });
+  await fleet.send(doneSession, "Say done.");
 
   {
     // A desk: Peek rises on a row's hover, and opens the peek.
@@ -1049,6 +1123,48 @@ try {
     }
     await page.mouse.move(1, 1);
     await page.screenshot({ path: join(out, "peek-open-ask-1440.png") });
+
+    // A finished row is archivable: on hover Archive and Peek both rise,
+    // Archive a step left of Peek.
+    await page.goto(base, { waitUntil: "domcontentloaded" });
+    await page
+      .getByRole("tab", { name: /^Finished/ })
+      .first()
+      .click();
+    const archivable = ".item[data-archivable][data-peek]";
+    await page.waitForSelector(archivable, {
+      state: "attached",
+      timeout: 120_000,
+    });
+    await page.hover(`${archivable} > a.row`);
+    await page.waitForTimeout(400);
+    const pair = await page.evaluate((at) => {
+      const item = document.querySelector(at) as Element;
+      const one = (selector: string) => {
+        const e = item.querySelector(selector) as Element;
+        const r = e.getBoundingClientRect();
+        return {
+          opacity: getComputedStyle(e).opacity,
+          left: Math.round(r.left * 100) / 100,
+          right: Math.round(r.right * 100) / 100,
+        };
+      };
+      return {
+        title: item.querySelector(".title")?.textContent?.trim(),
+        archive: one("button.archive"),
+        peek: one("button.peek"),
+      };
+    }, archivable);
+    check(
+      "archivable row: Archive and Peek both on hover, Archive left of Peek (1440)",
+      pair.archive.opacity === "1" &&
+        pair.peek.opacity === "1" &&
+        pair.archive.right < pair.peek.left,
+      JSON.stringify(pair)
+    );
+    await page.screenshot({
+      path: join(out, "peek-row-hover-archive-1440.png"),
+    });
     await context.close();
   }
 
@@ -1065,18 +1181,40 @@ try {
       shown?.opacity === "1" && shown.display !== "none",
       JSON.stringify(shown)
     );
+    check(
+      "row Peek's glyph at the touch size, its ink ≥ 3:1 on the row (1024×1366 touch)",
+      shown?.glyph === "20×20" && (shown?.contrast ?? 0) >= 3,
+      `glyph ${shown?.glyph}, ink ${shown?.ink}, contrast ${shown?.contrast}:1 (duotone half ${shown?.contrastHalf}:1)`
+    );
     await page.screenshot({ path: join(out, "peek-row-1024.png") });
     await page.tap(rowPeek);
     await peekShows(page, "row, 1024×1366 touch", WORK_TITLE, "step ");
+    await page.waitForTimeout(1200);
+    const rowTips = await tooltips(page);
+    check(
+      "no tooltip after Peek opens from a row (1024×1366 touch)",
+      rowTips === 0,
+      `${rowTips} tooltip elements`
+    );
     await page.screenshot({ path: join(out, "peek-open-1024.png") });
     await openPanel(page, base);
-    const panelPeek = await page.locator(".caw-pop .row button.peek").count();
+    const panelButton = ".caw-pop .row .end button.peek";
+    const panel = await readPeekButton(page, panelButton);
     check(
-      "the panel's Needs-you row offers Peek (1024×1366 touch)",
-      panelPeek === 1,
-      `${panelPeek}`
+      "the panel's Needs-you row offers Peek at the touch size, ≥ 3:1 (1024×1366 touch)",
+      panel !== null && panel.glyph === "20×20" && panel.contrast >= 3,
+      `glyph ${panel?.glyph}, ink ${panel?.ink}, contrast ${panel?.contrast}:1 (duotone half ${panel?.contrastHalf}:1)`
     );
     await page.screenshot({ path: join(out, "peek-panel-row-1024.png") });
+    await page.tap(panelButton);
+    await peekOpens(page, "panel, 1024×1366 touch");
+    await page.waitForTimeout(1200);
+    const panelTips = await tooltips(page);
+    check(
+      "no tooltip after Peek opens from the panel (1024×1366 touch)",
+      panelTips === 0,
+      `${panelTips} tooltip elements`
+    );
     await context.close();
   }
 

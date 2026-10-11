@@ -42,7 +42,7 @@
   import { capLine } from "../usage";
   import { choices } from "./choices.svelte";
   import { clock, type NeedsItem, span } from "./home-state.svelte";
-  import { openPeek, peekable } from "./peek.svelte";
+  import { openPeek, peekable, peekTipOff } from "./peek.svelte";
 
   let {
     item,
@@ -180,7 +180,7 @@
   {#if peeks}
     <!-- Glance → peek → dive: read what led here before answering. -->
     <span class="end">
-      <Tip label="Peek">
+      <Tip disabled={peekTipOff()} label="Peek">
         {#snippet children(
           tip
         )}
@@ -263,7 +263,13 @@
      what it wants, two lines at most; then the kind and where; a
      permission's peers under them. */
   .row {
-    --peek-ink: calc((24px - 16px) / 2 + 16px * 1.25 / 24);
+    --peek-glyph: var(--icon-md);
+    --peek-ink: calc(
+      (24px - var(--peek-glyph)) /
+      2 +
+      var(--peek-glyph) *
+      1.25 / 24
+    );
     --peek-room: calc(24px - var(--peek-ink) + var(--space-2));
     position: relative;
     display: grid;
@@ -367,8 +373,8 @@
       transform var(--dur-toggle) var(--ease-out);
   }
   .peek > :global(svg) {
-    inline-size: 16px;
-    block-size: 16px;
+    inline-size: var(--peek-glyph);
+    block-size: var(--peek-glyph);
   }
   @media (prefers-reduced-motion: no-preference) {
     .peek:active {
@@ -385,6 +391,11 @@
      centred where the box stood before it hung: moved back inboard by
      `--peek-ink`, so the list never grows a sideways scroll for it. */
   @media (pointer: coarse) {
+    /* Under a finger the glyph is the house's touch size (`icon-lg`); its
+       ink still ends on the trailing edge (`--peek-ink` follows it). */
+    .row {
+      --peek-glyph: var(--icon-lg);
+    }
     .peek::after {
       inset-inline-start: calc((24px - 44px) / 2 - var(--peek-ink));
       inset-inline-end: calc((24px - 44px) / 2 + var(--peek-ink));

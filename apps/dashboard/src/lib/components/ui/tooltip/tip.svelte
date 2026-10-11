@@ -15,17 +15,20 @@
     label,
     keys,
     side = "bottom",
+    disabled = false,
     children,
   }: {
     label: string;
     /** The shortcut, as it is drawn: "⇧⌘N". */
     keys?: string;
     side?: "top" | "right" | "bottom" | "left";
+    /** It never opens (the control's aria-label still says it). */
+    disabled?: boolean;
     children: Snippet<[Record<string, unknown>]>;
   } = $props();
 </script>
 
-<Root>
+<Root {disabled}>
   <Trigger>
     {#snippet child({
       props,

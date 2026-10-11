@@ -24,6 +24,16 @@ const drawer = new MediaQuery(DRAWER_QUERY);
 /** Whether this layout offers Peek: the wide one, not the phone's. */
 export const peekable = (): boolean => !drawer.current;
 
+/** A finger (an iPad): Peek's buttons always show, and their "Peek" tip never opens. */
+const coarse = new MediaQuery("(pointer: coarse)");
+
+/**
+ * Whether a Peek button's tooltip is off: on a coarse pointer a press would
+ * leave it standing over the sheet it just opened, and there is no hover to
+ * want it; the button's aria-label still names it.
+ */
+export const peekTipOff = (): boolean => coarse.current;
+
 export function openPeek(target: PeekTarget): void {
   peek.target = target;
   peek.open = true;
