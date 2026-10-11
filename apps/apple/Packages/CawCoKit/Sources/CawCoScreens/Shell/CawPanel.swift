@@ -47,6 +47,8 @@ final class CawPanel: UIView, UIGestureRecognizerDelegate {
     var onChoose: (HomeModel.NeedsItem) -> Void = { _ in }
     var onAnswer: (HomeModel.NeedsItem, ParkedAsk, NeedsYouStore.Answer) -> Void = { _, _, _ in }
     var onDismiss: (Notice) -> Void = { _ in }
+    /// One entry of a group acknowledged alone, by its notice ids.
+    var onAcknowledge: ([String]) -> Void = { _ in }
     /// The update notice's one act (Retry, Install now).
     var onAct: (Notice) -> Void = { _ in }
     /// Opened or closed: Caw says so.
@@ -61,6 +63,9 @@ final class CawPanel: UIView, UIGestureRecognizerDelegate {
     private let list = UIStackView()
     /// What the rows said last: they are made again only when that changes.
     private var drawn = ""
+    /// The groups whose signed-in-everywhere fold stands open: it stays open
+    /// when the rows are made again (a wait ticking over).
+    private var foldsOpen: Set<Notice.Kind> = []
 
     /// What each ask's answer has reached (`NeedsYouStore.answerSent`), by item id.
     struct Answers {
@@ -109,8 +114,11 @@ final class CawPanel: UIView, UIGestureRecognizerDelegate {
             let stage = Self.stageWords(answers.sent[item.id])
             return "\(item.id)\u{1f}\(item.title)\u{1f}\(item.place)\u{1f}\(item.raisedAt.map { Naming.span(ms: now - $0) } ?? "")\u{1f}\(item.stale)\u{1f}\(stage?.text ?? "")\u{1f}\(answers.sent[item.id].map { $0.stage != .failed } ?? false)"
         }
-        let noticeWords = notices.map { notice in
-            ([notice.id, notice.closing ?? "", notice.action?.label ?? ""] + notice.entries.flatMap { [$0.title] + $0.lines }).joined(separator: "\u{1f}")
+        let noticeWords = notices.map { notice -> String in
+            let head: [String] = [notice.id, notice.closing ?? "", notice.action?.label ?? "", "\(notice.count ?? 0)"]
+            let entries: [String] = notice.entries.flatMap { [$0.title] + $0.lines }
+            let members: [String] = notice.members.flatMap { [$0.id, $0.title, String(describing: $0.todo)] + $0.lines }
+            return (head + entries + members).joined(separator: "\u{1f}")
         }
         let words = (needWords + noticeWords + [quiet, "\(live)"]).joined(separator: "\n")
         guard words != drawn else { return }
@@ -147,10 +155,21 @@ final class CawPanel: UIView, UIGestureRecognizerDelegate {
                 // Notices part with the grey hairline, as rows of one list do
                 // (CawPanel.svelte `.notices > li + li`).
                 if at > 0 { list.addArrangedSubview(NoticeRule()) }
-                let row = NoticeRow(notice)
-                row.onDismiss = { [weak self] in self?.onDismiss(notice) }
-                row.onAct = { [weak self] in self?.onAct(notice) }
-                list.addArrangedSubview(row)
+                let dismiss: @MainActor () -> Void = { [weak self] in self?.onDismiss(notice) }
+                switch notice.lead {
+                case .group:
+                    let acknowledge: @MainActor ([String]) -> Void = { [weak self] ids in self?.onAcknowledge(ids) }
+                    let group = NoticeGroup(notice, open: foldsOpen.contains(notice.kind), dismiss: dismiss, acknowledge: acknowledge)
+                    group.resized = { [weak self] open in
+                        guard let self else { return }
+                        if open { foldsOpen.insert(notice.kind) } else { foldsOpen.remove(notice.kind) }
+                        place(animated: true)
+                    }
+                    list.addArrangedSubview(group)
+                case .caw:
+                    let act: @MainActor () -> Void = { [weak self] in self?.onAct(notice) }
+                    list.addArrangedSubview(NoticeRow.single(notice, dismiss: dismiss, act: act))
+                }
             }
         }
         if needs.isEmpty, notices.isEmpty {
@@ -627,19 +646,16 @@ private final class NeedRow: UIControl {
 
 // MARK: A notice
 
-/// One notice row (NoticeRow.svelte, with UpdateCard, MovedLogins and
-/// RebalanceNotices in it): its 28pt lead (Caw's mark in the notice's
-/// status, or the first account's tile), the entries beside it (a later
-/// entry with its own tile), the update's closing words, its one act at the
-/// trailing edge, and the ✕ (`NoticeCloseButton`, the 24pt ghost) in the
-/// first line's trailing cell, where lists put a row's dismiss. Only that
-/// cell is the ✕'s: every line under the first runs to the trailing edge.
-/// The ✕ is the one way it leaves and acknowledges every entry the row
-/// shows; the row answers for its 44pt target too.
+/// The shape every notice row shares (NoticeRow.svelte): its 28pt lead, its
+/// words in the text column, and the ✕ (`NoticeCloseButton`, the 24pt ghost)
+/// in the first line's trailing cell, where lists put a row's dismiss. Only
+/// that cell is the ✕'s: every line under the first runs to the trailing
+/// edge, and the first line keeps the ✕'s room (`firstLine`). `nested`: an
+/// entry of a group, the same columns with `space1` above and below in place
+/// of `space3`, its first line in body type. The ✕ is the one way a notice
+/// leaves; the row answers for its 44pt target too.
 private final class NoticeRow: UIView {
-    var onDismiss: () -> Void = {}
-    var onAct: () -> Void = {}
-    private var close: NoticeCloseButton!
+    private let close: NoticeCloseButton
 
     /// The lead's side (NoticeRow's `lead`, AccountTile at 28).
     static let lead = 28.0
@@ -647,53 +663,85 @@ private final class NoticeRow: UIView {
     /// `--x-room`): its words stop `space2` short of its box.
     static let xRoom = NoticeCloseButton.side - NoticeCloseButton.inkInset + Space.space2
 
-    init(_ notice: Notice) {
+    init(lead: UIView, column: UIView, nested: Bool, dismissLabel: String, reading: [Any], dismiss: @escaping @MainActor () -> Void) {
+        close = NoticeCloseButton(label: dismissLabel, action: dismiss)
         super.init(frame: .zero)
+        lead.translatesAutoresizingMaskIntoConstraints = false
+        lead.isAccessibilityElement = false
+        column.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(lead)
+        addSubview(column)
+        addSubview(close)
+        // `space3` above and below, `space1` for a group's entry (NoticeRow.svelte `--pad-block`).
+        let pad = nested ? Space.space1 : Space.space3
+        let first = nested ? TypeScale.typeBody : TypeScale.typeLabel
+        NSLayoutConstraint.activate([
+            lead.topAnchor.constraint(equalTo: topAnchor, constant: pad),
+            lead.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Space.space3),
+            lead.widthAnchor.constraint(equalToConstant: Self.lead),
+            lead.heightAnchor.constraint(equalToConstant: Self.lead),
+            bottomAnchor.constraint(greaterThanOrEqualTo: lead.bottomAnchor, constant: pad),
+            column.topAnchor.constraint(equalTo: topAnchor, constant: pad),
+            column.leadingAnchor.constraint(equalTo: lead.trailingAnchor, constant: Space.space3),
+            column.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Space.space3),
+            column.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -pad),
+            // The first line's trailing cell (NoticeRow.svelte `.end`): centred
+            // on that line, its box hung past the trailing edge by its ink
+            // inset so its stroke ends on the edge the words keep.
+            close.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -(Space.space3 - NoticeCloseButton.inkInset)),
+            close.centerYAnchor.constraint(equalTo: topAnchor, constant: pad + first.lineHeight / 2),
+        ])
+        // The words, the act and the ✕ each read on their own; the lead is a picture.
+        accessibilityElements = reading + [close]
+        accessibilityIdentifier = nested ? "caw-notice-entry" : "caw-notice"
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        fatalError("NoticeRow is built in code")
+    }
+
+    /// A first line that keeps the ✕'s cell clear (`xRoom`).
+    static func firstLine(_ parts: [UIView], spacing: Double = Space.space1, alignment: UIStackView.Alignment = .center) -> UIStackView {
+        let line = UIStackView(arrangedSubviews: parts)
+        line.spacing = spacing
+        line.alignment = alignment
+        line.isLayoutMarginsRelativeArrangement = true
+        line.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: 0, bottom: 0, trailing: Self.xRoom)
+        return line
+    }
+
+    /// A notice that stands alone (UpdateCard.svelte, the hub-newer row): Caw
+    /// at its lead, its title and lines, the update's closing words and its
+    /// one act at the trailing edge.
+    static func single(_ notice: Notice, dismiss: @escaping @MainActor () -> Void, act: @escaping @MainActor () -> Void) -> NoticeRow {
         let column = UIStackView()
         column.axis = .vertical
         column.spacing = 2
         var reading: [Any] = []
         for (at, entry) in notice.entries.enumerated() {
-            let entryColumn = UIStackView()
-            entryColumn.axis = .vertical
-            entryColumn.spacing = 2
             let title = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong, lines: 0)
             title.text = entry.title
             reading.append(title)
             if at == 0 {
-                // The first line, the failure glyph before its title
-                // (UpdateCard `.title`), keeps the ✕'s cell clear (`xRoom`).
+                // The failure glyph before the title (UpdateCard `.title`).
                 var parts: [UIView] = [title]
                 if notice.failed {
                     let glyph = GlyphView(.alert, size: Size.iconMd, tint: Palette.statusFailGlyph)
                     glyph.setContentHuggingPriority(.required, for: .horizontal)
                     parts.insert(glyph, at: 0)
                 }
-                let head = UIStackView(arrangedSubviews: parts)
-                head.spacing = Space.space1
-                head.alignment = .center
-                head.isLayoutMarginsRelativeArrangement = true
-                head.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: 0, bottom: 0, trailing: Self.xRoom)
-                entryColumn.addArrangedSubview(head)
+                column.addArrangedSubview(firstLine(parts))
             } else {
-                entryColumn.addArrangedSubview(title)
+                if let last = column.arrangedSubviews.last { column.setCustomSpacing(Space.space3, after: last) }
+                column.addArrangedSubview(title)
             }
             for line in entry.lines {
                 let said = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
                 said.text = line
-                entryColumn.addArrangedSubview(said)
+                column.addArrangedSubview(said)
                 reading.append(said)
             }
-            // A later entry stands beside its own tile (MovedLogins `.later`).
-            if at > 0, let tile = entry.tile {
-                let beside = UIStackView(arrangedSubviews: [AccountTileView(tile, side: Self.lead), entryColumn])
-                beside.spacing = Space.space3
-                beside.alignment = .top
-                column.addArrangedSubview(beside)
-            } else {
-                column.addArrangedSubview(entryColumn)
-            }
-            if at > 0 { column.setCustomSpacing(Space.space3, after: column.arrangedSubviews[column.arrangedSubviews.count - 2]) }
         }
         if let closing = notice.closing {
             let said = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
@@ -702,58 +750,33 @@ private final class NoticeRow: UIView {
             reading.append(said)
         }
         if let action = notice.action {
-            let act = KitButton.make(action.label, variant: .action, height: .sm) { [weak self] in self?.onAct() }
-            let actions = UIStackView(arrangedSubviews: [UIView(), act])
+            let button = KitButton.make(action.label, variant: .action, height: .sm) { act() }
+            let actions = UIStackView(arrangedSubviews: [UIView(), button])
             actions.alignment = .center
-            column.setCustomSpacing(Space.space2, after: column.arrangedSubviews[column.arrangedSubviews.count - 1])
+            if let last = column.arrangedSubviews.last { column.setCustomSpacing(Space.space2, after: last) }
             column.addArrangedSubview(actions)
-            reading.append(act)
+            reading.append(button)
         }
-        let lead = Self.leadView(notice.lead)
-        column.translatesAutoresizingMaskIntoConstraints = false
-        close = NoticeCloseButton(label: notice.dismissLabel) { [weak self] in self?.onDismiss() }
-        addSubview(lead)
-        addSubview(column)
-        addSubview(close)
-        let pad = Space.space3
-        NSLayoutConstraint.activate([
-            lead.topAnchor.constraint(equalTo: topAnchor, constant: pad),
-            lead.leadingAnchor.constraint(equalTo: leadingAnchor, constant: pad),
-            lead.widthAnchor.constraint(equalToConstant: Self.lead),
-            lead.heightAnchor.constraint(equalToConstant: Self.lead),
-            // `space3` above and below (NoticeRow.svelte `--pad-block`).
-            bottomAnchor.constraint(greaterThanOrEqualTo: lead.bottomAnchor, constant: pad),
-            column.topAnchor.constraint(equalTo: topAnchor, constant: pad),
-            column.leadingAnchor.constraint(equalTo: lead.trailingAnchor, constant: Space.space3),
-            column.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -pad),
-            column.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -pad),
-            // The first line's trailing cell (NoticeRow.svelte `.end`): centred
-            // on the label line, its box hung past the trailing edge by its
-            // ink inset so its stroke ends on the edge the words keep.
-            close.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -(pad - NoticeCloseButton.inkInset)),
-            close.centerYAnchor.constraint(equalTo: topAnchor, constant: pad + TypeScale.typeLabel.lineHeight / 2),
-        ])
-        // The words, the act and the ✕ each read on their own; the lead is a picture.
-        reading.append(close as Any)
-        accessibilityElements = reading
-        accessibilityIdentifier = "caw-notice"
+        return NoticeRow(lead: leadView(notice.lead), column: column, nested: false, dismissLabel: notice.dismissLabel, reading: reading, dismiss: dismiss)
     }
 
-    @available(*, unavailable)
-    required init?(coder _: NSCoder) {
-        fatalError("NoticeRow is built in code")
-    }
-
-    /// Caw's mark in the notice's status, an account's tile, or the lead's room alone.
-    private static func leadView(_ lead: Notice.Lead) -> UIView {
-        let view: UIView = switch lead {
-        case let .caw(status): CawMark(status: Self.status(status), side: Self.lead)
-        case let .account(tile): AccountTileView(tile, side: Self.lead)
-        case .none: UIView()
+    /// Caw's mark in the notice's status, or a group's glyph: the accounts'
+    /// own (`IconAccounts`, Solar users-group-rounded), 16pt in muted ink,
+    /// centred in the lead as a section head's is (MovedLogins.svelte `.glyph`).
+    static func leadView(_ lead: Notice.Lead) -> UIView {
+        switch lead {
+        case let .caw(status):
+            return CawMark(status: Self.status(status), side: Self.lead)
+        case .group:
+            let box = UIView()
+            let glyph = GlyphView(.toolTask, size: Size.iconMd, tint: Palette.inkMuted)
+            box.addSubview(glyph)
+            NSLayoutConstraint.activate([
+                glyph.centerXAnchor.constraint(equalTo: box.centerXAnchor),
+                glyph.centerYAnchor.constraint(equalTo: box.centerYAnchor),
+            ])
+            return box
         }
-        view.translatesAutoresizingMaskIntoConstraints = false
-        view.isAccessibilityElement = false
-        return view
     }
 
     /// The mascot's status for a notice's Caw, one for one (UpdateCard.svelte `CawMark status`).
@@ -777,6 +800,205 @@ private final class NoticeRow: UIView {
             return close
         }
         return super.hitTest(point, with: event)
+    }
+}
+
+// MARK: A group of notices
+
+/// Logins moved into CawCo, or the passes an account's arrival set moving,
+/// as one group (MovedLogins.svelte, RebalanceNotices.svelte): a head led by
+/// the accounts' glyph, its title (and a pass group's count) and one line
+/// saying what it means, its ✕ acknowledging them all; then each entry as a
+/// row of the panel, not indented, its account's tile in the lead, its own
+/// ✕. A moved login still to sign in on some machine stands open; those
+/// signed in everywhere fold behind one toggle, so the group never outgrows
+/// the panel with nothing to do in it. The head and its line stand apart from
+/// the entries by the head's `space3` foot and the first entry's `space1`,
+/// against `space1` + `space1` between two entries.
+private final class NoticeGroup: UIView {
+    /// The fold opened (true) or shut: the panel keeps that and takes its new height.
+    var resized: (Bool) -> Void = { _ in }
+    private let fold = UIStackView()
+    private var toggle: UIButton?
+    private var open: Bool
+    private let folded: Int
+
+    init(_ notice: Notice, open: Bool, dismiss: @escaping @MainActor () -> Void, acknowledge: @escaping @MainActor ([String]) -> Void) {
+        let todo = notice.members.filter { $0.todo != .everywhere }
+        let done = notice.members.filter { $0.todo == .everywhere }
+        folded = done.count
+        self.open = open
+        super.init(frame: .zero)
+        let stack = UIStackView()
+        stack.axis = .vertical
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: trailingAnchor),
+            stack.topAnchor.constraint(equalTo: topAnchor),
+            stack.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+        stack.addArrangedSubview(Self.head(notice, dismiss: dismiss))
+        // The entries, `space2` under the last (`.entries`).
+        let entries = UIStackView()
+        entries.axis = .vertical
+        entries.isLayoutMarginsRelativeArrangement = true
+        entries.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: 0, bottom: Space.space2, trailing: 0)
+        for member in todo { entries.addArrangedSubview(Self.entry(member, acknowledge: acknowledge)) }
+        if !done.isEmpty {
+            let button = KitButton.make(Self.toggleWords(open: open, count: done.count), glyph: open ? .chevronUp : .chevronDown,
+                                        variant: .ghost, height: .xs) { [weak self] in
+                self?.flip()
+            }
+            // The chevron after the words, the xs size's 6pt beside an icon.
+            button.configuration?.imagePlacement = .trailing
+            button.configuration?.contentInsets.trailing = 6 + 1
+            button.accessibilityValue = open ? "Expanded" : "Collapsed"
+            button.accessibilityIdentifier = "caw-moved-fold"
+            toggle = button
+            // In the text column, its chevron's ink on the trailing edge: it
+            // hangs past by the 1pt border, its 6pt padding and the 12pt
+            // chevron's side bearing (its stroke ends at 19.75 of 24).
+            let more = UIStackView(arrangedSubviews: [UIView(), button])
+            more.isLayoutMarginsRelativeArrangement = true
+            more.directionalLayoutMargins = NSDirectionalEdgeInsets(
+                top: 0, leading: Space.space3 + NoticeRow.lead + Space.space3, bottom: Space.space1,
+                trailing: Space.space3 - (1 + 6 + Size.iconSm * 4.25 / 24)
+            )
+            entries.addArrangedSubview(more)
+            fold.axis = .vertical
+            fold.clipsToBounds = true
+            for member in done { fold.addArrangedSubview(Self.entry(member, acknowledge: acknowledge)) }
+            fold.isHidden = !open
+            fold.alpha = open ? 1 : 0
+            entries.addArrangedSubview(fold)
+        }
+        stack.addArrangedSubview(entries)
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        fatalError("NoticeGroup is built in code")
+    }
+
+    /// The head: label type in strong ink (with a pass group's count in the
+    /// meta ink), its line in muted meta.
+    private static func head(_ notice: Notice, dismiss: @escaping @MainActor () -> Void) -> NoticeRow {
+        let entry = notice.entries[0]
+        let title = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong, lines: 0)
+        title.text = entry.title
+        var parts: [UIView] = [title]
+        if let count = notice.count {
+            let figure = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
+            figure.tabular = true
+            figure.text = "\(count)"
+            figure.isAccessibilityElement = false
+            figure.setContentHuggingPriority(.required, for: .horizontal)
+            title.accessibilityValue = "\(count)"
+            parts += [figure, UIView()]
+        }
+        let column = UIStackView(arrangedSubviews: [NoticeRow.firstLine(parts, alignment: .firstBaseline)])
+        column.axis = .vertical
+        column.spacing = 2
+        var reading: [Any] = [title]
+        for line in entry.lines {
+            let said = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
+            said.text = line
+            column.addArrangedSubview(said)
+            reading.append(said)
+        }
+        return NoticeRow(lead: NoticeRow.leadView(notice.lead), column: column, nested: false, dismissLabel: notice.dismissLabel,
+                         reading: reading, dismiss: dismiss)
+    }
+
+    /// One entry (MovedLogin.svelte, a pass): its name a step under the head
+    /// (body type, row ink, one line); a moved login's origin with what is
+    /// left to do at the line's trailing edge, a pass's lines in muted meta.
+    private static func entry(_ member: Notice.Member, acknowledge: @escaping @MainActor ([String]) -> Void) -> NoticeRow {
+        let name = KitLabel(TypeScale.typeBody, ink: Palette.inkRow)
+        name.text = member.title
+        name.lineBreakMode = .byTruncatingTail
+        let column = UIStackView(arrangedSubviews: [NoticeRow.firstLine([name])])
+        column.axis = .vertical
+        column.spacing = 2
+        var reading: [Any] = [name]
+        if let todo = member.todo {
+            let from = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
+            from.text = member.lines.first
+            let end = Self.todoView(todo)
+            let sub = UIStackView(arrangedSubviews: [from, end])
+            sub.spacing = Space.space2
+            sub.alignment = .center
+            column.addArrangedSubview(sub)
+            reading += [from, end]
+        } else {
+            for line in member.lines {
+                let said = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
+                said.text = line
+                column.addArrangedSubview(said)
+                reading.append(said)
+            }
+        }
+        // A pass whose first account's provider is not known wears no tile, as on the web.
+        let lead: UIView = member.tile.map { AccountTileView($0, side: NoticeRow.lead) } ?? UIView()
+        return NoticeRow(lead: lead, column: column, nested: true, dismissLabel: "Dismiss \(member.title)", reading: reading,
+                         dismiss: { acknowledge([member.id]) })
+    }
+
+    /// What is left to do, in muted meta: the machines still to sign in
+    /// (words only; the panel opens no settings), or the success glyph and
+    /// "Signed in everywhere".
+    private static func todoView(_ todo: Notice.Todo) -> UIView {
+        let words = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
+        // Its last letter on the trailing edge: the words never take slack.
+        words.setContentHuggingPriority(.required, for: .horizontal)
+        words.setContentCompressionResistancePriority(.required, for: .horizontal)
+        let view: UIView
+        switch todo {
+        case let .signIn(machines):
+            words.text = "Sign in on \(machines) machine\(machines == 1 ? "" : "s")"
+            view = words
+        case .everywhere:
+            words.text = "Signed in everywhere"
+            let tick = UIStackView(arrangedSubviews: [GlyphView(.passed, size: Size.iconSm, tint: Palette.inkMuted), words])
+            tick.spacing = Space.space1
+            tick.alignment = .center
+            tick.isAccessibilityElement = true
+            tick.accessibilityLabel = "Signed in everywhere"
+            view = tick
+        }
+        view.setContentHuggingPriority(.required, for: .horizontal)
+        view.setContentCompressionResistancePriority(.required, for: .horizontal)
+        return view
+    }
+
+    private static func toggleWords(open: Bool, count: Int) -> String {
+        "\(open ? "Hide" : "Show") \(count) signed in everywhere"
+    }
+
+    /// Opens or shuts the fold (UpdateCard's notes' recipe): open over
+    /// `durPanel`, shut quicker over `durExit`; with less motion only the fade.
+    private func flip() {
+        guard let toggle else { return }
+        open.toggle()
+        KitButton.setTitle(Self.toggleWords(open: open, count: folded), of: toggle, variant: .ghost, height: .xs)
+        toggle.configuration?.image = (open ? Glyph.chevronUp : Glyph.chevronDown).image.resized(to: Size.iconSm)
+        toggle.accessibilityValue = open ? "Expanded" : "Collapsed"
+        let opening = open
+        let change = {
+            self.fold.isHidden = !opening
+            self.fold.alpha = opening ? 1 : 0
+        }
+        if UIAccessibility.isReduceMotionEnabled {
+            change()
+        } else {
+            Motion.easeOut.animator(opening ? Motion.durPanel : Motion.durExit) {
+                change()
+                self.superview?.layoutIfNeeded()
+            }.startAnimation()
+        }
+        resized(opening)
     }
 }
 

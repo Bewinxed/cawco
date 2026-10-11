@@ -7,7 +7,7 @@ import Foundation
 /// (RebalanceNotices.svelte). Each kind is one row, its entries in it, and its
 /// ✕ acknowledges every entry it shows on every device (notices.svelte.ts).
 public struct Notice: Identifiable, Equatable, Sendable {
-    public enum Kind: Sendable {
+    public enum Kind: Hashable, Sendable {
         /// The update notice; `landedAll` is "CawCo X is running on N machines", which also forgets this device's installs.
         case update(landedAll: Bool)
         case movedLogins
@@ -38,11 +38,11 @@ public struct Notice: Identifiable, Equatable, Sendable {
     }
 
     /// What leads the row (NoticeRow.svelte `lead`): Caw's mark in the
-    /// notice's status, or an account's tile.
+    /// notice's status, or a group's glyph (MovedLogins.svelte,
+    /// RebalanceNotices.svelte: the accounts' own, `IconAccounts`).
     public enum Lead: Equatable, Sendable {
         case caw(CawLead)
-        case account(Tile)
-        case none
+        case group
     }
 
     /// The statuses an update notice's Caw takes (updates/model.ts `caw.status`).
@@ -54,12 +54,31 @@ public struct Notice: Identifiable, Equatable, Sendable {
         case sleeping
     }
 
-    /// One entry of the row: what it says first, then a line each; an entry
-    /// after the first carries its own account tile, where it has one.
+    /// One entry of the row: what it says first, then a line each.
     public struct Entry: Equatable, Sendable {
         public let title: String
         public let lines: [String]
-        public var tile: Tile?
+    }
+
+    /// One entry of a group under its head (MovedLogin.svelte, a pass of
+    /// RebalanceNotices.svelte): its account's tile, its name, its lines, and
+    /// its own ✕, which acknowledges it alone (`id`).
+    public struct Member: Equatable, Sendable {
+        public let id: String
+        public let title: String
+        public let lines: [String]
+        /// The account's tile; a pass whose first account's provider is not
+        /// known has none, as the web draws none.
+        public let tile: Tile?
+        /// A moved login's to-do, at its line's trailing edge.
+        public let todo: Todo?
+    }
+
+    /// What is left to do for a moved login (MovedLogin.svelte).
+    public enum Todo: Equatable, Sendable {
+        /// Online machines that could use it lack it.
+        case signIn(machines: Int)
+        case everywhere
     }
 
     /// The hub is newer than this app (UpdateNoticeCell's words, now a row of
@@ -87,14 +106,19 @@ public struct Notice: Identifiable, Equatable, Sendable {
     public let machineIds: [String]
     /// The notice ids its ✕ acknowledges.
     public let acks: [String]
+    /// A group's entries under its head (`.group` leads).
+    public var members: [Member] = []
+    /// The count a group's head says beside its title (RebalanceNotices.svelte `.count`).
+    public var count: Int?
 
     public static func == (a: Notice, b: Notice) -> Bool {
         a.id == b.id && a.entries == b.entries && a.closing == b.closing && a.action == b.action && a.failed == b.failed && a.lead == b.lead
+            && a.members == b.members && a.count == b.count
     }
 
     /// Every row under Notices, in the panel's order: the update, the moved logins, the rebalances.
-    static func unseen(machines: [MachineRow], accounts: Components.Schemas.GetApiAccounts200?, policy: Policy?,
-                       commanded: Set<String>, seen: Set<String>) -> [Notice] {
+    static func unseen(machines: [MachineRow], accounts: Components.Schemas.GetApiAccounts200?, providers: [Components.Schemas.ProviderChoice],
+                       policy: Policy?, commanded: Set<String>, seen: Set<String>) -> [Notice] {
         var out: [Notice] = []
         let fleet = machines.compactMap(UpdateMachine.init)
         if let policy, let update = noticeFor(fleet, policy: policy, commanded: commanded, seen: seen) {
@@ -104,7 +128,7 @@ public struct Notice: Identifiable, Equatable, Sendable {
         guard let accounts,
               let people = try? Wire.transcode(accounts.accounts, as: [Account].self),
               let signins = try? Wire.transcode(accounts.signins, as: [Signin].self) else { return out }
-        if let moved = movedLogins(people, signins: signins, machines: machines, seen: seen) { out.append(moved) }
+        if let moved = movedLogins(people, signins: signins, machines: machines, providers: providers, seen: seen) { out.append(moved) }
         let rebalances = (try? Wire.transcode(accounts.rebalances, as: [Rebalance].self)) ?? []
         if let row = rebalanced(rebalances.filter { !seen.contains($0.id) }, accounts: people) { out.append(row) }
         return out
@@ -358,7 +382,11 @@ public struct Notice: Identifiable, Equatable, Sendable {
         let machineId: String
         let movedAt: Double?
         let movedFrom: String?
+        let state: String
     }
+
+    /// The Claude provider's id (core `CLAUDE_PROVIDER`).
+    private static let claudeProvider = "anthropic"
 
     /// An account as the operator knows it (accounts/model.svelte.ts `nameOf`).
     private static func name(_ account: Account) -> String {
@@ -368,24 +396,55 @@ public struct Notice: Identifiable, Equatable, Sendable {
         return account.label ?? account.email ?? "an account not signed in yet"
     }
 
+    /// What a provider is called: its first picker row's name, "Claude" for Anthropic (model.svelte.ts `providerName`).
+    private static func providerName(_ provider: String, _ providers: [Components.Schemas.ProviderChoice]) -> String {
+        providers.first { $0.provider == provider }?.name ?? (provider == claudeProvider ? "Claude" : provider)
+    }
+
+    /// An account's name where nothing around it says what it is: a key with
+    /// no nickname leads with its provider and "key" (model.svelte.ts `namedForNotice`).
+    private static func namedForNotice(_ account: Account, _ providers: [Components.Schemas.ProviderChoice]) -> String {
+        guard account.kind == "api_key", account.label == nil else { return name(account) }
+        return "\(account.provider == claudeProvider ? "Anthropic" : providerName(account.provider, providers)) key \(name(account))"
+    }
+
+    /// The harnesses that use an account of a provider (model.svelte.ts `providerHarnesses`).
+    private static func harnesses(of provider: String, _ providers: [Components.Schemas.ProviderChoice]) -> Set<String> {
+        guard provider != claudeProvider else { return ["claude"] }
+        return Set(providers.filter { $0.provider == provider }.flatMap { $0.harnesses.map(\.rawValue) })
+    }
+
     private static let storeWords = ["claude": "Claude Code", "pi": "pi", "opencode": "OpenCode"]
 
-    /// Every login moved in from a machine's own store nobody has acknowledged, newest first, as one row.
-    private static func movedLogins(_ accounts: [Account], signins: [Signin], machines: [MachineRow], seen: Set<String>) -> Notice? {
-        let moved = signins.compactMap { signin -> (id: String, at: Double, entry: Entry)? in
+    /// Every login moved in from a machine's own store nobody has acknowledged,
+    /// newest first, as one group (MovedLogins.svelte): its head, then each
+    /// login with what is left to do for it.
+    private static func movedLogins(_ accounts: [Account], signins: [Signin], machines: [MachineRow],
+                                    providers: [Components.Schemas.ProviderChoice], seen: Set<String>) -> Notice? {
+        let moved = signins.compactMap { signin -> (at: Double, member: Member)? in
             guard let movedAt = signin.movedAt,
                   let account = accounts.first(where: { $0.id == signin.accountId }),
                   let from = machines.first(where: { $0.machineId == signin.machineId }) else { return nil }
             let id = "moved-login:\(account.id):\(signin.machineId):\(Int64(movedAt))"
             guard !seen.contains(id) else { return nil }
             let store = storeWords[signin.movedFrom ?? "claude"] ?? "Claude Code"
-            return (id, movedAt, Entry(title: name(account), lines: ["from \(store) on \(Naming.machineLabel(from.hostname))"],
-                                       tile: Tile(provider: account.provider, hue: account.hue)))
-        }.sorted { $0.at > $1.at }
+            // Online machines that run its harnesses and aren't signed in to it yet (model.svelte.ts `movedLogins`).
+            let uses = harnesses(of: account.provider, providers)
+            let missing = machines.filter { machine in
+                machine.status == "online"
+                    && (machine.harnesses ?? []).contains { uses.contains($0.harness.rawValue) }
+                    && signins.first { $0.accountId == account.id && $0.machineId == machine.machineId }?.state != "signed-in"
+            }.count
+            return (movedAt, Member(id: id, title: namedForNotice(account, providers), lines: ["from \(store) on \(Naming.machineLabel(from.hostname))"],
+                                    tile: Tile(provider: account.provider, hue: account.hue),
+                                    todo: missing > 0 ? .signIn(machines: missing) : .everywhere))
+        }.sorted { $0.at > $1.at }.map(\.member)
         guard let first = moved.first else { return nil }
-        return Notice(id: first.id, kind: .movedLogins, lead: first.entry.tile.map(Lead.account) ?? .none, label: "Logins moved into CawCo",
-                      dismissLabel: "Dismiss moved logins", failed: false, entries: moved.map(\.entry), closing: nil, action: nil,
-                      machineIds: [], acks: moved.map(\.id))
+        let heading = "\(plural(moved.count, "login")) moved into CawCo"
+        return Notice(id: first.id, kind: .movedLogins, lead: .group, label: heading,
+                      dismissLabel: "Dismiss all \(plural(moved.count, "moved login"))", failed: false,
+                      entries: [Entry(title: heading, lines: ["Found signed in on your machines and kept as fleet accounts; any session can use them now."])],
+                      closing: nil, action: nil, machineIds: [], acks: moved.map(\.id), members: moved)
     }
 
     // MARK: Rebalances (RebalanceNotices.svelte, core `rebalanceWords`)
@@ -439,20 +498,23 @@ public struct Notice: Identifiable, Equatable, Sendable {
         let held: [Held]
     }
 
-    /// Every pass nobody has acknowledged, newest first, as one row; each
-    /// entry's tile is the first account that came, in its provider's mark.
+    /// Every pass nobody has acknowledged, newest first, as one group
+    /// (RebalanceNotices.svelte): its head and how many, then each pass, its
+    /// tile the first account that came, in its provider's mark.
     private static func rebalanced(_ passes: [Rebalance], accounts: [Account]) -> Notice? {
         let sorted = passes.sorted { $0.at > $1.at }
         guard let first = sorted.first else { return nil }
-        let entries = sorted.map { pass in
+        let members = sorted.map { pass in
             let came = pass.came.first?.account
             let provider = came.flatMap { named in accounts.first { $0.id == named.id }?.provider }
-            return Entry(title: "\(cameWords(pass.came)) on \(pass.machine)", lines: pass.running.map(runningLine) + pass.held.map(heldLine),
-                         tile: came.flatMap { named in provider.map { Tile(provider: $0, hue: named.hue) } })
+            return Member(id: pass.id, title: "\(cameWords(pass.came)) on \(pass.machine)", lines: pass.running.map(runningLine) + pass.held.map(heldLine),
+                          tile: came.flatMap { named in provider.map { Tile(provider: $0, hue: named.hue) } }, todo: nil)
         }
-        return Notice(id: first.id, kind: .rebalances, lead: entries[0].tile.map(Lead.account) ?? .none, label: "Sessions rebalanced",
-                      dismissLabel: "Dismiss rebalance notices", failed: false, entries: entries, closing: nil, action: nil,
-                      machineIds: [], acks: sorted.map(\.id))
+        return Notice(id: first.id, kind: .rebalances, lead: .group, label: "Sessions rebalanced",
+                      dismissLabel: "Dismiss all \(sorted.count) rebalances", failed: false,
+                      entries: [Entry(title: "Sessions rebalanced",
+                                      lines: ["An account came, so sessions moved off accounts about to run out and held ones were placed again."])],
+                      closing: nil, action: nil, machineIds: [], acks: sorted.map(\.id), members: members, count: sorted.count)
     }
 
     private static func cameWords(_ came: [Came]) -> String {

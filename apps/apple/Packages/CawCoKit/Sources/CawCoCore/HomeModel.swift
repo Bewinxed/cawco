@@ -116,8 +116,8 @@ public final class HomeModel {
     public var notices: [Notice] {
         let local = hub.showsHubNewer ? [Notice.hubNewer] : []
         guard fleet.noticesKnown else { return local }
-        return local + Notice.unseen(machines: fleet.machines, accounts: fleet.accounts, policy: fleet.updatePolicy,
-                                     commanded: fleet.commanded, seen: fleet.noticesSeen)
+        return local + Notice.unseen(machines: fleet.machines, accounts: fleet.accounts, providers: fleet.accountProviders ?? [],
+                                     policy: fleet.updatePolicy, commanded: fleet.commanded, seen: fleet.noticesSeen)
     }
 
     /// The notices' sources are all read (the seen record, the accounts and
@@ -126,6 +126,11 @@ public final class HomeModel {
 
     /// A notice's ✕: acknowledged everywhere (update-notice.svelte.ts
     /// `dismissUpdate`); the hub being newer is closed for this launch.
+    /// One entry of a group acknowledged alone (MovedLogin's, a pass's ✕).
+    public func acknowledge(_ ids: [String]) {
+        hub.acknowledge(notices: ids)
+    }
+
     public func dismiss(_ notice: Notice) {
         switch notice.kind {
         case .hubNewer:

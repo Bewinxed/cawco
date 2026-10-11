@@ -231,6 +231,9 @@ public final class FleetStore {
     /// model catalog. Read on connect and after every `usage` frame, which the
     /// hub sends when any of it moves. Nil until read.
     public internal(set) var accounts: Components.Schemas.GetApiAccounts200?
+    /// The providers the fleet's machines know (`/api/accounts/providers`):
+    /// which harnesses use an account of each. Nil until read.
+    public internal(set) var accountProviders: [Components.Schemas.ProviderChoice]?
 
     /// The notice ids a person acknowledged on any tab or device (hub
     /// notices.ts), plus this device's own on their way to the hub

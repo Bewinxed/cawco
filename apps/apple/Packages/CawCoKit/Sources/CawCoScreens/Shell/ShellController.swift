@@ -158,6 +158,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             hub.needs.answer(ask, machineId: item.machineId, answer)
         }
         cawPanel.onDismiss = { [weak self] notice in self?.home.dismiss(notice) }
+        cawPanel.onAcknowledge = { [weak self] ids in self?.home.acknowledge(ids) }
         cawPanel.onAct = { [weak self] notice in
             if notice.action == .openTestFlight { UIApplication.shared.open(HubConnection.Incompatible.testFlight) }
             self?.home.act(notice)
