@@ -81,10 +81,12 @@ public enum NotificationCentre {
     // MARK: Changes: queued, not waited for
 
     /// The categories the hub's pushes name, and the question categories a
-    /// delivered push still names (CawCoPush `PushCategory.install`, which
-    /// waits on the centre's answers here, on the queue).
+    /// delivered push still names (CawCoPush `PushCategory.install`). Its
+    /// first request is queued now, behind every call asked before it; each
+    /// next one is queued when the centre answers the last, so the queue is
+    /// never held waiting for the centre.
     public static func installCategories() {
-        queue.async { PushCategory.install(adding: nil, pruning: true) }
+        PushCategory.install(adding: nil, pruning: true, on: queue) {}
     }
 
     public static func removePending(_ identifiers: [String]) {
