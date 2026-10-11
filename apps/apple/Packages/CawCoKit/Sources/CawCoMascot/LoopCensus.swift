@@ -18,29 +18,34 @@ public enum LoopCensus {
         return found
     }
 
+    /// Walked once a second on the main thread, so a view is named only when something is found on it.
     private static func visit(_ view: UIView, hidden: Bool, into found: inout [String]) {
         let hidden = hidden || view.isHidden || view.alpha < 0.01
-        let name = "\(type(of: view)) \"\(label(of: view))\"\(hidden ? " (hidden)" : "")"
+        let name = { "\(type(of: view)) \"\(label(of: view))\"\(hidden ? " (hidden)" : "")" }
         if let rive = view as? RiveUIView, !rive.isPaused {
-            found.append("Rive drawing in \(name)")
+            found.append("Rive drawing in \(name())")
         }
-        layers(view.layer, name: name, into: &found)
+        for key in forEver(on: view.layer) {
+            found.append("\(key) for ever on \(name())")
+        }
         for child in view.subviews {
             visit(child, hidden: hidden, into: &found)
         }
     }
 
-    /// `layer` and the sublayers no other view owns.
-    private static func layers(_ layer: CALayer, name: String, into found: inout [String]) {
+    /// The keys of the animations that repeat for ever on `layer` and the sublayers no other view owns.
+    private static func forEver(on layer: CALayer) -> [String] {
+        var keys: [String] = []
         for key in layer.animationKeys() ?? [] {
             guard let animation = layer.animation(forKey: key) else { continue }
             if animation.repeatCount == .infinity || animation.repeatDuration == .infinity {
-                found.append("\(key) for ever on \(name)")
+                keys.append(key)
             }
         }
         for sublayer in layer.sublayers ?? [] where !(sublayer.delegate is UIView) {
-            layers(sublayer, name: name, into: &found)
+            keys += forEver(on: sublayer)
         }
+        return keys
     }
 
     /// The view's own label or id, or the nearest one over it.

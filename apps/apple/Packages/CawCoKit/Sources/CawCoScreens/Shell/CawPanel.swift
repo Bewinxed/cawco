@@ -41,7 +41,7 @@ final class CawPanel: UIView, UIGestureRecognizerDelegate {
     static let tallest: CGFloat = 560
     /// Its content stands this far in from its drawn edge (DESIGN.md, "Caw's panel": 7px).
     static let inset: CGFloat = 7
-    private static let log = Logger(subsystem: "dev.cawco.app", category: "CawPanel")
+    fileprivate static let log = Logger(subsystem: "dev.cawco.app", category: "CawPanel")
 
     /// A row chosen: the panel has begun to close.
     var onChoose: (HomeModel.NeedsItem) -> Void = { _ in }
@@ -114,6 +114,9 @@ final class CawPanel: UIView, UIGestureRecognizerDelegate {
         let words = (needWords + noticeWords + [quiet, "\(live)"]).joined(separator: "\n")
         guard words != drawn else { return }
         drawn = words
+        #if DEBUG
+        ProbeCounts.panelRows += 1
+        #endif
         for view in list.arrangedSubviews { view.removeFromSuperview() }
         if !needs.isEmpty {
             list.addArrangedSubview(Self.head("Needs you", count: needs.count))
@@ -209,6 +212,9 @@ final class CawPanel: UIView, UIGestureRecognizerDelegate {
     /// edge, flared on the leading side by the glass's `flare`.
     private func place(animated: Bool = false) {
         guard let host = superview, let glass, glass.window != nil else { return }
+        #if DEBUG
+        ProbeCounts.panelPlaces += 1
+        #endif
         let cap = Self.restingBox(of: glass, in: host)
         let compact = host.traitCollection.horizontalSizeClass == .compact
         let width = compact
@@ -425,7 +431,31 @@ private final class NeedRow: UIControl {
         fatalError("NeedRow is built in code")
     }
 
-    @objc private func choose() { onChoose() }
+    @objc private func choose() {
+        #if DEBUG
+        CawPanel.log.notice("panel row chosen: \(self.accessibilityIdentifier ?? "", privacy: .public)")
+        #endif
+        onChoose()
+    }
+
+    #if DEBUG
+    /// A simulator probe's word on a press that did not open the row: where it came down and lifted.
+    override func beginTracking(_ touch: UITouch, with event: UIEvent?) -> Bool {
+        CawPanel.log.notice("panel row press began at \(String(describing: touch.location(in: self)), privacy: .public) in \(String(describing: self.bounds.size), privacy: .public)")
+        return super.beginTracking(touch, with: event)
+    }
+
+    override func endTracking(_ touch: UITouch?, with event: UIEvent?) {
+        let inside = touch.map { point(inside: $0.location(in: self), with: event) }
+        CawPanel.log.notice("panel row press ended, inside \(String(describing: inside), privacy: .public), in a window \(self.window != nil, privacy: .public)")
+        super.endTracking(touch, with: event)
+    }
+
+    override func cancelTracking(with event: UIEvent?) {
+        CawPanel.log.notice("panel row press cancelled")
+        super.cancelTracking(with: event)
+    }
+    #endif
 
     /// A press anywhere on the row but its buttons is the row's own: its
     /// stacks and labels never take the touch (a press between Deny and

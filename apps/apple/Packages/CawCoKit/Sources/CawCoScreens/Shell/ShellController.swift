@@ -380,9 +380,15 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         }
         let probe = Logger(subsystem: "dev.cawco.app", category: "Probe")
         probe.notice("\(line, privacy: .public)")
-        // What keeps the app from going idle this second: a probe whose read timed out prints it.
+        // What keeps the app from going idle this second, and how often the
+        // shell laid out, placed the panel and remade its rows since the last
+        // line: a probe whose read timed out prints these.
         let loops = LoopCensus.running(in: view.window?.windowScene?.windows ?? [])
-        probe.notice("probe loops n=\(loops.count) \(loops.joined(separator: " | "), privacy: .public)")
+        let counts = "layouts=\(ProbeCounts.shellLayouts) places=\(ProbeCounts.panelPlaces) rows=\(ProbeCounts.panelRows)"
+        ProbeCounts.shellLayouts = 0
+        ProbeCounts.panelPlaces = 0
+        ProbeCounts.panelRows = 0
+        probe.notice("probe loops n=\(loops.count) \(counts, privacy: .public) \(loops.joined(separator: " | "), privacy: .public)")
     }
 
     /// The first tab on screen in the phone's row.
@@ -410,6 +416,9 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
+        #if DEBUG
+        ProbeCounts.shellLayouts += 1
+        #endif
         barTabs.relayout()
         placeGrip()
         // The split view lays its columns over what else is in its view on

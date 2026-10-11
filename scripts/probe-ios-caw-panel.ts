@@ -180,7 +180,22 @@ interface Frame {
 /** The app's name, as Maestro's read of it gives it (project.yml CFBundleDisplayName). */
 const APP = "CawCo";
 /** Every element on the app's screen, flattened. */
-const tree = async (udid: string) => (await screenRead(udid, APP)).nodes;
+const tree = async (udid: string) => (await read(udid)).nodes;
+/** A read still out after this long is waiting on the app: its main thread is sampled while it hangs. */
+const SAMPLE_AFTER_MS = 45_000;
+/** The app's screen, read; a read that hangs past `SAMPLE_AFTER_MS` has the app sampled meanwhile (`sampleApp`). */
+async function read(udid: string): Promise<ScreenRead> {
+  let sampled: Promise<void> | undefined;
+  const timer = setTimeout(() => {
+    sampled = sampleApp(udid);
+  }, SAMPLE_AFTER_MS);
+  try {
+    return await screenRead(udid, APP);
+  } finally {
+    clearTimeout(timer);
+    await sampled;
+  }
+}
 const said = (nodes: Node[]) =>
   nodes
     .filter((n) => n.id || n.label)
@@ -531,7 +546,7 @@ xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-e
     (node) => node?.label === CAW_SEEDED,
     180_000
   ).catch(() => undefined);
-  const rest = await screenRead(udid, APP);
+  const rest = await read(udid);
   let { nodes } = rest;
   check(
     `${kind}: Caw's rim counts needs-you only`,
@@ -559,6 +574,7 @@ xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-e
   }
   // The screen before the panel opens: what stands where the glass will flare.
   const closed = await pixels(udid, rest.screen.width);
+  await censusNow(kind, udid);
   await tap(udid, centre(head.frame));
   await pause(1200);
   nodes = await tree(udid);
@@ -1031,8 +1047,11 @@ async function chooseRow(kind: Kind, udid: string) {
   check(
     `${kind}: a press on the ask's row opens its session`,
     closed && call !== undefined,
-    `${closed ? "the panel closed" : "the panel is still open"}; ${call ? `"${call.label}" on screen` : "no pending call of Needs probe on screen"}`
+    `${closed ? "the panel closed" : "the panel is still open"}; ${call ? `"${call.label}" on screen` : "no pending call of Needs probe on screen"}; pressed at ${JSON.stringify(centre(title.frame))} on "${title.label}" ${JSON.stringify(title.frame)}`
   );
+  if (!(closed && call !== undefined)) {
+    await pressEvidence(kind, udid);
+  }
   await shot(udid, `${kind}-chosen-light`);
 }
 
@@ -1166,34 +1185,126 @@ async function pass(
       await chooseRow(kind, udid);
     }
   } catch (error) {
-    if (String(error).includes(QUERY_TIMEOUT)) {
+    if (hung(String(error))) {
       await idleEvidence(kind, udid);
     }
     throw error;
   }
 }
 
-/** XCTest's words when a query waited on an app that never went idle (Maestro's AppError: XCTFuture 1000). */
-const QUERY_TIMEOUT = "Timed out while evaluating UI query";
-/** How far back the app's log is read after a timed-out read: past the 187s one read has waited. */
+/**
+ * Maestro's words for a read that waited on the app: XCTest's two timeouts
+ * (Maestro's AppError: a UI query's XCTFuture 1000, the main run loop busy),
+ * the CLI's DriverTimeout, and its insight for a read that runs long.
+ */
+const HUNG_WORDS =
+  /Timed out while evaluating UI query|main thread busy|Maestro driver timed out|taking longer than usual/;
+/** A read that failed after this long waited on the app, whatever it said. */
+const HUNG_MS = 60_000;
+/** The shared wrapper's word on how long a failed read ran (`screenRead`). */
+const FAILED_AFTER = /failed after (\d+) ms/;
+const hung = (message: string) =>
+  HUNG_WORDS.test(message) ||
+  Number(FAILED_AFTER.exec(message)?.[1] ?? 0) > HUNG_MS;
+/** `sample`'s seconds on the app's process. */
+const SAMPLE_SECONDS = 3;
+/** A call graph line's sample count, after its tree marks. */
+const GRAPH_COUNT = /^[\s+!:|]*(\d+) /;
+/**
+ * What the app's main thread is doing while a read waits on it: macOS
+ * `sample` on the simulator app's process (a process of the Mac's own), the
+ * main thread's call graph cut to its hot path (the frames in at least half
+ * its samples), then the heaviest tops of stack over the whole process.
+ */
+async function sampleApp(udid: string) {
+  const text =
+    await mac(`PID=$(xcrun simctl spawn ${udid} launchctl list | awk '/UIKitApplication:dev\\.cawco\\.app/ { print $1; exit }')
+if [ -z "$PID" ] || [ "$PID" = "-" ]; then echo "NO PID"; exit 0; fi
+F=$(mktemp)
+sample "$PID" ${SAMPLE_SECONDS} -mayDie -file "$F" >/dev/null 2>&1 || true
+echo "PID $PID"
+awk '/com\\.apple\\.main-thread/ { on = 1; print; next } on && /^ {4}[0-9]+ Thread_/ { on = 0 } on { print }' "$F"
+echo "TOPS"
+awk '/^Sort by top of stack/ { on = 1; next } on && NF == 0 { exit } on { print }' "$F" | head -15
+rm -f "$F"`).catch((error) => String(error));
+  const lines = text.split("\n");
+  const tops = lines.indexOf("TOPS");
+  const graph = lines.slice(
+    lines.findIndex((one) => one.includes("com.apple.main-thread")),
+    tops < 0 ? undefined : tops
+  );
+  const total = Number(GRAPH_COUNT.exec(graph[0] ?? "")?.[1] ?? 0);
+  const clean = (line: string) =>
+    line.replace(/\s+\[0x[0-9a-f,]+\]/g, "").slice(0, 240);
+  console.log(
+    `  ${udid}: a read out for ${SAMPLE_AFTER_MS / 1000}s; ${lines[0]?.startsWith("PID") ? `the app (${lines[0]}) sampled for ${SAMPLE_SECONDS}s, its main thread's hot path (frames in at least half of its ${total} samples):` : `not sampled: ${text.trim().slice(0, 300)}`}`
+  );
+  for (const line of graph.filter(
+    (one) => Number(GRAPH_COUNT.exec(one)?.[1] ?? 0) >= total / 2
+  )) {
+    console.log(`    ${clean(line)}`);
+  }
+  if (tops >= 0) {
+    console.log("    the process's heaviest tops of stack:");
+    for (const line of lines.slice(tops + 1).filter(Boolean)) {
+      console.log(`      ${clean(line.trim())}`);
+    }
+  }
+}
+
+/** The app's latest census line before Caw is tapped: what was looping, and how often the shell laid out, while the screen was at rest. */
+async function censusNow(kind: Kind, udid: string) {
+  const line = await mac(
+    `xcrun simctl spawn ${udid} log show --last 15s --style compact --predicate 'subsystem == "dev.cawco.app" AND category == "Probe" AND eventMessage BEGINSWITH "probe loops"' | tail -1`
+  ).catch((error) => String(error));
+  console.log(
+    `  ${kind}: before Caw is tapped, ${LOOPS_LINE.exec(line)?.[0] ?? `no 'probe loops' line (${line.trim().slice(0, 200)})`}`
+  );
+}
+
+/**
+ * A press on the ask's row that did not open it: the panel's own log of the
+ * press over the last 30s (CawPanel NeedRow, DEBUG): where it came down,
+ * whether it lifted inside or was cancelled, whether the row was chosen,
+ * and whether the rows were made again under it.
+ */
+async function pressEvidence(kind: Kind, udid: string) {
+  const text = await mac(
+    `xcrun simctl spawn ${udid} log show --last 30s --style compact --predicate 'subsystem == "dev.cawco.app" AND category == "CawPanel" AND (eventMessage BEGINSWITH "panel row" OR eventMessage BEGINSWITH "panel rows")' | tail -20`
+  ).catch((error) => String(error));
+  const lines = text.split("\n").filter((one) => one.includes("dev.cawco.app"));
+  console.log(
+    `  ${kind}: the panel's log of the press, last 30s (${lines.length} lines):`
+  );
+  for (const line of lines) {
+    console.log(
+      `    ${line.split(" ")[1] ?? ""} ${line.replace(LOG_PREFIX, "")}`
+    );
+  }
+}
+
+/** How far back the app's log is read after a hung read: past the 187s one read has waited. */
 const EVIDENCE_WINDOW = "6m";
 /** The app's once-a-second census under `-shell-probe` (ShellController `probeShell`, `LoopCensus`). */
 const LOOPS_LINE = /probe loops n=\d+.*/;
 
 /**
- * Why the app never went idle, from its own log over `EVIDENCE_WINDOW`:
+ * Why the app never went idle, from its own log over `EVIDENCE_WINDOW`.
  * XCTest takes an app with an animation running as never idle
- * (rdar://25562105). The last `probe loops` lines, with their times (lines
- * that stop mean the main thread stopped turning); every `Loops` on and off
- * (`LoopLog`); and how many times the panel was placed (`panel hangs`),
- * which runs into thousands when a layout pass keeps setting off another.
+ * (rdar://25562105), and gives up on one whose main thread stays busy. The
+ * last `probe loops` lines, with their times: each counts the shell's
+ * layout passes, the panel's placings and its rows remade since the line
+ * before, and lines that stop mean the main thread stopped turning. Then
+ * every `Loops` on and off (`LoopLog`), and how many times the panel was
+ * placed (`panel hangs`), which runs into thousands when a layout pass
+ * keeps setting off another.
  */
 async function idleEvidence(kind: Kind, udid: string) {
   // Counted on the Mac: a layout loop can log the panel's place thousands of times.
   const text = await mac(`F=$(mktemp)
 xcrun simctl spawn ${udid} log show --last ${EVIDENCE_WINDOW} --style compact --predicate 'subsystem == "dev.cawco.app" AND ((category == "Probe" AND eventMessage BEGINSWITH "probe loops") OR category == "Loops" OR (category == "CawPanel" AND eventMessage BEGINSWITH "panel hangs"))' > "$F" || true
 echo "PLACED $(grep -c 'panel hangs' "$F" || true) $(grep 'panel hangs' "$F" | head -1 | cut -d' ' -f2) $(grep 'panel hangs' "$F" | tail -1 | cut -d' ' -f2)"
-grep 'probe loops' "$F" | tail -5 || true
+grep 'probe loops' "$F" | tail -10 || true
 echo "LOOPS $(grep -c ':Loops]' "$F" || true)"
 grep ':Loops]' "$F" | tail -20 || true
 rm -f "$F"`).catch((error) => String(error));
