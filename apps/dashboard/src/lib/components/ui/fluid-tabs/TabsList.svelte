@@ -193,6 +193,8 @@
     f: number
   ) {
     const cuts = items.map(() => [0, 0]);
+    /* Which of each tab's sides stands under its neighbour's card now. */
+    const under = items.map(() => [false, false]);
     for (let i = 0; i < items.length - 1; i += 1) {
       const left = items[i];
       const right = items[i + 1];
@@ -200,18 +202,30 @@
       seamAt.set(left, { right, q });
       if ((rankNow.get(left) ?? 0) > (rankNow.get(right) ?? 0)) {
         cuts[i][1] = q;
+        under[i + 1][0] = true;
       } else {
         cuts[i + 1][0] = 1 - q;
+        under[i][1] = true;
       }
     }
     items.forEach((item, i) => {
       const [start, end] = cuts[i];
-      const key = `${start} ${end}`;
+      const [startUnder, endUnder] = under[i];
+      const key = `${start} ${end} ${startUnder} ${endUnder}`;
       if (cutNow.get(item) !== key) {
         cutNow.set(item, key);
         const laid = laidOf(item, track);
         laid.style.setProperty("--cut-start", String(start));
         laid.style.setProperty("--cut-end", String(end));
+        // A side under a neighbour draws nothing a host would paint on
+        // it (`visibility`): the card over it covers it, but on a switch
+        // the card is a compositor layer whose foot row is filtered half
+        // clear, and a rim's foot under it showed through on the shelf.
+        laid.style.setProperty(
+          "--under-start",
+          startUnder ? "hidden" : "visible"
+        );
+        laid.style.setProperty("--under-end", endUnder ? "hidden" : "visible");
       }
     });
   }

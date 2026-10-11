@@ -1,11 +1,19 @@
 <script lang="ts">
   /**
-   * The session folder tabs on a bench: the real PaneTabs, five tabs in
-   * mixed statuses (needs you, working, idle, done, working), fed through
-   * the client's own state with no hub, over everything the shell draws
-   * (its hub banner included). `?theme=` light | dark; `?at=` the index of
-   * the tab chosen first (1). `window.__ft.choose(id)` chooses a tab, as a
-   * click does, and `window.__ft.ids` lists the tabs in order: what
+   * Both folder strips on a bench, fed through the client's own state with
+   * no hub, over everything the shell draws (its hub banner included):
+   *
+   * - the session tabs (`data-strip="session"`): the real PaneTabs, five
+   *   tabs in mixed statuses (needs you, working, idle, done, working);
+   * - the home's Working and Finished (`data-strip="work"`): the real
+   *   WorkTabs over twelve working runs and fourteen finished, hosted as
+   *   the shell hosts it, in the rail's 260px column on the desk and across
+   *   the phone's home page under 900px.
+   *
+   * `?theme=` light | dark; `?at=` the index of the session tab chosen
+   * first (1); `?work=` working | finished. `window.__ft.choose(id)` chooses
+   * a session tab and `window.__ft.work.choose(id)` Working or Finished, as
+   * a click does; `ids` and `chosen()` on each say the rest: what
    * scripts/folder-tabs-proof.ts drives.
    *
    * A click on a tab chooses it here, in the bench's own group; the strip's
@@ -14,6 +22,9 @@
    */
   import type { SessionPulse, Workflow, WorkflowRun } from "@cawco/core";
   import { onMount, untrack } from "svelte";
+  import { MediaQuery } from "svelte/reactivity";
+  import WorkTabs from "#lib/cawco/home/WorkTabs.svelte";
+  import { workTab } from "#lib/cawco/home/work-tab.svelte.js";
   import { workflowState } from "#lib/cawco/workflow-state.svelte.js";
   import PaneTabs from "#lib/cawco/workspace/PaneTabs.svelte";
   import type { LeafNode } from "#lib/cawco/workspace/workspace.svelte.js";
@@ -61,12 +72,13 @@
     id: WORKFLOW,
     name: "Release notes",
   } as Workflow);
-  workflowState.runs[RUN] = {
+  /** A run of the bench's workflow, working or ended `ago` ms back. */
+  const runOf = (id: string, ago: number | null): WorkflowRun => ({
     edges: {},
-    endedAt: new Date(now - 60_000).toISOString(),
+    endedAt: ago === null ? null : new Date(now - ago).toISOString(),
     failure: null,
     graph: null,
-    id: RUN,
+    id,
     inputs: {},
     launchedBy: "bench",
     loops: {},
@@ -78,11 +90,41 @@
     result: null,
     startedAt: new Date(now - 600_000).toISOString(),
     state: {},
-    status: "done",
+    status: ago === null ? "running" : "done",
     supervisorInstanceId: null,
     workflowId: WORKFLOW,
     workspace: "/bench",
-  } satisfies WorkflowRun;
+  });
+  workflowState.runs[RUN] = runOf(RUN, 60_000);
+
+  // The home's Working and Finished (WorkTabs), fed the same way: runs that
+  // are working (their pulses say so) and runs that ended unseen, twelve
+  // and fourteen, so both counts take two figures, the tabs' widest.
+  const WORKING = 12;
+  const FINISHED = 14;
+  const runId = (n: number) =>
+    `0f1e2d3c-0000-4000-8000-0000000001${String(n).padStart(2, "0")}`;
+  const workRuns = Array.from({ length: WORKING + FINISHED - 1 }, (_, n) =>
+    runId(n)
+  );
+  for (const [n, id] of workRuns.entries()) {
+    const working = n < WORKING;
+    workflowState.runs[id] = runOf(id, working ? null : 120_000 + n * 1000);
+    if (working) {
+      debug.state.pulses[`run:${id}`] = {
+        activity: "working",
+        at: now,
+        busy: true,
+        currentTool: null,
+        instanceId: `run:${id}`,
+        runningSubagents: 0,
+      };
+    }
+  }
+  const WORK_IDS = ["working", "finished"] as const;
+  workTab.set(
+    page.url.searchParams.get("work") === "finished" ? "finished" : "working"
+  );
 
   const first = untrack(() =>
     Math.min(
@@ -96,6 +138,9 @@
     tabs: ids,
     active: ids[first],
   });
+
+  /** The drawer layout, where the home is the phone's page, not the rail's. */
+  const phone = new MediaQuery("(max-width: 899px)");
 
   const scheme = $derived(
     page.url.searchParams.get("theme") === "dark" ? "dark" : "light"
@@ -138,13 +183,33 @@
     choose(id);
   }
 
+  let workEl = $state<HTMLElement>();
+  /** Chooses Working or Finished as a click on its tab does. */
+  function chooseWork(id: string) {
+    const at = WORK_IDS.indexOf(id as (typeof WORK_IDS)[number]);
+    workEl?.querySelectorAll<HTMLElement>(".ff-tab > .hit")[at]?.click();
+  }
+
   onMount(() => {
-    const bench = { ids, choose, chosen: () => leaf.active };
+    const bench = {
+      ids,
+      choose,
+      chosen: () => leaf.active,
+      work: {
+        ids: [...WORK_IDS],
+        choose: chooseWork,
+        chosen: () => workTab.current,
+      },
+    };
     Object.assign(window, { __ft: bench });
     return () => {
       Reflect.deleteProperty(window, "__ft");
       for (const id of Object.keys(DOING)) {
         delete debug.state.pulses[id];
+      }
+      for (const id of workRuns) {
+        delete debug.state.pulses[`run:${id}`];
+        delete workflowState.runs[id];
       }
       delete workflowState.runs[RUN];
       workflowState.workflows = workflowState.workflows.filter(
@@ -159,10 +224,22 @@
 <!-- Over the shell and anything it draws (a hub banner): the strip on its
      shelf, and the page its chosen tab opens into. -->
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-<div class="proof" data-folder-proof onclickcapture={benchClick}>
-  <div class="group">
+<div class="proof" data-folder-proof>
+  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+  <div class="group" data-strip="session" onclickcapture={benchClick}>
     <PaneTabs {leaf} />
     <div class="page"></div>
+  </div>
+  <!-- The home's Working and Finished as the shell hosts them: in the
+       rail's column on the desk, across the phone's home page under a
+       finger. -->
+  <div class="home" data-strip="work" bind:this={workEl}>
+    <WorkTabs
+      onstart={() => undefined}
+      stale={false}
+      variant={phone.current ? "page" : "rail"}
+      waiting={false}
+    />
   </div>
 </div>
 
@@ -187,8 +264,24 @@
     padding-block-start: var(--space-7);
     background: var(--surface-shelf);
   }
-  .page {
-    flex: 1 1 auto;
+  .group .page {
+    block-size: var(--space-7);
     background: var(--surface-recess);
+  }
+  /* The rail's column (Shell .rail, Home .rail .groups) on the desk; the
+     phone's home page (Home .page .groups) under 900px. Both stand on
+     surface-recess. */
+  .home {
+    flex: 1 1 auto;
+    min-block-size: 0;
+    inline-size: 260px;
+    padding: var(--space-1) var(--space-2) var(--space-2);
+    overflow: hidden;
+    background: var(--surface-recess);
+
+    @media (max-width: 899px) {
+      inline-size: 100%;
+      padding: var(--space-2) var(--space-5) var(--space-7);
+    }
   }
 </style>

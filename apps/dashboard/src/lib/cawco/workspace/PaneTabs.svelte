@@ -2127,6 +2127,19 @@
       calc(100% - var(--F)) calc(100% - var(--F) - var(--t)) 0 var(--F)
     );
   }
+  /* A side under its neighbour's card draws no foot (TabsList
+     `--under-start`/`--under-end`, flipped with the rank at the seam's
+     handover, where the two sides stand on the same pixels): the card
+     covers it at rest, and on a switch the card's foot row, a compositor
+     layer's edge, is half clear and showed it as a stub on the shelf. Its
+     shoulder and run stay, so the corner where the two tops meet is one
+     line. */
+  .rim-side[data-side="start"] > :is(.rim-foot, .rim-flare) {
+    visibility: var(--under-start, visible);
+  }
+  .rim-side[data-side="end"] > :is(.rim-foot, .rim-flare) {
+    visibility: var(--under-end, visible);
+  }
   /* The chosen tab's foot: out round the sheet's flare to the shelf's line. */
   .rim-flare {
     opacity: clamp(0, 2 * var(--pick) - 1, 1);

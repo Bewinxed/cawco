@@ -1,9 +1,11 @@
 #!/usr/bin/env bun
 /**
- * The session folder tabs, measured by their pixels: the bench
- * (apps/dashboard /motion/folder-proof, the real PaneTabs, five tabs in
- * mixed statuses, no hub) at 1440×900 and at 390×844 (touch), light and
- * dark, device scale 2.
+ * Both folder strips, measured by their pixels: the bench
+ * (apps/dashboard /motion/folder-proof, no hub) with the real PaneTabs
+ * (five tabs in mixed statuses) and the real WorkTabs (Working and
+ * Finished), at 1440×900 and at 390×844 (touch), light and dark, device
+ * scale 2. Each strip is measured in turn; the session strip switches
+ * from its second tab to its third, the home's from Working to Finished.
  *
  *   CAWCO_DEV_HUB_URL=http://127.0.0.1:9 bunx vite dev --port 5199   (apps/dashboard)
  *   bun scripts/folder-tabs-proof.ts [--url http://localhost:5199] [--out $TMPDIR] [--tag final]
@@ -25,7 +27,9 @@
  * Contrast is WCAG's, from the screenshot's own pixels. Every frame is also
  * written as <tag>-switch-<width>-<theme>-<pct>pct.png (the strip plus 24px
  * each side), and the 1440 rest as <tag>-rest-session-<theme>.png; the
- * numbers go to <tag>-folder-proof.json.
+ * home's as <tag>-work-switch-… and <tag>-work-rest-<theme>.png. The
+ * numbers go to <tag>-folder-proof.json, and the pass/fail table of every
+ * rule (`RULES`) per strip, width and theme to <tag>-folder-proof-table.md.
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one browser page measures one frame at a time; each step waits on the one before.
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -52,13 +56,56 @@ const THEMES = ["light", "dark"] as const;
 /** Room round the strip in every capture, css px. */
 const ROOM = 24;
 
+/**
+ * A folder strip on the bench: where it stands (`root`), what one of its
+ * tabs is (`tab`, the item the track lays out), how many it holds, and its
+ * captures' names.
+ */
+interface Strip {
+  /** The bench's handle on it: `window.__ft`, or `window.__ft.work`. */
+  api: "session" | "work";
+  count: number;
+  /** <tag>-<rest>-<theme>.png, and <tag>-<switch>-<width>-<theme>-<pct>pct.png. */
+  rest: string;
+  /**
+   * Whether it draws a rim (PaneTabs): the stroke, corner and 3:1 rules
+   * are a rim's. WorkTabs has none by design (5c57755c: the chosen sheet
+   * is its only mark); its sheet's edge is checked instead (`sheetEdges`).
+   */
+  rim: boolean;
+  root: string;
+  switch: string;
+  tab: string;
+}
+const STRIPS: Strip[] = [
+  {
+    api: "session",
+    root: '[data-strip="session"]',
+    tab: ".tab",
+    count: 5,
+    rim: true,
+    rest: "rest-session",
+    switch: "switch",
+  },
+  {
+    api: "work",
+    root: '[data-strip="work"]',
+    tab: ".ff-tab",
+    count: 2,
+    rim: false,
+    rest: "work-rest",
+    switch: "work-switch",
+  },
+];
+
+interface Bench {
+  choose: (id: string) => void;
+  chosen: () => string | null;
+  ids: string[];
+}
 declare global {
   interface Window {
-    __ft: {
-      choose: (id: string) => void;
-      chosen: () => string | null;
-      ids: string[];
-    };
+    __ft: Bench & { work: Bench };
   }
 }
 
@@ -70,18 +117,21 @@ interface Box {
 }
 
 /** Where the strip stands, in css px, with its room, inside the viewport. */
-function clipOf(page: Page): Promise<Box> {
-  return page.evaluate((room) => {
-    const track = document.querySelector(
-      "[data-folder-proof] .ff-tabs-list"
-    ) as HTMLElement;
-    const r = track.getBoundingClientRect();
-    const x = Math.max(0, Math.floor(r.left - room));
-    const y = Math.max(0, Math.floor(r.top - room));
-    const right = Math.min(innerWidth, Math.ceil(r.right + room));
-    const bottom = Math.min(innerHeight, Math.ceil(r.bottom + room));
-    return { x, y, width: right - x, height: bottom - y };
-  }, ROOM);
+function clipOf(page: Page, strip: Strip): Promise<Box> {
+  return page.evaluate(
+    ({ room, root }) => {
+      const track = document.querySelector(
+        `${root} .ff-tabs-list`
+      ) as HTMLElement;
+      const r = track.getBoundingClientRect();
+      const x = Math.max(0, Math.floor(r.left - room));
+      const y = Math.max(0, Math.floor(r.top - room));
+      const right = Math.min(innerWidth, Math.ceil(r.right + room));
+      const bottom = Math.min(innerHeight, Math.ceil(r.bottom + room));
+      return { x, y, width: right - x, height: bottom - y };
+    },
+    { room: ROOM, root: strip.root }
+  );
 }
 
 /**
@@ -89,19 +139,21 @@ function clipOf(page: Page): Promise<Box> {
  * piece hidden in turn, the pixels down the edge's side (under the
  * shoulders, to the shelf) that change. The tab in front's side changes
  * them; a side under its neighbour's card changes none. One side drawing
- * is one edge; both is two strokes.
+ * is one edge; both is two strokes. A strip with no rim pieces (WorkTabs)
+ * has its tab's own shapes (card and sheet) hidden instead: the edge the
+ * eye sees is then the one that moves.
  */
-async function sidesDrawn(page: Page) {
-  const seams = await page.evaluate(() => {
+async function sidesDrawn(page: Page, strip: Strip) {
+  const seams = await page.evaluate(({ root, tab }) => {
     const track = document.querySelector(
-      "[data-folder-proof] .ff-tabs-list"
+      `${root} .ff-tabs-list`
     ) as HTMLElement;
     const tr = track.getBoundingClientRect();
     const radius =
       Number.parseFloat(getComputedStyle(track).getPropertyValue("--radius")) ||
       0;
     const tabs = [
-      ...document.querySelectorAll<HTMLElement>("[data-folder-proof] .tab"),
+      ...document.querySelectorAll<HTMLElement>(`${root} ${tab}`),
     ].map((el) => el.getBoundingClientRect());
     return tabs.slice(0, -1).flatMap((a, i) => {
       const b = tabs[i + 1];
@@ -123,23 +175,39 @@ async function sidesDrawn(page: Page) {
         },
       ];
     });
-  });
+  }, strip);
   const hide = (i: number, side: "start" | "end", hidden: boolean) =>
     page.evaluate(
-      ({ k, s, h }) => {
-        const tab = document.querySelectorAll<HTMLElement>(
-          "[data-folder-proof] .tab"
-        )[k];
+      ({ k, s, h, root, tab: sel }) => {
+        const tab = document.querySelectorAll<HTMLElement>(`${root} ${sel}`)[k];
         const piece = tab.querySelector<HTMLElement>(
           `.rim-side[data-side="${s}"]`
-        ) as HTMLElement;
-        piece.style.visibility = h ? "hidden" : "";
+        );
+        if (piece) {
+          piece.style.visibility = h ? "hidden" : "";
+          return;
+        }
+        if (!document.getElementById("proof-hide")) {
+          const style = document.createElement("style");
+          style.id = "proof-hide";
+          style.textContent =
+            "[data-proof-hide]::before,[data-proof-hide]::after{visibility:hidden!important}";
+          document.head.append(style);
+        }
+        tab.toggleAttribute("data-proof-hide", h);
       },
-      { k: i, s: side, h: hidden }
+      { k: i, s: side, h: hidden, root: strip.root, tab: strip.tab }
     );
+  /**
+   * The pixels inside `box` that differ between two whole-viewport
+   * captures. Whole, as the screen draws it: a capture clipped to the
+   * seam's small box is rendered on its own, and at 1440 mid-switch it
+   * showed a 3px stub of the side behind on the shoulder's last row that
+   * neither the whole viewport nor a smaller clip of the same frame shows.
+   */
   const changed = async (box: Box, base: Buffer, shot: Buffer) =>
     page.evaluate(
-      async ({ one, two }) => {
+      async ({ one, two, box: b }) => {
         const read = async (src: string) => {
           const img = new Image();
           img.src = src;
@@ -149,7 +217,15 @@ async function sidesDrawn(page: Page) {
           c.height = img.naturalHeight;
           const ctx = c.getContext("2d") as CanvasRenderingContext2D;
           ctx.drawImage(img, 0, 0);
-          return ctx.getImageData(0, 0, c.width, c.height).data;
+          const s = img.naturalWidth / innerWidth;
+          const x = Math.floor(b.x * s);
+          const y = Math.floor(b.y * s);
+          return ctx.getImageData(
+            x,
+            y,
+            Math.ceil((b.x + b.width) * s) - x,
+            Math.ceil((b.y + b.height) * s) - y
+          ).data;
         };
         const p = await read(one);
         const q = await read(two);
@@ -174,12 +250,12 @@ async function sidesDrawn(page: Page) {
     );
   const out: { between: string; leftEnd: number; rightStart: number }[] = [];
   for (const { i, box } of seams) {
-    const base = await page.screenshot({ clip: box, animations: "allow" });
+    const base = await page.screenshot({ animations: "allow" });
     await hide(i, "end", true);
-    const left = await page.screenshot({ clip: box, animations: "allow" });
+    const left = await page.screenshot({ animations: "allow" });
     await hide(i, "end", false);
     await hide(i + 1, "start", true);
-    const right = await page.screenshot({ clip: box, animations: "allow" });
+    const right = await page.screenshot({ animations: "allow" });
     await hide(i + 1, "start", false);
     out.push({
       between: `${i}|${i + 1}`,
@@ -188,6 +264,125 @@ async function sidesDrawn(page: Page) {
     });
   }
   return out;
+}
+
+/**
+ * Where each seam's edge shows, against where the glide puts it: with what
+ * is written on the tabs hidden, along a row at the tab's mid-height, the
+ * device pixel where the fill steps most across the overlap and 4px past
+ * it, and the step's contrast (the fills 3px each side of it). The glide
+ * puts the edge on the front tab's side, stood in by its cut (TabsList
+ * `--cut-start`/`--cut-end` × `--seam-tuck`). A step under 1.02:1 is no
+ * edge: the two fills look the same there (mid-switch, at the handover).
+ */
+async function sheetEdges(page: Page, strip: Strip, region: Box) {
+  await page.evaluate(
+    ({ root, tab }) => {
+      for (const el of document.querySelectorAll<HTMLElement>(
+        `${root} ${tab} > *`
+      )) {
+        el.style.visibility = "hidden";
+      }
+    },
+    { root: strip.root, tab: strip.tab }
+  );
+  const shot = await page.screenshot({ clip: region, animations: "allow" });
+  await page.evaluate(
+    ({ root, tab }) => {
+      for (const el of document.querySelectorAll<HTMLElement>(
+        `${root} ${tab} > *`
+      )) {
+        el.style.visibility = "";
+      }
+    },
+    { root: strip.root, tab: strip.tab }
+  );
+  return page.evaluate(
+    async ({ src, clip, root, tab }) => {
+      const img = new Image();
+      img.src = src;
+      await img.decode();
+      const c = document.createElement("canvas");
+      c.width = img.naturalWidth;
+      c.height = img.naturalHeight;
+      const ctx = c.getContext("2d") as CanvasRenderingContext2D;
+      ctx.drawImage(img, 0, 0);
+      const { data } = ctx.getImageData(0, 0, c.width, c.height);
+      const scale = c.width / clip.width;
+      const lin = (v: number) => {
+        const s = v / 255;
+        return s <= 0.040_45 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+      };
+      const lum = (x: number, y: number) => {
+        const k = (y * c.width + x) * 4;
+        return (
+          0.2126 * lin(data[k]) +
+          0.7152 * lin(data[k + 1]) +
+          0.0722 * lin(data[k + 2])
+        );
+      };
+      const ratio = (a: number, b: number) =>
+        (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+      const r2 = (n: number) => Math.round(n * 100) / 100;
+      const track = document.querySelector(
+        `${root} .ff-tabs-list`
+      ) as HTMLElement;
+      const tuck =
+        Number.parseFloat(
+          getComputedStyle(track).getPropertyValue("--overlap")
+        ) -
+        (Number.parseFloat(
+          getComputedStyle(track).getPropertyValue("--seam-stroke")
+        ) || 0);
+      const els = [...document.querySelectorAll<HTMLElement>(`${root} ${tab}`)];
+      const laid = (el: HTMLElement) => {
+        let at = el;
+        while (at.parentElement && at.parentElement !== track) {
+          at = at.parentElement;
+        }
+        return at;
+      };
+      return els.slice(0, -1).map((el, i) => {
+        const a = el.getBoundingClientRect();
+        const b = els[i + 1].getBoundingClientRect();
+        const za = Number(getComputedStyle(laid(el)).getPropertyValue("--z"));
+        const zb = Number(
+          getComputedStyle(laid(els[i + 1])).getPropertyValue("--z")
+        );
+        const cut = (e: HTMLElement, side: string) =>
+          Number(laid(e).style.getPropertyValue(`--cut-${side}`) || 0);
+        const predicted =
+          za > zb
+            ? a.right - cut(el, "end") * tuck
+            : b.left + cut(els[i + 1], "start") * tuck;
+        const y = Math.round(((a.top + a.bottom) / 2 - clip.y) * scale);
+        const x0 = Math.floor((Math.min(b.left, a.right) - 4 - clip.x) * scale);
+        const x1 = Math.ceil((Math.max(b.left, a.right) + 4 - clip.x) * scale);
+        let best = { x: 0, step: 0 };
+        for (let x = x0; x < x1; x += 1) {
+          const step = Math.abs(lum(x + 1, y) - lum(x, y));
+          if (step > best.step) {
+            best = { x, step };
+          }
+        }
+        const contrast = ratio(lum(best.x - 6, y), lum(best.x + 7, y));
+        const at = (best.x + 1) / scale + clip.x;
+        return {
+          between: `${i}|${i + 1}`,
+          front: za > zb ? i : i + 1,
+          predicted: r2(predicted),
+          at: contrast >= 1.02 ? r2(at) : null,
+          contrast: r2(contrast),
+        };
+      });
+    },
+    {
+      src: `data:image/png;base64,${shot.toString("base64")}`,
+      clip: region,
+      root: strip.root,
+      tab: strip.tab,
+    }
+  );
 }
 
 /** Waits two frames: Svelte's flush, the style pass, the track's ranking. */
@@ -204,29 +399,36 @@ const frames = (page: Page) =>
  * switch: `p` of the longest one's end (the choice's clock, delays
  * included), each one held at its own end once past it.
  */
-function seek(page: Page, p: number) {
-  return page.evaluate((at) => {
-    const strip = document.querySelector("[data-folder-proof]") as HTMLElement;
-    const runs = strip
-      .getAnimations({ subtree: true })
-      .filter((run) => run instanceof CSSTransition);
-    const endOf = (run: Animation) =>
-      Number(run.effect?.getComputedTiming().endTime ?? 0);
-    const clock = Math.max(0, ...runs.map(endOf));
-    for (const run of runs) {
-      run.pause();
-      run.currentTime = Math.min(endOf(run), clock * at);
+function seek(page: Page, strip: Strip, p: number) {
+  return page.evaluate(
+    ({ at, root }) => {
+      const host = document.querySelector(root) as HTMLElement;
+      const runs = host
+        .getAnimations({ subtree: true })
+        .filter((run) => run instanceof CSSTransition);
+      const endOf = (run: Animation) =>
+        Number(run.effect?.getComputedTiming().endTime ?? 0);
+      const clock = Math.max(0, ...runs.map(endOf));
+      for (const run of runs) {
+        run.pause();
+        run.currentTime = Math.min(endOf(run), clock * at);
+      }
+      return { paused: runs.length, clock };
+    },
+    // The work strip's own track: its list's rows have motion of their own.
+    {
+      at: p,
+      root: strip.api === "work" ? `${strip.root} .ff-tabs-list` : strip.root,
     }
-    return { paused: runs.length, clock };
-  }, p);
+  );
 }
 
 /** The measurements of one frame, taken from its own screenshot. */
-async function measure(page: Page, region: Box, keep: number[]) {
+async function measure(page: Page, strip: Strip, region: Box, keep: number[]) {
   const shot = await page.screenshot({ clip: region, animations: "allow" });
   const url = `data:image/png;base64,${shot.toString("base64")}`;
   const numbers = await page.evaluate(
-    async ({ src, box: clip, kept }) => {
+    async ({ src, box: clip, kept, root, tabSel }) => {
       const img = new Image();
       img.src = src;
       await img.decode();
@@ -266,15 +468,15 @@ async function measure(page: Page, region: Box, keep: number[]) {
       const r2 = (n: number) => Math.round(n * 100) / 100;
 
       const track = document.querySelector(
-        "[data-folder-proof] .ff-tabs-list"
+        `${root} .ff-tabs-list`
       ) as HTMLElement;
       const tr = track.getBoundingClientRect();
       const tabs = [
-        ...document.querySelectorAll<HTMLElement>("[data-folder-proof] .tab"),
+        ...document.querySelectorAll<HTMLElement>(`${root} ${tabSel}`),
       ].map((el) => {
         const r = el.getBoundingClientRect();
         const style = getComputedStyle(el);
-        const rim = el.querySelector(".rim") as HTMLElement;
+        const rim = el.querySelector<HTMLElement>(".rim");
         const sides = [...el.querySelectorAll<HTMLElement>(".rim-side")];
         const text = el.querySelector(".label .text") as HTMLElement;
         return {
@@ -284,9 +486,11 @@ async function measure(page: Page, region: Box, keep: number[]) {
           top: r.top,
           bottom: r.bottom,
           tone: el.dataset.tone ?? "",
-          chosen: el.hasAttribute("data-chosen"),
+          chosen:
+            el.hasAttribute("data-chosen") || el.classList.contains("selected"),
           z: Number(style.getPropertyValue("--z") || 0),
-          rimOpacity: r2(Number(getComputedStyle(rim).opacity)),
+          // A strip with no rim (WorkTabs) draws none: -1.
+          rimOpacity: rim ? r2(Number(getComputedStyle(rim).opacity)) : -1,
           // How far each side stands in for a gliding seam (TabsList).
           startShown: r2(Number(el.style.getPropertyValue("--cut-start") || 0)),
           endShown: r2(Number(el.style.getPropertyValue("--cut-end") || 0)),
@@ -741,7 +945,7 @@ async function measure(page: Page, region: Box, keep: number[]) {
         edges,
       };
     },
-    { src: url, box: region, kept: keep }
+    { src: url, box: region, kept: keep, root: strip.root, tabSel: strip.tab }
   );
   return { shot, numbers };
 }
@@ -751,16 +955,23 @@ const browser = await chromium.launch({
   headless: true,
   args: ["--no-sandbox"],
 });
-/** The bench in `theme` with tab `at` chosen, once everything in it has landed. */
-async function open(page: Page, theme: string, at: number) {
-  await page.goto(`${BASE}/motion/folder-proof?theme=${theme}&at=${at}`, {
-    waitUntil: "domcontentloaded",
-  });
+/**
+ * The bench in `theme` with tab `at` of the session strip and `work` of the
+ * home's chosen, once everything in it has landed.
+ */
+async function open(page: Page, theme: string, at: number, work: string) {
+  await page.goto(
+    `${BASE}/motion/folder-proof?theme=${theme}&at=${at}&work=${work}`,
+    { waitUntil: "domcontentloaded" }
+  );
   await page.waitForFunction(
-    () =>
+    (strips) =>
       window.__ft &&
-      document.querySelectorAll("[data-folder-proof] .tab").length === 5,
-    undefined,
+      strips.every(
+        (s) =>
+          document.querySelectorAll(`${s.root} ${s.tab}`).length === s.count
+      ),
+    STRIPS,
     { timeout: 60_000 }
   );
   await page.evaluate(() => document.fonts.ready);
@@ -796,45 +1007,78 @@ for (const view of VIEWS) {
       localStorage.setItem("cawco-theme", t);
     }, theme);
     const page = await context.newPage();
-    await open(page, theme, 1);
-    const key = `${view.w}-${theme}`;
-    const ids = await page.evaluate(() => window.__ft.ids);
-    const chosen = await page.evaluate(() => window.__ft.chosen());
-    const from = ids.indexOf(chosen ?? ids[0]);
-    const next = ids[from + 1];
-    const clipRest = await clipOf(page);
-    const rest = await measure(page, clipRest, [from]);
-    const restSides = await sidesDrawn(page);
-    if (view.w === 1440) {
-      writeFileSync(join(OUT, `${TAG}-rest-session-${theme}.png`), rest.shot);
-    }
-    await page.evaluate((id) => window.__ft.choose(id), next);
-    await frames(page);
-    const paused = await seek(page, 0);
-    const switchFrames: Record<string, unknown> = {};
-    for (const pct of PCTS) {
-      await seek(page, pct / 100);
-      await frames(page);
-      const clip = await clipOf(page);
-      // Both tabs are drawn chosen while the switch runs; the one it
-      // leaves no longer once it has landed.
-      const frame = await measure(
-        page,
-        clip,
-        pct < 100 ? [from, from + 1] : [from + 1]
+    for (const strip of STRIPS) {
+      // The session strip from its second tab to its third; the home's
+      // from Working to Finished.
+      await open(page, theme, 1, "working");
+      const key = `${strip.api}-${view.w}-${theme}`;
+      const ids = await page.evaluate(
+        (s) => (s.api === "work" ? window.__ft.work : window.__ft).ids,
+        strip
       );
-      const name = `${TAG}-switch-${view.w}-${theme}-${String(pct).padStart(3, "0")}pct.png`;
-      writeFileSync(join(OUT, name), frame.shot);
-      switchFrames[pct] = { ...frame.numbers, sides: await sidesDrawn(page) };
+      const chosen = await page.evaluate(
+        (s) => (s.api === "work" ? window.__ft.work : window.__ft).chosen(),
+        strip
+      );
+      const from = ids.indexOf(chosen ?? ids[0]);
+      const next = ids[from + 1];
+      const clipRest = await clipOf(page, strip);
+      const rest = await measure(page, strip, clipRest, [from]);
+      const restSides = await sidesDrawn(page, strip);
+      const restSheet = strip.rim
+        ? []
+        : await sheetEdges(page, strip, clipRest);
+      if (view.w === 1440) {
+        writeFileSync(
+          join(OUT, `${TAG}-${strip.rest}-${theme}.png`),
+          rest.shot
+        );
+      }
+      await page.evaluate(
+        ({ s, id }) =>
+          (s.api === "work" ? window.__ft.work : window.__ft).choose(id),
+        { s: strip, id: next }
+      );
+      await frames(page);
+      const paused = await seek(page, strip, 0);
+      const switchFrames: Record<string, unknown> = {};
+      for (const pct of PCTS) {
+        await seek(page, strip, pct / 100);
+        await frames(page);
+        const clip = await clipOf(page, strip);
+        // Both tabs are drawn chosen while the switch runs; the one it
+        // leaves no longer once it has landed.
+        const frame = await measure(
+          page,
+          strip,
+          clip,
+          pct < 100 ? [from, from + 1] : [from + 1]
+        );
+        const name = `${TAG}-${strip.switch}-${view.w}-${theme}-${String(pct).padStart(3, "0")}pct.png`;
+        writeFileSync(join(OUT, name), frame.shot);
+        switchFrames[pct] = {
+          ...frame.numbers,
+          sides: await sidesDrawn(page, strip),
+          sheet: strip.rim ? [] : await sheetEdges(page, strip, clip),
+        };
+      }
+      // The session strip at its start (the first tab chosen, nothing
+      // scrolled); the home's with Finished chosen.
+      await open(page, theme, 0, "finished");
+      const other = strip.api === "work" ? 1 : 0;
+      const clipFirst = await clipOf(page, strip);
+      const restFirst = await measure(page, strip, clipFirst, [other]);
+      report[key] = {
+        rim: strip.rim,
+        rest: { ...rest.numbers, sides: restSides, sheet: restSheet },
+        restFirst: {
+          ...restFirst.numbers,
+          sides: await sidesDrawn(page, strip),
+          sheet: strip.rim ? [] : await sheetEdges(page, strip, clipFirst),
+        },
+        switch: { from: chosen, to: next, paused, frames: switchFrames },
+      };
     }
-    // The strip at its start: the first tab chosen, nothing scrolled.
-    await open(page, theme, 0);
-    const restFirst = await measure(page, await clipOf(page), [0]);
-    report[key] = {
-      rest: { ...rest.numbers, sides: restSides },
-      restFirst: restFirst.numbers,
-      switch: { from: chosen, to: next, paused, frames: switchFrames },
-    };
     await context.close();
   }
 }
@@ -846,6 +1090,7 @@ writeFileSync(
 
 // The summary: per width and theme, the rest and each switch frame.
 type Numbers = Awaited<ReturnType<typeof measure>>["numbers"] & {
+  sheet?: Awaited<ReturnType<typeof sheetEdges>>;
   sides?: Awaited<ReturnType<typeof sidesDrawn>>;
 };
 const line = (label: string, n: Numbers) => {
@@ -885,8 +1130,16 @@ const line = (label: string, n: Numbers) => {
         `${s.between}:${s.leftEnd}/${s.rightStart}${(s.leftEnd > 0) === (s.rightStart > 0) ? " BOTH-OR-NONE" : ""}`
     )
     .join(" ");
+  // Each seam's sheet edge (a strip with no rim): where it shows against
+  // where the glide puts it, and its step.
+  const sheet = (n.sheet ?? [])
+    .map(
+      (s) =>
+        `${s.between}:f${s.front} ${s.at ?? "none"}~${s.predicted} (${s.contrast}:1)`
+    )
+    .join(" ");
   console.log(
-    `  ${label}\n    seams ${seams}\n    sides ${sides}\n    rows  ${rows}\n    corner ${corners}\n    chosen ${clear} (fades ${n.fades.start}/${n.fades.end})\n    tabs  ${tabs}`
+    `  ${label}\n    seams ${seams}\n    sides ${sides}\n    rows  ${rows}\n    corner ${corners}\n    sheet ${sheet}\n    chosen ${clear} (fades ${n.fades.start}/${n.fades.end})\n    tabs  ${tabs}`
   );
 };
 for (const [key, value] of Object.entries(report)) {
@@ -911,3 +1164,137 @@ for (const [key, value] of Object.entries(report)) {
     );
   }
 }
+
+/**
+ * The rules, per strip, width and theme, over every frame measured (both
+ * rests and the switch's five), each failing frame named:
+ *  - one stroke: every shared edge in view crosses exactly one stroke, no
+ *    wider than one, in every row down its side, and exactly one of its two
+ *    sides draws it, the front tab's;
+ *  - corner: where two tops meet, the strokes are one connected piece;
+ *  - 3:1: every shared edge's stroke, out of the fades, holds 3:1 against
+ *    the fills either side;
+ *  - sheet edge (a strip with no rim): every seam's edge, where the two
+ *    fills differ, shows within 1px of where the glide puts it, and across
+ *    the switch it moves one way only, never back (no jump, no flicker);
+ *  - fades: every tab drawn chosen stands clear of both edge fades;
+ *  - titles: no tab's title is cut.
+ * The first three are a rim's rules: n/a on a strip with none; the sheet
+ * edge is n/a on one with a rim, whose seam is its stroke.
+ */
+const RULES = [
+  "one stroke",
+  "corner",
+  "3:1",
+  "sheet edge",
+  "fades",
+  "titles",
+] as const;
+type Rule = (typeof RULES)[number];
+const RIM_RULES: readonly Rule[] = ["one stroke", "corner", "3:1"];
+/** The shared edges a frame measured, the strip's outer two left out. */
+const sharedOf = (n: Numbers) =>
+  n.edges.filter((e) => !e.between.includes("shelf"));
+/** Rows down a seam crossing other than one stroke, and seams both or neither of whose sides draw, or the one behind. */
+function strokeFaults(n: Numbers): string[] {
+  const rows = n.seamRows.flatMap((s) =>
+    s.rowsNotOne > 0 ? [`${s.between} ${s.rowsNotOne}/${s.rows} rows`] : []
+  );
+  const shared = sharedOf(n);
+  const sides = (n.sides ?? []).flatMap((s) => {
+    const [left] = s.between.split("|");
+    const frontLeft =
+      shared.find((e) => e.between === s.between)?.front === left;
+    const one = frontLeft
+      ? s.leftEnd > 0 && s.rightStart === 0
+      : s.rightStart > 0 && s.leftEnd === 0;
+    return one ? [] : [`${s.between} sides ${s.leftEnd}/${s.rightStart}`];
+  });
+  return [...rows, ...sides];
+}
+/** Seams in view and out of the fades whose stroke holds under 3:1. */
+const contrastFaults = (n: Numbers): string[] =>
+  sharedOf(n).flatMap((e) => {
+    if (e.strokes === "off-view" || e.faded) {
+      return [];
+    }
+    const best = Math.max(0, ...e.strokes.map((s) => Math.min(s.vsA, s.vsB)));
+    if (best >= 3) {
+      return [];
+    }
+    return [`${e.between} ${best === 0 ? "no stroke" : `${best}:1`}`];
+  });
+/** Every rule's faults in one frame. */
+const faults = (n: Numbers): Record<Rule, string[]> => ({
+  "one stroke": strokeFaults(n),
+  corner: n.corners.flatMap((c) =>
+    c.pieces === 1 ? [] : [`${c.between} ${c.pieces} pieces`]
+  ),
+  "3:1": contrastFaults(n),
+  "sheet edge": (n.sheet ?? []).flatMap((s) =>
+    s.at !== null && Math.abs(s.at - s.predicted) > 1
+      ? [`${s.between} at ${s.at}, glide ${s.predicted}`]
+      : []
+  ),
+  fades: n.clear.flatMap((c) =>
+    c.clear ? [] : [`${c.i} ${c.inFade.start}/${c.inFade.end}`]
+  ),
+  titles: n.tabs.flatMap((t) =>
+    t.labelCut ? [`${t.i} ${t.labelScroll}>${t.labelClient}`] : []
+  ),
+});
+const table: string[] = [
+  `| strip | width | theme | ${RULES.join(" | ")} |`,
+  `|---|---|---|${RULES.map(() => "---").join("|")}|`,
+];
+for (const [key, value] of Object.entries(report)) {
+  const v = value as {
+    rim: boolean;
+    rest: Numbers;
+    restFirst: Numbers;
+    switch: { frames: Record<string, Numbers> };
+  };
+  const measured = [
+    ["rest", v.rest],
+    ["rest2", v.restFirst],
+    ...Object.entries(v.switch.frames).map(([p, n]) => [`${p}%`, n]),
+  ] as [string, Numbers][];
+  // Across the switch each seam's edge moves one way: from the rest before
+  // it through its five frames, never back by more than half a pixel.
+  const glide: string[] = [];
+  const path = [v.rest, ...Object.values(v.switch.frames)];
+  for (const [k, seam] of (v.rest.sheet ?? []).entries()) {
+    const shown = path.flatMap((n) => {
+      const at = n.sheet?.[k]?.at;
+      return at === null || at === undefined ? [] : [at];
+    });
+    const way = Math.sign((shown.at(-1) ?? 0) - (shown[0] ?? 0));
+    for (let j = 1; j < shown.length; j += 1) {
+      if ((shown[j] - shown[j - 1]) * way < -0.5) {
+        glide.push(`${seam.between} back ${shown[j - 1]}→${shown[j]}`);
+      }
+    }
+  }
+  const cells = RULES.map((rule) => {
+    if (RIM_RULES.includes(rule) && !v.rim) {
+      return "n/a (no rim by design)";
+    }
+    if (rule === "sheet edge" && v.rim) {
+      return "n/a (the rim is the edge)";
+    }
+    const bad = [
+      ...measured.flatMap(([at, n]) =>
+        faults(n)[rule].map((f) => `${at}: ${f}`)
+      ),
+      ...(rule === "sheet edge" ? glide : []),
+    ];
+    return bad.length === 0 ? "pass" : `FAIL (${bad.join("; ")})`;
+  });
+  const [strip, width, theme] = key.split("-");
+  table.push(`| ${strip} | ${width} | ${theme} | ${cells.join(" | ")} |`);
+}
+console.log(`\n${table.join("\n")}`);
+writeFileSync(
+  join(OUT, `${TAG}-folder-proof-table.md`),
+  `${table.join("\n")}\n`
+);
