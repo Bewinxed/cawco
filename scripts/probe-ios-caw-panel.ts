@@ -28,8 +28,9 @@
  *     the trailing flank straight down, the leading foot's flare in the
  *     panel's surface), captures it light and dark (and on the phone records
  *     it closing and opening), taps the transcript
- *     row at a point outside it (a long intro turn first stands the row
- *     below where the panel hangs); on the phone it then presses the ask's
+ *     row at a point outside it (a second Bash call stands the newest row
+ *     below the panel's foot on the phone, which the panel spans; on the
+ *     iPad a row runs out beside it); on the phone it then presses the ask's
  *     row itself, which opens its session; on the iPad it dismisses Design
  *     by its entry's ✕, then the rest by the group's ✕, and approves
  *     the ask from the panel;
@@ -126,6 +127,12 @@ const app = `$HOME/build/cawco-apple/${build}/DerivedData/Build/Products/Debug-i
 // ── 2. The scratch fleet ─────────────────────────────────────────────────
 const tag = crypto.randomUUID().slice(0, 6);
 const ROW = `panel-row-${tag}`;
+/**
+ * A second Bash call after the first: the newest tool row, at the
+ * transcript's foot, stands wholly below the open panel's foot on a phone
+ * (the panel spans its width, so a row beside it is no row outside it).
+ */
+const ROW_BELOW = `panel-below-${tag}`;
 const ASK = `panel-ask-${tag}`;
 const INTRO = `panel-intro-${tag}`;
 /** The row session's one delegate: its chip opens a panel over the tray (`trayThrough`). */
@@ -155,6 +162,16 @@ const respond = (request: Seen) => {
       tool: {
         name: "Bash",
         input: { command: "echo row-output", description: "Print a line" },
+      },
+    };
+  }
+  if (request.tools && request.last.includes(ROW_BELOW)) {
+    return {
+      everyMs: 5,
+      words: [],
+      tool: {
+        name: "Bash",
+        input: { command: "echo row-below", description: "Print another line" },
       },
     };
   }
@@ -501,6 +518,51 @@ const panelBox = (nodes: Node[]): Frame | undefined => {
   );
   return { x: x0, y: y0, width: x1 - x0, height: y1 - y0 };
 };
+/** The probe's own Bash rows' labels ("Print a line echo row-output", "… row-below"). */
+const OUR_ROWS = /row-(output|below)/;
+/** The transcript's disclosure rows (tool calls), each Collapsed or Expanded. */
+const disclosureRows = (nodes: Node[]) =>
+  nodes.filter(
+    (n) => n.frame && (n.value === "Collapsed" || n.value === "Expanded")
+  );
+/**
+ * A transcript row outside the open panel and the point to tap it at:
+ * one wholly below the panel's foot (a phone's panel spans its width), the
+ * second Bash call's first; else, on a wide screen, one whose middle line
+ * runs out beside the panel, at a point there. None when every row is under it.
+ */
+function rowOutside(
+  nodes: Node[],
+  box: Frame
+): { target: Node; at: { x: number; y: number } } | undefined {
+  // The probe's own Bash rows, not a delegate's chip (which also expands).
+  const all = disclosureRows(nodes);
+  const ours = all.filter((n) => OUR_ROWS.test(n.label ?? ""));
+  const rows = ours.length > 0 ? ours : all;
+  const foot = box.y + box.height;
+  const [below] = rows
+    .filter((n) => (n.frame?.y ?? 0) >= foot + 1)
+    .sort(
+      (a, b) =>
+        Number((b.label ?? "").includes("row-below")) -
+        Number((a.label ?? "").includes("row-below"))
+    );
+  if (below?.frame) {
+    return { target: below, at: centre(below.frame) };
+  }
+  for (const n of rows) {
+    const row = n.frame as Frame;
+    const at = [0.5, 0.25, 0.1, 0.75, 0.9]
+      .map((share) => ({
+        x: row.x + row.width * share,
+        y: row.y + row.height / 2,
+      }))
+      .find((point) => !inside(box, point));
+    if (at) {
+      return { target: n, at };
+    }
+  }
+}
 /** The Bash call's transcript row: a disclosure line that names its command. */
 const toolRow = (nodes: Node[]) =>
   nodes.find(
@@ -964,26 +1026,25 @@ function frameGaps(buf: Buffer, mdhd: Mp4Box, stts: Mp4Box): number[] {
  * what a finger lands on there, and a tap on it both reaches it and closes
  * the panel.
  */
-async function tapThrough(name: string, udid: string, box: Frame) {
+async function tapThrough(name: string, udid: string, given: Frame) {
   let nodes = await tree(udid);
-  const target = toolRow(nodes);
-  if (!target?.frame) {
+  // The panel as it stands now: opening its fold made it taller than the
+  // box read when it opened.
+  const box = panelBox(nodes) ?? given;
+  const found = rowOutside(nodes, box);
+  if (!found) {
+    const rows = disclosureRows(nodes);
     check(
-      `${name}: a tap outside reaches the row`,
+      `${name}: nothing covers the transcript row outside the panel`,
       false,
-      "no transcript row to tap"
+      rows.length === 0
+        ? "no transcript row to tap"
+        : `no transcript row stands outside the panel ${JSON.stringify(box)}: ${rows.map((n) => `"${n.label ?? ""}" ${JSON.stringify(n.frame)}`).join(", ")}; nothing was tapped`
     );
     return;
   }
-  // A point on the row's middle line outside the panel's frame, if any.
-  const row = target.frame;
-  const at =
-    [0.5, 0.25, 0.1, 0.75, 0.9]
-      .map((share) => ({
-        x: row.x + row.width * share,
-        y: row.y + row.height / 2,
-      }))
-      .find((point) => !inside(box, point)) ?? centre(row);
+  const { target, at } = found;
+  const row = target.frame as Frame;
   const covered = inside(box, at);
   // What else stands at that point: every element there but the row, what
   // holds it (its frame takes in the row's) and what it holds.
@@ -1005,7 +1066,9 @@ async function tapThrough(name: string, udid: string, box: Frame) {
   await tap(udid, at);
   await pause(1500);
   nodes = await tree(udid);
-  const after = toolRow(nodes)?.value;
+  const after = disclosureRows(nodes).find(
+    (n) => n.label === target.label
+  )?.value;
   check(
     `${name}: a tap on the row reaches the row`,
     after !== undefined && after !== before,
@@ -1485,6 +1548,17 @@ try {
         await fleet.api<unknown>(`/api/instances/${rowSession}/transcript`)
       ),
     (text) => text.includes("Row done."),
+    180_000
+  );
+  await fleet.send(rowSession, `${ROW_BELOW}: print another line.`);
+  await until(
+    "the row session's second Bash call answered",
+    async () =>
+      JSON.stringify(
+        await fleet.api<unknown>(`/api/instances/${rowSession}/transcript`)
+      ),
+    (text) =>
+      text.includes("echo row-below") && text.split("Row done.").length > 2,
     180_000
   );
   const askSession = await fleet.spawn("claude", "Needs probe", fleet.workdir, {
