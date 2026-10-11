@@ -174,8 +174,8 @@
      the strip, a key, a jump — lands the way a swipe does: the panes slide
      by their distance on the swipe's own spring (gesture.svelte.ts,
      `prepare` and `arrive`). Elsewhere the arriving transcript glides in
-     from the side of the tab it came from and fades up, on the strip's own
-     --wipe (260ms) and --wipe-ease (--ease-drawer), so the eye reads which
+     from the side of the tab it came from and fades up, over 260ms on
+     --ease-drawer (the app's own curve), so the eye reads which
      way it went. The side is read off the strip as it was before the
      switch, so a tab that closed still says where it stood. Only the
      showing transcript is painted there, so it alone moves. */

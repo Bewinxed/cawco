@@ -813,6 +813,8 @@
     --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
     --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
     --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+    /* Two states trading places where they stand: a folder tab's choice, over dur-settle (its lean, sheet, title ink and rim travel together). CSS ease-in-out, the curve transitions.dev gives icon and text swaps. At 400ms its steepest 1/60s frame moves 7.2% of the change; every other house curve moves more than an eighth in one frame there (ease-out 17.6%, ease-in-out 19.7%, ease-drawer 17.2%, ease-arrive 16.4%, ease-figure 16.9%), which reads as the change lurching. */
+    --ease-crossfade: cubic-bezier(0.42, 0, 0.58, 1);
     /* A small mark arriving beside what it belongs to (the compaction divider's chevron): it leaves at once and takes most of its time settling, so a 160ms entrance reads as motion where ease-out reads as a swap. */
     --ease-arrive: cubic-bezier(0.2, 0, 0, 1);
     /* A strategy figure's travel and growth (Configure → Accounts): a session riding into its lane, a bar filling, a lane reordering. The owner's reference motion, from the Projects mockups (mocks/project-paths). */
@@ -852,7 +854,7 @@
     --dur-lift: 340ms;
     /* How long a touch rests on the composer, keyboard down, before the recall wheel comes up under it. */
     --dur-press-hold: 380ms;
-    /* The existing motion/spring.ts response for non-paging surface settlement. Paging uses UIScrollView's system mechanics. */
+    /* The existing motion/spring.ts response for non-paging surface settlement. Paging uses UIScrollView's system mechanics. Also a folder tab's choice, on ease-crossfade (the owner's pick, "Slow · 400ms"). */
     --dur-settle: 400ms;
     /* A disclosure growing open (collapsible-content); it folds shut over dur-exit. */
     --dur-reveal: 240ms;

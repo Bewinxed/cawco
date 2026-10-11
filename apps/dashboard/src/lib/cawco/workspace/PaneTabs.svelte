@@ -234,27 +234,29 @@
     return { to, f: Math.min(1, Math.max(0, travel.fraction)) };
   });
   /**
-   * How a tab on the phone's row is drawn, between how it is drawn with the
-   * choice on the chosen tab and with it on the one a swipe is heading to,
-   * by how far the swipe has gone, so every tab moves with the finger and
-   * the landing changes nothing. At rest it is the chosen tab's alone.
-   * - `pick`: how chosen it is, 0 to 1 (its rim's strength, its title's ink).
-   * - `fillFrom`/`fillTo`: its card's recede step either way, mixed by `f`.
-   *   A tab steps back toward the shelf for each tab between it and the
-   *   chosen one, to three; the chosen tab's own card, under its sheet, is
-   *   one step back. With none chosen every tab is one step back.
-   * Nothing here sizes a tab: choosing one never moves the others.
+   * How a tab's rim is drawn, between how it is drawn with the choice on the
+   * chosen tab and with it on the one a swipe is heading to, by how far the
+   * swipe has gone, so every tab moves with the finger and the landing
+   * changes nothing. At rest it is the chosen tab's alone.
+   * - `pick`: how chosen it is, 0 to 1 (its lean and its rim's strength and
+   *   foot; the kit draws its sheet, card and title from the same).
+   * - `start`/`end`: how much of each side's rim shows, 0 to 1. A side is
+   *   shown unless a neighbour nearer the choice stands over it (the track's
+   *   stack, TabsList: the first tab on top with none chosen).
+   * Every receded tab is one step back, whatever its distance from the
+   * choice: two tabs whose order changes on a switch then look alike as
+   * they trade places, so the trade shows nothing. Nothing here sizes a
+   * tab: choosing one never moves the others.
    */
   const look = (i: number) => {
     const { to, f } = scrub;
-    const step = (at: number) =>
-      at < 0 ? 1 : Math.max(1, Math.min(Math.abs(i - at), 3));
-    const pick = (at: number) => (i === at ? 1 : 0);
+    const top = (at: number) => Math.max(at, 0);
+    const mix = (from: boolean, toward: boolean) =>
+      Number(from) + (Number(toward) - Number(from)) * f;
     return {
-      pick: pick(chosenAt) + (pick(to) - pick(chosenAt)) * f,
-      fillFrom: `var(--tab-recede-${step(chosenAt)})`,
-      fillTo: `var(--tab-recede-${step(to)})`,
-      f,
+      pick: mix(i === chosenAt, i === to),
+      start: mix(i <= top(chosenAt), i <= top(to)),
+      end: mix(i >= top(chosenAt), i >= top(to)),
     };
   };
 
@@ -637,6 +639,36 @@
     });
   });
 
+  /**
+   * A tab moved by an animation of its own (a slide, its arrival, a flight
+   * landing it) is a stack of its own while that runs, and would be drawn
+   * under every other tab's card. It stands at its rank in the track's
+   * stack (TabsList `--z`, above its own card, sheet and title's layers)
+   * until the last of them ends; its rim stays on it, under a nearer tab.
+   */
+  const owned = (run: Animation) =>
+    !(run instanceof CSSTransition || run instanceof CSSAnimation);
+  function holdRank(el: HTMLElement) {
+    const runs = el.getAnimations().filter(owned);
+    if (runs.length === 0) {
+      return;
+    }
+    el.style.zIndex = "calc(var(--z, 1) * 4 + 2)";
+    const release = () => {
+      if (
+        !el
+          .getAnimations()
+          .some((run) => owned(run) && run.playState === "running")
+      ) {
+        el.style.removeProperty("z-index");
+      }
+    };
+    for (const run of runs) {
+      run.addEventListener("finish", release, { once: true });
+      run.addEventListener("cancel", release, { once: true });
+    }
+  }
+
   /** Every tab that stood somewhere else before the change slides from there to where it lies. */
   function slide(from: Map<string, number>, removed: boolean, added: boolean) {
     let duration = dur("--dur-panel");
@@ -674,6 +706,7 @@
           [{ transform: `translateX(${dx}px)` }, { transform: "none" }],
           { id: SLIDE, duration, easing }
         );
+        holdRank(el);
       }
     }
   }
@@ -708,11 +741,7 @@
           return forget(id, node, frame);
         }
         frame = requestAnimationFrame(() => {
-          const flying = node
-            .getAnimations()
-            .some(
-              (a) => !(a instanceof CSSTransition || a instanceof CSSAnimation)
-            );
+          const flying = node.getAnimations().some(owned);
           if (!flying) {
             node.animate(
               [
@@ -722,6 +751,7 @@
               { duration: dur("--dur-morph"), easing: ease("--ease-out") }
             );
           }
+          holdRank(node);
         });
         return forget(id, node, frame);
       });
@@ -777,6 +807,8 @@
     node.style.top = `${offsetTop}px`;
     node.style.width = `${offsetWidth}px`;
     node.style.pointerEvents = "none";
+    // A stack of its own while it fades: at its rank, as a sliding tab is.
+    node.style.zIndex = "calc(var(--z, 1) * 4 + 2)";
     const narrow = motionOk.current;
     return {
       duration: dur("--dur-exit"),
@@ -1259,10 +1291,9 @@
           hoverTab(tab.id, event);
         }}
         onpointerleave={leaveDetails}
-        style:--f={drawn.f}
-        style:--fill-from={drawn.fillFrom}
-        style:--fill-to={drawn.fillTo}
+        style:--end-shown={drawn.end}
         style:--pick={drawn.pick}
+        style:--start-shown={drawn.start}
         class:drop-after={dropHint.tabIndexIn(leaf.id) === i + 1 &&
           i === tabs.length - 1}
         class:drop-before={dropHint.tabIndexIn(leaf.id) === i}
@@ -1477,8 +1508,23 @@
             </ContextMenu.CopyItem>
           </ContextMenu.Content>
         </ContextMenu.Root>
-        <!-- The status rim, drawn on the tab's own outline, on every width. -->
-        <span aria-hidden="true" class="rim"></span>
+        <!-- The status rim, drawn on the tab's own outline, on every width,
+             in pieces that each fade on their own: the top, and each side
+             (its shoulder and run, then either a plain foot or the chosen
+             sheet's flared one). -->
+        <span aria-hidden="true" class="rim">
+          <span class="rim-top"></span>
+          <span class="rim-side" data-side="start">
+            <span class="rim-run"></span>
+            <span class="rim-foot"></span>
+            <span class="rim-flare"></span>
+          </span>
+          <span class="rim-side" data-side="end">
+            <span class="rim-run"></span>
+            <span class="rim-foot"></span>
+            <span class="rim-flare"></span>
+          </span>
+        </span>
         <!-- The stroke up the tab's flanks while its card hangs from it:
              the rim owns the top, the neck the foot. -->
         <span aria-hidden="true" class="neck"></span>
@@ -1671,10 +1717,15 @@
     color: var(--ink-muted);
     cursor: pointer;
 
+    /* It comes and goes with the choice, and drops with its tab's lean. */
     @media (prefers-reduced-motion: no-preference) {
       transition:
-        opacity var(--dur-control) var(--ease-out),
-        scale var(--dur-control) var(--ease-out);
+        opacity var(--choose-dur) var(--choose-ease),
+        scale var(--choose-dur) var(--choose-ease),
+        translate var(--choose-dur) var(--choose-ease);
+    }
+    :global([data-ride]) & {
+      transition: none;
     }
     /* Another tab's slot: kept, empty, and part of that tab. */
     &.idle {
@@ -1845,7 +1896,7 @@
       inline-size: 2px;
       border-radius: var(--radius-pill);
       background: var(--ink-strong);
-      z-index: 3;
+      z-index: calc(var(--stack-top) + 1);
     }
     &.drop-before::before {
       inset-inline-start: -2px;
@@ -1866,24 +1917,28 @@
 
   /* ── The status rim, on every width ───────────────────────────────
      Each tab's rim wears its session's status (`data-tone`, the rail's
-     scale): the tab's own outline, a 1.5px stroke across the top and round
-     both shoulders, tapering to 0.5px down the sides, gone by 90% of its
-     height, with a soft glow outside at half its strength. A status change
-     cross-fades it. Increase Contrast and Reduce Transparency draw it a
-     solid 1px rim. How chosen a tab is (`--pick`, `look`) sets its
-     strength. The desk keeps its status glyph before the title as well
-     (owner: "desktop and mobile should all have rims, desktop has icons
-     mobile not").
+     scale) on the tab's whole outline at one weight, 1.5px: across the
+     top, round both shoulders, down both sloped sides, and at the foot
+     either straight down to the shelf or, on the chosen tab, out round the
+     sheet's flared foot to the shelf's line, with a soft glow following
+     the outline at half its strength. The desk keeps its status glyph
+     before the title as well (owner: "desktop and mobile should all have
+     rims, desktop has icons mobile not").
 
-     It is drawn on the tab's card, edge for edge (TabsList
-     `--card-in-start`, `--card-in-end`; the shoulders' `--r-start`,
-     `--r-end`). On the desk a card tucked under a neighbour starts where
-     that neighbour's edge stands, its own shoulder rounded there, a notch
-     of shelf between the two (bf08800e). Its rim stops at that shoulder's
-     crest, stroke and glow: the neighbour's stroke alone runs down into
-     the notch, one outline where the two meet. The phone's row runs a
-     tucked card under its neighbour square (`--tuck: 0px`), where the
-     neighbour's card covers the rest of its rim. */
+     It is drawn in pieces so each can fade on its own (`.rim-top`; a
+     `.rim-side` for each side holding its shoulder and run, its plain foot
+     and its flared foot), opaque in the tone, and the rim as a whole
+     carries the tone's strength as its opacity (`--rim-mix`: how chosen
+     the tab is, `--pick`, sets it), so the strength travels on the
+     compositor. It leans with its tab (TabItem `--lean-now`).
+
+     Rims stand above every tab's card, sheet and title (`--stack-top`,
+     TabsList), and a side under a neighbour nearer the choice fades out
+     (`--start-shown`, `--end-shown`, `look`). On a switch the side going
+     under fades out while the side coming out from under fades in, on the
+     switch's clock, so the stroke where two tabs meet hands over in place
+     and never jumps from one edge to the other. Increase Contrast and
+     Reduce Transparency draw a solid 1px outline and no glow. */
   .tab {
     --tone: var(--ink-muted);
     --rim-mix: calc(
@@ -1891,15 +1946,17 @@
       (var(--tab-rim-mix-chosen) - var(--tab-rim-mix)) *
       var(--pick)
     );
+    /* The tab's lean, as the kit's card has it (TabItem `--lean-now`), for
+       the rim drawn on that card. */
+    --lean-now: calc(
+      var(--lean) *
+      (1 - var(--pick)) *
+      (1 - var(--lean-lift-now, 0))
+    );
   }
-  @media (min-width: 900px) {
-    .tab[data-tucked="start"] .rim {
-      clip-path: inset(
-        0 0 0 calc(var(--spill) + var(--r-start, var(--radius)))
-      );
-    }
-    .tab[data-tucked="end"] .rim {
-      clip-path: inset(0 calc(var(--spill) + var(--r-end, var(--radius))) 0 0);
+  @media (hover: hover) and (pointer: fine) {
+    .tab:not([data-chosen]):hover {
+      --lean-lift-now: var(--lean-lift);
     }
   }
   .tab[data-tone="working"] {
@@ -1914,112 +1971,142 @@
   .tab:is([data-tone="quiet"], [data-tone="done"]) {
     --rim-mix: var(--tab-rim-mix-idle);
   }
-  /* Under a swipe the rim is where its fraction puts it, frame by frame:
-     no transition lags the finger. */
-  :global([data-ride]) .rim::before,
-  :global([data-ride]) .rim::after {
-    transition: none;
-  }
+  /* `--t` and `--tn` are the stroke, `--fn` the flare (`--flare`:
+     `--radius-sm` on the desk, `--radius-lg` on the phone's row) as plain
+     numbers, for the run along the shelf where the flare's stroke meets it:
+     √(2·flare·stroke + stroke²), as motion/hang's flareTail. */
   .rim {
-    /* 6px of room round the outline for the glow, inside the mask. */
+    /* Room round the outline for the glow. */
     --spill: 6px;
+    --F: var(--flare);
+    --t: 1.5px;
+    --tn: 1.5;
+    --fn: 8;
+    --tail: calc(sqrt(2 * var(--fn) * var(--tn) + var(--tn) * var(--tn)) * 1px);
     display: block;
     position: absolute;
     inset-block: calc(-1 * var(--spill)) 0;
-    inset-inline: calc(var(--card-in-start, 0px) - var(--spill))
-      calc(var(--card-in-end, 0px) - var(--spill));
-    z-index: 2;
+    inset-inline: calc(-1 * var(--F));
+    z-index: calc(var(--stack-top) + 1);
     pointer-events: none;
-    mask-image: linear-gradient(
-      #000 var(--spill),
-      transparent calc(var(--spill) + 0.9 * var(--item))
+    opacity: var(--rim-mix);
+    filter: drop-shadow(
+      0 0 6px color-mix(in oklab, var(--tone) 50%, transparent)
     );
+    /* The glow stops at the shelf's line. */
+    clip-path: inset(-24px -24px 0);
+    /* It leans with its card, about the same bottom centre. */
+    transform-origin: 50% 100%;
+    transform: rotateX(var(--lean-now));
 
-    /* Both on the tab's own outline: the glow outside it (a box shadow
-       is drawn only outside its box), the stroke inside it. */
-    &::before,
-    &::after {
-      content: "";
-      position: absolute;
-      inset: var(--spill) var(--spill) 0;
+    @media (max-width: 899px) {
+      --fn: 12;
     }
-    &::before {
-      border-radius: var(--r-start, var(--radius)) var(--r-end, var(--radius)) 0
-        0;
-      box-shadow: 0 0 6px
-        color-mix(in oklab, var(--tone) calc(var(--rim-mix) / 2), transparent);
-      transition: box-shadow var(--dur-panel) var(--ease-out);
-    }
-    /* The stroke as a shape, so it holds its full width across the top
-       and round both shoulders, where a shadow's would thin with the
-       corner's radius, and only then tapers, over the next --spill down
-       each side, to its side width. Each shoulder takes its own radius
-       (`--r-start`, `--r-end`, the strip's `--radius` unless the host
-       squares it); the stroke's inner edge turns on one `--top` less, none
-       on a square shoulder (`--in-*`). */
-    &::after {
-      --top: 1.5px;
-      --side: 0.5px;
-      --rs: var(--r-start, var(--radius));
-      --re: var(--r-end, var(--radius));
-      --in-start: max(var(--rs), var(--top));
-      --in-end: max(var(--re), var(--top));
-      background: color-mix(in oklab, var(--tone) var(--rim-mix), transparent);
-      clip-path: shape(
-        from 0 100%,
-        line to 0 var(--rs),
-        arc to var(--rs) 0 of var(--rs) cw,
-        line to calc(100% - var(--re)) 0,
-        arc to 100% var(--re) of var(--re) cw,
-        line to 100% 100%,
-        line to calc(100% - var(--side)) 100%,
-        line to calc(100% - var(--side)) calc(var(--in-end) + var(--spill)),
-        line to calc(100% - var(--top)) var(--in-end),
-        arc to calc(100% - var(--in-end)) var(--top) of
-          calc(var(--in-end) - var(--top)) ccw,
-        line to var(--in-start) var(--top),
-        arc to var(--top) var(--in-start) of calc(var(--in-start) - var(--top))
-          ccw,
-        line to var(--side) calc(var(--in-start) + var(--spill)),
-        line to var(--side) 100%,
-        close
-      );
-      transition: background-color var(--dur-panel) var(--ease-out);
-    }
-
     @media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
-      mask-image: none;
+      --t: 1px;
+      --tn: 1;
+      opacity: 1;
+      filter: none;
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      transition:
+        transform var(--choose-dur) var(--choose-ease),
+        opacity var(--choose-dur) var(--choose-ease),
+        filter var(--dur-panel) var(--ease-out);
+    }
 
-      &::before {
-        box-shadow: none;
-      }
-      &::after {
-        --top: 1px;
-        --side: 1px;
-        background: var(--tone);
+    & > span {
+      position: absolute;
+      inset: var(--spill) 0 0;
+    }
+  }
+  .rim-top,
+  .rim-side > span {
+    background: var(--tone);
+  }
+  /* The straight top, between the two shoulders (overlapping each by half
+     a pixel, opaque on opaque, so no seam shows). */
+  .rim-top {
+    clip-path: inset(
+      0 calc(var(--F) + var(--slope-end) + var(--radius) - 0.5px)
+        calc(100% - var(--t))
+        calc(var(--F) + var(--slope-start) + var(--radius) - 0.5px)
+    );
+  }
+  /* A side, drawn as the leading one; the trailing one is its mirror. */
+  .rim-side {
+    --s: var(--slope-start);
+    opacity: var(--start-shown);
+
+    &[data-side="end"] {
+      --s: var(--slope-end);
+      opacity: var(--end-shown);
+      transform: scaleX(-1);
+    }
+    & > span {
+      position: absolute;
+      inset: 0;
+    }
+  }
+  /* The shoulder and the sloped run, down to where the foot begins. */
+  .rim-run {
+    clip-path: shape(
+      from calc(var(--F) + var(--s) + var(--radius)) 0,
+      arc to calc(var(--F) + var(--s)) var(--radius) of var(--radius) ccw,
+      line to var(--F) calc(100% - var(--F)),
+      line to calc(var(--F) + var(--t)) calc(100% - var(--F)),
+      line to calc(var(--F) + var(--s) + var(--t)) var(--radius),
+      arc to calc(var(--F) + var(--s) + var(--radius)) var(--t) of
+        calc(var(--radius) - var(--t)) cw,
+      close
+    );
+  }
+  /* A receded tab's foot: straight down to the shelf. */
+  .rim-foot {
+    opacity: calc(1 - var(--pick));
+    clip-path: inset(
+      calc(100% - var(--F)) calc(100% - var(--F) - var(--t)) 0 var(--F)
+    );
+  }
+  /* The chosen tab's foot: out round the sheet's flare to the shelf's line. */
+  .rim-flare {
+    opacity: var(--pick);
+    clip-path: shape(
+      from 0 100%,
+      arc to var(--F) calc(100% - var(--F)) of var(--F) ccw,
+      line to calc(var(--F) + var(--t)) calc(100% - var(--F)),
+      arc to var(--tail) 100% of calc(var(--F) + var(--t)) cw,
+      close
+    );
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .rim-side,
+    .rim-foot,
+    .rim-flare {
+      transition: opacity var(--choose-dur) var(--choose-ease);
+    }
+    /* A pointer's lift runs at the control tier (TabItem). */
+    @media (hover: hover) and (pointer: fine) {
+      .tab:not([data-chosen]):hover .rim {
+        transition-duration: var(--dur-control);
+        transition-timing-function: var(--ease-out);
       }
     }
   }
+  /* Under a swipe the rim is where its fraction puts it, frame by frame:
+     no transition lags the finger. */
+  :global([data-ride]) :is(.rim, .rim-side, .rim-foot, .rim-flare) {
+    transition: none;
+  }
 
-  /* ── The phone's row: receding tabs ───────────────────────────────
-     The chosen tab is the page it opens; every other tab recedes one step
-     toward the shelf per tab of distance from it, to three. The rim is the
-     status: the row draws no status glyph.
-
-     A swipe carries the choice from tab to tab with the finger (`look`):
-     how chosen a tab is (`--pick`) sets its rim's strength and its title's
-     ink, its card mixes between its recede steps either side of the swipe
-     (`--fill-from`, `--fill-to`, by `--f`). At rest they are the chosen
-     tab's alone. None of them sizes a tab: choosing one never moves the
-     others. */
+  /* ── The phone's row ──────────────────────────────────────────────
+     The same folder tabs as the desk's: the chosen tab is the page it
+     opens, every other tab one step back. At the row's 36px the lean is
+     faint and the fills do the work. The rim is the status: the row draws
+     no status glyph. A swipe carries the choice from tab to tab with the
+     finger (`look`, the kit's `--pick`), and nothing in it sizes a tab:
+     choosing one never moves the others. */
   @media (max-width: 899px) {
-    .tab {
-      --tab-fill: color-mix(
-        in oklab,
-        var(--fill-to) calc(var(--f) * 100%),
-        var(--fill-from)
-      );
-    }
     /* The rim is the status: no glyph beside the title. */
     .tglyph {
       display: none;
@@ -2034,39 +2121,6 @@
     .tab {
       --px-start: calc(var(--overlap) + var(--c-tab-lead));
       --px-end: calc(var(--overlap) + var(--radius-lg));
-    }
-    /* A shoulder tucked under its neighbour (TabsList `data-tucked`) is
-       square, card and rim: the neighbour over it is rounder than the
-       overlap is deep, so a round shoulder would rise out of the notch and
-       its rim cross the neighbour's, a double stroke at the junction.
-       Square, its top runs on under the neighbour and meets its shoulder
-       at the top, as the mockup's tabs do, whose radius is their overlap.
-       The kit's card reads the same two radii, and runs under the
-       neighbour in full (`--tuck`): here the rim draws the outline. */
-    .tab {
-      --r-start: var(--radius);
-      --r-end: var(--radius);
-      --tuck: 0px;
-    }
-    .tab[data-tucked="start"] {
-      --r-start: 0px;
-    }
-    .tab[data-tucked="end"] {
-      --r-end: 0px;
-    }
-    /* The title's ink follows how chosen its tab is; parked on you, it
-       stays strong (`.needs`). */
-    .tab:not(.needs) :global(.ff-tab) {
-      color: color-mix(
-        in oklab,
-        var(--ink-strong) calc(var(--pick) * 100%),
-        var(--ink-muted)
-      );
-    }
-    /* Under a swipe the title's ink is where its fraction puts it, frame
-       by frame: no transition lags the finger. */
-    :global([data-ride]) .tab :global(.ff-tab) {
-      transition: none;
     }
   }
 
@@ -2097,10 +2151,12 @@
   .tab[data-flush="start"] :global(.ff-tab.selected)::after {
     clip-path: shape(
       from var(--flare) 100%,
-      line to var(--flare) var(--radius),
-      arc to calc(var(--flare) + var(--radius)) 0 of var(--radius) cw,
-      line to calc(100% - var(--flare) - var(--radius)) 0,
-      arc to calc(100% - var(--flare)) var(--radius) of var(--radius) cw,
+      line to calc(var(--flare) + var(--slope-start)) var(--radius),
+      arc to calc(var(--flare) + var(--slope-start) + var(--radius)) 0 of
+        var(--radius) cw,
+      line to calc(100% - var(--flare) - var(--slope-end) - var(--radius)) 0,
+      arc to calc(100% - var(--flare) - var(--slope-end)) var(--radius) of
+        var(--radius) cw,
       line to calc(100% - var(--flare)) calc(100% - var(--flare)),
       arc to 100% 100% of var(--flare) ccw,
       close
@@ -2116,7 +2172,8 @@
     position: absolute;
     inset-block: 0 -1px;
     inset-inline: calc(-1 * var(--flare));
-    z-index: 2;
+    /* Over every tab, under the rims. */
+    z-index: var(--stack-top);
     pointer-events: none;
     background: var(--border-control);
     clip-path: shape(
@@ -2201,7 +2258,8 @@
       transition:
         background-color var(--dur-control) var(--ease-out),
         color var(--dur-control) var(--ease-out),
-        transform var(--dur-control) var(--ease-out);
+        transform var(--dur-control) var(--ease-out),
+        translate var(--choose-dur) var(--choose-ease);
 
       &:active {
         transform: scale(var(--press-scale));

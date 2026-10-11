@@ -14,7 +14,7 @@
    */
   import type { Snippet } from "svelte";
   import type { HTMLAttributes } from "svelte/elements";
-  import { dur, ease, motionOk } from "#lib/cawco/motion/curves.svelte.js";
+  import { motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { cn } from "#lib/utils.js";
   import { provideList, TabsListState, useTabs } from "./context.svelte";
@@ -42,79 +42,6 @@
     list.optimisticIndex = selectedIndex >= 0 ? selectedIndex : null;
   });
 
-  // Which way the last switch went: a folder tab's sheet wipes in from the
-  // side facing the tab it came from, and the old one out toward it.
-  let direction = $state<"forward" | "back">("forward");
-  let lastIndex: number | null = null;
-  /**
-   * A switch past a neighbour. The two wipes would play at either end of
-   * the row with bare tabs between them, so instead the chosen sheet is
-   * shown whole at once and slides over from the tab it left, on the same
-   * --wipe and curve. Set before the tabs re-render, so the masks skip
-   * their transition in the same frame the choice moves.
-   */
-  let leap = $state<{ from: number; to: number } | null>(null);
-  $effect.pre(() => {
-    const index = list.optimisticIndex;
-    if (index !== null && lastIndex !== null && index !== lastIndex) {
-      direction = index > lastIndex ? "forward" : "back";
-      leap =
-        Math.abs(index - lastIndex) > 1 ? { from: lastIndex, to: index } : null;
-    }
-    lastIndex = index;
-  });
-  // Measured and started in the next frame's callbacks, never in the task
-  // that made the switch (reading layout there lays the page out mid-task).
-  // The callbacks run before that frame's style, so the slide is already
-  // under way in the first frame the new choice paints.
-  $effect(() => {
-    const jump = leap;
-    const track = node;
-    if (!(jump && track && motionOk.current)) {
-      return;
-    }
-    let slide: Animation | undefined;
-    const frame = requestAnimationFrame(() => {
-      // A gesture carries this switch (the root's `travel`): its sheets ride
-      // the gesture between the two tabs, and nothing slides.
-      if (tabs.travel) {
-        leap = null;
-        return;
-      }
-      const tab = (i: number) =>
-        track.querySelector<HTMLElement>(`[data-tab-index="${i}"]`);
-      const from = tab(jump.from);
-      const to = tab(jump.to);
-      if (!(from && to)) {
-        return;
-      }
-      const dx =
-        from.getBoundingClientRect().left - to.getBoundingClientRect().left;
-      slide = to.animate(
-        [{ transform: `translateX(${dx}px)` }, { transform: "none" }],
-        {
-          duration: dur("--dur-pop"),
-          easing: ease("--ease-drawer"),
-          pseudoElement: "::after",
-        }
-      );
-      slide.finished.then(
-        () => {
-          if (leap === jump) {
-            leap = null;
-          }
-        },
-        () => {
-          /* a newer switch cancelled it and owns `leap` now */
-        }
-      );
-    });
-    return () => {
-      cancelAnimationFrame(frame);
-      slide?.cancel();
-    };
-  });
-
   /**
    * A gesture carrying the indicator (the root's `travel`), and two frames
    * past it: the folder sheets it drew are handed back to their resting
@@ -136,53 +63,122 @@
     return () => cancelAnimationFrame(frame);
   });
 
-  /**
-   * Folder tabs overlap like a drawer of real folders (owner: "spacing
-   * between inactive tabs should overlap a bit just like actual folder
-   * tabs"), so which one is drawn over which is a choice: the chosen tab on
-   * top, then each tab above the ones farther from it, so every edge tucks
-   * behind its neighbour toward the chosen tab. With none chosen the first
-   * is on top. Each tab is its own stack, ranked here on the item the track
-   * lays out (a host may wrap the tab), and the focus ring rides above them
-   * all. A tap on an overlap goes to the tab drawn there. Under a gesture
-   * the tab it is heading to takes the top once it is more than half way
-   * there, as its sheet is by then more chosen than the one it is leaving.
-   */
-  const stackAt = $derived.by(() => {
-    const { travel } = tabs;
-    const toward = travel ? tabs.order.indexOf(travel.toward) : -1;
-    return toward >= 0 && travel && travel.fraction > 0.5
-      ? toward
-      : (list.optimisticIndex ?? -1);
-  });
+  /* ── Folder tabs: the stack hands over at equal depth ──────────────
+     Folder tabs overlap like a drawer of real folders (owner: "spacing
+     between inactive tabs should overlap a bit just like actual folder
+     tabs"), so which one is drawn over which is a choice. The tabs make no
+     stacks of their own: every tab's card, sheet and contents meet in the
+     track's one stack (TabItem), at the tab's rank (`--z`, written here on
+     the item the track lays out, which a host may wrap), with anything a
+     host draws on every outline (PaneTabs' rims) and the focus ring above
+     them all (`--stack-top`).
+
+     A tab's rank follows how far back it stands now (its depth: 0 chosen,
+     1 receded), not where the choice has gone. On a switch each tab's depth
+     travels from where it was to where it is going on the switch's own
+     clock (the eased progress of the sheets' fade, read every frame, so a
+     slowed clock slows it too), and the stack is ranked again from those
+     depths each frame. Two tabs trade places only when they stand equally
+     far back, which is when they look the same, so the trade shows nothing
+     (transitions.dev, banner stacking: "the swap happens at identity").
+     Ties go to the order the choice ends in: nearer the chosen tab on top,
+     the first tab on top with none chosen. A switch caught mid-way starts
+     from the depths it has reached. Under a gesture (the root's `travel`)
+     the depths are the gesture's, so the tab it is heading to takes the
+     top as it passes half way. A tap on an overlap goes to the tab drawn
+     there. */
+  const depthNow = new WeakMap<HTMLElement, number>();
+  const rankNow = new WeakMap<HTMLElement, number>();
+  /** The item a tab is laid out as: the tab, or the host's box round it. */
+  function laidOf(item: HTMLElement, track: HTMLElement): HTMLElement {
+    let laid = item;
+    while (laid.parentElement && laid.parentElement !== track) {
+      laid = laid.parentElement;
+    }
+    return laid;
+  }
+  /** The eased progress of a switch under way, read off the sheets' fade: 1 when none runs. */
+  function switchProgress(items: HTMLElement[]): number {
+    for (const item of items) {
+      for (const run of item.getAnimations({ subtree: true })) {
+        if (
+          run instanceof CSSTransition &&
+          run.transitionProperty === "opacity" &&
+          run.effect instanceof KeyframeEffect &&
+          run.effect.target === item &&
+          run.effect.pseudoElement === "::after"
+        ) {
+          const { progress } = run.effect.getComputedTiming();
+          if (typeof progress === "number") {
+            return progress;
+          }
+        }
+      }
+    }
+    return 1;
+  }
+  /** Ranks the stack from each tab's depth now, farthest back lowest. */
+  function rank(track: HTMLElement, items: HTMLElement[], chosen: number) {
+    const order = items
+      .map((item, i) => ({ item, i, depth: depthNow.get(item) ?? 1 }))
+      .sort(
+        (a, b) =>
+          b.depth - a.depth ||
+          Math.abs(b.i - Math.max(chosen, 0)) -
+            Math.abs(a.i - Math.max(chosen, 0))
+      );
+    order.forEach(({ item }, at) => {
+      const z = at + 1;
+      if (rankNow.get(item) !== z) {
+        rankNow.set(item, z);
+        laidOf(item, track).style.setProperty("--z", String(z));
+      }
+    });
+  }
   $effect(() => {
     const track = node;
     const { items } = rects;
-    const chosen = stackAt;
+    const chosen = list.optimisticIndex ?? -1;
+    const { travel } = tabs;
     if (!track?.closest('[data-variant="folder"]')) {
       return;
     }
-    const top = items.length + 1;
-    const rank = items.map((_, i) =>
-      i === chosen ? top : items.length - Math.abs(i - Math.max(chosen, 0))
-    );
-    items.forEach((item, i) => {
-      let laid: HTMLElement = item;
-      while (laid.parentElement && laid.parentElement !== track) {
-        laid = laid.parentElement;
+    track.style.setProperty("--stack-top", String(4 * (items.length + 1)));
+    const toward = travel ? tabs.order.indexOf(travel.toward) : -1;
+    const f = travel ? Math.min(1, Math.max(0, travel.fraction)) : 0;
+    /** How far back a tab stands once the switch lands, or as the gesture holds it. */
+    const target = (i: number) => {
+      let pick = i === chosen ? 1 : 0;
+      if (toward >= 0 && toward !== chosen) {
+        pick += ((i === toward ? 1 : 0) - pick) * f;
       }
-      laid.style.zIndex = String(rank[i]);
-      // The edge a neighbour drawn above it covers: a host may square that
-      // shoulder (PaneTabs' phone row, whose rim draws the outline).
-      let tucked = "none";
-      if (i > 0 && rank[i - 1] > rank[i]) {
-        tucked = "start";
-      } else if (i < items.length - 1 && rank[i + 1] > rank[i]) {
-        tucked = "end";
+      return 1 - pick;
+    };
+    if (travel) {
+      for (const [i, item] of items.entries()) {
+        depthNow.set(item, target(i));
       }
-      laid.dataset.tucked = tucked;
+      rank(track, items, toward >= 0 && f > 0.5 ? toward : chosen);
+      return;
+    }
+    const from = items.map((item, i) => depthNow.get(item) ?? target(i));
+    for (const [i, item] of items.entries()) {
+      depthNow.set(item, from[i]);
+    }
+    rank(track, items, chosen);
+    // Read in the next frame's callbacks, where the frame lays the page out
+    // anyway, once the switch's transitions have started.
+    let frame = requestAnimationFrame(function step() {
+      const p = switchProgress(items);
+      items.forEach((item, i) => {
+        depthNow.set(item, from[i] + (target(i) - from[i]) * p);
+      });
+      rank(track, items, chosen);
+      if (p < 1) {
+        frame = requestAnimationFrame(step);
+      }
     });
-    track.style.setProperty("--stack-top", String(top + 1));
+    return () => cancelAnimationFrame(frame);
   });
 
   const selectedRect = $derived(rects.at(list.optimisticIndex));
@@ -475,8 +471,6 @@
     scrollable && "scrollable kit-edge-fade",
     className
   )}
-  data-direction={direction}
-  data-leap={leap ? "" : undefined}
   data-ride={ride ? "" : undefined}
   {onfocusin}
   {onfocusout}
@@ -600,48 +594,40 @@
     padding-block-end: 0;
     border-radius: 0;
     background: none;
-    /* The app's own curve and the tab details' morph length, so the sheet
-       and the popover that follows it move as one. */
-    --wipe: var(--dur-pop);
-    --wipe-ease: var(--ease-drawer);
-    --wipe-in: left;
-    --wipe-out: right;
-
-    &[data-direction="back"] {
-      --wipe-in: right;
-      --wipe-out: left;
-    }
+    /* The tabs' layers meet in this one stack (the script above), kept in
+       the track. */
+    isolation: isolate;
+    /* Folder tabs in depth (owner: the chosen tab "approaches from the
+       horizon when it's selected, while the others recede and fold
+       neatly"). Every tab is hinged on its foot, the shelf's line: the
+       chosen one stands upright, every other leans back `--lean` (TabItem),
+       all one step back. The sides of every outline (card, sheet, a host's
+       rim) bring their top corners in by `--slope-start` and `--slope-end`
+       from the foot (the owner's pick: 1px and 0px). A choice travels over
+       `--choose-dur` on `--choose-ease`, every part of it together (the
+       owner's pick, "Slow · 400ms"; DESIGN.md, Folder tabs). */
+    --lean: 18deg;
+    /* How much of its lean a receded tab gives up under a fine pointer. */
+    --lean-lift: 0.6;
+    --slope-start: 1px;
+    --slope-end: 0px;
+    --choose-dur: var(--dur-settle);
+    --choose-ease: var(--ease-crossfade);
   }
 
   /* Each folder tab, or the host's box round it, steps back over its
-     leading neighbour by the overlap and stands in its own stack, ranked
-     from the chosen tab by the script. The track's own layers are not tabs:
-     the highlight's ghost and pills (absolutely placed, app.css
-     .kit-highlight) taken into the flow with the overlap's margin pulled
-     every tab 16px back past the track's leading flare room. */
+     leading neighbour by the overlap, and makes no stack of its own: its
+     layers take their rank in the track's (`--z`, the script). The track's
+     own layers are not tabs: the highlight's ghost and pills (absolutely
+     placed, app.css .kit-highlight) taken into the flow with the overlap's
+     margin pulled every tab 16px back past the track's leading flare
+     room. */
   :global([data-variant="folder"])
     .ff-tabs-list
     > :global(:not(.segment, .ring, .kit-ghost, .kit-pill, .kit-pill-trail)) {
+    --z: 1;
     position: relative;
     margin-inline-start: calc(-1 * var(--overlap));
-  }
-  /* The edge a neighbour drawn above a tab covers (`data-tucked`): the
-     tab's card starts where that neighbour's edge stands, its own shoulder
-     rounded there, so the neighbour's shoulder shows against the shelf and
-     each tab stands on it with its rounded top, not run under the next into
-     one slab. The one word on where a card's edges stand: its card
-     (TabItem) and anything a host draws on its outline (PaneTabs' rim)
-     read it. A host whose rim draws the outline lets the card run under
-     (`--tuck: 0px`, PaneTabs' phone row). */
-  :global([data-variant="folder"])
-    .ff-tabs-list
-    > :global([data-tucked="start"]) {
-    --card-in-start: var(--tuck, var(--overlap));
-  }
-  :global([data-variant="folder"])
-    .ff-tabs-list
-    > :global([data-tucked="end"]) {
-    --card-in-end: var(--tuck, var(--overlap));
   }
   /* Placed by `transform`, not `left`/`top`: moving between tabs is then a
      compositor-only translate. Only the width change lays out, and it lays
@@ -710,8 +696,9 @@
         height var(--dur-ghost) var(--ease-out);
     }
   }
+  /* Above every tab and every outline a host draws on them. */
   :global([data-variant="folder"]) .ring {
-    z-index: var(--stack-top);
+    z-index: calc(var(--stack-top) + 2);
     border-radius: calc(var(--radius) + 2px) calc(var(--radius) + 2px) 0 0;
   }
 </style>

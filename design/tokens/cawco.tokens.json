@@ -2790,6 +2790,11 @@
       "$type": "cubicBezier",
       "$value": "cubic-bezier(0.32, 0.72, 0, 1)"
     },
+    "ease-crossfade": {
+      "$type": "cubicBezier",
+      "$value": "cubic-bezier(0.42, 0, 0.58, 1)",
+      "$description": "Two states trading places where they stand: a folder tab's choice, over dur-settle (its lean, sheet, title ink and rim travel together). CSS ease-in-out, the curve transitions.dev gives icon and text swaps. At 400ms its steepest 1/60s frame moves 7.2% of the change; every other house curve moves more than an eighth in one frame there (ease-out 17.6%, ease-in-out 19.7%, ease-drawer 17.2%, ease-arrive 16.4%, ease-figure 16.9%), which reads as the change lurching."
+    },
     "ease-arrive": {
       "$type": "cubicBezier",
       "$value": "cubic-bezier(0.2, 0, 0, 1)",
@@ -2898,7 +2903,7 @@
     "dur-settle": {
       "$type": "duration",
       "$value": "400ms",
-      "$description": "The existing motion/spring.ts response for non-paging surface settlement. Paging uses UIScrollView's system mechanics."
+      "$description": "The existing motion/spring.ts response for non-paging surface settlement. Paging uses UIScrollView's system mechanics. Also a folder tab's choice, on ease-crossfade (the owner's pick, \"Slow · 400ms\")."
     },
     "dur-reveal": {
       "$type": "duration",

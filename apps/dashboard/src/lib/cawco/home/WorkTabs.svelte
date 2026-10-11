@@ -745,7 +745,10 @@
                         undefined}
                       data-flip="pop"
                       data-tab={tab.id}
-                      >{count}</span
+                      ><span>{count}</span
+                      ><span aria-hidden="true" class="loud"
+                        >{count}</span
+                      ></span
                     >
                   {/key}
                 {/if}
@@ -996,7 +999,11 @@
     flex-shrink: 0;
   }
   /* The count, washed in its tab's status ink (the usage tints' strength),
-     on the chosen tab only; the other's is a plain numeral. */
+     on the chosen tab only; the other's is a plain numeral, muted unless
+     it says something failed. The wash and the ink come and go with the
+     choice, as the tab's own sheet and title do (ui/fluid-tabs, `--pick`):
+     the wash as its background, the ink as the numeral again in it over
+     the muted one, faded in. */
   .count {
     --ink: var(--status-live-ink);
     --wash: var(--count-wash-live);
@@ -1010,25 +1017,40 @@
     pointer-events: none;
     margin-inline-end: max(0px, 2px - var(--tight) * 0.06);
     border-radius: var(--radius-xs);
-    background: var(--wash);
-    color: var(--ink);
+    background: color-mix(
+      in oklab,
+      var(--wash) calc(var(--pick) * 100%),
+      transparent
+    );
+    color: var(--ink-muted);
     font: var(--type-meta);
     font-variant-numeric: tabular-nums;
+
+    & > span {
+      grid-area: 1 / 1;
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      transition: background-color var(--choose-dur) var(--choose-ease);
+    }
+  }
+  .loud {
+    color: var(--ink);
+    opacity: var(--pick);
+
+    @media (prefers-reduced-motion: no-preference) {
+      transition: opacity var(--choose-dur) var(--choose-ease);
+    }
   }
   .count[data-tab="finished"] {
     --ink: var(--status-done-ink);
     --wash: var(--count-wash-done);
   }
-  /* Something listed as finished failed: the numeral says so. */
+  /* Something listed as finished failed: the numeral says so, chosen or
+     not. */
   .count[data-failed] {
     --ink: var(--status-fail-ink);
     --wash: var(--count-wash-fail);
-  }
-  :global(.ff-tab:not(.selected)) .count {
-    background: none;
-  }
-  :global(.ff-tab:not(.selected)) .count:not([data-failed]) {
-    color: var(--ink-muted);
+    color: var(--ink);
   }
   /* The corner actions' icon button (Sidebar .head-action), at one size
      whatever it shows. Pressed, its glyph turns solid in strong ink: no

@@ -2112,6 +2112,11 @@
         "purpose": "Popovers, sheets, page swaps, shared-element flights, container morphs."
       },
       {
+        "name": "ease-crossfade",
+        "value": "cubic-bezier(0.42, 0, 0.58, 1)",
+        "purpose": "Two states trading places where they stand: a folder tab's choice over dur-settle. At most 7.2% of a change in any 1/60s at 400ms."
+      },
+      {
         "name": "ease-arrive",
         "value": "cubic-bezier(0.2, 0, 0, 1)",
         "purpose": "A small mark arriving beside what it belongs to: the compaction divider's chevron."
@@ -2283,7 +2288,7 @@
       },
       {
         "name": "fluid-tabs",
-        "value": "segment --dur-toggle ease-out; focus ring --dur-ghost ease-out; folder wipe --dur-pop ease-drawer",
+        "value": "segment --dur-toggle ease-out; focus ring --dur-ghost ease-out; folder choice (lean, sheets fading in place, card fill, title ink, rim) --dur-settle ease-crossfade, the stack trading tabs at equal depth",
         "purpose": "The fluid tab strip."
       },
       {
