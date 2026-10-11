@@ -50,16 +50,18 @@
   const HUES = ["amber", "blue", "cyan", "green", "orange"] as const;
 
   interface Seed {
-    bind?: "week";
     email: string;
     five: number;
     fiveResets: number;
     seenAgo: number;
-    sessions: number;
     week: number;
-    weekOut?: number;
+    /** Its week's pace while it runs sessions, percent an hour (0.5 else). */
+    weekPace?: number;
     weekResets: number;
   }
+  /** A running account's 5-hour pace, percent an hour. */
+  const FIVE_PACE = 18;
+  const WEEK_PACE = 0.5;
 
   /** The screenshot's six, in fill-first order. */
   const SIX: Seed[] = [
@@ -70,7 +72,6 @@
       week: 38,
       weekResets: 52 * HOUR,
       seenAgo: 2 * MIN,
-      sessions: 2,
     },
     {
       email: "bewinxed@petralab.ai",
@@ -79,7 +80,6 @@
       week: 54,
       weekResets: 75 * HOUR,
       seenAgo: 4 * MIN,
-      sessions: 1,
     },
     {
       email: "jude@petralab.ai",
@@ -88,7 +88,6 @@
       week: 41,
       weekResets: 98 * HOUR,
       seenAgo: 100 * MIN,
-      sessions: 0,
     },
     {
       email: "marketing@petralab.ai",
@@ -97,7 +96,6 @@
       week: 63,
       weekResets: 30 * HOUR,
       seenAgo: 9 * MIN,
-      sessions: 0,
     },
     {
       email: "rand@petralab.ai",
@@ -106,7 +104,6 @@
       week: 72,
       weekResets: 120 * HOUR,
       seenAgo: 6 * MIN,
-      sessions: 0,
     },
     {
       email: "bewinxed@gmail.com",
@@ -115,9 +112,8 @@
       week: 93,
       weekResets: 26 * HOUR,
       seenAgo: 12 * MIN,
-      sessions: 0,
-      bind: "week",
-      weekOut: 9 * HOUR,
+      // Its one session spends a week with 7% left: the week binds it.
+      weekPace: 2,
     },
   ];
 
@@ -128,7 +124,6 @@
     week: (i * 23) % 85,
     weekResets: (24 + i * 7) * HOUR,
     seenAgo: (5 + i) * MIN,
-    sessions: 0,
   });
 
   /** Six: Petralab's five and Omar Al Matar's one; then Northwind's four, Acme's two, and Petralab. */
@@ -203,31 +198,59 @@
       provider: "anthropic",
       reservePct: null,
     }));
-    const forecasts: AccountForecast[] = seeds.map((seed, i) => ({
-      accountId: `acc-${i}`,
-      bindingWindow:
-        seed.bind === "week"
-          ? { kind: "weekly_all", scopeLabel: null }
-          : { kind: "session", scopeLabel: null },
-      lastSeenAt: now - seed.seenAgo,
-      windows: [
-        {
-          kind: "session",
-          pace: seed.sessions > 0 ? 18 : null,
-          resetsAt: iso(seed.fiveResets),
-          scopeLabel: null,
-          utilization: seed.five,
-        },
-        {
-          kind: "weekly_all",
-          pace: null,
-          resetsAt: iso(seed.weekResets),
-          runsOutAt: seed.weekOut ? now + seed.weekOut : undefined,
-          scopeLabel: null,
-          utilization: seed.week,
-        },
-      ],
-    }));
+    // Each window as the hub forecasts it (forecast.ts windowForecast): a
+    // pace only while the account runs sessions, a run-out only with a pace
+    // and only before the window resets; the binding window the one that
+    // runs out first, else the one that resets last (bindingWindow).
+    const windowOf = (
+      kind: "session" | "weekly_all",
+      used: number,
+      resetIn: number,
+      pace: number | null
+    ) => {
+      const out =
+        pace && pace > 0 ? now + ((100 - used) / pace) * HOUR : undefined;
+      return {
+        kind,
+        pace,
+        resetsAt: iso(resetIn),
+        scopeLabel: null,
+        utilization: used,
+        ...(out !== undefined && out < now + resetIn ? { runsOutAt: out } : {}),
+      };
+    };
+    const forecasts: AccountForecast[] = seeds.map((seed, i) => {
+      const running = SESSIONS.some((one) => one.accountId === `acc-${i}`);
+      const windows = [
+        windowOf(
+          "session",
+          seed.five,
+          seed.fiveResets,
+          running ? FIVE_PACE : null
+        ),
+        windowOf(
+          "weekly_all",
+          seed.week,
+          seed.weekResets,
+          running ? (seed.weekPace ?? WEEK_PACE) : null
+        ),
+      ];
+      const runningOut = windows.filter((one) => one.runsOutAt !== undefined);
+      const binds =
+        runningOut.length > 0
+          ? runningOut.reduce((a, b) =>
+              (b.runsOutAt ?? 0) < (a.runsOutAt ?? 0) ? b : a
+            )
+          : windows.reduce((a, b) =>
+              Date.parse(b.resetsAt) > Date.parse(a.resetsAt) ? b : a
+            );
+      return {
+        accountId: `acc-${i}`,
+        bindingWindow: { kind: binds.kind, scopeLabel: null },
+        lastSeenAt: now - seed.seenAgo,
+        windows,
+      };
+    });
     // design carries, then bewinxed, then jude (out of date), then
     // marketing; nothing for 20m; rand is back from its limit.
     const yours: CarrySpan[] = [

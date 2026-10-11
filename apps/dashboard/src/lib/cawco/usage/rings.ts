@@ -164,6 +164,8 @@ export interface ClaudeRings {
    * carries (hub forecast.ts `carrySequence`).
    */
   burn: number;
+  /** The fleet's weekly burn: the summed weekly pace, percent an hour. */
+  burnWeek: number;
   /** Who carries your new sessions now; null: nothing can. */
   carry: RingAccount | null;
   /** Where the next delegate goes, and why in a few words. */
@@ -378,6 +380,17 @@ function delegateReason(
   }[choice.strategy];
 }
 
+/** The summed pace of one kind of window across a forecast's accounts. */
+const paceSum = (
+  forecast: ProviderForecast,
+  kind: "session" | "weekly_all"
+): number =>
+  forecast.accounts.reduce(
+    (sum, one) =>
+      sum + (one.windows.find((window) => window.kind === kind)?.pace ?? 0),
+    0
+  );
+
 /**
  * A provider's accounts in carrying order (who carries you now, then next,
  * then the rest in fill-first order), and the carry answer from the
@@ -445,12 +458,8 @@ export function claudeRings(input: {
     accounts: order
       .map((id) => byId.get(id))
       .filter((r): r is RingAccount => Boolean(r)),
-    burn: forecast.accounts.reduce(
-      (sum, one) =>
-        sum +
-        (one.windows.find((window) => window.kind === "session")?.pace ?? 0),
-      0
-    ),
+    burn: paceSum(forecast, "session"),
+    burnWeek: paceSum(forecast, "weekly_all"),
     carry,
     next,
     nextAt: next ? (spans[1]?.from ?? null) : null,
@@ -585,15 +594,27 @@ export function caption(c: ClaudeRings, now: number): Part[] {
 }
 
 /**
- * The time under a dial-wall cell's name, one shape for every account: how
- * long it lasts ("1h 20m left", "over 5h"), or at its limit when it's back
- * ("back in 4h 50m"); a reading out of date puts a tilde before it
- * ("~1h 20m left"), and the dial's tooltip says why. Who takes over when is
- * the relay bar's to say. A Claude account (`c`) lasts until its binding
- * window runs out while it carries you or holds its reserve; one in the
- * relay until the relay stops handing it work; an idle one as long as it
- * would carry you if it took over now (`takeover`). The Go plan (no `c`)
- * lasts until one of its windows runs out.
+ * An account's forecast stop: when it runs out on the window that binds it.
+ * One running sessions (and the Go plan, no `c`) at its own pace: the hub's
+ * run-out for its binding window, none when every window lasts to its reset
+ * (forecast.ts windowForecast). An idle one at the fleet's pace, as if it
+ * took over now (`takeover`). Null past the 5-hour horizon.
+ */
+export function stopOf(
+  r: RingAccount,
+  c: ClaudeRings | null,
+  now: number
+): number | null {
+  const out = !c || r.sessions.length > 0 ? r.bindOut : takeover(r, c, now);
+  return out !== null && out - now < HORIZON_MS ? out : null;
+}
+
+/**
+ * The time under a dial-wall cell's name, one shape for every account: its
+ * forecast stop ("1h 20m left", "over 5h"; `stopOf`), or at its limit when
+ * it's back ("back in 4h 50m"); a reading out of date puts a tilde before
+ * it ("~1h 20m left"), and the dial's tooltip says why. Who takes over when
+ * is the relay bar's to say.
  */
 export function cellTime(
   r: RingAccount,
@@ -605,51 +626,51 @@ export function cellTime(
       ? "at its limit"
       : `back in ${until(r.backAt, now)}`;
   }
-  let out: number | null = r.carryUntil;
-  if (!c) {
-    out = r.bindOut;
-  } else if (r.state === "reserve" || r.id === c.carry?.id) {
-    out = r.bindOut ?? r.carryUntil;
-  } else if (r.carryUntil === null) {
-    out = takeover(r, c.burn, now);
-  }
-  const time =
-    out !== null && out - now < HORIZON_MS
-      ? `${fmt(out - now)} left`
-      : "over 5h";
-  return guess(r.state === "stale", time);
+  const out = stopOf(r, c, now);
+  return guess(
+    r.state === "stale",
+    out === null ? "over 5h" : `${fmt(out - now)} left`
+  );
 }
 
 /**
  * When an idle account would run out if it took over now, as the relay's
  * walk spends a carrier (hub forecast.ts `carrySequence`): its 5-hour use
- * climbs at the fleet's `burn` (percent an hour), a window that resets
- * starts again from nothing, and one not open has no reset ahead. Null when
- * it lasts past the 5-hour horizon, or nothing burns.
+ * climbs at the fleet's burn (`c.burn`, percent an hour), a window that
+ * resets starts again from nothing, and one not open has no reset ahead;
+ * its week spends at the fleet's weekly pace (`c.burnWeek`) until its
+ * reset. The sooner of the two; null when nothing burns.
  */
 export function takeover(
   r: RingAccount,
-  burn: number,
+  c: ClaudeRings,
   now: number
 ): number | null {
-  if (burn <= 0 || !r.w5) {
-    return null;
-  }
   const horizon = now + HORIZON_MS;
-  let use = 100 - r.w5.left;
-  let reset =
-    r.w5.resetsAt !== null && r.w5.resetsAt > now ? r.w5.resetsAt : null;
-  let t = now;
-  while (t < horizon) {
-    const out = t + ((100 - use) / burn) * HOUR_MS;
-    if (reset === null || out <= reset) {
-      return out < horizon ? out : null;
+  let five: number | null = null;
+  if (c.burn > 0 && r.w5) {
+    let use = 100 - r.w5.left;
+    let reset =
+      r.w5.resetsAt !== null && r.w5.resetsAt > now ? r.w5.resetsAt : null;
+    let t = now;
+    while (t < horizon) {
+      const out = t + ((100 - use) / c.burn) * HOUR_MS;
+      if (reset === null || out <= reset) {
+        five = out;
+        break;
+      }
+      use = 0;
+      t = reset;
+      reset += HORIZON_MS;
     }
-    use = 0;
-    t = reset;
-    reset += HORIZON_MS;
   }
-  return null;
+  let week: number | null = null;
+  if (c.burnWeek > 0 && r.week) {
+    const out = now + (r.week.left / c.burnWeek) * HOUR_MS;
+    week = r.week.resetsAt === null || out < r.week.resetsAt ? out : null;
+  }
+  const outs = [five, week].filter((out): out is number => out !== null);
+  return outs.length > 0 ? Math.min(...outs) : null;
 }
 
 /** One group of the accounts: an organization's accounts, or (null) the rest. */
@@ -693,33 +714,70 @@ export const staleTip = (r: RingAccount, now: number): string =>
     : `Last reading ${fmt(now - r.seenAt)} ago, so this is an estimate.`;
 
 /** The routing's reason, said of the account it chose. */
-/**
- * The routing's reason as placement applies it (hub placement.ts), said so
- * the dial wall cannot contradict it. Spread takes the lowest binding use,
- * the higher of an account's 5-hour and weekly use, among the accounts the
- * delegates may run on (benched and past-reserve ones left out).
- */
+/** The routing's reason as placement applies it (hub placement.ts). */
 const DELEGATE_CLAUSE: Record<string, string> = {
-  "most room left":
-    "of every account they may use, its fuller window has the most left",
   "first in your order": "it’s the first in your order with room",
   "resets soonest": "its 5-hour window resets soonest",
   pinned: "it’s pinned",
 };
 
+/** The share an account has left on both its windows: the lower of the two. */
+const leftOnBoth = (r: RingAccount): number =>
+  Math.min(
+    r.limitOn === "5h" ? 0 : (r.w5?.left ?? 100),
+    r.limitOn === "week" ? 0 : (r.week?.left ?? 100)
+  );
+
+/**
+ * Spread's reason, said as the wall can check it. Spread takes the lowest
+ * binding use, the higher of an account's 5-hour and weekly use (hub
+ * placement.ts `spread`, `Usage.binding`): the most left on both windows.
+ * An account with more left that it passed over was held back: past its
+ * reserve (placement's `pastReserve`), or not one the delegates may run on.
+ */
+function spreadWhy(
+  c: ClaudeRings,
+  to: RingAccount,
+  nameOf: (r: RingAccount) => string
+): string {
+  const left = leftOnBoth(to);
+  const passed = c.accounts.filter(
+    (r) => r.id !== to.id && leftOnBoth(r) > left
+  );
+  const both = `${left}% or more left on both windows`;
+  if (passed.length === 0) {
+    return `${both}, the most of any account`;
+  }
+  const reserved = passed.filter((r) => r.state === "reserve").map(nameOf);
+  const held =
+    reserved.length === passed.length
+      ? `${reserved.join(", ")} ${reserved.length === 1 ? "is" : "are"} kept in reserve`
+      : "the accounts with more left are not ones they may run on";
+  return `${held}; ${both}, the most of the rest`;
+}
+
 /**
  * The line under the dial wall: where new delegates start, by the name its
- * cell shows, and why ("New delegates start on bewinxed: it has the most
- * room left."). Nothing when no account takes them.
+ * cell shows, and why, in the words of the rule placement applies, so the
+ * wall cannot contradict it ("New delegates start on jude: 59% or more
+ * left on both windows, the most of any account."). Nothing when no
+ * account takes them.
  */
-export function delegateLine(c: ClaudeRings, name: string): Part[] {
-  if (!c.delegate) {
+export function delegateLine(
+  c: ClaudeRings,
+  nameOf: (r: RingAccount) => string
+): Part[] {
+  const to = c.delegate;
+  if (!to) {
     return [];
   }
-  const why = DELEGATE_CLAUSE[c.delegateWhy] ?? c.delegateWhy;
+  const why =
+    c.delegateWhy === "most room left"
+      ? spreadWhy(c, to, nameOf)
+      : (DELEGATE_CLAUSE[c.delegateWhy] ?? c.delegateWhy);
   return [
     "New delegates start on ",
-    { account: name, color: c.delegate.color },
+    { account: nameOf(to), color: to.color },
     why ? `: ${why}.` : ".",
   ];
 }

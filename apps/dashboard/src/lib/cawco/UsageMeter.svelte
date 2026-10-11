@@ -24,8 +24,8 @@
    * Live: the forecast is read whenever the hub says an account moved
    * (usage/forecast.svelte.ts), and the words move on once a minute.
    */
+  import { untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
-  import { badgeVariants } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Drawer from "#lib/components/ui/drawer/index.js";
@@ -45,6 +45,7 @@
   import Relay from "./usage/Relay.svelte";
   import Rings from "./usage/Rings.svelte";
   import {
+    type ClaudeRings,
     caption,
     cellTime,
     delegateLine,
@@ -53,6 +54,7 @@
     plain,
     type RingAccount,
     staleTip,
+    stopOf,
     stopText,
   } from "./usage/rings";
   import SessionsChip from "./usage/SessionsChip.svelte";
@@ -117,28 +119,43 @@
     org: string | null;
   }
   /**
-   * What is left of the window that binds an account, the one that runs out
-   * first: what the wall ranks by.
+   * The moment the wall ranks at: the last reading's, so the minute moving
+   * on, which shortens every running account's time but no idle one's,
+   * never reorders the cells.
    */
+  let rankedAt = $state(untrack(() => usage.now));
+  $effect.pre(() => {
+    if (usage.cause === "data") {
+      rankedAt = usage.now;
+    }
+  });
+  /** What is left of the window that binds an account: the tie-break. */
   const roomOf = (ring: RingAccount): number =>
     (ring.bind === "week" ? ring.week?.left : ring.w5?.left) ?? 0;
   /**
-   * Most room first; accounts at their limit last, the one back soonest
-   * first. Ties keep the carrying order. Room moves only with a reading, so
-   * the minute moving on never reorders.
+   * The time each cell says first: the latest forecast stop first ("over
+   * 5h" before any time), ties to the most room; accounts at their limit
+   * last, the one back soonest first; then the carrying order. Read across
+   * a row, the times run down.
    */
-  const ranked = (accounts: RingAccount[]): RingAccount[] =>
-    [...accounts].sort((a, b) => {
+  const ranked = (accounts: RingAccount[], c: ClaudeRings): RingAccount[] => {
+    const stop = (ring: RingAccount) =>
+      stopOf(ring, c, rankedAt) ?? Number.POSITIVE_INFINITY;
+    return [...accounts].sort((a, b) => {
       const limitA = a.state === "limit";
       const limitB = b.state === "limit";
       if (limitA !== limitB) {
         return limitA ? 1 : -1;
       }
-      return limitA
-        ? (a.backAt ?? Number.POSITIVE_INFINITY) -
-            (b.backAt ?? Number.POSITIVE_INFINITY)
-        : roomOf(b) - roomOf(a);
+      if (limitA) {
+        return (
+          (a.backAt ?? Number.POSITIVE_INFINITY) -
+          (b.backAt ?? Number.POSITIVE_INFINITY)
+        );
+      }
+      return stop(b) - stop(a) || roomOf(b) - roomOf(a);
     });
+  };
   /**
    * Claude's accounts as blocks, four across, each ranked by room. Where
    * the last organization's last row leaves two or more places, the
@@ -152,7 +169,7 @@
     }
     const blocks: WallBlock[] = [];
     for (const group of orgGroups(claude.accounts)) {
-      const cells = ranked(group.accounts).map((ring) => ({
+      const cells = ranked(group.accounts, claude).map((ring) => ({
         ring,
         grouped: group.org !== null,
       }));
@@ -223,9 +240,9 @@
   /** Its week, one style in every cell: "wk 62%" left, "wk 0%" at its limit. */
   const weekText = (ring: RingAccount): string => {
     if (ring.limitOn === "week") {
-      return "wk 0%";
+      return "wk 0% left";
     }
-    return ring.week ? `wk ${ring.week.left}%` : "";
+    return ring.week ? `wk ${ring.week.left}% left` : "";
   };
   /** Where new delegates start, said under the wall in the name its cell shows. */
   const delegates = $derived.by(() => {
@@ -233,11 +250,15 @@
     if (!(claude && to)) {
       return [];
     }
-    const grouped = wall.some((block) =>
-      block.cells.some((cell) => cell.ring.id === to.id && cell.grouped)
+    const grouped = new Set(
+      wall.flatMap((block) =>
+        block.cells.filter((cell) => cell.grouped).map((cell) => cell.ring.id)
+      )
     );
-    const name = cellName(to, grouped);
-    return delegateLine(claude, `${name.local}${name.domain}`);
+    return delegateLine(claude, (ring) => {
+      const name = cellName(ring, grouped.has(ring.id));
+      return `${name.local}${name.domain}`;
+    });
   });
 
   /** One mark's room in the strip: 16px and the 4px between marks. */
@@ -440,9 +461,9 @@
   <div
     class={["cell-d", joined && "joined", lowered && "lowered"]}
     data-account={ring.id}
+    data-bind={ring.bind}
     data-flip
     data-flyover-anchor
-    data-room={roomOf(ring)}
     class:carrying={ring.id === claude?.carry?.id}
     class:limit={ring.state === "limit"}
   >
@@ -523,7 +544,11 @@
       {@attach reflow()}
     >
       {#if claude}
-        <div class="group orgs" data-burn={claude.burn}>
+        <div
+          class="group orgs"
+          data-burn={claude.burn}
+          data-burn-week={claude.burnWeek}
+        >
           <!-- An organization of more than two accounts is a group under its
                name; the rest follow, ungrouped, along its last row after a
                hairline when two places are left there, else after the same
@@ -850,7 +875,10 @@
     font: var(--type-meta);
     color: var(--ink-muted);
   }
+  /* The house edge fade at its full length on every width, as Caw's panel
+     has it: the phone's short one reads as no fade at all. */
   .accounts {
+    --fade-len: 40px;
     flex: 1 1 auto;
     min-block-size: 0;
     overflow-y: auto;
