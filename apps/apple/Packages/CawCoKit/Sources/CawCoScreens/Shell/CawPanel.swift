@@ -143,7 +143,10 @@ final class CawPanel: UIView, UIGestureRecognizerDelegate {
                 list.setCustomSpacing(Space.space2, after: rule)
             }
             list.addArrangedSubview(Self.head("Notices", count: notices.count, glyph: .bell, tint: Palette.inkMuted))
-            for notice in notices {
+            for (at, notice) in notices.enumerated() {
+                // Notices part with the grey hairline, as rows of one list do
+                // (CawPanel.svelte `.notices > li + li`).
+                if at > 0 { list.addArrangedSubview(NoticeRule()) }
                 let row = NoticeRow(notice)
                 row.onDismiss = { [weak self] in self?.onDismiss(notice) }
                 row.onAct = { [weak self] in self?.onAct(notice) }
@@ -423,6 +426,24 @@ private final class SectionRule: UIView {
     }
 }
 
+/// The hairline between two notices: 1pt of `border-hairline` across the rows' width.
+private final class NoticeRule: UIView {
+    init() {
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        isUserInteractionEnabled = false
+        isAccessibilityElement = false
+        accessibilityIdentifier = "caw-notice-rule"
+        backgroundColor = Palette.borderHairline
+        heightAnchor.constraint(equalToConstant: SectionRule.thickness).isActive = true
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        fatalError("NoticeRule is built in code")
+    }
+}
+
 // MARK: A row that needs you
 
 /// One thing parked on the operator (NeedsCard.svelte, in Caw's panel):
@@ -688,11 +709,12 @@ private final class NoticeRow: UIView {
             lead.leadingAnchor.constraint(equalTo: leadingAnchor, constant: pad),
             lead.widthAnchor.constraint(equalToConstant: Self.lead),
             lead.heightAnchor.constraint(equalToConstant: Self.lead),
-            bottomAnchor.constraint(greaterThanOrEqualTo: lead.bottomAnchor, constant: Space.space2),
+            // `space3` above and below (NoticeRow.svelte `--pad-block`).
+            bottomAnchor.constraint(greaterThanOrEqualTo: lead.bottomAnchor, constant: pad),
             column.topAnchor.constraint(equalTo: topAnchor, constant: pad),
             column.leadingAnchor.constraint(equalTo: lead.trailingAnchor, constant: Space.space3),
             column.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -pad),
-            column.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -Space.space2),
+            column.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -pad),
             // The first line's trailing cell (NoticeRow.svelte `.end`): centred
             // on the label line, its box hung past the trailing edge by its
             // ink inset so its stroke ends on the edge the words keep.
