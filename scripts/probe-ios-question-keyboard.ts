@@ -906,9 +906,10 @@ try {
   }
   // One delegate of the asking session, so its chip fills the tray row. A
   // workspace is cut from the project's origin: the scratch workdir gets a
-  // commit and a bare origin of its own beside it.
+  // commit and a bare origin of its own beside it, whose HEAD names the
+  // `main` pushed to it (agent clone.ts `remoteDefault` reads origin's HEAD).
   const origin = join(fleet.workdir, "..", "origin.git");
-  await Bun.$`git -C ${fleet.workdir} init -q && git -C ${fleet.workdir} -c user.name=probe -c user.email=probe@localhost commit -q --allow-empty -m seed && git init -q --bare ${origin} && git -C ${fleet.workdir} remote add origin ${origin} && git -C ${fleet.workdir} push -q origin HEAD:main`.quiet();
+  await Bun.$`git -C ${fleet.workdir} init -q -b main && git -C ${fleet.workdir} -c user.name=probe -c user.email=probe@localhost commit -q --allow-empty -m seed && git init -q --bare -b main ${origin} && git -C ${fleet.workdir} remote add origin ${origin} && git -C ${fleet.workdir} push -q origin HEAD:main`.quiet();
   const delegated = await fetch(`${fleet.base}/api/work-items`, {
     method: "POST",
     headers: { "content-type": "application/json" },

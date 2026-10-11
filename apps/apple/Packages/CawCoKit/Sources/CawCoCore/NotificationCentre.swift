@@ -170,5 +170,40 @@ public enum NotificationCentre {
             }
         }
     }
+
+    /// The extension's work on a delivered push, done from the app for
+    /// `PushProbe`: a simulator never hands a `simctl push` to the extension
+    /// (Xcode 11.4 release notes, 55822721: "Notification Service Extensions
+    /// do not work in simulated push notifications"). The same
+    /// `PushOpening.open` the extension calls, its category registered as the
+    /// extension registers it (merged in, nothing pruned), then the opened
+    /// push put back under its own identifier, which replaces the one on
+    /// show, as iOS shows what the extension hands back. The verdict: the
+    /// category the opening named and its actions, or why nothing opened.
+    public static func openDelivered(_ identifier: String) async -> String {
+        await withCheckedContinuation { (done: CheckedContinuation<String, Never>) in
+            queue.async {
+                UNUserNotificationCenter.current().getDeliveredNotifications { notes in
+                    guard let note = notes.first(where: { $0.request.identifier == identifier }) else {
+                        done.resume(returning: "not delivered")
+                        return
+                    }
+                    guard let opened = PushOpening.open(note.request) else {
+                        done.resume(returning: "not opened")
+                        return
+                    }
+                    let named = opened.content.categoryIdentifier
+                    let actions = opened.category?.actions.map(\.title).joined(separator: "|") ?? ""
+                    let said = "opened, category \(named) actions=[\(actions)]"
+                    nonisolated(unsafe) let request = UNNotificationRequest(identifier: identifier, content: opened.content, trigger: nil)
+                    PushCategory.install(adding: opened.category, pruning: false, on: queue) {
+                        UNUserNotificationCenter.current().add(request) { error in
+                            done.resume(returning: error.map { "\(said), not shown again: \($0)" } ?? said)
+                        }
+                    }
+                }
+            }
+        }
+    }
     #endif
 }

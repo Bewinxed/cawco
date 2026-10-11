@@ -25,8 +25,8 @@
  *     its pairing and push key with the hub (PushProbe; a simulator has no
  *     purchase for Cawrier);
  *  4. for each case, quits the app, delivers the hub's payload with
- *     `xcrun simctl push <udid> dev.cawco.app <payload.apns>` (the extension
- *     opens it there), and lists what the notification centre shows;
+ *     `xcrun simctl push <udid> dev.cawco.app <payload.apns>`, and lists
+ *     what the notification centre shows;
  *  5. runs the action. A script can't press a notification's action on a
  *     simulator and `UNNotificationResponse` has no public initializer, so
  *     the app is launched with `-push-probe-act <id> <action> [<text>]`, which
@@ -39,7 +39,8 @@
  *     - Reply on a failed attempt's push (made by the hub's own push.ts with
  *       the scratch hub's device and session) arrives as a user message;
  *     - the top-level session's finished turn pushes CAWCO_TURN (Open,
- *       Reply) with the reply's first line sealed, and Reply on it lands;
+ *       Reply) with the reply's first line sealed, Reply on it lands, and
+ *       the turn that Reply starts pushes when it ends;
  *     - two turns of one session 3 s apart send two pushes under one
  *       collapse id, the second replacing the first;
  *     - a turn that ends with its session in front in the app (launched with
@@ -55,10 +56,19 @@
  *       in the push's place, read off the delivered list.
  *
  * The inline buttons of a question are the notification service extension's
- * work. It logs `opened` / `not opened` for every push it is handed; when no
- * such line follows a `simctl push`, the simulator never ran it, and the probe
- * says so (`FAIL the extension runs for a simctl push`) and SKIPs the button
- * check rather than failing it as the code's fault.
+ * work. A simulator never hands a `simctl push` to it (Xcode 11.4 release
+ * notes, known issue 55822721: "Notification Service Extensions do not work
+ * in simulated push notifications"; Xcode 14's: remote notifications "support
+ * more features (like Notification Service Extensions) than locally simulated
+ * notifications using .apns payload files or the simctl push command"). So
+ * "the extension runs for a simctl push" is device-only and SKIPs, unless an
+ * `opened` / `not opened` line does follow the push. Then the app runs the
+ * extension's opening (CawCoPush `PushOpening.open`, the one function
+ * NotificationService calls) on the delivered push, `-push-probe-open <id>`:
+ * opened with the key this device registered, its question category
+ * registered, and the opened push put back in its place, as iOS shows what
+ * the extension hands back. The probe checks the sealed title and the
+ * option buttons on what the centre then shows.
  *
  * It stops only what it started: the fleet's processes by PID, the stand-in,
  * the tunnel, the log stream, and the simulator it created (deleted at the
@@ -466,6 +476,14 @@ rm -f "$F"`);
  * push to it, which is not the code failing.
  */
 const EXTENSION_RAN = /push \S+ (?:opened|not opened):/;
+/** That line whole: what `PushOpening.open` said of a push. */
+const OPENING_LINE = /push \S+ (?:opened|not opened):.*/;
+/**
+ * Why no such line comes on a simulator: Apple's word that a `simctl push`
+ * never reaches the extension, never lifted in a later Xcode.
+ */
+const NO_SIMULATED_EXTENSION =
+  'a simulator does not hand a simctl push to a Notification Service Extension (Xcode 11.4 release notes, known issue 55822721: "Notification Service Extensions do not work in simulated push notifications. The mutable-content key is not honored."; Xcode 14 release notes: remote notifications "support more features (like Notification Service Extensions) than locally simulated notifications using .apns payload files or the simctl push command")';
 
 interface Listed {
   actions: string[];
@@ -478,12 +496,15 @@ interface Listed {
 const LISTED =
   /probe listed (\S+) category=(\S*) actions=\[([^\]]*)\] kind=(\S*) request=(\S*) title=(.*?) body=/g;
 const LISTED_DONE = /probe listed done:/;
-/** What the notification centre shows, as the app lists it. */
-const listed = async (): Promise<Listed[]> => {
+/**
+ * Launches the app with `args`, a hook that ends by listing what the
+ * notification centre shows; its log from the launch, and that list.
+ */
+const listedAfter = async (args: string) => {
   const from = mark();
-  await launch("-push-probe-list");
+  await launch(args);
   const { log } = await awaitLine(from, LISTED_DONE, 30_000);
-  return [...log.matchAll(LISTED)].map((m) => ({
+  const shows: Listed[] = [...log.matchAll(LISTED)].map((m) => ({
     id: m[1],
     category: m[2],
     actions: m[3] ? m[3].split("|") : [],
@@ -491,6 +512,26 @@ const listed = async (): Promise<Listed[]> => {
     request: m[5],
     title: m[6],
   }));
+  return { log, shows };
+};
+/** What the notification centre shows, as the app lists it. */
+const listed = async (): Promise<Listed[]> =>
+  (await listedAfter("-push-probe-list")).shows;
+/**
+ * The extension's opening (CawCoPush `PushOpening.open`, the function
+ * NotificationService calls) run by the app on the delivered push `id`: its
+ * category registered and the opened push put back in its place, as iOS does
+ * with what the extension hands back. The hook's verdict, the opening's own
+ * `opened` / `not opened` line, and what the centre shows after.
+ */
+const openInApp = async (id: string) => {
+  const { log, shows } = await listedAfter(`-push-probe-open ${id}`);
+  return {
+    verdict:
+      log.match(new RegExp(`probe opened ${id}: (.*)`))?.[1] ?? "no verdict",
+    line: log.match(OPENING_LINE)?.[0],
+    shows,
+  };
 };
 /**
  * Runs an action on a delivered notification; the log from its start, and
@@ -894,32 +935,51 @@ rm -f "$F"`).catch((error: unknown) => `sample failed: ${String(error)}`);
       `aps.category ${push.payload.aps.category}; sealed options ${JSON.stringify(sealed.options)}`
     );
     const extension = await deliver(push);
-    const shown = (await listed()).find((n) => n.request === requestId);
-    // The buttons are the extension's work: whether it ran at all decides
-    // whether a wrong category is the code's failure or the simulator's.
+    const delivered = (await listed()).find((n) => n.request === requestId);
+    // The buttons are the extension's work. A simulator never runs it for a
+    // simctl push (Apple, NO_SIMULATED_EXTENSION), so there its opening runs
+    // from the app on the delivered push: the same function, the same
+    // registration, the opened push put back where iOS would show it.
+    // Only iOS calling `didReceive` stays device-only.
     const extensionRan = EXTENSION_RAN.test(extension);
-    check(
-      "the extension runs for a simctl push",
-      extensionRan,
-      extensionRan
-        ? (extension.match(EXTENSION_RAN)?.[0] ?? "")
-        : "no `opened` / `not opened` line from NotificationService: this simulator did not hand the push to the extension"
-    );
-    const step = "the extension gives the push an action per option and Other…";
-    const detail = shown
-      ? `category ${shown.category}, actions [${shown.actions.join(" | ")}], title "${shown.title}" (sealed "${sealed.title}"); extension: ${extension.match(/question push answers inline: .*/)?.[0] ?? "no inline line"}`
-      : "the push is not in the notification centre";
     if (extensionRan) {
       check(
-        step,
-        shown?.category.startsWith("CAWCO_QUESTION.") === true &&
-          JSON.stringify(shown.actions) ===
-            JSON.stringify([...THREE, "Other…"]),
-        detail
+        "the extension runs for a simctl push",
+        true,
+        extension.match(EXTENSION_RAN)?.[0] ?? ""
       );
     } else {
-      skip(step, `the extension never ran (above); ${detail}`);
+      skip(
+        "the extension runs for a simctl push",
+        `device-only: ${NO_SIMULATED_EXTENSION}; no \`opened\` / \`not opened\` line followed this push either`
+      );
     }
+    const opening =
+      !extensionRan && delivered ? await openInApp(delivered.id) : undefined;
+    if (opening) {
+      check(
+        "the extension's opening opens the hub's sealed push with this device's key (run from the app)",
+        opening.verdict.startsWith("opened, category CAWCO_QUESTION.") &&
+          /push \S+ opened:/.test(opening.line ?? ""),
+        `verdict: ${opening.verdict}; ${opening.line ?? "no opened line"}`
+      );
+    }
+    const shown = opening
+      ? opening.shows.find((n) => n.request === requestId)
+      : delivered;
+    const step = opening
+      ? "the extension's opening gives the push the sealed title, an action per option and Other… (run from the app)"
+      : "the extension gives the push the sealed title, an action per option and Other…";
+    check(
+      step,
+      shown?.category.startsWith("CAWCO_QUESTION.") === true &&
+        JSON.stringify(shown.actions) ===
+          JSON.stringify([...THREE, "Other…"]) &&
+        shown.title === sealed.title,
+      shown
+        ? `category ${shown.category}, actions [${shown.actions.join(" | ")}], title "${shown.title}" (sealed "${sealed.title}")`
+        : "the push is not in the notification centre"
+    );
     if (shown) {
       const ran = await act(shown.id, "ANSWER_1");
       const gone = await until(
@@ -1104,6 +1164,7 @@ rm -f "$F"`).catch((error: unknown) => `sample failed: ${String(error)}`);
     );
     if (shown) {
       const words = `probe turn reply ${tag}`;
+      const replyFrom = captured.length;
       const ran = await act(shown.id, "REPLY", words);
       const arrived = await until(
         "the turn reply in the transcript",
@@ -1115,6 +1176,30 @@ rm -f "$F"`).catch((error: unknown) => `sample failed: ${String(error)}`);
         "Reply on the turn push lands in the transcript",
         arrived,
         `${ran.match ? "action ran" : "no action line"}; transcript has "${words}" ${arrived}`
+      );
+      // The turn that Reply started ends with the mock's "ok" and pushes
+      // after the hub's look grace. At 78cd11f5 that push landed after 7b
+      // had begun counting and read as 7b's first ("ok", then "Turn one").
+      const replyTurn = await until(
+        "the push of the turn Reply started",
+        () =>
+          captured
+            .slice(replyFrom)
+            .find(
+              (p) =>
+                p.payload.cawco.kind === "turn" &&
+                p.payload.cawco.instanceId === id
+            ),
+        (found) => found !== undefined,
+        60_000
+      ).catch(() => undefined);
+      check(
+        "the turn Reply started pushes when it ends",
+        replyTurn !== undefined &&
+          (await opened(replyTurn as Captured)).body === "ok",
+        replyTurn
+          ? `sealed body "${(await opened(replyTurn as Captured)).body}", collapse ${(replyTurn as Captured).collapseId}`
+          : "no turn push within 60 s of the reply"
       );
     }
   }
@@ -1167,6 +1252,7 @@ rm -f "$F"`).catch((error: unknown) => `sample failed: ${String(error)}`);
 
   // ── 7c. A session open in front in the app: its turn pushes nothing ────
   {
+    const lookFrom = mark();
     await launch(`-open-session ${id}`);
     // The session's composer (ComposerView's "steer-message") is on screen.
     const inFront = (
@@ -1204,7 +1290,11 @@ rm -f "$F"`).catch((error: unknown) => `sample failed: ${String(error)}`);
       check(
         "a turn that ends with its session in front in the app pushes nothing",
         pushed.length === 0,
-        `${pushed.length} turn pushes; the hub's seen_at ${seen?.seen_at ?? "null"} (${seen?.seen_at && seen.seen_at >= sent ? "marked after the send" : "not marked since the send"})`
+        `${pushed.length} turn pushes; the hub's seen_at ${seen?.seen_at ?? "null"} (${seen?.seen_at && seen.seen_at >= sent ? "marked after the send" : "not marked since the send"}); the app's looks: ${
+          [...logSince(lookFrom).matchAll(/seen look \S+: .*/g)]
+            .map((m) => m[0])
+            .join(" / ") || "none"
+        }`
       );
     } else {
       check(
@@ -1218,8 +1308,13 @@ rm -f "$F"`).catch((error: unknown) => `sample failed: ${String(error)}`);
 
   // ── 8. A delegate's finished turn pushes nothing ───────────────────────
   {
+    // The bare origin's HEAD names `main`, the branch pushed to it: a
+    // workspace is cut from the branch origin names as its HEAD (agent
+    // clone.ts `remoteDefault`, `ls-remote --symref origin HEAD`). Made
+    // without `-b`, its HEAD named git's default `master`, which was never
+    // pushed: "origin does not name a default branch for its HEAD".
     const origin = join(fleet.workdir, "..", "probe-origin.git");
-    await Bun.$`git -C ${fleet.workdir} init -q && git -C ${fleet.workdir} -c user.name=probe -c user.email=probe@localhost commit -q --allow-empty -m seed && git init -q --bare ${origin} && git -C ${fleet.workdir} remote add origin ${origin} && git -C ${fleet.workdir} push -q origin HEAD:main`.quiet();
+    await Bun.$`git -C ${fleet.workdir} init -q -b main && git -C ${fleet.workdir} -c user.name=probe -c user.email=probe@localhost commit -q --allow-empty -m seed && git init -q --bare -b main ${origin} && git -C ${fleet.workdir} remote add origin ${origin} && git -C ${fleet.workdir} push -q origin HEAD:main`.quiet();
     const made = await fetch(`${fleet.base}/api/work-items`, {
       method: "POST",
       headers: { "content-type": "application/json" },
