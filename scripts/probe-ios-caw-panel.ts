@@ -20,8 +20,8 @@
  *     the hub serves as a moved-login notice;
  *  3. forwards the scratch hub to the Mac's loopback (`ssh -R`);
  *  4. on an iPhone and then an iPad simulator, launches the app with
- *     `-paywall-env sandbox` on "Panel probe" and drives it with idb (its
- *     guest reader reads the screen, its synthesized touches tap): taps
+ *     `-paywall-env sandbox` on "Panel probe" and drives it with Maestro (its
+ *     XCTest runner in the simulator reads the screen and taps): taps
  *     Caw, reads the panel and how it hangs from his glass (0pt at the join,
  *     the trailing flank straight down, the leading foot's flare in the
  *     panel's surface), captures it light and dark (and on the phone records
@@ -35,9 +35,10 @@
  *     folder it names, and exits 0 only if every check passed.
  *
  * It stops only what it started: the fleet's processes by PID, the tunnel,
- * the idb companion of each simulator it created, and those simulators
+ * the Maestro runner of each simulator it created, and those simulators
  * (deleted at the end). `--keep` keeps the fleet's sandbox for reading. The
- * Mac needs idb (`brew install facebook/fb/idb`).
+ * Mac's Maestro (/opt/homebrew/bin/maestro) and Homebrew's openjdk do the
+ * driving; what the Maestro calls took is printed before the verdict.
  */
 import { mkdir } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
@@ -174,42 +175,10 @@ interface Frame {
   x: number;
   y: number;
 }
-interface Node {
-  frame?: Frame;
-  id?: string;
-  label?: string;
-  value?: string;
-}
-
-/** Every element of the app's accessibility tree, flattened; or with `point`, what is under that point. */
-async function tree(
-  udid: string,
-  point?: { x: number; y: number }
-): Promise<Node[]> {
-  const read = await screenRead(udid, point);
-  const nodes: Node[] = [];
-  const walk = (at: unknown) => {
-    if (Array.isArray(at)) {
-      for (const child of at) {
-        walk(child);
-      }
-      return;
-    }
-    if (!at || typeof at !== "object") {
-      return;
-    }
-    const o = at as Record<string, unknown>;
-    nodes.push({
-      id: (o.AXUniqueId ?? o.identifier) as string | undefined,
-      label: (o.AXLabel ?? o.label) as string | undefined,
-      value: (o.AXValue ?? o.value) as string | undefined,
-      frame: o.frame as Frame | undefined,
-    });
-    walk(o.children);
-  };
-  walk(read.elements);
-  return nodes;
-}
+/** The app's name, as Maestro's read of it gives it (project.yml CFBundleDisplayName). */
+const APP = "CawCo";
+/** Every element on the app's screen, flattened. */
+const tree = async (udid: string) => (await screenRead(udid, APP)).nodes;
 const said = (nodes: Node[]) =>
   nodes
     .filter((n) => n.id || n.label)
@@ -219,78 +188,164 @@ const said = (nodes: Node[]) =>
 const centre = (f: Frame) => ({ x: f.x + f.width / 2, y: f.y + f.height / 2 });
 const inside = (f: Frame, p: { x: number; y: number }) =>
   p.x >= f.x && p.x <= f.x + f.width && p.y >= f.y && p.y <= f.y + f.height;
+/** Whether `outer` takes in all of `inner`. */
+const encloses = (outer: Frame, inner: Frame) =>
+  inside(outer, inner) &&
+  inside(outer, { x: inner.x + inner.width, y: inner.y + inner.height });
 const pause = (ms: number) => Bun.sleep(ms);
 /**
- * idb on the Mac (`brew install facebook/fb/idb`), its companion named
- * outright: the client looks for it on PATH, which a non-login shell there
- * lacks. `--retry-verdict` has a failed call say whether it may be sent again.
+ * Maestro on the Mac (/opt/homebrew/bin/maestro), on the JDK Homebrew keeps
+ * for it, its analytics, update check and analysis notice off. Its iOS
+ * driver is an XCTest runner app inside the simulator that serves HTTP on the
+ * Mac's loopback. It reads the screen from the guest, XCTest's snapshot of
+ * the foreground app, which takes in subtrees other processes draw (Safari's
+ * page), and not through the host's accessibility translator, which on the
+ * iPad fails once Caw's panel opens ("No translation object").
  */
-const IDB =
-  "/opt/homebrew/bin/idb --companion-path /opt/homebrew/bin/idb_companion --retry-verdict";
+const MAESTRO =
+  'JAVA_HOME="$(/opt/homebrew/bin/brew --prefix openjdk)" MAESTRO_CLI_NO_ANALYTICS=1 MAESTRO_DISABLE_UPDATE_CHECK=true MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED=true /opt/homebrew/bin/maestro';
+/** Maestro's runner app: one per simulator, kept up by an `xcodebuild test-without-building` on the Mac. */
+const RUNNER = "dev.mobile.maestro-driver-iosUITests.xctrunner";
 /**
- * The companion's word that a failed call changed nothing and may be sent
- * again as it was (idb's RetryVerdict: `safe`, or `safe_after_reread`).
+ * Each simulator's runner port, a free one on the Mac picked before its first
+ * read. Maestro's default, 22087, is every simulator's, and the CLI takes
+ * whatever answers `GET /status` there for its runner without asking which
+ * simulator that runner drives.
  */
-const RETRY_SAFE = /^retry: safe(_after_reread)? /m;
-/** One idb command on the Mac, sent again up to 3 times, 0.5s apart (idb `ui wait`'s poll interval), while the companion says it may be. */
-async function idb(command: string): Promise<string> {
-  for (let attempt = 1; ; attempt += 1) {
-    try {
-      // biome-ignore lint/performance/noAwaitInLoops: each try follows the last one's failure
-      return await mac(`${IDB} ${command}`);
-    } catch (error) {
-      if (attempt >= 4 || !RETRY_SAFE.test(String(error))) {
-        throw error;
-      }
-      console.log(
-        `  idb may send it again (try ${attempt}): ${String(error).replace(/\s+/g, " ").slice(0, 160)}`
-      );
-      await Bun.sleep(500);
-    }
+const runnerPorts = new Map<string, number>();
+async function runnerPort(udid: string): Promise<number> {
+  const known = runnerPorts.get(udid);
+  if (known !== undefined) {
+    return known;
   }
+  const port = Number(
+    (
+      await mac(
+        `python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])'`
+      )
+    ).trim()
+  );
+  runnerPorts.set(udid, port);
+  return port;
 }
+/** Each Maestro call's wall time on the Mac, ms: a simulator's first read (it starts the runner), the reads after it, the taps. */
+const maestroMs = {
+  starts: [] as number[],
+  reads: [] as number[],
+  taps: [] as number[],
+};
 
-/** One idb read: the elements (each with its `children`) and the screen they stand on, in points. */
+/** An element of the screen: its label, id and value, and its frame in points. */
+interface Node {
+  frame?: Frame;
+  id?: string;
+  label?: string;
+  value?: string;
+}
+/** One read: the foreground app's name, its elements flattened, and the screen it fills, in points. */
 interface ScreenRead {
-  elements: unknown[];
+  app: string;
+  nodes: Node[];
   screen: { height: number; width: number };
 }
+/** A node of `maestro hierarchy`'s tree: its attributes as strings, and its children. */
+interface MaestroNode {
+  attributes?: Record<string, string>;
+  children?: MaestroNode[];
+}
+/** Maestro's `bounds`: "[left,top][right,bottom]", in points. */
+const BOUNDS = /^\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]$/;
+const frameOf = (bounds: string | undefined): Frame | undefined => {
+  const m = BOUNDS.exec(bounds ?? "");
+  if (!m) {
+    return;
+  }
+  const [x0, y0, x1, y1] = m.slice(1).map(Number);
+  return { x: x0, y: y0, width: x1 - x0, height: y1 - y0 };
+};
 /**
- * The screen as idb's guest reader reads it (`--api axbridge`), from inside
- * the simulator: the frontmost app's whole tree, or with `point` the element
- * under it. The host's reader (axe's) reaches neither a page in Safari, which
- * another process draws, nor the iPad's app once its panel opens ("No
- * translation object"), so a read the companion served any other way is refused.
+ * The screen as Maestro's runner reads it (`maestro hierarchy`): the
+ * foreground app's tree, then the status bar's. `named` is the foreground
+ * app's name, as its tree's top element gives it ("CawCo", "Safari"). A read
+ * of any other app is refused: when no app reports itself in the foreground,
+ * the runner hands back SpringBoard's tree in its place. `--no-reinstall-driver`
+ * keeps the runner up between calls; the default uninstalls it at each exit.
  */
-async function screenRead(
-  udid: string,
-  point?: { x: number; y: number }
-): Promise<ScreenRead> {
-  const what = point
-    ? `describe-point ${Math.round(point.x)} ${Math.round(point.y)}`
-    : "describe-all";
-  const read = JSON.parse(
-    await idb(`ui ${what} --udid ${udid} --api axbridge --format complete`)
-  ) as Partial<ScreenRead> & { backend?: string | null };
-  if (!(read.backend?.startsWith("axbridge") && read.elements && read.screen)) {
+async function screenRead(udid: string, named: string): Promise<ScreenRead> {
+  const first = !runnerPorts.has(udid);
+  const port = await runnerPort(udid);
+  const started = Date.now();
+  const text = await mac(
+    `${MAESTRO} --device ${udid} --driver-host-port ${port} hierarchy --no-reinstall-driver`
+  );
+  (first ? maestroMs.starts : maestroMs.reads).push(Date.now() - started);
+  const whole = JSON.parse(
+    text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1)
+  ) as MaestroNode;
+  const foreground = whole.children?.[0]?.attributes;
+  const screen = frameOf(foreground?.bounds);
+  if (foreground?.accessibilityText !== named || !screen) {
     throw new Error(
-      `idb's read was not its guest reader's (backend ${read.backend ?? "not named"}): upgrade idb on the Mac (brew upgrade facebook/fb/idb)`
+      `Maestro's read has "${foreground?.accessibilityText || "nothing named"}" in the foreground, not ${named}${screen ? "" : ", and no frame"}: with no app in the foreground its runner reads SpringBoard`
     );
   }
-  return read as ScreenRead;
+  const nodes: Node[] = [];
+  const walk = (node: MaestroNode) => {
+    const a = node.attributes ?? {};
+    nodes.push({
+      label: a.accessibilityText || undefined,
+      id: a["resource-id"] || undefined,
+      value: a.value || undefined,
+      frame: frameOf(a.bounds),
+    });
+    for (const child of node.children ?? []) {
+      walk(child);
+    }
+  };
+  walk(whole);
+  return {
+    app: named,
+    nodes,
+    screen: { width: screen.width, height: screen.height },
+  };
 }
-/** One finger's tap at a point, in points: a synthesized touch. */
-const tap = (udid: string, p: { x: number; y: number }) =>
-  idb(`ui tap ${Math.round(p.x)} ${Math.round(p.y)} --api hid --udid ${udid}`);
 /**
- * The companion idb starts for `udid` (`idb_companion --udid <udid>
- * --grpc-domain-sock …`), as `pgrep -f` matches it: the bracket keeps it off
- * the shell running the match, whose own command line holds the pattern.
+ * One finger's tap at a point, in points: the runner's own touch, `POST
+ * /touch`, the call every `tapOn` of Maestro's ends in, sent to it straight.
+ * A tap through `maestro test` first starts a JVM, lists the devices and reads
+ * the whole tree, seconds in all, so nothing could say when the finger came
+ * down; this one lands as it is sent. The runner is the one the simulator's
+ * first read started.
  */
-const companionOf = (udid: string) => `[i]db_companion.* --udid ${udid} `;
-/** That companion, stopped. */
-const stopCompanion = (udid: string) =>
-  mac(`pkill -f "${companionOf(udid)}" || true`);
+async function tap(udid: string, p: { x: number; y: number }) {
+  const port = runnerPorts.get(udid);
+  if (port === undefined) {
+    throw new Error(`no Maestro runner for ${udid}: read its screen first`);
+  }
+  const started = Date.now();
+  await mac(
+    `curl -sS --fail-with-body --max-time 30 -H 'Content-Type: application/json' -d '{"x":${Math.round(p.x)},"y":${Math.round(p.y)}}' http://127.0.0.1:${port}/touch`
+  );
+  maestroMs.taps.push(Date.now() - started);
+}
+/**
+ * The simulator's runner, stopped: its app, and the `xcodebuild` keeping it
+ * up, as `pkill -f` matches it (the bracket keeps the pattern off the shell
+ * running the match, whose own command line holds it).
+ */
+const stopRunner = (udid: string) =>
+  mac(`xcrun simctl terminate ${udid} ${RUNNER} >/dev/null 2>&1 || true
+pkill -f "[x]codebuild test-without-building .*-destination id=${udid} " || true`);
+/** What the Maestro calls took, for the summary. */
+function maestroTimes(): string {
+  const ms = (values: number[]) => {
+    const sorted = [...values].sort((a, b) => a - b);
+    return values.length === 0
+      ? "none"
+      : `median ${sorted[Math.floor(sorted.length / 2)]} ms, longest ${sorted.at(-1)} ms`;
+  };
+  return `maestro: ${maestroMs.starts.length} first reads, which start the runner (${ms(maestroMs.starts)}); ${maestroMs.reads.length} reads after (${ms(maestroMs.reads)}); ${maestroMs.taps.length} taps (${ms(maestroMs.taps)})`;
+}
 
 /** The moved login's row (MovedLogins.svelte): the account's name is its entry, its ✕ "Dismiss moved logins". */
 const NOTICE = "Probe";
@@ -435,7 +490,7 @@ xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-e
     await restChecks(udid);
   }
   // The screen before the panel opens: what stands where the glass will flare.
-  const closed = await pixels(udid, (await screenRead(udid)).screen.width);
+  const closed = await pixels(udid, (await screenRead(udid, APP)).screen.width);
   await tap(udid, centre(head.frame));
   await pause(1200);
   nodes = await tree(udid);
@@ -834,14 +889,21 @@ async function tapThrough(kind: Kind, udid: string, box: Frame) {
       }))
       .find((point) => !inside(box, point)) ?? centre(row);
   const covered = inside(box, at);
-  const under = await tree(udid, at);
+  // What else stands at that point: every element there but the row, what
+  // holds it (its frame takes in the row's) and what it holds.
+  const over = nodes.filter(
+    (n) =>
+      n.frame &&
+      inside(n.frame, at) &&
+      !encloses(n.frame, row) &&
+      !encloses(row, n.frame)
+  );
   check(
     `${kind}: nothing covers the transcript row outside the panel`,
-    !covered &&
-      under.some((n) => n.value === "Collapsed" || n.value === "Expanded"),
+    !covered && over.length === 0,
     covered
       ? `no point of the row ${JSON.stringify(row)} is outside the panel ${JSON.stringify(box)}`
-      : `at ${JSON.stringify(at)} on the row: ${said(under)}`
+      : `at ${JSON.stringify(at)} on the row "${target.label ?? ""}": ${over.length === 0 ? "the row alone" : `also ${said(over)}`}`
   );
   const before = target.value;
   await tap(udid, at);
@@ -1130,8 +1192,8 @@ try {
 } finally {
   for (const udid of sims) {
     // biome-ignore lint/performance/noAwaitInLoops: one ssh session at a time, each simulator torn down in turn
-    await stopCompanion(udid).catch((error) =>
-      console.log(`  idb companion cleanup: ${error}`)
+    await stopRunner(udid).catch((error) =>
+      console.log(`  Maestro runner cleanup: ${error}`)
     );
     await mac(`xcrun simctl terminate ${udid} dev.cawco.app >/dev/null 2>&1 || true
 xcrun simctl shutdown ${udid} >/dev/null 2>&1 || true
@@ -1144,6 +1206,7 @@ xcrun simctl delete ${udid}`).catch((error) =>
   await fleet.clean(keep || failures > 0);
 }
 
+console.log(maestroTimes());
 console.log(`Captures: ${out}`);
 console.log(failures === 0 ? "ALL PASS" : `${failures} FAILED`);
 process.exit(failures === 0 ? 0 : 1);
