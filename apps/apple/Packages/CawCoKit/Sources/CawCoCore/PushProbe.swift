@@ -51,8 +51,8 @@ public enum PushProbe {
     /// answer has come 45 s after it, so a prompt that never showed tells
     /// "already decided" from "asked and not shown".
     private static func register() async {
-        let deadline = ContinuousClock.now + .seconds(30)
-        while !inFront, ContinuousClock.now < deadline {
+        let frontBy = ContinuousClock.now + .seconds(30)
+        while !inFront, ContinuousClock.now < frontBy {
             try? await Task.sleep(for: .milliseconds(100))
         }
         let before = await NotificationCentre.authorization()
