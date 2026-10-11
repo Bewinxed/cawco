@@ -128,10 +128,16 @@
     };
   };
   /** The joined run's head: over its columns, on the track above its row. */
-  const joinHeadOf = (block: WallBlock, join: number) => ({
-    column: `${(join % across) + 1} / -1`,
-    row: `${1 + headTracks(block) + rowOf(join) * 4}`,
-  });
+  const joinHeadOf = (block: WallBlock, join: number) => {
+    const first = (join % across) + 1;
+    const track = 1 + headTracks(block) + rowOf(join) * 4;
+    return {
+      column: `${first} / -1`,
+      row: `${track}`,
+      /** The hairline: in the gap before its first column, from the head down. */
+      seam: { column: `${first}`, row: `${track} / span 5` },
+    };
+  };
   /** A cell: its account, and whether an organization's head stands over it. */
   interface WallCell {
     grouped: boolean;
@@ -604,6 +610,7 @@
       <span class="cell-chip">
         <SessionsChip
           account={ring.name}
+          name={`${name.local}${name.domain}`}
           onopen={putAway}
           sessions={ring.sessions}
         />
@@ -703,7 +710,15 @@
                 {#if i === block.join}
                   {@const at = joinHeadOf(block, i)}
                   <!-- The ungrouped run along the group's last row says why
-                       it stands there, over its own columns. -->
+                       it stands there, over its own columns, a hairline from
+                       its head down setting it apart from the group's. -->
+                  <span
+                    aria-hidden="true"
+                    class="seam"
+                    data-seam
+                    style:grid-column={at.seam.column}
+                    style:grid-row={at.seam.row}
+                  ></span>
                   <h4
                     class="org"
                     data-flyover-edge
@@ -1102,8 +1117,9 @@
     padding: 0;
   }
   /* An organization's name over its accounts: meta, no chrome of its own. */
+  /* A head starts at its first cell's column. */
   .org {
-    padding: 0 var(--space-1) 2px;
+    padding: 0 0 2px;
     font: var(--type-meta);
     color: var(--ink-muted);
   }
@@ -1168,15 +1184,15 @@
   .cell-d.lowered .dial {
     margin-block-start: var(--space-3);
   }
-  /* The first ungrouped account going on along an organization's last row:
-     a hairline, the cell's height, in the column gap before it. */
-  .cell-d.joined::before {
-    position: absolute;
-    inset-block: 0;
-    inset-inline-start: calc(var(--space-1) / -2 - 0.5px);
+  /* The ungrouped run along an organization's last row: a hairline in the
+     column gap before its first cell, from its "Other" head to the foot of
+     its row, so the head reads as its own and the group's cells stay the
+     group's. */
+  .seam {
+    justify-self: start;
     inline-size: 1px;
+    margin-inline-start: calc(var(--space-1) / -2 - 0.5px);
     background: var(--border-control);
-    content: "";
   }
   /* Its touch area reaches the full 44px up and down, and space-5 / 2 to
      either side: a count in the last column stays inside the wall's

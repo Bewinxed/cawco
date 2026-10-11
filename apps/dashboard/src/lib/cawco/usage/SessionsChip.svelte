@@ -16,11 +16,13 @@
    * `[data-flyover-anchor]`, a cell of the usage popover's dial wall), as
    * wide as the row: where the cell stands in a wall (`[data-flyover-span]`)
    * the row is the wall's whole width at the cell's height, so a session's
-   * title and project read whole. It is as tall as its sessions, unless its
-   * foot would cut through a line of words under it (a cell's name, time or
-   * week, below its dial; a head, `[data-flyover-edge]`, in
-   * `[data-flyover-scope]`): then it reaches that cell's or line's foot, so
-   * it covers whole rows of words or none. Opened by
+   * title and project read whole. It is a card: a head line (the account's
+   * name as its cell shows it, then how many sessions), its sessions under
+   * it, top-aligned. It covers whole cells or none: where its foot would
+   * fall inside a cell or a head line under it (`[data-flyover-anchor]`,
+   * `[data-flyover-edge]`, in `[data-flyover-scope]`), it reaches that
+   * cell's or line's foot, and the band left under its sessions is the
+   * card's own. Opened by
    * a pointer (a rest or a press) it leaves focus where it
    * is: no ring lands on its first session. Opened from the keyboard, focus
    * goes to the first session and the house ring shows.
@@ -38,11 +40,14 @@
   let {
     sessions,
     account,
+    name = account,
     onopen,
   }: {
     sessions: InstanceRow[];
     /** The account's name, for the chip's label. */
     account: string;
+    /** Its name as its cell shows it, for the card's head. */
+    name?: string;
     /** A session was opened from the list. */
     onopen?: () => void;
   } = $props();
@@ -85,15 +90,15 @@
     }
   };
 
-  /** The list, and the height it reaches to so it never cuts words (0: its own). */
-  let list = $state<HTMLElement | null>(null);
+  /** The card's content, and the height it reaches to so it covers whole cells (0: its own). */
+  let card = $state<HTMLElement | null>(null);
   let reach = $state(0);
   $effect(() => {
-    if (!(open && list && row)) {
+    if (!(open && card && row)) {
       reach = 0;
       return;
     }
-    const items = list;
+    const content = card;
     const cell = row;
     const scope = cell.closest<HTMLElement>("[data-flyover-scope]");
     if (!scope) {
@@ -103,22 +108,17 @@
       // It stands a pitch (4px) under the row, with a 1px edge each side.
       const top = cell.getBoundingClientRect().bottom + 4;
       const zones = [
-        ...[...scope.querySelectorAll<HTMLElement>("[data-flyover-anchor]")]
-          .filter((one) => one !== cell)
-          .map((one) => ({
-            top: (
-              one.querySelector("[data-name]") ?? one
-            ).getBoundingClientRect().top,
-            bottom: one.getBoundingClientRect().bottom,
-          })),
-        ...[...scope.querySelectorAll<HTMLElement>("[data-flyover-edge]")].map(
-          (one) => {
-            const at = one.getBoundingClientRect();
-            return { top: at.top, bottom: at.bottom };
-          }
+        ...scope.querySelectorAll<HTMLElement>(
+          "[data-flyover-anchor], [data-flyover-edge]"
         ),
-      ];
-      let end = top + items.offsetHeight + 2;
+      ]
+        .filter((one) => one !== cell)
+        .map((one) => {
+          const at = one.getBoundingClientRect();
+          return { top: at.top, bottom: at.bottom };
+        });
+      const own = content.offsetHeight + 2;
+      let end = top + own;
       for (let moved = true; moved; ) {
         moved = false;
         for (const zone of zones) {
@@ -128,7 +128,7 @@
           }
         }
       }
-      reach = end - top > items.offsetHeight + 2.5 ? end - top : 0;
+      reach = end - top > own + 0.5 ? end - top : 0;
     });
     return () => cancelAnimationFrame(frame);
   });
@@ -206,22 +206,28 @@
     style={reach > 0 ? `min-block-size: ${reach}px` : undefined}
     trapFocus={!byPointer}
   >
-    <ul aria-label={label} class="list" bind:this={list}>
-      {#each sessions as session (session.id)}
-        <li>
-          <a
-            class="item"
-            data-session-link={session.id}
-            href={conversationHref(session.id, cawco.instanceIndex)}
-            onclick={opened}
-          >
-            <SessionStatus compact sessionId={session.id} />
-            <span class="title">{instanceTitle(session)}</span>
-            <span class="project">{projectOfRow(session)}</span>
-          </a>
-        </li>
-      {/each}
-    </ul>
+    <div class="card" bind:this={card}>
+      <p class="head" data-flyover-head>
+        {name}
+        · {count === 1 ? "1 session" : `${count} sessions`}
+      </p>
+      <ul aria-label={label} class="list">
+        {#each sessions as session (session.id)}
+          <li>
+            <a
+              class="item"
+              data-session-link={session.id}
+              href={conversationHref(session.id, cawco.instanceIndex)}
+              onclick={opened}
+            >
+              <SessionStatus compact sessionId={session.id} />
+              <span class="title">{instanceTitle(session)}</span>
+              <span class="project">{projectOfRow(session)}</span>
+            </a>
+          </li>
+        {/each}
+      </ul>
+    </div>
   </Popover.Content>
 </Popover.Root>
 
@@ -243,6 +249,18 @@
      night, made them read as disabled. */
   :global(.kit-pop.sessions-flyover) {
     box-shadow: var(--shadow-raised);
+  }
+  /* The card: its head, then its sessions, top-aligned; any band its foot
+     reaches past them stays under them. */
+  .card {
+    display: flex;
+    flex-direction: column;
+  }
+  .head {
+    padding: var(--space-2) var(--space-3) var(--space-1);
+    font: var(--type-meta);
+    font-weight: var(--weight-strong);
+    color: var(--ink-strong);
   }
   .list {
     display: flex;
