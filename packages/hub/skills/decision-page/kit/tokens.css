@@ -55,7 +55,7 @@
     --account-rose: var(--mark-8);
     --account-violet: var(--mark-7);
     /* What an account's week rim is mixed toward from its hue (account-week-mix, in oklch, so the hue holds): black by day, a deeper shade on paper; white at night, a lighter one. The disc keeps the hue itself, so the 5-hour and the week read apart at a glance. */
-    --account-week-toward: light-dark(oklch(0% 0 0), oklch(100% 0 0));
+    --account-week-toward: light-dark(oklch(0% 0 none), oklch(100% 0 none));
     /* The track of a ring's spent window, at its limit, on the meter-wash-over cell: 1.6:1 against that wash by day, 2:1 at night, so the empty dial still reads as a dial. */
     --ring-track-spent: light-dark(var(--neutral-7), var(--neutral-8));
     /* The part of an account's week rim that sits under its reserve, once the reserve is reached: a mid neutral that reads on paper and at night. */

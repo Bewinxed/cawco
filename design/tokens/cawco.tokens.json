@@ -452,10 +452,10 @@
     "account-week-toward": {
       "$type": "color",
       "$description": "What an account's week rim is mixed toward from its hue (account-week-mix, in oklch, so the hue holds): black by day, a deeper shade on paper; white at night, a lighter one. The disc keeps the hue itself, so the 5-hour and the week read apart at a glance.",
-      "$value": "oklch(0% 0 0)",
+      "$value": "oklch(0% 0 none)",
       "$extensions": {
         "dev.cawco": {
-          "dark": "oklch(100% 0 0)"
+          "dark": "oklch(100% 0 none)"
         }
       }
     },

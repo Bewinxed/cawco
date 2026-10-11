@@ -158,6 +158,12 @@ export interface ClaudeRings {
   /** The account that is back first after nothing can carry you. */
   back: RingAccount | null;
   backAt: number | null;
+  /**
+   * The fleet's burn, in percent of a 5-hour window an hour: the summed
+   * 5-hour pace of every account, which the relay moves onto whoever
+   * carries (hub forecast.ts `carrySequence`).
+   */
+  burn: number;
   /** Who carries your new sessions now; null: nothing can. */
   carry: RingAccount | null;
   /** Where the next delegate goes, and why in a few words. */
@@ -439,6 +445,12 @@ export function claudeRings(input: {
     accounts: order
       .map((id) => byId.get(id))
       .filter((r): r is RingAccount => Boolean(r)),
+    burn: forecast.accounts.reduce(
+      (sum, one) =>
+        sum +
+        (one.windows.find((window) => window.kind === "session")?.pace ?? 0),
+      0
+    ),
     carry,
     next,
     nextAt: next ? (spans[1]?.from ?? null) : null,
@@ -578,9 +590,10 @@ export function caption(c: ClaudeRings, now: number): Part[] {
  * ("back in 4h 50m"); a reading out of date puts a tilde before it
  * ("~1h 20m left"), and the dial's tooltip says why. Who takes over when is
  * the relay bar's to say. A Claude account (`c`) lasts until its binding
- * window runs out while it carries you or holds its reserve, else until the
- * relay stops handing it work; the Go plan (no `c`) until one of its
- * windows runs out.
+ * window runs out while it carries you or holds its reserve; one in the
+ * relay until the relay stops handing it work; an idle one as long as it
+ * would carry you if it took over now (`takeover`). The Go plan (no `c`)
+ * lasts until one of its windows runs out.
  */
 export function cellTime(
   r: RingAccount,
@@ -597,14 +610,46 @@ export function cellTime(
     out = r.bindOut;
   } else if (r.state === "reserve" || r.id === c.carry?.id) {
     out = r.bindOut ?? r.carryUntil;
-  } else if (r.neverBackup) {
-    out = null;
+  } else if (r.carryUntil === null) {
+    out = takeover(r, c.burn, now);
   }
   const time =
     out !== null && out - now < HORIZON_MS
       ? `${fmt(out - now)} left`
       : "over 5h";
   return guess(r.state === "stale", time);
+}
+
+/**
+ * When an idle account would run out if it took over now, as the relay's
+ * walk spends a carrier (hub forecast.ts `carrySequence`): its 5-hour use
+ * climbs at the fleet's `burn` (percent an hour), a window that resets
+ * starts again from nothing, and one not open has no reset ahead. Null when
+ * it lasts past the 5-hour horizon, or nothing burns.
+ */
+export function takeover(
+  r: RingAccount,
+  burn: number,
+  now: number
+): number | null {
+  if (burn <= 0 || !r.w5) {
+    return null;
+  }
+  const horizon = now + HORIZON_MS;
+  let use = 100 - r.w5.left;
+  let reset =
+    r.w5.resetsAt !== null && r.w5.resetsAt > now ? r.w5.resetsAt : null;
+  let t = now;
+  while (t < horizon) {
+    const out = t + ((100 - use) / burn) * HOUR_MS;
+    if (reset === null || out <= reset) {
+      return out < horizon ? out : null;
+    }
+    use = 0;
+    t = reset;
+    reset += HORIZON_MS;
+  }
+  return null;
 }
 
 /** One group of the accounts: an organization's accounts, or (null) the rest. */
@@ -648,10 +693,17 @@ export const staleTip = (r: RingAccount, now: number): string =>
     : `Last reading ${fmt(now - r.seenAt)} ago, so this is an estimate.`;
 
 /** The routing's reason, said of the account it chose. */
+/**
+ * The routing's reason as placement applies it (hub placement.ts), said so
+ * the dial wall cannot contradict it. Spread takes the lowest binding use,
+ * the higher of an account's 5-hour and weekly use, among the accounts the
+ * delegates may run on (benched and past-reserve ones left out).
+ */
 const DELEGATE_CLAUSE: Record<string, string> = {
-  "most room left": "it has the most room left",
-  "first in your order": "it’s first in your order",
-  "resets soonest": "it resets soonest",
+  "most room left":
+    "of every account they may use, its fuller window has the most left",
+  "first in your order": "it’s the first in your order with room",
+  "resets soonest": "its 5-hour window resets soonest",
   pinned: "it’s pinned",
 };
 

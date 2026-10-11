@@ -238,9 +238,18 @@
       { accountId: null, from: now + 270 * MIN, to: now + 290 * MIN },
       { accountId: "acc-4", from: now + 290 * MIN, to: now + 9 * HOUR },
     ];
+    // Delegates go where the hub's Spread puts them (placement.ts): the
+    // lowest binding use, the higher of the 5-hour and weekly use, ties to
+    // the account order.
+    const binding = (seed: Seed) => Math.max(seed.five, seed.week);
+    const spreadTo = seeds.reduce(
+      (best, seed, i, all) =>
+        binding(seed) < binding(all[best] ?? seed) ? i : best,
+      0
+    );
     const forecast: ProviderForecast = {
       accounts: forecasts,
-      delegates: [{ accountId: "acc-1", from: now, to: now + 170 * MIN }],
+      delegates: [{ accountId: `acc-${spreadTo}`, from: now, to: now + HOUR }],
       provider: "anthropic",
       yours,
     };

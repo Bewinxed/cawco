@@ -37,6 +37,7 @@
   import { cawco } from "./client.svelte";
   import { dur, motionOk } from "./motion/curves.svelte";
   import { morph } from "./motion/morph.svelte";
+  import { reflow } from "./motion/rows.svelte";
   import OpenCodeLogo from "./OpenCodeLogo.svelte";
   import { claudeGap } from "./usage";
   import Figure from "./usage/Figure.svelte";
@@ -106,28 +107,43 @@
     ring: RingAccount;
   }
   /**
-   * A row of cells; from `join` on they are ungrouped accounts that went on
-   * along an organization's last row, after a hairline.
+   * An organization's cells under its name, or (null) the ungrouped ones;
+   * from `join` on, ungrouped accounts that went on along the
+   * organization's last row (null: none did).
    */
-  interface WallRow {
-    cells: WallCell[];
-    join: number;
-  }
-  /** An organization's rows under its name, or (null) the ungrouped ones. */
   interface WallBlock {
+    cells: WallCell[];
+    join: number | null;
     org: string | null;
-    rows: WallRow[];
   }
-  const rowsOf = (cells: WallCell[]): WallRow[] =>
-    Array.from({ length: Math.ceil(cells.length / ACROSS) }, (_, i) => {
-      const slice = cells.slice(i * ACROSS, (i + 1) * ACROSS);
-      return { cells: slice, join: slice.length };
+  /**
+   * What is left of the window that binds an account, the one that runs out
+   * first: what the wall ranks by.
+   */
+  const roomOf = (ring: RingAccount): number =>
+    (ring.bind === "week" ? ring.week?.left : ring.w5?.left) ?? 0;
+  /**
+   * Most room first; accounts at their limit last, the one back soonest
+   * first. Ties keep the carrying order. Room moves only with a reading, so
+   * the minute moving on never reorders.
+   */
+  const ranked = (accounts: RingAccount[]): RingAccount[] =>
+    [...accounts].sort((a, b) => {
+      const limitA = a.state === "limit";
+      const limitB = b.state === "limit";
+      if (limitA !== limitB) {
+        return limitA ? 1 : -1;
+      }
+      return limitA
+        ? (a.backAt ?? Number.POSITIVE_INFINITY) -
+            (b.backAt ?? Number.POSITIVE_INFINITY)
+        : roomOf(b) - roomOf(a);
     });
   /**
-   * Claude's accounts as blocks of rows, four across. Where the last
-   * organization's last row leaves two or more places, the ungrouped
-   * accounts go on along it, one place short of full so the hairline
-   * between them has room; the rest stand in rows of their own after the
+   * Claude's accounts as blocks, four across, each ranked by room. Where
+   * the last organization's last row leaves two or more places, the
+   * ungrouped accounts go on along it, on the same columns, after a
+   * hairline in the gap; the rest stand in a block of their own after the
    * group gap.
    */
   const wall = $derived.by((): WallBlock[] => {
@@ -136,30 +152,29 @@
     }
     const blocks: WallBlock[] = [];
     for (const group of orgGroups(claude.accounts)) {
-      const cells = group.accounts.map((ring) => ({
+      const cells = ranked(group.accounts).map((ring) => ({
         ring,
         grouped: group.org !== null,
       }));
-      const last = blocks.at(-1)?.rows.at(-1);
-      if (group.org === null && last && ACROSS - last.cells.length >= 2) {
+      const last = blocks.at(-1);
+      const free = last ? (ACROSS - (last.cells.length % ACROSS)) % ACROSS : 0;
+      if (group.org === null && last && free >= 2) {
         last.join = last.cells.length;
-        last.cells.push(...cells.splice(0, ACROSS - last.cells.length - 1));
+        last.cells.push(...cells.splice(0, free));
       }
       if (cells.length > 0) {
-        blocks.push({ org: group.org, rows: rowsOf(cells) });
+        blocks.push({ org: group.org, cells, join: null });
       }
     }
     return blocks;
   });
-  /**
-   * Each row's columns: four cells' widths, and the hairline's own width
-   * where one joins (max-content: an auto track would take the row's spare
-   * room and push the joined cells to its end).
-   */
-  const columnsOf = (row: WallRow): string =>
-    row.join < row.cells.length
-      ? `repeat(${row.join}, var(--cell)) max-content repeat(${row.cells.length - row.join}, var(--cell))`
-      : `repeat(${ACROSS}, var(--cell))`;
+  /** Whether the row cell `i` stands in holds a session count. */
+  const countRow = (block: WallBlock, i: number): boolean => {
+    const start = i - (i % ACROSS);
+    return block.cells
+      .slice(start, start + ACROSS)
+      .some((one) => one.ring.sessions.length > 0);
+  };
 
   /** An email domain's top level ("gmail.com" → "gmail"). */
   const TOP_DOMAIN = /\.[^.]+$/;
@@ -219,9 +234,7 @@
       return [];
     }
     const grouped = wall.some((block) =>
-      block.rows.some((row) =>
-        row.cells.some((cell) => cell.ring.id === to.id && cell.grouped)
-      )
+      block.cells.some((cell) => cell.ring.id === to.id && cell.grouped)
     );
     const name = cellName(to, grouped);
     return delegateLine(claude, `${name.local}${name.domain}`);
@@ -412,19 +425,24 @@
 {#snippet cell(
   ring: RingAccount,
   grouped: boolean,
-  time: string
+  time: string,
+  lowered: boolean,
+  joined: boolean
 )}
   <!-- A cell of the dial wall: the sessions it runs at its top corner, off
        the dial; the double dial at 56px (its disc the 5-hour window, its
        rim the week); its name on two lines; how long it lasts; its week.
-       Its four parts are the row's four tracks (subgrid), so every time and
-       every week stand on one line across the row. -->
+       Its four parts are its row's four tracks (subgrid), so every time and
+       every week stand on one line across the row. A re-ranking slides it
+       to its new place (motion/rows). -->
   {@const name = cellName(ring, grouped)}
   {@const week = weekText(ring)}
   <div
-    class="cell-d"
+    class={["cell-d", joined && "joined", lowered && "lowered"]}
     data-account={ring.id}
+    data-flip
     data-flyover-anchor
+    data-room={roomOf(ring)}
     class:carrying={ring.id === claude?.carry?.id}
     class:limit={ring.state === "limit"}
   >
@@ -469,26 +487,6 @@
   </div>
 {/snippet}
 
-{#snippet wallRows(
-  rows: WallRow[]
-)}
-  {#each rows as row, r (r)}
-    <!-- A row with a session count holds the chip's band over its dials. -->
-    <div
-      class="wall-row"
-      style:grid-template-columns={columnsOf(row)}
-      class:chips={row.cells.some((one) => one.ring.sessions.length > 0)}
-    >
-      {#each row.cells as one, i (one.ring.id)}
-        {#if i === row.join}
-          <span aria-hidden="true" class="seam" data-seam></span>
-        {/if}
-        {@render cell(one.ring, one.grouped, cellTime(one.ring, claude, now))}
-      {/each}
-    </div>
-  {/each}
-{/snippet}
-
 {#snippet limits(
   sheet: boolean
 )}
@@ -517,10 +515,15 @@
       </header>
     {/if}
     <!-- A sessions list hangs from its cell's row, as wide as the wall
-         (SessionsChip). -->
-    <div class={["accounts", sheet && "kit-sheet-scroll"]} data-accounts>
+         (SessionsChip). The house edge fade shows where more is above or
+         below; a re-ranking reflows the cells. -->
+    <div
+      class={["accounts kit-edge-fade-block", sheet && "kit-sheet-scroll"]}
+      data-accounts
+      {@attach reflow()}
+    >
       {#if claude}
-        <div class="group orgs">
+        <div class="group orgs" data-burn={claude.burn}>
           <!-- An organization of more than two accounts is a group under its
                name; the rest follow, ungrouped, along its last row after a
                hairline when two places are left there, else after the same
@@ -534,7 +537,15 @@
               {#if block.org}
                 <h4 class="org" data-org-head>{block.org}</h4>
               {/if}
-              {@render wallRows(block.rows)}
+              {#each block.cells as one, i (one.ring.id)}
+                {@render cell(
+                  one.ring,
+                  one.grouped,
+                  cellTime(one.ring, claude, now),
+                  countRow(block, i),
+                  i === block.join
+                )}
+              {/each}
             </div>
           {/each}
           {#if delegates.length > 0}
@@ -553,9 +564,13 @@
             opencode Go
           </h3>
           <div class="wall" data-flyover-span>
-            <div class="wall-row" class:chips={openCode.sessions.length > 0}>
-              {@render cell(openCode, true, cellTime(openCode, null, now))}
-            </div>
+            {@render cell(
+              openCode,
+              true,
+              cellTime(openCode, null, now),
+              openCode.sessions.length > 0,
+              false
+            )}
           </div>
         </section>
       {/if}
@@ -906,41 +921,28 @@
     background: transparent;
     cursor: help;
   }
-  /* The dial wall: an organization's name, then its rows of four, one
-     pitch apart. */
+  /* The dial wall: an organization's name across it, then its cells on
+     four columns, one pitch apart; every row of it, a joined one too, on
+     the same columns. */
   .wall {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-  }
-  /* A row: four cells' widths (a quarter of the wall less the gaps, so a
-     short row keeps the same pitch), and the four tracks every cell's parts
-     stand on: the dial, the name, the time, the week. */
-  .wall-row {
-    --cell: calc((100% - 3 * var(--space-1)) / 4);
     display: grid;
-    grid-template-columns: repeat(4, var(--cell));
-    grid-template-rows: repeat(4, auto);
-    column-gap: var(--space-1);
-    row-gap: 2px;
-  }
-  /* Ungrouped accounts going on along an organization's last row: a
-     hairline the wall's height between, a wider gap either side. */
-  .seam {
-    grid-row: 1 / -1;
-    inline-size: 1px;
-    margin-inline: var(--space-2);
-    background: var(--border-hairline);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--space-1);
+
+    & > .org {
+      grid-column: 1 / -1;
+    }
   }
   /* A cell: the dial over its name, its time and its week, centred, in
-     meta, on its row's tracks. The carrier wears a hairline ring; an
-     account at its limit the limit wash, which the dial's reserve notch
-     takes as its ground. */
+     meta, on four tracks of its row (subgrid). The carrier wears a hairline
+     ring; an account at its limit the limit wash, which the dial's reserve
+     notch takes as its ground. */
   .cell-d {
     position: relative;
     display: grid;
-    grid-row: 1 / -1;
+    grid-row: span 4;
     grid-template-rows: subgrid;
+    row-gap: 2px;
     justify-items: center;
     align-items: start;
     min-inline-size: 0;
@@ -963,8 +965,18 @@
      dial's top-right, 4px or more off the week rim: in a row that has one
      the dials stand space-5 lower, what a two-digit count at a 63px cell
      (320px wide) needs. */
-  .wall-row.chips .dial {
+  .cell-d.lowered .dial {
     margin-block-start: var(--space-5);
+  }
+  /* The first ungrouped account going on along an organization's last row:
+     a hairline, the cell's height, in the column gap before it. */
+  .cell-d.joined::before {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: calc(var(--space-1) / -2 - 0.5px);
+    inline-size: 1px;
+    background: var(--border-control);
+    content: "";
   }
   /* Its touch area reaches the full 44px up and down, and space-5 / 2 to
      either side: a count in the last column stays inside the wall's
