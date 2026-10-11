@@ -2,8 +2,9 @@
   /**
    * The usage popover (the relay) on a bench: the real strip and its real
    * popover (the rail's, on the desk) or sheet (on the phone), fed a staged
-   * forecast with no hub. `?n=` 6 | 20 the number of Claude accounts, `?view=`
-   * desktop | phone where it opens; on a desk the phone view is this page at
+   * forecast with no hub. `?theme=` light | dark, `?n=` 6 | 20 the number
+   * of Claude accounts, `?view=` desktop | phone where it opens; on a desk
+   * the phone view is this page at
    * 390×844 in a frame. Six: five accounts in Petralab (a group) and one in
    * Omar Al Matar (ungrouped); twenty adds Northwind's four (a group) and
    * Acme's two (ungrouped). The picker stops its pointerdowns so a press on
@@ -24,6 +25,7 @@
   import { usage } from "#lib/cawco/usage/forecast.svelte.js";
   import { claudeRings, openCodeRing } from "#lib/cawco/usage/rings.js";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { theme } from "#lib/theme.svelte.js";
   import { page } from "$app/state";
 
   const MIN = 60_000;
@@ -90,7 +92,7 @@
     },
     {
       email: "marketing@petralab.ai",
-      five: 48,
+      five: 8,
       fiveResets: 4.1 * HOUR,
       week: 63,
       weekResets: 30 * HOUR,
@@ -163,7 +165,23 @@
       title: "Fix tray chip overflow",
       cwd: "/home/omar/anbar",
     },
+    // An account that carries nothing new still runs a session.
+    {
+      id: "bench-notes",
+      accountId: "acc-5",
+      title: "Draft release notes",
+      cwd: "/home/omar/site",
+    },
   ];
+  /** A session on opencode Go, so its row carries a count too. */
+  const OPENCODE_SESSION = {
+    id: "bench-go",
+    harness: "opencode",
+    status: "running",
+    title: "Port the bench to Go",
+    cwd: "/home/omar/cockpit",
+    machineId: "nixbox",
+  } as unknown as InstanceRow;
 
   function stageView(n: number) {
     const now = Date.now();
@@ -288,7 +306,7 @@
       claude: { ...rings, accounts: shown },
       openCode: openCodeRing(
         { fetchedAt: now, windows: go },
-        [],
+        [OPENCODE_SESSION],
         now,
         shown.map((ring) => ring.hue)
       ),
@@ -297,6 +315,13 @@
 
   $effect(() => {
     stageView(count);
+  });
+
+  const scheme = $derived(
+    page.url.searchParams.get("theme") === "dark" ? "dark" : "light"
+  );
+  $effect(() => {
+    theme.set(scheme);
   });
 
   const hrefOf = (key: string, value: string) => {
@@ -348,6 +373,14 @@
 
   const SWITCHES = [
     {
+      key: "theme",
+      label: "Theme",
+      options: [
+        { value: "light", label: "Light" },
+        { value: "dark", label: "Dark" },
+      ],
+    },
+    {
       key: "n",
       label: "Accounts",
       options: [
@@ -365,7 +398,7 @@
     },
   ] as const;
   const current = (key: string): string =>
-    ({ n: String(count), view })[key] ?? "";
+    ({ n: String(count), view, theme: scheme })[key] ?? "";
 </script>
 
 <svelte:head><title>Usage relay | CawCo</title></svelte:head>

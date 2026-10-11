@@ -594,31 +594,6 @@ export function rowTime(r: RingAccount, c: ClaudeRings, now: number): string {
   return left(r.carryUntil);
 }
 
-/**
- * A row's status, under its name: only what the bar, the figures and the
- * session count don't say. The carrier says nothing (its sessions' count
- * stands there); an account in the relay says when it takes over; one
- * with nothing to do is idle.
- */
-export function rowStatus(r: RingAccount, c: ClaudeRings, now: number): Part[] {
-  if (r.state === "limit") {
-    return ["at its limit"];
-  }
-  if (r.id === c.carry?.id) {
-    return [];
-  }
-  if (r.state === "reserve") {
-    return ["reserve reached"];
-  }
-  if (r.carryFrom !== null && r.carryFrom > now) {
-    return ["takes over in ", strong(fmt(r.carryFrom - now))];
-  }
-  if (r.neverBackup) {
-    return ["never a backup"];
-  }
-  return ["idle"];
-}
-
 /** One group of the accounts: an organization's accounts, or (null) the rest. */
 export interface OrgGroup {
   accounts: RingAccount[];
@@ -852,15 +827,6 @@ export const openCodeRowTime = (o: RingAccount, now: number): string =>
     ? `back in ${until(o.backAt, now)}`
     : openCodeStop(o, now);
 
-/**
- * Opencode's row status: at its limit, else nothing. Its row time already
- * says how long it lasts ("1h 12m", "5h+", a tilde when out of date), so
- * saying it again here would be the same thing twice.
- */
-export function openCodeStatus(o: RingAccount): Part[] {
-  return o.state === "limit" ? ["at its limit"] : [];
-}
-
 export function openCodeSentence(o: RingAccount, now: number): Part[] {
   if (o.state === "limit") {
     return ["At its limit. Back in ", strong(until(o.backAt, now)), "."];
@@ -873,35 +839,6 @@ export function openCodeSentence(o: RingAccount, now: number): Part[] {
   return o.bindOut !== null && o.bindOut - now < HORIZON_MS
     ? ["Runs out in ", strong(fmt(o.bindOut - now)), "."]
     : ["Nothing stops you in the next 5 hours."];
-}
-
-/**
- * A row's one reset, the window that binds it: on the row, the reset glyph and
- * "1h 33m" on the 5-hour or "Fri 23:00" on the week (`at`); read out and in
- * its tooltip, "resets in 1h 33m", "resets Fri 23:00" (`said`). Null at its
- * limit: the row's time already says when it's back.
- */
-export function bindReset(
-  r: RingAccount,
-  now: number
-): { at: string; said: string } | null {
-  if (r.state === "limit") {
-    return null;
-  }
-  if (r.bind === "5h") {
-    const resets = r.w5?.resetsAt ?? null;
-    if (resets === null) {
-      return null;
-    }
-    const at = until(resets, now);
-    return { at, said: `resets in ${at}` };
-  }
-  const resets = r.week?.resetsAt ?? null;
-  if (resets === null) {
-    return null;
-  }
-  const at = dayTime(resets, now);
-  return { at, said: `resets ${at}` };
 }
 
 /** One line of the key: glyph | label | value | reset. */

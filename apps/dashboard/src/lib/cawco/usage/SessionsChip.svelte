@@ -12,9 +12,13 @@
    * list, so a pointer crossing the gap keeps it open.
    *
    * The list hangs from the whole row the chip sits on (its nearest
-   * `[data-flyover-anchor]`), as wide as the row, so it covers the rows under
-   * it whole and never leaves a letter or half a figure showing at its
-   * edges. Opened by a pointer (a rest or a press) it leaves focus where it
+   * `[data-flyover-anchor]`, a cell of the usage popover's dial wall), as
+   * wide as the row: where the cell stands in a grid (`[data-flyover-span]`,
+   * the wall) the row is the grid's whole width at the cell's height. It
+   * reaches down to the first edge it can end on (a cell's foot or a
+   * head's, `[data-flyover-edge]`, inside `[data-flyover-scope]`), so it
+   * covers what lies under it whole and never leaves a letter, half a
+   * figure or half a dial showing at its edges. Opened by a pointer (a rest or a press) it leaves focus where it
    * is: no ring lands on its first session. Opened from the keyboard, focus
    * goes to the first session and the house ring shows.
    */
@@ -51,9 +55,56 @@
   /** The last thing that opened it was a pointer (a rest or a press). */
   let byPointer = $state(false);
   let trigger = $state<HTMLElement | null>(null);
-  const anchor = $derived(
+  let list = $state<HTMLElement | null>(null);
+  const row = $derived(
     trigger?.closest<HTMLElement>("[data-flyover-anchor]") ?? null
   );
+  const span = $derived(
+    row?.closest<HTMLElement>("[data-flyover-span]") ?? null
+  );
+  /** The row, across its grid's whole width where it stands in one. */
+  const anchor = $derived.by(() => {
+    if (!(row && span)) {
+      return row;
+    }
+    const cell = row;
+    const grid = span;
+    return {
+      contextElement: cell,
+      getBoundingClientRect: () => {
+        const at = cell.getBoundingClientRect();
+        const across = grid.getBoundingClientRect();
+        return new DOMRect(across.x, at.y, across.width, at.height);
+      },
+    };
+  });
+  /**
+   * In a grid, the list's height, from the row's foot to the first edge
+   * under it at or past its own end; 0 lets it be its own height.
+   */
+  let reach = $state(0);
+  $effect(() => {
+    if (!(open && list && row && span)) {
+      reach = 0;
+      return;
+    }
+    const items = list;
+    const cell = row;
+    const scope = span.closest<HTMLElement>("[data-flyover-scope]") ?? span;
+    const frame = requestAnimationFrame(() => {
+      // It stands 1px into the row and has a 1px edge above and below.
+      const top = cell.getBoundingClientRect().bottom - 1;
+      const end = top + items.offsetHeight + 2;
+      const edges = [
+        ...scope.querySelectorAll("[data-flyover-anchor], [data-flyover-edge]"),
+      ]
+        .map((edge) => edge.getBoundingClientRect().bottom)
+        .filter((bottom) => bottom >= end - 0.5)
+        .sort((a, b) => a - b);
+      reach = edges.length > 0 ? edges[0] - top : 0;
+    });
+    return () => cancelAnimationFrame(frame);
+  });
   const keepFocus = (event: Event) => {
     if (byPointer) {
       event.preventDefault();
@@ -131,9 +182,10 @@
     onpointerleave={leave}
     side="bottom"
     sideOffset={-1}
+    style={reach > 0 ? `min-block-size: ${reach}px` : undefined}
     trapFocus={!byPointer}
   >
-    <ul aria-label={label} class="list">
+    <ul aria-label={label} class="list" bind:this={list}>
       {#each sessions as session (session.id)}
         <li>
           <a

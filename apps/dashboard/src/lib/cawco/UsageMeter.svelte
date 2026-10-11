@@ -12,8 +12,11 @@
    *
    * The whole strip is one control. It opens the relay: the time until
    * Claude stops, who carries you across the next five hours as one bar,
-   * and every account on two lines (grouped by organization where one has
-   * more than two), then the way to the Usage page: a popover by the strip
+   * and every account as a cell of the dial wall, four across (grouped by
+   * organization where one has more than two): its 56px double dial, its
+   * name, the time that matters and its week, so one glance says which
+   * accounts still have room in the next five hours and this week. Then
+   * the way to the Usage page: a popover by the strip
    * with a fine pointer, the house bottom sheet on touch. The
    * strip is 44px in the rail (56px on the phone home) in every state, so
    * nothing around it moves when a reading lands or changes.
@@ -32,7 +35,6 @@
   import { IconKey, IconRefresh } from "#lib/icons.js";
   import { cn } from "#lib/utils.js";
   import ClaudeIcon from "~icons/logos/claude-icon";
-  import AccountName from "./accounts/AccountName.svelte";
   import { cawco } from "./client.svelte";
   import { dur, motionOk } from "./motion/curves.svelte";
   import { morph } from "./motion/morph.svelte";
@@ -43,17 +45,14 @@
   import Relay from "./usage/Relay.svelte";
   import Rings from "./usage/Rings.svelte";
   import {
-    bindReset,
     caption,
     delegateTip,
-    nameFields,
+    fmt,
     openCodeRowTime,
-    openCodeStatus,
     openCodeStop,
     orgGroups,
     plain,
     type RingAccount,
-    rowStatus,
     rowTime,
     staleTip,
     stopText,
@@ -100,6 +99,72 @@
   const openCode = $derived(usage.openCode);
   const now = $derived(usage.now);
   const shown = $derived(Boolean(claude || openCode));
+
+  // ── the dial wall's words ──
+  /** A cell's time in its words and its figure: "in ", "1h 20m", " left". */
+  const TIME_PARTS = /^(in )?(.*?)( left)?$/;
+  /** An email domain's top level ("gmail.com" → "gmail"). */
+  const TOP_DOMAIN = /\.[^.]+$/;
+  /**
+   * A cell's name, so no two cells shown together read the same: a
+   * nickname as it is; under its organization's head the email's local
+   * part; ungrouped, the local part and its domain's stem ("bewinxed" and
+   * "@gmail"), which may stand on a second line.
+   */
+  const cellName = (
+    ring: RingAccount,
+    grouped: boolean
+  ): { local: string; domain: string } => {
+    if (ring.nick || !ring.email) {
+      return { local: ring.name, domain: "" };
+    }
+    const at = ring.email.lastIndexOf("@");
+    if (at < 0) {
+      return { local: ring.email, domain: "" };
+    }
+    return {
+      local: ring.email.slice(0, at),
+      domain: grouped ? "" : ring.email.slice(at + 1).replace(TOP_DOMAIN, ""),
+    };
+  };
+  /**
+   * A time worked out from a reading out of date carries a tilde, once,
+   * on the figure ("in ~1h 20m", "~3h 40m left", "~5h+").
+   */
+  const guessed = (ring: RingAccount, time: string): string => {
+    if (ring.state !== "stale" || time.includes("~")) {
+      return time;
+    }
+    return time.startsWith("in ") ? `in ~${time.slice(3)}` : `~${time}`;
+  };
+  /**
+   * A Claude account's one time that matters: "in 1h 20m" for one the
+   * relay hands over to later, else the row time ("1h 20m left", "5h+",
+   * "back in 4h 50m").
+   */
+  const claudeTime = (ring: RingAccount): string => {
+    if (!claude) {
+      return "";
+    }
+    if (
+      ring.id !== claude.carry?.id &&
+      ring.state !== "limit" &&
+      ring.carryFrom !== null &&
+      ring.carryFrom > now
+    ) {
+      return guessed(ring, `in ${fmt(ring.carryFrom - now)}`);
+    }
+    return guessed(ring, rowTime(ring, claude, now));
+  };
+  /** Its week: "wk 62%" left, "wk —" at the week's limit, nothing unread. */
+  const weekText = (ring: RingAccount): string => {
+    if (ring.limitOn === "week") {
+      return "wk —";
+    }
+    return ring.week ? `wk ${ring.week.left}%` : "";
+  };
+  const delegatesOf = (ring: RingAccount): string | null =>
+    claude && ring.id === claude.delegate?.id ? delegateTip(claude) : null;
 
   /** One mark's room in the strip: 16px and the 4px between marks. */
   const SLOT = 20;
@@ -283,84 +348,104 @@
   {/if}
 {/snippet}
 
-{#snippet row(
-  ring: RingAccount,
-  time: string,
-  status: ReturnType<typeof rowStatus>,
-  delegates: string | null,
-  carrying: boolean
+{#snippet when(
+  text: string
 )}
-  <!-- Two lines: its name and the time that matters, then what nothing
-       else says (its status, the sessions the carrier holds, where
-       delegates start) and the one reset that binds it. -->
-  {@const reset = bindReset(ring, now)}
+  <!-- A time; "back in 4h 50m" as the reset glyph and the time, read out
+       whole, so a limit takes a reset's width. -->
+  {#if text.startsWith("back in ")}
+    <span class="when"
+      ><IconRefresh aria-hidden="true" /><span class="sr-only">back in</span>
+      {text.slice(8)}</span
+    >
+  {:else}
+    <!-- The figure never breaks; in a narrow cell "in" or "left" takes a
+         line of its own rather than the time running past the cell. -->
+    {@const [, before = "", figure = text, after = ""] =
+      TIME_PARTS.exec(text) ?? []}
+    {before}<span class="fig">{figure}</span>{after}
+  {/if}
+{/snippet}
+
+{#snippet cell(
+  ring: RingAccount,
+  grouped: boolean,
+  time: string
+)}
+  <!-- A cell of the dial wall: the double dial at 56px (its disc the
+       5-hour window, its rim the week) with the sessions it runs on its
+       corner, then its name, the time that matters, its week, and the
+       word "Delegates" under the account new delegates start on. -->
+  {@const name = cellName(ring, grouped)}
+  {@const tip = delegatesOf(ring)}
+  {@const week = weekText(ring)}
   <div
-    class="row"
+    class="cell-d"
     data-account={ring.id}
     data-flyover-anchor
+    class:carrying={ring.id === claude?.carry?.id}
     class:limit={ring.state === "limit"}
   >
-    {#if ring.state === "stale"}
-      <Tip label={staleTip(ring, now)} side="top">
+    <span class="dial">
+      {#if ring.state === "stale"}
+        <Tip label={staleTip(ring, now)} side="top">
+          {#snippet children(
+            props
+          )}
+            <button
+              {...props}
+              aria-label={staleTip(ring, now)}
+              class="ring-tip"
+              data-stale-ring
+              type="button"
+            >
+              <Rings {ring} size={56} />
+            </button>
+          {/snippet}
+        </Tip>
+      {:else}
+        <Rings {ring} size={56} />
+      {/if}
+      {#if ring.sessions.length > 0}
+        <span class="dial-chip">
+          <SessionsChip
+            account={ring.name}
+            onopen={putAway}
+            sessions={ring.sessions}
+          />
+        </span>
+      {/if}
+    </span>
+    <!-- Its parts are flex items, so no space stands between them and the
+         domain takes the second line whole when both don't fit. -->
+    <span class="nm" data-name>
+      <span>{name.local}</span>
+      {#if name.domain}
+        <span>@{name.domain}</span>
+      {/if}
+    </span>
+    <span class="line" data-time>{@render when(time)}</span>
+    {#if week}
+      <span class="line" data-week class:strong={ring.bind === "week"}
+        >{week}</span
+      >
+    {/if}
+    {#if tip}
+      <Tip label={tip} side="top">
         {#snippet children(
           props
         )}
           <button
             {...props}
-            aria-label={staleTip(ring, now)}
-            class="ring-tip"
-            data-stale-ring
+            class={cn(badgeVariants({ variant: "secondary" }), "tag px-1")}
+            data-delegates-tag
             type="button"
           >
-            <Rings {ring} size={24} />
+            Delegates
           </button>
         {/snippet}
       </Tip>
-    {:else}
-      <Rings {ring} size={24} />
     {/if}
-    <span class="who"><AccountName account={nameFields(ring)} row /></span>
-    <span class="time" data-time class:muted={ring.state === "stale"}
-      ><Figure text={time} /></span
-    >
-    <span class="line2">
-      {#if status.length > 0}
-        <span class="status" data-status><Words parts={status} /></span>
-      {/if}
-      {#if carrying && ring.sessions.length > 0}
-        <SessionsChip
-          account={ring.name}
-          onopen={putAway}
-          sessions={ring.sessions}
-        />
-      {/if}
-      {#if delegates}
-        <Tip label={delegates} side="top">
-          {#snippet children(
-            props
-          )}
-            <!-- The word alone: with the glyph it doesn't fit beside "takes
-                 over in 1h 20m" and the short reset at 320px. -->
-            <button
-              {...props}
-              class={cn(badgeVariants({ variant: "secondary" }), "tag px-1")}
-              data-delegates-tag
-              type="button"
-            >
-              Delegates
-            </button>
-          {/snippet}
-        </Tip>
-      {/if}
-      {#if reset}
-        <!-- The reset glyph and the time; "resets in 1h 33m" read out. -->
-        <span class="reset" data-reset>
-          <IconRefresh aria-hidden="true" />
-          <span class="sr-only">{reset.said}</span>
-          <span aria-hidden="true">{reset.at}</span>
-        </span>
-      {/if}
-    </span>
   </div>
 {/snippet}
 
@@ -392,25 +477,25 @@
         <Relay accounts={claude.accounts} {now} spans={usage.spans} />
       </header>
     {/if}
-    <div class="accounts" data-accounts>
+    <!-- A sessions list hangs from a cell's row across its wall and ends on
+         the first cell's or head's foot under it (SessionsChip). -->
+    <div class="accounts" data-accounts data-flyover-scope>
       {#if claude}
         <div class="group orgs">
           <!-- An organization of more than two accounts is a group under its
                name; the rest follow, ungrouped, after the same gap a group's
                name stands after. -->
           {#each orgGroups(claude.accounts) as group (group.org ?? "")}
-            <div class="rows" data-org-group={group.org ?? ""}>
+            <div
+              class="wall"
+              data-flyover-span
+              data-org-group={group.org ?? ""}
+            >
               {#if group.org}
-                <h4 class="org" data-org-head>{group.org}</h4>
+                <h4 class="org" data-flyover-edge data-org-head>{group.org}</h4>
               {/if}
               {#each group.accounts as ring (ring.id)}
-                {@render row(
-                  ring,
-                  rowTime(ring, claude, now),
-                  rowStatus(ring, claude, now),
-                  ring.id === claude.delegate?.id ? delegateTip(claude) : null,
-                  ring.id === claude.carry?.id
-                )}
+                {@render cell(ring, group.org !== null, claudeTime(ring))}
               {/each}
             </div>
           {/each}
@@ -418,17 +503,15 @@
       {/if}
       {#if openCode}
         <section class="group">
-          <h3 class="provider">
+          <h3 class="provider" data-flyover-edge>
             <span aria-hidden="true" class="mark"><OpenCodeLogo /></span>
             opencode Go
           </h3>
-          <div class="rows">
-            {@render row(
+          <div class="wall" data-flyover-span>
+            {@render cell(
               openCode,
-              openCodeRowTime(openCode, now),
-              openCodeStatus(openCode),
-              null,
-              true
+              true,
+              guessed(openCode, openCodeRowTime(openCode, now))
             )}
           </div>
         </section>
@@ -455,7 +538,7 @@
       {#each notes as note (note.id)}
         {@const Mark = note.mark}
         <!-- A provider with nothing to draw: why, and what to do about it. -->
-        <p class="pop-empty pop-note">
+        <p class="pop-empty pop-note" data-flyover-edge>
           <span aria-hidden="true" class="mark"><Mark /></span>
           {note.text}
         </p>
@@ -642,8 +725,7 @@
     font-variant-numeric: tabular-nums;
     color: var(--ink-strong);
   }
-  .digits.muted,
-  .time.muted {
+  .digits.muted {
     color: var(--ink-muted);
   }
   /* One line. Its whole width is what the cell asks for, but it may break
@@ -766,11 +848,6 @@
   .pop-head .provider {
     padding: 0;
   }
-  /* Rows stand edge to edge: one pitch, the row's own height. */
-  .rows {
-    display: flex;
-    flex-direction: column;
-  }
   /* An organization's name over its accounts: meta, no chrome of its own. */
   .org {
     padding: 0 var(--space-1) 2px;
@@ -786,88 +863,95 @@
     background: transparent;
     cursor: help;
   }
-  /* An account, on two lines beside its ring: its name and the time that
-     matters, then a short status and the one reset that binds it. 40px
-     (44px on touch) whatever line 2 holds: line 1 is one label line, line 2
-     is always the kit badge's height (1.25rem, its h-5), so line 2 starts
-     at the same offset on every row, chip or no chip, tint or no tint. */
-  .row {
+  /* The dial wall: four cells across, one pitch apart, an organization's
+     name across the whole row over its cells. */
+  .wall {
     display: grid;
-    grid-template-columns: 24px minmax(0, 1fr) auto;
-    grid-template-rows: auto 1.25rem;
-    column-gap: var(--space-2);
-    align-content: center;
-    align-items: center;
-    block-size: 40px;
-    padding: 0 var(--space-1);
-    border-radius: var(--radius-sm);
-    transition: background-color var(--dur-fade) var(--ease-out);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--space-1);
 
-    & > :global(svg),
-    & > .ring-tip {
-      grid-row: 1 / 3;
-      align-self: center;
+    & > .org {
+      grid-column: 1 / -1;
     }
   }
-  .row.limit {
+  /* A cell: the dial over its name, its time and its week, centred, in
+     meta. The carrier wears a hairline ring; an account at its limit the
+     limit wash, which the dial's reserve notch takes as its ground. */
+  .cell-d {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    min-inline-size: 0;
+    padding: var(--space-1) 2px;
+    border-radius: var(--radius-sm);
+    text-align: center;
+    transition: background-color var(--dur-fade) var(--ease-out);
+  }
+  .cell-d.carrying {
+    box-shadow: inset 0 0 0 1px var(--border-control);
+  }
+  .cell-d.limit {
     background: var(--meter-wash-over);
     --ring-ground: var(--meter-wash-over);
   }
-  .who {
-    display: flex;
-    min-inline-size: 0;
+  /* The dial, with the count of the sessions it runs on its lower corner. */
+  .dial {
+    position: relative;
+    display: grid;
+    margin-block-end: 2px;
   }
-  .time {
-    flex: none;
-    font: var(--type-label);
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
+  .dial-chip {
+    position: absolute;
+    inset-block-end: -4px;
+    inset-inline-end: -10px;
+  }
+  /* A name never ends in an ellipsis: an ungrouped one breaks before its
+     "@" onto a second line, and anything longer than the cell wraps. */
+  .nm {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    max-inline-size: 100%;
+    overflow-wrap: anywhere;
+    font: var(--type-meta);
+    font-weight: var(--weight-strong);
     color: var(--ink-strong);
   }
-  /* What only this account can say: its status, the sessions it carries,
-     where new delegates start; then, at its end, its reset. It spans the
-     name's column and the time's, so its words have the row's whole width
-     and never the time column's leftovers. */
-  .line2 {
-    display: flex;
-    grid-column: 2 / 4;
-    align-items: center;
-    gap: var(--space-1);
-    min-inline-size: 0;
-    block-size: 100%;
-  }
-  .status {
-    min-inline-size: 0;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
+  .line {
+    max-inline-size: 100%;
+    text-wrap: balance;
     font: var(--type-meta);
-    color: var(--ink-row);
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-muted);
   }
-  /* The Delegates badge: the glyph and the word, in meta. */
+  /* The week, when it is the window that binds. */
+  .line.strong {
+    font-weight: var(--weight-strong);
+    color: var(--ink-strong);
+  }
+  .fig {
+    white-space: nowrap;
+  }
+  /* "back in 4h 50m" as the reset glyph and the time. */
+  .when {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    line-height: 1;
+
+    & :global(svg) {
+      flex: none;
+      inline-size: 12px;
+      block-size: 12px;
+    }
+  }
+  /* The Delegates badge: the word alone, in meta, 4px in. */
   .tag {
     flex: none;
     font: var(--type-meta);
     line-height: 1;
     cursor: help;
-  }
-  /* The reset: the refresh glyph and the time, end-aligned under the row's
-     time. */
-  .reset {
-    display: inline-flex;
-    flex: none;
-    align-items: center;
-    gap: 2px;
-    margin-inline-start: auto;
-    white-space: nowrap;
-    font: var(--type-meta);
-    font-variant-numeric: tabular-nums;
-    color: var(--ink-muted);
-
-    & :global(svg) {
-      inline-size: 12px;
-      block-size: 12px;
-    }
   }
   .foot {
     flex: none;
@@ -896,17 +980,14 @@
   :global(.usage-sheet) .orgs {
     padding-block-start: var(--space-3);
   }
-  :global(.usage-sheet) .row {
-    block-size: 44px;
-    padding: 0 6px;
-  }
   :global(.usage-sheet) .foot :global(a) {
     inline-size: 100%;
     block-size: 44px;
   }
+
   @media (prefers-reduced-motion: reduce) {
     .slot,
-    .row {
+    .cell-d {
       transition: none;
     }
   }
