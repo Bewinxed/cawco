@@ -754,7 +754,7 @@ public enum Motion {
     public static let echoOpacity: Double = 0.45
     /// The duotone second layer of a status glyph in an alert row (join/JoinedRow): the lowest at which it holds 3:1 on the recess in both schemes for the ink-strong, done and attn glyph inks, the attn glyph by day being the floor. Every other Solar glyph keeps 0.5.
     public static let glyphDuoStatusOpacity: Double = 0.81
-    /// How far an account's week rim is mixed from its hue toward account-week-toward: a clearly different lightness of the same hue.
+    /// How far an account's week rim is mixed from its hue toward account-week-toward: a clearly different lightness of the same hue. By day 0.32 (the rim 1.9:1 or more from the disc); at night 0.63, the lowest at which the rim stands 1.8:1 from the disc for every account hue (rose the floor), the rim then 7.9:1 or more on its track.
     public static let accountWeekMix: Double = 0.32
     /// An account whose reading is out of date: its rings and its relay band draw at this opacity, the lowest at which every account hue holds 3:1 against the border-control track it lies on, in both schemes (by day cyan and green set the floor at 0.82, at night rose at 0.80); on the raised surface they hold more.
     public static let accountStaleOpacity: Double = 0.82

@@ -151,10 +151,14 @@
     }
     return blocks;
   });
-  /** Each row's columns: four cells' widths, a hairline's where one joins. */
+  /**
+   * Each row's columns: four cells' widths, and the hairline's own width
+   * where one joins (max-content: an auto track would take the row's spare
+   * room and push the joined cells to its end).
+   */
   const columnsOf = (row: WallRow): string =>
     row.join < row.cells.length
-      ? `repeat(${row.join}, var(--cell)) auto repeat(${row.cells.length - row.join}, var(--cell))`
+      ? `repeat(${row.join}, var(--cell)) max-content repeat(${row.cells.length - row.join}, var(--cell))`
       : `repeat(${ACROSS}, var(--cell))`;
 
   /** An email domain's top level ("gmail.com" → "gmail"). */
@@ -955,15 +959,22 @@
   .dial {
     display: grid;
   }
-  /* The session count stands in a band over the dials of its row, at its
-     cell's top corner, clear of the week rim. */
+  /* The session count, 16px, stands in its cell's top corner, beside the
+     dial's top-right, 4px or more off the week rim: in a row that has one
+     the dials stand space-5 lower, what a two-digit count at a 63px cell
+     (320px wide) needs. */
   .wall-row.chips .dial {
-    margin-block-start: calc(1.25rem + var(--space-1));
+    margin-block-start: var(--space-5);
   }
+  /* Its touch area reaches the full 44px up and down, and space-5 / 2 to
+     either side: a count in the last column stays inside the wall's
+     padding, so the accounts never scroll sideways. */
   .cell-chip {
+    --hit-gap-x: var(--space-5);
     position: absolute;
-    inset-block-start: var(--space-1);
-    inset-inline-end: 2px;
+    inset-block-start: 0;
+    inset-inline-end: 0;
+    display: grid;
   }
   /* Two lines in every cell, so every row's times stand level: the first
      line strong, the domain's stem (where it is needed) quiet. A name

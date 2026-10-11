@@ -1,8 +1,9 @@
 <script lang="ts">
   /**
-   * The sessions an account carries, on its row: a kit badge with the
-   * session glyph and how many (its delegates' sessions among them: each is
-   * a hub row whose `accountId` is the account). Resting a fine pointer on
+   * The sessions an account carries, on its dial's corner: a 16px count in
+   * the kit badge's paint (its delegates' sessions among them: each is a
+   * hub row whose `accountId` is the account), read out "2 sessions on
+   * design", reaching 44px under a finger. Resting a fine pointer on
    * it, or a tap, opens the list in a kit popover: each session's status
    * glyph, title and project, a link that opens it and puts the usage
    * popover away (`onopen`).
@@ -24,7 +25,6 @@
   import { badgeVariants } from "#lib/components/ui/badge/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "#lib/components/ui/popover/index.js";
-  import { IconChat } from "#lib/icons.js";
   import { cn } from "#lib/utils.js";
   import { cawco, type InstanceRow } from "../client.svelte";
   import { instanceTitle, projectOfRow } from "../home/home-state.svelte";
@@ -138,7 +138,6 @@
     onpointerleave={leave}
     bind:ref={trigger}
   >
-    <IconChat aria-hidden="true" />
     <span class="num">{count}</span>
   </Popover.Trigger>
   <Popover.Content
@@ -174,9 +173,14 @@
 </Popover.Root>
 
 <style>
+  /* A count: 16px high, at least as wide, the badge's recess and corner. */
   :global(.sessions-chip) {
     flex: none;
+    block-size: 16px;
+    min-inline-size: 16px;
+    padding-inline: var(--space-1);
     font: var(--type-meta);
+    line-height: 1;
     font-variant-numeric: tabular-nums;
     color: var(--ink-row);
     cursor: pointer;

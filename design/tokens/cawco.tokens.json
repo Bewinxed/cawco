@@ -2969,7 +2969,12 @@
     "account-week-mix": {
       "$type": "number",
       "$value": "0.32",
-      "$description": "How far an account's week rim is mixed from its hue toward account-week-toward: a clearly different lightness of the same hue."
+      "$description": "How far an account's week rim is mixed from its hue toward account-week-toward: a clearly different lightness of the same hue. By day 0.32 (the rim 1.9:1 or more from the disc); at night 0.63, the lowest at which the rim stands 1.8:1 from the disc for every account hue (rose the floor), the rim then 7.9:1 or more on its track.",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "0.63"
+        }
+      }
     },
     "account-stale-opacity": {
       "$type": "number",

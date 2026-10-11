@@ -5,7 +5,8 @@
  *
  * A token's `$value` is its light (or only) value. `$extensions["dev.cawco"]`
  * carries the scheme and media variants:
- *   dark     the dark value; the token is emitted as light-dark(light, dark)
+ *   dark     the dark value; a colour is emitted as light-dark(light, dark),
+ *            any other token's dark value under the theme class (:root.dark)
  *   coarse   the value under (pointer: coarse)
  *   compact  the value under (pointer: coarse), (width < 640px)
  * References (`{group.name}`) are emitted as `var(--name)`, so the cascade
@@ -56,10 +57,15 @@ function variantsOf(token: TransformedToken): Variants {
   return (token.original.$extensions?.[EXT] ?? {}) as Variants;
 }
 
+/** light-dark() takes colours only: any other token's dark value is set
+    under the theme class (`:root.dark`, lib/theme.svelte.ts). */
+const isColour = (token: TransformedToken): boolean =>
+  (token.$type ?? token.original.$type) === "color";
+
 function declaration(token: TransformedToken, names: Set<string>): string {
   const light = cssValue(String(token.original.$value), names, token.name);
   const { dark } = variantsOf(token);
-  if (dark === undefined) {
+  if (dark === undefined || !isColour(token)) {
     return `    --${token.name}: ${light};`;
   }
   return `    --${token.name}: light-dark(${light}, ${cssValue(dark, names, token.name)});`;
@@ -81,6 +87,17 @@ function format({ dictionary }: { dictionary: Dictionary }): string {
     lines.push(declaration(token, names));
   }
   lines.push("  }");
+  const darkOnly = tokens.filter(
+    (t) => !isColour(t) && variantsOf(t).dark !== undefined
+  );
+  if (darkOnly.length > 0) {
+    lines.push("", "  :root.dark {");
+    for (const token of darkOnly) {
+      const value = cssValue(String(variantsOf(token).dark), names, token.name);
+      lines.push(`    --${token.name}: ${value};`);
+    }
+    lines.push("  }");
+  }
   for (const [key, query] of Object.entries(MEDIA) as [
     keyof typeof MEDIA,
     string,
