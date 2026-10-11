@@ -272,8 +272,26 @@ async function unblocked(
     // Escape (HID 41) dismisses a system sheet or HUD where one takes keys.
     await mac(`${AXE} key 41 --udid ${udid}`).catch(() => undefined);
     await Bun.sleep(10_000);
+    try {
+      const answer = await axe(args);
+      console.log(`  ${what} went through after waiting`);
+      return answer;
+    } catch (again) {
+      if (!AXE_SESSION.test(String(again))) {
+        throw again;
+      }
+    }
+    // Nothing over the app and still no translation: the host's
+    // CoreSimulatorBridge is wedged, and launchd respawns it when killed
+    // (https://github.com/getsentry/XcodeBuildMCP/issues/458).
+    console.log(
+      "  still blocked with nothing over the app: restarting CoreSimulatorBridge"
+    );
+    await mac(
+      "pgrep -f /usr/libexec/CoreSimulatorBridge | xargs kill -9; sleep 3"
+    ).catch(() => undefined);
     const answer = await axe(args);
-    console.log(`  ${what} went through after waiting`);
+    console.log(`  ${what} went through after the bridge restarted`);
     return answer;
   }
 }
@@ -448,7 +466,12 @@ xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-e
     await restChecks(udid);
   }
   // The screen before the panel opens: what stands where the glass will flare.
-  const closed = await pixels(udid);
+  const screen = nodes[0]?.frame?.width;
+  if (!screen) {
+    check(`${kind}: the screen reads`, false, "describe-ui gave no window");
+    return;
+  }
+  const closed = await pixels(udid, screen);
   await tap(udid, centre(head.frame));
   await pause(1200);
   nodes = await tree(udid);
@@ -522,8 +545,7 @@ interface Pixels {
   bmp: Buffer;
   points: number;
 }
-async function pixels(udid: string): Promise<Pixels> {
-  const points = (await tree(udid))[0]?.frame?.width ?? 402;
+async function pixels(udid: string, points: number): Promise<Pixels> {
   const text = await mac(`F=$(mktemp -d)
 xcrun simctl io ${udid} screenshot "$F/s.png" >/dev/null 2>&1
 sips -s format bmp "$F/s.png" --out "$F/s.bmp" >/dev/null 2>&1
@@ -669,7 +691,7 @@ async function hangChecks(kind: Kind, udid: string, closed: Pixels) {
   );
   // Inside the flare: just left of the glass's leading flank, just above
   // where it meets the panel's top edge (past the neck on a phone).
-  const open = await pixels(udid);
+  const open = await pixels(udid, closed.points);
   const inFlare = { x: glass.x - 3, y: panel.y - 2 };
   const flareOpen = colourAt(open, inFlare.x, inFlare.y);
   const flareShut = colourAt(closed, inFlare.x, inFlare.y);

@@ -300,16 +300,25 @@ const phone = await device();
 await run(["xcrun", "simctl", "openurl", phone, url]);
 console.log(`  opened ${url} in Safari; waiting for Caw`);
 let caw: Node | undefined;
+let seen: Node[] = [];
 for (let attempt = 0; attempt < 30 && !caw?.frame; attempt += 1) {
   // biome-ignore lint/performance/noAwaitInLoops: polling the screen until the page has loaded
   await Bun.sleep(1000);
-  caw = (await tree(phone)).find(
-    (node) => CAW_LABEL.test(node.label ?? "") && node.frame
-  );
+  seen = await tree(phone);
+  caw = seen.find((node) => CAW_LABEL.test(node.label ?? "") && node.frame);
 }
 if (!caw?.frame) {
+  const capture = join(out, "no-caw.png");
+  await run(["xcrun", "simctl", "io", phone, "screenshot", capture]).catch(
+    () => undefined
+  );
+  const labels = seen
+    .map((node) => node.label)
+    .filter(Boolean)
+    .slice(0, 40)
+    .join(" | ");
   console.error(
-    "FAIL Caw was not found on the screen: is the dashboard loaded and narrow (a phone)?"
+    `FAIL Caw was not found on the screen: is the dashboard loaded and narrow (a phone)?\n  on screen: ${labels || "no labels"}\n  capture: ${capture}`
   );
   process.exit(1);
 }
