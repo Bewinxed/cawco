@@ -26,12 +26,14 @@
    *   sessions) stays on the tile while its rows are out.
    * - Working: the tile echoes. A copy of it grows from under the tile and
    *   fades, each working row in its list a beat after the one above
-   *   (motion/echo `echoBeat`, on the list). With reduced motion, a still
-   *   dot in the live ink instead.
+   *   (motion/echo `echoBeat`, on the list), three loops from when it took
+   *   the status; then, and with reduced motion, a still dot in the live
+   *   ink instead.
    * - Needs you, failed: a dot on the tile's top-right corner in that
    *   status's ink, the tile cut away round it so it reads on any hue. The
    *   failed dot is still; the needs-you dot echoes as a working tile does,
-   *   on the same beat. Idle, finished or no status: nothing.
+   *   on the same beat, three loops, then stands still. Idle, finished or
+   *   no status: nothing.
    *
    * - `faceAlways`: the tile keeps its face whatever it holds (a thread's
    *   mark is Caw): no count and no chevron on it; the deck behind it and
@@ -523,12 +525,13 @@
     --dot: var(--status-fail-glyph);
   }
   /* Working: a still dot in the live ink, only where the echo that says it
-     does not run. */
+     does not run: with reduced motion, or once its echoes have played
+     (motion/echo marks the echo `data-rested`). */
   .tree-mark[data-dot="live"] {
     --dot: var(--status-live-glyph);
   }
   @media (prefers-reduced-motion: no-preference) {
-    .tree-mark[data-dot="live"] {
+    .tree-mark[data-dot="live"]:not(:has([data-rested])) {
       & .dot {
         display: none;
       }

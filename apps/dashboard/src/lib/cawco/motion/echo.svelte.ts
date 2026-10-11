@@ -19,6 +19,17 @@
  * restarts for the others, and a row that joins is already in step. Rows
  * under an open parent take their place in the order as they are drawn.
  *
+ * An echo plays ECHOES cycles from the beat it joined, then rests: the
+ * scheduler marks it `data-rested` and the mark draws what reduced motion
+ * draws (TreeMark: the needs-you dot still, a working tile with its still
+ * dot in the live ink). A loop with nothing new to say keeps the page from
+ * ever going idle and spends a frame at every refresh. The echo element is
+ * the status's own (TreeMark draws one per status), so a new status is a
+ * new element and echoes afresh, and the same status drawn again keeps its
+ * element and its running echo. Its end is fixed when it starts: re-timed
+ * because its place in the order changed, or started again after the list
+ * was hidden, it still ends then (iOS SessionMark `run()`, `rested`).
+ *
  * With reduced motion nothing runs here: the mark draws a still dot.
  *
  * Nor while the list is not rendered (`watchRendered`: the home board put
@@ -35,6 +46,14 @@ import { CURVE, dur, motionOk, numberOf } from "./curves.svelte";
 
 /** How many beats fit in one loop: the rows start a third of a loop apart. */
 const BEATS = 3;
+/** How many cycles an echo plays before its mark rests (iOS `echoes`). */
+const ECHOES = 3;
+
+/** When each echo's last cycle ends, on the document's timeline. */
+const ends = new WeakMap<Element, number>();
+
+/** The echo has played its cycles: the mark rests on its status. */
+const rest = (echo: Element) => echo.setAttribute("data-rested", "");
 
 /**
  * One beat's keyframes, the first `share` of the cycle: the echo leaves the
@@ -124,19 +143,55 @@ export function echoBeat(): Attachment<HTMLElement> {
           stop(echo);
         }
       }
+      const now = Number(document.timeline.currentTime ?? 0);
       echoes.forEach((echo, place) => {
+        if (echo.hasAttribute("data-rested")) {
+          return;
+        }
+        const end = ends.get(echo);
+        if (end !== undefined && now >= end) {
+          stop(echo);
+          rest(echo);
+          return;
+        }
         const beat = beats.get(echo);
         if (beat && beat.place === place && beat.cycle === cycle) {
           return;
         }
         beat?.animation.cancel();
-        const animation = echo.animate(beatFrames(loop / cycle), {
-          duration: cycle,
-          iterations: Number.POSITIVE_INFINITY,
-        });
-        animation.startTime = origin + place * gap;
-        beats.set(echo, { animation, cycle, place });
+        play(echo, place, now, cycle);
       });
+    };
+
+    /**
+     * `echo` beats from the start of the cycle its place is in now, on the
+     * list's clock, for ECHOES cycles the first time. Started again (its
+     * place or the list's cycle changed, or the list was drawn again), it
+     * runs to the end it already has, carried to the end of the cycle that
+     * end falls in: a beat is the first share of its cycle, and the rest of
+     * the cycle the copy waits at the tile's size under the cut, so an echo
+     * that stops at a cycle's end never vanishes part grown.
+     */
+    const play = (echo: Element, place: number, now: number, cycle: number) => {
+      const loop = dur("--dur-loop");
+      const into = (now - origin - (place * loop) / BEATS) % cycle;
+      const start = now - (into < 0 ? into + cycle : into);
+      const end = ends.get(echo);
+      const iterations =
+        end === undefined
+          ? ECHOES
+          : Math.max(1, Math.ceil((end - start) / cycle - 1e-6));
+      ends.set(echo, start + iterations * cycle);
+      const animation = echo.animate(beatFrames(loop / cycle), {
+        duration: cycle,
+        iterations,
+      });
+      animation.startTime = start;
+      animation.onfinish = () => {
+        stop(echo);
+        rest(echo);
+      };
+      beats.set(echo, { animation, cycle, place });
     };
 
     const watch = new MutationObserver(schedule);
