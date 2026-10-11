@@ -56,6 +56,12 @@ public enum KitButton {
         case outline
         /// No fill and no edge at rest.
         case ghost
+        /// The fail status's fill and ink, no edge (NeedsCard.svelte `.deny`,
+        /// The Peer Rule's panel form). It holds still under a press, as its
+        /// peer does, so neither is made the more inviting.
+        case fail
+        /// The done status's fill and ink, no edge (NeedsCard.svelte `.approve`).
+        case done
     }
 
     public enum Height: Sendable {
@@ -168,15 +174,29 @@ public enum KitButton {
             config.background.strokeWidth = 1
         case .ghost:
             config.background.strokeWidth = 0
+        case .fail, .done:
+            // `border-color: transparent` over a border-box fill: the tint
+            // runs to the box's edge.
+            config.background.strokeWidth = 0
         }
         return config
     }
 
     private static func ink(_ variant: Variant) -> UIColor {
-        variant == .action ? Palette.onAction : Palette.inkStrong
+        switch variant {
+        case .action: Palette.onAction
+        case .fail: Palette.statusFailInk
+        case .done: Palette.statusDoneInk
+        case .secondary, .outline, .ghost: Palette.inkStrong
+        }
     }
 
     private static func background(_ variant: Variant, pressed: Bool) -> UIColor {
+        switch variant {
+        case .fail: return Palette.statusFailBg
+        case .done: return Palette.statusDoneBg
+        case .action, .secondary, .outline, .ghost: break
+        }
         if pressed {
             return Palette.surfaceFill
         }
@@ -184,7 +204,7 @@ public enum KitButton {
         case .action: return Palette.actionSolid
         case .secondary: return Palette.surfaceRecess
         case .outline: return Palette.surfaceRaised
-        case .ghost: return .clear
+        case .ghost, .fail, .done: return .clear
         }
     }
 }

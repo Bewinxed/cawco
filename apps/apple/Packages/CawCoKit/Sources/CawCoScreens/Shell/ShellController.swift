@@ -1012,10 +1012,9 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         // The rim counts what needs the operator, never the notices.
         let needs = home.needs
         let notices = home.notices
-        let online = fleet.machines.filter { $0.status == "online" }.count
         let tone = MachineHealth.tone(fleet.machines, hubBuild: fleet.hubBuild)
         for cluster in [mainCluster, compactCluster, sessionCluster] {
-            cluster.configure(needs: needs.count, notices: notices.count, quiet: home.quiet, online: online, tone: tone, panelOpen: cawPanel.open)
+            cluster.configure(needs: needs.count, notices: notices.count, quiet: home.quiet, machines: fleet.machines.count, tone: tone, panelOpen: cawPanel.open)
         }
         var answers = CawPanel.Answers()
         for item in needs {

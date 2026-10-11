@@ -120,7 +120,7 @@ final class CawPanel: UIView, UIGestureRecognizerDelegate {
         #endif
         for view in list.arrangedSubviews { view.removeFromSuperview() }
         if !needs.isEmpty {
-            list.addArrangedSubview(Self.head("Needs you", count: needs.count))
+            list.addArrangedSubview(Self.head("Needs you", count: needs.count, glyph: .attention, tint: Palette.statusAttnGlyph))
             for item in needs {
                 let row = NeedRow(item, now: now, sent: answers.sent[item.id], live: live)
                 row.onChoose = { [weak self] in
@@ -133,9 +133,16 @@ final class CawPanel: UIView, UIGestureRecognizerDelegate {
             }
         }
         if !notices.isEmpty {
-            let head = Self.head("Notices", count: notices.count)
-            list.addArrangedSubview(head)
-            if !needs.isEmpty { list.setCustomSpacing(Space.space3, after: list.arrangedSubviews[list.arrangedSubviews.count - 2]) }
+            // The sections part with the vermillion hairline (CawPanel.svelte
+            // `.section + .section`): `space2` from the last row to it, and
+            // `space2` from it to the head, whose own top margin follows.
+            if let last = list.arrangedSubviews.last {
+                let rule = SectionRule()
+                list.setCustomSpacing(Space.space2, after: last)
+                list.addArrangedSubview(rule)
+                list.setCustomSpacing(Space.space2, after: rule)
+            }
+            list.addArrangedSubview(Self.head("Notices", count: notices.count, glyph: .bell, tint: Palette.inkMuted))
             for notice in notices {
                 let row = NoticeRow(notice)
                 row.onDismiss = { [weak self] in self?.onDismiss(notice) }
@@ -154,8 +161,11 @@ final class CawPanel: UIView, UIGestureRecognizerDelegate {
         }
     }
 
-    /// A section's head: its name and how many, in the meta ink.
-    private static func head(_ title: String, count: Int) -> UIView {
+    /// A section's head (CawPanel.svelte `.head`): its 16pt Solar duotone
+    /// glyph centred in the panel's one 28pt lead column, so its name starts
+    /// on the rows' text column `space3` after it; then the name in label
+    /// type and how many in the meta ink.
+    private static func head(_ title: String, count: Int, glyph: Glyph, tint: UIColor) -> UIView {
         let name = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong)
         name.text = title
         name.accessibilityTraits = .header
@@ -164,11 +174,25 @@ final class CawPanel: UIView, UIGestureRecognizerDelegate {
         figure.text = "\(count)"
         figure.isAccessibilityElement = false
         name.accessibilityValue = "\(count)"
-        let row = UIStackView(arrangedSubviews: [name, figure, UIView()])
-        row.spacing = Space.space2
-        row.alignment = .firstBaseline
+        let words = UIStackView(arrangedSubviews: [name, figure, UIView()])
+        words.spacing = Space.space2
+        words.alignment = .firstBaseline
+        let mark = GlyphView(glyph, size: Size.iconMd, tint: tint)
+        let lead = UIView()
+        lead.translatesAutoresizingMaskIntoConstraints = false
+        lead.addSubview(mark)
+        NSLayoutConstraint.activate([
+            lead.widthAnchor.constraint(equalToConstant: NoticeRow.lead),
+            lead.heightAnchor.constraint(equalToConstant: Size.iconMd),
+            mark.centerXAnchor.constraint(equalTo: lead.centerXAnchor),
+            mark.centerYAnchor.constraint(equalTo: lead.centerYAnchor),
+        ])
+        let row = UIStackView(arrangedSubviews: [lead, words])
+        row.spacing = Space.space3
+        row.alignment = .center
         row.isLayoutMarginsRelativeArrangement = true
         row.directionalLayoutMargins = NSDirectionalEdgeInsets(top: Space.space2, leading: Space.space3, bottom: Space.space1, trailing: Space.space3)
+        row.accessibilityIdentifier = "caw-section-head"
         return row
     }
 
@@ -370,13 +394,43 @@ final class CawPanel: UIView, UIGestureRecognizerDelegate {
     }
 }
 
+// MARK: The sections' rule
+
+/// The hairline between Needs you and Notices (DESIGN.md, Caw's panel): 1pt
+/// of the brand's vermillion (`brand-solid`) at the session tabs' rim
+/// strength (`tab-rim-mix`, by day or by night), across the rows' width, no
+/// glow and no fade; solid under Increase Contrast. `color-mix(in oklab,
+/// brand-solid N%, transparent)` is the vermillion itself at alpha N.
+private final class SectionRule: UIView {
+    static let thickness = 1.0
+
+    init() {
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        isUserInteractionEnabled = false
+        isAccessibilityElement = false
+        accessibilityIdentifier = "caw-section-rule"
+        backgroundColor = UIColor { traits in
+            let solid = Palette.brandSolid.resolvedColor(with: traits)
+            return traits.accessibilityContrast == .high ? solid : solid.withAlphaComponent(Effect.tabRimMix.value(for: traits))
+        }
+        heightAnchor.constraint(equalToConstant: Self.thickness).isActive = true
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        fatalError("SectionRule is built in code")
+    }
+}
+
 // MARK: A row that needs you
 
 /// One thing parked on the operator (NeedsCard.svelte, in Caw's panel):
 /// whose it is and how long it has waited, where it runs, what it asks. A
-/// permission is answered here, Deny and Approve as equal recessed peers at
-/// opposite ends; a question is answered in its session and a run's in its
-/// run. The answer's stage is said under them until the session has it. A
+/// permission is answered here, Deny then Approve together at the trailing
+/// edge, each filled in its status's tint (The Peer Rule's panel form), a
+/// finger's `space4` between them so their 44pt areas meet at the midpoint;
+/// a question is answered in its session and a run's in its run. The answer's stage is said under them until the session has it. A
 /// press on the row itself opens what it is waiting in.
 private final class NeedRow: UIControl {
     var onChoose: () -> Void = {}
@@ -417,18 +471,25 @@ private final class NeedRow: UIControl {
                 actions.addArrangedSubview(UIView())
                 actions.addArrangedSubview(KitButton.make("Answer", variant: .secondary, height: .sm) { [weak self] in self?.choose() })
             } else {
-                let deny = KitButton.make("Deny", glyph: .close, glyphTint: Palette.inkMuted, variant: .secondary, height: .sm) { [weak self] in
+                let deny = KitButton.make("Deny", glyph: .close, variant: .fail, height: .sm) { [weak self] in
                     self?.onAnswer(parked, .deny)
                 }
-                let approve = KitButton.make("Approve", glyph: .tick, glyphTint: Palette.inkStrong, variant: .secondary, height: .sm) { [weak self] in
+                let approve = KitButton.make("Approve", glyph: .tick, variant: .done, height: .sm) { [weak self] in
                     self?.onAnswer(parked, .allow)
                 }
                 deny.accessibilityLabel = "Deny \(parked.summary) on \(item.title)"
                 approve.accessibilityLabel = "Approve \(parked.summary) on \(item.title)"
-                deny.isEnabled = !stale && !inFlight
-                approve.isEnabled = !stale && !inFlight
-                actions.addArrangedSubview(deny)
-                actions.addArrangedSubview(approve)
+                deny.accessibilityIdentifier = "caw-need-deny"
+                approve.accessibilityIdentifier = "caw-need-approve"
+                for peer in [deny, approve] {
+                    peer.isEnabled = !stale && !inFlight
+                    peer.setContentHuggingPriority(.required, for: .horizontal)
+                }
+                let room = UIView()
+                room.setContentHuggingPriority(.defaultLow - 1, for: .horizontal)
+                actions.distribution = .fill
+                actions.spacing = Space.space4
+                for view in [room, deny, approve] { actions.addArrangedSubview(view) }
             }
             column.addArrangedSubview(actions)
             column.setCustomSpacing(Space.space2, after: ask)
@@ -444,10 +505,34 @@ private final class NeedRow: UIControl {
             stage.text = words.text
             column.addArrangedSubview(stage)
         }
+        // Its mark centred in the panel's one 28pt lead column on the title's
+        // line (NeedsCard.svelte `.lead`): the session's own mark, as the rail
+        // draws it, in the needs-you status; a run its workflow glyph.
+        let mark: UIView
+        switch item.kind {
+        case let .ask(parked):
+            let session = SessionMarkView()
+            session.configure(id: parked.instanceId, place: item.cwd.isEmpty ? item.machineId : item.cwd, status: .attn)
+            mark = session
+        case .run:
+            mark = GlyphView(.workflow, size: Size.iconMd, tint: Palette.inkMuted)
+        }
+        mark.isUserInteractionEnabled = false
+        let lead = UIView()
+        lead.translatesAutoresizingMaskIntoConstraints = false
+        lead.isUserInteractionEnabled = false
+        lead.addSubview(mark)
         column.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(lead)
         addSubview(column)
         NSLayoutConstraint.activate([
-            column.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Space.space3),
+            lead.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Space.space3),
+            lead.widthAnchor.constraint(equalToConstant: NoticeRow.lead),
+            lead.topAnchor.constraint(equalTo: title.topAnchor),
+            lead.bottomAnchor.constraint(equalTo: title.bottomAnchor),
+            mark.centerXAnchor.constraint(equalTo: lead.centerXAnchor),
+            mark.centerYAnchor.constraint(equalTo: lead.centerYAnchor),
+            column.leadingAnchor.constraint(equalTo: lead.trailingAnchor, constant: Space.space3),
             column.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Space.space3),
             column.topAnchor.constraint(equalTo: topAnchor, constant: Space.space2),
             column.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -Space.space2),
@@ -513,10 +598,11 @@ private final class NeedRow: UIControl {
 /// RebalanceNotices in it): its 28pt lead (Caw's mark in the notice's
 /// status, or the first account's tile), the entries beside it (a later
 /// entry with its own tile), the update's closing words, its one act at the
-/// trailing edge, and the ✕ (`NoticeCloseButton`, the 20pt pill) on the
-/// lead's top corner, 8pt out from it. The ✕ is the one way it leaves and
-/// acknowledges every entry the row shows; its 44pt target reaches past
-/// the row, so the row answers for it there too.
+/// trailing edge, and the ✕ (`NoticeCloseButton`, the 24pt ghost) in the
+/// first line's trailing cell, where lists put a row's dismiss. Only that
+/// cell is the ✕'s: every line under the first runs to the trailing edge.
+/// The ✕ is the one way it leaves and acknowledges every entry the row
+/// shows; the row answers for its 44pt target too.
 private final class NoticeRow: UIView {
     var onDismiss: () -> Void = {}
     var onAct: () -> Void = {}
@@ -524,6 +610,9 @@ private final class NoticeRow: UIView {
 
     /// The lead's side (NoticeRow's `lead`, AccountTile at 28).
     static let lead = 28.0
+    /// What the first line keeps clear for the ✕ (NoticeRow.svelte
+    /// `--x-room`): its words stop `space2` short of its box.
+    static let xRoom = NoticeCloseButton.side - NoticeCloseButton.inkInset + Space.space2
 
     init(_ notice: Notice) {
         super.init(frame: .zero)
@@ -538,13 +627,20 @@ private final class NoticeRow: UIView {
             let title = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong, lines: 0)
             title.text = entry.title
             reading.append(title)
-            if at == 0, notice.failed {
-                // The failure glyph before the title (UpdateCard `.title`).
-                let glyph = GlyphView(.alert, size: Size.iconMd, tint: Palette.statusFailGlyph)
-                glyph.setContentHuggingPriority(.required, for: .horizontal)
-                let head = UIStackView(arrangedSubviews: [glyph, title])
+            if at == 0 {
+                // The first line, the failure glyph before its title
+                // (UpdateCard `.title`), keeps the ✕'s cell clear (`xRoom`).
+                var parts: [UIView] = [title]
+                if notice.failed {
+                    let glyph = GlyphView(.alert, size: Size.iconMd, tint: Palette.statusFailGlyph)
+                    glyph.setContentHuggingPriority(.required, for: .horizontal)
+                    parts.insert(glyph, at: 0)
+                }
+                let head = UIStackView(arrangedSubviews: parts)
                 head.spacing = Space.space1
                 head.alignment = .center
+                head.isLayoutMarginsRelativeArrangement = true
+                head.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: 0, bottom: 0, trailing: Self.xRoom)
                 entryColumn.addArrangedSubview(head)
             } else {
                 entryColumn.addArrangedSubview(title)
@@ -597,9 +693,11 @@ private final class NoticeRow: UIView {
             column.leadingAnchor.constraint(equalTo: lead.trailingAnchor, constant: Space.space3),
             column.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -pad),
             column.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -Space.space2),
-            // On the lead's top corner, 8pt out from it (NoticeRow `.x`), inside the row's inset.
-            close.topAnchor.constraint(equalTo: lead.topAnchor, constant: -8),
-            close.leadingAnchor.constraint(equalTo: lead.leadingAnchor, constant: -8),
+            // The first line's trailing cell (NoticeRow.svelte `.end`): centred
+            // on the label line, its box hung past the trailing edge by its
+            // ink inset so its stroke ends on the edge the words keep.
+            close.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -(pad - NoticeCloseButton.inkInset)),
+            close.centerYAnchor.constraint(equalTo: topAnchor, constant: pad + TypeScale.typeLabel.lineHeight / 2),
         ])
         // The words, the act and the ✕ each read on their own; the lead is a picture.
         reading.append(close as Any)

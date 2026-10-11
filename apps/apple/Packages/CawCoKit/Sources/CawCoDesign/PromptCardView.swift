@@ -565,9 +565,9 @@ public final class PromptCardView: UIView, UIGestureRecognizerDelegate {
         /// The question's Answer: the action surface, a step wider.
         case primary
         case outline
-        /// Approve: recessed, the check in strong ink.
+        /// Approve: recessed, outlined in the done ink, the tick and label in strong ink.
         case grant
-        /// Deny: recessed, the cross in muted ink.
+        /// Deny: recessed, outlined in the fail ink, the cross and label in strong ink.
         case refuse
     }
 
@@ -580,11 +580,9 @@ public final class PromptCardView: UIView, UIGestureRecognizerDelegate {
         case .outline: .outline
         case .grant, .refuse: .secondary
         }
-        let ink: UIColor = switch kind {
-        case .primary: Palette.onAction
-        case .outline, .grant: Palette.inkStrong
-        case .refuse: Palette.inkMuted
-        }
+        // The Peer Rule's apart form (Prompt.svelte `.choice`): both labels
+        // and glyphs in the one strong ink, so neither leans.
+        let ink: UIColor = kind == .primary ? Palette.onAction : Palette.inkStrong
         let button = KitButton.make(title, glyph: glyph, glyphTint: ink, variant: variant, height: .lg, action: action)
         var config = button.configuration
         config?.attributedTitle = AttributedString(title, attributes: TypeScale.typeLabel.container(color: ink, tracking: -0.01))
@@ -595,6 +593,13 @@ public final class PromptCardView: UIView, UIGestureRecognizerDelegate {
         config?.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: pad, bottom: 0, trailing: pad)
         config?.background.cornerRadius = Radius.radiusSm
         config?.background.customView?.layer.cornerRadius = Radius.radiusSm
+        // Each peer outlined 1pt in its tint over the one recessed fill; the
+        // press scales it and changes neither (`KitButton`'s compact press).
+        switch kind {
+        case .grant: config?.background.strokeColor = Palette.statusDoneInk
+        case .refuse: config?.background.strokeColor = Palette.statusFailInk
+        case .primary, .outline: break
+        }
         button.configuration = config
         button.accessibilityLabel = title
         button.setContentHuggingPriority(.required, for: .horizontal)

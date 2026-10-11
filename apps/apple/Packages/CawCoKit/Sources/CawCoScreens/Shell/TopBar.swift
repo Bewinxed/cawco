@@ -180,7 +180,7 @@ final class BarTabs {
     /// constraint to them would not survive that. Only the strip takes touches.
     private final class Slot: UIView {
         weak var strip: PaneTabsView?
-        weak var cluster: UIView?
+        weak var cluster: TopBarCluster?
         weak var toggle: UIView?
 
         override func layoutSubviews() {
@@ -192,7 +192,7 @@ final class BarTabs {
             }
             var end = bounds.width - Space.space6
             if let cluster, cluster.window != nil, cluster.window === window {
-                end = cluster.convert(cluster.bounds, to: self).minX - Space.space2
+                end = cluster.convert(CGPoint(x: cluster.leadingEdge, y: 0), to: self).x - Space.space2
             }
             let height = PaneTabsView.item + 4
             let frame = CGRect(x: lead, y: bounds.height - height, width: max(0, end - lead), height: height)
@@ -356,13 +356,19 @@ final class GlassItem: TapControl {
         row.translatesAutoresizingMaskIntoConstraints = false
         count.tabular = true
         addSubview(row)
+        // As wide as its content needs and no wider: a bar that offers its
+        // group more room never stretches an item (it took the crumb's room).
+        let snug = widthAnchor.constraint(equalToConstant: NeedsCawButton.side)
+        snug.priority = .defaultHigh
         NSLayoutConstraint.activate([
             heightAnchor.constraint(equalToConstant: NeedsCawButton.side),
             widthAnchor.constraint(greaterThanOrEqualToConstant: NeedsCawButton.side),
+            snug,
             row.centerXAnchor.constraint(equalTo: centerXAnchor),
             row.centerYAnchor.constraint(equalTo: centerYAnchor),
             row.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: Space.space2),
         ])
+        setContentHuggingPriority(.required, for: .horizontal)
         addInteraction(UIPointerInteraction(delegate: self))
         addGestureRecognizer(UIHoverGestureRecognizer(target: self, action: #selector(hovered(_:))))
         isAccessibilityElement = true
@@ -450,8 +456,11 @@ final class TopBarCluster: UIView {
     /// phone, the bar's glass group on a wide screen (NeedsCaw.svelte `glass`).
     var glass: GlassCapsule { compact ? phoneCaw.capsule ?? group : group }
 
-    /// Where the first drawn control starts, in the cluster's own space.
-    let leadingEdge = 0.0
+    /// Where the first drawn control starts, in the cluster's own space: the
+    /// group stands at the cluster's trailing end, so a bar that hands the
+    /// cluster more room than it needs leaves that room empty before it, and
+    /// the crumb measures to the glass, not to the room.
+    var leadingEdge: Double { stack.frame.minX }
 
     init() {
         super.init(frame: .zero)
@@ -462,8 +471,13 @@ final class TopBarCluster: UIView {
         addSubview(stack)
         // The web's right inset is `space6` (21); the bar's own differs by device and is measured.
         end = stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -(Space.space6 - 16))
+        // Snug to the group when the bar sizes the cluster from its content;
+        // when the bar gives it more, the group keeps to the trailing end.
+        let snug = stack.leadingAnchor.constraint(equalTo: leadingAnchor)
+        snug.priority = .defaultLow
         NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor),
+            stack.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor),
+            snug,
             end,
             stack.topAnchor.constraint(equalTo: topAnchor),
             stack.bottomAnchor.constraint(equalTo: bottomAnchor),
@@ -523,7 +537,7 @@ final class TopBarCluster: UIView {
         )
     }
 
-    private var lastWidth = 0.0
+    private var lastEdge = 0.0
     private var end: NSLayoutConstraint!
 
     /// A phone's touch area for Caw (`NeedsCawButton.touchBox`): 44pt square
@@ -560,16 +574,20 @@ final class TopBarCluster: UIView {
             next = -max(0, Space.space6 - own)
         }
         if abs(end.constant - next) > 0.25 { end.constant = next }
-        if bar != nil, abs(bounds.width - lastWidth) > 0.25 {
-            lastWidth = bounds.width
+        // Where the glass starts moved (the cluster resized, or the group in it): the crumb is measured again.
+        let edge = convert(CGPoint(x: leadingEdge, y: 0), to: bar ?? self).x
+        if bar != nil, abs(edge - lastEdge) > 0.25 {
+            lastEdge = edge
             onResize()
         }
     }
 
     /// The hub's word on the bar: what needs the operator, which machines are up.
-    func configure(needs: Int, notices: Int, quiet: String, online: Int, tone: MachineHealth.Tone?, panelOpen: Bool) {
+    /// `machines`: every machine the hub knows (MachinesButton.svelte `count`),
+    /// the number the Machines item says; the asks are Caw's arcs, never this.
+    func configure(needs: Int, notices: Int, quiet: String, machines total: Int, tone: MachineHealth.Tone?, panelOpen: Bool) {
         for head in [phoneCaw, groupCaw] { head.configure(count: needs, notices: notices, quiet: quiet, open: panelOpen) }
-        machines.count.text = "\(online)"
+        machines.count.text = "\(total)"
         // The glyph alone carries a machine in trouble; it crosses over `durFade`, never pulses.
         let ink: UIColor = switch tone {
         case .fail: Palette.statusFailGlyph
@@ -579,7 +597,7 @@ final class TopBarCluster: UIView {
         if machines.glyph.tintColor != ink {
             Motion.easeOut.animator(Motion.durFade) { self.machines.glyph.tintColor = ink }.startAnimation()
         }
-        machines.accessibilityValue = "\(online) online"
+        machines.accessibilityValue = "\(total) \(total == 1 ? "machine" : "machines")"
     }
 
     /// Something new needs the operator: Caw's beat, where he is drawn.

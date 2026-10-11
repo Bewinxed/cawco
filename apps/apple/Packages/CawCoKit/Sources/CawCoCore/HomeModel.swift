@@ -215,6 +215,9 @@ public final class HomeModel {
         /// Its session's machine is offline (the row reads `unknown`): the ask
         /// still stands, and answering it waits for the machine.
         public var stale = false
+        /// Where its session runs, for its mark's hue (NeedsCard.svelte
+        /// `item.cwd || item.machineId`); empty for a run.
+        public var cwd = ""
 
         /// The session whose ask it is, for a session's.
         public var instanceId: String? {
@@ -248,6 +251,7 @@ public final class HomeModel {
                     raisedAt: ask.raisedAt
                 )
                 item.stale = row?.isStale == true
+                item.cwd = row?.cwd ?? ""
                 items.append(item)
             }
         }
