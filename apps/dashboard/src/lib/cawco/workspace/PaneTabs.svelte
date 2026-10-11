@@ -1934,10 +1934,12 @@
 
      Rims stand above every tab's card, sheet and title (`--stack-top`,
      TabsList), and a side under a neighbour nearer the choice fades out
-     (`--start-shown`, `--end-shown`, `look`). On a switch the side going
-     under fades out while the side coming out from under fades in, on the
-     switch's clock, so the stroke where two tabs meet hands over in place
-     and never jumps from one edge to the other. Increase Contrast and
+     (`--start-shown`, `--end-shown`, `look`) and stands on that
+     neighbour's edge. On a switch the side going under and the side coming
+     out travel together from one tab's edge to the other's, one fading out
+     as the other fades in at the same x, on the switch's clock, so the
+     stroke where two tabs meet is one line in every frame and never jumps
+     from one edge to the other. Increase Contrast and
      Reduce Transparency draw a solid 1px outline and no glow. */
   .tab {
     --tone: var(--ink-muted);
@@ -2033,14 +2035,22 @@
         calc(var(--F) + var(--slope-start) + var(--radius) - 0.5px)
     );
   }
-  /* A side, drawn as the leading one; the trailing one is its mirror. */
+  /* A side, drawn as the leading one; the trailing one is its mirror. A
+     side under its neighbour stands in by the overlap less the stroke
+     (`--tuck-in`), its stroke on the neighbour's own, the one line that
+     shows there: on a switch the side going under and the side coming out
+     travel together between the two edges on the same pixels, one fading
+     out as the other fades in, so the seam is one stroke in every frame. */
   .rim-side {
     --s: var(--slope-start);
+    --tuck-in: calc(var(--overlap) - var(--t));
     opacity: var(--start-shown);
+    translate: calc(var(--tuck-in) * (1 - var(--start-shown))) 0;
 
     &[data-side="end"] {
       --s: var(--slope-end);
       opacity: var(--end-shown);
+      translate: calc(var(--tuck-in) * (var(--end-shown) - 1)) 0;
       transform: scaleX(-1);
     }
     & > span {
@@ -2080,7 +2090,11 @@
     );
   }
   @media (prefers-reduced-motion: no-preference) {
-    .rim-side,
+    .rim-side {
+      transition:
+        opacity var(--choose-dur) var(--choose-ease),
+        translate var(--choose-dur) var(--choose-ease);
+    }
     .rim-foot,
     .rim-flare {
       transition: opacity var(--choose-dur) var(--choose-ease);

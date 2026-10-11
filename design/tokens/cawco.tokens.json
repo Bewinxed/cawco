@@ -2763,17 +2763,20 @@
     "tab-rim-mix": {
       "$type": "number",
       "$value": "51%",
-      "$description": "How much of its session's status colour an unchosen session tab's rim carries, on every width; its glow carries half of it."
+      "$description": "How much of its session's status colour an unchosen session tab's rim carries, on every width; its glow carries half of it. A rim is a boundary, so its sides hold 3:1 against the tab's fill and the shelf (WCAG non-text contrast); by night that takes more of the tone: 51% left a failed tab's side at 2.5:1 and a working one at 2.9:1, 64% clears the failed tone, the hardest.",
+      "$extensions": { "dev.cawco": { "dark": "64%" } }
     },
     "tab-rim-mix-chosen": {
       "$type": "number",
       "$value": "65%",
-      "$description": "The chosen session tab's rim, on every width."
+      "$description": "The chosen session tab's rim, on every width: 14 points louder than an unchosen one, by day and by night.",
+      "$extensions": { "dev.cawco": { "dark": "78%" } }
     },
     "tab-rim-mix-idle": {
       "$type": "number",
       "$value": "32%",
-      "$description": "An idle session's rim, chosen or not, in the muted ink."
+      "$description": "An idle session's rim, chosen or not, in the muted ink. By night 32% left its side at 2.0:1; 54% holds 3:1 against the fill and the shelf.",
+      "$extensions": { "dev.cawco": { "dark": "54%" } }
     }
   },
   "motion": {

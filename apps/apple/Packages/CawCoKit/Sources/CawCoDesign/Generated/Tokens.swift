@@ -652,11 +652,11 @@ public enum Effect {
     /// Relative tints for rows inside any surface: hover +6%, selected +10% ink.
     public static let surfaceHoverMix: Double = 0.06
     public static let surfaceSelectedMix: Double = 0.1
-    /// How much of its session's status colour an unchosen session tab's rim carries, on every width; its glow carries half of it.
+    /// How much of its session's status colour an unchosen session tab's rim carries, on every width; its glow carries half of it. A rim is a boundary, so its sides hold 3:1 against the tab's fill and the shelf (WCAG non-text contrast); by night that takes more of the tone: 51% left a failed tab's side at 2.5:1 and a working one at 2.9:1, 64% clears the failed tone, the hardest.
     public static let tabRimMix: Double = 0.51
-    /// The chosen session tab's rim, on every width.
+    /// The chosen session tab's rim, on every width: 14 points louder than an unchosen one, by day and by night.
     public static let tabRimMixChosen: Double = 0.65
-    /// An idle session's rim, chosen or not, in the muted ink.
+    /// An idle session's rim, chosen or not, in the muted ink. By night 32% left its side at 2.0:1; 54% holds 3:1 against the fill and the shelf.
     public static let tabRimMixIdle: Double = 0.32
 }
 
