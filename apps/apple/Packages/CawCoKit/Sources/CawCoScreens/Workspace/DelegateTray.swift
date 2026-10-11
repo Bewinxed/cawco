@@ -206,6 +206,7 @@ final class DelegateTrayView: UIView {
         fanOpen = false
         fanPinned = false
         ground.catches = false
+        releaseGround()
         fanViews.values.forEach { $0.removeFromSuperview() }
         fanViews = [:]
         fanOrder = []
@@ -633,11 +634,40 @@ final class DelegateTrayView: UIView {
 
     /// The panel's ground: the composer's host above the row, as wide as the
     /// row, so the panel stands at its chip and stays inside the row's edges.
+    /// It stands in the host only while a chip's panel or the fan is open (and
+    /// while they fold away, `releaseGround`): with neither, nothing of the
+    /// tray stands over the transcript. While it stands, every layout lays it
+    /// out with the row.
     private func syncGround() {
         guard let host = panelHost, window != nil else { return }
+        let wanted = openKey != nil || fanOpen
+        guard wanted || ground.superview === host else { return }
+        if wanted {
+            groundRelease?.cancel()
+            groundRelease = nil
+        }
         if ground.superview !== host { host.addSubview(ground) }
         let box = row.convert(row.bounds, to: host)
         ground.frame = CGRect(x: box.minX, y: 0, width: box.width, height: box.minY)
+    }
+
+    /// How long the ground outlasts the last thing in it: the panel's fade,
+    /// or the fan folding, its nearest chip five deep (`placeFan`).
+    private static let groundLinger = max(Motion.durControl, 4 * Motion.durStagger + Motion.durExit)
+    private var groundRelease: DispatchWorkItem?
+
+    /// With neither a panel nor the fan open, the ground leaves the host once
+    /// they have folded away; one opening meanwhile keeps it (`syncGround`).
+    private func releaseGround() {
+        guard openKey == nil, !fanOpen, ground.superview != nil else { return }
+        groundRelease?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, openKey == nil, !fanOpen else { return }
+            groundRelease = nil
+            ground.removeFromSuperview()
+        }
+        groundRelease = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.groundLinger, execute: work)
     }
 
     private func open(_ key: String, pin: Bool) {
@@ -646,10 +676,11 @@ final class DelegateTrayView: UIView {
         guard key != "more", let chip = frame(of: key), panelHost != nil else { return }
         // A row chip's panel takes the place of a fan nobody pinned.
         if fanViews[key] == nil, !fanPinned { closeFan() }
+        // Open before the ground is laid, so it stands for this panel.
+        openKey = key
         syncGround()
         let place = place(for: key, chip: chip)
         panel.room = min(320, place.y - 16)
-        openKey = key
         pinned = pin || pinned
         ground.catches = pinned || fanPinned
         panel.show(key, content: content(key), at: place, in: ground)
@@ -669,6 +700,7 @@ final class DelegateTrayView: UIView {
         panel.hide()
         for view in chipViews.values { view.accessibilityValue = "Collapsed" }
         for view in fanViews.values { view.accessibilityValue = "Collapsed" }
+        releaseGround()
     }
 
     /// The panel and the fan, both.
@@ -709,6 +741,7 @@ final class DelegateTrayView: UIView {
         ground.catches = pinned
         moreChip?.accessibilityValue = "Collapsed"
         placeFan(animated: true)
+        releaseGround()
     }
 
     /// The chips "+N" holds, one view each, in the fan.
