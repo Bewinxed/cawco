@@ -390,9 +390,23 @@ try {
   }
 
   // ── 4. The opens ─────────────────────────────────────────────────────
+  // A reading the page gives back (`--sample`, a script's text): before the
+  // opens, after the tenth and after the last, so what grows with every
+  // open shows apart from what the first ones set up once.
+  const sampleScript = option("--sample");
+  const sample = async (when: string) => {
+    if (sampleScript) {
+      const text = await Bun.file(sampleScript).text();
+      console.log(`sample ${when}: ${await page.evaluate(text)}`);
+    }
+  };
+  await sample("before the opens");
   const summary: { max: number; dropped: number }[] = [];
   for (let n = 0; n < RUNS; n += 1) {
-    // biome-ignore lint/performance/noAwaitInLoops: one open at a time
+    if (n === 10) {
+      // biome-ignore lint/performance/noAwaitInLoops: read between two opens
+      await sample("after 10 opens");
+    }
     const run = await open(page, at);
     const opened = await page.evaluate(
       () =>
@@ -427,6 +441,7 @@ try {
       }
     }
   }
+  await sample(`after ${RUNS} opens`);
   // What an experiment's script left for us (`--script`), if anything.
   const left = await page.evaluate(() =>
     (window as unknown as { __probeOut?: string[] }).__probeOut?.join("\n")

@@ -262,9 +262,19 @@
       },
       dispose() {
         performance.mark(`caw stage ${status} gone`);
-        // The file stays parsed for the next stage (`parsed`).
+        // The file stays parsed for the next stage (`parsed`). Every
+        // instance the runtime made for this stage goes ("Call the
+        // `.delete()` API on any instances created from the Rive runtime
+        // when they are no longer needed", rive.app/docs/runtimes/web/
+        // low-level-api-usage); the view model instance is counted by
+        // reference, and is let go as the runtime's own cleanup lets its
+        // go (`ViewModelInstance.cleanup`: `_runtimeInstance.unref()`),
+        // after the machine bound to it. Its values (`entered`, `dark`,
+        // `pixel`) are its own and go with it. Kept, each clip left
+        // about 1 KiB on the runtime's heap for good.
         renderer.delete();
         machine.delete();
+        caw.unref();
         artboard.delete();
       },
     };

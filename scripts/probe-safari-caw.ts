@@ -20,14 +20,26 @@
  *  4. reads each recording's video track itself: the media timescale from
  *     its `mdhd` and every frame's duration from its `stts` (a QuickTime
  *     movie is the same box tree as an MP4), so no ffprobe is needed;
- *  5. finds the open in each recording, the burst of frames the screen drew
+ *  5. times the press from the touch itself: the movie's time 0 is the
+ *     moment the recorder says "Recording started" ("simctl writes
+ *     `Recording started` to stderr once the first frame is processed",
+ *     simctl's help text), and the touch came down when the runner's reply
+ *     came back less the time it says it spent playing the touch (its own
+ *     log line, "Tapping took <s>", which Maestro's TouchRouteHandler writes
+ *     once `synthesize` has played the touch down and up). The press frame
+ *     is the time from the touch coming down to the first frame the screen
+ *     drew after it, so a press that stalls counts even when the screen
+ *     stood still before the tap;
+ *  6. finds the open in each recording, the burst of frames the screen drew
  *     after the tap, and prints its cadence: frames, how long it ran, the
  *     longest interval, how many intervals were longer than a 60 Hz frame and
  *     a half (25 ms, a dropped frame), and the intervals themselves.
  *
  * The recorder writes a frame only when the screen changed, so a still
  * screen shows as one long interval; the open is the run of short ones after
- * the tap. Safari must already be past its first-launch screens on the
+ * the tap, and a stall in the press's own frame merged into that still
+ * interval, which is why the press is timed from the touch (5). A press
+ * frame past PRESS_MS is a stall. Safari must already be past its first-launch screens on the
  * simulator. The Mac's Maestro (/opt/homebrew/bin/maestro) and Homebrew's
  * openjdk do the reading; the runner the first read starts on the simulator
  * (it replaces any Maestro runner already there) is stopped at the end, and
@@ -55,6 +67,16 @@ if (!url) {
 const RUNS = Number(option("--runs") ?? 10);
 /** A 60 Hz frame and a half: an interval past this lost a frame. */
 const DROPPED_MS = 25;
+/**
+ * From the touch coming down to the screen's first frame after it, ms: the
+ * frame the touch lands in, the one that draws the press, and one to spare
+ * for the touch's way from the runner through the simulator to Safari's
+ * page. Past this the press stalled. (This probe's own call: three 60 Hz
+ * frames.)
+ */
+const PRESS_MS = 50;
+/** How long the recorder is given to say its first frame is in, ms. */
+const RECORDER_START_MS = 15_000;
 /** Intervals longer than this end the open's burst: the screen stood still. */
 const STILL_MS = 120;
 /** How long the panel is given to open, and the recorder to settle, ms. */
@@ -267,19 +289,93 @@ async function screenRead(udid: string, named: string): Promise<ScreenRead> {
  * /touch`, the call every `tapOn` of Maestro's ends in, sent to it straight.
  * A tap through `maestro test` first starts a JVM, lists the devices and reads
  * the whole tree, seconds in all, so nothing could say when the finger came
- * down; this one lands as it is sent. The runner is the one the simulator's
- * first read started.
+ * down. The runner is the one the simulator's first read started. Its reply
+ * comes once the touch has been played down and up (TouchRouteHandler:
+ * `synthesize`, then "Tapping took", then 200), so the touch came down at
+ * the reply less what the runner says the playing took (`runnerTook`).
+ * Returns when it was sent and when the reply came back, on this process's
+ * clock (`performance.now()`), ms.
  */
-async function tap(udid: string, p: { x: number; y: number }) {
+async function tap(
+  udid: string,
+  p: { x: number; y: number }
+): Promise<{ back: number; sent: number }> {
   const port = runnerPorts.get(udid);
   if (port === undefined) {
     throw new Error(`no Maestro runner for ${udid}: read its screen first`);
   }
-  const started = Date.now();
+  const sent = performance.now();
   await mac(
     `curl -sS --fail-with-body --max-time 30 -H 'Content-Type: application/json' -d '{"x":${Math.round(p.x)},"y":${Math.round(p.y)}}' http://127.0.0.1:${port}/touch`
   );
-  maestroLog(udid).taps.push(Date.now() - started);
+  const back = performance.now();
+  maestroLog(udid).taps.push(Math.round(back - sent));
+  return { sent, back };
+}
+/** The runner's own "Tapping took <s>" (TouchRouteHandler's NSLog). */
+const TAPPING_TOOK = /Tapping took ([\d.]+)/g;
+/**
+ * How long the runner says it spent playing its last touch, ms: the last
+ * "Tapping took" line in the simulator's log of the past 30 s.
+ */
+async function runnerTook(udid: string): Promise<number> {
+  const text = await mac(
+    `xcrun simctl spawn ${udid} log show --last 30s --style compact --predicate 'eventMessage BEGINSWITH "Tapping took"'`
+  );
+  const last = [...text.matchAll(TAPPING_TOOK)].at(-1);
+  if (!last) {
+    throw new Error(
+      `the runner logged no "Tapping took" in ${udid}'s last 30 s, so the touch's time is unknown: ${text.trim().slice(-300) || "(an empty log)"}`
+    );
+  }
+  return Number(last[1]) * 1000;
+}
+/**
+ * The moment the recorder says its first frame is in, the movie's time 0,
+ * on this process's clock (`performance.now()`): "simctl writes `Recording
+ * started` to stderr once the first frame is processed" (simctl's help).
+ */
+async function recordingStarted(
+  recorder: ReturnType<typeof Bun.spawn>
+): Promise<number> {
+  const { stderr } = recorder;
+  if (!(stderr instanceof ReadableStream)) {
+    throw new Error("the recorder's stderr is not piped");
+  }
+  const reader = stderr.getReader();
+  const words = new TextDecoder();
+  let said = "";
+  const deadline = Bun.sleep(RECORDER_START_MS).then(() => null);
+  try {
+    while (!said.includes("Recording started")) {
+      // biome-ignore lint/performance/noAwaitInLoops: the recorder's lines, as they come
+      const chunk = await Promise.race([reader.read(), deadline]);
+      if (chunk === null || chunk.done) {
+        throw new Error(
+          `the recorder did not say "Recording started" within ${RECORDER_START_MS} ms: ${said.trim() || "it said nothing"}`
+        );
+      }
+      said += words.decode(chunk.value);
+    }
+    return performance.now();
+  } finally {
+    reader.releaseLock();
+  }
+}
+/**
+ * The press frame: from the touch coming down, `downAt` ms into the movie,
+ * to the first frame the screen drew after it, ms; each frame stands at the
+ * sum of the durations before it.
+ */
+function pressFrame(durations: number[], downAt: number): number | null {
+  let t = 0;
+  for (const duration of durations) {
+    if (t > downAt) {
+      return t - downAt;
+    }
+    t += duration;
+  }
+  return null;
 }
 /**
  * The simulator's runner, stopped: its app, and the `xcodebuild` keeping it
@@ -507,7 +603,12 @@ const cawAt = {
   y: caw.frame.y + caw.frame.height / 2,
 };
 
-const summaries: { dropped: number; frames: number; max: number }[] = [];
+const summaries: {
+  dropped: number;
+  frames: number;
+  max: number;
+  press: number;
+}[] = [];
 try {
   for (let n = 0; n < RUNS; n += 1) {
     const file = join(out, `open-${n}.mov`);
@@ -525,23 +626,33 @@ try {
       { stdout: "ignore", stderr: "pipe" }
     );
     // biome-ignore lint/performance/noAwaitInLoops: one recording at a time
+    const zero = await recordingStarted(recorder);
     await Bun.sleep(LEAD_MS);
-    await tap(phone, cawAt);
+    const touch = await tap(phone, cawAt);
     await Bun.sleep(OPEN_MS);
     recorder.kill("SIGINT");
     await recorder.exited;
+    // Read with nothing recording, before the close's own touch is logged.
+    const took = await runnerTook(phone);
     // Close the panel: his press toggles it.
     await tap(phone, cawAt);
     await Bun.sleep(800);
 
     const durations = frameDurations(await Bun.file(file).arrayBuffer());
+    const downAt = touch.back - took - zero;
+    const press = pressFrame(durations, downAt);
+    if (press === null) {
+      throw new Error(
+        `run ${n}: no frame after the touch came down at +${downAt.toFixed(0)} ms in ${file}`
+      );
+    }
     const burst = openBurst(durations, LEAD_MS);
     const total = burst.reduce((sum, ms) => sum + ms, 0);
     const max = burst.length > 0 ? Math.max(...burst) : 0;
     const dropped = burst.filter((ms) => ms > DROPPED_MS).length;
-    summaries.push({ frames: burst.length + 1, max, dropped });
+    summaries.push({ frames: burst.length + 1, max, dropped, press });
     console.log(
-      `run ${n}: ${burst.length + 1} frames over ${total.toFixed(0)} ms, longest ${max.toFixed(1)} ms, ${dropped} over ${DROPPED_MS} ms; intervals ${burst.map((ms) => ms.toFixed(0)).join(" ")}`
+      `run ${n}: press ${press.toFixed(0)} ms${press > PRESS_MS ? " STALLED" : ""} (touch down at +${downAt.toFixed(0)} ms in the movie, sent at +${(touch.sent - zero).toFixed(0)}, the runner played it in ${took.toFixed(0)} ms); ${burst.length + 1} frames over ${total.toFixed(0)} ms, longest ${max.toFixed(1)} ms, ${dropped} over ${DROPPED_MS} ms; intervals ${burst.map((ms) => ms.toFixed(0)).join(" ")}`
     );
   }
 } finally {
@@ -551,6 +662,10 @@ try {
 const sorted = (values: number[]) => [...values].sort((a, b) => a - b);
 const median = (values: number[]) =>
   sorted(values)[Math.floor(values.length / 2)] ?? 0;
+const presses = summaries.map((s) => s.press);
+console.log(
+  `PRESS ${RUNS} opens: median ${median(presses).toFixed(0)} ms, longest ${Math.max(0, ...presses).toFixed(0)} ms, ${presses.filter((ms) => ms > PRESS_MS).length} over ${PRESS_MS} ms (from the touch coming down to the screen's next frame)`
+);
 console.log(
   `SUMMARY ${RUNS} opens: median ${median(summaries.map((s) => s.frames))} frames, median longest ${median(summaries.map((s) => s.max)).toFixed(1)} ms, ${summaries.reduce((sum, s) => sum + s.dropped, 0)} intervals over ${DROPPED_MS} ms in all; first open: longest ${summaries[0]?.max.toFixed(1)} ms, ${summaries[0]?.dropped} over ${DROPPED_MS} ms`
 );
