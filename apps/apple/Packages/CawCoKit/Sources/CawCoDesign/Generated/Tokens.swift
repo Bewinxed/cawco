@@ -345,6 +345,8 @@ public enum FontFamily {
 }
 
 public enum TypeScale {
+    /// Figtree's cap height (0.703em). JetBrains Mono figures set beside Figtree words take it as `font-size-adjust: cap-height`, so their digits stand as tall as Figtree's at the same size step (unadjusted, Mono's stand 4% taller).
+    public static let monoFigureCap: Double = 0.703
     /// The landing wordmark's variable-font weight. Brand only.
     public static let weightWordmark: Double = 1000
     /// The landing wordmark's tracking; the ampersand shares its face and size.

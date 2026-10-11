@@ -32,7 +32,7 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "#lib/components/ui/popover/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
-  import { IconKey, IconSubagents } from "#lib/icons.js";
+  import { IconKey, IconRefresh, IconSubagents } from "#lib/icons.js";
   import ClaudeIcon from "~icons/logos/claude-icon";
   import { cawco } from "./client.svelte";
   import { dur, motionOk } from "./motion/curves.svelte";
@@ -49,17 +49,19 @@
     type ClaudeRings,
     caption,
     cellTime,
-    delegateLine,
+    delegateTip,
+    dialTip,
     openCodeStop,
     orgGroups,
     plain,
     type RingAccount,
-    staleTip,
+    shownNames,
     stopOf,
     stopText,
     weekLeft,
   } from "./usage/rings";
   import SessionsChip from "./usage/SessionsChip.svelte";
+  import WeekMark from "./usage/WeekMark.svelte";
   import Words from "./usage/Words.svelte";
 
   let {
@@ -108,14 +110,9 @@
   );
 
   // ── the dial wall ──
-  /** A cell: its account, and whether an organization's head stands over it. */
-  interface WallCell {
-    grouped: boolean;
-    ring: RingAccount;
-  }
   /** An organization's cells under its name, or (null) the ungrouped ones. */
   interface WallBlock {
-    cells: WallCell[];
+    cells: RingAccount[];
     /** Its head: the organization's name, "Other" under groups, or none. */
     head: string | null;
     org: string | null;
@@ -173,65 +170,51 @@
     return groups.map((group, i) => ({
       org: group.org,
       head: group.org ?? (i > 0 ? OTHER : null),
-      cells: ranked(group.accounts, claude).map((ring) => ({
-        ring,
-        grouped: group.org !== null,
-      })),
+      cells: ranked(group.accounts, claude),
     }));
   });
 
-  /** An email domain's top level ("gmail.com" → "gmail"). */
-  const TOP_DOMAIN = /\.[^.]+$/;
-  /** An account's first name line: its nickname, else its email's local part. */
-  const localOf = (ring: RingAccount): string =>
-    ring.nick || !ring.email
-      ? ring.name
-      : ring.email.slice(0, ring.email.lastIndexOf("@"));
-  /** How many accounts shown together go by each first line. */
-  const locals = $derived.by(() => {
-    const count = new Map<string, number>();
-    for (const ring of [...(claude?.accounts ?? []), openCode]) {
-      if (ring) {
-        count.set(localOf(ring), (count.get(localOf(ring)) ?? 0) + 1);
-      }
-    }
-    return count;
-  });
-  /**
-   * A cell's name: its first line, then, only where an ungrouped account
-   * shares that first line with another shown with it, its domain's stem
-   * ("@gmail"). Under an organization's head the head tells them apart.
-   */
-  const cellName = (
-    ring: RingAccount,
-    grouped: boolean
-  ): { local: string; domain: string } => {
-    const local = localOf(ring);
-    const shared = (locals.get(local) ?? 0) > 1;
-    return {
-      local,
-      domain:
-        !grouped && shared && ring.email
-          ? `@${ring.email.slice(ring.email.lastIndexOf("@") + 1).replace(TOP_DOMAIN, "")}`
-          : "",
-    };
+  /** Every account by the one name the strip and the popover show it by. */
+  const names = $derived(shownNames(claude?.accounts ?? [], openCode));
+  const nameOf = (ring: RingAccount): string => {
+    const name = names.get(ring.id);
+    return name ? `${name.local}${name.domain}` : ring.name;
   };
-  /** Where new delegates start, said under the wall in the name its cell shows. */
-  const delegates = $derived.by(() => {
-    const to = claude?.delegate;
-    if (!(claude && to)) {
-      return [];
+  /**
+   * A cell read out whole, with the words its figures and marks stand for:
+   * "design · 5h+ left · week 62% left · 2 sessions · new sessions start
+   * here".
+   */
+  const cellLabel = (
+    ring: RingAccount,
+    c: ClaudeRings | null,
+    name = nameOf(ring)
+  ): string => {
+    const time = cellTime(ring, c, now);
+    const week = weekLeft(ring);
+    const sessions = ring.sessions.length;
+    let said: string;
+    if (time.kind === "back") {
+      said =
+        time.figure === null
+          ? "at its limit"
+          : `at its limit, back in ${time.figure}`;
+    } else {
+      said = `${time.guess ? "about " : ""}${time.figure} left`;
     }
-    const grouped = new Set(
-      wall.flatMap((block) =>
-        block.cells.filter((cell) => cell.grouped).map((cell) => cell.ring.id)
-      )
-    );
-    return delegateLine(claude, (ring) => {
-      const name = cellName(ring, grouped.has(ring.id));
-      return `${name.local}${name.domain}`;
-    });
-  });
+    return [
+      name,
+      said,
+      week === null ? null : `week ${week}% left`,
+      sessions > 0
+        ? `${sessions} ${sessions === 1 ? "session" : "sessions"}`
+        : null,
+      c && ring.id === c.delegate?.id ? "delegates start here" : null,
+      c && ring.id === c.carry?.id ? "new sessions start here" : null,
+    ]
+      .filter((part) => part !== null)
+      .join(" · ");
+  };
 
   /** One mark's room in the strip: 16px and the 4px between marks. */
   const SLOT = 20;
@@ -415,7 +398,7 @@
     const said: string[] = [];
     if (claude) {
       said.push(
-        `Claude: ${stopText(claude, now)} until you're stopped, ${plain(caption(claude, now))}`
+        `Claude: ${stopText(claude, now)} until you're stopped, ${plain(caption(claude, now, nameOf))}`
       );
     }
     if (openCode) {
@@ -494,7 +477,7 @@
             >
           </span>
           <span class="cap" data-next={claude.next?.id} data-strip-caption
-            ><Words parts={caption(claude, now)} /></span
+            ><Words parts={caption(claude, now, nameOf)} /></span
           >
         </span>
       {/if}
@@ -514,51 +497,146 @@
   {/if}
 {/snippet}
 
-{#snippet cell(
+{#snippet dial(
   ring: RingAccount,
-  grouped: boolean,
+  c: ClaudeRings | null
+)}
+  <!-- The 32px double dial (its disc the 5-hour window, its rim the week),
+       its own key: resting on it or a tap says what each window has left. -->
+  {@const tip = dialTip(ring, c, now)}
+  <span class="dial">
+    <Tip label={tip} side="top" tap>
+      {#snippet children(
+        props
+      )}
+        <button
+          {...props}
+          aria-label={tip}
+          class="ring-tip"
+          data-dial-tip
+          data-stale-ring={ring.state === "stale" ? "" : undefined}
+          type="button"
+        >
+          <Rings {ring} size={32} />
+        </button>
+      {/snippet}
+    </Tip>
+  </span>
+{/snippet}
+
+{#snippet timeFigure(
   time: CellTime
 )}
-  <!-- A cell of the dial wall, one row on its wall column's three tracks
-       (subgrid): the 32px double dial (its disc the 5-hour window, its rim
-       the week) on both lines; its name on the first, the sessions it runs
-       at that line's end; how long it lasts, then its week at the end, on
-       the second. A re-ranking slides it to its new place (motion/rows). -->
-  {@const name = cellName(ring, grouped)}
+  <!-- How long it lasts, a figure alone; a guess's tilde hangs before it,
+       so every time's first figure stands on one x. At its limit, the
+       refresh mark and when it's back, said whole on a rest or a tap. -->
+  {#if time.kind === "back"}
+    {@const tip =
+      time.figure === null
+        ? "At its limit."
+        : `At its limit. Back in ${time.figure}.`}
+    <Tip label={tip} side="top" tap>
+      {#snippet children(
+        props
+      )}
+        <span
+          {...props}
+          aria-label={tip}
+          class="line time back"
+          data-time
+          role="img"
+        >
+          <span aria-hidden="true" class="glyph"><IconRefresh /></span>
+          {#if time.figure}
+            <span class="fig mono-figure">{time.figure}</span>
+          {/if}
+        </span>
+      {/snippet}
+    </Tip>
+  {:else}
+    <span class="line time" data-time class:guess={time.guess}>
+      {#if time.guess}
+        <span class="tilde mono-figure">~</span>
+      {/if}
+      <span class="fig mono-figure">{time.figure}</span>
+    </span>
+  {/if}
+{/snippet}
+
+{#snippet weekFigure(
+  ring: RingAccount
+)}
+  <!-- What is left of its week, after the rim it reads off. -->
   {@const week = weekLeft(ring)}
+  {#if week !== null}
+    <span class="line wk" data-week>
+      <WeekMark />
+      <span class="fig mono-figure">{week}%</span>
+    </span>
+  {/if}
+{/snippet}
+
+{#snippet sessionsChip(
+  ring: RingAccount,
+  shown: string
+)}
+  {#if ring.sessions.length > 0}
+    <span class="cell-chip">
+      <SessionsChip
+        account={ring.name}
+        name={shown}
+        onopen={putAway}
+        sessions={ring.sessions}
+      />
+    </span>
+  {/if}
+{/snippet}
+
+{#snippet cell(
+  ring: RingAccount,
+  c: ClaudeRings
+)}
+  <!-- The carrier's hairline ring says, on a rest or a tap, that new
+       sessions start there. -->
+  {#if ring.id === c.carry?.id}
+    <Tip label="New sessions start here" side="top" tap>
+      {#snippet children(
+        props
+      )}
+        {@render cellBody(ring, c, props)}
+      {/snippet}
+    </Tip>
+  {:else}
+    {@render cellBody(ring, c, {})}
+  {/if}
+{/snippet}
+
+{#snippet cellBody(
+  ring: RingAccount,
+  c: ClaudeRings,
+  props: Record<string, unknown>
+)}
+  <!-- A cell of the dial wall, one row on its wall column's three tracks
+       (subgrid): the dial on both lines; its name on the first, the
+       delegates' mark after it where new delegates start, the sessions it
+       runs at the line's end; how long it lasts, then its week at the end,
+       on the second. Read out whole with the words its marks stand for. A
+       re-ranking slides it to its new place (motion/rows). -->
+  {@const name = names.get(ring.id) ?? { local: ring.name, domain: "" }}
+  <!-- biome-ignore lint/a11y/useSemanticElements: a cell is a labelled group of figures and marks, not a form; a fieldset would draw a form's frame and legend -->
   <div
+    {...props}
+    aria-label={cellLabel(ring, c)}
     class="cell-d"
     data-account={ring.id}
     data-bind={ring.bind}
     data-flip
     data-flyover-anchor
-    class:carrying={ring.id === claude?.carry?.id}
+    role="group"
+    class:carrying={ring.id === c.carry?.id}
     class:limit={ring.state === "limit"}
   >
-    <span class="dial">
-      {#if ring.state === "stale"}
-        <Tip label={staleTip(ring, now)} side="top">
-          {#snippet children(
-            props
-          )}
-            <button
-              {...props}
-              aria-label={staleTip(ring, now)}
-              class="ring-tip"
-              data-stale-ring
-              type="button"
-            >
-              <Rings {ring} size={32} />
-            </button>
-          {/snippet}
-        </Tip>
-      {:else}
-        <Rings {ring} size={32} />
-      {/if}
-    </span>
-    <!-- The first line: the name, the domain's stem right after it only
-         where it tells two accounts apart, and the session count at the
-         line's end. -->
+    {@render dial(ring, c)}
     <span class="l1">
       <span class="nm" data-name>
         <span class="nm-local">{name.local}</span>
@@ -566,39 +644,28 @@
           <span class="nm-domain">{name.domain}</span>
         {/if}
       </span>
-      {#if ring.sessions.length > 0}
-        <span class="cell-chip">
-          <SessionsChip
-            account={ring.name}
-            name={`${name.local}${name.domain}`}
-            onopen={putAway}
-            sessions={ring.sessions}
-          />
-        </span>
+      {#if ring.id === c.delegate?.id}
+        {@const tip = delegateTip(c, ring)}
+        <Tip label={tip} side="top" tap>
+          {#snippet children(
+            tipProps
+          )}
+            <span
+              {...tipProps}
+              aria-label={tip}
+              class="delegates-mark"
+              data-delegates
+              role="img"
+            >
+              <IconSubagents aria-hidden="true" />
+            </span>
+          {/snippet}
+        </Tip>
       {/if}
+      {@render sessionsChip(ring, nameOf(ring))}
     </span>
-    <!-- Its words a space apart; the tilde of a time worked out from an
-         old reading hangs before the line, so every time's first figure
-         stands on one x. -->
-    <span class="line" data-time>
-      {#if time.guess}
-        <span class="tilde">~</span>
-      {/if}
-      {#if time.lead}
-        <span>{time.lead}</span>
-      {/if}
-      {#if time.figure}
-        <span class="fig num">{time.figure}</span>
-      {/if}
-      {#if time.tail}
-        <span>{time.tail}</span>
-      {/if}
-    </span>
-    {#if week !== null}
-      <span class="line wk" data-week
-        >wk <span class="fig num">{week}%</span></span
-      >
-    {/if}
+    {@render timeFigure(cellTime(ring, c, now))}
+    {@render weekFigure(ring)}
   </div>
 {/snippet}
 
@@ -619,14 +686,33 @@
             <span aria-hidden="true" class="mark"><ClaudeIcon /></span>
             Claude
           </h3>
-          <span class="stop">
-            <span class="kpi num" class:muted={claude.stale !== null}
-              ><Figure text={stopText(claude, now)} /></span
-            >
-            <span class="stop-meta">until Claude stops</span>
-          </span>
+          <!-- The answer first: how long until nothing can carry you, said
+               whole on a rest or a tap. -->
+          <Tip label="Until no account can start a session" side="bottom" tap>
+            {#snippet children(
+              props
+            )}
+              <span
+                {...props}
+                aria-label="{stopText(
+                  claude,
+                  now
+                )} until no account can start a session"
+                class="kpi num"
+                data-stop-kpi
+                role="img"
+                class:muted={claude.stale !== null}
+                ><Figure text={stopText(claude, now)} /></span
+              >
+            {/snippet}
+          </Tip>
         </div>
-        <Relay accounts={claude.accounts} {now} spans={usage.spans} />
+        <Relay
+          accounts={claude.accounts}
+          {now}
+          spans={usage.spans}
+          stopAt={claude.stopAt}
+        />
       </header>
     {/if}
     <!-- A sessions list hangs from its cell's row, as wide as the wall
@@ -658,37 +744,37 @@
                     {block.head}
                   </h4>
                 {/if}
-                {#each block.cells as one (one.ring.id)}
-                  {@render cell(
-                    one.ring,
-                    one.grouped,
-                    cellTime(one.ring, claude, now)
-                  )}
+                {#each block.cells as ring (ring.id)}
+                  {@render cell(ring, claude)}
                 {/each}
               </div>
             {/each}
           </div>
-          <!-- The dial's key: what the disc and the ring measure. -->
-          <p class="key" data-dial-key data-flyover-edge>
-            Disc: 5-hour window left · Ring: week left
-          </p>
-          {#if delegates.length > 0}
-            <!-- Where new delegates start, said whole: no word to hover. -->
-            <p class="delegates num" data-delegates data-flyover-edge>
-              <IconSubagents aria-hidden="true" />
-              <Words parts={delegates} />
-            </p>
-          {/if}
         </div>
       {/if}
       {#if openCode}
-        <section class="group">
-          <h3 class="provider" data-flyover-edge>
-            <span aria-hidden="true" class="mark"><OpenCodeLogo /></span>
-            opencode Go
-          </h3>
+        <!-- The Go plan: one row on the wall's grid, its mark and name on
+             the first column, its dial, figures and sessions on the second. -->
+        <section class="group go">
           <div class="wall" data-flyover-span>
-            {@render cell(openCode, true, cellTime(openCode, null, now))}
+            <h3 class="provider" data-flyover-edge>
+              <span aria-hidden="true" class="mark"><OpenCodeLogo /></span>
+              opencode Go
+            </h3>
+            <!-- biome-ignore lint/a11y/useSemanticElements: a cell is a labelled group of figures and marks, not a form; a fieldset would draw a form's frame and legend -->
+            <div
+              aria-label={cellLabel(openCode, null, "opencode Go")}
+              class="cell-d one-line"
+              data-account={openCode.id}
+              data-flyover-anchor
+              role="group"
+              class:limit={openCode.state === "limit"}
+            >
+              {@render dial(openCode, null)}
+              {@render timeFigure(cellTime(openCode, null, now))}
+              {@render sessionsChip(openCode, "opencode Go")}
+              {@render weekFigure(openCode)}
+            </div>
           </div>
         </section>
       {/if}
@@ -958,23 +1044,12 @@
     justify-content: space-between;
     gap: var(--space-2);
   }
-  /* The answer first: how long until nothing can carry you. */
-  .stop {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 2px;
-  }
   .kpi {
     font: var(--type-kpi);
     white-space: nowrap;
     color: var(--ink-stat);
   }
   .kpi.muted {
-    color: var(--ink-muted);
-  }
-  .stop-meta {
-    font: var(--type-meta);
     color: var(--ink-muted);
   }
   /* The house edge fade at its full length on every width, as Caw's panel
@@ -1017,8 +1092,7 @@
   .pop-note + .pop-note {
     border-block-start: 1px solid var(--border-hairline);
   }
-  /* Claude's accounts: the wall, the dial's key and the delegates line,
-     space-3 apart, the wall space-3 under the head's hairline. */
+  /* Claude's accounts: the wall, space-3 under the head's hairline. */
   .orgs {
     gap: var(--space-3);
     padding-block-start: var(--space-3);
@@ -1046,7 +1120,7 @@
   .block + .block > .org {
     margin-block-start: calc(var(--space-3) - var(--space-1));
   }
-  /* A stale ring is its tooltip's trigger: a bare button, the ring itself. */
+  /* Every dial is its tooltip's trigger: a bare button, the ring itself. */
   .ring-tip {
     display: grid;
     padding: 0;
@@ -1137,25 +1211,28 @@
     margin-inline-start: auto;
   }
   /* The second line: the time at the text's start, the week at the end,
-     their figures tabular (.num). A figure never breaks, nor does the
-     week; a time too long for its track ("back in 4h 50m" in a narrow
-     sheet) goes on under its words rather than run into the week. */
+     each a figure alone in the code face (mono-figure), never wrapping. */
   .line {
     grid-row: 2;
+    white-space: nowrap;
     font: var(--type-meta);
     color: var(--ink-muted);
   }
-  .line[data-time] {
+  /* The time a step stronger than the week; a guess stays muted. */
+  .time {
     position: relative;
     grid-column: 2;
+    color: var(--ink-row);
   }
-  .fig,
-  .wk {
-    white-space: nowrap;
+  .time.guess {
+    color: var(--ink-muted);
   }
+  /* The week's figure on the line's baseline, as the time's is; its ring
+     centred on the figures' x-height before it. */
   .wk {
     grid-column: 3;
     justify-self: end;
+    color: var(--ink-muted);
   }
   /* A guess's tilde hangs in the gap before the text, so "~3h 14m" starts
      its figure on the x "2h 21m" does. */
@@ -1163,27 +1240,43 @@
     position: absolute;
     inset-inline-end: 100%;
   }
-  /* The dial's key, under the wall, in meta. */
-  .key {
-    padding: 0 var(--space-1);
-    font: var(--type-meta);
+  /* The marks a figure or a name carries: 12px, Solar duotone, muted. */
+  .glyph,
+  .delegates-mark {
+    display: inline-grid;
     color: var(--ink-muted);
-  }
-  /* Where new delegates start, in words under the wall. */
-  .delegates {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--space-1);
-    padding: 0 var(--space-1);
-    font: var(--type-meta);
-    color: var(--ink-row);
 
     & :global(svg) {
-      flex: none;
-      inline-size: 16px;
-      block-size: 16px;
-      color: var(--ink-muted);
+      inline-size: 12px;
+      block-size: 12px;
     }
+  }
+  .glyph {
+    margin-inline-end: var(--space-1);
+    vertical-align: middle;
+  }
+  .delegates-mark {
+    flex: none;
+  }
+  /* The Go plan: its mark and name on the wall's first column, its cell
+     on the second, one line beside its dial. */
+  .go .provider {
+    grid-column: 1 / span 3;
+    align-self: center;
+    padding-block: 0;
+  }
+  .one-line {
+    grid-template-rows: auto;
+    align-items: center;
+  }
+  .one-line .dial,
+  .one-line .line,
+  .one-line .cell-chip {
+    grid-row: 1;
+  }
+  .one-line .cell-chip {
+    grid-column: 2;
+    justify-self: end;
   }
   .foot {
     flex: none;

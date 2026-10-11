@@ -3,7 +3,8 @@
    * The relay: who carries your new sessions across the next five hours, as
    * one bar. Each carry span is a band in its account's colour, laid from
    * now to the 5-hour horizon on a recessed groove, 2px between bands. A
-   * span nobody can carry draws nothing (the groove shows through); an
+   * span nobody can carry is hatched, the first of them (the stop) behind a
+   * 1px ink-strong tick; an
    * account out of date draws its band at --account-stale-opacity; an
    * account at its limit draws its band only from the moment it's back,
    * when that is inside the horizon. Hour ticks under it, each a hairline
@@ -23,10 +24,13 @@
     spans,
     accounts,
     now,
+    stopAt,
   }: {
     spans: CarrySpan[];
     accounts: RingAccount[];
     now: number;
+    /** When nothing can carry you (`ClaudeRings.stopAt`), null if never. */
+    stopAt: number | null;
   } = $props();
 
   type Segment =
@@ -79,6 +83,13 @@
     }
     return out;
   });
+
+  /** Where nobody can carry you first: the stop, inside the five hours. */
+  const stopKey = $derived(
+    stopAt !== null && stopAt - now < HORIZON_MS
+      ? (segments.find((seg) => seg.kind === "blank")?.key ?? null)
+      : null
+  );
 
   /** The bar read out: who carries, for how long, in order. */
   const label = $derived(
@@ -155,7 +166,13 @@
           out:bandOut
         ></span>
       {:else}
-        <span aria-hidden="true" class="blank" style:flex-grow={seg.ms}></span>
+        <span
+          aria-hidden="true"
+          class="blank"
+          data-relay-stop={seg.key === stopKey ? "" : undefined}
+          style:flex-grow={seg.ms}
+          class:stop={seg.key === stopKey}
+        ></span>
       {/if}
     {/each}
   </div>
@@ -169,7 +186,7 @@
         class:start={tick.hour === 0}
       >
         <span class="mark" data-tick-mark></span>
-        <span class="label" data-tick-label>{tick.text}</span>
+        <span class="label mono-figure" data-tick-label>{tick.text}</span>
       </span>
     {/each}
   </div>
@@ -209,6 +226,19 @@
   }
   .band.stale {
     opacity: var(--account-stale-opacity);
+  }
+  /* A span nobody carries is hatched, the groove's paint over the ground's,
+     and the first one, the stop, starts on a 1px ink-strong tick, so the bar
+     shows where you're stopped without a word. */
+  .blank {
+    background: repeating-linear-gradient(
+      -45deg,
+      var(--border-control) 0 1px,
+      var(--ring-ground, var(--surface-raised)) 1px var(--space-1)
+    );
+  }
+  .blank.stop {
+    border-inline-start: 1px solid var(--ink-strong);
   }
   .instant .band,
   .instant .blank {

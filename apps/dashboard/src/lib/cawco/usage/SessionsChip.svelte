@@ -190,7 +190,7 @@
     onpointerleave={leave}
     bind:ref={trigger}
   >
-    <span class="num">{count}</span>
+    <span class="mono-figure">{count}</span>
   </Popover.Trigger>
   <Popover.Content
     align="start"

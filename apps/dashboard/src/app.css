@@ -1961,6 +1961,19 @@
   font-variant-numeric: tabular-nums !important;
 }
 
+/* A measured figure among Figtree words (a time, a share left, a count, an
+   hour tick): JetBrains Mono at the code step, ligatures off, tabular, its
+   digits brought to Figtree's cap height (`mono-figure-cap`) so they stand
+   as tall as the words beside them. Put it on the figure's own span: a
+   role's `font` shorthand on the same element would reset the face. */
+@utility mono-figure {
+  font-family: var(--font-mono);
+  font-size: var(--text-code);
+  font-size-adjust: cap-height var(--mono-figure-cap);
+  font-variant-ligatures: none;
+  font-variant-numeric: tabular-nums;
+}
+
 /* A scroller that scrolls without drawing a bar. */
 @utility no-scrollbar {
   scrollbar-width: none;

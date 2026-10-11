@@ -1921,6 +1921,11 @@
     }
   },
   "type": {
+    "mono-figure-cap": {
+      "$type": "number",
+      "$value": "0.703",
+      "$description": "Figtree's cap height (0.703em). JetBrains Mono figures set beside Figtree words take it as `font-size-adjust: cap-height`, so their digits stand as tall as Figtree's at the same size step (unadjusted, Mono's stand 4% taller)."
+    },
     "weight-wordmark": {
       "$type": "number",
       "$value": "1000",

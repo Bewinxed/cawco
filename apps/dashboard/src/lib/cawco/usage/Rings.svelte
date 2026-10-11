@@ -5,7 +5,7 @@
    * (56px) the week is a band wide enough, and far enough off the disc,
    * that weeks compare by eye from cell to cell.
    */
-  const RIMS = {
+  export const RIMS = {
     16: [1.5, 1],
     24: [2, 1.5],
     32: [3.5, 1.5],

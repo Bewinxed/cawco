@@ -544,8 +544,8 @@ export function openCodeRing(
 
 // ── words ─────────────────────────────────────────────────────────────────
 
-const named = (ring: RingAccount): Part => ({
-  account: ring.name,
+const named = (ring: RingAccount, name = ring.name): Part => ({
+  account: name,
   color: ring.color,
 });
 const strong = (text: string): Part => ({ strong: text });
@@ -577,18 +577,23 @@ export const stopText = (c: ClaudeRings, now: number): string =>
     : guess(c.stale !== null, fmt(c.stopAt - now));
 
 /**
- * The strip's caption: who is next, else when you're back. An account out of
- * date in the chain is said by the figure's tilde, not here.
+ * The strip's caption: who is next, else when you're back, each account by
+ * the name its popover cell shows (`nameOf`). An account out of date in the
+ * chain is said by the figure's tilde, not here.
  */
-export function caption(c: ClaudeRings, now: number): Part[] {
+export function caption(
+  c: ClaudeRings,
+  now: number,
+  nameOf: (r: RingAccount) => string
+): Part[] {
   if (c.next) {
-    return ["then ", named(c.next)];
+    return ["then ", named(c.next, nameOf(c.next))];
   }
   if (c.stopAt !== null && c.backAt !== null) {
     return ["back in ", strong(fmt(c.backAt - now))];
   }
   if (c.carry?.w5) {
-    return [named(c.carry), ` ${c.carry.w5.left}% left`];
+    return [named(c.carry, nameOf(c.carry)), ` ${c.carry.w5.left}% left`];
   }
   return [];
 }
@@ -610,25 +615,20 @@ export function stopOf(
 }
 
 /**
- * A dial-wall cell's time in its parts, so its figure can be set in
- * tabular figures and its tilde can hang: `lead` and `tail` are words
- * (shown a space apart from the figure), `figure` the changing value,
- * `guess` a tilde before it all.
+ * A dial-wall cell's time, a figure alone: how long it lasts (`stop`), or,
+ * at its limit, when it's back (`back`, null when that isn't known). The
+ * words it stands for are the cell's label and its tooltips'.
  */
-export interface CellTime {
-  figure: string;
-  guess: boolean;
-  lead: string;
-  tail: string;
-}
+export type CellTime =
+  | { kind: "stop"; figure: string; guess: boolean }
+  | { kind: "back"; figure: string | null };
 
 /**
  * The time on a dial-wall cell's second line, one shape for every account:
- * its forecast stop ("1h 20m left"; `stopOf`), "5h+ left" when it won't run
- * out inside the five hours (no stop), or at its limit when it's back
- * ("back in 4h 50m"); a reading out of date puts a tilde before it
- * ("~1h 20m left"), and the dial's tooltip says why. Who takes over when is
- * the relay bar's to say.
+ * its forecast stop ("1h 20m"; `stopOf`), "5h+" when it won't run out inside
+ * the five hours (no stop), or at its limit when it's back ("4h 50m"); a
+ * reading out of date makes it a guess ("~1h 20m"), and the dial's tooltip
+ * says why. Who takes over when is the relay bar's to say.
  */
 export function cellTime(
   r: RingAccount,
@@ -636,27 +636,109 @@ export function cellTime(
   now: number
 ): CellTime {
   if (r.state === "limit") {
-    return r.backAt === null
-      ? { guess: false, lead: "at its limit", figure: "", tail: "" }
-      : {
-          guess: false,
-          lead: "back in",
-          figure: until(r.backAt, now),
-          tail: "",
-        };
+    return {
+      kind: "back",
+      figure: r.backAt === null ? null : until(r.backAt, now),
+    };
   }
   const out = stopOf(r, c, now);
   return {
-    guess: r.state === "stale",
-    lead: "",
+    kind: "stop",
     figure: out === null ? "5h+" : fmt(out - now),
-    tail: "left",
+    guess: r.state === "stale",
   };
 }
 
-/** A cell's week: what is left of it ("wk 62%"), 0 at its limit, none unread. */
+/**
+ * A dial's tooltip, a line per window: what is left of it and, on the window
+ * that binds, how long that lasts at this pace; a spent window says when
+ * it's back. An out-of-date reading says so first.
+ */
+export function dialTip(
+  r: RingAccount,
+  c: ClaudeRings | null,
+  now: number
+): string {
+  const time = cellTime(r, c, now);
+  const pace =
+    time.kind === "stop" ? ` · lasts ${time.figure} at this pace` : "";
+  const spent =
+    r.backAt === null ? "used up" : `used up · back in ${until(r.backAt, now)}`;
+  const window = (
+    label: string,
+    limited: boolean,
+    left: number | undefined,
+    binds: boolean
+  ): string | null => {
+    if (limited) {
+      return `${label}: ${spent}`;
+    }
+    return left === undefined
+      ? null
+      : `${label}: ${left}% left${binds ? pace : ""}`;
+  };
+  return [
+    r.state === "stale" ? staleTip(r, now) : null,
+    window("5-hour window", r.limitOn === "5h", r.w5?.left, r.bind !== "week"),
+    window("Week", r.limitOn === "week", r.week?.left, r.bind === "week"),
+  ]
+    .filter((line) => line !== null)
+    .join("\n");
+}
+
+/** A cell's week: what is left of it ("62%"), 0 at its limit, none unread. */
 export const weekLeft = (r: RingAccount): number | null =>
   r.limitOn === "week" ? 0 : (r.week?.left ?? null);
+
+/** An email domain's top level ("gmail.com" → "gmail"). */
+const TOP_DOMAIN = /\.[^.]+$/;
+/** An account's first name: its nickname, else its email's local part. */
+const localOf = (r: RingAccount): string =>
+  r.nick || !r.email ? r.name : r.email.slice(0, r.email.lastIndexOf("@"));
+
+/** A name as the usage popover and strip show it: its first part, then a stem. */
+export interface ShownName {
+  /** The domain's stem ("@gmail"), or "" when the first part says enough. */
+  domain: string;
+  local: string;
+}
+
+/**
+ * The names the usage strip and popover show, one per account: its first
+ * part (a nickname, else the email's local part), then, only where an
+ * ungrouped account shares that first part with another shown with it, its
+ * domain's stem ("@gmail"). Under an organization's head the head tells
+ * them apart, as it does for `extra` (the Go plan).
+ */
+export function shownNames(
+  accounts: RingAccount[],
+  extra: RingAccount | null
+): Map<string, ShownName> {
+  const all = extra ? [...accounts, extra] : accounts;
+  const count = new Map<string, number>();
+  for (const r of all) {
+    count.set(localOf(r), (count.get(localOf(r)) ?? 0) + 1);
+  }
+  const grouped = new Set(
+    orgGroups(accounts)
+      .filter((group) => group.org !== null)
+      .flatMap((group) => group.accounts.map((r) => r.id))
+  );
+  if (extra) {
+    grouped.add(extra.id);
+  }
+  return new Map(
+    all.map((r) => {
+      const local = localOf(r);
+      const shared = (count.get(local) ?? 0) > 1;
+      const domain =
+        !grouped.has(r.id) && shared && r.email
+          ? `@${r.email.slice(r.email.lastIndexOf("@") + 1).replace(TOP_DOMAIN, "")}`
+          : "";
+      return [r.id, { local, domain }];
+    })
+  );
+}
 
 /**
  * When an idle account would run out if it took over now, as the relay's
@@ -738,12 +820,11 @@ export const staleTip = (r: RingAccount, now: number): string =>
     ? "No reading yet, so this is an estimate."
     : `Last reading ${fmt(now - r.seenAt)} ago, so this is an estimate.`;
 
-/** The routing's reason, said of the account it chose. */
 /** The routing's reason as placement applies it (hub placement.ts). */
-const DELEGATE_CLAUSE: Record<string, string> = {
-  "first in your order": "it’s the first in your order with room",
-  "resets soonest": "its 5-hour window resets soonest",
-  pinned: "it’s pinned",
+const DELEGATE_WHY: Record<string, string> = {
+  "first in your order": "It’s the first in your order with room.",
+  "resets soonest": "Its 5-hour window resets soonest.",
+  pinned: "Delegates are pinned to it.",
 };
 
 /** The share an account has left on both its windows: the lower of the two. */
@@ -754,57 +835,30 @@ const leftOnBoth = (r: RingAccount): number =>
   );
 
 /**
- * Spread's reason, said as the wall can check it. Spread takes the lowest
- * binding use, the higher of an account's 5-hour and weekly use (hub
- * placement.ts `spread`, `Usage.binding`): the most left on both windows.
- * An account with more left that it passed over was held back: past its
- * reserve (placement's `pastReserve`), or not one the delegates may run on.
+ * The tooltip on the delegates' mark, by the cell of the account new
+ * delegates start on: why, in the words of the rule placement applies, so
+ * the wall cannot contradict it. Spread takes the lowest binding use, the
+ * higher of an account's 5-hour and weekly use (hub placement.ts `spread`,
+ * `Usage.binding`): the most left on both windows; an account with more
+ * left that it passed over was held back, past its reserve (placement's
+ * `pastReserve`) or not one delegates may run on.
  */
-function spreadWhy(
-  c: ClaudeRings,
-  to: RingAccount,
-  nameOf: (r: RingAccount) => string
-): string {
-  const left = leftOnBoth(to);
+export function delegateTip(c: ClaudeRings, to: RingAccount): string {
+  if (c.delegateWhy !== "most room left") {
+    const why = DELEGATE_WHY[c.delegateWhy];
+    return why
+      ? `New delegates start here. ${why}`
+      : "New delegates start here.";
+  }
   const passed = c.accounts.filter(
-    (r) => r.id !== to.id && leftOnBoth(r) > left
+    (r) => r.id !== to.id && leftOnBoth(r) > leftOnBoth(to)
   );
-  const both = `${left}% or more left on both windows`;
   if (passed.length === 0) {
-    return `${both}, the most of any account`;
+    return "New delegates start here. It has the most room on both windows.";
   }
-  const reserved = passed.filter((r) => r.state === "reserve").map(nameOf);
-  const held =
-    reserved.length === passed.length
-      ? `${reserved.join(", ")} ${reserved.length === 1 ? "is" : "are"} kept in reserve`
-      : "the accounts with more left are not ones they may run on";
-  return `${held}; ${both}, the most of the rest`;
-}
-
-/**
- * The line under the dial wall: where new delegates start, by the name its
- * cell shows, and why, in the words of the rule placement applies, so the
- * wall cannot contradict it ("New delegates start on jude: 59% or more
- * left on both windows, the most of any account."). Nothing when no
- * account takes them.
- */
-export function delegateLine(
-  c: ClaudeRings,
-  nameOf: (r: RingAccount) => string
-): Part[] {
-  const to = c.delegate;
-  if (!to) {
-    return [];
-  }
-  const why =
-    c.delegateWhy === "most room left"
-      ? spreadWhy(c, to, nameOf)
-      : (DELEGATE_CLAUSE[c.delegateWhy] ?? c.delegateWhy);
-  return [
-    "New delegates start on ",
-    { account: nameOf(to), color: to.color },
-    why ? `: ${why}.` : ".",
-  ];
+  return passed.every((r) => r.state === "reserve")
+    ? "New delegates start here. It has the most room on both windows outside your reserve."
+    : "New delegates start here. It has the most room on both windows of the accounts they can use.";
 }
 
 /** A tile's sentence: the same status, said whole. */
