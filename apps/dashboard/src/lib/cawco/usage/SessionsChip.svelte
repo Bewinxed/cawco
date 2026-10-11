@@ -11,14 +11,12 @@
    * 350ms of rest and closes 300ms after the pointer leaves both it and the
    * list, so a pointer crossing the gap keeps it open.
    *
-   * The list hangs from the whole row the chip sits on (its nearest
+   * The list hangs a pitch under the row the chip sits on (its nearest
    * `[data-flyover-anchor]`, a cell of the usage popover's dial wall), as
-   * wide as the row: where the cell stands in a grid (`[data-flyover-span]`,
-   * the wall) the row is the grid's whole width at the cell's height. It
-   * reaches down to the first edge it can end on (a cell's foot or a
-   * head's, `[data-flyover-edge]`, inside `[data-flyover-scope]`), so it
-   * covers what lies under it whole and never leaves a letter, half a
-   * figure or half a dial showing at its edges. Opened by a pointer (a rest or a press) it leaves focus where it
+   * wide as the row: where the cell stands in a wall (`[data-flyover-span]`)
+   * the row is the wall's whole width at the cell's height, so a session's
+   * title and project read whole. It is as tall as its sessions. Opened by
+   * a pointer (a rest or a press) it leaves focus where it
    * is: no ring lands on its first session. Opened from the keyboard, focus
    * goes to the first session and the house ring shows.
    */
@@ -55,7 +53,6 @@
   /** The last thing that opened it was a pointer (a rest or a press). */
   let byPointer = $state(false);
   let trigger = $state<HTMLElement | null>(null);
-  let list = $state<HTMLElement | null>(null);
   const row = $derived(
     trigger?.closest<HTMLElement>("[data-flyover-anchor]") ?? null
   );
@@ -77,33 +74,6 @@
         return new DOMRect(across.x, at.y, across.width, at.height);
       },
     };
-  });
-  /**
-   * In a grid, the list's height, from the row's foot to the first edge
-   * under it at or past its own end; 0 lets it be its own height.
-   */
-  let reach = $state(0);
-  $effect(() => {
-    if (!(open && list && row && span)) {
-      reach = 0;
-      return;
-    }
-    const items = list;
-    const cell = row;
-    const scope = span.closest<HTMLElement>("[data-flyover-scope]") ?? span;
-    const frame = requestAnimationFrame(() => {
-      // It stands 1px into the row and has a 1px edge above and below.
-      const top = cell.getBoundingClientRect().bottom - 1;
-      const end = top + items.offsetHeight + 2;
-      const edges = [
-        ...scope.querySelectorAll("[data-flyover-anchor], [data-flyover-edge]"),
-      ]
-        .map((edge) => edge.getBoundingClientRect().bottom)
-        .filter((bottom) => bottom >= end - 0.5)
-        .sort((a, b) => a - b);
-      reach = edges.length > 0 ? edges[0] - top : 0;
-    });
-    return () => cancelAnimationFrame(frame);
   });
   const keepFocus = (event: Event) => {
     if (byPointer) {
@@ -181,11 +151,10 @@
     onpointerenter={rest}
     onpointerleave={leave}
     side="bottom"
-    sideOffset={-1}
-    style={reach > 0 ? `min-block-size: ${reach}px` : undefined}
+    sideOffset={4}
     trapFocus={!byPointer}
   >
-    <ul aria-label={label} class="list" bind:this={list}>
+    <ul aria-label={label} class="list">
       {#each sessions as session (session.id)}
         <li>
           <a
@@ -212,10 +181,9 @@
     color: var(--ink-row);
     cursor: pointer;
   }
-  /* It lies on the rows it covers, so it takes the raised lift, not the
-     overlay's long drop: that one fell across the next row's name and, at
-     night, made it read as disabled. This one ends within 4px of its edge,
-     inside the next row's top padding. */
+  /* It lies on the cells under it, so it takes the raised lift, not the
+     overlay's long drop: that one fell across the next names and, at
+     night, made them read as disabled. */
   :global(.kit-pop.sessions-flyover) {
     box-shadow: var(--shadow-raised);
   }
@@ -223,11 +191,8 @@
     display: flex;
     flex-direction: column;
   }
-  /* A session: its status glyph, its title, and its project after it. Each
-     is an account row's height (40px, 44px where the rows are), and the
-     list stands 1px into the row above with its 1px edge: it ends on a row's
-     edge, so the rows it covers are covered whole and the rows around it
-     keep every letter. */
+  /* A session: its status glyph, its title, and its project after it,
+     40px (44px on touch). */
   .item {
     display: flex;
     align-items: center;

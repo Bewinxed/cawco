@@ -573,25 +573,38 @@ export function caption(c: ClaudeRings, now: number): Part[] {
 }
 
 /**
- * The time that matters for a row, at its end. A reading out of date is a
- * guess, and its time says so with a tilde ("~3h 40m left"); the ring's
- * tooltip says why.
+ * The time under a dial-wall cell's name, one shape for every account: how
+ * long it lasts ("1h 20m left", "over 5h"), or at its limit when it's back
+ * ("back in 4h 50m"); a reading out of date puts a tilde before it
+ * ("~1h 20m left"), and the dial's tooltip says why. Who takes over when is
+ * the relay bar's to say. A Claude account (`c`) lasts until its binding
+ * window runs out while it carries you or holds its reserve, else until the
+ * relay stops handing it work; the Go plan (no `c`) until one of its
+ * windows runs out.
  */
-export function rowTime(r: RingAccount, c: ClaudeRings, now: number): string {
+export function cellTime(
+  r: RingAccount,
+  c: ClaudeRings | null,
+  now: number
+): string {
   if (r.state === "limit") {
-    return `back in ${until(r.backAt, now)}`;
+    return r.backAt === null
+      ? "at its limit"
+      : `back in ${until(r.backAt, now)}`;
   }
-  const left = (out: number | null) =>
+  let out: number | null = r.carryUntil;
+  if (!c) {
+    out = r.bindOut;
+  } else if (r.state === "reserve" || r.id === c.carry?.id) {
+    out = r.bindOut ?? r.carryUntil;
+  } else if (r.neverBackup) {
+    out = null;
+  }
+  const time =
     out !== null && out - now < HORIZON_MS
-      ? `${guess(r.state === "stale", fmt(out - now))} left`
-      : "5h+";
-  if (r.state === "reserve" || r.id === c.carry?.id) {
-    return left(r.bindOut ?? r.carryUntil);
-  }
-  if (r.neverBackup) {
-    return "5h+";
-  }
-  return left(r.carryUntil);
+      ? `${fmt(out - now)} left`
+      : "over 5h";
+  return guess(r.state === "stale", time);
 }
 
 /** One group of the accounts: an organization's accounts, or (null) the rest. */
@@ -642,12 +655,21 @@ const DELEGATE_CLAUSE: Record<string, string> = {
   pinned: "it’s pinned",
 };
 
-/** The Delegates tag's tooltip: where new delegates start, and why. */
-export function delegateTip(c: ClaudeRings): string {
+/**
+ * The line under the dial wall: where new delegates start, by the name its
+ * cell shows, and why ("New delegates start on bewinxed: it has the most
+ * room left."). Nothing when no account takes them.
+ */
+export function delegateLine(c: ClaudeRings, name: string): Part[] {
+  if (!c.delegate) {
+    return [];
+  }
   const why = DELEGATE_CLAUSE[c.delegateWhy] ?? c.delegateWhy;
-  return why
-    ? `New delegates start here: ${why}.`
-    : "New delegates start here.";
+  return [
+    "New delegates start on ",
+    { account: name, color: c.delegate.color },
+    why ? `: ${why}.` : ".",
+  ];
 }
 
 /** A tile's sentence: the same status, said whole. */
@@ -820,12 +842,6 @@ export const openCodeStop = (o: RingAccount, now: number): string => {
     ? guess(o.state === "stale", fmt(o.bindOut - now))
     : "5h+";
 };
-
-/** Opencode's row time, the Claude rows' shape: when it's back, at its limit. */
-export const openCodeRowTime = (o: RingAccount, now: number): string =>
-  o.state === "limit"
-    ? `back in ${until(o.backAt, now)}`
-    : openCodeStop(o, now);
 
 export function openCodeSentence(o: RingAccount, now: number): Part[] {
   if (o.state === "limit") {

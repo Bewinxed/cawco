@@ -56,6 +56,10 @@ public enum Palette {
     public static let accountBlue = Palette.named("account-blue")
     public static let accountRose = Palette.named("account-rose")
     public static let accountViolet = Palette.named("account-violet")
+    /// What an account's week rim is mixed toward from its hue (account-week-mix, in oklch, so the hue holds): black by day, a deeper shade on paper; white at night, a lighter one. The disc keeps the hue itself, so the 5-hour and the week read apart at a glance.
+    public static let accountWeekToward = Palette.named("account-week-toward")
+    /// The track of a ring's spent window, at its limit, on the meter-wash-over cell: 1.6:1 against that wash by day, 2:1 at night, so the empty dial still reads as a dial.
+    public static let ringTrackSpent = Palette.named("ring-track-spent")
     /// The part of an account's week rim that sits under its reserve, once the reserve is reached: a mid neutral that reads on paper and at night.
     public static let accountReserved = Palette.named("account-reserved")
     public static let markGlyph = Palette.named("mark-glyph")
@@ -750,8 +754,10 @@ public enum Motion {
     public static let echoOpacity: Double = 0.45
     /// The duotone second layer of a status glyph in an alert row (join/JoinedRow): the lowest at which it holds 3:1 on the recess in both schemes for the ink-strong, done and attn glyph inks, the attn glyph by day being the floor. Every other Solar glyph keeps 0.5.
     public static let glyphDuoStatusOpacity: Double = 0.81
-    /// An account whose reading is out of date: its rings and its relay band draw at this opacity, the lowest at which every account hue holds 3:1 on the raised surface in both schemes (by day 0.7 is the floor for mark-2 to mark-7, at night 0.65).
-    public static let accountStaleOpacity: Double = 0.7
+    /// How far an account's week rim is mixed from its hue toward account-week-toward: a clearly different lightness of the same hue.
+    public static let accountWeekMix: Double = 0.32
+    /// An account whose reading is out of date: its rings and its relay band draw at this opacity, the lowest at which every account hue holds 3:1 against the border-control track it lies on, in both schemes (by day cyan and green set the floor at 0.82, at night rose at 0.80); on the raised surface they hold more.
+    public static let accountStaleOpacity: Double = 0.82
     /// The first stretch of its nesting line over which a child's icon fades in as it leaves its parent's (motion/branch).
     public static let rideFade: Double = 14
     public static let popRise: Double = 8

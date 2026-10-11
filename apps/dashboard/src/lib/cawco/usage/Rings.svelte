@@ -1,15 +1,21 @@
 <script lang="ts" module>
-  /** Rim width and the gap inside it, in px, per size: the rim reads at 16px. */
-  const RIMS = { 16: [1.5, 1], 24: [2, 1.5], 56: [3, 2.5] } as const;
+  /**
+   * Rim width and the gap inside it, in px, per size: the rim reads at 16px;
+   * at 56px (the usage popover's dial wall) the week is a 6px band 3px off
+   * the disc, so weeks compare by eye from cell to cell.
+   */
+  const RIMS = { 16: [1.5, 1], 24: [2, 1.5], 56: [6, 3] } as const;
 </script>
 
 <script lang="ts">
   /**
    * An account's double dial: the inner disc is its 5-hour window, filled as
    * a sector clockwise from 12 o'clock for the share left, over a track disc;
-   * the outer rim, a hairline outside it, is its week, drawn the same way.
-   * Both in the account's colour. At its limit the spent window's fill is
-   * gone; a reading out of date draws at --account-stale-opacity (3:1 on
+   * the outer rim, outside it, is its week, drawn the same way. The disc is
+   * the account's colour, the rim the same hue at another lightness
+   * (--account-week-toward, --account-week-mix). At its limit the spent
+   * window's fill is gone and its track takes --ring-track-spent, which
+   * holds on the limit wash; a reading out of date draws at --account-stale-opacity (3:1 on
    * the raised surface for every hue). Past its weekly reserve the
    * part of the rim under the reserve is the reserved neutral, with a notch
    * cut where the reserve sits, in the ground's paint (`--ring-ground`).
@@ -107,7 +113,13 @@
   bind:this={svg}
   style:--c={ring.color}
 >
-  <circle class="disc-track" cx="12" cy="12" r={geometry.rd.toFixed(3)} />
+  <circle
+    class="disc-track"
+    cx="12"
+    cy="12"
+    r={geometry.rd.toFixed(3)}
+    class:spent={ring.limitOn === "5h"}
+  />
   <circle
     class="arc"
     cx="12"
@@ -124,9 +136,10 @@
     cy="12"
     r={geometry.rr.toFixed(3)}
     stroke-width={geometry.w.toFixed(3)}
+    class:spent={ring.limitOn === "week"}
   />
   <circle
-    class="arc"
+    class="arc week"
     cx="12"
     cy="12"
     data-arc="rim"
@@ -173,6 +186,12 @@
   .track {
     stroke: var(--border-control);
   }
+  .disc-track.spent {
+    fill: var(--ring-track-spent);
+  }
+  .track.spent {
+    stroke: var(--ring-track-spent);
+  }
   .arc {
     stroke: var(--c);
     stroke-dasharray: 100 100;
@@ -181,6 +200,13 @@
       stroke-dashoffset var(--dur-panel) var(--ease-in-out),
       stroke var(--dur-toggle) var(--ease-out),
       opacity var(--dur-toggle) var(--ease-out);
+  }
+  .arc.week {
+    stroke: color-mix(
+      in oklch,
+      var(--c),
+      var(--account-week-toward) calc(var(--account-week-mix) * 100%)
+    );
   }
   .arc.reserved {
     stroke: var(--account-reserved);

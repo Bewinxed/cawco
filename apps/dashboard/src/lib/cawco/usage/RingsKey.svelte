@@ -52,9 +52,14 @@
   .disc circle {
     fill: var(--c);
   }
+  /* The week's glyph wears the rim's shade (Rings), so the key matches. */
   .rim circle {
     fill: none;
-    stroke: var(--c);
+    stroke: color-mix(
+      in oklch,
+      var(--c),
+      var(--account-week-toward) calc(var(--account-week-mix) * 100%)
+    );
     stroke-width: 1.5;
   }
   .disc.limit circle {

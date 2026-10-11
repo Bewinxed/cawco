@@ -32,8 +32,7 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "#lib/components/ui/popover/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
-  import { IconKey, IconRefresh } from "#lib/icons.js";
-  import { cn } from "#lib/utils.js";
+  import { IconKey, IconSubagents } from "#lib/icons.js";
   import ClaudeIcon from "~icons/logos/claude-icon";
   import { cawco } from "./client.svelte";
   import { dur, motionOk } from "./motion/curves.svelte";
@@ -46,14 +45,12 @@
   import Rings from "./usage/Rings.svelte";
   import {
     caption,
-    delegateTip,
-    fmt,
-    openCodeRowTime,
+    cellTime,
+    delegateLine,
     openCodeStop,
     orgGroups,
     plain,
     type RingAccount,
-    rowTime,
     staleTip,
     stopText,
   } from "./usage/rings";
@@ -100,71 +97,131 @@
   const now = $derived(usage.now);
   const shown = $derived(Boolean(claude || openCode));
 
-  // ── the dial wall's words ──
-  /** A cell's time in its words and its figure: "in ", "1h 20m", " left". */
-  const TIME_PARTS = /^(in )?(.*?)( left)?$/;
+  // ── the dial wall ──
+  /** Cells across the wall. */
+  const ACROSS = 4;
+  /** A cell: its account, and whether an organization's head stands over it. */
+  interface WallCell {
+    grouped: boolean;
+    ring: RingAccount;
+  }
+  /**
+   * A row of cells; from `join` on they are ungrouped accounts that went on
+   * along an organization's last row, after a hairline.
+   */
+  interface WallRow {
+    cells: WallCell[];
+    join: number;
+  }
+  /** An organization's rows under its name, or (null) the ungrouped ones. */
+  interface WallBlock {
+    org: string | null;
+    rows: WallRow[];
+  }
+  const rowsOf = (cells: WallCell[]): WallRow[] =>
+    Array.from({ length: Math.ceil(cells.length / ACROSS) }, (_, i) => {
+      const slice = cells.slice(i * ACROSS, (i + 1) * ACROSS);
+      return { cells: slice, join: slice.length };
+    });
+  /**
+   * Claude's accounts as blocks of rows, four across. Where the last
+   * organization's last row leaves two or more places, the ungrouped
+   * accounts go on along it, one place short of full so the hairline
+   * between them has room; the rest stand in rows of their own after the
+   * group gap.
+   */
+  const wall = $derived.by((): WallBlock[] => {
+    if (!claude) {
+      return [];
+    }
+    const blocks: WallBlock[] = [];
+    for (const group of orgGroups(claude.accounts)) {
+      const cells = group.accounts.map((ring) => ({
+        ring,
+        grouped: group.org !== null,
+      }));
+      const last = blocks.at(-1)?.rows.at(-1);
+      if (group.org === null && last && ACROSS - last.cells.length >= 2) {
+        last.join = last.cells.length;
+        last.cells.push(...cells.splice(0, ACROSS - last.cells.length - 1));
+      }
+      if (cells.length > 0) {
+        blocks.push({ org: group.org, rows: rowsOf(cells) });
+      }
+    }
+    return blocks;
+  });
+  /** Each row's columns: four cells' widths, a hairline's where one joins. */
+  const columnsOf = (row: WallRow): string =>
+    row.join < row.cells.length
+      ? `repeat(${row.join}, var(--cell)) auto repeat(${row.cells.length - row.join}, var(--cell))`
+      : `repeat(${ACROSS}, var(--cell))`;
+
   /** An email domain's top level ("gmail.com" → "gmail"). */
   const TOP_DOMAIN = /\.[^.]+$/;
+  /** An account's first name line: its nickname, else its email's local part. */
+  const localOf = (ring: RingAccount): string =>
+    ring.nick || !ring.email
+      ? ring.name
+      : ring.email.slice(0, ring.email.lastIndexOf("@"));
+  /** How many accounts shown together go by each first line. */
+  const locals = $derived.by(() => {
+    const count = new Map<string, number>();
+    for (const ring of [...(claude?.accounts ?? []), openCode]) {
+      if (ring) {
+        count.set(localOf(ring), (count.get(localOf(ring)) ?? 0) + 1);
+      }
+    }
+    return count;
+  });
   /**
-   * A cell's name, so no two cells shown together read the same: a
-   * nickname as it is; under its organization's head the email's local
-   * part; ungrouped, the local part and its domain's stem ("bewinxed" and
-   * "@gmail"), which may stand on a second line.
+   * A cell's name on two lines: its first line, then, only where an
+   * ungrouped account shares that first line with another shown with it,
+   * its domain's stem ("@gmail"). Under an organization's head the head
+   * tells them apart.
    */
   const cellName = (
     ring: RingAccount,
     grouped: boolean
   ): { local: string; domain: string } => {
-    if (ring.nick || !ring.email) {
-      return { local: ring.name, domain: "" };
-    }
-    const at = ring.email.lastIndexOf("@");
-    if (at < 0) {
-      return { local: ring.email, domain: "" };
-    }
+    const local = localOf(ring);
+    const shared = (locals.get(local) ?? 0) > 1;
     return {
-      local: ring.email.slice(0, at),
-      domain: grouped ? "" : ring.email.slice(at + 1).replace(TOP_DOMAIN, ""),
+      local,
+      domain:
+        !grouped && shared && ring.email
+          ? `@${ring.email.slice(ring.email.lastIndexOf("@") + 1).replace(TOP_DOMAIN, "")}`
+          : "",
     };
   };
+  /** The space inside a figure ("1h 20m"). */
+  const FIGURE_SPACE = /(\d[hm]) (?=\d)/g;
   /**
-   * A time worked out from a reading out of date carries a tilde, once,
-   * on the figure ("in ~1h 20m", "~3h 40m left", "~5h+").
+   * A cell's time with its figure held together: in a narrow cell "back
+   * in", "over" or "left" takes a line of its own, never half the figure.
    */
-  const guessed = (ring: RingAccount, time: string): string => {
-    if (ring.state !== "stale" || time.includes("~")) {
-      return time;
-    }
-    return time.startsWith("in ") ? `in ~${time.slice(3)}` : `~${time}`;
-  };
-  /**
-   * A Claude account's one time that matters: "in 1h 20m" for one the
-   * relay hands over to later, else the row time ("1h 20m left", "5h+",
-   * "back in 4h 50m").
-   */
-  const claudeTime = (ring: RingAccount): string => {
-    if (!claude) {
-      return "";
-    }
-    if (
-      ring.id !== claude.carry?.id &&
-      ring.state !== "limit" &&
-      ring.carryFrom !== null &&
-      ring.carryFrom > now
-    ) {
-      return guessed(ring, `in ${fmt(ring.carryFrom - now)}`);
-    }
-    return guessed(ring, rowTime(ring, claude, now));
-  };
-  /** Its week: "wk 62%" left, "wk —" at the week's limit, nothing unread. */
+  const unbroken = (time: string): string => time.replace(FIGURE_SPACE, "$1 ");
+  /** Its week, one style in every cell: "wk 62%" left, "wk 0%" at its limit. */
   const weekText = (ring: RingAccount): string => {
     if (ring.limitOn === "week") {
-      return "wk —";
+      return "wk 0%";
     }
     return ring.week ? `wk ${ring.week.left}%` : "";
   };
-  const delegatesOf = (ring: RingAccount): string | null =>
-    claude && ring.id === claude.delegate?.id ? delegateTip(claude) : null;
+  /** Where new delegates start, said under the wall in the name its cell shows. */
+  const delegates = $derived.by(() => {
+    const to = claude?.delegate;
+    if (!(claude && to)) {
+      return [];
+    }
+    const grouped = wall.some((block) =>
+      block.rows.some((row) =>
+        row.cells.some((cell) => cell.ring.id === to.id && cell.grouped)
+      )
+    );
+    const name = cellName(to, grouped);
+    return delegateLine(claude, `${name.local}${name.domain}`);
+  });
 
   /** One mark's room in the strip: 16px and the 4px between marks. */
   const SLOT = 20;
@@ -348,36 +405,17 @@
   {/if}
 {/snippet}
 
-{#snippet when(
-  text: string
-)}
-  <!-- A time; "back in 4h 50m" as the reset glyph and the time, read out
-       whole, so a limit takes a reset's width. -->
-  {#if text.startsWith("back in ")}
-    <span class="when"
-      ><IconRefresh aria-hidden="true" /><span class="sr-only">back in</span>
-      {text.slice(8)}</span
-    >
-  {:else}
-    <!-- The figure never breaks; in a narrow cell "in" or "left" takes a
-         line of its own rather than the time running past the cell. -->
-    {@const [, before = "", figure = text, after = ""] =
-      TIME_PARTS.exec(text) ?? []}
-    {before}<span class="fig">{figure}</span>{after}
-  {/if}
-{/snippet}
-
 {#snippet cell(
   ring: RingAccount,
   grouped: boolean,
   time: string
 )}
-  <!-- A cell of the dial wall: the double dial at 56px (its disc the
-       5-hour window, its rim the week) with the sessions it runs on its
-       corner, then its name, the time that matters, its week, and the
-       word "Delegates" under the account new delegates start on. -->
+  <!-- A cell of the dial wall: the sessions it runs at its top corner, off
+       the dial; the double dial at 56px (its disc the 5-hour window, its
+       rim the week); its name on two lines; how long it lasts; its week.
+       Its four parts are the row's four tracks (subgrid), so every time and
+       every week stand on one line across the row. -->
   {@const name = cellName(ring, grouped)}
-  {@const tip = delegatesOf(ring)}
   {@const week = weekText(ring)}
   <div
     class="cell-d"
@@ -386,6 +424,15 @@
     class:carrying={ring.id === claude?.carry?.id}
     class:limit={ring.state === "limit"}
   >
+    {#if ring.sessions.length > 0}
+      <span class="cell-chip">
+        <SessionsChip
+          account={ring.name}
+          onopen={putAway}
+          sessions={ring.sessions}
+        />
+      </span>
+    {/if}
     <span class="dial">
       {#if ring.state === "stale"}
         <Tip label={staleTip(ring, now)} side="top">
@@ -406,57 +453,45 @@
       {:else}
         <Rings {ring} size={56} />
       {/if}
-      {#if ring.sessions.length > 0}
-        <span class="dial-chip">
-          <SessionsChip
-            account={ring.name}
-            onopen={putAway}
-            sessions={ring.sessions}
-          />
-        </span>
-      {/if}
     </span>
-    <!-- Its parts are flex items, so no space stands between them and the
-         domain takes the second line whole when both don't fit. -->
+    <!-- Two lines in every cell: the first line, then the domain's stem
+         only where it tells two accounts apart. -->
     <span class="nm" data-name>
-      <span>{name.local}</span>
-      {#if name.domain}
-        <span>@{name.domain}</span>
-      {/if}
+      <span class="nm-local">{name.local}</span>
+      <span class="nm-domain">{name.domain}</span>
     </span>
-    <span class="line" data-time>{@render when(time)}</span>
-    {#if week}
-      <span class="line" data-week class:strong={ring.bind === "week"}
-        >{week}</span
-      >
-    {/if}
-    {#if tip}
-      <Tip label={tip} side="top">
-        {#snippet children(
-          props
-        )}
-          <button
-            {...props}
-            class={cn(badgeVariants({ variant: "secondary" }), "tag px-1")}
-            data-delegates-tag
-            type="button"
-          >
-            Delegates
-          </button>
-        {/snippet}
-      </Tip>
-    {/if}
+    <span class="line" data-time>{unbroken(time)}</span>
+    <span class="line" data-week>{week}</span>
   </div>
+{/snippet}
+
+{#snippet wallRows(
+  rows: WallRow[]
+)}
+  {#each rows as row, r (r)}
+    <!-- A row with a session count holds the chip's band over its dials. -->
+    <div
+      class="wall-row"
+      style:grid-template-columns={columnsOf(row)}
+      class:chips={row.cells.some((one) => one.ring.sessions.length > 0)}
+    >
+      {#each row.cells as one, i (one.ring.id)}
+        {#if i === row.join}
+          <span aria-hidden="true" class="seam" data-seam></span>
+        {/if}
+        {@render cell(one.ring, one.grouped, cellTime(one.ring, claude, now))}
+      {/each}
+    </div>
+  {/each}
 {/snippet}
 
 {#snippet limits(
   sheet: boolean
 )}
   <!-- Its size follows what it lists (a provider arriving, a note going).
-       In the popover the head and the foot stand still and the accounts
-       between them scroll; in the sheet the whole body scrolls under the
-       sheet's header. -->
-  <div class={["pop-body", sheet && "kit-sheet-scroll"]} {@attach morph()}>
+       In the popover and in the sheet alike the head and the foot stand
+       still and the accounts between them scroll. -->
+  <div class="pop-body" {@attach morph()}>
     {#if !(shown || gap) && notes.length === 0}
       <p class="pop-empty">{empty}</p>
     {/if}
@@ -477,42 +512,46 @@
         <Relay accounts={claude.accounts} {now} spans={usage.spans} />
       </header>
     {/if}
-    <!-- A sessions list hangs from a cell's row across its wall and ends on
-         the first cell's or head's foot under it (SessionsChip). -->
-    <div class="accounts" data-accounts data-flyover-scope>
+    <!-- A sessions list hangs from its cell's row, as wide as the wall
+         (SessionsChip). -->
+    <div class={["accounts", sheet && "kit-sheet-scroll"]} data-accounts>
       {#if claude}
         <div class="group orgs">
           <!-- An organization of more than two accounts is a group under its
-               name; the rest follow, ungrouped, after the same gap a group's
-               name stands after. -->
-          {#each orgGroups(claude.accounts) as group (group.org ?? "")}
+               name; the rest follow, ungrouped, along its last row after a
+               hairline when two places are left there, else after the same
+               gap a group's name stands after. -->
+          {#each wall as block (block.org ?? "")}
             <div
               class="wall"
               data-flyover-span
-              data-org-group={group.org ?? ""}
+              data-org-group={block.org ?? ""}
             >
-              {#if group.org}
-                <h4 class="org" data-flyover-edge data-org-head>{group.org}</h4>
+              {#if block.org}
+                <h4 class="org" data-org-head>{block.org}</h4>
               {/if}
-              {#each group.accounts as ring (ring.id)}
-                {@render cell(ring, group.org !== null, claudeTime(ring))}
-              {/each}
+              {@render wallRows(block.rows)}
             </div>
           {/each}
+          {#if delegates.length > 0}
+            <!-- Where new delegates start, said whole: no word to hover. -->
+            <p class="delegates" data-delegates>
+              <IconSubagents aria-hidden="true" />
+              <Words parts={delegates} />
+            </p>
+          {/if}
         </div>
       {/if}
       {#if openCode}
         <section class="group">
-          <h3 class="provider" data-flyover-edge>
+          <h3 class="provider">
             <span aria-hidden="true" class="mark"><OpenCodeLogo /></span>
             opencode Go
           </h3>
           <div class="wall" data-flyover-span>
-            {@render cell(
-              openCode,
-              true,
-              guessed(openCode, openCodeRowTime(openCode, now))
-            )}
+            <div class="wall-row" class:chips={openCode.sessions.length > 0}>
+              {@render cell(openCode, true, cellTime(openCode, null, now))}
+            </div>
           </div>
         </section>
       {/if}
@@ -538,7 +577,7 @@
       {#each notes as note (note.id)}
         {@const Mark = note.mark}
         <!-- A provider with nothing to draw: why, and what to do about it. -->
-        <p class="pop-empty pop-note" data-flyover-edge>
+        <p class="pop-empty pop-note">
           <span aria-hidden="true" class="mark"><Mark /></span>
           {note.text}
         </p>
@@ -863,25 +902,43 @@
     background: transparent;
     cursor: help;
   }
-  /* The dial wall: four cells across, one pitch apart, an organization's
-     name across the whole row over its cells. */
+  /* The dial wall: an organization's name, then its rows of four, one
+     pitch apart. */
   .wall {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: var(--space-1);
-
-    & > .org {
-      grid-column: 1 / -1;
-    }
-  }
-  /* A cell: the dial over its name, its time and its week, centred, in
-     meta. The carrier wears a hairline ring; an account at its limit the
-     limit wash, which the dial's reserve notch takes as its ground. */
-  .cell-d {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    gap: 2px;
+    gap: var(--space-1);
+  }
+  /* A row: four cells' widths (a quarter of the wall less the gaps, so a
+     short row keeps the same pitch), and the four tracks every cell's parts
+     stand on: the dial, the name, the time, the week. */
+  .wall-row {
+    --cell: calc((100% - 3 * var(--space-1)) / 4);
+    display: grid;
+    grid-template-columns: repeat(4, var(--cell));
+    grid-template-rows: repeat(4, auto);
+    column-gap: var(--space-1);
+    row-gap: 2px;
+  }
+  /* Ungrouped accounts going on along an organization's last row: a
+     hairline the wall's height between, a wider gap either side. */
+  .seam {
+    grid-row: 1 / -1;
+    inline-size: 1px;
+    margin-inline: var(--space-2);
+    background: var(--border-hairline);
+  }
+  /* A cell: the dial over its name, its time and its week, centred, in
+     meta, on its row's tracks. The carrier wears a hairline ring; an
+     account at its limit the limit wash, which the dial's reserve notch
+     takes as its ground. */
+  .cell-d {
+    position: relative;
+    display: grid;
+    grid-row: 1 / -1;
+    grid-template-rows: subgrid;
+    justify-items: center;
+    align-items: start;
     min-inline-size: 0;
     padding: var(--space-1) 2px;
     border-radius: var(--radius-sm);
@@ -895,28 +952,37 @@
     background: var(--meter-wash-over);
     --ring-ground: var(--meter-wash-over);
   }
-  /* The dial, with the count of the sessions it runs on its lower corner. */
   .dial {
-    position: relative;
     display: grid;
-    margin-block-end: 2px;
   }
-  .dial-chip {
+  /* The session count stands in a band over the dials of its row, at its
+     cell's top corner, clear of the week rim. */
+  .wall-row.chips .dial {
+    margin-block-start: calc(1.25rem + var(--space-1));
+  }
+  .cell-chip {
     position: absolute;
-    inset-block-end: -4px;
-    inset-inline-end: -10px;
+    inset-block-start: var(--space-1);
+    inset-inline-end: 2px;
   }
-  /* A name never ends in an ellipsis: an ungrouped one breaks before its
-     "@" onto a second line, and anything longer than the cell wraps. */
+  /* Two lines in every cell, so every row's times stand level: the first
+     line strong, the domain's stem (where it is needed) quiet. A name
+     never ends in an ellipsis; one longer than the cell wraps. */
   .nm {
     display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
+    flex-direction: column;
+    align-items: center;
+    min-block-size: 2lh;
     max-inline-size: 100%;
     overflow-wrap: anywhere;
     font: var(--type-meta);
+  }
+  .nm-local {
     font-weight: var(--weight-strong);
     color: var(--ink-strong);
+  }
+  .nm-domain {
+    color: var(--ink-muted);
   }
   .line {
     max-inline-size: 100%;
@@ -925,51 +991,33 @@
     font-variant-numeric: tabular-nums;
     color: var(--ink-muted);
   }
-  /* The week, when it is the window that binds. */
-  .line.strong {
-    font-weight: var(--weight-strong);
-    color: var(--ink-strong);
-  }
-  .fig {
-    white-space: nowrap;
-  }
-  /* "back in 4h 50m" as the reset glyph and the time. */
-  .when {
-    display: inline-flex;
-    align-items: center;
-    gap: 2px;
-    line-height: 1;
+  /* Where new delegates start, in words under the wall. */
+  .delegates {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-1);
+    padding: 0 var(--space-1);
+    font: var(--type-meta);
+    color: var(--ink-row);
 
     & :global(svg) {
       flex: none;
-      inline-size: 12px;
-      block-size: 12px;
+      inline-size: 16px;
+      block-size: 16px;
+      color: var(--ink-muted);
     }
-  }
-  /* The Delegates badge: the word alone, in meta, 4px in. */
-  .tag {
-    flex: none;
-    font: var(--type-meta);
-    line-height: 1;
-    cursor: help;
   }
   .foot {
     flex: none;
     padding: 10px 14px;
     border-block-start: 1px solid var(--border-hairline);
   }
-  /* The sheet: the whole body scrolls under its header, rows at the touch
-     floor. */
+  /* The sheet: as the popover, the head and the foot stand still and the
+     accounts between them scroll, the controls at the touch floor. */
   :global(.usage-sheet) .pop-body {
     flex: 1 1 auto;
     min-block-size: 0;
     max-block-size: none;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-  }
-  :global(.usage-sheet) .accounts {
-    flex: none;
-    overflow: visible;
   }
   :global(.usage-sheet) .pop-head {
     padding: 4px 18px 12px;
