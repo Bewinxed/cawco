@@ -145,6 +145,30 @@ const MAESTRO =
   'JAVA_HOME="$(/opt/homebrew/bin/brew --prefix openjdk)" MAESTRO_OPTS=--enable-final-field-mutation=ALL-UNNAMED MAESTRO_CLI_NO_ANALYTICS=true MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED=true MAESTRO_DISABLE_UPDATE_CHECK=true /opt/homebrew/bin/maestro --no-ansi';
 
 /**
+ * A port for Maestro's runner, bound free on the Mac's 127.0.0.1 a moment
+ * before each Maestro call, which takes it as `--driver-host-port`. Left to
+ * itself, `maestro test` picks one with `ServerSocket(0)` (TestCommand
+ * .selectPort), which on macOS probes the IPv6 wildcard: a port another
+ * process holds on 127.0.0.1 alone (an `ssh -R` tunnel such as this
+ * probe's) reads as free there ("a port reported free there can still be
+ * taken on IPv4", Maestro's SocketUtils.getFreePort), and Maestro talks to
+ * its runner at 127.0.0.1. At 3b7734e0 that is what answered: the flow's
+ * first read of its runner, `deviceInfo`, got a body opening with `<` and
+ * Maestro stopped before launchApp ("JsonParseException: Unexpected
+ * character ('<'" at XCTestDriverClient.deviceInfo), then failed to
+ * terminate a runner that was gone (simctl's ESRCH, "found nothing to
+ * terminate"). Binding 127.0.0.1 itself sees every holder of the port.
+ */
+const runnerPort = async () =>
+  Number(
+    (
+      await mac(
+        `python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])'`
+      )
+    ).trim()
+  );
+
+/**
  * Runs `steps` (Maestro flow commands) on the probe's simulator under this
  * app's id; whether the flow passed, Maestro's last lines, and all it said.
  */
@@ -156,10 +180,11 @@ const flow = async (
   const b64 = Buffer.from(yaml).toString("base64");
   const tail = (text: string) =>
     text.trim().split("\n").slice(-6).join(" / ").slice(0, 400);
+  const port = await runnerPort();
   return await mac(`D=$(mktemp -d)
 trap 'rm -rf "$D"' EXIT
 echo '${b64}' | base64 -D > "$D/${name}.yaml"
-${MAESTRO} --device ${udid} test "$D/${name}.yaml" 2>&1`).then(
+${MAESTRO} --device ${udid} --driver-host-port ${port} test "$D/${name}.yaml" 2>&1`).then(
     (text) => ({ ok: true, said: tail(text), all: text.trim() }),
     (error: unknown) => ({
       ok: false,
@@ -170,10 +195,10 @@ ${MAESTRO} --device ${udid} test "$D/${name}.yaml" 2>&1`).then(
 };
 
 /** The screen as Maestro reads it (`maestro hierarchy`): its JSON, or the failure. */
-const hierarchy = () =>
-  mac(`${MAESTRO} --device ${udid} hierarchy 2>/dev/null`).catch(
-    (error: unknown) => `maestro hierarchy failed: ${String(error)}`
-  );
+const hierarchy = async () =>
+  mac(
+    `${MAESTRO} --device ${udid} --driver-host-port ${await runnerPort()} hierarchy 2>/dev/null`
+  ).catch((error: unknown) => `maestro hierarchy failed: ${String(error)}`);
 
 // ── The app's log, streamed from before its first launch ─────────────────
 /**
@@ -623,7 +648,10 @@ xcrun simctl install ${udid} "${app}"`);
   // ── The real path: iOS asks, Maestro allows, APNs gives a token, the
   // app registers its pairing and push key with the hub (PushProbe). ──────
   // The flow launches the app (one `simctl launch`, the process whose log
-  // streams: Maestro.launchApp stops it, then IOSDriver.launchApp), waits
+  // streams: Maestro.launchApp stops it through the runner, then
+  // IOSDriver.launchApp; at a0570c26 one "probe register: started" and the
+  // same pid to the end). Maestro launches it after its runner is up, so
+  // the runner app never comes to the front over the prompt. It waits
   // for the prompt's "Allow" and taps it itself. Maestro's own tap is not
   // relied on: its runner taps Allow only when ViewHierarchyHandler's
   // RunningApp.getForegroundApp() returns SpringBoard; when no app reads as
