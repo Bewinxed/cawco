@@ -13,7 +13,7 @@
    */
   import { Button } from "#lib/components/ui/button/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
-  import { IconKey } from "#lib/icons.js";
+  import { IconKey, IconRefresh } from "#lib/icons.js";
   import ClaudeIcon from "~icons/logos/claude-icon";
   import AccountName from "../accounts/AccountName.svelte";
   import { cawco, type InstanceRow } from "../client.svelte";
@@ -28,10 +28,10 @@
     nameFields,
     openCodeFigure,
     openCodeSentence,
-    openCodeStop,
     type Part,
     type RingAccount,
     stopText,
+    type TileFigure,
     tileFigure,
     tileSentence,
   } from "./rings";
@@ -44,7 +44,7 @@
   const claude = $derived(usage.claude);
   const openCode = $derived(usage.openCode);
   const now = $derived(usage.now);
-  const read = $derived(usage.read && cawco.usageLimitsRead);
+  const read = $derived(usage.staged || (usage.read && cawco.usageLimitsRead));
 
   /** The fleet's real spend, the hub's one figure; null while read or failed. */
   const spend = $derived(cawco.spend);
@@ -68,19 +68,33 @@
     return extra.inUse ? "on, in use" : "on";
   });
 
-  /** The lead: Claude's answer, or opencode's when it is the only plan. */
-  const lead = $derived.by((): { figure: string; say: Part[] } | null => {
-    if (claude) {
-      return { figure: stopText(claude, now), say: leadSentence(claude, now) };
+  /**
+   * The lead: Claude's answer, or opencode's when it is the only plan, in
+   * the popover's words; at opencode's limit, the refresh mark and how long
+   * until it's back.
+   */
+  const lead = $derived.by(
+    (): { back: boolean; figure: string; of: string; say: Part[] } | null => {
+      if (claude) {
+        return {
+          back: false,
+          figure: stopText(claude, now),
+          of: "until no account can start a session",
+          say: leadSentence(claude, now),
+        };
+      }
+      if (openCode) {
+        const go = openCodeFigure(openCode, now);
+        return {
+          back: go.back,
+          figure: go.figure,
+          of: go.back ? "until it’s back" : go.label,
+          say: openCodeSentence(openCode, now),
+        };
+      }
+      return null;
     }
-    if (openCode) {
-      return {
-        figure: openCodeStop(openCode, now),
-        say: openCodeSentence(openCode, now),
-      };
-    }
-    return null;
-  });
+  );
 
   const titleOf = (row: InstanceRow) =>
     row.title ?? row.derivedTitle ?? "untitled session";
@@ -98,7 +112,8 @@
   <div class="running">
     {#if ring.sessions.length > 0}
       <span class="heading"
-        >Running <span class="count">{ring.sessions.length}</span></span
+        >Running
+        <span class="count mono-figure">{ring.sessions.length}</span></span
       >
       <div class="sessions">
         {#each ring.sessions as row (row.id)}
@@ -110,7 +125,7 @@
               {/if}
               {titleOf(row)}</span
             >
-            <span class="num">{tokens(row)}</span>
+            <span class="tokens mono-figure">{tokens(row)}</span>
           </div>
         {/each}
       </div>
@@ -123,7 +138,7 @@
 {#snippet tile(
   ring: RingAccount,
   index: number,
-  figure: { figure: string; label: string },
+  figure: TileFigure,
   say: Part[]
 )}
   <div
@@ -142,7 +157,10 @@
         <span
           class="value"
           class:muted={ring.state === "limit" || ring.state === "stale"}
-          ><Figure text={figure.figure} /></span
+          >{#if figure.back}
+            <span aria-hidden="true" class="back-glyph"><IconRefresh /></span>
+          {/if}
+          <Figure text={figure.figure} /></span
         >
         <small>{figure.label}</small>
       </span>
@@ -170,10 +188,13 @@
     {#if lead}
       <div class="lead">
         <p class="big">
-          <span class="kpi" data-lead-figure class:muted={claude?.stale}
-            ><Figure text={lead.figure} /></span
+          <span class="kpi num" data-lead-figure class:muted={claude?.stale}
+            >{#if lead.back}
+              <span aria-hidden="true" class="back-glyph"><IconRefresh /></span>
+            {/if}
+            <Figure text={lead.figure} /></span
           >
-          <span class="of">until you’re stopped</span>
+          <span class="of">{lead.of}</span>
         </p>
         <p class="sentence" data-lead><Words parts={lead.say} /></p>
       </div>
@@ -239,11 +260,15 @@
         </div>
       {/if}
       {#if spend && spend.all > 0}
-        <p class="line num">
-          <span class="label">Spend</span>{money(spend.today)}
-          today,
-          {money(spend.week)}
-          this week, {money(spend.all)} all time
+        <p class="line">
+          <span class="label">Spend</span
+          ><span
+            ><span class="mono-figure">{money(spend.today)}</span>
+            today, <span class="mono-figure">{money(spend.week)}</span>
+            this week,
+            <span class="mono-figure">{money(spend.all)}</span>
+            all time</span
+          >
         </p>
       {/if}
     {/if}
@@ -284,8 +309,21 @@
   .kpi {
     font: var(--type-kpi);
     letter-spacing: -0.02em;
-    font-variant-numeric: tabular-nums;
     color: var(--ink-strong);
+  }
+  /* At its limit the figure says how long until it's back, after the
+     refresh mark the popover's cell uses: Solar duotone, at the figure's
+     cap height, muted. */
+  .back-glyph {
+    display: inline-grid;
+    margin-inline-end: 0.25em;
+    vertical-align: -0.1em;
+    color: var(--ink-muted);
+
+    & :global(svg) {
+      inline-size: 0.8em;
+      block-size: 0.8em;
+    }
   }
   .kpi.muted,
   .value.muted {
@@ -416,9 +454,8 @@
       text-overflow: ellipsis;
       white-space: nowrap;
     }
-    & .num {
+    & .tokens {
       flex: none;
-      font-variant-numeric: tabular-nums;
       color: var(--ink-muted);
     }
   }

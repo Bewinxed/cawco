@@ -214,7 +214,11 @@ export const dayTime = (at: number, now: number): string =>
     .format(at)
     .replace(",", "");
 
-const sessions = (n: number) => (n === 1 ? "1 session" : `${n} sessions`);
+/** A count of sessions in words, its figure set as one: "2 sessions". */
+const sessionsSaid = (n: number): Part[] => [
+  { figure: String(n) },
+  n === 1 ? " session" : " sessions",
+];
 const until = (at: number | null, now: number) =>
   at === null ? "" : fmt(at - now);
 
@@ -551,6 +555,8 @@ const named = (ring: RingAccount, name = ring.name): Part => ({
   color: ring.color,
 });
 const strong = (text: string): Part => ({ strong: text });
+/** A measured figure among the words (a time, a share, a count). */
+const fig = (text: string): Part => ({ figure: text });
 
 /** The parts as plain text: a label, a key for a crossfade. */
 export const plain = (parts: Part[]): string =>
@@ -879,21 +885,27 @@ export function tileSentence(
 ): Part[] {
   const n = r.sessions.length;
   if (r.state === "limit") {
-    return ["At its limit. Back in ", strong(until(r.backAt, now)), "."];
+    return ["At its limit. Back in ", fig(until(r.backAt, now)), "."];
   }
   if (r.state === "stale" && r.seenAt !== null) {
     return [
-      `Hasn’t reported for ${fmt(now - r.seenAt)}, so this may be out of date.`,
+      "Hasn’t reported for ",
+      fig(fmt(now - r.seenAt)),
+      ", so this may be out of date.",
     ];
   }
   if (r.state === "reserve") {
     return [
-      `Reserve reached. It keeps its ${sessions(n)}; new work goes elsewhere.`,
+      "Reserve reached. It keeps its ",
+      ...sessionsSaid(n),
+      "; new work goes elsewhere.",
     ];
   }
   if (r.id === c.carry?.id) {
     return [
-      n > 0 ? `Carrying ${sessions(n)}` : "Carries your next session",
+      ...(n > 0
+        ? ["Carrying ", ...sessionsSaid(n)]
+        : ["Carries your next session"]),
       ...(c.next ? [", then ", named(c.next)] : []),
       ".",
     ];
@@ -906,28 +918,40 @@ export function tileSentence(
       "Takes over from ",
       named(c.carry),
       " in ",
-      strong(fmt(c.nextAt - now)),
+      fig(fmt(c.nextAt - now)),
       ".",
     ];
   }
   return ["Idle."];
 }
 
-/** A tile's figure, beside its mark, and what the figure is. */
+/**
+ * A tile's figure, beside its mark, and what the figure is: how long it
+ * lasts, or at its limit (`back`, drawn after the refresh mark, as the
+ * popover's cell does) how long until it's back.
+ */
+export interface TileFigure {
+  back: boolean;
+  figure: string;
+  label: string;
+}
+
+/** A tile's figure: how long it lasts, or how long until it's back. */
 export function tileFigure(
   r: RingAccount,
   c: ClaudeRings,
   now: number
-): { figure: string; label: string } {
+): TileFigure {
   if (r.state === "limit") {
     return {
-      figure: `back in ${until(r.backAt, now)}`,
-      label: `${r.bindName} at its limit`,
+      back: true,
+      figure: until(r.backAt, now),
+      label: `until it’s back · ${r.bindName} at its limit`,
     };
   }
   const carrying = r.id === c.carry?.id;
   if (r.neverBackup && !carrying) {
-    return { figure: "5h+", label: "never a backup" };
+    return { back: false, figure: "5h+", label: "never a backup" };
   }
   const out =
     carrying || r.state === "reserve"
@@ -935,9 +959,10 @@ export function tileFigure(
       : (r.carryUntil ?? r.bindOut);
   const figure = within(out, now);
   if (r.state === "stale") {
-    return { figure, label: "last known" };
+    return { back: false, figure, label: "last known" };
   }
   return {
+    back: false,
     figure,
     label: r.bind === "5h" ? "left of 5 hours" : `left of the ${r.bindName}`,
   };
@@ -947,18 +972,20 @@ export function tileFigure(
 const within = (at: number | null, now: number): string =>
   at !== null && at - now < HORIZON_MS ? fmt(at - now) : "5h+";
 
-/** Opencode's figure beside its mark, and what it is. */
-export function openCodeFigure(
-  o: RingAccount,
-  now: number
-): { figure: string; label: string } {
-  const figure = openCodeStop(o, now);
-  if (o.state === "limit") {
-    return { figure, label: `${o.bindName} at its limit` };
+/** Opencode's figure beside its mark, and what it is, as its popover cell says it. */
+export function openCodeFigure(o: RingAccount, now: number): TileFigure {
+  const time = cellTime(o, null, now);
+  if (time.kind === "back") {
+    return {
+      back: true,
+      figure: time.figure ?? "",
+      label: `until it’s back · ${o.bindName} at its limit`,
+    };
   }
   return {
-    figure,
-    label: figure === "5h+" ? "nothing runs out" : "until it runs out",
+    back: false,
+    figure: time.guess ? `~${time.figure}` : time.figure,
+    label: time.figure === "5h+" ? "nothing runs out" : "until it runs out",
   };
 }
 
@@ -970,7 +997,7 @@ export function leadSentence(c: ClaudeRings, now: number): Part[] {
           " You’re back on ",
           strong(c.back.name),
           " in ",
-          strong(fmt(c.backAt - now)),
+          fig(fmt(c.backAt - now)),
           ".",
         ]
       : [];
@@ -980,7 +1007,7 @@ export function leadSentence(c: ClaudeRings, now: number): Part[] {
           "Nothing can carry you now. ",
           strong(c.back.name),
           " is back in ",
-          strong(fmt(c.backAt - now)),
+          fig(fmt(c.backAt - now)),
           ".",
         ]
       : ["Nothing can carry you now."];
@@ -992,7 +1019,7 @@ export function leadSentence(c: ClaudeRings, now: number): Part[] {
       : [
           strong(c.carry.name),
           " runs out in ",
-          strong(fmt(carryEnd - now)),
+          fig(fmt(carryEnd - now)),
           ...(c.next ? [", then ", strong(c.next.name), "."] : ["."]),
         ];
   if (c.stale && c.stale.seenAt !== null) {
@@ -1000,7 +1027,9 @@ export function leadSentence(c: ClaudeRings, now: number): Part[] {
       ...parts,
       " ",
       strong(c.stale.name),
-      ` last reported ${fmt(now - c.stale.seenAt)} ago, so the time after that is a guess.`,
+      " last reported ",
+      fig(fmt(now - c.stale.seenAt)),
+      " ago, so the time after that is a guess.",
     ];
   }
   if (c.stopAt === null) {
@@ -1014,7 +1043,7 @@ export function leadSentence(c: ClaudeRings, now: number): Part[] {
       " ",
       strong(limited.name),
       " is at its limit and back in ",
-      strong(fmt(limited.backAt - now)),
+      fig(fmt(limited.backAt - now)),
       ", so nothing carries you in between.",
       ...(c.back && c.back.id !== limited.id ? back : []),
     ];
@@ -1025,34 +1054,28 @@ export function leadSentence(c: ClaudeRings, now: number): Part[] {
       ...parts,
       " ",
       strong(reserved.name),
-      ` reached its weekly reserve: it keeps its ${sessions(reserved.sessions.length)}, and new work goes elsewhere.`,
+      " reached its weekly reserve: it keeps its ",
+      ...sessionsSaid(reserved.sessions.length),
+      ", and new work goes elsewhere.",
       ...back,
     ];
   }
   return [...parts, ...back];
 }
 
-/** Opencode's figure: how long until one of its windows runs out. */
-export const openCodeStop = (o: RingAccount, now: number): string => {
-  if (o.state === "limit") {
-    return "0m";
-  }
-  return o.bindOut !== null && o.bindOut - now < HORIZON_MS
-    ? guess(o.state === "stale", fmt(o.bindOut - now))
-    : "5h+";
-};
-
 export function openCodeSentence(o: RingAccount, now: number): Part[] {
   if (o.state === "limit") {
-    return ["At its limit. Back in ", strong(until(o.backAt, now)), "."];
+    return ["At its limit. Back in ", fig(until(o.backAt, now)), "."];
   }
   if (o.state === "stale" && o.seenAt !== null) {
     return [
-      `Hasn’t reported for ${fmt(now - o.seenAt)}, so this may be out of date.`,
+      "Hasn’t reported for ",
+      fig(fmt(now - o.seenAt)),
+      ", so this may be out of date.",
     ];
   }
   return o.bindOut !== null && o.bindOut - now < HORIZON_MS
-    ? ["Runs out in ", strong(fmt(o.bindOut - now)), "."]
+    ? ["Runs out in ", fig(fmt(o.bindOut - now)), "."]
     : ["Nothing stops you in the next 5 hours."];
 }
 
@@ -1064,13 +1087,17 @@ export interface KeyRow {
   label: string;
   /** The window is spent: its glyph goes to the track's grey. */
   limit: boolean;
-  reset: string;
-  value: string;
+  /** When it resets or is back, its figure set as one. */
+  reset: Part[];
+  /** What is left of it ("62% left"), its figure set as one. */
+  value: Part[];
 }
 
 /** An account's key: the 5-hour (the disc), then the week (the rim), then the month. */
 export function keyRows(r: RingAccount, now: number): KeyRow[] {
   const rows: KeyRow[] = [];
+  const left = (share: number, limited: boolean): Part[] =>
+    limited ? ["at its limit"] : [fig(`${share}%`), " left"];
   if (r.w5) {
     const lim = r.limitOn === "5h";
     const resets = r.w5.resetsAt;
@@ -1079,10 +1106,10 @@ export function keyRows(r: RingAccount, now: number): KeyRow[] {
       glyph: "disc",
       label: "5-hour",
       limit: lim,
-      value: lim ? "at its limit" : `${r.w5.left}% left`,
+      value: left(r.w5.left, lim),
       reset: lim
-        ? `back in ${until(r.backAt, now)}`
-        : `resets in ${until(resets, now)}`,
+        ? ["back in ", fig(until(r.backAt, now))]
+        : ["resets in ", fig(until(resets, now))],
     });
   }
   if (r.week) {
@@ -1093,8 +1120,8 @@ export function keyRows(r: RingAccount, now: number): KeyRow[] {
       glyph: "rim",
       label: "Week",
       limit: lim,
-      value: lim ? "at its limit" : `${r.week.left}% left`,
-      reset: resets === null ? "" : `resets ${dayTime(resets, now)}`,
+      value: left(r.week.left, lim),
+      reset: resets === null ? [] : ["resets ", ...clockSaid(resets, now)],
     });
   }
   if (r.month) {
@@ -1104,9 +1131,18 @@ export function keyRows(r: RingAccount, now: number): KeyRow[] {
       glyph: null,
       label: "Month",
       limit: r.month.left <= 0,
-      value: r.month.left <= 0 ? "at its limit" : `${r.month.left}% left`,
-      reset: resets === null ? "" : `resets in ${fmt(resets - now)}`,
+      value: left(r.month.left, r.month.left <= 0),
+      reset: resets === null ? [] : ["resets in ", fig(fmt(resets - now))],
     });
   }
   return rows;
 }
+
+/** A day and time ("Tue 14:00"): the day in words, the clock a figure. */
+const clockSaid = (at: number, now: number): Part[] => {
+  const said = dayTime(at, now);
+  const space = said.lastIndexOf(" ");
+  return space === -1
+    ? [fig(said)]
+    : [said.slice(0, space + 1), fig(said.slice(space + 1))];
+};

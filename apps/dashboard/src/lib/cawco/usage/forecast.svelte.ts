@@ -133,6 +133,10 @@ export const usage = {
   get read() {
     return staged !== null || state.read;
   },
+  /** A bench stands its own view in: the limits count as read with it. */
+  get staged() {
+    return staged !== null;
+  },
   /** A bench stands its own view in for the hub's; null hands it back. */
   stage(view: StagedUsage | null) {
     staged = view;

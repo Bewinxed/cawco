@@ -4,14 +4,27 @@
    * An account's key: one line per window, the 5-hour (the disc) first,
    * then the week (the rim), then opencode's month: glyph | label | value |
    * reset. The label and value columns are fixed, so values line up down a
-   * tile, across the tiles in a row, and down the popover.
+   * tile and across the tiles in a row; their figures are in the mono
+   * figure face.
    */
-  import { type KeyRow, keyRows, type RingAccount } from "./rings";
+  import { type KeyRow, keyRows, type Part, type RingAccount } from "./rings";
 
   let { ring }: { ring: RingAccount } = $props();
 
   const rows: KeyRow[] = $derived(keyRows(ring, usage.now));
 </script>
+
+{#snippet said(
+  parts: Part[]
+)}
+  {#each parts as part, i (i)}
+    {#if typeof part === "string"}
+      {part}
+    {:else if "figure" in part}
+      <span class="mono-figure">{part.figure}</span>
+    {/if}
+  {/each}
+{/snippet}
 
 <div class="key" style:--c={ring.color}>
   {#each rows as row (row.id)}
@@ -31,8 +44,8 @@
       <span></span>
     {/if}
     <span class="label">{row.label}</span>
-    <span class="value" data-key-value>{row.value}</span>
-    <span class="reset">{row.reset}</span>
+    <span class="value" data-key-value>{@render said(row.value)}</span>
+    <span class="reset">{@render said(row.reset)}</span>
   {/each}
 </div>
 
