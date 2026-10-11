@@ -303,7 +303,6 @@ final class CawPanel: UIView, UIGestureRecognizerDelegate {
             at = view.superview
         }
         Self.log.notice("panel glass moved by: \(moved.isEmpty ? "nothing" : moved.joined(separator: " < "), privacy: .public)")
-        if let window { Self.nameViews(in: window) }
         #endif
         place()
         layoutIfNeeded()
@@ -313,28 +312,6 @@ final class CawPanel: UIView, UIGestureRecognizerDelegate {
         card.grow()
         UIAccessibility.post(notification: .layoutChanged, argument: list.arrangedSubviews.first)
     }
-
-    #if DEBUG
-    /// Names every unnamed view in the window by its type and its four
-    /// nearest ancestors' (`dbg:Type<Parent<…`), so a simulator pass can say
-    /// which view stands over a transcript row on the iPad
-    /// (scripts/probe-ios-caw-panel.ts prints `label ?? resource-id`).
-    /// Diagnostic only, for one probe run.
-    private static func nameViews(in root: UIView) {
-        var pending = [root]
-        while let view = pending.popLast() {
-            pending += view.subviews
-            guard view.accessibilityIdentifier?.isEmpty ?? true else { continue }
-            var path = [String(describing: type(of: view))]
-            var at = view.superview
-            while let parent = at, path.count < 5 {
-                path.append(String(describing: type(of: parent)))
-                at = parent.superview
-            }
-            view.accessibilityIdentifier = "dbg:" + path.joined(separator: "<")
-        }
-    }
-    #endif
 
     func close() {
         guard open else { return }
