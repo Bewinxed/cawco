@@ -610,29 +610,53 @@ export function stopOf(
 }
 
 /**
- * The time under a dial-wall cell's name, one shape for every account: its
- * forecast stop ("1h 20m left"; `stopOf`), "5h+ left" when it won't run out
- * inside the five hours (no stop), or at its limit when
- * it's back ("back in 4h 50m"); a reading out of date puts a tilde before
- * it ("~1h 20m left"), and the dial's tooltip says why. Who takes over when
- * is the relay bar's to say.
+ * A dial-wall cell's time in its parts, so its figure can be set in
+ * tabular figures and its tilde can hang: `lead` and `tail` are words
+ * (shown a space apart from the figure), `figure` the changing value,
+ * `guess` a tilde before it all.
+ */
+export interface CellTime {
+  figure: string;
+  guess: boolean;
+  lead: string;
+  tail: string;
+}
+
+/**
+ * The time on a dial-wall cell's second line, one shape for every account:
+ * its forecast stop ("1h 20m left"; `stopOf`), "5h+ left" when it won't run
+ * out inside the five hours (no stop), or at its limit when it's back
+ * ("back in 4h 50m"); a reading out of date puts a tilde before it
+ * ("~1h 20m left"), and the dial's tooltip says why. Who takes over when is
+ * the relay bar's to say.
  */
 export function cellTime(
   r: RingAccount,
   c: ClaudeRings | null,
   now: number
-): string {
+): CellTime {
   if (r.state === "limit") {
     return r.backAt === null
-      ? "at its limit"
-      : `back in ${until(r.backAt, now)}`;
+      ? { guess: false, lead: "at its limit", figure: "", tail: "" }
+      : {
+          guess: false,
+          lead: "back in",
+          figure: until(r.backAt, now),
+          tail: "",
+        };
   }
   const out = stopOf(r, c, now);
-  return guess(
-    r.state === "stale",
-    out === null ? "5h+ left" : `${fmt(out - now)} left`
-  );
+  return {
+    guess: r.state === "stale",
+    lead: "",
+    figure: out === null ? "5h+" : fmt(out - now),
+    tail: "left",
+  };
 }
+
+/** A cell's week: what is left of it ("wk 62%"), 0 at its limit, none unread. */
+export const weekLeft = (r: RingAccount): number | null =>
+  r.limitOn === "week" ? 0 : (r.week?.left ?? null);
 
 /**
  * When an idle account would run out if it took over now, as the relay's

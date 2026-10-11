@@ -1,14 +1,14 @@
 <script lang="ts" module>
   /**
    * Rim width and the gap inside it, in px, per size: the rim reads at 16px;
-   * at the dial wall's sizes (32, 40, 56) the week is a band wide enough,
-   * and far enough off the disc, that weeks compare by eye from cell to cell.
+   * at the usage popover's dial wall (32px) and the Usage page's limits
+   * (56px) the week is a band wide enough, and far enough off the disc,
+   * that weeks compare by eye from cell to cell.
    */
   const RIMS = {
     16: [1.5, 1],
     24: [2, 1.5],
     32: [3.5, 1.5],
-    40: [4.5, 2],
     56: [6, 3],
   } as const;
 </script>

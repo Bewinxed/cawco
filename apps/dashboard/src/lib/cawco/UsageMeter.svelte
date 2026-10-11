@@ -12,8 +12,8 @@
    *
    * The whole strip is one control. It opens the relay: the time until
    * Claude stops, who carries you across the next five hours as one bar,
-   * and every account as a cell of the dial wall, four across (grouped by
-   * organization where one has more than two): its 56px double dial, its
+   * and every account as a cell of the dial wall, two across (grouped by
+   * organization where one has more than two): its 32px double dial, its
    * name, the time that matters and its week, so one glance says which
    * accounts still have room in the next five hours and this week. Then
    * the way to the Usage page: a popover by the strip
@@ -45,6 +45,7 @@
   import Relay from "./usage/Relay.svelte";
   import Rings from "./usage/Rings.svelte";
   import {
+    type CellTime,
     type ClaudeRings,
     caption,
     cellTime,
@@ -56,6 +57,7 @@
     staleTip,
     stopOf,
     stopText,
+    weekLeft,
   } from "./usage/rings";
   import SessionsChip from "./usage/SessionsChip.svelte";
   import Words from "./usage/Words.svelte";
@@ -106,21 +108,6 @@
   );
 
   // ── the dial wall ──
-  /**
-   * Cells across the wall: four in the popover (`c-panel-w`), three in the
-   * sheet, so every cell holds the longest time line on one line.
-   */
-  const across = $derived(touch.current ? 3 : 4);
-  /** The tracks a cell's parts stand on: its dial, its name, its time and week. */
-  const TRACKS = 3;
-  /**
-   * Where cell `i` of a block stands: on its column, on its row's tracks,
-   * under its block's head when it has one.
-   */
-  const placeOf = (block: WallBlock, i: number) => ({
-    column: `${(i % across) + 1}`,
-    row: `${1 + (block.head ? 1 : 0) + Math.floor(i / across) * TRACKS} / span ${TRACKS}`,
-  });
   /** A cell: its account, and whether an organization's head stands over it. */
   interface WallCell {
     grouped: boolean;
@@ -228,13 +215,6 @@
           ? `@${ring.email.slice(ring.email.lastIndexOf("@") + 1).replace(TOP_DOMAIN, "")}`
           : "",
     };
-  };
-  /** Its week, one style in every cell: "wk 62%" left, "wk 0%" at its limit. */
-  const weekText = (ring: RingAccount): string => {
-    if (ring.limitOn === "week") {
-      return "wk 0% left";
-    }
-    return ring.week ? `wk ${ring.week.left}% left` : "";
   };
   /** Where new delegates start, said under the wall in the name its cell shows. */
   const delegates = $derived.by(() => {
@@ -537,25 +517,21 @@
 {#snippet cell(
   ring: RingAccount,
   grouped: boolean,
-  time: string,
-  place: { column: string; row: string }
+  time: CellTime
 )}
-  <!-- A cell of the dial wall: the sessions it runs beside the dial's
-       top-right; the double dial at 56px (its disc the 5-hour window, its
-       rim the week); its name on one line; how long it lasts, and its week
-       under that when it has one. Its three parts are its row's three
-       tracks (subgrid), so every time stands on one line across the row. A
-       re-ranking slides it to its new place (motion/rows). -->
+  <!-- A cell of the dial wall, one row on its wall column's three tracks
+       (subgrid): the 32px double dial (its disc the 5-hour window, its rim
+       the week) on both lines; its name on the first, the sessions it runs
+       at that line's end; how long it lasts, then its week at the end, on
+       the second. A re-ranking slides it to its new place (motion/rows). -->
   {@const name = cellName(ring, grouped)}
-  {@const week = weekText(ring)}
+  {@const week = weekLeft(ring)}
   <div
     class="cell-d"
     data-account={ring.id}
     data-bind={ring.bind}
     data-flip
     data-flyover-anchor
-    style:grid-column={place.column}
-    style:grid-row={place.row}
     class:carrying={ring.id === claude?.carry?.id}
     class:limit={ring.state === "limit"}
   >
@@ -572,13 +548,24 @@
               data-stale-ring
               type="button"
             >
-              <Rings {ring} size={56} />
+              <Rings {ring} size={32} />
             </button>
           {/snippet}
         </Tip>
       {:else}
-        <Rings {ring} size={56} />
+        <Rings {ring} size={32} />
       {/if}
+    </span>
+    <!-- The first line: the name, the domain's stem right after it only
+         where it tells two accounts apart, and the session count at the
+         line's end. -->
+    <span class="l1">
+      <span class="nm" data-name>
+        <span class="nm-local">{name.local}</span>
+        {#if name.domain}
+          <span class="nm-domain">{name.domain}</span>
+        {/if}
+      </span>
       {#if ring.sessions.length > 0}
         <span class="cell-chip">
           <SessionsChip
@@ -590,20 +577,28 @@
         </span>
       {/if}
     </span>
-    <!-- The first line, then the domain's stem right after it only where
-         it tells two accounts apart. -->
-    <span class="nm" data-name>
-      <span class="nm-local">{name.local}</span>
-      {#if name.domain}
-        <span class="nm-domain">{name.domain}</span>
+    <!-- Its words a space apart; the tilde of a time worked out from an
+         old reading hangs before the line, so every time's first figure
+         stands on one x. -->
+    <span class="line" data-time>
+      {#if time.guess}
+        <span class="tilde">~</span>
+      {/if}
+      {#if time.lead}
+        <span>{time.lead}</span>
+      {/if}
+      {#if time.figure}
+        <span class="fig num">{time.figure}</span>
+      {/if}
+      {#if time.tail}
+        <span>{time.tail}</span>
       {/if}
     </span>
-    <span class="lines">
-      <span class="line" data-time>{time}</span>
-      {#if week}
-        <span class="line" data-week>{week}</span>
-      {/if}
-    </span>
+    {#if week !== null}
+      <span class="line wk" data-week
+        >wk <span class="fig num">{week}%</span></span
+      >
+    {/if}
   </div>
 {/snippet}
 
@@ -625,7 +620,7 @@
             Claude
           </h3>
           <span class="stop">
-            <span class="kpi" class:muted={claude.stale !== null}
+            <span class="kpi num" class:muted={claude.stale !== null}
               ><Figure text={stopText(claude, now)} /></span
             >
             <span class="stop-meta">until Claude stops</span>
@@ -650,36 +645,36 @@
           data-burn={claude.burn}
           data-burn-week={claude.burnWeek}
         >
-          <!-- An organization of more than two accounts is a group under its
-               name; the rest follow, ungrouped, on rows of their own. -->
-          {#each wall as block (block.org ?? "")}
-            <div
-              class="wall"
-              data-flyover-span
-              data-org-group={block.org ?? ""}
-            >
-              {#if block.head}
-                <h4 class="org" data-flyover-edge data-org-head>
-                  {block.head}
-                </h4>
-              {/if}
-              {#each block.cells as one, i (one.ring.id)}
-                {@render cell(
-                  one.ring,
-                  one.grouped,
-                  cellTime(one.ring, claude, now),
-                  placeOf(block, i)
-                )}
-              {/each}
-            </div>
-          {/each}
+          <!-- One grid for the whole wall, so every dial, every text start
+               and every week's end stands on one x down it. An organization
+               of more than two accounts is a group under its name; the rest
+               follow, ungrouped, on rows of their own: a head spans the
+               wall, so the next block starts a row. -->
+          <div class="wall" data-flyover-span>
+            {#each wall as block (block.org ?? "")}
+              <div class="block" data-org-group={block.org ?? ""}>
+                {#if block.head}
+                  <h4 class="org" data-flyover-edge data-org-head>
+                    {block.head}
+                  </h4>
+                {/if}
+                {#each block.cells as one (one.ring.id)}
+                  {@render cell(
+                    one.ring,
+                    one.grouped,
+                    cellTime(one.ring, claude, now)
+                  )}
+                {/each}
+              </div>
+            {/each}
+          </div>
           <!-- The dial's key: what the disc and the ring measure. -->
           <p class="key" data-dial-key data-flyover-edge>
             Disc: 5-hour window left · Ring: week left
           </p>
           {#if delegates.length > 0}
             <!-- Where new delegates start, said whole: no word to hover. -->
-            <p class="delegates" data-delegates data-flyover-edge>
+            <p class="delegates num" data-delegates data-flyover-edge>
               <IconSubagents aria-hidden="true" />
               <Words parts={delegates} />
             </p>
@@ -693,10 +688,7 @@
             opencode Go
           </h3>
           <div class="wall" data-flyover-span>
-            {@render cell(openCode, true, cellTime(openCode, null, now), {
-              column: "1",
-              row: `1 / span ${TRACKS}`,
-            })}
+            {@render cell(openCode, true, cellTime(openCode, null, now))}
           </div>
         </section>
       {/if}
@@ -975,7 +967,6 @@
   }
   .kpi {
     font: var(--type-kpi);
-    font-variant-numeric: tabular-nums;
     white-space: nowrap;
     color: var(--ink-stat);
   }
@@ -1026,10 +1017,8 @@
   .pop-note + .pop-note {
     border-block-start: 1px solid var(--border-hairline);
   }
-  /* Claude's accounts, a block per organization and one for the rest: the
-     same gap stands before every block, the first one's after the head's
-     hairline, so the accounts after a group read apart from it as a group
-     after its name does, with no label of their own. */
+  /* Claude's accounts: the wall, the dial's key and the delegates line,
+     space-3 apart, the wall space-3 under the head's hairline. */
   .orgs {
     gap: var(--space-3);
     padding-block-start: var(--space-3);
@@ -1045,12 +1034,17 @@
   .pop-head .provider {
     padding: 0;
   }
-  /* An organization's name over its accounts: meta, no chrome of its own. */
-  /* A head starts at its first cell's column. */
+  /* An organization's name over its accounts: meta, no chrome of its own,
+     across the wall, starting on the dials' start edge. Every block after
+     the first stands the same space-3 from the one before. */
   .org {
-    padding: 0 0 2px;
+    grid-column: 1 / -1;
+    padding: 0 var(--space-1) 2px;
     font: var(--type-meta);
     color: var(--ink-muted);
+  }
+  .block + .block > .org {
+    margin-block-start: calc(var(--space-3) - var(--space-1));
   }
   /* A stale ring is its tooltip's trigger: a bare button, the ring itself. */
   .ring-tip {
@@ -1061,38 +1055,33 @@
     background: transparent;
     cursor: help;
   }
-  /* The dial wall: an organization's name across it, then its cells on
-     four columns, one pitch apart. */
+  /* The dial wall: one grid, two columns of cells, each column three
+     tracks (the dial, the text, the week), so every dial, every text start
+     and every week's end stands on one x down the wall. A block is no box
+     of its own: its head and cells stand on the wall's grid. */
   .wall {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(2, auto minmax(0, 1fr) auto);
     gap: var(--space-1);
-
-    & > .org {
-      grid-column: 1 / -1;
-    }
   }
-  /* Three across in the sheet: an 85px cell at 320 holds the longest time
-     line, where a fourth column would leave it 63px. */
-  :global(.usage-sheet) .wall {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+  .block {
+    display: contents;
   }
-  /* A cell: the dial over its name, then its time over its week, centred,
-     in meta, on three tracks of its row (subgrid). The carrier wears a
-     hairline ring; an account at its limit the limit wash, which the dial's
-     reserve notch takes as its ground. */
+  /* A cell: one row on its column's three tracks (subgrid), space-1 in on
+     every side, in meta. The carrier wears a hairline ring; an account at
+     its limit the limit wash, which the dial's reserve notch takes as its
+     ground. */
   .cell-d {
     position: relative;
     display: grid;
-    grid-row: span 3;
-    grid-template-rows: subgrid;
-    row-gap: 2px;
-    justify-items: center;
+    grid-column: span 3;
+    grid-template-columns: subgrid;
+    grid-template-rows: auto auto;
+    align-content: start;
     align-items: start;
     min-inline-size: 0;
-    padding: var(--space-1) 0;
+    padding: var(--space-1);
     border-radius: var(--radius-sm);
-    text-align: center;
     transition: background-color var(--dur-fade) var(--ease-out);
   }
   .cell-d.carrying {
@@ -1102,53 +1091,77 @@
     background: var(--meter-wash-over);
     --ring-ground: var(--meter-wash-over);
   }
+  /* The dial, centred on the two lines, space-2 before the text: the
+     wall's space-1 gap and the rest here. */
   .dial {
-    position: relative;
     display: grid;
+    grid-row: 1 / span 2;
+    grid-column: 1;
+    align-self: center;
+    margin-inline-end: calc(var(--space-2) - var(--space-1));
   }
-  /* The session count, 16px, stands beside the dial's top-right: level
-     with the cell's top edge, starting where the dial's box ends, 4px off
-     the week rim. Its touch area reaches the full 44px up and down, and
-     space-5 / 2 to either side: a count in the last column stays inside
-     the wall's padding, so the accounts never scroll sideways. */
-  .cell-chip {
-    --hit-gap-x: var(--space-5);
-    position: absolute;
-    inset-block-start: calc(-1 * var(--space-1));
-    inset-inline-start: 100%;
-    display: grid;
+  /* The first line, across the text and the week: the name, then the
+     session count at the line's end, on the week's end x. */
+  .l1 {
+    display: flex;
+    grid-row: 1;
+    grid-column: 2 / span 2;
+    align-items: center;
+    gap: var(--space-1);
+    min-inline-size: 0;
   }
-  /* One line: the first line strong, the domain's stem (where it is
-     needed) quiet right after it, going under it only when the two don't
-     fit. A name never ends in an ellipsis; one longer than the cell wraps. */
+  /* The name strong, the domain's stem (where it is needed) quiet right
+     after it, going under it only when the two don't fit. A name never
+     ends in an ellipsis; one longer than the cell wraps. */
   .nm {
-    max-inline-size: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    min-inline-size: 0;
     overflow-wrap: anywhere;
     font: var(--type-meta);
   }
   .nm-local {
+    min-inline-size: 0;
     font-weight: var(--weight-strong);
     color: var(--ink-strong);
   }
   .nm-domain {
-    display: inline-block;
     color: var(--ink-muted);
   }
-  /* The time, and the week under it when there is one. */
-  .lines {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 2px;
-    max-inline-size: 100%;
+  /* The count, 16px. Its touch area reaches the full 44px up and down,
+     and space-5 / 2 to either side: a count in the last column stays
+     inside the wall's padding, so the accounts never scroll sideways. */
+  .cell-chip {
+    --hit-gap-x: var(--space-5);
+    display: grid;
+    margin-inline-start: auto;
   }
-  /* One line each: the cell is as wide as the longest of them. */
+  /* The second line: the time at the text's start, the week at the end,
+     their figures tabular (.num). A figure never breaks, nor does the
+     week; a time too long for its track ("back in 4h 50m" in a narrow
+     sheet) goes on under its words rather than run into the week. */
   .line {
-    max-inline-size: 100%;
-    white-space: nowrap;
+    grid-row: 2;
     font: var(--type-meta);
-    font-variant-numeric: tabular-nums;
     color: var(--ink-muted);
+  }
+  .line[data-time] {
+    position: relative;
+    grid-column: 2;
+  }
+  .fig,
+  .wk {
+    white-space: nowrap;
+  }
+  .wk {
+    grid-column: 3;
+    justify-self: end;
+  }
+  /* A guess's tilde hangs in the gap before the text, so "~3h 14m" starts
+     its figure on the x "2h 21m" does. */
+  .tilde {
+    position: absolute;
+    inset-inline-end: 100%;
   }
   /* The dial's key, under the wall, in meta. */
   .key {
