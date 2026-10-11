@@ -126,6 +126,8 @@ const tag = crypto.randomUUID().slice(0, 6);
 const ROW = `panel-row-${tag}`;
 const ASK = `panel-ask-${tag}`;
 const INTRO = `panel-intro-${tag}`;
+/** The row session's one delegate: its chip opens a panel over the tray (`trayThrough`). */
+const TRAY_TITLE = "Tray probe";
 /**
  * The intro turn's reply: long enough that the Bash row after it stands
  * below where Caw's panel hangs (about 350pt down), so a tap on the row
@@ -952,12 +954,12 @@ function frameGaps(buf: Buffer, mdhd: Mp4Box, stts: Mp4Box): number[] {
  * what a finger lands on there, and a tap on it both reaches it and closes
  * the panel.
  */
-async function tapThrough(kind: Kind, udid: string, box: Frame) {
+async function tapThrough(name: string, udid: string, box: Frame) {
   let nodes = await tree(udid);
   const target = toolRow(nodes);
   if (!target?.frame) {
     check(
-      `${kind}: a tap outside reaches the row`,
+      `${name}: a tap outside reaches the row`,
       false,
       "no transcript row to tap"
     );
@@ -983,7 +985,7 @@ async function tapThrough(kind: Kind, udid: string, box: Frame) {
       !encloses(row, n.frame)
   );
   check(
-    `${kind}: nothing covers the transcript row outside the panel`,
+    `${name}: nothing covers the transcript row outside the panel`,
     !covered && over.length === 0,
     covered
       ? `no point of the row ${JSON.stringify(row)} is outside the panel ${JSON.stringify(box)}`
@@ -995,18 +997,18 @@ async function tapThrough(kind: Kind, udid: string, box: Frame) {
   nodes = await tree(udid);
   const after = toolRow(nodes)?.value;
   check(
-    `${kind}: a tap on the row reaches the row`,
+    `${name}: a tap on the row reaches the row`,
     after !== undefined && after !== before,
     `the row went ${before} → ${after ?? "gone"}`
   );
   check(
-    `${kind}: the same tap closes the panel`,
+    `${name}: the same tap closes the panel`,
     !(approve(nodes) || dismiss(nodes)) && caw(nodes)?.value !== "Open",
     approve(nodes)
       ? "the panel's Approve is still on screen"
       : `closed; Caw's value "${caw(nodes)?.value ?? ""}"`
   );
-  await shot(udid, `${kind}-after-tap-light`);
+  await shot(udid, `${name}-after-tap-light`);
 }
 
 /**
@@ -1160,6 +1162,41 @@ async function answerEvidence(udid: string) {
 const LOG_PREFIX = /^.*\[dev\.cawco\.app:/;
 
 /**
+ * The same with a delegate chip's panel open over the tray (iPad, where the
+ * composer stands 720pt wide and its row stands well under the panel): the
+ * panel's ground is no box of its own over the transcript, so only the panel
+ * stands there, and a tap on the row reaches it and closes the panel.
+ */
+async function trayThrough(udid: string) {
+  const chip = (await tree(udid)).find((n) =>
+    (n.label ?? "").startsWith(`${TRAY_TITLE},`)
+  );
+  check(
+    "pad: the delegate's chip stands in the tray",
+    Boolean(chip?.frame),
+    chip ? `"${chip.label}" at ${JSON.stringify(chip.frame)}` : "no chip"
+  );
+  if (!chip?.frame) {
+    return;
+  }
+  await tap(udid, centre(chip.frame));
+  await pause(1500);
+  const opened = (await tree(udid)).find((n) => n.label === chip.label);
+  check(
+    "pad: a press on the chip opens its panel",
+    opened?.value === "Expanded",
+    `the chip reads ${opened?.value ?? "gone"}`
+  );
+  await tapThrough("pad-tray", udid, { x: 0, y: 0, width: 0, height: 0 });
+  const after = (await tree(udid)).find((n) => n.label === chip.label);
+  check(
+    "pad-tray: the same tap closes the chip's panel",
+    after?.value === "Collapsed",
+    `the chip reads ${after?.value ?? "gone"}`
+  );
+}
+
+/**
  * One device's pass. `last`: the pass that also dismisses the notice and
  * approves the ask, which take them away for every device after it. A read
  * that timed out waiting for the app to go idle has the app's word on why
@@ -1178,6 +1215,9 @@ async function pass(
       return;
     }
     await tapThrough(kind, udid, box);
+    if (kind === "pad") {
+      await trayThrough(udid);
+    }
     if (last) {
       await answerFromPanel(kind, udid);
     } else {
@@ -1386,6 +1426,25 @@ try {
     "hub parks the ask",
     pending.includes(askSession),
     `pending holds ${askSession}`
+  );
+  // One delegate of the row session, for a chip in its tray. Its workspace is
+  // cut from the project's origin: the workdir gets a commit and a bare origin.
+  const origin = join(fleet.workdir, "..", "origin.git");
+  await Bun.$`git -C ${fleet.workdir} init -q -b main && git -C ${fleet.workdir} -c user.name=probe -c user.email=probe@localhost commit -q --allow-empty -m seed && git init -q --bare -b main ${origin} && git -C ${fleet.workdir} remote add origin ${origin} && git -C ${fleet.workdir} push -q origin HEAD:main`.quiet();
+  const delegated = await fetch(`${fleet.base}/api/work-items`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      parentInstanceId: rowSession,
+      title: TRAY_TITLE,
+      prompt: "Say ok.",
+      checks: [{ name: "Nothing to check here", command: "true" }],
+    }),
+  });
+  check(
+    "a delegate of the row session, for the tray",
+    delegated.ok,
+    `POST /api/work-items: ${delegated.status} ${(await delegated.text()).slice(0, 300)}`
   );
 
   // The notice: the probe account's sign-in, as one moved in from the machine's own Claude Code store.

@@ -624,19 +624,22 @@ final class DelegateTrayView: UIView {
     }
 
     /// Where a chip's panel stands: over its chip, or, for a chip in the
-    /// fan, over the whole fan (DelegateTray.svelte `place`, `rise`).
+    /// fan, over the whole fan (DelegateTray.svelte `place`, `rise`). The
+    /// ground's line is the row's top, so a row chip's panel stands on 0.
     private func place(for key: String, chip: CGRect) -> HoverPanel.Place {
         let fanned = fanViews[key] != nil
         return HoverPanel.Place(x: max(0, fanned ? fan.frame.minX : chip.minX),
-                                y: fanned ? fan.frame.minY : ground.bounds.height,
+                                y: fanned ? fan.frame.minY : 0,
                                 origin: chip.width / 2, span: row.bounds.width)
     }
 
-    /// The panel's ground: the composer's host above the row, as wide as the
-    /// row, so the panel stands at its chip and stays inside the row's edges.
-    /// It stands in the host only while a chip's panel or the fan is open (and
-    /// while they fold away, `releaseGround`): with neither, nothing of the
-    /// tray stands over the transcript. While it stands, every layout lays it
+    /// The panel's ground: a line in the composer's host along the row's top,
+    /// as wide as the row and no height at all, so the panel stands at its
+    /// chip and stays inside the row's edges, and the panel and the fan grow
+    /// up from it, outside its bounds. It has no box of its own over the
+    /// transcript: only what stands on it is there (`PanelGround`). It stands
+    /// in the host only while a chip's panel or the fan is open (and while
+    /// they fold away, `releaseGround`). While it stands, every layout lays it
     /// out with the row.
     private func syncGround() {
         guard let host = panelHost, window != nil else { return }
@@ -648,8 +651,12 @@ final class DelegateTrayView: UIView {
         }
         if ground.superview !== host { host.addSubview(ground) }
         let box = row.convert(row.bounds, to: host)
-        ground.frame = CGRect(x: box.minX, y: 0, width: box.width, height: box.minY)
+        ground.frame = CGRect(x: box.minX, y: box.minY, width: box.width, height: 0)
     }
+
+    /// The host's room over the row, from its top to the ground's line: what
+    /// the panel and the fan may grow up into.
+    private var roomAbove: Double { ground.frame.minY }
 
     /// How long the ground outlasts the last thing in it: the panel's fade,
     /// or the fan folding, its nearest chip five deep (`placeFan`).
@@ -680,7 +687,7 @@ final class DelegateTrayView: UIView {
         openKey = key
         syncGround()
         let place = place(for: key, chip: chip)
-        panel.room = min(320, place.y - 16)
+        panel.room = min(320, roomAbove + place.y - 16)
         pinned = pin || pinned
         ground.catches = pinned || fanPinned
         panel.show(key, content: content(key), at: place, in: ground)
@@ -792,9 +799,10 @@ final class DelegateTrayView: UIView {
         let step = chipHeight + Self.gap
         let count = views.count
         let whole = Double(count) * step
-        let room = max(step, ground.bounds.height - Space.space2)
+        let room = max(step, roomAbove - Space.space2)
         let height = min(whole, room)
-        fan.frame = CGRect(x: x, y: ground.bounds.height - height, width: widest, height: height)
+        // Standing on the ground's line, above it.
+        fan.frame = CGRect(x: x, y: -height, width: widest, height: height)
         fan.contentSize = CGSize(width: widest, height: whole)
         // Clipped only while it scrolls, so the chips' shadows are drawn whole.
         fan.clipsToBounds = whole > room
@@ -967,9 +975,12 @@ final class DelegateTrayView: UIView {
     }
 }
 
-/// The ground the tray's panel stands in: only the panel takes a touch, and
-/// while a panel is pinned a press anywhere else closes it and goes on to
-/// what it pressed.
+/// The ground the tray's panel stands on: a line with no height, the panel
+/// and the fan standing above it, outside its bounds. A point is its only
+/// where a shown, touchable view on it reaches (the panel with the gap under
+/// it, the open fan), so its own frame covers nothing; only the panel takes a
+/// touch, and while a panel is pinned a press anywhere else closes it and
+/// goes on to what it pressed.
 private final class PanelGround: UIView {
     var onOutside: () -> Void = {}
     var catches = false
@@ -984,9 +995,13 @@ private final class PanelGround: UIView {
         return nil
     }
 
-    /// The panel stands above the row; a press beside the ground is outside too.
-    override func point(inside point: CGPoint, with _: UIEvent?) -> Bool {
-        catches ? true : bounds.contains(point)
+    /// While something is pinned every press is the ground's to see (one
+    /// beside the panel is outside); otherwise only presses on what stands on it.
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        catches || subviews.contains { part in
+            !part.isHidden && part.alpha > 0.01 && part.isUserInteractionEnabled
+                && part.point(inside: convert(point, to: part), with: event)
+        }
     }
 }
 
