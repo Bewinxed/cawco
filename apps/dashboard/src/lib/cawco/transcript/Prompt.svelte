@@ -529,11 +529,11 @@
     "text-label font-medium";
 
   /* The permission gate is symmetric: Approve and Deny are recessed peers at
-     one fill and one border. They differ in kind, never in salience: a check
-     in --ink-strong grants, a cross in --ink-muted refuses. */
+     one fill, apart at the row's two ends, each outlined in its tint (The
+     Peer Rule's transcript form): a tick grants, a cross refuses. */
   const peer = `${btnBase} flex-1 min-w-0`;
-  const grant = `${peer} !text-[var(--ink-strong)]`;
-  const refuse = `${peer} !text-[var(--ink-muted)]`;
+  const grant = `${peer} approve !text-[var(--ink-strong)]`;
+  const refuse = `${peer} deny !text-[var(--ink-muted)]`;
   const primary = `${btnBase} px-[var(--space-4)]`;
   const dismiss = btnBase;
 
@@ -1063,6 +1063,21 @@
   }
   .choice > :global(*) {
     flex: 0 0 auto;
+  }
+  /* Each peer outlined in its tint (DESIGN.md, The Peer Rule, the
+     transcript's form): Approve in the done ink, Deny in the fail ink, 1px
+     each, both inks at one strength, over the one untinted recessed fill.
+     Neither changes under the pointer: the fill and the edge hold still, so
+     the hand's last move never makes one the more inviting. */
+  .choice > :global(.approve),
+  .choice > :global(.approve:hover) {
+    border-color: var(--status-done-ink);
+    background-color: var(--surface-recess);
+  }
+  .choice > :global(.deny),
+  .choice > :global(.deny:hover) {
+    border-color: var(--status-fail-ink);
+    background-color: var(--surface-recess);
   }
   .widen {
     /* a clear break from the gate above, on the scale (--space-8 / --space-5) */

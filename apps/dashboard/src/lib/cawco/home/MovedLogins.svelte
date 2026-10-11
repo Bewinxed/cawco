@@ -1,8 +1,10 @@
 <script lang="ts">
   /**
    * Logins moved into CawCo nobody has acknowledged yet, as one group of
-   * Caw's panel (B1; macOS Notification Center's app group): a head with the
-   * first account's tile, how many moved and its ✕, which acknowledges them
+   * Caw's panel (B1; macOS Notification Center's app group): a head led by
+   * the group glyph (the accounts' own, in muted ink, as a section's head is
+   * led: the entries wear the account tiles, so a tile on the head made it
+   * read as one of them), how many moved and its ✕, which acknowledges them
    * all; one line saying what happened and what it means; then each login
    * as an entry in the text column with its own ✕ (MovedLogin), the head's
    * count falling with it.
@@ -13,11 +15,10 @@
    * group never outgrows the panel with nothing to do in it: five open
    * entries and two asks were 696px against the panel's 560.
    */
-  import AccountTile from "#lib/cawco/accounts/AccountTile.svelte";
   import type { MovedLogin as Moved } from "#lib/cawco/accounts/model.svelte.js";
   import { reflowsFrom, reread } from "#lib/cawco/motion/rows.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
-  import { IconChevronDown } from "#lib/icons.js";
+  import { IconAccounts, IconChevronDown } from "#lib/icons.js";
   import { plural } from "../updates/model";
   import MovedLogin from "./MovedLogin.svelte";
   import NoticeRow from "./NoticeRow.svelte";
@@ -33,7 +34,6 @@
     onchoose: () => void;
   } = $props();
 
-  const first = $derived(moved[0]);
   const heading = $derived(`${plural(moved.length, "login")} moved into CawCo`);
   /** Still to sign in on some machine: always shown. */
   const todo = $derived(moved.filter((one) => one.missing > 0));
@@ -67,13 +67,7 @@
     ondismiss={() => ondismiss(moved.map((one) => one.id))}
   >
     {#snippet lead()}
-      {#if first}
-        <AccountTile
-          hue={first.account.hue}
-          provider={first.account.provider}
-          size={28}
-        />
-      {/if}
+      <span class="glyph"><IconAccounts aria-hidden="true" /></span>
     {/snippet}
     <h3 class="head">{heading}</h3>
     <p class="explainer">
@@ -131,6 +125,17 @@
 </div>
 
 <style>
+  /* The group's glyph in the lead column, as a section head's is: 16px
+     (`icon-md`) in muted ink, centred in the 28px column. */
+  .glyph {
+    display: grid;
+    place-items: center;
+    color: var(--ink-muted);
+  }
+  .glyph > :global(svg) {
+    inline-size: var(--icon-md);
+    block-size: var(--icon-md);
+  }
   /* The heading of the group: label type in strong ink, its explainer in
      muted meta; the entries under it read a step lower (MovedLogin). */
   .head {

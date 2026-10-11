@@ -32,6 +32,10 @@
  *     update behaviour's words on the title's column and the trailing edge
  *     again, scrolls to their middle, and reads that Hide changes stands
  *     inside the list and folds them; saves captures;
+ *  5b. opens the ask's session from its row, at 1440 and at 390 with touch,
+ *     and reads the transcript's permission card: Approve and Deny apart
+ *     (32px at least), one untinted fill, Approve outlined 1px in the done
+ *     ink and Deny in the fail ink, and neither changing under the pointer;
  *  6. dismisses one moved login and reads the hub's notices record: only its
  *     id was added; then Clear all, and reads that every notice's id was.
  *
@@ -618,6 +622,37 @@ try {
             project.color === project.strong,
           JSON.stringify(project)
         );
+        const groupLead = await page.evaluate(() => {
+          const head = document.querySelector(
+            ".caw-pop .group > .notice > .lead"
+          );
+          const glyph = head?.querySelector(".glyph > svg");
+          const entries = [
+            ...document.querySelectorAll(
+              ".caw-pop .group .entries .notice > .lead"
+            ),
+          ];
+          return {
+            headTile: head?.querySelector(".tile") !== null,
+            glyph: glyph
+              ? {
+                  size: `${glyph.getBoundingClientRect().width}×${glyph.getBoundingClientRect().height}`,
+                  color: getComputedStyle(glyph).color,
+                }
+              : null,
+            entriesWithTile: entries.filter((e) => e.querySelector(".tile"))
+              .length,
+            entries: entries.length,
+          };
+        });
+        check(
+          `moved logins: the head is led by the group glyph, not a tile (${width})`,
+          groupLead.headTile === false &&
+            groupLead.glyph !== null &&
+            groupLead.entries > 0 &&
+            groupLead.entriesWithTile === groupLead.entries,
+          JSON.stringify(groupLead)
+        );
         check(
           `moved logins: the head apart from its entries (${width})`,
           eye.moved !== null &&
@@ -729,6 +764,82 @@ try {
       );
       await context.close();
     }
+  }
+
+  // ── 5b. The transcript's permission card: apart, outlined in its tints ─
+  for (const [width, shape] of [
+    ["1440", desk],
+    ["390", phone],
+  ] as const) {
+    // biome-ignore lint/performance/noAwaitInLoops: one width at a time, each its own page
+    const context = await browser.newContext(shape);
+    const page = await context.newPage();
+    await openPanel(page, base);
+    await page.click(".caw-pop .row .cover");
+    await page.waitForSelector(".choice .approve", { timeout: 60_000 });
+    await page.waitForTimeout(600);
+    const read = () =>
+      page.evaluate(() => {
+        const approve = document.querySelector(".choice .approve") as Element;
+        const deny = document.querySelector(".choice .deny") as Element;
+        const inkOf = (token: string) => {
+          const swatch = document.createElement("span");
+          swatch.style.color = `var(${token})`;
+          document.body.append(swatch);
+          const ink = getComputedStyle(swatch).color;
+          swatch.remove();
+          return ink;
+        };
+        const side = (e: Element) => {
+          const s = getComputedStyle(e);
+          return {
+            border: `${s.borderTopWidth} ${s.borderTopColor}`,
+            fill: s.backgroundColor,
+          };
+        };
+        return {
+          approve: side(approve),
+          deny: side(deny),
+          done: inkOf("--status-done-ink"),
+          fail: inkOf("--status-fail-ink"),
+          gap:
+            Math.round(
+              (deny.getBoundingClientRect().left -
+                approve.getBoundingClientRect().right) *
+                100
+            ) / 100,
+          row:
+            Math.round(
+              (deny.getBoundingClientRect().right -
+                approve.getBoundingClientRect().left) *
+                100
+            ) / 100,
+        };
+      });
+    const card = await read();
+    check(
+      `transcript card: apart, outlined in done and fail inks (${width})`,
+      card.approve.border === `1px ${card.done}` &&
+        card.deny.border === `1px ${card.fail}` &&
+        card.approve.fill === card.deny.fill &&
+        card.gap >= 32,
+      JSON.stringify(card)
+    );
+    if (width === "1440") {
+      await page.hover(".choice .approve");
+      await page.waitForTimeout(300);
+      const hovered = await read();
+      check(
+        "transcript card: neither peer changes under the pointer (1440)",
+        hovered.approve.fill === card.approve.fill &&
+          hovered.approve.border === card.approve.border,
+        `rest ${JSON.stringify(card.approve)} → hovered ${JSON.stringify(hovered.approve)}`
+      );
+    }
+    await page.screenshot({
+      path: join(out, `caw-notices-transcript-card-${width}.png`),
+    });
+    await context.close();
   }
 
   // ── 6. One dismissal, then Clear all, on the hub's record ─────────────

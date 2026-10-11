@@ -2,7 +2,8 @@
   /**
    * What adding an account, or one coming back from its bench, set moving,
    * nobody has acknowledged yet: one group of Caw's panel, MovedLogins'
-   * shape: a head with the first account's tile, "Sessions rebalanced" and
+   * shape: a head led by the group glyph in muted ink (the entries wear the
+   * account tiles), "Sessions rebalanced" and
    * how many, its ✕ acknowledging them all; one line saying what it means;
    * then an entry per pass, each with its own ✕: the tile of the first
    * account that came, "design@ and marketing@ added on obelisk", and a
@@ -14,6 +15,7 @@
   import AccountTile from "#lib/cawco/accounts/AccountTile.svelte";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import NoticeRow from "#lib/cawco/home/NoticeRow.svelte";
+  import { IconAccounts } from "#lib/icons.js";
 
   let {
     notices,
@@ -26,8 +28,6 @@
 
   const providerOf = (accountId: string) =>
     cawco.accounts?.accounts.find((one) => one.id === accountId)?.provider;
-  const leader = $derived(notices[0]?.came[0]?.account);
-  const leaderProvider = $derived(leader ? providerOf(leader.id) : undefined);
 </script>
 
 <div class="group">
@@ -37,9 +37,7 @@
     ondismiss={() => ondismiss(notices.map((one) => one.id))}
   >
     {#snippet lead()}
-      {#if leader && leaderProvider}
-        <AccountTile hue={leader.hue} provider={leaderProvider} size={28} />
-      {/if}
+      <span class="glyph"><IconAccounts aria-hidden="true" /></span>
     {/snippet}
     <h3 class="head">
       Sessions rebalanced <span class="count">{notices.length}</span>
@@ -77,6 +75,16 @@
 </div>
 
 <style>
+  /* The group's glyph in the lead column (MovedLogins'). */
+  .glyph {
+    display: grid;
+    place-items: center;
+    color: var(--ink-muted);
+  }
+  .glyph > :global(svg) {
+    inline-size: var(--icon-md);
+    block-size: var(--icon-md);
+  }
   .head {
     margin: 0;
     padding-inline-end: var(--x-room);
