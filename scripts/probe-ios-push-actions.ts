@@ -15,7 +15,9 @@
  *     stand-in Cawrier this probe serves (`CAWCO_CAWRIER_ORIGIN`), which keeps
  *     each push's body: the hub's real payload, sealed for the simulator;
  *  3. forwards the scratch hub to the Mac's loopback (`ssh -R`), makes an
- *     iPhone simulator, installs the app, streams the app's log from before
+ *     iPhone 16 Pro simulator on iOS 18.5 (the iOS 27.2 simulator's
+ *     notification centre never answers the app; see `SIM_RUNTIME`'s use),
+ *     installs the app, streams the app's log from before
  *     its first launch (`log stream`, read for every step after), and runs a
  *     Maestro flow that launches it with `-paywall-env sandbox
  *     -push-probe-register` and notifications allowed: iOS shows its prompt
@@ -79,6 +81,9 @@ const SSH = ["ssh", "-F", join(home, ".ssh", "config"), "-o", "BatchMode=yes"];
 const BUNDLE = "dev.cawco.app";
 const BUILT_IOS = /^BUILT iOS$/m;
 const BUILT_IOS_18 = /^BUILT iOS 18\.5$/m;
+/** The simulator the probe runs on: build-both.sh's 'iOS 18.5' pair. */
+const SIM_RUNTIME = "com.apple.CoreSimulator.SimRuntime.iOS-18-5";
+const SIM_TYPE = "com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro";
 /** A thread's head in `sample`'s call graph, which names its dispatch queue. */
 const SAMPLE_THREAD = /\n(?=\s+\d+\s+Thread_)/;
 /** The notification centre's queues, and the app's own (NotificationCentre). */
@@ -578,27 +583,21 @@ try {
     30_000
   );
   hub = `http://127.0.0.1:${port}`;
+  // iOS 18.5, the runtime build-both.sh launches the app on beside the
+  // newest (its 'iOS 18.5' pair). On the iOS 27.2 simulator the notification
+  // centre answers this app nothing: usernotificationsd accepts the
+  // connection, passes its entitlement check and logs "Forwarding
+  // getNotificationSettings: dev.cawco.app" to SpringBoard's notification
+  // service, whose store maps only com.apple.* apps, and no reply comes. The
+  // app's first synchronous call (removePendingNotificationRequests) then
+  // parks in xpc_connection_send_message_with_reply_sync for good (runs at
+  // 2aa48ace, db520abc and 4b4bc2d5), so iOS never asks.
   udid = (
-    await mac(`read -r RUNTIME TYPE < <(xcrun simctl list devices available -j | python3 -c '
-import json, re, sys
-best = None
-for runtime, devices in json.load(sys.stdin)["devices"].items():
-    m = re.search(r"\\.iOS-(\\d+)-(\\d+)$", runtime)
-    if not m:
-        continue
-    for d in devices:
-        pro = re.fullmatch(r"iPhone (\\d+) Pro", d["name"])
-        if pro:
-            key = (int(m[1]), int(m[2]), int(pro[1]))
-            if best is None or key > best[0]:
-                best = (key, runtime, d["deviceTypeIdentifier"])
-if best is None:
-    sys.exit("no iPhone Pro simulator")
-print(best[1], best[2])
-')
-xcrun simctl create "CawCo probe push actions" "$TYPE" "$RUNTIME"`)
+    await mac(
+      `xcrun simctl create "CawCo probe push actions" ${SIM_TYPE} ${SIM_RUNTIME}`
+    )
   ).trim();
-  console.log(`  simulator ${udid}`);
+  console.log(`  simulator ${udid} (${SIM_RUNTIME})`);
   // One boot. The double boot that set SpringBoard's AX switch
   // (IgnoreAXServerEntitlements) was for axe, a host-side reader SpringBoard
   // refuses from iOS 26.5; Maestro reads and taps from its XCTest runner, an
