@@ -693,6 +693,29 @@ interface Declaration {
   line: string;
 }
 
+/**
+ * A number token. One with a night value is a pair, read under the drawing's
+ * traits (CawCoDesign/Ink.swift `SchemeValue`), as a colour resolves.
+ */
+function numberDeclaration(
+  token: TransformedToken,
+  tokens: Tokens,
+  one: (line: string, extra?: string[]) => Declaration
+): Declaration {
+  const name = swiftName(token.name);
+  const where = token.name;
+  const light = swiftNumber(tokens.numeric(authored(token), where));
+  const { dark } = variantsOf(token);
+  if (dark === undefined) {
+    return one(`public static let ${name}: Double = ${light}`);
+  }
+  const night = swiftNumber(tokens.numeric(String(dark), where));
+  return one(
+    `public static let ${name} = SchemeValue(light: ${light}, dark: ${night})`,
+    ["By day and by night: read it with `value(for:)`."]
+  );
+}
+
 function declare(token: TransformedToken, tokens: Tokens): Declaration[] {
   const name = swiftName(token.name);
   const raw = authored(token);
@@ -755,11 +778,7 @@ function declare(token: TransformedToken, tokens: Tokens): Declaration[] {
       return out;
     }
     case "number":
-      return [
-        one(
-          `public static let ${name}: Double = ${swiftNumber(tokens.numeric(raw, where))}`
-        ),
-      ];
+      return [numberDeclaration(token, tokens, one)];
     case "duration":
       return [
         one(

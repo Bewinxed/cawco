@@ -68,6 +68,32 @@ export class TabsState {
   }
 }
 
+/**
+ * A folder tab's place in the track's stack at rest, 1 the farthest back:
+ * the chosen tab on top, then each tab above those farther from it, the
+ * nearer the first; with none chosen (`chosen` -1) the first on top. It is
+ * drawn from the order and the value alone, so the first render (the
+ * server's too) stacks the tabs before anything is measured; the track
+ * ranks the same way while a switch runs (TabsList).
+ */
+export function restRank(count: number, chosen: number, at: number): number {
+  const top = Math.max(chosen, 0);
+  const depth = (i: number) => (i === chosen ? 0 : 1);
+  const distance = (i: number) => Math.abs(i - top);
+  let rank = 1;
+  for (let i = 0; i < count; i += 1) {
+    const before =
+      depth(i) > depth(at) ||
+      (depth(i) === depth(at) &&
+        (distance(i) > distance(at) ||
+          (distance(i) === distance(at) && i < at)));
+    if (i !== at && before) {
+      rank += 1;
+    }
+  }
+  return rank;
+}
+
 export class TabsListState {
   rects: TabRects;
   /** Where the indicator is drawn — moved on click, ahead of the value. */

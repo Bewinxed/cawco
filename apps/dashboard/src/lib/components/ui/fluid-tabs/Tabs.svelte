@@ -6,7 +6,7 @@
    * either, the first item is chosen so the indicator has somewhere to be
    * from the first paint.
    */
-  import type { Snippet } from "svelte";
+  import { type Snippet, untrack } from "svelte";
   import type { HTMLAttributes } from "svelte/elements";
   import {
     provideTabs,
@@ -25,10 +25,18 @@
     size = "default",
     variant = "segmented",
     travel = null,
+    values,
     children,
     ...rest
   }: Omit<HTMLAttributes<HTMLDivElement>, "onselect"> & {
     value?: string;
+    /**
+     * The items' values in the order they stand, when the host knows them:
+     * the chosen item and a folder track's stack are drawn from the first
+     * render, the server's included, before the track has measured its
+     * items. The track's own order replaces it once it has.
+     */
+    values?: readonly string[];
     onValueChange?: (value: string) => void;
     selectedIndex?: number;
     onSelect?: (index: number) => void;
@@ -48,16 +56,23 @@
 
   // svelte-ignore state_referenced_locally — defaultValue is a one-time initial
   const state = new TabsState(defaultValue);
-  // $effect.pre runs before the first paint and on every subsequent change,
-  // so there is no need for a separate synchronous assignment.
-  $effect.pre(() => {
+  const sync = () => {
     state.controlled = value;
     state.selectedIndex = selectedIndex;
     state.size = size;
     state.travel = travel;
     state.onValueChange = onValueChange;
     state.onSelect = onSelect;
-  });
+    // The host's order when it changes, never in answer to the track's own.
+    const order = values ? [...values] : null;
+    if (order) {
+      untrack(() => state.setOrder(order));
+    }
+  };
+  // Once now, so the first render (the server's, where no effect runs)
+  // draws the chosen item; then before every update after.
+  sync();
+  $effect.pre(sync);
   provideTabs(state);
 </script>
 

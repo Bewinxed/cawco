@@ -1330,6 +1330,16 @@
         }
       }
     },
+    "tab-rim-attn": {
+      "$type": "color",
+      "$value": "oklch(48% 0.125 78)",
+      "$description": "A session tab's rim when it needs you: the attention glyph's hue and chroma, darker by day, where the glyph's own tone holds only 3.2:1 against the shelf even whole, so a rim in it (tab-rim-mix) cannot hold 3:1 and stay quieter than the chosen tab's. By night the glyph's own.",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(87% 0.14 92)"
+        }
+      }
+    },
     "status-done-glyph": {
       "$type": "color",
       "$value": "oklch(52% 0.14 140)",
@@ -2762,20 +2772,20 @@
     },
     "tab-rim-mix": {
       "$type": "number",
-      "$value": "51%",
-      "$description": "How much of its session's status colour an unchosen session tab's rim carries, on every width; its glow carries half of it. A rim is a boundary, so its sides hold 3:1 against the tab's fill and the shelf (WCAG non-text contrast); by night that takes more of the tone: 51% left a failed tab's side at 2.5:1 and a working one at 2.9:1, 64% clears the failed tone, the hardest.",
+      "$value": "83%",
+      "$description": "How much of its session's status colour an unchosen session tab's rim carries, on every width; its glow carries half of it. A rim is a boundary, so its sides hold 3:1 against the tab's fill and the shelf (WCAG non-text contrast) in both themes. By day 51% left them at 1.6 to 2.2:1; 83% clears the working and failed tones, and the attention tone with its rim's own (tab-rim-attn). By night 51% left a failed tab's side at 2.5:1 and a working one at 2.9:1; 64% clears the failed tone, the hardest.",
       "$extensions": { "dev.cawco": { "dark": "64%" } }
     },
     "tab-rim-mix-chosen": {
       "$type": "number",
-      "$value": "65%",
+      "$value": "97%",
       "$description": "The chosen session tab's rim, on every width: 14 points louder than an unchosen one, by day and by night.",
       "$extensions": { "dev.cawco": { "dark": "78%" } }
     },
     "tab-rim-mix-idle": {
       "$type": "number",
-      "$value": "32%",
-      "$description": "An idle session's rim, chosen or not, in the muted ink. By night 32% left its side at 2.0:1; 54% holds 3:1 against the fill and the shelf.",
+      "$value": "86%",
+      "$description": "An idle session's rim, chosen or not, in the muted ink: 3:1 against the fill and the shelf. By day 32% left its side at 1.4:1, by night at 2.0:1.",
       "$extensions": { "dev.cawco": { "dark": "54%" } }
     }
   },

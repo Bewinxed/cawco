@@ -12,7 +12,7 @@
   import type { Component, Snippet } from "svelte";
   import type { HTMLAttributes } from "svelte/elements";
   import { cn } from "#lib/utils.js";
-  import { useList, useTabs } from "./context.svelte";
+  import { restRank, useList, useTabs } from "./context.svelte";
 
   let {
     value,
@@ -52,6 +52,21 @@
   const index = $derived(node ? list.rects.items.indexOf(node) : -1);
 
   const selected = $derived(tabs.value === value);
+  /**
+   * Where a folder tab stands in the stack at rest, from the order and the
+   * value alone (`restRank`): what the first render draws, the server's
+   * included, until the track ranks the tabs itself (TabsList `--z`).
+   */
+  const restAt = $derived.by(() => {
+    const at = tabs.order.indexOf(value);
+    return at < 0
+      ? undefined
+      : restRank(
+          tabs.order.length,
+          tabs.value === undefined ? -1 : tabs.order.indexOf(tabs.value),
+          at
+        );
+  });
   /**
    * How chosen the tab is, 0 to 1: a folder tab's sheet, its lean, its card's
    * fill and its title's strong ink all follow it. At rest it is 1 on the
@@ -95,6 +110,7 @@
   data-tab-index={index}
   bind:this={node}
   style:--pick={pick}
+  style:--z-rest={restAt}
 >
   <svelte:element
     aria-selected={selected}
@@ -276,7 +292,7 @@
       content: "";
       position: absolute;
       inset: 0;
-      z-index: calc(var(--z, 1) * 4);
+      z-index: calc(var(--z, var(--z-rest, 1)) * 4);
       background: color-mix(
         in oklab,
         var(--sheet) calc(var(--pick) * 100%),
@@ -303,7 +319,7 @@
       position: absolute;
       inset-block: 0;
       inset-inline: calc(-1 * var(--flare));
-      z-index: calc(var(--z, 1) * 4 + 1);
+      z-index: calc(var(--z, var(--z-rest, 1)) * 4 + 1);
       background: var(--sheet);
       opacity: var(--pick);
       clip-path: shape(
@@ -370,7 +386,7 @@
   /* What is written on a folder tab, above its sheet at its rank, upright,
      dropped with the leaning card's middle. */
   :global([data-variant="folder"]) .ff-tab > :global(*) {
-    z-index: calc(var(--z, 1) * 4 + 2);
+    z-index: calc(var(--z, var(--z-rest, 1)) * 4 + 2);
     translate: 0 calc(var(--item) * 0.5 * (1 - cos(var(--lean-now))));
   }
   /* Its drop travels with the choice. Weightless, so a host's trailing

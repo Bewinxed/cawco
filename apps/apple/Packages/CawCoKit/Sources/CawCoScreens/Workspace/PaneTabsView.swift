@@ -1128,12 +1128,17 @@ final class TabView: UIView {
         guard let tone = tab?.face.tone else { return }
         let ink: UIColor = switch tone {
         case .working: Palette.statusLiveGlyph
-        case .attention: Palette.statusAttnGlyph
+        case .attention: Palette.tabRimAttn
         case .failed: Palette.statusFailGlyph
         case .quiet, .done: Palette.inkMuted
         }
         let quiet = tone == .quiet || tone == .done
-        let mix = quiet ? Effect.tabRimMixIdle : Effect.tabRimMix + (Effect.tabRimMixChosen - Effect.tabRimMix) * look.pick
+        // Its strengths by day or by night: a rim holds 3:1 against the tab
+        // and the shelf in either.
+        let traits = traitCollection
+        let unchosen = Effect.tabRimMix.value(for: traits)
+        let chosen = Effect.tabRimMixChosen.value(for: traits)
+        let mix = quiet ? Effect.tabRimMixIdle.value(for: traits) : unchosen + (chosen - unchosen) * look.pick
         let solid = solidRim
         let resolved = ink.resolvedColor(with: traitCollection)
         CATransaction.begin()

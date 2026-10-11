@@ -149,6 +149,8 @@
     { id: "working", label: "Working" },
     { id: "finished", label: "Finished" },
   ] as const;
+  /** The tabs' order, for the strip to draw its chosen tab from the first render. */
+  const TAB_IDS = TABS.map((tab) => tab.id);
   /** Rows a tab lists before "N more". */
   const MORE_AT = 8;
   /** The boxes whose heights a change drives: each group, its "N more" line in it. */
@@ -729,6 +731,7 @@
         class="work-tabs"
         onValueChange={(id: string) => choose(id as WorkTab)}
         value={workTab.current}
+        values={TAB_IDS}
         variant="folder"
       >
         <TabsList aria-label="Sessions">

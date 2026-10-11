@@ -1252,6 +1252,7 @@
   onValueChange={(id) => workspace.activate(id, leaf.id)}
   {travel}
   value={leaf.active ?? ""}
+  values={leaf.tabs}
   variant="folder"
 >
   <TabsList
@@ -1964,8 +1965,9 @@
   .tab[data-tone="working"] {
     --tone: var(--status-live-glyph);
   }
+  /* The attention glyph's tone, darker by day, so its rim holds 3:1. */
   .tab[data-tone="attention"] {
-    --tone: var(--status-attn-glyph);
+    --tone: var(--tab-rim-attn);
   }
   .tab[data-tone="failed"] {
     --tone: var(--status-fail-glyph);

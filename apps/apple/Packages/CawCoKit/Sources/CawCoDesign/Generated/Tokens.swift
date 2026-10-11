@@ -216,6 +216,8 @@ public enum Palette {
     /// Status glyphs: the hue itself, not the near-black text ink, so a row's state reads in colour at a glance. Each holds 3:1 or more (non-text) on raised, page, fill, hover, the selected wash and the needs-you wash, in both themes; idle stays neutral.
     public static let statusLiveGlyph = Palette.named("status-live-glyph")
     public static let statusAttnGlyph = Palette.named("status-attn-glyph")
+    /// A session tab's rim when it needs you: the attention glyph's hue and chroma, darker by day, where the glyph's own tone holds only 3.2:1 against the shelf even whole, so a rim in it (tab-rim-mix) cannot hold 3:1 and stay quieter than the chosen tab's. By night the glyph's own.
+    public static let tabRimAttn = Palette.named("tab-rim-attn")
     public static let statusDoneGlyph = Palette.named("status-done-glyph")
     public static let statusFailGlyph = Palette.named("status-fail-glyph")
     public static let statusIdleGlyph = Palette.named("status-idle-glyph")
@@ -652,12 +654,15 @@ public enum Effect {
     /// Relative tints for rows inside any surface: hover +6%, selected +10% ink.
     public static let surfaceHoverMix: Double = 0.06
     public static let surfaceSelectedMix: Double = 0.1
-    /// How much of its session's status colour an unchosen session tab's rim carries, on every width; its glow carries half of it. A rim is a boundary, so its sides hold 3:1 against the tab's fill and the shelf (WCAG non-text contrast); by night that takes more of the tone: 51% left a failed tab's side at 2.5:1 and a working one at 2.9:1, 64% clears the failed tone, the hardest.
-    public static let tabRimMix: Double = 0.51
+    /// How much of its session's status colour an unchosen session tab's rim carries, on every width; its glow carries half of it. A rim is a boundary, so its sides hold 3:1 against the tab's fill and the shelf (WCAG non-text contrast) in both themes. By day 51% left them at 1.6 to 2.2:1; 83% clears the working and failed tones, and the attention tone with its rim's own (tab-rim-attn). By night 51% left a failed tab's side at 2.5:1 and a working one at 2.9:1; 64% clears the failed tone, the hardest.
+    /// By day and by night: read it with `value(for:)`.
+    public static let tabRimMix = SchemeValue(light: 0.83, dark: 0.64)
     /// The chosen session tab's rim, on every width: 14 points louder than an unchosen one, by day and by night.
-    public static let tabRimMixChosen: Double = 0.65
-    /// An idle session's rim, chosen or not, in the muted ink. By night 32% left its side at 2.0:1; 54% holds 3:1 against the fill and the shelf.
-    public static let tabRimMixIdle: Double = 0.32
+    /// By day and by night: read it with `value(for:)`.
+    public static let tabRimMixChosen = SchemeValue(light: 0.97, dark: 0.78)
+    /// An idle session's rim, chosen or not, in the muted ink: 3:1 against the fill and the shelf. By day 32% left its side at 1.4:1, by night at 2.0:1.
+    /// By day and by night: read it with `value(for:)`.
+    public static let tabRimMixIdle = SchemeValue(light: 0.86, dark: 0.54)
 }
 
 public enum Motion {
@@ -757,7 +762,8 @@ public enum Motion {
     /// The duotone second layer of a status glyph in an alert row (join/JoinedRow): the lowest at which it holds 3:1 on the recess in both schemes for the ink-strong, done and attn glyph inks, the attn glyph by day being the floor. Every other Solar glyph keeps 0.5.
     public static let glyphDuoStatusOpacity: Double = 0.81
     /// How far an account's week rim is mixed from its hue toward account-week-toward: a clearly different lightness of the same hue. By day 0.32 (the rim 1.9:1 or more from the disc); at night 0.63, the lowest at which the rim stands 1.8:1 from the disc for every account hue (rose the floor), the rim then 7.9:1 or more on its track.
-    public static let accountWeekMix: Double = 0.32
+    /// By day and by night: read it with `value(for:)`.
+    public static let accountWeekMix = SchemeValue(light: 0.32, dark: 0.63)
     /// An account whose reading is out of date: its rings and its relay band draw at this opacity, the lowest at which every account hue holds 3:1 against the border-control track it lies on, in both schemes (by day cyan and green set the floor at 0.82, at night rose at 0.80); on the raised surface they hold more.
     public static let accountStaleOpacity: Double = 0.82
     /// The first stretch of its nesting line over which a child's icon fades in as it leaves its parent's (motion/branch).

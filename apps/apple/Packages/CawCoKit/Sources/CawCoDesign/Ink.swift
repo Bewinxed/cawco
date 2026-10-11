@@ -36,6 +36,23 @@ public struct Ink: Sendable {
     }
 }
 
+/// A number token authored once per appearance (a night value under
+/// `dev.cawco.dark`), the way it reads under `:root.dark` on the web.
+public struct SchemeValue: Sendable {
+    public let light: Double
+    public let dark: Double
+
+    public init(light: Double, dark: Double) {
+        self.light = light
+        self.dark = dark
+    }
+
+    /// Its value under the trait collection it is drawn in.
+    public func value(for traits: UITraitCollection) -> Double {
+        traits.userInterfaceStyle == .dark ? dark : light
+    }
+}
+
 /// One layer of a CSS `box-shadow` token, in points.
 public struct ShadowLayer: Sendable {
     public let x: Double

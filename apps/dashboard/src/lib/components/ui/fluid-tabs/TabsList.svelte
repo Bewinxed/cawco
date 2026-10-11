@@ -71,7 +71,10 @@
      track's one stack (TabItem), at the tab's rank (`--z`, written here on
      the item the track lays out, which a host may wrap), with anything a
      host draws on every outline (PaneTabs' rims) and the focus ring above
-     them all (`--stack-top`).
+     them all (`--stack-top`, in the markup). Until the track has measured
+     its tabs (the first render, the server's included), each tab stands at
+     its rank at rest, drawn from the order and the value (TabItem
+     `--z-rest`, `restRank`, the same ranking as below).
 
      A tab's rank follows how far back it stands now (its depth: 0 chosen,
      1 receded), not where the choice has gone. On a switch each tab's depth
@@ -143,7 +146,6 @@
     if (!track?.closest('[data-variant="folder"]')) {
       return;
     }
-    track.style.setProperty("--stack-top", String(4 * (items.length + 1)));
     const toward = travel ? tabs.order.indexOf(travel.toward) : -1;
     const f = travel ? Math.min(1, Math.max(0, travel.fraction)) : 0;
     /** How far back a tab stands once the switch lands, or as the gesture holds it. */
@@ -477,6 +479,7 @@
   {onkeydown}
   role="tablist"
   bind:this={node}
+  style:--stack-top={4 * (tabs.order.length + 1)}
   use:rects.container
   use:sideways
   {@attach highlight({
@@ -625,7 +628,6 @@
   :global([data-variant="folder"])
     .ff-tabs-list
     > :global(:not(.segment, .ring, .kit-ghost, .kit-pill, .kit-pill-trail)) {
-    --z: 1;
     position: relative;
     margin-inline-start: calc(-1 * var(--overlap));
   }
