@@ -1,8 +1,7 @@
 /**
  * A progressive blur, the app's one: what lies under a band goes out of focus
  * toward the band's edge, from sharp at its foot to `--c-head-fade-blur` at
- * the edge. The transcript's head under the tab strip (HeadFade) and the far
- * edge of the recall wheel's grown shape (grown.ts) both draw it.
+ * the edge. The transcript's head under the tab strip draws it (HeadFade).
  *
  * It is a stack of uniform blurs: each layer blurs the whole band and a linear
  * mask keeps only its slice, the radius doubling layer by layer toward the

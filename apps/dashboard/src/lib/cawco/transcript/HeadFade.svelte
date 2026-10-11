@@ -7,8 +7,7 @@
   transcript's overlays stand above it and only its rows pass under.
 
   The blur is the app's progressive blur (progressive-blur.ts): its layers,
-  their blurs and their slices are drawn from there, as the recall wheel's
-  far edge draws them.
+  their blurs and their slices are drawn from there.
 
   Scrolled to the very top there is nothing under it and it is clear; it comes
   in over the first `--c-head-fade` of scroll. The pane names the transcript's

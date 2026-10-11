@@ -1826,7 +1826,7 @@
     "shadow-drop": {
       "$type": "shadow",
       "$value": "0 14px 28px {color.shadow-tint-2}",
-      "$description": "A drawn shape's drop (the grown composer), set as drop-shadow() filters so it follows the shape, not a box: this far layer, then shadow-drop-near."
+      "$description": "A drawn shape's drop (the grown composer), drawn as the SVG's own feDropShadow filters so it follows the shape, not a box, and is painted once rather than reapplied as the shape moves (grown.ts): this far layer, then shadow-drop-near."
     },
     "shadow-drop-near": {
       "$type": "shadow",
@@ -2361,7 +2361,7 @@
     "c-head-fade-blur": {
       "$type": "dimension",
       "$value": "4px",
-      "$description": "The head blur's radius at the transcript's top edge, its strongest layer. The layers under it halve (2, 1, 0.5px) toward the band's end, their slices bounded at inOutCubic positions (HeadFade on the web and in CawCoKit). A blur, never a colour. The recall wheel's far edge goes out of focus with the same layers, over a row and the room above it (grown.ts)."
+      "$description": "The head blur's radius at the transcript's top edge, its strongest layer. The layers under it halve (2, 1, 0.5px) toward the band's end, their slices bounded at inOutCubic positions (HeadFade on the web and in CawCoKit). A blur, never a colour. The recall wheel's rows go out of focus up to this radius as they rise through its far edge's band, a row and the room above it (RecallWheel)."
     },
     "c-recall-cross-blur": {
       "$type": "dimension",
@@ -2376,12 +2376,7 @@
     "c-deck-scale": {
       "$type": "number",
       "$value": "0.94",
-      "$description": "A button in the recall wheel's deck, against the one in front of it: its size (Composer)."
-    },
-    "c-deck-dim": {
-      "$type": "number",
-      "$value": "0.75",
-      "$description": "A button in the recall wheel's deck, against the one in front of it: its opacity (Composer)."
+      "$description": "A button in the recall wheel's deck, against the one in front of it: its size (Composer). Each stays whole, its edge at the outline button's 3:1, so it reads behind the one in front."
     },
     "c-tab-max-w": {
       "$type": "dimension",

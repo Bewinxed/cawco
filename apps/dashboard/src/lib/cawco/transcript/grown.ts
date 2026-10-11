@@ -16,12 +16,15 @@
  * Its edge is the pill's border (`--border-control`), and stays the border
  * while the field has keyboard focus: the grown composer draws no ring.
  *
- * Its far edge goes out of focus (`frosted`): the app's progressive blur
- * (progressive-blur.ts) over its top band, a row and the room over it, above
- * what stands in the shape, so the farthest rows blur into the edge with the
- * transcript behind it. Each layer is cut to the shape on its own. The blur
- * and the drop come in once the shape stands still; nothing that moves
- * carries a backdrop filter.
+ * The band at its top, a row and the room over it (`edge`), is where what
+ * stands in it goes out of sight: the wheel's rows blur and fade there
+ * (RecallWheel). The wheel's shape is solid to its edge (`fade: false`), so
+ * nothing behind it shows through; the queued edit's row fades its top.
+ *
+ * Its drop comes in once it stands still, and is drawn once: a copy of the
+ * outline under it with the shadow fixed. Folding, the copy shrinks with the
+ * shape and fades out by a compositor animation (transform and opacity), so
+ * no frame of the fold redraws a shadow.
  *
  * Every size is measured once, before it is made (`measureShape`); a frame
  * only writes.
@@ -31,13 +34,14 @@
  * top is solid to the edge (`fade: false`), since its first line is the
  * ask's title, not an oldest row going out of sight.
  */
-import { dur, easeDrawer, motionOk } from "../motion/curves.svelte";
-import { layerBlur, layerMask, PROGRESSIVE_BLUR } from "./progressive-blur";
+import { easeDrawer, motionOk } from "../motion/curves.svelte";
 
 /** How far the shoulders curve in for each row of height, as a share of the width. */
 const TAPER = 0.022;
 /** Points sampled along each curve of a side, for `inset`. */
 const SAMPLES = 48;
+/** Keyframes the drop's fold is sampled at, off the outline's own height. */
+const DROP_STEPS = 12;
 
 /** The composer's sizes, read once before anything is written. */
 export interface ShapeSize {
@@ -63,6 +67,23 @@ export interface ClipBox {
 
 type Map2 = (x: number, y: number) => string;
 
+/** One shadow of a `--shadow-*` token: its offset, its blur and its colour. */
+interface Shadow {
+  blur: number;
+  color: string;
+  dx: number;
+  dy: number;
+}
+const SHADOW =
+  /^\s*(-?[\d.]+)(?:px)?\s+(-?[\d.]+)(?:px)?\s+([\d.]+)(?:px)?\s+(.+?)\s*$/;
+/** A one-shadow token as written (`0 14px 28px <colour>`), or null. */
+function shadowOf(value: string): Shadow | null {
+  const m = SHADOW.exec(value);
+  return m
+    ? { dx: Number(m[1]), dy: Number(m[2]), blur: Number(m[3]), color: m[4] }
+    : null;
+}
+
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const clamp01 = (t: number) => Math.min(1, Math.max(0, t));
 
@@ -77,15 +98,17 @@ export class GrownShape {
   readonly #halo: HTMLDivElement;
   readonly #svg: SVGSVGElement;
   readonly #path: SVGPathElement;
-  /** Its drop, a copy of the outline under it that only fades. */
+  /** Its drop, a copy of the outline under it, drawn once it stands. */
   readonly #drop: HTMLDivElement;
   readonly #dropSvg: SVGSVGElement;
   readonly #dropPath: SVGPathElement;
-  /** Until when the drop can be seen: for good while it is up, then as it fades out. */
-  #dropUntil = 0;
+  /** The drop's shadow, and how far past the outline it reaches. */
+  readonly #dropFilter: SVGFilterElement;
+  readonly #dropReach: number;
+  /** The drop's fold, while it runs. */
+  #dropFold: Animation | null = null;
   readonly #mid: SVGStopElement;
   readonly #edge: SVGStopElement;
-  readonly #bands: HTMLDivElement[] = [];
   readonly #clips = new Map<HTMLElement, () => ClipBox>();
   readonly #taper: boolean;
   readonly #fade: boolean;
@@ -93,53 +116,55 @@ export class GrownShape {
   #sides: { ext: number; at: number[]; inset: number[] } | null = null;
   #frame = 0;
   #done: (() => void) | null = null;
-  /** What the drop and the blur wait on after the next morph lands, besides it. */
+  /** What the drop waits on after the next morph lands, besides it. */
   #after: Promise<void> | null = null;
 
   constructor(
     host: HTMLElement,
     size: ShapeSize,
     ext: number,
-    {
-      frosted,
-      taper = true,
-      fade = true,
-    }: { frosted: boolean; taper?: boolean; fade?: boolean }
+    { taper = true, fade = true }: { taper?: boolean; fade?: boolean } = {}
   ) {
     this.#size = size;
     this.ext = ext;
     this.#taper = taper;
     this.#fade = fade;
-    // The frosted bands are the faded top's; a solid top has none.
     const clear = fade ? "stop-opacity: 0" : "";
     made += 1;
     const fill = `grown-fill-${made}`;
     const edge = `grown-edge-${made}`;
-    if (frosted && fade) {
-      for (const layer of PROGRESSIVE_BLUR) {
-        const band = document.createElement("div");
-        band.className = "grown-band";
-        band.setAttribute("aria-hidden", "true");
-        band.style.backdropFilter = layerBlur(layer);
-        band.style.setProperty("-webkit-backdrop-filter", layerBlur(layer));
-        band.style.maskImage = layerMask(layer);
-        band.style.setProperty("-webkit-mask-image", layerMask(layer));
-        host.append(band);
-        this.#bands.push(band);
-      }
-    }
-    // The drop is its own copy of the outline, its shadow fixed, coming in
-    // and out by its opacity alone: a shadow's filter changing under the
-    // far edge's backdrop blur brought WebKit's compositor down (Playwright
-    // WebKit, ten opens and folds: a filter transition on the shape crashed
-    // the page; an opacity transition on this copy did not).
+    // The drop is its own copy of the outline, its shadow drawn into it,
+    // moving by transform and opacity alone: a shadow's filter changing
+    // brought WebKit's compositor down (Playwright WebKit, ten opens and
+    // folds: a filter transition on the shape crashed the page). The shadow
+    // is the SVG's own filter, painted once with the outline, never a CSS
+    // filter on the layer: WebKit applies a layer's filter again every frame
+    // the layer moves (Playwright WebKit at 390, a fold's slow frames 3.75 a
+    // round with it, 0.25 without), and draws no CSS filter on an SVG path.
+    const shadows = ["--shadow-drop", "--shadow-drop-near"]
+      .map((token) => shadowOf(getComputedStyle(host).getPropertyValue(token)))
+      .filter((s): s is Shadow => s !== null);
+    const lay = shadows
+      .map(
+        ({ dx, dy, blur, color }) =>
+          `<feDropShadow dx="${dx}" dy="${dy}" stdDeviation="${blur / 2}" style="flood-color: ${color}"/>`
+      )
+      .join("");
+    this.#dropReach = Math.max(
+      0,
+      ...shadows.map(
+        (s) => Math.max(Math.abs(s.dx), Math.abs(s.dy)) + s.blur * 1.5
+      )
+    );
+    const shade = `grown-drop-${made}`;
     this.#drop = document.createElement("div");
     this.#drop.className = "grown-drop";
     this.#drop.setAttribute("aria-hidden", "true");
-    this.#drop.innerHTML = `<svg><path fill="url(#${fill})"/></svg>`;
+    this.#drop.innerHTML = `<svg><defs><filter id="${shade}" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">${lay}</filter></defs><path fill="url(#${fill})" filter="url(#${shade})"/></svg>`;
     host.append(this.#drop);
     this.#dropSvg = this.#drop.querySelector("svg") as SVGSVGElement;
     this.#dropPath = this.#drop.querySelector("path") as SVGPathElement;
+    this.#dropFilter = this.#drop.querySelector("filter") as SVGFilterElement;
     this.#halo = document.createElement("div");
     this.#halo.className = "grown-halo";
     this.#halo.setAttribute("aria-hidden", "true");
@@ -185,17 +210,17 @@ export class GrownShape {
   }
 
   /**
-   * The drop and the blur come in once the next morph has landed and `still`
-   * has resolved too: what stands in the shape has stopped moving. Rows
-   * still rolling under a fresh shadow and backdrop blur cost WebKit a
-   * frame in three (Playwright WebKit: every slow frame of an open fell
-   * after the shape landed, while the roll's spring settled).
+   * The drop comes in once the next morph has landed and `still` has
+   * resolved too: what stands in the shape has stopped moving. Rows still
+   * rolling under a fresh shadow cost WebKit a frame in three (Playwright
+   * WebKit: every slow frame of an open fell after the shape landed, while
+   * the roll's spring settled).
    */
   settleAfter(still: Promise<void>): void {
     this.#after = still;
   }
 
-  /** The band at the top that goes out of focus: a row and the room over it. */
+  /** The band at the top where what stands in it goes out of sight: a row and the room over it. */
   get edge(): number {
     return this.#size.row + this.#size.headroom;
   }
@@ -314,21 +339,23 @@ export class GrownShape {
     }")`;
   }
 
+  /** Draws the outline `d`, `height` tall, into one of its copies. */
+  #draw(
+    box: HTMLElement,
+    svg: SVGSVGElement,
+    path: SVGPathElement,
+    d: string,
+    height: number
+  ): void {
+    box.style.height = `${height}px`;
+    svg.setAttribute("viewBox", `0 0 ${this.#size.w} ${height}`);
+    path.setAttribute("d", d);
+  }
+
   /** Writes the shape where it is now. Writes only. */
   paint(): number {
     const { d, height, up } = this.outline(this.open);
-    const view = `0 0 ${this.#size.w} ${height}`;
-    // The drop follows only while it can be seen: redrawing its shadow every
-    // frame of a growth it is clear for cost WebKit a frame in six.
-    const drawn = performance.now() < this.#dropUntil;
-    for (const [box, svg, path] of [
-      [this.#halo, this.#svg, this.#path],
-      ...(drawn ? [[this.#drop, this.#dropSvg, this.#dropPath] as const] : []),
-    ] as const) {
-      box.style.height = `${height}px`;
-      svg.setAttribute("viewBox", view);
-      path.setAttribute("d", d);
-    }
+    this.#draw(this.#halo, this.#svg, this.#path, d, height);
     // Behind every row it is solid; only the grown top fades, where the
     // oldest row is fading already.
     if (this.#fade) {
@@ -347,23 +374,92 @@ export class GrownShape {
     return height;
   }
 
-  /** The drop and the far edge's blur, once it stands grown. */
+  /** The drop, once it stands grown: drawn here, once, and faded in. */
   #settle(): void {
     if (this.open !== 1) {
       return;
     }
-    this.#dropUntil = Number.POSITIVE_INFINITY;
-    const height = this.paint();
-    // Every layer covers the whole band and keeps its own slice of it.
-    const tall = Math.min(this.edge, height);
-    const box = { left: 0, bottom: height - tall, height: tall };
-    for (const band of this.#bands) {
-      band.style.bottom = `${box.bottom}px`;
-      band.style.height = `${tall}px`;
-      band.style.clipPath = this.#cut(height, box);
-      band.classList.add("settled");
+    this.#dropFold?.cancel();
+    this.#dropFold = null;
+    const { d, height } = this.outline(1);
+    this.#draw(this.#drop, this.#dropSvg, this.#dropPath, d, height);
+    // The shadow's own region: the outline and as far past it as it reaches.
+    const reach = this.#dropReach;
+    for (const [name, value] of [
+      ["x", -reach],
+      ["y", -reach],
+      ["width", this.#size.w + 2 * reach],
+      ["height", height + 2 * reach],
+    ] as const) {
+      this.#dropFilter.setAttribute(name, String(value));
     }
     this.#drop.classList.add("settled");
+  }
+
+  /**
+   * The drop follows the shape over `ms`: it stretches to the shape's
+   * height at each moment (its foot on the pill's), and folding (`fade`)
+   * fades out evenly over the whole of it, so no one frame takes much of it
+   * away. Transform and opacity only: the compositor runs it, and its
+   * shadow is never redrawn. Standing grown again, it is drawn anew.
+   */
+  #followDrop(
+    to: number,
+    ext: number,
+    ms: number,
+    base: number,
+    fade: boolean
+  ): void {
+    this.#dropFold?.cancel();
+    this.#dropFold = null;
+    if (!motionOk.current || ms <= 0) {
+      if (fade) {
+        this.#drop.classList.remove("settled");
+      }
+      return;
+    }
+    const from = this.open;
+    const fromExt = this.ext;
+    const fromBase = this.#size.base;
+    const tall = Number.parseFloat(this.#drop.style.height) || 1;
+    // Still fading in, it fades out from where it is: its fade-in (a CSS
+    // transition, which would outrank this motion) gives way to it.
+    const shown = Number(getComputedStyle(this.#drop).opacity);
+    for (const run of this.#drop.getAnimations()) {
+      if (run instanceof CSSTransition) {
+        run.cancel();
+      }
+    }
+    const frames: Keyframe[] = [];
+    for (let i = 0; i <= DROP_STEPS; i += 1) {
+      const t = i / DROP_STEPS;
+      const up =
+        lerp(fromExt, ext, easeDrawer(t)) *
+        easeDrawer(lerp(from, to, t) * 1.25);
+      const height = lerp(fromBase, base, easeDrawer(t)) + up;
+      frames.push({
+        transform: `scaleY(${(height / tall).toFixed(4)})`,
+        // Folding it fades out; standing grown, it finishes coming in.
+        opacity: fade ? shown * (1 - t) : shown + (1 - shown) * t,
+      });
+    }
+    const run = this.#drop.animate(frames, {
+      duration: ms,
+      easing: "linear",
+      fill: "forwards",
+    });
+    this.#dropFold = run;
+    run.finished.then(
+      () => {
+        if (fade && this.#dropFold === run) {
+          // Hidden for good in the same task the motion lets go of it.
+          this.#drop.classList.remove("settled");
+          run.cancel();
+          this.#dropFold = null;
+        }
+      },
+      () => undefined
+    );
   }
 
   /**
@@ -380,13 +476,13 @@ export class GrownShape {
   ): Promise<void> {
     cancelAnimationFrame(this.#frame);
     this.#done?.();
-    // A drop that was up follows the shape while it fades out.
-    if (this.#dropUntil === Number.POSITIVE_INFINITY) {
-      this.#dropUntil = performance.now() + dur("--dur-exit");
-    }
-    this.#drop.classList.remove("settled");
-    for (const band of this.#bands) {
-      band.classList.remove("settled");
+    if (this.#drop.classList.contains("settled") && open <= this.open) {
+      this.#followDrop(open, ext, ms, base, open < this.open);
+    } else {
+      // Growing (or turned back mid-fold): the drop comes in once it lands.
+      this.#dropFold?.cancel();
+      this.#dropFold = null;
+      this.#drop.classList.remove("settled");
     }
     const fromOpen = this.open;
     const fromExt = this.ext;
@@ -440,9 +536,6 @@ export class GrownShape {
     this.#done?.();
     this.#halo.remove();
     this.#drop.remove();
-    for (const band of this.#bands) {
-      band.remove();
-    }
     for (const el of this.#clips.keys()) {
       el.style.clipPath = "";
     }

@@ -6,17 +6,20 @@
    * words and time in the selected ink; the reader's own draft is the first
    * row, the newest message the next, and older ones stand above, each
    * leaning back and a little fainter than the one below it, as many as the
-   * shape holds, up to its top, where they go out of focus into its edge.
-   * Each row runs between the shape's sides at its height, less the pill's
-   * padding, so the rows follow its shoulders as they roll; on the field's
-   * line it stops short of the pill's buttons, folded into a deck at the
-   * trailing end while it is up (Composer).
+   * shape holds, up to its top. Through the band at its top (a row and the
+   * room over it, grown.ts `edge`) a row goes out of focus and out of sight
+   * as it rises, each row on its own, so none is ever cut by the edge; below
+   * the band every row holds 4.5:1. Each row runs between the shape's sides
+   * at its height, less the pill's padding, so the rows follow its
+   * shoulders as they roll; on the field's line it stops short of the
+   * pill's buttons, folded into a deck at the trailing end while it is up
+   * (Composer), at every frame of the deck's slide (`deck`).
    *
    * The draft is the field's own text, not a copy: rolling up, the field's
    * words leave downward as every row leaves the line, and rolling back to
    * the draft brings them back up into place on the same spring (`--roll-y`,
-   * `--roll-o` on the field, Composer). An empty draft's row is a hint, the
-   * field's own hint fading out under it.
+   * `--roll-o` on the field, Composer). An empty draft's row is a hint, and
+   * the field's own hint is not drawn while the wheel is up (Composer).
    *
    * It is mounted while it is up. ↑ and ↓ step (the composer hands it its
    * keys, `key`), a scroll or a drag rolls it, Enter takes the pick into
@@ -47,6 +50,7 @@
     shell,
     field,
     measured,
+    deck,
     draft,
     id,
     sent,
@@ -64,11 +68,15 @@
     /** The field's box: its text is the draft's row. */
     field: HTMLElement;
     /**
-     * The composer's sizes, its field, and where the deck of its buttons
-     * starts (from the shell's inline start), read by the composer before
-     * it wrote anything for the wheel (grown.ts `measureShape`).
+     * The composer's sizes and its field, read by the composer before it
+     * wrote anything for the wheel (grown.ts `measureShape`).
      */
-    measured: { size: ShapeSize; line: LineBox; deck: number };
+    measured: { size: ShapeSize; line: LineBox };
+    /**
+     * Where the deck of the pill's buttons starts this frame (from the
+     * shell's inline start), and whether it has stopped sliding.
+     */
+    deck: () => { at: number; still: boolean };
     /** The composer's text when it came up: the first row. */
     draft: string;
     /** The list's id; each row's is the list's and its place. */
@@ -194,12 +202,16 @@
   /** Sizes, read once as it opens. */
   let row = $state(0);
   let box = $state({ bottom: 0, width: 0, height: 0 });
-  /** The shape's far edge, which the rows fade out over. */
-  let edge = $state(0);
+  /** The band at the shape's top that rows go out of sight through. */
+  let edge = 0;
+  /** The blur a row has as it leaves the band's top (px). */
+  let haze = 0;
+  /** A row's room above and below its words (px). */
+  let inkPad = 1;
+  /** Where the deck starts this frame, read once per frame. */
+  let deckEdge = Number.POSITIVE_INFINITY;
   /** Called once the roll stands still (back to the draft, then close). */
   let settled: (() => void) | null = null;
-  /** The field's hint fading out under an empty draft's row, while it is up. */
-  let hintFade: Animation | null = null;
 
   /** The room over the top row, grown. */
   let headroom = 0;
@@ -227,8 +239,12 @@
     return p <= 1 ? p * draftTall() : draftTall() + (p - 1) * row;
   }
 
-  /** A row `up` rows above the line, faint by how far up it stands. */
-  const ghost = (up: number) => 0.75 - 0.04 * up;
+  /**
+   * A row `up` rows above the line, a touch fainter by how far up it
+   * stands, never below 4.5:1 for its age's muted ink: the lean carries the
+   * depth, and only the far band takes a row out of sight.
+   */
+  const ghost = (up: number) => 1 - 0.015 * Math.min(up, LEAN_ROWS - 1);
   /**
    * How strongly a row shows: at full strength on the line, fainter row by
    * row as it stands `up` rows above it, and gone as it leaves `off` rows
@@ -242,25 +258,35 @@
   }
 
   /**
-   * The inline insets of a row whose foot stands `y` px over the line's
-   * foot, leaning back `lean` degrees: the shape's sides at the row's
-   * middle as it is drawn, less the pill's padding. On the field's line it
-   * stops short of the buttons' deck, and of a search's chip.
+   * How far over the line's foot the top of a row whose foot stands `y` px
+   * over it is drawn, leaning back `lean` degrees: its top leans away, and
+   * the perspective draws it lower.
    */
-  function edges(y: number, lean: number): [number, number] {
-    const { line, size, deck } = measured;
-    const pad = line.left;
-    // Its top leans away, and the perspective draws it lower.
+  function topOf(y: number, lean: number): number {
     const th = (lean * Math.PI) / 180;
-    const top =
-      ((y + row * Math.cos(th)) * DEPTH) / (DEPTH + row * Math.sin(th));
+    return ((y + row * Math.cos(th)) * DEPTH) / (DEPTH + row * Math.sin(th));
+  }
+
+  /**
+   * The inline insets of a row whose foot stands `y` px over the line's
+   * foot and whose top is drawn `top` px over it: the shape's sides at the
+   * row's middle as it is drawn, less the pill's padding. On the field's
+   * line it stops a step short of the buttons' deck, where the deck is this
+   * frame, and of a search's chip.
+   */
+  function edges(y: number, top: number): [number, number] {
+    const { line, size } = measured;
+    const pad = line.left;
     const side = (shape?.inset(line.bottom + (y + top) / 2) ?? 0) + pad;
-    const onLine = Math.max(0, 1 - Math.abs(y) / row);
+    // While its words stand beside the deck (the deck is a row tall, on the
+    // line) a row stops short of it whole; its words clear of the deck's
+    // top, it widens to the shape's side as its foot reaches it.
+    const onLine = Math.min(1, Math.max(0, (row - y) / inkPad));
     if (onLine === 0) {
       return [side, side];
     }
     const gap = size.headroom;
-    let stop = size.w - deck + gap;
+    let stop = size.w - deckEdge + gap;
     if (query.trim()) {
       stop = Math.max(
         stop,
@@ -282,10 +308,19 @@
     const up = Math.max(0, y / row);
     const lean = Math.min(up, LEAN_ROWS) * LEAN;
     node.style.transform = `translateY(${-y}px) rotateX(${lean}deg)`;
-    const [start, end] = edges(y, lean);
+    const top = topOf(y, lean);
+    const [start, end] = edges(y, top);
     node.style.left = `${start}px`;
     node.style.right = `${end}px`;
-    node.style.opacity = String(presence(up, off));
+    // Through the band at the shape's top a row leaves by its top: clear and
+    // whole with it a band below the edge, gone as it reaches the edge, so
+    // the edge never cuts a row that can be seen.
+    const clear = Math.min(1, Math.max(0, (box.height - top) / edge));
+    node.style.opacity = String(presence(up, off) * clear);
+    const blur = clear < 1 ? `blur(${(haze * (1 - clear)).toFixed(2)}px)` : "";
+    if (node.style.filter !== blur) {
+      node.style.filter = blur;
+    }
   }
 
   /**
@@ -311,13 +346,39 @@
     target = at;
   }
 
-  /** Places every row, and the draft, where the roll has it. Writes only. */
-  function draw(): void {
+  /** Places every row, and the draft, where the roll and the deck have them. */
+  function placeAll(): void {
+    placeRows();
+    placeDraft();
+  }
+
+  /** Places every row where the roll and the deck have it. Writes only. */
+  function placeRows(): void {
+    deckEdge = deck().at;
     const nodes = ghosts?.children ?? [];
     for (let k = 0; k < nodes.length; k += 1) {
       place(nodes[k] as HTMLElement, k);
     }
-    placeDraft();
+  }
+
+  /**
+   * While the deck slides (folding in as it opens, fanning out as it folds),
+   * the rows follow its edge every frame, whether or not the roll moves.
+   * The draft is the roll's alone: a pick taken has let go of it.
+   */
+  let deckFrame = 0;
+  function followDeck(): void {
+    cancelAnimationFrame(deckFrame);
+    const trail = () => {
+      placeRows();
+      deckFrame = deck().still ? 0 : requestAnimationFrame(trail);
+    };
+    deckFrame = requestAnimationFrame(trail);
+  }
+
+  /** Places every row and the draft, and keeps the pick. Writes only. */
+  function draw(): void {
+    placeAll();
     if (closing) {
       return;
     }
@@ -411,16 +472,6 @@
     });
   }
 
-  /** The field's hint comes back as the rows go. */
-  function showHint(): void {
-    const fade = hintFade;
-    hintFade = null;
-    if (fade) {
-      fade.reverse();
-      fade.finished.then(() => fade.cancel());
-    }
-  }
-
   /**
    * Folds away. `text`: the pick goes into the field (and is sent, `andSend`);
    * none: back to the draft, as it was.
@@ -436,10 +487,10 @@
     let home = Promise.resolve();
     if (text === undefined) {
       onback();
+      followDeck();
       felt("close");
       // The draft rolls home on the wheel's own spring as the shape folds.
       home = rollHome();
-      showHint();
     } else {
       cancelAnimationFrame(frame);
       // The ghost on the line becomes the field's own text.
@@ -451,9 +502,8 @@
       }
       field.style.removeProperty("--roll-y");
       field.style.removeProperty("--roll-o");
-      hintFade?.cancel();
-      hintFade = null;
       const fitted = ontake(text, andSend);
+      followDeck();
       // The field's text stands where the ghost stood: the ghost blurs out
       // over it, so what they share reads as one and only the rest (a
       // longer pick's further lines, flattened onto the row) dissolves.
@@ -683,8 +733,19 @@
     const { size, line } = measured;
     ({ row, headroom } = size);
     above = matchMedia(ROOMY).matches ? 5 : 3;
-    shape = new GrownShape(shell, size, extFor(), { frosted: true });
+    // Solid to its edge: nothing behind it shows through.
+    shape = new GrownShape(shell, size, extFor(), { fade: false });
     ({ edge } = shape);
+    haze = Number.parseFloat(
+      getComputedStyle(shell).getPropertyValue("--c-head-fade-blur")
+    );
+    const first = ghosts?.firstElementChild;
+    if (first) {
+      inkPad = Math.max(
+        1,
+        Number.parseFloat(getComputedStyle(first).paddingTop)
+      );
+    }
     // The rows stand from the field's line up to the shape's top, across it.
     box = {
       bottom: line.bottom,
@@ -695,16 +756,9 @@
       shape.clip(ghosts, () => ({ left: 0, ...box }));
     }
     draw();
+    followDeck();
     if (keys) {
       felt("open");
-    }
-    // An empty draft's hint gives way to the row that stands for it.
-    if (!ownText) {
-      hintFade = field.animate([{ opacity: 1 }, { opacity: 0 }], {
-        duration: dur("--dur-fade"),
-        easing: ease("--ease-out"),
-        fill: "forwards",
-      });
     }
     ghosts?.animate([{ opacity: 0 }, { opacity: 1 }], {
       duration: dur("--dur-fade"),
@@ -721,9 +775,9 @@
     spinTo(1);
     return () => {
       cancelAnimationFrame(frame);
+      cancelAnimationFrame(deckFrame);
       field.style.removeProperty("--roll-y");
       field.style.removeProperty("--roll-o");
-      hintFade?.cancel();
       shape?.remove();
     };
   });
@@ -758,7 +812,6 @@
   role="listbox"
   tabindex="-1"
   bind:this={ghosts}
-  style:--edge="{edge}px"
   style:bottom="{box.bottom}px"
   style:height="{box.height}px"
   style:perspective="{DEPTH}px"
@@ -826,16 +879,15 @@
 <style>
   /* The rows stand on the field's line and above it to the shape's top,
      across the shape, each one row tall, set as the field sets its text.
-     They fade out over the shape's far edge as it goes out of focus
-     (grown.ts), instead of being cut through. Each row's inline edges are
-     the roll's (`place`). */
+     Each one blurs and fades out on its own through the band at the
+     shape's top (`place`), so none is cut through, in every engine. Each
+     row's inline edges are the roll's. */
   .ghosts {
     position: absolute;
     z-index: 3;
     inset-inline-start: 0;
     overflow: hidden;
     perspective-origin: 50% 100%;
-    mask-image: linear-gradient(transparent, #000 var(--edge));
     touch-action: none;
     user-select: none;
     cursor: ns-resize;
@@ -934,11 +986,5 @@
   }
   .n {
     color: var(--ink-muted);
-  }
-  /* A phone's field is too narrow to spend on the age. */
-  @media (width < 640px) {
-    .m {
-      display: none;
-    }
   }
 </style>

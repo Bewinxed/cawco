@@ -1356,7 +1356,7 @@
     keys: boolean;
     text: string;
     caret: [number, number];
-    measured: ReturnType<typeof measureShape> & { deck: number };
+    measured: ReturnType<typeof measureShape>;
   } | null>(null);
   /** The pill's buttons, which fold into a deck while the wheel is up. */
   let ctrls = $state<HTMLElement>();
@@ -1369,6 +1369,12 @@
   let recallActive = $state<string>();
   /** The grown shape is the composer: the pill's own surface steps aside. */
   let wheeling = $state(false);
+  /**
+   * The field's hint fading back in after the wheel has folded away (its
+   * timer while it does): it is not drawn while the wheel is up, where it
+   * would stand doubled under the row on the line.
+   */
+  let hintBack = $state<ReturnType<typeof setTimeout> | 0>(0);
   const recallId = `recall-${newId()}`;
   /** What the wheel rolls, read only while it is up. */
   const sentHere = $derived(
@@ -1404,20 +1410,20 @@
    * Where each of the pill's buttons stands in the deck they fold into
    * while the wheel is up, read before anything is written: Send in front,
    * where it is; each one behind it slid toward it until it peeks out by
-   * `--c-deck-peek`, a step smaller (`--c-deck-scale`) and dimmer
-   * (`--c-deck-dim`) than the one in front. With reduced motion nothing
-   * slides: the ones behind fade out, and the deck is Send alone. Returns
-   * each button's place, and where the deck starts from the shell's inline
-   * start.
+   * `--c-deck-peek`, a step smaller (`--c-deck-scale`), whole, so its edge
+   * reads behind the one in front and nothing behind it shows through. With
+   * reduced motion nothing slides: the ones behind fade out, and the deck is
+   * Send alone. Returns each button's place, and where the deck starts
+   * (`deck`) and where its first button stands now (`start`), from the
+   * shell's inline start.
    */
   function foldDeck(
     row: HTMLElement,
     from: number
-  ): { deck: number; places: DeckPlace[] } {
+  ): { deck: number; start: number; places: DeckPlace[] } {
     const style = getComputedStyle(row);
     const peek = Number.parseFloat(style.getPropertyValue("--c-deck-peek"));
     const scale = Number.parseFloat(style.getPropertyValue("--c-deck-scale"));
-    const dim = Number.parseFloat(style.getPropertyValue("--c-deck-dim"));
     const cards = [...row.children]
       .filter((card): card is HTMLElement => card instanceof HTMLElement)
       .map((card) => ({ card, box: card.getBoundingClientRect() }))
@@ -1425,23 +1431,28 @@
       .reverse();
     const [front] = cards;
     if (!front) {
-      return { deck: Number.POSITIVE_INFINITY, places: [] };
+      const none = Number.POSITIVE_INFINITY;
+      return { deck: none, start: none, places: [] };
     }
     const slide = motionOk.current;
     let { left } = front.box;
+    // On the device's pixel grid, so each peeking edge is drawn whole, not
+    // smeared across two pixels at a fraction of its contrast.
+    const grid = window.devicePixelRatio || 1;
     const places = cards.map(({ card, box }, i) => {
       const s = slide ? scale ** i : 1;
       // Its leading edge one peek past the edge of the one in front.
-      const edge = front.box.left - i * peek;
+      const edge = Math.round((front.box.left - i * peek) * grid) / grid;
       const x = slide
         ? edge + (box.width * s) / 2 - (box.left + box.width / 2)
         : 0;
       if (slide) {
         left = Math.min(left, edge);
       }
-      return { card, x, s, o: slide ? dim ** i : Number(i === 0) };
+      return { card, x, s, o: slide ? 1 : Number(i === 0) };
     });
-    return { deck: left - from, places };
+    const first = (cards.at(-1)?.box.left ?? left) - from;
+    return { deck: left - from, start: slide ? first : left - from, places };
   }
 
   /** One of the pill's buttons, where it stands in the deck. */
@@ -1451,33 +1462,88 @@
     s: number;
     x: number;
   }
-  /** The buttons folded into the deck, and their motion, while they are. */
-  let decked: { places: DeckPlace[]; runs: Animation[] } | null = null;
+  /**
+   * The buttons folded into the deck, and their motion, while they are, and
+   * where the first of them stands unfolded (from the shell's inline start).
+   */
+  let decked: { places: DeckPlace[]; runs: Animation[]; start: number } | null =
+    null;
+  /**
+   * The deck's leading edge on the move, from the shell's inline start:
+   * from `from` to `to` on `run`'s clock, the drawer curve. Every button
+   * slides on the same curve, so the first one's edge leads the whole way.
+   */
+  let deckSlide: { from: number; to: number; run: Animation | null } | null =
+    null;
+
+  /**
+   * Where the deck's leading edge stands this frame (from the shell's
+   * inline start), and whether it has stopped: arithmetic off its motion's
+   * clock, no layout read. The wheel's row on the field's line stops short
+   * of it at every frame.
+   */
+  function deckAt(): { at: number; still: boolean } {
+    const slide = deckSlide;
+    if (!slide) {
+      return { at: Number.POSITIVE_INFINITY, still: true };
+    }
+    const { run } = slide;
+    const ms = Number(run?.effect?.getTiming().duration) || 0;
+    const moving = run?.playState === "running" || run?.playState === "paused";
+    const t =
+      run && moving && ms > 0
+        ? Math.min(1, Math.max(0, Number(run.currentTime ?? 0) / ms))
+        : 1;
+    return {
+      at: slide.from + (slide.to - slide.from) * easeDrawer(t),
+      still: t >= 1,
+    };
+  }
 
   /**
    * The buttons slide together into the deck on the wheel's own growth:
    * its --dur-grow on the drawer curve. Transform and opacity only, by the
    * Web Animations API, so the buttons' own transitions stay theirs.
    */
-  function deckIn(places: DeckPlace[]): void {
+  function deckIn(places: DeckPlace[], from: number, to: number): void {
     deckOut(0);
     const timing = {
       duration: dur("--dur-grow"),
       easing: CURVE.drawer,
       fill: "forwards",
     } as const;
-    decked = {
-      places,
-      runs: places.map(({ card, x, s, o }) =>
-        card.animate(
-          [
-            { translate: "0 0", scale: "1", opacity: 1 },
-            { translate: `${x.toFixed(2)}px 0`, scale: String(s), opacity: o },
-          ],
-          timing
-        )
-      ),
-    };
+    const runs = places.map(({ card, x, s, o }) =>
+      card.animate(
+        [
+          { translate: "0 0", scale: "1", opacity: 1 },
+          { translate: `${x.toFixed(2)}px 0`, scale: String(s), opacity: o },
+        ],
+        timing
+      )
+    );
+    const stack = { places, runs, start: from };
+    decked = stack;
+    deckSlide = { from, to, run: runs.at(-1) ?? null };
+    // Landed, each card stands where it is as its own style, not held by a
+    // motion: a held motion's layer is drawn at full size and scaled, which
+    // smears each card's 1px edge across two pixels; standing, it is drawn
+    // at its size, its edge whole.
+    runs[0]?.finished.then(
+      () => {
+        if (decked !== stack) {
+          return;
+        }
+        // Its own end, written out (WebKit's commitStyles() has written a
+        // finished motion's start).
+        for (const [i, { card, x, s, o }] of places.entries()) {
+          card.style.translate = `${x.toFixed(2)}px 0`;
+          card.style.scale = String(s);
+          card.style.opacity = String(o);
+          runs[i]?.cancel();
+        }
+      },
+      () => undefined
+    );
   }
 
   /**
@@ -1491,6 +1557,8 @@
     if (!was) {
       return;
     }
+    const edge = deckAt().at;
+    deckSlide = null;
     // Where each one is drawn now, read before the motion that held it goes.
     const from = was.places.map(({ card }) => {
       const style = getComputedStyle(card);
@@ -1503,15 +1571,21 @@
     for (const run of was.runs) {
       run.cancel();
     }
+    for (const { card } of was.places) {
+      for (const property of ["translate", "scale", "opacity"]) {
+        card.style.removeProperty(property);
+      }
+    }
     if (ms <= 0) {
       return;
     }
-    for (const [i, { card }] of was.places.entries()) {
+    const runs = was.places.map(({ card }, i) =>
       card.animate([from[i], { translate: "0 0", scale: "1", opacity: 1 }], {
         duration: ms,
         easing: CURVE.drawer,
-      });
-    }
+      })
+    );
+    deckSlide = { from: edge, to: was.start, run: runs.at(-1) ?? null };
   }
 
   function openRecall(keys: boolean): void {
@@ -1526,12 +1600,12 @@
     // Every size first, before anything is written: one layout per open.
     const measured = measureShape(shell, pill, historyButton, field);
     const deck = foldDeck(ctrls, shell.getBoundingClientRect().left);
-    deckIn(deck.places);
+    deckIn(deck.places, deck.start, deck.deck);
     recall = {
       keys,
       text: draft.text,
       caret: [field.selectionStart, field.selectionEnd],
-      measured: { ...measured, deck: deck.deck },
+      measured,
     };
     wheeling = true;
     dismissed = true;
@@ -1602,6 +1676,11 @@
     const again = reopen;
     reopen = false;
     recall = null;
+    // The field's hint comes back once the rows are gone, never under them.
+    clearTimeout(hintBack);
+    hintBack = setTimeout(() => {
+      hintBack = 0;
+    }, dur("--dur-fade"));
     await tick();
     const took = was?.text !== draft.text;
     // Back to the draft and asked for again: it comes straight back up. A
@@ -2127,7 +2206,7 @@
       liftSizes ?? measureShape(shell, pill, historyButton, field);
     liftSizes = null;
     const { row } = size;
-    const shape = new GrownShape(shell, size, row, { frosted: false });
+    const shape = new GrownShape(shell, size, row);
     editShape = shape;
     // Inset past the shoulders' curve, so nothing sits against the slope.
     edit = {
@@ -2366,7 +2445,6 @@
     const ext = askPanel.offsetHeight - size.base;
     askBox.ext = ext;
     const shape = new GrownShape(shell, size, ext, {
-      frosted: false,
       taper: false,
       fade: false,
     });
@@ -2729,6 +2807,7 @@
     <div class="shell" bind:this={shell} class:rolling={!!recall}>
       {#if recall && shell && fieldWrap}
         <RecallWheel
+          deck={deckAt}
           draft={recall.text}
           field={fieldWrap}
           id={recallId}
@@ -2813,6 +2892,8 @@
         bind:this={pill}
         class:asking={askOpen}
         class:grown={!!edit || askOpen}
+        class:hint-back={!!hintBack}
+        class:recalling={!!recall}
         class:settling={!!recall && !wheeling}
         class:wheeling={wheeling}
       >
@@ -3566,11 +3647,21 @@
       color: var(--ink-strong);
     }
   }
-  /* In the recall wheel's deck it is a card like its neighbours (Attach,
-     Autopilot), so its edge peeks out from behind Send. */
+  /* In the recall wheel's deck every button behind Send is a card: its
+     face, its edge at the outline button's 3:1 (the control edge, 1.37:1,
+     is lost at a 4px peek) and a little shadow, so each one's edge reads
+     behind the one in front. */
   .ctrls[inert] .history-btn {
+    border: 1px solid var(--border-button-outline);
     background: var(--surface-raised);
-    box-shadow: inset 0 0 0 1px var(--border-control);
+    box-shadow: var(--shadow-xs);
+  }
+  .ctrls[inert] :global(:is(.att-btn, .ap-trigger)) {
+    box-shadow: var(--shadow-xs);
+  }
+  /* An Autopilot that is on keeps its brand edge. */
+  .ctrls[inert] :global(:is(.att-btn, .ap-trigger:not(.ap-active))) {
+    border-color: var(--border-button-outline);
   }
   @media (hover: hover) and (pointer: fine) {
     .history-btn:hover {
@@ -3680,6 +3771,15 @@
   .wheeling textarea {
     caret-color: transparent;
   }
+  /* The field's hint is not drawn from the moment the wheel comes up until
+     it has folded away: an empty draft's row on the line stands for it, and
+     the two would read doubled. It fades back in once the rows are gone. */
+  .recalling textarea::placeholder {
+    color: transparent;
+  }
+  .hint-back textarea::placeholder {
+    transition: color var(--dur-fade) var(--ease-out);
+  }
   .asking .more {
     visibility: hidden;
   }
@@ -3707,11 +3807,11 @@
     bottom: 0;
   }
 
-  /* The grown shape and its far edge's blur (grown.ts), made as it grows:
-     the shape behind the pill, the blur's layers over the wheel's rows, so
-     the farthest go out of focus into the edge. The drop (a copy of the
-     outline under it, its shadow fixed) and the blur come in by their
-     opacity once it stands still. */
+  /* The grown shape (grown.ts), made as it grows, behind the pill. Its
+     drop (a copy of the outline under it, its shadow --shadow-drop and
+     --shadow-drop-near drawn into it) comes in by its opacity once it
+     stands still, and folds with it by its own motion (transform and
+     opacity), its foot on the pill's. */
   .shell :global(:is(.grown-halo, .grown-drop)) {
     position: absolute;
     z-index: 1;
@@ -3726,39 +3826,25 @@
       overflow: visible;
     }
   }
-  /* Faded out, the drop and the blur are not drawn at all: a clear layer's
-     shadow or backdrop still cost a frame in six on WebKit as the shape
-     moved under it. */
-  /* They leave faster than they come (--dur-exit): the shape is moving
-     under them as they go. */
-  .shell :global(:is(.grown-drop, .grown-band)) {
+  /* Not standing, the drop is not drawn at all: a clear layer's shadow
+     still cost a frame in six on WebKit as the shape moved under it. */
+  .shell :global(.grown-drop) {
     opacity: 0;
     visibility: hidden;
-    transition:
-      opacity var(--dur-exit) var(--ease-out),
-      visibility 0s linear var(--dur-exit);
+    transform-origin: 50% 100%;
   }
-  .shell :global(:is(.grown-drop, .grown-band).settled) {
+  .shell :global(.grown-drop.settled) {
     opacity: 1;
     visibility: visible;
     transition:
       opacity var(--dur-fade) var(--ease-out),
       visibility 0s;
   }
-  .shell :global(.grown-drop) {
-    filter: drop-shadow(var(--shadow-drop)) drop-shadow(var(--shadow-drop-near));
-  }
   /* While the wheel is up the grown shape is part of the composer: its
      margins take a press (rolling the wheel) and never pan the page. */
   .shell.rolling :global(.grown-halo) {
     pointer-events: auto;
     touch-action: none;
-  }
-  .shell :global(.grown-band) {
-    position: absolute;
-    z-index: 4;
-    inset-inline: 0;
-    pointer-events: none;
   }
 
   /* The row the composer grows while a queued message is edited: what is

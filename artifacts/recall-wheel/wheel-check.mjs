@@ -11,7 +11,7 @@
  * - rows: every visible row's edges against the grown outline (its SVG path,
  *   sampled) at the row's middle, less the field's inset; the line's row
  *   against the deck; the top row's top against the shape's top;
- * - edge: the far edge's blur layers (progressive-blur.ts);
+ * - edge: each row's blur and opacity through the far band (RecallWheel);
  * - swipe (phone): a touch swiped up on the pill opens the wheel, and the
  *   drag after it rolls it;
  * - draft: three lines typed, ↑ into the wheel, ↓ back to the draft, ↓ out
@@ -128,18 +128,15 @@ const geometry = (page) =>
           onLine,
         };
       });
-    const ghosts = document.querySelector(".ghosts");
-    const bands = [...document.querySelectorAll(".grown-band")].map((e) => {
-      const s = getComputedStyle(e);
-      return {
-        backdrop: s.backdropFilter || s.webkitBackdropFilter,
-        mask: (s.maskImage || s.webkitMaskImage).slice(0, 60),
-        opacity: s.opacity,
-        z: s.zIndex,
-        top: +e.getBoundingClientRect().top.toFixed(1),
-        height: +e.getBoundingClientRect().height.toFixed(1),
-      };
-    });
+    const band = [...document.querySelectorAll(".ghost")]
+      .filter((e) => e.style.visibility === "visible")
+      .map((e) => ({
+        text: e.textContent.trim().slice(0, 16),
+        top: +(e.getBoundingClientRect().top - hb.top).toFixed(1),
+        opacity: e.style.opacity,
+        filter: e.style.filter || "none",
+      }))
+      .filter((r) => r.filter !== "none");
     const pitch = Number.parseFloat(
       getComputedStyle(document.documentElement).getPropertyValue(
         "--c-composer-field"
@@ -156,10 +153,9 @@ const geometry = (page) =>
       pitch,
       topWithinPitch: topRow - hb.top <= pitch,
       edge: {
-        mechanism: "progressive-blur.ts (the ad078dd2 HeadFade layers)",
-        ghostsZ: getComputedStyle(ghosts).zIndex,
-        ghostsMask: getComputedStyle(ghosts).maskImage?.slice(0, 60),
-        bands,
+        mechanism:
+          "each row blurs and fades through the far band (RecallWheel place)",
+        band,
       },
     };
   });
