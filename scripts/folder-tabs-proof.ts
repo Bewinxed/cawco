@@ -84,6 +84,112 @@ function clipOf(page: Page): Promise<Box> {
   }, ROOM);
 }
 
+/**
+ * Which side draws each shared edge, as the eye sees it: each side's rim
+ * piece hidden in turn, the pixels down the edge's side (under the
+ * shoulders, to the shelf) that change. The tab in front's side changes
+ * them; a side under its neighbour's card changes none. One side drawing
+ * is one edge; both is two strokes.
+ */
+async function sidesDrawn(page: Page) {
+  const seams = await page.evaluate(() => {
+    const track = document.querySelector(
+      "[data-folder-proof] .ff-tabs-list"
+    ) as HTMLElement;
+    const tr = track.getBoundingClientRect();
+    const radius =
+      Number.parseFloat(getComputedStyle(track).getPropertyValue("--radius")) ||
+      0;
+    const tabs = [
+      ...document.querySelectorAll<HTMLElement>("[data-folder-proof] .tab"),
+    ].map((el) => el.getBoundingClientRect());
+    return tabs.slice(0, -1).flatMap((a, i) => {
+      const b = tabs[i + 1];
+      const lo = Math.min(b.left, a.right) - 4;
+      const hi = Math.max(b.left, a.right) + 4;
+      if (lo < tr.left + 1 || hi > tr.right - 1) {
+        return [];
+      }
+      const top = Math.max(a.top, b.top) + radius;
+      return [
+        {
+          i,
+          box: {
+            x: lo,
+            y: top,
+            width: hi - lo,
+            height: Math.min(a.bottom, b.bottom) - top,
+          },
+        },
+      ];
+    });
+  });
+  const hide = (i: number, side: "start" | "end", hidden: boolean) =>
+    page.evaluate(
+      ({ k, s, h }) => {
+        const tab = document.querySelectorAll<HTMLElement>(
+          "[data-folder-proof] .tab"
+        )[k];
+        const piece = tab.querySelector<HTMLElement>(
+          `.rim-side[data-side="${s}"]`
+        ) as HTMLElement;
+        piece.style.visibility = h ? "hidden" : "";
+      },
+      { k: i, s: side, h: hidden }
+    );
+  const changed = async (box: Box, base: Buffer, shot: Buffer) =>
+    page.evaluate(
+      async ({ one, two }) => {
+        const read = async (src: string) => {
+          const img = new Image();
+          img.src = src;
+          await img.decode();
+          const c = document.createElement("canvas");
+          c.width = img.naturalWidth;
+          c.height = img.naturalHeight;
+          const ctx = c.getContext("2d") as CanvasRenderingContext2D;
+          ctx.drawImage(img, 0, 0);
+          return ctx.getImageData(0, 0, c.width, c.height).data;
+        };
+        const p = await read(one);
+        const q = await read(two);
+        let n = 0;
+        for (let k = 0; k < p.length; k += 4) {
+          if (
+            Math.abs(p[k] - q[k]) +
+              Math.abs(p[k + 1] - q[k + 1]) +
+              Math.abs(p[k + 2] - q[k + 2]) >
+            24
+          ) {
+            n += 1;
+          }
+        }
+        return n;
+      },
+      {
+        one: `data:image/png;base64,${base.toString("base64")}`,
+        two: `data:image/png;base64,${shot.toString("base64")}`,
+        box,
+      }
+    );
+  const out: { between: string; leftEnd: number; rightStart: number }[] = [];
+  for (const { i, box } of seams) {
+    const base = await page.screenshot({ clip: box, animations: "allow" });
+    await hide(i, "end", true);
+    const left = await page.screenshot({ clip: box, animations: "allow" });
+    await hide(i, "end", false);
+    await hide(i + 1, "start", true);
+    const right = await page.screenshot({ clip: box, animations: "allow" });
+    await hide(i + 1, "start", false);
+    out.push({
+      between: `${i}|${i + 1}`,
+      leftEnd: await changed(box, base, left),
+      rightStart: await changed(box, base, right),
+    });
+  }
+  return out;
+}
+
 /** Waits two frames: Svelte's flush, the style pass, the track's ranking. */
 const frames = (page: Page) =>
   page.evaluate(
@@ -116,11 +222,11 @@ function seek(page: Page, p: number) {
 }
 
 /** The measurements of one frame, taken from its own screenshot. */
-async function measure(page: Page, region: Box) {
+async function measure(page: Page, region: Box, keep: number[]) {
   const shot = await page.screenshot({ clip: region, animations: "allow" });
   const url = `data:image/png;base64,${shot.toString("base64")}`;
   const numbers = await page.evaluate(
-    async ({ src, box: clip }) => {
+    async ({ src, box: clip, kept }) => {
       const img = new Image();
       img.src = src;
       await img.decode();
@@ -181,8 +287,12 @@ async function measure(page: Page, region: Box) {
           chosen: el.hasAttribute("data-chosen"),
           z: Number(style.getPropertyValue("--z") || 0),
           rimOpacity: r2(Number(getComputedStyle(rim).opacity)),
-          startShown: r2(Number(getComputedStyle(sides[0]).opacity)),
-          endShown: r2(Number(getComputedStyle(sides[1]).opacity)),
+          // How far each side stands in for a gliding seam (TabsList).
+          startShown: r2(Number(el.style.getPropertyValue("--cut-start") || 0)),
+          endShown: r2(Number(el.style.getPropertyValue("--cut-end") || 0)),
+          sideOpacity: sides.map((s) =>
+            r2(Number(getComputedStyle(s).opacity))
+          ),
           label: text.textContent ?? "",
           labelScroll: text.scrollWidth,
           labelClient: text.clientWidth,
@@ -200,7 +310,18 @@ async function measure(page: Page, region: Box) {
       interface Run {
         at: number;
         colour: string;
+        /**
+         * Device pixels at half the run's peak or more: one 1.5px stroke
+         * is 3 to 4; two strokes side by side, touching, are 6 or more.
+         */
+        core: number;
         peak: number;
+        /**
+         * Its separate highs: two strokes touching, one fainter than the
+         * other or in another ink, still dip between them.
+         */
+        peaks: number;
+        profile: number[];
         vsA: number;
         vsB: number;
       }
@@ -213,6 +334,7 @@ async function measure(page: Page, region: Box) {
         vsB: number
       ) => {
         const d = Math.min(vsA, vsB);
+        run.profile.push(d);
         if (d > run.peak) {
           run.peak = r2(d);
           run.vsA = r2(vsA);
@@ -220,8 +342,73 @@ async function measure(page: Page, region: Box) {
           run.colour = hex(c);
           run.at = r2(dx / scale + clip.x);
         }
+        const half = 1 + (run.peak - 1) / 2;
+        run.core = run.profile.filter((v) => v >= half).length;
       };
-      const blank = (): Run => ({ at: 0, peak: 0, vsA: 0, vsB: 0, colour: "" });
+      /** The highs of a run's profile parted by a dip of 0.15 or more. */
+      const peaksOf = (profile: number[]) => {
+        // Every local high, then each counted apart from the one before it
+        // only where the profile dips 0.15 under the lower of the two.
+        const last = profile.length - 1;
+        const highs = profile.flatMap((v, k) => {
+          const up = k === 0 || v >= profile[k - 1];
+          const down = k === last || v > profile[k + 1];
+          return up && down ? [k] : [];
+        });
+        let count = Math.min(1, highs.length);
+        for (let j = 1; j < highs.length; j += 1) {
+          const dip = Math.min(...profile.slice(highs[j - 1], highs[j] + 1));
+          const lower = Math.min(profile[highs[j - 1]], profile[highs[j]]);
+          count += lower - dip >= 0.15 ? 1 : 0;
+        }
+        return count;
+      };
+      /** The 8-connected pieces of an ink mask `w` by `h`, by size. */
+      const piecesOf = (ink: Uint8Array, w: number, h: number) => {
+        const seen = new Uint8Array(w * h);
+        const steps = [-1, 0, 1].flatMap((dy) =>
+          [-1, 0, 1].map((dx) => [dx, dy] as const)
+        );
+        const grow = (start: number) => {
+          let size = 0;
+          const queue = [start];
+          seen[start] = 1;
+          while (queue.length > 0) {
+            const p = queue.pop() as number;
+            size += 1;
+            const px = p % w;
+            const py = (p - px) / w;
+            for (const [dx, dy] of steps) {
+              const nx = px + dx;
+              const ny = py + dy;
+              const q = ny * w + nx;
+              const inside = nx >= 0 && ny >= 0 && nx < w && ny < h;
+              if (inside && ink[q] && !seen[q]) {
+                seen[q] = 1;
+                queue.push(q);
+              }
+            }
+          }
+          return size;
+        };
+        const sizes: number[] = [];
+        for (let s = 0; s < w * h; s += 1) {
+          if (ink[s] && !seen[s]) {
+            sizes.push(grow(s));
+          }
+        }
+        return sizes;
+      };
+      const blank = (): Run => ({
+        at: 0,
+        peak: 0,
+        peaks: 0,
+        vsA: 0,
+        vsB: 0,
+        colour: "",
+        core: 0,
+        profile: [],
+      });
       function strokes(from: number, to: number, y: number, a: Rgb, b: Rgb) {
         const runs: Run[] = [];
         let current: Run | null = null;
@@ -243,6 +430,10 @@ async function measure(page: Page, region: Box) {
             current ??= runs[runs.push(blank()) - 1];
             peakAt(current, dx, c, vsA, vsB);
           }
+        }
+        for (const run of runs) {
+          run.peaks = peaksOf(run.profile);
+          run.profile = [];
         }
         return runs;
       }
@@ -411,7 +602,129 @@ async function measure(page: Page, region: Box) {
           rimTopY: r2(t.top),
         };
       });
+      const trackStyle = getComputedStyle(track);
+      const lengthOf = (name: string) =>
+        Number.parseFloat(trackStyle.getPropertyValue(name)) || 0;
+      const radius = lengthOf("--radius");
+      const flare = lengthOf("--flare");
+
+      /**
+       * Every shared edge, row by row (each device row) down its side, from
+       * under the shoulders to above the foot: how many strokes each row
+       * crosses there. One in every row is one edge.
+       */
+      const seamRows = tabs.slice(0, -1).flatMap((a, i) => {
+        const b = tabs[i + 1];
+        const lo = Math.min(b.left, a.right);
+        const hi = Math.max(b.left, a.right);
+        if (!(inTrack(lo - 2) && inTrack(hi + 2))) {
+          return [];
+        }
+        const fa = fillOf(a);
+        const fb = fillOf(b);
+        const counts: number[] = [];
+        const cores: number[] = [];
+        const y0 = Math.max(a.top, b.top) + radius + 3;
+        const y1 = Math.min(a.bottom, b.bottom) - flare - 2;
+        for (let y = y0; y <= y1; y += 1 / scale) {
+          const runs = strokes(lo - 2, hi + 2, y, fa, fb);
+          // Each high in a run is a stroke.
+          counts.push(runs.reduce((n, r) => n + r.peaks, 0));
+          cores.push(Math.max(0, ...runs.map((r) => r.core)));
+        }
+        // A row is one edge when it crosses one stroke, no wider than one
+        // (a 1.5px stroke is 3 device px).
+        const off = counts.filter((n, k) => n !== 1 || cores[k] > 3).length;
+        return [
+          {
+            between: `${i}|${i + 1}`,
+            rows: counts.length,
+            min: Math.min(...counts),
+            max: Math.max(...counts),
+            widest: Math.max(...cores),
+            rowsNotOne: off,
+          },
+        ];
+      });
+
+      /**
+       * Where two tabs' tops meet: the stroke pixels in a box round the
+       * seam's top (12px each side, from 4px over the higher top to 6px
+       * under it, clear of the glyphs), as connected pieces. The front
+       * tab's shoulder and the top of the one behind meeting it are one
+       * piece; a stub or a notch is two.
+       */
+      const corners = tabs.slice(0, -1).flatMap((a, i) => {
+        const b = tabs[i + 1];
+        const lo = Math.min(b.left, a.right);
+        const hi = Math.max(b.left, a.right);
+        if (!(inTrack(lo - 12) && inTrack(hi + 12))) {
+          return [];
+        }
+        const top = Math.min(a.top, b.top);
+        const shelf = shelfAt(lo);
+        const refs = [shelf, fillOf(a), fillOf(b)];
+        // Clear of the left tab's close glyph (14px in from its end) and
+        // the right tab's status glyph (12px in from its start).
+        const x0 = Math.round((lo - 5 - clip.x) * scale);
+        const x1 = Math.round((hi + 3 - clip.x) * scale);
+        const y0 = Math.round((top - 4 - clip.y) * scale);
+        const y1 = Math.round((top + radius + 2 - clip.y) * scale);
+        const w = x1 - x0 + 1;
+        const h = y1 - y0 + 1;
+        const ink = new Uint8Array(w * h);
+        for (let y = 0; y < h; y += 1) {
+          for (let x = 0; x < w; x += 1) {
+            const c = at(x0 + x, y0 + y);
+            ink[y * w + x] =
+              Math.min(...refs.map((r) => contrast(c, r))) >= 1.6 ? 1 : 0;
+          }
+        }
+        const pieces = piecesOf(ink, w, h)
+          .filter((n) => n >= 4)
+          .sort((p, q) => q - p);
+        return [
+          { between: `${i}|${i + 1}`, pieces: pieces.length, sizes: pieces },
+        ];
+      });
+
+      /**
+       * Each tab drawn chosen (`kept`): whether it stands wholly inside
+       * the track and clear of both edges' fades as drawn (each fade cut
+       * short at its cap, TabsList; the phone's start fade runs 1.5 of
+       * its length).
+       */
+      const phone = innerWidth <= 899;
+      const capOf = (name: string) => {
+        const v = Number.parseFloat(track.style.getPropertyValue(name));
+        return Number.isFinite(v) ? v : Number.POSITIVE_INFINITY;
+      };
+      const fadeIn = Math.min(
+        fadeStart * (phone ? 1.5 : 1),
+        capOf("--fade-cap-start")
+      );
+      const fadeOut = Math.min(fadeEnd, capOf("--fade-cap-end"));
+      const clear = kept.map((k) => {
+        const t = tabs[k];
+        return {
+          i: k,
+          label: t.label,
+          clear:
+            t.left >= tr.left + fadeIn - 0.5 &&
+            t.right <= tr.right - fadeOut + 0.5,
+          inFade: {
+            start: r2(Math.max(0, tr.left + fadeIn - t.left)),
+            end: r2(Math.max(0, t.right - (tr.right - fadeOut))),
+          },
+          labelWhole: t.labelScroll <= t.labelClient,
+        };
+      });
+
       return {
+        seamRows,
+        corners,
+        clear,
+        fades: { start: r2(fadeIn), end: r2(fadeOut) },
         track: {
           left: r2(tr.left),
           right: r2(tr.right),
@@ -428,7 +741,7 @@ async function measure(page: Page, region: Box) {
         edges,
       };
     },
-    { src: url, box: region }
+    { src: url, box: region, kept: keep }
   );
   return { shot, numbers };
 }
@@ -485,14 +798,16 @@ for (const view of VIEWS) {
     const page = await context.newPage();
     await open(page, theme, 1);
     const key = `${view.w}-${theme}`;
+    const ids = await page.evaluate(() => window.__ft.ids);
+    const chosen = await page.evaluate(() => window.__ft.chosen());
+    const from = ids.indexOf(chosen ?? ids[0]);
+    const next = ids[from + 1];
     const clipRest = await clipOf(page);
-    const rest = await measure(page, clipRest);
+    const rest = await measure(page, clipRest, [from]);
+    const restSides = await sidesDrawn(page);
     if (view.w === 1440) {
       writeFileSync(join(OUT, `${TAG}-rest-session-${theme}.png`), rest.shot);
     }
-    const ids = await page.evaluate(() => window.__ft.ids);
-    const chosen = await page.evaluate(() => window.__ft.chosen());
-    const next = ids[ids.indexOf(chosen ?? ids[0]) + 1];
     await page.evaluate((id) => window.__ft.choose(id), next);
     await frames(page);
     const paused = await seek(page, 0);
@@ -501,16 +816,22 @@ for (const view of VIEWS) {
       await seek(page, pct / 100);
       await frames(page);
       const clip = await clipOf(page);
-      const frame = await measure(page, clip);
+      // Both tabs are drawn chosen while the switch runs; the one it
+      // leaves no longer once it has landed.
+      const frame = await measure(
+        page,
+        clip,
+        pct < 100 ? [from, from + 1] : [from + 1]
+      );
       const name = `${TAG}-switch-${view.w}-${theme}-${String(pct).padStart(3, "0")}pct.png`;
       writeFileSync(join(OUT, name), frame.shot);
-      switchFrames[pct] = frame.numbers;
+      switchFrames[pct] = { ...frame.numbers, sides: await sidesDrawn(page) };
     }
     // The strip at its start: the first tab chosen, nothing scrolled.
     await open(page, theme, 0);
-    const restFirst = await measure(page, await clipOf(page));
+    const restFirst = await measure(page, await clipOf(page), [0]);
     report[key] = {
-      rest: rest.numbers,
+      rest: { ...rest.numbers, sides: restSides },
       restFirst: restFirst.numbers,
       switch: { from: chosen, to: next, paused, frames: switchFrames },
     };
@@ -524,7 +845,9 @@ writeFileSync(
 );
 
 // The summary: per width and theme, the rest and each switch frame.
-type Numbers = Awaited<ReturnType<typeof measure>>["numbers"];
+type Numbers = Awaited<ReturnType<typeof measure>>["numbers"] & {
+  sides?: Awaited<ReturnType<typeof sidesDrawn>>;
+};
 const line = (label: string, n: Numbers) => {
   const seams = n.edges
     .map((e) =>
@@ -539,7 +862,32 @@ const line = (label: string, n: Numbers) => {
         `${t.i}${t.chosen ? "*" : ""}${t.tone[0]} op${t.rimOpacity} s${t.startShown}/${t.endShown} fill${t.fillVsShelf} cut${t.glowCut} top${t.topVsShelf}/${t.topVsFill} vis${t.visible}${t.labelCut ? " CUT" : ""}`
     )
     .join(" | ");
-  console.log(`  ${label}\n    seams ${seams}\n    tabs  ${tabs}`);
+  const rows = n.seamRows
+    .map(
+      (s) =>
+        `${s.between}:${s.min}-${s.max}w${s.widest}(${s.rowsNotOne}/${s.rows} off)`
+    )
+    .join(" ");
+  const corners = n.corners
+    .map((c) => `${c.between}:${c.pieces}[${c.sizes.join(",")}]`)
+    .join(" ");
+  const clear = n.clear
+    .map(
+      (c) =>
+        `${c.i}:${c.clear ? "clear" : `FADED ${c.inFade.start}/${c.inFade.end}`}${c.labelWhole ? "" : " LABEL-CUT"}`
+    )
+    .join(" ");
+  // Each seam: the pixels its left tab's end side and its right tab's
+  // start side change; one edge is exactly one of the two.
+  const sides = (n.sides ?? [])
+    .map(
+      (s) =>
+        `${s.between}:${s.leftEnd}/${s.rightStart}${(s.leftEnd > 0) === (s.rightStart > 0) ? " BOTH-OR-NONE" : ""}`
+    )
+    .join(" ");
+  console.log(
+    `  ${label}\n    seams ${seams}\n    sides ${sides}\n    rows  ${rows}\n    corner ${corners}\n    chosen ${clear} (fades ${n.fades.start}/${n.fades.end})\n    tabs  ${tabs}`
+  );
 };
 for (const [key, value] of Object.entries(report)) {
   const v = value as {

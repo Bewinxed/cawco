@@ -260,6 +260,10 @@
       (1 - var(--pick)) *
       (1 - var(--lean-lift-now, 0))
     );
+    /* Where a seam is gliding, this tab's side stands in by this much,
+       card and sheet with it (TabsList, `--cut-start`/`--cut-end`). */
+    --cut-s: calc(var(--seam-tuck) * var(--cut-start, 0));
+    --cut-e: calc(var(--seam-tuck) * var(--cut-end, 0));
     /* The chosen tab's name is its strong ink layer (`.label .strong`): the
        muted one under it stays as it was. */
     &.selected {
@@ -299,14 +303,16 @@
         var(--tab-fill, var(--surface-recess-deep))
       );
       clip-path: shape(
-        from 0 100%,
-        line to 0 calc(100% - var(--flare)),
-        line to var(--slope-start) var(--radius),
-        arc to calc(var(--slope-start) + var(--radius)) 0 of var(--radius) cw,
-        line to calc(100% - var(--slope-end) - var(--radius)) 0,
-        arc to calc(100% - var(--slope-end)) var(--radius) of var(--radius) cw,
-        line to 100% calc(100% - var(--flare)),
-        line to 100% 100%,
+        from var(--cut-s) 100%,
+        line to var(--cut-s) calc(100% - var(--flare)),
+        line to calc(var(--cut-s) + var(--slope-start)) var(--radius),
+        arc to calc(var(--cut-s) + var(--slope-start) + var(--radius)) 0 of
+          var(--radius) cw,
+        line to calc(100% - var(--cut-e) - var(--slope-end) - var(--radius)) 0,
+        arc to calc(100% - var(--cut-e) - var(--slope-end)) var(--radius) of
+          var(--radius) cw,
+        line to calc(100% - var(--cut-e)) calc(100% - var(--flare)),
+        line to calc(100% - var(--cut-e)) 100%,
         close
       );
     }
@@ -323,16 +329,28 @@
       background: var(--sheet);
       opacity: var(--pick);
       clip-path: shape(
-        from 0 100%,
-        arc to var(--flare) calc(100% - var(--flare)) of var(--flare) ccw,
-        line to calc(var(--flare) + var(--slope-start)) var(--radius),
-        arc to calc(var(--flare) + var(--slope-start) + var(--radius)) 0 of
-          var(--radius) cw,
-        line to calc(100% - var(--flare) - var(--slope-end) - var(--radius)) 0,
-        arc to calc(100% - var(--flare) - var(--slope-end)) var(--radius) of
-          var(--radius) cw,
-        line to calc(100% - var(--flare)) calc(100% - var(--flare)),
-        arc to 100% 100% of var(--flare) ccw,
+        from var(--cut-s) 100%,
+        arc to calc(var(--cut-s) + var(--flare)) calc(100% - var(--flare)) of
+          var(--flare) ccw,
+        line to calc(var(--cut-s) + var(--flare) + var(--slope-start))
+          var(--radius),
+        arc to
+          calc(var(--cut-s) + var(--flare) + var(--slope-start) + var(--radius))
+          0 of var(--radius) cw,
+        line to
+          calc(
+            100% -
+            var(--cut-e) -
+            var(--flare) -
+            var(--slope-end) -
+            var(--radius)
+          )
+          0,
+        arc to calc(100% - var(--cut-e) - var(--flare) - var(--slope-end))
+          var(--radius) of var(--radius) cw,
+        line to calc(100% - var(--cut-e) - var(--flare))
+          calc(100% - var(--flare)),
+        arc to calc(100% - var(--cut-e)) 100% of var(--flare) ccw,
         close
       );
     }

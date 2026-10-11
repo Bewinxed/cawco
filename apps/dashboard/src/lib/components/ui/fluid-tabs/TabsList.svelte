@@ -12,7 +12,7 @@
    * item is kept in view and a wheel over the track, which has no vertical
    * travel to spend it on, moves it along.
    */
-  import type { Snippet } from "svelte";
+  import { type Snippet, untrack } from "svelte";
   import type { HTMLAttributes } from "svelte/elements";
   import { motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
@@ -120,21 +120,98 @@
     }
     return 1;
   }
-  /** Ranks the stack from each tab's depth now, farthest back lowest. */
-  function rank(track: HTMLElement, items: HTMLElement[], chosen: number) {
+  /**
+   * The stack's ranks for the tabs standing at these depths, farthest back
+   * lowest; ties go to the order the choice ends in (nearer `chosen` on
+   * top).
+   */
+  function ranksBy(
+    items: HTMLElement[],
+    depthOf: (item: HTMLElement, i: number) => number,
+    chosen: number
+  ): Map<HTMLElement, number> {
     const order = items
-      .map((item, i) => ({ item, i, depth: depthNow.get(item) ?? 1 }))
+      .map((item, i) => ({ item, i, depth: depthOf(item, i) }))
       .sort(
         (a, b) =>
           b.depth - a.depth ||
           Math.abs(b.i - Math.max(chosen, 0)) -
             Math.abs(a.i - Math.max(chosen, 0))
       );
-    order.forEach(({ item }, at) => {
-      const z = at + 1;
+    return new Map(order.map(({ item }, at) => [item, at + 1]));
+  }
+  /** Ranks the stack from each tab's depth now. */
+  function rank(track: HTMLElement, items: HTMLElement[], chosen: number) {
+    const ranks = ranksBy(items, (item) => depthNow.get(item) ?? 1, chosen);
+    for (const [item, z] of ranks) {
       if (rankNow.get(item) !== z) {
         rankNow.set(item, z);
         laidOf(item, track).style.setProperty("--z", String(z));
+      }
+    }
+  }
+
+  /* ── Where two tabs meet: one edge, gliding ─────────────────────────
+     Where two folder tabs overlap, the edge that shows is the front
+     tab's: its card covers the other's, and the other's side stands at
+     its own edge under it (a host's outline drawn at each tab's rank,
+     PaneTabs' rims, does the same). On a switch that changes which of
+     the two is in front, the edge glides from where it stood to where it
+     will stand, on the switch's clock: whichever of the two is in front
+     at that frame draws it there, its card and outline standing in from
+     its own edge by `--cut-start`/`--cut-end` (0 to 1 of the overlap
+     less a host's stroke, `--seam-tuck`), and the one behind stands at
+     its own edge. The front changes at equal depth, where the two stand
+     in on the same pixels, so the handover moves nothing (transitions.dev,
+     banner stacking: "the swap happens at identity"). Under a gesture the
+     gesture's fraction is the clock. */
+  /** Each seam's place, keyed by the tab on its left: 0 on that tab's own edge, 1 on its right neighbour's. */
+  const seamAt = new WeakMap<HTMLElement, { right: HTMLElement; q: number }>();
+  /** Each tab's start and end cut as written. */
+  const cutNow = new WeakMap<HTMLElement, string>();
+  /** Where each seam rests for a ranking: on the edge of the tab in front. */
+  const seamsAtRest = (items: HTMLElement[], ranks: Map<HTMLElement, number>) =>
+    items
+      .slice(0, -1)
+      .map((left, i) =>
+        (ranks.get(left) ?? 0) > (ranks.get(items[i + 1]) ?? 0) ? 0 : 1
+      );
+  /** Where each seam stands now, or rests for `ranks` when it is a new one. */
+  const seamsNow = (items: HTMLElement[], ranks: Map<HTMLElement, number>) => {
+    const atRest = seamsAtRest(items, ranks);
+    return items.slice(0, -1).map((left, i) => {
+      const seam = seamAt.get(left);
+      return seam?.right === items[i + 1] ? seam.q : atRest[i];
+    });
+  };
+  /** Places every seam `f` of the way from `from` to `to`, drawn by the tab in front now. */
+  function placeSeams(
+    track: HTMLElement,
+    items: HTMLElement[],
+    from: number[],
+    to: number[],
+    f: number
+  ) {
+    const cuts = items.map(() => [0, 0]);
+    for (let i = 0; i < items.length - 1; i += 1) {
+      const left = items[i];
+      const right = items[i + 1];
+      const q = from[i] + (to[i] - from[i]) * f;
+      seamAt.set(left, { right, q });
+      if ((rankNow.get(left) ?? 0) > (rankNow.get(right) ?? 0)) {
+        cuts[i][1] = q;
+      } else {
+        cuts[i + 1][0] = 1 - q;
+      }
+    }
+    items.forEach((item, i) => {
+      const [start, end] = cuts[i];
+      const key = `${start} ${end}`;
+      if (cutNow.get(item) !== key) {
+        cutNow.set(item, key);
+        const laid = laidOf(item, track);
+        laid.style.setProperty("--cut-start", String(start));
+        laid.style.setProperty("--cut-end", String(end));
       }
     });
   }
@@ -157,17 +234,38 @@
       return 1 - pick;
     };
     if (travel) {
+      // The seams glide by the gesture's fraction, from where they rest
+      // with the choice where it is to where they would with it landed.
+      const at = (pick: number) => (_: HTMLElement, i: number) =>
+        i === pick ? 0 : 1;
+      const restFrom = seamsAtRest(items, ranksBy(items, at(chosen), chosen));
+      const restTo =
+        toward >= 0
+          ? seamsAtRest(items, ranksBy(items, at(toward), toward))
+          : restFrom;
       for (const [i, item] of items.entries()) {
         depthNow.set(item, target(i));
       }
       rank(track, items, toward >= 0 && f > 0.5 ? toward : chosen);
+      placeSeams(track, items, restFrom, restTo, f);
       return;
     }
     const from = items.map((item, i) => depthNow.get(item) ?? target(i));
+    // Where the seams stand before the switch moves anything: read before
+    // the stack is ranked for it.
+    const seamsFrom = seamsNow(
+      items,
+      ranksBy(items, (item, i) => from[i], chosen)
+    );
+    const seamsTo = seamsAtRest(
+      items,
+      ranksBy(items, (_, i) => target(i), chosen)
+    );
     for (const [i, item] of items.entries()) {
       depthNow.set(item, from[i]);
     }
     rank(track, items, chosen);
+    placeSeams(track, items, seamsFrom, seamsTo, 0);
     // Read in the next frame's callbacks, where the frame lays the page out
     // anyway, once the switch's transitions have started.
     let frame = requestAnimationFrame(function step() {
@@ -176,8 +274,12 @@
         depthNow.set(item, from[i] + (target(i) - from[i]) * p);
       });
       rank(track, items, chosen);
+      placeSeams(track, items, seamsFrom, seamsTo, p);
       if (p < 1) {
         frame = requestAnimationFrame(step);
+      } else {
+        outgoing = null;
+        capFades();
       }
     });
     return () => cancelAnimationFrame(frame);
@@ -316,12 +418,19 @@
         );
       } else {
         rideFrom = null;
-        to = inView(at, rect, width, room);
+        to = inView(
+          at,
+          rect,
+          width,
+          room,
+          outgoing === null ? undefined : rects.at(outgoing)
+        );
       }
       if (Math.abs(to - at) > 0.5) {
         stopGlide();
         track.scrollLeft = to;
       }
+      capFades();
     };
     placeFrame ??= requestAnimationFrame(() => {
       placeFrame = null;
@@ -349,14 +458,81 @@
     at: number,
     chosen: { left: number; width: number },
     width: number,
-    room: { end: number; start: number }
+    room: { end: number; start: number },
+    keep?: { left: number; width: number }
   ): number {
-    const least = chosen.left + chosen.width + room.end - width;
-    const most = chosen.left - room.start;
-    return Math.max(
-      0,
-      least > most ? most : Math.min(most, Math.max(least, at))
-    );
+    const fit = (r: { end: number; start: number }) => {
+      const least = chosen.left + chosen.width + r.end - width;
+      const most = chosen.left - r.start;
+      return Math.max(
+        0,
+        least > most ? most : Math.min(most, Math.max(least, at))
+      );
+    };
+    const roomy = fit(room);
+    /* While a switch runs, the tab it leaves is still drawn chosen: it
+       stays whole too, the edges' fades standing aside for both
+       (`capFades`), when the two fit the track together. Where they do
+       not, the tab being chosen is the one shown whole. */
+    const whole = (s: number, r: { left: number; width: number }) =>
+      r.left >= s - 0.5 && r.left + r.width <= s + width + 0.5;
+    if (!keep || whole(roomy, keep)) {
+      return roomy;
+    }
+    const least = Math.max(chosen.left + chosen.width, keep.left + keep.width);
+    const most = Math.min(chosen.left, keep.left);
+    if (least - width > most) {
+      return fit({ start: 0, end: 0 });
+    }
+    return Math.max(0, Math.min(most, Math.max(least - width, at)));
+  }
+
+  /**
+   * The tab a switch is leaving, until the switch lands: it is still drawn
+   * chosen, so the strip keeps it whole and its edges do not fade it.
+   */
+  let outgoing: number | null = null;
+  let lastChosen: number | null = null;
+  $effect.pre(() => {
+    const now = list.optimisticIndex;
+    untrack(() => {
+      if (lastChosen !== null && now !== null && now !== lastChosen) {
+        outgoing = lastChosen;
+      }
+      lastChosen = now;
+    });
+  });
+  /**
+   * A scrolling track's edge fades never lie over a tab drawn chosen (the
+   * chosen tab, and the one a switch is leaving): each edge's fade is cut
+   * short at the nearest of them (`--fade-cap-start`, `--fade-cap-end`,
+   * read by the fade's mask). Kept as the track scrolls.
+   */
+  function capFades() {
+    const track = node;
+    if (!(scrollable && track)) {
+      return;
+    }
+    const at = track.scrollLeft;
+    const { width } = rects.viewport;
+    let start = Number.POSITIVE_INFINITY;
+    let end = Number.POSITIVE_INFINITY;
+    for (const i of [list.optimisticIndex, outgoing]) {
+      const r = i === null ? undefined : rects.at(i);
+      if (r) {
+        start = Math.min(start, r.left - at);
+        end = Math.min(end, at + width - (r.left + r.width));
+      }
+    }
+    const write = (name: string, value: number) => {
+      if (Number.isFinite(value)) {
+        track.style.setProperty(name, `${Math.max(0, value)}px`);
+      } else {
+        track.style.removeProperty(name);
+      }
+    };
+    write("--fade-cap-start", start);
+    write("--fade-cap-end", end);
   }
 
   /**
@@ -440,6 +616,15 @@
     // track overflows (its tabs' measured boxes and its viewport say when),
     // so a track with nothing to scroll never holds a wheel for the main
     // thread to answer before the page scrolls.
+    // The fades' caps follow the track as it scrolls, once a frame.
+    let capFrame = 0;
+    const onscroll = () => {
+      capFrame ||= requestAnimationFrame(() => {
+        capFrame = 0;
+        capFades();
+      });
+    };
+    el.addEventListener("scroll", onscroll, { passive: true });
     const stopListening = $effect.root(() => {
       $effect(() => {
         if (!overflows) {
@@ -454,6 +639,8 @@
       destroy() {
         stop();
         stopListening();
+        cancelAnimationFrame(capFrame);
+        el.removeEventListener("scroll", onscroll);
       },
     };
   }
@@ -614,6 +801,10 @@
     --lean-lift: 0.6;
     --slope-start: 1px;
     --slope-end: 0px;
+    /* How far a tab's side stands in at most where it draws a seam that
+       is gliding (`--cut-start`, `--cut-end`, the script above): the
+       overlap, less the stroke a host draws on the outline (PaneTabs). */
+    --seam-tuck: calc(var(--overlap) - var(--seam-stroke, 0px));
     --choose-dur: var(--dur-settle);
     --choose-ease: var(--ease-crossfade);
   }
