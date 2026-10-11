@@ -43,6 +43,7 @@ import {
 } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { type Browser, chromium, type Page } from "playwright-core";
+import { CLAUDE_JSON_NAME } from "../packages/core/src/claude-dirs";
 import {
   ACCOUNT,
   MACHINE,
@@ -167,7 +168,7 @@ async function claudeAccount(home: string, id: string, email: string) {
     })
   );
   await writeFile(
-    join(dir, ".claude.json"),
+    join(dir, CLAUDE_JSON_NAME),
     JSON.stringify({
       hasCompletedOnboarding: true,
       oauthAccount: {
