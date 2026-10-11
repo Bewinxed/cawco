@@ -42,6 +42,8 @@ const STALE_MS = HOUR_MS;
 export type Part =
   | string
   | { strong: string }
+  /** A measured figure among the words: set in the mono figure face. */
+  | { figure: string }
   | { account: string; color: string };
 
 /** One window as a ring draws it: the share left, and its clock. */
@@ -557,7 +559,10 @@ export const plain = (parts: Part[]): string =>
       if (typeof part === "string") {
         return part;
       }
-      return "strong" in part ? part.strong : part.account;
+      if ("strong" in part) {
+        return part.strong;
+      }
+      return "figure" in part ? part.figure : part.account;
     })
     .join("");
 
@@ -590,10 +595,15 @@ export function caption(
     return ["then ", named(c.next, nameOf(c.next))];
   }
   if (c.stopAt !== null && c.backAt !== null) {
-    return ["back in ", strong(fmt(c.backAt - now))];
+    return ["back in ", { figure: fmt(c.backAt - now) }];
   }
   if (c.carry?.w5) {
-    return [named(c.carry, nameOf(c.carry)), ` ${c.carry.w5.left}% left`];
+    return [
+      named(c.carry, nameOf(c.carry)),
+      " ",
+      { figure: `${c.carry.w5.left}%` },
+      " left",
+    ];
   }
   return [];
 }

@@ -1,7 +1,8 @@
 <script lang="ts">
   /**
    * A Rings sentence, typeset: plain words in the line's own ink, emphasis
-   * at weight 500 in the strongest ink, an account's name led by its dot.
+   * at weight 500 in the strongest ink (a measured figure in the mono
+   * figure face), an account's name led by its dot.
    * New words from a new reading cross-fade in (motion/curves crossIn); the
    * minute moving on changes them in place.
    */
@@ -25,6 +26,8 @@
         {part}
       {:else if "strong" in part}
         <b>{part.strong}</b>
+      {:else if "figure" in part}
+        <b class="mono-figure">{part.figure}</b>
       {:else}
         <span class="dot" style:--c={part.color}></span><b>{part.account}</b>
       {/if}

@@ -51,7 +51,6 @@
     cellTime,
     delegateTip,
     dialTip,
-    openCodeStop,
     orgGroups,
     plain,
     type RingAccount,
@@ -387,8 +386,17 @@
     ].filter((note) => note.text !== null && !(gap && note.id === "Claude"))
   );
 
-  const weekUsed = (ring: RingAccount) =>
-    ring.week ? `week ${100 - ring.week.left}%` : "";
+  /** The Go plan's time and week in the strip, as its popover cell says them. */
+  const goTime = $derived.by(() => {
+    if (!openCode) {
+      return null;
+    }
+    const time = cellTime(openCode, null, now);
+    return time.kind === "stop" && time.guess
+      ? { ...time, figure: `~${time.figure}` }
+      : time;
+  });
+  const goWeek = $derived(openCode ? weekLeft(openCode) : null);
 
   /** The strip read out: what its one control is called. */
   const triggerLabel = $derived.by(() => {
@@ -398,13 +406,11 @@
     const said: string[] = [];
     if (claude) {
       said.push(
-        `Claude: ${stopText(claude, now)} until you're stopped, ${plain(caption(claude, now, nameOf))}`
+        `Claude · ${stopText(claude, now)} until no account can start a session · ${plain(caption(claude, now, nameOf))}`
       );
     }
     if (openCode) {
-      said.push(
-        `opencode Go: ${openCodeStop(openCode, now)}, ${weekUsed(openCode)}`
-      );
+      said.push(cellLabel(openCode, null, "opencode Go"));
     }
     return `${said.join(". ")}. Show every limit.`;
   });
@@ -486,11 +492,22 @@
           <span class="l1">
             <span aria-hidden="true" class="mark"><OpenCodeLogo /></span>
             <Rings reveal ring={openCode} size={16} />
-            <span class="digits"
-              ><Figure text={openCodeStop(openCode, now)} /></span
+            <!-- As its popover cell says it: how long it lasts, or at its
+                 limit the refresh mark and when it's back. -->
+            {#if goTime?.kind === "back"}
+              <span aria-hidden="true" class="strip-glyph"
+                ><IconRefresh /></span
+              >
+            {/if}
+            <span class="digits" data-strip-go-time
+              ><Figure text={goTime?.figure ?? ""} /></span
             >
           </span>
-          <span class="cap">{weekUsed(openCode)}</span>
+          {#if goWeek !== null}
+            <span class="cap" data-strip-go-week
+              ><WeekMark /><span class="mono-figure">{goWeek}%</span></span
+            >
+          {/if}
         </span>
       {/if}
     </span>
@@ -999,6 +1016,17 @@
   }
   .digits.muted {
     color: var(--ink-muted);
+  }
+  /* The Go plan's refresh mark at its limit: 12px, Solar duotone, muted. */
+  .strip-glyph {
+    display: inline-grid;
+    flex: none;
+    color: var(--ink-muted);
+
+    & :global(svg) {
+      inline-size: 12px;
+      block-size: 12px;
+    }
   }
   /* One line. Its whole width is what the cell asks for, but it may break
      anywhere, so it never holds the cell wider than the marks and digits:
