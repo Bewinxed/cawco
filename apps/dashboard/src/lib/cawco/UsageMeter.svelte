@@ -26,11 +26,10 @@
   import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Drawer from "#lib/components/ui/drawer/index.js";
-  import { EmptyState } from "#lib/components/ui/empty/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "#lib/components/ui/popover/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
-  import { IconKey, IconRefresh, IconUsage } from "#lib/icons.js";
+  import { IconKey, IconRefresh } from "#lib/icons.js";
   import { cn } from "#lib/utils.js";
   import ClaudeIcon from "~icons/logos/claude-icon";
   import AccountName from "./accounts/AccountName.svelte";
@@ -120,9 +119,9 @@
   );
 
   /**
-   * No limit can be shown once everything is read: the strip is the empty
-   * state (DESIGN.md "Empty"), what is missing, why, and the one action that
-   * fixes it, in the Usage page's words (usage.ts `claudeGap`).
+   * No limit can be shown once everything is read: the strip says so in one
+   * line (`short`), and its popover says why and the one action that fixes
+   * it, in the Usage page's words (usage.ts `claudeGap`).
    */
   const gap = $derived(
     !shown && cawco.usageLimitsRead && usage.read
@@ -183,7 +182,7 @@
           Object.values(cawco.openCodeGoLimits)
         ),
       },
-    ].filter((note) => note.text !== null)
+    ].filter((note) => note.text !== null && !(gap && note.id === "Claude"))
   );
 
   const weekUsed = (ring: RingAccount) =>
@@ -192,7 +191,7 @@
   /** The strip read out: what its one control is called. */
   const triggerLabel = $derived.by(() => {
     if (!shown) {
-      return `${empty}. Show every limit.`;
+      return `${gap?.short ?? empty}. Show every limit.`;
     }
     const said: string[] = [];
     if (claude) {
@@ -235,7 +234,7 @@
 
 {#snippet face()}
   {#if !shown}
-    <span class="noline">{empty}</span>
+    <span class="noline">{gap?.short ?? empty}</span>
   {:else}
     <span class="cells">
       {#if claude}
@@ -373,7 +372,7 @@
        between them scroll; in the sheet the whole body scrolls under the
        sheet's header. -->
   <div class={["pop-body", sheet && "kit-sheet-scroll"]} {@attach morph()}>
-    {#if !shown && notes.length === 0}
+    {#if !(shown || gap) && notes.length === 0}
       <p class="pop-empty">{empty}</p>
     {/if}
     {#if claude}
@@ -434,6 +433,25 @@
           </div>
         </section>
       {/if}
+      {#if gap}
+        <!-- Claude's gap: the whole why the strip's line stands for, and
+             the sign-in that fixes it when one does. -->
+        <div class="pop-empty pop-gap">
+          <p class="pop-note">
+            <span aria-hidden="true" class="mark"><ClaudeIcon /></span>
+            {gap.reason}
+          </p>
+          {#if gap.signIn}
+            <Button
+              href="/config/accounts"
+              icon={IconKey}
+              label="Sign in an account"
+              size="xs"
+              variant="outline"
+            />
+          {/if}
+        </div>
+      {/if}
       {#each notes as note (note.id)}
         {@const Mark = note.mark}
         <!-- A provider with nothing to draw: why, and what to do about it. -->
@@ -449,32 +467,8 @@
   </div>
 {/snippet}
 
-<div class="strip" data-variant={variant} class:gap={gap !== null}>
-  {#if gap}
-    <EmptyState icon={IconUsage} inline line={gap.reason} title="No limits">
-      {#snippet action()}
-        {#if gap.signIn}
-          <Button
-            href="/config/accounts"
-            icon={IconKey}
-            label="Sign in an account"
-            size="xs"
-            variant="outline"
-          />
-        {:else}
-          <!-- A text link: no box to pad, so its words start where the
-               strip's mark does when it wraps under the line. -->
-          <Button
-            class="px-0"
-            href="/usage"
-            label="Open Usage"
-            size="xs"
-            variant="link"
-          />
-        {/if}
-      {/snippet}
-    </EmptyState>
-  {:else if touch.current}
+<div class="strip" data-variant={variant}>
+  {#if touch.current}
     <!-- On touch every account rises in the house sheet, as a tab's details
          and a peek do; with a fine pointer it is a popover by the strip. -->
     <Drawer.Root bind:open>
@@ -531,13 +525,6 @@
   .strip[data-variant="home"] {
     --strip-ground: var(--surface-raised);
     border-radius: var(--radius-md);
-  }
-  /* Empty: the claim stands in the strip's height, its padding the row's. */
-  .strip.gap {
-    display: flex;
-    align-items: center;
-    min-block-size: 44px;
-    padding: var(--space-1) var(--space-2);
   }
   /* One control, one height whatever it says. */
   :global(.strip-hit) {
@@ -748,8 +735,15 @@
     gap: 6px;
     padding: 8px 10px;
   }
+  .pop-gap {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2);
+  }
   .group + .group,
   .group + .pop-note,
+  .pop-gap + .pop-note,
   .pop-note + .pop-note {
     border-block-start: 1px solid var(--border-hairline);
   }

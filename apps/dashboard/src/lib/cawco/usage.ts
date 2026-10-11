@@ -361,7 +361,10 @@ export const planName = (subscription: string | null): string | null =>
  */
 export interface LimitsGap {
   machine: AgentRow | null;
+  /** The whole why: the Limits block and the strip's popover say it. */
   reason: string;
+  /** What the rail's strip says in its one line; the popover says the why. */
+  short: string;
   signIn: boolean;
 }
 export function claudeGap(
@@ -373,6 +376,7 @@ export function claudeGap(
     return {
       machine: null,
       reason: "No machine has reported a Claude reading yet.",
+      short: "No limits yet",
       signIn: false,
     };
   }
@@ -385,6 +389,7 @@ export function claudeGap(
     return {
       machine,
       reason: `${host} is offline. Its Claude limits are read again once it's back.`,
+      short: "Machine offline",
       signIn: false,
     };
   }
@@ -392,12 +397,14 @@ export function claudeGap(
     return {
       machine,
       reason: `No Claude account is signed in on ${host}.`,
+      short: "Sign in to see limits",
       signIn: true,
     };
   }
   return {
     machine,
     reason: `Claude Code hasn't reported the limits of ${host}'s account yet; they appear once a session runs there.`,
+    short: "No limits yet",
     signIn: false,
   };
 }
