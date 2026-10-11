@@ -12,6 +12,11 @@ import UserNotifications
 ///   kept hub (`probeRegister`), so the hub seals its pushes for this simulator.
 /// - `-push-probe-list`: logs every delivered notification, its category and
 ///   that category's actions.
+/// - `-push-probe-open <notification id>`: the Notification Service
+///   Extension's opening (CawCoPush `PushOpening`) on that delivered push,
+///   its category registered and the opened push put back in its place, as
+///   iOS does with the extension on a device; then lists. A simulator never
+///   runs the extension for a `simctl push`.
 /// - `-push-probe-act <notification id> <action> [<text>]`: runs the action
 ///   on that delivered notification through `PushActions.perform`, the entry
 ///   the notification centre's delegate calls with a response, then lists.
@@ -31,6 +36,10 @@ public enum PushProbe {
         }
         if args.contains("-push-probe-list") {
             Task { await list("listed") }
+        }
+        if let at = args.firstIndex(of: "-push-probe-open"), args.count > at + 1 {
+            let id = args[at + 1]
+            Task { await open(id) }
         }
         if let at = args.firstIndex(of: "-push-probe-act"), args.count > at + 2 {
             let id = args[at + 1]
@@ -132,6 +141,20 @@ public enum PushProbe {
             log.notice("probe \(label, privacy: .public) \(note.identifier, privacy: .public) category=\(note.category, privacy: .public) actions=[\(actions, privacy: .public)] kind=\(note.fields["kind"] ?? "", privacy: .public) request=\(note.fields["requestId"] ?? "", privacy: .public) title=\(note.title, privacy: .public) body=\(note.body, privacy: .public)")
         }
         log.notice("probe \(label, privacy: .public) done: \(delivered.count) delivered, \(categories.count) categories")
+    }
+
+    /// The extension's opening, run on a delivered push from the app
+    /// (`NotificationCentre.openDelivered`), then the list. It waits out the
+    /// app's own category install at launch first: that one prunes question
+    /// categories no delivered push names, and the push names its own only
+    /// once it is put back opened.
+    private static func open(_ id: String) async {
+        try? await Task.sleep(for: .seconds(3))
+        let verdict = await NotificationCentre.openDelivered(id)
+        log.notice("probe opened \(id, privacy: .public): \(verdict, privacy: .public)")
+        // The push put back lands through `willPresent` first, as `act`'s notice does.
+        try? await Task.sleep(for: .seconds(2))
+        await list("listed")
     }
 
     private static func act(_ id: String, action: String, text: String?) async {

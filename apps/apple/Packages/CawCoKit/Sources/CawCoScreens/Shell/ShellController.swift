@@ -656,6 +656,11 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     /// push for it (push.ts `turnEnded`); a working one is never marked ahead
     /// of its end, and nothing is sent twice.
     private func lookAtFront() {
+        // A group's tabs and the one in front change in place (PaneLeaf is a
+        // plain class); `version` is the workspace's only observed mark of
+        // an open, a switch or a close. Without it this read woke for none
+        // of them, so a conversation opened in front was never marked.
+        _ = workspace.version
         let tabs = workspace.leaves.compactMap(\.active)
         // One the shell picked that has left the front was switched away
         // from: it never puts one back, so in front again it is the owner's doing.

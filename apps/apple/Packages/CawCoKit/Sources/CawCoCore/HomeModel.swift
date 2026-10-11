@@ -1,6 +1,7 @@
 import CawCoAPI
 import Foundation
 import Observation
+import OSLog
 
 /// What the home says, as the web's home model says it
 /// (apps/dashboard/src/lib/cawco/home/home-state.svelte.ts and WorkTabs.svelte):
@@ -390,13 +391,17 @@ public final class HomeModel {
         for id in ids {
             seenHere[id] = at
         }
+        let said = "\(kind.rawValue) \(ids.joined(separator: ","))"
         Task { [weak self] in
             guard let self else {
                 return
             }
+            let log = Logger(subsystem: "dev.cawco.app", category: "Seen")
             do {
                 try await hub.markSeen(ids, kind: kind)
+                log.notice("seen \(said, privacy: .public): marked")
             } catch {
+                log.error("seen \(said, privacy: .public): not marked: \(String(describing: error), privacy: .public)")
                 for id in ids where seenHere[id] == at {
                     seenHere[id] = nil
                 }
