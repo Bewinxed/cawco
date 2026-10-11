@@ -743,6 +743,14 @@ export const instances = sqliteTable("instances", {
    */
   seenAt: timestamp("seen_at"),
   /**
+   * When the session's latest turn ended, on the hub's clock: the moment
+   * the hub took the turn's `result` (server.ts, the `endedAt` a turn's push
+   * waits from). Read against `seenAt`, also the hub's, it decides "ended
+   * since the owner last looked" on every device without reading a device's
+   * or a machine's clock. Null on one whose turn never ended.
+   */
+  turnEndedAt: timestamp("turn_ended_at"),
+  /**
    * `scratch`: a spin-off (NEW.md §1), shown apart from mainline work.
    * `summariser`: a continuation's internal worker, never on the board.
    */

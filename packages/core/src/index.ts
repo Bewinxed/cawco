@@ -905,6 +905,12 @@ export interface InstanceRow {
    * session's own `set_title` cannot replace) or `agent`. Null while nobody has.
    */
   titleSource?: "owner" | "agent" | null;
+  /**
+   * When its latest turn ended, on the hub's clock, as `seenAt` is: the
+   * two together say whether it ended since the owner last looked. Null on
+   * one whose turn never ended.
+   */
+  turnEndedAt?: string | number | Date | null;
   /** When the row last moved. */
   updatedAt?: string | number | Date | null;
   workflowRunId?: string | null;

@@ -21035,6 +21035,13 @@ export const createServer = (
                   }
                   const turnId = message.instanceId;
                   const endedAt = new Date();
+                  // The end on the hub's clock, on the row every screen reads:
+                  // against `seenAt`, also the hub's, it says "ended since the
+                  // owner last looked" without any device's clock.
+                  if (row) {
+                    db.noteTurnEnded(turnId, endedAt);
+                    publishInstances(row.machineId);
+                  }
                   // Every turn of a work item's session counts against its
                   // budget, whatever answers it; one at the limit stops it.
                   if (row?.workItemId) {

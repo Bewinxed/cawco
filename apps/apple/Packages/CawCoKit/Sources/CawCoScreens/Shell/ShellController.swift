@@ -619,8 +619,14 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
 
     /// The bar carries the tabs only where the conversations are the page in
     /// front on a wide screen (Shell.svelte `hostedLeaf`: on a session page).
+    /// Called wherever the page in front changes (a place, a width, the
+    /// conversations shown or put away), so what the owner now sees is looked
+    /// at too: back on the conversations from another place, the one in front
+    /// is marked, which no workspace change says. Off this turn, so the
+    /// watcher whose read called it never takes on the look's reads.
     private func hostTabs() {
         workspaceController.hosting = !compact && destination == .fleet && detail.shown === workspaceController
+        DispatchQueue.main.async { [weak self] in self?.lookAtFront() }
     }
 
     /// A wide screen never shows an empty detail if anything can be opened:
