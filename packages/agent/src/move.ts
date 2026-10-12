@@ -237,6 +237,8 @@ const hubEnv = (
       // git-lfs asks a server about locks before a push and writes what it
       // hears into the repository's config; the hub has no locks.
       [`lfs.${hubRepo(projectId)}/info/lfs.locksverify`, "false"],
+      // Its access mode as given (see hubGitEnv): nothing left to write.
+      [`lfs.${hubRepo(projectId)}/info/lfs.access`, "basic"],
       ...extra,
     ]),
   } as Record<string, string>;
@@ -247,6 +249,17 @@ const hubEnv = (
  * repositories with this machine's credential, env-only as {@link hubEnv}
  * is: a workspace's clone and fetches, and a workspace's own fetch and push
  * run on the host (`hub-git.ts`). LFS's lock checks off: the hub has none.
+ *
+ * And LFS's access mode for the hub given as `basic`, the hub's realm: a
+ * 401 from the hub's LFS (a credential it turned down) otherwise has git-lfs
+ * upgrade the mode from `none` and persist `lfs.<url>.access` into the
+ * clone's own config by lock-and-rename (lfsapi/auth.go `doWithAuth`: "if
+ * newAccess.Mode() != access.Mode() { c.Endpoints.SetAccess(newAccess) }",
+ * and `SetAccess` is `gitConfig.SetLocal`). The rename drops a workspace
+ * sandbox's read-only bind on `.git/config`, which stops the sandbox, and the
+ * key is one `repositoryConfigProblem` refuses. git-lfs reads the mode from
+ * all of git's config (`fetchGitAccess`), so one given here leaves it
+ * nothing to write.
  */
 export const hubGitEnv = (
   extra: [string, string][] = []
@@ -260,6 +273,7 @@ export const hubGitEnv = (
         `Authorization: Basic ${basicOf()}`,
       ],
       [`lfs.${hubGitPrefix()}.locksverify`, "false"],
+      [`lfs.${hubGitPrefix()}.access`, "basic"],
       ...extra,
     ]),
   }) as Record<string, string>;
