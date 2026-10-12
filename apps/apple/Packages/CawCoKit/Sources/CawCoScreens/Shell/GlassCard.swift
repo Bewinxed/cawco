@@ -193,8 +193,11 @@ final class GlassCard: UIView, UIGestureRecognizerDelegate {
     private func placement(of content: GlassContent, in host: UIView, under glass: GlassCapsule) -> Placement {
         let cap = Self.restingBox(of: glass, under: head, in: host)
         let compact = host.traitCollection.horizontalSizeClass == .compact
+        // On a phone "its leading side keeps the 12px margin" (DESIGN.md,
+        // "Caw's panel."), whatever the content's own widest: a 380pt panel
+        // on a 402pt screen stood 22pt in.
         let width = compact
-            ? min(content.widest, cap.maxX - Self.phoneMargin)
+            ? cap.maxX - Self.phoneMargin
             : min(content.widest, cap.maxX - Self.edge)
         let x = cap.maxX - width
         let top = cap.maxY + glass.neck

@@ -796,7 +796,11 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             say(String(format: "\(label) at %.2f: card w %.1f h %.1f trailing %.2f glass flank %.2f flush %@ top %.2f glass foot %.2f on foot %@ revealed %.2f",
                        fraction, drawn.width, drawn.height, drawn.maxX, cap.maxX, abs(drawn.maxX - cap.maxX) <= 1 ? "true" : "false",
                        drawn.minY, foot, abs(drawn.minY - foot) <= 1 ? "true" : "false", card.card.revealed))
-            if fraction == 0.5 { snap("\(label)-50") }
+            if fraction == 0.5 {
+                snap("\(label)-50")
+                // Held a while longer, so a capture from outside the app (the system's status bar with it) can be taken.
+                try? await Task.sleep(for: .seconds(2))
+            }
         }
         let held = layer.timeOffset
         layer.speed = 1
