@@ -17,7 +17,7 @@
  *    to its next, the switch caught on the clock and read at 0, 25, 50, 75
  *    and 100%, the band's top row within ΔE 1 of the sheet in every frame.
  */
-import { Clock } from "../../anim";
+import { Clock, overlay } from "../../anim";
 import { capture, colours, deltaE, type Raster, type Rgb } from "../../ink";
 import {
   frames,
@@ -177,15 +177,17 @@ async function read(kit: Kit, view: View, theme: (typeof THEMES)[number]) {
   // The ramp over a flat ground.
   await scrollTo(Math.round(L0.tr.max / 2));
   L = await page.evaluate(layout);
-  await page.evaluate(() => {
-    const ht = (window as unknown as { __ht: { chosen: () => string } }).__ht;
-    const pane = `[data-pane="${ht.chosen()}"] .tr`;
-    const style = document.createElement("style");
-    style.id = "kit-ground";
-    style.textContent = `${pane} { background: var(--ink-strong) !important; } ${pane} * { visibility: hidden !important; }`;
-    document.head.append(style);
-  });
-  await frames(page);
+  const pane = `[data-pane="${L.chosen}"] .tr`;
+  await overlay(page, [
+    {
+      selector: pane,
+      style: {
+        "background-color": "var(--ink-strong)",
+        "background-image": "none",
+      },
+    },
+    { selector: `${pane} *`, style: { visibility: "hidden" } },
+  ]);
   await page.waitForTimeout(80);
   const col: Raster = await capture(page, {
     x: L.tr.x + L.tr.w / 2,
@@ -193,7 +195,7 @@ async function read(kit: Kit, view: View, theme: (typeof THEMES)[number]) {
     width: 1,
     height: L.band.h,
   });
-  await page.evaluate(() => document.getElementById("kit-ground")?.remove());
+  await overlay(page, []);
   const ramp: number[] = [];
   for (let y = col.height - 1; y >= 0; y -= 1) {
     const k = y * col.width * 4;

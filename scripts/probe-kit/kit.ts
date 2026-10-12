@@ -340,24 +340,45 @@ export async function open(
 
 /** Waits until every finite animation on the page has landed. */
 export async function settle(page: Page, ms = 150): Promise<void> {
-  // At most 10s: a run that never lands is the spec's to find, not a stall.
-  await page.evaluate(() =>
-    Promise.race([
+  // A finite run still going after 10s will not land (a timeline held
+  // still): named, as a failure, never waited on for ever.
+  const stuck = await page.evaluate(() => {
+    const running = document
+      .getAnimations()
+      .filter(
+        (run) =>
+          run.playState === "running" &&
+          Number.isFinite(Number(run.effect?.getComputedTiming().endTime ?? 0))
+      );
+    return Promise.race([
       Promise.all(
-        document
-          .getAnimations()
-          .filter(
-            (run) =>
-              run.playState === "running" &&
-              Number.isFinite(
-                Number(run.effect?.getComputedTiming().endTime ?? 0)
-              )
-          )
-          .map((run) => run.finished.catch(() => undefined))
+        running.map((run) => run.finished.catch(() => undefined))
+      ).then(() => [] as string[]),
+      new Promise<string[]>((done) =>
+        setTimeout(
+          () =>
+            done(
+              running
+                .filter((run) => run.playState === "running")
+                .map((run) => {
+                  const target = (run.effect as KeyframeEffect | null)?.target;
+                  const what =
+                    run instanceof CSSTransition
+                      ? `transition ${run.transitionProperty}`
+                      : `${run.constructor.name} ${run.id}`;
+                  return `${what} on ${target?.tagName.toLowerCase()}.${String(target?.className).split(" ")[0]}`;
+                })
+            ),
+          10_000
+        )
       ),
-      new Promise((done) => setTimeout(done, 10_000)),
-    ])
-  );
+    ]);
+  });
+  if (stuck.length > 0) {
+    throw new Error(
+      `animations never landed within 10s: ${stuck.slice(0, 6).join("; ")}`
+    );
+  }
   await page.waitForTimeout(ms);
 }
 

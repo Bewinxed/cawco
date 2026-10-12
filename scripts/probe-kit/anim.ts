@@ -13,6 +13,12 @@
  * (TabsList reads its sheet's transition progress each frame and follows),
  * so what a host draws from them is read on the same frame.
  *
+ * A reading that needs the page drawn another way (a glow off, a layer
+ * hidden, a piece drawn whole) lays it on with `overlay`, never a style
+ * rule: a rule changes the after-change value of what it touches, and where
+ * a transition is running on that property the engine cancels it and starts
+ * another (CSS Transitions), so the clock loses a run it had caught.
+ *
  * chromedevtools.github.io/devtools-protocol/tot/Animation
  */
 import type { CDPSession, Page } from "playwright-core";
@@ -239,4 +245,99 @@ export function oneClock(
     );
     return { faults, runs: all.length };
   }, selectors);
+}
+
+/** A way of drawing what `selector` names: CSS properties and values. */
+export interface Look {
+  selector: string;
+  style: Record<string, string>;
+}
+
+/**
+ * Draws the page with `looks` laid over it for a reading, replacing any
+ * overlay before it; `[]` takes the overlay away and gives the page back as
+ * it was, every caught run where it stood.
+ *
+ * Each look is a paused Web Animation on each element it names, its one
+ * value held (`fill: both`). An animation's values never start, retarget or
+ * cancel a CSS transition, as a rule's would; but a running transition
+ * outranks an animation in the cascade, so where one runs on a property a
+ * look sets, its effect is held aside (`effect = null`) while the look
+ * stands and put back after, its time untouched. Throws where a look did not
+ * take (an author `!important` outranks an animation), naming the element
+ * and the property: a reading is never taken off a page drawn otherwise
+ * than asked.
+ */
+export async function overlay(page: Page, looks: Look[]): Promise<void> {
+  const misses = await page.evaluate((list) => {
+    interface Held {
+      effect: AnimationEffect | null;
+      run: Animation;
+    }
+    const w = window as unknown as {
+      __kitLook?: { held: Held[]; over: Animation[] };
+    };
+    if (w.__kitLook) {
+      for (const run of w.__kitLook.over) {
+        run.cancel();
+      }
+      for (const { run, effect } of w.__kitLook.held) {
+        run.effect = effect;
+      }
+    }
+    const look = { held: [] as Held[], over: [] as Animation[] };
+    w.__kitLook = look;
+    const camel = (prop: string) =>
+      prop.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
+    /** Whether a run (a transition, or keyframes) drives `prop`. */
+    const animates = (run: Animation, prop: string) =>
+      run instanceof CSSTransition
+        ? run.transitionProperty === prop
+        : ((run.effect as KeyframeEffect | null)
+            ?.getKeyframes()
+            .some((frame) => camel(prop) in frame) ?? false);
+    /** Holds aside the effect of every run on `el` that drives one of `props`, but the overlay's own. */
+    const holdAside = (el: Element, props: string[]) => {
+      for (const run of el.getAnimations()) {
+        if (!look.over.includes(run) && props.some((p) => animates(run, p))) {
+          look.held.push({ run, effect: run.effect });
+          run.effect = null;
+        }
+      }
+    };
+    /** Lays `frame` on `el` as a paused animation holding its one value. */
+    const lay = (el: Element, frame: Record<string, string>) => {
+      const over = el.animate([frame, frame], { duration: 1, fill: "both" });
+      over.pause();
+      look.over.push(over);
+    };
+    for (const { selector, style } of list) {
+      const props = Object.keys(style);
+      const frame = Object.fromEntries(
+        props.map((prop) => [camel(prop), style[prop] as string])
+      );
+      for (const el of document.querySelectorAll(selector)) {
+        holdAside(el, props);
+        lay(el, frame);
+      }
+    }
+    /** Every property a look names that does not compute to its value (one through a var() is not compared). */
+    const missed = (selector: string, style: Record<string, string>) =>
+      [...document.querySelectorAll(selector)].flatMap((el) => {
+        const s = getComputedStyle(el);
+        return Object.entries(style).flatMap(([prop, value]) => {
+          const now = s.getPropertyValue(prop);
+          return value.includes("var(") || now === value
+            ? []
+            : [`${selector} ${prop}: ${now}, not ${value}`];
+        });
+      });
+    return list.flatMap(({ selector, style }) => missed(selector, style));
+  }, looks);
+  if (misses.length > 0) {
+    throw new Error(
+      `the overlay did not take: ${misses.slice(0, 4).join("; ")}`
+    );
+  }
+  await frames(page);
 }

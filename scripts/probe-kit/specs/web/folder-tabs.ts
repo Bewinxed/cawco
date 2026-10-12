@@ -30,7 +30,7 @@
  * its whole.
  */
 // biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: each rule is read case by case, as the drawing has them.
-import { Clock, oneClock } from "../../anim";
+import { Clock, type Look, oneClock, overlay } from "../../anim";
 import {
   at,
   capture,
@@ -226,46 +226,52 @@ const clipOf = (page: import("playwright-core").Page, strip: Strip) =>
     { room: ROOM, root: strip.root }
   );
 
-/** The proof's one rule over the page ("" clears it). */
-const rule = (page: import("playwright-core").Page, css: string) =>
-  page.evaluate((text) => {
-    let style = document.getElementById("kit-rule");
-    if (!style) {
-      style = document.createElement("style");
-      style.id = "kit-rule";
-      document.head.append(style);
-    }
-    style.textContent = text;
-  }, css);
-/**
- * The rims' glow off without touching the switch's held transitions: the
- * filter leaves the transitioned properties, so turning it off starts
- * nothing (a transition started now would stand still on the held clock).
- */
-const KEEP_CLOCK = ".rim{transition-property:transform,opacity!important}";
-const GLOW_OFF = `${KEEP_CLOCK}.rim{filter:none!important}`;
-const HIDE = "[data-kit-hide],[data-kit-hide] *{visibility:hidden!important}";
+/** What `selector` names hidden, with everything inside it. */
+const hidden = (selector: string): Look[] => [
+  { selector, style: { visibility: "hidden" } },
+  { selector: `${selector} *`, style: { visibility: "hidden" } },
+];
+/** The rims' glow off. */
+const glowOff = (strip: Strip): Look[] => [
+  { selector: `${strip.root} .rim`, style: { filter: "none" } },
+];
+/** The elements marked `data-kit-pick` (by `pick`). */
+const PICKED = "[data-kit-pick]";
 
-/** Marks elements (`which` picks them per tab) to hide under `HIDE`; none clears. */
-const mark = (
+/** Marks elements (per tab, under it) as `PICKED`; none clears the marks. */
+const pick = (
   page: import("playwright-core").Page,
   strip: Strip,
   picks: { tab: number; sel: string }[]
 ) =>
   page.evaluate(
     ({ root, tab, list }) => {
-      for (const el of document.querySelectorAll("[data-kit-hide]")) {
-        el.removeAttribute("data-kit-hide");
+      for (const el of document.querySelectorAll("[data-kit-pick]")) {
+        el.removeAttribute("data-kit-pick");
       }
       const tabs = document.querySelectorAll<HTMLElement>(`${root} ${tab}`);
       for (const p of list) {
         for (const el of tabs[p.tab]?.querySelectorAll(p.sel) ?? []) {
-          el.setAttribute("data-kit-hide", "");
+          el.setAttribute("data-kit-pick", "");
         }
       }
     },
     { root: strip.root, tab: strip.tab, list: picks }
   );
+
+/** The page drawn with `looks` (anim.ts `overlay`) and the strip captured; the overlay taken away after. */
+async function captureWith(
+  page: import("playwright-core").Page,
+  clip: Awaited<ReturnType<typeof clipOf>>,
+  looks: Look[]
+): Promise<Raster> {
+  await overlay(page, looks);
+  try {
+    return await capture(page, clip);
+  } finally {
+    await overlay(page, []);
+  }
+}
 
 /** One frame's ink captures and readings for a strip (see the file's head). */
 async function inkFrame(
@@ -276,15 +282,13 @@ async function inkFrame(
   const clip = await clipOf(page, strip);
   if (!strip.rim) {
     // The rimless strip: its sheets alone, what is written on them hidden.
-    await mark(
+    await pick(
       page,
       strip,
       L.tabs.map((_, i) => ({ tab: i, sel: ":scope > *" }))
     );
-    await rule(page, HIDE);
-    const sheet = await capture(page, clip);
-    await rule(page, "");
-    await mark(page, strip, []);
+    const sheet = await captureWith(page, clip, hidden(PICKED));
+    await pick(page, strip, []);
     return { sheet: sheetEdges(sheet, L) };
   }
   const base = await capture(page, clip);
@@ -298,45 +302,47 @@ async function inkFrame(
       sel: `.rim-side[data-side="${left ? "end" : "start"}"]`,
     };
   };
-  await mark(
+  await pick(
     page,
     strip,
     seams.map((s) => facing(s, false))
   );
-  await rule(page, HIDE);
-  const behindHidden = await capture(page, clip);
-  await mark(
+  const behindHidden = await captureWith(page, clip, hidden(PICKED));
+  await pick(
     page,
     strip,
     seams.map((s) => facing(s, true))
   );
-  const frontHidden = await capture(page, clip);
-  await mark(page, strip, []);
-  // The rims' ink with the glow off: shown, the plain feet alone and whole, hidden; each parity alone.
-  await rule(page, GLOW_OFF);
-  const lit = await capture(page, clip);
-  await rule(
-    page,
-    ".rim{transition-property:transform!important;filter:none!important;opacity:1!important}.rim-side{opacity:1!important}.rim-flared{visibility:hidden!important}.rim-plain{opacity:1!important}"
-  );
-  const plainLit = await capture(page, clip);
-  await rule(page, `${GLOW_OFF}.rim,.rim *{visibility:hidden!important}`);
-  const unlit = await capture(page, clip);
+  const frontHidden = await captureWith(page, clip, hidden(PICKED));
+  // The rims' ink with the glow off: shown; the plain feet alone and whole;
+  // hidden; each parity alone.
+  const lit = await captureWith(page, clip, glowOff(strip));
+  const plainLit = await captureWith(page, clip, [
+    {
+      selector: `${strip.root} .rim`,
+      style: { filter: "none", opacity: "1" },
+    },
+    { selector: `${strip.root} .rim-side`, style: { opacity: "1" } },
+    { selector: `${strip.root} .rim-plain`, style: { opacity: "1" } },
+    { selector: `${strip.root} .rim-flared`, style: { visibility: "hidden" } },
+  ]);
+  const unlit = await captureWith(page, clip, [
+    ...glowOff(strip),
+    ...hidden(`${strip.root} .rim`),
+  ]);
   const alone = async (shown: 0 | 1) => {
-    await mark(
+    await pick(
       page,
       strip,
       L.tabs.flatMap((_, i) =>
         i % 2 === shown ? [] : [{ tab: i, sel: ".rim" }]
       )
     );
-    await rule(page, `${GLOW_OFF}${HIDE}`);
-    return capture(page, clip);
+    return captureWith(page, clip, [...glowOff(strip), ...hidden(PICKED)]);
   };
   const even = await alone(0);
   const odd = await alone(1);
-  await mark(page, strip, []);
-  await rule(page, "");
+  await pick(page, strip, []);
   return {
     base,
     sides: seams.map((s) => ({
@@ -565,11 +571,11 @@ async function litFrame(
   L: Layout
 ) {
   const clip = await clipOf(page, strip);
-  await rule(page, GLOW_OFF);
-  const lit = await capture(page, clip);
-  await rule(page, `${GLOW_OFF}.rim,.rim *{visibility:hidden!important}`);
-  const unlit = await capture(page, clip);
-  await rule(page, "");
+  const lit = await captureWith(page, clip, glowOff(strip));
+  const unlit = await captureWith(page, clip, [
+    ...glowOff(strip),
+    ...hidden(`${strip.root} .rim`),
+  ]);
   return taperOf(L, lit, null, unlit);
 }
 
