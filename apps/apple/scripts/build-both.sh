@@ -12,8 +12,9 @@
 # sharing it lock its build.db. -skipPackagePluginValidation lets the
 # OpenAPIGenerator build plugin (CawCoAPI) run without Xcode's trust prompt.
 # Each workspace owns ~/build/cawco-apple/<workspace>, including DerivedData
-# and logs. Mac-side locks cover retirement, rsync and both builds;
-# builds from different workspaces wait their turn.
+# and logs. Mac-side locks cover retirement, rsync and both builds; a
+# second build of the same workspace, and builds from different
+# workspaces, wait their turn.
 # Only processes this script starts are stopped: the Mac-side build runs in
 # its own process group, which ends (TERM, then KILL) when the SSH link drops.
 # Run on the Mac itself, the Mac side runs here through the same steps and
@@ -73,7 +74,6 @@ ROOT=${APPLE_ROOT:-$HOME/build/cawco-apple}
 mkdir -p "$ROOT/.locks"
 LOCK="$ROOT/.locks/$BUILD"
 command -v shlock >/dev/null || { echo "shlock is required for Apple workspace builds" >&2; exit 2; }
-shlock -p $$ -f "$LOCK" || { echo "workspace $BUILD is already building (lock: $LOCK)" >&2; exit 3; }
 MACHINE_LOCK="$ROOT/.locks/.machine"
 MACHINE_OWNER="$ROOT/.locks/.machine.owner"
 WAIT_PID=
@@ -94,7 +94,8 @@ stop_build() {
 release_locks() {
   stop_build
   if [[ -n $WAIT_PID ]]; then kill "$WAIT_PID" 2>/dev/null || true; fi
-  rm -f "$LOCK"
+  # Only this shell's own: a run that leaves while waiting never frees the holder's.
+  if [[ -f $LOCK && $(cat "$LOCK" 2>/dev/null) == $$ ]]; then rm -f "$LOCK"; fi
   if [[ -f $MACHINE_LOCK && $(<"$MACHINE_LOCK") == $$ ]]; then
     rm -f "$MACHINE_OWNER" "$MACHINE_LOCK"
   fi
@@ -115,6 +116,17 @@ trap 'GO=1' USR1
   kill -TERM "$$"
 ) <&0 &
 WAIT_PID=$!
+# One build per workspace: a second run waits its turn (two of an item's
+# checks may start together), and a caller that leaves ends the wait above.
+next_notice=0
+until shlock -p $$ -f "$LOCK"; do
+  now=$(date +%s)
+  if (( now >= next_notice )); then
+    echo "WAITING for workspace $BUILD's build: process $(cat "$LOCK" 2>/dev/null || echo unknown) holds it (lock: $LOCK)"
+    next_notice=$((now + 60))
+  fi
+  sleep 5
+done
 next_notice=0
 until shlock -p $$ -f "$MACHINE_LOCK"; do
   now=$(date +%s)
