@@ -195,6 +195,11 @@ public final class HangCard: UIView {
             part.bounds = CGRect(origin: .zero, size: bounds.size)
             part.center = CGPoint(x: bounds.midX, y: bounds.midY)
         }
+        // The hung shadow follows the shade's own size on its tween: laid out
+        // only as the shade's bounds changed, it stood at the next size at
+        // once, and a card growing (Jump to Caw's panel) showed its edge
+        // 54pt under the card's tweening foot.
+        BoxShadow.attached(to: shade)?.relayout()
         // While the card's own size is tweened (a switch's morph, its content's
         // height), the edge, its mask and the cut tween with it on its clock;
         // otherwise they stand at the new size at once.
@@ -282,6 +287,22 @@ public final class HangCard: UIView {
         topRow.colors = [on, on, off, off, on, on]
         topRow.locations = stops
     }
+
+    #if DEBUG
+    /// A probe's reading of every piece the card draws, as the screen shows
+    /// it now (presentation values, in the card's own points): its box, the
+    /// sliding card, its surface, its shade and that shade's cast shadows,
+    /// its edge, and the cut.
+    public func probeLayers() -> String {
+        func box(_ r: CGRect) -> String { String(format: "%.1f %.1f %.1f %.1f", r.minX, r.minY, r.width, r.height) }
+        func shown(_ l: CALayer) -> CALayer { l.presentation() ?? l }
+        func frame(_ l: CALayer) -> CGRect { shown(l).convert(shown(l).bounds, to: shown(layer)) }
+        let edgePath = (shown(edge) as? CAShapeLayer)?.path?.boundingBoxOfPath ?? .null
+        let cutPath = (shown(cut) as? CAShapeLayer)?.path?.boundingBoxOfPath ?? .null
+        let shadows = BoxShadow.attached(to: shade)?.probeReading(in: shown(layer)) ?? "none"
+        return "card \(box(shown(layer).bounds)) slider \(box(frame(slider.layer))) body \(box(frame(body.layer))) shade \(box(frame(shade.layer))) edge \(box(frame(edge))) edge path \(box(edgePath)) cut path \(box(cutPath)) shadows \(shadows)"
+    }
+    #endif
 
     // MARK: The slide
 

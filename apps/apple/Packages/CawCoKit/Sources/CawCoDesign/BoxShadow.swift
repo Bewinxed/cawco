@@ -103,6 +103,9 @@ final class BoxShadow {
         "shadowColor": NSNull(), "shadowOffset": NSNull(), "shadowRadius": NSNull(), "frame": NSNull(),
     ]
 
+    /// How far past the host's box the masks reach: the far box is the host's grown by it.
+    private var reach: Double = 1
+
     /// Each shadow and the layer that casts it.
     private var casts: [(layer: CALayer, shadow: ShadowLayer)] = []
 
@@ -180,6 +183,14 @@ final class BoxShadow {
         return p.cgPath
     }
 
+    /// Lays the shadows out again for the host as it stands now: a host whose
+    /// owner sets its bounds inside a tween asks for this once the tween's
+    /// bounds animation is on the layer, so the shadows follow it from where
+    /// they are drawn (the bounds observer can run before UIKit adds it).
+    func relayout() {
+        layout()
+    }
+
     private func layout() {
         guard let host else { return }
         let layer = host.layer
@@ -196,7 +207,7 @@ final class BoxShadow {
         defer { CATransaction.commit() }
 
         // Wide enough for any token's reach: offset, spread and three blur radii each way.
-        var reach: Double = 1
+        reach = 1
         for shadow in token {
             let extent: Double = abs(shadow.x) + abs(shadow.y) + abs(shadow.spread) + shadow.blur * 3
             reach = max(reach, extent + 1)
@@ -223,6 +234,26 @@ final class BoxShadow {
             set(shadowLayer, shadowPath: shape, like: moving)
         }
     }
+
+    #if DEBUG
+    /// Each cast shadow's path box and the outer mask's hole, as the screen
+    /// shows them now, in `space`'s points.
+    func probeReading(in space: CALayer) -> String {
+        func box(_ r: CGRect) -> String { String(format: "%.1f %.1f %.1f %.1f", r.minX, r.minY, r.width, r.height) }
+        let paths = casts.map { cast -> String in
+            let shown = cast.layer.presentation() ?? cast.layer
+            let r = shown.shadowPath?.boundingBoxOfPath ?? .null
+            return box(shown.convert(r, to: space))
+        }
+        // The outer mask is the far box (the host's, grown by the shadows' reach) with the
+        // host's rounded rect cut out: as drawn, its box less that reach each side is the hole.
+        let mask = outerMask.presentation() ?? outerMask
+        let far = mask.path.map { mask.convert($0.boundingBoxOfPath, to: space) } ?? .null
+        let hole = far.insetBy(dx: reach, dy: reach)
+        let host = (host?.layer.presentation() ?? host?.layer).map { $0.convert($0.bounds, to: space) } ?? .null
+        return "casts [\(paths.joined(separator: ", "))] mask hole \(box(hole)) host \(box(host))"
+    }
+    #endif
 
     private func set(_ mask: CAShapeLayer, path: CGPath, like moving: CABasicAnimation?) {
         if let moving, let from = mask.presentation()?.path { mask.add(Self.following(moving, "path", from: from, to: path), forKey: "path") }

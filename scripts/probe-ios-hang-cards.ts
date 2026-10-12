@@ -53,6 +53,9 @@ const DEVICES = [
   },
 ];
 
+/** One side of a held card: `w 478.0 (531.0 to 425.0)`, as drawn, from, to. */
+const HALF_SIDE = /[wh] ([\d.]+) \(([\d.]+) to ([\d.]+)\)/g;
+
 let failures = 0;
 const check = (step: string, ok: boolean, detail: string) => {
   console.log(`${ok ? "PASS" : "FAIL"} ${step}: ${detail}`);
@@ -90,6 +93,9 @@ try {
     );
     made.push(udid);
     await sh(`xcrun simctl boot ${udid}; xcrun simctl bootstatus ${udid} -b >/dev/null
+# Jump's field raises the keyboard: its first-use tips ("Speed up your typing…") would cover the card in a capture.
+xcrun simctl spawn ${udid} defaults write com.apple.keyboard.preferences DidShowContinuousPathIntroduction -bool true
+xcrun simctl spawn ${udid} defaults write com.apple.keyboard.preferences KeyboardDidShowProductivityTutorial -bool true
 xcrun simctl status_bar ${udid} override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3
 xcrun simctl install ${udid} "${app}"`);
     for (const style of ["light", "dark"]) {
@@ -175,6 +181,97 @@ xcrun simctl install ${udid} "${app}"`);
           `${label}: ${morph} slides nothing out of or into the glass`,
           head.endsWith(" slide false"),
           "no transform in the card"
+        );
+        // Every piece the card draws stands at the card's own size at each
+        // stop of the tween: the border (edge path), the clip (cut path), the
+        // raised surface (body, shade) and the shadow (each cast, the mask's hole).
+        const stops = lines.filter((line) =>
+          line.startsWith(`hang ${morph} layers at `)
+        );
+        check(
+          `${label}: ${morph} read at four stops`,
+          stops.length === 4,
+          `${stops.length} 'layers at' lines`
+        );
+        for (const stop of stops) {
+          const at = stop.slice(
+            `hang ${morph} layers at `.length,
+            stop.indexOf(":")
+          );
+          const size = (name: string) => {
+            const m = stop.match(
+              new RegExp(`${name} (-?[\\d.]+) (-?[\\d.]+) ([\\d.]+) ([\\d.]+)`)
+            );
+            return m ? [Number(m[3]), Number(m[4])] : null;
+          };
+          const card = size("card");
+          const casts = [
+            ...(stop.match(/casts \[([^\]]*)\]/)?.[1] ?? "").matchAll(
+              /-?[\d.]+ -?[\d.]+ ([\d.]+) ([\d.]+)/g
+            ),
+          ].map((m) => [Number(m[1]), Number(m[2])]);
+          // The cut clips only at the card's top edge: its box is the card's
+          // grown by its room out to each side and down, so it is read as that
+          // box less the room (the room from its width, the same below).
+          const cutBox = stop.match(
+            /cut path (-?[\d.]+) (-?[\d.]+) ([\d.]+) ([\d.]+)/
+          );
+          const room = cutBox ? -Number(cutBox[1]) : 0;
+          // Its top on the card's top, or it is off (null).
+          const cut =
+            cutBox && Number(cutBox[2]) === 0
+              ? [Number(cutBox[3]) - 2 * room, Number(cutBox[4]) - room]
+              : null;
+          const parts: [string, number[] | null][] = [
+            ["edge path", size("edge path")],
+            ["cut path less its room", cut],
+            ["body", size("body")],
+            ["shade", size("shade")],
+            ["mask hole", size("mask hole")],
+            ...casts.map((c, k): [string, number[]] => [`cast ${k}`, c]),
+          ];
+          const off = parts.filter(
+            ([, s]) =>
+              !(card && s) ||
+              Math.abs(s[0] - card[0]) > 1 ||
+              Math.abs(s[1] - card[1]) > 1
+          );
+          check(
+            `${label}: ${morph} at ${at} border, clip, surface and shadow at the card's size`,
+            card !== null && casts.length > 0 && off.length === 0,
+            off.length === 0
+              ? `card ${card?.join("×")}, ${parts.length} parts`
+              : `card ${card?.join("×")} off: ${off.map(([n, s]) => `${n} ${s?.join("×")}`).join(", ")}`
+          );
+        }
+        // Held at half the size, each side within half a point of its midpoint.
+        const hold =
+          lines.find((line) =>
+            line.startsWith(`hang ${morph} holds half the size`)
+          ) ?? "";
+        const sides = [...hold.matchAll(HALF_SIDE)].map((m) => [
+          Number(m[1]),
+          Number(m[2]),
+          Number(m[3]),
+        ]);
+        check(
+          `${label}: ${morph} held at half the size`,
+          sides.length === 2 &&
+            sides.every(
+              ([drawn, start, end]) =>
+                Math.abs(drawn - (start + end) / 2) <= 0.5
+            ),
+          hold || "no line"
+        );
+        const settled =
+          lines.find((line) => line.startsWith(`hang ${morph} settled: `)) ??
+          "";
+        const to = morph.slice(morph.lastIndexOf("-") + 1);
+        check(
+          `${label}: ${morph} settles on ${to}, standing alone`,
+          settled.includes(` shows ${to} hidden false revealed 1.00 `) &&
+            settled.includes(` contents [${to} 1.00] moving []`),
+          settled || "no line"
         );
         for (const at of ["0.00", "0.50", "1.00"]) {
           const held =

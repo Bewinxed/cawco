@@ -768,6 +768,8 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         let layer = card.layer
         let begun = layer.convertTime(CACurrentMediaTime(), from: nil)
         let from = card.showing?.name ?? "nothing"
+        // The size it tweens from: as drawn the moment before the switch.
+        let startSize = (layer.presentation() ?? layer).frame.size
         start()
         let keys = Self.animationKeys(layer)
         let tween = (layer.animation(forKey: "bounds.size") ?? layer.animation(forKey: "bounds")) as? CABasicAnimation
@@ -797,21 +799,39 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         }
         let half = (low + high) / 2
         layer.speed = 0
-        // The size it tweens to (the model's), and from (read at 0).
+        // The size it tweens to (the model's).
         let endSize = layer.frame.size
-        var startSize = CGSize.zero
         for fraction in [0.0, half, 0.5, 1.0] {
             layer.timeOffset = at + fraction * tween.duration
             try? await Task.sleep(for: .milliseconds(150))
+            if fraction == half {
+                // The clock's start can sit a fraction of a millisecond off the tween's (the
+                // card read 426.2pt for 425 at 0, 0.49 of its travel at `half`): the time is
+                // found on the drawn size itself, the side that travels furthest at its midpoint.
+                let wide = abs(endSize.width - startSize.width) >= abs(endSize.height - startSize.height)
+                let mid = wide ? (startSize.width + endSize.width) / 2 : (startSize.height + endSize.height) / 2
+                let rising = wide ? endSize.width > startSize.width : endSize.height > startSize.height
+                var early = at
+                var late = at + tween.duration
+                for _ in 0 ..< 16 {
+                    layer.timeOffset = (early + late) / 2
+                    // The presentation is computed from what is committed: commit each step.
+                    CATransaction.flush()
+                    let size = (layer.presentation() ?? layer).frame.size
+                    if ((wide ? size.width : size.height) < mid) == rising { early = layer.timeOffset } else { late = layer.timeOffset }
+                }
+                try? await Task.sleep(for: .milliseconds(150))
+            }
             let drawn = layer.presentation()?.frame ?? layer.frame
-            if fraction == 0 { startSize = drawn.size }
+            // Every piece the card draws at this stop: they all stand at the card's own size.
+            say(String(format: "\(label) layers at %.3f: ", fraction) + card.card.probeLayers())
             let cap = GlassCard.restingBox(of: glass, under: card.head, in: view)
             let foot = cap.maxY + glass.neck
             say(String(format: "\(label) at %.2f: card w %.1f h %.1f trailing %.2f glass flank %.2f flush %@ top %.2f glass foot %.2f on foot %@ revealed %.2f",
                        fraction, drawn.width, drawn.height, drawn.maxX, cap.maxX, abs(drawn.maxX - cap.maxX) <= 1 ? "true" : "false",
                        drawn.minY, foot, abs(drawn.minY - foot) <= 1 ? "true" : "false", card.card.revealed))
             if fraction == half {
-                say(String(format: "\(label) holds half the size at time %.3f: w %.1f (%.1f to %.1f) h %.1f (%.1f to %.1f)", fraction,
+                say(String(format: "\(label) holds half the size at time %.3f: w %.1f (%.1f to %.1f) h %.1f (%.1f to %.1f)", (layer.timeOffset - at) / tween.duration,
                            drawn.width, startSize.width, endSize.width, drawn.height, startSize.height, endSize.height))
                 snap("\(label)-50")
                 // Held a while longer, so a capture from outside the app (the system's status bar with it) can be taken.
@@ -823,8 +843,21 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         layer.timeOffset = 0
         layer.beginTime = 0
         layer.beginTime = layer.convertTime(CACurrentMediaTime(), from: nil) - held
-        try? await Task.sleep(for: .seconds(0.5))
+        // Settled: no switch animation left anywhere in the card (its box, edge, cut, the
+        // contents' fades), polled a frame at a time for up to 2s.
+        var moving = Self.animationKeys(layer).filter(Self.switchKeys.contains)
+        for _ in 0 ..< 120 where !moving.isEmpty {
+            try? await Task.sleep(for: .milliseconds(16))
+            moving = Self.animationKeys(layer).filter(Self.switchKeys.contains)
+        }
+        let drawn = card.convert(card.bounds, to: nil)
+        let contents = card.card.content.subviews.compactMap { $0 as? GlassContent }.map { "\($0.name) \(String(format: "%.2f", $0.alpha))" }
+        say(String(format: "\(label) settled: shows %@ hidden %@ revealed %.2f card x %.1f y %.1f w %.1f h %.1f contents [%@] moving [%@]",
+                   card.showing?.name ?? "nothing", card.isHidden ? "true" : "false", card.card.revealed, drawn.minX, drawn.minY, drawn.width, drawn.height,
+                   contents.joined(separator: ", "), moving.joined(separator: ", ")))
         snap("\(label)-end")
+        // Held as it settled, so a capture from outside the app shows this state and no later one.
+        try? await Task.sleep(for: .seconds(5))
     }
 
     /// What stands on the glass at rest, against the glass's own bounds: every
