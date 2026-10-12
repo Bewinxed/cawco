@@ -786,20 +786,36 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         try? await Task.sleep(for: .milliseconds(20))
         let begin = (layer.animation(forKey: "bounds.size") ?? layer.animation(forKey: "bounds"))?.beginTime ?? 0
         let at = begin > 0 ? begin : begun
+        // Half the size, not half the time: the drawer curve is front-loaded,
+        // so at half its time the box has come ~97% of the way and reads as
+        // the end. The time the curve reaches half its travel, by bisection.
+        var low = 0.0
+        var high = 1.0
+        for _ in 0 ..< 40 {
+            let mid = (low + high) / 2
+            if Motion.easeDrawer.value(at: mid) < 0.5 { low = mid } else { high = mid }
+        }
+        let half = (low + high) / 2
         layer.speed = 0
-        for fraction in [0.0, 0.5, 1.0] {
+        // The size it tweens to (the model's), and from (read at 0).
+        let endSize = layer.frame.size
+        var startSize = CGSize.zero
+        for fraction in [0.0, half, 0.5, 1.0] {
             layer.timeOffset = at + fraction * tween.duration
             try? await Task.sleep(for: .milliseconds(150))
             let drawn = layer.presentation()?.frame ?? layer.frame
+            if fraction == 0 { startSize = drawn.size }
             let cap = GlassCard.restingBox(of: glass, under: card.head, in: view)
             let foot = cap.maxY + glass.neck
             say(String(format: "\(label) at %.2f: card w %.1f h %.1f trailing %.2f glass flank %.2f flush %@ top %.2f glass foot %.2f on foot %@ revealed %.2f",
                        fraction, drawn.width, drawn.height, drawn.maxX, cap.maxX, abs(drawn.maxX - cap.maxX) <= 1 ? "true" : "false",
                        drawn.minY, foot, abs(drawn.minY - foot) <= 1 ? "true" : "false", card.card.revealed))
-            if fraction == 0.5 {
+            if fraction == half {
+                say(String(format: "\(label) holds half the size at time %.3f: w %.1f (%.1f to %.1f) h %.1f (%.1f to %.1f)", fraction,
+                           drawn.width, startSize.width, endSize.width, drawn.height, startSize.height, endSize.height))
                 snap("\(label)-50")
                 // Held a while longer, so a capture from outside the app (the system's status bar with it) can be taken.
-                try? await Task.sleep(for: .seconds(2))
+                try? await Task.sleep(for: .seconds(6))
             }
         }
         let held = layer.timeOffset
