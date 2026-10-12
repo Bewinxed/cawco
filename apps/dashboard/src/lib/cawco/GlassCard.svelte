@@ -31,7 +31,9 @@
    * first row, Caw's first row (without the ring after a press). A press
    * elsewhere, or on the glass, leaves the focus where it put it; Escape,
    * and every other close, gives it back to what had it before the first
-   * card opened. Non-modal: no scrim, no trap, and a press outside closes it
+   * card opened, or, opened from inside the phone's sheet, which goes as it
+   * opens, to what invoked the sheet: the burger (bar-glass `invoker`).
+   * ⌘K in Jump's own field closes it (Shell). Non-modal: no scrim, no trap, and a press outside closes it
    * and still lands; the glass's own items open, swap or shut it themselves.
    *
    * Mounted from the start and kept (`forceMount`), up behind the cut and
@@ -423,10 +425,14 @@
       if (warming || asked === null) {
         return;
       }
+      // What invoked it, or what invoked the opener that has gone (the
+      // phone's sheet hands over its burger, bar-glass `invoker`).
       returnTo =
-        document.activeElement instanceof HTMLElement
+        barGlass.invoker ??
+        (document.activeElement instanceof HTMLElement
           ? document.activeElement
-          : null;
+          : null);
+      barGlass.invoker = null;
       const card = asked;
       const node = content?.querySelector<HTMLElement>(`[data-face="${card}"]`);
       if (!node) {

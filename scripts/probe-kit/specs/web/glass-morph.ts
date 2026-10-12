@@ -349,8 +349,19 @@ async function readAt(kit: Kit, view: "desk" | "phone", theme: string) {
   }
   await shortcut("caw");
   if (touch) {
+    // The sheet's search field invoked Jump and went with the sheet: the
+    // card was handed what invoked the sheet, the burger (WAI-ARIA APG,
+    // dialog pattern).
     await page.keyboard.press("Escape");
     await rest();
+    const atBurger = await page.evaluate(
+      () => document.activeElement?.matches(".burger") ?? false
+    );
+    kit.check(
+      `${where}: Escape gives the focus to the burger, which invoked the sheet Jump was opened from`,
+      atBurger,
+      (await focusNow(page)).what
+    );
   } else {
     await page.click(".bar-item.machines");
     await rest();
@@ -427,6 +438,30 @@ async function readAt(kit: Kit, view: "desk" | "phone", theme: string) {
     await page.emulateMedia({ reducedMotion: null });
   }
 
+  // Any other text field keeps ⌘K: typed there, it opens nothing.
+  await page.evaluate(() => {
+    const field = document.createElement("input");
+    field.className = "probe-field";
+    document.body.append(field);
+    field.focus();
+  });
+  await page.keyboard.press("Control+k");
+  await rest();
+  const otherField = await page.evaluate((sel) => {
+    const field = document.querySelector<HTMLInputElement>(".probe-field");
+    const kept = document.activeElement === field;
+    field?.remove();
+    return {
+      kept,
+      open: document.querySelector(sel)?.getAttribute("data-state") === "open",
+    };
+  }, CARD);
+  kit.check(
+    `${where}: ⌘K in any other text field opens nothing and keeps the field's focus`,
+    otherField.kept && !otherField.open,
+    JSON.stringify(otherField)
+  );
+
   // Every way it shuts, each from a card standing open.
   const opener: Face = touch ? "jump" : "caw";
   const outsidePress = () => page.mouse.click(outside.x, outside.y);
@@ -460,9 +495,12 @@ async function readAt(kit: Kit, view: "desk" | "phone", theme: string) {
       async () => {
         await page.keyboard.press("Control+k");
         await rest();
-        // ⌘K is no shortcut while a field has the focus (isTyping).
-        await page.evaluate(() =>
-          (document.activeElement as HTMLElement | null)?.blur()
+        // As it always is once Jump stands open: its own field has the focus.
+        const inField = await focusNow(page);
+        kit.check(
+          `${where}: Jump's field has the focus as ⌘K closes it`,
+          inField.face === "jump" && inField.fits,
+          `${inField.face} ${inField.what}`
         );
         await page.keyboard.press("Control+k");
       },

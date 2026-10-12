@@ -24,6 +24,18 @@ class BarGlass {
    * until the next card opens, so its close is as instant as its open.
    */
   instant = $state(false);
+  /**
+   * What the card gives the focus back to when it closes, handed over by
+   * what opened it when the opener itself goes away: the phone's sheet,
+   * whose search field opens Jump as the sheet closes, hands over what
+   * invoked the sheet, the burger. "When a dialog closes, focus returns to
+   * the element that invoked the dialog unless … The invoking element no
+   * longer exists. Then, focus is set on another element that provides
+   * logical work flow" (WAI-ARIA APG, Dialog (Modal) Pattern,
+   * w3.org/WAI/ARIA/apg/patterns/dialog-modal/). Taken, and cleared, as the
+   * card opens; without it, what had the focus then.
+   */
+  invoker: HTMLElement | null = null;
   /** Opens `card`, or shuts it when it is the one standing. */
   toggle(card: GlassCard): void {
     this.open = this.open === card ? null : card;

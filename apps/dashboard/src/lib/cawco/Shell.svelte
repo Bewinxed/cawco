@@ -40,7 +40,7 @@
   import { page } from "$app/state";
   import AddMachineDialog from "./AddMachineDialog.svelte";
   import AssistantPanel from "./assistant/AssistantPanel.svelte";
-  import { barGlass } from "./bar-glass.svelte";
+  import { barGlass, type GlassCard as GlassFace } from "./bar-glass.svelte";
   import ConfirmDialog from "./ConfirmDialog.svelte";
   import { cawco, hubSocketUrl, reconnectNow } from "./client.svelte";
   import { continuing } from "./continue.svelte";
@@ -90,6 +90,19 @@
   // Seeded once from the server's reading; dragging owns it after that.
   let railWidth = $state(untrack(() => clamp(initialRailWidth)));
   let railOpen = $state(false);
+  /** The sidebar toggle: what invokes the phone's sheet. */
+  let burger = $state<HTMLButtonElement | null>(null);
+  /**
+   * A glass card opened from inside the phone's sheet: the sheet closes as
+   * the card opens, taking the field that invoked it, so the card is handed
+   * what invoked the sheet, the burger, to give the focus back to (bar-glass
+   * `invoker`, WAI-ARIA APG's dialog pattern).
+   */
+  function fromSheet(card: GlassFace) {
+    barGlass.invoker = burger;
+    railOpen = false;
+    barGlass.open = card;
+  }
   let assistantOpen = $state(false);
 
   /**
@@ -272,10 +285,16 @@
     if (!(event.metaKey || event.ctrlKey)) {
       return;
     }
-    if (isTyping()) {
+    const key = event.key.toLowerCase();
+    // A text field keeps the shortcuts, but for ⌘K in Jump's own field,
+    // which has the focus whenever Jump stands open: ⌘K opens and closes
+    // Jump (DESIGN.md, "The glass's cards").
+    const inJump = Boolean(
+      document.activeElement?.closest(".glass-face[data-face='jump']")
+    );
+    if (isTyping() && !(key === "k" && inJump)) {
       return;
     }
-    const key = event.key.toLowerCase();
     if (key === "n" && event.shiftKey) {
       event.preventDefault();
       newSession();
@@ -903,10 +922,7 @@
               railOpen = false;
               assistantOpen = true;
             }}
-            onsearch={() => {
-              railOpen = false;
-              barGlass.open = "jump";
-            }}
+            onsearch={() => fromSheet("jump")}
             sheet
           />
         {/if}
@@ -925,6 +941,7 @@
             railOpen = true;
           }}
           type="button"
+          bind:this={burger}
         >
           <IconSidebar />
         </button>
