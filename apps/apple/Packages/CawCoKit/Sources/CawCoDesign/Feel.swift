@@ -61,7 +61,7 @@ public enum Feel {
         selection.prepare()
     }
 
-    /// The wheel came up from a key or the history button.
+    /// The wheel came up from a key or VoiceOver's "Show what you sent".
     public static func opened() {
         Cues.shared.play(.open)
     }

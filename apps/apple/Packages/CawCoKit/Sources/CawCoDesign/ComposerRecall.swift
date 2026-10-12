@@ -4,21 +4,34 @@ import UIKit
 import UIKit.UIGestureRecognizerSubclass
 
 // The composer's recall (composer-recall, variant "Wheel"): the composer
-// grows upward out of its history button, absolutely, so nothing above it
-// moves, and what the reader sent here rolls down into its field as ghost
-// rows on a gentle wheel. The row on the field's line is the one Return or
-// a tap takes, tinted in the selected ink; above it the rows are ghosts,
-// going softer as they rise.
+// grows upward from its pill's top, absolutely, so nothing above it moves,
+// to half the window, and what the reader sent here rolls down into its
+// field as ghost rows on a gentle wheel. The row on the field's line is the
+// one Return or a tap takes, tinted in the selected ink; above it the rows
+// are ghosts, going softer as they rise.
 
 /// The wheel's measures and the grown shape's curve.
 enum Recall {
     /// One row: the field's own line box.
     static let row = Size.cComposerField
-    /// Rows above the field's line, at most: five where the window has the
-    /// room (640pt both ways, the web's phone breakpoint), three on a phone
-    /// or in a short window.
-    static func rowsAbove(in window: CGRect) -> Int {
-        window.width >= 640 && window.height >= 640 ? 5 : 3
+    /// How much of the window the grown shape stands up into, from its foot
+    /// (`floor`: the window's, or the keyboard's top while it is up): half
+    /// on a phone (compact width), 40% on an iPad or the Mac (regular width).
+    static func reach(regular: Bool) -> Double {
+        regular ? 0.4 : 0.5
+    }
+    /// Rows above the field's line: as many as stand between the pill's top
+    /// (`top`, in the window) and the reach's top, never fewer than three on
+    /// a phone and five at regular width.
+    static func rowsAbove(top: Double, floor: Double, regular: Bool) -> Int {
+        let fit = Int(((top - 6 - floor * (1 - reach(regular: regular))) / row).rounded())
+        return max(regular ? 5 : 3, fit)
+    }
+    /// How far back the oldest row stands, in rows of lean, shrink, blur and
+    /// fade: three on a phone, five at regular width. However many rows
+    /// show, the depth is spread across them to end here.
+    static func depth(regular: Bool) -> Int {
+        regular ? 5 : 3
     }
     /// The wheel's lean per row, in degrees, and how much smaller each row
     /// is than the one below it: gentle, so it reads as a wheel and not a wall.
@@ -31,8 +44,9 @@ enum Recall {
     /// transcript under the fade goes soft by degrees.
     static let blurs: [Double] = [0.5, 1, 2, 4, 8, 16]
     static let band = 6.0
-    /// How much softer each row up is than the one below it (points of
-    /// blur), and the most a row's words soften: the top of the taller wheel.
+    /// How much softer each row of depth is than the one below it (points
+    /// of blur), and the most a row's words soften: the oldest row at
+    /// regular width, five rows deep.
     static let soft = 0.3
     static let softest = 5 * soft
     /// A ghost row `o` rows above the line: each a tenth fainter than the one below.
@@ -45,42 +59,37 @@ enum Recall {
         1 - pow(1 - min(1, max(0, t)), 3.2)
     }
 
-    /// The shoulders' inward curve at full growth: as much as the top row has shrunk.
-    static func taper(width: Double, extra: Double) -> Double {
-        shrink * (max(0, (extra - 6) / row) + 0.5) * width / 2
+    /// The shoulders' inward curve at full growth: as much as the top row has
+    /// shrunk, `spread` rows of depth for each row the shape holds.
+    static func taper(width: Double, extra: Double, spread: Double) -> Double {
+        shrink * (max(0, (extra - 6) / row) * spread + 0.5) * width / 2
     }
 
     /// The grown composer at `p` (0: the composer's own pill, 1: grown), in
     /// its own box, with its height and how far above the pill it reaches
-    /// (composer-recall `outline()`). The whole pill rises, its top corners
-    /// rounding all the way, the side with the history button a little ahead
-    /// so the top leans toward it and levels out as it rises; then the
-    /// shoulders curve in by the taper.
+    /// (composer-recall `outline()`). The whole pill rises from its top,
+    /// evenly across its width, its top corners rounding all the way; then
+    /// the shoulders curve in by the taper.
     static func outline(_ geometry: RecallGeometry, open p: Double, extra: Double) -> (path: CGPath, height: Double, up: Double) {
         let w = geometry.width
         let r = Radius.radiusLg
-        let near = drawer(p * 1.25), far = drawer(p * 1.25 - 0.15)
-        let (hR, hL) = geometry.button >= w / 2 ? (extra * near, extra * far) : (extra * far, extra * near)
-        let up = max(hR, hL), height = geometry.base + up
-        let tR = up - hR, tL = up - hL
+        let up = extra * drawer(p * 1.25 - 0.075), height = geometry.base + up
         let pw = drawer((p - 0.25) / 0.75)
-        let k = taper(width: w, extra: extra)
+        let k = taper(width: w, extra: extra, spread: geometry.spread)
         let left = k * pw, right = w - k * pw
         // Each side runs straight up to the pill's top, then sweeps in to its rounded top corner.
-        let sR = max(tR + r, up), sL = max(tL + r, up)
+        let s = max(r, up)
         let path = CGMutablePath()
         func point(_ x: Double, _ y: Double) -> CGPoint { CGPoint(x: x, y: y) }
         path.move(to: point(r, height))
         path.addLine(to: point(w - r, height))
         path.addArc(tangent1End: point(w, height), tangent2End: point(w, height - r), radius: r)
-        path.addLine(to: point(w, sR))
-        path.addCurve(to: point(right, tR + r), control1: point(w, sR - (sR - tR - r) * 0.55), control2: point(right, tR + r + (sR - tR - r) * 0.35))
-        path.addQuadCurve(to: point(right - r, tR), control: point(right, tR))
-        // The top eases from one side's height to the other's.
-        let span = right - left - 2 * r
-        path.addCurve(to: point(left + r, tL), control1: point(right - r - span * 0.4, tR), control2: point(left + r + span * 0.4, tL))
-        path.addQuadCurve(to: point(left, tL + r), control: point(left, tL))
-        path.addCurve(to: point(0, sL), control1: point(left, tL + r + (sL - tL - r) * 0.35), control2: point(0, sL - (sL - tL - r) * 0.55))
+        path.addLine(to: point(w, s))
+        path.addCurve(to: point(right, r), control1: point(w, s - (s - r) * 0.55), control2: point(right, r + (s - r) * 0.35))
+        path.addQuadCurve(to: point(right - r, 0), control: point(right, 0))
+        path.addLine(to: point(left + r, 0))
+        path.addQuadCurve(to: point(left, r), control: point(left, 0))
+        path.addCurve(to: point(0, s), control1: point(left, r + (s - r) * 0.35), control2: point(0, s - (s - r) * 0.55))
         path.addLine(to: point(0, height - r))
         path.addArc(tangent1End: point(0, height), tangent2End: point(r, height), radius: r)
         path.closeSubpath()
@@ -130,14 +139,16 @@ enum Recall {
     }
 }
 
-/// The composer's sizes and its history button's place, read once before
-/// anything is written (composer-recall `measure`).
+/// The composer's sizes, read once before anything is written
+/// (composer-recall `measure`).
 struct RecallGeometry {
     /// The pill's width and height.
     var width: Double
     var base: Double
-    /// The history button's centre across the pill.
-    var button: Double
+    /// Rows of depth (lean, shrink, blur, fade) per row the shape holds:
+    /// the wheel spreads its depth across however many rows it shows; the
+    /// queued edit's one row is one row deep.
+    var spread = 1.0
 }
 
 // MARK: The frame clock
@@ -229,6 +240,13 @@ final class RecallHalo: UIView {
         "bounds": NSNull(), "position": NSNull(), "path": NSNull(), "locations": NSNull(), "colors": NSNull(),
         "shadowPath": NSNull(), "shadowOpacity": NSNull(), "frame": NSNull(), "contents": NSNull(),
     ]
+
+    /// The wheel was measured again (the keyboard moved): the depth per row
+    /// the shoulders' taper follows, taken by the next paint.
+    var spread: Double {
+        get { geometry.spread }
+        set { geometry.spread = newValue }
+    }
 
     /// The pill's height changed under the shape (the field grew a line).
     var base: Double {
@@ -445,6 +463,50 @@ final class FrostBand: UIVisualEffectView {
 
 // MARK: A ghost row
 
+/// The faces a wheel's rows are set in, made once as it opens: a role's
+/// font is its variable face scaled by Dynamic Type, made again on every
+/// read, and every row coming into view would otherwise make each anew.
+@MainActor
+struct RecallFaces {
+    /// The field's line height.
+    let line: Double
+    /// The words: the field's face in its ink, the selected ink on the line,
+    /// muted ("Nothing you sent here matches"), and the empty draft's hint.
+    let strong: [NSAttributedString.Key: Any]
+    let selected: [NSAttributedString.Key: Any]
+    let muted: [NSAttributedString.Key: Any]
+    let subtle: [NSAttributedString.Key: Any]
+    /// When it was sent (`font: 400 12px/22px` on the row's line box), with
+    /// tabular figures, muted and on the line; and the "Queued" tag.
+    let meta: [NSAttributedString.Key: Any]
+    let metaSelected: [NSAttributedString.Key: Any]
+    let queued: [NSAttributedString.Key: Any]
+
+    init() {
+        let field = ComposerView.fieldRole
+        line = field.lineHeight
+        strong = field.attributes(color: Palette.inkStrong)
+        selected = field.attributes(color: Palette.selectedInk)
+        muted = field.attributes(color: Palette.inkMuted)
+        subtle = field.attributes(color: Palette.inkSubtle)
+        let role = TypeRole(weight: .regular, size: TypeScale.textMeta ... TypeScale.textMeta, leading: line / TypeScale.textMeta,
+                            family: FontFamily.fontBody)
+        queued = role.attributes(color: Palette.statusAttnInk)
+        func tabular(_ color: UIColor) -> [NSAttributedString.Key: Any] {
+            var attributes = role.attributes(color: color)
+            if let font = attributes[.font] as? UIFont {
+                attributes[.font] = UIFont(descriptor: font.fontDescriptor.addingAttributes([.featureSettings: [[
+                    UIFontDescriptor.FeatureKey.type: kNumberSpacingType,
+                    UIFontDescriptor.FeatureKey.selector: kMonospacedNumbersSelector,
+                ]]]), size: font.pointSize)
+            }
+            return attributes
+        }
+        meta = tabular(Palette.inkMuted)
+        metaSelected = tabular(Palette.selectedInk)
+    }
+}
+
 /// One row of the wheel (composer-recall `.ghost`): the words on one line in
 /// the field's own face, and, at its end, when it was sent (and "Queued" for
 /// a send not read yet). On the field's line, a message's words and time
@@ -460,21 +522,34 @@ final class RecallRow: UIView {
 
     let kind: Kind
     var onActivate: () -> Void = {}
+    /// Its blurred copy is ready: the wheel keeps it for the row's next time in view.
+    var onBlurred: (UIImage) -> Void = { _ in }
+    /// Rows of depth it stands at, as last drawn (the DEBUG probe reads it).
+    var depth = 0.0
+    /// Points of blur it is softened by, as last drawn.
+    private(set) var blur = 0.0
     private let content = UIView()
     private let words = UILabel()
     private let time = UILabel()
     private let queuedTag = TagLabel()
     private let soft = UIImageView()
+    private let faces: RecallFaces
     private let text: String
     private let marks: Set<[UInt16]>
     private let date: Date?
     private let queued: Bool
     private let showsMeta: Bool
     private var picked = false
-    private var softened = false
+    /// Its blurred copy is being drawn, off the main thread.
+    private var blurring = false
+    #if DEBUG
+    /// How much of its blurred copy shows (the `-recall-probe` reads it).
+    var softShown: Double { Double(soft.alpha) }
+    #endif
 
-    init(kind: Kind, text: String, marks: Set<[UInt16]> = [], date: Date? = nil, queued: Bool = false, showsMeta: Bool) {
+    init(kind: Kind, text: String, marks: Set<[UInt16]> = [], date: Date? = nil, queued: Bool = false, showsMeta: Bool, faces: RecallFaces) {
         self.kind = kind
+        self.faces = faces
         self.text = text
         self.marks = marks
         self.date = date
@@ -492,7 +567,7 @@ final class RecallRow: UIView {
         }
         words.lineBreakMode = .byTruncatingTail
         if queued, self.showsMeta {
-            queuedTag.attributedText = NSAttributedString(string: "Queued", attributes: Self.metaRole.attributes(color: Palette.statusAttnInk))
+            queuedTag.attributedText = NSAttributedString(string: "Queued", attributes: faces.queued)
             queuedTag.backgroundColor = Palette.statusAttnBg
             content.addSubview(queuedTag)
         }
@@ -506,42 +581,23 @@ final class RecallRow: UIView {
         fatalError("RecallRow is built in code")
     }
 
-    /// The meta's face: `font: 400 12px/22px`, on the row's line box.
-    private static var metaRole: TypeRole {
-        TypeRole(weight: .regular, size: TypeScale.textMeta ... TypeScale.textMeta, leading: ComposerView.fieldRole.lineHeight / TypeScale.textMeta,
-                 family: FontFamily.fontBody)
-    }
-
     private func render() {
-        let ink: UIColor = switch kind {
-        case .none: Palette.inkMuted
-        case .draft: Palette.inkStrong
-        case .sent: picked ? Palette.selectedInk : Palette.inkStrong
-        }
-        var attributes = ComposerView.fieldRole.attributes(color: ink)
-        if let paragraph = (attributes[.paragraphStyle] as? NSParagraphStyle)?.mutableCopy() as? NSMutableParagraphStyle {
-            paragraph.lineBreakMode = .byTruncatingTail
-            attributes[.paragraphStyle] = paragraph
+        let words: [NSAttributedString.Key: Any] = switch kind {
+        case .none: faces.muted
+        case .draft: faces.strong
+        case .sent: picked ? faces.selected : faces.strong
         }
         if kind == .draft, text.isEmpty {
-            words.attributedText = NSAttributedString(string: "Your draft · type to search",
-                                                      attributes: ComposerView.fieldRole.attributes(color: Palette.inkSubtle))
+            self.words.attributedText = NSAttributedString(string: "Your draft · type to search", attributes: faces.subtle)
         } else {
             let line = Recall.oneLine(text)
-            let string = NSMutableAttributedString(string: line, attributes: attributes)
+            let string = NSMutableAttributedString(string: line, attributes: words)
             if !marks.isEmpty { mark(line, in: string) }
-            words.attributedText = string
+            self.words.attributedText = string
         }
         if showsMeta {
             let ago = Recall.ago(date)
-            var meta = Self.metaRole.attributes(color: picked ? Palette.selectedInk : Palette.inkMuted)
-            if let font = meta[.font] as? UIFont {
-                meta[.font] = UIFont(descriptor: font.fontDescriptor.addingAttributes([.featureSettings: [[
-                    UIFontDescriptor.FeatureKey.type: kNumberSpacingType,
-                    UIFontDescriptor.FeatureKey.selector: kMonospacedNumbersSelector,
-                ]]]), size: font.pointSize)
-            }
-            time.attributedText = NSAttributedString(string: queued ? " · \(ago)" : ago, attributes: meta)
+            time.attributedText = NSAttributedString(string: queued ? " · \(ago)" : ago, attributes: picked ? faces.metaSelected : faces.meta)
         }
         time.isHidden = !showsMeta
         accessibilityLabel = switch kind {
@@ -586,40 +642,82 @@ final class RecallRow: UIView {
 
     /// Softer the further the row has risen: the sharp words give way to a
     /// blurred copy of them, `amount` points of blur of `Recall.softest`.
-    func soften(_ amount: Double) {
-        let share = min(1, max(0, amount / Recall.softest))
-        if share > 0.02, !softened {
-            softened = true
-            soft.image = blurred()
-        }
+    /// A row with none is never blurred. The copy is drawn off the main
+    /// thread the first time the row softens while the wheel is `slow`
+    /// (a row flying past shows none of it); until it lands the row stays
+    /// sharp, so no frame waits on a blur. Answers whether it began one.
+    @discardableResult
+    func soften(_ amount: Double, slow: Bool) -> Bool {
+        blur = amount
+        let begins = slow && amount / Recall.softest > 0.02 && soft.image == nil && !blurring
+        if begins { blurInBackground() }
+        showSoftness()
+        return begins
+    }
+
+    /// It is soft and its blurred copy has not begun: the wheel begins it
+    /// in a later frame.
+    var waitsForBlur: Bool {
+        blur / Recall.softest > 0.02 && soft.image == nil && !blurring
+    }
+
+    /// A copy blurred for this row before (it was in view and left).
+    func useBlurred(_ image: UIImage) {
+        placeSoft()
+        soft.image = image
+        showSoftness()
+    }
+
+    private func showSoftness() {
+        let share = soft.image == nil ? 0 : min(1, max(0, blur / Recall.softest))
         soft.alpha = share
         content.alpha = 1 - share
     }
 
-    private func blurred() -> UIImage? {
-        let pad = 8.0
+    private static let pad = 8.0
+
+    private func placeSoft() {
+        soft.frame = bounds.insetBy(dx: -Self.pad, dy: -Self.pad)
+    }
+
+    private func blurInBackground() {
+        let pad = Self.pad
         let size = CGSize(width: bounds.width + pad * 2, height: bounds.height + pad * 2)
-        guard size.width > pad * 2 else { return nil }
+        guard size.width > pad * 2 else { return }
+        blurring = true
+        layoutIfNeeded()
         let drawn = UIGraphicsImageRenderer(size: size).image { context in
             context.cgContext.translateBy(x: pad, y: pad)
             content.layer.render(in: context.cgContext)
         }
+        placeSoft()
+        Task { [weak self] in
+            let radius = Float(Recall.softest * drawn.scale)
+            let image = await Task.detached(priority: .userInitiated) { Self.blurred(drawn, radius: radius) }.value
+            guard let self, let image else { return }
+            blurring = false
+            soft.image = image
+            showSoftness()
+            onBlurred(image)
+        }
+    }
+
+    private nonisolated static func blurred(_ drawn: UIImage, radius: Float) -> UIImage? {
         guard let input = CIImage(image: drawn) else { return nil }
         let filter = CIFilter.gaussianBlur()
         filter.inputImage = input
-        filter.radius = Float(Recall.softest * drawn.scale)
+        filter.radius = radius
         guard let output = filter.outputImage?.cropped(to: input.extent),
-              let cg = Self.context.createCGImage(output, from: input.extent) else { return nil }
-        soft.frame = CGRect(x: -pad, y: -pad, width: size.width, height: size.height)
+              let cg = context.createCGImage(output, from: input.extent) else { return nil }
         return UIImage(cgImage: cg, scale: drawn.scale, orientation: .up)
     }
 
-    private static let context = CIContext()
+    private nonisolated static let context = CIContext()
 
     override func layoutSubviews() {
         super.layoutSubviews()
         content.frame = bounds
-        let line = ComposerView.fieldRole.lineHeight
+        let line = faces.line
         let top = max(0, (bounds.height - line) / 2)
         var end = bounds.width
         if showsMeta {
@@ -733,11 +831,16 @@ final class QueryChip: UIView {
 
 /// The recall wheel, while it is up: its list (the draft and what was sent,
 /// newest first, or the matches of what the reader types), where it has
-/// rolled to, and the views it rolls them in. Opened by ↑, the history
-/// button or a swipe up from the composer; ↑ and ↓ roll it, Return takes the row on the field's
-/// line into the composer, ⌘Return sends it as it is, Escape goes back to
-/// the draft (clearing a filter first), and with an empty draft what is
-/// typed filters it.
+/// rolled to, and the views it rolls them in. Opened by ↑, a swipe up from
+/// the composer, or VoiceOver's "Show what you sent" on the field; ↑ and ↓
+/// roll it, Return takes the row on the field's line into the composer,
+/// ⌘Return sends it as it is, Escape goes back to the draft (clearing a
+/// filter first), and with an empty draft what is typed filters it.
+///
+/// It stands half the window tall on a phone, 40% on an iPad or the Mac
+/// (`Recall.reach`). Only the rows in view are built: a row
+/// rolling out of the shape is let go, and its blurred copy kept for its
+/// next time in view.
 @MainActor
 final class RecallWheel: NSObject, UIGestureRecognizerDelegate {
     private enum Entry {
@@ -746,17 +849,21 @@ final class RecallWheel: NSObject, UIGestureRecognizerDelegate {
     }
 
     private unowned let composer: ComposerView
-    private let entries: [RecallEntry]
+    /// What was sent, newest first: older entries join at the end as the
+    /// pages before them are read.
+    private var entries: [RecallEntry]
+    /// How many entries it held when it last asked for the page before them.
+    private var askedAt: Int?
     let draft: String
     private let caret: NSRange
-    /// Whether keys reach the wheel (↑ or the history button); a swipe leaves the keyboard as it was.
+    /// Whether keys reach the wheel (↑ or VoiceOver's action); a swipe leaves the keyboard as it was.
     let keys: Bool
     private(set) var closing = false
     /// Dismissed: whatever a fold still under way would do next is dropped.
     private var cut = false
     private(set) var query = ""
 
-    private var geometry = RecallGeometry(width: 0, base: 0, button: 0)
+    private var geometry = RecallGeometry(width: 0, base: 0)
     private var field = CGRect.zero
     private var halo: RecallHalo?
     private let ghosts = UIView()
@@ -766,10 +873,20 @@ final class RecallWheel: NSObject, UIGestureRecognizerDelegate {
     private var chip: QueryChip?
     private var chipRoom = 0.0
     private var list: [Entry] = []
-    private var rows: [RecallRow] = []
+    /// The rows built, by their place in `list`: only those in view.
+    private var rows: [Int: RecallRow] = [:]
+    /// Blurred copies of rows that have been in view, by their place in `list`.
+    private var blurred: [Int: UIImage] = [:]
     private var search: RecallSearch?
     private let showsMeta: Bool
-    private let above: Int
+    /// The rows' faces, made once as it opens.
+    private let faces = RecallFaces()
+    /// Rows above the field's line, and how far back the oldest stands
+    /// (`Recall.depth`): measured at opening, and again when the keyboard moves.
+    private var above = 1
+    private var depth = 3
+    /// The foot the rows were measured against: the window's, or the keyboard's top.
+    private var foot = 0.0
 
     // The spring: `pos` rolls toward the nearest whole entry of `target`.
     private var pos = 0.0
@@ -779,6 +896,10 @@ final class RecallWheel: NSObject, UIGestureRecognizerDelegate {
     private var detent: Int?
     private var settled: (() -> Void)?
     private let spring = FrameTicker()
+    /// Builds the rows and begins the blurred copies a fast roll left
+    /// undone, once it stands still: a frame at a time, bounded as a roll is.
+    private let finish = FrameTicker()
+    private var unfinished = false
     private var outside: OutsideTouch?
 
     // A drag on the rows, or the swipe up from the composer that brought it up.
@@ -788,6 +909,14 @@ final class RecallWheel: NSObject, UIGestureRecognizerDelegate {
     private var swipeOrigin = 0.0
     private var scrolled = 0.0
 
+    #if DEBUG
+    /// The `-recall-probe` hears how long each drawn frame's rows took, how
+    /// many rows it built and how many blurred copies it began.
+    var probeCost: ((Double, Int, Int) -> Void)?
+    private var probeBuilt = 0
+    private var probeBlurs = 0
+    #endif
+
     init(composer: ComposerView, entries: [RecallEntry], draft: String, caret: NSRange, keys: Bool) {
         self.composer = composer
         self.entries = entries
@@ -795,11 +924,60 @@ final class RecallWheel: NSObject, UIGestureRecognizerDelegate {
         self.caret = caret
         self.keys = keys
         showsMeta = (composer.window?.bounds.width ?? 1000) > 560
-        above = Recall.rowsAbove(in: composer.window?.bounds ?? .zero)
         super.init()
     }
 
     var ghostsView: UIView { ghosts }
+
+    /// Rows of depth per row: the oldest row in view stands `depth` back.
+    private var spread: Double { Double(depth) / Double(above) }
+
+    /// How many rows stand between the pill's top and half the window, or
+    /// half the room above the keyboard while it is up (the host's keyboard
+    /// guide sits at the safe area's foot while it is down).
+    private func measureRows() {
+        guard let window = composer.window else { return }
+        let ring = composer.ring.convert(composer.ring.bounds, to: nil)
+        foot = Double(window.bounds.height)
+        if let host = composer.superview {
+            let keyboard = host.keyboardLayoutGuide.layoutFrame
+            if keyboard.height > host.safeAreaInsets.bottom + 1 { foot = host.convert(keyboard, to: nil).minY }
+        }
+        let regular = composer.traitCollection.horizontalSizeClass == .regular
+        above = Recall.rowsAbove(top: ring.minY, floor: foot, regular: regular)
+        depth = Recall.depth(regular: regular)
+        geometry.spread = spread
+    }
+
+    /// The rows' box: the field's own line and the rows above it.
+    private func placeGhosts() {
+        let height = Recall.row * Double(above + 1)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
+        ghosts.frame = CGRect(x: field.minX, y: field.maxY - height, width: field.width, height: height)
+        clip.frame = ghosts.bounds
+        inner.frame = ghosts.bounds
+        // The oldest row fades out at the top edge instead of being cut through.
+        top.frame = inner.bounds
+        top.locations = [0, NSNumber(value: 14 / height)]
+        for row in rows.values { row.center.y = ghosts.bounds.height }
+    }
+
+    /// The keyboard came or went while the wheel is up (VoiceOver's action
+    /// focuses the field, and the keyboard rises after the wheel measured):
+    /// it stands half the new room tall, the shape following over `durFade`.
+    @objc private func keyboardMoved() {
+        guard !closing, let halo else { return }
+        let before = above
+        composer.superview?.layoutIfNeeded()
+        measureRows()
+        guard above != before else { return }
+        halo.spread = spread
+        placeGhosts()
+        draw(shown)
+        halo.morph(to: 1, extra: extraFor(), duration: Motion.durFade)
+    }
 
     private var last: Int { max(0, list.count - 1) }
     private func clamp(_ value: Double) -> Double { max(0, min(Double(last), value)) }
@@ -820,27 +998,22 @@ final class RecallWheel: NSObject, UIGestureRecognizerDelegate {
         let ring = composer.ring
         Feel.prepare()
         // Every size first, before anything is written.
-        geometry = RecallGeometry(width: ring.bounds.width, base: ring.bounds.height,
-                                  button: composer.historyBox.convert(composer.historyBox.bounds, to: ring).midX)
+        geometry = RecallGeometry(width: ring.bounds.width, base: ring.bounds.height)
         field = composer.pill.convert(composer.field.frame, to: ring)
-        let height = Recall.row * Double(above + 1)
+        measureRows()
         composer.wheelStepsIn()
         let halo = RecallHalo(geometry, extra: extraFor())
         ring.insertSubview(halo, belowSubview: composer.pill)
         self.halo = halo
         // The rows sit on the field's own line and above it, shown only inside the shape.
-        ghosts.frame = CGRect(x: field.minX, y: field.maxY - height, width: field.width, height: height)
         ghosts.layer.mask = clip
-        clip.frame = ghosts.bounds
         clip.actions = ["path": NSNull(), "bounds": NSNull(), "position": NSNull()]
-        inner.frame = ghosts.bounds
         inner.isUserInteractionEnabled = false
-        // The oldest row fades out at the top edge instead of being cut through.
-        top.frame = inner.bounds
         top.colors = [UIColor.clear.cgColor, UIColor.black.cgColor]
-        top.locations = [0, NSNumber(value: 14 / height)]
         inner.layer.mask = top
         ghosts.addSubview(inner)
+        placeGhosts()
+        NotificationCenter.default.addObserver(self, selector: #selector(keyboardMoved), name: UIResponder.keyboardDidChangeFrameNotification, object: nil)
         ghosts.accessibilityLabel = "What you sent"
         ghosts.isAccessibilityElement = false
         ghosts.shouldGroupAccessibilityChildren = true
@@ -888,8 +1061,11 @@ final class RecallWheel: NSObject, UIGestureRecognizerDelegate {
 
     // MARK: The list
 
+    /// The list for the query, with no rows built yet: `draw` builds the ones in view.
     private func buildRows() {
-        for row in rows { row.removeFromSuperview() }
+        for row in rows.values { row.removeFromSuperview() }
+        rows = [:]
+        blurred = [:]
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
         if q.isEmpty {
             list = [Entry.draft] + entries.map { Entry.sent($0, marks: []) }
@@ -897,15 +1073,6 @@ final class RecallWheel: NSObject, UIGestureRecognizerDelegate {
             if search == nil { search = RecallSearch(entries.map(\.text)) }
             list = (search?.search(q) ?? []).map { Entry.sent(entries[$0.index], marks: $0.terms) }
         }
-        rows = list.enumerated().map { k, entry in
-            let row: RecallRow = switch entry {
-            case .draft: RecallRow(kind: .draft, text: draft, showsMeta: showsMeta)
-            case let .sent(sent, marks): RecallRow(kind: .sent, text: sent.text, marks: marks, date: sent.date, queued: sent.queued, showsMeta: showsMeta)
-            }
-            row.onActivate = { [weak self] in self?.choose(k) }
-            return row
-        }
-        if list.isEmpty { rows = [RecallRow(kind: .none, text: "Nothing you sent here matches", showsMeta: false)] }
         if let chip {
             chip.isHidden = q.isEmpty
             chip.show(query, matches: list.count)
@@ -915,14 +1082,55 @@ final class RecallWheel: NSObject, UIGestureRecognizerDelegate {
             // While filtering, every row stops short of the chip.
             chipRoom = q.isEmpty ? 0 : width + 10
         }
-        let width = ghosts.bounds.width - chipRoom
-        for row in rows {
-            row.bounds = CGRect(x: 0, y: 0, width: width, height: Recall.row)
-            row.center = CGPoint(x: width / 2, y: ghosts.bounds.height)
-            row.isHidden = true
-            inner.addSubview(row)
+        ghosts.accessibilityElements = []
+    }
+
+    /// Row `k`, built as it comes into view: "Nothing you sent here matches"
+    /// in the first place when the list is empty.
+    private func row(_ k: Int) -> RecallRow {
+        if let row = rows[k] { return row }
+        let row: RecallRow = if list.isEmpty {
+            RecallRow(kind: .none, text: "Nothing you sent here matches", showsMeta: false, faces: faces)
+        } else {
+            switch list[k] {
+            case .draft: RecallRow(kind: .draft, text: draft, showsMeta: showsMeta, faces: faces)
+            case let .sent(sent, marks):
+                RecallRow(kind: .sent, text: sent.text, marks: marks, date: sent.date, queued: sent.queued, showsMeta: showsMeta, faces: faces)
+            }
         }
-        ghosts.accessibilityElements = rows
+        row.onActivate = { [weak self] in self?.choose(k) }
+        // Kept only while the row is still this list's row `k` (a search rebuilds the list).
+        row.onBlurred = { [weak self, weak row] image in
+            guard let self, let row, rows[k] === row else { return }
+            blurred[k] = image
+        }
+        let width = ghosts.bounds.width - chipRoom
+        row.bounds = CGRect(x: 0, y: 0, width: width, height: Recall.row)
+        row.center = CGPoint(x: width / 2, y: ghosts.bounds.height)
+        if let image = blurred[k] { row.useBlurred(image) }
+        inner.addSubview(row)
+        rows[k] = row
+        return row
+    }
+
+    /// What was sent, read again (an older page landed): the list takes the
+    /// older entries in where it stands. Rows already built keep their
+    /// place when only older entries joined; otherwise, or while a search
+    /// filters, the list is built again, the wheel held where it was.
+    func heard(_ next: [RecallEntry]) {
+        guard !closing, next != entries else { return }
+        let appended = next.count > entries.count && zip(entries, next).allSatisfy { $0.id == $1.id }
+        entries = next
+        search = nil
+        if appended, query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            list = [Entry.draft] + entries.map { Entry.sent($0, marks: []) }
+        } else {
+            buildRows()
+            pos = clamp(pos)
+            target = clamp(target)
+        }
+        draw(min(shown, Double(last)))
+        if let halo, extraFor() != halo.extra { halo.morph(to: 1, extra: extraFor(), duration: Motion.durFade) }
     }
 
     private func setQuery(_ next: String) {
@@ -994,21 +1202,72 @@ final class RecallWheel: NSObject, UIGestureRecognizerDelegate {
     /// Every row where `p` puts it. Landing on another entry is a detent the
     /// reader feels and hears; overshooting past either end is not.
     private func draw(_ p: Double) {
+        #if DEBUG
+        let began = CACurrentMediaTime()
+        defer { probeCost?(CACurrentMediaTime() - began, probeBuilt, probeBlurs) }
+        #endif
+        // A frame's work is bounded however fast it rolls: four rows built at
+        // most, nearest the line first (a row flying past for a frame is not
+        // seen), and blurred copies only while it moves slowly, two at most;
+        // what is left is done in the frames after, once it stands still too.
+        let slow = abs(p - shown) < 0.1
+        var blurs = 0
+        var built = 0
+        unfinished = false
         shown = p
         let line = Recall.round(p)
-        for (k, row) in rows.enumerated() {
-            let off = Double(k) - p
-            if off > Double(above) + 0.6 || off < -1.2 {
-                row.isHidden = true
-                continue
+        // In view: from just under the field's line to just over the shape's top.
+        let count = max(1, list.count)
+        let low = max(0, Int((p - 1.2).rounded(.up)))
+        let high = min(count - 1, Int((p + Double(above) + 0.6).rounded(.down)))
+        let gone = rows.keys.filter { $0 < low || $0 > high }
+        for k in gone {
+            rows[k]?.removeFromSuperview()
+            rows[k] = nil
+        }
+        let held = rows.count
+        let spread = spread
+        let near = stride(from: low, through: high, by: 1).sorted { abs(Double($0) - p) < abs(Double($1) - p) }
+        for k in near {
+            if rows[k] == nil {
+                guard built < 4 else {
+                    unfinished = true
+                    continue
+                }
+                built += 1
             }
-            row.isHidden = false
-            let up = max(0, off)
-            row.layer.transform = Recall.transform(off: off, up: up)
-            row.soften(max(0, up - 1) * Recall.soft)
+            let row = row(k)
+            let off = Double(k) - p
+            // Its depth: the rows in view share the wheel's, the oldest standing `depth` back.
+            let deep = max(0, off) * spread
+            row.depth = deep
+            row.layer.transform = Recall.transform(off: off, up: deep)
+            if row.soften(deep * Recall.soft, slow: slow && blurs < 2) { blurs += 1 }
+            if row.waitsForBlur { unfinished = true }
             // On the field's line a row is at full strength; above it the rows are ghosts, fading as they rise.
-            row.alpha = off >= 0 ? max(0, off < 1 ? 1 + (Recall.ghost(1) - 1) * off : Recall.ghost(off)) : max(0, 1 + off * 1.6)
+            row.alpha = off >= 0 ? max(0, off < 1 ? 1 + (Recall.ghost(spread) - 1) * off : Recall.ghost(deep)) : max(0, 1 + off * 1.6)
             row.pick(line == k)
+        }
+        if built > 0 || !gone.isEmpty || rows.count != held {
+            ghosts.accessibilityElements = rows.keys.sorted().compactMap { rows[$0] }
+        }
+        #if DEBUG
+        probeBuilt = built
+        probeBlurs = blurs
+        #endif
+        // Standing still with rows still to build or blur: a frame at a time until none is left.
+        if unfinished, !spring.running, !finish.running {
+            finish.run { [weak self] _ in
+                guard let self, !closing, !spring.running else { return false }
+                draw(shown)
+                return unfinished
+            }
+        }
+        // Nearing the oldest entry read (within a shape's rows of it), the
+        // page before it is read: once for each count of entries held.
+        if !list.isEmpty, high + above >= last, askedAt != entries.count {
+            askedAt = entries.count
+            composer.binding?.readOlder()
         }
         if line >= 0, line <= last, line != detent {
             if let detent, !list.isEmpty { Feel.detent(older: line > detent) }
@@ -1183,17 +1442,19 @@ final class RecallWheel: NSObject, UIGestureRecognizerDelegate {
 
     // MARK: Closing
 
-    /// Folds the wheel back into the history button, the rows still inside
-    /// it, fading as they go. `text` is what was taken into the field; nil
-    /// goes back to the draft with the caret where it was.
+    /// Folds the wheel back down into the pill, the rows still inside it,
+    /// fading as they go. `text` is what was taken into the field; nil goes
+    /// back to the draft with the caret where it was.
     private func close(_ text: String?, send: Bool) {
         guard !closing else { return }
         closing = true
         spring.stop()
         settled = nil
+        NotificationCenter.default.removeObserver(self, name: UIResponder.keyboardDidChangeFrameNotification, object: nil)
         if let outside { outside.view?.removeGestureRecognizer(outside) }
         outside = nil
-        let line = rows.indices.contains(Recall.round(pos)) ? rows[Recall.round(pos)] : nil
+        // The row on the field's line is always in view, so built.
+        let line = rows[Recall.round(pos)]
         let still = UIAccessibility.isReduceMotionEnabled || composer.window == nil
         let fold = { [weak self] in
             guard let self, !cut else { return }
@@ -1235,6 +1496,7 @@ final class RecallWheel: NSObject, UIGestureRecognizerDelegate {
         closing = true
         spring.stop()
         settled = nil
+        NotificationCenter.default.removeObserver(self, name: UIResponder.keyboardDidChangeFrameNotification, object: nil)
         if let outside { outside.view?.removeGestureRecognizer(outside) }
         outside = nil
         chip?.removeFromSuperview()
@@ -1245,6 +1507,46 @@ final class RecallWheel: NSObject, UIGestureRecognizerDelegate {
         composer.wheelEnded(self, focus: false, caretAtEnd: false, send: false)
     }
 }
+
+#if DEBUG
+/// What the `-recall-probe` reads off the wheel: its measures, and every
+/// row in view as last drawn.
+struct RecallProbeState {
+    struct Row {
+        let index: Int
+        let off: Double
+        let depth: Double
+        let blur: Double
+        let softShown: Double
+        let alpha: Double
+    }
+
+    /// The grown shape's top, in the window.
+    let top: Double
+    let floor: Double
+    let above: Int
+    let depth: Int
+    let open: Double
+    let matches: Int
+    let rows: [Row]
+}
+
+extension RecallWheel {
+    var probeState: RecallProbeState {
+        let top = halo.map { Double($0.convert($0.bounds, to: nil).minY) } ?? .nan
+        let rows = rows.keys.sorted().compactMap { k in
+            self.rows[k].map {
+                RecallProbeState.Row(index: k, off: Double(k) - shown, depth: $0.depth, blur: $0.blur, softShown: $0.softShown, alpha: Double($0.alpha))
+            }
+        }
+        return RecallProbeState(top: top, floor: foot, above: above, depth: depth, open: halo?.open ?? 0, matches: list.count, rows: rows)
+    }
+
+    func probeSpin(to index: Double) {
+        spin(to: index)
+    }
+}
+#endif
 
 /// Hears every touch that begins in the window, and lets each go on to
 /// whatever it was for: the wheel's "tap outside dismisses". `onTouch` gets

@@ -74,17 +74,18 @@ public enum ComposerAttachment: Sendable, Equatable {
 ///   radius or padding on focus. A draft of several lines folds to its first
 ///   line, "+N lines" on its faded end, when the field is not being written
 ///   in, and opens again over `durMorph`.
-/// - History, Attach and Send/Stop are 34pt boxes (radius 12 − 7),
-///   bottom-aligned, 10pt apart. History opens the recall wheel
-///   (ComposerRecall.swift). Send and Stop are one box: its glyph swaps (`icon-swap`:
+/// - Attach and Send/Stop are 34pt boxes (radius 12 − 7), bottom-aligned,
+///   10pt apart. Send and Stop are one box: its glyph swaps (`icon-swap`:
 ///   opacity, scale 0.25→1, a 4pt blur clearing) over `durControl`, a spinner
 ///   while the send is in flight; empty and idle it rests at 55% with no
 ///   gradient. Both scale to `pressScale` under the finger.
 /// - Parked prompts stand in their own column above (`prompts`), 11pt apart,
 ///   so a card coming or going never moves the pill.
-/// - Recall (composer-recall, "Wheel"): ↑ in an empty field or with the
-///   caret at its start, the history button, or a swipe up that starts on
-///   the pill brings up what the reader sent here; ↑ in an empty field while
+/// - Recall (composer-recall, "Wheel", ComposerRecall.swift): ↑ in an empty
+///   field or with the caret at its start, a swipe up that starts on the
+///   pill, or VoiceOver's "Show what you sent" action on the field brings up
+///   what the reader sent here (there is no history button on this app, only
+///   on the web); ↑ in an empty field while
 ///   their newest message is queued and can be withdrawn lifts that
 ///   message's words into the field to edit instead (ComposerQueuedEdit.swift).
 /// - Commands (Composer.svelte `.menu`): a `/` starting the word under the
@@ -154,8 +155,6 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
     private let hint = KitLabel(ComposerView.fieldRole, ink: Palette.inkMuted, tracking: -0.01)
     private let more = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
     private let attach = PressBox()
-    /// Opens the recall wheel (composer-recall `#history-btn`).
-    let historyBox = PressBox()
     private let actionBox = PressBox()
     private let gradient = CAGradientLayer()
     private var glyph: SwapGlyph?
@@ -328,6 +327,10 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
         field.delegate = self
         field.accessibilityLabel = "Message the agent"
         field.accessibilityIdentifier = "steer-message"
+        // VoiceOver's way to the wheel, which a swipe or ↑ brings up otherwise.
+        field.accessibilityCustomActions = [UIAccessibilityCustomAction(name: Self.recallAction) { [weak self] _ in
+            self?.recallPressed() ?? false
+        }]
         field.translatesAutoresizingMaskIntoConstraints = false
         field.onPaste = { [weak self] long in self?.attachPaste(long) }
         field.onPasteItems = { [weak self] items in self?.binding?.onPasteItems(items) }
@@ -341,17 +344,13 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
         more.translatesAutoresizingMaskIntoConstraints = false
 
         attach.configure(glyph: .plus, accessibility: "Attach a file or image")
-        historyBox.configure(glyph: .history, accessibility: "Show what you sent")
-        historyBox.addAction(UIAction { [weak self] _ in self?.historyPressed() }, for: .primaryActionTriggered)
-        historyBox.addAction(UIAction { _ in Feel.prepare() }, for: .touchDown)
-        historyBox.accessibilityIdentifier = "composer-history"
         actionBox.addAction(UIAction { [weak self] _ in self?.pressAction() }, for: .primaryActionTriggered)
         actionBox.accessibilityIdentifier = "send-steer"
         gradient.cornerRadius = Radius.radiusLg - Self.inset
         gradient.cornerCurve = .continuous
         actionBox.layer.insertSublayer(gradient, at: 0)
 
-        let controls = UIStackView(arrangedSubviews: [historyBox, attach, actionBox])
+        let controls = UIStackView(arrangedSubviews: [attach, actionBox])
         // A coarse pointer's gap, so each 34pt box's 44pt touch area meets its neighbour's.
         controls.spacing = 10
         controls.alignment = .center
@@ -374,8 +373,6 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
             controls.bottomAnchor.constraint(equalTo: field.bottomAnchor),
             attach.widthAnchor.constraint(equalToConstant: Self.control),
             attach.heightAnchor.constraint(equalToConstant: Self.control),
-            historyBox.widthAnchor.constraint(equalToConstant: Self.control),
-            historyBox.heightAnchor.constraint(equalToConstant: Self.control),
             actionBox.widthAnchor.constraint(equalToConstant: Self.control),
             actionBox.heightAnchor.constraint(equalToConstant: Self.control),
             hint.leadingAnchor.constraint(equalTo: field.leadingAnchor),
@@ -404,7 +401,6 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
         let traits = traitCollection
         pill.layer.borderColor = grown ? UIColor.clear.cgColor : Palette.borderControl.resolvedColor(with: traits).cgColor
         attach.layer.borderColor = Palette.borderControl.resolvedColor(with: traits).cgColor
-        historyBox.layer.borderColor = Palette.borderControl.resolvedColor(with: traits).cgColor
         // The warning state's edge, a CGColor, follows the appearance by hand.
         actionBox.layer.borderColor = Palette.warning9.resolvedColor(with: traits).cgColor
         gradient.colors = Palette.actionSurface.colors(for: traits)
@@ -471,6 +467,9 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
         }
         attachments = next.attachments
         render(next)
+        #if DEBUG
+        RecallProbe.arm(self)
+        #endif
     }
 
     /// What the pane changed: its action, whether it can be written to, its
@@ -490,6 +489,8 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
         }
         syncPrompts(source.prompts)
         renderAction(animated: window != nil)
+        // An older page may have landed: the wheel takes in what it brought.
+        if let wheel, !wheel.closing { wheel.heard(source.recall()) }
         // The session's commands may have changed (their details landed): a `/` word being typed shows them.
         if menuWasOpen { syncMenu() }
     }
@@ -1106,14 +1107,22 @@ extension ComposerView {
         return wheel.backspace()
     }
 
-    private func historyPressed() {
+    /// The field's accessibility action that brings the wheel up.
+    static let recallAction = "Show what you sent"
+
+    /// VoiceOver's "Show what you sent": brings the wheel up, or puts it (or
+    /// a queued message being edited) away again. Answers whether it acted.
+    func recallPressed() -> Bool {
         if let wheel {
             wheel.backToDraft()
         } else if let edit {
             edit.returnEdit(nil)
         } else if binding != nil {
             openWheel(keys: true)
+        } else {
+            return false
         }
+        return true
     }
 
     /// Brings the wheel up. `keys`: the field takes focus, so keys reach the
@@ -1365,6 +1374,39 @@ extension ComposerView {
         return nil
     }
 }
+
+#if DEBUG
+extension ComposerView {
+    /// The `-recall-probe`: the wheel brought up as a swipe brings it (the
+    /// keyboard left as it is).
+    func probeOpenWheel() {
+        guard let binding, wheel == nil, edit == nil else { return }
+        endFlight()
+        closeMenu(animated: false)
+        (superview ?? self).layoutIfNeeded()
+        let wheel = RecallWheel(composer: self, entries: binding.recall(), draft: field.text ?? "", caret: field.selectedRange, keys: false)
+        self.wheel = wheel
+        wheel.open()
+        renderAction(animated: true)
+    }
+
+    /// What the session sent here, newest first.
+    var probeEntries: [RecallEntry] {
+        binding?.recall() ?? []
+    }
+
+    /// Every button in the pill, by what VoiceOver calls it.
+    var probeButtons: [String] {
+        var found: [String] = []
+        var views: [UIView] = [pill]
+        while let view = views.popLast() {
+            if let button = view as? UIButton { found.append(button.accessibilityLabel ?? button.accessibilityIdentifier ?? "unlabelled") }
+            views += view.subviews
+        }
+        return found.sorted()
+    }
+}
+#endif
 
 // MARK: The `/` menu
 

@@ -123,8 +123,7 @@ public enum Glyph: String, CaseIterable, Sendable {
     case fork = "branching-paths-up-bold-duotone"
     /// PiLogo.svelte: one ink, drawn in the text colour.
     case logoPi = "logo-pi"
-    // The composer's history button, and the Sound switch.
-    case history = "history-bold-duotone"
+    // The Sound switch.
     case soundOn = "volume-loud-bold-duotone"
     case soundOff = "volume-cross-bold-duotone"
     /// TaskSheet.svelte's `IconLock`: a task that waits on others.

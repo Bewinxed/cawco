@@ -45,8 +45,12 @@ public final class SessionComposerBinding {
 
     /// What the reader sent in this conversation, newest first: their own
     /// messages only, never the agent's, a delegate's or a harness note.
-    /// Read once each time the recall wheel opens.
+    /// Read as the recall wheel opens, and again while it is up whenever the
+    /// pane renders (an older page landed).
     public var recall: () -> [RecallEntry] = { [] }
+    /// Asks for the page before the oldest the transcript holds: the wheel
+    /// is nearing the oldest entry it has (`SessionsStore.readOlderPage`).
+    public var readOlder: () -> Void = {}
     /// The reader's newest message, when it is still queued and the harness
     /// can take it back (client.svelte.ts `canWithdraw`): what ↑ in an empty
     /// composer lifts out of the transcript.

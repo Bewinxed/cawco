@@ -3,7 +3,7 @@ import UIKit
 
 // Editing a queued message (composer-recall `editQueued`): its words lift out
 // of the transcript into the composer, the bubble folding down to its tag,
-// and the composer grows by one row, out of its history button as the wheel
+// and the composer grows by one row, up from its pill's top as the wheel
 // grows, that says what is happening. Return replaces the message, Escape
 // (or Keep it, on a touch screen) gives it back as it was; either way the
 // words fly back and the bubble unfolds.
@@ -292,8 +292,7 @@ final class QueuedEdit {
     /// The composer stays grown by one row while the words are in it.
     private func grow() {
         let ring = composer.ring
-        let geometry = RecallGeometry(width: ring.bounds.width, base: ring.bounds.height,
-                                      button: composer.historyBox.convert(composer.historyBox.bounds, to: ring).midX)
+        let geometry = RecallGeometry(width: ring.bounds.width, base: ring.bounds.height)
         composer.grown = true
         let halo = RecallHalo(geometry, extra: Recall.editExtra)
         ring.insertSubview(halo, belowSubview: composer.pill)
@@ -301,7 +300,7 @@ final class QueuedEdit {
         let row = EditRow(keyboard: EditRow.keyboard)
         row.onKeep = { [weak self] in self?.returnEdit(nil) }
         // Inset past the shoulders' curve, set from the shape's own taper.
-        inset = (Recall.taper(width: geometry.width, extra: Recall.editExtra) + Radius.radiusLg + 8).rounded()
+        inset = (Recall.taper(width: geometry.width, extra: Recall.editExtra, spread: geometry.spread) + Radius.radiusLg + 8).rounded()
         row.frame = CGRect(x: inset, y: -Recall.editExtra, width: max(0, geometry.width - 2 * inset), height: Recall.editExtra)
         ring.addSubview(row)
         self.row = row
@@ -354,7 +353,7 @@ final class QueuedEdit {
         if let replacement { binding?.onReplaceQueued(id, replacement) }
     }
 
-    /// Folds the grown row back into the history button.
+    /// Folds the grown row back down into the pill.
     private func fold(animated: Bool) {
         let halo = halo, row = row
         self.halo = nil

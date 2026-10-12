@@ -64,6 +64,10 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         composerBinding.onRetryFile = { [weak self] id in self?.upload(id) }
         composerBinding.attachMenu = attachMenu()
         composerBinding.recall = { [weak self] in self.map { SentMessages.recall($0.transcript) } ?? [] }
+        composerBinding.readOlder = { [weak self] in
+            guard let self else { return }
+            hub.sessions.readOlderPage(sessionId)
+        }
         composerBinding.editableQueued = { [weak self] in self?.editableQueued() }
         composerBinding.foldQueued = { [weak self] id, folded, replacement in
             self?.transcriptView.foldQueued(id, folded: folded, replacement: replacement)
