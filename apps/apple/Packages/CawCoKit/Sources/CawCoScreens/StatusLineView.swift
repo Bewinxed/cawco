@@ -8,16 +8,18 @@ import UIKit
 /// default: the home draws no line then. A dead hub says so with its retry
 /// clock and Reconnect: a quiet fleet and an unreachable hub never read the
 /// same. Local Network privacy refusing the hub is said here and only here,
-/// with Open Settings, the one action that changes it: coming back from
-/// Settings reconnects by itself (`HubConnection.becameActive`), so there is
-/// no Reconnect beside it. Each change of phase cross-fades.
+/// with the one action that changes it, Settings opened at the switch (on
+/// the Mac one click short of it, the line naming that click: `LocalNetwork
+/// .refusal`): coming back reconnects by itself (`HubConnection
+/// .becameActive`), so there is no Reconnect beside it. The words wrap, never
+/// cut. Each change of phase cross-fades.
 final class StatusLineView: UIView {
     enum Phase: Equatable {
         case refused, unreachable, connecting, reading, connected
     }
 
     private let glyph = GlyphView(.warning, size: Size.iconSm, tint: Palette.statusFailInk)
-    private let words = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
+    private let words = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
     private var reconnect: UIButton!
     private let row = UIStackView()
     private var phase: Phase?
@@ -27,7 +29,12 @@ final class StatusLineView: UIView {
     init() {
         super.init(frame: .zero)
         reconnect = KitButton.make("Reconnect", variant: .outline, height: .xs) { [weak self] in
-            self?.hub?.reconnectNow()
+            guard let self else { return }
+            if phase == .refused {
+                UIApplication.shared.open(LocalNetwork.settingsURL)
+            } else {
+                hub?.reconnectNow()
+            }
         }
         words.tabular = true
         row.addArrangedSubview(glyph)
@@ -97,7 +104,7 @@ final class StatusLineView: UIView {
         switch phase {
         case .refused:
             // Not the hub away: this app is not let onto its network. Open Settings is the fix.
-            words.text = "CawCo isn't allowed on the local network"
+            words.text = LocalNetwork.refusal
         case .unreachable:
             if hub.socket == .connecting {
                 words.text = "Hub unreachable, retrying now"
@@ -113,7 +120,7 @@ final class StatusLineView: UIView {
             // Live and read is the quiet default: the home draws no line then.
             words.text = nil
         }
-        let action = phase == .refused ? "Open Settings" : hub.socket == .connecting ? "Connecting…" : "Reconnect"
+        let action = phase == .refused ? LocalNetwork.settingsAction : hub.socket == .connecting ? "Connecting…" : "Reconnect"
         KitButton.setTitle(action, of: reconnect, variant: .outline, height: .xs)
         #if DEBUG
         // What the line says, for a simulator pass to read (probe-ios-catchup.ts `--local-network`).

@@ -73,18 +73,47 @@ public enum LocalNetwork {
         error.code == .notConnectedToInternet || error.code == .cannotConnectToHost
     }
 
-    /// The switch itself. On the Mac, System Settings › Privacy & Security ›
-    /// Local Network: its pane is the Privacy & Security extension's
-    /// `privacy-localnetwork` (that extension's Info.plist on macOS 27), and
-    /// its anchor `Privacy_LocalNetwork` was found to "open the pane" on Tahoe
-    /// (discourse.vidvox.net/t/tahoe-ndi-and-local-network-permissions-lost-
-    /// on-restart/8938). On iPhone, this app's own page in Settings, where
-    /// its Local Network switch is: there is no URL for the list itself.
+    /// Where the switch is reached from. On iPhone, this app's own page in
+    /// Settings, which holds its Local Network switch. On the Mac no URL
+    /// reaches the Local Network list: every anchor tried on macOS 27
+    /// (`Privacy_LocalNetwork` and the pane's own names) lands on the top of
+    /// Privacy & Security, as Sequel Ace found on macOS 15 (it "won't navigate
+    /// to the Local Network pane—it will open Privacy & Security instead",
+    /// github.com/Sequel-Ace/Sequel-Ace/pull/2347). So the Mac opens Privacy &
+    /// Security, and the words name the last click (`refusal`).
     @MainActor public static var settingsURL: URL {
         #if targetEnvironment(macCatalyst)
-        URL(string: "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_LocalNetwork")!
+        URL(string: "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension")!
         #else
         URL(string: UIApplication.openSettingsURLString)!
+        #endif
+    }
+
+    /// What the button that opens `settingsURL` says: where it goes.
+    public static var settingsAction: String {
+        #if targetEnvironment(macCatalyst)
+        "Open Privacy & Security"
+        #else
+        "Open Settings"
+        #endif
+    }
+
+    /// How to allow it, as a clause (the pane in place of a transcript).
+    public static var allowIt: String {
+        #if targetEnvironment(macCatalyst)
+        "Turn it on in Privacy & Security › Local Network"
+        #else
+        "Allow it in Settings"
+        #endif
+    }
+
+    /// The status line while the hub is refused. On the Mac the button lands
+    /// one click short, so the line names that click.
+    public static var refusal: String {
+        #if targetEnvironment(macCatalyst)
+        "CawCo isn't allowed on the local network: turn it on in Privacy & Security › Local Network"
+        #else
+        "CawCo isn't allowed on the local network"
         #endif
     }
 

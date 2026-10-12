@@ -1923,7 +1923,8 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         }
     }
 
-    static let openSettings = "Open Settings"
+    /// Where the dock's action for a Local Network refusal goes (`LocalNetwork.settingsAction`).
+    static var openSettings: String { LocalNetwork.settingsAction }
 
     /// The error formula for a transcript that could not be caught up, as a
     /// toast (client.svelte.ts `toastBehind`): what happened (its name isn't
