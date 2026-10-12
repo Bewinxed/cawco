@@ -101,12 +101,21 @@
     }
     return at;
   });
-  /** A moment on the bar: "now", else how far ahead ("+1h 40m"). */
-  const ahead = (ms: number): string => (ms < 60_000 ? "now" : `+${fmt(ms)}`);
-  /** A band's tooltip: its account and its span, "design · now to +1h 40m". */
+  /**
+   * A moment on the bar: "now" where `fmt` would say "0m", else how far
+   * ahead ("+1h 40m"), rounded as the cells round their times.
+   */
+  const ahead = (ms: number): string =>
+    fmt(ms) === "0m" ? "now" : `+${fmt(ms)}`;
+  /**
+   * A band's tooltip: how long its account carries your new sessions,
+   * "design carries you from now to +32m". It ends where the relay hands
+   * over, which can come before the account runs out (its dial's tip says
+   * when that is).
+   */
   const bandTip = (seg: Segment & { kind: "band" }): string => {
     const from = startOf.get(seg.key) ?? 0;
-    return `${nameOf(seg.ring)} · ${ahead(from)} to ${ahead(from + seg.ms)}`;
+    return `${nameOf(seg.ring)} carries you from ${ahead(from)} to ${ahead(from + seg.ms)}`;
   };
 
   /** Where nobody can carry you first: the stop, inside the five hours. */

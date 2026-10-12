@@ -82,6 +82,10 @@ public enum Rings {
     /// A provider's accounts in carrying order, and the carry answer (`ClaudeRings`).
     public struct Claude: Sendable {
         public var accounts: [Account]
+        /// The forecast's moment: the hub walks its spans from it (its first
+        /// span's `from`), so a stop worked out here walks from it too and
+        /// counts down with the bands between readings.
+        public var at: Double
         /// The account that is back first after nothing can carry you.
         public var back: Account?
         public var backAt: Double?
@@ -304,6 +308,7 @@ public enum Rings {
         let delegate = of(forecast.delegates.first)
         return Claude(
             accounts: order.compactMap { byId[$0] },
+            at: spans.first?.from ?? now,
             back: of(backSpan), backAt: backSpan?.from,
             burn: paceSum(forecast, "session"), burnWeek: paceSum(forecast, "weekly_all"),
             carry: carry,
@@ -381,8 +386,11 @@ public enum Rings {
     }
 
     /// An account's forecast stop (`stopFor`): the carrier and an idle
-    /// account at the fleet's pace (`takeover`), any other running account
-    /// (and the Go plan, no `c`) at its own; nil past the 5-hour horizon.
+    /// account at the fleet's pace from the forecast's moment (`takeover`),
+    /// any other running account (and the Go plan, no `c`) at its own; nil
+    /// past the 5-hour horizon. The carrier's band ends at its stop, or
+    /// sooner when the walk hands over first: the band says how long it
+    /// carries you, the cell when it runs out (`bandTip`, `dialTip`).
     public static func stopFor(_ r: Account, _ c: Claude?, now: Double) -> Stop? {
         let own = c == nil || (!r.sessions.isEmpty && r.id != c?.carry?.id)
         var stop: Stop?
@@ -423,10 +431,18 @@ public enum Rings {
         return .stop(figure: out.map { fmt($0 - now) } ?? "5h+", guess: r.state == .stale)
     }
 
-    /// A dial's tooltip under its account's name, a short line per limit (`dialTip`).
+    /// A dial's tooltip under its account's name, a short line per limit
+    /// (`dialTip`): on the limit it stops on, when it runs out ("runs out in
+    /// 32m", an idle account "if it takes over now"), or "lasts past the next
+    /// 5 hours"; how long it carries you is its band's to say.
     public static func dialTip(_ r: Account, _ c: Claude?, now: Double) -> String {
         let time = cellTime(r, c, now: now)
-        let pace = if case let .stop(figure, _) = time { " · \(figure) at this pace" } else { "" }
+        // At the fleet's pace as if it took over now (`stopFor`'s idle).
+        let idle = c != nil && r.sessions.isEmpty && r.id != c?.carry?.id
+        var pace = ""
+        if case let .stop(figure, _) = time {
+            pace = figure == "5h+" ? " · lasts past the next 5 hours" : " · runs out in \(figure)\(idle ? " if it takes over now" : "")"
+        }
         let stopsOnWeek = (stopFor(r, c, now: now)?.limit ?? r.bindName) != "5-hour"
         let spent = r.backAt == nil ? "used up" : "used up · back in \(until(r.backAt, now))"
         func line(_ label: String, _ limited: Bool, _ left: Double?, _ binds: Bool) -> String? {
@@ -487,15 +503,17 @@ public enum Rings {
         return out
     }
 
-    /// When an idle account would run out if it took over now, as the relay's
-    /// walk spends a carrier (`takeover`).
+    /// When an account runs out carrying you, as the relay's walk spends a
+    /// carrier, from the forecast's moment (`c.at`), so it counts down
+    /// between readings as the bands do (`takeover`).
     public static func takeover(_ r: Account, _ c: Claude, now: Double) -> Stop? {
+        let from = c.at
         let horizon = now + horizonMs
         var five: Double?
         if c.burn > 0, let w5 = r.w5 {
             var use = 100 - w5.left
-            var reset: Double? = w5.resetsAt.flatMap { $0 > now ? $0 : nil }
-            var t = now
+            var reset: Double? = w5.resetsAt.flatMap { $0 > from ? $0 : nil }
+            var t = from
             while t < horizon {
                 let out = t + ((100 - use) / c.burn) * hourMs
                 guard let at = reset, out > at else {
@@ -509,7 +527,7 @@ public enum Rings {
         }
         var week: Double?
         if c.burnWeek > 0, let w = r.week {
-            let out = now + (w.left / c.burnWeek) * hourMs
+            let out = from + (w.left / c.burnWeek) * hourMs
             week = w.resetsAt.map { out < $0 } ?? true ? out : nil
         }
         if let five, week.map({ five <= $0 }) ?? true {
@@ -574,25 +592,34 @@ public enum Rings {
             : "\(lead) more than any other account’s delegates can use."
     }
 
-    /// A tile's sentence: the same status, said whole (`tileSentence`).
+    /// A tile's sentence: the same status, said whole (`tileSentence`). An
+    /// account running sessions says so ("Carrying 2 sessions" on the
+    /// carrier, "Running 1 session." on any other); only one running none is "Idle.".
     public static func tileSentence(_ r: Account, _ c: Claude, now: Double) -> [Part] {
         let n = r.sessions.count
+        let running: [Part] = n > 0 ? [.text("Running ")] + sessionsSaid(n) + [.text(".")] : []
+        // The running sentence, then `rest` after a space (`after`).
+        func after(_ rest: [Part]) -> [Part] {
+            running.isEmpty ? rest : running + [.text(" ")] + rest
+        }
         if r.state == .limit { return [.text("At its limit. Back in "), .figure(until(r.backAt, now)), .text(".")] }
         if r.state == .stale, let seenAt = r.seenAt {
             return [.text("Hasn’t reported for "), .figure(fmt(now - seenAt)), .text(", so this may be out of date.")]
         }
         if r.state == .reserve {
-            return [.text("Reserve reached. It keeps its ")] + sessionsSaid(n) + [.text("; new work goes elsewhere.")]
+            return n > 0
+                ? [.text("Reserve reached. It keeps its ")] + sessionsSaid(n) + [.text("; new work goes elsewhere.")]
+                : [.text("Reserve reached. New work goes elsewhere.")]
         }
         if r.id == c.carry?.id {
             return (n > 0 ? [.text("Carrying ")] + sessionsSaid(n) : [.text("Carries your next session")])
                 + (c.next.map { [.text(", then "), .account($0.name, hue: $0.hue)] } ?? []) + [.text(".")]
         }
-        if r.neverBackup { return [.text("Never a backup: only a pick or a pin uses it.")] }
+        if r.neverBackup { return after([.text("Never a backup: only a pick or a pin uses it.")]) }
         if r.id == c.next?.id, let carry = c.carry, let nextAt = c.nextAt {
-            return [.text("Takes over from "), .account(carry.name, hue: carry.hue), .text(" in "), .figure(fmt(nextAt - now)), .text(".")]
+            return after([.text("Takes over from "), .account(carry.name, hue: carry.hue), .text(" in "), .figure(fmt(nextAt - now)), .text(".")])
         }
-        return [.text("Idle.")]
+        return running.isEmpty ? [.text("Idle.")] : running
     }
 
     /// A tile's figure, beside its mark, and what it is (`TileFigure`).
@@ -835,14 +862,17 @@ extension Rings {
         }
     }
 
-    /// A moment on the bar: "now", else how far ahead ("+1h 40m") (`ahead`).
+    /// A moment on the bar: "now" where `fmt` would say "0m", else how far
+    /// ahead ("+1h 40m"), rounded as the cells round their times (`ahead`).
     static func ahead(_ ms: Double) -> String {
-        ms < minuteMs ? "now" : "+\(fmt(ms))"
+        fmt(ms) == "0m" ? "now" : "+\(fmt(ms))"
     }
 
-    /// A band's tooltip: "design · now to +1h 40m" (`bandTip`).
+    /// A band's tooltip: how long its account carries your new sessions,
+    /// "design carries you from now to +32m"; it ends where the relay hands
+    /// over, which can come before the account runs out (`bandTip`).
     public static func bandTip(_ seg: Segment, name: String) -> String {
-        "\(name) · \(ahead(seg.start)) to \(ahead(seg.start + seg.ms))"
+        "\(name) carries you from \(ahead(seg.start)) to \(ahead(seg.start + seg.ms))"
     }
 
     /// Where nobody can carry you first: the stop, inside the five hours (`stopKey`).

@@ -510,7 +510,9 @@
               class="digits"
               data-strip-digits
               class:muted={claude.stale !== null}
-              ><Figure text={stopText(claude, now)} /></span
+              ><span class="mono-figure"
+                ><Figure text={stopText(claude, now)} /></span
+              ></span
             >
           </span>
           <span class="cap" data-next={claude.next?.id} data-strip-caption
@@ -531,7 +533,9 @@
               >
             {/if}
             <span class="digits" data-strip-go-time
-              ><Figure text={goTime?.figure ?? ""} /></span
+              ><span class="mono-figure"
+                ><Figure text={goTime?.figure ?? ""} /></span
+              ></span
             >
           </span>
           {#if goWeek !== null}
@@ -1047,6 +1051,8 @@
     line-height: 16px;
     color: var(--ink-muted);
   }
+  /* The strip's time: its line here, the figure face on its own span
+     (`mono-figure`), since this shorthand resets the face. */
   .digits {
     flex: none;
     font: var(--weight-strong) var(--text-label) / 16px var(--font-body);

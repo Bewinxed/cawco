@@ -157,6 +157,13 @@ export const nameFields = (
 /** A provider's accounts in carrying order, and the carry answer. */
 export interface ClaudeRings {
   accounts: RingAccount[];
+  /**
+   * The forecast's moment: the hub walks its spans from it (forecast.ts
+   * `carrySequence` starts at its own now, so the first span's `from`), with
+   * the readings as they stand then. A stop worked out here walks from it
+   * too, so it counts down with the bands between readings.
+   */
+  at: number;
   /** The account that is back first after nothing can carry you. */
   back: RingAccount | null;
   backAt: number | null;
@@ -464,6 +471,7 @@ export function claudeRings(input: {
     accounts: order
       .map((id) => byId.get(id))
       .filter((r): r is RingAccount => Boolean(r)),
+    at: spans[0]?.from ?? now,
     burn: paceSum(forecast, "session"),
     burnWeek: paceSum(forecast, "weekly_all"),
     carry,
@@ -624,7 +632,10 @@ export interface Stop {
  * An account's forecast stop: when it runs out, and on which limit. The
  * carrier, which takes your new sessions now, and an idle account, as if it
  * took over now, at the fleet's pace (`takeover`): the pace the relay walk
- * spends a carrier at, so a cell and its relay band agree. Any other
+ * spends a carrier at, from the forecast's moment. The carrier's band ends
+ * at its stop, or sooner when the walk hands over first (an account before
+ * it in the order is back): the band says how long it carries you, the cell
+ * when it runs out (`bandTip`, `dialTip`). Any other
  * account running sessions (and the Go plan, no `c`) at its own pace: the
  * hub's run-out for its binding window, none when every window lasts to its
  * reset (forecast.ts windowForecast). Null past the 5-hour horizon.
@@ -688,10 +699,12 @@ export function cellTime(
 
 /**
  * A dial's tooltip under its account's name, a short line per limit: what
- * is left of it and, on the one that binds, how long that lasts at this
- * pace ("5-hour: 29% left · 1h 12m at this pace"); a spent one says when
- * it's back. An out-of-date reading adds one line, "Estimate: last reading
- * 14m ago".
+ * is left of it and, on the one it stops on, when it runs out (the cell's
+ * time: "5-hour: 29% left · runs out in 32m"), an idle account if it takes
+ * over now, "lasts past the next 5 hours" with no stop inside them; a spent
+ * one says when it's back. How long it carries you is its relay band's to
+ * say. An out-of-date reading adds one line, "Estimate: last reading 14m
+ * ago".
  */
 export function dialTip(
   r: RingAccount,
@@ -699,7 +712,16 @@ export function dialTip(
   now: number
 ): string {
   const time = cellTime(r, c, now);
-  const pace = time.kind === "stop" ? ` · ${time.figure} at this pace` : "";
+  /** At the fleet's pace as if it took over now (`stopFor`'s idle). */
+  const idle = c !== null && r.sessions.length === 0 && r.id !== c.carry?.id;
+  let pace = "";
+  if (time.kind === "stop") {
+    if (time.figure === "5h+") {
+      pace = " · lasts past the next 5 hours";
+    } else {
+      pace = ` · runs out in ${time.figure}${idle ? " if it takes over now" : ""}`;
+    }
+  }
   /** The line the pace goes on: the limit it stops on, else the one that binds. */
   const stopsOnWeek = (stopFor(r, c, now)?.limit ?? r.bindName) !== "5-hour";
   const spent =
@@ -781,9 +803,10 @@ export function shownNames(
 }
 
 /**
- * When an idle account would run out if it took over now, as the relay's
- * walk spends a carrier (hub forecast.ts `carrySequence`): its 5-hour use
- * climbs at the fleet's burn (`c.burn`, percent an hour), a window that
+ * When an account runs out carrying you, as the relay's walk spends a
+ * carrier (hub forecast.ts `carrySequence`), from the forecast's moment
+ * (`c.at`), so it counts down between readings as the bands do: its 5-hour
+ * use climbs at the fleet's burn (`c.burn`, percent an hour), a window that
  * resets starts again from nothing, and one not open has no reset ahead;
  * its week spends at the fleet's weekly pace (`c.burnWeek`) until its
  * reset. The sooner of the two; null when nothing burns.
@@ -793,13 +816,14 @@ export function takeover(
   c: ClaudeRings,
   now: number
 ): Stop | null {
+  const from = c.at;
   const horizon = now + HORIZON_MS;
   let five: number | null = null;
   if (c.burn > 0 && r.w5) {
     let use = 100 - r.w5.left;
     let reset =
-      r.w5.resetsAt !== null && r.w5.resetsAt > now ? r.w5.resetsAt : null;
-    let t = now;
+      r.w5.resetsAt !== null && r.w5.resetsAt > from ? r.w5.resetsAt : null;
+    let t = from;
     while (t < horizon) {
       const out = t + ((100 - use) / c.burn) * HOUR_MS;
       if (reset === null || out <= reset) {
@@ -813,7 +837,7 @@ export function takeover(
   }
   let week: number | null = null;
   if (c.burnWeek > 0 && r.week) {
-    const out = now + (r.week.left / c.burnWeek) * HOUR_MS;
+    const out = from + (r.week.left / c.burnWeek) * HOUR_MS;
     week = r.week.resetsAt === null || out < r.week.resetsAt ? out : null;
   }
   if (five !== null && (week === null || five <= week)) {
@@ -909,13 +933,21 @@ export function delegateTip(c: ClaudeRings, to: RingAccount): string {
     : `${lead} more than any other account’s delegates can use.`;
 }
 
-/** A tile's sentence: the same status, said whole. */
+/**
+ * A tile's sentence: the same status, said whole. An account running
+ * sessions says so ("Carrying 2 sessions" on the carrier, "Running 1
+ * session." on any other); only one running none is "Idle.".
+ */
 export function tileSentence(
   r: RingAccount,
   c: ClaudeRings,
   now: number
 ): Part[] {
   const n = r.sessions.length;
+  const running: Part[] = n > 0 ? ["Running ", ...sessionsSaid(n), "."] : [];
+  /** The running sentence, then `rest` after a space. */
+  const after = (rest: Part[]): Part[] =>
+    running.length > 0 ? [...running, " ", ...rest] : rest;
   if (r.state === "limit") {
     return ["At its limit. Back in ", fig(until(r.backAt, now)), "."];
   }
@@ -927,11 +959,13 @@ export function tileSentence(
     ];
   }
   if (r.state === "reserve") {
-    return [
-      "Reserve reached. It keeps its ",
-      ...sessionsSaid(n),
-      "; new work goes elsewhere.",
-    ];
+    return n > 0
+      ? [
+          "Reserve reached. It keeps its ",
+          ...sessionsSaid(n),
+          "; new work goes elsewhere.",
+        ]
+      : ["Reserve reached. New work goes elsewhere."];
   }
   if (r.id === c.carry?.id) {
     return [
@@ -943,18 +977,18 @@ export function tileSentence(
     ];
   }
   if (r.neverBackup) {
-    return ["Never a backup: only a pick or a pin uses it."];
+    return after(["Never a backup: only a pick or a pin uses it."]);
   }
   if (r.id === c.next?.id && c.carry && c.nextAt !== null) {
-    return [
+    return after([
       "Takes over from ",
       named(c.carry),
       " in ",
       fig(fmt(c.nextAt - now)),
       ".",
-    ];
+    ]);
   }
-  return ["Idle."];
+  return running.length > 0 ? running : ["Idle."];
 }
 
 /**
