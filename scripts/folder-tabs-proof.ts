@@ -525,7 +525,7 @@ async function rimInk(page: Page, strip: Strip, drawn: number[]) {
        * One side's foot: its outline at x0 (the stroke lies `dir` of it),
        * the shelf's line, the rim's y scale for its lean, the flare, the
        * stroke, the flared stroke's middle radius and its length round the
-       * quarter turn, and how far up to read (css px along the stroke).
+       * quarter turn, and how high above the shelf to read (css px).
        */
       interface Foot {
         A: number;
@@ -576,7 +576,7 @@ async function rimInk(page: Page, strip: Strip, drawn: number[]) {
           }
           out.push({ s: r2(s), ink: Math.round(sum) });
         }
-        for (let h = f.F + step / 2; h <= f.F + f.top; h += step) {
+        for (let h = f.F + step / 2; h <= f.top; h += step) {
           out.push({ s: r2(f.A + h - f.F), ink: row(f, h) });
         }
         return out;
@@ -650,9 +650,11 @@ async function rimInk(page: Page, strip: Strip, drawn: number[]) {
             t,
             R,
             A,
+            // Up to a px under the shoulder, where the side stops being
+            // straight: a row past it crosses the shoulder's curve.
             top: Math.min(
               taper + 8,
-              (box.height - radius) / Math.max(lean, 0.1)
+              (box.height - radius) / Math.max(lean, 0.1) - 1
             ),
           };
           return {
@@ -1207,9 +1209,12 @@ async function measure(page: Page, strip: Strip, region: Box, keep: number[]) {
         const fb = fillOf(b);
         const counts: number[] = [];
         const cores: number[] = [];
+        /* Each row's height above the shelf, css px. */
+        const heights: number[] = [];
         const y0 = Math.max(a.top, b.top) + radius + 3;
         const y1 = Math.min(a.bottom, b.bottom) - flare - 2;
         for (let y = y0; y <= y1; y += 1 / scale) {
+          heights.push(Math.min(a.bottom, b.bottom) - y);
           // A run is a stroke when it reaches 30% of the strongest's
           // contrast in the row: a 3px stroke's glow tints the card past it
           // to 1.15:1, the ink line, and a pixel of it two past the stroke
@@ -1237,6 +1242,10 @@ async function measure(page: Page, strip: Strip, region: Box, keep: number[]) {
             rowsNotNone: counts.filter((n) => n !== 0).length,
             rowsOverOne: counts.filter((n, k) => n > 1 || cores[k] > one)
               .length,
+            // Each row: its height above the shelf, its strokes, its
+            // widest core; and a stroke's width in device px.
+            perRow: counts.map((n, k) => [r2(heights[k]), n, cores[k]]),
+            one,
           },
         ];
       });
@@ -1543,9 +1552,10 @@ for (const [key, value] of Object.entries(report)) {
  *    whose front tab wears none crosses none, and neither side draws;
  *  - corner: where two tops meet, the rims' own ink is one connected
  *    piece, or none (no stub, no notch);
- *  - 3:1: at rest, every shared edge in front of which stands the chosen
- *    tab, out of the fades, holds 3:1 against the fills either side (an
- *    unchosen tab's subtle rim is a status mark, its card edge the
+ *  - 3:1: at rest, the chosen tab's top holds 3:1 against the shelf; its
+ *    sides taper up to the shoulder and read softer by design, so they are
+ *    reported (the cell's `sides`, at their mid-height) and not held to it
+ *    (an unchosen tab's subtle rim is a status mark, its card edge the
  *    boundary);
  *  - idle none: the unchosen idle tabs' rims change no pixel (the tabs
  *    drawn chosen left out);
@@ -1597,10 +1607,11 @@ const sharedOf = (n: Numbers) =>
 const strengthOf = (n: Numbers, i: number) =>
   n.tabs.find((t) => t.i === i)?.rimOpacity ?? 0;
 /**
- * What a seam should cross, by its front tab's rim strength now: one
- * stroke where it wears one at 0.3 or more, none where it wears none, and
- * one or none while one fades in or out across a switch under that (a rim
- * at a tenth of its strength reads as no stroke), never two.
+ * What a seam's row should cross, by its front tab's rim strength there:
+ * one stroke where it wears one at 0.3 or more, none where it wears none,
+ * and one or none under that, while a rim fades in or out across a switch
+ * or low on a long taper (a rim at a tenth of its strength reads as no
+ * stroke), never two.
  */
 const wantOf = (strength: number): "one" | "none" | "one or none" => {
   if (strength <= 0.01) {
@@ -1613,14 +1624,22 @@ function strokeFaults(n: Numbers): string[] {
   const shared = sharedOf(n);
   const frontOf = (between: string) =>
     Number(shared.find((e) => e.between === between)?.front);
+  // Each row by the front rim's strength where it crosses: its strength
+  // now, faded by the taper at that row's height (up to the shoulder), so
+  // a row low on a long taper may read as no stroke.
   const rows = n.seamRows.flatMap((s) => {
-    const want = wantOf(strengthOf(n, frontOf(s.between)));
-    const off = {
-      one: s.rowsNotOne,
-      none: s.rowsNotNone,
-      "one or none": s.rowsOverOne,
-    }[want];
-    return off > 0 ? [`${s.between} ${off}/${s.rows} rows (want ${want})`] : [];
+    const front = frontOf(s.between);
+    const rim = n.ink?.tabs.find((t: InkTab) => t.i === front);
+    const fadeEnd = rim ? Math.min(rim.taper, rim.shoulderAt) : 0;
+    const off = s.perRow.filter(([h, count, core]) => {
+      const fade = fadeEnd > 0 ? Math.min(1, h / fadeEnd) : 1;
+      const want = wantOf(strengthOf(n, front) * fade);
+      if (want === "one") {
+        return count !== 1 || core > s.one;
+      }
+      return want === "none" ? count !== 0 : count > 1 || core > s.one;
+    }).length;
+    return off > 0 ? [`${s.between} ${off}/${s.rows} rows`] : [];
   });
   const sides = (n.sides ?? []).flatMap((s) => {
     const [left] = s.between.split("|");
@@ -1638,20 +1657,21 @@ function strokeFaults(n: Numbers): string[] {
 }
 /** At rest, seams with the chosen tab in front, in view and out of the fades, whose stroke holds under 3:1. */
 const contrastFaults = (n: Numbers, at: string): string[] =>
+  AT_REST.has(at)
+    ? n.tabs.flatMap((t) =>
+        t.chosen && t.visible > 0.5 && t.topVsShelf < 3
+          ? [`${t.i} top ${t.topVsShelf}:1`]
+          : []
+      )
+    : [];
+/** At rest, the chosen tab's sides as they stand: each shared edge it is in front of, its stroke's contrast against the fills (read at the side's mid-height, where the taper softens it by design). */
+const chosenSides = (n: Numbers): number[] =>
   sharedOf(n).flatMap((e) => {
     const front = n.tabs.find((t) => t.i === Number(e.front));
-    if (
-      !(AT_REST.has(at) && front?.chosen) ||
-      e.strokes === "off-view" ||
-      e.faded
-    ) {
+    if (!front?.chosen || e.strokes === "off-view" || e.faded) {
       return [];
     }
-    const best = Math.max(0, ...e.strokes.map((s) => Math.min(s.vsA, s.vsB)));
-    if (best >= 3) {
-      return [];
-    }
-    return [`${e.between} ${best === 0 ? "no stroke" : `${best}:1`}`];
+    return [Math.max(0, ...e.strokes.map((s) => Math.min(s.vsA, s.vsB)))];
   });
 type Ink = NonNullable<Awaited<ReturnType<typeof rimInk>>>;
 type InkTab = Ink["tabs"][number];
@@ -1670,10 +1690,13 @@ function taperPath(
   full: number,
   alone: boolean
 ): { faults: string[]; reach: string } {
+  // Whole: where the fade has ended, read from a px before its end (a
+  // taper as long as the side ends at the shoulder, where reading stops).
+  const end = Math.min(full, samples.at(-1)?.s ?? full);
   const whole = Math.max(
     0,
     ...samples
-      .filter((p) => p.s >= full + 1 && p.s <= full + 5)
+      .filter((p) => p.s >= end - 1 && p.s <= full + 5)
       .map((p) => p.ink)
   );
   if (whole === 0) {
@@ -1872,7 +1895,21 @@ for (const [key, value] of Object.entries(report)) {
       ...(rule === "sheet edge" ? glide : []),
       ...(rule === "handover" ? handover : []),
     ];
-    return bad.length === 0 ? "pass" : `FAIL (${bad.join("; ")})`;
+    // The 3:1 cell names the chosen tab's top and, as numbers, its sides,
+    // in each resting frame.
+    const noted =
+      rule === "3:1"
+        ? ` (${measured
+            .filter(([at]) => AT_REST.has(at))
+            .map(([at, n]) => {
+              const top = n.tabs.find((t) => t.chosen)?.topVsShelf ?? "-";
+              return `${at} top ${top} sides ${chosenSides(n).join("/") || "-"}`;
+            })
+            .join("; ")})`
+        : "";
+    return bad.length === 0
+      ? `pass${noted}`
+      : `FAIL (${bad.join("; ")})${noted}`;
   });
   const [strip, width, theme] = key.split("-");
   table.push(`| ${strip} | ${width} | ${theme} | ${cells.join(" | ")} |`);

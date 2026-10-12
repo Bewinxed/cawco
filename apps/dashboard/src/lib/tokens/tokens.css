@@ -809,16 +809,16 @@
     --surface-selected-mix: 10%;
     /* The strength of Caw's panel's vermillion hairline between its sections (CawPanel, web and iOS), and of an unchosen session tab's rim in the iOS app (PaneTabsView); the dashboard's unchosen tabs wear tab-rim-mix-subtle. At this strength a status rim holds 3:1 against the tab's fill and the shelf in both themes: by day 83% clears the working and failed tones, by night 64% the failed tone, the hardest. */
     --tab-rim-mix: 83%;
-    /* The chosen session tab's rim strength (its opacity, a plain number so the rim's arithmetic can divide by it), on every width, when its session is working, needs you or failed: its sides hold 3:1 against the tab's fill and the shelf (WCAG non-text contrast) in both themes. Unchosen tabs wear tab-rim-mix-subtle, or no rim when idle. */
+    /* The chosen session tab's rim strength (its opacity, a plain number so the rim's arithmetic can divide by it), on every width, when its session is working, needs you or failed: its top holds 3:1 against the shelf (WCAG non-text contrast) in both themes; its sides taper over tab-rim-taper up to the shoulder and read softer by design. Unchosen tabs wear tab-rim-mix-subtle, or no rim when idle. */
     --tab-rim-mix-chosen: 0.97;
-    /* The chosen tab's rim strength when its session is idle or done, in the muted ink: 3:1 against the fill and the shelf. By day 0.32 left its side at 1.4:1, by night at 2.0:1. */
+    /* The chosen tab's rim strength when its session is idle or done, in the muted ink: its top holds 3:1 against the shelf (3.2:1 by day, 3.8:1 by night at 1px); its sides taper softer by design. By day 0.32 left its side at 1.4:1, by night at 2.0:1. */
     --tab-rim-mix-idle: 0.86;
-    /* An unchosen session tab's rim strength when its session is anything but idle (working, needs you, done, failed): the same outline and taper as the chosen tab's, clearly quieter (owner: other tabs have no rim "unless they are active, then they should have a more subtle rim", "or any other status"). An unchosen idle tab draws no rim. It is a status mark, not a boundary: the tab's card edge is the boundary, so it is not held to 3:1. Its top against the shelf and its own fill: by day 1.9/2.0:1 needs you, 1.9/2.0:1 working, 2.0/2.1:1 failed, 1.8/1.9:1 done; by night (0.4) 3.1/2.9:1, 2.3/2.2:1, 2.1/2.0:1, 2.6/2.4:1. */
+    /* An unchosen session tab's rim strength when its session is anything but idle (working, needs you, done, failed): the same outline and taper as the chosen tab's, clearly quieter (owner: other tabs have no rim "unless they are active, then they should have a more subtle rim", "or any other status"). An unchosen idle tab draws no rim. It is a status mark, not a boundary: the tab's card edge is the boundary, so it is not held to 3:1. The owner's tuning on the bench: 0.5 by day and by night ("50pct"). */
     --tab-rim-mix-subtle: 0.5;
     /* A session tab's rim stroke, in px, on every tab, in both themes (1 under Increase Contrast and Reduce Transparency). A plain number for the rim's arithmetic (PaneTabs `.rim`); its shoulders, its feet's narrowing to a point and a gliding seam's stop (`--seam-stroke`) all follow it. */
-    --tab-rim-width: 1.5;
-    /* How far, in px along the stroke, a session tab's rim fades out at each free end (the tips of its feet on the shelf), on every tab, in both themes, so a rim never stops on a hard cut (owner: "the rim should taper-progress-fade at the very edges"). A plain number for the rim's arithmetic (PaneTabs `.rim`); the fade stops short of the shoulders. */
-    --tab-rim-taper: 12;
+    --tab-rim-width: 1;
+    /* The owner's tuning on the bench ("32"). How far, in px along the stroke, a session tab's rim fades out at each free end (the tips of its feet on the shelf), on every tab, in both themes, so a rim never stops on a hard cut (owner: "the rim should taper-progress-fade at the very edges"). A plain number for the rim's arithmetic (PaneTabs `.rim`); the fade stops short of the shoulders. */
+    --tab-rim-taper: 32;
     /* Entrances and exits ease out; on-screen movement eases in-out; drawers, popovers and page swaps use the drawer curve. No ease-in. */
     --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
     --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
@@ -909,7 +909,6 @@
     --tab-rim-mix: 64%;
     --tab-rim-mix-chosen: 0.78;
     --tab-rim-mix-idle: 0.54;
-    --tab-rim-mix-subtle: 0.4;
     --account-week-mix: 0.63;
   }
 
