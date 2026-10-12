@@ -12,7 +12,14 @@ import UIKit
 ///   40% at regular width, of the room above the keyboard while it is up);
 /// - every row in view: its depth, lean, width, blur and opacity, which
 ///   only grow from the pick, the oldest at the depth's end;
-/// - a search with a match;
+/// - every row's contrast as drawn: a capture of the window, and in each
+///   row's words and time the strongest ink pixel against the shape's
+///   surface, 4.5:1 at least; and the topmost row drawn again over a range
+///   of blurs (the sweep), for the blur its depth can carry;
+/// - every soft row showing its blurred copy the moment a roll settles,
+///   and again after the appearance changes while the wheel is up;
+/// - a search with a match: the row on the line stopping short of the
+///   query chip, the rows above it across the shape;
 /// - the display link's frame times through a 2s glide over the session's
 ///   200 sent messages, and the rows' own drawing cost in each frame;
 /// - the older pages read as the wheel nears its oldest entry.
@@ -85,13 +92,15 @@ enum RecallProbe {
 
             // As a swipe brings it up: the keyboard left down.
             composer.probeOpenWheel()
-            await wait(1.2)
+            await settled(composer, "\(name) opening")
+            await wait(1.0)
             measure(composer, "\(name) keyboard down", regular: regular)
             snap(window, dir, "\(name)-rest")
             composer.wheel?.probeSpin(to: 14)
             await wait(0.14)
             snap(window, dir, "\(name)-glide")
-            await wait(1.4)
+            await settled(composer, "\(name) a roll to row 14")
+            await wait(0.4)
             composer.wheel?.dismiss()
             await wait(0.6)
 
@@ -121,47 +130,67 @@ enum RecallProbe {
                 let held = composer.probeEntries.count
                 check("\(name) a search for \"\(word)\" matches", state.matches > 0 && state.matches < held,
                       "\(state.matches) of \(held) sent; on the line: row \(line.map { "\($0.index)" } ?? "none")")
+                widths(state, window, "\(name) search")
+                measure(composer, "\(name) search", regular: regular, search: true)
                 snap(window, dir, "\(name)-search")
                 wheel.dismiss()
             }
             await wait(0.6)
         }
+        // The appearance changing while it is up: no row keeps a copy blurred in the other's inks.
+        window.overrideUserInterfaceStyle = .light
+        await wait(0.6)
+        composer.probeOpenWheel()
+        await settled(composer, "\(device) light, before the switch")
+        await wait(0.6)
+        window.overrideUserInterfaceStyle = .dark
+        await wait(0.6)
+        measure(composer, "\(device) switched to dark while up", regular: regular)
+        composer.wheel?.dismiss()
         window.overrideUserInterfaceStyle = .unspecified
         await wait(0.6)
         await glide(composer, window: window, first: entries.count)
         say("done \(dir.path)")
     }
 
-    /// The wheel as it stands: its top against the reach, and every row's
-    /// depth, which must only grow from the pick and end at the depth.
-    private static func measure(_ composer: ComposerView, _ label: String, regular: Bool) {
-        guard let state = composer.wheel?.probeState else { return say("FAIL \(label): no wheel") }
-        let target = state.floor * (1 - Recall.reach(regular: regular))
-        say("\(label): top \(f(state.top, 1)) reach \(f(target, 1)) (floor \(f(state.floor, 0)) × \(f(1 - Recall.reach(regular: regular)))) open \(f(state.open)) rows above \(state.above) depth \(state.depth)")
-        check("\(label) the shape's top reaches its reach", state.open == 1 && state.top <= target + Recall.row,
-              "top \(f(state.top, 1)) ≤ \(f(target + Recall.row, 1)) (reach + one row)\(regular ? ", at least five rows: \(state.above)" : "")")
+    /// The wheel as it stands: its top against the reach, every row's
+    /// depth, which must only grow from the pick and end at the depth, and
+    /// every row's contrast as the screen draws it.
+    private static func measure(_ composer: ComposerView, _ label: String, regular: Bool, search: Bool = false) {
+        guard let state = composer.wheel?.probeState, let window = composer.window else { return say("FAIL \(label): no wheel") }
+        if !search {
+            let target = state.floor * (1 - Recall.reach(regular: regular))
+            let height = Double(window.bounds.height)
+            say("\(label): top \(f(state.top, 1)) reach \(f(target, 1)) (floor \(f(state.floor, 0)) × \(f(1 - Recall.reach(regular: regular)))) open \(f(state.open)) rows above \(state.above) depth \(state.depth)")
+            // The reach is a share of the room up from the foot: the window's bottom, or the keyboard's top.
+            say("\(label) height: the shape's top stands \(f(state.floor - state.top, 0))pt up from the foot, \(f((state.floor - state.top) / state.floor * 100, 1))% of the room (want \(f(Recall.reach(regular: regular) * 100, 0))%), \(f((height - state.top) / height * 100, 1))% of the window up from its bottom; the top is \(f(state.top / height * 100, 1))% of the way down")
+            check("\(label) the shape's top reaches its reach", state.open == 1 && state.top <= target + Recall.row && state.top >= target - Recall.row,
+                  "top \(f(state.top, 1)) within one row of \(f(target, 1))\(regular ? ", at least five rows: \(state.above)" : "")")
+        }
         let ghosts = state.rows.filter { $0.off > -0.01 }.sorted { $0.off < $1.off }
-        // Each ink at the row's opacity over the shape's own surface, resolved in this appearance.
-        let traits = composer.traitCollection
-        let surface = Palette.surfaceRaised.resolvedColor(with: traits)
+        let dark = composer.traitCollection.userInterfaceStyle == .dark
+        let drawn = asDrawn(window, ghosts)
         var weakest = (ratio: Double.infinity, what: "")
         for row in ghosts {
-            let contrasts = row.inks.map { name, ink in
-                (name, Contrast.ratio(ink.resolvedColor(with: traits), alpha: row.alpha, over: surface))
-            }
+            let contrasts = drawn[row.index] ?? []
             for (name, ratio) in contrasts where ratio < weakest.ratio {
                 weakest = (ratio, "row \(row.index) \(name)")
             }
-            say("\(label) row \(row.index) off \(f(row.off)) depth \(f(row.depth, 3)) lean \(f(row.depth * Recall.lean))° width \(f(1 - row.depth * Recall.shrink, 4)) blur \(f(row.blur, 3)) (shown \(f(row.softShown))) opacity \(f(row.alpha, 3)) contrast \(contrasts.map { "\($0.0) \(f($0.1))" }.joined(separator: ", "))")
+            say("\(label) row \(row.index) off \(f(row.off)) depth \(f(row.depth, 3)) lean \(f(row.depth * Recall.lean))° width \(f(1 - row.depth * Recall.shrink, 4)) blur \(f(row.blur, 3)) (shown \(f(row.softShown))) opacity \(f(row.alpha, 3)) drawn \(contrasts.map { "\($0.0) \(f($0.1))" }.joined(separator: ", "))")
         }
-        check("\(label) every row holds 4.5:1 on the shape's surface", weakest.ratio >= 4.5,
-              "the weakest: \(weakest.what) at \(f(weakest.ratio)):1 (\(traits.userInterfaceStyle == .dark ? "dark" : "light"))")
-        let above = ghosts.filter { $0.off > 0.5 }
-        check("\(label) rows shown", above.count == state.above, "\(above.count) above the line, \(state.above) measured")
+        check("\(label) every row holds 4.5:1 as drawn", weakest.ratio >= 4.5 && !ghosts.isEmpty,
+              "the weakest: \(weakest.what) at \(f(weakest.ratio)):1 (\(dark ? "dark" : "light")), its strongest ink pixel against the shape's surface in a capture of the window")
+        let pending = ghosts.filter(\.pending).map(\.index)
+        check("\(label) every soft row shows its blurred copy", pending.isEmpty, pending.isEmpty ? "all \(ghosts.count) rows" : "pending: rows \(pending)")
+        if let top = ghosts.last { sweep(top, label) }
         let rising = zip(ghosts, ghosts.dropFirst()).allSatisfy { low, high in
             high.depth >= low.depth && high.blur >= low.blur && high.alpha <= low.alpha + 1e-6
         }
         check("\(label) depth only grows from the pick", rising, "lean, width, blur and opacity monotone over \(ghosts.count) rows")
+        // A search shows only its matches, in a shape only as tall as they need.
+        guard !search else { return }
+        let above = ghosts.filter { $0.off > 0.5 }
+        check("\(label) rows shown", above.count == state.above, "\(above.count) above the line, \(state.above) measured")
         if let top = above.last {
             let deep = Double(state.depth)
             // The web's topmost row: 94% at regular width, 95.5% on a phone.
@@ -170,6 +199,40 @@ enum RecallProbe {
             check("\(label) the oldest row ends at row \(state.depth)'s values", ok,
                   "lean \(f(top.depth * Recall.lean))° (want \(f(deep * Recall.lean))), width \(f(1 - top.depth * Recall.shrink, 4)) (want \(f(1 - deep * Recall.shrink, 4))), blur \(f(top.blur, 3)) (want \(f(deep * Recall.soft, 3))), opacity \(f(top.alpha, 3)) (want \(f(faintest, 3)))")
         }
+    }
+
+    /// Waits a frame at a time for the roll to stand still, then: every
+    /// soft row's blurred copy already shows, the moment it does.
+    private static func settled(_ composer: ComposerView, _ label: String) async {
+        for _ in 0 ..< 600 where composer.wheel?.probeRolling ?? false {
+            try? await Task.sleep(for: .milliseconds(4))
+        }
+        guard let state = composer.wheel?.probeState else { return say("FAIL \(label): no wheel") }
+        let pending = state.rows.filter { $0.off > -0.01 && $0.pending }.map(\.index)
+        let soft = state.rows.filter { $0.off > -0.01 && $0.blur > 0 }.count
+        check("\(label): every soft row's blurred copy shows as the roll settles", pending.isEmpty,
+              pending.isEmpty ? "\(soft) soft rows, all showing their copies" : "\(pending.count) of \(soft) soft rows still sharp: \(pending)")
+    }
+
+    /// A search's rows: the one on the line stops a step short of the query
+    /// chip, and every row above it is the shape's width less the pill's
+    /// padding on each side (before its lean narrows it).
+    private static func widths(_ state: RecallProbeState, _ window: UIWindow, _ label: String) {
+        guard let chip = state.chip else { return say("FAIL \(label): no query chip") }
+        let inner = state.shape.width - 2 * state.pad
+        for row in state.rows where row.off > -0.01 {
+            let drawn = row.view.layer.convert(row.view.bounds, to: window.layer)
+            say("\(label) row \(row.index) off \(f(row.off)): \(f(row.view.bounds.width, 1))pt wide, drawn \(f(drawn.minX, 1))…\(f(drawn.maxX, 1)) of the shape's \(f(state.shape.minX, 1))…\(f(state.shape.maxX, 1)) (\(f(drawn.width / state.shape.width * 100, 1))%), chip from \(f(chip.minX, 1))")
+        }
+        if let line = state.rows.first(where: { abs($0.off) < 0.01 }) {
+            let right = line.view.layer.convert(line.view.bounds, to: window.layer).maxX
+            check("\(label) the row on the line stops short of the chip", right <= chip.minX && chip.minX - right <= 12,
+                  "its right edge \(f(right, 1)), the chip's left \(f(chip.minX, 1))")
+        }
+        let above = state.rows.filter { $0.off > 0.99 }
+        let short = above.filter { abs($0.view.bounds.width - inner) > 0.5 }
+        check("\(label) the rows above the line are the shape's width", !above.isEmpty && short.isEmpty,
+              "\(above.count) rows, \(short.isEmpty ? "each" : "rows \(short.map(\.index)) not") \(f(inner, 1))pt (the shape's \(f(state.shape.width, 1)) less \(f(state.pad, 1)) each side)")
     }
 
     /// A 2s glide over what the session sent: out to the oldest entry held
@@ -216,28 +279,119 @@ enum RecallProbe {
     }
 }
 
-/// WCAG 2's contrast ratio of an ink, at an opacity, composited over a
-/// surface (in sRGB, as the screen blends it).
-enum Contrast {
-    static func ratio(_ ink: UIColor, alpha: Double, over surface: UIColor) -> Double {
-        let fg = rgba(ink), bg = rgba(surface)
-        let a = fg.3 * alpha
-        let mixed = (fg.0 * a + bg.0 * (1 - a), fg.1 * a + bg.1 * (1 - a), fg.2 * a + bg.2 * (1 - a))
-        let l1 = luminance(mixed), l2 = luminance((bg.0, bg.1, bg.2))
-        return (max(l1, l2) + 0.05) / (min(l1, l2) + 0.05)
+extension RecallProbe {
+    /// Every row's words and time as the screen composites them (lean,
+    /// shrink, blurred copy, opacity, the shape under them): a capture of
+    /// the window, and in each box the WCAG ratio of its strongest ink
+    /// pixel against the surface it stands on (the box's commonest pixel).
+    static func asDrawn(_ window: UIWindow, _ rows: [RecallProbeState.Row]) -> [Int: [(String, Double)]] {
+        let format = UIGraphicsImageRendererFormat()
+        format.preferredRange = .standard
+        format.scale = window.screen.scale
+        let image = UIGraphicsImageRenderer(bounds: window.bounds, format: format).image { _ in
+            _ = window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+        }
+        guard let cg = image.cgImage, let pixels = Pixels(cg) else { return [:] }
+        let scale = Double(format.scale)
+        var found: [Int: [(String, Double)]] = [:]
+        for row in rows {
+            found[row.index] = row.view.probeBoxes.map { name, box in
+                let shown = row.view.layer.convert(box, to: window.layer)
+                return (name, pixels.contrast(in: shown, scale: scale, surface: nil))
+            }
+        }
+        return found
     }
 
-    private static func rgba(_ color: UIColor) -> (Double, Double, Double, Double) {
-        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
-        color.getRed(&r, green: &g, blue: &b, alpha: &a)
-        // Extended sRGB can step outside 0…1 for P3 inks: held to the sRGB gamut.
-        let clamp = { (v: CGFloat) in min(1, max(0, Double(v))) }
-        return (clamp(r), clamp(g), clamp(b), clamp(a))
+    /// The topmost row's words and time drawn again at its opacity over the
+    /// shape's surface, blurred by each of a range of blurs as its copy is:
+    /// the blur its depth can carry and still hold 4.5:1.
+    static func sweep(_ row: RecallProbeState.Row, _ label: String) {
+        let view = row.view
+        let sharp = view.probeSharp()
+        let surface = Palette.surfaceRaised.resolvedColor(with: view.traitCollection)
+        let scale = Double(sharp.scale)
+        let pad = RecallRow.pad
+        var lines: [String] = []
+        for blur in [0, 0.1, 0.15, 0.2, 0.25, 0.3, 0.45, 0.9, 1.5] {
+            guard let image = blur == 0 ? sharp : RecallRow.blurred(sharp, radius: Float(blur * scale)), let cg = image.cgImage,
+                  let pixels = Pixels(cg, over: surface, alpha: row.alpha) else { continue }
+            let ratios = view.probeBoxes.map { name, box in
+                "\(name) \(f(pixels.contrast(in: box.offsetBy(dx: pad, dy: pad), scale: scale, surface: pixels.corner)))"
+            }
+            lines.append("\(f(blur))pt \(ratios.joined(separator: " "))")
+        }
+        say("\(label) sweep row \(row.index) at \(f(row.alpha, 3)): \(lines.joined(separator: " | "))")
+    }
+}
+
+/// An image's pixels, 8-bit sRGB, as the screen shows them.
+struct Pixels {
+    let width: Int
+    let height: Int
+    private let bytes: [UInt8]
+
+    /// `image`, or `image` at `alpha` over `surface`.
+    init?(_ image: CGImage, over surface: UIColor? = nil, alpha: Double = 1) {
+        let width = image.width, height = image.height
+        self.width = width
+        self.height = height
+        var bytes = [UInt8](repeating: 0, count: width * height * 4)
+        let drawn = bytes.withUnsafeMutableBytes { buffer -> Bool in
+            guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+                  let context = CGContext(data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+                                          space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+            let box = CGRect(x: 0, y: 0, width: width, height: height)
+            if let surface {
+                context.setFillColor(surface.cgColor)
+                context.fill(box)
+            }
+            context.setAlpha(alpha)
+            context.draw(image, in: box)
+            return true
+        }
+        guard drawn else { return nil }
+        self.bytes = bytes
     }
 
-    private static func luminance(_ c: (Double, Double, Double)) -> Double {
-        func channel(_ v: Double) -> Double { v <= 0.04045 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4) }
-        return 0.2126 * channel(c.0) + 0.7152 * channel(c.1) + 0.0722 * channel(c.2)
+    private func at(_ x: Int, _ y: Int) -> UInt32 {
+        let i = (y * width + x) * 4
+        return UInt32(bytes[i]) << 16 | UInt32(bytes[i + 1]) << 8 | UInt32(bytes[i + 2])
+    }
+
+    /// The top left pixel.
+    var corner: UInt32 { at(0, 0) }
+
+    /// The WCAG ratio of the pixel in `rect` (points, top-left origin)
+    /// furthest from `surface`, or from the rect's commonest pixel.
+    func contrast(in rect: CGRect, scale: Double, surface: UInt32?) -> Double {
+        let x0 = max(0, Int((rect.minX * scale).rounded(.down))), x1 = min(width, Int((rect.maxX * scale).rounded(.up)))
+        let y0 = max(0, Int((rect.minY * scale).rounded(.down))), y1 = min(height, Int((rect.maxY * scale).rounded(.up)))
+        guard x1 > x0, y1 > y0 else { return 0 }
+        var ground = surface ?? 0
+        if surface == nil {
+            var counts: [UInt32: Int] = [:]
+            for y in y0 ..< y1 { for x in x0 ..< x1 { counts[at(x, y), default: 0] += 1 } }
+            ground = counts.max { $0.value < $1.value }?.key ?? 0
+        }
+        let base = Self.luminance(ground)
+        var best = 1.0
+        for y in y0 ..< y1 {
+            for x in x0 ..< x1 {
+                let l = Self.luminance(at(x, y))
+                best = max(best, (max(l, base) + 0.05) / (min(l, base) + 0.05))
+            }
+        }
+        return best
+    }
+
+    private static let linear: [Double] = (0 ..< 256).map {
+        let v = Double($0) / 255
+        return v <= 0.04045 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4)
+    }
+
+    static func luminance(_ rgb: UInt32) -> Double {
+        0.2126 * linear[Int(rgb >> 16 & 255)] + 0.7152 * linear[Int(rgb >> 8 & 255)] + 0.0722 * linear[Int(rgb & 255)]
     }
 }
 

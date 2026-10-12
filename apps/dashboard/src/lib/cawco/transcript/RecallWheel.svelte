@@ -10,7 +10,7 @@
    * is spread over however many show: each row up leans further back,
    * narrows, softens and fades a touch, evenly, the topmost ending where the
    * fifth row stood before (the third on a compact window): 30° back, 11%
-   * narrower, 1.5px soft, at 94%. Every row that stands in the shape is
+   * narrower, 0.1px soft, at 94%. Every row that stands in the shape is
    * whole and holds 4.5:1; only a row rolling up past the top row goes out
    * of focus and out of sight, through the room over it. Each row stands
    * inside the shape's sides at its height, less the pill's padding; on the
@@ -136,7 +136,7 @@
   /** Each depth row's share of the top row's depth: lean (deg), narrowing, softness (px), fading. */
   const LEAN = 6;
   const NARROW = 0.022;
-  const SOFT = 0.3;
+  const SOFT = 0.02;
   const FAINT = 0.015;
   /** The rows' perspective (px), from the line's foot at the shape's middle. */
   const DEPTH = 900;

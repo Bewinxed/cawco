@@ -44,11 +44,11 @@ enum Recall {
     /// transcript under the fade goes soft by degrees.
     static let blurs: [Double] = [0.5, 1, 2, 4, 8, 16]
     static let band = 6.0
-    /// How much softer each row of depth is than the one below it (points
-    /// of blur), and the most a row's words soften: the oldest row at
-    /// regular width, five rows deep.
-    static let soft = 0.3
-    static let softest = 5 * soft
+    /// How much softer each row of depth is than the one below it: points
+    /// of blur, a Gaussian's standard deviation, as CSS `blur()` takes px
+    /// (RecallWheel.svelte `SOFT`). Any more and the topmost row's 12pt
+    /// muted time, leaning 30° back at 94%, drops under 4.5:1 as drawn.
+    static let soft = 0.02
     /// How much fainter a row is per row of depth (RecallWheel.svelte `FAINT`).
     static let faint = 0.015
     /// How strongly a row `deep` rows of depth back shows, of a wheel whose
@@ -527,12 +527,23 @@ final class RecallRow: UIView {
 
     let kind: Kind
     var onActivate: () -> Void = {}
-    /// Its blurred copy is ready: the wheel keeps it for the row's next time in view.
-    var onBlurred: (UIImage) -> Void = { _ in }
+    /// Its blurred copy is ready, drawn in `style`: the wheel keeps it for
+    /// the row's next time in view in that appearance.
+    var onBlurred: (UIImage, UIUserInterfaceStyle, Double) -> Void = { _, _, _ in }
+    /// It changed appearance, and let its blurred copy go.
+    var onRestyled: () -> Void = {}
     /// Rows of depth it stands at, as last drawn (the DEBUG probe reads it).
     var depth = 0.0
     /// Points of blur it is softened by, as last drawn.
     private(set) var blur = 0.0
+    /// Points of blur it will stand at once the roll comes to rest: what
+    /// its blurred copy is drawn at, so at rest it shows that copy alone.
+    private(set) var wanted = 0.0
+    /// The blur the copy it shows was drawn at.
+    private var softBlur = 0.0
+    /// It stands at the width its blurred copy is drawn at: the shape's,
+    /// clear of the field's line. Only then is a copy drawn for it or shown.
+    var full = false
     private let content = UIView()
     private let words = UILabel()
     private let time = UILabel()
@@ -545,20 +556,31 @@ final class RecallRow: UIView {
     private let queued: Bool
     private let showsMeta: Bool
     private var picked = false
-    /// Its blurred copy is being drawn, off the main thread.
-    private var blurring = false
+    /// The blur of the copy being drawn for it, off the main thread.
+    private var blurring: Double?
+    /// Counts the copies let go (the row was resized or changed appearance):
+    /// a copy landing for an older one is dropped.
+    private var generation = 0
     #if DEBUG
     /// How much of its blurred copy shows (the `-recall-probe` reads it).
     var softShown: Double { Double(soft.alpha) }
-    /// The inks its words and its time are drawn in now (the probe's contrast).
-    var probeInks: [(name: String, ink: UIColor)] {
-        let words: (String, UIColor) = switch kind {
-        case .none: ("muted", Palette.inkMuted)
-        case .draft: text.isEmpty ? ("subtle", Palette.inkSubtle) : ("strong", Palette.inkStrong)
-        case .sent: picked ? ("selected", Palette.selectedInk) : ("strong", Palette.inkStrong)
+    /// Its words' and its time's boxes, in its own space, by the ink they
+    /// are drawn in now (the probe's contrast as drawn).
+    var probeBoxes: [(name: String, box: CGRect)] {
+        let ink = switch kind {
+        case .none: "muted"
+        case .draft: text.isEmpty ? "subtle" : "strong"
+        case .sent: picked ? "selected" : "strong"
         }
-        guard showsMeta else { return [words] }
-        return [words, picked ? ("selected time", Palette.selectedInk) : ("muted time", Palette.inkMuted)]
+        let box = words.frame.width > 0 ? [(ink, words.frame)] : []
+        guard showsMeta, time.frame.width > 0 else { return box }
+        return box + [(picked ? "selected time" : "muted time", time.frame)]
+    }
+
+    /// Its words and time drawn sharp at full strength, in its appearance,
+    /// `pad` points of room around them (the probe's blur sweep).
+    func probeSharp() -> UIImage {
+        draw()
     }
     #endif
 
@@ -588,6 +610,11 @@ final class RecallRow: UIView {
         }
         isAccessibilityElement = true
         accessibilityTraits = .button
+        // A blurred copy holds the inks of the appearance it was drawn in.
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (row: RecallRow, _: UITraitCollection) in
+            row.forgetBlur()
+            row.onRestyled()
+        }
         render()
     }
 
@@ -655,69 +682,130 @@ final class RecallRow: UIView {
         render()
     }
 
-    /// Softer the further the row has risen: the sharp words give way to a
-    /// blurred copy of them, `amount` points of blur of `Recall.softest`.
-    /// A row with none is never blurred. The copy is drawn off the main
-    /// thread the first time the row softens while the wheel is `slow`
-    /// (a row flying past shows none of it); until it lands the row stays
-    /// sharp, so no frame waits on a blur. Answers whether it began one.
-    @discardableResult
-    func soften(_ amount: Double, slow: Bool) -> Bool {
-        blur = amount
-        let begins = slow && amount / Recall.softest > 0.02 && soft.image == nil && !blurring
-        if begins { blurInBackground() }
+    /// Softer the further the row has risen, `blur` points now and `wanted`
+    /// once the roll rests. The sharp words give way to a blurred copy of
+    /// them drawn at `wanted`: at rest the copy alone shows, exactly that
+    /// blur; on the way there a share of it, as much as the row has of its
+    /// blur. A row with none is never blurred. The copy is drawn off the
+    /// main thread (`blurInBackground`), so no frame waits on a blur; until
+    /// it lands the row shows the copy it had, or its sharp words.
+    func soften(_ blur: Double, wanted: Double) {
+        self.blur = blur
+        self.wanted = wanted
         showSoftness()
-        return begins
     }
 
-    /// It is soft and its blurred copy has not begun: the wheel begins it
-    /// in a later frame.
+    /// Points of blur below which a row is drawn sharp.
+    private static let least = 0.005
+
+    /// The copy it should show at rest is not the one it shows.
+    var needsCopy: Bool {
+        full && wanted > Self.least && (soft.image == nil || abs(softBlur - wanted) > 1e-4)
+    }
+
+    /// It needs a copy, and none is being drawn at the blur it wants: the
+    /// wheel begins one, in this frame or a later one.
     var waitsForBlur: Bool {
-        blur / Recall.softest > 0.02 && soft.image == nil && !blurring
+        needsCopy && blurring.map { abs($0 - wanted) > 1e-4 } ?? true
     }
 
-    /// A copy blurred for this row before (it was in view and left).
-    func useBlurred(_ image: UIImage) {
+    /// Soft, and not showing a copy drawn at the blur it has now (the probe reads it at rest).
+    var blurPending: Bool {
+        full && blur > Self.least && (soft.image == nil || abs(softBlur - blur) > 1e-4)
+    }
+
+    /// A copy blurred for this row before, `at` points, at this width and
+    /// in this appearance (the wheel keeps them).
+    func useBlurred(_ image: UIImage, at blur: Double) {
         placeSoft()
         soft.image = image
+        softBlur = blur
         showSoftness()
+    }
+
+    /// Its blurred copy no longer matches it (its width or its appearance
+    /// changed): the words show sharp until a new one is drawn.
+    func forgetBlur() {
+        generation += 1
+        blurring = nil
+        soft.image = nil
+        showSoftness()
+    }
+
+    /// `width` wide, its foot's middle at `center`: a new width lets its blurred copy go.
+    func place(width: Double, center: CGPoint) {
+        if abs(bounds.width - width) > 0.25 {
+            bounds = CGRect(x: 0, y: 0, width: width, height: Recall.row)
+            if soft.image != nil || blurring != nil { forgetBlur() }
+        }
+        self.center = center
     }
 
     private func showSoftness() {
-        let share = soft.image == nil ? 0 : min(1, max(0, blur / Recall.softest))
+        let share = soft.image == nil || softBlur <= 0 ? 0 : min(1, max(0, blur / softBlur))
         soft.alpha = share
         content.alpha = 1 - share
     }
 
-    private static let pad = 8.0
+    static let pad = 8.0
 
     private func placeSoft() {
         soft.frame = bounds.insetBy(dx: -Self.pad, dy: -Self.pad)
     }
 
-    private func blurInBackground() {
+    /// Its words and time drawn sharp at full strength, in its own
+    /// appearance, with `pad` around them.
+    private func draw() -> UIImage {
         let pad = Self.pad
-        let size = CGSize(width: bounds.width + pad * 2, height: bounds.height + pad * 2)
-        guard size.width > pad * 2 else { return }
-        blurring = true
         layoutIfNeeded()
-        let drawn = UIGraphicsImageRenderer(size: size).image { context in
-            context.cgContext.translateBy(x: pad, y: pad)
-            content.layer.render(in: context.cgContext)
+        let shown = content.alpha
+        content.alpha = 1
+        defer { content.alpha = shown }
+        let size = CGSize(width: bounds.width + pad * 2, height: bounds.height + pad * 2)
+        var drawn = UIImage()
+        traitCollection.performAsCurrent {
+            drawn = UIGraphicsImageRenderer(size: size).image { context in
+                context.cgContext.translateBy(x: pad, y: pad)
+                content.layer.render(in: context.cgContext)
+            }
         }
-        placeSoft()
+        return drawn
+    }
+
+    /// Draws its copy at the blur it wants, off the main thread. A copy
+    /// landing at another blur than it wants by then is kept by the wheel
+    /// and shown only while it has none.
+    func blurInBackground() {
+        guard bounds.width > 0 else { return }
+        let blur = wanted
+        blurring = blur
+        let drawn = draw()
+        let style = traitCollection.userInterfaceStyle
+        let generation = generation
+        let radius = Float(blur * drawn.scale)
         Task { [weak self] in
-            let radius = Float(Recall.softest * drawn.scale)
             let image = await Task.detached(priority: .userInitiated) { Self.blurred(drawn, radius: radius) }.value
-            guard let self, let image else { return }
-            blurring = false
-            soft.image = image
-            showSoftness()
-            onBlurred(image)
+            guard let self, generation == self.generation, let image else { return }
+            if blurring == blur { blurring = nil }
+            onBlurred(image, style, blur)
+            if abs(wanted - blur) <= 1e-4 || soft.image == nil { useBlurred(image, at: blur) }
         }
     }
 
-    private nonisolated static func blurred(_ drawn: UIImage, radius: Float) -> UIImage? {
+    /// The first blur pays for Core Image's start: paid as a wheel opens, before any row needs one.
+    nonisolated static func warm() {
+        Task.detached(priority: .userInitiated) {
+            let pixel = UIGraphicsImageRenderer(size: CGSize(width: 4, height: 4)).image { _ in }
+            _ = blurred(pixel, radius: 1)
+        }
+    }
+
+    /// `drawn` blurred by a Gaussian of `radius` pixels' standard deviation
+    /// (CIGaussianBlur's radius is the deviation, as CSS `blur()`'s length
+    /// is), blended in sRGB's own encoding as the screen and the web's
+    /// `filter: blur()` blend: a linear-light blur thins dark words on a
+    /// light surface.
+    nonisolated static func blurred(_ drawn: UIImage, radius: Float) -> UIImage? {
         guard let input = CIImage(image: drawn) else { return nil }
         let filter = CIFilter.gaussianBlur()
         filter.inputImage = input
@@ -727,7 +815,9 @@ final class RecallRow: UIView {
         return UIImage(cgImage: cg, scale: drawn.scale, orientation: .up)
     }
 
-    private nonisolated static let context = CIContext()
+    private nonisolated static let context = CIContext(options: [
+        .workingColorSpace: CGColorSpace(name: CGColorSpace.extendedSRGB) as Any,
+    ])
 
     override func layoutSubviews() {
         super.layoutSubviews()
@@ -886,12 +976,28 @@ final class RecallWheel: NSObject, UIGestureRecognizerDelegate {
     private let clip = CAShapeLayer()
     private let top = CAGradientLayer()
     private var chip: QueryChip?
-    private var chipRoom = 0.0
+    /// Where the row on the field's line stops while a search filters: a
+    /// step short of the query chip, in the ring.
+    private var chipStop: Double?
     private var list: [Entry] = []
     /// The rows built, by their place in `list`: only those in view.
     private var rows: [Int: RecallRow] = [:]
-    /// Blurred copies of rows that have been in view, by their place in `list`.
-    private var blurred: [Int: UIImage] = [:]
+    /// A row's blurred copy, by its place in `list`, the appearance it was
+    /// drawn in and its blur (in ten-thousandths of a point).
+    private struct Blurred: Hashable {
+        let row: Int
+        let style: UIUserInterfaceStyle
+        let blur: Int
+
+        init(row: Int, style: UIUserInterfaceStyle, blur: Double) {
+            self.row = row
+            self.style = style
+            self.blur = Int((blur * 10000).rounded())
+        }
+    }
+
+    /// Blurred copies of rows in view and near it, at the shape's width.
+    private var blurred: [Blurred: UIImage] = [:]
     private var search: RecallSearch?
     private let showsMeta: Bool
     /// The rows' faces, made once as it opens.
@@ -964,19 +1070,52 @@ final class RecallWheel: NSObject, UIGestureRecognizerDelegate {
         geometry.spread = spread
     }
 
-    /// The rows' box: the field's own line and the rows above it.
+    /// The rows' box: across the shape, from the field's own line to the rows above it.
     private func placeGhosts() {
         let height = Recall.row * Double(above + 1)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         defer { CATransaction.commit() }
-        ghosts.frame = CGRect(x: field.minX, y: field.maxY - height, width: field.width, height: height)
+        ghosts.frame = CGRect(x: 0, y: field.maxY - height, width: geometry.width, height: height)
         clip.frame = ghosts.bounds
         inner.frame = ghosts.bounds
         // The oldest row fades out at the top edge instead of being cut through.
         top.frame = inner.bounds
         top.locations = [0, NSNumber(value: 14 / height)]
         for row in rows.values { row.center.y = ghosts.bounds.height }
+    }
+
+    /// A row's sides, `off` rows above the field's line (RecallWheel.svelte
+    /// `edges`): across the shape, the pill's padding in from each side; on
+    /// the line it stops short of the pill's buttons, and of the query chip
+    /// while a search filters. A row rising off the line widens to the
+    /// shape's side as its words clear the buttons' top, over the room
+    /// above its words. Answers its width and whether it is at the shape's.
+    private func edges(off: Double) -> (left: Double, width: Double, full: Bool) {
+        let pad = field.minX
+        let side = geometry.width - pad
+        let inkPad = max(1, (Recall.row - faces.line) / 2)
+        let onLine = min(1, max(0, (Recall.row - off * Recall.row) / inkPad))
+        let stop = min(field.maxX, chipStop ?? field.maxX)
+        let right = side - (side - stop) * onLine
+        return (pad, max(0, right - pad), onLine == 0)
+    }
+
+    /// Row `k` changed appearance while it is up (it let its blurred copy
+    /// go, drawn in the other's inks): the copy kept for it in this one, or
+    /// a new one drawn in a later frame, once its words are drawn anew.
+    private func restyled(_ row: RecallRow, _ k: Int) {
+        if !keep(row, k) { finishWhenStill() }
+    }
+
+    /// Shows the copy kept for row `k` at the blur it wants, if it needs
+    /// one and one is kept: answers whether it still needs one.
+    @discardableResult
+    private func keep(_ row: RecallRow, _ k: Int) -> Bool {
+        guard row.needsCopy else { return false }
+        guard let image = blurred[Blurred(row: k, style: row.traitCollection.userInterfaceStyle, blur: row.wanted)] else { return true }
+        row.useBlurred(image, at: row.wanted)
+        return false
     }
 
     /// The keyboard came or went while the wheel is up (VoiceOver's action
@@ -1042,9 +1181,11 @@ final class RecallWheel: NSObject, UIGestureRecognizerDelegate {
             ring.addSubview(chip)
             self.chip = chip
         }
+        RecallRow.warm()
         buildRows()
         detent = nil
-        pos = 0; target = 0; vel = 0
+        // It opens rolling to the newest message: the rows' copies are drawn for where they will rest.
+        pos = 0; target = clamp(1); vel = 0
         draw(0)
         if keys { Feel.opened() }
         halo.paint()
@@ -1094,8 +1235,8 @@ final class RecallWheel: NSObject, UIGestureRecognizerDelegate {
             let size = chip.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize)
             let width = min(ceil(size.width), field.width * 0.45)
             chip.frame = CGRect(x: field.maxX - width, y: field.maxY - Recall.row / 2 - size.height / 2, width: width, height: size.height)
-            // While filtering, every row stops short of the chip.
-            chipRoom = q.isEmpty ? 0 : width + 10
+            // While filtering, the row on the line stops short of the chip.
+            chipStop = q.isEmpty ? nil : chip.frame.minX - 10
         }
         ghosts.accessibilityElements = []
     }
@@ -1115,17 +1256,24 @@ final class RecallWheel: NSObject, UIGestureRecognizerDelegate {
         }
         row.onActivate = { [weak self] in self?.choose(k) }
         // Kept only while the row is still this list's row `k` (a search rebuilds the list).
-        row.onBlurred = { [weak self, weak row] image in
+        row.onBlurred = { [weak self, weak row] image, style, blur in
             guard let self, let row, rows[k] === row else { return }
-            blurred[k] = image
+            blurred[Blurred(row: k, style: style, blur: blur)] = image
         }
-        let width = ghosts.bounds.width - chipRoom
-        row.bounds = CGRect(x: 0, y: 0, width: width, height: Recall.row)
-        row.center = CGPoint(x: width / 2, y: ghosts.bounds.height)
-        if let image = blurred[k] { row.useBlurred(image) }
+        row.onRestyled = { [weak self, weak row] in
+            guard let self, let row, rows[k] === row else { return }
+            restyled(row, k)
+        }
         inner.addSubview(row)
         rows[k] = row
         return row
+    }
+
+    /// Row `row` `off` rows above the line: its sides.
+    private func place(_ row: RecallRow, off: Double) {
+        let edge = edges(off: off)
+        row.place(width: edge.width, center: CGPoint(x: edge.left + edge.width / 2, y: ghosts.bounds.height))
+        row.full = edge.full
     }
 
     /// What was sent, read again (an older page landed): the list takes the
@@ -1199,6 +1347,7 @@ final class RecallWheel: NSObject, UIGestureRecognizerDelegate {
                     target = goal
                     vel = 0
                     draw(pos)
+                    if unfinished { finishWhenStill() }
                     fire()
                     return false
                 }
@@ -1214,6 +1363,18 @@ final class RecallWheel: NSObject, UIGestureRecognizerDelegate {
         done?()
     }
 
+    /// From the next frame on, while it stands still: the rows and blurred
+    /// copies a roll left undone, a frame at a time, bounded as a roll is.
+    /// The spring's own last frame calls it too, while its link still runs.
+    private func finishWhenStill() {
+        guard !finish.running, !closing else { return }
+        finish.run { [weak self] _ in
+            guard let self, !closing, !spring.running else { return false }
+            draw(shown)
+            return unfinished
+        }
+    }
+
     /// Every row where `p` puts it. Landing on another entry is a detent the
     /// reader feels and hears; overshooting past either end is not.
     private func draw(_ p: Double) {
@@ -1223,14 +1384,18 @@ final class RecallWheel: NSObject, UIGestureRecognizerDelegate {
         #endif
         // A frame's work is bounded however fast it rolls: four rows built at
         // most, nearest the line first (a row flying past for a frame is not
-        // seen), and blurred copies only while it moves slowly, two at most;
-        // what is left is done in the frames after, once it stands still too.
-        let slow = abs(p - shown) < 0.1
+        // seen), and two blurred copies begun at most, each at the blur its
+        // row will stand at once the roll rests, so they are ready by then:
+        // while the spring rolls to its rest, or a finger moves the wheel
+        // slowly. What is left is done in the frames after, once it stands still.
+        let copies = abs(p - shown) < 0.1 || spring.running
         var blurs = 0
         var built = 0
         unfinished = false
         shown = p
         let line = Recall.round(p)
+        // Where the roll will rest: the entry the spring heads for, or the nearest.
+        let rest = Double(Recall.round(target))
         // In view: from just under the field's line to just over the shape's top.
         let count = max(1, list.count)
         let low = max(0, Int((p - 1.2).rounded(.up)))
@@ -1253,12 +1418,22 @@ final class RecallWheel: NSObject, UIGestureRecognizerDelegate {
             }
             let row = row(k)
             let off = Double(k) - p
+            place(row, off: off)
             // Its depth: the rows in view share the wheel's, the oldest standing `depth` back.
             let deep = max(0, off) * spread
             row.depth = deep
             row.layer.transform = Recall.transform(off: off, up: deep)
-            if row.soften(deep * Recall.soft, slow: slow && blurs < 2) { blurs += 1 }
-            if row.waitsForBlur { unfinished = true }
+            // Its blur at rest, if it stands in the shape then.
+            let resting = Double(k) - rest
+            row.soften(deep * Recall.soft, wanted: resting >= 0 && resting <= Double(above) ? resting * spread * Recall.soft : 0)
+            if keep(row, k), row.waitsForBlur {
+                if copies, blurs < 2 {
+                    row.blurInBackground()
+                    blurs += 1
+                } else {
+                    unfinished = true
+                }
+            }
             // On the field's line a row is at full strength; above it each is a touch fainter by its depth.
             row.alpha = off >= 0 ? Recall.presence(deep, of: depth) : max(0, 1 + off * 1.6)
             row.pick(line == k)
@@ -1266,18 +1441,16 @@ final class RecallWheel: NSObject, UIGestureRecognizerDelegate {
         if built > 0 || !gone.isEmpty || rows.count != held {
             ghosts.accessibilityElements = rows.keys.sorted().compactMap { rows[$0] }
         }
+        // Once more than three a row are kept, only the copies of the rows in view and two past each end stay.
+        if blurred.count > 3 * (high - low + 5) {
+            blurred = blurred.filter { $0.key.row >= low - 2 && $0.key.row <= high + 2 }
+        }
         #if DEBUG
         probeBuilt = built
         probeBlurs = blurs
         #endif
         // Standing still with rows still to build or blur: a frame at a time until none is left.
-        if unfinished, !spring.running, !finish.running {
-            finish.run { [weak self] _ in
-                guard let self, !closing, !spring.running else { return false }
-                draw(shown)
-                return unfinished
-            }
-        }
+        if unfinished, !spring.running { finishWhenStill() }
         // Nearing the oldest entry read (within a shape's rows of it), the
         // page before it is read: once for each count of entries held.
         if !list.isEmpty, high + above >= last, askedAt != entries.count {
@@ -1534,7 +1707,9 @@ struct RecallProbeState {
         let blur: Double
         let softShown: Double
         let alpha: Double
-        let inks: [(name: String, ink: UIColor)]
+        /// Soft, at the shape's width, and its blurred copy not showing.
+        let pending: Bool
+        let view: RecallRow
     }
 
     /// The grown shape's top, in the window.
@@ -1545,6 +1720,11 @@ struct RecallProbeState {
     let open: Double
     let matches: Int
     let rows: [Row]
+    /// The shape's sides and the query chip's box, in the window.
+    let shape: CGRect
+    let chip: CGRect?
+    /// The pill's padding: a row stands this far in from each side of the shape.
+    let pad: Double
 }
 
 extension RecallWheel {
@@ -1553,10 +1733,18 @@ extension RecallWheel {
         let rows = rows.keys.sorted().compactMap { k in
             self.rows[k].map {
                 RecallProbeState.Row(index: k, off: Double(k) - shown, depth: $0.depth, blur: $0.blur, softShown: $0.softShown, alpha: Double($0.alpha),
-                                     inks: $0.probeInks)
+                                     pending: $0.blurPending, view: $0)
             }
         }
-        return RecallProbeState(top: top, floor: foot, above: above, depth: depth, open: halo?.open ?? 0, matches: list.count, rows: rows)
+        let shape = halo.map { $0.convert($0.bounds, to: nil) } ?? .null
+        let chip = chip.flatMap { $0.isHidden ? nil : $0.convert($0.bounds, to: nil) }
+        return RecallProbeState(top: top, floor: foot, above: above, depth: depth, open: halo?.open ?? 0, matches: list.count, rows: rows,
+                                shape: shape, chip: chip, pad: field.minX)
+    }
+
+    /// The spring is still rolling it.
+    var probeRolling: Bool {
+        spring.running
     }
 
     func probeSpin(to index: Double) {

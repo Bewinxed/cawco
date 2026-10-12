@@ -244,7 +244,9 @@ xcrun simctl shutdown ${udid} >/dev/null 2>&1 || true`);
       return `| ${file} | ${device === "ipad" ? "iPad Pro 11-inch (M4)" : "iPhone 16 Pro"} | ${appearance} | ${say[state] ?? state} |`;
     }),
     "",
-    "Look for: the shape's top near the window's middle (iPhone) or 60% of the way down, the wheel taking the bottom 40% (iPad); every row readable, none cut by the top fade; no history button in the pill; Attach and Send keep their sizes and spacing; light and dark both legible.",
+    "Look for: the shape's top near the window's middle (iPhone) or 60% of the way down, the wheel taking the bottom 40% (iPad); with the keyboard up, the same shares of the room above the keyboard; every row readable, none cut by the top fade, the blur softening the top rows but never smearing them; light and dark the same apart from colour; in a search, the row on the line stopping short of the query chip and the rows above it across the shape; no history button in the pill; Attach and Send keep their sizes and spacing.",
+    "",
+    "The probe's own measures (its log, printed by the script) prove what a picture cannot: each row's strongest ink pixel against the shape's surface in a capture of the window, at least 4.5:1, light and dark, on both devices; each soft row's blurred copy showing the moment a roll settles; the search rows' widths against the shape and the chip; the shape's height as a share of the room; and the glide's frame times.",
     "",
   ].join("\n");
   await Bun.write(join(out, "INDEX.md"), index);
