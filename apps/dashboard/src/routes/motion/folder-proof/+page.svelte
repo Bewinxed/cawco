@@ -20,7 +20,7 @@
    * first (1); `?work=` working | finished. `window.__ft.choose(id)` chooses
    * a session tab and `window.__ft.work.choose(id)` Working or Finished, as
    * a click does; `ids` and `chosen()` on each say the rest: what
-   * scripts/folder-tabs-proof.ts drives.
+   * scripts/probe-kit/specs/web/folder-tabs.ts drives.
    *
    * A click on a tab chooses it here, in the bench's own group; the strip's
    * own choice goes to the workspace, which holds no such group and would

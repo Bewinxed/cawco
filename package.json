@@ -23,7 +23,7 @@
     "lint": "ultracite check",
     "lint:changed": "git diff --name-only --diff-filter=ACMR HEAD | xargs -r bunx biome check",
     "lint:fix": "ultracite fix",
-    "typecheck": "bun run --filter '*' typecheck && bun run --filter '@cawco/hub' openapi:check && bun run --filter '@cawco/hub' roles:check && bun run --filter '@cawco/hub' a2ui:check && bun run --filter '@cawco/core' tools:check && bun run claude-paths:check && bun run apple-ops:check && bunx tsc --project scripts/tsconfig.binary.json"
+    "typecheck": "bun run --filter '*' typecheck && bun run --filter '@cawco/hub' openapi:check && bun run --filter '@cawco/hub' roles:check && bun run --filter '@cawco/hub' a2ui:check && bun run --filter '@cawco/core' tools:check && bun run claude-paths:check && bun run apple-ops:check && bunx tsc --project scripts/tsconfig.binary.json && bunx tsc --project scripts/probe-kit/tsconfig.json"
   },
   "overrides": {
     "@types/bun": "^1.4.2",
@@ -37,8 +37,11 @@
     "@biomejs/biome": "2.5.15",
     "@types/bun": "^1.4.2",
     "@types/node": "^26.6.4",
+    "@types/pngjs": "^6.0.5",
     "@typescript/native": "npm:typescript@^7.0.2",
+    "pixelmatch": "^8.0.0",
     "playwright-core": "^1.63.0",
+    "pngjs": "^7.0.0",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
     "ultracite": "7.12.2"
   },

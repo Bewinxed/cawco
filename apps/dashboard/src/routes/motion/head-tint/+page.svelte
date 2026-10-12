@@ -14,7 +14,8 @@
    *
    * `?theme=` light | dark; `?at=` the index of the tab chosen first (1).
    * `window.__ht.choose(id)` chooses a tab as a click does; `ids` and
-   * `chosen()` say the rest: what scripts/head-tint-proof.ts drives.
+   * `chosen()` say the rest: what scripts/probe-kit/specs/web/head-tint.ts
+   * drives.
    *
    * A click on a tab chooses it here, in the bench's own group; the strip's
    * own choice goes to the workspace, which holds no such group and would
