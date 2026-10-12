@@ -4,6 +4,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { mkdir, readdir, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join, relative, resolve } from "node:path";
+import { nativeTarball, stageNativeClaude } from "./binary/native-tarball";
 
 export const PINNED_BUN = "1.4.2";
 export const TARGETS = [
@@ -67,46 +68,24 @@ async function filesUnder(
   }
   return files;
 }
-async function nativeClaude(target: string, work: string): Promise<string> {
-  const { version } = JSON.parse(
-    await Bun.file(
-      join(
-        packageDir("@anthropic-ai/claude-agent-sdk", requireAgent),
-        "package.json"
-      )
-    ).text()
+/** The Claude Agent SDK version installed in the tree whose agent package is `agentManifest`. */
+export async function agentSdkVersion(
+  agentManifest = join(ROOT, "packages/agent/package.json")
+): Promise<string> {
+  const manifest = join(
+    packageDir("@anthropic-ai/claude-agent-sdk", createRequire(agentManifest)),
+    "package.json"
   );
-  const pkg = `@anthropic-ai/claude-agent-sdk-${target}`;
-  const dir = join(work, "native", version, target);
-  const binary = join(dir, "package/claude");
-  if (await Bun.file(binary).exists()) {
-    return binary;
-  }
-  await mkdir(dir, { recursive: true });
-  const response = await fetch(`https://registry.npmjs.org/${pkg}/${version}`);
-  if (!response.ok) {
-    throw new Error(`Cannot resolve ${pkg}@${version}: ${response.status}`);
-  }
-  const metadata = (await response.json()) as {
-    dist: { tarball: string; integrity: string };
-  };
-  const archive = join(dir, "native.tgz");
-  const download = await fetch(metadata.dist.tarball);
-  if (!download.ok) {
-    throw new Error(`Native asset download failed: ${download.status}`);
-  }
-  await Bun.write(archive, download);
-  const [algorithm, expected] = metadata.dist.integrity.split("-");
-  if (
-    algorithm !== "sha512" ||
-    new Bun.CryptoHasher("sha512")
-      .update(await Bun.file(archive).bytes())
-      .digest("base64") !== expected
-  ) {
-    throw new Error("Native SDK package integrity mismatch");
-  }
-  await run(["tar", "-xzf", archive, "-C", dir]);
-  return binary;
+  return JSON.parse(await Bun.file(manifest).text()).version;
+}
+
+async function nativeClaude(target: string, work: string): Promise<string> {
+  const version = await agentSdkVersion();
+  return await stageNativeClaude(
+    target,
+    version,
+    join(work, "native", version, target)
+  );
 }
 
 /** Builds one target at a time; release.ts owns locking, gates, signing and archives. */
@@ -409,7 +388,14 @@ export async function buildBinary(options: {
   );
 }
 
-if (import.meta.main) {
+const prefetch = Bun.argv.indexOf("--prefetch");
+if (import.meta.main && prefetch !== -1) {
+  // Fills the native tarball cache for every release target while npm is healthy.
+  const version = Bun.argv[prefetch + 1] ?? (await agentSdkVersion());
+  for (const target of TARGETS) {
+    console.log(`${target}: ${await nativeTarball(target, version)}`);
+  }
+} else if (import.meta.main) {
   const [
     target = "linux-x64",
     outfile = join(ROOT, ".context/binary-build/cawco"),

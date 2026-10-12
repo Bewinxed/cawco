@@ -14,7 +14,8 @@
  */
 import { mkdir, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { buildBinary } from "../build-binary";
+import { agentSdkVersion, buildBinary } from "../build-binary";
+import { stageNativeClaude } from "./native-tarball";
 
 /** The commit before keepers ran side by side (packages/core/src/keepers.ts). */
 const BEFORE_SIDE_BY_SIDE = "eedffee6d89def230ba998aae49f289269abab43";
@@ -75,6 +76,16 @@ await run([
 ]);
 try {
   await run([process.execPath, "install", "--frozen-lockfile"], before);
+  // That commit's build script downloads the native binary unless it finds one
+  // already extracted in its work dir; put it there from the verified cache.
+  const beforeSdk = await agentSdkVersion(
+    join(before, "packages/agent/package.json")
+  );
+  await stageNativeClaude(
+    "linux-x64",
+    beforeSdk,
+    join(before, ".context/binary-build/native", beforeSdk, "linux-x64")
+  );
   const { buildBinary: buildBefore } = (await import(
     join(before, "scripts/build-binary.ts")
   )) as { buildBinary: typeof buildBinary };
