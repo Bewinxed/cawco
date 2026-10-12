@@ -863,9 +863,9 @@ const state = $state({
    */
   projectOffers: {} as Record<string, ProjectOfferSummary>,
   /**
-   * Approved actions waiting on the operator (proposed, or whose outcome is
-   * unknown until checked): read on connect, then kept whole by `actions`
-   * frames.
+   * Approved actions waiting on the operator (proposed, or failed or of
+   * unknown outcome until put away): read on connect, then kept whole by
+   * `actions` frames.
    */
   actions: [] as ApprovedActionView[],
   /**
@@ -5343,8 +5343,8 @@ async function readWaitingActions(): Promise<void> {
 
 /**
  * Your decision on an approved action: approve the exact call shown (named
- * by its arguments' hash, so the hub refuses any other), deny it, or put an
- * unknown one away once you checked the service. Nothing is optimistic: the
+ * by its arguments' hash, so the hub refuses any other), deny it, or put a
+ * failed or unknown one away once you have read it. Nothing is optimistic: the
  * card leaves when the hub's `actions` frame says so. A refusal is thrown in
  * the hub's own sentence.
  */
@@ -7275,7 +7275,7 @@ export const cawco = {
       capHolds(project.cap, minute.now)
     );
   },
-  /** Approved actions waiting on you: proposed, or unknown until checked. */
+  /** Approved actions waiting on you: proposed, or failed or unknown until put away. */
   get actions(): ApprovedActionView[] {
     return state.actions;
   },

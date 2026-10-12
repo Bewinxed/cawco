@@ -23,8 +23,9 @@
    * account it signs in as, the tool, and the exact arguments in a well that
    * scrolls. Deny and Approve are the permission's peers; Approve names the
    * arguments' hash the hub gave with them, so the hub runs the call shown
-   * and refuses any other. One whose call may or may not have happened says
-   * so, and Remove puts it away once you have checked the service.
+   * and refuses any other. One that failed says why (the hub's or the
+   * service's words), and one whose call may or may not have happened says
+   * so; Remove puts either away once you have read it.
    */
   import { questionsOf } from "@cawco/core";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -33,6 +34,7 @@
     IconCheck,
     IconClose,
     IconDollar,
+    IconError,
     IconFolder,
     IconMaximize,
     IconSend,
@@ -88,8 +90,11 @@
       case "run":
         return "Waiting on your answer";
       case "action":
-        return item.action.state === "unknown"
-          ? `This may or may not have happened. Check ${item.action.service}.`
+        if (item.action.state === "unknown") {
+          return `This may or may not have happened. Check ${item.action.service}.`;
+        }
+        return item.action.state === "failed"
+          ? `It failed. ${item.action.error ?? `${item.action.service} did not take it.`}`
           : item.action.reason;
       default:
         return capLine(item.cap);
@@ -113,7 +118,6 @@
       through: `${action.connection} · ${action.service} as ${action.account}`,
       tool: action.tool,
       args,
-      unknown: action.state === "unknown",
     };
   });
 
@@ -129,15 +133,15 @@
     }).format(at);
   }
 
-  /** When the call runs, or (unknown) when it went. */
+  /** When the call runs, or (failed, unknown) when it was tried. */
   function whenOf(
     state: string,
     runAt: number | null,
     startedAt: number | null,
     now: number
   ): string {
-    if (state === "unknown") {
-      return startedAt === null ? "Unknown" : `Went ${stamp(startedAt)}`;
+    if (state === "unknown" || state === "failed") {
+      return startedAt === null ? "Not tried" : `Tried ${stamp(startedAt)}`;
     }
     if (runAt === null) {
       return "As soon as you approve";
@@ -274,6 +278,8 @@
     {:else if item.kind === "action"}
       {#if item.action.state === "unknown"}
         <IconWarningTriangle aria-hidden="true" />
+      {:else if item.action.state === "failed"}
+        <IconError aria-hidden="true" />
       {:else}
         <IconSend aria-hidden="true" />
       {/if}

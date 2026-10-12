@@ -155,6 +155,7 @@ const PROPOSED = /^\(proposed\)\s*/i;
 const BUDGET_ENTRY =
   /^\s*(usd|turns|minutes)\s*:\s*\$?([0-9]+(?:\.[0-9]+)?)\s*$/;
 const SECTION = /^##\s+(.*?)(?:\s+#+)?\s*$/;
+const SPACES = /\s+/g;
 const TITLE = /^#\s+(.*?)(?:\s+#+)?\s*$/;
 const FENCE = /^\s*(```|~~~)/;
 const SEQUENCE_ITEM = /^\s*-\s+(.*)$/;
@@ -909,6 +910,27 @@ export class TaskDoc {
       `## ${heading}`,
       ...lines
     );
+  }
+
+  /**
+   * Adds one line to the `## Notes` section, making the section at the end
+   * when there is none: what the hub says about the task (tasks.ts).
+   */
+  addNote(text: string): void {
+    const line = `- ${text.replace(SPACES, " ").trim()}`;
+    const section = sectionsOf(this.body).find(
+      (each) => each.heading.trim().toLowerCase() === "notes"
+    );
+    if (!section) {
+      this.endWithBlank();
+      this.body.push("## Notes", "", line, "");
+      return;
+    }
+    let at = section.end;
+    while (at > section.at + 1 && this.body[at - 1]?.trim() === "") {
+      at -= 1;
+    }
+    this.body.splice(at, 0, line);
   }
 
   /** Makes the body end in one blank line before something is appended. */

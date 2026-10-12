@@ -1017,27 +1017,32 @@ export const createPush = ({
 
     /**
      * An approved action needs you (actions.ts): it waits for your approval,
-     * or its call may or may not have happened. The permission push's shape,
-     * Open only; the visible words say "Approved action", the sealed ones
-     * the connection and the proposer's reason. Sent while `waiting` holds.
+     * it failed, or its call may or may not have happened. The permission
+     * push's shape, Open only; the visible words say "Approved action" and
+     * the state, the sealed ones the connection and `said` (the proposer's
+     * reason, or why it failed). Sent while `waiting` holds.
      */
     action(action: {
       connection: string;
       id: string;
       projectId: string;
-      reason: string;
-      unknown: boolean;
+      said: string;
+      state: "proposed" | "failed" | "unknown";
       waiting: () => boolean;
     }): void {
       const project = projectName(action.projectId);
-      const body = action.unknown ? "May or may not have run" : NEEDS_YOU;
+      const { body, ask } = {
+        proposed: { body: NEEDS_YOU, ask: "approve?" },
+        failed: { body: "Failed", ask: "it failed" },
+        unknown: { body: "May or may not have run", ask: "check it" },
+      }[action.state];
       moment(
         {
           shown: alertOf("Approved action", project, body),
           sealed: alertOf(
-            `${action.connection}: ${action.unknown ? "check it" : "approve?"}`,
+            `${action.connection}: ${ask}`,
             project,
-            firstLine(action.reason) || body
+            firstLine(action.said) || body
           ),
           category: PUSH_CATEGORIES.permissionOpenOnly,
           collapseId: `action-${action.id}`,
@@ -1051,6 +1056,7 @@ export const createPush = ({
         null,
         action.waiting
       );
+      console.log(`[push] action ${action.id}: ${action.state}`);
     },
 
     /** A test: a push to the devices given, quiet ones too. */

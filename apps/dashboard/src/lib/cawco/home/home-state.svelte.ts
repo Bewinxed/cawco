@@ -304,8 +304,8 @@ export interface CapItem {
 
 /**
  * An approved action waiting on you (actions.ts on the hub): one exact call
- * to approve or deny, or one whose call may or may not have happened, to
- * check at the service and remove.
+ * to approve or deny, or one that failed or whose call may or may not have
+ * happened, to read and remove.
  */
 export interface ActionItem {
   action: ApprovedActionView;
@@ -884,9 +884,9 @@ class Home {
           ? `${at}?task=${encodeURIComponent(action.taskId)}`
           : at,
         raisedAt:
-          action.state === "unknown"
-            ? (action.endedAt ?? action.createdAt)
-            : action.createdAt,
+          action.state === "proposed"
+            ? action.createdAt
+            : (action.endedAt ?? action.createdAt),
       };
     });
     // Longest wait first; an ask the hub has not stamped sorts last.

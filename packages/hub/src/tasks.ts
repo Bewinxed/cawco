@@ -30,12 +30,14 @@
  * at once both land.
  */
 import type { InstanceRow, LandsMode } from "@cawco/core";
+import { detach } from "@cawco/core/detach";
 import { Elysia, t } from "elysia";
 import type { TaskIndexRow, WorkItemRow } from "./db";
 import type { Tracker, WorkBudget, WorkItemState } from "./db/schema";
 import {
   type FolderAuthor,
   FolderRefusal,
+  folderHistory,
   folderPathsInHistory,
   hasProjectFolder,
   listFolder,
@@ -965,6 +967,107 @@ export const createTasks = (store: TaskStore) => {
     };
   };
 
+  // --- a stage written into the file, not moved --------------------------------
+  //
+  // §5.2: a task changes stage only through a move (tasks.move, checked for
+  // its mover; an approved action's through `actionMove`). A file edited to
+  // another `stage:` (Caw's folder_write, the folder editor, a push to the
+  // folder) never moves the task: the index keeps its stage, the file gets
+  // that stage back with a note naming who edited it, and the move is never
+  // made. A file the index has never seen is a new task, not an edit.
+
+  /** The indexed row, when `content` says another stage than it holds. */
+  const strayStage = (
+    row: TaskIndexRow | undefined,
+    path: string,
+    content: string
+  ): TaskIndexRow | undefined => {
+    if (!row?.stage) {
+      return;
+    }
+    const written = new TaskDoc(path, content).read().fields.stage ?? "";
+    return written === row.stage ? undefined : row;
+  };
+
+  /** `content` with the indexed stage in place of the one written. */
+  const withStage = (path: string, content: string, stage: string): string => {
+    const doc = new TaskDoc(path, content);
+    doc.setField("stage", stage);
+    return doc.toString();
+  };
+
+  /**
+   * Puts the indexed stage back in the file, with a note on the task naming
+   * who edited it (the file's last commit's author: Caw for folder_write,
+   * you for the folder editor), as one commit by the hub; then indexes it.
+   * Runs inside the project's turn. Answers the restored content.
+   */
+  const restoreStage = async (
+    projectId: string,
+    path: string,
+    number: number,
+    content: string,
+    row: TaskIndexRow
+  ): Promise<string> => {
+    const doc = new TaskDoc(path, content);
+    const written = doc.read().fields.stage || "(none)";
+    const who =
+      (await folderHistory(projectId, path, 1).catch(() => undefined))
+        ?.commits[0]?.author || "someone";
+    const at = new Date().toISOString().slice(0, 16).replace("T", " ");
+    doc.setField("stage", row.stage);
+    doc.addNote(
+      `${at} UTC: stage changes go through task moves; ${who} edited the file to say stage ${written}, so it stays ${row.stage}.`
+    );
+    const restored = doc.toString();
+    stands(projectId);
+    await writeFolderFile(projectId, path, restored, {
+      author: { name: "hub" },
+      message: `task ${row.id}: stage ${written} written by ${who} put back to ${row.stage} (by hub: stage changes go through task moves)`,
+    });
+    store.put([indexRow(projectId, path, number, restored, hashOf(restored))]);
+    console.info(
+      `[tasks] ${projectId} ${row.id}: ${who} wrote stage ${written} into its file; it stays ${row.stage}`
+    );
+    emit({ kind: "changed", projectId, id: row.id });
+    return restored;
+  };
+
+  /** Restores queued, by project and path: one edit is restored once however often it is read. */
+  const restoring = new Set<string>();
+
+  /**
+   * A read outside the project's turn found a stray stage: the restore is
+   * queued in the turn (a change under way finishes first), and the index
+   * keeps its row meanwhile, so nothing reads the written stage as the task's.
+   */
+  const queueRestore = (projectId: string, path: string, number: number) => {
+    const key = `${projectId}\0${path}`;
+    if (restoring.has(key)) {
+      return;
+    }
+    restoring.add(key);
+    detach(
+      inTurn(projectId, async () => {
+        try {
+          const { content } = await readFolderFile(projectId, path);
+          const row = store.index(projectId).find((each) => each.path === path);
+          if (strayStage(row, path, content) && row) {
+            await restoreStage(projectId, path, number, content, row);
+          } else if (row?.hash !== hashOf(content)) {
+            stands(projectId);
+            store.put([
+              indexRow(projectId, path, number, content, hashOf(content)),
+            ]);
+          }
+        } finally {
+          restoring.delete(key);
+        }
+      }),
+      `task ${path} stage restore`
+    );
+  };
+
   /**
    * Reads every task file and re-indexes the ones whose content changed since
    * the index last saw them; forgets rows whose files are gone. Answers the
@@ -1009,9 +1112,15 @@ export const createTasks = (store: TaskStore) => {
         try {
           const { content } = await readFolderFile(projectId, path);
           const hash = hashOf(content);
-          return indexed.get(path)?.hash === hash
-            ? undefined
-            : indexRow(projectId, path, number, content, hash);
+          const row = indexed.get(path);
+          if (row?.hash === hash) {
+            return;
+          }
+          if (strayStage(row, path, content)) {
+            queueRestore(projectId, path, number);
+            return;
+          }
+          return indexRow(projectId, path, number, content, hash);
         } catch (error) {
           if (error instanceof FolderRefusal) {
             problems.push(error.message);
@@ -1286,7 +1395,16 @@ export const createTasks = (store: TaskStore) => {
       writable(projectId);
       const { path, number } = await locate(projectId, ref, true);
       const id = taskId(number);
-      const { content } = await readFolderFile(projectId, path);
+      const read = (await readFolderFile(projectId, path)).content;
+      // A stage written into the file is put back before any change reads it.
+      const stray = strayStage(
+        store.index(projectId).find((each) => each.path === path),
+        path,
+        read
+      );
+      const content = stray
+        ? await restoreStage(projectId, path, number, read, stray)
+        : read;
       const doc = new TaskDoc(path, content);
       const did = await apply(doc, id);
       const next = doc.toString();
@@ -1377,7 +1495,11 @@ export const createTasks = (store: TaskStore) => {
       const { content } = await readFolderFile(projectId, path);
       const hash = hashOf(content);
       const row = store.index(projectId).find((each) => each.path === path);
-      if (row?.hash !== hash) {
+      const stray = strayStage(row, path, content);
+      if (stray) {
+        // Shown at the stage it is in; the file gets it back in its turn.
+        queueRestore(projectId, path, number);
+      } else if (row?.hash !== hash) {
         stands(projectId);
         store.put([indexRow(projectId, path, number, content, hash)]);
       }
@@ -1385,7 +1507,7 @@ export const createTasks = (store: TaskStore) => {
         projectId,
         path,
         number,
-        content,
+        stray ? withStage(path, content, stray.stage) : content,
         await currentStages(projectId)
       );
     },

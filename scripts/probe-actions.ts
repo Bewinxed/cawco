@@ -23,6 +23,12 @@
  *    stays proposed.
  * 6. then_stage: the done post moves its task to `posted` (by: action); the
  *    route's and a session's direct move to `posted` are refused.
+ * 7. A post the service refuses (once): failed, with the service's words,
+ *    waiting on you with a push; "checked" puts it away; never called again.
+ * 8. The project's Caw writes a task file through folder_write, once with
+ *    `stage: posted` (a `by: action` stage) and once with an ordinary
+ *    stage: neither moves the task; the file gets its stage back with a
+ *    note naming Caw.
  *
  * Run from the repo root:
  *   bun scripts/probe-actions.ts [--keep]
@@ -41,7 +47,8 @@ import {
 const keep = process.argv.includes("--keep");
 const PROPOSE = "mcp__cawco__action_propose";
 const MOVE = "mcp__cawco__task_update";
-const LOGGED = /actions|tasks|error/i;
+const LOGGED = /actions|tasks|push|caw|error/i;
+const STAGE_LINE = /^stage: .*$/m;
 /** The scheduler wakes at an action's time; this is the slack a busy machine gets. */
 const WAKE_SLACK_MS = 3000;
 
@@ -70,6 +77,8 @@ interface Call {
 }
 const calls: Call[] = [];
 let holding = false;
+/** The next call is answered as the service refusing it. */
+let refuseNext = false;
 let releaseHeld: (() => void) | undefined;
 const rpc = (id: unknown, result: unknown) =>
   Response.json({ jsonrpc: "2.0", id, result });
@@ -126,6 +135,13 @@ const mcp = Bun.serve({
         if (holding) {
           await new Promise<void>((done) => {
             releaseHeld = done;
+          });
+        }
+        if (refuseNext) {
+          refuseNext = false;
+          return rpc(message.id, {
+            isError: true,
+            content: [{ type: "text", text: "rate limited: try in an hour" }],
           });
         }
         return rpc(message.id, {
@@ -225,19 +241,27 @@ const callsFor = (key: string) =>
 
 let session = "";
 let sent = 0;
-/** The session runs one tool call; answers what it said back. */
-const sessionCalls = async (name: string, input: object): Promise<string> => {
+/**
+ * One tool call by the session (`via` sends the message: the session's own
+ * composer, or a thread to the project's Caw); answers what it said back.
+ */
+const toolCall = async (
+  name: string,
+  input: object,
+  via: (text: string) => Promise<unknown> = (text) => fleet.send(session, text)
+): Promise<string> => {
   sent += 1;
   const marker = String(sent);
   asks.set(marker, { name, input });
-  await fleet.send(session, `PROBE-CALL:${marker}`);
+  await via(`PROBE-CALL:${marker}`);
   return await until(
-    `the session's ${name} (${marker})`,
+    `the ${name} call (${marker})`,
     () => answered.get(marker),
     Boolean,
-    120_000
+    180_000
   );
 };
+const sessionCalls = (name: string, input: object) => toolCall(name, input);
 /** A proposal by the session; answers the row it filed. */
 const propose = async (input: object): Promise<ActionRow> => {
   const before = new Set(
@@ -540,6 +564,118 @@ try {
         late.status === 409,
       `calls ${callsFor(denied.idempotency_key).length}/${callsFor(cancelled.idempotency_key).length}/${callsFor(tampered.idempotency_key).length}; states ${rowOf(denied.id)?.state}/${rowOf(cancelled.id)?.state}; late approve ${late.status}`
     );
+  });
+
+  // ── 7: a post the service refuses needs you ──────────────────────────────
+  await section("7: a failed action reaches Needs you", async () => {
+    refuseNext = true;
+    const action = await propose({
+      connection: "x-probe",
+      tool: "post",
+      args: { text: "Refused by the service" },
+      reason: "Proves a failure reaches you.",
+    });
+    await approve(action);
+    const after = await until(
+      "the action failed",
+      () => rowOf(action.id),
+      (row) => row?.state === "failed",
+      60_000
+    );
+    const waiting = await ok<{ actions: { id: string; state: string }[] }>(
+      "GET",
+      "/api/actions/waiting"
+    );
+    const pushed = await until(
+      "the push line",
+      async () =>
+        (await fleet.logs("hub")).includes(
+          `[push] action ${action.id}: failed`
+        ),
+      Boolean,
+      15_000
+    );
+    await Bun.sleep(5000);
+    check(
+      "7: failed with the service's words, waiting on you, pushed, called once",
+      waiting.actions.some(
+        (one) => one.id === action.id && one.state === "failed"
+      ) &&
+        (after.error ?? "").includes("rate limited: try in an hour") &&
+        pushed &&
+        callsFor(action.idempotency_key).length === 1,
+      `${after.error}; waiting ${waiting.actions.map((one) => one.state).join(", ")}; ${callsFor(action.idempotency_key).length} call(s)`
+    );
+    await ok("POST", `/api/actions/${action.id}/checked`);
+    const later = await ok<{ actions: { id: string }[] }>(
+      "GET",
+      "/api/actions/waiting"
+    );
+    check(
+      "7: Remove (checked) puts the failed one away",
+      !later.actions.some((one) => one.id === action.id) &&
+        rowOf(action.id)?.state === "failed",
+      `${later.actions.length} waiting`
+    );
+  });
+
+  // ── 8: a stage written into the file by Caw never moves the task ─────────
+  await section("8: a task file's stage edited by Caw stays", async () => {
+    const target = await ok<{ id: string; stage: string }>(
+      "POST",
+      `/api/projects/${projectId}/tasks`,
+      { title: "Third post", stage: "scheduled" }
+    );
+    await send("PATCH", `/api/projects/${projectId}/caw`, { on: true });
+    const listing = await ok<{ entries: { path: string }[] }>(
+      "GET",
+      `/api/projects/${projectId}/folder?path=tasks`
+    );
+    const path =
+      listing.entries.find((one) => one.path.startsWith(`tasks/${target.id}-`))
+        ?.path ?? "";
+    const fileOf = async () =>
+      (
+        await ok<{ content: string }>(
+          "GET",
+          `/api/projects/${projectId}/folder/file?path=${encodeURIComponent(path)}`
+        )
+      ).content;
+    const viaLead = (text: string) =>
+      ok("POST", `/api/projects/${projectId}/threads`, { body: text });
+    for (const written of ["posted", "draft"]) {
+      // biome-ignore lint/performance/noAwaitInLoops: one edit, then its restore, then the next
+      const content = (await fileOf()).replace(STAGE_LINE, `stage: ${written}`);
+      const said = await toolCall(
+        "mcp__cawco__folder_write",
+        { path, content },
+        viaLead
+      );
+      // A read of the task: the index keeps its stage, and the file gets it back.
+      const shown = await fleet.api<{ stage: string }>(
+        `/api/projects/${projectId}/tasks/${target.id}`
+      );
+      const restored = await until(
+        "the file's stage put back",
+        fileOf,
+        (text) =>
+          text.includes("stage: scheduled") &&
+          text.includes(`Caw edited the file to say stage ${written}`),
+        60_000
+      );
+      const now = await fleet.api<{ stage: string }>(
+        `/api/projects/${projectId}/tasks/${target.id}`
+      );
+      check(
+        `8: Caw's folder_write of stage ${written} leaves the task in scheduled, with the note`,
+        shown.stage === "scheduled" &&
+          now.stage === "scheduled" &&
+          restored.includes(
+            "stage changes go through task moves; Caw edited the file"
+          ),
+        `folder_write said ${said.slice(0, 120)}; read ${shown.stage}, then ${now.stage}; note: ${restored.split("\n").find((line) => line.includes("task moves"))}`
+      );
+    }
   });
 
   check(

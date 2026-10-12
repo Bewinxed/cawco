@@ -21,7 +21,9 @@
  *   one call ({@link Connections.callOnce}), with the idempotency key in the
  *   request's `_meta`, then files done, failed or unknown. Nothing is
  *   retried. A row a stopped hub left running is never called again: it
- *   becomes unknown, and Needs you says to check the service.
+ *   becomes unknown, and Needs you says to check the service. A failed
+ *   one needs you too, with the hub's or the service's reason, as a
+ *   routine's second failure does; both stand until you remove them.
  * - **Stage moves**: a done action with a task and a `then_stage` moves its
  *   task there as the mover `action`; the stage engine lets no other path
  *   make an `action` move (tasks.ts `actionMove`).
@@ -68,7 +70,7 @@ const LISTED = 50;
 const PROPOSERS: ReadonlySet<SessionRole> = new Set(["worker", "lead"]);
 
 /** The states that wait on you: Needs you shows these. */
-const WAITING: readonly ActionState[] = ["proposed", "unknown"];
+const WAITING: readonly ActionState[] = ["proposed", "failed", "unknown"];
 
 /** A refusal, with the status a route answers and the words a tool returns. */
 export class ActionRefusal extends Error {
@@ -215,7 +217,7 @@ export const createActions = ({
     };
   };
 
-  /** Every action waiting on you: proposed, or unknown and not yet checked. */
+  /** Every action waiting on you: proposed, or failed or unknown and not yet put away. */
   const waiting = (): ApprovedActionView[] =>
     store
       .inStates(WAITING)
@@ -230,8 +232,11 @@ export const createActions = ({
       id: row.id,
       connection: row.connection,
       projectId: row.projectId,
-      reason: row.reason,
-      unknown: row.state === "unknown",
+      said: row.state === "proposed" ? row.reason : (row.error ?? row.reason),
+      state:
+        row.state === "proposed" || row.state === "failed"
+          ? row.state
+          : "unknown",
       waiting: () => {
         const now = store.get(row.id);
         return now?.state === row.state && now.checkedAt === null;
@@ -492,13 +497,13 @@ export const createActions = ({
     return view(cancelled);
   };
 
-  /** Yours: an unknown one, checked at the service and put away. */
+  /** Yours: a failed or unknown one, read (and checked at the service) and put away. */
   const check = (id: string): ApprovedActionView => {
     const row = moved(
       rowOf(id),
-      ["unknown"],
+      ["failed", "unknown"],
       { checkedAt: new Date() },
-      "put away (only one whose outcome is unknown is)"
+      "put away (only one that failed or whose outcome is unknown is)"
     );
     told();
     return view(row);
@@ -527,7 +532,7 @@ export const createActions = ({
     console.info(`[actions] ${row.id}: ${said}`);
   };
 
-  /** What became of the call, filed; Needs you hears of an unknown one. */
+  /** What became of the call, filed; Needs you, and the phone, hear of a failed or unknown one. */
   const file = (
     row: ActionRow,
     end: {
@@ -545,7 +550,7 @@ export const createActions = ({
     console.info(
       `[actions] ${row.id} ${row.connection}/${row.tool}: ${end.state}${end.error ? ` (${end.error})` : ""}`
     );
-    if (ended?.state === "unknown") {
+    if (ended?.state === "unknown" || ended?.state === "failed") {
       pushFor(ended);
     }
     told();

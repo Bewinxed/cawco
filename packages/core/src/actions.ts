@@ -27,7 +27,7 @@ export interface ApprovedActionView {
   args: string;
   /** SHA-256 of `args`, hex: what an approval names. */
   argsHash: string;
-  /** When you put an unknown one away, having checked the service. */
+  /** When you put a failed or unknown one away. */
   checkedAt: number | null;
   connection: string;
   createdAt: number;
@@ -61,7 +61,8 @@ export interface ApprovedActionView {
 
 /**
  * Hub-originated: every approved action waiting on you, whole, on each
- * change: those proposed, and those whose outcome is unknown until you check.
+ * change: those proposed, and those that failed or whose outcome is unknown,
+ * until you put them away.
  */
 export interface ActionsFrame {
   actions: ApprovedActionView[];
