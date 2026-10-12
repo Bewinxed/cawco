@@ -1,54 +1,24 @@
 /**
- * CawCo Agent.app: the one identity macOS gives a privacy grant to. Server-only.
+ * CawCo Agent.app: the identity macOS gives a privacy grant to.
  *
  * macOS keys a grant (Screen Recording, Accessibility, Files and Folders,
  * Automation…) on the responsible process: for the work a workspace runs, the
  * session keeper's launchd job, and for the agent's own work, the agent's. A
  * bare executable is keyed on its path, and an ad-hoc signature's designated
- * requirement is its cdhash, so a build at `versions/<v>/cawco` was a new
- * client to TCC on every update. The bundle fixes both: it sits at one path,
- * `<binary root>/CawCo Agent.app`, its identifier is `dev.cawco.agent`, and
- * every release signs it with the team's Developer ID (scripts/release.ts,
- * scripts/binary/sign-agent-bundle.sh), so its designated requirement names
- * the identifier and the team, never the code. TCC then keys the grant on the
- * bundle id and that requirement, and shows one row, "CawCo Agent".
+ * requirement is its cdhash, so a bare build was a new client to TCC on every
+ * update. A bundle's grant is keyed on its identifier, `dev.cawco.agent`, and
+ * its designated requirement, which names that identifier and the team's
+ * Developer ID (scripts/release.ts, scripts/binary/sign-agent-bundle.sh) and
+ * never the code or the path. So every build is its own signed bundle,
+ * `versions/<v>/CawCo Agent.app`, shipped in the release exactly as the Mac
+ * signed it, and the grant follows each update; TCC shows one row, "CawCo
+ * Agent".
  *
- * Its executable is always the build the `current` link names: every place
- * that moves `current` puts that build in here ({@link installAgentBundle}),
- * by renaming a copy over the executable, so the path and the requirement
- * never change, and a process already running from it keeps the file it was
- * started from. The agent, hub and dashboard start from it through the
- * service wrapper (binary-wrapper.ts), and every session keeper's job starts
- * from it (a keeper of another build runs its own, sessiond main.ts).
- *
- * The Mach-O's signature binds the bundle's Info.plist and its resource seal
- * (`_CodeSignature/CodeResources`). Neither depends on the executable: the
- * Info.plist is {@link AGENT_INFO_PLIST}, here, and the release seals an
- * empty bundle with it on the Mac before it compiles, and compiles that seal
- * in (`__CAWCO_AGENT_CODE_RESOURCES__`). So each build writes the exact two
- * files its own signature names, and nothing else rides in the release.
+ * A Developer ID, hardened-runtime executable signed as a bundle's main
+ * executable is killed when run outside that bundle (`load code signature
+ * error 4`): on macOS a build only ever runs from inside its bundle
+ * (binary-installation.ts `versionExecutable`).
  */
-import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
-import {
-  chmod,
-  constants,
-  copyFile,
-  mkdir,
-  readFile,
-  rename,
-  rm,
-  writeFile,
-} from "node:fs/promises";
-import { basename, join } from "node:path";
-import {
-  binaryRoot,
-  versionDirectory,
-  writeJsonAtomic,
-} from "./binary-installation";
-import { runtimeVersion, standalone } from "./runtime";
-
-declare const __CAWCO_AGENT_CODE_RESOURCES__: string | undefined;
 
 /** The bundle's identifier: the code-signing identifier TCC and CawCo Helper know the agent by. */
 export const AGENT_BUNDLE_ID = "dev.cawco.agent";
@@ -59,16 +29,11 @@ export const AGENT_BUNDLE_NAME = "CawCo Agent";
 /** The bundle's executable, inside `Contents/MacOS`. */
 export const AGENT_EXECUTABLE_NAME = "cawco";
 
-/** The bundle, at its one path. */
-export const agentBundlePath = (): string =>
-  join(binaryRoot(), `${AGENT_BUNDLE_NAME}.app`);
+/** The bundle's folder, in a build's folder and in the release archive. */
+export const AGENT_BUNDLE = `${AGENT_BUNDLE_NAME}.app`;
 
-/** The executable every launchd job of a macOS binary install starts. */
-export const agentExecutable = (): string =>
-  join(agentBundlePath(), "Contents", "MacOS", AGENT_EXECUTABLE_NAME);
-
-/** Which build the bundle holds, written once it holds it. */
-const stampPath = (): string => join(binaryRoot(), "agent-bundle.json");
+/** The bundle's executable, from the folder that holds the bundle. */
+export const AGENT_BUNDLE_EXECUTABLE = `${AGENT_BUNDLE}/Contents/MacOS/${AGENT_EXECUTABLE_NAME}`;
 
 /**
  * What macOS asks a person on the bundle's behalf. Every command a workspace
@@ -182,98 +147,3 @@ ${USAGE.map(([key, text]) => `\t<key>${key}</key>\n\t<string>${text}</string>`).
 </dict>
 </plist>
 `;
-
-/** The resource seal this build was signed with, as the release compiled it in; none in a build not signed for the bundle. */
-const SEAL =
-  typeof __CAWCO_AGENT_CODE_RESOURCES__ === "string"
-    ? __CAWCO_AGENT_CODE_RESOURCES__
-    : undefined;
-
-/**
- * A file this process writes before renaming it into the bundle: beside the
- * bundle, never in it, where one left by a process that died would be
- * content the seal does not cover, and the bundle would fail its signature.
- */
-const temporaryFor = (name: string): string =>
-  join(binaryRoot(), `.agent-bundle-${name}.${process.pid}.tmp`);
-
-/** Writes `text` at `path` unless it is there already, by one rename. */
-const place = async (path: string, text: string): Promise<void> => {
-  if ((await readFile(path, "utf8").catch(() => undefined)) === text) {
-    return;
-  }
-  const temporary = temporaryFor(basename(path));
-  try {
-    await writeFile(temporary, text, { mode: 0o600 });
-    await rename(temporary, path);
-  } finally {
-    await rm(temporary, { force: true });
-  }
-};
-
-/**
- * Puts this build in CawCo Agent.app: its Info.plist and seal, then its
- * executable, copied from `versions/<this build>/cawco` and renamed over the
- * one there (a running process keeps the file it started from; a launch
- * meets one build or the other, never a half-written file). Then codesign
- * checks the bundle as a whole, and only a bundle that satisfies its own
- * designated requirement is recorded as holding this build. A bundle already
- * holding it is left alone.
- */
-export async function installAgentBundle(): Promise<
-  "installed" | "already held"
-> {
-  if (!(standalone && process.platform === "darwin")) {
-    throw new Error(
-      `${AGENT_BUNDLE_NAME}.app is a macOS binary install's, and this is not one`
-    );
-  }
-  if (!SEAL) {
-    throw new Error(
-      `This build (${runtimeVersion}) was not signed as ${AGENT_BUNDLE_NAME}.app, so it cannot be put in it`
-    );
-  }
-  const stamp = JSON.parse(
-    await readFile(stampPath(), "utf8").catch(() => "{}")
-  ) as { version?: string };
-  if (stamp.version === runtimeVersion && existsSync(agentExecutable())) {
-    return "already held";
-  }
-  // From here until it passes its check, the bundle holds no build on record:
-  // one left half-written is written again by the next install, of any build.
-  await rm(stampPath(), { force: true });
-  const contents = join(agentBundlePath(), "Contents");
-  await mkdir(join(contents, "MacOS"), { recursive: true, mode: 0o700 });
-  await mkdir(join(contents, "_CodeSignature"), {
-    recursive: true,
-    mode: 0o700,
-  });
-  await place(join(contents, "Info.plist"), AGENT_INFO_PLIST);
-  await place(join(contents, "_CodeSignature", "CodeResources"), SEAL);
-  // A copy, never a hard link: a vnode with two names may be reported by
-  // either, and the process must be seen to run from the bundle.
-  const temporary = temporaryFor(AGENT_EXECUTABLE_NAME);
-  try {
-    await copyFile(
-      join(versionDirectory(runtimeVersion), "cawco"),
-      temporary,
-      constants.COPYFILE_FICLONE
-    );
-    await chmod(temporary, 0o700);
-    await rename(temporary, agentExecutable());
-  } finally {
-    await rm(temporary, { force: true });
-  }
-  const checked = spawnSync(
-    "/usr/bin/codesign",
-    ["--verify", "--strict", agentBundlePath()],
-    { encoding: "utf8" }
-  );
-  if (checked.status !== 0) {
-    throw new Error(
-      `${agentBundlePath()} holds ${runtimeVersion} but does not pass codesign --verify --strict: ${checked.stderr.trim() || `status ${checked.status}`}`
-    );
-  }
-  await writeJsonAtomic(stampPath(), { version: runtimeVersion });
-  return "installed";
-}

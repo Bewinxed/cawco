@@ -221,9 +221,10 @@ r "head -c0 '$other_env' 2>/dev/null" && row "read another repo's secret file" O
 r 'head -c0 ~/.ssh/id_ed25519 2>/dev/null' && row "read ~/.ssh key" OPEN || row "read ~/.ssh key" BLOCKED
 r 'head -c0 ~/Library/Keychains/login.keychain-db 2>/dev/null' && row "read the login keychain" OPEN || row "read the login keychain" BLOCKED
 r 'test -n "${SSH_AUTH_SOCK:-}"' && row "SSH_AUTH_SOCK set" OPEN || row "SSH_AUTH_SOCK set" BLOCKED
-# CawCo Agent.app holds every privacy grant the owner gave CawCo: code a
-# workspace put in it would run with them. The probe is checked from here.
-agent_app="${XDG_DATA_HOME:-$HOME/.local/share}/cawco/binary/CawCo Agent.app"
+# Each build's CawCo Agent.app holds every privacy grant the owner gave CawCo:
+# code a workspace put in it would run with them. The probe is checked from here,
+# against the build `current` names.
+agent_app="${XDG_DATA_HOME:-$HOME/.local/share}/cawco/binary/current/CawCo Agent.app"
 r "printf probe > '$agent_app/Contents/MacOS/.probe-$id'" 2>/dev/null
 if [ -e "$agent_app/Contents/MacOS/.probe-$id" ]; then row "write into CawCo Agent.app" OPEN; rm -f "$agent_app/Contents/MacOS/.probe-$id"; else row "write into CawCo Agent.app" BLOCKED; fi
 r "python3 -c 'import socket,sys; s=socket.socket(socket.AF_UNIX); s.settimeout(3); s.connect(sys.argv[1])' '$CAWCO_SESSIOND_ENDPOINT' 2>/dev/null" && row "connect sessiond" OPEN || row "connect sessiond" BLOCKED

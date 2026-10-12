@@ -10,6 +10,7 @@ import {
 } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { AGENT_BUNDLE, AGENT_BUNDLE_EXECUTABLE } from "./agent-bundle";
 import type { BinaryUpdateState } from "./binary-updates";
 import { versionsInUse } from "./live-processes";
 import { markerIsLive } from "./process-identity";
@@ -46,6 +47,31 @@ export const updateStatePath = (): string =>
   join(binaryRoot(), "update-state.json");
 export const versionDirectory = (version: string): string =>
   join(binaryRoot(), "versions", version);
+
+/**
+ * Where a build's executable sits in its folder: on macOS inside the signed
+ * `CawCo Agent.app` the release ships (agent-bundle.ts), the only place macOS
+ * lets it run; elsewhere the folder's `cawco`. The service wrapper's `EXE`
+ * (binary-wrapper.ts) and the installer's (install-script.ts) are its shell
+ * twins.
+ */
+export const EXECUTABLE_IN_VERSION =
+  process.platform === "darwin" ? AGENT_BUNDLE_EXECUTABLE : "cawco";
+
+/** What this platform's release archive holds, and what of it a build's folder keeps: the bundle, or the executable. */
+export const ARCHIVE_ENTRY =
+  process.platform === "darwin" ? AGENT_BUNDLE : "cawco";
+
+/** The one way to name a build's executable. */
+export const versionExecutable = (version: string): string =>
+  join(versionDirectory(version), EXECUTABLE_IN_VERSION);
+
+/** The folder of the build the `current` link names, through the link. */
+export const currentDirectory = (): string => join(binaryRoot(), "current");
+
+/** The executable of the build the `current` link names, through the link. */
+export const currentExecutable = (): string =>
+  join(currentDirectory(), EXECUTABLE_IN_VERSION);
 
 export async function writeJsonAtomic(
   path: string,
@@ -139,7 +165,7 @@ export const trialUnits = (
  * Which build's session keeper is the machine's current one: a relative link
  * `<root>/keeper` -> `versions/<v>`, changed only by an atomic rename, like
  * `current`, and only by a keeper handover (`cawco binary-apply`). The keeper
- * of that build runs in a job of its own, from `versions/<v>/cawco`, and the
+ * of that build runs in a job of its own, from its build ({@link versionExecutable}), and the
  * machine's endpoint names it (keepers.ts). A legacy keeper's unit runs
  * `<root>/run sessiond`, which execs through this link.
  */
@@ -187,7 +213,7 @@ export async function prune(): Promise<void> {
       keep.add(version);
     }
   };
-  add(await linkedVersion(join(binaryRoot(), "current")));
+  add(await linkedVersion(currentDirectory()));
   add(await linkedVersion(keeperPath()));
   const trial = await readTrial();
   add(trial?.previous);

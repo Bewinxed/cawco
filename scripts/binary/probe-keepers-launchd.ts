@@ -15,13 +15,14 @@
 import { openSync } from "node:fs";
 import { copyFile, lstat, mkdir, readlink, rm } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import {
   keeperJob,
   keeperJobsHere,
 } from "../../packages/agent/src/keeper-jobs";
 import { KeeperPool } from "../../packages/agent/src/keepers";
 import { SessiondClient } from "../../packages/agent/src/sessiond-client";
+import { EXECUTABLE_IN_VERSION } from "../../packages/core/src/binary-installation";
 import {
   keeperEndpoint,
   keeperEndpoints,
@@ -48,7 +49,8 @@ const data = join(scratch, "data");
 const root = join(data, "cawco", "binary");
 const run = join(scratch, "run");
 const machine = join(run, "sessiond.sock");
-const binary = join(root, "versions", VERSION, "cawco");
+// Where the build's own `binary-units` names it: inside its bundle (binary-installation.ts).
+const binary = join(root, "versions", VERSION, EXECUTABLE_IN_VERSION);
 // The probe runs as `BUN_BE_BUN=1 ./cawco`; a `cawco` it starts with that set
 // is bun, not CawCo (`cawco sessiond`: `Script not found "sessiond"`, exit 1).
 // Nothing it starts gets it.
@@ -138,7 +140,7 @@ const job = keeperJob(build);
 const own = keeperEndpoint(build, machine);
 let legacy: ReturnType<typeof Bun.spawn> | undefined;
 try {
-  await mkdir(join(root, "versions", VERSION), { recursive: true });
+  await mkdir(dirname(binary), { recursive: true });
   await mkdir(run, { recursive: true, mode: 0o700 });
   await copyFile(given, binary);
   await Bun.$`chmod 700 ${binary}`;

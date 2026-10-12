@@ -13,6 +13,10 @@ import {
 import { freemem, homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import type { Subprocess } from "bun";
+import {
+  AGENT_BUNDLE,
+  AGENT_BUNDLE_EXECUTABLE,
+} from "../packages/core/src/agent-bundle";
 import { releaseTag } from "../packages/core/src/binary-distribution";
 import {
   type ReleaseManifest,
@@ -514,14 +518,14 @@ const build = async (current: Request): Promise<void> => {
       testSigned: false,
       artifacts: [],
     };
-    // macOS builds run as CawCo Agent.app, signed with the team's Developer ID
-    // (packages/core/src/agent-bundle.ts, scripts/binary/sign-agent-bundle.sh),
-    // on the Mac, in a folder under its home: its Info.plist from this commit,
-    // sealed once, the seal compiled into each darwin build, then each signed.
+    // A darwin build ships as its own CawCo Agent.app, signed with the team's
+    // Developer ID (packages/core/src/agent-bundle.ts,
+    // scripts/binary/sign-agent-bundle.sh) on the Mac, in a folder under its
+    // home, with its Info.plist from this commit; the Mac tars the bundle as
+    // signed, and runs what it tarred, before the archive comes back.
     const mac = current.macHost;
     const macDir = `build/cawco-agent-sign/${current.commit.slice(0, 12)}`;
     const bundleFiles = join(staging, "agent-bundle");
-    const seal = join(bundleFiles, "CodeResources");
     await mkdir(bundleFiles, { recursive: true });
     await run(
       [
@@ -540,12 +544,6 @@ const build = async (current: Request): Promise<void> => {
         join(checkout, "scripts/binary/sign-agent-bundle.sh"),
         `${mac}:${macDir}/`,
       ]);
-      await run([
-        "ssh",
-        mac,
-        `bash --norc '${macDir}/sign-agent-bundle.sh' seal '${macDir}'`,
-      ]);
-      await run(["scp", `${mac}:${macDir}/CodeResources`, seal]);
       for (const target of TARGETS) {
         if (freemem() < 4 * 1024 ** 3) {
           throw new Error(
@@ -565,30 +563,51 @@ const build = async (current: Request): Promise<void> => {
             version,
             current.commit,
             "--skip-prepare",
-            ...(darwin ? ["--agent-code-resources", seal] : []),
           ],
           checkout
         );
+        // The tag form, so the file name carries no `+`.
+        const archive = `cawco-${releaseTag(manifest)}-${target}.tar.gz`;
+        // What the manifest's binarySha256 names: the executable as the installer and the updater find it.
+        let executable = binary;
         if (darwin) {
           await run(["scp", binary, `${mac}:${macDir}/cawco`]);
           await run([
             "ssh",
             mac,
-            `bash --norc '${macDir}/sign-agent-bundle.sh' sign '${macDir}' '${target}' '${version}'`,
+            `bash --norc '${macDir}/sign-agent-bundle.sh' '${macDir}' '${target}' '${version}' '${archive}'`,
           ]);
-          await run(["scp", `${mac}:${macDir}/cawco`, binary]);
+          await run([
+            "scp",
+            `${mac}:${macDir}/${archive}`,
+            join(staging, archive),
+          ]);
+          await rm(binary);
+          // Unpacked here only to hash the signed executable it carries; libarchive's own pax keywords are not GNU tar's.
+          await run(
+            [
+              "tar",
+              "--warning=no-unknown-keyword",
+              "-xzf",
+              join(staging, archive),
+              "-C",
+              dir,
+              AGENT_BUNDLE,
+            ],
+            checkout
+          );
+          executable = join(dir, AGENT_BUNDLE_EXECUTABLE);
+        } else {
+          await run(
+            ["tar", "-czf", join(staging, archive), "-C", dir, "cawco"],
+            checkout
+          );
         }
-        // The tag form, so the file name carries no `+`.
-        const archive = `cawco-${releaseTag(manifest)}-${target}.tar.gz`;
-        await run(
-          ["tar", "-czf", join(staging, archive), "-C", dir, "cawco"],
-          checkout
-        );
         const sha256 = new Bun.CryptoHasher("sha256")
           .update(await Bun.file(join(staging, archive)).bytes())
           .digest("hex");
         const binarySha256 = new Bun.CryptoHasher("sha256")
-          .update(await Bun.file(binary).bytes())
+          .update(await Bun.file(executable).bytes())
           .digest("hex");
         manifest.artifacts.push({
           target,
@@ -596,7 +615,7 @@ const build = async (current: Request): Promise<void> => {
           sha256,
           size: (await stat(join(staging, archive))).size,
           binarySha256,
-          binarySize: (await stat(binary)).size,
+          binarySize: (await stat(executable)).size,
         });
         await writeFile(
           join(staging, `${archive}.sha256`),

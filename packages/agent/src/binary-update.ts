@@ -14,18 +14,16 @@ import { readdir, readFile, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { UpdateReport } from "@cawco/core";
 import {
-  AGENT_BUNDLE_NAME,
-  installAgentBundle,
-} from "@cawco/core/agent-bundle";
-import {
   archiveMatches,
   readAtMost,
   type SignedRelease,
 } from "@cawco/core/binary-distribution";
 import { hubProtocol } from "@cawco/core/binary-health";
 import {
+  ARCHIVE_ENTRY,
   type BinaryInstallation,
   binaryRoot,
+  EXECUTABLE_IN_VERSION,
   helperIsLive,
   prune,
   readInstallation,
@@ -35,6 +33,7 @@ import {
   readUpdateState,
   updateStatePath,
   versionDirectory,
+  versionExecutable,
   writeJsonAtomic,
 } from "@cawco/core/binary-installation";
 import {
@@ -227,11 +226,10 @@ function helperEnvironment(): [string, string][] {
 /**
  * The update helper (`cawco binary-apply`, given `args`), as a job of the
  * service manager so it outlives the restarts it performs. It is this build,
- * from its own folder: on macOS this agent runs from CawCo Agent.app, which an
- * update fills with another build while this agent still runs.
+ * by its own folder, never through `current`, which the helper moves.
  */
 async function launchApplyHelper(args: readonly string[]) {
-  const executable = join(versionDirectory(runtimeVersion), "cawco");
+  const executable = versionExecutable(runtimeVersion);
   const forwarded = helperEnvironment();
   if (process.platform === "linux") {
     const child = Bun.spawn(
@@ -726,12 +724,6 @@ export class BinaryUpdater {
     }
     const path = join(binaryRoot(), "run");
     if ((await readFile(path, "utf8").catch(() => "")) !== BINARY_WRAPPER) {
-      // The wrapper starts CawCo Agent.app on macOS: it holds this build before the wrapper says so.
-      if (process.platform === "darwin") {
-        console.info(
-          `[update] ${AGENT_BUNDLE_NAME}.app: ${await installAgentBundle()}`
-        );
-      }
       await writeWrapper(binaryRoot());
       console.info(`[update] ${path} is ${runtimeVersion}'s wrapper now`);
     }
@@ -988,8 +980,9 @@ export class BinaryUpdater {
     const archive = `${work}.tar.gz`;
     try {
       await Bun.write(archive, bytes);
-      await Bun.$`mkdir -p ${work} && tar -xzf ${archive} -C ${work} cawco`.quiet();
-      const binary = join(work, "cawco");
+      // On macOS the signed CawCo Agent.app, exactly as the release signed it.
+      await Bun.$`mkdir -p ${work} && tar -xzf ${archive} -C ${work} ${ARCHIVE_ENTRY}`.quiet();
+      const binary = join(work, EXECUTABLE_IN_VERSION);
       const extracted = await Bun.file(binary).bytes();
       if (
         extracted.byteLength !== artifact.binarySize ||

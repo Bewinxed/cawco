@@ -1,3 +1,4 @@
+import { AGENT_BUNDLE, AGENT_BUNDLE_EXECUTABLE } from "./agent-bundle";
 import { CAWCO_ENV, CAWCO_HUB_PORT } from "./index";
 import { INSTALL_STEP_PREFIX } from "./join";
 import { RELEASE_PUBLIC_KEY } from "./release-key";
@@ -70,7 +71,7 @@ ${hub ? `  HUB=${shellQuote(hub)}\n` : ""}  REPO=${shellQuote(origin)}
     [ "$?" != 0 ] || return 0
     set +e
     if [ "$SETUP_BEGAN" = 1 ] && [ -n "$CREATED_VERSION" ]; then
-      "$ROOT/versions/$CREATED_VERSION/cawco" service uninstall >/dev/null 2>&1
+      "$ROOT/versions/$CREATED_VERSION/$EXE" service uninstall >/dev/null 2>&1
     fi
     if [ "$CREATED_ROOT" = 1 ]; then
       rm -rf "$ROOT"
@@ -84,6 +85,21 @@ ${hub ? `  HUB=${shellQuote(hub)}\n` : ""}  REPO=${shellQuote(origin)}
   }
   trap undo EXIT
   trap '' HUP
+
+  case "$(uname -s)" in
+    Linux) OS=linux ;;
+    Darwin) OS=darwin ;;
+    *) fail "CawCo runs on Linux and macOS." ;;
+  esac
+  # What a release archive holds and a build's folder versions/<v> keeps (TOP), and the build's executable in it
+  # (EXE): on macOS the signed bundle, exactly as the release signed it, the only place macOS lets it run.
+  if [ "$OS" = darwin ]; then
+    TOP=${shellQuote(AGENT_BUNDLE)}
+    EXE=${shellQuote(AGENT_BUNDLE_EXECUTABLE)}
+  else
+    TOP=cawco
+    EXE=cawco
+  fi
 
   ask_yes() {
     [ -t 1 ] && (: </dev/tty) 2>/dev/null || return 1
@@ -101,7 +117,7 @@ ${
   hub
     ? `    if [ "$joined" != "$HUB" ]; then
       say "moving this machine from $joined to the hub at $HUB"
-      "$ROOT/current/cawco" binary-rejoin --hub "$HUB" </dev/null
+      "$ROOT/current/$EXE" binary-rejoin --hub "$HUB" </dev/null
       return 0
     fi
 `
@@ -111,11 +127,6 @@ ${
     return 0
   fi
 
-  case "$(uname -s)" in
-    Linux) OS=linux ;;
-    Darwin) OS=darwin ;;
-    *) fail "CawCo runs on Linux and macOS." ;;
-  esac
   case "$(uname -m)" in
     x86_64|amd64) ARCH=x64 ;;
     arm64|aarch64) ARCH=arm64 ;;
@@ -159,7 +170,7 @@ ${
   # An existing command by this name that this installer did not make is left alone.
   if [ -e "$BIN_LINK" ] || [ -L "$BIN_LINK" ]; then
     case "$(readlink "$BIN_LINK" 2>/dev/null || :)" in
-      "$ROOT"/current/cawco) ;;
+      "$ROOT/current/$EXE") ;;
       *) fail "$BIN_LINK already exists and is not CawCo's. Move it aside, then run this again. Nothing was installed." ;;
     esac
   fi
@@ -254,22 +265,22 @@ ${
   download "$BASE/$ARCHIVE" "$WORK/$ARCHIVE" "$ARCHIVE_SIZE"
   [ "$(sha256_of "$WORK/$ARCHIVE")" = "$ARCHIVE_SHA" ] || fail "the download does not match the signed checksum. Nothing was installed."
   mkdir "$WORK/extract"
-  tar -xzf "$WORK/$ARCHIVE" -C "$WORK/extract" cawco || fail "the download could not be unpacked. Nothing was installed."
-  [ "$(sha256_of "$WORK/extract/cawco")" = "$BINARY_SHA" ] || fail "the unpacked program does not match the signed checksum. Nothing was installed."
+  tar -xzf "$WORK/$ARCHIVE" -C "$WORK/extract" "$TOP" || fail "the download could not be unpacked. Nothing was installed."
+  [ "$(sha256_of "$WORK/extract/$EXE")" = "$BINARY_SHA" ] || fail "the unpacked program does not match the signed checksum. Nothing was installed."
 
   # Everything is checked; from here on a failure removes what this run created.
   say "installing CawCo $VERSION into $ROOT"
   [ -d "$ROOT" ] || CREATED_ROOT=1
   mkdir -p "$ROOT/versions/$VERSION" "$HOME/.local/bin"
   CREATED_VERSION="$VERSION"
-  mv "$WORK/extract/cawco" "$ROOT/versions/$VERSION/cawco"
-  chmod 700 "$ROOT/versions/$VERSION/cawco"
+  mv "$WORK/extract/$TOP" "$ROOT/versions/$VERSION/$TOP"
+  chmod 700 "$ROOT/versions/$VERSION/$EXE"
   cp "$WORK/release.json" "$ROOT/versions/$VERSION/release.json"
   printf '{"signature":"%s"}\\n' "$(cat "$WORK/release.json.sig")" > "$ROOT/versions/$VERSION/release.signature.json"
   ln -sfn "versions/$VERSION" "$ROOT/current"
   ln -sfn "versions/$VERSION" "$ROOT/keeper"
   [ -L "$BIN_LINK" ] || CREATED_LINK=1
-  ln -sf "$ROOT/current/cawco" "$BIN_LINK"
+  ln -sf "$ROOT/current/$EXE" "$BIN_LINK"
 
   AUTO=""
   ASK=""
@@ -296,7 +307,7 @@ ${
   export PORT HOST ${CAWCO_ENV.hubPort}
   # A hub already on this network or tailnet: this machine joins it unless a person says to start another.
   JOINED_EXISTING=0
-  FOUND="$("$ROOT/current/cawco" binary-find-hub </dev/null 2>/dev/null || :)"
+  FOUND="$("$ROOT/current/$EXE" binary-find-hub </dev/null 2>/dev/null || :)"
   if [ -n "$FOUND" ]; then
     say "a CawCo hub is already running at $FOUND"
     if [ -n "$ASK" ]; then
@@ -319,9 +330,9 @@ ${
   [ -z "$AUTO" ] || set -- "$@" "$AUTO"
   SETUP_BEGAN=1
   if [ -n "$ASK" ]; then
-    "$ROOT/current/cawco" "$@" --ask </dev/tty
+    "$ROOT/current/$EXE" "$@" --ask </dev/tty
   else
-    "$ROOT/current/cawco" "$@" </dev/null
+    "$ROOT/current/$EXE" "$@" </dev/null
   fi
 ${
   hub

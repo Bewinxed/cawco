@@ -570,32 +570,10 @@ const run = async (argv: string[]): Promise<number> => {
       // keeper goes to: that build's own keeper unit, as this build writes it. Only
       // that unit: the others carry what the installing shell knew (the hub's
       // address, the dashboard's port), which this process may not.
-      // On macOS the keeper's job starts CawCo Agent.app, so this build is put
-      // in it first: a build an earlier helper swapped in, which did not, is
-      // put there here.
-      if (process.platform === "darwin") {
-        const { AGENT_BUNDLE_NAME, installAgentBundle } = await import(
-          "@cawco/core/agent-bundle"
-        );
-        console.log(
-          `units: ${AGENT_BUNDLE_NAME}.app: ${await installAgentBundle()}`
-        );
-      }
       const { binaryLayout } = await import("./binary-install");
       const { refreshUnits } = await import("./service");
       await refreshUnits(["sessiond"], binaryLayout(CLI_VERSION), (line) =>
         console.log(`units: ${line}`)
-      );
-      return 0;
-    }
-    case "binary-bundle": {
-      // Run by the update helper as it moves `current` to this build
-      // (binary-apply.ts `pointCurrentAt`): this build into CawCo Agent.app.
-      const { AGENT_BUNDLE_NAME, installAgentBundle } = await import(
-        "@cawco/core/agent-bundle"
-      );
-      console.log(
-        `${AGENT_BUNDLE_NAME}.app ${await installAgentBundle()} ${CLI_VERSION}`
       );
       return 0;
     }

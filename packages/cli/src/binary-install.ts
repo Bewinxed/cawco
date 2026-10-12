@@ -14,17 +14,14 @@ import {
   INSTALL_STEP_PREFIX,
 } from "@cawco/core";
 import {
-  AGENT_BUNDLE_NAME,
-  agentExecutable,
-  installAgentBundle,
-} from "@cawco/core/agent-bundle";
-import {
   type BinaryInstallation,
   binaryRoot,
+  currentDirectory,
+  currentExecutable,
   installationPath,
   readInstallation,
   updateStatePath,
-  versionDirectory,
+  versionExecutable,
   writeJsonAtomic,
 } from "@cawco/core/binary-installation";
 import type {
@@ -58,22 +55,12 @@ export interface BinaryInstallOptions {
   role: BinaryInstallation["role"];
 }
 
-/**
- * A binary install's units, with the keeper's for `keeper`'s build: run from
- * its folder, or on macOS from CawCo Agent.app, the identity macOS gives the
- * privacy grants of every command a workspace runs to (a keeper of a build
- * the bundle does not hold runs its own, sessiond main.ts).
- */
+/** A binary install's units, with the keeper's for `keeper`'s build, run from its folder. */
 export const binaryLayout = (keeper: string) => ({
-  executable: `${binaryRoot()}/current/cawco`,
+  root: currentDirectory(),
+  executable: currentExecutable(),
   wrapper: `${binaryRoot()}/run`,
-  keeper: {
-    version: keeper,
-    executable:
-      process.platform === "darwin"
-        ? agentExecutable()
-        : `${versionDirectory(keeper)}/cawco`,
-  },
+  keeper: { version: keeper, executable: versionExecutable(keeper) },
 });
 
 async function awaitJoined(hubUrl: string): Promise<void> {
@@ -147,10 +134,6 @@ async function bringUp(options: BinaryInstallOptions): Promise<void> {
     console.log(line.endsWith("…") ? `${INSTALL_STEP_PREFIX}${line}` : line);
   if (platform() === "linux") {
     await requireLinger(note);
-  }
-  // macOS: this build in CawCo Agent.app first, which the wrapper and the keeper's job start.
-  if (platform() === "darwin") {
-    note(`${AGENT_BUNDLE_NAME}.app: ${await installAgentBundle()}`);
   }
   // The wrapper every unit starts through; afterwards only a confirmed build replaces it.
   await writeWrapper(binaryRoot());

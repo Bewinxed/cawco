@@ -1875,9 +1875,11 @@ export interface ServiceOptions {
    * keeper's unit is `keeper`'s own, run from its folder.
    */
   binaryLayout?: {
+    /** The build the units run, through `current`: what they run, and where. */
     executable: string;
     /** The build whose session keeper the keeper's unit runs, and its program. */
     keeper: { executable: string; version: string };
+    root: string;
     wrapper: string;
   };
   follow: boolean;
@@ -1900,7 +1902,7 @@ const specsOf = (
 ): ServiceSpec[] => {
   const layout: Layout = binaryLayout
     ? {
-        root: dirname(binaryLayout.executable),
+        root: binaryLayout.root,
         hub: {
           command: [binaryLayout.wrapper, "hub"],
           needs: binaryLayout.executable,

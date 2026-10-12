@@ -1,6 +1,6 @@
 import { chmod, rename } from "node:fs/promises";
 import { join } from "node:path";
-import { AGENT_BUNDLE_NAME, AGENT_EXECUTABLE_NAME } from "./agent-bundle";
+import { AGENT_BUNDLE_EXECUTABLE } from "./agent-bundle";
 
 /**
  * The script the hub, dashboard, agent and session keeper units start through.
@@ -17,8 +17,9 @@ import { AGENT_BUNDLE_NAME, AGENT_EXECUTABLE_NAME } from "./agent-bundle";
  * manager, not of this unit, so the rollback it may decide, which restarts
  * this unit, does not end it.
  *
- * On macOS every build runs from CawCo Agent.app (agent-bundle.ts), which
- * always holds the build `current` names; elsewhere from `current`. A
+ * Every unit runs the build `current` names, by its executable in that
+ * folder: on macOS inside the build's own CawCo Agent.app (`EXE`, the shell
+ * twin of binary-installation.ts `EXECUTABLE_IN_VERSION`). A
  * build's session keeper runs in a job of its own (keepers.ts), and not
  * through here. A legacy keeper's unit, from before
  * keepers ran side by side, still starts through `sessiond`, from the
@@ -31,6 +32,8 @@ import { AGENT_BUNDLE_NAME, AGENT_EXECUTABLE_NAME } from "./agent-bundle";
 export const BINARY_WRAPPER = `#!/bin/sh
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 TRIAL="$ROOT/trial.json"
+# A build's executable in its folder versions/<v>: on macOS inside its signed bundle, the only place it may run.
+if [ "$(uname)" = Darwin ]; then EXE='${AGENT_BUNDLE_EXECUTABLE}'; else EXE=cawco; fi
 # A helper is live when the lock names a process that is still the one that wrote it: same start time, same
 # boot (a killed helper leaves its lock, and its pid can be reused).
 helper_live() {
@@ -88,28 +91,16 @@ case "$1" in hub | dashboard | up | sessiond) unit_start=1 ;; *) unit_start=0 ;;
 if [ "$unit_start" = 1 ] && [ -f "$TRIAL" ] && ! helper_live; then
   previous="$(sed -n 's/.*"previous":"\\([^"]*\\)".*/\\1/p' "$TRIAL")"
   version="$(sed -n 's/.*"version":"\\([^"]*\\)".*/\\1/p' "$TRIAL")"
-  if [ -n "$previous" ] && [ -x "$ROOT/versions/$previous/cawco" ]; then
+  if [ -n "$previous" ] && [ -x "$ROOT/versions/$previous/$EXE" ]; then
     echo "cawco: the trial of $version is open and no update helper is deciding it; starting one from $previous" >&2
-    launch_decider "$ROOT/versions/$previous/cawco" || echo "cawco: the update helper could not be started" >&2
+    launch_decider "$ROOT/versions/$previous/$EXE" || echo "cawco: the update helper could not be started" >&2
   fi
 fi
 if [ "$1" = sessiond ]; then
-  exec "$ROOT/keeper/cawco" sessiond
+  exec "$ROOT/keeper/$EXE" sessiond
 fi
-# macOS: the build \`current\` names, from ${AGENT_BUNDLE_NAME}.app, the identity every privacy grant is given to.
-if [ "$(uname)" = Darwin ]; then
-  exec "$ROOT/${AGENT_BUNDLE_NAME}.app/Contents/MacOS/${AGENT_EXECUTABLE_NAME}" "$@"
-fi
-exec "$ROOT/current/cawco" "$@"
+exec "$ROOT/current/$EXE" "$@"
 `;
-
-/**
- * Whether a wrapper's text starts the units from CawCo Agent.app: the wrapper
- * a build that keeps the bundle wrote. Until a confirmed build has written
- * one, nothing starts from the bundle, and an update need not fill it.
- */
-export const wrapperStartsBundle = (text: string): boolean =>
-  text.includes(`/${AGENT_BUNDLE_NAME}.app/Contents/MacOS/`);
 
 /**
  * Puts {@link BINARY_WRAPPER} at `<root>/run`, atomically: a shell already
