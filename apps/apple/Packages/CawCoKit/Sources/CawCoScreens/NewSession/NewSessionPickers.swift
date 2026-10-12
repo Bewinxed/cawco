@@ -193,7 +193,7 @@ final class MachinesPopover: NsPopoverController {
         pairing = false
         watch?.invalidate()
         let at = machines.count
-        machines.append(NsMachine(id: joined.machineId, name: joined.hostname, os: joined.os, online: joined.status == "online",
+        machines.append(NsMachine(id: joined.machineId, name: joined.name, os: joined.os, online: joined.status == "online",
                                   load: "Idle", glyph: MachineHealth.icon(joined.os), hue: MachineHealth.hue(at, online: joined.status == "online")))
         list()
     }

@@ -106,7 +106,7 @@ final class MachineUpdates {
     /// (MachineMenu.svelte `updateMachine`).
     func update(_ machine: MachineRow, hub: HubConnection) async throws {
         failures[machine.machineId] = nil
-        let host = machine.hostname
+        let host = machine.name
         updates[machine.machineId] = Update(since: machine.build?.startedAt, settled: false)
         do {
             let report = try await hub.updateMachine(machineId: machine.machineId)
@@ -354,9 +354,9 @@ final class MachinesListView: UIView {
             let live = running.filter { $0.machineId == machine.machineId }.count
             let presence: MachineRowView.Presence = !up ? .off : (fault == nil ? .online : .away)
             row.content.configure(glyph: MachineHealth.icon(machine.os), hue: MachineHealth.hue(index, online: up),
-                                  name: Naming.machineLabel(machine.hostname),
+                                  name: machine.name,
                                   meta: ["\(live) live", fault].compactMap(\.self).joined(separator: " · "), presence: presence)
-            row.accessibilityLabel = Naming.machineLabel(machine.hostname)
+            row.accessibilityLabel = machine.name
             row.accessibilityValue = ["\(live) live", fault].compactMap(\.self).joined(separator: ", ")
             list.insertArrangedSubview(row, at: index)
         }
@@ -588,7 +588,7 @@ final class MachineMenu: NSObject, UIContextMenuInteractionDelegate {
 
     private func showFailure(_ message: String) {
         guard let machine, let host else { return }
-        host.dialogPresenter.present(ErrorDialogController(title: "Update failed on \(machine.hostname)", message: message), animated: true)
+        host.dialogPresenter.present(ErrorDialogController(title: "Update failed on \(machine.name)", message: message), animated: true)
     }
 
     /// Forgets a machine the fleet no longer has: only while it is offline,
@@ -601,7 +601,7 @@ final class MachineMenu: NSObject, UIContextMenuInteractionDelegate {
         let projects = hub.fleet.projects.filter { $0.placed(on: machine.machineId) }.count
         let id = machine.machineId
         let dialog = ConfirmDialog(
-            title: "Remove \(Naming.machineLabel(machine.hostname))?",
+            title: "Remove \(machine.name)?",
             // MachineMenu.svelte: removing a machine takes its places from projects, never the projects.
             body: "Its \(count(sessions, "session")) are removed from the fleet\(projects > 0 ? ", and \(count(projects, "project")) \(projects == 1 ? "loses its folders" : "lose their folders") on it; the projects stay" : ""). Its spend history stays. If its agent starts again, it rejoins the fleet.",
             confirmLabel: "Remove machine",

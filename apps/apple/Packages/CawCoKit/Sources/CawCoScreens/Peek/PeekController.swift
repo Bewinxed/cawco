@@ -370,7 +370,7 @@ final class PeekController: ObservedViewController {
         let machine = row.flatMap { row in hub.fleet.machines.first { $0.machineId == row.machineId } }
         osMark.isHidden = machine == nil
         if let machine { osMark.glyph = Glyph.os(machine.os) }
-        hostLabel.text = machine.map { Naming.machineLabel($0.hostname) } ?? row?.machineId ?? ""
+        hostLabel.text = machine?.name ?? row?.machineId ?? ""
         cwdLabel.isHidden = cwd.isEmpty
         cwdLabel.text = cwd
 

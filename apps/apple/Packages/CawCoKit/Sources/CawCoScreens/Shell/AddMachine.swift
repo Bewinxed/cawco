@@ -425,7 +425,7 @@ final class AddMachineController: KitDialogController {
     }
 
     private func joinedName(_ machineId: String?) -> String {
-        hub.fleet.machines.first { $0.machineId == machineId }.map { Naming.machineLabel($0.hostname) } ?? machineId ?? "The machine"
+        hub.fleet.machines.first { $0.machineId == machineId }?.name ?? machineId ?? "The machine"
     }
 
     // MARK: Command
@@ -450,7 +450,7 @@ final class AddMachineController: KitDialogController {
         dot.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([dot.widthAnchor.constraint(equalToConstant: 6), dot.heightAnchor.constraint(equalToConstant: 6)])
         let said = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
-        said.text = joined.map { "\(Naming.machineLabel($0.hostname)) joined the fleet." } ?? "Waiting for check-in…"
+        said.text = joined.map { "\($0.name) joined the fleet." } ?? "Waiting for check-in…"
         let status = UIStackView(arrangedSubviews: [dot, said, UIView()])
         status.spacing = 8
         status.alignment = .center

@@ -367,7 +367,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
             let online = row.status == "online"
             let running = fleet.rows.filter { $0.machineId == row.machineId && $0.isLive }.count
             let load = !online ? "Offline" : (running == 0 ? "Idle" : "\(running) session\(running == 1 ? "" : "s")")
-            return NsMachine(id: row.machineId, name: row.hostname, os: row.os, online: online, load: load,
+            return NsMachine(id: row.machineId, name: row.name, os: row.os, online: online, load: load,
                              glyph: MachineHealth.icon(row.os), hue: MachineHealth.hue(index, online: online),
                              place: placeHint(row.machineId))
         }
@@ -395,13 +395,13 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
 
     private var locationReading: String {
         if let offline = offlineMachine {
-            return "\(offline.hostname) is offline. Pick another machine, or start when it returns."
+            return "\(offline.name) is offline. Pick another machine, or start when it returns."
         }
         if unreadable {
-            return "That directory can't be read on \(machine?.hostname ?? machineId). Check the path and try again."
+            return "That directory can't be read on \(machine?.name ?? machineId). Check the path and try again."
         }
         if !locationUnverified, !missingMachines.isEmpty {
-            let names = missingMachines.map { id in fleet.machines.first { $0.machineId == id }?.hostname ?? id }
+            let names = missingMachines.map { id in fleet.machineName(id) }
             return "Folder missing. Start creates it on \(names.joined(separator: ", "))."
         }
         return ""
@@ -453,9 +453,9 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         guard let estimate = moveEstimated else { return "Reading…" }
         if let refused = estimate.refused { return refused }
         guard estimate.needed else { return "" }
-        let there = fleet.machines.first { $0.machineId == to }?.hostname ?? to
+        let there = fleet.machineName(to)
         let sourceId = project.primaryPlace?.machineId ?? ""
-        let source = fleet.machines.first { $0.machineId == sourceId }?.hostname ?? sourceId
+        let source = fleet.machineName(sourceId)
         // One size, history and large files together: step 2 splits them.
         let total = estimate.bytes + estimate.lfsBytes
         let size = total > 0 ? " (\(moveSize(total)))" : ""
@@ -940,7 +940,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
     }
 
     private var summarizerState: ModelSectionView.State {
-        .init(harness: summarizerHarness, installed: installed, machineName: machine?.hostname ?? machineId, machineIds: machineIds,
+        .init(harness: summarizerHarness, installed: installed, machineName: machine?.name ?? machineId, machineIds: machineIds,
               model: summarizerModel, tools: nil)
     }
 
@@ -959,7 +959,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
                 self?.requestRefresh()
             }
         )
-        return .init(accountId: placedAccount, harness: harness, installed: installed, machineName: machine?.hostname ?? machineId,
+        return .init(accountId: placedAccount, harness: harness, installed: installed, machineName: machine?.name ?? machineId,
                      machineIds: machineIds, model: model, tools: tools)
     }
 
@@ -1260,10 +1260,10 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
             let to = moveTo
             let seed: LocationPopover.Seed = if let to {
                 .init(mode: .dir, dir: moveDestination, repo: "", locked: !moveEditing, machineId: to,
-                      machineName: fleet.machines.first { $0.machineId == to }?.hostname ?? to)
+                      machineName: fleet.machineName(to))
             } else {
                 .init(mode: repo == nil ? .dir : .repo, dir: cwd, repo: repo ?? "", locked: locked,
-                      machineId: machineId, machineName: machine?.hostname ?? "")
+                      machineId: machineId, machineName: machine?.name ?? "")
             }
             let location = LocationPopover(hub: hub, seed: seed)
             location.onDir = { [weak self] value in

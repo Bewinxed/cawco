@@ -265,12 +265,12 @@ final class ProjectViewController: ObservedViewController {
         folder.text = home?.path ?? "Its folder on the hub"
         let machine = home.flatMap { place in fleet.machines.first { $0.machineId == place.machineId } }
         machineGlyph.glyph = Glyph.os(machine?.os ?? "")
-        machineName.text = machine.map { Naming.machineLabel($0.hostname) } ?? home?.machineId
+        machineName.text = machine?.name ?? home?.machineId
         let online = machine?.status == "online"
         if let home, context.hub.state == .connected {
             docsView.load(machineId: home.machineId, cwd: home.path, projectId: project.id)
             memory.load(machineId: home.machineId, cwd: home.path, projectId: project.id, online: online,
-                        machineName: machine.map { Naming.machineLabel($0.hostname) } ?? home.machineId)
+                        machineName: machine?.name ?? home.machineId)
         }
         inventory.isHidden = machine == nil
         if let machine { inventory.configure(machines: [machine]) }

@@ -77,7 +77,7 @@ struct JumpIndex {
             lists[0].append(JumpRow(id: "project:\(project.id)", kind: .project, label: project.name, detail: project.primaryPlace?.path ?? "", target: .project(project.id)))
         }
         for machine in fleet.machines where machine.status == "online" {
-            lists[1].append(JumpRow(id: "machine:\(machine.machineId)", kind: .machine, label: machine.hostname,
+            lists[1].append(JumpRow(id: "machine:\(machine.machineId)", kind: .machine, label: machine.name,
                                     detail: "\(machine.os) · start a session here", target: .machine(machine.machineId)))
         }
         let words: [Activity: String] = [.working: "Working", .blocked: "Needs you", .idle: "Idle"]
@@ -97,7 +97,7 @@ struct JumpIndex {
                 guard !destinations.contains(to) else { continue }
                 destinations.insert(to)
                 let row = JumpRow(id: "stored:\(machine.machineId):\(info.sessionId)", kind: .stored, label: title,
-                                  detail: "\(machine.hostname) · \(info.cwd ?? "")", target: .conversation(to))
+                                  detail: "\(machine.name) · \(info.cwd ?? "")", target: .conversation(to))
                 lists[3].append(row)
                 if i < recentPerMachine { recentStored.append(row) }
             }
@@ -837,7 +837,7 @@ final class JumpCard: GlassContent, UITextFieldDelegate {
     private func hitItem(_ hit: TranscriptHit) -> UIView {
         let leaf = hit.cwd.flatMap { $0.split(separator: "/").last.map(String.init) }
         let title = index.sessionTitles[hit.sessionId] ?? leaf ?? String(hit.sessionId.prefix(8))
-        let host = hub.fleet.machines.first { $0.machineId == hit.machineId }?.hostname ?? hit.machineId
+        let host = hub.fleet.machineName(hit.machineId)
         let head = item(glyph: .document, name: NSAttributedString(string: title, attributes: TypeScale.typeMeta.attributes(color: Palette.inkMuted)),
                         trail: NSAttributedString(string: "\(host) · \(hit.role)", attributes: TypeScale.typeMeta.attributes(color: Palette.inkMuted, tracking: TypeScale.trackCaps)))
         let snippet = UILabel()

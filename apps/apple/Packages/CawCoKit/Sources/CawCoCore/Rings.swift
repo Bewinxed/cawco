@@ -1019,7 +1019,7 @@ extension Usage {
             return Gap(machineId: nil, reason: "No machine has reported a Claude reading yet.", short: "No limits yet", signIn: false)
         }
         let machine = machines.first { $0.machineId == first.key }
-        let host = machine?.hostname ?? "a removed machine"
+        let host = machine?.name ?? "a removed machine"
         if let machine, machine.status != "online" {
             return Gap(machineId: machine.machineId, reason: "\(host) is offline. Its Claude limits are read again once it's back.",
                        short: "Machine offline", signIn: false)

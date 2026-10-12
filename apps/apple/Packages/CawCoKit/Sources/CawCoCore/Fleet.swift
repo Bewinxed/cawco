@@ -12,6 +12,19 @@ public typealias BuildInfo = Components.Schemas.BuildInfo
 
 extension Components.Schemas.InstanceRow: TreeRow {}
 
+public extension Components.Schemas.AgentRow {
+    /// The one name a machine is shown by, on every surface: its hostname
+    /// without a local suffix (`Naming.machineLabel`, the web's
+    /// `machineLabel(machine.hostname)`). The raw `hostname` is for what is
+    /// matched, sent or copied as a hostname, never for words a person reads.
+    var name: String { Naming.machineLabel(hostname) }
+}
+
+public extension Components.Schemas.UsageRowMachine {
+    /// The machine a usage row ran on, by the same one name (`AgentRow.name`).
+    var name: String { Naming.machineLabel(hostname) }
+}
+
 extension Components.Schemas.InstanceRow {
     /// Only a session the hub can still reach is live; the rest is history. A
     /// session its project is moving for (`moving`) is live work the hub carries.
@@ -430,8 +443,9 @@ public final class FleetStore {
         pulseCell(id).settled
     }
 
+    /// A machine's name by its id (`MachineRow.name`); the id where the fleet has no such machine.
     public func machineName(_ machineId: String) -> String {
-        machines.first { $0.machineId == machineId }.map { Naming.machineLabel($0.hostname) } ?? machineId
+        machines.first { $0.machineId == machineId }?.name ?? machineId
     }
 
     /// One machine order for every list: the fleet's.

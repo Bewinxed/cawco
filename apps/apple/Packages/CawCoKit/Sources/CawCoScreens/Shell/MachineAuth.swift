@@ -179,7 +179,7 @@ final class MachineLoginController: MachineAuthDialog, UITextFieldDelegate {
     }
 
     private var said: AuthSaid {
-        let host = machine.hostname
+        let host = machine.name
         return [
             .authenticated: ("\(host) is logged in", "New sessions on \(host) will use this login."),
             .unauthenticated: ("\(host) is not logged in", "\(host) saved the token, but still reports nobody logged in."),
@@ -195,11 +195,11 @@ final class MachineLoginController: MachineAuthDialog, UITextFieldDelegate {
 
     private func form() -> UIView {
         let header = KitDialogController.header(
-            title: "Log in \(machine.hostname)",
+            title: "Log in \(machine.name)",
             description: "Authorise in your browser here, then paste the code back. Nothing needs to be typed on that machine.",
             glyph: .key
         )
-        asking.text = "Asking \(machine.hostname) for a login link…"
+        asking.text = "Asking \(machine.name) for a login link…"
         asking.wrap = .pretty
         openLink = KitButton.make("Open the authorisation page", glyph: .external, variant: .action, height: .sm, stretch: true) { [weak self] in
             guard let url = self?.url else { return }
@@ -276,8 +276,8 @@ final class MachineLoginController: MachineAuthDialog, UITextFieldDelegate {
         attempt += 1
         let mine = attempt
         codeField.resignFirstResponder()
-        let status = showStatus(working: "Logging in \(machine.hostname)…",
-                                steps: ("Exchanging the code", "Checking \(machine.hostname) can use the new login"))
+        let status = showStatus(working: "Logging in \(machine.name)…",
+                                steps: ("Exchanging the code", "Checking \(machine.name) can use the new login"))
         Task { @MainActor [weak self, hub, machine] in
             do {
                 let state = try await hub.completeLogin(machineId: machine.machineId, code: code)
@@ -316,7 +316,7 @@ final class UnlockKeychainController: MachineAuthDialog, UITextFieldDelegate {
     }
 
     private var said: AuthSaid {
-        let host = machine.hostname
+        let host = machine.name
         return [
             .authenticated: ("\(host) is unlocked", "\(host) is logged in again. New sessions there can read its credentials."),
             .unauthenticated: ("\(host) is not logged in", "\(host) unlocked, but nobody has logged in there yet."),
@@ -336,15 +336,15 @@ final class UnlockKeychainController: MachineAuthDialog, UITextFieldDelegate {
 
     private func form() -> UIView {
         let header = KitDialogController.header(
-            title: "Unlock \(machine.hostname)",
+            title: "Unlock \(machine.name)",
             description: "Its login keychain is locked, so Claude Code there cannot read its credentials. This is the macOS login password for that machine.",
             glyph: .key, glyphTint: Palette.warning
         )
         password.isSecureTextEntry = true
         password.textContentType = .password
-        password.attributedPlaceholder = NSAttributedString(string: "Login password for \(machine.hostname)",
+        password.attributedPlaceholder = NSAttributedString(string: "Login password for \(machine.name)",
                                                             attributes: [.font: TypeScale.typeBody.font, .foregroundColor: Palette.mutedForeground])
-        password.accessibilityLabel = "Login password for \(machine.hostname)"
+        password.accessibilityLabel = "Login password for \(machine.name)"
         password.delegate = self
         password.returnKeyType = .go
         password.addAction(UIAction { [weak self] _ in self?.submit.isEnabled = !(self?.password.text ?? "").isEmpty }, for: .editingChanged)
@@ -371,8 +371,8 @@ final class UnlockKeychainController: MachineAuthDialog, UITextFieldDelegate {
         let mine = attempt
         password.text = ""
         password.resignFirstResponder()
-        let status = showStatus(working: "Unlocking \(machine.hostname)…",
-                                steps: ("Unlocking the login keychain", "Checking \(machine.hostname) can read its credentials"))
+        let status = showStatus(working: "Unlocking \(machine.name)…",
+                                steps: ("Unlocking the login keychain", "Checking \(machine.name) can read its credentials"))
         Task { @MainActor [weak self, hub, machine] in
             do {
                 let state = try await hub.unlockKeychain(machineId: machine.machineId, password: sent)

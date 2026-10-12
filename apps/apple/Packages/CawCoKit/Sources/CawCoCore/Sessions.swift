@@ -508,7 +508,7 @@ public final class SessionsStore {
 
     /// A 503 naming a machine is the hub saying that machine is not connected.
     private func offline(_ machine: String) -> ReadFault {
-        let host = hub.fleet.machines.first { $0.machineId == machine }?.hostname ?? machine
+        let host = hub.fleet.machineName(machine)
         return ReadFault(reason: .offline, machineId: machine, message: "\(host) is offline, so its stored transcript can't be read right now")
     }
 

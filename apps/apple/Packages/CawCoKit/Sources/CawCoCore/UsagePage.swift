@@ -266,7 +266,7 @@ public enum UsageWhere {
             let item = item(row, summary: summary, harness: harness, grouping: grouping)
             if groups[item.machineId] == nil {
                 order.append(item.machineId)
-                groups[item.machineId] = Group(machineId: item.machineId, name: row.machine?.hostname ?? "", os: row.machine?.os ?? "", rows: [])
+                groups[item.machineId] = Group(machineId: item.machineId, name: row.machine?.name ?? "", os: row.machine?.os ?? "", rows: [])
             }
             groups[item.machineId]?.rows.append(item)
         }
@@ -335,9 +335,6 @@ public enum UsageSessionsExport {
             spend[entry.key] = (entry.harness, entry.row)
         }
         func cell(_ value: String) -> String { "\"\(value.replacingOccurrences(of: "\"", with: "\"\""))\"" }
-        func machineName(_ id: String) -> String {
-            fleet.machines.first { $0.machineId == id }.map { Naming.machineLabel($0.hostname) } ?? id
-        }
         let head = ["Session", "Machine", "Harness", "Turns", "Context", "Last activity", "State",
                     "API price (USD)", "Spend (USD)", "Input", "Output", "Cache write", "Cache read", "Messages"]
         var seen = Set<String>()
@@ -355,7 +352,7 @@ public enum UsageSessionsExport {
                 }
             }
             lines.append([
-                fleet.title(row), machineName(row.machineId), harnessName[harness] ?? harness,
+                fleet.title(row), fleet.machineName(row.machineId), harnessName[harness] ?? harness,
                 read.turns.map(String.init) ?? "", read.contextPct.map { "\(Int($0.rounded()))%" } ?? "",
                 at > 0 ? iso(at) : "", state,
             ] + spendCells(row.sessionId.flatMap { spend[$0] }))
@@ -364,7 +361,7 @@ public enum UsageSessionsExport {
             for info in fleet.catalog(machine.machineId) where !seen.contains(info.sessionId) {
                 seen.insert(info.sessionId)
                 lines.append([
-                    fleet.storedTitle(info, machineId: machine.machineId), Naming.machineLabel(machine.hostname),
+                    fleet.storedTitle(info, machineId: machine.machineId), machine.name,
                     harnessName[info.harness.rawValue] ?? info.harness.rawValue, "", "", iso(info.lastModified), "Idle",
                 ] + spendCells(spend[info.sessionId]))
             }
@@ -372,7 +369,7 @@ public enum UsageSessionsExport {
         for key in order where !seen.contains(key) {
             guard let entry = spend[key] else { continue }
             lines.append([
-                entry.row.label, entry.row.machine.map { Naming.machineLabel($0.hostname) } ?? "", harnessName[entry.harness.rawValue] ?? entry.harness.rawValue,
+                entry.row.label, entry.row.machine?.name ?? "", harnessName[entry.harness.rawValue] ?? entry.harness.rawValue,
                 "", "", "", "",
             ] + spendCells(entry))
         }

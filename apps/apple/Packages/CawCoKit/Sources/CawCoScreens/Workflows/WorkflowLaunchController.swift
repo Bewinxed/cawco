@@ -204,7 +204,7 @@ final class WorkflowLaunchController: KitDialogController {
         machineSelect.set(
             [.init(value: "", label: "Choose a machine", disabled: true)] + machines.map { machine in
                 let online = machine.status == "online"
-                return .init(value: machine.machineId, label: online ? machine.hostname : "\(machine.hostname) · offline", disabled: !online)
+                return .init(value: machine.machineId, label: online ? machine.name : "\(machine.name) · offline", disabled: !online)
             },
             value: machines.contains { $0.machineId == machineId } ? machineId : ""
         )

@@ -273,7 +273,7 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
             return false
         }
         let wait = moveWait ?? makeMoveWait()
-        wait.show(move) { [hub] id in hub.fleet.machines.first { $0.machineId == id }?.hostname ?? id }
+        wait.show(move) { [hub] id in hub.fleet.machineName(id) }
         #if DEBUG
         let said = "move \(move.id.prefix(8)): \(move.stage.rawValue) · \(wait.said)"
         if said != probeSaid {

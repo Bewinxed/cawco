@@ -690,7 +690,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             if let first = waiting.first {
                 cawLine = waiting.count > 1
                     ? "Waiting for \(waiting.count) machines to answer."
-                    : "Waiting for \(Naming.machineLabel(first.hostname)) to answer."
+                    : "Waiting for \(first.name) to answer."
             } else {
                 cawLine = "Your sessions will land here."
             }

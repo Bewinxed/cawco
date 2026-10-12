@@ -183,7 +183,7 @@ public struct Notice: Identifiable, Equatable, Sendable {
         init?(_ row: MachineRow) {
             guard let update = row.binaryUpdate, let state = try? Wire.transcode(update, as: State.self) else { return nil }
             id = row.machineId
-            name = Naming.unbroken(Naming.machineLabel(row.hostname))
+            name = Naming.unbroken(row.name)
             online = row.status == "online"
             self.state = state
         }
@@ -435,7 +435,7 @@ public struct Notice: Identifiable, Equatable, Sendable {
                     && (machine.harnesses ?? []).contains { uses.contains($0.harness.rawValue) }
                     && signins.first { $0.accountId == account.id && $0.machineId == machine.machineId }?.state != "signed-in"
             }.count
-            return (movedAt, Member(id: id, title: namedForNotice(account, providers), lines: ["from \(store) on \(Naming.unbroken(Naming.machineLabel(from.hostname)))"],
+            return (movedAt, Member(id: id, title: namedForNotice(account, providers), lines: ["from \(store) on \(Naming.unbroken(from.name))"],
                                     tile: Tile(provider: account.provider, hue: account.hue),
                                     todo: missing > 0 ? .signIn(machines: missing) : .everywhere))
         }.sorted { $0.at > $1.at }.map(\.member)
