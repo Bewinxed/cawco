@@ -412,7 +412,33 @@ final class PaneGroupController: UIViewController, UIDropInteractionDelegate {
         super.viewDidLayoutSubviews()
         layoutPanes()
         dock.layout()
+        #if DEBUG
+        runDetailsProbe()
+        #endif
     }
+
+    #if DEBUG
+    private var detailsProbeBegun = false
+
+    /// A simulator pass's `-details-probe`: once the chosen tab stands on
+    /// screen and the opening sessions have settled, its details pinned, and
+    /// once they hang, where the card stands against the tab and its
+    /// surfaces (`TabDetails.probeReading`), on a `details …` Probe line.
+    private func runDetailsProbe() {
+        guard !detailsProbeBegun, ProcessInfo.processInfo.arguments.contains("-details-probe"),
+              let id = leaf?.active, let tab = strip.tabView(id), tab.window != nil else { return }
+        detailsProbeBegun = true
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(6))
+            guard let self, let tab = strip.tabView(id) else { return }
+            tabDetails.pin(id, tab: tab)
+            try? await Task.sleep(for: .seconds(1.2))
+            let probe = Logger(subsystem: "dev.cawco.app", category: "Probe")
+            probe.notice("\(self.tabDetails.probeReading(), privacy: .public)")
+            probe.notice("details done")
+        }
+    }
+    #endif
 
     /// A tab chosen without the finger: the swipe's settle where the group
     /// swipes, the 40pt glide elsewhere; the side is read off the strip as it was.

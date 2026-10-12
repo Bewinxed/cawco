@@ -164,18 +164,6 @@ final class PaneHost {
     /// The details' MCP count leads to the fleet's MCP configuration.
     var onOpenMcp: () -> Void = {}
 
-    /// Session details as a sheet (PaneTabs.svelte, where a finger drives):
-    /// the house sheet on its edge. Where a pointer drives, the group's tabs
-    /// host the card themselves (TabDetails). A workflow run's tab is its own
-    /// details: it has no card.
-    func showDetails(_ id: String, from presenter: UIViewController?) {
-        guard let presenter, BoardRun.runId(of: id) == nil else { return }
-        let details = details(for: id)
-        let sheet = HouseSheetController(details, style: .edge, scroller: details.scroller)
-        details.onClose = { [weak sheet] in sheet?.dismiss(animated: true) }
-        presenter.present(sheet, animated: true)
-    }
-
     func continueInNewSession(_ id: String) {
         continueHandler?(id)
     }

@@ -54,8 +54,16 @@ final class SessionReadings {
 /// where it runs, what it runs on and how full it is. Its model, effort and
 /// permission mode change here while it runs; each change says where it was
 /// made that it is applying, that it landed, or why it was refused. The host
-/// (the tab strip) shows it as a popover or a sheet, and moves one card
-/// between tabs with `show(sessionId:title:link:dir:)`.
+/// (the tab strip, `TabDetails`) hangs it from its tab on every width, and
+/// moves one card between tabs with `show(sessionId:title:link:dir:)`.
+///
+/// Two levels and no more (DESIGN.md, "Session card."): "The card's head
+/// (title and meta) is on `surface-recess`, the tab's own surface", and
+/// "Everything under the head sits on the card's one body surface,
+/// `surface-raised`, with no fill of its own … They part by space, with one
+/// `border-hairline` between the settings and the meters, never by a change
+/// of fill." The head's own edge is the hairline at the top of the settings
+/// (SessionDetails.svelte `.configuration`).
 public final class SessionDetailsController: ObservedViewController {
     /// The card's width on a pointer (`min(416px, 100vw - 24px)`).
     public static let width = 416.0
@@ -72,8 +80,18 @@ public final class SessionDetailsController: ObservedViewController {
     public var onContinue: (String) -> Void = { _ in }
     /// The MCP count leads to the fleet's MCP configuration.
     public var onOpenMcp: () -> Void = {}
-    /// The content's scroll view, for a sheet that hands a pull down to itself.
-    public let scroller = UIScrollView()
+    /// The head (title and meta), on the tab's own surface: a swipe up on it
+    /// folds the card back into its tab under the finger (`TabDetails`).
+    public let head = UIStackView()
+    private let scroller = UIScrollView()
+
+    /// A finger's vertical drag on the head is the card's own (`fold`, a
+    /// swipe up folding it back into its tab), never the body's scroll,
+    /// which would take the touch away from it (SessionDetails.svelte
+    /// `.head`): the scroll waits for that drag to fail.
+    public func yieldScroll(to fold: UIGestureRecognizer) {
+        scroller.panGestureRecognizer.require(toFail: fold)
+    }
 
     // MARK: State (per session; cleared when the card moves to another)
 
@@ -422,12 +440,18 @@ public final class SessionDetailsController: ObservedViewController {
         configuration.addArrangedSubview(settings)
         configuration.addArrangedSubview(feedback)
         configuration.isLayoutMarginsRelativeArrangement = true
-        configuration.directionalLayoutMargins = NSDirectionalEdgeInsets(top: Space.space3, leading: pad, bottom: Space.space3, trailing: pad)
+        // No pad at the foot: the held feedback line is the space under the group (`.configuration`).
+        configuration.directionalLayoutMargins = NSDirectionalEdgeInsets(top: Space.space4, leading: pad, bottom: 0, trailing: pad)
         let configurationBox = UIStackView(arrangedSubviews: [Self.hairline(), configuration])
         configurationBox.axis = .vertical
         self.configurationBox = configurationBox
 
-        let body = UIStackView(arrangedSubviews: [identity, metaBox, configurationBox])
+        // The head: the tab's own surface, continued through the junction where the card hangs from the tab.
+        head.axis = .vertical
+        head.addArrangedSubview(identity)
+        head.addArrangedSubview(metaBox)
+        head.backgroundColor = Palette.surfaceRecess
+        let body = UIStackView(arrangedSubviews: [head, configurationBox])
         body.axis = .vertical
         body.translatesAutoresizingMaskIntoConstraints = false
         scroller.translatesAutoresizingMaskIntoConstraints = false
@@ -476,8 +500,8 @@ public final class SessionDetailsController: ObservedViewController {
         stats.stretch = contextUnit
         stats.stretchBy = 48
         stats.end = costFigure
-        let statsBox = Self.inset(stats, NSDirectionalEdgeInsets(top: Space.space3, leading: pad, bottom: Space.space3, trailing: pad))
-        statsBox.backgroundColor = Palette.surfaceRecess
+        // On the body's own surface, no fill of its own; the action follows by space alone (`.stats`).
+        let statsBox = Self.inset(stats, NSDirectionalEdgeInsets(top: Space.space3, leading: pad, bottom: 0, trailing: pad))
 
         // The footer: the modal's action row.
         continueButton = NsButton("Continue in new session…", primary: true, size: .xs, height: touch ? Size.cBtnHLg : nil) { [weak self] in
@@ -490,7 +514,8 @@ public final class SessionDetailsController: ObservedViewController {
         footer.isLayoutMarginsRelativeArrangement = true
         footer.directionalLayoutMargins = NSDirectionalEdgeInsets(top: Space.space4, leading: pad, bottom: Space.space4, trailing: pad)
 
-        let column = UIStackView(arrangedSubviews: [scroller, Self.hairline(), statsBox, Self.hairline(), footer])
+        // The one hairline between the settings and the meters.
+        let column = UIStackView(arrangedSubviews: [scroller, Self.hairline(), statsBox, footer])
         column.axis = .vertical
         column.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(column)
@@ -510,10 +535,24 @@ public final class SessionDetailsController: ObservedViewController {
             harnessBox.heightAnchor.constraint(equalToConstant: 28),
         ])
         self.column = column
+        scroller.contentInsetAdjustmentBehavior = .never
+        Self.keepOwnMargins(view)
     }
 
     private var column: UIStackView!
     private var configurationBox: UIView!
+
+    /// The card floats over the page and slides in and out of its tab: its
+    /// margins are its own, never the window's safe area. Taken from it, a
+    /// phone's fold that slid the head up under the status bar grew every
+    /// stack's margins frame by frame, so the content's height, the card's
+    /// place and the margins fed each other and the main thread never
+    /// settled (the touch's end never arrived). As the top bar's glass group
+    /// keeps its own (TopBar `groupRow`).
+    private static func keepOwnMargins(_ at: UIView) {
+        at.insetsLayoutMarginsFromSafeArea = false
+        for sub in at.subviews { keepOwnMargins(sub) }
+    }
 
     private static func hairline() -> UIView {
         let line = UIView()
@@ -644,7 +683,7 @@ public final class SessionDetailsController: ObservedViewController {
         }
 
         status.configure(face)
-        let hostName = machine?.hostname ?? machineId ?? ""
+        let hostName = machine?.name ?? machineId ?? ""
         hostDot.isHidden = hostName.isEmpty
         host.isHidden = hostName.isEmpty
         host.text = hostName
@@ -734,6 +773,8 @@ public final class SessionDetailsController: ObservedViewController {
             costFigure.isHidden = true
         }
         stats.setNeedsLayout()
+        // What this paint made (the feedback's row, the chips) keeps its own margins too.
+        Self.keepOwnMargins(view)
         view.setNeedsLayout()
     }
 
@@ -771,11 +812,51 @@ public final class SessionDetailsController: ObservedViewController {
         feedback.show(row)
     }
 
+    #if DEBUG
+    /// A probe's reading of the card's surfaces, in the scheme it is drawn
+    /// in: the head's fill against `surface-recess`, every other fill drawn
+    /// under the head (by its y and height; the body has none of its own),
+    /// the hairlines by their y, and the space from the settings' feedback
+    /// line to the hairline under it.
+    public func surfacesReading() -> String {
+        let traits = view.traitCollection
+        func rgb(_ color: UIColor?) -> String {
+            guard let color else { return "none" }
+            var (r, g, b, a) = (CGFloat(0), CGFloat(0), CGFloat(0), CGFloat(0))
+            color.resolvedColor(with: traits).getRed(&r, green: &g, blue: &b, alpha: &a)
+            return String(format: "(%.0f,%.0f,%.0f a %.2f)", r * 255, g * 255, b * 255, a)
+        }
+        var fills: [String] = []
+        var rules: [String] = []
+        func walk(_ at: UIView) {
+            for sub in at.subviews where !sub.isHidden && sub !== head {
+                if let fill = sub.backgroundColor, fill.cgColor.alpha > 0, sub.bounds.width > 4 {
+                    let frame = sub.convert(sub.bounds, to: view)
+                    if sub.bounds.height <= 1.01 {
+                        rules.append(String(format: "y %.1f ", frame.minY) + rgb(fill) + " hairline \(fill == Palette.borderHairline)")
+                    } else {
+                        fills.append(String(format: "%@ y %.1f h %.1f ", "\(type(of: sub))", frame.minY, frame.height) + rgb(fill))
+                    }
+                }
+                walk(sub)
+            }
+        }
+        walk(view)
+        let headBox = head.convert(head.bounds, to: view)
+        let feedbackFoot = feedback.convert(feedback.bounds, to: view).maxY
+        let chipsFoot = modelChip.convert(modelChip.bounds, to: view).maxY
+        return String(format: "head y %.1f h %.1f fill ", headBox.minY, headBox.height) + rgb(head.backgroundColor)
+            + " recess \(head.backgroundColor == Palette.surfaceRecess) recess token \(rgb(Palette.surfaceRecess)) raised token \(rgb(Palette.surfaceRaised))"
+            + String(format: "; chips foot %.1f feedback foot %.1f", chipsFoot, feedbackFoot)
+            + "; fills under the head \(fills.isEmpty ? "none" : fills.joined(separator: " | ")); hairlines \(rules.joined(separator: " | "))"
+    }
+    #endif
+
     // MARK: Models
 
     private func openModels() {
         guard editable, let harness, modelPopover == nil else { return }
-        let state = ModelSectionView.State(harness: harness, installed: [harness], machineName: machine?.hostname ?? "",
+        let state = ModelSectionView.State(harness: harness, installed: [harness], machineName: machine?.name ?? "",
                                            machineIds: machineId.map { [$0] } ?? [], model: model ?? "", tools: nil)
         let picker = ModelPopover(hub: hub, state: state) { [weak self] id in
             self?.changeModel(id)
