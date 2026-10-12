@@ -4,7 +4,7 @@
  * that finds them.
  *
  * - **One shape both ways.** {@link normalizeGitHub} maps a polled object
- *   (`pull`, `issue`, `comment`) and a webhook payload (`pull_request`,
+ *   (`pull`, `issue`, `comment`, `issue_event`) and a webhook payload (`pull_request`,
  *   `issues`, `issue_comment`) to the same events under the same natural
  *   keys, so a poll and a webhook of one change are one row
  *   (`inbound_events` is unique on source and key). Keys: `pr:<n>:opened`,
@@ -14,8 +14,10 @@
  * - **Resources, not the events feed.** GitHub's events API "is not built to
  *   serve real-time use cases. Depending on the time of day, event latency
  *   can be anywhere from 30s to 6h" (docs.github.com/en/rest/activity/events).
- *   {@link pollRepo} reads pulls, issues and issue comments, newest updated
- *   first, each with its own ETag: "If no new events have been triggered,
+ *   {@link pollRepo} reads pulls, issues, issue comments and issue events
+ *   (labels come from these alone, each `labeled` event at its own time, so
+ *   a label added before the poller started never lands), newest first,
+ *   each with its own ETag: "If no new events have been triggered,
  *   you will see a '304 Not Modified' response, and your current rate limit
  *   will be untouched" (same page). Each resource's high-water mark is the
  *   newest `updated_at` it took in; a first poll only sets it, so a new
@@ -35,6 +37,7 @@ export type GitHubKind =
   | "pull"
   | "issue"
   | "comment"
+  | "issue_event"
   | "pull_request"
   | "issues"
   | "issue_comment";
@@ -44,6 +47,7 @@ export const GITHUB_RESOURCES: readonly GitHubResource[] = [
   "pulls",
   "issues",
   "comments",
+  "issueEvents",
 ];
 
 /** The edge of the window read again each poll: late-visible changes are not missed. Our choice. */
@@ -101,6 +105,15 @@ const comment = z.object({
   issue_url: z.string(),
   created_at: z.string(),
   updated_at: z.string(),
+});
+
+/** One of a repository's issue events (`/issues/events`): a label added is `labeled`. */
+const issueEvent = z.object({
+  id: z.number().int(),
+  event: z.string(),
+  label: z.object({ name: z.string() }).nullish(),
+  created_at: z.string(),
+  issue,
 });
 
 const repository = z.object({ full_name: z.string() });
@@ -175,9 +188,16 @@ const pullEvents = (
   return events;
 };
 
+/**
+ * An issue's events: polled, its opening and its close (its labels come
+ * from its label events, never from the list's current labels); from a
+ * webhook or a label event, the one action, a label at its own time.
+ */
 const issueEvents = (
   one: z.infer<typeof issue>,
-  only?: { action: "opened" | "closed" } | { action: "labeled"; label: string }
+  only?:
+    | { action: "opened" | "closed" }
+    | { action: "labeled"; at: number; label: string }
 ): InboundEvent[] => {
   const repo = repoOf(one.repository_url);
   if (one.pull_request !== undefined || !repo) {
@@ -209,21 +229,22 @@ const issueEvents = (
         },
       ]
     : [];
-  const labeled = (name: string): InboundEvent => ({
-    ...base,
-    key: `issue:${one.number}:labeled:${name}`,
-    kind: "issue.labeled",
-    at: ms(one.updated_at),
-  });
   switch (only?.action) {
     case "opened":
       return [opened];
     case "closed":
       return closed;
     case "labeled":
-      return [labeled(only.label)];
+      return [
+        {
+          ...base,
+          key: `issue:${one.number}:labeled:${only.label}`,
+          kind: "issue.labeled",
+          at: only.at,
+        },
+      ];
     default:
-      return [opened, ...closed, ...base.labels.map(labeled)];
+      return [opened, ...closed];
   }
 };
 
@@ -276,6 +297,17 @@ const READERS: Record<GitHubKind, (payload: unknown) => InboundEvent[]> = {
     const parsed = comment.safeParse(payload);
     return parsed.success ? commentEvent(parsed.data) : [];
   },
+  issue_event: (payload) => {
+    const parsed = issueEvent.safeParse(payload);
+    const added = parsed.data?.label;
+    return parsed.success && parsed.data.event === "labeled" && added
+      ? issueEvents(parsed.data.issue, {
+          action: "labeled",
+          label: added.name,
+          at: ms(parsed.data.created_at),
+        })
+      : [];
+  },
   pull_request: (payload) => {
     const parsed = webhook.pull_request.safeParse(payload);
     const action = parsed.data?.action;
@@ -290,7 +322,12 @@ const READERS: Record<GitHubKind, (payload: unknown) => InboundEvent[]> = {
     }
     const { action, issue: one, label: added } = parsed.data;
     if (action === "labeled" && added) {
-      return issueEvents(one, { action, label: added.name });
+      // A webhook comes as the label is added: the issue's update is that moment.
+      return issueEvents(one, {
+        action,
+        label: added.name,
+        at: ms(one.updated_at),
+      });
     }
     return ISSUE_ACTIONS.has(action)
       ? issueEvents(one, { action: action as "opened" | "closed" })
@@ -337,8 +374,11 @@ const pathOf = (
       return `/repos/${repo}/pulls?state=all&${list}`;
     case "issues":
       return `/repos/${repo}/issues?state=all&${list}&since=${after}`;
-    default:
+    case "comments":
       return `/repos/${repo}/issues/comments?${list}&since=${after}`;
+    default:
+      // Newest first, by when each happened; no `since`, so its URL (and ETag) holds.
+      return `/repos/${repo}/issues/events?per_page=${PER_PAGE}`;
   }
 };
 
@@ -346,6 +386,16 @@ const KIND_OF: Record<GitHubResource, GitHubKind> = {
   pulls: "pull",
   issues: "issue",
   comments: "comment",
+  issueEvents: "issue_event",
+};
+
+/** When a listed item last moved: its `updated_at`, or an issue event's `created_at`. */
+const movedAt = (item: unknown): number => {
+  const { updated_at: updated, created_at: created } = item as {
+    created_at?: string;
+    updated_at?: string;
+  };
+  return Date.parse(updated ?? created ?? "");
 };
 
 /** When GitHub's answer says to wait, ms; null when it does not. */
@@ -402,8 +452,8 @@ const refusal = async (
 
 /**
  * One page of a resource's list: the events in the window, the newest
- * `updated_at` in it, and whether it reached past the window's edge (the
- * list is newest first, so the next page holds nothing newer).
+ * time in it ({@link movedAt}), and whether it reached past the window's
+ * edge (the list is newest first, so the next page holds nothing newer).
  */
 const readPage = (
   resource: GitHubResource,
@@ -415,9 +465,7 @@ const readPage = (
   }
   const page = { events: [] as InboundEvent[], newest: edge, past: false };
   for (const item of items) {
-    const updated = Date.parse(
-      (item as { updated_at?: string }).updated_at ?? ""
-    );
+    const updated = movedAt(item);
     if (!Number.isFinite(updated) || updated < edge) {
       page.past = true;
       continue;

@@ -5,15 +5,36 @@ import { type RoutineRunState, routineRuns, routines } from "./schema";
 export type RoutineRow = typeof routines.$inferSelect;
 export type RoutineRunRow = typeof routineRuns.$inferSelect;
 
-/** What a run is filed as: started, or skipped with the sentence that says why. */
+/**
+ * What a run is filed as: started; queued behind a live run (an event's
+ * run, which is a delivery and is never dropped); or skipped, each with the
+ * sentence that says why.
+ */
 export type RunDecision =
   | { state: "starting" }
-  | { reason: string; state: "skipped" };
+  | { reason: string; state: "queued" | "skipped" };
+
+/** What a decision reads: the routine, its run still going, and whether runs wait behind it. */
+export type Decide = (
+  routine: RoutineRow,
+  live: RoutineRunRow | undefined,
+  waiting: boolean
+) => RunDecision;
 
 /** The states of a run that is still going: what overlap looks for. */
 const LIVE: RoutineRunState[] = ["starting", "running"];
 
 export interface RoutinesDb {
+  /**
+   * The next queued run, taken in one transaction while the routine has no
+   * run going: its oldest by arrival, filed as `decide` says now (started,
+   * or skipped when a gate holds it). Nothing while a run goes or none
+   * waits; a run is taken once, its state still `queued` when it is.
+   */
+  readonly claimQueued: (claim: {
+    decide: Decide;
+    routineId: string;
+  }) => RoutineRunRow | undefined;
   /**
    * THE fire of a scheduled slot, in one transaction: `next_slot` moves from
    * `due` to `next` (only while it still reads `due` and the routine is on),
@@ -22,10 +43,7 @@ export interface RoutinesDb {
    * the run is there already: then nothing fires.
    */
   readonly claimSlot: (claim: {
-    decide: (
-      routine: RoutineRow,
-      live: RoutineRunRow | undefined
-    ) => RunDecision;
+    decide: Decide;
     due: Date;
     next: Date;
     routineId: string;
@@ -41,10 +59,7 @@ export interface RoutinesDb {
    */
   readonly insertRun: (run: {
     attempt: number;
-    decide: (
-      routine: RoutineRow,
-      live: RoutineRunRow | undefined
-    ) => RunDecision;
+    decide: Decide;
     routineId: string;
     slot: string;
   }) => RoutineRunRow | undefined;
@@ -52,6 +67,8 @@ export interface RoutinesDb {
   readonly list: (projectId?: string | null) => RoutineRow[];
   /** Runs still starting or running, every routine's. */
   readonly liveRuns: () => RoutineRunRow[];
+  /** Routines that have runs waiting: what a hub start drains. */
+  readonly queuedRoutines: () => string[];
   readonly run: (id: string) => RoutineRunRow | undefined;
   readonly runOfItem: (workItemId: string) => RoutineRunRow | undefined;
   /** A routine's runs, newest first. */
@@ -87,18 +104,40 @@ export const routinesDb = (db: BunSQLiteDatabase): RoutinesDb => {
       .orderBy(desc(routineRuns.startedAt))
       .get();
 
+  /** The routine's oldest queued run, by arrival (rowid). */
+  const oldestQueued = (tx: Tx, routineId: string) =>
+    tx
+      .select()
+      .from(routineRuns)
+      .where(
+        and(
+          eq(routineRuns.routineId, routineId),
+          eq(routineRuns.state, "queued")
+        )
+      )
+      .orderBy(sql`rowid`)
+      .get();
+
+  /** The columns a decision sets on a run. */
+  const filed = (decision: RunDecision) => ({
+    state: decision.state,
+    reason: decision.state === "starting" ? null : decision.reason,
+    endedAt: decision.state === "skipped" ? new Date() : null,
+  });
+
   /** Inserts the run `decide` files; nothing when its key is taken. */
   const insert = (
     tx: Tx,
     routine: RoutineRow,
     slot: string,
     attempt: number,
-    decide: (
-      routine: RoutineRow,
-      live: RoutineRunRow | undefined
-    ) => RunDecision
+    decide: Decide
   ): RoutineRunRow | undefined => {
-    const decision = decide(routine, liveOf(tx, routine.id));
+    const decision = decide(
+      routine,
+      liveOf(tx, routine.id),
+      oldestQueued(tx, routine.id) !== undefined
+    );
     return tx
       .insert(routineRuns)
       .values({
@@ -106,10 +145,7 @@ export const routinesDb = (db: BunSQLiteDatabase): RoutinesDb => {
         routineId: routine.id,
         slot,
         attempt,
-        state: decision.state,
-        ...(decision.state === "skipped"
-          ? { reason: decision.reason, endedAt: new Date() }
-          : {}),
+        ...filed(decision),
         startedAt: new Date(),
       })
       .onConflictDoNothing()
@@ -141,6 +177,32 @@ export const routinesDb = (db: BunSQLiteDatabase): RoutinesDb => {
         const routine = get(routineId, tx);
         return routine ? insert(tx, routine, slot, attempt, decide) : undefined;
       }),
+    claimQueued: ({ routineId, decide }) =>
+      db.transaction((tx) => {
+        const routine = get(routineId, tx);
+        const next = oldestQueued(tx, routineId);
+        if (!(routine && next) || liveOf(tx, routineId)) {
+          return;
+        }
+        return tx
+          .update(routineRuns)
+          .set({
+            ...filed(decide(routine, undefined, false)),
+            startedAt: new Date(),
+          })
+          .where(
+            and(eq(routineRuns.id, next.id), eq(routineRuns.state, "queued"))
+          )
+          .returning()
+          .get();
+      }),
+    queuedRoutines: () =>
+      db
+        .selectDistinct({ routineId: routineRuns.routineId })
+        .from(routineRuns)
+        .where(eq(routineRuns.state, "queued"))
+        .all()
+        .map((row) => row.routineId),
     create: (row) => db.insert(routines).values(row).returning().get(),
     get: (id) => get(id),
     list: (projectId) => {

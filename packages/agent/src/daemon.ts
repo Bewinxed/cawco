@@ -307,19 +307,42 @@ const machineProviders = async (): Promise<
 };
 
 /**
+ * How long one part of the machine's report may take before it is given up
+ * for this beat. Longer than the slowest read that answers (a Claude
+ * account's probe waits up to 60 s for initialize, accounts.ts); a part
+ * past it is a read that will not answer, which held the whole first report
+ * back and so the machine's sign-ins with it.
+ */
+const PART_MS = 90_000;
+
+/**
  * One part of what the machine reports, read on its own: what it read, or,
- * when it could not be read, nothing, said once under the part's name. One
- * part failing never keeps the others from being sent.
+ * when it could not be read in {@link PART_MS}, nothing, said once under
+ * the part's name; it is read again on the next beat. One part failing, or
+ * never answering, never keeps the others from being sent.
  */
 const readPart = async <T>(
   part: string,
   read: () => Promise<T>
 ): Promise<T | undefined> => {
+  let late: ReturnType<typeof setTimeout> | undefined;
   try {
-    return await read();
+    return await Promise.race([
+      read(),
+      new Promise<undefined>((resolve) => {
+        late = setTimeout(() => {
+          console.warn(
+            `[agent] ${part} was not read within ${PART_MS / 1000} s; it is read again on the next beat`
+          );
+          resolve(undefined);
+        }, PART_MS);
+      }),
+    ]);
   } catch (error) {
     console.warn(`[agent] ${part} could not be read: ${errorWords(error)}`);
     return undefined;
+  } finally {
+    clearTimeout(late);
   }
 };
 
@@ -718,25 +741,55 @@ const send = (socket: WebSocket, envelope: Envelope): void => {
   }
 };
 
-/** Succeeds with an open socket; fails if the socket closes before opening. */
+/**
+ * How long a dial waits for the hub to answer its upgrade. A socket the far
+ * end accepted but never answers (a hub whose loop is wedged, a middlebox
+ * holding the connection, another process on the hub's port) fires neither
+ * `open` nor `close`: without this the dial waits forever, silent after
+ * "connecting", and never reaches the reconnect below. Our choice: a
+ * healthy hub answers in milliseconds.
+ */
+const OPEN_TIMEOUT_MS = 30_000;
+
+/** Succeeds with an open socket; fails if the socket closes, or is not answered, before opening. */
 const open = (url: string) =>
   Effect.callback<WebSocket, ConnectionLost>((resume) => {
     // Says this agent reads parts; without it the hub sends whole messages,
     // as to an agent on the build before (`WIRE_PARTS_PARAM`).
     const socket = new WebSocket(announcingParts(url));
-    const onOpen = () => {
+    const settle = () => {
+      clearTimeout(unanswered);
+      socket.removeEventListener("open", onOpen);
       socket.removeEventListener("close", onClose);
+    };
+    const onOpen = () => {
+      settle();
       resume(Effect.succeed(socket));
     };
     const onClose = (event: CloseEvent) => {
-      socket.removeEventListener("open", onOpen);
+      settle();
       resume(
         Effect.fail(new ConnectionLost({ url, reason: closeReason(event) }))
       );
     };
+    const unanswered = setTimeout(() => {
+      settle();
+      socket.close();
+      resume(
+        Effect.fail(
+          new ConnectionLost({
+            url,
+            reason: `the hub did not answer the connection within ${OPEN_TIMEOUT_MS / 1000} s`,
+          })
+        )
+      );
+    }, OPEN_TIMEOUT_MS);
     socket.addEventListener("open", onOpen, { once: true });
     socket.addEventListener("close", onClose, { once: true });
-    return Effect.sync(() => socket.close());
+    return Effect.sync(() => {
+      settle();
+      socket.close();
+    });
   });
 
 const connection = (url: string) =>
@@ -1187,45 +1240,62 @@ const attach = (
         piWatch?.close();
       })
     );
-    // Each part settles on its own (`readPart`): a part that could not be
-    // read is left out of the beat, and the hub keeps what it last read of
-    // it. A harness left out of `harnesses` keeps its last report there
-    // (`mergeAgentHarnesses`), absent `tools` merge nothing, and a harness
-    // absent from `providers` leaves its last list (`machineProviders`).
+    // Each part goes on its own beat as soon as it is read (`readPart`), so
+    // no part waits on another: Claude's sign-ins reach the hub when Claude's
+    // report is read, whatever OpenCode's server or the tool probes are
+    // doing. A part that could not be read, or was not read in time, is left
+    // out, and the hub keeps what it last read of it: a harness left out of
+    // `harnesses` keeps its last report there (`mergeAgentHarnesses`),
+    // absent `tools` merge nothing, and a harness absent from `providers`
+    // leaves its last list (`machineProviders`).
     supervisor.reannounce = () => {
-      // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — reannounce doesn't await its own send
-      void (async () => {
-        const [detected, tools, providers] = await Promise.all([
-          Promise.all(harnesses().map(readHarness)),
-          readPart("tools", probeTools),
-          machineProviders(),
-        ]);
-        if (socket.readyState !== WebSocket.OPEN) {
-          return;
+      const beat = (part: Partial<HeartbeatPayload>): void => {
+        if (socket.readyState === WebSocket.OPEN) {
+          send(socket, {
+            verb: "heartbeat",
+            machineId: identity.machineId,
+            payload: {
+              at: Date.now(),
+              instances: supervisor.instanceIds,
+              ...part,
+            } satisfies HeartbeatPayload,
+          });
         }
-        const read = detected.filter(
-          (report): report is HarnessReport => report !== undefined
-        );
-        reportedHarnesses = read;
-        announced = true;
+      };
+      // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — reannounce doesn't await its own sends
+      void (async () => {
         reportedProviderAccounts = providerAccountReports();
         reportedHomeStores = homeStoresStamp();
-        send(socket, {
-          verb: "heartbeat",
-          machineId: identity.machineId,
-          payload: {
-            at: Date.now(),
-            instances: supervisor.instanceIds,
-            ...(latestBinaryUpdate()
-              ? { binaryUpdate: latestBinaryUpdate() }
-              : {}),
-            ...(read.length > 0 ? { harnesses: read } : {}),
-            ...(tools ? { tools } : {}),
-            providerAccounts: reportedProviderAccounts,
-            homeStores: reportedHomeStores,
-            ...(providers ? { providers } : {}),
-          } satisfies HeartbeatPayload,
+        beat({
+          ...(latestBinaryUpdate()
+            ? { binaryUpdate: latestBinaryUpdate() }
+            : {}),
+          providerAccounts: reportedProviderAccounts,
+          homeStores: reportedHomeStores,
         });
+        await Promise.all([
+          ...harnesses().map(async (adapter) => {
+            const report = await readHarness(adapter);
+            if (report) {
+              keepReport(report);
+              beat({ harnesses: [report] });
+            }
+          }),
+          (async () => {
+            const tools = await readPart("tools", probeTools);
+            if (tools) {
+              beat({ tools });
+            }
+          })(),
+          (async () => {
+            const providers = await machineProviders();
+            if (providers) {
+              beat({ providers });
+            }
+          })(),
+        ]);
+        // Every part answered or ran out: the cadence below reads again what is missing.
+        announced = true;
       })().catch((error: unknown) =>
         console.warn(
           `[agent] the machine's report could not be sent: ${errorWords(error)}`

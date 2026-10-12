@@ -3546,6 +3546,7 @@ public enum OpenEnums {
     /// `#/components/schemas/RoutineRunState`.
     public enum RoutineRunState: OpenEnum {
         case ended
+        case queued
         case running
         case skipped
         case starting
@@ -3555,6 +3556,7 @@ public enum OpenEnums {
         public init(rawValue: String) {
             switch rawValue {
             case "ended": self = .ended
+            case "queued": self = .queued
             case "running": self = .running
             case "skipped": self = .skipped
             case "starting": self = .starting
@@ -3565,6 +3567,7 @@ public enum OpenEnums {
         public var rawValue: String {
             switch self {
             case .ended: "ended"
+            case .queued: "queued"
             case .running: "running"
             case .skipped: "skipped"
             case .starting: "starting"
@@ -3576,7 +3579,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.ended, .running, .skipped, .starting]
+        public static let allCases: [Self] = [.ended, .queued, .running, .skipped, .starting]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

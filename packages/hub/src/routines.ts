@@ -33,7 +33,9 @@
  *   (caw.ts `wake`), as any event does.
  * - **Event runs**: an inbound event a route sends here (ingress.ts) runs the
  *   routine once, slot `event:<event id>`, the event carried after the
- *   routine's prompt as untrusted data.
+ *   routine's prompt as untrusted data. An event is a delivery, never
+ *   dropped for a busy routine: its run queues behind a live run (`queued`)
+ *   and starts when the runs before it have ended, oldest first, each once.
  * - **New routines** run once at once as a test (`test:<created at>`).
  *   Agent-made ones turn themselves off after 7 days unless kept.
  */
@@ -46,7 +48,7 @@ import { z } from "zod";
 import { tool } from "./admin-tools";
 import type { Caw } from "./caw";
 import type { DbShape, ProjectRow, WorkItemRow } from "./db";
-import type { RoutineRow, RoutineRunRow, RunDecision } from "./db/routines";
+import type { Decide, RoutineRow, RoutineRunRow } from "./db/routines";
 import type { RoutineOutcome, RoutineTarget, WorkBudget } from "./db/schema";
 import { defaultCheck } from "./dispatch";
 import { eventData } from "./ingress";
@@ -455,17 +457,71 @@ export const createRoutines = ({
       : undefined;
   };
 
+  /**
+   * How a run at `slot` is filed. A gate (the project, the daily cap) skips
+   * it. A run still going skips a time slot (a cron slot, a test, a run by
+   * hand: the next one comes); an event's run is a delivery, so it queues
+   * behind it, and behind the event runs already waiting, and starts when
+   * they have ended ({@link drain}). A retry goes before those waiting.
+   */
   const decide =
-    (now: number) =>
-    (routine: RoutineRow, live: RoutineRunRow | undefined): RunDecision => {
-      const reason =
-        (live
-          ? `the ${slotLabel(live.slot, routine.timeZone)} run is still going`
-          : undefined) ??
-        projectGate(routine) ??
-        capGate(routine, now);
-      return reason ? { state: "skipped", reason } : { state: "starting" };
+    (now: number, slot: string, attempt = 1): Decide =>
+    (routine, live, waiting) => {
+      const gate = projectGate(routine) ?? capGate(routine, now);
+      if (gate) {
+        return { state: "skipped", reason: gate };
+      }
+      const going = live
+        ? `the ${slotLabel(live.slot, routine.timeZone)} run is still going`
+        : undefined;
+      if (
+        slot.startsWith(EVENT_SLOT) &&
+        (going || (waiting && attempt === 1))
+      ) {
+        return {
+          state: "queued",
+          reason: going ?? "earlier events' runs are waiting",
+        };
+      }
+      return going
+        ? { state: "skipped", reason: going }
+        : { state: "starting" };
     };
+
+  /**
+   * The routine's waiting event runs, started one at a time once nothing of
+   * it runs: the oldest first, each claimed once (db/routines.ts
+   * `claimQueued`). A claimed run a gate now holds is skipped, and the next
+   * is tried. Called whenever a run of the routine ends.
+   */
+  const drain = (routineId: string): void => {
+    for (;;) {
+      const routine = store.get(routineId);
+      const run = routine
+        ? store.claimQueued({
+            routineId,
+            decide: decide(Date.now(), EVENT_SLOT),
+          })
+        : undefined;
+      if (!(routine && run)) {
+        return;
+      }
+      // The event is handled once its run is decided: started, or skipped by a gate.
+      db.ingress.setEvent(run.slot.slice(EVENT_SLOT.length), {
+        handledAt: new Date(),
+      });
+      if (run.state === "starting") {
+        console.log(
+          `[routines] ${routine.name} (${run.slot}): started from the queue`
+        );
+        fire(routine, run);
+        return;
+      }
+      console.log(
+        `[routines] ${routine.name} (${run.slot}) skipped: ${run.reason}`
+      );
+    }
+  };
 
   // --- firing ------------------------------------------------------------------
 
@@ -559,6 +615,7 @@ export const createRoutines = ({
         endedAt: new Date(),
       });
       console.log(`[routines] ${routine.name} (${run.slot}) skipped: ${place}`);
+      drain(routine.id);
       return;
     }
     const label = slotLabel(run.slot, routine.timeZone);
@@ -612,6 +669,7 @@ export const createRoutines = ({
         ? { state: "ended", outcome: "sent", endedAt: new Date() }
         : { state: "skipped", reason: "the lead is off", endedAt: new Date() }
     );
+    drain(routine.id);
   };
 
   /** Starts a run filed `starting`; one that cannot start ends failed, as any failure. */
@@ -639,7 +697,7 @@ export const createRoutines = ({
       routineId: routine.id,
       slot,
       attempt,
-      decide: decide(Date.now()),
+      decide: decide(Date.now(), slot, attempt),
     });
     if (run?.state === "starting") {
       fire(routine, run);
@@ -682,6 +740,8 @@ export const createRoutines = ({
     if (!surface(routine, run, end, instanceId)) {
       release(run);
     }
+    // Its retry, filed above, goes first; else the next waiting event's run.
+    drain(routine.id);
   };
 
   /**
@@ -857,7 +917,7 @@ export const createRoutines = ({
       due: routine.nextSlot,
       next: Cron.next(cron, now),
       slot: due.getTime() < routine.nextSlot.getTime() ? routine.nextSlot : due,
-      decide: decide(now),
+      decide: decide(now, "cron"),
     });
   };
 
@@ -917,7 +977,8 @@ export const createRoutines = ({
   /**
    * Hub start: runs a stopped hub left live are settled from their work
    * items (one left starting cannot say whether its work began, so it ends
-   * failed without a retry), then one look, which is the catch-up.
+   * failed without a retry), then one look, which is the catch-up; then
+   * event runs a stopped hub left waiting start, in order, where nothing runs.
    */
   const start = (): void => {
     for (const run of store.liveRuns()) {
@@ -937,6 +998,9 @@ export const createRoutines = ({
     }
     started = true;
     tick();
+    for (const routineId of store.queuedRoutines()) {
+      drain(routineId);
+    }
     schedule();
   };
 

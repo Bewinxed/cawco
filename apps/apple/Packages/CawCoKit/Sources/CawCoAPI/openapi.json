@@ -25382,10 +25382,11 @@
         ]
       },
       "RoutineRunState": {
-        "description": "Where a routine's run is: being started, running, ended, or skipped (nothing started).",
+        "description": "Where a routine's run is: queued behind a live run (an event's run, which\nstarts when the runs before it end), being started, running, ended, or\nskipped (nothing started).",
         "type": "string",
         "enum": [
           "ended",
+          "queued",
           "running",
           "skipped",
           "starting"
@@ -25563,6 +25564,9 @@
                     "$ref": "#/components/schemas/GitHubCursor"
                   },
                   "comments": {
+                    "$ref": "#/components/schemas/GitHubCursor"
+                  },
+                  "issueEvents": {
                     "$ref": "#/components/schemas/GitHubCursor"
                   }
                 }

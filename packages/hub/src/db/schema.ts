@@ -2521,8 +2521,17 @@ export const routines = sqliteTable(
   (table) => [index("routines_project").on(table.projectId)]
 );
 
-/** Where a routine's run is: being started, running, ended, or skipped (nothing started). */
-export type RoutineRunState = "starting" | "running" | "ended" | "skipped";
+/**
+ * Where a routine's run is: queued behind a live run (an event's run, which
+ * starts when the runs before it end), being started, running, ended, or
+ * skipped (nothing started).
+ */
+export type RoutineRunState =
+  | "queued"
+  | "starting"
+  | "running"
+  | "ended"
+  | "skipped";
 
 /**
  * How a run ended: `silent` (its delegate said `NO_REPLY`), `delivered`
@@ -2723,8 +2732,8 @@ export interface GitHubCursor {
   since: number;
 }
 
-/** The three resources a project's repository is polled for. */
-export type GitHubResource = "pulls" | "issues" | "comments";
+/** The resources a project's repository is polled for: issue events are where its labels come from. */
+export type GitHubResource = "pulls" | "issues" | "comments" | "issueEvents";
 
 /**
  * A project's GitHub poller (ingress.ts, github.ts): the connection whose

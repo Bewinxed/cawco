@@ -21,8 +21,9 @@
  *   `<id>:<version>`. A first call only looks.
  * - **Routing**: the project's oldest enabled route whose every condition
  *   holds (source pattern, kinds, author, label, branch, a regex over title
- *   and body) runs its routine with the event as the run's input
- *   (routines.ts `runForEvent`). An unmatched event goes to the lead's next
+ *   and body, both matched on RE2 in linear time) runs its routine with the
+ *   event as the run's input (routines.ts `runForEvent`; behind a run still
+ *   going it queues, and is handled when it starts). An unmatched event goes to the lead's next
  *   wake as an inbox line (caw.ts); with the lead off it is stored, and
  *   nothing is woken.
  * - **Data, never instructions.** An event reaches a model only inside a
@@ -34,6 +35,7 @@
 import { CAWCO_ENV, type InstanceRow, readEnv } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
 import { Elysia, status, t } from "elysia";
+import { RE2JS } from "re2js";
 import { z } from "zod";
 import { tool } from "./admin-tools";
 import type { Connections } from "./connections";
@@ -197,15 +199,30 @@ const keyPart = (value: unknown): string | undefined =>
     ? String(value).slice(0, KEY_PART_MAX)
     : undefined;
 
-/** `*` matching any run of characters; everything else literal. */
-const globOf = (pattern: string): RegExp =>
-  new RegExp(
-    `^${pattern
-      .split("*")
-      .map((part) => part.replace(/[.+?^${}()|[\]\\]/g, "\\$&"))
-      .join(".*")}$`,
-    "i"
-  );
+/**
+ * Route patterns run on RE2 (re2js, "the JavaScript port of RE2, a regular
+ * expression engine that provides linear time matching",
+ * npmjs.com/package/re2js): no pattern a session writes can make a match
+ * backtrack, so none can hold the hub's loop. Compiled once each.
+ */
+const compiled = new Map<string, RE2JS>();
+const re2 = (pattern: string, flags = 0): RE2JS => {
+  const key = `${flags}\0${pattern}`;
+  const known = compiled.get(key);
+  if (known) {
+    return known;
+  }
+  const made = RE2JS.compile(pattern, flags);
+  compiled.set(key, made);
+  return made;
+};
+
+/** `*` matching any run of characters; everything else literal; any case. */
+const globMatches = (pattern: string, source: string): boolean =>
+  re2(
+    pattern.split("*").map(RE2JS.quote).join(".*"),
+    RE2JS.CASE_INSENSITIVE
+  ).testExact(source);
 
 const same = (a: string | null, b: string | null) =>
   a !== null && b !== null && a.toLowerCase() === b.toLowerCase();
@@ -218,22 +235,26 @@ const defined = <T extends object>(
     Object.entries(fields).filter(([, value]) => value !== undefined)
   ) as { [K in keyof T]?: Exclude<T[K], undefined> };
 
-/** Why a route's regex cannot be one, or nothing. */
+/**
+ * Why a route's regex cannot be one, or nothing. RE2 has no backreferences
+ * or lookaround (they are what make a match backtrack): a pattern using
+ * them is refused with RE2's own words.
+ */
 const regexProblem = (regex: string): string | undefined => {
   if (regex.length > REGEX_MAX) {
     return `regex is at most ${REGEX_MAX} characters.`;
   }
   try {
-    new RegExp(regex, "u").test("");
+    re2(regex);
     return undefined;
   } catch (error) {
-    return `regex does not parse: ${error instanceof Error ? error.message : String(error)}`;
+    return `regex is not one RE2 runs (it has no backreferences or lookaround, which is what keeps every match linear in time): ${error instanceof Error ? error.message : String(error)}`;
   }
 };
 
 /** Whether every condition `route` sets holds for `event`. */
 const matches = (route: EventRouteRow, event: InboundEvent): boolean => {
-  if (!globOf(route.source).test(event.source)) {
+  if (!globMatches(route.source, event.source)) {
     return false;
   }
   if (route.kinds.length > 0 && !route.kinds.includes(event.kind)) {
@@ -262,7 +283,7 @@ const matches = (route: EventRouteRow, event: InboundEvent): boolean => {
     .filter((part): part is string => typeof part === "string")
     .join("\n")
     .slice(0, MATCH_TEXT_MAX);
-  return new RegExp(route.regex, "u").test(text);
+  return re2(route.regex).test(text);
 };
 
 /** Who acts: you (the dashboard), or a session through its tools. */
@@ -471,11 +492,12 @@ export const createIngress = ({
       }
     });
     if (taken) {
+      // Routed first: a queued run is handled when it starts (routines.ts `drain`).
+      store.setEvent(row.id, { routedTo: taken.routineId });
       const run = routines.runForEvent(taken.routineId, row.id);
-      store.setEvent(row.id, {
-        routedTo: taken.routineId,
-        handledAt: new Date(),
-      });
+      if (run?.state !== "queued") {
+        store.setEvent(row.id, { handledAt: new Date() });
+      }
       console.log(
         `[ingress] ${row.source} ${row.deliveryKey} → routine ${taken.routineId}${run ? ` (run ${run.id}, ${run.state}${run.reason ? `: ${run.reason}` : ""})` : ""}`
       );

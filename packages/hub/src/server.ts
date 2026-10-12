@@ -20095,12 +20095,14 @@ export const createServer = (
               if (moved) {
                 flushOwedStarts(message.machineId);
               }
-              // What the machine can do: one beat per connection carries it,
-              // sent the moment the daemon's probes finish. It used to ride the
-              // register, which made the register wait on those probes, and
-              // the register is what puts a machine back in the registry. So
-              // everything that reads a machine's harnesses or tools runs here,
-              // off the report it reads.
+              // What the machine can do: each part on a beat of its own, sent
+              // the moment the daemon reads it (a harness's report, its tools,
+              // its providers), so a part that is slow never holds another
+              // back: Claude's sign-ins land when Claude's report is read. It
+              // used to ride the register, which made the register wait on
+              // those probes, and the register is what puts a machine back in
+              // the registry. So everything that reads a machine's harnesses
+              // or tools runs here, off the part it reads.
               const reported = peekHarnesses(message.payload);
               if (reported) {
                 db.mergeAgentHarnesses(message.machineId, reported);
@@ -20113,12 +20115,12 @@ export const createServer = (
                 if (claudeAccounts) {
                   syncAccounts(message.machineId, "claude", claudeAccounts);
                 }
-                db.mergeAgentTools(
-                  message.machineId,
-                  peekTools(message.payload)
-                );
-                autoInstall(message.machineId, ws);
                 sendFleetSync(message.machineId, ws);
+              }
+              const tools = peekTools(message.payload);
+              if (tools.length > 0) {
+                db.mergeAgentTools(message.machineId, tools);
+                autoInstall(message.machineId, ws);
               }
               // What the machine's own pi and OpenCode stores hold, moved into
               // accounts on each connection and whenever they change under it
