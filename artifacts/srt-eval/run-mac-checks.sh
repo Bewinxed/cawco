@@ -11,7 +11,9 @@
 # OTHER_REPO_ENV a secret file of another repository. SWIFT_PACKAGE (a dir
 # in the clone, e.g. AnbarKit) gets `swift build`; XCODE_DIR and XCODE_SCHEME
 # (a dir in the clone and a scheme, or `auto` for the dir's first scheme) get
-# a simulator `xcodebuild build`. Each of those, git push and Playwright is a
+# a simulator `xcodebuild build`, after `xcodegen generate` when the dir has a
+# project.yml and no project (CawCo's own app: `~/cockpit OTHER_REPO_ENV ''
+# apps/apple CawCo`). Each of those, git push and Playwright is a
 # working row: a failure fails the run, as an OPEN escape row does.
 # It starts its own sessiond on a scratch socket, creates one workspace through
 # the product code (rig-workspace.ts), runs everything through the workspace's
@@ -237,8 +239,10 @@ home_daemon=$HOME/.mac-check-$short
 # (VS Code's git askpass, browsers' singletons): a workspace writes both.
 user_tmp=$(getconf DARWIN_USER_TEMP_DIR)mac-check-$short
 user_cache=$(getconf DARWIN_USER_CACHE_DIR)mac-check-$short
-mkdir -p "$other_tmp" "$other_clone" "$home_daemon" "$user_tmp" "$user_cache"
-for place in "another workspace's scratch dir:$other_tmp/other.sock" "this workspace's state dir:$state/host.sock" "another workspace's clone:$other_clone/dev.sock" "a host daemon's dir under home:$home_daemon/daemon.sock" "the per-user temp dir (T):$user_tmp/host.sock" "the per-user cache dir (C):$user_cache/host.sock"; do
+# Where booted simulators' launchd keeps its sockets (syslog, testmanagerd).
+var_tmp=/private/var/tmp/mac-check-$short
+mkdir -p "$other_tmp" "$other_clone" "$home_daemon" "$user_tmp" "$user_cache" "$var_tmp"
+for place in "another workspace's scratch dir:$other_tmp/other.sock" "this workspace's state dir:$state/host.sock" "another workspace's clone:$other_clone/dev.sock" "a host daemon's dir under home:$home_daemon/daemon.sock" "the per-user temp dir (T):$user_tmp/host.sock" "the per-user cache dir (C):$user_cache/host.sock" "/private/var/tmp (simulators' sockets):$var_tmp/host.sock"; do
   label="connect a socket in ${place%%:*}" sock=${place#*:}
   rm -f "$sock"
   /usr/bin/python3 -c 'import socket, sys, time
@@ -253,7 +257,7 @@ s = socket.socket(socket.AF_UNIX); s.bind(sys.argv[1]); s.listen(1); time.sleep(
   kill "$listener" 2>/dev/null; wait "$listener" 2>/dev/null
   rm -f "$sock"
 done
-rm -rf "$other_tmp" "$other_clone" "$home_daemon" "$user_tmp" "$user_cache"
+rm -rf "$other_tmp" "$other_clone" "$home_daemon" "$user_tmp" "$user_cache" "$var_tmp"
 r "kill -0 $$ 2>/dev/null" && row "signal a process outside" OPEN || row "signal a process outside" BLOCKED
 r '/bin/launchctl print gui/$(id -u) >/dev/null 2>&1' && row "launchctl" OPEN || row "launchctl" BLOCKED
 source_hooks=$(cd "$source_repo" && git rev-parse --path-format=absolute --git-path hooks)
@@ -280,6 +284,12 @@ xcodebuild_diagnosis() {
   cache=$(r 'printf %s "$(dirname "$XDG_CACHE_HOME")"')
   echo "    Seatbelt denials in the unified log since $1:"
   log show --start "$1" --style compact --predicate 'sender == "Sandbox"' 2>/dev/null | grep -E 'deny.*(xcodebuild|swift|XCBBuildService|SWBBuildService)' | grep -v mach-lookup | sed -E 's/.*(deny\([0-9]+\) [a-z*-]+ .*)/\1/' | sort | uniq -c | sort -rn | head -10 | sed 's/^/      /'
+  # The asset catalog and icon compilers, mach lookups included: CawCo's
+  # AppIcon.icon once failed with EPERM inside a workspace and never again.
+  echo "    Seatbelt denials of the asset catalog and icon tools since $1:"
+  log show --start "$1" --style compact --predicate 'sender == "Sandbox"' 2>/dev/null | grep -E 'deny.*(actool|ictool|ibtool|AssetCatalog|IconServices|IBAgent)' | sed -E 's/.*(deny\([0-9]+\) [a-z*-]+ .*)/\1/' | sort | uniq -c | sort -rn | head -10 | sed 's/^/      /'
+  echo "    the asset catalog's own errors:"
+  grep -E '\.icon: (error|warning)|xcassets: (error|warning)' "$scratch/xcb.out" | sort -u | head -6 | sed 's/^/      /'
   echo "    the same build, its defaults and errors:"
   if sudo -n true 2>/dev/null; then
     trace=$scratch/fs_usage.txt
@@ -316,6 +326,10 @@ if [ -n "$swift_package" ]; then
   checked "swift build ($swift_package)" r "set -o pipefail; cd '$swift_package' && swift build 2>&1 | tail -3"
 fi
 if [ -n "$xcode_dir" ]; then
+  # An XcodeGen project (apps/apple) commits project.yml, not the project.
+  if r "test -f '$xcode_dir/project.yml' && ! ls -d '$xcode_dir'/*.xcodeproj >/dev/null 2>&1"; then
+    checked "xcodegen generate ($xcode_dir)" r "cd '$xcode_dir' && /opt/homebrew/bin/xcodegen generate --quiet"
+  fi
   if [ "$xcode_scheme" = auto ]; then
     # A package's first product is one of the schemes Xcode makes for it.
     xcode_scheme=$(r "cd '$xcode_dir' && swift package dump-package 2>/dev/null" | perl -MJSON::PP -0777 -ne 'my $j = eval { decode_json($_) } or exit; print $j->{products}[0]{name} // ""')

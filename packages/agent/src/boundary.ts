@@ -1556,6 +1556,15 @@ done`;
 const LAUNCHD_SOCKETS = "/private/tmp";
 
 /**
+ * Where each booted simulator's launchd keeps its sockets (its syslog,
+ * testmanagerd's, webinspectord's), beside those in {@link LAUNCHD_SOCKETS}.
+ * A workspace writes nothing there, so every socket in it is the host's: a
+ * workspace drives a simulator through CoreSimulator's mach services
+ * (`simctl`), never these.
+ */
+const SIMULATOR_SOCKETS = "/private/var/tmp";
+
+/**
  * A Linux boundary generation's srt temp dir, short (a socket path is capped
  * at 108 bytes, srt #213) and its own (REPORT.md §5o).
  */
@@ -1650,6 +1659,7 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
           dirname(workspacesDir()),
           dirname(sessiondPath()),
           LAUNCHD_SOCKETS,
+          SIMULATOR_SOCKETS,
           // The per-user temp and cache dirs: a workspace writes them for
           // Apple's build tools, and every host app keeps its sockets there
           // (VS Code's git askpass, browsers' singletons, srt's proxies).
