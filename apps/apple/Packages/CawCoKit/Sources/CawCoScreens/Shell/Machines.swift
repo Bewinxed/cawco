@@ -2,6 +2,7 @@ import CawCoAPI
 import CawCoCore
 import CawCoDesign
 import Observation
+import OSLog
 import UIKit
 
 // The machines, one tap away beside Jump (MachinesButton.svelte): the
@@ -238,54 +239,45 @@ protocol MachinesHost: AnyObject {
     var dialogPresenter: UIViewController { get }
 }
 
-/// The machines popover (MachinesButton.svelte): the machines' list
-/// (`MachinesListView`). 320pt wide at most, hung from the button's end; it
-/// opens from 0.97 with no rise over `durMenu` on the out curve (`.machines-pop`).
-final class MachinesPopoverController: KitPopoverController {
-    private weak var host: MachinesHost?
-    private var listView: MachinesListView?
-
-    static let entrance = KitPopover.Entrance(scale: 0.97, rise: 0, duration: Motion.durMenu, curve: Motion.easeOut)
+/// The machines card (MachinesButton.svelte): the machines' list
+/// (`MachinesListView`) on one of the glass's cards (`GlassCard`; DESIGN.md,
+/// "The glass's cards"), 320pt wide at most (`w-[min(20rem,…)]`), as tall
+/// as the list, its content 7pt inside the card's drawn edge. A row's dialog
+/// opens as the card goes back into the glass.
+final class MachinesCard: GlassCard {
+    private let listView: MachinesListView
     private static let inset = 7.0
+    private static let log = Logger(subsystem: "dev.cawco.app", category: "GlassCard")
 
     init(host: MachinesHost) {
-        self.host = host
-        super.init()
+        listView = MachinesListView(host: host)
+        super.init(name: "machines", widest: 320, log: Self.log)
+        card.accessibilityLabel = "Machines"
+        card.accessibilityIdentifier = "machines-card"
+        listView.leave = { [weak self] then in
+            self?.close(refocus: false)
+            then()
+        }
+        listView.onChange = { [weak self] in self?.place(animated: true) }
+        listView.translatesAutoresizingMaskIntoConstraints = true
+        card.content.addSubview(listView)
     }
 
     @available(*, unavailable)
     required init?(coder _: NSCoder) {
-        fatalError("MachinesPopoverController is built in code")
+        fatalError("MachinesCard is built in code")
     }
 
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        view.accessibilityLabel = "Machines"
-        guard let host else { return }
-        let made = MachinesListView(host: host)
-        // A row's dialog opens once the popover has gone.
-        made.leave = { [weak self] then in self?.dismiss(animated: true, completion: then) }
-        made.onChange = { [weak self] in self?.resize() }
-        made.translatesAutoresizingMaskIntoConstraints = false
-        card.addSubview(made)
-        // `padding: 6px` inside the popover's 1px border.
-        NSLayoutConstraint.activate([
-            made.topAnchor.constraint(equalTo: card.topAnchor, constant: Self.inset),
-            made.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: Self.inset),
-            made.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -Self.inset),
-        ])
-        listView = made
-        resize()
+    override func measure(width: CGFloat) -> CGFloat {
+        listView.systemLayoutSizeFitting(CGSize(width: width - Self.inset * 2, height: 0),
+                                         withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height + Self.inset * 2
     }
 
-    /// `w-[min(20rem,calc(100vw-16px))]`, as tall as the list.
-    private func resize() {
-        guard let listView else { return }
-        let width = min(320, (view.window?.bounds.width ?? UIScreen.main.bounds.width) - 16)
-        listView.layoutIfNeeded()
-        let height = listView.systemLayoutSizeFitting(CGSize(width: width - Self.inset * 2, height: 0), withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height + Self.inset * 2
-        preferredContentSize = CGSize(width: width, height: height)
+    override func layContent(width: CGFloat, fit: CGFloat) {
+        listView.frame = CGRect(x: Self.inset, y: Self.inset, width: width - Self.inset * 2, height: fit - Self.inset * 2)
     }
+
+    override var landing: Any? { listView }
 }
 
 /// The machines as a list: each machine (its menu on a long-press or a

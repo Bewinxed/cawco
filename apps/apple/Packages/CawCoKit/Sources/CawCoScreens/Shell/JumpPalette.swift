@@ -2,6 +2,7 @@ import CawCoAPI
 import CawCoCore
 import CawCoDesign
 import Observation
+import OSLog
 import UIKit
 
 // Jump to (JumpPalette.svelte, jump-index.ts, jump-search.svelte.ts): one
@@ -238,33 +239,33 @@ final class JumpSearch {
 
 // MARK: Palette
 
-/// What opened the palette: ⌘K, or the button tapped.
+/// What opened the palette: ⌘K (it stands open and leaves at once), or a
+/// press (on the search glass, or the phone sidebar's search field).
 enum JumpOpener {
     case key
-    case view(UIView)
+    case press(UIView?)
 }
 
-/// The palette (Command.Dialog at 9% from the top, up to 672pt wide, 82%
-/// tall at most): the kit dialog's recess frame 7pt round one sunken well,
-/// cut to the frame's radius less that inset, holding the search line, the
-/// groups and the key hints, each divided by the hairline. From ⌘K it only
-/// fades in over `durControl`, scrim and all; from the Jump button it grows
-/// out of the button from the pop scale and rise over `durPop` on the
-/// drawer curve. Rows that arrive, leave or change rank move as every list
-/// does: moves over `durPanel` in-out, arrivals fading in, leavers out over
-/// `durExit`.
-final class JumpPaletteController: UIViewController, UIViewControllerTransitioningDelegate, UITextFieldDelegate {
+/// The palette (JumpPalette.svelte): one of the glass's cards (`GlassCard`;
+/// DESIGN.md, "The glass's cards"), 672pt wide at most (`min(42rem, …)`),
+/// 82% of the window tall at most, its search line, the groups and the key
+/// hints on the card's own surface inside its one frame, each divided by the
+/// hairline. Non-modal: no scrim, its field takes the focus as it opens, a
+/// press outside closes it and lands, and Escape closes it and gives the
+/// focus back to what had it. Rows that arrive, leave or change rank move as
+/// every list does: moves over `durPanel` in-out, the card's height with
+/// them, arrivals fading in, leavers out over `durExit`.
+final class JumpCard: GlassCard, UITextFieldDelegate {
     var onProject: (String) -> Void = { _ in }
     var onMachine: (String) -> Void = { _ in }
     var onConversation: (String) -> Void = { _ in }
 
     private let hub: HubConnection
     private let home: HomeModel
-    private let opener: JumpOpener
     private let search: JumpSearch
     private var index: JumpIndex
-    private let frameView = UIView()
-    private let well = UIView()
+    private let column = UIStackView()
+    private let footer = UIStackView()
     private let field = UITextField()
     private let chip = UIStackView()
     private let scroll = UIScrollView()
@@ -278,44 +279,20 @@ final class JumpPaletteController: UIViewController, UIViewControllerTransitioni
     private var selectable: [(id: String, action: () -> Void)] = []
     private var selected = 0
 
-    init(hub: HubConnection, home: HomeModel, opener: JumpOpener) {
+    private static let log = Logger(subsystem: "dev.cawco.app", category: "GlassCard")
+    /// A row's inset inside the card's 1pt edge: the list's 4 and the group's 4.
+    private static let listInset = 8.0
+    /// What sits round the list: the card's edge, the search line, the two rules.
+    private static let searchLine = 41.0
+
+    init(hub: HubConnection, home: HomeModel) {
         self.hub = hub
         self.home = home
-        self.opener = opener
         search = JumpSearch(hub: hub)
         index = JumpIndex.build(hub: hub, home: home)
-        super.init(nibName: nil, bundle: nil)
-        modalPresentationStyle = .custom
-        transitioningDelegate = self
-    }
-
-    @available(*, unavailable)
-    required init?(coder _: NSCoder) {
-        fatalError("JumpPaletteController is built in code")
-    }
-
-    private static let inset = 7.0
-    /// A row's inset inside the well's 1pt edge: the list's 4 and the group's 4.
-    private static let listInset = 8.0
-
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        view.backgroundColor = .clear
-        view.accessibilityViewIsModal = true
-        frameView.backgroundColor = Palette.surfaceRecess
-        frameView.layer.cornerRadius = Radius.radiusModal
-        frameView.layer.cornerCurve = .continuous
-        frameView.boxShadow = Shadow.shadowOverlay
-        frameView.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(frameView)
-        well.backgroundColor = Palette.surfaceRecess
-        // `.jump-well`: `calc(var(--radius-lg) - var(--jump-inset))`.
-        well.layer.cornerRadius = Radius.radiusLg - Self.inset
-        well.layer.cornerCurve = .continuous
-        well.layer.borderWidth = 1
-        well.clipsToBounds = true
-        well.translatesAutoresizingMaskIntoConstraints = false
-        frameView.addSubview(well)
+        super.init(name: "jump", widest: 672, log: Self.log)
+        card.accessibilityLabel = "Jump to"
+        card.accessibilityIdentifier = "jump-card"
 
         // The search line: the glyph, the author chip, the field, flex siblings.
         field.font = fieldFont
@@ -335,7 +312,7 @@ final class JumpPaletteController: UIViewController, UIViewControllerTransitioni
         searchRow.isLayoutMarginsRelativeArrangement = true
         searchRow.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: 11, bottom: 0, trailing: 11)
         // `.jump-search { height: 42px }`, its hairline foot included: 41 over the rule.
-        searchRow.heightAnchor.constraint(equalToConstant: 41).isActive = true
+        searchRow.heightAnchor.constraint(equalToConstant: Self.searchLine).isActive = true
 
         list.axis = .vertical
         list.translatesAutoresizingMaskIntoConstraints = false
@@ -348,35 +325,25 @@ final class JumpPaletteController: UIViewController, UIViewControllerTransitioni
         // Where the footer's rule cuts a row the list goes on past, the row fades out, as the rail's does.
         scrollFade = EdgeFade(scroll)
 
-        let footer = UIStackView(arrangedSubviews: [hint("↑↓", "navigate"), hint("↵", "open"), hint("esc", "close"), UIView()])
+        for part in [hint("↑↓", "navigate"), hint("↵", "open"), hint("esc", "close"), UIView()] { footer.addArrangedSubview(part) }
         footer.spacing = 16
         footer.isLayoutMarginsRelativeArrangement = true
         footer.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 7, leading: 12, bottom: 7, trailing: 12)
 
-        let column = UIStackView(arrangedSubviews: [searchRow, rule(), scroll, rule(), footer])
+        for part in [searchRow, rule(), scroll, rule(), footer] { column.addArrangedSubview(part) }
         column.axis = .vertical
         column.translatesAutoresizingMaskIntoConstraints = false
-        well.addSubview(column)
-
-        // `sm:max-w-2xl`: 672pt wherever the window has it; a long row truncates, it never widens the panel.
-        let wanted = frameView.widthAnchor.constraint(equalToConstant: 672)
-        wanted.priority = .required - 1
+        card.content.addSubview(column)
+        // The list gives way first (`listHeight`); a card shorter than the search
+        // line and the hints together cuts the hints off rather than breaking.
+        let foot = column.bottomAnchor.constraint(equalTo: card.content.bottomAnchor, constant: -1)
+        foot.priority = .required - 1
         NSLayoutConstraint.activate([
-            frameView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            wanted,
-            frameView.widthAnchor.constraint(lessThanOrEqualTo: view.widthAnchor, constant: -32),
-            frameView.topAnchor.constraint(equalTo: view.topAnchor, constant: UIScreen.main.bounds.height * 0.09),
-            frameView.heightAnchor.constraint(lessThanOrEqualTo: view.heightAnchor, multiplier: 0.82),
-            frameView.bottomAnchor.constraint(lessThanOrEqualTo: view.keyboardLayoutGuide.topAnchor, constant: -16),
-            well.topAnchor.constraint(equalTo: frameView.topAnchor, constant: Self.inset),
-            well.bottomAnchor.constraint(equalTo: frameView.bottomAnchor, constant: -Self.inset),
-            well.leadingAnchor.constraint(equalTo: frameView.leadingAnchor, constant: Self.inset),
-            well.trailingAnchor.constraint(equalTo: frameView.trailingAnchor, constant: -Self.inset),
-            // Everything stands inside the well's 1pt border.
-            column.topAnchor.constraint(equalTo: well.topAnchor, constant: 1),
-            column.bottomAnchor.constraint(equalTo: well.bottomAnchor, constant: -1),
-            column.leadingAnchor.constraint(equalTo: well.leadingAnchor, constant: 1),
-            column.trailingAnchor.constraint(equalTo: well.trailingAnchor, constant: -1),
+            // Everything stands inside the card's drawn 1pt edge, its one frame.
+            column.topAnchor.constraint(equalTo: card.content.topAnchor, constant: 1),
+            foot,
+            column.leadingAnchor.constraint(equalTo: card.content.leadingAnchor, constant: 1),
+            column.trailingAnchor.constraint(equalTo: card.content.trailingAnchor, constant: -1),
             listHeight,
             // `.jump-list` pads 4 and each group 4 more.
             list.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor, constant: Self.listInset),
@@ -384,21 +351,52 @@ final class JumpPaletteController: UIViewController, UIViewControllerTransitioni
             list.leadingAnchor.constraint(equalTo: scroll.frameLayoutGuide.leadingAnchor, constant: Self.listInset),
             list.trailingAnchor.constraint(equalTo: scroll.frameLayoutGuide.trailingAnchor, constant: -Self.listInset),
         ])
-        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (palette: JumpPaletteController, _: UITraitCollection) in palette.paint() }
-        paint()
         placeholder()
         render(animated: false)
-        follow()
+        watchFleet()
     }
 
-    override func viewWillAppear(_ animated: Bool) {
-        super.viewWillAppear(animated)
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        fatalError("JumpCard is built in code")
+    }
+
+    // MARK: The glass's card
+
+    /// What had the focus as it opened, which has it back on Escape.
+    private weak var returnTo: UIResponder?
+
+    /// Its field takes the focus.
+    override func opened() {
+        let current = UIResponder.current
+        if current !== field { returnTo = current }
         field.becomeFirstResponder()
     }
 
-    private func paint() {
-        well.layer.borderColor = Palette.borderHairline.resolvedColor(with: traitCollection).cgColor
+    override func closing() {
+        if field.isFirstResponder { field.resignFirstResponder() }
     }
+
+    override var landing: Any? { field }
+
+    #if DEBUG
+    /// Its field has the keyboard (a probe pass reads this).
+    var fieldFocused: Bool { field.isFirstResponder }
+    #endif
+
+    /// The search line, the list at its own height, the hints, the two rules and the edge.
+    override func measure(width: CGFloat) -> CGFloat {
+        let foot = footer.systemLayoutSizeFitting(CGSize(width: width - 2, height: 0), withHorizontalFittingPriority: .required,
+                                                  verticalFittingPriority: .fittingSizeLevel).height
+        return 2 + Self.searchLine + 1 + naturalHeight(width: width - 2) + 1 + foot
+    }
+
+    override func layContent(width: CGFloat, fit _: CGFloat) {
+        listHeight.constant = naturalHeight(width: width - 2)
+    }
+
+    /// `max-height: 82vh`.
+    override func tallest(in host: UIView) -> CGFloat { host.bounds.height * 0.82 }
 
     private func rule() -> UIView {
         let line = UIView()
@@ -435,7 +433,11 @@ final class JumpPaletteController: UIViewController, UIViewControllerTransitioni
     /// `.jump-field` is body type; under a finger every field is 16pt
     /// (app.css, `pointer: coarse`: `font-size: 16px`).
     private var fieldFont: UIFont {
-        traitCollection.userInterfaceIdiom == .mac ? TypeScale.typeBody.font : TypeScale.typeBody.font(16)
+        #if targetEnvironment(macCatalyst)
+        TypeScale.typeBody.font
+        #else
+        TypeScale.typeBody.font(16)
+        #endif
     }
 
     private func placeholder() {
@@ -444,7 +446,7 @@ final class JumpPaletteController: UIViewController, UIViewControllerTransitioni
     }
 
     /// Follows the fleet and the search while the palette is up.
-    private func follow() {
+    private func watchFleet() {
         withObservationTracking {
             _ = search.hits
             _ = search.pending
@@ -455,7 +457,7 @@ final class JumpPaletteController: UIViewController, UIViewControllerTransitioni
                 guard let self else { return }
                 self.index = JumpIndex.build(hub: self.hub, home: self.home)
                 self.render(animated: true)
-                self.follow()
+                self.watchFleet()
             }
         }
     }
@@ -554,7 +556,7 @@ final class JumpPaletteController: UIViewController, UIViewControllerTransitioni
     override var keyCommands: [UIKeyCommand]? {
         let up = UIKeyCommand(input: UIKeyCommand.inputUpArrow, modifierFlags: [], action: #selector(moveUp))
         let down = UIKeyCommand(input: UIKeyCommand.inputDownArrow, modifierFlags: [], action: #selector(moveDown))
-        let escape = UIKeyCommand(input: UIKeyCommand.inputEscape, modifierFlags: [], action: #selector(close))
+        let escape = UIKeyCommand(input: UIKeyCommand.inputEscape, modifierFlags: [], action: #selector(leaveByKey))
         for command in [up, down, escape] { command.wantsPriorityOverSystemBehavior = true }
         return [up, down, escape]
     }
@@ -562,10 +564,18 @@ final class JumpPaletteController: UIViewController, UIViewControllerTransitioni
     /// The list loops (`loop`): past either end comes round to the other.
     @objc private func moveUp() { select(selected - 1) }
     @objc private func moveDown() { select(selected + 1) }
-    @objc private func close() { dismiss(animated: true) }
+
+    /// Escape or ⌘K, keys: it goes at once, and the focus goes back to what had it.
+    @objc func leaveByKey() {
+        let back = returnTo
+        close(instant: true, refocus: false)
+        back?.becomeFirstResponder()
+    }
 
     override func accessibilityPerformEscape() -> Bool {
+        let back = returnTo
         close()
+        back?.becomeFirstResponder()
         return true
     }
 
@@ -624,8 +634,8 @@ final class JumpPaletteController: UIViewController, UIViewControllerTransitioni
                 sections.append((key: "group:hits", heading: heading, items: search.hits.map { hit in
                     (id: "hit:\(hit.docId)", make: { [weak self] in self?.hitItem(hit) ?? UIView() }, action: { [weak self] in
                         guard let self else { return }
+                        close(refocus: false)
                         onConversation(hub.fleet.conversationId(sessionKey: hit.sessionId, machineId: hit.machineId, cwd: hit.cwd))
-                        dismiss(animated: true)
                     })
                 }))
             }
@@ -679,7 +689,7 @@ final class JumpPaletteController: UIViewController, UIViewControllerTransitioni
         selectable = actions
         selected = min(selected, max(0, actions.count - 1))
 
-        let still = !animated || UIAccessibility.isReduceMotionEnabled || view.window == nil
+        let still = !animated || UIAccessibility.isReduceMotionEnabled || window == nil
         // Leavers fade where they stand over `durExit`.
         for gone in leaving {
             let frame = gone.convert(gone.bounds, to: scroll)
@@ -703,50 +713,43 @@ final class JumpPaletteController: UIViewController, UIViewControllerTransitioni
         }
         for row in arriving.compactMap({ built[$0] }) where !still { row.alpha = 0 }
         paintSelection()
-        listHeight.constant = naturalHeight()
         if still {
-            view.layoutIfNeeded()
+            place()
+            // Before it hangs it has no size to lay its rows out in.
+            if window != nil { layoutIfNeeded() }
             for row in arriving.compactMap({ built[$0] }) { row.alpha = 1 }
             return
         }
-        Motion.easeInOut.animator(Motion.durPanel) { self.view.layoutIfNeeded() }.startAnimation()
+        // The rows move and the card's height follows them, on one clock.
+        Motion.easeInOut.animator(Motion.durPanel) {
+            self.place()
+            self.layoutIfNeeded()
+        }.startAnimation()
         Motion.easeOut.animator(Motion.durPop) {
             for row in arriving.compactMap({ built[$0] }) { row.alpha = 1 }
         }.startAnimation()
     }
 
-    /// The list's own height at the scroller's width. A row's height follows
-    /// its width (a fact that can't stand beside the name goes under it), so
-    /// each row is fitted to the width first.
-    private func naturalHeight() -> CGFloat {
-        let width = max(1, scroll.bounds.width - Self.listInset * 2)
+    /// The list's own height inside the card's `width` (its edge in). A row's
+    /// height follows its width (a fact that can't stand beside the name goes
+    /// under it), so each row is fitted to the width first.
+    private func naturalHeight(width: CGFloat) -> CGFloat {
+        let inner = max(1, width - Self.listInset * 2)
         // A row stands 10pt inside its item at either side (JumpItemView).
         func fit(_ view: UIView) {
-            if let row = view as? JumpRowView { row.fit(width - 20) }
+            if let row = view as? JumpRowView { row.fit(inner - 20) }
             view.subviews.forEach(fit)
         }
         fit(list)
-        return list.systemLayoutSizeFitting(CGSize(width: width, height: 0), withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height + Self.listInset * 2
-    }
-
-    private var measuredWidth: CGFloat = 0
-
-    override func viewDidLayoutSubviews() {
-        super.viewDidLayoutSubviews()
-        // The first render ran before the panel had its width: measure again at the width it has.
-        guard abs(scroll.bounds.width - measuredWidth) > 0.5 else { return }
-        measuredWidth = scroll.bounds.width
-        listHeight.constant = naturalHeight()
+        return list.systemLayoutSizeFitting(CGSize(width: inner, height: 0), withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height + Self.listInset * 2
     }
 
     private func go(_ target: JumpTarget) {
-        dismiss(animated: true) { [weak self] in
-            guard let self else { return }
-            switch target {
-            case let .project(id): onProject(id)
-            case let .machine(id): onMachine(id)
-            case let .conversation(id): onConversation(id)
-            }
+        close(refocus: false)
+        switch target {
+        case let .project(id): onProject(id)
+        case let .machine(id): onMachine(id)
+        case let .conversation(id): onConversation(id)
         }
     }
 
@@ -884,21 +887,6 @@ final class JumpPaletteController: UIViewController, UIViewControllerTransitioni
         return column
     }
 
-    // MARK: Presentation
-
-    func presentationController(forPresented presented: UIViewController, presenting: UIViewController?, source _: UIViewController) -> UIPresentationController? {
-        ScrimPresentation(presentedViewController: presented, presenting: presenting) { [weak self] in self?.dismiss(animated: true) }
-    }
-
-    func animationController(forPresented _: UIViewController, presenting _: UIViewController, source _: UIViewController) -> (any UIViewControllerAnimatedTransitioning)? {
-        JumpAnimator(presenting: true, opener: opener)
-    }
-
-    func animationController(forDismissed _: UIViewController) -> (any UIViewControllerAnimatedTransitioning)? {
-        JumpAnimator(presenting: false, opener: opener)
-    }
-
-    fileprivate var panel: UIView { frameView }
 }
 
 /// A row: the mark, the name and its trailing fact, and the command item's
@@ -1027,59 +1015,5 @@ private final class JumpItemView: TapControl {
             self.backgroundColor = on ? Palette.surfaceHover : .clear
         }.startAnimation()
         accessibilityTraits = selectedRow ? [.button, .selected] : .button
-    }
-}
-
-/// ⌘K fades the palette in over `durControl`; the Jump button grows it out
-/// of the button from the pop scale and rise over `durPop` on the drawer
-/// curve. It leaves over `durExit`.
-private final class JumpAnimator: NSObject, UIViewControllerAnimatedTransitioning {
-    private let presenting: Bool
-    private let opener: JumpOpener
-
-    init(presenting: Bool, opener: JumpOpener) {
-        self.presenting = presenting
-        self.opener = opener
-    }
-
-    private var pops: Bool {
-        if case .view = opener { return !UIAccessibility.isReduceMotionEnabled }
-        return false
-    }
-
-    func transitionDuration(using _: (any UIViewControllerContextTransitioning)?) -> TimeInterval {
-        presenting ? (pops ? Motion.durPop : Motion.durControl) : Motion.durExit
-    }
-
-    func animateTransition(using context: any UIViewControllerContextTransitioning) {
-        let key: UITransitionContextViewKey = presenting ? .to : .from
-        guard let view = context.view(forKey: key),
-              let palette = context.viewController(forKey: presenting ? .to : .from) as? JumpPaletteController else {
-            context.completeTransition(true)
-            return
-        }
-        if presenting {
-            view.frame = context.containerView.bounds
-            context.containerView.addSubview(view)
-            view.layoutIfNeeded()
-            view.alpha = 0
-            if pops, case let .view(source) = opener {
-                // Scaled about the button's centre: the panel's own centre moved
-                // there, scaled, and moved back, so its layout is never touched.
-                let panel = palette.panel
-                let from = source.convert(CGPoint(x: source.bounds.midX, y: source.bounds.midY), to: panel)
-                let dx = from.x - panel.bounds.midX
-                let dy = from.y - panel.bounds.midY
-                let scale = Motion.popScale
-                panel.transform = CGAffineTransform(translationX: dx * (1 - scale), y: dy * (1 - scale) - Motion.popRise).scaledBy(x: scale, y: scale)
-            }
-        }
-        let curve = presenting && pops ? Motion.easeDrawer : Motion.easeOut
-        let animator = curve.animator(transitionDuration(using: context)) { [presenting] in
-            view.alpha = presenting ? 1 : 0
-            if presenting { palette.panel.transform = .identity }
-        }
-        animator.addCompletion { _ in context.completeTransition(!context.transitionWasCancelled) }
-        animator.startAnimation()
     }
 }

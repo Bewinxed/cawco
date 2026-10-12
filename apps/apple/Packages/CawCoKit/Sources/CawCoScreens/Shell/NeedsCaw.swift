@@ -294,14 +294,16 @@ final class NeedsCawButton: UIControl {
     /// His panel hangs from his glass (true) or folds back (false): the
     /// lower half of his rim fades out over `durPop` as it grows and back
     /// over `durExit` as it folds, on `easeOut`, on the panel's clock.
-    func setJoined(_ on: Bool) {
+    /// `instant`: the arcs change at once, with a card opened or closed by the keyboard.
+    func setJoined(_ on: Bool, instant: Bool = false) {
         let target: Float = on ? 0 : 1
         let now = lowerHalf.presentation()?.opacity ?? lowerHalf.opacity
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         lowerHalf.opacity = target
         CATransaction.commit()
-        guard window != nil, now != target else { return }
+        if instant { lowerHalf.removeAnimation(forKey: "joined") }
+        guard !instant, window != nil, now != target else { return }
         let fade = CABasicAnimation(keyPath: "opacity")
         fade.fromValue = now
         fade.toValue = target

@@ -542,8 +542,9 @@ final class TopBarCluster: UIView {
     var leadingEdge: Double { stack.frame.minX }
 
     #if DEBUG
-    /// The Machines item, which a Mac pass (`-mac-probe`) opens its popover from.
+    /// The Machines and Search items, which a probe pass opens their cards from.
     var machinesItem: UIView { machines }
+    var jumpItem: UIView { jump }
     #endif
 
     init() {

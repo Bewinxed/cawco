@@ -114,9 +114,18 @@ public final class GlassCapsule: UIView {
     /// folds, on `easeOut`; the glass's own edge gives way on the same clock.
     public private(set) var joined = false
 
-    public func setJoined(_ on: Bool) {
+    /// `instant`: the join changes at once, with a card opened or closed by the keyboard.
+    public func setJoined(_ on: Bool, instant: Bool = false) {
         guard on != joined else { return }
         joined = on
+        if instant {
+            layer.removeAnimation(forKey: "borderColor")
+            tuckedEdge.removeAnimation(forKey: "opacity")
+            join.layer.removeAllAnimations()
+            paint()
+            join.alpha = on ? 1 : 0
+            return
+        }
         let duration = on ? Motion.durPop : Motion.durExit
         let fromBorder = layer.presentation()?.borderColor ?? layer.borderColor
         let fromEdge = tuckedEdge.presentation()?.opacity ?? tuckedEdge.opacity

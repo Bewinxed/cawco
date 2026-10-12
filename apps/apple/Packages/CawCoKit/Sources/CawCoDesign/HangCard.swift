@@ -305,13 +305,22 @@ public final class HangCard: UIView {
         }
     }
 
-    /// Comes down out of the anchor (`durPop`, `easeOut`), from wherever it stands.
-    public func grow() {
+    /// Comes down out of the anchor (`durPop`, `easeOut`), from wherever it
+    /// stands; `instant` (a keyboard's open: "Never animate keyboard-initiated
+    /// actions") stands it there at once.
+    public func grow(instant: Bool = false) {
         generation += 1
         shown = true
         layoutIfNeeded()
         let wasHidden = isHidden
         isHidden = false
+        if instant {
+            hold()
+            alpha = 1
+            share = 1
+            draw(1)
+            return
+        }
         if UIAccessibility.isReduceMotionEnabled {
             hold()
             share = 1
@@ -330,11 +339,19 @@ public final class HangCard: UIView {
         run(Motion.easeOut.animator(Motion.durPop), to: 1)
     }
 
-    /// Goes back up into the anchor (`durExit`, `easeOut`); `done` once it is shut and hidden.
-    public func fold(done: @escaping () -> Void = {}) {
+    /// Goes back up into the anchor (`durExit`, `easeOut`); `done` once it is
+    /// shut and hidden. `instant`: gone at once, as a keyboard's close is.
+    public func fold(instant: Bool = false, done: @escaping () -> Void = {}) {
         generation += 1
         shown = false
         let finish = shut(generation, done: done)
+        if instant {
+            hold()
+            share = 0
+            draw(0)
+            finish()
+            return
+        }
         if UIAccessibility.isReduceMotionEnabled {
             let fade = Motion.easeOut.animator(Motion.durExit) { self.alpha = 0 }
             fade.addCompletion { _ in finish() }

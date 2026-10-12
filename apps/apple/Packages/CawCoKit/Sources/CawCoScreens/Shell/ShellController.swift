@@ -166,15 +166,17 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         railToggle.label = "Hide sidebar"
         railToggle.addAction(UIAction { [weak self] _ in self?.toggleRail() }, for: .primaryActionTriggered)
         for cluster in [mainCluster, compactCluster, sessionCluster] {
-            cluster.onJump = { [weak self] source in self?.openJump(.view(source)) }
+            cluster.onJump = { [weak self] source in self?.openJump(.press(source)) }
             cluster.onMachines = { [weak self] source in self?.openMachines(from: source) }
             cluster.onCaw = { [weak self, weak cluster] head in
                 guard let self, let cluster else { return }
                 // It hangs from the glass he stands on: his own tab on a phone, the bar's group on a wide screen.
-                if cawPanel.open { cawPanel.close() } else { cawPanel.show(from: head, glass: cluster.glass) }
+                if cawPanel.open { cawPanel.close() } else { stand(cawPanel, head: head, glass: cluster.glass, instant: false) }
             }
             cluster.onCawPull = { [weak self, weak cluster] head, pan in
                 guard let self, let cluster else { return }
+                // A pull that brings his panel out folds whichever card stood.
+                if pan.state == .began { foldCards(except: cawPanel, instant: false) }
                 cawPanel.pulled(pan, from: head, glass: cluster.glass)
             }
         }
@@ -226,6 +228,9 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             #if DEBUG
             openProbeForm()
             runMacProbe()
+            #if !targetEnvironment(macCatalyst)
+            runHangProbe()
+            #endif
             #endif
         }
         // Apart from the bars: a pulse of a conversation in front wakes only this read.
@@ -468,6 +473,9 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         #if DEBUG
         openProbeForm()
         runMacProbe()
+        #if !targetEnvironment(macCatalyst)
+        runHangProbe()
+        #endif
         if ProcessInfo.processInfo.arguments.contains("-shell-probe"), shellProbe == nil {
             shellProbe = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
                 MainActor.assumeIsolated { self?.probeShell() }
@@ -647,27 +655,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
                 let railPoint = rail.view.convert(CGPoint(x: rail.view.bounds.midX, y: 160), to: window)
                 let railHit = window.hitTest(railPoint, with: nil)
                 say("\(name) rail \(box(rail.view.convert(rail.view.bounds, to: window))) hit at \(railPoint) lands in rail \(railHit?.isDescendant(of: rail.view) == true) (\(railHit.map { "\(type(of: $0))" } ?? "nil"))")
-                cawPanel.show(from: mainCluster.caw, glass: mainCluster.glass)
-                try? await Task.sleep(for: .seconds(0.8))
-                let glass = mainCluster.glass.convert(mainCluster.glass.bounds, to: window)
-                let panel = cawPanel.convert(cawPanel.bounds, to: window)
-                say("\(name) caw glass \(box(glass)) panel \(box(panel)) panel top on glass foot \(abs(panel.minY - glass.maxY) < 1) trailing flush \(abs(panel.maxX - glass.maxX) < 1)")
-                snap("\(name)-caw-panel")
-                cawPanel.close()
-                try? await Task.sleep(for: .seconds(0.6))
-                let item = mainCluster.machinesItem
-                openMachines(from: item)
-                try? await Task.sleep(for: .seconds(1))
-                let anchor = item.convert(item.bounds, to: window)
-                if let card = presentedViewController?.view {
-                    let popover = card.convert(card.bounds, to: window)
-                    say("\(name) machines item \(box(anchor)) popover \(box(popover)) below item \(popover.minY >= anchor.maxY) trailing on item's \(abs(popover.maxX - anchor.maxX) < 1)")
-                } else {
-                    say("\(name) machines popover did not present")
-                }
-                snap("\(name)-machines")
-                dismiss(animated: false)
-                try? await Task.sleep(for: .seconds(0.6))
+                await probeGlassCards(window: window, say: { say("\(name) \($0)") }, snap: { snap("\(name)-\($0)") })
             }
             let frame = scene.effectiveGeometry.systemFrame
             scene.requestGeometryUpdate(.Mac(systemFrame: CGRect(x: frame.minX, y: frame.minY, width: 640, height: 820)))
@@ -680,6 +668,86 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         }
         #endif
     }
+
+    /// The glass's three cards in turn, the way a press opens each (DESIGN.md,
+    /// "The glass's cards"), printing per card where it hangs against the
+    /// glass (its top on the glass's foot, its trailing edge flush within 1pt,
+    /// the neck's span the glass's), how many cards stand, and Jump's focus:
+    /// Caw's panel; the machines over it (where the bar has their glass);
+    /// Jump over them. Then ⌘K: Jump goes at once and stands again at once,
+    /// read in the same turn as the key, with no frame between.
+    private func probeGlassCards(window: UIWindow, say: (String) -> Void, snap: (String) -> Void) async {
+        func box(_ r: CGRect) -> String { String(format: "x %.1f y %.1f w %.1f h %.1f (maxX %.1f)", r.minX, r.minY, r.width, r.height, r.maxX) }
+        func row(_ card: GlassCard) {
+            guard let glass = card.glass else { return say("\(card.name) not hung") }
+            let cap = view.convert(GlassCard.restingBox(of: glass, under: card.head, in: view), to: window)
+            let drawn = card.convert(card.bounds, to: window)
+            let neck = card.card.neck
+            let edge = compact ? window.bounds.maxX - window.safeAreaInsets.right : cap.maxX
+            say("\(card.name) glass \(box(cap)) card \(box(drawn)) top on the glass's foot \(abs(drawn.minY - (cap.maxY + glass.neck)) < 0.5) (neck \(glass.neck)) trailing flush \(abs(drawn.maxX - cap.maxX) <= 1) (screen edge \(abs(drawn.maxX - edge) <= 1)) neck span \(neck.end - neck.start) glass span \(cap.width) equal \(abs((neck.end - neck.start) - cap.width) < 0.5) flare \(neck.flareStart) flush end \(neck.flush == .end) glass joined \(glass.joined)")
+            say("cards standing \(glassCards.filter(\.open).map(\.name)) one at a time \(glassCards.filter(\.open).count == 1)")
+        }
+        let cluster = frontCluster
+        stand(cawPanel, head: cluster.caw, glass: cluster.glass, instant: false)
+        try? await Task.sleep(for: .seconds(0.8))
+        row(cawPanel)
+        snap("caw-panel")
+        if !compact {
+            openMachines(from: mainCluster.machinesItem)
+            try? await Task.sleep(for: .seconds(0.8))
+            say("caw's panel folded for the machines \(!cawPanel.open)")
+            if let machinesCard { row(machinesCard) }
+            snap("machines")
+        }
+        openJump(.press(compact ? nil : mainCluster.jumpItem))
+        try? await Task.sleep(for: .seconds(0.8))
+        say("the machines folded for Jump \(machinesCard?.open != true) caw's panel shut \(!cawPanel.open)")
+        if let jumpCard {
+            row(jumpCard)
+            say("jump field focused \(jumpCard.fieldFocused)")
+        }
+        snap("jump")
+        // ⌘K: read in the same turn as the key, before any frame is drawn.
+        openJump(.key)
+        say("cmd-k close: jump hidden at once \(jumpCard?.isHidden ?? true) glass joined \(cluster.glass.joined)")
+        openJump(.key)
+        let instant = jumpCard.map { !$0.isHidden && $0.card.revealed >= 1 } ?? false
+        say("cmd-k open: jump standing at once \(instant) revealed \(jumpCard?.card.revealed ?? 0) glass joined \(cluster.glass.joined) field focused \(jumpCard?.fieldFocused ?? false)")
+        try? await Task.sleep(for: .seconds(0.4))
+        snap("jump-by-key")
+        jumpCard?.leaveByKey()
+        try? await Task.sleep(for: .seconds(0.6))
+    }
+
+    #if !targetEnvironment(macCatalyst)
+    /// A simulator pass's `-hang-probe`: once the fleet is read, the glass's
+    /// cards (`probeGlassCards`), each capture saved into the app's
+    /// temporary folder under `hang/`, every line in the Probe log.
+    private var hangProbeRan = false
+
+    private func runHangProbe() {
+        guard ProcessInfo.processInfo.arguments.contains("-hang-probe"), !hangProbeRan, home.ready, let window = view.window else { return }
+        hangProbeRan = true
+        let dir = FileManager.default.temporaryDirectory.appending(path: "hang")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let style = traitCollection.userInterfaceStyle == .dark ? "dark" : "light"
+        let device = traitCollection.userInterfaceIdiom == .pad ? "ipad" : "iphone"
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            func say(_ line: String) { Logger(subsystem: "dev.cawco.app", category: "Probe").notice("hang \(line, privacy: .public)") }
+            func snap(_ name: String) {
+                let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
+                    _ = window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+                }
+                try? image.pngData()?.write(to: dir.appending(path: "\(device)-\(style)-\(name).png"))
+            }
+            try? await Task.sleep(for: .seconds(3))
+            say("\(device) \(style) window \(window.bounds) compact \(compact)")
+            await probeGlassCards(window: window, say: say, snap: snap)
+            say("done \(dir.path)")
+        }
+    }
+    #endif
 
     /// The first tab on screen in the phone's row.
     private static func firstTab(in view: UIView) -> TabView? {
@@ -715,10 +783,12 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         barTabs.relayout()
         placeGrip()
         // The split view lays its columns over what else is in its view on
-        // every pass (the grip brings itself back the same way): Caw's panel
-        // stays over all of them, under him wherever he now stands.
-        view.bringSubviewToFront(cawPanel)
-        cawPanel.follow()
+        // every pass (the grip brings itself back the same way): a card of
+        // the glass stays over all of them, under the glass wherever it now stands.
+        for card in glassCards where !card.isHidden {
+            view.bringSubviewToFront(card)
+            card.follow()
+        }
     }
 
     static func clamp(_ width: Double) -> Double { min(railMax, max(railMin, width.rounded())) }
@@ -1034,8 +1104,8 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     // MARK: Rail
 
     private func showRailSheet() {
-        // The sidebar comes over the page: Caw's panel does not stay open under it.
-        cawPanel.close()
+        // The sidebar comes over the page: no card of the glass stays open under it.
+        for card in glassCards { card.close(refocus: false) }
         let sheet: SidebarViewController
         if let kept = keptRailSheet {
             sheet = kept
@@ -1236,26 +1306,84 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         dialogPresenter.present(sheet, animated: true)
     }
 
-    /// The phone sheet's Search: the sheet steps aside, and Jump opens over the page.
+    /// The phone sheet's Search: the sheet steps aside, and Jump comes down
+    /// out of the glass Caw stands on.
     func search() {
         if let sheet = railSheet {
-            sheet.dismiss(animated: true) { [weak self] in self?.openJump(.key) }
+            sheet.dismiss(animated: true) { [weak self] in self?.openJump(.press(nil)) }
         } else {
-            openJump(.key)
+            openJump(.press(nil))
         }
     }
 
-    /// Jump to (JumpPalette): ⌘K toggles it; the Jump button grows it out of itself.
+    // MARK: The glass's cards
+
+    /// The machines and Jump, each made for an opening and gone once shut;
+    /// Caw's panel stays for the window's life.
+    private var machinesCard: MachinesCard?
+    private var jumpCard: JumpCard?
+    private var glassCards: [GlassCard] { [cawPanel, machinesCard, jumpCard].compactMap(\.self) }
+
+    /// The bar in front, whose glass the cards hang from: a wide screen's
+    /// glass group; on a phone Caw's tab, on the conversations' row or the board's bar.
+    private var frontCluster: TopBarCluster {
+        guard compact else { return mainCluster }
+        return compactNav.topViewController === workspaceController ? sessionCluster : compactCluster
+    }
+
+    /// Every card standing but `kept` goes back into the glass on its own clock (at once for a key).
+    private func foldCards(except kept: GlassCard, instant: Bool) {
+        for other in glassCards where other !== kept && other.open {
+            other.close(instant: instant, refocus: false)
+        }
+    }
+
+    /// One of the glass's cards stands open at a time (DESIGN.md, "The
+    /// glass's cards"): `next` comes down while the one standing folds back
+    /// into the glass, each on its own clock; opened by a key, both at once.
+    private func stand(_ next: GlassCard, head: NeedsCawButton, glass: GlassCapsule, instant: Bool) {
+        foldCards(except: next, instant: instant)
+        next.show(from: head, glass: glass, instant: instant)
+    }
+
+    /// A card made for one opening joins the shell over its columns, and leaves it once shut.
+    private func mount(_ card: GlassCard) {
+        view.addSubview(card)
+        card.dismissal(in: view)
+        card.onShut = { [weak self, weak card] in
+            guard let self, let card else { return }
+            card.detach()
+            if card === machinesCard { machinesCard = nil }
+            if card === jumpCard { jumpCard = nil }
+        }
+    }
+
+    /// Jump to (JumpPalette): the search glass and ⌘K open and close it. A
+    /// press brings it down out of the glass; ⌘K stands it open at once.
     func openJump(_ opener: JumpOpener) {
-        if let up = dialogPresenter as? JumpPaletteController {
-            up.dismiss(animated: true)
+        let instant: Bool
+        let trigger: UIView?
+        switch opener {
+        case .key: (instant, trigger) = (true, nil)
+        case let .press(source): (instant, trigger) = (false, source)
+        }
+        if let open = jumpCard, open.open {
+            if instant { open.leaveByKey() } else { open.close() }
             return
         }
-        let palette = JumpPaletteController(hub: hub, home: home, opener: opener)
-        palette.onProject = { [weak self] id in self?.go(.project(id)) }
-        palette.onMachine = { [weak self] id in self?.startSession(machineId: id, cwd: nil, projectId: nil) }
-        palette.onConversation = { [weak self] id in self?.openSession(id) }
-        dialogPresenter.present(palette, animated: true)
+        // One still folding back comes down again from where it has reached.
+        let card = jumpCard ?? {
+            let made = JumpCard(hub: hub, home: home)
+            made.onProject = { [weak self] id in self?.go(.project(id)) }
+            made.onMachine = { [weak self] id in self?.startSession(machineId: id, cwd: nil, projectId: nil) }
+            made.onConversation = { [weak self] id in self?.openSession(id) }
+            mount(made)
+            jumpCard = made
+            return made
+        }()
+        card.trigger = trigger
+        let cluster = frontCluster
+        stand(card, head: cluster.caw, glass: cluster.glass, instant: instant)
     }
 
     // MARK: Keys (Shell.svelte `shortcut`): none of them while the reader is typing.
@@ -1274,6 +1402,11 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
 
     /// The menu bar's commands and their keys; every one stands down while the reader is typing.
     func perform(_ command: RootViewController.ShellCommand) {
+        // ⌘K closes Jump at once, its own field typing or not.
+        if command == .jump, let card = jumpCard, card.open {
+            card.leaveByKey()
+            return
+        }
         guard !UIResponder.isTyping, can(command) else { return }
         switch command {
         case .jump: openJump(.key)
@@ -1295,10 +1428,21 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         return [escape]
     }
 
-    /// MachinesButton's popover, hung from the button's end.
+    /// MachinesButton's card, on the glass the button stands in; the button opens and closes it.
     private func openMachines(from source: UIView) {
-        KitPopover.present(MachinesPopoverController(host: self), from: source, in: self, align: .end,
-                           entrance: MachinesPopoverController.entrance)
+        if let open = machinesCard, open.open {
+            open.close()
+            return
+        }
+        let card = machinesCard ?? {
+            let made = MachinesCard(host: self)
+            mount(made)
+            machinesCard = made
+            return made
+        }()
+        card.trigger = source
+        let cluster = frontCluster
+        stand(card, head: cluster.caw, glass: cluster.glass, instant: false)
     }
 
     /// Connect a machine (AddMachineDialog), over whatever is up.
@@ -1825,9 +1969,15 @@ extension UIResponder {
 
     /// typing.ts `isTyping`: a text field or text view has the keyboard.
     static var isTyping: Bool {
+        let now = current
+        return now is UITextField || now is UITextView
+    }
+
+    /// What has the keyboard's focus now, if anything does.
+    static var current: UIResponder? {
         found = nil
         UIApplication.shared.sendAction(#selector(UIResponder.reportFirstResponder), to: nil, from: nil, for: nil)
-        return found is UITextField || found is UITextView
+        return found
     }
 
     @objc private func reportFirstResponder() {
