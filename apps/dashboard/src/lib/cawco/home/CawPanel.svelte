@@ -127,8 +127,6 @@
   }
 </script>
 
-<!-- The panel's surface, over its drawn shadow (NeedsCaw, motion/hung-shadow). -->
-<span aria-hidden="true" class="hung-surface"></span>
 <!-- More than the panel holds: the house edge fade at the foot while more
      is below, and at the head once scrolled. -->
 <div
@@ -220,47 +218,21 @@
 </div>
 
 <style>
-  /* The panel hangs from his glass (`kit-hang`): its edge is the recipe's
-     `::after`, drawn inside its box over the kit's 6px pad, so the pad
-     takes the border's pixel back and the rows stand where they did. Its
-     top shows its own surface across the cut, so its shadow has no night
-     ring (`shadow-overlay-hung`): the ring is the edge's own pixel, hidden
-     under the drawn edge, and across the cut (and down a phone's screen
-     edge, where no edge is drawn) it was a seam. That shadow is a picture
-     NeedsCaw draws once (motion/hung-shadow) and lays round the panel as
-     its border-image, not a box-shadow: WebKit blurred the whole panel again
-     on every open, in the frame its slide started on. */
+  /* The panel hangs from his glass (a HangCard on the glass: `kit-hang`
+     and `glass-card` in app.css draw its edge, its cut, its hung shadow and
+     its phone's square trailing side). Its rows stand 7px in from its drawn
+     edge. On a phone it keeps the phone's 12px margin on its leading side. */
   :global(.kit-pop.caw-pop) {
     width: min(var(--c-panel-w), calc(100vw - 24px));
     padding: 7px;
-    box-shadow: none;
   }
-  /* On a phone his glass is a tab tucked into the screen's trailing edge,
-     and the panel hanging from it is too: its trailing side is the screen's
-     edge, square and with no edge drawn there, as his glass's, and it keeps
-     the phone's 12px margin on its leading side. */
   @media (max-width: 899px) {
     :global(.kit-pop.caw-pop) {
       width: min(
         var(--c-panel-w),
         calc(100vw - 12px - env(safe-area-inset-right, 0px))
       );
-      border-end-end-radius: 0;
     }
-    :global(.kit-pop.caw-pop)::after {
-      border-inline-end-width: 0;
-    }
-  }
-  /* The panel's surface: the card's own box and corners, under its rows and
-     over the shadow picture the card wears as its border-image, which a box
-     paints over its background (motion/hung-shadow). */
-  .hung-surface {
-    position: absolute;
-    inset: 0;
-    z-index: -1;
-    border-radius: inherit;
-    background: var(--hang-surface);
-    pointer-events: none;
   }
   /* The kit's edge fade at its full length on every width: a phone's short
      fade (the recipe's, for a narrow track's edge) lands in the gap between

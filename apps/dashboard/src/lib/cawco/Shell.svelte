@@ -33,20 +33,24 @@
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { DRAWER_QUERY, NARROW_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import { IconChevronLeft, IconSearch, IconSidebar } from "#lib/icons.js";
+  import { theme } from "#lib/theme.svelte.js";
   import { isTyping } from "#lib/utils/typing.js";
   import { browser } from "$app/env";
   import { goto, onNavigate } from "$app/navigation";
   import { page } from "$app/state";
   import AddMachineDialog from "./AddMachineDialog.svelte";
   import AssistantPanel from "./assistant/AssistantPanel.svelte";
+  import { barGlass } from "./bar-glass.svelte";
   import ConfirmDialog from "./ConfirmDialog.svelte";
   import { cawco, hubSocketUrl, reconnectNow } from "./client.svelte";
   import { continuing } from "./continue.svelte";
   import ForgetProjectDialog from "./ForgetProjectDialog.svelte";
+  import { deviceRatio } from "./home/device-ratio.svelte";
   import { sessionName } from "./home/home-state.svelte";
-  import JumpPalette, { type JumpOpener } from "./JumpPalette.svelte";
+  import JumpPalette from "./JumpPalette.svelte";
   import { machinesPopover } from "./join/join.svelte";
   import MachinesButton from "./MachinesButton.svelte";
+  import { hangShadow } from "./motion/hung-shadow";
   import NeedsCaw from "./NeedsCaw.svelte";
   import SessionSurface from "./SessionSurface.svelte";
   import Sidebar from "./Sidebar.svelte";
@@ -87,8 +91,6 @@
   // Seeded once from the server's reading; dragging owns it after that.
   let railWidth = $state(untrack(() => clamp(initialRailWidth)));
   let jumpOpen = $state(false);
-  /** What opened the palette, which decides how it arrives (JumpPalette). */
-  let jumpOpener = $state<JumpOpener>("key");
   let railOpen = $state(false);
   let assistantOpen = $state(false);
 
@@ -283,7 +285,6 @@
     }
     if (key === "k") {
       event.preventDefault();
-      jumpOpener = "key";
       jumpOpen = !jumpOpen;
       return;
     }
@@ -454,6 +455,28 @@
      brings it back as it was left. */
   const drawerQuery = new MediaQuery(DRAWER_QUERY);
   const railed = $derived(browser ? !drawerQuery.current : true);
+
+  /**
+   * The shadow of every card hanging from the glass (HangCard `glass`),
+   * drawn ahead of any press (motion/hung-shadow): a picture of
+   * `--shadow-overlay-hung` round its corners, the glass's trailing flank
+   * square and, on a phone, its foot at the screen's edge square (app.css
+   * `.glass-card`), drawn again for a new scheme, device ratio or width.
+   */
+  $effect(() => {
+    const look = [theme.resolved, deviceRatio.current, !railed] as const;
+    const corner = Number.parseFloat(
+      getComputedStyle(document.documentElement).getPropertyValue("--radius-lg")
+    );
+    hangShadow(".kit-pop.glass-card", "--shadow-overlay-hung", [
+      corner,
+      0,
+      look[2] ? 0 : corner,
+      corner,
+    ]).catch((error: unknown) => {
+      console.error("The glass's card shadow did not draw", error);
+    });
+  });
 
   /**
    * The sheet's own open state, published for the clocks under it: an elapsed
@@ -860,8 +883,15 @@
   }
       }
     >
+      <!-- Closed by its search field, the focus stays in the Jump palette
+           it opened, which hangs from the bar's glass. -->
       <Sheet.Content
         class="rail-sheet w-[284px] p-0 min-[900px]:hidden"
+        onCloseAutoFocus={(event) => {
+          if (jumpOpen) {
+            event.preventDefault();
+          }
+        }}
         side="left"
       >
         <Sheet.Header class="sr-only">
@@ -875,9 +905,8 @@
               railOpen = false;
               assistantOpen = true;
             }}
-            onsearch={(opener) => {
+            onsearch={() => {
               railOpen = false;
-              jumpOpener = opener;
               jumpOpen = true;
             }}
             sheet
@@ -952,9 +981,13 @@
              Jump and the machines in its sidebar, so its group holds Caw
              alone. -->
         <div class="right">
-          <div class="tools" data-bar-group>
-            <!-- The glass as one shape with Caw's panel while it hangs from
-                 it (NeedsCaw `data-joined`). -->
+          <div
+            class="tools"
+            data-bar-group
+            data-joined={barGlass.joined ? "" : undefined}
+          >
+            <!-- The glass as one shape with the card hanging from it while
+                 one does (bar-glass: Caw's panel, the machines, Jump). -->
             <span aria-hidden="true" class="join"></span>
             {#if railed}
               <Tip keys="⌘K" label="Jump to session">
@@ -963,12 +996,13 @@
                 )}
                   <button
                     {...tip}
+                    aria-expanded={jumpOpen}
+                    aria-haspopup="dialog"
                     aria-label="Jump to session"
                     class="bar-item jump touch-hit press-tint"
                     data-share="jump"
-                    onclick={(event: MouseEvent) => {
-                      jumpOpener = event.currentTarget as HTMLElement;
-                      jumpOpen = true;
+                    onclick={() => {
+                      jumpOpen = !jumpOpen;
                     }}
                     type="button"
                   >
@@ -1075,7 +1109,7 @@
     </div>
   </div>
 
-  <JumpPalette opener={jumpOpener} bind:open={jumpOpen} />
+  <JumpPalette bind:open={jumpOpen} />
   <!-- One dialog for every destructive confirm in the app (see confirm.svelte.ts). -->
   <ConfirmDialog />
   <!-- One Forget project dialog for every opener (forget.svelte.ts). -->
@@ -1368,8 +1402,8 @@
      would make it the box Caw's fixed drawer is laid out in. */
   .tools {
     --hit-gap-x: var(--c-bar-group-pad);
-    /* How far the glass's leading foot flares out into Caw's panel while it
-       hangs (`.join`): the panel's own corner radius. */
+    /* How far the glass's leading foot flares out into the card hanging
+       from it (`.join`, HangCard reads it): the card's own corner radius. */
     --flare: var(--radius-lg);
     position: relative;
     display: flex;
@@ -1405,9 +1439,10 @@
       border-color: var(--border-contrast);
     }
   }
-  /* ── The glass and Caw's panel, one shape ───────────────────────────
-     While Caw's panel hangs from the glass (NeedsCaw, `kit-hang`), the
-     glass is one shape with it, as a session tab is with its card: its
+  /* ── The glass and the card hanging from it, one shape ──────────────
+     While a card hangs from the glass (Caw's panel, the machines, the Jump
+     palette: HangCard `glass`, bar-glass), the glass is one shape with it,
+     as a session tab is with its card: its
      top corners keep the glass's round, its trailing flank runs straight
      down into the panel's side, its leading one flares out at its foot
      into the panel's top edge (`--flare`), and its foot is no edge at all.
@@ -1418,7 +1453,7 @@
      foot into the panel's top edge, as the tab's `.neck` does: the layer is
      the edge's ink in the outline, and `::before` is the surface 1px inside
      it, so the edge runs up the flare and both flanks and over the top.
-     It fades in as the panel grows and out as it folds, on the panel's
+     It fades in as the card grows and out as it folds, on the card's
      clock (`data-joined`: from the growth's first frame to the fold's). */
   .join {
     --f: var(--flare);
@@ -1462,7 +1497,7 @@
       );
     }
   }
-  .tools:has(:global([data-joined])) .join {
+  .tools[data-joined] .join {
     opacity: 1;
     transition-duration: var(--dur-pop);
   }
@@ -1584,14 +1619,15 @@
     .tools::before {
       border-inline-end-width: 0;
     }
-    /* Joined to Caw's panel, the same: its trailing side is the screen's
-       edge, square and with no edge drawn, as the panel's is below it. And
-       it reaches on down through the neck to the row's floor, at the
-       glass's width and in its surface, where it flares out into the
-       panel's top edge: the panel hangs from the floor (NeedsCaw's side
-       offset is the neck), so it covers no tab. The neck is the join's, so
-       it is there only while he is joined, and comes and goes with it on
-       the panel's clock. */
+    /* Joined to a card (Caw's panel, or the Jump palette the sidebar
+       opens), the same: its trailing side is the screen's edge, square and
+       with no edge drawn, as the card's is below it. And it reaches on down
+       through the neck to the row's floor, at the glass's width and in its
+       surface, where it flares out into the card's top edge: the card hangs
+       from the floor (bar-glass `glassPlacement`: its side offset is the
+       neck), so it covers no tab. The neck is the join's, so it is there
+       only while the glass is joined, and comes and goes with it on the
+       card's clock. */
     .join {
       --r: calc(var(--c-bar-caw-glass-phone) / 2);
       inset-block-end: calc(-1px - var(--caw-neck));

@@ -1,7 +1,10 @@
 /**
  * A floating card that hangs from its anchor as one shape with it, and grows
- * out of it (DESIGN.md, "A card that hangs from its anchor"): the session
- * card from its tab (PaneTabs), Caw's panel from his glass (NeedsCaw).
+ * out of it (DESIGN.md, "A card that hangs from its anchor"). Every such
+ * card is a HangCard (components/ui/hang-card), which measures the neck and
+ * attaches this: the session card and a finger's tab menu from their tab
+ * (PaneTabs), Caw's panel, the machines and the Jump palette from the top
+ * bar's glass.
  *
  * The card is a kit popover with the `kit-hang` recipe (app.css) and stands
  * on its anchor's foot, at side offset 0. Its top edge is cut across the
@@ -92,14 +95,8 @@ const flareTail = (flare: number): number =>
 /**
  * The neck as the card's style (`kit-hang`): its span, its flares, and the
  * run each side over which the top edge fades out under the flare's stroke
- * (`--neck-tail-*`), so the two strokes meet with no break. Every hanging
- * card writes its neck through this.
+ * (`--neck-tail-*`), so the two strokes meet with no break.
  */
-export const neckStyle = (neck: Neck): string =>
-  neckProperties(neck)
-    .map(([name, value]) => `${name}: ${value}`)
-    .join("; ");
-
 const neckProperties = (neck: Neck): [string, string][] => [
   ["--neck-start", `${neck.start}px`],
   ["--neck-end", `${neck.end}px`],
@@ -110,8 +107,8 @@ const neckProperties = (neck: Neck): [string, string][] => [
 ];
 
 /**
- * The neck written straight onto the card's own style, for a card whose
- * style nothing else writes: it costs a style change and no render of the
+ * The neck written straight onto the card's own style (HangCard writes every
+ * card's through this): it costs a style change and no render of the
  * popover's props, which each placement of Caw's panel paid as it first
  * opened.
  */

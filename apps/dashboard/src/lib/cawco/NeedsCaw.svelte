@@ -31,15 +31,17 @@
    * on and the clip's Rive is gone. Every drawing keeps two device pixels
    * inside his glass circle (assets/mascot/scripts/head_circle.py).
    *
-   * A tap on him opens his panel: the kit's popover (`kit-pop`), hanging
-   * from the glass he stands on as one shape with it (`kit-hang`,
-   * motion/hang, the session card's own mechanism): its top edge is the
+   * A tap on him opens his panel: a HangCard on the glass he stands on,
+   * hanging from it as one shape with it (the session card's own
+   * component): its top edge is the
    * glass's foot, its trailing side runs straight on down from the glass's
    * trailing flank, and the glass flares out at its bottom-left into the
    * panel's top edge (Shell `.join`). It grows out of the glass and folds
    * back into it. While it hangs, the glass takes the panel's surface and
    * edge, and the arcs on the lower half of his rim, where the glass now
-   * runs on into the panel, fade out (`data-joined`). It is non-modal: no
+   * runs on into the panel, fade out (the glass's `data-joined`, bar-glass,
+   * as they do under the machines and the Jump palette, the glass's other
+   * cards; one of the three stands open at a time). It is non-modal: no
    * scrim, no focus trap, nothing of the page made inert, so the transcript
    * scrolls, the composer takes keys and the rail's rows open while it
    * stands. A click anywhere else closes it and still lands where it was
@@ -50,13 +52,14 @@
   import { mergeProps } from "bits-ui";
   import { untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
+  import { HangCard } from "#lib/components/ui/hang-card/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Popover from "#lib/components/ui/popover/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { DRAWER_QUERY } from "#lib/hooks/is-mobile.svelte.js";
-  import { theme } from "#lib/theme.svelte.js";
   import { browser } from "$app/env";
   import { page } from "$app/state";
+  import { barGlass, glassPlacement, oneAtATime } from "./bar-glass.svelte";
   import { type CawFile, type CawHead, stageCaw } from "./home/Caw.svelte";
   import CawFace from "./home/CawFace.svelte";
   import CawPanel from "./home/CawPanel.svelte";
@@ -67,11 +70,9 @@
     CAW_STILL_BLEED,
     cawStill,
   } from "./home/caw-still.svelte";
-  import { deviceRatio } from "./home/device-ratio.svelte";
   import { home } from "./home/home-state.svelte";
   import { dur, easeOut, motionOk } from "./motion/curves.svelte";
-  import { GROWN, hang, type Neck, sameNeck, setNeck } from "./motion/hang";
-  import { hangShadow } from "./motion/hung-shadow";
+  import { GROWN } from "./motion/hang";
 
   /**
    * The phone bar, where his glass is his own (Shell). The server has the
@@ -590,100 +591,29 @@
    * key (MachinesButton's rule): focus goes in without the ring.
    */
   let byPointer = false;
-  /** The panel is closing on a press outside it: the press keeps its focus. */
+  /**
+   * The panel is closing on a press outside it, or on another card of the
+   * glass opening: the focus stays where that put it.
+   */
   let closedOutside = false;
   /**
    * The glass he stands on, the panel's anchor: the bar's group
-   * (`data-bar-group`), which on a phone holds him alone.
+   * (`data-bar-group`), which on a phone holds him alone. The panel hangs
+   * right-aligned under it, flush with its trailing flank (square there,
+   * the glass's trailing side running straight on down), and the glass's
+   * leading foot flares out into the panel's top edge by its `--flare`
+   * (HangCard measures it).
    */
   const glass = $derived(
     capsule?.closest<HTMLElement>("[data-bar-group]") ?? null
   );
   /**
-   * The glass's span in the panel's coordinates. The panel hangs
-   * right-aligned under it, flush with its trailing flank (square there,
-   * the glass's trailing side running straight on down), and the glass's
-   * leading foot flares out into the panel's top edge by its `--flare`.
-   * Written onto the panel's own style as it changes (hang `setNeck`), not
-   * through the popover's props.
+   * Where it hangs (bar-glass): on a phone through his neck to the tab
+   * row's floor, so it covers no tab while his glass stands clear of the
+   * floor. The same open or shut: a side offset that changed on every open
+   * placed the panel again in the press's own frame.
    */
-  let neck: Neck = {
-    start: 0,
-    end: 0,
-    flareStart: 0,
-    flareEnd: 0,
-    flush: "end",
-  };
-  /**
-   * The glass's span on the screen and its flare, read whenever it is laid
-   * out anew (its size, the window's), never in a placement: read there,
-   * just after bits-ui moved the panel, each read made the page lay itself
-   * out again then and there, twice on a first open.
-   */
-  let glassSpan: { left: number; right: number; flare: number } | null = null;
-  $effect(() => {
-    const at = glass;
-    if (!at) {
-      return;
-    }
-    const read = () => {
-      const box = at.getBoundingClientRect();
-      glassSpan = {
-        left: box.left,
-        right: box.right,
-        flare:
-          Number.parseFloat(getComputedStyle(at).getPropertyValue("--flare")) ||
-          0,
-      };
-    };
-    read();
-    const sized = new ResizeObserver(read);
-    sized.observe(at);
-    addEventListener("resize", read);
-    return () => {
-      sized.disconnect();
-      removeEventListener("resize", read);
-    };
-  });
-  /**
-   * How far below his glass's foot the panel hangs: on a phone the neck
-   * down to the tab row's floor (Shell `--caw-neck`), so the panel covers no
-   * tab while his glass stands clear of the floor; none on the wide bar.
-   */
-  const neckDrop = $derived(
-    // The phone bar's alone (Shell sets it under DRAWER_QUERY's width), and
-    // the same open or shut: a side offset that changed on every open
-    // placed the panel again in the press's own frame.
-    phone && glass
-      ? Number.parseFloat(
-          getComputedStyle(glass).getPropertyValue("--caw-neck")
-        ) || 0
-      : 0
-  );
-  /**
-   * The panel's shadow, drawn ahead of any press (motion/hung-shadow): a
-   * picture of `--shadow-overlay-hung` round its corners, the glass's
-   * trailing flank square and, on a phone, its foot at the screen's edge
-   * square (CawPanel `.caw-pop`), drawn again for a new scheme, device ratio
-   * or width.
-   */
-  $effect(() => {
-    const look = [theme.resolved, deviceRatio.current, phone] as const;
-    const corner = Number.parseFloat(
-      getComputedStyle(document.documentElement).getPropertyValue("--radius-lg")
-    );
-    hangShadow(".kit-pop.caw-pop", "--shadow-overlay-hung", [
-      corner,
-      0,
-      look[2] ? 0 : corner,
-      corner,
-    ]).catch((error: unknown) => {
-      console.error("Caw's panel shadow did not draw", error);
-    });
-  });
-
-  /** The panel stands open from his glass: the glass is one shape with it. */
-  let joined = $state(false);
+  const placement = $derived(glassPlacement(glass, phone));
   // The unseen first open, after the page's first frame.
   $effect(() => {
     if (warmed || !content || !glass) {
@@ -704,43 +634,14 @@
       clearTimeout(timer);
     };
   });
-  $effect(() => {
-    const node = content;
-    if (!node) {
-      return;
+  oneAtATime(
+    "caw",
+    () => open && !warming,
+    () => {
+      closedOutside = true;
+      setOpen(false);
     }
-    return untrack(() =>
-      hang({
-        neckAt: (left) =>
-          glassSpan
-            ? {
-                start: glassSpan.left - left,
-                end: glassSpan.right - left,
-                flareStart: glassSpan.flare,
-                flareEnd: 0,
-                flush: "end",
-              }
-            : null,
-        onneck: (next) => {
-          if (!sameNeck(next, neck)) {
-            neck = next;
-            setNeck(node, next);
-          }
-          if (warming && open) {
-            // Placed: shut again, still quiet until the shut has been seen.
-            setOpen(false);
-            requestAnimationFrame(() => {
-              warming = false;
-            });
-          }
-        },
-        onshown: (shown) => {
-          joined = shown;
-        },
-        quiet: () => warming,
-      })(node)
-    );
-  });
+  );
 </script>
 
 <svelte:window
@@ -823,7 +724,6 @@
             })}
             aria-label={label}
             class="capsule bar-item touch-hit press-tint"
-            data-joined={joined ? "" : undefined}
             data-needs-caw
             type="button"
             bind:this={capsule}
@@ -858,14 +758,15 @@
        press's own frame 80–90 ms in WebKit (the owner: "the pressing on caw
        is very laggy when it opens"), so a press only opens it. -->
 
-  <Popover.Content
+  <HangCard
     align="end"
+    anchor={glass}
     aria-label="Needs you"
-    class="caw-pop kit-hang gap-0"
-    collisionPadding={phone ? { top: 12, bottom: 12, left: 12, right: 0 } : 8}
+    class="caw-pop gap-0"
+    collisionPadding={placement.collisionPadding}
     customAnchor={glass}
-    data-flush="end"
     forceMount
+    glass
     inert={!open || warming}
     onCloseAutoFocus={(event) => {
       if (warming) {
@@ -882,6 +783,15 @@
     }}
     onInteractOutside={() => {
       closedOutside = true;
+    }}
+    onneck={() => {
+      if (warming && open) {
+        // Placed: shut again, still quiet until the shut has been seen.
+        setOpen(false);
+        requestAnimationFrame(() => {
+          warming = false;
+        });
+      }
     }}
     onOpenAutoFocus={(event) => {
       if (warming) {
@@ -915,9 +825,14 @@
         );
       }
     }}
+    quiet={() => warming}
     side="bottom"
-    sideOffset={neckDrop}
+    sideOffset={placement.sideOffset}
     trapFocus={false}
+    bind:joined={
+      () => barGlass.shown.includes("caw"),
+      (shown) => barGlass.show("caw", shown)
+    }
     bind:ref={content}
   >
     <CawPanel
@@ -927,7 +842,7 @@
       }}
       {quiet}
     />
-  </Popover.Content>
+  </HangCard>
 </Popover.Root>
 
 <style>
@@ -943,13 +858,14 @@
     padding: 0;
     -webkit-tap-highlight-color: transparent;
   }
-  /* The panel's own frame (`.caw-pop`) is CawPanel's. The lower half of his rim gives way to the panel while it hangs (the
-     rim's script, "While his panel hangs"): it fades out as the panel grows
-     and back as it folds, on the panel's own clock. */
+  /* The panel's own frame (`.caw-pop`) is CawPanel's. The lower half of his
+     rim gives way to whichever card hangs from the glass (the rim's script,
+     "While his panel hangs"; bar-glass): it fades out as the card grows and
+     back as it folds, on the card's own clock. */
   .rim.foot {
     transition: opacity var(--dur-exit) var(--ease-out);
   }
-  .capsule[data-joined] .rim.foot {
+  :global([data-bar-group][data-joined]) .rim.foot {
     opacity: 0;
     transition-duration: var(--dur-pop);
   }

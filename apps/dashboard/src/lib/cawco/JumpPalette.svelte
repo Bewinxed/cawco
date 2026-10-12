@@ -1,27 +1,32 @@
-<script lang="ts" module>
-  /**
-   * What opened the palette: ⌘K (`key`), or the element tapped (the Jump
-   * button at the end of the tab row).
-   */
-  export type JumpOpener = "key" | HTMLElement;
-</script>
-
 <script lang="ts">
+  /**
+   * The Jump palette: a HangCard on the bar's glass, hanging from its foot
+   * flush with its trailing flank as Caw's panel does, and coming down out
+   * of it; opening it closes the glass's other card (bar-glass). The search
+   * glass opens and closes it, ⌘K does too (Shell), and on a phone the
+   * sidebar's search field opens it from the glass Caw stands on. Non-modal,
+   * as the glass's other cards: a press elsewhere closes it and lands, and
+   * Escape closes it and gives the focus back to what had it.
+   */
   import { Command as CommandPrimitive } from "bits-ui";
+  import { untrack } from "svelte";
+  import { MediaQuery } from "svelte/reactivity";
   import { scale } from "svelte/transition";
   import {
     crossOut,
     dur,
-    ease,
     easeOut,
     motionOk,
-    popScale,
   } from "#lib/cawco/motion/curves.svelte.js";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Command from "#lib/components/ui/command/index.js";
+  import { HangCard } from "#lib/components/ui/hang-card/index.js";
   import { Kbd } from "#lib/components/ui/kbd/index.js";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
+  import * as Popover from "#lib/components/ui/popover/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
+  import { DRAWER_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import {
     IconAgent,
     IconChat,
@@ -35,6 +40,12 @@
   import { formatDistanceToNow } from "#lib/utils/time.js";
   import { goto } from "$app/navigation";
   import { ACTIVITY_LABEL } from "./activity";
+  import {
+    barGlass,
+    glassElement,
+    glassPlacement,
+    oneAtATime,
+  } from "./bar-glass.svelte";
   import { cawco } from "./client.svelte";
   import CawFace from "./home/CawFace.svelte";
   import { instanceTitle } from "./home/home-state.svelte";
@@ -53,10 +64,7 @@
   import { checkoutOf } from "./projects";
   import { isThreadTab } from "./thread-tabs";
 
-  let {
-    open = $bindable(false),
-    opener = "key",
-  }: { open?: boolean; opener?: JumpOpener } = $props();
+  let { open = $bindable(false) }: { open?: boolean } = $props();
   let query = $state("");
 
   const index = $derived.by(() =>
@@ -189,41 +197,35 @@
     await goto(href);
   }
 
-  /* ── How it arrives ──────────────────────────────────────────────────
-     From the Jump button it grows out of the button: from the pop scale,
-     the button as its origin, over --dur-pop on the drawer curve. From ⌘K,
-     nothing travels — it is summoned often and from nowhere in particular —
-     so it only fades in, over --dur-control. The kit dialog's own entrance
-     stands down for both (the class below). */
-  const entry = $derived(opener === "key" ? "fade" : "pop");
-  let well = $state<HTMLElement | null>(null);
-  const shell = $derived(
-    well?.closest<HTMLElement>('[data-slot="dialog-content"]') ?? null
-  );
-  $effect(() => {
-    if (!shell) {
-      return;
-    }
-    if (entry === "pop" && motionOk.current && opener instanceof HTMLElement) {
-      const from = opener.getBoundingClientRect();
-      const box = shell.getBoundingClientRect();
-      const origin = `${from.left + from.width / 2 - box.left}px ${from.top + from.height / 2 - box.top}px`;
-      const rise = Number.parseFloat(
-        getComputedStyle(shell).getPropertyValue("--pop-rise")
-      );
-      shell.animate(
-        [
-          {
-            transformOrigin: origin,
-            transform: `translateY(${-rise}px) scale(${popScale()})`,
-            opacity: 0,
-          },
-          { transformOrigin: origin, transform: "none", opacity: 1 },
-        ],
-        { duration: dur("--dur-pop"), easing: ease("--ease-drawer") }
-      );
+  /* ── Where it hangs ─────────────────────────────────────────────── */
+  const phoneQuery = new MediaQuery(DRAWER_QUERY);
+  const glass = $derived(open ? glassElement() : null);
+  const placement = $derived(glassPlacement(glass, phoneQuery.current));
+  /** What had the focus before it opened, which has it back once it closes. */
+  let returnTo: HTMLElement | null = null;
+  $effect.pre(() => {
+    if (open) {
+      untrack(() => {
+        returnTo =
+          document.activeElement instanceof HTMLElement
+            ? document.activeElement
+            : null;
+      });
     }
   });
+  /**
+   * It is closing on a press outside it, or on another card of the glass
+   * opening: the focus stays where that put it.
+   */
+  let closedOutside = false;
+  oneAtATime(
+    "jump",
+    () => open,
+    () => {
+      closedOutside = true;
+      open = false;
+    }
+  );
 
   /* ── The list ────────────────────────────────────────────────────────
      Groups and rows that arrive, leave or change rank as the query changes
@@ -238,226 +240,276 @@
   });
 </script>
 
-<Command.Dialog
-  class="jump-dialog jump-{entry} top-[9vh] sm:max-w-2xl"
-  description="Jump to a project, machine, or session"
-  loop
-  shouldFilter={false}
-  title="Jump to"
-  bind:open
->
-  <!-- The signature move, applied to the whole panel rather than half of it:
+<Popover.Root bind:open>
+  <HangCard
+    align="end"
+    anchor={glass}
+    aria-label="Jump to"
+    class="jump-pop gap-0"
+    collisionPadding={placement.collisionPadding}
+    customAnchor={glass}
+    glass
+    onCloseAutoFocus={(event) => {
+      event.preventDefault();
+      if (!closedOutside && returnTo?.isConnected) {
+        returnTo.focus({ preventScroll: true });
+      }
+      closedOutside = false;
+    }}
+    onInteractOutside={(event) => {
+      // The search glass is its toggle: its own press closes it.
+      if (
+        event.target instanceof Element &&
+        event.target.closest(".bar-item.jump")
+      ) {
+        event.preventDefault();
+        return;
+      }
+      closedOutside = true;
+    }}
+    onOpenAutoFocus={(event) => {
+      event.preventDefault();
+      input?.focus({ preventScroll: true });
+    }}
+    side="bottom"
+    sideOffset={placement.sideOffset}
+    trapFocus={false}
+    bind:joined={
+      () => barGlass.shown.includes("jump"),
+      (shown) => barGlass.show("jump", shown)
+    }
+  >
+    <Command.Root class="text-body" loop shouldFilter={false}>
+      <!-- The signature move, applied to the whole panel rather than half of it:
        ONE sunken well inside the raised card, holding the search line, the
        results and the hints. The input was its own bordered control floating
        above a separately bordered list — two boxes, two radii, two insets. -->
-  <div class="jump-well" bind:this={well}>
-    <!-- The search line is built here rather than taken from Command.Input:
+      <div class="jump-well">
+        <!-- The search line is built here rather than taken from Command.Input:
          its input group owns the field's padding and puts the addon in flow,
          which leaves no place to put a chip except on top of the text. Icon,
          chip and field are flex siblings, so nothing overlaps and nothing
          needs measuring. -->
-    <div class="jump-search field-underline">
-      <IconSearch class="jump-search-icon" height={16} width={16} />
-      {#if scoped}
-        {@const ScopedMark = AUTHOR_MARK[scoped.token]}
-        <span class="jump-chip" transition:scale={chipMotion}>
-          <ScopedMark class="jump-chip-mark" height={12} width={12} />
-          {scoped.label}
-          <button
-            aria-label="Clear author filter"
-            class="jump-chip-off"
-            onclick={() => {
-              scope = null;
-              input?.focus();
-            }}
-            type="button"
-          >
-            ×
-          </button>
-        </span>
-      {/if}
-      <CommandPrimitive.Input
-        class="jump-field"
-        onkeydown={onSearchKey}
-        placeholder={scope
-          ? "Search these messages…"
-          : "Jump to a project, thread, machine, or session…"}
-        bind:ref={input}
-        bind:value={query}
-      />
-    </div>
-
-    <Command.List class="jump-list" bind:ref={list}>
-      {#if !(search.pending || fragment !== null)}
-        <Command.Empty data-flip>Nothing matches that.</Command.Empty>
-      {/if}
-
-      <!-- Typing `@` asks who wrote the line, so the list answers that question
-           and nothing else until it is settled. -->
-      {#if fragment !== null}
-        <Command.Group data-flip heading="Search messages from">
-          {#each authorChoices as author (author.token)}
-            {@const AuthorMark = AUTHOR_MARK[author.token]}
-            {@const trail = `@${author.token} · ${author.detail}`}
-            <div data-flip>
-              <Command.Item
-                onSelect={() => chooseAuthor(author.token)}
-                value={`author:${author.token}`}
+        <div class="jump-search field-underline">
+          <IconSearch class="jump-search-icon" height={16} width={16} />
+          {#if scoped}
+            {@const ScopedMark = AUTHOR_MARK[scoped.token]}
+            <span class="jump-chip" transition:scale={chipMotion}>
+              <ScopedMark class="jump-chip-mark" height={12} width={12} />
+              {scoped.label}
+              <button
+                aria-label="Clear author filter"
+                class="jump-chip-off"
+                onclick={() => {
+                  scope = null;
+                  input?.focus();
+                }}
+                type="button"
               >
-                <span class="jump-text">
-                  <AuthorMark class="jump-mark" height={16} width={16} />
-                  <span class="jump-name">{author.label}</span>
-                  <span class="jump-trail">{trail}</span>
-                </span>
-              </Command.Item>
-            </div>
-          {/each}
-        </Command.Group>
-      {/if}
+                ×
+              </button>
+            </span>
+          {/if}
+          <CommandPrimitive.Input
+            class="jump-field"
+            onkeydown={onSearchKey}
+            placeholder={scope
+              ? "Search these messages…"
+              : "Jump to a project, thread, machine, or session…"}
+            bind:ref={input}
+            bind:value={query}
+          />
+        </div>
 
-      {#each fragment === null ? grouped : [] as group (group.name)}
-        <Command.Group data-flip heading={group.name}>
-          {#each group.rows as entry (entry.id)}
-            {@const EntryMark = MARK[entry.kind]}
-            <div data-flip>
-              <Command.Item onSelect={() => jump(entry.href)} value={entry.id}>
-                <span class="jump-text">
-                  {#if entry.kind === "thread"}
-                    <span class="jump-mark">
-                      <CawFace
-                        size={16}
-                        status={(entry.conversation &&
-                          cawco.threadOf(entry.conversation)?.status) ||
-                          "ready"}
-                      />
+        <Command.List class="jump-list" bind:ref={list}>
+          {#if !(search.pending || fragment !== null)}
+            <Command.Empty data-flip>Nothing matches that.</Command.Empty>
+          {/if}
+
+          <!-- Typing `@` asks who wrote the line, so the list answers that question
+           and nothing else until it is settled. -->
+          {#if fragment !== null}
+            <Command.Group data-flip heading="Search messages from">
+              {#each authorChoices as author (author.token)}
+                {@const AuthorMark = AUTHOR_MARK[author.token]}
+                {@const trail = `@${author.token} · ${author.detail}`}
+                <div data-flip>
+                  <Command.Item
+                    onSelect={() => chooseAuthor(author.token)}
+                    value={`author:${author.token}`}
+                  >
+                    <span class="jump-text">
+                      <AuthorMark class="jump-mark" height={16} width={16} />
+                      <span class="jump-name">{author.label}</span>
+                      <span class="jump-trail">{trail}</span>
                     </span>
-                  {:else if EntryMark}
-                    <EntryMark class="jump-mark" height={16} width={16} />
-                  {/if}
-                  <JumpMatch
-                    class="jump-name"
-                    ranges={entry.labelRanges}
-                    text={entry.label}
-                  />
-                  <JumpMatch
-                    class="jump-trail"
-                    ranges={entry.detailRanges}
-                    text={entry.detail}
-                  />
-                </span>
-              </Command.Item>
-            </div>
-          {/each}
-        </Command.Group>
-      {/each}
-
-      {#if search.pending || search.hits.length > 0}
-        <Command.Group
-          class="jump-hits"
-          data-flip
-          heading={scoped
-            ? `Transcripts · from ${scoped.label}`
-            : "Transcripts"}
-        >
-          {#if search.pending && search.hits.length === 0}
-            <!-- The shape of what is coming: rows drawn as the hit rows are,
-                 at their height, so the hits take their place without moving
-                 anything. They fade where they stand as the hits arrive. -->
-            <div aria-hidden="true" class="jump-skeletons" out:crossOut>
-              {#each SKELETONS as row (row)}
-                <div class="kit-item jump-hit jump-skeleton">
-                  <span class="jump-hit-head">
-                    <Skeleton class="jump-skeleton-mark" />
-                    <Skeleton
-                      class="jump-skeleton-bar"
-                      style="width: {38 - row * 6}%"
-                    />
-                  </span>
-                  <span class="jump-snippet">
-                    <Skeleton
-                      class="jump-skeleton-bar"
-                      style="width: {74 - row * 9}%"
-                    />
-                  </span>
+                  </Command.Item>
                 </div>
               {/each}
-            </div>
-            <span class="sr-only" role="status">Searching transcripts</span>
+            </Command.Group>
           {/if}
-          {#each search.hits as hit (hit.docId)}
-            <div data-flip>
-              <Command.Item
-                class="jump-hit"
-                onSelect={() =>
-                  jump(
-                    conversationHref(
-                      hit.instanceId ?? hit.sessionId,
-                      cawco.instanceIndex
-                    )
-                  )}
-                value={`hit:${hit.docId}`}
-              >
-                <!-- Which conversation this line came out of. Without it a list of
-                   snippets is a list of strangers. -->
-                <span class="jump-hit-head">
-                  <span class="jump-text">
-                    <IconDocument class="jump-mark" height={16} width={16} />
-                    <span class="jump-name">
-                      {index.sessionTitles.get(hit.sessionId) ??
-                        (hit.cwd ? leaf(hit.cwd) : hit.sessionId.slice(0, 8))}
-                    </span>
-                    <span class="jump-trail">
-                      {hostOf.get(hit.machineId) ?? hit.machineId}
-                      · {hit.role}
-                    </span>
-                  </span>
-                </span>
-                <!-- And the line itself, with the terms that matched marked. -->
-                <span class="jump-snippet" title={plain(hit.snippet)}>
-                  {#each segments(hit.snippet) as part, i (i)}
-                    {#if i % 2 === 1}
-                      <mark>{part}</mark>
-                    {:else}
-                      {part}
-                    {/if}
-                  {/each}
-                </span>
-              </Command.Item>
-            </div>
-          {/each}
-        </Command.Group>
-      {/if}
-    </Command.List>
 
-    <div class="jump-footer">
-      <span><Kbd>↑↓</Kbd> navigate</span>
-      <span><Kbd>↵</Kbd> open</span>
-      <span><Kbd>esc</Kbd> close</span>
-    </div>
-  </div>
-</Command.Dialog>
+          {#each fragment === null ? grouped : [] as group (group.name)}
+            <Command.Group data-flip heading={group.name}>
+              {#each group.rows as entry (entry.id)}
+                {@const EntryMark = MARK[entry.kind]}
+                <div data-flip>
+                  <Command.Item
+                    onSelect={() => jump(entry.href)}
+                    value={entry.id}
+                  >
+                    <span class="jump-text">
+                      {#if entry.kind === "thread"}
+                        <span class="jump-mark">
+                          <CawFace
+                            size={16}
+                            status={(entry.conversation &&
+                              cawco.threadOf(entry.conversation)?.status) ||
+                              "ready"}
+                          />
+                        </span>
+                      {:else if EntryMark}
+                        <EntryMark class="jump-mark" height={16} width={16} />
+                      {/if}
+                      <JumpMatch
+                        class="jump-name"
+                        ranges={entry.labelRanges}
+                        text={entry.label}
+                      />
+                      <JumpMatch
+                        class="jump-trail"
+                        ranges={entry.detailRanges}
+                        text={entry.detail}
+                      />
+                    </span>
+                  </Command.Item>
+                </div>
+              {/each}
+            </Command.Group>
+          {/each}
+
+          {#if search.pending || search.hits.length > 0}
+            <Command.Group
+              class="jump-hits"
+              data-flip
+              heading={scoped
+                ? `Transcripts · from ${scoped.label}`
+                : "Transcripts"}
+            >
+              {#if search.pending && search.hits.length === 0}
+                <!-- The shape of what is coming: rows drawn as the hit rows are,
+                 at their height, so the hits take their place without moving
+                 anything. They fade where they stand as the hits arrive. -->
+                <div aria-hidden="true" class="jump-skeletons" out:crossOut>
+                  {#each SKELETONS as row (row)}
+                    <div class="kit-item jump-hit jump-skeleton">
+                      <span class="jump-hit-head">
+                        <Skeleton class="jump-skeleton-mark" />
+                        <Skeleton
+                          class="jump-skeleton-bar"
+                          style="width: {38 - row * 6}%"
+                        />
+                      </span>
+                      <span class="jump-snippet">
+                        <Skeleton
+                          class="jump-skeleton-bar"
+                          style="width: {74 - row * 9}%"
+                        />
+                      </span>
+                    </div>
+                  {/each}
+                </div>
+                <span class="sr-only" role="status">Searching transcripts</span>
+              {/if}
+              {#each search.hits as hit (hit.docId)}
+                <div data-flip>
+                  <Command.Item
+                    class="jump-hit"
+                    onSelect={() =>
+                      jump(
+                        conversationHref(
+                          hit.instanceId ?? hit.sessionId,
+                          cawco.instanceIndex
+                        )
+                      )}
+                    value={`hit:${hit.docId}`}
+                  >
+                    <!-- Which conversation this line came out of. Without it a list of
+                   snippets is a list of strangers. -->
+                    <span class="jump-hit-head">
+                      <span class="jump-text">
+                        <IconDocument
+                          class="jump-mark"
+                          height={16}
+                          width={16}
+                        />
+                        <span class="jump-name">
+                          {index.sessionTitles.get(hit.sessionId) ??
+                            (hit.cwd
+                              ? leaf(hit.cwd)
+                              : hit.sessionId.slice(0, 8))}
+                        </span>
+                        <span class="jump-trail">
+                          {hostOf.get(hit.machineId) ?? hit.machineId}
+                          · {hit.role}
+                        </span>
+                      </span>
+                    </span>
+                    <!-- And the line itself, with the terms that matched marked. -->
+                    <span class="jump-snippet" title={plain(hit.snippet)}>
+                      {#each segments(hit.snippet) as part, i (i)}
+                        {#if i % 2 === 1}
+                          <mark>{part}</mark>
+                        {:else}
+                          {part}
+                        {/if}
+                      {/each}
+                    </span>
+                  </Command.Item>
+                </div>
+              {/each}
+            </Command.Group>
+          {/if}
+        </Command.List>
+
+        <div class="jump-footer">
+          <span><Kbd>↑↓</Kbd> navigate</span>
+          <span><Kbd>↵</Kbd> open</span>
+          <span><Kbd>esc</Kbd> close</span>
+        </div>
+      </div>
+    </Command.Root>
+  </HangCard>
+</Popover.Root>
 
 <style>
-  /* The dialog opens at 9vh; the well is bounded so the footer is never pushed
-     under the fold. Measured before: at `top-1/3` with a 60vh list the panel
-     ran 9px past the viewport and the key hints were unreachable. */
-  :global(.jump-dialog) {
+  /* The card hangs from the glass; the well is bounded so the footer is
+     never pushed under the fold. */
+  :global(.kit-pop.jump-pop) {
     /* The inset the well sits at — and the term the concentric radius below
        subtracts. Changing it in one place keeps the corners true. */
     --jump-inset: 7px;
+    width: min(42rem, calc(100vw - 24px));
     max-height: 82vh;
     padding: var(--jump-inset);
+  }
+  /* On a phone it keeps the phone's 12px margin on its leading side; its
+     trailing side is the screen's edge (app.css `.glass-card`). */
+  @media (max-width: 899px) {
+    :global(.kit-pop.jump-pop) {
+      width: calc(100vw - 12px - env(safe-area-inset-right, 0px));
+    }
   }
   /* The command element carries its own 4px padding and an 8px corner that
      nothing paints — left in, they push the well to a 10px inset and the
      concentric radius below stops being true. */
-  :global(.jump-dialog [data-slot="command"]) {
+  :global(.jump-pop [data-slot="command"]) {
     padding: 0;
     border-radius: 0;
   }
-  /* One surface for the whole panel. Its radius is the shell's minus the inset
-     it sits at (20 − 7 = 13): a well cut to the card's own 7px corner read as
-     a tighter, unrelated box inside a rounder one. */
+  /* One surface for the whole panel. Its radius is the card's minus the inset
+     it sits at: a well cut to the card's own 7px corner read as a tighter,
+     unrelated box inside a rounder one. */
   .jump-well {
     display: flex;
     min-height: 0;
@@ -680,20 +732,6 @@
     height: 1lh;
   }
 
-  /* The kit dialog's own entrance (app.css kit-dialog-in) stands down: the
-     Jump button pops it, and ⌘K fades it in
-     over --dur-control, scrim and all. */
-  @media (prefers-reduced-motion: no-preference) {
-    :global(.jump-dialog.jump-pop[data-state="open"]) {
-      animation: none;
-    }
-    :global(.jump-dialog.jump-fade[data-state="open"]) {
-      animation: kit-fade-in var(--dur-control) var(--ease-out) both;
-    }
-  }
-  :global([data-slot="dialog-overlay"][data-state="open"]:has(+ .jump-fade)) {
-    animation-duration: var(--dur-control);
-  }
   /* Inside the well, divided from the results by the same hairline as the
      search line above them — the panel reads as one object, top to bottom. */
   .jump-footer {

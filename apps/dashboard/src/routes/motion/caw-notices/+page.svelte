@@ -2,8 +2,8 @@
   import type { Account, AccountHue } from "@cawco/core";
   /**
    * CAW'S NOTICES BENCH (dev only) — the real CawPanel in the real popover
-   * shell (`kit-pop caw-pop kit-hang`, hanging on `hang` from the top bar's
-   * own glass), driven by a fixture feed with no hub. Dismissing, Clear all,
+   * shell (a HangCard on the top bar's own glass, as NeedsCaw hangs it),
+   * driven by a fixture feed with no hub. Dismissing, Clear all,
    * Show changes and Reload all work against the fixture; Reset brings it
    * back. The fixture (update, 5 logins and 2 asks; update only; nothing)
    * and the width are switches.
@@ -14,35 +14,26 @@
    */
   import { machineLabel } from "@cawco/core";
   import type { BinaryUpdateState } from "@cawco/core/binary-updates";
-  import { MediaQuery } from "svelte/reactivity";
   import type { MovedLogin } from "#lib/cawco/accounts/model.svelte.js";
+  import { barGlass, glassPlacement } from "#lib/cawco/bar-glass.svelte.js";
   import CawPanel from "#lib/cawco/home/CawPanel.svelte";
   import type { CawFeed } from "#lib/cawco/home/caw-feed.svelte.js";
-  import { deviceRatio } from "#lib/cawco/home/device-ratio.svelte.js";
   import type {
     AskItem,
     NeedsItem,
   } from "#lib/cawco/home/home-state.svelte.js";
   import { markHue } from "#lib/cawco/mark.js";
   import {
-    hang,
-    type Neck,
-    neckStyle,
-    sameNeck,
-  } from "#lib/cawco/motion/hang.js";
-  import { hangShadow } from "#lib/cawco/motion/hung-shadow.js";
-  import {
     type Notice,
     noticeFor,
     type UpdateMachine,
   } from "#lib/cawco/updates/model.js";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { HangCard } from "#lib/components/ui/hang-card/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Popover from "#lib/components/ui/popover/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
-  import { DRAWER_QUERY } from "#lib/hooks/is-mobile.svelte.js";
-  import { theme } from "#lib/theme.svelte.js";
   import { page } from "$app/state";
 
   /* ── The switches, from the URL ────────────────────────────────────── */
@@ -347,66 +338,10 @@
    */
   let open = $state(true);
   let glass = $state<HTMLElement | null>(null);
-  let content = $state<HTMLElement | null>(null);
-  let neck = $state<Neck>({
-    start: 0,
-    end: 0,
-    flareStart: 0,
-    flareEnd: 0,
-    flush: "end",
-  });
   $effect(() => {
     glass = document.querySelector<HTMLElement>("[data-bar-group]");
   });
-  // The panel's shadow, as NeedsCaw draws it (motion/hung-shadow), its
-  // corners by the window's width as CawPanel's are.
-  const drawerWidth = new MediaQuery(DRAWER_QUERY);
-  $effect(() => {
-    const look = [theme.resolved, deviceRatio.current, drawerWidth.current];
-    const corner = Number.parseFloat(
-      getComputedStyle(document.documentElement).getPropertyValue("--radius-lg")
-    );
-    hangShadow(".kit-pop.caw-pop", "--shadow-overlay-hung", [
-      corner,
-      0,
-      look[2] ? 0 : corner,
-      corner,
-    ]).catch((error: unknown) => {
-      console.error("Caw's panel shadow did not draw", error);
-    });
-  });
-  $effect(() => {
-    const node = content;
-    const anchor = glass;
-    if (!(node && anchor)) {
-      return;
-    }
-    const capsule = anchor.querySelector("[data-needs-caw]");
-    return hang({
-      neckAt: (left) => {
-        const box = anchor.getBoundingClientRect();
-        const flare =
-          Number.parseFloat(
-            getComputedStyle(anchor).getPropertyValue("--flare")
-          ) || 0;
-        return {
-          start: box.left - left,
-          end: box.right - left,
-          flareStart: flare,
-          flareEnd: 0,
-          flush: "end",
-        };
-      },
-      onneck: (next) => {
-        if (!sameNeck(next, neck)) {
-          neck = next;
-        }
-      },
-      onshown: (shown) => {
-        capsule?.toggleAttribute("data-joined", shown);
-      },
-    })(node);
-  });
+  const placement = $derived(glassPlacement(glass, width === "phone"));
 </script>
 
 <svelte:head>
@@ -417,25 +352,26 @@
 {#if glass && (framed || width === "desk")}
   <Popover.Root bind:open>
     {#key generation}
-      <Popover.Content
+      <HangCard
         align="end"
+        anchor={glass}
         aria-label="Needs you"
-        class="caw-pop kit-hang gap-0"
-        collisionPadding={width === "phone"
-          ? { top: 12, bottom: 12, left: 12, right: 0 }
-          : 8}
+        class="caw-pop gap-0"
+        collisionPadding={placement.collisionPadding}
         customAnchor={glass}
-        data-flush={neck.flush ?? undefined}
         escapeKeydownBehavior="ignore"
+        glass
         interactOutsideBehavior="ignore"
         side="bottom"
-        sideOffset={0}
-        style={neckStyle(neck)}
+        sideOffset={placement.sideOffset}
         trapFocus={false}
-        bind:ref={content}
+        bind:joined={
+          () => barGlass.shown.includes("caw"),
+          (shown) => barGlass.show("caw", shown)
+        }
       >
         <CawPanel {feed} onchoose={() => undefined} quiet="All caught up" />
-      </Popover.Content>
+      </HangCard>
     {/key}
   </Popover.Root>
 {/if}

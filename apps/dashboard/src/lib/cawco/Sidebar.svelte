@@ -100,7 +100,7 @@
     /** Toggles the assistant, which Shell owns so ⌘J and this row share it. */
     onassistant: () => void;
     /** Opens Jump, from the phone's Search field (Shell owns the palette). */
-    onsearch?: (opener: HTMLElement) => void;
+    onsearch?: () => void;
     assistantOpen: boolean;
     /** The Shell's live narrow answer: a phone opens Configure on its list. */
     narrow: boolean;
@@ -904,13 +904,14 @@
        slides instead of jumping (motion/rows `reflow`). -->
   <Sidebar.Content class="gap-0 py-1" {@attach reflow()} {@attach scroller}>
     {#if sheet && onsearch}
-      <!-- The phone's search: the Jump palette's field, which opens Jump. -->
+      <!-- The phone's search: the Jump palette's field, which opens Jump
+           hanging from the bar's glass. -->
       <div class="px-2 pb-1">
         <button
           aria-haspopup="dialog"
           class="search press-tint focus-inset"
           data-share="jump"
-          onclick={(event) => onsearch(event.currentTarget)}
+          onclick={() => onsearch()}
           type="button"
         >
           <IconSearch />
@@ -1279,7 +1280,8 @@
     border-radius: var(--radius-pill);
   }
   /* The phone's search: Jump's field, standing where the sheet starts; a
-     press opens the palette, which grows from it (`data-share="jump"`). */
+     press closes the sheet and opens the palette, hanging from the bar's
+     glass. */
   .search {
     display: flex;
     align-items: center;

@@ -15,31 +15,51 @@
    * status hue, fail when any is down and attention otherwise; which ones
    * and what is wrong are words in the tooltip, the label and the popover
    * (DESIGN.md, The Glyph, Word, Hue Rule). The popover is the machines'
-   * list (MachinesList). The home's Check machines opens it too (join
+   * list (MachinesList), a HangCard on the bar's glass: it hangs from the
+   * glass's foot flush with its trailing flank, as Caw's panel does, and
+   * comes down out of it; opening it closes the glass's other card
+   * (bar-glass). The home's Check machines opens it too (join
    * `machinesPopover`). A phone has no room for it in the bar: the machines
    * are in its sidebar.
    */
   import { machineLabel } from "@cawco/core";
   import { mergeProps } from "bits-ui";
+  import { HangCard } from "#lib/components/ui/hang-card/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Popover from "#lib/components/ui/popover/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { IconServer } from "#lib/icons.js";
+  import { barGlass, glassPlacement, oneAtATime } from "./bar-glass.svelte";
   import { home } from "./home/home-state.svelte";
   import { machinesPopover } from "./join/join.svelte";
   import MachinesList from "./MachinesList.svelte";
 
   let content = $state<HTMLElement | null>(null);
+  let button = $state<HTMLButtonElement | null>(null);
+  /** The glass it hangs from: the bar's group its button is an item of. */
+  const glass = $derived(
+    button?.closest<HTMLElement>("[data-bar-group]") ?? null
+  );
+  const placement = $derived(glassPlacement(glass, false));
   /**
    * The last thing that could open the popover was a pointer press, not a
    * key: its own button, or the home's Check machines.
    */
   let byPointer = false;
   /**
-   * The popover is closing on a press outside it: the press keeps its focus.
-   * Non-modal (no trap), so a click on the composer or a rail row lands.
+   * The popover is closing on a press outside it, or on another card of
+   * the glass opening: the focus stays where that put it. Non-modal (no
+   * trap), so a click on the composer or a rail row lands.
    */
   let closedOutside = false;
+  oneAtATime(
+    "machines",
+    () => machinesPopover.open,
+    () => {
+      closedOutside = true;
+      machinesPopover.open = false;
+    }
+  );
 
   const count = $derived(cawco.machines.length);
   /** The glyph's hue: fail when a machine is down, attention when one is in trouble. */
@@ -112,6 +132,7 @@
             class="bar-item machines touch-hit press-tint"
             data-tone={tone}
             type="button"
+            bind:this={button}
           >
             <IconServer aria-hidden="true" class="bar-symbol" />
             <span class="num">{count}</span>
@@ -120,11 +141,14 @@
       </Popover.Trigger>
     {/snippet}
   </Tip>
-  <Popover.Content
+  <HangCard
     align="end"
+    anchor={glass}
     aria-label="Machines"
     class="machines-pop w-[min(20rem,calc(100vw-16px))] gap-0"
-    collisionPadding={8}
+    collisionPadding={placement.collisionPadding}
+    customAnchor={glass}
+    glass
     onCloseAutoFocus={(event) => {
       // Closed by a press elsewhere: the focus stays where that press put
       // it. Escape and its own button bring it back here.
@@ -147,8 +171,12 @@
       }
     }}
     side="bottom"
-    sideOffset={6}
+    sideOffset={placement.sideOffset}
     trapFocus={false}
+    bind:joined={
+      () => barGlass.shown.includes("machines"),
+      (shown) => barGlass.show("machines", shown)
+    }
     bind:ref={content}
   >
     <MachinesList
@@ -156,7 +184,7 @@
         machinesPopover.open = false;
       }}
     />
-  </Popover.Content>
+  </HangCard>
 </Popover.Root>
 
 <style>
@@ -178,14 +206,5 @@
   .num {
     font: var(--type-label);
     font-variant-numeric: tabular-nums;
-  }
-  /* Opens with a short scale from its corner, closes faster. */
-  :global(.kit-pop.machines-pop) {
-    --pop-scale: 0.97;
-    --pop-rise: 0px;
-    transition-timing-function: var(--ease-out);
-  }
-  :global(.kit-pop.machines-pop:not([data-state="closed"])) {
-    transition-duration: var(--dur-menu);
   }
 </style>

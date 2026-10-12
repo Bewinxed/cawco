@@ -1,6 +1,7 @@
 /**
  * A hanging card's shadow, drawn once as a nine-slice picture instead of on
- * every paint (Caw's panel, `.caw-pop`).
+ * every paint (the cards on the top bar's glass, HangCard `glass`:
+ * `.glass-card`).
  *
  * WebKit blurs a box-shadow's whole shape each time it paints the box:
  * Safari's layer backing stores are IOSurface contexts, which WebKit counts
@@ -22,7 +23,7 @@
  * deviation of half the blur radius), each shadow out to its blur radius
  * from its shape, where CSS ends it. A border-image is painted over its
  * box's background, so the card's surface is an element of its own over
- * the picture (`.hung-surface`, CawPanel), as a box's background lies over
+ * the picture (`.hung-surface`, HangCard), as a box's background lies over
  * its box-shadow. Against the box-shadow it replaces, in Playwright WebKit at
  * 3x, 51 pixels round the corners differ by more than 4 of 255 levels, none
  * by more than 9.

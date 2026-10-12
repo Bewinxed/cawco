@@ -1090,8 +1090,9 @@
   }
 
   /* A floating surface that hangs from its anchor as one shape with it
-     (motion/hang: the session card from its tab, Caw's panel from his
-     glass). It stands on the anchor's foot. Its edge is drawn by `::after`
+     (HangCard, motion/hang: the session card and a finger's tab menu from
+     their tab; Caw's panel, the machines and the Jump palette from the top
+     bar's glass). It stands on the anchor's foot. Its edge is drawn by `::after`
      rather than its border, so its top can be cut across the anchor's span
      and its flared foot (`--neck-start`, `--neck-end`, `--neck-flare-start`,
      `--neck-flare-end`, in the card's own coordinates, written by the card
@@ -1131,7 +1132,7 @@
        surface again, drawn over it. A flare's stroke meets the top edge
        along it, its last few pixels in the edge's own row (`--neck-tail-*`,
        √(2·flare + 1) each side with a flare, written by every card through
-       hang's `neckStyle`): the edge fades out across them as the stroke's
+       HangCard through hang's `setNeck`): the edge fades out across them as the stroke's
        coverage does, rather than stopping short of them. Under that row is
        the card's surface, so covering the edge with it by a ramp draws
        what masking the edge out by the same ramp drew, with no mask: a
@@ -1157,6 +1158,41 @@
         transparent
       );
       pointer-events: none;
+    }
+  }
+  /* A card hanging from the top bar's glass (HangCard `glass`: Caw's panel,
+     the machines, the Jump palette). Its top shows its own surface across
+     the cut, so its shadow has no night ring (`shadow-overlay-hung`): the
+     ring is the edge's own pixel, hidden under the drawn edge, and across
+     the cut (and down a phone's screen edge, where no edge is drawn) it was
+     a seam. That shadow is a picture the Shell draws once
+     (motion/hung-shadow) and lays round the card as its border-image, not a
+     box-shadow: WebKit blurred the whole card again on every open, in the
+     frame its slide started on. The card's surface is an element of its
+     own over that picture (`.hung-surface`), as a box's background lies
+     over its box-shadow. */
+  .kit-pop.kit-hang.glass-card {
+    box-shadow: none;
+
+    & > .hung-surface {
+      position: absolute;
+      inset: 0;
+      z-index: -1;
+      border-radius: inherit;
+      background: var(--hang-surface);
+      pointer-events: none;
+    }
+  }
+  /* On a phone the glass is a tab tucked into the screen's trailing edge,
+     and the card hanging from it is too: its trailing side is the screen's
+     edge, square and with no edge drawn there, as the glass's. */
+  @media (max-width: 899px) {
+    .kit-pop.kit-hang.glass-card {
+      border-end-end-radius: 0;
+
+      &::after {
+        border-inline-end-width: 0;
+      }
     }
   }
   /* The cut the card comes down from behind (`hang`): its floating wrapper,

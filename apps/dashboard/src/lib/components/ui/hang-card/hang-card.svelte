@@ -1,0 +1,259 @@
+<script lang="ts">
+  /**
+   * A card that hangs from its anchor as one shape with it (DESIGN.md, "A
+   * card that hangs from its anchor"): Caw's panel, the machines and the
+   * Jump palette from the top bar's glass, the session card and a finger's
+   * tab menu from their tab. The iOS app's HangCard draws the same card.
+   *
+   * It is a kit floating surface (the popover by default, or the context
+   * menu's: `as`), so focus, Escape and a press outside are the primitive's.
+   * It stands on its anchor's foot (the site gives the primitive side
+   * `bottom` at its offset) and wears `kit-hang` (app.css): its edge drawn
+   * inside its box, its top cut across the anchor's span and the anchor's
+   * flared foot each side of it (the neck), square on a side it stands flush
+   * with. It opens and closes on `hang` (motion/hang): a slide down out of
+   * the foot from behind a cut that never moves, translate alone,
+   * interruptible, a fade under Reduce Motion.
+   *
+   * The neck is measured here, from where the primitive places the card:
+   * the anchor's span in the card's coordinates, and on each side the
+   * anchor's `--flare` where the card reaches past the anchor's edge, none
+   * where its edge meets the anchor's (flush, within a pixel). The anchor's
+   * box is read as it is laid out anew (its size, the window's, a scroll),
+   * never in a placement, where a read made the page lay itself out again
+   * then and there.
+   *
+   * The anchor draws its own foot while the card stands drawn out of it
+   * (`joined`): Caw's glass its `.join`, a tab its `.neck`.
+   *
+   * A card on the bar's glass (`glass`) wears the hung shadow, the picture
+   * of `--shadow-overlay-hung` the Shell draws once (motion/hung-shadow),
+   * over its own surface (`.hung-surface`), and on a phone its trailing side
+   * is the screen's edge, as the glass's is.
+   */
+  import type {
+    ContextMenu as ContextMenuPrimitive,
+    Popover as PopoverPrimitive,
+  } from "bits-ui";
+  import { type Snippet, untrack } from "svelte";
+  import {
+    hang,
+    type Neck,
+    sameNeck,
+    setNeck,
+  } from "#lib/cawco/motion/hang.js";
+  import type ContextMenuContent from "#lib/components/ui/context-menu/context-menu-content.svelte";
+  import PopoverContent from "#lib/components/ui/popover/popover-content.svelte";
+  import { cn } from "#lib/utils.js";
+
+  type Props = Omit<
+    PopoverPrimitive.ContentProps & ContextMenuPrimitive.ContentProps,
+    "child" | "children"
+  > & {
+    /** What it hangs from. */
+    anchor: HTMLElement | null;
+    /** The kit surface it is: the popover's (default), bits-ui's own, or the context menu's. */
+    as?:
+      | typeof PopoverContent
+      | typeof PopoverPrimitive.Content
+      | typeof ContextMenuContent;
+    /** The anchor's foot flares out into the card (a chosen tab's does; another's meets it square). */
+    flared?: boolean;
+    /** It hangs from the top bar's glass. */
+    glass?: boolean;
+    /** It stands drawn out of its anchor: the anchor draws its foot. */
+    joined?: boolean;
+    /** The neck where the card stands, on every placement. */
+    onneck?: (neck: Neck) => void;
+    /** A finger is drawing it out of its anchor, which is its open: nothing plays. */
+    held?: () => boolean;
+    /** A finger folded it into its anchor: it is shut, with nothing left to play. */
+    folded?: () => boolean;
+    /** It is opened only to be placed ahead of its first real open: nothing plays. */
+    quiet?: () => boolean;
+    children: Snippet;
+  };
+
+  let {
+    anchor,
+    as: Content = PopoverContent,
+    flared = true,
+    glass = false,
+    joined = $bindable(false),
+    ref = $bindable(null),
+    onneck,
+    held,
+    folded,
+    quiet,
+    class: className,
+    children,
+    ...rest
+  }: Props = $props();
+
+  /** The anchor's span on the screen and its flare; re-read once it may have moved. */
+  let span: { left: number; right: number; flare: number } | null = null;
+  let moved = true;
+  function read(at: HTMLElement) {
+    const box = at.getBoundingClientRect();
+    span = {
+      left: box.left,
+      right: box.right,
+      flare:
+        Number.parseFloat(getComputedStyle(at).getPropertyValue("--flare")) ||
+        0,
+    };
+    moved = false;
+  }
+  $effect(() => {
+    const at = anchor;
+    if (!at) {
+      span = null;
+      return;
+    }
+    read(at);
+    const sized = new ResizeObserver(() => read(at));
+    sized.observe(at);
+    const away = () => {
+      moved = true;
+    };
+    const options = { capture: true, passive: true } as const;
+    addEventListener("resize", away);
+    addEventListener("scroll", away, options);
+    return () => {
+      sized.disconnect();
+      removeEventListener("resize", away);
+      removeEventListener("scroll", away, options);
+    };
+  });
+
+  /** The card's width, kept by its own observer. */
+  let width = 0;
+  /** Where the card's left edge stood at its last placement. */
+  let placedAt: number | null = null;
+  let drawn: Neck | null = null;
+
+  function neckAt(
+    node: HTMLElement,
+    left: number,
+    flaring: boolean
+  ): Neck | null {
+    const at = anchor;
+    if (!at) {
+      return null;
+    }
+    if (moved || !span) {
+      read(at);
+    }
+    if (!span) {
+      return null;
+    }
+    const right = left + (width || node.offsetWidth);
+    const flare = flaring ? span.flare : 0;
+    const flushStart = Math.abs(left - span.left) <= 1;
+    const flushEnd = Math.abs(right - span.right) <= 1;
+    let flush: Neck["flush"] = null;
+    if (flushStart) {
+      flush = "start";
+    } else if (flushEnd) {
+      flush = "end";
+    }
+    return {
+      start: span.left - left,
+      end: span.right - left,
+      flareStart: flushStart ? 0 : flare,
+      flareEnd: flushEnd ? 0 : flare,
+      flush,
+    };
+  }
+
+  /**
+   * Writes the neck onto the card's own style, which costs a style change
+   * and no render of the primitive's props; again whenever the primitive
+   * wrote the style attribute over it.
+   */
+  function draw(node: HTMLElement, neck: Neck) {
+    const standing =
+      drawn !== null &&
+      sameNeck(neck, drawn) &&
+      node.style.getPropertyValue("--neck-start") === `${neck.start}px`;
+    if (!standing) {
+      setNeck(node, neck);
+      if (neck.flush) {
+        node.dataset.flush = neck.flush;
+      } else {
+        delete node.dataset.flush;
+      }
+      drawn = neck;
+    }
+    onneck?.(neck);
+  }
+
+  const hung = (node: HTMLElement) => {
+    const sized = new ResizeObserver(([entry]) => {
+      width = entry?.borderBoxSize[0]?.inlineSize ?? node.offsetWidth;
+    });
+    sized.observe(node);
+    const motion = hang({
+      neckAt: (left) => {
+        placedAt = left;
+        return neckAt(node, left, flared);
+      },
+      onneck: (neck) => draw(node, neck),
+      onshown: (shown) => {
+        joined = shown;
+      },
+      held: () => held?.() ?? false,
+      folded: () => folded?.() ?? false,
+      quiet: () => quiet?.() ?? false,
+    })(node);
+    return () => {
+      sized.disconnect();
+      motion?.();
+      placedAt = null;
+      drawn = null;
+    };
+  };
+
+  // A tab chosen or let go under its open card: the flares follow at once.
+  let card: HTMLElement | null = null;
+  $effect(() => {
+    const flaring = flared;
+    untrack(() => {
+      if (card && placedAt !== null) {
+        const neck = neckAt(card, placedAt, flaring);
+        if (neck) {
+          draw(card, neck);
+        }
+      }
+    });
+  });
+  const kept = (node: HTMLElement) => {
+    card = node;
+    return () => {
+      if (card === node) {
+        card = null;
+      }
+    };
+  };
+</script>
+
+<Content
+  {...rest}
+  class={cn("kit-pop kit-hang", glass && "glass-card", className)}
+  bind:ref
+>
+  {#snippet child({
+    props,
+    wrapperProps,
+  })}
+    <div {...wrapperProps}>
+      <div {...props} {@attach hung} {@attach kept}>
+        {#if glass}
+          <!-- Its surface, over the shadow picture it wears as its border-image (motion/hung-shadow). -->
+          <span aria-hidden="true" class="hung-surface"></span>
+        {/if}
+        {@render children()}
+      </div>
+    </div>
+  {/snippet}
+</Content>

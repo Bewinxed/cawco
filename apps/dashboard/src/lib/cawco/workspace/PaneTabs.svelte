@@ -20,7 +20,7 @@
 </script>
 
 <script lang="ts">
-  import { mergeProps, Popover } from "bits-ui";
+  import { Popover } from "bits-ui";
   /**
    * One group's tabs: a segmented control (the Fluid Functionalism tabs,
    * `#lib/components/ui/fluid-tabs/index.js`) with one segment per open conversation.
@@ -45,12 +45,6 @@
     easeOut,
     motionOk,
   } from "#lib/cawco/motion/curves.svelte.js";
-  import {
-    hang,
-    type Neck,
-    neckStyle,
-    sameNeck,
-  } from "#lib/cawco/motion/hang.js";
   import { land } from "#lib/cawco/motion/share.svelte.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
@@ -61,6 +55,7 @@
     TabsList,
     type TabsTravel,
   } from "#lib/components/ui/fluid-tabs/index.js";
+  import { HangCard } from "#lib/components/ui/hang-card/index.js";
   import { IconArrowRight, IconChevronDown, IconClose } from "#lib/icons.js";
   import { page } from "$app/state";
   import AccountSubmenu from "../accounts/AccountSubmenu.svelte";
@@ -326,7 +321,7 @@
     if (!(detailsOpen && detailId !== id)) {
       detailId = id;
       detailAnchor = anchor;
-      neck = neckOf(anchor);
+      cardFlush = flushAt(anchor) ? "start" : null;
       detailsOpen = true;
       return;
     }
@@ -346,7 +341,7 @@
             : -1;
         detailId = id;
         detailAnchor = anchor;
-        neck = neckOf(anchor);
+        cardFlush = flushAt(anchor) ? "start" : null;
       });
     });
   }
@@ -375,8 +370,7 @@
   /** Round the card's corner, and the 4px run before the flare begins. */
   const CARD_CORNER = 12;
   const CARD_RUN = 4;
-  /** The card's width (`.session-details-popover`) and its margin to the viewport. */
-  const CARD_W = 416;
+  /** The card's margin to the viewport. */
   const CARD_MARGIN = 12;
   const flareOf = (anchor: HTMLElement) =>
     Number.parseFloat(getComputedStyle(anchor).getPropertyValue("--flare")) ||
@@ -405,39 +399,11 @@
       : -(flareOf(anchor) + CARD_CORNER + CARD_RUN);
   }
   /**
-   * The tab's span in the card's coordinates, from where the card stands (or
-   * will), and the flare each side of it: none on a side the card is flush
-   * with (motion/hang).
+   * The side the card stands flush with its tab on, as HangCard measures it
+   * where the card stands (and as `flushAt` says before it is placed): the
+   * tab's sheet is square at its foot on that side.
    */
-  let neck = $state<Neck>({
-    start: 0,
-    end: 0,
-    flareStart: 0,
-    flareEnd: 0,
-    flush: null,
-  });
-  function neckOf(anchor: HTMLElement, cardLeft?: number): Neck {
-    const box = anchor.getBoundingClientRect();
-    const vw = document.documentElement.clientWidth;
-    const width = Math.min(CARD_W, vw - 2 * CARD_MARGIN);
-    const flush = flushAt(anchor);
-    const left =
-      cardLeft ??
-      Math.min(
-        Math.max(box.left + alignFor(anchor), CARD_MARGIN),
-        vw - CARD_MARGIN - width
-      );
-    // Only a chosen tab wears the sheet's flared foot; another tab's card
-    // (hovered open) meets the card square.
-    const flare = anchor.hasAttribute("data-chosen") ? flareOf(anchor) : 0;
-    return {
-      start: box.left - left,
-      end: box.right - left,
-      flareStart: flush ? 0 : flare,
-      flareEnd: flare,
-      flush: flush ? "start" : null,
-    };
-  }
+  let cardFlush = $state<"start" | "end" | null>(null);
   /** The tab's box, the card's anchor, by the tab's id. */
   function anchorOf(id: string): HTMLElement | null {
     return (
@@ -448,24 +414,12 @@
   }
   /** Set by the finger that folded the card into its tab: nothing left to play. */
   let folded = false;
-  /**
-   * The card hangs from its tab and grows out of it (motion/hang): the neck
-   * follows every placement, and a card the finger folded into its tab
-   * (`swipeCardShut`) is already shut and leaves at once.
-   */
-  const hangCard = hang({
-    neckAt: (left) => (detailAnchor ? neckOf(detailAnchor, left) : null),
-    onneck: (next) => {
-      if (!sameNeck(next, neck)) {
-        neck = next;
-      }
-    },
-    folded: () => {
-      const was = folded;
-      folded = false;
-      return was;
-    },
-  });
+  /** A card the finger folded into its tab (`swipeCardShut`) is already shut and leaves at once. */
+  function takeFolded() {
+    const was = folded;
+    folded = false;
+    return was;
+  }
   /**
    * A finger dragged outside the open card closes it and carries on as the
    * scroll it is, as the iOS app's card does (a pan beside its light-dismiss
@@ -479,14 +433,6 @@
    */
   const DRAG_SLOP = 10;
   let cardEl = $state<HTMLElement | null>(null);
-  const cardRef: Attachment<HTMLElement> = (node) => {
-    cardEl = node;
-    return () => {
-      if (cardEl === node) {
-        cardEl = null;
-      }
-    };
-  };
   function closeOnOutsideDrag(card: HTMLElement) {
     let press: { id: number; x: number; y: number } | null = null;
     const down = (event: PointerEvent) => {
@@ -543,11 +489,23 @@
     }
     return untrack(() => closeOnOutsideDrag(card));
   });
-  /** A finger's swipe up the card's head, beside bits-ui's own handlers in the content's props. */
-  const swipeShut: Attachment<HTMLElement> = (node) => {
-    node.addEventListener("pointerdown", swipeCardShut);
-    return () => node.removeEventListener("pointerdown", swipeCardShut);
-  };
+  // A finger's swipe up the card's head, beside bits-ui's own handlers in
+  // the content's props.
+  $effect(() => {
+    const card = cardEl;
+    if (!card) {
+      return;
+    }
+    card.addEventListener("pointerdown", swipeCardShut);
+    return () => card.removeEventListener("pointerdown", swipeCardShut);
+  });
+  // The morph mark changes as the surface retargets. It is set on the
+  // element: as a prop of the popover's content the change re-mounts
+  // bits-ui's focus scope, which runs its close auto-focus on a surface
+  // that is still open.
+  $effect(() => {
+    cardEl?.toggleAttribute("data-morph", morphing);
+  });
   function hoverTab(id: string, event: PointerEvent) {
     if (touch.current || event.pointerType !== "mouse" || pinned || menuOpen) {
       return;
@@ -953,61 +911,26 @@
      a plain kit menu. */
   /** The tab whose menu hangs from it, while it stands open. */
   let menuHung = $state<string | null>(null);
-  /** The hanging menu's neck: the tab's span and flares in its coordinates. */
-  let menuNeck = $state<Neck>({
-    start: 0,
-    end: 0,
-    flareStart: 0,
-    flareEnd: 0,
-    flush: null,
-  });
+  /** The side the hanging menu stands flush with its tab on (HangCard). */
+  let menuFlush = $state<"start" | "end" | null>(null);
   /** The least width that holds the tab's span and its flare: the margin, the tab, its flare, a corner. */
   let menuMin = $state(0);
   /** A finger is drawing the menu out: the pull is its open. */
   let menuHeld = false;
   /** A finger put the menu back into its tab: it is already shut. */
   let menuFolded = false;
-  /** The open menu's surface and its tab, once bits-ui has mounted it. */
-  let menuEl = $state<{ el: HTMLElement; id: string } | null>(null);
-  $effect(() => {
-    const at = menuEl;
-    if (!(at && touch.current)) {
-      return;
-    }
-    return untrack(() =>
-      hang({
-        neckAt: (left) => {
-          const anchor = anchorOf(at.id);
-          return anchor ? neckOf(anchor, left) : null;
-        },
-        onneck: (next) => {
-          if (!sameNeck(next, menuNeck)) {
-            menuNeck = next;
-          }
-        },
-        onshown: (shown) => {
-          if (shown) {
-            menuHung = at.id;
-          } else if (menuHung === at.id) {
-            menuHung = null;
-          }
-        },
-        held: () => menuHeld,
-        folded: () => {
-          const was = menuFolded;
-          menuFolded = false;
-          return was;
-        },
-      })(at.el)
-    );
-  });
+  function takeMenuFolded() {
+    const was = menuFolded;
+    menuFolded = false;
+    return was;
+  }
 
   /** The side a tab's hanging card or menu stands flush with it on, if one hangs. */
   function hungFlush(card: boolean, menu: boolean) {
     if (card) {
-      return neck.flush ?? undefined;
+      return cardFlush ?? undefined;
     }
-    return menu ? (menuNeck.flush ?? undefined) : undefined;
+    return menu ? (menuFlush ?? undefined) : undefined;
   }
 
   /** Opens tab's menu hanging from its foot, under the row. */
@@ -1015,6 +938,7 @@
     const hit = tabNode.querySelector("[data-session-tab]") ?? tabNode;
     const box = tabNode.getBoundingClientRect();
     if (touch.current) {
+      menuFlush = flushAt(tabNode) ? "start" : null;
       menuMin =
         -alignFor(tabNode) +
         box.width +
@@ -1404,6 +1328,77 @@
         {@attach attachmentsOf(tab.id).enter}
         {@attach attachmentsOf(tab.id).land}
       >
+        <!-- The tab's options: a finger's hanging menu and a mouse's both. -->
+        {#snippet options()}
+          {#if !(runIdOf(tab.id) || isThreadTab(tab.id))}
+            <ContextMenu.Item
+              onSelect={() => {
+                const anchor = anchorOf(tab.id);
+                if (anchor) {
+                  showDetails(tab.id, anchor, true);
+                }
+              }}
+              >Session details</ContextMenu.Item
+            >
+            <ContextMenu.Item
+              onSelect={() =>
+                continueInNewSession(continueSourceOf(tab.id, tab.label))}
+            >
+              <IconArrowRight />
+              Continue in new session…
+            </ContextMenu.Item>
+            {@const row = cawco.instances.find((one) => one.id === tab.id)}
+            {#if row}
+              <AccountSubmenu instance={row} />
+            {/if}
+          {/if}
+          <!-- Every gesture has a command that does the same thing. Splitting
+                 and moving are reachable from here before drag-and-drop exists,
+                 and stay reachable for anyone not using a pointer. -->
+          <ContextMenu.Item
+            onSelect={() => workspace.split(leaf.id, "right", tab.id)}
+          >
+            Split right
+          </ContextMenu.Item>
+          <ContextMenu.Item
+            onSelect={() => workspace.split(leaf.id, "bottom", tab.id)}
+          >
+            Split down
+          </ContextMenu.Item>
+          {#if otherLeaves.length > 0}
+            <ContextMenu.Separator />
+            {#each otherLeaves as other, i (other.id)}
+              <ContextMenu.Item
+                onSelect={() => workspace.move(tab.id, other.id)}
+              >
+                Move to group {i + 2}
+              </ContextMenu.Item>
+            {/each}
+          {/if}
+          <ContextMenu.Separator />
+          <ContextMenu.Item onSelect={() => workspace.close(tab.id)}
+            >Close</ContextMenu.Item
+          >
+          <ContextMenu.Item
+            disabled={leaf.tabs.length < 2}
+            onSelect={() => {
+              for (const id of [...leaf.tabs]) {
+                if (id !== tab.id) {
+                  workspace.close(id);
+                }
+              }
+            }}
+          >
+            Close others
+          </ContextMenu.Item>
+          <ContextMenu.Separator />
+          <ContextMenu.CopyItem
+            text={new URL(tab.href, location.origin).href}
+            what="Link"
+          >
+            Copy link
+          </ContextMenu.CopyItem>
+        {/snippet}
         <ContextMenu.Root
           bind:open={() => menuFor === tab.id, (open) => setMenu(tab.id, open)}
         >
@@ -1511,102 +1506,49 @@
             </TabItem>
           </ContextMenu.Trigger>
           <!-- Under a finger it hangs from the tab's foot as one shape with
-               it (`kit-hang`, above), from the card's own 12px margin
+               it (a HangCard, above), from the card's own 12px margin
                before the tab, shifted left only when it would pass the
                screen's edge less 12px (as TabOptionsSheet on iOS); a
                mouse's opens beside the pointer. -->
-          <ContextMenu.Content
-            align="start"
-            class={touch.current ? "kit-hang tab-menu" : undefined}
-            collisionPadding={12}
-            data-flush={touch.current
-              ? (menuNeck.flush ?? undefined)
-              : undefined}
-            side={touch.current ? "bottom" : "right"}
-            sideOffset={0}
-            style={touch.current
-              ? `${neckStyle(menuNeck)}; --hang-min: ${menuMin}px`
-              : undefined}
-            bind:ref={
-              () => (menuEl?.id === tab.id ? menuEl.el : null),
-              (el) => {
-    if (el) {
-      menuEl = { el, id: tab.id };
-    } else if (menuEl?.id === tab.id) {
-      menuEl = null;
+          {#if touch.current}
+            <HangCard
+              align="start"
+              anchor={menuFor === tab.id ? anchorOf(tab.id) : null}
+              as={ContextMenu.Content}
+              class="tab-menu"
+              collisionPadding={12}
+              flared={chosen}
+              folded={takeMenuFolded}
+              held={() => menuHeld}
+              onneck={(neck) => {
+                menuFlush = neck.flush;
+              }}
+              side="bottom"
+              sideOffset={0}
+              style="--hang-min: {menuMin}px"
+              bind:joined={
+                () => menuHung === tab.id,
+                (shown) => {
+    if (shown) {
+      menuHung = tab.id;
+    } else if (menuHung === tab.id) {
+      menuHung = null;
     }
   }
-            }
-          >
-            {#if !(runIdOf(tab.id) || isThreadTab(tab.id))}
-              <ContextMenu.Item
-                onSelect={() => {
-                  const anchor = anchorOf(tab.id);
-                  if (anchor) {
-                    showDetails(tab.id, anchor, true);
-                  }
-                }}
-                >Session details</ContextMenu.Item
-              >
-              <ContextMenu.Item
-                onSelect={() =>
-                  continueInNewSession(continueSourceOf(tab.id, tab.label))}
-              >
-                <IconArrowRight />
-                Continue in new session…
-              </ContextMenu.Item>
-              {@const row = cawco.instances.find((one) => one.id === tab.id)}
-              {#if row}
-                <AccountSubmenu instance={row} />
-              {/if}
-            {/if}
-            <!-- Every gesture has a command that does the same thing. Splitting
-                 and moving are reachable from here before drag-and-drop exists,
-                 and stay reachable for anyone not using a pointer. -->
-            <ContextMenu.Item
-              onSelect={() => workspace.split(leaf.id, "right", tab.id)}
+              }
             >
-              Split right
-            </ContextMenu.Item>
-            <ContextMenu.Item
-              onSelect={() => workspace.split(leaf.id, "bottom", tab.id)}
+              {@render options()}
+            </HangCard>
+          {:else}
+            <ContextMenu.Content
+              align="start"
+              collisionPadding={12}
+              side="right"
+              sideOffset={0}
             >
-              Split down
-            </ContextMenu.Item>
-            {#if otherLeaves.length > 0}
-              <ContextMenu.Separator />
-              {#each otherLeaves as other, i (other.id)}
-                <ContextMenu.Item
-                  onSelect={() => workspace.move(tab.id, other.id)}
-                >
-                  Move to group {i + 2}
-                </ContextMenu.Item>
-              {/each}
-            {/if}
-            <ContextMenu.Separator />
-            <ContextMenu.Item onSelect={() => workspace.close(tab.id)}
-              >Close</ContextMenu.Item
-            >
-            <ContextMenu.Item
-              disabled={leaf.tabs.length < 2}
-              onSelect={() => {
-                for (const id of [...leaf.tabs]) {
-                  if (id !== tab.id) {
-                    workspace.close(id);
-                  }
-                }
-              }}
-            >
-              Close others
-            </ContextMenu.Item>
-            <ContextMenu.Separator />
-            <ContextMenu.CopyItem
-              text={new URL(tab.href, location.origin).href}
-              what="Link"
-            >
-              Copy link
-            </ContextMenu.CopyItem>
-          </ContextMenu.Content>
+              {@render options()}
+            </ContextMenu.Content>
+          {/if}
         </ContextMenu.Root>
         <!-- The status rim, drawn on the tab's own outline, on every width,
              in pieces: the top, and each side twice, its shoulder and run
@@ -1638,14 +1580,18 @@
   open={detailsOpen}
 >
   <Popover.Portal>
-    <Popover.Content
+    <HangCard
       align="start"
       alignOffset={alignFor(detailAnchor)}
+      anchor={detailAnchor}
       aria-label="Session details"
-      class="kit-pop kit-hang session-details-popover"
+      as={Popover.Content}
+      class="session-details-popover"
       collisionPadding={12}
       customAnchor={detailAnchor}
       data-safe-bottom
+      flared={leaf.active === detailId}
+      folded={takeFolded}
       onCloseAutoFocus={(event) => {
         event.preventDefault();
         if (restoreFocus) {
@@ -1664,6 +1610,9 @@
           event.preventDefault();
         }
       }}
+      onneck={(neck) => {
+        cardFlush = neck.flush;
+      }}
       onOpenAutoFocus={(event) => {
         if (!pinned) {
           event.preventDefault();
@@ -1678,52 +1627,32 @@
       side="bottom"
       sideOffset={0}
       trapFocus={pinned}
+      bind:ref={cardEl}
     >
-      {#snippet child({
-        props,
-        wrapperProps,
-      })}
-        <div {...wrapperProps}>
-          <!-- The morph mark changes as the surface retargets. It is set
-                 here, on the element: as a prop of Popover.Content the change
-                 re-mounts bits-ui's focus scope, which runs its close
-                 auto-focus on a surface that is still open. -->
-          <div
-            {...mergeProps(props, { style: neckStyle(neck) })}
-            data-flush={neck.flush ?? undefined}
-            data-morph={morphing ? "" : undefined}
-            {@attach hangCard}
-            {@attach swipeShut}
-            {@attach cardRef}
-          >
-            <div
-              class="details-morph"
-              style:height={detailsHeight ? `${detailsHeight}px` : undefined}
-            >
-              <div class="details-measure" bind:offsetHeight={detailsHeight}>
-                {#if detailTab}
-                  <SessionDetails
-                    dir={detailDir}
-                    href={detailTab.href}
-                    onclose={closeDetails}
-                    sessionId={detailTab.id}
-                    title={detailTab.label}
-                  />
-                {/if}
-              </div>
-            </div>
-          </div>
+      <div
+        class="details-morph"
+        style:height={detailsHeight ? `${detailsHeight}px` : undefined}
+      >
+        <div class="details-measure" bind:offsetHeight={detailsHeight}>
+          {#if detailTab}
+            <SessionDetails
+              dir={detailDir}
+              href={detailTab.href}
+              onclose={closeDetails}
+              sessionId={detailTab.id}
+              title={detailTab.label}
+            />
+          {/if}
         </div>
-      {/snippet}
-    </Popover.Content>
+      </div>
+    </HangCard>
   </Popover.Portal>
 </Popover.Root>
 
 <style>
-  /* The card is a kit floating surface (app.css `.kit-pop`) that hangs from
-     its tab (`.kit-hang`, motion/hang): its edge, the cut across the tab's
+  /* The card is a HangCard on its tab: its edge, the cut across the tab's
      flared span, its shadow cut at its top edge, and its open and close
-     are the recipe's. Its content runs edge to edge. */
+     are the component's. Its content runs edge to edge. */
   :global(.kit-pop.session-details-popover) {
     display: flex;
     z-index: 60;
