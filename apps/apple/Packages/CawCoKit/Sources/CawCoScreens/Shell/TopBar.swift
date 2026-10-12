@@ -432,6 +432,10 @@ final class GlassItem: TapControl {
         row.isUserInteractionEnabled = false
         row.translatesAutoresizingMaskIntoConstraints = false
         count.tabular = true
+        // The count is never cut: `snug` below asks at `defaultHigh`, the
+        // label's own default resistance, and the tie drew the machines' "0"
+        // 2pt wide past the glyph, a sliver on the glass. The item grows to it.
+        count.setContentCompressionResistancePriority(.required, for: .horizontal)
         addSubview(row)
         // As wide as its content needs and no wider: a bar that offers its
         // group more room never stretches an item (it took the crumb's room).

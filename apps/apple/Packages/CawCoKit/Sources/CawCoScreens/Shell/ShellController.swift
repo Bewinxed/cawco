@@ -688,6 +688,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             say("cards standing \(glassCards.filter(\.open).map(\.name)) one at a time \(glassCards.filter(\.open).count == 1)")
         }
         let cluster = frontCluster
+        say(Self.glassReading(cluster.glass))
         stand(cawPanel, head: cluster.caw, glass: cluster.glass, instant: false)
         try? await Task.sleep(for: .seconds(0.8))
         row(cawPanel)
@@ -696,7 +697,10 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             openMachines(from: mainCluster.machinesItem)
             try? await Task.sleep(for: .seconds(0.8))
             say("caw's panel folded for the machines \(!cawPanel.open)")
-            if let machinesCard { row(machinesCard) }
+            if let machinesCard {
+                row(machinesCard)
+                say(Self.rulesReading(machinesCard))
+            }
             snap("machines")
         }
         openJump(.press(compact ? nil : mainCluster.jumpItem))
@@ -704,6 +708,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         say("the machines folded for Jump \(machinesCard?.open != true) caw's panel shut \(!cawPanel.open)")
         if let jumpCard {
             row(jumpCard)
+            say(Self.rulesReading(jumpCard))
             say("jump field focused \(jumpCard.fieldFocused)")
         }
         snap("jump")
@@ -717,6 +722,58 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         snap("jump-by-key")
         jumpCard?.leaveByKey()
         try? await Task.sleep(for: .seconds(0.6))
+    }
+
+    /// What stands on the glass at rest, against the glass's own bounds: every
+    /// drawn view that reaches past them (more than half a point), and every
+    /// label drawn narrower than its text, which the glass would show cut off.
+    /// Then each control on it, its frame and any label's text in it.
+    private static func glassReading(_ glass: GlassCapsule) -> String {
+        func box(_ r: CGRect) -> String { String(format: "x %.1f y %.1f w %.1f h %.1f", r.minX, r.minY, r.width, r.height) }
+        var outside: [String] = []
+        var narrow: [String] = []
+        func walk(_ view: UIView) {
+            for sub in view.subviews where !sub.isHidden && sub.alpha > 0.01 {
+                let frame = sub.convert(sub.bounds, to: glass)
+                if !glass.bounds.insetBy(dx: -0.5, dy: -0.5).contains(frame) {
+                    outside.append("\(type(of: sub)) \(box(frame))")
+                }
+                if let label = sub as? UILabel, label.intrinsicContentSize.width > label.bounds.width + 0.5 {
+                    narrow.append("'\(label.text ?? "")' \(box(frame)) needs w \(String(format: "%.1f", label.intrinsicContentSize.width))")
+                }
+                walk(sub)
+            }
+        }
+        walk(glass)
+        let controls = glass.content.subviews.flatMap(\.subviews).map { control in
+            let words = control.subviews.flatMap(\.subviews).compactMap { ($0 as? UILabel)?.text }
+            return "\(type(of: control)) \(box(control.convert(control.bounds, to: glass)))\(words.isEmpty ? "" : " '\(words.joined(separator: " "))'")"
+        }
+        return "glass \(box(glass.bounds)) outside \(outside.isEmpty ? "none" : outside.joined(separator: " | ")) narrow \(narrow.isEmpty ? "none" : narrow.joined(separator: " | ")) controls \(controls.joined(separator: " | "))"
+    }
+
+    /// Every rule drawn in a card (a view a point tall or less with a fill),
+    /// its colour as resolved in the card's scheme, and the two rule tokens
+    /// resolved there: `seam` and `border-hairline`.
+    private static func rulesReading(_ card: GlassCard) -> String {
+        let traits = card.traitCollection
+        func rgb(_ color: UIColor) -> String {
+            var (r, g, b, a) = (CGFloat(0), CGFloat(0), CGFloat(0), CGFloat(0))
+            color.resolvedColor(with: traits).getRed(&r, green: &g, blue: &b, alpha: &a)
+            return String(format: "(%.0f,%.0f,%.0f a %.2f)", r * 255, g * 255, b * 255, a)
+        }
+        var rules: [String] = []
+        func walk(_ view: UIView) {
+            for sub in view.subviews where !sub.isHidden {
+                if sub.bounds.height <= 1.01, sub.bounds.width > 4, let fill = sub.backgroundColor, fill.cgColor.alpha > 0 {
+                    let frame = sub.convert(sub.bounds, to: card)
+                    rules.append(String(format: "y %.1f w %.1f ", frame.minY, frame.width) + rgb(fill) + " seam \(fill == Palette.seam) hairline \(fill == Palette.borderHairline)")
+                }
+                walk(sub)
+            }
+        }
+        walk(card)
+        return "\(card.name) rules \(rules.isEmpty ? "none" : rules.joined(separator: " | ")); tokens seam \(rgb(Palette.seam)) border-hairline \(rgb(Palette.borderHairline))"
     }
 
     #if !targetEnvironment(macCatalyst)

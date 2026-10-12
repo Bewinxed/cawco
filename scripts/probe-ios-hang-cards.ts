@@ -8,7 +8,10 @@
  * foot, its trailing edge flush within 1pt, the neck's span the glass's, one
  * card standing when the machines open over Caw's panel and Jump over the
  * machines, Jump's field focused, and ⌘K standing it and taking it at once
- * with no frame between.
+ * with no frame between. At rest, nothing on the glass reaches past its
+ * bounds and no label on it is drawn narrower than its text; the machines'
+ * and Jump's rules are printed with their resolved colour against `seam` and
+ * `border-hairline`.
  *
  *   bun scripts/probe-ios-hang-cards.ts <CawCo.app> <hub url> [out dir]
  *
@@ -100,6 +103,12 @@ xcrun simctl install ${udid} "${app}"`);
       for (const line of lines) {
         console.log(`  ${line}`);
       }
+      const glass = lines.find((line) => line.startsWith("hang glass ")) ?? "";
+      check(
+        `${label}: the glass draws nothing past its bounds, no label cut`,
+        glass.includes("outside none narrow none"),
+        glass || "no 'hang glass' line"
+      );
       const cards =
         device.kind === "ipad"
           ? ["panel", "machines", "jump"]
