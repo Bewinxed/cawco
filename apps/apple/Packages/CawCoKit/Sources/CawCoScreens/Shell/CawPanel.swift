@@ -111,6 +111,19 @@ final class CawPanel: GlassContent {
 
     // MARK: Rows
 
+    #if DEBUG
+    /// The last rows asked for, to build again (`probeRebuild`).
+    private var probeLast: (() -> Void)?
+
+    /// Builds the rows again from what they were last asked to show, as a
+    /// change in the hub's word builds them: a probe's way to have new rows
+    /// waiting on their first layout.
+    func probeRebuild() {
+        drawn = ""
+        probeLast?()
+    }
+    #endif
+
     /// The rows, as the hub says them now. `quiet`: what Caw says with nothing to list.
     func configure(needs: [HomeModel.NeedsItem], answers: Answers, notices: [Notice], quiet: String, now: Double, live: Bool) {
         let needWords = needs.map { item -> String in
@@ -124,6 +137,9 @@ final class CawPanel: GlassContent {
             return (head + entries + members).joined(separator: "\u{1f}")
         }
         let words = (needWords + noticeWords + [quiet, "\(live)"]).joined(separator: "\n")
+        #if DEBUG
+        probeLast = { [weak self] in self?.configure(needs: needs, answers: answers, notices: notices, quiet: quiet, now: now, live: live) }
+        #endif
         guard words != drawn else { return }
         drawn = words
         #if DEBUG

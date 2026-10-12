@@ -178,6 +178,23 @@ public final class SessionMarkView: UIView {
         hit.isHidden = !(count > 0 && onToggle != nil)
     }
 
+    #if DEBUG
+    /// Each part the mark draws, as drawn now (presentation values), in
+    /// `space`'s points: its own box, the tile's face, the sprite, the echo,
+    /// the ping, and each deck card that shows.
+    public func probeParts(in space: CALayer) -> [(name: String, frame: CGRect)] {
+        func drawn(_ part: CALayer) -> CGRect {
+            let shown = part.presentation() ?? part
+            return shown.convert(shown.bounds, to: space.presentation() ?? space)
+        }
+        var parts: [(String, CGRect)] = [("mark", drawn(layer)), ("face", drawn(face.layer)), ("sprite", drawn(sprite.layer))]
+        if !echo.isHidden { parts.append(("echo", drawn(echo))) }
+        if !ping.isHidden { parts.append(("ping", drawn(ping))) }
+        for (index, card) in cards.enumerated() where !card.isHidden { parts.append(("card \(index)", drawn(card))) }
+        return parts
+    }
+    #endif
+
     /// The switch as an accessibility element of the row it stands in, while it is armed.
     public var switchElement: UIView? { hit.isHidden ? nil : hit }
 

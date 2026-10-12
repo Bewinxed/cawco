@@ -750,6 +750,62 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     /// in it is a content's own (a field's caret, a row's selection tint).
     private static let switchKeys: Set<String> = ["bounds", "bounds.size", "bounds.origin", "position", "path", "locations", "opacity", "transform"]
 
+    /// Every session mark in the card and each of its parts as drawn now
+    /// (presentation values, in the card's points); every image the card
+    /// draws: those drawn at another size than their own bounds (`off`, a
+    /// view laid out inside a tween grows from where UIKit first put it, an
+    /// image view from its image's own size) and those wider or taller than
+    /// 40pt (`big`: a glyph is 12-24pt); and any layout animation in the
+    /// contents (`laying`), which only the card's box may have.
+    private static func marksReading(_ card: GlassCard) -> String {
+        func box(_ r: CGRect) -> String { String(format: "%.1f %.1f %.1f %.1f", r.minX, r.minY, r.width, r.height) }
+        let space = card.layer.presentation() ?? card.layer
+        var marks: [String] = []
+        var images = 0
+        var off: [String] = []
+        var big: [String] = []
+        func walk(_ view: UIView) {
+            for sub in view.subviews where !sub.isHidden {
+                if let mark = sub as? SessionMarkView {
+                    marks.append(mark.probeParts(in: card.layer).map { "\($0.name) \(box($0.frame))" }.joined(separator: ", "))
+                }
+                if sub is UIImageView {
+                    images += 1
+                    let shown = sub.layer.presentation() ?? sub.layer
+                    let drawn = shown.convert(shown.bounds, to: space)
+                    let own = sub.layer.bounds.size
+                    if abs(shown.bounds.width - own.width) > 0.5 || abs(shown.bounds.height - own.height) > 0.5 {
+                        off.append("\(type(of: sub)) drawn \(box(drawn)) own \(String(format: "%.1f %.1f", own.width, own.height))")
+                    }
+                    if drawn.width > 40 || drawn.height > 40 { big.append("\(type(of: sub)) \(box(drawn))") }
+                }
+                walk(sub)
+            }
+        }
+        walk(card)
+        let layout: Set<String> = ["bounds", "bounds.size", "bounds.origin", "position", "frame"]
+        // Each layer under a content with a layout animation, named by its view (or its own class);
+        // one inside a text field or view is the system's caret placing itself as the field takes focus.
+        func inField(_ layer: CALayer) -> Bool {
+            var view = layer.delegate as? UIView
+            while let at = view {
+                if at is UITextField || at is UITextView { return true }
+                view = at.superview
+            }
+            return false
+        }
+        func laid(_ layer: CALayer, in content: String) -> [String] {
+            let own = (layer.animationKeys() ?? []).filter(layout.contains).map { key in
+                "\(content) \(layer.delegate.map { "\(type(of: $0))" } ?? "\(type(of: layer))") \(key)\(inField(layer) ? " in its field" : "")"
+            }
+            return own + (layer.sublayers ?? []).flatMap { laid($0, in: content) }
+        }
+        let laying = card.card.content.subviews.compactMap { $0 as? GlassContent }.flatMap { content in
+            content.subviews.flatMap { laid($0.layer, in: content.name) }
+        }
+        return "\(marks.count) marks [\(marks.joined(separator: " | "))] images \(images) off [\(off.joined(separator: " | "))] big [\(big.joined(separator: " | "))] laying [\(Array(Set(laying)).sorted().joined(separator: ", "))]"
+    }
+
     /// Every animation key in `layer` and the layers under it, sorted, once each.
     private static func animationKeys(_ layer: CALayer) -> [String] {
         func all(_ at: CALayer) -> [String] { (at.animationKeys() ?? []) + (at.sublayers ?? []).flatMap(all) }
@@ -771,6 +827,15 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         // The size it tweens from: as drawn the moment before the switch.
         let startSize = (layer.presentation() ?? layer).frame.size
         start()
+        // What a keyboard moving mid-switch does (`keyboardMoved`, Jump's field
+        // letting the keyboard go as Caw's panel comes in): the card placed again
+        // on a tween. Here with the panel's rows just built again, as the hub's
+        // word changing builds them, so a first layout falling inside that tween
+        // shows in the readings below.
+        if card.showing === cawPanel {
+            cawPanel.probeRebuild()
+            card.place(animated: true)
+        }
         let keys = Self.animationKeys(layer)
         let tween = (layer.animation(forKey: "bounds.size") ?? layer.animation(forKey: "bounds")) as? CABasicAnimation
         let curve: String = tween?.timingFunction.map { function in
@@ -825,6 +890,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             let drawn = layer.presentation()?.frame ?? layer.frame
             // Every piece the card draws at this stop: they all stand at the card's own size.
             say(String(format: "\(label) layers at %.3f: ", fraction) + card.card.probeLayers())
+            say(String(format: "\(label) marks at %.3f: ", fraction) + Self.marksReading(card))
             let cap = GlassCard.restingBox(of: glass, under: card.head, in: view)
             let foot = cap.maxY + glass.neck
             say(String(format: "\(label) at %.2f: card w %.1f h %.1f trailing %.2f glass flank %.2f flush %@ top %.2f glass foot %.2f on foot %@ revealed %.2f",

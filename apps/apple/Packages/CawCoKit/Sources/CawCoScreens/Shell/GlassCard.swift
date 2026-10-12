@@ -218,16 +218,29 @@ final class GlassCard: UIView, UIGestureRecognizerDelegate {
         #endif
         let spot = placement(of: showing, in: host, under: glass)
         logHang(spot, glass: glass)
-        let apply = { self.lay(showing, at: spot) }
+        // The content at its new size and laid out whole first, as a morph lays
+        // it: only the card's box follows over the tween.
+        layContent(showing, at: spot)
+        settleContents()
         if animated, !isHidden, !UIAccessibility.isReduceMotionEnabled {
-            let move = Motion.easeOut.animator(Motion.durMorph) { apply(); self.layoutIfNeeded() }
+            let move = Motion.easeOut.animator(Motion.durMorph) { self.layCard(at: spot); self.layoutIfNeeded() }
             move.addCompletion { _ in done() }
             move.startAnimation()
         } else {
-            apply()
+            layCard(at: spot)
             layoutIfNeeded()
             done()
         }
+    }
+
+    /// Every content it holds laid out where it stands, before a tween. A row
+    /// a content built since its last layout (Caw's panel builds its rows
+    /// again as the hub's word changes) would otherwise be laid out for the
+    /// first time inside the tween, and grow from wherever UIKit first put it:
+    /// an image view from its image's own size, the Claude mark's 256pt drawn
+    /// over Caw's panel.
+    private func settleContents() {
+        for content in held { content.layoutIfNeeded() }
     }
 
     /// Where it hangs, in the shell's points (the window's): the probes read the join off this.
@@ -404,7 +417,7 @@ final class GlassCard: UIView, UIGestureRecognizerDelegate {
             // size, laid out whole before the tween so only the card moves.
             if !wasHeld { next.alpha = 0 }
             layContent(next, at: spot)
-            next.layoutIfNeeded()
+            settleContents()
             if UIAccessibility.isReduceMotionEnabled {
                 layCard(at: spot)
                 layoutIfNeeded()

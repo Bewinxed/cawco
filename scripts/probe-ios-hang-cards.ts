@@ -55,6 +55,16 @@ const DEVICES = [
 
 /** One side of a held card: `w 478.0 (531.0 to 425.0)`, as drawn, from, to. */
 const HALF_SIDE = /[wh] ([\d.]+) \(([\d.]+) to ([\d.]+)\)/g;
+/** A session mark's part as drawn: `face 23.0 41.5 18.0 18.0`. */
+const MARK_PART = /\b(mark|face|sprite) -?[\d.]+ -?[\d.]+ ([\d.]+) ([\d.]+)/g;
+/** The images drawn at another size than their own bounds. */
+const MARKS_OFF = /off \[([^\]]*)\]/;
+/** The images drawn over 40pt. */
+const MARKS_BIG = /big \[([^\]]*)\]/;
+/** The layout animations in the contents. */
+const MARKS_LAYING = /laying \[([^\]]*)\]/;
+/** How many marks and images a stop read. */
+const MARKS_COUNT = /\d+ marks .*? images \d+/;
 
 let failures = 0;
 const check = (step: string, ok: boolean, detail: string) => {
@@ -263,6 +273,52 @@ xcrun simctl install ${udid} "${app}"`);
             ),
           hold || "no line"
         );
+        // Every sprite and mark in the card at its own size at each stop: a
+        // session mark 18pt with its face 18pt and its sprite 12pt; no image
+        // drawn at another size than its own bounds or over 40pt; and nothing
+        // in the contents laid out on a tween but a field's caret.
+        const markStops = lines.filter((line) =>
+          line.startsWith(`hang ${morph} marks at `)
+        );
+        check(
+          `${label}: ${morph} marks read at four stops`,
+          markStops.length === 4,
+          `${markStops.length} 'marks at' lines`
+        );
+        for (const stop of markStops) {
+          const at = stop.slice(
+            `hang ${morph} marks at `.length,
+            stop.indexOf(":")
+          );
+          const wrong = [...stop.matchAll(MARK_PART)]
+            .filter(([, part, w, h]) => {
+              const side = part === "sprite" ? 12 : 18;
+              return (
+                Math.abs(Number(w) - side) > 0.5 ||
+                Math.abs(Number(h) - side) > 0.5
+              );
+            })
+            .map(([, part, w, h]) => `${part} ${w}×${h}`);
+          const off = stop.match(MARKS_OFF)?.[1] ?? "?";
+          const big = stop.match(MARKS_BIG)?.[1] ?? "?";
+          const laying = (stop.match(MARKS_LAYING)?.[1] ?? "?")
+            .split(", ")
+            .filter(
+              (entry) => entry !== "" && !entry.endsWith(" in its field")
+            );
+          const clean =
+            wrong.length === 0 &&
+            off === "" &&
+            big === "" &&
+            laying.length === 0;
+          check(
+            `${label}: ${morph} at ${at} every sprite and mark at its own size`,
+            clean,
+            clean
+              ? (stop.match(MARKS_COUNT)?.[0] ?? stop)
+              : `marks ${wrong.join(", ") || "ok"}; off [${off}]; big [${big}]; laying [${laying.join(", ")}]`
+          );
+        }
         const settled =
           lines.find((line) => line.startsWith(`hang ${morph} settled: `)) ??
           "";
