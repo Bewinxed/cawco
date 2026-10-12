@@ -2357,11 +2357,18 @@
        the turn left it (`--ea0`). A stop past the turn's end lands on the
        run's foot and one short of it on the turn's, each in the ink there,
        so the two meet in one ink; on the run the fade stops short of the
-       shoulder, where the stroke is whole. */
-    --cap: calc(100% - var(--radius));
+       shoulder, where the stroke is whole.
+
+       The two cover the whole side and part at the run's foot as hard stops
+       on one line (the conic clear above it, the linear clear below), so
+       every pixel takes its ink from one of them. As two tiles meeting
+       there, a leaning tab drew the line between device rows, each tile's
+       edge covered the row in part, and the stroke dipped across it: 9 to
+       13% of its ink at 390 mid-switch (folder-tabs-proof, "composite"). */
+    --cap: calc(100% - var(--F) - var(--radius));
     mask-image:
       conic-gradient(
-        from 90deg at 0 0,
+        from 90deg at 0 calc(100% - var(--F)),
         rgb(0 0 0 / var(--ea0)) 0deg,
         rgb(0 0 0 / var(--ea0))
           max(0deg, calc(90deg - var(--tl) / var(--R) * 1rad)),
@@ -2385,31 +2392,51 @@
       ),
       linear-gradient(
         to top,
-        rgb(0 0 0 / var(--ea0)),
+        transparent var(--F),
+        rgb(0 0 0 / var(--ea0)) var(--F),
         rgb(0 0 0 / calc(1 - pow(1 - max(0.04, var(--a0)), var(--te))))
-          clamp(0px, 0.04 * var(--taper) - var(--A) * 1px, var(--cap)),
+          calc(
+            var(--F) +
+            clamp(0px, 0.04 * var(--taper) - var(--A) * 1px, var(--cap))
+          ),
         rgb(0 0 0 / calc(1 - pow(1 - max(0.08, var(--a0)), var(--te))))
-          clamp(0px, 0.08 * var(--taper) - var(--A) * 1px, var(--cap)),
+          calc(
+            var(--F) +
+            clamp(0px, 0.08 * var(--taper) - var(--A) * 1px, var(--cap))
+          ),
         rgb(0 0 0 / calc(1 - pow(1 - max(0.13, var(--a0)), var(--te))))
-          clamp(0px, 0.13 * var(--taper) - var(--A) * 1px, var(--cap)),
+          calc(
+            var(--F) +
+            clamp(0px, 0.13 * var(--taper) - var(--A) * 1px, var(--cap))
+          ),
         rgb(0 0 0 / calc(1 - pow(1 - max(0.19, var(--a0)), var(--te))))
-          clamp(0px, 0.19 * var(--taper) - var(--A) * 1px, var(--cap)),
+          calc(
+            var(--F) +
+            clamp(0px, 0.19 * var(--taper) - var(--A) * 1px, var(--cap))
+          ),
         rgb(0 0 0 / calc(1 - pow(1 - max(0.26, var(--a0)), var(--te))))
-          clamp(0px, 0.26 * var(--taper) - var(--A) * 1px, var(--cap)),
+          calc(
+            var(--F) +
+            clamp(0px, 0.26 * var(--taper) - var(--A) * 1px, var(--cap))
+          ),
         rgb(0 0 0 / calc(1 - pow(1 - max(0.35, var(--a0)), var(--te))))
-          clamp(0px, 0.35 * var(--taper) - var(--A) * 1px, var(--cap)),
+          calc(
+            var(--F) +
+            clamp(0px, 0.35 * var(--taper) - var(--A) * 1px, var(--cap))
+          ),
         rgb(0 0 0 / calc(1 - pow(1 - max(0.5, var(--a0)), var(--te))))
-          clamp(0px, 0.5 * var(--taper) - var(--A) * 1px, var(--cap)),
+          calc(
+            var(--F) +
+            clamp(0px, 0.5 * var(--taper) - var(--A) * 1px, var(--cap))
+          ),
         rgb(0 0 0 / calc(1 - pow(1 - max(0.7, var(--a0)), var(--te))))
-          clamp(0px, 0.7 * var(--taper) - var(--A) * 1px, var(--cap)),
-        #000 clamp(0px, var(--taper) - var(--A) * 1px, var(--cap))
+          calc(
+            var(--F) +
+            clamp(0px, 0.7 * var(--taper) - var(--A) * 1px, var(--cap))
+          ),
+        #000
+          calc(var(--F) + clamp(0px, var(--taper) - var(--A) * 1px, var(--cap)))
       );
-    mask-size:
-      calc(var(--F) + var(--t) + 1px) var(--F),
-      100% calc(100% - var(--F));
-    mask-position:
-      0 100%,
-      0 0;
     mask-repeat: no-repeat;
   }
   /* The feet ease nothing of their own: they are the sheet's, frame by

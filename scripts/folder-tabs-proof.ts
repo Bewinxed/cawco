@@ -836,6 +836,8 @@ async function rimInk(page: Page, strip: Strip, drawn: number[]) {
           tone: el.dataset.tone ?? "",
           chosen: el.hasAttribute("data-chosen"),
           opacity: r2(Number(rs.opacity)),
+          // Its lean's y scale (1 upright).
+          lean: Math.round(lean * 1000) / 1000,
           taper,
           ease,
           shoulderAt: r2(box.height - radius),
@@ -1877,7 +1879,11 @@ for (const view of VIEWS) {
       }
       // The same switch again, its two tabs' flared feet against their
       // sheets, every 5% of it and either side of the handover.
+      // And each flared foot as the screen draws it, both feet as they are
+      // (`rimInk`'s flared path, off the rims shown whole), on the two tabs
+      // that lean as they trade the choice.
       const feet: Record<string, FeetFrame> = {};
+      const composite: Record<string, InkTab[]> = {};
       if (strip.rim) {
         await open(page, theme, 1, "working");
         await page.evaluate((id) => window.__ft.choose(id), next);
@@ -1887,6 +1893,9 @@ for (const view of VIEWS) {
           await seek(page, strip, pct / 100);
           await frames(page);
           feet[pct] = await feetAgainstSheets(page, strip, [from, from + 1]);
+          composite[pct] = (
+            await rimInk(page, strip, [from, from + 1])
+          ).tabs.filter((t) => t.i === from || t.i === from + 1);
         }
       }
       // The session strip at its start (the first tab chosen, nothing
@@ -1912,6 +1921,7 @@ for (const view of VIEWS) {
         switch: { from: chosen, to: next, paused, frames: switchFrames },
         jump: { from, past: from + 1, to: from + 2, frames: jump },
         feet: { frames: feet },
+        composite,
       };
     }
     await context.close();
@@ -1970,6 +1980,93 @@ function feetSeries(read: Record<string, FeetFrame>) {
     })
   );
 }
+/**
+ * How far a flared foot's ink may fall back along it, drawn as the screen
+ * draws it, as a share of its whole: the taper rises from the tip and never
+ * falls, and the reader's own grain upright is under 0.05 (0.048 at most,
+ * 1440 light). A leaning tab's foot fell 0.10 to 0.134 at 390 where the
+ * mask's two tiles met (`.rim-flared`), before they became one line.
+ */
+const COMPOSITE_FALL = 0.07;
+/**
+ * Along one flared path from its tip (`samples`, `rimInk`), up to where
+ * its taper ends (`full`): the most its ink falls back from the highest it
+ * has reached, as a share of its whole (its ink where the taper has ended),
+ * and where.
+ */
+function fallOf(samples: { ink: number; s: number }[], full: number) {
+  const end = Math.min(full, samples.at(-1)?.s ?? full);
+  const whole = Math.max(
+    0,
+    ...samples
+      .filter((p) => p.s >= end - 1 && p.s <= full + 5)
+      .map((p) => p.ink)
+  );
+  let most = 0;
+  let fall = 0;
+  let at = 0;
+  for (const p of samples) {
+    if (p.s > full) {
+      break;
+    }
+    if (whole > 0 && (most - p.ink) / whole > fall) {
+      fall = (most - p.ink) / whole;
+      at = p.s;
+    }
+    most = Math.max(most, p.ink);
+  }
+  return { fall: Math.round(fall * 1000) / 1000, at, whole };
+}
+/**
+ * The two tabs a switch moves, each side's flared foot as the screen draws
+ * it (both feet, at their strengths, glow off), every frame read: how far
+ * its ink falls back along it (`fallOf`); null where it draws none (under
+ * its neighbour, out of view, or its flared foot not shown).
+ */
+function compositeSeries(read: Record<string, InkTab[]>) {
+  const pcts = Object.keys(read)
+    .map(Number)
+    .sort((a, b) => a - b);
+  return (read[pcts[0]] ?? []).flatMap((first) =>
+    (["start", "end"] as const).map((side) => ({
+      tab: first.i,
+      side,
+      points: pcts.map((pct) => {
+        const t = read[pct].find((u) => u.i === first.i) as InkTab;
+        const s = t.sides.find(
+          (x) => x.side === side
+        ) as InkTab["sides"][number];
+        // Drawn, and strong enough to read: a rim at a tenth of its
+        // strength reads as noise (a 0.02 foot "fell" 0.125 on the run).
+        const drawn =
+          !s.under &&
+          s.inView &&
+          t.opacity * s.sideOp >= 0.1 &&
+          s.flaredOp > 0.01;
+        const full =
+          t.taper <= s.arc
+            ? t.taper
+            : s.arc + Math.min(t.taper - s.arc, t.shoulderAt - s.flare);
+        return {
+          pct,
+          flaredOp: s.flaredOp,
+          lean: t.lean,
+          ...(drawn ? fallOf(s.flared, full) : { fall: null, at: 0, whole: 0 }),
+        };
+      }),
+    }))
+  );
+}
+/** No leaning tab's flared foot, as drawn, falls back along it by more than `COMPOSITE_FALL`. */
+const compositeFaults = (read: Record<string, InkTab[]>): string[] =>
+  compositeSeries(read).flatMap((r) =>
+    r.points.flatMap((p) =>
+      p.fall !== null && p.fall > COMPOSITE_FALL
+        ? [`${r.tab}${r.side[0]} ${p.pct}%: falls ${p.fall} at ${p.at}px`]
+        : []
+    )
+  );
+
 /**
  * Each switching tab's flared feet sit on its sheet's curve: in every
  * frame read, each foot in front and in view has its ink within
@@ -2108,6 +2205,23 @@ for (const [key, value] of Object.entries(report)) {
       console.log(`    tab ${r.tab} ${r.side} (whole ${r.whole}) ${points}`);
     }
   }
+  // The same two tabs' flared feet as drawn: how far each falls back along
+  // it, frame by frame, with the tab's lean.
+  const { composite } = value as { composite?: Record<string, InkTab[]> };
+  if (composite && Object.keys(composite).length > 0) {
+    console.log(
+      "  composite: pct:flared opacity/most fallen back (share of whole)@px lean; - none drawn"
+    );
+    for (const r of compositeSeries(composite)) {
+      const points = r.points
+        .map(
+          (p) =>
+            `${p.pct}%:${p.flaredOp}/${p.fall === null ? "-" : `${p.fall}@${p.at}`} ${p.lean}`
+        )
+        .join(" ");
+      console.log(`    tab ${r.tab} ${r.side} ${points}`);
+    }
+  }
 }
 
 /**
@@ -2145,6 +2259,10 @@ for (const [key, value] of Object.entries(report)) {
  *    handover, each of its two tabs' flared feet in front and in view has
  *    its ink (as a share of that foot drawn whole) within 0.03 of its
  *    sheet's opacity: body and feet are one shape on one clock;
+ *  - composite: on the same frames, each of the two tabs' flared feet as
+ *    the screen draws it (both feet at their strengths, the tab leaning as
+ *    it trades the choice) never falls back along it by more than 0.07 of
+ *    its whole (the reader's grain upright is under 0.05);
  *  - sheet edge (a strip with no rim): every seam's edge, where the two
  *    fills differ, shows within 1px of where the glide puts it, and across
  *    the switch it moves one way only, never back (no jump, no flicker);
@@ -2166,6 +2284,7 @@ const RULES = [
   "handover",
   "jump",
   "feet",
+  "composite",
   "sheet edge",
   "fades",
   "titles",
@@ -2181,6 +2300,7 @@ const RIM_RULES: readonly Rule[] = [
   "handover",
   "jump",
   "feet",
+  "composite",
 ];
 interface Jump {
   frames: Record<string, Numbers["tabs"]>;
@@ -2467,6 +2587,7 @@ const faults = (n: Numbers, at: string): Record<Rule, string[]> => ({
   handover: [],
   jump: [],
   feet: [],
+  composite: [],
   titles: n.tabs.flatMap((t) =>
     t.labelCut ? [`${t.i} ${t.labelScroll}>${t.labelClient}`] : []
   ),
@@ -2483,6 +2604,7 @@ for (const [key, value] of Object.entries(report)) {
     switch: { frames: Record<string, Numbers> };
     jump: Jump;
     feet: { frames: Record<string, FeetFrame> };
+    composite: Record<string, InkTab[]>;
   };
   const measured = [
     ["rest", v.rest],
@@ -2555,6 +2677,7 @@ for (const [key, value] of Object.entries(report)) {
       ...(rule === "handover" ? handover : []),
       ...(rule === "jump" ? jumpFaults(v.jump) : []),
       ...(rule === "feet" ? feetFaults(v.feet.frames) : []),
+      ...(rule === "composite" ? compositeFaults(v.composite) : []),
     ];
     // The 3:1 cell names the chosen tab's top and, as numbers, its sides,
     // in each resting frame.

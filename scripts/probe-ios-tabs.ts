@@ -36,7 +36,11 @@
  *     drag), which takes the pages while the tap's switch runs: retried
  *     until it takes the tap's own switch between 0.1 and 0.9 of the way;
  *  4. checks every logged frame and copies the captures and the log to
- *     $TMPDIR/ios-tabs/ (or ./.probe/ios-tabs).
+ *     $TMPDIR/ios-tabs/ (or ./.probe/ios-tabs). At each held stop it also
+ *     reads every tab's flared feet (the web proof's "feet"): each foot in
+ *     front and in view draws its ink within 0.03 of its sheet's opacity,
+ *     against the same foot drawn whole in the same frame, and a side under
+ *     its neighbour's card has no foot to draw and changes no pixel.
  *
  * Prints `PASS <check>` / `FAIL <check>` and exits 0 only if all pass. It
  * stops only what it started; the simulators it created are deleted.
@@ -612,6 +616,124 @@ function judgeRims(run: string, log: string) {
   }
 }
 
+/**
+ * One side's flared foot at a held stop (PaneTabsView `probeFeet`): free (in
+ * front of its neighbour and in view) with its ink as a share of the same
+ * foot drawn whole in the same frame and that whole; under its
+ * neighbour's card, with whether it has a foot to draw and the pixels its
+ * box changes; or out of view.
+ */
+type Foot =
+  | { kind: "free"; ink: number; whole: number }
+  | { kind: "under"; path: boolean; px: number }
+  | { kind: "out" };
+const FEET = /tabs feet (\S+) (\S+) sheet=(\S+) lead=(\S+) trail=(\S+)/;
+/** How far a foot's ink may stand off its sheet's opacity at any held stop. */
+const FOOT_TOLERANCE = 0.03;
+/** Under this whole (summed channel change, 0 to 3 a pixel) a foot is too faint to read. */
+const FOOT_LEAST = 3;
+
+function parseFoot(text: string): Foot {
+  const [kind, a, b] = text.split(":");
+  if (kind === "free") {
+    return { kind, ink: +a, whole: +b };
+  }
+  if (kind === "under") {
+    return { kind, path: a === "path1", px: +b };
+  }
+  return { kind: "out" };
+}
+
+/** Every tab's feet at every held stop, as `probeFeet` logged them. */
+function parseFeet(log: string) {
+  return log.split("\n").flatMap((line) => {
+    const m = FEET.exec(line);
+    return m
+      ? [
+          {
+            stop: m[1],
+            id: m[2],
+            sheet: +m[3],
+            sides: [
+              ["lead", parseFoot(m[4])],
+              ["trail", parseFoot(m[5])],
+            ] as const,
+          },
+        ]
+      : [];
+  });
+}
+type FeetRow = ReturnType<typeof parseFeet>[number];
+/** A foot in front, in view, and drawn strongly enough to read. */
+const readable = (f: Foot): f is Extract<Foot, { kind: "free" }> =>
+  f.kind === "free" && f.whole >= FOOT_LEAST;
+
+/**
+ * The feet are the sheet's (PaneTabs.svelte `--sheet-now`, web rule
+ * "feet"): at every held stop, each tab's flared foot in front of its
+ * neighbour and in view draws its ink within 0.03 of its sheet's opacity,
+ * read against the same foot drawn whole in the same frame; each held
+ * switch's two tabs, part way, have a foot read. And every side under its
+ * neighbour's card has no foot to draw and changes no pixel
+ * (`judgeCovered`).
+ */
+function judgeFeet(run: string, log: string) {
+  const rows = parseFeet(log);
+  const read = rows.flatMap((r) =>
+    r.sides.flatMap(([side, foot]) =>
+      readable(foot) ? [{ r, side, ink: foot.ink }] : []
+    )
+  );
+  const off = read
+    .filter(({ r, ink }) => Math.abs(ink - r.sheet) > FOOT_TOLERANCE)
+    .map(
+      ({ r, side, ink }) =>
+        `${r.stop} ${r.id} ${side} foot ${ink} sheet ${r.sheet}`
+    );
+  const shown = read
+    .filter(({ r }) => r.sheet > 0.001 && r.sheet < 0.999)
+    .map(({ r, side, ink }) => `${r.stop} ${r.id} ${side} ${r.sheet}/${ink}`);
+  // Each held switch, part way: its two tabs (the sheets between rest and whole) each have a foot read.
+  const unread = ["step-held", "jump-held"].flatMap((held) =>
+    ["t25", "f45", "t50", "f55", "t75"].flatMap((stop) => {
+      const mid = rows.filter(
+        (r) =>
+          r.stop === `${held}-${stop}` && r.sheet > 0.001 && r.sheet < 0.999
+      );
+      const readHere = mid.filter((r) => r.sides.some(([, f]) => readable(f)));
+      return readHere.length >= 2
+        ? []
+        : [`${held}-${stop} ${readHere.length} of the two tabs read`];
+    })
+  );
+  const faults = [...off, ...unread];
+  check(
+    `${run} feet follow the sheet`,
+    read.length > 0 && faults.length === 0,
+    `${faults.map((f) => `${f}; `).join("")}${read.length} feet read; sheet/foot part way: ${shown.join(" ")}`
+  );
+  judgeCovered(run, rows);
+}
+
+/** Every side under its neighbour's card at a held stop has no foot to draw and changes no pixel there. */
+function judgeCovered(run: string, rows: FeetRow[]) {
+  const covered = rows.flatMap((r) =>
+    r.sides.flatMap(([side, f]) =>
+      f.kind === "under"
+        ? [`${r.stop} ${r.id} ${side} ${f.path ? "path" : "none"} ${f.px}px`]
+        : []
+    )
+  );
+  check(
+    `${run} a covered side draws no foot`,
+    covered.length > 0 &&
+      rows.every((r) =>
+        r.sides.every(([, f]) => f.kind !== "under" || (!f.path && f.px === 0))
+      ),
+    `${covered.length} covered sides${covered.length > 0 ? `, e.g. ${covered.slice(0, 3).join("; ")}` : ""}`
+  );
+}
+
 /** Whether the swipe took the tap's own switch part-way, 0.1 to 0.9 of it. */
 function tookMidway(samples: Sample[]): boolean {
   const frames = samples.filter((s) => s.t !== "landed");
@@ -937,6 +1059,7 @@ try {
         .map((s) => `${s.label}@${s.f}`);
       check(`${run} stops captured`, held.length === 18, held.join(" "));
       judgeRims(run, log);
+      judgeFeet(run, log);
       const step = begins.find((b) => b[1] === "step-held");
       if (step) {
         judgeSeam(
