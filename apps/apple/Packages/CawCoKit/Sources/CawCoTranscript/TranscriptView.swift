@@ -42,10 +42,10 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     private let collection: UICollectionView
     /// The rows fading out toward the tab strip at the list's top edge, over
     /// `Size.cHeadFade` once rows are scrolled under it: an alpha mask on the
-    /// list, nothing painted over the rows. The web blurs them (HeadFade.svelte);
-    /// a tint-free variable blur on iOS is private API, and a stack of UIKit
-    /// materials brightened the rows with each layer's tint.
-    private let headFade: EdgeFade
+    /// list, nothing painted over the rows. The web blurs them (its transcript
+    /// head); a tint-free variable blur on iOS is private API, and a stack of
+    /// UIKit materials brightened the rows with each layer's tint.
+    private let headBand: EdgeFade
     private var dataSource: UICollectionViewDiffableDataSource<Int, String>!
     private let env = RowEnv()
     /// Every row's view, kept laid out for its item (RowStore).
@@ -241,7 +241,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         }
         self.layout = layout
         collection = UICollectionView(frame: .zero, collectionViewLayout: layout)
-        headFade = EdgeFade(collection, length: Size.cHeadFade, edges: .top)
+        headBand = EdgeFade(collection, length: Size.cHeadFade, edges: .top)
         super.init(frame: frame)
         Self.warm()
         // The session pane's ground (SessionPane.svelte `.pane`): the recess, not the page.

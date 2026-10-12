@@ -26,8 +26,8 @@ public final class EdgeFade {
 
     /// `length`: a fixed fade length, for a place whose foot must read as
     /// "more below" on every width (Caw's panel, 40pt). `edges`: where it
-    /// fades; a transcript's head fades at its top alone (`Size.cHeadFade`),
-    /// its foot standing sharp over the composer.
+    /// fades; a transcript's head fades at its top alone, its foot standing
+    /// sharp over the composer.
     public init(_ scroll: UIScrollView, length: Double? = nil, edges: Edges = .both) {
         self.scroll = scroll
         self.length = length
