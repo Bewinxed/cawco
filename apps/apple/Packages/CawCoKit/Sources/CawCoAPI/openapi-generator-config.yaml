@@ -29,6 +29,9 @@ typeOverrides:
     ColumnPropsAlign: OpenEnums.ColumnPropsAlign
     CommandAckOutcome: OpenEnums.CommandAckOutcome
     CommandAckStage: OpenEnums.CommandAckStage
+    ConnectionAuth: OpenEnums.ConnectionAuth
+    ConnectionState: OpenEnums.ConnectionState
+    ConnectionTransport: OpenEnums.ConnectionTransport
     ContinuationJobStage: OpenEnums.ContinuationJobStage
     ContinueStep: OpenEnums.ContinueStep
     DelegateBudgetPer: OpenEnums.DelegateBudgetPer

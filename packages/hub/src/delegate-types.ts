@@ -27,6 +27,8 @@ interface DelegateTypeRow {
   can_delegate: number | null;
   /** 1 when the type turns "CawCo's to-dos" on; 0 or NULL leaves it to the fleet. */
   cawco_todos: number | null;
+  /** The connections its sessions may call, as a JSON array; NULL: none. */
+  connections: string | null;
   deny_tools: string | null;
   description: string;
   effort: string | null;
@@ -47,6 +49,7 @@ const rowToType = (row: DelegateTypeRow): DelegateType => ({
   ...(row.can_delegate === null ? {} : { canDelegate: row.can_delegate === 1 }),
   ...(row.cawco_todos === 1 ? { cawcoTodos: true } : {}),
   ...(row.account ? { account: row.account } : {}),
+  ...(row.connections ? { connections: JSON.parse(row.connections) } : {}),
 });
 
 export interface DelegateTypesShape {
@@ -103,6 +106,9 @@ export const makeDelegateTypes = (
   }
   if (!columns.includes("account")) {
     sqlite.run("ALTER TABLE delegate_types ADD COLUMN account TEXT");
+  }
+  if (!columns.includes("connections")) {
+    sqlite.run("ALTER TABLE delegate_types ADD COLUMN connections TEXT");
   }
   // "CawCo's to-dos" is a type's own flag now, not names in its deny list: a
   // type that denied the four ledger tools had it on. Once, the names become
@@ -165,8 +171,8 @@ export const makeDelegateTypes = (
       draft.canDelegate === undefined ? null : Number(draft.canDelegate);
     sqlite
       .query(
-        `INSERT INTO delegate_types (name, description, harness, model, effort, skills, deny_tools, can_delegate, cawco_todos, account, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO delegate_types (name, description, harness, model, effort, skills, deny_tools, can_delegate, cawco_todos, account, connections, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(name) DO UPDATE SET
            description = excluded.description,
            harness = excluded.harness,
@@ -176,7 +182,8 @@ export const makeDelegateTypes = (
            deny_tools = excluded.deny_tools,
            can_delegate = excluded.can_delegate,
            cawco_todos = excluded.cawco_todos,
-           account = excluded.account`
+           account = excluded.account,
+           connections = excluded.connections`
       )
       .run(
         draft.name,
@@ -189,6 +196,7 @@ export const makeDelegateTypes = (
         canDelegate,
         draft.cawcoTodos ? 1 : null,
         draft.account ?? null,
+        draft.connections?.length ? JSON.stringify(draft.connections) : null,
         Date.now()
       );
     return draft;
@@ -245,6 +253,7 @@ export const delegateTypesRoutes = (store: DelegateTypesShape) =>
           canDelegate: t.Optional(t.Boolean()),
           cawcoTodos: t.Optional(t.Boolean()),
           account: t.Optional(t.String()),
+          connections: t.Optional(t.Array(t.String())),
         }),
       },
       ({ params, body, status }) => {

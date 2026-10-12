@@ -1,10 +1,11 @@
 import { createHash } from "node:crypto";
 import { unwatchFile, watchFile } from "node:fs";
-import type {
-  Envelope,
-  InstanceRow,
-  LandsMode,
-  SendPayload,
+import {
+  type Envelope,
+  type InstanceRow,
+  type LandsMode,
+  parseConnectionTool,
+  type SendPayload,
 } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
@@ -14,8 +15,9 @@ import {
   type CallToolResult,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { adminTools, isAdminWrite } from "./admin-tools";
+import { adminTools, isAdminWrite, shownToPerson } from "./admin-tools";
 import type { Caw } from "./caw";
+import type { Connections } from "./connections";
 import type { Fleet, SendDelivery } from "./delegation-actions";
 import { handoffInstructions, handoffTools } from "./delegation-tools";
 import type { DelegateListInclude, DelegateNode } from "./delegation-tree";
@@ -163,6 +165,11 @@ export function createDelegationMcp(options: {
   /** The routine tools (routines.ts), for the roles that run a project. */
   routineTools?: (actor: InstanceRow | undefined) => RoutineTool[];
   /**
+   * Connections (connections.ts): the `conn__<name>__<tool>` tools a session
+   * is granted, and the hub's call of one for it.
+   */
+  connections?: Pick<Connections, "callAs" | "sessionTools">;
+  /**
    * Parks an admin write as the person's ask and waits: resolves when they
    * approve it, rejects with the refusal when they deny it (admin-asks.ts).
    */
@@ -262,11 +269,14 @@ export function createDelegationMcp(options: {
       ...(options.cawTools ? options.cawTools(undefined) : []),
       ...(options.routineTools ? options.routineTools(undefined) : []),
     ];
+    // Granted by a delegate type or a project, not a role's list: the
+    // connections module answers which, the role's say included.
+    const connections = options.connections?.sessionTools(actor) ?? [];
     if (!actor) {
-      return all;
+      return [...all, ...connections];
     }
     const role = roleOf(actor);
-    return all.filter((tool) => allows(role, tool.name));
+    return [...all.filter((tool) => allows(role, tool.name)), ...connections];
   };
 
   /**
@@ -370,7 +380,9 @@ export function createDelegationMcp(options: {
       throw new Error(`Unknown tool ${name}`);
     }
     if (isAdminWrite(name)) {
-      await options.askPerson(actor, name, input);
+      // The ask is kept and shown everywhere; a secret in it is shown by its
+      // length only, and runs from this call's memory once approved.
+      await options.askPerson(actor, name, shownToPerson(name, input));
     }
     return (await entry.handler(input)) as CallToolResult;
   };
@@ -561,6 +573,11 @@ export function createDelegationMcp(options: {
         console.warn(
           `[delegation] ${actor.id} passed a session credential to ${name}; it was replaced before the call ran`
         );
+      }
+      // A connection's tool: run by the hub, with the connection's key, when
+      // the caller's type or project grants it (connections.ts `callAs`).
+      if (options.connections && parseConnectionTool(name)) {
+        return await options.connections.callAs(actor, name, input);
       }
       // The one place a role holds: what it does not list, it cannot call.
       const role = roleOf(actor);

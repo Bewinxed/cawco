@@ -155,6 +155,21 @@ const CAWS: ReadonlySet<string> = new Set(CAW_TOOLS);
 export const allows = (role: SessionRole, name: string): boolean =>
   role === "worker" ? !CAWS.has(name) : TOOLS[role].has(name);
 
+/**
+ * Which of a granted connection's tools (connections.ts) a role gets: a
+ * worker or a delegate every one; a web-facing session only those the server
+ * marks read-only, since it has no posting tools; Caw and fleet-watch triage
+ * none, their toolsets being the board's and the fleet's.
+ */
+export const connectionToolsFor = (
+  role: SessionRole
+): "all" | "read-only" | "none" => {
+  if (role === "worker" || role === "delegate") {
+    return "all";
+  }
+  return role === "web-facing" ? "read-only" : "none";
+};
+
 /** What a session hears when it calls a tool its role does not have. */
 export const refusal = (role: SessionRole, name: string): string => {
   switch (role) {

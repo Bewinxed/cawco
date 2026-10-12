@@ -13,6 +13,8 @@ export * from "./archive";
 export * from "./attachments";
 // Claude Code's dir names, as a screen, a message or a shell script names them (paths.ts owns the paths).
 export * from "./claude-dirs";
+// Connections: outside services the hub signs in to and calls for sessions.
+export * from "./connections";
 export * from "./continuation";
 // Delegate types: named presets the `delegate` tool's `type` param resolves,
 // so routing is by description instead of a raw model string.

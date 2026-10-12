@@ -30,6 +30,13 @@ export interface DelegateType {
    * false leaves it to the fleet. A project type file says `cawco_todos: true`.
    */
   cawcoTodos?: boolean;
+  /**
+   * The connections (Projects spec §5.5) its sessions may call, by name: the
+   * hub lists each one's tools to them as `conn__<name>__<tool>` and runs
+   * every call itself, so no key reaches the session. A project type file
+   * says `mcp: [x-brand]`.
+   */
+  connections?: string[];
   denyTools?: string[];
   /** What the calling model reads to decide whether this is the right type. */
   description: string;
@@ -49,6 +56,30 @@ export interface DelegateType {
 
 /** What a name may be. Mirrors a subagent's own `AGENT_NAME` — no reason to invent a second rule. */
 export const DELEGATE_TYPE_NAME = /^[a-z][a-z0-9-]*$/;
+
+/**
+ * What a connection's name may be (`github-petra`, `x-brand`): no `_`, so a
+ * session's `conn__<name>__<tool>` splits one way only; at most 24
+ * characters, so its tools' names keep room under a harness's tool-name
+ * limit (connections.ts `sessionToolName`).
+ */
+export const CONNECTION_NAME = /^(?=.{1,24}$)[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+/** The tool name a session calls a connection's `tool` by. */
+export const connectionToolName = (connection: string, tool: string): string =>
+  `conn__${connection}__${tool}`;
+
+const CONNECTION_TOOL = /^conn__([a-z0-9]+(?:-[a-z0-9]+)*)__(.+)$/;
+
+/** A session's connection tool name, split; undefined for any other tool. */
+export const parseConnectionTool = (
+  name: string
+): { connection: string; tool: string } | undefined => {
+  const match = CONNECTION_TOOL.exec(name);
+  return match?.[1] && match[2]
+    ? { connection: match[1], tool: match[2] }
+    : undefined;
+};
 
 /**
  * Why this row cannot be stored, in a sentence, or nothing when it can. One
@@ -73,6 +104,12 @@ export const delegateTypeProblem = (
   }
   if (draft.effort && !EFFORT_LEVELS.includes(draft.effort)) {
     return `“${draft.effort}” is not an effort level`;
+  }
+  const badConnection = (draft.connections ?? []).find(
+    (name) => !CONNECTION_NAME.test(name)
+  );
+  if (badConnection !== undefined) {
+    return `“${badConnection}” is not a connection name: up to 24 lowercase letters, digits and hyphens`;
   }
   // A deny list is kept only where its harness enforces it: a type that names
   // tools its harness cannot deny would store a promise nothing keeps.

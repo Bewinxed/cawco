@@ -73,7 +73,6 @@ export type CatalogType = DelegateType & {
   /** The type's brief: the file's body. */
   brief?: string;
   lands?: DelegateLands;
-  mcp?: string[];
   /** The file it was read from, inside the project folder. */
   path?: string;
   /** A project type that replaces a fleet type of the same name. */
@@ -183,7 +182,7 @@ const projectFieldsOf = (
   | string
   | Pick<
       CatalogType,
-      "budget" | "lands" | "mcp" | "role" | "canDelegate" | "cawcoTodos"
+      "budget" | "lands" | "connections" | "role" | "canDelegate" | "cawcoTodos"
     > => {
   const role = fields.scalar("role");
   if (!oneOf(role, TYPE_ROLES)) {
@@ -206,9 +205,11 @@ const projectFieldsOf = (
   if (typeof budget === "string") {
     return budget;
   }
-  const mcp = fields.list("mcp");
+  // `mcp:` names connections (§5.1): the hub calls them, the session never
+  // holds their keys.
+  const connections = fields.list("mcp");
   return {
-    ...(mcp?.length ? { mcp } : {}),
+    ...(connections?.length ? { connections } : {}),
     ...(role ? { role: role as SessionRole } : {}),
     ...(budget && Object.keys(budget).length > 0 ? { budget } : {}),
     ...(lands ? { lands: lands as DelegateLands } : {}),
@@ -263,6 +264,7 @@ const parseTypeFile = (
     ...(skills?.length ? { skills } : {}),
     ...(deny?.length ? { denyTools: deny } : {}),
     ...(account ? { account } : {}),
+    ...(extra.connections ? { connections: extra.connections } : {}),
     ...(extra.canDelegate === undefined
       ? {}
       : { canDelegate: extra.canDelegate }),

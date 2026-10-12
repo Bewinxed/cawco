@@ -291,6 +291,7 @@ import {
   LFS_ROOT,
   SPAWN_START_TIMEOUT_MS,
 } from "./config";
+import { connectionRoutes, createConnections } from "./connections";
 import {
   type ContinuationSource,
   type ContinueRequest,
@@ -435,6 +436,7 @@ import {
 import { envelopeFault, type RegistryShape, refusalFrame } from "./registry";
 import { createRoutines, routineRoutes } from "./routines";
 import { RuleEngine } from "./rules";
+import { makeSecretBox } from "./secret-box";
 import { createSessionIdentities } from "./session-identity";
 import { createSessionLifecycle } from "./session-lifecycle";
 import { resolveSkill } from "./skills";
@@ -13784,9 +13786,27 @@ export const createServer = (
       "project merge and task catch-up"
     );
   }
+  // Connections (connections.ts): outside services the hub signs in to and
+  // calls for the sessions its delegate types and projects grant them to.
+  const connections = createConnections({
+    db: db.connections,
+    secrets: makeSecretBox(),
+    lifetime,
+    hubOrigin: hubHttpUrl,
+    projectExists: (id) => Boolean(db.project(id)),
+    typeConnections: (row) =>
+      row.delegateType
+        ? (projectTypes.resolveTypeFor(
+            row.delegateTypeProject,
+            row.delegateType
+          )?.connections ?? [])
+        : [],
+    changed: () => toolsMayHaveChanged(),
+  });
   const delegationMcp = createDelegationMcp({
     lifetime,
     tasks,
+    connections,
     workItemTask: (id) => db.workItem(id)?.taskId,
     workItemLands: (id) => db.workItem(id)?.lands,
     startAttempt: (projectId, ref, parent) =>
@@ -13965,6 +13985,8 @@ export const createServer = (
     },
   });
   ({ toolsMayHaveChanged } = delegationMcp);
+  // Each connection looked at once, off the boot path: its tools for sessions' lists.
+  connections.start();
 
   /**
    * What the hub holds in memory for sessions whose rows were just deleted —
@@ -15388,6 +15410,7 @@ export const createServer = (
       .use(dispatchRoutes(dispatcher))
       .use(cawRoutes(caw))
       .use(routineRoutes(routines))
+      .use(connectionRoutes(connections))
       .use(caps.routes())
       .use(viewRoutes(views))
       .use(noticesSeen.routes)

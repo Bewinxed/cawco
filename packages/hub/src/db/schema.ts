@@ -2542,6 +2542,64 @@ export const routineRuns = sqliteTable(
 );
 
 /**
+ * A connection (Projects spec §5.5, connections.ts): an outside service's MCP
+ * server the hub signs in to and calls for sessions. Its key, or its OAuth
+ * tokens, client and the verifier of a sign-in under way, are `sealed`
+ * (secret-box.ts: AES-256-GCM under the key file beside this database);
+ * nothing else in the row is secret, and no route or tool answers `sealed`.
+ */
+export const connections = sqliteTable("connections", {
+  id: text("id").primaryKey(),
+  /** `[a-z0-9-]+`, unique: the name delegate types list and sessions call it by. */
+  name: text("name").notNull().unique(),
+  service: text("service").notNull(),
+  /** Which account of the service, in the owner's words. */
+  account: text("account").notNull(),
+  transport: text("transport")
+    .$type<import("@cawco/core").ConnectionTransport>()
+    .notNull(),
+  url: text("url"),
+  command: text("command"),
+  args: text("args", { mode: "json" }).$type<string[]>(),
+  auth: text("auth").$type<import("@cawco/core").ConnectionAuth>().notNull(),
+  /** For `header` auth: the header (stdio: the environment variable) the key goes in. */
+  header: text("header"),
+  state: text("state").$type<import("@cawco/core").ConnectionState>().notNull(),
+  reason: text("reason"),
+  /** The sealed secret: JSON `{ key?, tokens?, client?, verifier? }`, sealed. */
+  sealed: text("sealed"),
+  /** The OAuth discovery the SDK saved (resource and authorization server metadata): public documents. */
+  discovery: text("discovery", { mode: "json" }).$type<
+    import("@modelcontextprotocol/sdk/client/auth.js").OAuthDiscoveryState
+  >(),
+  /** A sign-in under way: the `state` its redirect must bring back, and where to. */
+  signInState: text("sign_in_state").unique(),
+  signInRedirect: text("sign_in_redirect"),
+  signInExpiresAt: timestamp("sign_in_expires_at"),
+  /** When the held access token runs out, as its token response said. */
+  tokensExpireAt: timestamp("tokens_expire_at"),
+  createdAt: timestamp("created_at").notNull(),
+  updatedAt: timestamp("updated_at").notNull(),
+});
+
+/** The projects whose every session may use a connection, beside the delegate types that list it. */
+export const connectionProjects = sqliteTable(
+  "connection_projects",
+  {
+    connectionId: text("connection_id")
+      .notNull()
+      .references(() => connections.id, { onDelete: "cascade" }),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.connectionId, table.projectId] }),
+    index("connection_projects_project").on(table.projectId),
+  ]
+);
+
+/**
  * Every permission and question a session is parked on, as the hub relays it
  * (`pending.ts`). Kept here so a hub that restarts still holds them: every
  * screen reading `/api/pending` the moment it is back sees the asks its

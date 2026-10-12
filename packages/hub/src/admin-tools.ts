@@ -57,6 +57,17 @@ const api = async (
   return contentType.includes("json") ? response.json() : response.text();
 };
 
+/** The fields a call gave: none undefined, no empty list. */
+const fieldsGiven = (
+  fields: Record<string, unknown>
+): Record<string, unknown> =>
+  Object.fromEntries(
+    Object.entries(fields).filter(
+      ([, value]) =>
+        value !== undefined && !(Array.isArray(value) && value.length === 0)
+    )
+  );
+
 const ok = (data: unknown) => ({
   content: [{ type: "text" as const, text: JSON.stringify(data) }],
   structuredContent: data,
@@ -93,6 +104,52 @@ const ADMIN_WRITE_TOOL = /^admin_[a-z_]+_write$/;
 /** Whether a tool is an admin write: the hub asks the person before each call runs (admin-asks.ts). */
 export const isAdminWrite = (name: string): boolean =>
   ADMIN_WRITE_TOOL.test(name);
+
+/** The inputs of an admin write that are secrets, by tool. */
+const SECRET_INPUTS: Record<string, readonly string[]> = {
+  admin_connections_write: ["key"],
+};
+
+/** What a secret input reads as wherever an ask is kept or shown. */
+const HELD =
+  /^\[a secret of \d+ characters, held by the hub until you answer\]$/;
+
+/**
+ * The key a `set_key` runs with: refused when it is the placeholder a kept
+ * ask holds, which means the hub restarted between the ask and its answer
+ * and the key itself, held only in memory, is gone.
+ */
+const heldKey = (key: string | undefined): string => {
+  if (!key) {
+    throw new Error("key is required for set_key");
+  }
+  if (HELD.test(key)) {
+    throw new Error(
+      "The key was held in memory until the person answered, and the hub restarted in between; set it again."
+    );
+  }
+  return key;
+};
+
+/**
+ * An admin write's input as the person's ask keeps and shows it: each secret
+ * replaced by its length. The ask is stored, sent to every screen, Telegram
+ * and the phone; the secret itself stays in the waiting call's memory.
+ */
+export const shownToPerson = (
+  name: string,
+  input: Record<string, unknown>
+): Record<string, unknown> => {
+  const secrets = SECRET_INPUTS[name] ?? [];
+  return Object.fromEntries(
+    Object.entries(input).map(([key, value]) => [
+      key,
+      secrets.includes(key) && typeof value === "string"
+        ? `[a secret of ${value.length} characters, held by the hub until you answer]`
+        : value,
+    ])
+  );
+};
 
 /**
  * One group of fleet settings as two tools, named group first (§5.3):
@@ -189,6 +246,12 @@ export function adminTools() {
           .describe(
             "True: its sessions use CawCo's to-dos and spec, never their harness's own list or plan mode."
           ),
+        connections: z
+          .array(z.string())
+          .optional()
+          .describe(
+            "Connections its sessions may call (admin_connections_read)."
+          ),
       },
       async ({
         action,
@@ -201,6 +264,7 @@ export function adminTools() {
         denyTools,
         canDelegate,
         cawcoTodos,
+        connections,
       }) => {
         if (action === "list") {
           return ok(await api("GET", "/api/delegate-types"));
@@ -227,14 +291,105 @@ export function adminTools() {
             description,
             harness,
             model,
-            ...(effort ? { effort } : {}),
-            ...(skills?.length ? { skills } : {}),
-            ...(denyTools?.length ? { denyTools } : {}),
-            ...(canDelegate === undefined ? {} : { canDelegate }),
-            ...(cawcoTodos ? { cawcoTodos } : {}),
+            ...fieldsGiven({
+              effort,
+              skills,
+              denyTools,
+              canDelegate,
+              cawcoTodos: cawcoTodos || undefined,
+              connections,
+            }),
           })
         );
       }
+    ),
+
+    // ── connections ──────────────────────────────────────────────────────
+    ...admin(
+      "connections",
+      "the hub's connections: outside services it signs in to, one per account. " +
+        "Sessions whose delegate type or project lists one call its tools as " +
+        "conn__<name>__<tool>; the hub keeps the key.",
+      ["list"],
+      ["create", "update", "sign_in", "set_key", "remove"],
+      {
+        name: z
+          .string()
+          .optional()
+          .describe("Lowercase, digits, hyphens: github-petra."),
+        service: z.string().optional().describe("github, x, linear…"),
+        account: z.string().optional().describe("Which account of it."),
+        transport: z
+          .enum(["http", "sse", "stdio"])
+          .optional()
+          .describe("stdio: a command the hub runs."),
+        url: z.string().optional(),
+        command: z.string().optional(),
+        args: z.array(z.string()).optional(),
+        auth: z.enum(["none", "bearer", "header", "oauth"]).optional(),
+        header: z
+          .string()
+          .optional()
+          .describe(
+            "auth header: the header (stdio: env var) the key goes in."
+          ),
+        projects: z
+          .array(z.string())
+          .optional()
+          .describe("Project ids whose sessions may use it."),
+        key: z
+          .string()
+          .optional()
+          .describe("set_key: the key; the ask shows only its length."),
+        origin: z
+          .string()
+          .optional()
+          .describe("sign_in: the hub address the browser reaches."),
+      },
+      async (args) => {
+        const { action, name } = args;
+        if (action === "list") {
+          return ok(await api("GET", "/api/connections"));
+        }
+        if (!name) {
+          throw new Error("name is required for every connection write");
+        }
+        const path = `/api/connections/${encodeURIComponent(name)}`;
+        if (action === "remove") {
+          return ok(await api("DELETE", path));
+        }
+        if (action === "sign_in") {
+          return ok(
+            await api(
+              "POST",
+              `${path}/sign-in`,
+              fieldsGiven({ origin: args.origin })
+            )
+          );
+        }
+        if (action === "set_key") {
+          return ok(
+            await api("PUT", `${path}/key`, { key: heldKey(args.key) })
+          );
+        }
+        const {
+          action: _action,
+          name: _name,
+          key: _key,
+          origin: _origin,
+          ...fields
+        } = args;
+        if (action === "create") {
+          return ok(
+            await api("POST", "/api/connections", {
+              name,
+              ...fieldsGiven(fields),
+            })
+          );
+        }
+        return ok(await api("PATCH", path, fieldsGiven(fields)));
+      },
+      " create, then set_key or sign_in (answers the URL to open). Changing where it points drops the key."
     ),
 
     // ── skills ───────────────────────────────────────────────────────────

@@ -80,6 +80,7 @@ import { HubLifetime } from "../lifetime";
 import { workflowSkill } from "../workflows/skills";
 import { type AccountsDb, accountsDb } from "./accounts";
 import { type AtLimitDb, atLimitDb } from "./at-limit";
+import { type ConnectionsDb, connectionsDb } from "./connections";
 import { type RoutinesDb, routinesDb } from "./routines";
 import {
   accountSignins,
@@ -463,6 +464,8 @@ export interface DbShape {
   readonly closeTurn: (id: string) => void;
   /** A receipt for the current row's decision; deletes are finalized here. */
   readonly confirmInstanceEnd: (id: string, reason?: string) => void;
+  /** Connections and the projects that grant them (connections.ts). */
+  readonly connections: ConnectionsDb;
   readonly continuationRow: (id: string) => ContinuationRow | undefined;
   /** Every continuation job, oldest first. */
   readonly continuationRows: () => ContinuationRow[];
@@ -6740,6 +6743,7 @@ const make = async (path: string): Promise<DbShape> => {
     turnUsage: turnUsageDb(db),
     atLimit: atLimitDb(db),
     routines: routinesDb(db),
+    connections: connectionsDb(db),
     usageSpend: ({ harness, todayStart, weekStart }) => {
       const since = (start: number) =>
         sql<number>`coalesce(sum(case when ${usageBuckets.start} >= ${start} then ${usageBuckets.costUsd} else 0 end), 0)`;

@@ -843,6 +843,132 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/ConnectionAuth`.
+    public enum ConnectionAuth: OpenEnum {
+        case bearer
+        case header
+        case none
+        case oauth
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "bearer": self = .bearer
+            case "header": self = .header
+            case "none": self = .none
+            case "oauth": self = .oauth
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .bearer: "bearer"
+            case .header: "header"
+            case .none: "none"
+            case .oauth: "oauth"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.bearer, .header, .none, .oauth]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/ConnectionState`.
+    public enum ConnectionState: OpenEnum {
+        case error
+        case needsSignIn
+        case signedIn
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "error": self = .error
+            case "needs-sign-in": self = .needsSignIn
+            case "signed-in": self = .signedIn
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .error: "error"
+            case .needsSignIn: "needs-sign-in"
+            case .signedIn: "signed-in"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.error, .needsSignIn, .signedIn]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/ConnectionTransport`.
+    public enum ConnectionTransport: OpenEnum {
+        case http
+        case sse
+        case stdio
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "http": self = .http
+            case "sse": self = .sse
+            case "stdio": self = .stdio
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .http: "http"
+            case .sse: "sse"
+            case .stdio: "stdio"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.http, .sse, .stdio]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/ContinuationJobStage`.
     public enum ContinuationJobStage: OpenEnum {
         case cancelled
