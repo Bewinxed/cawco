@@ -117,6 +117,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         for home in [railHome, board] {
             home.onOpen = { [weak self] id in self?.openSession(id) }
             home.onUsagePage = { [weak self] in self?.go(.usage) }
+            home.onUsageSignIn = { [weak self] in self?.go(.configure) }
         }
         // The page's dock: Start session where the phone's thumb reaches.
         board.onStart = { [weak self] in self?.startSession(machineId: nil, cwd: nil, projectId: nil) }
@@ -896,6 +897,8 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             self?.dismiss(animated: true)
             self?.go(.usage)
         }
+        limits.onOpenSession = { [weak self] id in self?.openSession(id) }
+        limits.onSignIn = { [weak self] in self?.go(.configure) }
         // The house bottom sheet, as the home's usage bar presents it.
         limits.loadViewIfNeeded()
         let sheet = HouseSheetController(limits, title: "Usage limits", scroller: limits.scroll)

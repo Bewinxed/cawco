@@ -53,8 +53,10 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     private var drawnTab: HomeModel.Tab
     var onOpen: (String) -> Void = { _ in }
     var onSelectTab: (HomeModel.Tab) -> Void = { _ in }
-    /// Opens the Usage page from the strip's corner link.
+    /// Opens the Usage page from the usage sheet's foot.
     var onUsagePage: (() -> Void)?
+    /// Where accounts are signed in: the usage sheet's "Sign in an account".
+    var onUsageSignIn: (() -> Void)?
     /// What a row's session menu does through the shell (LiveSessionMenu, StoredSessionMenu).
     var sessionMenus: (() -> SessionMenuContext?)?
     /// Set on the page (not the rail's copy): its dock's Start session.
@@ -87,7 +89,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     /// Nothing is going on, so he sleeps; while a machine is awaited he is awake.
     private var cawStatus = CawStatus.sleeping
     /// Read in `build()`, so a change to it alone runs the update again.
-    private var usageStrip: Usage.Strip?
+    private var usageStrip: UsageRings?
 
     // The view's own state.
     private var search = ""
@@ -380,11 +382,12 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     private func makeDataSource() -> UICollectionViewDiffableDataSource<Section, Item> {
         let usage = UICollectionView.CellRegistration<UsageCell, Item> { [weak self] cell, _, _ in
             guard let self else { return }
-            // Its bar's ticks are cut in the ground it stands on.
+            // On the phone home's own raised card (`data-variant="home"`).
             cell.ground = variant.ground
-            cell.configure(usageStrip ?? home.usage)
+            cell.variant = .home
+            let view = usageStrip ?? home.usage
+            cell.configure(view, gap: home.usageGap(view), empty: home.usageEmpty(view))
             cell.onOpen = { [weak self] in self?.openUsage() }
-            cell.onPage = onUsagePage
         }
         let status = UICollectionView.CellRegistration<StatusCell, Item> { [weak self] cell, _, _ in
             guard let self else { return }
@@ -965,9 +968,11 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         return out.sorted { $0.frame.minY < $1.frame.minY }
     }
 
-    /// Every window, in the house bottom sheet.
+    /// Every account's limits, in the house bottom sheet (UsageMeter.svelte's sheet on touch).
     private func openUsage() {
         let limits = UsageSheetController(home: home)
+        limits.onOpenSession = { [weak self] id in self?.onOpen(id) }
+        limits.onSignIn = onUsageSignIn
         if let page = onUsagePage {
             limits.onPage = { [weak self] in
                 self?.dismiss(animated: true)

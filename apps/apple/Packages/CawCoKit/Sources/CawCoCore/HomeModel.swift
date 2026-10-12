@@ -578,9 +578,45 @@ public final class HomeModel {
         return held.order("home:recent", items, id: \.id)
     }
 
-    /// The usage strip: the window that stops you first, from the readings the hub keeps current.
-    public var usage: Usage.Strip {
-        Usage.strip(claude: fleet.claudeLimits, go: fleet.openCodeGoLimits, read: fleet.limitsRead, now: now)
+    /// Claude's accounts as Rings and opencode's plan (forecast.svelte.ts
+    /// `usage`): what the strip, its sheet and the Usage page all read.
+    public var usage: UsageRings {
+        UsageRings.read(fleet: fleet, now: now)
+    }
+
+    /// The forecast the wall last ranked by: a new one reorders the cells,
+    /// the minute moving on never does (UsageMeter.svelte `rankedAt`).
+    public var usageForecast: Components.Schemas.ProviderForecast? { fleet.forecast }
+
+    /// The hub's limits have been read once (`usageLimitsRead`).
+    public var usageLimitsRead: Bool { fleet.limitsRead }
+
+    /// No limit can be shown once everything is read: why, in one line and
+    /// whole, and the sign-in that fixes it (UsageMeter.svelte `gap`).
+    public func usageGap(_ view: UsageRings) -> Usage.Gap? {
+        view.claude == nil && view.openCode == nil && fleet.limitsRead && view.read
+            ? Usage.claudeGap(fleet.claudeLimits, machines: fleet.machines) : nil
+    }
+
+    /// Why there is nothing to draw: a normal state, never a fake 0% (`empty`).
+    public func usageEmpty(_ view: UsageRings) -> String {
+        fleet.limitsRead && view.read ? "Sign in to see limits" : "Reading limits…"
+    }
+
+    /// A provider with nothing to draw: why, and what to do about it (`notes`).
+    public func usageNotes(_ view: UsageRings, gap: Usage.Gap?) -> [(id: String, text: String)] {
+        let byMachine = { (errors: [String: String?]) in errors.sorted { $0.key < $1.key }.map(\.value) }
+        return [
+            gap == nil ? Usage.noteOf("Claude", has: view.claude != nil, errors: byMachine(fleet.claudeLimits.mapValues(\.error)),
+                                      read: fleet.limitsRead).map { ("Claude", $0) } : nil,
+            Usage.noteOf("opencode Go", has: view.openCode != nil, errors: byMachine(fleet.openCodeGoLimits.mapValues(\.error)),
+                         read: fleet.limitsRead).map { ("opencode", $0) },
+        ].compactMap(\.self)
+    }
+
+    /// Where a session runs, as its row names it (home-state `projectOfRow`).
+    public func usagePlace(_ row: InstanceRow) -> String {
+        fleet.placeOf(row.machineId, row.cwd)
     }
 
     public func fleetTitle(_ row: InstanceRow) -> String {

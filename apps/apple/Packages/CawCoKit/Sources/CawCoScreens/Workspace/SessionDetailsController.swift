@@ -234,12 +234,25 @@ public final class SessionDetailsController: ObservedViewController {
     /// This session's provider limit: the window that stops its provider first.
     private var providerLimit: Usage.Row? {
         let now = Date().timeIntervalSince1970 * 1000
-        let cells = Usage.strip(claude: fleet.claudeLimits, go: fleet.openCodeGoLimits, read: fleet.limitsRead, now: now).cells
-        if harness == "claude" { return Usage.firstToStop(cells.first { $0.id == "Claude" }?.rows ?? []) }
+        if harness == "claude" {
+            guard let claude = Usage.speaking(fleet.claudeLimits, error: \.error, stale: \.stale, windows: \.windows) else { return nil }
+            return Usage.firstToStop(Usage.rows(provider: "Claude", windows: claude.windows, stale: claude.stale, now: now))
+        }
         if harness == "opencode", model?.hasPrefix("opencode-go/") == true {
-            return Usage.firstToStop(cells.first { $0.id == "opencode" }?.rows ?? [])
+            guard let go = Usage.speaking(fleet.openCodeGoLimits, error: \.error, stale: { $0.stale ?? false }, windows: \.windows) else { return nil }
+            return Usage.firstToStop(Usage.rows(provider: "opencode", windows: go.windows, stale: go.stale ?? false, now: now))
         }
         return nil
+    }
+
+    /// A meter's colour step as the bar draws it.
+    private static func tone(_ state: Usage.State) -> LimitBar.Tone {
+        switch state {
+        case .calm: .calm
+        case .near: .near
+        case .over, .reached: .over
+        case .stale: .stale
+        }
     }
 
     private var face: SessionStatusView.Face {
@@ -674,7 +687,7 @@ public final class SessionDetailsController: ObservedViewController {
             contextBar.isHidden = false
             contextFigure.isHidden = false
             contextNote.isHidden = true
-            contextBar.configure(used: percent, elapsed: nil, tone: UsageCell.tone(Usage.fill(percent)), reached: false,
+            contextBar.configure(used: percent, elapsed: nil, tone: Self.tone(Usage.fill(percent)), reached: false,
                                  paint: Palette.surfaceRecess, label: "Context")
             contextFigure.text = "\(Int(percent))% · \(Self.tokens(reading.totalTokens))/\(Self.tokens(reading.maxTokens))"
             // When a session that can no longer answer was last read.
@@ -696,9 +709,14 @@ public final class SessionDetailsController: ObservedViewController {
         if let limit = providerLimit {
             limitUnit.isHidden = false
             limitLabel.text = limit.label
-            limitBar.configure(used: limit.meter.used, elapsed: limit.meter.elapsed, tone: UsageCell.tone(limit.meter.state),
-                               reached: limit.meter.state == .reached, paint: Palette.surfaceRecess, label: limit.label)
-            limitFigure.text = "\(Int(limit.meter.used.rounded()))%"
+            // As the usage popover reads a limit (ProviderLimit.svelte): the bar
+            // filled with what is left, then "62% left", its figure in the figure face.
+            limitBar.configure(used: limit.meter.used, elapsed: limit.meter.elapsed, tone: Self.tone(limit.meter.state),
+                               reached: limit.meter.state == .reached, paint: Palette.surfaceRecess, label: limit.label, reads: .left)
+            let left = Int((100 - min(100, max(0, limit.meter.used))).rounded())
+            let said = NSMutableAttributedString(string: "\(left)%", attributes: TypeScale.typeMeta.figure().attributes(color: Palette.inkStrong))
+            said.append(NSAttributedString(string: " left", attributes: TypeScale.typeMeta.attributes(color: Palette.inkStrong)))
+            limitFigure.attributedText = said
         } else {
             limitUnit.isHidden = true
         }

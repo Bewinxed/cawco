@@ -491,17 +491,20 @@ public final class HubConnection {
         return try await client.postApiSeen(body: .json(.init(ids: ids, kind: kind))).ok.body.json.at
     }
 
-    /// Reads the hub's accounts, their sign-ins and catalogs, and the
-    /// providers the fleet's machines know (client.svelte.ts `readAccounts`);
-    /// a failed read keeps what was there.
+    /// Reads the hub's accounts, their sign-ins and catalogs, the providers
+    /// the fleet's machines know (client.svelte.ts `readAccounts`) and
+    /// Claude's forecast (forecast.svelte.ts `readForecast`, which the web
+    /// reads on the same signal); a failed read keeps what was there.
     func readAccounts() {
         guard let client else { return }
         Task { [weak self] in
             async let view = try? client.getApiAccounts().ok.body.json
             async let providers = try? client.getApiAccountsProviders().ok.body.json
-            let (read, known) = await (view, providers)
+            async let forecast = try? client.getApiAccountsForecast(query: .init(provider: "anthropic")).ok.body.json
+            let (read, known, ahead) = await (view, providers, forecast)
             if let read { self?.fleet.accounts = read }
             if let known { self?.fleet.accountProviders = known }
+            if let ahead { self?.fleet.forecast = ahead }
         }
     }
 

@@ -24,14 +24,19 @@ public struct TypeRole: Sendable {
     /// utility carries (`--text-title--letter-spacing`), zero for a role
     /// the web sets untracked.
     public let tracking: Double
+    /// The size Dynamic Type scales it as: its own, or (a measured figure)
+    /// the size of the words it stands among, so the two scale together.
+    private let styleSize: Double?
 
-    init(weight: UIFont.Weight, size: ClosedRange<Double>, leading: Double, family: [String], fluid: Fluid? = nil, tracking: Double = 0) {
+    init(weight: UIFont.Weight, size: ClosedRange<Double>, leading: Double, family: [String], fluid: Fluid? = nil, tracking: Double = 0,
+         textStyleOf styleSize: Double? = nil) {
         self.weight = weight
         self.size = size
         self.leading = leading
         self.family = family
         self.fluid = fluid
         self.tracking = tracking
+        self.styleSize = styleSize
     }
 
     /// The role's size on a compact screen: a fluid role's smallest.
@@ -63,6 +68,22 @@ public struct TypeRole: Sendable {
 
     /// The role's line height in points, at the font's scaled size.
     public var lineHeight: Double { font.pointSize * leading }
+
+    /// A measured figure among this role's words (app.css `mono-figure`,
+    /// DESIGN.md "Measured figure"): JetBrains Mono, ligatures off, at the
+    /// size that brings its cap height to `monoFigureCap` of the role's
+    /// size (`font-size-adjust: cap-height`), on the role's own line height,
+    /// at the role's weight unless the run restates it (`weight`).
+    public func figure(weight: UIFont.Weight? = nil) -> TypeRole {
+        let probe = UIFont(descriptor: Self.descriptor(weight: .regular, mono: true, wordmark: false), size: 100)
+        let cap = probe.capHeight / probe.pointSize
+        let scale = cap > 0 ? TypeScale.monoFigureCap / cap : 1
+        let sized = { (points: Double) in points * scale }
+        return TypeRole(weight: weight ?? self.weight, size: sized(size.lowerBound) ... sized(size.upperBound),
+                        leading: leading / scale, family: FontFamily.fontMono,
+                        fluid: fluid.map { Fluid(base: $0.base * scale, perViewport: $0.perViewport * scale) },
+                        textStyleOf: points)
+    }
 
     /// Text attributes that set a string in this role. `tracking`, in em,
     /// is the role's own unless the element it ports restates it.
@@ -107,7 +128,7 @@ public struct TypeRole: Sendable {
     }
 
     private var textStyle: UIFont.TextStyle {
-        switch points {
+        switch styleSize ?? points {
         case ..<12.5: .caption1
         case ..<13.5: .footnote
         case ..<16: .subheadline

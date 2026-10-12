@@ -234,6 +234,10 @@ public final class FleetStore {
     /// The providers the fleet's machines know (`/api/accounts/providers`):
     /// which harnesses use an account of each. Nil until read.
     public internal(set) var accountProviders: [Components.Schemas.ProviderChoice]?
+    /// Claude's accounts as a forecast (`/api/accounts/forecast?provider=anthropic`,
+    /// forecast.svelte.ts `readForecast`): read with the accounts, on connect
+    /// and on every `usage` frame. Nil until read; a failed read keeps what was there.
+    public internal(set) var forecast: Components.Schemas.ProviderForecast?
 
     /// The notice ids a person acknowledged on any tab or device (hub
     /// notices.ts), plus this device's own on their way to the hub

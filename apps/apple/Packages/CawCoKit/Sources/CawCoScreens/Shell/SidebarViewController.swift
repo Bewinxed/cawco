@@ -88,10 +88,8 @@ final class SidebarViewController: ObservedViewController {
     private var shownNodes: [(node: RailBranch, row: SessionRailRow)] = []
     private var blockedCount = 0
     private var liveCount = 0
-    private var usageAt: Double?
-    private var usageRead: Bool?
-    private var claudeReadings: [String: Components.Schemas.ClaudeLimits] = [:]
-    private var goReadings: [String: Components.Schemas.OpenCodeGoLimits] = [:]
+    /// What the usage strip was last drawn from: it draws again only when that moves.
+    private var usageKey: Int?
     private var olderOpen = Set<String>()
     private var openTrees = Set<String>()
     private let fold = RailFold()
@@ -535,13 +533,11 @@ final class SidebarViewController: ObservedViewController {
     // MARK: Footer
 
     private func buildFooter() -> UIView {
-        var ground = UIBackgroundConfiguration.clear()
-        ground.backgroundColor = Palette.sidebar
-        usage.backgroundConfiguration = ground
+        // The rail's paint: the strip's reserve notches are cut in it.
+        usage.ground = Palette.sidebar
+        usage.variant = .rail
         usage.translatesAutoresizingMaskIntoConstraints = false
         usage.onOpen = { [weak self] in self?.host?.showLimits() }
-        // The cell draws the web's `.usage-link` corner link itself.
-        usage.onPage = { [weak self] in self?.host?.go(.usage) }
         usage.heightAnchor.constraint(equalToConstant: 44).isActive = true
 
         // The strip's words start on the rail's content edge, where the rows' do.
@@ -640,12 +636,23 @@ final class SidebarViewController: ObservedViewController {
         #endif
         if fold.running { return }
         let fleet = hub.fleet
-        if usageAt != home.now || usageRead != fleet.limitsRead || claudeReadings != fleet.claudeLimits || goReadings != fleet.openCodeGoLimits {
-            usageAt = home.now
-            usageRead = fleet.limitsRead
-            claudeReadings = fleet.claudeLimits
-            goReadings = fleet.openCodeGoLimits
-            usage.configure(home.usage)
+        var key = Hasher()
+        key.combine(home.now)
+        key.combine(fleet.limitsRead)
+        key.combine(fleet.claudeLimits)
+        key.combine(fleet.openCodeGoLimits)
+        key.combine(fleet.accounts)
+        key.combine(fleet.forecast)
+        for row in fleet.rows where row.status == .running || row.status == .starting {
+            key.combine(row.id)
+            key.combine(row.accountId)
+            key.combine(row.harness)
+        }
+        let drawn = key.finalize()
+        if usageKey != drawn {
+            usageKey = drawn
+            let view = home.usage
+            usage.configure(view, gap: home.usageGap(view), empty: home.usageEmpty(view))
         }
         guard projectsReady else {
             lists = []

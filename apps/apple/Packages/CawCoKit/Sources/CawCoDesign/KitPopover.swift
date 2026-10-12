@@ -8,7 +8,10 @@ import UIKit
 /// and back over `durExit`; with less motion only the fade. A tap outside
 /// closes it. The content sizes it through `preferredContentSize`.
 public final class KitPopover: NSObject, UIViewControllerTransitioningDelegate {
-    public enum Align: Sendable { case start, end }
+    public enum Align: Sendable { case start, end, center }
+    /// Which side of its trigger it opens on first (bits-ui `side`); it
+    /// flips to the other where the screen has no room.
+    public enum Side: Sendable { case bottom, top }
 
     /// How the card arrives: from `scale` and `rise` toward its trigger, to
     /// rest over `duration` on `curve`. A popover may set its own
@@ -32,6 +35,10 @@ public final class KitPopover: NSObject, UIViewControllerTransitioningDelegate {
 
     private weak var source: UIView?
     private let align: Align
+    private let side: Side
+    /// The part of `source` it hangs off, in the source's coordinates (a
+    /// cell's row across its whole wall, bits-ui `customAnchor`); nil: all of it.
+    private let rect: CGRect?
     private let offset: Double
     private let entrance: Entrance
     /// Views under the popover that still take touches while it is up: the
@@ -46,9 +53,10 @@ public final class KitPopover: NSObject, UIViewControllerTransitioningDelegate {
     /// Presents `content` off `source`; keep the returned object for as long as it is up.
     @MainActor
     @discardableResult
-    public static func present(_ content: UIViewController, from source: UIView, in presenter: UIViewController, align: Align = .start, offset: Double = 6,
+    public static func present(_ content: UIViewController, from source: UIView, rect: CGRect? = nil, in presenter: UIViewController,
+                               align: Align = .start, side: Side = .bottom, offset: Double = 6,
                                entrance: Entrance = .standard, passthrough: [UIView] = []) -> KitPopover {
-        let popover = KitPopover(source: source, align: align, offset: offset, entrance: entrance)
+        let popover = KitPopover(source: source, rect: rect, align: align, side: side, offset: offset, entrance: entrance)
         popover.passthrough = passthrough.map { Weak(view: $0) }
         content.modalPresentationStyle = .custom
         content.transitioningDelegate = popover
@@ -59,15 +67,18 @@ public final class KitPopover: NSObject, UIViewControllerTransitioningDelegate {
 
     nonisolated(unsafe) private static var key = 0
 
-    private init(source: UIView, align: Align, offset: Double, entrance: Entrance) {
+    private init(source: UIView, rect: CGRect?, align: Align, side: Side, offset: Double, entrance: Entrance) {
         self.source = source
+        self.rect = rect
         self.align = align
+        self.side = side
         self.offset = offset
         self.entrance = entrance
     }
 
     public func presentationController(forPresented presented: UIViewController, presenting: UIViewController?, source _: UIViewController) -> UIPresentationController? {
-        let presentation = Presentation(presentedViewController: presented, presenting: presenting, anchor: source, align: align, offset: offset)
+        let presentation = Presentation(presentedViewController: presented, presenting: presenting, anchor: source, rect: rect, align: align, side: side,
+                                        offset: offset)
         presentation.catcher.passthrough = passthrough
         return presentation
     }
@@ -96,17 +107,28 @@ public final class KitPopover: NSObject, UIViewControllerTransitioningDelegate {
 
     final class Presentation: UIPresentationController {
         private weak var anchor: UIView?
+        private let rect: CGRect?
         private let align: Align
+        private let side: Side
         private let offset: Double
         let catcher = Catcher()
-        /// Whether the card hangs above its trigger (no room below).
+        /// Whether the card hangs above its trigger.
         private(set) var above = false
 
-        init(presentedViewController: UIViewController, presenting: UIViewController?, anchor: UIView?, align: Align, offset: Double) {
+        init(presentedViewController: UIViewController, presenting: UIViewController?, anchor: UIView?, rect: CGRect?, align: Align, side: Side,
+             offset: Double) {
             self.anchor = anchor
+            self.rect = rect
             self.align = align
+            self.side = side
             self.offset = offset
             super.init(presentedViewController: presentedViewController, presenting: presenting)
+        }
+
+        /// The trigger's frame in the container: its `rect`, or all of it.
+        private func trigger(in container: UIView) -> CGRect? {
+            guard let anchor else { return nil }
+            return anchor.convert(rect ?? anchor.bounds, to: container)
         }
 
         /// The keyboard's top in the container, while one is up: the card keeps above it.
@@ -121,21 +143,27 @@ public final class KitPopover: NSObject, UIViewControllerTransitioningDelegate {
         }
 
         override var frameOfPresentedViewInContainerView: CGRect {
-            guard let container = containerView, let anchor else { return .zero }
-            let trigger = anchor.convert(anchor.bounds, to: container)
+            guard let container = containerView, let trigger = trigger(in: container) else { return .zero }
             var bounds = container.bounds.inset(by: container.safeAreaInsets)
             if let keyboardTop { bounds.size.height = min(bounds.height, keyboardTop - bounds.minY) }
             let safe = bounds.insetBy(dx: 8, dy: 8)
             var size = presentedViewController.preferredContentSize
             size.width = min(size.width, safe.width)
             size.height = min(size.height, safe.height)
-            // Floating UI's flip, then its shift: below the trigger, else above
-            // it, else as near it as the screen (and the keyboard) leave room for.
+            // Floating UI's flip, then its shift: on its side of the trigger,
+            // else the other, else as near it as the screen (and the keyboard) leave room for.
             let below = trigger.maxY + offset
-            above = below + size.height > safe.maxY && trigger.minY - offset - size.height >= safe.minY
-            var y = above ? trigger.minY - offset - size.height : below
+            let over = trigger.minY - offset - size.height
+            let roomBelow = below + size.height <= safe.maxY
+            let roomAbove = over >= safe.minY
+            above = side == .top ? roomAbove || !roomBelow : !roomBelow && roomAbove
+            var y = above ? over : below
             y = min(max(y, safe.minY), safe.maxY - size.height)
-            var x = align == .start ? trigger.minX : trigger.maxX - size.width
+            var x = switch align {
+            case .start: trigger.minX
+            case .end: trigger.maxX - size.width
+            case .center: trigger.midX - size.width / 2
+            }
             x = min(max(x, safe.minX), safe.maxX - size.width)
             return CGRect(origin: CGPoint(x: x, y: y), size: size)
         }
@@ -162,8 +190,7 @@ public final class KitPopover: NSObject, UIViewControllerTransitioningDelegate {
         /// Where the card grows from: the trigger's side of it.
         var origin: CGPoint {
             let frame = frameOfPresentedViewInContainerView
-            guard let container = containerView, let anchor else { return CGPoint(x: 0.5, y: 0) }
-            let trigger = anchor.convert(anchor.bounds, to: container)
+            guard let container = containerView, let trigger = trigger(in: container) else { return CGPoint(x: 0.5, y: 0) }
             let x = frame.width > 0 ? min(1, max(0, (trigger.midX - frame.minX) / frame.width)) : 0.5
             return CGPoint(x: x, y: above ? 1 : 0)
         }

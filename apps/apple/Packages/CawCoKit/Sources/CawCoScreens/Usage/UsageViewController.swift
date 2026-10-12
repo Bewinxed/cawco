@@ -95,10 +95,9 @@ final class UsageViewController: ObservedViewController, UIDocumentPickerDelegat
         controls.addArrangedSubview(exportButton)
         errorSlot.axis = .vertical
 
-        limits.onLogin = { [weak self] machineId in
-            guard let self, let machine = context.hub.fleet.machines.first(where: { $0.machineId == machineId }) else { return }
-            context.sessionMenus.presenter().present(MachineLoginController(hub: context.hub, machine: machine), animated: true)
-        }
+        // "Sign in an account": where accounts are signed in (`/config/accounts`).
+        limits.onSignIn = { [weak self] in self?.context.go(.configure) }
+        limits.presenter = self
         whereCard.onOpen = { [weak self] session in
             guard let self else { return }
             // `conversationHref`: the row with that id, else the newest that holds the session.
@@ -169,7 +168,7 @@ final class UsageViewController: ObservedViewController, UIDocumentPickerDelegat
             errorSlot.addArrangedSubview(UsageCard.failed("Could not reach the hub for usage data. Check that it is running, then try again.",
                                                           retrying: rereading) { [weak self] in self?.reread() })
         }
-        limits.configure(UsageLimits.read(fleet: fleet, now: now), now: now)
+        limits.configure(UsageRings.read(fleet: fleet, now: now), fleet: fleet)
         let since = range.since(fleet: fleet)
         whereCard.configure(since: since)
         history.configure(since: since, hourly: range.hourly)

@@ -2,10 +2,9 @@ public import CawCoAPI
 public import Foundation
 
 // The Usage page as the web reads it (routes/usage/+page.svelte and
-// lib/cawco/usage/): the Limits block's content, the range each harness is
-// read over, where the spend goes and its history. The home's strip reads
-// the same readings through `Usage.strip`; both stand on `Usage.rows` and
-// `Usage.firstToStop`.
+// lib/cawco/usage/): the range each harness is read over, where the spend
+// goes and its history. Its Limits block reads Rings (Rings.swift), as the
+// strip and its sheet do.
 
 // MARK: Words and figures (usage.ts)
 
@@ -20,23 +19,6 @@ extension Usage {
         if n >= 1_000_000 { return "\(short(n / 1_000_000))M" }
         if n >= 1000 { return "\(short(n / 1000))k" }
         return String(Int(n))
-    }
-
-    /// "max" → "Max": the plan as Claude Code's `subscriptionType` names it (`planName`).
-    public static func planName(_ subscription: String?) -> String? {
-        guard let subscription, !subscription.isEmpty else { return nil }
-        return subscription.prefix(1).uppercased() + subscription.dropFirst()
-    }
-
-    /// "On · in use", "Off · out of credits", then its reset (`extraUsageText`).
-    public static func extraUsageText(_ extra: Components.Schemas.ClaudeExtraUsage, now: Double) -> String {
-        let said: String
-        if extra.on {
-            said = extra.inUse ? "On · in use" : "On"
-        } else {
-            said = extra.offReason.map { "Off · \($0)" } ?? "Off"
-        }
-        return extra.resetsAt.map { "\(said) · resets \(resetLabel($0, now: now))" } ?? said
     }
 
     /// When the window started, from its reset and its span (`windowStart`).
@@ -71,134 +53,6 @@ extension Usage {
         return Locale(components: parts)
     }
 
-    /// A reset on the page (`resetLabel`): "in 4h 38m" under a day away,
-    /// "Thu 09:00" inside the next seven days, and "Oct 17 08:49" past them.
-    public static func resetLabel(_ resetsAt: String, now: Double) -> String {
-        guard let at = Wire.parseDate(resetsAt) else { return "" }
-        let left = at.timeIntervalSince1970 * 1000 - now
-        if left <= 0 { return "now" }
-        if left < dayMs { return "in \(duration(left))" }
-        let time = at.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits).locale(clock))
-        if left < 7 * dayMs {
-            return "\(at.formatted(.dateTime.weekday(.abbreviated).locale(clock))) \(time)"
-        }
-        return at.formatted(.dateTime.day().month(.abbreviated).hour(.twoDigits(amPM: .omitted)).minute(.twoDigits).locale(clock))
-    }
-
-    /// The projection, as one sentence: what the Limits block leads with (`projectionSentence`).
-    public static func projectionSentence(_ meter: Meter, now: Double) -> String {
-        if meter.used >= 100 {
-            return meter.window.resetsAt.map { "Limit reached. It resets \(resetLabel($0, now: now))." } ?? "Limit reached."
-        }
-        if meter.early { return "Too early in the window to project." }
-        if let runsOutIn = meter.runsOutIn, let margin = meter.margin {
-            return "At this pace it runs out in about \(about(runsOutIn)), \(about(margin)) before the reset."
-        }
-        return meter.lasts ? "At this pace it lasts to the reset." : ""
-    }
-
-    /// A bar's own line under it: its projection, short (`projectionNote`).
-    public static func projectionNote(_ meter: Meter) -> String {
-        if meter.early { return "too early to project" }
-        if let runsOutIn = meter.runsOutIn { return "runs out in about \(about(runsOutIn))" }
-        return meter.lasts ? "lasts to the reset" : ""
-    }
-}
-
-// MARK: Limits block (LimitsBlock.svelte)
-
-/// What the Limits block says: the window that stops you first, then every
-/// window by provider.
-public struct UsageLimits: Sendable {
-    /// Why there is no Claude bar, and what to do about it.
-    public struct Unknown: Sendable {
-        public let machineId: String?
-        public let reason: String
-        public let signIn: Bool
-    }
-
-    /// The hub's limits have been read once; before that the block is a skeleton.
-    public let read: Bool
-    public let lead: Usage.Row?
-    /// What the headline percent is of: "the 5-hour window", "Claude's Fable week".
-    public let leadName: String
-    public let sentence: String
-    public let claudeRows: [Usage.Row]
-    /// "Max": the plan Claude Code names (`subscriptionType`).
-    public let claudePlan: String?
-    /// "read 2h ago" when no session runs on the account.
-    public let claudeAge: String?
-    public let claudeUnknown: Unknown?
-    /// "On · in use · resets in 4h", "Off · out of credits"; nil when Claude Code never said.
-    public let extra: String?
-    /// The opencode group shows: it has windows, or there is spend to say.
-    public let showGo: Bool
-    public let goRows: [Usage.Row]
-    public let goAge: String?
-    /// "$0.09 today · $1.20 this week · $40.10 all time"; nil when not shown.
-    public let spend: String?
-
-    /// A row's line after its percent: "runs out in about 2h · resets in 4h 38m".
-    public func resets(_ row: Usage.Row, now: Double) -> String {
-        let meter = row.meter
-        let note = row.key == lead?.key ? "" : Usage.projectionNote(meter)
-        let before = meter.runsOutIn != nil && !note.isEmpty ? "\(note) · " : ""
-        guard let reset = meter.window.resetsAt else { return before }
-        let when = Usage.resetLabel(reset, now: now)
-        return before + (meter.used >= 100 ? "Limit reached · resets \(when)" : "resets \(when)")
-    }
-
-    @MainActor
-    public static func read(fleet: FleetStore, now: Double) -> UsageLimits {
-        let claude = Usage.speaking(fleet.claudeLimits, error: \.error, stale: \.stale, windows: \.windows)
-        let go = Usage.speaking(fleet.openCodeGoLimits, error: \.error, stale: { $0.stale ?? false }, windows: \.windows)
-        let claudeRows = claude.map { Usage.rows(provider: "Claude", windows: $0.windows, stale: $0.stale, now: now) } ?? []
-        let goRows = go.map { Usage.rows(provider: "opencode", windows: $0.windows, stale: $0.stale ?? false, now: now) } ?? []
-
-        var unknown: Unknown?
-        if claude == nil {
-            if let first = fleet.claudeLimits.sorted(by: { $0.key < $1.key }).first {
-                let host = fleet.machines.first { $0.machineId == first.key }?.hostname ?? "a removed machine"
-                let known = fleet.machines.contains { $0.machineId == first.key } ? first.key : nil
-                switch first.value.error {
-                case "not signed in":
-                    unknown = Unknown(machineId: known, reason: "Not signed in to Claude on \(host).", signIn: true)
-                default:
-                    unknown = Unknown(machineId: known, reason: "Claude Code has not reported the limits of \(host)'s account yet; they appear once a session runs there.", signIn: false)
-                }
-            } else {
-                unknown = Unknown(machineId: nil, reason: "No machine has reported a Claude reading yet.", signIn: false)
-            }
-        }
-
-        let providers = [!claudeRows.isEmpty, !goRows.isEmpty].filter(\.self).count
-        let lead = Usage.firstToStop(claudeRows + goRows)
-        var leadName = ""
-        if let lead {
-            let window = lead.meter.window
-            let base = ["session": "5-hour window", "weekly": "week", "monthly": "month"][window.group] ?? lead.label
-            let scoped = window.scopeLabel.map { "\($0) \(base)" } ?? base
-            leadName = providers > 1 ? "\(lead.provider)'s \(scoped)" : "the \(scoped)"
-        }
-
-        let spend = fleet.spend
-        let showSpend = spend.map { $0.all > 0 || !goRows.isEmpty } ?? false
-        return UsageLimits(
-            read: fleet.limitsRead,
-            lead: lead,
-            leadName: leadName,
-            sentence: lead.map { Usage.projectionSentence($0.meter, now: now) } ?? "",
-            claudeRows: claudeRows,
-            claudePlan: claude.flatMap { Usage.planName($0.subscription) },
-            claudeAge: claude.flatMap { $0.stale ? Usage.readAgo($0.fetchedAt, now: now) : nil },
-            claudeUnknown: unknown,
-            extra: claude?.extraUsage.map { Usage.extraUsageText($0, now: now) },
-            showGo: !goRows.isEmpty || showSpend,
-            goRows: goRows,
-            goAge: go.flatMap { $0.stale == true ? Usage.readAgo($0.fetchedAt, now: now) : nil },
-            spend: showSpend ? spend.map { "\(Usage.money($0.today)) today · \(Usage.money($0.week)) this week · \(Usage.money($0.all)) all time" } : nil
-        )
-    }
 }
 
 // MARK: Range (+page.svelte `since`)

@@ -53,3 +53,39 @@ enum OKLab {
         )
     }
 }
+
+/// An account's colours (rings.ts `hueToken`, Rings.svelte `.arc.week`):
+/// its `account-<hue>` token, and its week's shade, the hue mixed in oklch
+/// toward `account-week-toward` by `account-week-mix`
+/// (`color-mix(in oklch, hue, toward mix%)`; the toward colour's hue is
+/// `none`, so only lightness and chroma move).
+public enum AccountInk {
+    /// The `account-<hue>` token (core AccountHue); an unknown hue reads as amber, the first.
+    public static func color(_ hue: String) -> UIColor {
+        switch hue {
+        case "blue": Palette.accountBlue
+        case "cyan": Palette.accountCyan
+        case "green": Palette.accountGreen
+        case "orange": Palette.accountOrange
+        case "rose": Palette.accountRose
+        case "violet": Palette.accountViolet
+        default: Palette.accountAmber
+        }
+    }
+
+    /// The week rim's and week mark's shade of `hue`.
+    public static func week(_ hue: String) -> UIColor {
+        let base = color(hue)
+        return UIColor { traits in
+            var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+            base.resolvedColor(with: traits).getRed(&r, green: &g, blue: &b, alpha: &a)
+            var tr: CGFloat = 0, tg: CGFloat = 0, tb: CGFloat = 0, ta: CGFloat = 0
+            Palette.accountWeekToward.resolvedColor(with: traits).getRed(&tr, green: &tg, blue: &tb, alpha: &ta)
+            let mix = Motion.accountWeekMix.value(for: traits)
+            let (l, c, h) = OKLab.lch(r, g, b)
+            let (tl, tc, _) = OKLab.lch(tr, tg, tb)
+            let (r2, g2, b2) = OKLab.rgb(l: l + (tl - l) * mix, c: c + (tc - c) * mix, h: h)
+            return UIColor(red: r2, green: g2, blue: b2, alpha: a)
+        }
+    }
+}

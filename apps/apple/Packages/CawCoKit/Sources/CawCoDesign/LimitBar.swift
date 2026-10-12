@@ -10,6 +10,13 @@ public final class LimitBar: UIView {
         case calm, near, over, stale
     }
 
+    /// What the fill shows (LimitBar.svelte `reads`): the share used (a
+    /// context window), or the share left (a provider's limit, its tick
+    /// where an even pace would leave you now).
+    public enum Reads: Sendable {
+        case used, left
+    }
+
     private let fill = UIView()
     private let tick = UIView()
     private var used = 0.0
@@ -39,16 +46,22 @@ public final class LimitBar: UIView {
 
     /// `used` 0–100 (a reading can pass 100; the bar stops at full); `elapsed` 0–1 draws the tick;
     /// `paint`: what the gap shows, the surface the bar is drawn on.
-    public func configure(used: Double, elapsed: Double?, tone: Tone, reached: Bool, paint: UIColor, label: String) {
-        let changed = used != self.used && window != nil
-        self.used = used
-        self.elapsed = reached ? nil : elapsed
+    public func configure(used: Double, elapsed: Double?, tone: Tone, reached: Bool, paint: UIColor, label: String, reads: Reads = .used) {
+        let share = min(100, max(0, used))
+        let shown = reads == .left ? 100 - share : share
+        let changed = shown != self.used && window != nil
+        self.used = shown
+        self.elapsed = reached ? nil : elapsed.map { reads == .left ? 1 - $0 : $0 }
         self.tone = tone
         backgroundColor = track
         fill.backgroundColor = ink
         tick.backgroundColor = paint
-        accessibilityLabel = "\(label) used"
-        accessibilityValue = "\(Int(used.rounded())) percent"
+        accessibilityLabel = "\(label) \(reads == .left ? "left" : "used")"
+        let said = "\(Int(shown.rounded())) percent \(reads == .left ? "left" : "used")"
+        accessibilityValue = self.elapsed.map { tick in
+            reads == .left ? "\(said); an even pace would leave \(Int((tick * 100).rounded())) percent by now"
+                : "\(said); an even pace would have used \(Int((tick * 100).rounded())) percent by now"
+        } ?? said
         if changed, !UIAccessibility.isReduceMotionEnabled {
             setNeedsLayout()
             Motion.easeDrawer.animator(Motion.durMorph) { self.layoutIfNeeded() }.startAnimation()
