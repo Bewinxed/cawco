@@ -37,10 +37,31 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     private var seenNotices: Set<String>?
     /// The wide screen's sidebar toggle: the rail's column shown or hidden.
     private let railToggle = BurgerButton()
-    /// The wide bar's toggle: an iPad's. The Mac has none, as the web's
-    /// desktop has none (Shell.svelte `.burger min-[900px]:hidden`): the rail
-    /// stands beside the page and its grip resizes it.
-    private var barToggle: BurgerButton? { UIDevice.current.userInterfaceIdiom == .mac ? nil : railToggle }
+    #if targetEnvironment(macCatalyst)
+    /// The Mac's own top bar, holding the crumb, the hosted tabs and the
+    /// cluster for good. It has no sidebar toggle, as the web's desktop has
+    /// none (Shell.svelte `.burger min-[900px]:hidden`): the rail stands
+    /// beside the page and its grip resizes it.
+    private lazy var macBar = MacBar(crumb: mainCrumb, cluster: mainCluster)
+    #endif
+
+    /// The wide screen's bar: the Mac's own, an iPad's system bar.
+    private var mainBar: UIView {
+        #if targetEnvironment(macCatalyst)
+        macBar
+        #else
+        mainNav.navigationBar
+        #endif
+    }
+
+    /// The wide screen's page in front takes the bar's parts: on an iPad its
+    /// system bar carries the toggle, the crumb and the cluster as items. The
+    /// Mac's bar holds them itself, whatever the page.
+    private func installMainBar(on page: UIViewController) {
+        #if !targetEnvironment(macCatalyst)
+        TopBar.install(on: page.navigationItem, crumb: mainCrumb, cluster: mainCluster, burger: railToggle)
+        #endif
+    }
 
     // Regular width.
     private let rail: SidebarViewController
@@ -169,7 +190,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             self?.home.act(notice)
         }
         cawPanel.onOpenChange = { [weak self] _ in self?.refreshBars() }
-        TopBar.install(on: detail.navigationItem, crumb: mainCrumb, cluster: mainCluster, burger: barToggle)
+        installMainBar(on: detail)
         TopBar.install(on: board.navigationItem, crumb: compactCrumb, cluster: compactCluster, burger: burger, showsCrumb: false)
         TopBar.pin(compactCluster, to: compactNav.navigationBar)
         placeSessionRow()
@@ -312,6 +333,9 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         view.addGestureRecognizer(railEdge)
         NotificationCenter.default.addObserver(self, selector: #selector(sceneActivated(_:)), name: UIScene.didActivateNotification, object: nil)
         #if targetEnvironment(macCatalyst)
+        // The page's column shows the Mac's own bar over it, never the system's (MacBar).
+        mainNav.setNavigationBarHidden(true, animated: false)
+        view.addSubview(macBar)
         view.addGestureRecognizer(WindowDragGesture { [weak self] touch in
             guard let self else { return false }
             return movesWindow(touch.view, at: touch.location(in: view))
@@ -321,19 +345,36 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
 
     #if targetEnvironment(macCatalyst)
     /// Whether a press that landed on `hit`, at `point` in the shell's
-    /// points, moves the window (MacWindow): on the bar's empty space, which
-    /// the system draws from the page column's top, 10pt over its own frame,
-    /// down to the bar's floor; or on the rail's top, over its header, where
-    /// the traffic lights stand. Never on a tab, a control or a row.
+    /// points, moves the window (MacWindow): on the bar's empty space, or on
+    /// the rail's top, over its header, where the traffic lights stand.
+    /// Never on a tab, a control or a row.
     func movesWindow(_ hit: UIView?, at point: CGPoint) -> Bool {
         guard let hit else { return false }
+        if hit.isDescendant(of: macBar) {
+            return WindowDragGesture.nothingTakes(hit, under: macBar)
+        }
         if let railView = rail.viewIfLoaded, hit.isDescendant(of: railView) {
             return railView.convert(point, from: view).y < railView.safeAreaInsets.top && WindowDragGesture.nothingTakes(hit, under: railView)
         }
-        if let page = mainNav.viewIfLoaded, hit.isDescendant(of: page) {
-            return page.convert(point, from: view).y < mainNav.navigationBar.frame.maxY && WindowDragGesture.nothingTakes(hit, under: page)
-        }
         return false
+    }
+
+    /// The Mac's bar across the window's top, from the rail's edge to the
+    /// window's, `cTopBarH` tall; the page's column starts under it, the
+    /// titlebar's inset it inherits (32pt) made up to the bar's height. The
+    /// split view lays its columns over its view's other subviews on a pass:
+    /// the bar comes back over them, and the assistant's pane over the bar,
+    /// which it overlaps by design (AssistantPane `install`).
+    private func placeMacBar() {
+        let rail = !isCollapsed && displayMode == .oneBesideSecondary ? primaryColumnWidth : 0
+        let start = traitCollection.layoutDirection == .rightToLeft ? 0 : rail
+        let frame = CGRect(x: start, y: 0, width: max(0, view.bounds.width - rail), height: Size.cTopBarH)
+        if macBar.frame != frame { macBar.frame = frame }
+        view.bringSubviewToFront(macBar)
+        if let assistantPane { view.bringSubviewToFront(assistantPane) }
+        let inherited = mainNav.view.safeAreaInsets.top - mainNav.additionalSafeAreaInsets.top
+        let top = Size.cTopBarH - inherited
+        if abs(mainNav.additionalSafeAreaInsets.top - top) > 0.25 { mainNav.additionalSafeAreaInsets.top = top }
     }
     #endif
 
@@ -483,9 +524,12 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     /// bar's empty space, on a tab and a control in the old titlebar strip
     /// and on the rail's top, the UIKit view a press lands on, whether the
     /// shell moves the window from there (`movesWindow`), and whether AppKit
-    /// still moves it by itself (a press queued on NSApplication, which
-    /// reaches the window and not UIKit); then the panel's and the popover's
-    /// frames against their anchors. Last, a 640pt window: whether the rail
+    /// still moves it by itself (a press queued on NSApplication). Such a
+    /// press reaches UIKit only where a control takes it; there the drag
+    /// gesture prints what it saw, AppKit's current event among it (a left
+    /// mouse-down with its window, the event `MacWindow.move` starts a drag
+    /// from). Then the panel's and the popover's frames against their
+    /// anchors. Last, a 640pt window: whether the rail
     /// still stands beside the page.
     private lazy var macProbeDir: URL? = {
         let arguments = ProcessInfo.processInfo.arguments
@@ -525,17 +569,14 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
                 scene.requestGeometryUpdate(.Mac(systemFrame: CGRect(x: frame.minX, y: frame.minY, width: width, height: 820)))
                 try? await Task.sleep(for: .seconds(1))
                 let name = "w\(Int(width))"
-                let bar = mainNav.navigationBar
+                let bar = macBar
                 let barBox = bar.convert(bar.bounds, to: window)
                 let titlebar = scene.titlebar
-                say("\(name) window \(box(window.bounds)) safe \(window.safeAreaInsets) shell safe \(view.safeAreaInsets) page safe \(mainNav.view.safeAreaInsets) bar style pad \(bar.behavioralStyle == .pad)")
-                // What the window shows of the bar: its background, which the system lays from the column's top.
-                let backdrop = bar.subviews.first { NSStringFromClass(type(of: $0)).contains("BarBackground") }
-                let seen = backdrop.map { $0.convert($0.bounds, to: window) } ?? barBox
-                say("\(name) bar \(box(barBox)) drawn \(box(seen)) drawn from window top \(abs(seen.minY) < 0.5) drawn height \(seen.height) web \(Size.cTopBarH)")
-                say("\(name) layout page \(box(mainNav.view.convert(mainNav.view.bounds, to: window))) page additional top \(mainNav.additionalSafeAreaInsets.top) bar parts \(bar.subviews.map { "\(type(of: $0)) \(box($0.frame))" }) bar interactions \(bar.interactions.map { "\(type(of: $0))" })")
+                say("\(name) window \(box(window.bounds)) safe \(window.safeAreaInsets) shell safe \(view.safeAreaInsets) page safe \(mainNav.view.safeAreaInsets) system bar hidden \(mainNav.isNavigationBarHidden)")
+                say("\(name) bar \(box(barBox)) from window top \(abs(barBox.minY) < 0.5) height \(barBox.height) web \(Size.cTopBarH) starts at the rail's edge \(abs(barBox.minX - primaryColumnWidth) < 0.5)")
                 let glassBox = mainCluster.glass.convert(mainCluster.glass.bounds, to: window)
-                say("\(name) drawn bar centre \(seen.midY) cluster glass centre \(glassBox.midY) centred \(abs(glassBox.midY - seen.midY) < 0.5) tabs' floor \(tabs(in: bar).first.map { $0.convert($0.bounds, to: window).maxY } ?? -1) bar floor \(seen.maxY)")
+                let pageTop = mainNav.topViewController.map { $0.view.convert($0.view.safeAreaLayoutGuide.layoutFrame, to: window).minY } ?? -1
+                say("\(name) bar centre \(barBox.midY) cluster glass \(box(glassBox)) centred \(abs(glassBox.midY - barBox.midY) < 0.5) tabs' floor \(tabs(in: bar).first.map { $0.convert($0.bounds, to: window).maxY } ?? -1) bar floor \(barBox.maxY) page content top \(pageTop)")
                 say("\(name) titlebar title hidden \(titlebar?.titleVisibility == .hidden) toolbar \(titlebar?.toolbar == nil ? "none" : "present") railToggle on screen \(railToggle.window != nil)")
                 say("\(name) board takes clicks \(view.isUserInteractionEnabled) alpha \(view.alpha) pro board open \(Pro.shared.boardOpen) access \(String(describing: Pro.shared.access))")
                 snap("\(name)-board")
@@ -560,9 +601,9 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
                 }
                 // Presses: where each lands, whether the shell moves the window from there, whether AppKit still does by itself.
                 var presses: [(String, CGPoint)] = [
-                    ("bar's top, over its frame", CGPoint(x: shown.midX, y: 4)),
-                    ("bar above the tabs", CGPoint(x: shown.midX, y: barBox.minY + 4)),
-                    ("bar above the glass", CGPoint(x: glassBox.midX, y: 4)),
+                    ("bar above the tabs", CGPoint(x: shown.midX, y: 4)),
+                    ("bar above the glass", CGPoint(x: glassBox.midX, y: 2)),
+                    ("bar under the glass", CGPoint(x: glassBox.midX, y: 42)),
                     ("search, on the glass", CGPoint(x: glassBox.minX + 20, y: glassBox.midY)),
                     ("rail's top", CGPoint(x: railBox.midX, y: 16)),
                     ("rail's header", CGPoint(x: railBox.midX, y: rail.view.safeAreaInsets.top + 16)),
@@ -571,15 +612,26 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
                     presses.append(("strip past the last tab", CGPoint(x: min(shown.maxX - 4, shown.minX + strip.contentSize.width - strip.contentOffset.x + 24), y: barBox.midY)))
                 }
                 if let chosen = tabs(in: bar).first(where: { $0.id == currentId && $0.window != nil }).map({ $0.convert($0.bounds, to: window).intersection(shown) }), !chosen.isNull {
-                    presses += [("chosen tab's top", CGPoint(x: chosen.midX, y: chosen.minY + 3)), ("chosen tab's middle", CGPoint(x: chosen.midX, y: chosen.midY))]
+                    presses += [("chosen tab's top", CGPoint(x: chosen.midX, y: chosen.minY + 3)), ("chosen tab's middle", CGPoint(x: chosen.midX, y: chosen.midY)),
+                                ("chosen tab's foot", CGPoint(x: chosen.midX, y: chosen.maxY - 3))]
                 }
-                for (label, point) in presses {
+                let items = mainCluster.glass.content.subviews.flatMap(\.subviews).map { box($0.convert($0.bounds, to: window)) }
+                say("\(name) glass items \(items) presented \(presentedViewController.map { "\(type(of: $0))" } ?? "none")")
+                // Every hit-test first, then the presses: a press may raise a tip or a card over what follows.
+                let landings = presses.map { label, point in
                     let hit = window.hitTest(point, with: nil)
                     let onTab = hit.map { landed in tabs(in: bar).contains { landed.isDescendant(of: $0) } } ?? false
                     let onControl = hit.map { landed in sequence(first: landed, next: \.superview).contains { $0 is UIControl } } ?? false
                     let shellMoves = movesWindow(hit, at: view.convert(point, from: window))
+                    return "\(name) press on the \(label) \(point): lands on \(hit.map { "\(type(of: $0))" } ?? "nil"), a tab \(onTab), a control \(onControl); the shell moves the window \(shellMoves)"
+                }
+                for ((_, point), landing) in zip(presses, landings) {
+                    MacWindow.lastAsk = "none"
+                    WindowDragGesture.lastTouch = "none"
                     let appKitMoves = await appKit.press(at: point)
-                    say("\(name) press on the \(label) \(point): lands on \(hit.map { "\(type(of: $0))" } ?? "nil"), a tab \(onTab), a control \(onControl); the shell moves the window \(shellMoves); AppKit moves it by itself \(appKitMoves) (AppKit view \(appKit.hitView(at: point)))")
+                    let raised = presentedViewController.map { "\(type(of: $0))" }
+                    if raised != nil { dismiss(animated: false) }
+                    say("\(landing); a window move was asked \(appKitMoves); the drag gesture saw \(WindowDragGesture.lastTouch); the shell's ask saw \(MacWindow.lastAsk); raised \(raised ?? "nothing")")
                 }
                 for tab in tabs(in: bar) where tab.window != nil && !tab.isHidden {
                     let frame = tab.convert(tab.bounds, to: window)
@@ -621,7 +673,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             scene.requestGeometryUpdate(.Mac(systemFrame: CGRect(x: frame.minX, y: frame.minY, width: 640, height: 820)))
             try? await Task.sleep(for: .seconds(1))
             let lights = appKit.lights
-            let bar = mainNav.navigationBar
+            let bar = macBar
             say("w640 window \(box(window.bounds)) display mode \(displayMode.rawValue) collapsed \(isCollapsed) compact \(compact) rail \(box(rail.view.convert(rail.view.bounds, to: window))) on screen \(rail.view.window != nil) bar \(box(bar.convert(bar.bounds, to: window))) lights \(lights.map(box) ?? "not found")")
             snap("w640-board")
             say("done")
@@ -657,7 +709,9 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         #if DEBUG
         ProbeCounts.shellLayouts += 1
         #endif
-        standBarOnWindowTop()
+        #if targetEnvironment(macCatalyst)
+        placeMacBar()
+        #endif
         barTabs.relayout()
         placeGrip()
         // The split view lays its columns over what else is in its view on
@@ -665,25 +719,6 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         // stays over all of them, under him wherever he now stands.
         view.bringSubviewToFront(cawPanel)
         cawPanel.follow()
-    }
-
-    /// A Mac window has no title and no toolbar (SceneDelegate `open`), yet
-    /// its titlebar still insets the top of the safe area (32pt): the bar
-    /// stood under an empty band of its own shelf colour. The page's column
-    /// takes that inset back, so its bar is the window's top edge, drawn from
-    /// y 0, as the web's desktop bar is the page's (Shell.svelte
-    /// `header.top`). The system bar sets itself 10pt down from there and
-    /// draws its background up over them, its controls centred on the whole
-    /// (a safe area cannot go below 0, so no inset lifts it further). The
-    /// rail keeps the inset: the window's traffic lights stand over its top,
-    /// and its header starts under them. The window moves from the bar's
-    /// empty space and the rail's top (`movesWindow`, MacWindow).
-    private func standBarOnWindowTop() {
-        #if targetEnvironment(macCatalyst)
-        // What the column inherits, its own adjustment taken out of what it has.
-        let inherited = mainNav.view.safeAreaInsets.top - mainNav.additionalSafeAreaInsets.top
-        if abs(mainNav.additionalSafeAreaInsets.top + inherited) > 0.25 { mainNav.additionalSafeAreaInsets.top = -inherited }
-        #endif
     }
 
     static func clamp(_ width: Double) -> Double { min(railMax, max(railMin, width.rounded())) }
@@ -728,7 +763,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         mainCrumb.set(next.crumb, animated: true)
         let regularPage = next == .fleet ? detail : page(for: next)
         // The bar's toggle, crumb and cluster move with the place, so they stay one bar.
-        TopBar.install(on: regularPage.navigationItem, crumb: mainCrumb, cluster: mainCluster, burger: barToggle)
+        installMainBar(on: regularPage)
         // A transition that is not animated never asks for its travel: none is left for the next one.
         mainMotion.route = animated ? travel : nil
         mainNav.setViewControllers([regularPage], animated: animated && !compact)
@@ -762,7 +797,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         destination = under
         mainCrumb.set(under.crumb, animated: false)
         let regularPage = under == .fleet ? detail : page(for: under)
-        TopBar.install(on: regularPage.navigationItem, crumb: mainCrumb, cluster: mainCluster, burger: barToggle)
+        installMainBar(on: regularPage)
         mainNav.setViewControllers([regularPage], animated: false)
         hostTabs()
         rail.requestRefresh()
@@ -873,7 +908,14 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         }
     }
 
-    private lazy var barTabs = BarTabs(bar: mainNav.navigationBar, crumb: mainCrumb, cluster: mainCluster, toggle: railToggle)
+    private lazy var barTabs = BarTabs(bar: mainBar, dress: { [weak self] hosting in
+        guard let self else { return }
+        #if targetEnvironment(macCatalyst)
+        macBar.dress(hosting: hosting)
+        #else
+        TopBar.dress(mainNav.navigationBar, hosting: hosting)
+        #endif
+    }, crumb: mainCrumb, cluster: mainCluster, toggle: railToggle)
 
     /// The bar carries the tabs only where the conversations are the page in
     /// front on a wide screen (Shell.svelte `hostedLeaf`: on a session page).
@@ -1054,7 +1096,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             dialogPresenter.present(sheet, animated: true)
         } else {
             let pane = AssistantPane(panel: panel)
-            pane.install(in: view, under: mainNav.navigationBar)
+            pane.install(in: view, under: mainBar)
             pane.appear(from: assistantOrigin)
             assistantPane = pane
         }

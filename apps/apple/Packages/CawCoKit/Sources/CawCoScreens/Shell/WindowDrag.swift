@@ -3,7 +3,7 @@ import UIKit
 import UIKit.UIGestureRecognizerSubclass
 
 /// The Mac window's own moves, now that the shell's bar is its top edge
-/// (ShellController `standBarOnWindowTop`). A Catalyst window keeps its
+/// (MacBar, ShellController `placeMacBar`). A Catalyst window keeps its
 /// titlebar's 32pt strip as a drag region even with no title and no toolbar,
 /// and AppKit moves the window from a press there before UIKit sees it: the
 /// top of every tab and of Caw's glass group, which stand in that strip, moved
@@ -46,10 +46,24 @@ enum MacWindow {
     /// The press being handled now moves its window with the mouse; a second
     /// press in a row does what the reader's titlebar double-click does
     /// (System Settings, Desktop & Dock: "Double-click a window's title bar to").
+    #if DEBUG
+    /// What the last press that asked to move saw as AppKit's current event (`-mac-probe`).
+    static var lastAsk = "none"
+
+    /// AppKit's current event, as a press sees it: its type (1 a left mouse-down) and whether it has a window.
+    static var currentEventSummary: String {
+        (object("NSApplication", "sharedApplication")?.value(forKey: "currentEvent") as? NSObject)
+            .map { "type \($0.value(forKey: "type") ?? "?") window \($0.value(forKey: "window") != nil)" } ?? "none"
+    }
+    #endif
+
     static func move(tapCount: Int) {
+        let current = object("NSApplication", "sharedApplication")?.value(forKey: "currentEvent") as? NSObject
+        #if DEBUG
+        lastAsk = currentEventSummary
+        #endif
         // NSEventTypeLeftMouseDown: the press itself, the event a window drag starts from.
-        guard let event = object("NSApplication", "sharedApplication")?.value(forKey: "currentEvent") as? NSObject,
-              (event.value(forKey: "type") as? UInt) == 1, let window = event.value(forKey: "window") as? NSObject else { return }
+        guard let event = current, (event.value(forKey: "type") as? UInt) == 1, let window = event.value(forKey: "window") as? NSObject else { return }
         if tapCount == 2 {
             switch UserDefaults.standard.string(forKey: "AppleActionOnDoubleClick") {
             case "None": break
@@ -79,7 +93,16 @@ final class WindowDragGesture: UIGestureRecognizer {
         delaysTouchesEnded = false
     }
 
+    #if DEBUG
+    /// The last press this saw: its view, its type, whether it was empty (`-mac-probe`).
+    static var lastTouch = "none"
+    #endif
+
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+        #if DEBUG
+        let current = MacWindow.currentEventSummary
+        Self.lastTouch = touches.map { "\($0.view.map { "\(type(of: $0))" } ?? "nil") type \($0.type.rawValue) empty \(empty($0)) current event \(current)" }.joined(separator: ", ")
+        #endif
         if touches.count == 1, let touch = touches.first, empty(touch) {
             MacWindow.move(tapCount: touch.tapCount)
         }

@@ -156,7 +156,10 @@ private final class BarLead: UIStackView {
 /// the crumb rises 4pt as it fades in. With less motion only the fades run.
 @MainActor
 final class BarTabs {
-    private weak var bar: UINavigationBar?
+    /// The bar the strip stands in: an iPad's system bar, the Mac's `MacBar`.
+    private weak var bar: UIView?
+    /// Dresses the bar as the shelf the tabs stand on, or back as itself.
+    private let dress: (Bool) -> Void
     private let crumb: CrumbView
     private let cluster: TopBarCluster
     private let hairline = UIView()
@@ -164,8 +167,9 @@ final class BarTabs {
 
     private weak var toggle: UIView?
 
-    init(bar: UINavigationBar, crumb: CrumbView, cluster: TopBarCluster, toggle: UIView) {
+    init(bar: UIView, dress: @escaping (Bool) -> Void, crumb: CrumbView, cluster: TopBarCluster, toggle: UIView) {
         self.bar = bar
+        self.dress = dress
         self.crumb = crumb
         self.cluster = cluster
         self.toggle = toggle
@@ -239,7 +243,7 @@ final class BarTabs {
             old.removeFromSuperview()
             old.translatesAutoresizingMaskIntoConstraints = false
         }
-        TopBar.dress(bar, hosting: next != nil)
+        dress(next != nil)
         guard let next else {
             hairline.removeFromSuperview()
             slot.removeFromSuperview()
@@ -283,6 +287,56 @@ final class BarTabs {
         }.startAnimation()
     }
 }
+
+#if targetEnvironment(macCatalyst)
+/// The Mac's top bar (Shell.svelte `header.top`): `cTopBarH` tall from the
+/// window's top edge, from the rail's edge to the window's, the raised
+/// surface with a whole point of seam in its foot. The crumb stands
+/// `space7` in, centred, and ends 16pt short of the cluster's glass, which
+/// stands `space6` inside the trailing edge, centred; a group's tabs take the
+/// crumb's place on its floor (`BarTabs`), the bar then the shelf they stand
+/// on. It is the shell's own view, not the system bar: on Catalyst that sets
+/// itself 10pt under the column's top at 46pt (56pt drawn) and no inset lifts
+/// it, where the web's bar is 44 from the top. The phone and the iPad keep
+/// the system bar (`TopBar.install`).
+final class MacBar: UIView {
+    private let seam = UIView()
+
+    init(crumb: CrumbView, cluster: TopBarCluster) {
+        super.init(frame: .zero)
+        seam.backgroundColor = Palette.seam
+        seam.isUserInteractionEnabled = false
+        seam.translatesAutoresizingMaskIntoConstraints = false
+        for part in [seam, crumb, cluster] as [UIView] { addSubview(part) }
+        NSLayoutConstraint.activate([
+            seam.leadingAnchor.constraint(equalTo: leadingAnchor),
+            seam.trailingAnchor.constraint(equalTo: trailingAnchor),
+            seam.bottomAnchor.constraint(equalTo: bottomAnchor),
+            seam.heightAnchor.constraint(equalToConstant: 1),
+            crumb.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Space.space7),
+            crumb.centerYAnchor.constraint(equalTo: centerYAnchor),
+            crumb.trailingAnchor.constraint(lessThanOrEqualTo: cluster.leadingAnchor, constant: -16),
+            cluster.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Space.space6),
+            cluster.centerYAnchor.constraint(equalTo: centerYAnchor),
+            // The group is as tall as what stands on it; a system bar sized it so by fitting, this view sets it.
+            cluster.glass.heightAnchor.constraint(equalToConstant: NeedsCawButton.side),
+        ])
+        dress(hosting: false)
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        fatalError("MacBar is built in code")
+    }
+
+    /// Hosting a group's tabs it is their shelf, `--surface-shelf` with no
+    /// seam: `BarTabs` draws the hairline in its foot, under the chosen tab.
+    func dress(hosting: Bool) {
+        backgroundColor = hosting ? Palette.surfaceShelf : Palette.surfaceRaised
+        seam.isHidden = hosting
+    }
+}
+#endif
 
 // MARK: Crumb
 
@@ -540,6 +594,10 @@ final class TopBarCluster: UIView {
         groupRow.spacing = 0
         groupRow.isLayoutMarginsRelativeArrangement = true
         groupRow.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: 2, bottom: 0, trailing: 2)
+        // Its margins are the glass's own 2pt, never a safe area's: on the
+        // Mac the bar stands in the window's titlebar inset, and margins taken
+        // from it pushed the items 28pt down the glass.
+        groupRow.insetsLayoutMarginsFromSafeArea = false
         groupRow.translatesAutoresizingMaskIntoConstraints = false
         for item in [jump, machines, groupCaw] as [UIView] { groupRow.addArrangedSubview(item) }
         group.content.addSubview(groupRow)
