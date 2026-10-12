@@ -94,6 +94,14 @@ targets:
           "CODE_SIGN_STYLE[sdk=macosx*]": Manual
           "CODE_SIGN_IDENTITY[sdk=macosx*]": Apple Distribution
           "PROVISIONING_PROFILE_SPECIFIER[sdk=macosx*]": CawCo Mac Catalyst App Store 20261009
+          # A TestFlight or App Store build without the hardened runtime dies at
+          # launch: dyld refuses `@rpath` ("security policy does not allow @ path
+          # expansion", Library not loaded: RiveRuntime; 20261012.2 on macOS 27).
+          # "Including the Hardened Runtime back… made it run perfectly in
+          # TestFlight" (developer.apple.com/forums/thread/732675). Signed for the
+          # team, RiveRuntime carries the same Team ID, so library validation passes;
+          # Debug keeps it off above for ad-hoc builds.
+          "ENABLE_HARDENED_RUNTIME[sdk=macosx*]": YES
     entitlements:
       path: CawCo/CawCo.entitlements
       properties:
@@ -200,6 +208,8 @@ targets:
           "CODE_SIGN_STYLE[sdk=macosx*]": Manual
           "CODE_SIGN_IDENTITY[sdk=macosx*]": Apple Distribution
           "PROVISIONING_PROFILE_SPECIFIER[sdk=macosx*]": CawCo NotificationService Mac Catalyst App Store 20261009
+          # As the app's Release (above): the store's builds run under the hardened runtime.
+          "ENABLE_HARDENED_RUNTIME[sdk=macosx*]": YES
     entitlements:
       path: NotificationService/NotificationService.entitlements
       properties:
