@@ -79,8 +79,11 @@ final class PaneState: UIView {
             titleText = fault.reason == .offline ? "This machine is offline" : "This transcript couldn't be read"
             // SessionPane `faultLine`: what went wrong, then what to do about it.
             // The fault's message is one sentence without its stop (`ReadFault`).
-            let said = fault.reason == .offline ? "\(fault.message). Try again once it is back online."
-                : "Reading it failed: \(fault.message). Try again; if it fails the same way, the hub's log has the cause."
+            let said = switch fault.reason {
+            case .offline: "\(fault.message). Try again once it is back online."
+            case .localNetwork: "\(fault.message). \(LocalNetwork.fix), then Try again."
+            case .failed: "Reading it failed: \(fault.message). Try again; if it fails the same way, the hub's log has the cause."
+            }
             lineText = NSAttributedString(string: said, attributes: body)
             actionTitle = "Try again"
         case let .missing(id):

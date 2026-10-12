@@ -139,7 +139,9 @@ if (!app) {
 // started. `--fail`: then a `stream.reset` is put on the socket while the
 // hub's read answers 500 with a long body for the next 40s: the dock says
 // "Not caught up" beside Try again, exactly one toast says why, and the
-// reads that follow keep to the backoff.
+// reads that follow keep to the backoff. `--fail --local-network`: the
+// reset's read is refused as Local Network privacy refuses it, and the toast
+// names the local network and where in Settings to allow it.
 const LIVE = option("--live");
 const TRAILING_SLASH = /\/$/;
 /** A log line up to what it says: its stamp, process and category. */
@@ -322,9 +324,13 @@ xcrun simctl install ${device} "${app}"`);
         );
       }
     })().catch(() => undefined);
+    // `--local-network`: the read the reset asks for fails as Local Network
+    // privacy makes it (-1009, the path refused), injected in DEBUG
+    // (`--hub-local-network-denied`): the simulator does not enforce it.
+    const localNetwork = args.includes("--local-network");
     const open = () =>
       sh(
-        `xcrun simctl launch --terminate-running-process ${device} dev.cawco.app -paywall-env sandbox -cawco-hub-url http://127.0.0.1:${live.port} -open-session ${full} >/dev/null`
+        `xcrun simctl launch --terminate-running-process ${device} dev.cawco.app -paywall-env sandbox -cawco-hub-url http://127.0.0.1:${live.port} -open-session ${full}${localNetwork ? " --hub-local-network-denied" : ""} >/dev/null`
       );
     await open();
     await pause(30_000);
@@ -362,7 +368,7 @@ xcrun simctl install ${device} "${app}"`);
     if (args.includes("--fail")) {
       const failFrom = lines.length;
       const notesAt = notes.length;
-      failUntil = Date.now() + 40_000;
+      failUntil = localNetwork ? 0 : Date.now() + 40_000;
       // The hub's word that its ring cannot replay: the app reads the history again.
       for (const ws of sockets) {
         ws.send(
@@ -436,13 +442,22 @@ xcrun simctl install ${device} "${app}"`);
         "live failing read: exactly one toast says why, in one sentence pair, nothing raw",
         toasts.length === 1 &&
           !toasts[0].includes("    at ") &&
-          toasts[0].length < 400,
+          toasts[0].length < 400 &&
+          (!localNetwork ||
+            (toasts[0].includes("isn't allowed on the local network") &&
+              toasts[0].includes(
+                "Settings › Privacy & Security › Local Network"
+              ))),
         toasts.map((t) => t.replace(TOAST_HEAD, "")).join(" | ") || "no toast"
       );
+      // Local network: only the reset's read is refused; the backoff's lands.
+      const failedCount = localNetwork
+        ? after.filter((l) => l.includes("transcript read for")).length
+        : failedReads.length;
       check(
         "live failing read: the reads that failed kept to the backoff (2s, 4s, 8s, 16s, …)",
-        failedReads.length >= 2 && failedReads.length <= 6,
-        `${failedReads.length} failed read(s) in 40s`
+        localNetwork ? failedCount === 1 : failedCount >= 2 && failedCount <= 6,
+        `${failedCount} failed read(s)`
       );
       const gone = after.some((l) => l.includes(`page adopted for ${full}`));
       check(

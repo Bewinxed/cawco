@@ -1920,9 +1920,11 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         let row = hub?.fleet.rows.first { $0.id == transcript.id }
         let name = Naming.sessionTitle(title: row?.title, cwd: row?.cwd, id: transcript.id)
         let title = "\(name) isn't caught up"
-        let description = fault.reason == .offline
-            ? "\(fault.message). The rest comes in once it's back."
-            : "\(fault.message). Try again reads it now; otherwise it's read again in 2 seconds, then less often, up to once a minute."
+        let description = switch fault.reason {
+        case .offline: "\(fault.message). The rest comes in once it's back."
+        case .localNetwork: "\(fault.message). \(LocalNetwork.fix), then Try again; until then it's read again in 2 seconds, then less often, up to once a minute."
+        case .failed: "\(fault.message). Try again reads it now; otherwise it's read again in 2 seconds, then less often, up to once a minute."
+        }
         Self.dockLog.notice("toast: \(title, privacy: .public). \(description, privacy: .public) \(transcript.id.prefix(8), privacy: .public)")
         Toast.show(title, description: description, kind: .error, in: self)
     }
@@ -1936,7 +1938,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         latestButton.show(latestShown)
         // Over rows drawn only: with none, the pane says why in their place.
         if rowsDrawn, let transcript, let fault = transcript.behind {
-            behind.say(Self.notCaughtUp(fault) { [hub] in hub?.fleet.machineName($0) ?? $0 }, retrying: fault.reason == .failed)
+            behind.say(Self.notCaughtUp(fault) { [hub] in hub?.fleet.machineName($0) ?? $0 }, retrying: fault.reason != .offline)
             behind.show(true)
             toastBehind(transcript, fault)
         } else {

@@ -87,6 +87,14 @@ final class StatusLineView: UIView {
         reconnect.isEnabled = hub.socket != .connecting
         words.ink = down ? Palette.statusFailInk : Palette.inkMuted
         switch phase {
+        case .unreachable where hub.localNetworkDenied:
+            // Not the hub away: this app is not let onto its network. The fix is the toast's, once.
+            words.text = "Not allowed on the local network"
+            if !hub.localNetworkToasted {
+                hub.localNetworkToasted = true
+                Toast.show("The hub can't be reached", description: "CawCo isn't allowed on the local network the hub is on. \(LocalNetwork.fix); it reconnects by itself once it's allowed.",
+                           kind: .error, in: self)
+            }
         case .unreachable:
             if hub.socket == .connecting {
                 words.text = "Hub unreachable, retrying now"

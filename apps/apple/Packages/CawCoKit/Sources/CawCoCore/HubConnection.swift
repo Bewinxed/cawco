@@ -54,6 +54,13 @@ public final class HubConnection {
     /// When the next attempt starts, while one is waited for.
     public private(set) var retryAt: Date?
     private var outage = false
+    /// The socket's last attempt failed because this app is not allowed on
+    /// the local network the hub is on (`LocalNetwork.denied`), not because
+    /// the hub is away. Cleared when the socket opens.
+    public private(set) var localNetworkDenied = false
+    /// The reader was told of `localNetworkDenied` by a toast, until the
+    /// socket opens: every screen that shows the status line says it once.
+    @ObservationIgnored public var localNetworkToasted = false
 
     /// Connected means the socket is open and the board was read again on it:
     /// a socket that just opened still holds the board as it was before the
@@ -329,6 +336,16 @@ public final class HubConnection {
                 }
             } catch {
                 log.info("hub socket closed: \(String(describing: error), privacy: .public)")
+                // An "offline" or unreached hub on a LAN address may be Local Network privacy.
+                var denied = false
+                if let url = error as? URLError, LocalNetwork.mayBeDenied(url) { denied = await LocalNetwork.denied(address) }
+                guard mine == generation else {
+                    return
+                }
+                if denied != localNetworkDenied {
+                    log.notice("hub socket: Local Network access \(denied ? "refused" : "no longer the cause", privacy: .public)")
+                    localNetworkDenied = denied
+                }
             }
             guard mine == generation else {
                 return
@@ -349,6 +366,8 @@ public final class HubConnection {
         socket = .connected
         retryAt = nil
         attempts = 0
+        localNetworkDenied = false
+        localNetworkToasted = false
         outageTimer?.cancel()
         outageTimer = nil
         outage = false

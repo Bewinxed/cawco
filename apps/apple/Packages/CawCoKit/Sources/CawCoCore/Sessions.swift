@@ -61,11 +61,12 @@ public final class SessionTranscript {
 }
 
 /// A transcript read that failed (client.svelte.ts `pageFault`): the machine
-/// holding it is offline (a 503 naming it), or the read failed. `message` is
-/// one sentence of why, without its closing stop (`Wire.reason`), never a
-/// body as the hub sent it.
+/// holding it is offline (a 503 naming it), this app is not allowed on the
+/// local network the hub is on, or the read failed. `message` is one
+/// sentence of why, without its closing stop (`Wire.reason`), never a body
+/// as the hub sent it.
 public struct ReadFault: Sendable, Equatable {
-    public enum Reason: Sendable { case offline, failed }
+    public enum Reason: Sendable { case offline, localNetwork, failed }
     public let reason: Reason
     public let machineId: String?
     public let message: String
@@ -75,11 +76,18 @@ public struct ReadFault: Sendable, Equatable {
 
     /// Why a read that never reached an answer failed, in one sentence: what
     /// the failure means, not the generated client's description of it,
-    /// which carries the request, the response and the body whole.
-    static func thrown(_ error: any Error) -> ReadFault {
+    /// which carries the request, the response and the body whole. A request
+    /// the system refused as "offline" (-1009) or that reached no host may be
+    /// Local Network privacy, the internet up all along: the path to the hub
+    /// is asked (`LocalNetwork.denied`) before anything is said.
+    static func thrown(_ error: any Error) async -> ReadFault {
         let cause = (error as? ClientError)?.underlyingError ?? error
         if cause is DecodingError { return failed("The hub's answer couldn't be read") }
-        if let url = cause as? URLError, url.code == .timedOut { return failed("The hub didn't answer in time") }
+        guard let url = cause as? URLError else { return failed("The hub couldn't be reached") }
+        if url.code == .timedOut { return failed("The hub didn't answer in time") }
+        if LocalNetwork.mayBeDenied(url), let address = url.failingURL, await LocalNetwork.denied(address) {
+            return ReadFault(reason: .localNetwork, machineId: nil, message: "CawCo isn't allowed on the local network the hub is on")
+        }
         return failed("The hub couldn't be reached")
     }
 }
@@ -182,8 +190,9 @@ public final class SessionsStore {
     @ObservationIgnored private var failedReads: [String: (count: Int, timer: Task<Void, Never>?)] = [:]
 
     /// A read failed: over rows held they stay (`behind`), else the pane says
-    /// why (`fault`). One the hub failed is read again on `readAgain`; one
-    /// that found the machine offline waits for `machineOnline`, unless the
+    /// why (`fault`). One the hub failed, or Local Network privacy stopped,
+    /// is read again on `readAgain`; one that found the machine offline
+    /// waits for `machineOnline`, unless the
     /// hub already lists that machine online: then the machine list has
     /// nothing more to say, and its every change would read again at once,
     /// so it is read again on `readAgain` too.
@@ -193,7 +202,7 @@ public final class SessionsStore {
         if hubRows(transcript).isEmpty { transcript.fault = fault } else { transcript.behind = fault }
         let listedOnline = fault.reason == .offline
             && hub.fleet.machines.contains { $0.machineId == fault.machineId && $0.status == "online" }
-        guard fault.reason == .failed || listedOnline else { return }
+        guard fault.reason != .offline || listedOnline else { return }
         let id = transcript.id
         var failed = failedReads[id] ?? (count: 0, timer: nil)
         failed.timer?.cancel()
@@ -287,6 +296,14 @@ public final class SessionsStore {
         readers[id] = Task { [weak self] in
             guard let self else { return }
             do {
+                #if DEBUG
+                // The simulator cannot enforce Local Network privacy: a read the
+                // hub asked for fails as a refused path does, with -1009 for the
+                // hub's address (`LocalNetwork.denied` injects the path's word).
+                if cause.catchesUp, ProcessInfo.processInfo.arguments.contains("--hub-local-network-denied"), let address = hub.address {
+                    throw URLError(.notConnectedToInternet, userInfo: [NSURLErrorFailingURLErrorKey: address])
+                }
+                #endif
                 let page: Components.Schemas.TranscriptPage
                 switch try await Self.page(client, id: id, before: nil) {
                 case let .read(read): page = read
@@ -321,7 +338,7 @@ public final class SessionsStore {
                     let answer: PageAnswer
                     do { answer = try await Self.page(client, id: id, before: before) } catch {
                         guard !Task.isCancelled else { return }
-                        older = (error as? Fault)?.fault ?? .thrown(error)
+                        older = await Self.fault(error)
                         whole = Joined(blocks: read, cursor: cursor, kept: 0)
                         break
                     }
@@ -381,7 +398,8 @@ public final class SessionsStore {
                 log.info("page adopted for \(id, privacy: .public): \(page.blocks.count) blocks at seq \(page.seq ?? -1), \(pages) page(s) read, \(whole.kept) held rows kept, \(whole.blocks.count) rows, older \(whole.cursor ?? "none", privacy: .public)")
             } catch {
                 guard !Task.isCancelled else { return }
-                let fault = (error as? Fault)?.fault ?? .thrown(error)
+                let fault = await Self.fault(error)
+                guard !Task.isCancelled else { return }
                 // The error as it came, for the log only: the reader is told `fault.message`.
                 log.error("transcript read for \(id.prefix(8), privacy: .public) (\(self.hubRows(transcript).isEmpty ? "nothing held" : "rows kept", privacy: .public)): \(fault.message, privacy: .public); \(String(describing: error).prefix(500), privacy: .public)")
                 readFailed(transcript, fault)
@@ -425,6 +443,12 @@ public final class SessionsStore {
     }
 
     private struct Fault: Error, Sendable { let fault: ReadFault; init(_ fault: ReadFault) { self.fault = fault } }
+
+    /// What a read that threw says: the hub's refusal as `page` read it, else what the failure means (`ReadFault.thrown`).
+    private nonisolated static func fault(_ error: any Error) async -> ReadFault {
+        if let fault = (error as? Fault)?.fault { return fault }
+        return await .thrown(error)
+    }
 
     /// What a page read came back with.
     private enum PageAnswer: Sendable {
@@ -516,7 +540,7 @@ public final class SessionsStore {
             case let .success(.away(machine)):
                 transcript.olderFault = offline(machine)
             case let .failure(error):
-                transcript.olderFault = (error as? Fault)?.fault ?? .thrown(error)
+                transcript.olderFault = await Self.fault(error)
             }
             log.error("older page for \(id, privacy: .public) failed: \(transcript.olderFault?.message ?? "", privacy: .public)")
         }
