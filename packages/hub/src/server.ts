@@ -338,6 +338,7 @@ import { accountForecasts, carrySequence } from "./forecast";
 import { gitRemoteRoutes } from "./git-remote";
 import type { HarnessPlanDeps } from "./harness-plans";
 import { hidden } from "./hidden";
+import { createIngress, ingressRoutes } from "./ingress";
 import { joinRoutes } from "./join";
 import { streamLargeJson } from "./json-response";
 import {
@@ -13801,6 +13802,15 @@ export const createServer = (
         : [],
     changed: () => toolsMayHaveChanged(),
   });
+  // Ingress (ingress.ts): events from GitHub and polled connections, each
+  // stored once and routed to a routine or the lead's next wake.
+  const ingress = createIngress({
+    connections,
+    db,
+    dispatcher,
+    lifetime,
+    routines,
+  });
   const delegationMcp = createDelegationMcp({
     lifetime,
     tasks,
@@ -13817,6 +13827,7 @@ export const createServer = (
     delegationTree: (actor, include) => delegationTree.read(actor, include),
     cawTools: (actor) => caw.tools(actor),
     routineTools: (actor) => routines.tools(actor),
+    ingressTools: (actor) => ingress.tools(actor),
     askPerson: (actor, name, input) => adminAsks.ask(actor, name, input),
     sendToUser: telegram
       ? (actor, message, attachments) =>
@@ -13985,6 +13996,10 @@ export const createServer = (
   ({ toolsMayHaveChanged } = delegationMcp);
   // Each connection looked at once, off the boot path: its tools for sessions' lists.
   connections.start();
+  if (resumeWorkflows) {
+    // The pollers pick up from the cursors a stopped hub kept.
+    ingress.start();
+  }
 
   /**
    * What the hub holds in memory for sessions whose rows were just deleted —
@@ -15409,6 +15424,7 @@ export const createServer = (
       .use(cawRoutes(caw))
       .use(routineRoutes(routines))
       .use(connectionRoutes(connections))
+      .use(ingressRoutes(ingress))
       .use(caps.routes())
       .use(viewRoutes(views))
       .use(noticesSeen.routes)

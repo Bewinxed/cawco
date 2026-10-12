@@ -22,6 +22,7 @@ import type { Fleet, SendDelivery } from "./delegation-actions";
 import { handoffInstructions, handoffTools } from "./delegation-tools";
 import type { DelegateListInclude, DelegateNode } from "./delegation-tree";
 import type { AttemptStart } from "./dispatch";
+import { INGRESS_TOOLS, type Ingress } from "./ingress";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import {
   type AcceptResult,
@@ -38,6 +39,7 @@ import type { Tasks } from "./tasks";
 type ToolFactory = typeof handoffTools;
 type CawTool = ReturnType<Caw["tools"]>[number];
 type RoutineTool = ReturnType<Routines["tools"]>[number];
+type IngressTool = ReturnType<Ingress["tools"]>[number];
 
 /** Tools that run for minutes, and what their progress heartbeat says meanwhile. */
 const LONG_CALLS: Record<string, string> = {
@@ -164,6 +166,8 @@ export function createDelegationMcp(options: {
   cawTools?: (actor: InstanceRow | undefined) => CawTool[];
   /** The routine tools (routines.ts), for the roles that run a project. */
   routineTools?: (actor: InstanceRow | undefined) => RoutineTool[];
+  /** The ingress tools (ingress.ts): event routes and connector polls, for the same roles. */
+  ingressTools?: (actor: InstanceRow | undefined) => IngressTool[];
   /**
    * Connections (connections.ts): the `conn__<name>__<tool>` tools a session
    * is granted, and the hub's call of one for it.
@@ -268,6 +272,7 @@ export function createDelegationMcp(options: {
       ...(options.projectFromSession ? [projectFromSessionTool()] : []),
       ...(options.cawTools ? options.cawTools(undefined) : []),
       ...(options.routineTools ? options.routineTools(undefined) : []),
+      ...(options.ingressTools ? options.ingressTools(undefined) : []),
     ];
     // Granted by a delegate type or a project, not a role's list: the
     // connections module answers which, the role's say included.
@@ -533,16 +538,29 @@ export function createDelegationMcp(options: {
     if (CAWS.has(name) && options.cawTools) {
       return await cawCall(actor, name, input);
     }
-    if (ROUTINE_TOOLS.has(name) && options.routineTools) {
-      const entry = options
-        .routineTools(actor)
-        .find((tool) => tool.name === name);
-      if (!entry) {
-        throw new Error(`Unknown tool ${name}`);
-      }
-      return (await entry.handler(input)) as CallToolResult;
+    return await projectToolCall(actor, name, input);
+  };
+
+  /** A routine or ingress tool (routines.ts, ingress.ts), bound to the caller. */
+  const projectToolCall = async (
+    actor: InstanceRow,
+    name: string,
+    input: Record<string, unknown>
+  ): Promise<CallToolResult | undefined> => {
+    let group: (RoutineTool | IngressTool)[] | undefined;
+    if (ROUTINE_TOOLS.has(name)) {
+      group = options.routineTools?.(actor);
+    } else if (INGRESS_TOOLS.has(name)) {
+      group = options.ingressTools?.(actor);
     }
-    return undefined;
+    if (!group) {
+      return undefined;
+    }
+    const entry = group.find((tool) => tool.name === name);
+    if (!entry) {
+      throw new Error(`Unknown tool ${name}`);
+    }
+    return (await entry.handler(input)) as CallToolResult;
   };
 
   const answer = async (

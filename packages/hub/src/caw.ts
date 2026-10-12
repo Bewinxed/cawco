@@ -67,6 +67,7 @@ import type {
   ThreadRow,
   WorkItemRow,
 } from "./db";
+import { inboxText } from "./ingress";
 import { DECISION_PAGE } from "./preview-choices";
 import type { Caps } from "./project-caps";
 import { readProjectTypes } from "./project-delegate-types";
@@ -263,7 +264,7 @@ const briefOf = (projectName: string): string =>
   [
     `You are Caw, the lead of the project “${projectName}” in CawCo.`,
     "You have the project's board (task_read, task_create, task_update, task_link, task_start, task_retry, todo_write), its threads (thread_read, thread_reply), its views (view_draft), its folder on the hub (folder_read, folder_write: stages.md, delegates/, AGENTS.md, decisions/), decision pages (page_show, page_choices), delegate with the tools that steer the project's work (handoff, answer_delegate, stop_delegate, interrupt_delegate, set_item_checks), and send_to_user. You have no edit or shell tools: work that changes the project's code becomes a task or a delegate.",
-    "You are woken only by events, each one a message: the person writing in a thread, an attempt at a task landing or failing, a task waiting for the person, a delegate's ask routed to you, the person asking for a view. Handle the event, then end your turn. Nothing wakes you on a timer.",
+    "You are woken only by events, each one a message: the person writing in a thread, an attempt at a task landing or failing, a task waiting for the person, a delegate's ask routed to you, the person asking for a view. Handle the event, then end your turn. Nothing wakes you on a timer. Inbound events from outside (GitHub, polled connections) that no route took ride along on your next wake as data: route the kinds that matter to routines with event_route_create.",
     "When the person writes in a thread, answer in that thread with thread_reply; the person does not see what you say outside it. Name the tasks a reply is about in its `tasks`. Code coordinates, models judge, the person decides: permissions, merges, configuration and public actions are theirs, so ask in the thread (AskUserQuestion lands there).",
     "A view-request event is the person asking for a view of the project's tasks: answer it with view_draft, then say in that thread what you drafted; the person keeps or discards it.",
   ].join("\n\n");
@@ -281,6 +282,7 @@ export interface CawDeps {
     | "createThread"
     | "getInstancesByIds"
     | "cawSpentSince"
+    | "ingress"
     | "newestThread"
     | "project"
     | "projectSpend"
@@ -648,18 +650,27 @@ export const createCaw = ({
       settle(threadId);
       return false;
     }
-    const text =
+    const words =
       event.note && threadId
         ? `${event.text}\n\n(Noted in thread ${threadId}; answer there with thread_reply when the person should hear of it.)`
         : event.text;
+    // Inbound events no route took ride on this wake (ingress.ts): taken
+    // now, given back when the wake does not go out.
+    const inbox = db.ingress.claimInbox(projectId, new Date());
+    const text =
+      inbox.length > 0 ? `${words}\n\n---\n\n${inboxText(inbox)}` : words;
+    const giveBack = () =>
+      db.ingress.releaseInbox(inbox.map((line) => line.id));
     let lead: Awaited<ReturnType<typeof leadFor>>;
     try {
       lead = await leadFor(projectId, text);
     } catch (error) {
+      giveBack();
       settle(threadId);
       throw error;
     }
     if (!lead) {
+      giveBack();
       settle(threadId);
       return false;
     }

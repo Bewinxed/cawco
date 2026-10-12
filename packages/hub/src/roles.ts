@@ -78,6 +78,21 @@ const ROUTINE = [
   "routine_run_now",
 ] as const;
 
+/**
+ * A project's ingress (ingress.ts): its event routes and connector polls,
+ * made and changed by the same roles as its routines, which they feed.
+ */
+const INGRESS = [
+  "event_route_create",
+  "event_route_list",
+  "event_route_update",
+  "event_route_delete",
+  "connector_poll_create",
+  "connector_poll_list",
+  "connector_poll_update",
+  "connector_poll_delete",
+] as const;
+
 /** The session tools a delegate keeps from the worker's set. */
 const DELEGATE_SESSION = [
   "create_workflow",
@@ -119,6 +134,7 @@ const TOOLS: Record<Exclude<SessionRole, "worker">, ReadonlySet<string>> = {
     ...TASK_WRITE,
     ...CAW_TOOLS,
     ...ROUTINE,
+    ...INGRESS,
     "delegate",
     "delegate_list",
     "list_delegate_types",

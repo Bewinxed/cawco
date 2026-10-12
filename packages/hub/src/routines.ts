@@ -31,6 +31,9 @@
  *   its project (a push for a routine in no project).
  * - **Lead runs** note the slot in the routine's thread and wake Caw there
  *   (caw.ts `wake`), as any event does.
+ * - **Event runs**: an inbound event a route sends here (ingress.ts) runs the
+ *   routine once, slot `event:<event id>`, the event carried after the
+ *   routine's prompt as untrusted data.
  * - **New routines** run once at once as a test (`test:<created at>`).
  *   Agent-made ones turn themselves off after 7 days unless kept.
  */
@@ -46,6 +49,7 @@ import type { DbShape, ProjectRow, WorkItemRow } from "./db";
 import type { RoutineRow, RoutineRunRow, RunDecision } from "./db/routines";
 import type { RoutineOutcome, RoutineTarget, WorkBudget } from "./db/schema";
 import { defaultCheck } from "./dispatch";
+import { eventData } from "./ingress";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import type { Push } from "./push";
 import { BUDGET, LANDS } from "./tasks";
@@ -61,6 +65,12 @@ import {
 export const NO_REPLY = "NO_REPLY";
 /** What a delegate's summary says to fail the run. */
 export const AUTOMATION_FAILED = "AUTOMATION_FAILED";
+
+/**
+ * A run an inbound event started (ingress.ts): its slot is `event:<event
+ * id>`, so an event runs a routine once, and its retry reads the same event.
+ */
+const EVENT_SLOT = "event:";
 
 /** How long an agent's routine lives unless kept. */
 const AGENT_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000;
@@ -197,7 +207,7 @@ export interface RoutineDeps {
   readonly anyOnline: () => boolean;
   /** Caw's routine notes and wakes (caw.ts). */
   readonly caw: Pick<Caw, "notice" | "wake">;
-  readonly db: Pick<DbShape, "project" | "routines" | "workItem">;
+  readonly db: Pick<DbShape, "ingress" | "project" | "routines" | "workItem">;
   /**
    * Where a routine in no project runs: the hub's machine and the checkout
    * the hub runs from; a sentence when it cannot now.
@@ -260,6 +270,9 @@ const slotLabel = (slot: string, timeZone: string): string => {
   }
   if (slot.startsWith("now:")) {
     return "by-hand";
+  }
+  if (slot.startsWith(EVENT_SLOT)) {
+    return "event";
   }
   return new Intl.DateTimeFormat("en-GB", {
     timeZone,
@@ -456,6 +469,20 @@ export const createRoutines = ({
 
   // --- firing ------------------------------------------------------------------
 
+  /**
+   * The event an event's run takes as its input, as a block its prompt
+   * carries after the routine's own words; nothing for a scheduled run.
+   */
+  const inputOf = (run: RoutineRunRow): string => {
+    if (!run.slot.startsWith(EVENT_SLOT)) {
+      return "";
+    }
+    const event = db.ingress.event(run.slot.slice(EVENT_SLOT.length));
+    return event
+      ? `\n\n## The event that started this run\n\n${eventData(event)}`
+      : "\n\n(The event that started this run is no longer kept.)";
+  };
+
   /** The routine's thread note's title. */
   const noteTitle = (routine: RoutineRow, what?: string): string =>
     `Routine · ${routine.name}${what ? ` ${what}` : ""}`;
@@ -538,7 +565,7 @@ export const createRoutines = ({
     const begun = await workItems.startForRoutine(
       {
         title: routine.name,
-        prompt: `Routine “${routine.name}”, its ${label} run${run.attempt > 1 ? ` (attempt ${run.attempt}: the last one failed)` : ""}. Its prompt:\n\n${routine.prompt}\n\n${CONTRACT}`,
+        prompt: `Routine “${routine.name}”, its ${label} run${run.attempt > 1 ? ` (attempt ${run.attempt}: the last one failed)` : ""}. Its prompt:\n\n${routine.prompt}${inputOf(run)}\n\n${CONTRACT}`,
         ...(routine.delegateType ? { type: routine.delegateType } : {}),
         checks: [defaultCheck(routine.lands, [])],
         lands: routine.lands,
@@ -577,7 +604,7 @@ export const createRoutines = ({
     const threadId = note(routine, noteTitle(routine, `· ${label}`));
     const woke = await caw.wake(projectId, {
       threadId,
-      text: `Routine “${routine.name}” (routine ${routine.id}), its ${label} run. Its prompt:\n\n${routine.prompt}\n\nHandle it now. Tell the person in thread ${threadId} with thread_reply only when there is something they should hear.`,
+      text: `Routine “${routine.name}” (routine ${routine.id}), its ${label} run. Its prompt:\n\n${routine.prompt}${inputOf(run)}\n\nHandle it now. Tell the person in thread ${threadId} with thread_reply only when there is something they should hear.`,
     });
     store.setRun(
       run.id,
@@ -1010,6 +1037,21 @@ export const createRoutines = ({
     return runView(run);
   };
 
+  /**
+   * An inbound event's run (ingress.ts): the routine once, with the event as
+   * its input, through the same gates as any run. Nothing when the routine
+   * is gone or off, or this event ran it already.
+   */
+  const runForEvent = (
+    id: string,
+    eventId: string
+  ): RoutineRunRow | undefined => {
+    const row = store.get(id);
+    return row?.enabled
+      ? fireExtra(row, `${EVENT_SLOT}${eventId}`, 1)
+      : undefined;
+  };
+
   const list = (projectId?: string | null): RoutineView[] =>
     store.list(projectId).map(viewOf);
 
@@ -1151,6 +1193,7 @@ export const createRoutines = ({
     itemEnded,
     list,
     remove,
+    runForEvent,
     runNow,
     start,
     tick,

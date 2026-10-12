@@ -2539,8 +2539,8 @@ export type RoutineOutcome =
 
 /**
  * One run of a routine at one slot: a scheduled slot's time (ISO), `test:<created
- * at>` for the run a new routine makes at once, or `now:<when>` for a run
- * asked for by hand. Unique on (routine, slot, attempt): the insert is the
+ * at>` for the run a new routine makes at once, `now:<when>` for a run
+ * asked for by hand, or `event:<inbound event id>` for an event's run. Unique on (routine, slot, attempt): the insert is the
  * fire, so a slot fires once, and its one retry (attempt 2) once.
  */
 export const routineRuns = sqliteTable(
@@ -2638,6 +2638,149 @@ export const connectionProjects = sqliteTable(
     primaryKey({ columns: [table.connectionId, table.projectId] }),
     index("connection_projects_project").on(table.projectId),
   ]
+);
+
+/** How an inbound event reached the hub. */
+export type InboundVia = "poll" | "webhook" | "connector";
+
+/**
+ * One event from outside (Projects spec §5.5 Ingress, ingress.ts), stored
+ * once under (source, delivery key) however many paths bring it in: a
+ * GitHub poll and a webhook of one change carry the same natural key
+ * (`pr:12:merged`), so the second insert finds the row and does nothing.
+ */
+export const inboundEvents = sqliteTable(
+  "inbound_events",
+  {
+    id: text("id").primaryKey(),
+    /** `github:<owner>/<repo>`, or `conn:<connection>:<tool>`. */
+    source: text("source").notNull(),
+    /** Natural, never a transport's delivery id: `pr:12:merged`, `comment:991`, `<id>:<version>`. */
+    deliveryKey: text("delivery_key").notNull(),
+    /** `pr.opened`, `pr.merged`, `pr.closed`, `issue.opened`, `issue.closed`, `issue.labeled`, `comment.created`, `item`. */
+    kind: text("kind").notNull(),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    /** The event as ingress.ts normalised it, JSON, at most 64 KB (cut with a marker). */
+    payload: text("payload").notNull(),
+    receivedAt: timestamp("received_at").notNull(),
+    via: text("via").$type<InboundVia>().notNull(),
+    /** The routine a route sent it to, `lead` for the lead's inbox, or null (stored only: the lead was off). */
+    routedTo: text("routed_to"),
+    /** When it was handed on: its routine's run filed, or the lead's wake that carried it. */
+    handledAt: timestamp("handled_at"),
+  },
+  (table) => [
+    uniqueIndex("inbound_events_delivery").on(table.source, table.deliveryKey),
+    index("inbound_events_project").on(table.projectId, table.receivedAt),
+    index("inbound_events_inbox").on(table.projectId, table.routedTo),
+  ]
+);
+
+/**
+ * A rule that sends a project's matching inbound events to a routine
+ * (ingress.ts). Every condition set must hold; the oldest enabled route
+ * that matches takes the event.
+ */
+export const eventRoutes = sqliteTable(
+  "event_routes",
+  {
+    id: text("id").primaryKey(),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    /** A source, `*` matching any run of characters: `github:*`, `conn:linear:*`. */
+    source: text("source").notNull(),
+    /** Kinds it takes; empty takes any. */
+    kinds: text("kinds", { mode: "json" }).$type<string[]>().notNull(),
+    /** The event's author, any case. */
+    author: text("author"),
+    /** A label the event carries, any case. */
+    label: text("label"),
+    /** A pull request's head branch, exactly. */
+    branch: text("branch"),
+    /** A regular expression run over the event's title and body. */
+    regex: text("regex"),
+    routineId: text("routine_id")
+      .notNull()
+      .references(() => routines.id, { onDelete: "cascade" }),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+    /** `owner`, or the id of the session that made it. */
+    createdBy: text("created_by").notNull(),
+    createdAt: timestamp("created_at").notNull(),
+  },
+  (table) => [index("event_routes_project").on(table.projectId)]
+);
+
+/** Where one GitHub resource's poll stands: its ETag, its high-water mark, and its counts. */
+export interface GitHubCursor {
+  etag: string | null;
+  /** 304s answered: polls that cost nothing. */
+  notModified: number;
+  polls: number;
+  /** The newest `updated_at` taken in, ms: events at or after it are looked for. */
+  since: number;
+}
+
+/** The three resources a project's repository is polled for. */
+export type GitHubResource = "pulls" | "issues" | "comments";
+
+/**
+ * A project's GitHub poller (ingress.ts, github.ts): the connection whose
+ * token it polls with, the repository it last polled, and each resource's
+ * cursor, so a hub restart neither re-delivers nor misses.
+ */
+export const githubPollers = sqliteTable("github_pollers", {
+  projectId: text("project_id")
+    .primaryKey()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  /** The connection (service `github`, a bearer token) it polls with. */
+  connection: text("connection").notNull(),
+  /** `owner/repo` the cursors are for; another repository starts them afresh. */
+  repo: text("repo"),
+  cursors: text("cursors", { mode: "json" })
+    .$type<Partial<Record<GitHubResource, GitHubCursor>>>()
+    .notNull(),
+  /** Why its last poll failed, or null. */
+  reason: text("reason"),
+  /** GitHub's rate limit holds polls back until then. */
+  resumeAt: timestamp("resume_at"),
+  polledAt: timestamp("polled_at"),
+});
+
+/**
+ * A connector poll (ingress.ts): one connection's read tool called on an
+ * interval, its items diffed by id and version into `inbound_events`.
+ */
+export const connectorPolls = sqliteTable(
+  "connector_polls",
+  {
+    id: text("id").primaryKey(),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    connection: text("connection").notNull(),
+    tool: text("tool").notNull(),
+    args: text("args", { mode: "json" })
+      .$type<Record<string, unknown>>()
+      .notNull(),
+    /** Seconds between calls, 60 or more. */
+    intervalS: integer("interval_s").notNull(),
+    /** A dot path to the array of items in the result; empty: the result is the array. */
+    itemsPath: text("items_path").notNull().default(""),
+    /** A dot path to each item's id, and to its version (`updated_at`). */
+    idPath: text("id_path").notNull(),
+    versionPath: text("version_path").notNull(),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+    /** What its last call saw, id to version; null until its first call, which only looks. */
+    seen: text("seen", { mode: "json" }).$type<Record<string, string>>(),
+    reason: text("reason"),
+    polledAt: timestamp("polled_at"),
+    createdBy: text("created_by").notNull(),
+    createdAt: timestamp("created_at").notNull(),
+  },
+  (table) => [index("connector_polls_project").on(table.projectId)]
 );
 
 /**

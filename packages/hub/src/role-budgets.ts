@@ -14,6 +14,7 @@ import {
 } from "@cawco/core";
 import { createCaw } from "./caw";
 import { createDelegationMcp } from "./delegation-mcp";
+import { createIngress } from "./ingress";
 import { makeLifetime } from "./lifetime";
 import { createRoutines } from "./routines";
 import type { Tasks } from "./tasks";
@@ -24,12 +25,14 @@ import type { Tasks } from "./tasks";
  * 2,382; web-facing 2,960) plus about 15%. A role that outgrows it splits a
  * tool or trims a description before it ships. The lead's grew at P3: it
  * runs its project's routines (§5.5), five `routine_*` tools of about 870
- * tokens, on top of the 9,295 it had reached.
+ * tokens, on top of the 9,295 it had reached. Both the lead and the worker
+ * grew again with P3's ingress: eight `event_route_*` and `connector_poll_*`
+ * tools of about 1,240 tokens (lead 11,403, worker 20,225 measured).
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 19_000,
+  worker: 21_000,
   delegate: 4600,
-  lead: 10_500,
+  lead: 12_000,
   overseer: 2800,
   "web-facing": 3400,
 };
@@ -128,6 +131,14 @@ export const measureRoles = (): RoleSize[] => {
         quiets: () => false,
         types: () => [],
         workItems: {} as never,
+      }).tools(actor),
+    ingressTools: (actor) =>
+      createIngress({
+        connections: {} as never,
+        db: {} as never,
+        dispatcher: {} as never,
+        lifetime,
+        routines: {} as never,
       }).tools(actor),
   });
   try {

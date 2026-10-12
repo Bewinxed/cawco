@@ -2126,6 +2126,47 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/InboundVia`.
+    public enum InboundVia: OpenEnum {
+        case connector
+        case poll
+        case webhook
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "connector": self = .connector
+            case "poll": self = .poll
+            case "webhook": self = .webhook
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .connector: "connector"
+            case .poll: "poll"
+            case .webhook: "webhook"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.connector, .poll, .webhook]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/InstanceRowEffort`.
     public enum InstanceRowEffort: OpenEnum {
         case high

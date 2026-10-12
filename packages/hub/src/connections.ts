@@ -12,8 +12,10 @@
  * the upstream echoes back is cut out of what the session is answered.
  *
  * One call path for every caller: sessions ({@link Connections.callAs}),
- * and hub code (the GitHub and connector pollers, approved actions) through
+ * and hub code (the connector poller, approved actions) through
  * {@link Connections.callConnection} and {@link Connections.listConnectionTools}.
+ * The GitHub poller speaks REST, not MCP: it alone opens a `github`
+ * connection's token ({@link Connections.githubToken}), in the hub.
  *
  * OAuth is the MCP authorization flow the SDK runs (`auth()`: discovery,
  * registration, PKCE, exchange, refresh) over a provider whose storage is the
@@ -693,6 +695,25 @@ export const createConnections = (deps: ConnectionsDeps) => {
     return clean === text ? result : (JSON.parse(clean) as CallToolResult);
   };
 
+  /**
+   * A `github` connection's bearer token, for the hub's own REST poller
+   * (ingress.ts, github.ts) and nothing else: no route, tool or view answers
+   * it, and it is never logged. Refused, in words, for a connection of
+   * another service, another sign-in, or with no key held.
+   */
+  const githubToken = (name: string): string => {
+    const r = row(name);
+    if (r.service.trim().toLowerCase() !== "github") {
+      problem(`${name} is a ${r.service} connection, not a github one.`);
+    }
+    if (r.auth !== "bearer") {
+      problem(
+        `${name} signs in with ${r.auth}; GitHub polling takes a bearer token.`
+      );
+    }
+    return opened(r).key ?? problem(`${name} needs its key: ${NO_SECRET}.`);
+  };
+
   /** Looks at a connection once (its tools), so its state says what is true; a failure is in its state. */
   const probe = (name: string) =>
     listConnectionTools(name).then(
@@ -1022,6 +1043,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
   return {
     callConnection,
     listConnectionTools,
+    githubToken,
     sessionTools,
     callAs,
     list: () => db.list().map(view),

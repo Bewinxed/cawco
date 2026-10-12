@@ -6252,6 +6252,918 @@
         }
       }
     },
+    "/api/projects/{id}/ingress": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiProjectsByIdIngress",
+        "responses": {
+          "200": {
+            "description": "getApiProjectsByIdIngress 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngressView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiProjectsByIdIngress 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "getApiProjectsByIdIngress 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiProjectsByIdIngress 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "getApiProjectsByIdIngress 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/ingress/github": {
+      "put": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "connection": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "connection"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "putApiProjectsByIdIngressGithub",
+        "responses": {
+          "200": {
+            "description": "putApiProjectsByIdIngressGithub 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngressView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "putApiProjectsByIdIngressGithub 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "putApiProjectsByIdIngressGithub 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "putApiProjectsByIdIngressGithub 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "putApiProjectsByIdIngressGithub 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "putApiProjectsByIdIngressGithub 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/ingress/github/poll": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiProjectsByIdIngressGithubPoll",
+        "responses": {
+          "200": {
+            "description": "postApiProjectsByIdIngressGithubPoll 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngressView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiProjectsByIdIngressGithubPoll 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiProjectsByIdIngressGithubPoll 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiProjectsByIdIngressGithubPoll 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiProjectsByIdIngressGithubPoll 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/event-routes": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "projectId": {
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string"
+                  },
+                  "kinds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "author": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "label": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "branch": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "regex": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "routineId": {
+                    "type": "string"
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "projectId",
+                  "source",
+                  "routineId"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiEventRoutes",
+        "responses": {
+          "200": {
+            "description": "postApiEventRoutes 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventRouteView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiEventRoutes 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiEventRoutes 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiEventRoutes 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiEventRoutes 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiEventRoutes 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/event-routes/{id}": {
+      "patch": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "source": {
+                    "type": "string"
+                  },
+                  "kinds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "author": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "label": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "branch": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "regex": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "routineId": {
+                    "type": "string"
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "patchApiEventRoutesById",
+        "responses": {
+          "200": {
+            "description": "patchApiEventRoutesById 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventRouteView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "patchApiEventRoutesById 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "patchApiEventRoutesById 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "patchApiEventRoutesById 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "patchApiEventRoutesById 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "patchApiEventRoutesById 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "deleteApiEventRoutesById",
+        "responses": {
+          "200": {
+            "description": "deleteApiEventRoutesById 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deleteApiEventRoutesById200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "deleteApiEventRoutesById 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "deleteApiEventRoutesById 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "deleteApiEventRoutesById 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "deleteApiEventRoutesById 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/connector-polls": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "projectId": {
+                    "type": "string"
+                  },
+                  "connection": {
+                    "type": "string"
+                  },
+                  "tool": {
+                    "type": "string"
+                  },
+                  "args": {
+                    "type": "object",
+                    "patternProperties": {
+                      "^.*$": {}
+                    }
+                  },
+                  "intervalS": {
+                    "minimum": 60,
+                    "type": "integer"
+                  },
+                  "itemsPath": {
+                    "type": "string"
+                  },
+                  "idPath": {
+                    "type": "string"
+                  },
+                  "versionPath": {
+                    "type": "string"
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "projectId",
+                  "connection",
+                  "tool",
+                  "intervalS",
+                  "idPath",
+                  "versionPath"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiConnectorPolls",
+        "responses": {
+          "200": {
+            "description": "postApiConnectorPolls 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectorPollView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiConnectorPolls 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiConnectorPolls 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiConnectorPolls 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiConnectorPolls 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiConnectorPolls 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/connector-polls/{id}": {
+      "patch": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "args": {
+                    "type": "object",
+                    "patternProperties": {
+                      "^.*$": {}
+                    }
+                  },
+                  "intervalS": {
+                    "minimum": 60,
+                    "type": "integer"
+                  },
+                  "itemsPath": {
+                    "type": "string"
+                  },
+                  "idPath": {
+                    "type": "string"
+                  },
+                  "versionPath": {
+                    "type": "string"
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "patchApiConnectorPollsById",
+        "responses": {
+          "200": {
+            "description": "patchApiConnectorPollsById 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectorPollView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "patchApiConnectorPollsById 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "patchApiConnectorPollsById 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "patchApiConnectorPollsById 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "patchApiConnectorPollsById 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "patchApiConnectorPollsById 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "deleteApiConnectorPollsById",
+        "responses": {
+          "200": {
+            "description": "deleteApiConnectorPollsById 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deleteApiConnectorPollsById200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "deleteApiConnectorPollsById 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "deleteApiConnectorPollsById 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "deleteApiConnectorPollsById 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "deleteApiConnectorPollsById 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/connector-polls/{id}/poll": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiConnectorPollsByIdPoll",
+        "responses": {
+          "200": {
+            "description": "postApiConnectorPollsByIdPoll 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectorPollView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiConnectorPollsByIdPoll 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiConnectorPollsByIdPoll 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiConnectorPollsByIdPoll 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiConnectorPollsByIdPoll 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/spend-settings": {
       "get": {
         "operationId": "getApiSpendSettings",
@@ -15989,6 +16901,28 @@
           "tools"
         ]
       },
+      "deleteApiEventRoutesById200": {
+        "type": "object",
+        "properties": {
+          "deleted": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "deleted"
+        ]
+      },
+      "deleteApiConnectorPollsById200": {
+        "type": "object",
+        "properties": {
+          "deleted": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "deleted"
+        ]
+      },
       "getApiSpendSettings200": {
         "type": "object",
         "properties": {
@@ -24108,6 +25042,327 @@
           "http",
           "sse",
           "stdio"
+        ]
+      },
+      "IngressView": {
+        "description": "What a project's ingress is: its GitHub poller, routes, connector polls and newest events.",
+        "type": "object",
+        "properties": {
+          "connectorPolls": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConnectorPollView"
+            }
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InboundEventView"
+            }
+          },
+          "github": {
+            "type": "object",
+            "properties": {
+              "connection": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "polled": {
+                "type": "boolean"
+              },
+              "polledAt": {
+                "type": [
+                  "null",
+                  "number"
+                ]
+              },
+              "repo": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "resources": {
+                "type": "object",
+                "properties": {
+                  "issues": {
+                    "$ref": "#/components/schemas/GitHubCursor"
+                  },
+                  "pulls": {
+                    "$ref": "#/components/schemas/GitHubCursor"
+                  },
+                  "comments": {
+                    "$ref": "#/components/schemas/GitHubCursor"
+                  }
+                }
+              },
+              "resumeAt": {
+                "type": [
+                  "null",
+                  "number"
+                ]
+              },
+              "state": {
+                "description": "What is true of it, in a sentence: polled, or why not.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "connection",
+              "polled",
+              "polledAt",
+              "repo",
+              "resources",
+              "resumeAt",
+              "state"
+            ]
+          },
+          "routes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EventRouteView"
+            }
+          }
+        },
+        "required": [
+          "connectorPolls",
+          "events",
+          "github",
+          "routes"
+        ]
+      },
+      "ConnectorPollView": {
+        "type": "object",
+        "properties": {
+          "args": {
+            "type": "object"
+          },
+          "connection": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "number"
+          },
+          "createdBy": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "idPath": {
+            "type": "string"
+          },
+          "intervalS": {
+            "type": "number"
+          },
+          "itemsPath": {
+            "type": "string"
+          },
+          "polledAt": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "seen": {
+            "description": "Items its last call saw; null until its first call.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "tool": {
+            "type": "string"
+          },
+          "versionPath": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "args",
+          "connection",
+          "createdAt",
+          "createdBy",
+          "enabled",
+          "id",
+          "idPath",
+          "intervalS",
+          "itemsPath",
+          "polledAt",
+          "projectId",
+          "reason",
+          "seen",
+          "tool",
+          "versionPath"
+        ]
+      },
+      "InboundEventView": {
+        "type": "object",
+        "properties": {
+          "event": {},
+          "handledAt": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "receivedAt": {
+            "type": "number"
+          },
+          "routedTo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "source": {
+            "type": "string"
+          },
+          "via": {
+            "$ref": "#/components/schemas/InboundVia"
+          }
+        },
+        "required": [
+          "event",
+          "handledAt",
+          "id",
+          "key",
+          "kind",
+          "receivedAt",
+          "routedTo",
+          "source",
+          "via"
+        ]
+      },
+      "InboundVia": {
+        "description": "How an inbound event reached the hub.",
+        "type": "string",
+        "enum": [
+          "connector",
+          "poll",
+          "webhook"
+        ]
+      },
+      "GitHubCursor": {
+        "description": "Where one GitHub resource's poll stands: its ETag, its high-water mark, and its counts.",
+        "type": "object",
+        "properties": {
+          "etag": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "notModified": {
+            "description": "304s answered: polls that cost nothing.",
+            "type": "number"
+          },
+          "polls": {
+            "type": "number"
+          },
+          "since": {
+            "description": "The newest `updated_at` taken in, ms: events at or after it are looked for.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "etag",
+          "notModified",
+          "polls",
+          "since"
+        ]
+      },
+      "EventRouteView": {
+        "type": "object",
+        "properties": {
+          "author": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "branch": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "createdAt": {
+            "type": "number"
+          },
+          "createdBy": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kinds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "label": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "regex": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "routineId": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "author",
+          "branch",
+          "createdAt",
+          "createdBy",
+          "enabled",
+          "id",
+          "kinds",
+          "label",
+          "projectId",
+          "regex",
+          "routineId",
+          "source"
         ]
       },
       "ProjectView": {

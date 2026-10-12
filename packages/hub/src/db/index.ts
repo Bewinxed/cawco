@@ -82,6 +82,7 @@ import { workflowSkill } from "../workflows/skills";
 import { type AccountsDb, accountsDb } from "./accounts";
 import { type AtLimitDb, atLimitDb } from "./at-limit";
 import { type ConnectionsDb, connectionsDb } from "./connections";
+import { type IngressDb, ingressDb } from "./ingress";
 import { type RoutinesDb, routinesDb } from "./routines";
 import {
   accountSignins,
@@ -701,6 +702,8 @@ export interface DbShape {
    * session's next start; false when it is no longer pending.
    */
   readonly holdSend: (uuid: string, envelope: string) => boolean;
+  /** Inbound events, their routes and the pollers that bring them in (ingress.ts). */
+  readonly ingress: IngressDb;
   readonly insertContinuation: (
     row: Omit<ContinuationRow, "createdAt" | "updatedAt">
   ) => ContinuationRow;
@@ -6774,6 +6777,7 @@ const make = async (path: string): Promise<DbShape> => {
     atLimit: atLimitDb(db),
     routines: routinesDb(db),
     connections: connectionsDb(db),
+    ingress: ingressDb(db),
     usageSpend: ({ harness, todayStart, weekStart }) => {
       const since = (start: number) =>
         sql<number>`coalesce(sum(case when ${usageBuckets.start} >= ${start} then ${usageBuckets.costUsd} else 0 end), 0)`;

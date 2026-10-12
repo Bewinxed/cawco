@@ -57,6 +57,7 @@ typeOverrides:
     HomeStore: OpenEnums.HomeStore
     HookCommandHandlerShell: OpenEnums.HookCommandHandlerShell
     HookEvent: OpenEnums.HookEvent
+    InboundVia: OpenEnums.InboundVia
     InstanceRowEffort: OpenEnums.InstanceRowEffort
     InstanceRowLaunchDir: OpenEnums.InstanceRowLaunchDir
     InstanceRowTitleSource: OpenEnums.InstanceRowTitleSource

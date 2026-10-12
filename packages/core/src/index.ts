@@ -1332,6 +1332,8 @@ export const CAWCO_ENV = {
   telegramToken: "CAWCO_TELEGRAM_TOKEN",
   /** Telegram's API origin, for pointing the bridge at a proxy. */
   telegramApi: "CAWCO_TELEGRAM_API",
+  /** GitHub's REST API origin the hub's pollers call, for pointing them at a proxy. */
+  githubApi: "CAWCO_GITHUB_API",
   telegramAsrUrl: "CAWCO_TELEGRAM_ASR_URL",
   telegramAsrModel: "CAWCO_TELEGRAM_ASR_MODEL",
   telegramAsrMode: "CAWCO_TELEGRAM_ASR_MODE",
