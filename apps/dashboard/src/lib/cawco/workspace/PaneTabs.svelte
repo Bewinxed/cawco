@@ -1842,12 +1842,14 @@
     --item: 32px;
     --sheet: var(--surface-recess);
     --tab-hover: light-dark(var(--surface-recess), var(--surface-hover));
-    /* The status rim's stroke (`.rim`): a gliding seam stops with it on
-       the neighbour's own (the kit's `--seam-tuck`). */
-    --seam-stroke: 1.5px;
+    /* The status rim's stroke (`.rim`, `tab-rim-width`, a plain px number
+       for the rim's arithmetic): a gliding seam stops with it on the
+       neighbour's own (the kit's `--seam-tuck`). */
+    --rim-w: var(--tab-rim-width);
+    --seam-stroke: calc(var(--rim-w) * 1px);
 
     @media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
-      --seam-stroke: 1px;
+      --rim-w: 1;
     }
   }
   /* The phone's row: tabs a row's height tall, standing on the bar's
@@ -2049,9 +2051,11 @@
     --spill: 6px;
     --F: var(--flare);
     /* The stroke, the track's (`--seam-stroke`, so a seam's glide stops
-       with it on the neighbour's own). */
+       with it on the neighbour's own; `--rim-w`, 1 under Increase
+       Contrast). The shoulders, the seams and the taper's narrowing all
+       take it from here. */
     --t: var(--seam-stroke);
-    --tn: 1.5;
+    --tn: var(--rim-w);
     --fn: 8;
     --tl: var(--tab-rim-taper);
     --taper: calc(var(--tl) * 1px);
@@ -2102,15 +2106,19 @@
        not have. Nothing drawn is cut: every piece lies inside the
        outline's box. */
     overflow: clip;
-    /* Its strength now; where one of its seams glides on a switch (its
-       cut), leaning toward the weaker of its own and that neighbour's by
-       half way, so at the handover the two rims stand at the same strength
-       and the edge passes from one to the other with nothing moving (a rim
+    /* Its strength now; where one of its seams glides on a switch (that
+       seam's glide, TabsList `--glide-start`/`--glide-end`, the same on
+       both its tabs: 0 at either edge, 1 half way), leaning toward the
+       weaker of its own and that neighbour's as the seam nears half way,
+       and back as it leaves, so at the handover the two rims stand at the
+       same strength and the edge passes from one to the other with nothing
+       moving, on either tab (its own cut drops to 0 as it goes behind, and
+       a lean read off it let the whole rim brighten in a frame; a rim
        fading in met one fading out at another strength in a jump). Against
        a neighbour with no rim, the gliding edge fades out. The whole rim
        leans, so its top, shoulders and sides stay one stroke. */
-    --lean-s: min(1, calc(2 * var(--cut-start, 0)));
-    --lean-e: min(1, calc(2 * var(--cut-end, 0)));
+    --lean-s: var(--glide-start, 0);
+    --lean-e: var(--glide-end, 0);
     opacity: calc(
       var(--rim-mix) *
       (
@@ -2139,7 +2147,6 @@
       --fn: 12;
     }
     @media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
-      --tn: 1;
       filter: none;
     }
     /* Its strength follows the switch's clock frame by frame (`--depth`);
@@ -2249,6 +2256,7 @@
     clip-path: shape(
       from calc(var(--F) + var(--s) + var(--radius)) 0,
       arc to calc(var(--F) + var(--s)) var(--radius) of var(--radius) ccw,
+      line to var(--F) calc(100% - var(--F)),
       line to var(--F) calc(100% - var(--F) * var(--u)),
       line to calc(var(--F) + var(--t))
         calc(100% - max(min(var(--taper), var(--F)), var(--F) * var(--u))),

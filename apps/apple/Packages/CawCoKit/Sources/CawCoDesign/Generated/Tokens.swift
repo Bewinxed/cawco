@@ -668,6 +668,8 @@ public enum Effect {
     /// An unchosen session tab's rim strength when its session is anything but idle (working, needs you, done, failed): the same outline and taper as the chosen tab's, clearly quieter (owner: other tabs have no rim "unless they are active, then they should have a more subtle rim", "or any other status"). An unchosen idle tab draws no rim. It is a status mark, not a boundary: the tab's card edge is the boundary, so it is not held to 3:1. Its top against the shelf and its own fill: by day 1.9/2.0:1 needs you, 1.9/2.0:1 working, 2.0/2.1:1 failed, 1.8/1.9:1 done; by night (0.4) 3.1/2.9:1, 2.3/2.2:1, 2.1/2.0:1, 2.6/2.4:1.
     /// By day and by night: read it with `value(for:)`.
     public static let tabRimMixSubtle = SchemeValue(light: 0.5, dark: 0.4)
+    /// A session tab's rim stroke, in px, on every tab, in both themes (1 under Increase Contrast and Reduce Transparency). A plain number for the rim's arithmetic (PaneTabs `.rim`); its shoulders, its feet's narrowing to a point and a gliding seam's stop (`--seam-stroke`) all follow it.
+    public static let tabRimWidth: Double = 1.5
     /// How far, in px along the stroke, a session tab's rim fades out at each free end (the tips of its feet on the shelf), on every tab, in both themes, so a rim never stops on a hard cut (owner: "the rim should taper-progress-fade at the very edges"). A plain number for the rim's arithmetic (PaneTabs `.rim`); the fade stops short of the shoulders.
     public static let tabRimTaper: Double = 12
 }

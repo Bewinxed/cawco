@@ -219,11 +219,17 @@
     const cuts = items.map(() => [0, 0]);
     /* Which of each tab's sides stands under its neighbour's card now. */
     const under = items.map(() => [false, false]);
+    /* How far each seam beside a tab stands between the two tabs' edges,
+       for both tabs alike: 0 on either edge, 1 half way. */
+    const glides = items.map(() => [0, 0]);
     for (let i = 0; i < items.length - 1; i += 1) {
       const left = items[i];
       const right = items[i + 1];
       const q = from[i] + (to[i] - from[i]) * f;
       seamAt.set(left, { right, q });
+      const glide = Math.round(2 * Math.min(q, 1 - q) * 1000) / 1000;
+      glides[i][1] = glide;
+      glides[i + 1][0] = glide;
       if ((rankNow.get(left) ?? 0) > (rankNow.get(right) ?? 0)) {
         cuts[i][1] = q;
         under[i + 1][0] = true;
@@ -235,12 +241,19 @@
     items.forEach((item, i) => {
       const [start, end] = cuts[i];
       const [startUnder, endUnder] = under[i];
-      const key = `${start} ${end} ${startUnder} ${endUnder}`;
+      const [glideStart, glideEnd] = glides[i];
+      const key = `${start} ${end} ${startUnder} ${endUnder} ${glideStart} ${glideEnd}`;
       if (cutNow.get(item) !== key) {
         cutNow.set(item, key);
         const laid = laidOf(item, track);
         laid.style.setProperty("--cut-start", String(start));
         laid.style.setProperty("--cut-end", String(end));
+        // The seams' glide (`--glide-start`, `--glide-end`), on the tab in
+        // front and the one behind alike, so a host can ease what meets
+        // at the handover through it on both tabs with no step (PaneTabs'
+        // rims meet at one strength there).
+        laid.style.setProperty("--glide-start", String(glideStart));
+        laid.style.setProperty("--glide-end", String(glideEnd));
         // A side under a neighbour (1, else 0) draws no foot where a host
         // paints on it: the card over it covers it, but on a switch the
         // card is a compositor layer whose foot row is filtered half
@@ -317,8 +330,13 @@
         frame = requestAnimationFrame(step);
       } else {
         outgoing = null;
-        track.toggleAttribute("data-switching", false);
         capFades();
+        // A frame after the last depths land, so the style pass that takes
+        // them still eases nothing (a host's own easing, back on with the
+        // attribute gone, eased that last step instead).
+        frame = requestAnimationFrame(() => {
+          track.toggleAttribute("data-switching", false);
+        });
       }
     });
     return () => cancelAnimationFrame(frame);

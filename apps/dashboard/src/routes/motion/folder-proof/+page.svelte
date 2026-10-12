@@ -7,9 +7,10 @@
    *   tabs in mixed statuses (needs you, working, idle, done, failed,
    *   idle), the working one chosen; and the same tabs again with the idle
    *   one chosen (`data-strip="session-idle"`);
-   * - two sliders over the rims' tokens, written live on the bench:
-   *   Taper (`--tab-rim-taper`, px) and Subtle (`--tab-rim-mix-subtle`,
-   *   an unchosen tab's rim strength);
+   * - three sliders over the rims' tokens, written live on the bench:
+   *   Taper (`--tab-rim-taper`, px), Subtle (`--tab-rim-mix-subtle`, an
+   *   unchosen tab's rim strength) and Thickness (`--tab-rim-width`, the
+   *   rim's stroke, px); `?taper=`, `?subtle=` and `?width=` start them;
    * - the home's Working and Finished (`data-strip="work"`): the real
    *   WorkTabs over twelve working runs and fourteen finished, hosted as
    *   the shell hosts it, in the rail's 260px column on the desk and across
@@ -161,13 +162,20 @@
   });
 
   /**
-   * The rims' two tunable tokens, written live on the bench: the taper's
-   * length (px) and an unchosen tab's rim strength (%). Each starts at the
-   * token's value in the bench's theme.
+   * The rims' three tunable tokens, written live on the bench: the taper's
+   * length (px), an unchosen tab's rim strength (%) and the rim's stroke
+   * (px). Each starts at `?taper=`, `?subtle=` or `?width=` where given,
+   * else at the token's value in the bench's theme.
    */
+  const asked = (name: string) => {
+    const value = untrack(() => page.url.searchParams.get(name));
+    return value === null || value === "" ? null : Number(value);
+  };
+  const subtleAsked = asked("subtle");
   let proofEl = $state<HTMLElement>();
-  let taper = $state<number | null>(null);
-  let subtle = $state<number | null>(null);
+  let taper = $state<number | null>(asked("taper"));
+  let subtle = $state<number | null>(subtleAsked);
+  let width = $state<number | null>(asked("width"));
   $effect(() => {
     // Again whenever the theme changes.
     if (!(proofEl && scheme)) {
@@ -176,11 +184,14 @@
     // Read once the theme has landed on the root.
     const frame = requestAnimationFrame(() => {
       const style = getComputedStyle(document.documentElement);
-      taper ??= Number.parseFloat(style.getPropertyValue("--tab-rim-taper"));
+      const token = (name: string) =>
+        Number.parseFloat(style.getPropertyValue(name));
+      taper ??= token("--tab-rim-taper");
+      width ??= token("--tab-rim-width");
       // The token is a strength 0 to 1; the slider reads it in percent.
-      subtle = Math.round(
-        Number.parseFloat(style.getPropertyValue("--tab-rim-mix-subtle")) * 100
-      );
+      if (subtleAsked === null) {
+        subtle = Math.round(token("--tab-rim-mix-subtle") * 100);
+      }
     });
     return () => cancelAnimationFrame(frame);
   });
@@ -281,6 +292,7 @@
     ? undefined
     : String(subtle / 100)}
   style:--tab-rim-taper={taper === null ? undefined : String(taper)}
+  style:--tab-rim-width={width === null ? undefined : String(width)}
 >
   <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
   <div class="group" data-strip="session" onclickcapture={benchClick(leaf)}>
@@ -329,6 +341,22 @@
         }
       >
       <output>{subtle ?? "–"}%</output>
+    </label>
+    <label>
+      <span>Thickness</span>
+      <input
+        max="4"
+        min="0.5"
+        step="0.25"
+        type="range"
+        bind:value={
+          () => width ?? 1.5,
+          (v) => {
+    width = v;
+  }
+        }
+      >
+      <output>{width ?? "–"}px</output>
     </label>
   </div>
   <!-- The home's Working and Finished as the shell hosts them: in the
