@@ -12,14 +12,7 @@
  */
 import { Database } from "bun:sqlite";
 import { existsSync } from "node:fs";
-import {
-  chmod,
-  mkdir,
-  mkdtemp,
-  readdir,
-  rm,
-  writeFile,
-} from "node:fs/promises";
+import { chmod, mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { parseProcId } from "../packages/agent/src/proc-id";
 import { SessiondClient } from "../packages/agent/src/sessiond-client";
@@ -221,10 +214,29 @@ const chatEvents = (words: string[]): string[] => {
   ];
 };
 
-/** A unix socket's longest path, in bytes, its NUL apart (`sun_path` is 108). */
-const SOCKET_PATH_MAX = 107;
-/** What srt's longest socket adds to the runtime dir: `/cawco-srt/<12 hex>/claude-socks-<16 hex>.sock`. */
-const SRT_SOCKET_TAIL = 58;
+/**
+ * A dir of its own under `root`, named two hex, made with mode 700: three
+ * bytes past `root`. A name another fleet holds is drawn again.
+ */
+async function shortDir(root: string): Promise<string> {
+  for (;;) {
+    const dir = join(root, crypto.randomUUID().slice(0, 2));
+    // biome-ignore lint/performance/noAwaitInLoops: a name is drawn again only when the last one was taken
+    const made = await mkdir(dir, { mode: 0o700 }).then(
+      () => true,
+      (error: NodeJS.ErrnoException) => {
+        if (error.code === "EEXIST") {
+          return false;
+        }
+        throw error;
+      }
+    );
+    if (made) {
+      await chmod(dir, 0o700);
+      return dir;
+    }
+  }
+}
 
 export const MACHINE = "scratch-fleet";
 export const ACCOUNT = "acct-scratch-fleet";
@@ -276,26 +288,27 @@ export async function scratchFleet(options: {
     scratch,
     `${options.name}-${crypto.randomUUID().slice(0, 8)}`
   );
-  const home = join(sandbox, "home");
+  // The services' HOME and the agent's XDG_RUNTIME_DIR hold the paths of a
+  // delegate's sockets, and a unix socket's path holds 103 bytes on macOS
+  // (107 on Linux). Under HOME is each workspace's scratch dir, where Chromium
+  // puts `~/.cawco/tmp/<id8>/org.chromium.Chromium.XXXXXX/SingletonSocket`
+  // (paths.ts `scratchSocketProblem`): HOME has 38 bytes. Under the runtime
+  // dir srt puts `cawco-srt/<12 hex>/claude-socks-<16 hex>.sock`
+  // (boundary.ts `srtTmpOf`): it has 49. So both sit apart from the sandbox,
+  // two hex under the shortest root this can write: a CawCo workspace's own
+  // TMPDIR (`~/.cawco/tmp/<id8>`, 35 bytes, on disk), else the cache root
+  // (`~/.cache`, 22). Mode 700, as a runtime dir is.
+  const shortRoot =
+    process.env.CAWCO_WORKSPACE && process.env.TMPDIR
+      ? process.env.TMPDIR
+      : scratch;
+  const home = await shortDir(shortRoot);
   // In a folder of its own: a workspace boundary hides the database's folder.
   const dbPath = join(sandbox, "hub", "hub.db");
   const sessiondSocket = join(sandbox, "sessiond.sock");
   await mkdir(join(home, ".config", "cawco"), { recursive: true });
   await mkdir(join(sandbox, "hub"), { recursive: true });
-  // The agent's XDG_RUNTIME_DIR, where a delegate's workspace boundary puts
-  // srt's temp dir and its proxy sockets (boundary.ts `srtTmpOf`). The
-  // longest is `<runtime>/cawco-srt/<12 hex>/claude-socks-<16 hex>.sock`, the
-  // runtime dir and 58 bytes, and a socket path holds 107 (108 with its NUL).
-  // So it sits beside the sandbox, not in it: `sf-XXXXXX` in the same scratch
-  // dir is 31 bytes under ~/.cache, as short as the runtime dir the boundary
-  // handover rig ran real srt boundaries under. Mode 700, as a runtime dir is.
-  const runtime = await mkdtemp(join(scratch, "sf-"));
-  await chmod(runtime, 0o700);
-  if (runtime.length + SRT_SOCKET_TAIL > SOCKET_PATH_MAX) {
-    console.warn(
-      `… ${runtime} is too long for a workspace boundary's srt sockets (${runtime.length + SRT_SOCKET_TAIL} > ${SOCKET_PATH_MAX} bytes): a delegate's boundary will not start here`
-    );
-  }
+  const runtime = await shortDir(shortRoot);
 
   const freePort = async (): Promise<number> => {
     const lease = Bun.serve({
@@ -822,15 +835,16 @@ export async function scratchFleet(options: {
     await killSessiond();
     await mock.stop(true);
   };
-  /** Deletes the sandbox and the runtime dir beside it, unless `keep`. */
+  /** Deletes the sandbox, the HOME and the runtime dir beside it, unless `keep`. */
   const clean = async (keep: boolean) => {
     if (keep) {
       console.log(
-        `The sandbox is kept for reading: ${sandbox} (runtime dir ${runtime})`
+        `The sandbox is kept for reading: ${sandbox} (HOME ${home}, runtime dir ${runtime})`
       );
       return;
     }
     await rm(sandbox, { recursive: true, force: true });
+    await rm(home, { recursive: true, force: true });
     await rm(runtime, { recursive: true, force: true });
   };
 

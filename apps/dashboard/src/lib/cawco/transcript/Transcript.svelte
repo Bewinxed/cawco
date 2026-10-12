@@ -1,5 +1,4 @@
 <script lang="ts" module>
-  import { machineLabel } from "@cawco/core";
   import type { CacheSnapshot } from "virtua";
 
   /**
@@ -39,7 +38,12 @@
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { IconChat } from "#lib/icons.js";
   import { browser } from "$app/env";
-  import { cawco, readOlderPage, type SessionState } from "../client.svelte";
+  import {
+    cawco,
+    readOlderPage,
+    readTranscript,
+    type SessionState,
+  } from "../client.svelte";
   import { crossIn, dur, ease, motionOk } from "../motion/curves.svelte";
   import { BLEED } from "../motion/rows.svelte";
   import { carry, waiting } from "../motion/share.svelte";
@@ -2675,20 +2679,15 @@
   });
 
   /**
-   * The machine a read again over these rows found offline, by the name the
-   * fleet lists it under; null while the transcript is caught up. Only over
-   * rows drawn: with none, the pane says why in their place.
+   * Why a read again over these rows failed; null while the transcript is
+   * caught up. Only over rows drawn: with none, the pane says why in their
+   * place.
    */
-  const behindOn = $derived.by(() => {
-    const fault = cawco.session(session.instanceId)?.behind;
-    if (fault?.reason !== "offline" || renderedRows.length === 0) {
-      return null;
-    }
-    const machine = cawco.machines.find(
-      (row) => row.machineId === fault.machineId
-    );
-    return machine ? machineLabel(machine.hostname) : fault.machineId;
-  });
+  const behind = $derived(
+    renderedRows.length > 0
+      ? (cawco.session(session.instanceId)?.behind ?? null)
+      : null
+  );
 </script>
 
 <!-- Off-screen, and the only thing on this surface that speaks. Two channels:
@@ -2868,14 +2867,23 @@
        nothing here coming or going moves a row: the catch-up, from the switch
        until it has appended, and — scrolled away from the tail — the way back. -->
   <div class="dock">
-    {#if catching}
-      <CatchUp />
+    <!-- The line over the pills, as on iOS: a phone gives it the whole width. -->
+    {#if behind}
+      <Behind
+        fault={behind}
+        floating
+        onretry={() => readTranscript(session.instanceId, "retry")}
+      />
     {/if}
-    {#if behindOn}
-      <Behind machine={behindOn} />
-    {/if}
-    {#if showLatest}
-      <Latest onjump={jump} />
+    {#if catching || showLatest}
+      <div class="pills">
+        {#if catching}
+          <CatchUp />
+        {/if}
+        {#if showLatest}
+          <Latest onjump={jump} />
+        {/if}
+      </div>
     {/if}
   </div>
 </div>
@@ -2993,15 +3001,24 @@
       )
     );
     block-size: 0;
+    /* A column hung up from the foot: what overflows its zero height goes
+       up, the pills at the bottom and the not-caught-up line over them. */
+    display: flex;
+    flex-direction: column;
+    justify-content: end;
+    align-items: center;
+    gap: var(--space-2);
+    pointer-events: none;
+
+    & :global(button) {
+      pointer-events: auto;
+    }
+  }
+  .pills {
     display: flex;
     justify-content: center;
     align-items: end;
     gap: var(--space-2);
-    pointer-events: none;
-
-    & > :global(button) {
-      pointer-events: auto;
-    }
   }
 
   /* The in-flight tool is a rail row on the same columns as the calls it

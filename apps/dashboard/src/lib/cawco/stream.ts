@@ -162,6 +162,12 @@ export interface StreamHost {
   // biome-ignore lint/style/useConsistentMethodSignatures: property-style signatures check contravariantly; client.svelte.ts's streamHost object literal implements this port and a switch could reject that assignment.
   follows(sessionId: string): boolean;
   /**
+   * The hub sent this session's events (a delta or a backlog), heard before
+   * anything is applied or dropped: a session whose last read failed while
+   * the socket stood is read again on its next word.
+   */
+  heard?: (sessionId: string) => void;
+  /**
    * Called once, the moment any command record settles at `failed`, whatever
    * killed it — a refusing ack, a dispatch that could not leave the tab, the
    * timeout sweep, a dropped socket.
@@ -463,6 +469,7 @@ function applyDelta(
     host.warn("stream: a delta arrived without a sequenced event", message);
     return "malformed";
   }
+  host.heard?.(event.sessionId);
   const cursor = cursorFor(state, event.sessionId);
   // A page read is out: what this event did is in the page, or after its
   // `seq`, which the resume that ends the read replays.
@@ -547,6 +554,9 @@ function applyBacklog(
 ): void {
   const { sessionId } = message;
   const events = Array.isArray(message.events) ? message.events : [];
+  if (events.length > 0) {
+    host.heard?.(sessionId);
+  }
   const cursor = cursorFor(state, sessionId);
   cursor.subscribed = true;
   // The page being read carries these; the resume that ends the read asks again.

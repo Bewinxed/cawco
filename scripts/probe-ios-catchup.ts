@@ -33,9 +33,12 @@
  *
  * Checks: the pill shows at most once and hides at most once for the load,
  * and never changes more than twice in any second; the reads are the newest
- * page once and each older page once. With the agent away, the dock says
- * "Not caught up: <machine> is offline" over the rows held, and the line
- * goes once the agent is back and the read lands. The head's ink is measured by
+ * page once and each older page once. With the hub failing the read (the
+ * proxy answers 500), the dock says "Not caught up: <reason>." beside Try
+ * again, which reads again, and the line goes once the session's next frame
+ * reads it. With the agent away, the dock says "Not caught up: <machine> is
+ * offline. The rest comes in once it's back." in at most two lines over the
+ * rows held, and the line goes once the agent is back and the read lands. The head's ink is measured by
  * scripts/probe-ios-headfade.ts from the captures this writes.
  *
  * Captures go to $TMPDIR/ios-transcript/<label>/ (or .probe/ outside a
@@ -61,6 +64,11 @@ const AXE = "/opt/homebrew/bin/axe";
 const PILL = "Catching up…";
 /** The dock's line while a read again found the machine offline (DockPill `note`). */
 const BEHIND = "Not caught up: ";
+const OFFLINE_NEXT = "is offline. The rest comes in once it's back.";
+/** What the hub says when a stored transcript could not be read (server.ts, a failed history read). */
+const FAILED = "the transcript could not be read";
+/** The note's line height: --text-meta (12pt) at its leading (1.35). */
+const META_LINE = 12 * 1.35;
 const out = join(
   process.env.CAWCO_WORKSPACE && process.env.TMPDIR
     ? join(process.env.TMPDIR, "ios-transcript")
@@ -175,10 +183,11 @@ interface Read {
   before: string | null;
   older: boolean;
 }
-/** `holding`: the app's socket is refused, so it reconnects only once let through. */
-const wire: { holding: boolean; reads: Read[] } = {
+/** `holding`: the app's socket is refused, so it reconnects only once let through; `failing`: the next newest reads answer 500. */
+const wire: { failing: number; holding: boolean; reads: Read[] } = {
   reads: [],
   holding: false,
+  failing: 0,
 };
 let sessionId = "";
 interface Link {
@@ -209,6 +218,14 @@ const proxy = Bun.serve<Link>({
     ) {
       const before = url.searchParams.get("before");
       wire.reads.push({ at: Date.now(), before, older: before !== null });
+      // The hub's read failing, as its route answers a failed history read.
+      if (before === null && wire.failing > 0) {
+        wire.failing -= 1;
+        return new Response(FAILED, {
+          status: 500,
+          headers: { "content-type": "text/plain" },
+        });
+      }
     }
     const answer = await fetch(`${fleet.base}${url.pathname}${url.search}`, {
       method: request.method,
@@ -522,8 +539,144 @@ xcrun simctl install ${udid} "${app}"`);
   // read again is joined to the rows held: they stay, the place does not
   // move, and no older page is read again. With the agent away, the read
   // finds the machine offline: the rows still stay, and the read is made
-  // again once the hub says the machine is online.
-  const resetOver = async (label: string, agentAway: boolean) => {
+  // again once the hub says the machine is online. With the hub failing the
+  // read, the line says why beside Try again, which reads again, and the
+  // session's next frame reads it again too.
+  /** Whether the app's log has said `text` since line `since`. */
+  const logged = (since: number, text: string) =>
+    logLines.slice(since).some((line) => line.includes(text));
+  const waitLogged = (label: string, since: number, text: string, ms: number) =>
+    until(label, () => Promise.resolve(logged(since, text)), Boolean, ms).catch(
+      () => false
+    );
+  const stays = (label: string, before: Place, now: Place) =>
+    check(
+      label,
+      now.first?.row === before.first?.row &&
+        Math.abs((now.first?.y ?? 0) - (before.first?.y ?? 0)) < 2,
+      `row-${before.first?.row} at y ${before.first?.y}, then row-${now.first?.row} at y ${now.first?.y}`
+    );
+  const lineGoes = async (label: string) => {
+    const gone = await until(
+      `${label}: the not-caught-up line goes`,
+      tree,
+      (nodes) => !nodes.some((n) => n.label?.startsWith(BEHIND)),
+      30_000
+    ).catch(() => undefined);
+    check(
+      `${label}: the line goes once the read lands`,
+      gone !== undefined,
+      gone ? "no longer in the pane" : "still in the pane after 30s"
+    );
+  };
+  /** The agent away: the rows stay, the line says so, and the read is made again once it is back. The reads it took. */
+  const awayCase = async (label: string, since: number, before: Place) => {
+    await waitLogged(
+      `${label}: the read found the machine offline`,
+      since,
+      "rows kept",
+      30_000
+    );
+    await pause(3000);
+    stays(
+      `${label}: the rows stay while the machine is offline`,
+      before,
+      await placed()
+    );
+    const strip = (await tree()).find((n) => n.label?.startsWith(BEHIND));
+    const lines = Math.round((strip?.frame?.height ?? 0) / META_LINE);
+    await shot("away-note");
+    check(
+      `${label}: the pane says it is not caught up, and what comes next, in at most two lines`,
+      strip?.label?.endsWith(OFFLINE_NEXT) === true && lines <= 2,
+      strip
+        ? `"${strip.label}", ${lines} line(s) (${strip.frame?.height}pt)`
+        : "no line in the pane"
+    );
+    fleet.launch("agent");
+    await fleet.agentUp();
+    const again = await waitLogged(
+      `${label}: read again once the machine is online`,
+      since,
+      "because machineOnline",
+      60_000
+    );
+    check(
+      `${label}: read again once the hub says the machine is online`,
+      again,
+      again ? "read because machineOnline" : "no read followed the machine"
+    );
+    await lineGoes(label);
+    return 2;
+  };
+  /** The hub failing the read: the line says why beside Try again, which reads again; the next frame reads it too. The reads it took. */
+  const failingCase = async (label: string, since: number, before: Place) => {
+    await waitLogged(
+      `${label}: the read failed over the rows`,
+      since,
+      "rows kept",
+      30_000
+    );
+    await pause(3000);
+    stays(
+      `${label}: the rows stay while the read has failed`,
+      before,
+      await placed()
+    );
+    const nodes = await tree();
+    const strip = nodes.find((n) => n.label?.startsWith(BEHIND))?.label;
+    const retry = nodes.find((n) => n.label === "Try again")?.frame;
+    await shot("failing-note");
+    check(
+      `${label}: the pane says why, with Try again`,
+      strip === `${BEHIND}${FAILED}.` && retry !== undefined,
+      strip
+        ? `"${strip}"${retry ? " [Try again]" : " (no Try again)"}`
+        : "no line in the pane"
+    );
+    // Try again reads again: the hub fails it once more, and the line stays.
+    const pressed = wire.reads.length;
+    wire.failing = 1;
+    if (retry) {
+      await sh(
+        `${AXE} tap -x ${Math.round(retry.x + retry.width / 2)} -y ${Math.round(retry.y + retry.height / 2)} --udid ${udid}`
+      );
+    }
+    const retried = await waitLogged(
+      `${label}: Try again read again`,
+      since,
+      "because retry",
+      15_000
+    );
+    await pause(2000);
+    const still = (await tree()).some((n) => n.label?.startsWith(BEHIND));
+    check(
+      `${label}: Try again reads again`,
+      retried && wire.reads.length > pressed && still,
+      `${retried ? "read because retry" : "no retry read"}, ${wire.reads.length - pressed} read(s) after the tap, line ${still ? "still there" : "gone"}`
+    );
+    // The session's next frame reads it again, and this time the hub answers.
+    wire.failing = 0;
+    await fleet.send(sessionId, "One more line.");
+    const framed = await waitLogged(
+      `${label}: read again on the session's next frame`,
+      since,
+      "because frame",
+      60_000
+    );
+    check(
+      `${label}: read again on the session's next frame`,
+      framed,
+      framed ? "read because frame" : "no read followed the session's frames"
+    );
+    await lineGoes(label);
+    return 3;
+  };
+  const resetOver = async (
+    label: string,
+    mode: "agent" | "failing" | "away"
+  ) => {
+    const agentAway = mode === "away";
     // The session speaks first, so the app's place in its stream is past
     // what a restarted hub's empty ring starts at: its resume is then a
     // reset, not an empty backlog.
@@ -540,6 +693,7 @@ xcrun simctl install ${udid} "${app}"`);
     const from = logLines.length;
     const readsBefore = wire.reads.length;
     wire.holding = true;
+    wire.failing = mode === "failing" ? 1 : 0;
     if (agentAway) {
       await fleet.stop("agent");
     }
@@ -559,62 +713,10 @@ xcrun simctl install ${udid} "${app}"`);
       60_000
     ).catch(() => 0);
     let reads = 1;
-    if (agentAway) {
-      await until(
-        `${label}: the read found the machine offline`,
-        () =>
-          Promise.resolve(
-            logLines.slice(from).some((line) => line.includes("rows kept"))
-          ),
-        Boolean,
-        30_000
-      ).catch(() => false);
-      await pause(3000);
-      const away = await placed();
-      check(
-        `${label}: the rows stay while the machine is offline`,
-        away.first?.row === before.first?.row &&
-          Math.abs((away.first?.y ?? 0) - (before.first?.y ?? 0)) < 2,
-        `row-${before.first?.row} at y ${before.first?.y}, then row-${away.first?.row} at y ${away.first?.y}`
-      );
-      const strip = (await tree()).find((n) =>
-        n.label?.startsWith(BEHIND)
-      )?.label;
-      check(
-        `${label}: the pane says it is not caught up`,
-        strip?.endsWith("is offline") === true,
-        strip ? `"${strip}"` : "no line in the pane"
-      );
-      fleet.launch("agent");
-      await fleet.agentUp();
-      const again = await until(
-        `${label}: read again once the machine is online`,
-        () =>
-          Promise.resolve(
-            logLines
-              .slice(from)
-              .some((line) => line.includes("because machineOnline"))
-          ),
-        Boolean,
-        60_000
-      ).catch(() => false);
-      check(
-        `${label}: read again once the hub says the machine is online`,
-        again,
-        again ? "read because machineOnline" : "no read followed the machine"
-      );
-      const gone = await until(
-        `${label}: the not-caught-up line goes`,
-        tree,
-        (nodes) => !nodes.some((n) => n.label?.startsWith(BEHIND)),
-        30_000
-      ).catch(() => undefined);
-      check(
-        `${label}: the line goes once the read lands`,
-        gone !== undefined,
-        gone ? "no longer in the pane" : "still in the pane after 30s"
-      );
-      reads = 2;
+    if (mode === "away") {
+      reads = await awayCase(label, from, before);
+    } else if (mode === "failing") {
+      reads = await failingCase(label, from, before);
     }
     await pause(6000);
     const after = await placed();
@@ -643,8 +745,9 @@ xcrun simctl install ${udid} "${app}"`);
     counted(label, transitions(PILL, from), reads);
     at = after;
   };
-  await resetOver("a reset over rows scrolled up to", false);
-  await resetOver("a reset over rows, the machine offline", true);
+  await resetOver("a reset over rows scrolled up to", "agent");
+  await resetOver("a reset over rows, the hub failing the read", "failing");
+  await resetOver("a reset over rows, the machine offline", "away");
   await sh(`${AXE} button home --udid ${udid}`);
   await pause(3000);
   const saved = logLines.filter((line) => line.includes("place saved for"));

@@ -164,6 +164,7 @@ public final class HubConnection {
         workflows = WorkflowsStore(hub: self)
         ledger.applyFrame = { [weak self] id, data in self?.sessions.apply(id, data: data) }
         ledger.rereadHistory = { [weak self] id, cause in self?.sessions.read(id, because: cause) }
+        ledger.heard = { [weak self] id in self?.sessions.heard(id) }
         hubNewer = HubNewer.met
         hubNewerWatch = NotificationCenter.default.addObserver(forName: HubNewer.noticed, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.hubNewer = true }

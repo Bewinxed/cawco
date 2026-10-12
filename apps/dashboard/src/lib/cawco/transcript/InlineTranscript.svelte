@@ -16,6 +16,7 @@
   import CollapsibleLazy from "#lib/components/ui/collapsible/collapsible-lazy.svelte";
   import { cawco, readOlderPage, readTranscript } from "../client.svelte";
   import AccountMoveDivider from "./AccountMoveDivider.svelte";
+  import Behind from "./Behind.svelte";
   import CompactionDivider from "./CompactionDivider.svelte";
   import Delegate from "./Delegate.svelte";
   import MessageBody from "./MessageBody.svelte";
@@ -186,6 +187,14 @@
           />
         {/if}
       {/each}
+      <!-- A read again over these rows that could not catch them up: said
+           at their foot, where the rows it would have brought belong. -->
+      {#if id && branch?.behind && shown.length > 0}
+        <Behind
+          fault={branch.behind}
+          onretry={() => readTranscript(id, "retry")}
+        />
+      {/if}
       {#if after && afterCount > 0 && !loading && limit > shown.length}
         {@render after()}
       {/if}

@@ -142,6 +142,16 @@ public final class SessionsStore {
         }
     }
 
+    /// The hub sent `id`'s events: a transcript whose last read failed while
+    /// the hub answered (a 5xx, a timeout) is read again now, unless a read
+    /// is already out (client.svelte.ts `readStale`). One whose machine was
+    /// offline waits for `machineOnline`.
+    func heard(_ id: String) {
+        guard let transcript = transcripts[id], !transcript.loading,
+              (transcript.behind ?? transcript.fault)?.reason == .failed else { return }
+        read(id, because: .frame)
+    }
+
     /// Peek and delegate readers share the same counted transcript watches as
     /// tabs, so one reader closing never drops another reader's stream.
     public func watchDelegate(_ id: String) { if !id.hasPrefix("run:") { _ = open(id) } }
@@ -171,6 +181,8 @@ public final class SessionsStore {
         case moveStarted
         /// The machine the last read found offline is online again.
         case machineOnline
+        /// The hub sent the session's events while its last read had failed.
+        case frame
     }
 
     /// Reads the newest page, and makes it what the transcript holds.

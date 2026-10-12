@@ -426,7 +426,8 @@ export interface SessionState {
   /**
    * Why the last read again over the rows held failed. The rows stay where
    * the reader has them, and the read is made again on the next event that
-   * can answer it: the machine online again, the socket back, a retry.
+   * can answer it: the machine online again, the socket back, the session's
+   * next events (a read that failed while the hub answered), a retry.
    */
   behind: ReadFault | null;
   /**
@@ -2451,6 +2452,20 @@ function readBehind(machineId: string): void {
   }
 }
 
+/**
+ * The hub sent `sessionId`'s events: a transcript whose last read failed
+ * while the hub answered (a 5xx, a timeout) is read again now, unless a read
+ * is already out. One whose machine was offline waits for {@link readBehind}.
+ */
+function readStale(sessionId: string): void {
+  const held = state.sessions[sessionId];
+  const fault = held?.behind ?? held?.readFault;
+  if (held && !held.loading && fault?.reason === "failed") {
+    // biome-ignore lint/complexity/noVoid: fire-and-forget — the read adopts the page and resumes the stream when it lands
+    void readTranscript(sessionId, "frame");
+  }
+}
+
 /** Answers the promise a `requestId` belongs to; false when nobody is waiting. */
 function settle(
   requestId: string | undefined,
@@ -3040,6 +3055,7 @@ const streamHost: StreamHost = {
     target.lastActivityAt = new Date();
   },
   follows: (sessionId) => subscriptionIds().includes(sessionId),
+  heard: (sessionId) => readStale(sessionId),
   // The newest page again, which resumes the stream from the `seq` it carries.
   rereadHistory: (sessionId, cause) => {
     // biome-ignore lint/complexity/noVoid: fire-and-forget — the read adopts the page and resumes the stream when it lands
@@ -5817,7 +5833,9 @@ export type ReadCause =
   /** The socket came back while the last read had failed. */
   | "reconnect"
   /** The machine the last read found offline is online again. */
-  | "machineOnline";
+  | "machineOnline"
+  /** The hub sent the session's events while its last read had failed. */
+  | "frame";
 
 /**
  * A session's transcript, read once: the newest page the hub built, then its
@@ -6052,7 +6070,8 @@ function readFailed(target: SessionState, fault: ReadFault): void {
  * A read that fails leaves the stream waiting for the next one (its cursor
  * stays `reading`), and that read is made on the next event that can answer
  * it: the machine online again ({@link readBehind}), the socket back
- * ({@link hubReached}), or the reader's retry.
+ * ({@link hubReached}), the session's next events after a read the hub
+ * failed ({@link readStale}), or the reader's retry.
  *
  * `cancel` fires when a fresh read took this one's place: whatever this one
  * would have said is dropped, and it answers `skipped`.

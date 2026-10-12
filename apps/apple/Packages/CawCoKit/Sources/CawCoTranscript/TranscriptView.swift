@@ -134,7 +134,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     private let catchUp = DockPill(glyph: nil, title: "Catching up…")
     private let compacting = DockPill(glyph: nil, title: "Compacting context…", pill: true)
     /// The transcript cannot be caught up while its machine is offline (Behind.svelte).
-    private let behind = DockPill(note: "Not caught up")
+    private let behind = DockNote()
     /// Where it rests: at the foot, or over "Jump to latest" while that shows.
     private var behindAtFoot: NSLayoutConstraint?
     private var behindOverLatest: NSLayoutConstraint?
@@ -661,7 +661,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         if transcript.facts != self.transcript?.facts { facts = nil }
         self.transcript = transcript
         env.sessionId = transcript.id
-        for pill in [latestButton, catchUp, compacting, behind] { pill.owner = String(transcript.id.prefix(8)) }
+        for pill in [latestButton, catchUp, compacting] { pill.owner = String(transcript.id.prefix(8)) }
         joinTray()
         env.machineId = transcript.location?.machineId
         var agent = env.agentName
@@ -678,7 +678,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         // Read here so the screen hears of them: an older page on its way, one
         // that could not be read, and whether any is left (the strip before
         // the first row, and when the next page is asked for), and a read
-        // again that found the machine offline (the dock's `behind`).
+        // again that could not catch the rows up (the dock's `behind`).
         _ = (transcript.loadingOlder, transcript.olderFault, transcript.cursor, transcript.behind)
         let tail = transcript.tail
         let next = tail?.streaming ?? ""
@@ -1877,7 +1877,10 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         latestButton.addAction(UIAction { [weak self] _ in self?.jump() }, for: .touchUpInside)
         catchUp.isUserInteractionEnabled = false
         compacting.isUserInteractionEnabled = false
-        behind.isUserInteractionEnabled = false
+        behind.onRetry = { [weak self] in
+            guard let self, let id = transcript?.id else { return }
+            hub?.sessions.read(id, because: .retry)
+        }
         let atFoot = behind.bottomAnchor.constraint(equalTo: safeAreaLayoutGuide.bottomAnchor, constant: -Space.space4)
         behindAtFoot = atFoot
         behindOverLatest = behind.bottomAnchor.constraint(equalTo: latestButton.topAnchor, constant: -Space.space2)
@@ -1894,13 +1897,30 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         ])
     }
 
+    /// What the dock says of a read again that could not catch the rows up
+    /// (Behind.svelte), as WORDS.md's error formula has it: what happened,
+    /// then what happens next. Offline, the rest comes in once the machine is
+    /// back; failed, Try again stands beside the reason, the read's own
+    /// sentence as a clause (a plain capitalised first word lowered, a name
+    /// left as it is).
+    static func notCaughtUp(_ fault: ReadFault, name: (String) -> String) -> String {
+        if fault.reason == .offline, let machine = fault.machineId {
+            return "Not caught up: \(Naming.unbroken(name(machine))) is offline. The rest comes in once it's back."
+        }
+        var said = fault.message.trimmingCharacters(in: .whitespacesAndNewlines)
+        if said.hasSuffix(".") { said.removeLast() }
+        let first = said.split(separator: " ").first.map(String.init) ?? ""
+        if first.wholeMatch(of: /[A-Z][a-z]*/) != nil { said = said.prefix(1).lowercased() + said.dropFirst() }
+        return "Not caught up: \(said)."
+    }
+
     private func updateDock() {
         let rowsDrawn = rowCount > 0
         let latestShown = landed && farFromLatest && rowsDrawn
         latestButton.show(latestShown)
         // Over rows drawn only: with none, the pane says why in their place.
-        if rowsDrawn, let fault = transcript?.behind, fault.reason == .offline, let machine = fault.machineId {
-            behind.say("Not caught up: \(hub?.fleet.machineName(machine) ?? machine) is offline")
+        if rowsDrawn, let fault = transcript?.behind {
+            behind.say(Self.notCaughtUp(fault) { [hub] in hub?.fleet.machineName($0) ?? $0 }, retrying: fault.reason == .failed)
             behind.show(true)
         } else {
             behind.show(false)
@@ -2009,63 +2029,58 @@ extension TranscriptView: RevealDriver {
     }
 }
 
-/// The floating surfaces over the list's foot (Latest.svelte, CatchUp.svelte,
-/// Behind.svelte) and top (the compacting pill): raised, hairline,
-/// --shadow-overlay; they rise in over --dur-panel and out over --dur-exit.
+/// Raises a dock surface into view, or lets it go: it rises in over
+/// --dur-panel and out over --dur-exit, and is hidden once gone (`shown`,
+/// read when the exit ends, says whether it came back meanwhile).
+@MainActor private func riseDock(_ view: UIView, _ visible: Bool, shown: @escaping @MainActor () -> Bool) {
+    if visible { view.isHidden = false }
+    let rise = UIAccessibility.isReduceMotionEnabled ? .identity : CGAffineTransform(translationX: 0, y: Motion.popRise)
+    if visible { view.transform = rise; view.alpha = 0 }
+    let animator = Motion.easeOut.animator(visible ? Motion.durPanel : Motion.durExit) {
+        view.alpha = visible ? 1 : 0
+        view.transform = visible ? .identity : rise
+    }
+    animator.addCompletion { _ in if !shown() { view.isHidden = true } }
+    animator.startAnimation()
+}
+
+/// The dock's raised surface (Latest.svelte, CatchUp.svelte, Behind.svelte):
+/// raised, hairline, --shadow-overlay.
+@MainActor private func raise(_ view: UIView, radius: Double) {
+    view.backgroundColor = Palette.surfaceRaised
+    view.layer.cornerRadius = radius
+    view.layer.cornerCurve = .continuous
+    view.layer.borderWidth = 1
+    view.boxShadow = Shadow.shadowOverlay
+}
+
+/// The floating surfaces over the list's foot (Latest.svelte, CatchUp.svelte)
+/// and top (the compacting pill): raised, hairline, --shadow-overlay; they
+/// rise in over --dur-panel and out over --dur-exit.
 final class DockPill: UIControl {
     /// Each pill's coming and going, for a simulator pass to count (probe-ios-catchup.ts).
     private static let log = Logger(subsystem: "dev.cawco.app", category: "Transcript")
     private let beat = Dot(Size.txBeatLg, color: Palette.statusLiveInk)
-    private let label = LineLabel(hug: .required, resist: .required)
-    /// The type its words are set in: a note's are the strip before the first row's.
-    private let role: TypeRole
-    private let ink: UIColor
     private var shown = false
     /// The session whose transcript it floats over, for the log: panes side by side each have their own.
     var owner = ""
 
     init(glyph: Glyph?, title: String, pill: Bool = false) {
-        role = TypeScale.typeLabel
-        ink = Palette.inkStrong
         super.init(frame: .zero)
-        let lead: UIView = glyph.map { GlyphView($0, size: Size.iconMd, tint: Palette.inkStrong) } ?? beat
-        build([lead, label], inset: pill ? Space.space4 : Space.space3, radius: pill ? Size.cBtnHLg : Radius.radiusMd)
-        say(title)
-        accessibilityTraits = glyph == nil ? .updatesFrequently : .button
-    }
-
-    /// A line of words alone, set as the strip before the first row sets why
-    /// a page could not be read (Transcript.svelte `.empty`): meta, muted.
-    init(note title: String) {
-        role = TypeScale.typeMeta
-        ink = Palette.inkMuted
-        super.init(frame: .zero)
-        label.lineBreakMode = .byTruncatingTail
-        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        build([label], inset: Space.space3, radius: Radius.radiusMd)
-        say(title)
-        accessibilityTraits = .staticText
-    }
-
-    private func build(_ views: [UIView], inset: Double, radius: Double) {
-        backgroundColor = Palette.surfaceRaised
-        layer.cornerRadius = radius
-        layer.cornerCurve = .continuous
-        layer.borderWidth = 1
-        boxShadow = Shadow.shadowOverlay
+        raise(self, radius: pill ? Size.cBtnHLg : Radius.radiusMd)
+        var views: [UIView] = []
+        if let glyph { views.append(GlyphView(glyph, size: Size.iconMd, tint: Palette.inkStrong)) } else { views.append(beat) }
+        let label = LineLabel(hug: .required, resist: .required)
+        label.attributedText = Styled.string(title, TypeScale.typeLabel, color: Palette.inkStrong)
+        views.append(label)
         let row = railLine(views)
         row.isUserInteractionEnabled = false
-        pin(row, insets: UIEdgeInsets(top: Space.space2, left: inset, bottom: Space.space2, right: inset))
+        pin(row, insets: UIEdgeInsets(top: Space.space2, left: pill ? Space.space4 : Space.space3, bottom: Space.space2, right: pill ? Space.space4 : Space.space3))
         isAccessibilityElement = true
+        accessibilityLabel = title
+        accessibilityTraits = glyph == nil ? .updatesFrequently : .button
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (pill: DockPill, _: UITraitCollection) in pill.paint() }
         paint()
-    }
-
-    /// Its words, set again only when they change.
-    func say(_ title: String) {
-        guard accessibilityLabel != title else { return }
-        label.attributedText = Styled.string(title, role, color: ink)
-        accessibilityLabel = title
     }
 
     @available(*, unavailable)
@@ -2089,14 +2104,67 @@ final class DockPill: UIControl {
         guard visible != shown else { return }
         shown = visible
         Self.log.debug("dock \(self.accessibilityLabel ?? "", privacy: .public) \(visible ? "shown" : "hidden", privacy: .public) \(self.owner, privacy: .public)")
-        if visible { isHidden = false; beat.beat() }
-        let rise = UIAccessibility.isReduceMotionEnabled ? .identity : CGAffineTransform(translationX: 0, y: Motion.popRise)
-        if visible { transform = rise; alpha = 0 }
-        let animator = Motion.easeOut.animator(visible ? Motion.durPanel : Motion.durExit) {
-            self.alpha = visible ? 1 : 0
-            self.transform = visible ? .identity : rise
+        if visible { beat.beat() }
+        riseDock(self, visible) { [weak self] in self?.shown ?? false }
+    }
+}
+
+/// The dock's line while a transcript cannot be caught up (Behind.svelte):
+/// what happened and what happens next, in the type the strip before the
+/// first row says why a page could not be read in (meta, muted), and Try
+/// again beside it when the read failed while the hub answered. It wraps
+/// rather than cuts: a phone gives it two lines, balanced as the web's.
+final class DockNote: UIView {
+    private let label = UILabel()
+    private var retry: UIButton?
+    private var shown = false
+    private var said = ""
+    /// What Try again does: read the transcript again.
+    var onRetry: () -> Void = {}
+
+    init() {
+        super.init(frame: .zero)
+        raise(self, radius: Radius.radiusMd)
+        label.numberOfLines = 0
+        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        label.adjustsFontForContentSizeCategory = false
+        let button = KitButton.make("Try again", variant: .ghost, height: .sm) { [weak self] in self?.onRetry() }
+        button.setContentCompressionResistancePriority(.required, for: .horizontal)
+        button.setContentHuggingPriority(.required, for: .horizontal)
+        retry = button
+        let row = railLine([label, button], spacing: Space.space2)
+        pin(row, insets: UIEdgeInsets(top: Space.space2, left: Space.space3, bottom: Space.space2, right: Space.space3))
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (note: DockNote, _: UITraitCollection) in note.paint() }
+        paint()
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) { fatalError("built in code") }
+
+    private func paint() {
+        layer.borderColor = Palette.borderHairline.resolvedColor(with: traitCollection).cgColor
+    }
+
+    /// Its words, and whether Try again stands beside them; set again only when they change.
+    func say(_ words: String, retrying: Bool) {
+        retry?.isHidden = !retrying
+        guard said != words else { return }
+        said = words
+        let text = NSMutableAttributedString(attributedString: Styled.string(words, TypeScale.typeMeta, color: Palette.inkMuted, lineBreak: .byWordWrapping))
+        let whole = NSRange(location: 0, length: text.length)
+        if let paragraph = (text.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle)?.mutableCopy() as? NSMutableParagraphStyle {
+            paragraph.alignment = .center
+            paragraph.lineBreakStrategy = .standard
+            text.addAttribute(.paragraphStyle, value: paragraph, range: whole)
         }
-        animator.addCompletion { _ in if !self.shown { self.isHidden = true } }
-        animator.startAnimation()
+        label.attributedText = text
+        // Read as words: the joiners that keep a machine's name whole are not.
+        label.accessibilityLabel = words.replacingOccurrences(of: "\u{2060}", with: "")
+    }
+
+    func show(_ visible: Bool) {
+        guard visible != shown else { return }
+        shown = visible
+        riseDock(self, visible) { [weak self] in self?.shown ?? false }
     }
 }
