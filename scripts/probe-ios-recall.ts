@@ -144,6 +144,8 @@ xcrun simctl create "CawCo probe recall" "$TYPE" "$RUNTIME"`)
   ).trim();
 /** What `log show --style compact` puts before a Probe line's own words. */
 const PROBE_PREFIX = /^.*\[dev\.cawco\.app:Probe\]\s*/;
+/** The app holding the wheel up with the keyboard: `<device>-<style>`. */
+const KEYBOARD_HOLD = /recall holds (\S+)-action with the keyboard up/;
 
 try {
   fleet.launch("sessiond");
@@ -180,9 +182,66 @@ try {
     console.log(`  ${name}: simulator ${udid}`);
     await sh(`xcrun simctl boot ${udid}
 xcrun simctl bootstatus ${udid} -b >/dev/null
+# The keyboard's first-use tips ("Speed up your typing…") would cover the wheel in a capture.
+xcrun simctl spawn ${udid} defaults write com.apple.keyboard.preferences DidShowContinuousPathIntroduction -bool true
+xcrun simctl spawn ${udid} defaults write com.apple.keyboard.preferences KeyboardDidShowProductivityTutorial -bool true
 xcrun simctl status_bar ${udid} override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3
-xcrun simctl install ${udid} "${app}"
-xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-env sandbox -cawco-hub-url http://127.0.0.1:${port} -open-session ${id} -recall-probe >/dev/null`);
+xcrun simctl ui ${udid} appearance light
+xcrun simctl install ${udid} "${app}"`);
+    // The keyboard is a window the app's own captures don't draw: on the app's
+    // "holds <name>-action with the keyboard up" line, the screen is captured
+    // here, the system's appearance set to the pass's first (the keyboard
+    // follows it, not the window's override).
+    const stream = Bun.spawn(
+      [
+        "xcrun",
+        "simctl",
+        "spawn",
+        udid,
+        "log",
+        "stream",
+        "--style",
+        "compact",
+        "--predicate",
+        'subsystem == "dev.cawco.app" AND category == "Probe"',
+      ],
+      { stdout: "pipe", stderr: "ignore" }
+    );
+    // Cancelled when the pass is done: the simulator's own `log` keeps the
+    // pipe open after `simctl spawn` is stopped, so the read never ends by itself.
+    const reader = stream.stdout.getReader();
+    const held = (async () => {
+      const decoder = new TextDecoder();
+      let rest = "";
+      for (;;) {
+        // biome-ignore lint/performance/noAwaitInLoops: a stream is read a chunk at a time
+        const { value, done } = await reader.read();
+        if (done) {
+          break;
+        }
+        rest += decoder.decode(value, { stream: true });
+        const parts = rest.split("\n");
+        rest = parts.pop() ?? "";
+        for (const part of parts) {
+          const hold = part.match(KEYBOARD_HOLD);
+          if (!hold) {
+            continue;
+          }
+          const shot = `${hold[1]}-action.png`;
+          const style = hold[1].endsWith("-dark") ? "dark" : "light";
+          // biome-ignore lint/performance/noAwaitInLoops: one hold at a time, as the app holds them
+          await sh(`xcrun simctl ui ${udid} appearance ${style}
+sleep 1.5
+xcrun simctl io ${udid} screenshot "${join(out, shot)}" >/dev/null 2>&1`);
+          console.log(
+            `  ${name}: captured ${shot} on "${part.replace(PROBE_PREFIX, "")}"`
+          );
+        }
+      }
+    })();
+    await sh(
+      `xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-env sandbox -cawco-hub-url http://127.0.0.1:${port} -open-session ${id} -recall-probe >/dev/null`
+    );
     const started = Date.now();
     const read = async () =>
       (
@@ -213,6 +272,9 @@ xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-e
     if (!lines.some((l) => l.startsWith("recall PASS"))) {
       fail(`${name}: no checks ran`);
     }
+    await reader.cancel();
+    await held;
+    stream.kill();
     const data = (
       await sh(`xcrun simctl get_app_container ${udid} dev.cawco.app data`)
     ).trim();
@@ -235,7 +297,7 @@ xcrun simctl shutdown ${udid} >/dev/null 2>&1 || true`);
     "",
     "The iOS composer's recall wheel after the change: it stands half the window tall on the iPhone (compact width) and 40% on the iPad (regular width), the depth (lean, width, blur, fade) spread across every row so the oldest ends at the 3rd row's values on the phone and the 5th's on the iPad; the history button is gone (Attach and Send only); the shape rises evenly across the pill's width.",
     "",
-    `Captured in-app (window.drawHierarchy) by \`-recall-probe\` on iOS 18.5 simulators, a scratch session holding ${SENDS} sent messages. Each starts with its own word (alpha, bravo, …).`,
+    `Captured in-app (window.drawHierarchy) by \`-recall-probe\` on iOS 18.5 simulators, a scratch session holding ${SENDS} sent messages. Each starts with its own word (alpha, bravo, …). The keyboard-up captures (\`-action\`) are of the whole screen (\`simctl io screenshot\`), taken on the app's own "holds … with the keyboard up" line, so the keyboard is in frame.`,
     "",
     "| File | Device | Appearance | What it shows |",
     "| --- | --- | --- | --- |",

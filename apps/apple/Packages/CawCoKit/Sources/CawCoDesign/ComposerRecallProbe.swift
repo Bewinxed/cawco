@@ -24,8 +24,10 @@ import UIKit
 ///   200 sent messages, and the rows' own drawing cost in each frame;
 /// - the older pages read as the wheel nears its oldest entry.
 ///
-/// Captures (at rest, mid-glide, after the action, a search) go to the app's
-/// temporary folder under `recall/`.
+/// Captures (at rest, mid-glide, a search) go to the app's temporary folder
+/// under `recall/`. After the action the keyboard is up, in a window of its
+/// own: that state is held five seconds on a `holds … with the keyboard up`
+/// line, for the probe script to capture the screen.
 @MainActor
 enum RecallProbe {
     private static var armed = ProcessInfo.processInfo.arguments.contains("-recall-probe")
@@ -113,7 +115,10 @@ enum RecallProbe {
             check("\(name) the action brings the wheel up", acted && composer.wheel != nil, "handled \(acted), wheel up \(composer.wheel != nil)")
             if composer.wheel != nil {
                 measure(composer, "\(name) after the action", regular: regular)
-                snap(window, dir, "\(name)-action")
+                // The keyboard is its own window, which a capture of this one doesn't draw: held
+                // a while, and captured from outside the app (the probe script, on this line).
+                say("holds \(name)-action with the keyboard up")
+                await wait(5)
                 composer.wheel?.dismiss()
             }
             composer.field.resignFirstResponder()
