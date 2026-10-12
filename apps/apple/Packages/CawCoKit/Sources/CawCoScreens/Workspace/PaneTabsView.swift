@@ -1028,29 +1028,35 @@ extension PaneTabsView {
     /// tab (PaneTabs.svelte's proof, rule "feet"): its sheet's opacity, and
     /// each side's foot read in the box its quarter turn stands in, clear of
     /// the run, against the window captured again with every flared foot
-    /// hidden and with every one drawn whole, so only how much of it is
-    /// drawn is read (its rim's and side's strength, under both, cancel). A
-    /// side in front and in view: its ink as a share of the whole, and the
-    /// whole (summed channel change, 0 to 3 a pixel). A side under its
-    /// neighbour's card: whether it has a foot to draw, and the pixels its
-    /// box changes between hidden and whole. Else out of view.
+    /// hidden and with its own tab's drawn whole, so only how much of it is
+    /// drawn is read (its rim's and side's strength, under both, cancel).
+    /// The even tabs' feet are drawn whole without the odd ones', then the
+    /// odd without the even, so a neighbour's foot, which flares out over
+    /// this tab's box, is never read as this one's. A side in front and in
+    /// view: its ink as a share of the whole, and the whole (summed channel
+    /// change, 0 to 3 a pixel). A side under its neighbour's card: whether
+    /// it has a foot to draw, and the pixels its box changes between hidden
+    /// and whole. Else out of view.
     private func probeFeet(_ name: String, drawn image: UIImage, window: UIWindow) {
         let tabs = order.compactMap { views[$0] }
-        func capture(_ opacity: Float?) -> UIImage {
-            for tab in tabs { tab.probeFootOpacity = opacity }
-            return UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
+        /// The window with the feet of the tabs `whole` picks drawn whole, every other hidden.
+        func capture(_ whole: (Int) -> Bool) -> ProbePixels? {
+            for (index, tab) in tabs.enumerated() { tab.probeFootOpacity = whole(index) ? 1 : 0 }
+            return ProbePixels(UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
                 _ = window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
-            }
+            })
         }
-        let bare = capture(0)
-        let whole = capture(1)
+        let bare = capture { _ in false }
+        let even = capture { $0 % 2 == 0 }
+        let odd = capture { $0 % 2 == 1 }
         for tab in tabs { tab.probeFootOpacity = nil }
-        guard let drawnPixels = ProbePixels(image), let barePixels = ProbePixels(bare), let wholePixels = ProbePixels(whole) else { return }
+        guard let drawnPixels = ProbePixels(image), let barePixels = bare, let evenPixels = even, let oddPixels = odd else { return }
         let room = fadeRoom
         let strip = scroll.convert(scroll.bounds, to: window)
         let shown = CGRect(x: strip.minX + room.start, y: strip.minY, width: max(0, strip.width - room.start - room.end), height: strip.height)
-        for id in order {
-            guard let view = views[id] else { continue }
+        for (index, view) in tabs.enumerated() {
+            let id = view.id
+            let wholePixels = index % 2 == 0 ? evenPixels : oddPixels
             let feet = view.probeFeet(in: window).map { foot -> String in
                 let inView = shown.contains(foot.box)
                 if foot.under {

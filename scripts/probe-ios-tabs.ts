@@ -74,9 +74,12 @@ const app = join(
 );
 
 let failed = 0;
+/** Every failing check's line, repeated at the end where a cut log still shows it. */
+const failures: string[] = [];
 const check = (name: string, ok: boolean, detail: string) => {
   if (!ok) {
     failed += 1;
+    failures.push(`FAIL ${name}: ${detail.slice(0, 300)}`);
   }
   console.log(`${ok ? "PASS" : "FAIL"} ${name}: ${detail}`);
 };
@@ -672,9 +675,12 @@ const readable = (f: Foot): f is Extract<Foot, { kind: "free" }> =>
  * The feet are the sheet's (PaneTabs.svelte `--sheet-now`, web rule
  * "feet"): at every held stop, each tab's flared foot in front of its
  * neighbour and in view draws its ink within 0.03 of its sheet's opacity,
- * read against the same foot drawn whole in the same frame; each held
- * switch's two tabs, part way, have a foot read. And every side under its
- * neighbour's card has no foot to draw and changes no pixel
+ * read against the same foot drawn whole in the same frame; part way
+ * through each held switch, every stop reads a foot of a tab the switch
+ * moves, and each of its two tabs has a foot read at some stop (a tab can
+ * stand with one side under its neighbour and the other in the strip's
+ * edge fade for half the switch: the first tab, arriving). And every side
+ * under its neighbour's card has no foot to draw and changes no pixel
  * (`judgeCovered`).
  */
 function judgeFeet(run: string, log: string) {
@@ -693,19 +699,26 @@ function judgeFeet(run: string, log: string) {
   const shown = read
     .filter(({ r }) => r.sheet > 0.001 && r.sheet < 0.999)
     .map(({ r, side, ink }) => `${r.stop} ${r.id} ${side} ${r.sheet}/${ink}`);
-  // Each held switch, part way: its two tabs (the sheets between rest and whole) each have a foot read.
-  const unread = ["step-held", "jump-held"].flatMap((held) =>
-    ["t25", "f45", "t50", "f55", "t75"].flatMap((stop) => {
-      const mid = rows.filter(
+  // Each held switch, part way (the sheets between rest and whole): a foot
+  // read at every stop, and each of its two tabs read at some stop.
+  const unread = ["step-held", "jump-held"].flatMap((held) => {
+    const mid = ["t25", "f45", "t50", "f55", "t75"].map((stop) =>
+      rows.filter(
         (r) =>
-          r.stop === `${held}-${stop}` && r.sheet > 0.001 && r.sheet < 0.999
-      );
-      const readHere = mid.filter((r) => r.sides.some(([, f]) => readable(f)));
-      return readHere.length >= 2
-        ? []
-        : [`${held}-${stop} ${readHere.length} of the two tabs read`];
-    })
-  );
+          r.stop === `${held}-${stop}` &&
+          r.sheet > 0.001 &&
+          r.sheet < 0.999 &&
+          r.sides.some(([, f]) => readable(f))
+      )
+    );
+    const stops = mid.flatMap((here, k) =>
+      here.length > 0 ? [] : [`${held} stop ${k} no foot read`]
+    );
+    const tabs = new Set(mid.flat().map((r) => r.id));
+    return tabs.size >= 2
+      ? stops
+      : [...stops, `${held} ${tabs.size} of its two tabs read`];
+  });
   const faults = [...off, ...unread];
   check(
     `${run} feet follow the sheet`,
@@ -1096,4 +1109,7 @@ try {
   await fleet.clean(keep);
 }
 console.log(`  captures and logs: ${out}`);
+console.log(
+  failed === 0 ? "all checks pass" : `${failed} failed:\n${failures.join("\n")}`
+);
 process.exit(failed === 0 ? 0 : 1);
