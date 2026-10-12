@@ -204,19 +204,28 @@ export class Clock {
 /**
  * One clock: every animation running on the elements `selectors` name
  * (pseudo-elements' included) has the same start time, duration and easing,
- * from `getAnimations()`. Returns a fault per run off the first, and the
- * runs read (none read is a fault).
+ * from `getAnimations()`. Only runs on the document's own time are read: a
+ * loop (infinite iterations, a status's pulse) has no end to share, and a
+ * scroll-driven one (`animation-timeline: scroll()`, a track's edge fade)
+ * runs on its scroller, not on time. Returns a fault per run off the first,
+ * and the runs read (none read is a fault).
  */
 export function oneClock(
   page: Page,
   selectors: string[]
 ): Promise<{ faults: string[]; runs: number }> {
   return page.evaluate((sels) => {
-    const runs = sels.flatMap((sel) =>
-      [...document.querySelectorAll(sel)].flatMap((el) =>
-        el.getAnimations({ subtree: true })
+    const runs = sels
+      .flatMap((sel) =>
+        [...document.querySelectorAll(sel)].flatMap((el) =>
+          el.getAnimations({ subtree: true })
+        )
       )
-    );
+      .filter(
+        (run) =>
+          run.timeline instanceof DocumentTimeline &&
+          run.effect?.getTiming().iterations !== Number.POSITIVE_INFINITY
+      );
     const read = (run: Animation) => {
       const timing = run.effect?.getTiming();
       return {

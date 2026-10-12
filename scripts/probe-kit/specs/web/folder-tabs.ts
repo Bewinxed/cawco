@@ -7,7 +7,8 @@
  * (anim.ts) and read at every 5% of it and either side of the handover.
  *
  * Engine (every frame read), from computed values:
- *  - one clock: every transition the switch starts in the strip runs on one;
+ *  - one clock: everything moving in the strip as the switch starts runs on
+ *    one (sheets, cards, titles, rims, their lean and their glow);
  *  - feet: each switching tab's flared foot in front and in view stands at
  *    its sheet's opacity, within 0.03: body and feet one shape on one clock;
  *  - handover: no rim's strength moves over 0.08 from 49% to 51%, and where
@@ -1115,11 +1116,13 @@ async function readStrip(
     () => page.evaluate(`${api}.choose(${JSON.stringify(ids[from + 1])})`),
     within
   );
-  const sheets = await oneClock(page, [`${s.root} .ff-tab`]);
+  // Everything moving in the strip as the switch starts: sheets, cards,
+  // titles, rims, their lean and their glow (`.rim`'s filter).
+  const clockOf = await oneClock(page, [within]);
   kit.check(
-    `${where}: the sheets' transitions run on one clock`,
-    sheets.faults.length === 0,
-    `${sheets.runs} runs${sheets.faults.length ? `; ${sheets.faults.slice(0, 3).join("; ")}` : ""}`
+    `${where}: everything in the strip moves on the switch's one clock, the rims' glow with it`,
+    clockOf.faults.length === 0,
+    `${clockOf.runs} runs${clockOf.faults.length ? `; ${clockOf.faults.slice(0, 3).join("; ")}` : ""}`
   );
   const series: { pct: number; L: Layout }[] = [];
   for (const pct of PCTS) {
