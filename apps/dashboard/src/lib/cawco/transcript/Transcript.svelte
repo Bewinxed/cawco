@@ -1243,33 +1243,22 @@
    */
   const TAIL_MOUNTED = 8;
   /**
-   * How many rows virtua's store holds: the rows of the last flush. virtua
-   * hands its store a new length in an `$effect.pre`, and in async mode its
-   * each block runs before that, on the new `data` but the old store. Its
-   * range comes from the store and stays inside it; a kept-mounted index is
-   * checked only against `data.length`, and one past the store's end was
-   * laid out past its sizes, caching NaN offsets that the list's total then
-   * read as `height:NaNpx` for a frame. So nothing is kept mounted past this
-   * count, and it takes the new length in an `$effect`, which runs after
-   * virtua's `$effect.pre`: the new tail is kept mounted in the next flush,
-   * still before the paint.
+   * The indexes virtua keeps mounted whatever its range: the last
+   * `TAIL_MOUNTED` rows, and every row folding shut wherever it stands —
+   * virtua dropping one mid-fold cancelled the fold, it never said it had
+   * gone, and it stayed in the list at full height to fold again whenever it
+   * was next drawn. These are indexes into the rows of this flush; virtua
+   * mounts one only once its store holds that many rows.
    */
-  let stored = $state(untrack(() => renderedRows.length));
-  $effect(() => {
-    stored = renderedRows.length;
-  });
-  // A row folding shut stays mounted too, wherever it stands: virtua dropping
-  // it mid-fold cancelled the fold, it never said it had gone, and it stayed
-  // in the list at full height to fold again whenever it was next drawn.
   const keepMounted = $derived.by(() => {
-    const count = Math.min(stored, renderedRows.length);
+    const count = renderedRows.length;
     return [
       ...Array.from(
         { length: Math.min(TAIL_MOUNTED, count) },
         (_, i) => count - 1 - i
       ),
       ...renderedRows.flatMap((row, index) =>
-        index < count && presentation.leaving.has(row.key) ? [index] : []
+        presentation.leaving.has(row.key) ? [index] : []
       ),
     ];
   });
@@ -1294,13 +1283,14 @@
    * `ssrCount` is virtua's server-render escape hatch: without it the store has
    * no viewport and no scroll offset to reason from, so it renders the empty
    * range `[0, -1]` and the server's HTML carries a transcript with no rows in
-   * it. Handing it the row count makes the server emit exactly that many, which
-   * (with the `ListItem` patch that keeps them in normal flow until mount) is
-   * what puts the conversation in the first response.
+   * it. Handing it the row count makes the server emit exactly that many, in
+   * normal flow until mount (virtua's `ListItem` leaves an unmeasured item
+   * unpositioned while `isSSR` holds), which is what puts the conversation in
+   * the first response.
    *
    * The catch is that it is not a render hint — it is a LATCH. The store reads
-   * it ONCE, at construction (`createVirtualStore(data.length, itemSize,
-   * ssrCount, …)`), sets `isSSR = !!ssrCount`, and pins its range at
+   * it ONCE, at construction (`createVirtualStore(layout, ssrCount)`), sets
+   * `isSSR = !!ssrCount`, and pins its range at
    * `[0, ssrCount - 1]`; `$getRange` then short-circuits to that frozen pair for
    * as long as `isSSR` holds. The only thing in the whole store that clears the
    * flag is `ACTION_SCROLL_OFFSET_CHANGE` — a genuine scroll event whose offset
