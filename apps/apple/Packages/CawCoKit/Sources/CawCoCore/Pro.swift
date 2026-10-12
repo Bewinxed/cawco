@@ -118,11 +118,24 @@ public final class Pro {
     /// unverified, `.xcode`, `.production` or a throw are all false.
     public private(set) var testFlight: Bool?
 
+    /// A Debug build started outside Xcode's StoreKit testing: the owner's
+    /// Mac app built from main and opened from /Applications, or a device or
+    /// simulator build launched by a script. It is development-signed, so
+    /// StoreKit answers it from the sandbox alone, and the owner's App Store
+    /// purchase and free week, which live in production, never reach it:
+    /// nothing it can do unlocks it (owner: "the app is locked behind a trial
+    /// thing"). Release builds (TestFlight, the App Store) never set this; a
+    /// Debug run under Xcode's StoreKit configuration (`.xcode`) and a
+    /// paywall probe (`-paywall-access`, `-paywall-catalog`, `-paywall-env`)
+    /// keep the gate, so it is still exercised.
+    public private(set) var developmentBuild = false
+
     /// The paywall isn't enforced: a TestFlight install (owner: "tesflight just
-    /// let me be able to open and demo it, don't enforce it during testing").
-    /// The board stays open whatever the catalogue holds; the sheet still opens
-    /// on request, and buys as usual. App Store and Xcode builds never get here.
-    public var boardOpen: Bool { testFlight == true }
+    /// let me be able to open and demo it, don't enforce it during testing"),
+    /// or a development build (`developmentBuild`). The board stays open
+    /// whatever the catalogue holds; the sheet still opens on request, and
+    /// buys as usual. App Store builds never get here.
+    public var boardOpen: Bool { testFlight == true || developmentBuild }
 
     /// Pro is on here, notifications included: an entitlement holds, or the board stands open.
     public var proOn: Bool { access?.entitled == true || boardOpen }
@@ -201,8 +214,12 @@ public final class Pro {
             let install = await Self.install.value
             appTransaction = install?.jws
             testFlight = install?.environment == .sandbox
+            #if DEBUG
+            let probing = ["paywall-access", "paywall-catalog", "paywall-env"].contains { UserDefaults.standard.object(forKey: $0) != nil }
+            developmentBuild = install?.environment != .xcode && !probing
+            #endif
             guard boardOpen else { return }
-            log.notice("TestFlight: the paywall isn't enforced")
+            log.notice("\(self.developmentBuild ? "development build" : "TestFlight", privacy: .public): the paywall isn't enforced")
             // A device with its token enrols now, on the purchase or the AppTransaction.
             PushRegistry.shared.entitlementChanged()
         }

@@ -17,6 +17,14 @@ enum TopBar {
     /// `--surface-shelf`, no seam, the hairline drawn in its own bottom pixel
     /// by `BarTabs` so the chosen tab's sheet covers it.
     static func dress(_ bar: UINavigationBar, hosting: Bool = false) {
+        // The bar stays in the window, as the web's does. On the Mac idiom its
+        // default style is `.mac`, and "NSToolbar displays the navigation bar's
+        // content" (UINavigationBar.behavioralStyle): the crumb, the tabs and
+        // the cluster were lifted into the window's toolbar under its "CawCo"
+        // title, beside a system sidebar button, where a click reached no tab
+        // and Caw's panel and the Machines popover, converted from there,
+        // hung at the window's far left.
+        bar.preferredBehavioralStyle = .pad
         let appearance = UINavigationBarAppearance()
         appearance.configureWithOpaqueBackground()
         appearance.backgroundColor = hosting ? Palette.surfaceShelf : Palette.surfaceRaised
@@ -169,10 +177,25 @@ final class BarTabs {
     var hosting: Bool { strip != nil }
     private let slot = Slot()
 
-    /// The bar moved its items (a page change, a resize): the strip is measured again.
+    /// The bar moved its items (a page change, a resize): the strip is
+    /// measured again, now and once more on the next turn. The bar places
+    /// its items after the pass that asks (the shell's layout), and the
+    /// cluster only moves, so nothing of its own says so: a Mac window
+    /// dragged from 1000 to 1400pt kept the strip 625pt wide, ending where
+    /// the cluster had stood, its first tab scrolled under the rail.
     func relayout() {
         slot.setNeedsLayout()
+        guard !settling else { return }
+        settling = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            settling = false
+            slot.setNeedsLayout()
+        }
     }
+
+    /// A measure on the next turn is already asked for.
+    private var settling = false
 
     /// The strip's room in the bar: from a `space2` past the sidebar toggle
     /// to a `space2` short of the cluster, on the bar's floor. Laid out by
@@ -463,6 +486,11 @@ final class TopBarCluster: UIView {
     /// cluster more room than it needs leaves that room empty before it, and
     /// the crumb measures to the glass, not to the room.
     var leadingEdge: Double { stack.frame.minX }
+
+    #if DEBUG
+    /// The Machines item, which a Mac pass (`-mac-probe`) opens its popover from.
+    var machinesItem: UIView { machines }
+    #endif
 
     init() {
         super.init(frame: .zero)

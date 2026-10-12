@@ -37,6 +37,10 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     private var seenNotices: Set<String>?
     /// The wide screen's sidebar toggle: the rail's column shown or hidden.
     private let railToggle = BurgerButton()
+    /// The wide bar's toggle: an iPad's. The Mac has none, as the web's
+    /// desktop has none (Shell.svelte `.burger min-[900px]:hidden`): the rail
+    /// stands beside the page and its grip resizes it.
+    private var barToggle: BurgerButton? { UIDevice.current.userInterfaceIdiom == .mac ? nil : railToggle }
 
     // Regular width.
     private let rail: SidebarViewController
@@ -122,6 +126,8 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
 
         let railNav = UINavigationController(rootViewController: rail)
         railNav.setNavigationBarHidden(true, animated: false)
+        // Hidden, and never the Mac window's toolbar either (TopBar `dress`).
+        railNav.navigationBar.preferredBehavioralStyle = .pad
         setViewController(railNav, for: .primary)
 
         for nav in [mainNav, compactNav] { TopBar.dress(nav.navigationBar) }
@@ -163,7 +169,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             self?.home.act(notice)
         }
         cawPanel.onOpenChange = { [weak self] _ in self?.refreshBars() }
-        TopBar.install(on: detail.navigationItem, crumb: mainCrumb, cluster: mainCluster, burger: railToggle)
+        TopBar.install(on: detail.navigationItem, crumb: mainCrumb, cluster: mainCluster, burger: barToggle)
         TopBar.install(on: board.navigationItem, crumb: compactCrumb, cluster: compactCluster, burger: burger, showsCrumb: false)
         TopBar.pin(compactCluster, to: compactNav.navigationBar)
         placeSessionRow()
@@ -198,6 +204,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             applyLanding()
             #if DEBUG
             openProbeForm()
+            runMacProbe()
             #endif
         }
         // Apart from the bars: a pulse of a conversation in front wakes only this read.
@@ -392,6 +399,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         applyLanding()
         #if DEBUG
         openProbeForm()
+        runMacProbe()
         if ProcessInfo.processInfo.arguments.contains("-shell-probe"), shellProbe == nil {
             shellProbe = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
                 MainActor.assumeIsolated { self?.probeShell() }
@@ -436,6 +444,101 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         ProbeCounts.panelPlaces = 0
         ProbeCounts.panelRows = 0
         probe.notice("probe loops n=\(loops.count) \(counts, privacy: .public) \(loops.joined(separator: " | "), privacy: .public)")
+    }
+
+    /// A Mac pass's `-mac-probe <dir>`: once the fleet is read, at a 1400pt
+    /// and then a 1000pt wide window, it renders the window into `dir`
+    /// (board, Caw's panel, the Machines popover) and prints, per width:
+    /// the bar's behavioural style and the titlebar, whether the board takes
+    /// clicks, each bar tab's hit-test at its centre, a rail hit-test, and
+    /// the panel's and the popover's frames against their anchors.
+    private lazy var macProbeDir: URL? = {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let at = arguments.firstIndex(of: "-mac-probe"), arguments.indices.contains(at + 1) else { return nil }
+        return URL(fileURLWithPath: arguments[at + 1])
+    }()
+
+    private var macProbeRan = false
+
+    private func runMacProbe() {
+        #if targetEnvironment(macCatalyst)
+        guard let dir = macProbeDir, !macProbeRan, home.ready, let window = view.window, let scene = window.windowScene else { return }
+        macProbeRan = true
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            func say(_ line: String) {
+                Logger(subsystem: "dev.cawco.app", category: "Probe").notice("\(line, privacy: .public)")
+                print("probe mac \(line)")
+            }
+            func snap(_ name: String) {
+                let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
+                    _ = window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+                }
+                try? image.pngData()?.write(to: dir.appending(path: "\(name).png"))
+            }
+            func box(_ r: CGRect) -> String { String(format: "x %.1f y %.1f w %.1f h %.1f (maxX %.1f)", r.minX, r.minY, r.width, r.height, r.maxX) }
+            func tabs(in view: UIView) -> [TabView] {
+                (view as? TabView).map { [$0] } ?? view.subviews.flatMap { tabs(in: $0) }
+            }
+            try? await Task.sleep(for: .seconds(4))
+            for width in [1400.0, 1000.0] {
+                let frame = scene.effectiveGeometry.systemFrame
+                scene.requestGeometryUpdate(.Mac(systemFrame: CGRect(x: frame.minX, y: frame.minY, width: width, height: 820)))
+                try? await Task.sleep(for: .seconds(2))
+                let name = "w\(Int(width))"
+                let bar = mainNav.navigationBar
+                let titlebar = scene.titlebar
+                say("\(name) window \(box(window.bounds)) safe \(window.safeAreaInsets) bar style pad \(bar.behavioralStyle == .pad) bar \(box(bar.convert(bar.bounds, to: window)))")
+                say("\(name) titlebar title hidden \(titlebar?.titleVisibility == .hidden) toolbar \(titlebar?.toolbar == nil ? "none" : "present") railToggle on screen \(railToggle.window != nil)")
+                say("\(name) board takes clicks \(view.isUserInteractionEnabled) alpha \(view.alpha) pro board open \(Pro.shared.boardOpen) access \(String(describing: Pro.shared.access))")
+                snap("\(name)-board")
+                var holder = tabs(in: bar).first?.superview
+                while let at = holder, !(at is UIScrollView) { holder = at.superview }
+                let strip = holder as? UIScrollView
+                let shown = strip.map { $0.convert($0.bounds, to: window) } ?? window.bounds
+                if let strip {
+                    let edge = mainCluster.convert(CGPoint(x: mainCluster.leadingEdge, y: 0), to: window).x
+                    say("\(name) strip \(box(shown)) offset \(strip.contentOffset.x) content \(strip.contentSize.width), cluster's first control at \(edge)")
+                }
+                for tab in tabs(in: bar) where tab.window != nil && !tab.isHidden {
+                    let frame = tab.convert(tab.bounds, to: window)
+                    // A click at the middle of what the strip shows of it.
+                    let seen = frame.intersection(shown)
+                    guard !seen.isEmpty else {
+                        say("\(name) tab \(tab.accessibilityLabel?.prefix(24) ?? "?") scrolled out of the strip")
+                        continue
+                    }
+                    let hit = window.hitTest(CGPoint(x: seen.midX, y: seen.midY), with: nil)
+                    say("\(name) tab \(tab.accessibilityLabel?.prefix(24) ?? "?") \(box(frame)) shown \(Int(seen.width))pt, hit lands on tab \(hit?.isDescendant(of: tab) == true) (\(hit.map { "\(type(of: $0))" } ?? "nil"))")
+                }
+                let railPoint = rail.view.convert(CGPoint(x: rail.view.bounds.midX, y: 160), to: window)
+                let railHit = window.hitTest(railPoint, with: nil)
+                say("\(name) rail \(box(rail.view.convert(rail.view.bounds, to: window))) hit at \(railPoint) lands in rail \(railHit?.isDescendant(of: rail.view) == true) (\(railHit.map { "\(type(of: $0))" } ?? "nil"))")
+                cawPanel.show(from: mainCluster.caw, glass: mainCluster.glass)
+                try? await Task.sleep(for: .seconds(1))
+                let glass = mainCluster.glass.convert(mainCluster.glass.bounds, to: window)
+                let panel = cawPanel.convert(cawPanel.bounds, to: window)
+                say("\(name) caw glass \(box(glass)) panel \(box(panel)) panel top on glass foot \(abs(panel.minY - glass.maxY) < 1) trailing flush \(abs(panel.maxX - glass.maxX) < 1)")
+                snap("\(name)-caw-panel")
+                cawPanel.close()
+                try? await Task.sleep(for: .seconds(1))
+                let item = mainCluster.machinesItem
+                openMachines(from: item)
+                try? await Task.sleep(for: .seconds(1.5))
+                let anchor = item.convert(item.bounds, to: window)
+                if let card = presentedViewController?.view {
+                    let popover = card.convert(card.bounds, to: window)
+                    say("\(name) machines item \(box(anchor)) popover \(box(popover)) below item \(popover.minY >= anchor.maxY) trailing on item's \(abs(popover.maxX - anchor.maxX) < 1)")
+                } else {
+                    say("\(name) machines popover did not present")
+                }
+                snap("\(name)-machines")
+                dismiss(animated: false)
+                try? await Task.sleep(for: .seconds(1))
+            }
+            say("done")
+        }
+        #endif
     }
 
     /// The first tab on screen in the phone's row.
@@ -517,7 +620,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         mainCrumb.set(next.crumb, animated: true)
         let regularPage = next == .fleet ? detail : page(for: next)
         // The bar's toggle, crumb and cluster move with the place, so they stay one bar.
-        TopBar.install(on: regularPage.navigationItem, crumb: mainCrumb, cluster: mainCluster, burger: railToggle)
+        TopBar.install(on: regularPage.navigationItem, crumb: mainCrumb, cluster: mainCluster, burger: barToggle)
         // A transition that is not animated never asks for its travel: none is left for the next one.
         mainMotion.route = animated ? travel : nil
         mainNav.setViewControllers([regularPage], animated: animated && !compact)
@@ -551,7 +654,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         destination = under
         mainCrumb.set(under.crumb, animated: false)
         let regularPage = under == .fleet ? detail : page(for: under)
-        TopBar.install(on: regularPage.navigationItem, crumb: mainCrumb, cluster: mainCluster, burger: railToggle)
+        TopBar.install(on: regularPage.navigationItem, crumb: mainCrumb, cluster: mainCluster, burger: barToggle)
         mainNav.setViewControllers([regularPage], animated: false)
         hostTabs()
         rail.requestRefresh()

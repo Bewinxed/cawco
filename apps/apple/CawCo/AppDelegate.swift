@@ -269,6 +269,15 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             return
         }
         Logger(subsystem: "dev.cawco.app", category: "Scene").info("window scene connected")
+        #if targetEnvironment(macCatalyst)
+        // A Mac window is the web's page and nothing over it: no title
+        // ("CawCo" stood over the tabs) and no toolbar. The shell's own bar
+        // is the top of the window (TopBar `dress`).
+        if let titlebar = scene.titlebar {
+            titlebar.titleVisibility = .hidden
+            titlebar.toolbar = nil
+        }
+        #endif
         let window = ReachWindow(windowScene: scene)
         window.tintColor = Palette.inkStrong
         #if DEBUG
