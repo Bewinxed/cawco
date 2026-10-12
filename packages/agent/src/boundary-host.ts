@@ -60,6 +60,7 @@ import {
 } from "@anthropic-ai/sandbox-runtime";
 import { projectClaudeRelative } from "@cawco/core/claude-dirs";
 import { mountedAnywhere, mountPointsOf } from "@cawco/core/mount-table";
+import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 import type { Subprocess } from "bun";
 
 const quote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`;
@@ -285,6 +286,53 @@ const makeStandIn = (
 };
 
 /**
+ * git-lfs's format marker in the clone's `.git/config`, written before a
+ * sandbox binds the file. git-lfs writes `lfs.repositoryformatversion` into
+ * any repository it runs in that lacks it, by git's lock-and-rename; the
+ * agent runs it on the host in the clone (hub-git.ts: `git lfs push` before
+ * a push through the git door, `git lfs fetch` after one that moved refs),
+ * and the rename drops the sandbox's read-only bind on `.git/config`, so the
+ * guard stops the sandbox and the push or fetch that set it off is cut off,
+ * having landed (exit 137, "the boundary stopped while this command ran").
+ * Written only while no mount namespace holds the file: an older boundary
+ * still running beside this one keeps its bind.
+ */
+const markLfs = (): void => {
+  const config = join(clone, ".git", "config");
+  if (!lstatOf(config)?.isFile() || mountedAnywhere(config)) {
+    return;
+  }
+  const has = Bun.spawnSync(
+    safeGitArgv([
+      "config",
+      "--file",
+      config,
+      "--get",
+      "lfs.repositoryformatversion",
+    ]),
+    { env: { ...process.env, ...SAFE_GIT_ENV }, stdout: "ignore" }
+  );
+  if (has.exitCode === 0) {
+    return;
+  }
+  const set = Bun.spawnSync(
+    safeGitArgv([
+      "config",
+      "--file",
+      config,
+      "lfs.repositoryformatversion",
+      "0",
+    ]),
+    { env: { ...process.env, ...SAFE_GIT_ENV }, stderr: "pipe" }
+  );
+  if (set.exitCode !== 0) {
+    console.error(
+      `cawco: git-lfs's format marker could not be written into ${config} before the workspace's sandbox started, so a host-side git-lfs run will restart the sandbox once: ${set.stderr.toString().trim()}`
+    );
+  }
+};
+
+/**
  * Makes each deny path the clone lacks a real, valid, empty one, before a
  * sandbox starts: srt then binds it onto itself, and nothing of the sandbox
  * is left on the host (`cloneDenies`). One the clone has is left exactly as
@@ -299,6 +347,7 @@ const makeStandIn = (
  * clone's mounts are `nodev`).
  */
 const standIn = (): void => {
+  markLfs();
   for (const { path, empty } of denies) {
     const found = lstatOf(path);
     if (empty.kind === "none" || (found && !leftMountPoint(found))) {

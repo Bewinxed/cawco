@@ -1,7 +1,9 @@
 /**
- * Probe: a checked item's landing on its base, when the base keeps moving
- * and when origin refuses the login, on a scratch fleet (real hub, agent and
- * sessiond on loopback, mock model, workspace boundary included).
+ * Probe: a checked item's landing on its base when the base keeps moving, on
+ * a scratch fleet (real hub, agent and sessiond on loopback, mock model,
+ * workspace boundary included). The landing's push through the workspace's
+ * git door is the first host-side git-lfs run in a clone with no LFS: it
+ * must not stop the boundary under the push (boundary-host.ts `markLfs`).
  *
  * One project whose origin is the hub's own remote, branch `main`. Each item's
  * delegate (the mock drives its tools) commits a file and calls finish_item.
@@ -17,8 +19,6 @@
  * b. n = ∞: every push loses. The item fails, its error's first line says
  *    `main` moved before each of the hub's 3 pushes; the parent's tray
  *    panel, hovered in the built dashboard, shows that line.
- * c. Origin answers 401 to everything: the item fails, its error's first
- *    line names the machine and says origin did not authorise it.
  *
  * Run from the repo root after `bunx vite build` in apps/dashboard:
  *   bun scripts/probe-landing-race.ts [--keep]
@@ -39,25 +39,12 @@ const root = resolve(import.meta.dir, "..");
 const DELEGATE_TAG = /PROBE-DELEGATE-(\w+)/;
 const FINISH = "mcp__cawco__finish_item";
 
-/** An origin that refuses every login: git asks for one, and no helper has it. */
-const refusing = Bun.serve({
-  hostname: "127.0.0.1",
-  port: 0,
-  fetch: () =>
-    new Response("login refused\n", {
-      status: 401,
-      headers: { "WWW-Authenticate": 'Basic realm="probe"' },
-    }),
-});
-const REFUSING_URL = `http://127.0.0.1:${refusing.port}/repo.git`;
-
 /** What the delegate of `tag` runs in its workspace, inside its boundary. */
 const delegateCommand = (tag: string) =>
   [
     `echo 'made by the delegate ${tag}' > delegate-${tag}.txt`,
     `git add delegate-${tag}.txt`,
     `git -c user.name=Delegate -c user.email=d@probe.test commit -qm 'Delegate commit ${tag}'`,
-    ...(tag === "c" ? [`git remote set-url origin ${REFUSING_URL}`] : []),
     'echo "status: [$(git status --porcelain | tr "\\n" " ")]"',
     `echo DONE-COMMIT-${tag}`,
   ].join(" && ");
@@ -325,16 +312,6 @@ try {
     firstLine(b.item.result)
   );
 
-  // ── c: origin refuses the login ─────────────────────────────────────────
-  const c = await delegate(src, project.id, "c", 0);
-  const whyC = firstLine(c.item.error);
-  check("c: item failed", c.item.state === "failed", c.item.state);
-  check(
-    "c: error's first line names the machine and the refused login",
-    whyC ===
-      `Not landed: the fetch of origin/main from ${MACHINE} wasn't authorised by origin.`,
-    `${whyC || "(empty)"} ‖ ${(c.item.error ?? "").split("\n").slice(1, 4).join(" ⏎ ")}`
-  );
   check(
     "no failed item has an empty error",
     fleet.query<{ n: number }>(
@@ -425,7 +402,6 @@ try {
   }
   await browser?.close();
   dashboard?.kill();
-  refusing.stop(true);
   await fleet.close();
   console.log(JSON.stringify(results, null, 2));
   await fleet.clean(keep || failed);

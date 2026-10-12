@@ -161,6 +161,20 @@ export async function land<F>(
   );
 }
 
+/**
+ * Whether origin's `ref` is at `sha` now. A push that did not answer 0 may
+ * still have landed (its command cut off after the remote took it), and a
+ * ref at the commit pushed is landed whatever the command said.
+ */
+async function holds(
+  run: LandingDeps<unknown>["run"],
+  ref: string,
+  sha: string
+): Promise<boolean> {
+  const there = await run(`git ls-remote origin ${quote(ref)}`, NETWORK_MS);
+  return there.exitCode === 0 && there.stdout.trim().split(SPACE)[0] === sha;
+}
+
 /** Fetch, rebase, check again if needed, push; once more if the push lost a race. */
 async function attempt<F>(
   base: string,
@@ -207,7 +221,10 @@ async function attempt<F>(
     `git push origin ${quote(`HEAD:refs/heads/${base}`)}`,
     NETWORK_MS
   );
-  if (pushed.exitCode === 0) {
+  if (
+    pushed.exitCode === 0 ||
+    (await holds(run, `refs/heads/${base}`, after))
+  ) {
     return { kind: "landed", sha: after, rebased };
   }
   const said = `${pushed.stderr}\n${pushed.stdout}`;
@@ -291,7 +308,9 @@ export async function pushBranch(
       }
       const sha = (await run("git rev-parse HEAD", LOCAL_MS)).stdout.trim();
       const refused = await leasedPush(run, `refs/heads/${branch}`, 1);
-      return refused ?? { kind: "pushed", sha };
+      return refused && !(await holds(run, `refs/heads/${branch}`, sha))
+        ? refused
+        : { kind: "pushed", sha };
     }
   );
 }
