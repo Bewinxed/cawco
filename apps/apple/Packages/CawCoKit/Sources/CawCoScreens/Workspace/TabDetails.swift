@@ -6,8 +6,8 @@ import UIKit
 /// card hung under a tab, opened by resting a pointer on the tab for 350ms
 /// and let go 250ms after the pointer leaves both the tab and the card, or
 /// pinned by a click (the chosen tab, its chevron, the menu's Session
-/// details), when it stays until it is closed, a click lands outside it, or
-/// the same tab is clicked again. While it is open, another tab takes it
+/// details), when it stays until it is closed, a click or a drag lands
+/// outside it, or the same tab is clicked again. While it is open, another tab takes it
 /// rather than reopening it: the card glides there over `durMorph` on the
 /// drawer curve and its content is nudged in from the side it moved toward.
 /// A pointer on the card holds it; a press in it pins it. The card is not
@@ -24,7 +24,8 @@ final class TabDetails: NSObject, UIGestureRecognizerDelegate {
     private(set) var pinned = false
     private var timer: Task<Void, Never>?
     private var sizes: NSKeyValueObservation?
-    private var outside: UITapGestureRecognizer?
+    /// The card's light dismiss: a tap and a drag outside it.
+    private var outside: [UIGestureRecognizer] = []
     /// A tab's context menu is open: hovering must not open the card under it.
     var menuOpen = false {
         didSet {
@@ -160,12 +161,21 @@ final class TabDetails: NSObject, UIGestureRecognizerDelegate {
             card.alpha = 1
             card.transform = .identity
         }.startAnimation()
-        // A click anywhere else closes it; one on a tab is the tab's to answer.
-        let tap = UITapGestureRecognizer(target: self, action: #selector(tappedOutside(_:)))
-        tap.cancelsTouchesInView = false
-        tap.delegate = self
-        host.addGestureRecognizer(tap)
-        outside = tap
+        // A tap anywhere else closes it, and so does a drag as it begins.
+        // Neither is taken from what it lands on (CawPanel `dismissal`):
+        // the drag goes on as the drag it is, the transcript scrolling by it,
+        // where a tap alone left the card up over the scroll. One on a tab is
+        // the tab's to answer; the card's own drags stay inside it.
+        let tap = UITapGestureRecognizer(target: self, action: #selector(touchedOutside))
+        let drag = UIPanGestureRecognizer(target: self, action: #selector(touchedOutside))
+        for recognizer in [tap, drag] as [UIGestureRecognizer] {
+            recognizer.cancelsTouchesInView = false
+            recognizer.delaysTouchesBegan = false
+            recognizer.delaysTouchesEnded = false
+            recognizer.delegate = self
+            host.addGestureRecognizer(recognizer)
+        }
+        outside = [tap, drag]
     }
 
     /// Under its tab, starting at the tab's start, kept 12pt inside the window.
@@ -193,8 +203,8 @@ final class TabDetails: NSObject, UIGestureRecognizerDelegate {
     func close() {
         timer?.cancel()
         sizes = nil
-        if let outside { outside.view?.removeGestureRecognizer(outside) }
-        outside = nil
+        for recognizer in outside { recognizer.view?.removeGestureRecognizer(recognizer) }
+        outside = []
         pinned = false
         openId = nil
         guard let card, let details else { return }
@@ -209,12 +219,13 @@ final class TabDetails: NSObject, UIGestureRecognizerDelegate {
         fade.startAnimation()
     }
 
-    @objc private func tappedOutside(_ tap: UITapGestureRecognizer) {
+    /// The tap once it is recognised, the drag as it begins: either closes the card.
+    @objc private func touchedOutside() {
         close()
     }
 
     func gestureRecognizer(_ recognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
-        guard recognizer === outside, let card else { return true }
+        guard outside.contains(where: { $0 === recognizer }), let card else { return true }
         // Not the card's own touches, and not a tab's: the tab answers for itself.
         var view = touch.view
         while let here = view {
