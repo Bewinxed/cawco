@@ -26,7 +26,9 @@
  *    redirect landing on the hub; a call works; with the access token
  *    revoked, the next call refreshes in the hub and works.
  * 7. admin_connections_read never returns the key; admin_connections_write
- *    set_key parks an ask that shows the key's length, not the key.
+ *    takes no key, and a session asking to set one is answered with the
+ *    command the owner runs (`cawco connections set-key`), which this probe
+ *    then runs, piped, to give beta its key.
  *
  * The typed sessions are started two ways, both the parent's own tool call.
  * By default `delegate`, as the brief means it: each in its own workspace
@@ -806,79 +808,80 @@ try {
   const parent = await fleet.spawn("claude", "Connections parent", fleet.repo);
   const { credential: parentCredential } = await traceOf(parent);
 
-  // ── 7: admin set_key through the ask; admin read ──────────────────────
+  // ── 7: a key never goes through a session; admin read ─────────────────
   await section(
-    "7: admin_connections_write set_key shows the person no key",
+    "7: admin_connections_write takes no key, and answers with the CLI command",
     async () => {
-      const writing = door(
+      const listed = (await listedTo(parent)).includes(
+        "admin_connections_write"
+      );
+      const schema = JSON.stringify(
+        (
+          await send<{ tools: { name: string; inputSchema: unknown }[] }>(
+            "GET",
+            `/api/delegation/tools?instanceId=${parent}`
+          )
+        ).tools.find((one) => one.name === "admin_connections_write")
+          ?.inputSchema
+      );
+      const asked = await door(
         parent,
         parentCredential,
         "admin_connections_write",
-        {
-          action: "set_key",
-          name: "echo-beta",
-          key: KEY_BETA,
-        }
+        { action: "set_key", name: "echo-beta" }
       );
-      const ask = await until(
-        "the set_key ask parked",
-        async () =>
-          (
-            await send<
-              {
-                payload: {
-                  requestId: string;
-                  toolName?: string;
-                  input?: unknown;
-                };
-              }[]
-            >("GET", "/api/pending")
-          ).find(
+      const pending = await send<{ payload: { toolName?: string } }[]>(
+        "GET",
+        "/api/pending"
+      );
+      check(
+        "7: a session's admin_connections_write has no set_key, and asking for one answers with the command, asking nobody",
+        listed &&
+          !(schema.includes("set_key") || schema.includes('"key"')) &&
+          asked.text.includes(
+            "Run on a machine joined to this hub: cawco connections set-key echo-beta"
+          ) &&
+          !pending.some(
             (one) =>
               one.payload.toolName === "mcp__cawco__admin_connections_write"
           ),
-        Boolean,
-        30_000
+        asked.text.slice(0, 300)
       );
-      if (!ask) {
-        throw new Error("the set_key ask did not park");
-      }
-      // What screens get (`/api/pending`) and what the hub keeps across a
-      // restart (`parked_asks`, the ledger's original the Approve runs with).
-      const shown = JSON.stringify(ask.payload.input);
-      const kept =
-        fleet.query<{ envelope: string }>(
-          "SELECT envelope FROM parked_asks WHERE request_id = ?",
-          ask.payload.requestId
-        )[0]?.envelope ?? "";
-      check(
-        "7: the parked ask, shown and kept, holds the key's length, never the key",
-        !(shown.includes(KEY_BETA) || kept.includes(KEY_BETA)) &&
-          kept.includes(`a secret of ${KEY_BETA.length} characters`),
-        `shown ${shown}; kept input ${JSON.stringify((JSON.parse(kept || "{}") as { payload?: { input?: unknown } }).payload?.input)}`
+      // The owner runs it, from their own terminal: the key piped in.
+      const cli = Bun.spawn(
+        [
+          process.execPath,
+          "packages/cli/src/cli.ts",
+          "connections",
+          "set-key",
+          "echo-beta",
+          "--hub",
+          fleet.base,
+        ],
+        {
+          env: Object.fromEntries(
+            Object.entries(process.env).filter(
+              ([name]) =>
+                name !== "CAWCO_INSTANCE_ID" &&
+                name !== "CAWCO_SESSION_CREDENTIAL"
+            )
+          ),
+          stdin: new Blob([`${KEY_BETA}\n`]),
+          stdout: "pipe",
+          stderr: "pipe",
+        }
       );
-      await fleet.post({
-        type: "command",
-        commandId: crypto.randomUUID(),
-        kind: "permission.answer",
-        machineId: "scratch-fleet",
-        sessionId: parent,
-        payload: {
-          instanceId: parent,
-          requestId: ask.payload.requestId,
-          method: "resolvePermission",
-          args: [
-            ask.payload.requestId,
-            { behavior: "allow", updatedInput: {} },
-          ],
-        },
-      });
-      const wrote = await writing;
+      const said = `${await new Response(cli.stdout).text()}${await new Response(cli.stderr).text()}`;
       const beta = await viewOf("echo-beta");
       check(
-        "7: approved, the write ran with the real key: beta is signed in",
-        wrote.status === 200 && beta?.state === "signed-in",
-        `${wrote.status} ${wrote.text.slice(0, 300)}; ${JSON.stringify(beta)}`
+        "7: the owner's cawco connections set-key, piped, signs beta in",
+        (await cli.exited) === 0 &&
+          said.includes(
+            `Key set for echo-beta (${KEY_BETA.length} characters)`
+          ) &&
+          !said.includes(KEY_BETA) &&
+          beta?.state === "signed-in",
+        `${said.trim().replaceAll("\n", " | ")}; ${beta?.state}`
       );
       const read = await door(
         parent,

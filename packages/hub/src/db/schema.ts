@@ -64,6 +64,7 @@ import type {
   OAuthTokens,
 } from "@modelcontextprotocol/sdk/shared/auth.js";
 import {
+  customType,
   index,
   integer,
   primaryKey,
@@ -74,8 +75,31 @@ import {
 } from "drizzle-orm/sqlite-core";
 import type { ContinueRequest, PreparedContinuation } from "../continuation";
 import type { MoveState } from "../moves";
+import { hubSecrets, openOrNull } from "../secret-box";
 
 const timestamp = (column: string) => integer(column, { mode: "timestamp_ms" });
+
+/**
+ * A secret column (secret-box.ts): sealed on every write, opened on every
+ * read, the one path either way. A value the hub's key does not open reads
+ * as null: no secret, so the feature that holds it asks for it again.
+ */
+const sealedText = customType<{ data: string | null; driverData: string }>({
+  dataType: () => "text",
+  toDriver: (value) => hubSecrets().seal(value ?? ""),
+  fromDriver: (value) => openOrNull(value),
+});
+
+/** A secret JSON column: the value's JSON, sealed as {@link sealedText} is. */
+const sealedJson = <T>(column: string) =>
+  customType<{ data: T | null; driverData: string }>({
+    dataType: () => "text",
+    toDriver: (value) => hubSecrets().seal(JSON.stringify(value)),
+    fromDriver: (value) => {
+      const opened = openOrNull(value);
+      return opened === null ? null : (JSON.parse(opened) as T);
+    },
+  })(column);
 
 /**
  * One harness conversation a session had before the one it runs now
@@ -1282,7 +1306,8 @@ export const tools = sqliteTable("tools", {
 export const mcpServers = sqliteTable("mcp_servers", {
   /** The name sessions see, and the key the entry takes in `~/.claude.json`. */
   name: text("name").primaryKey(),
-  config: text("config", { mode: "json" }).$type<FleetMcpConfig>().notNull(),
+  /** Sealed: a server's headers and env carry its keys. Null when the hub's key does not open it. */
+  config: sealedJson<FleetMcpConfig>("config").notNull(),
   authMode: text("auth_mode")
     .$type<"direct" | "oauth">()
     .notNull()
@@ -1303,7 +1328,11 @@ export const mcpServers = sqliteTable("mcp_servers", {
     .$defaultFn(() => new Date()),
 });
 
-/** Private OAuth material. Only the hub's OAuth manager reads these rows. */
+/**
+ * Private OAuth material. Only the hub's OAuth manager reads these rows. The
+ * clients (which may hold a client secret), the tokens and a sign-in under
+ * way (its PKCE verifier) are sealed; the discovered metadata is public.
+ */
 export const fleetMcpOauth = sqliteTable("fleet_mcp_oauth", {
   name: text("name").primaryKey(),
   generation: text("generation").notNull(),
@@ -1315,21 +1344,19 @@ export const fleetMcpOauth = sqliteTable("fleet_mcp_oauth", {
   metadata: text("metadata", { mode: "json" })
     .$type<AuthorizationServerMetadata>()
     .notNull(),
-  client: text("client", { mode: "json" }).$type<OAuthClientInformationFull>(),
-  tokens: text("tokens", { mode: "json" }).$type<OAuthTokens>(),
+  client: sealedJson<OAuthClientInformationFull>("client"),
+  tokens: sealedJson<OAuthTokens>("tokens"),
   expiresAt: timestamp("expires_at"),
   /** The client the stored tokens were issued to; refreshing them must use that one. */
-  tokenClient: text("token_client", {
-    mode: "json",
-  }).$type<OAuthClientInformationFull>(),
-  pending: text("pending", { mode: "json" }).$type<{
+  tokenClient: sealedJson<OAuthClientInformationFull>("token_client"),
+  pending: sealedJson<{
     /** The client this sign-in started with, which is the one its code is exchanged by. */
     client: OAuthClientInformationFull;
     redirectUri: string;
     verifier: string;
     state: string;
     expiresAt: number;
-  }>(),
+  }>("pending"),
   lastOpenedAt: timestamp("last_opened_at"),
 });
 
@@ -2079,7 +2106,8 @@ export const supervisorConfig = sqliteTable("supervisor_config", {
   enabled: integer("enabled", { mode: "boolean" }).notNull().default(false),
   baseUrl: text("base_url"),
   model: text("model"),
-  apiKey: text("api_key"),
+  /** Sealed. */
+  apiKey: sealedText("api_key"),
   /**
    * Fleet-wide tool denials — JSON `string[]`. Every spawned session and every
    * `~/.claude/settings.json` convergence reads this list. `null` only before
@@ -2127,7 +2155,8 @@ export const spendSettings = sqliteTable("spend_settings", {
 export const openrouterConnection = sqliteTable("openrouter_connection", {
   /** Always `'openrouter'`. */
   id: text("id").primaryKey(),
-  apiKey: text("api_key").notNull(),
+  /** Sealed; null when the hub's key does not open it, which reads as not connected. */
+  apiKey: sealedText("api_key").notNull(),
   connectedAt: timestamp("connected_at").notNull(),
   /** The composer asks Jev for skill and MCP server suggestions while typing. Off by default. */
   suggestWhileTyping: integer("suggest_while_typing", { mode: "boolean" })
@@ -2238,14 +2267,18 @@ export const moves = sqliteTable("moves", {
 export const pushDevices = sqliteTable("push_devices", {
   /** The pairing's id at Cawrier, a lowercase v4 uuid. */
   pairingId: text("pairing_id").primaryKey(),
-  /** The pairing's secret, base64url; sent to Cawrier only, never answered by a route. */
-  secret: text("secret").notNull(),
   /**
-   * The device's push key: 32 random bytes from the device, standard base64.
-   * Each push's real words are sealed under it (AES-256-GCM) so only the
-   * device reads them. Never logged, never answered by a route, never sent.
+   * The pairing's secret, base64url, sealed; sent to Cawrier only, never
+   * answered by a route. A row whose secret or key does not open is no
+   * device until the app registers again (it does on every launch).
    */
-  key: text("key").notNull(),
+  secret: sealedText("secret").notNull(),
+  /**
+   * The device's push key: 32 random bytes from the device, standard base64,
+   * sealed. Each push's real words are sealed under it (AES-256-GCM) so only
+   * the device reads them. Never logged, never answered by a route, never sent.
+   */
+  key: sealedText("key").notNull(),
   /** The device's own name (`UIDevice.name`), for Settings. */
   name: text("name").notNull(),
   /** `ios`, `ipados` or `macos`. */
@@ -2541,12 +2574,20 @@ export const routineRuns = sqliteTable(
   ]
 );
 
+/** What a connection's sealed `secret` holds. */
+export interface ConnectionSecret {
+  client?: import("@modelcontextprotocol/sdk/shared/auth.js").OAuthClientInformationMixed;
+  key?: string;
+  tokens?: OAuthTokens;
+  verifier?: string;
+}
+
 /**
  * A connection (Projects spec §5.5, connections.ts): an outside service's MCP
  * server the hub signs in to and calls for sessions. Its key, or its OAuth
- * tokens, client and the verifier of a sign-in under way, are `sealed`
- * (secret-box.ts: AES-256-GCM under the key file beside this database);
- * nothing else in the row is secret, and no route or tool answers `sealed`.
+ * tokens, client and the verifier of a sign-in under way, are its `secret`,
+ * a sealed column; nothing else in the row is secret, and no route or tool
+ * answers the secret.
  */
 export const connections = sqliteTable("connections", {
   id: text("id").primaryKey(),
@@ -2566,8 +2607,8 @@ export const connections = sqliteTable("connections", {
   header: text("header"),
   state: text("state").$type<import("@cawco/core").ConnectionState>().notNull(),
   reason: text("reason"),
-  /** The sealed secret: JSON `{ key?, tokens?, client?, verifier? }`, sealed. */
-  sealed: text("sealed"),
+  /** Its key, or its OAuth tokens, client and a sign-in's verifier: sealed. */
+  secret: sealedJson<ConnectionSecret>("sealed"),
   /** The OAuth discovery the SDK saved (resource and authorization server metadata): public documents. */
   discovery: text("discovery", { mode: "json" }).$type<
     import("@modelcontextprotocol/sdk/client/auth.js").OAuthDiscoveryState

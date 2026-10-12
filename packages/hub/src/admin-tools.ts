@@ -105,50 +105,27 @@ const ADMIN_WRITE_TOOL = /^admin_[a-z_]+_write$/;
 export const isAdminWrite = (name: string): boolean =>
   ADMIN_WRITE_TOOL.test(name);
 
-/** The inputs of an admin write that are secrets, by tool. */
-const SECRET_INPUTS: Record<string, readonly string[]> = {
-  admin_connections_write: ["key"],
-};
-
-/** What a secret input reads as wherever an ask is kept or shown. */
-const HELD =
-  /^\[a secret of \d+ characters, held by the hub until you answer\]$/;
+/** What a session is told to have the owner run to give a connection its key. */
+const setKeyCommand = (name: string): string =>
+  `Run on a machine joined to this hub: cawco connections set-key ${name}`;
 
 /**
- * The key a `set_key` runs with: refused when it is the placeholder a kept
- * ask holds, which means the hub restarted between the ask and its answer
- * and the key itself, held only in memory, is gone.
+ * The answer to an admin write that changes nothing and so asks nobody: a
+ * session asking to set a connection's key. A key never passes through a
+ * session, so it lands in no transcript: the owner gives it to the hub with
+ * the CLI, and the session is told the exact command. Undefined for every
+ * other call.
  */
-const heldKey = (key: string | undefined): string => {
-  if (!key) {
-    throw new Error("key is required for set_key");
-  }
-  if (HELD.test(key)) {
-    throw new Error(
-      "The key was held in memory until the person answered, and the hub restarted in between; set it again."
-    );
-  }
-  return key;
-};
-
-/**
- * An admin write's input as the person's ask keeps and shows it: each secret
- * replaced by its length. The ask is stored, sent to every screen, Telegram
- * and the phone; the secret itself stays in the waiting call's memory.
- */
-export const shownToPerson = (
+export const answeredWithoutAsking = (
   name: string,
   input: Record<string, unknown>
-): Record<string, unknown> => {
-  const secrets = SECRET_INPUTS[name] ?? [];
-  return Object.fromEntries(
-    Object.entries(input).map(([key, value]) => [
-      key,
-      secrets.includes(key) && typeof value === "string"
-        ? `[a secret of ${value.length} characters, held by the hub until you answer]`
-        : value,
-    ])
-  );
+): string | undefined => {
+  if (name !== "admin_connections_write" || input.action !== "set_key") {
+    return;
+  }
+  const connection =
+    typeof input.name === "string" && input.name ? input.name : "<name>";
+  return `${setKeyCommand(connection)}\nA connection's key is never given to a session: don't ask the owner to paste it here.`;
 };
 
 /**
@@ -311,7 +288,7 @@ export function adminTools() {
         "Sessions whose delegate type or project lists one call its tools as " +
         "conn__<name>__<tool>; the hub keeps the key.",
       ["list"],
-      ["create", "update", "sign_in", "set_key", "remove"],
+      ["create", "update", "sign_in", "remove"],
       {
         name: z
           .string()
@@ -337,10 +314,6 @@ export function adminTools() {
           .array(z.string())
           .optional()
           .describe("Project ids whose sessions may use it."),
-        key: z
-          .string()
-          .optional()
-          .describe("set_key: the key; the ask shows only its length."),
         origin: z
           .string()
           .optional()
@@ -367,15 +340,9 @@ export function adminTools() {
             )
           );
         }
-        if (action === "set_key") {
-          return ok(
-            await api("PUT", `${path}/key`, { key: heldKey(args.key) })
-          );
-        }
         const {
           action: _action,
           name: _name,
-          key: _key,
           origin: _origin,
           ...fields
         } = args;
@@ -389,7 +356,7 @@ export function adminTools() {
         }
         return ok(await api("PATCH", path, fieldsGiven(fields)));
       },
-      " create, then set_key or sign_in (answers the URL to open). Changing where it points drops the key."
+      " A key never goes through a session: the owner runs `cawco connections set-key <name>` on a machine joined to the hub. Never ask for a key in chat. sign_in answers the URL to open. Changing where it points drops the key."
     ),
 
     // ── skills ───────────────────────────────────────────────────────────

@@ -1,20 +1,22 @@
 /**
- * The hub's sealed secrets (connections.ts): AES-256-GCM under one key kept
- * in a file of its own beside the database (`connections.key`, 32 random
- * bytes, mode 0600). A copy of the database alone opens nothing; the key
- * file's folder is the database's, which every workspace boundary hides
- * (core `credentialStores`).
+ * The hub's sealed secrets: AES-256-GCM under one key kept in a file of its
+ * own beside the database (`secrets.key`, 32 random bytes, mode 0600). A copy
+ * of the database alone opens nothing; the key file's folder is the
+ * database's, which every workspace boundary hides (core `credentialStores`).
  *
- * Until this, every secret the hub kept (the OpenRouter key, push pairing
- * secrets, fleet MCP OAuth tokens) sat in SQLite as plain text; connections
- * are the first rows sealed.
+ * Every secret column is a sealed column (db/schema.ts `sealedText`,
+ * `sealedJson`): sealed on each write, opened on each read, and a value the
+ * key does not open reads as no secret, so its feature asks for it again.
+ * Values kept before sealing are sealed in place at start (db/seal-at-rest.ts).
  */
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import {
   chmodSync,
   closeSync,
+  existsSync,
   openSync,
   readFileSync,
+  renameSync,
   statSync,
   writeSync,
 } from "node:fs";
@@ -71,9 +73,18 @@ const loadKey = (path: string): Buffer => {
   return key;
 };
 
+/** Whether a stored value is one the hub sealed (it may still not open, under another key). */
+export const isSealed = (value: string): boolean => value.startsWith(PREFIX);
+
 export const makeSecretBox = (
-  path = join(dirname(DB_PATH), "connections.key")
+  path = join(dirname(DB_PATH), "secrets.key")
 ): SecretBox => {
+  // The key's first name, from when it sealed connections only.
+  const first = join(dirname(path), "connections.key");
+  if (!existsSync(path) && existsSync(first)) {
+    renameSync(first, path);
+    console.info(`[secret-box] the hub's secret key is now ${path}`);
+  }
   const key = loadKey(path);
   return {
     seal: (plain) => {
@@ -105,4 +116,33 @@ export const makeSecretBox = (
       ]).toString("utf8");
     },
   };
+};
+
+let hub: SecretBox | undefined;
+
+/** The hub's one box, under the key beside its database; made on first use. */
+export const hubSecrets = (): SecretBox => {
+  hub ??= makeSecretBox();
+  return hub;
+};
+
+/** Sealed values already said not to open, so each is said once. */
+const unopened = new Set<string>();
+
+/**
+ * A sealed column's value opened, or null when the hub's key does not open
+ * it (the key file was replaced): no secret, so its feature asks again.
+ */
+export const openOrNull = (sealed: string): string | null => {
+  try {
+    return hubSecrets().open(sealed);
+  } catch {
+    if (!unopened.has(sealed)) {
+      unopened.add(sealed);
+      console.warn(
+        "[secret-box] a sealed value does not open with the hub's key; it reads as no secret until it is given again"
+      );
+    }
+    return null;
+  }
 };

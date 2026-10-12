@@ -52,10 +52,6 @@ import {
   StreamableHTTPClientTransport,
   StreamableHTTPError,
 } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import type {
-  OAuthClientInformationMixed,
-  OAuthTokens,
-} from "@modelcontextprotocol/sdk/shared/auth.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import {
   type CallToolResult,
@@ -64,10 +60,10 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { Elysia, status, t } from "elysia";
 import type { ConnectionRow, ConnectionsDb } from "./db/connections";
+import type { ConnectionSecret } from "./db/schema";
 import { hidden } from "./hidden";
 import type { HubLifetimeShape } from "./lifetime";
 import { connectionToolsFor, roleOf } from "./roles";
-import type { SecretBox } from "./secret-box";
 
 /** Where an OAuth sign-in's redirect lands: on the hub, never a session. */
 export const CONNECTION_CALLBACK_PATH = "/api/connections/oauth/callback";
@@ -91,14 +87,6 @@ const RESERVED_HEADERS = new Set([
   "mcp-protocol-version",
   "last-event-id",
 ]);
-
-/** What a row seals: the key, or the OAuth tokens, client and a sign-in's verifier. */
-interface Sealed {
-  client?: OAuthClientInformationMixed;
-  key?: string;
-  tokens?: OAuthTokens;
-  verifier?: string;
-}
 
 /** What a connection is made from, and what an update may change (never its name). */
 export interface ConnectionInput {
@@ -131,7 +119,6 @@ export interface ConnectionsDeps {
   readonly hubOrigin: () => string;
   readonly lifetime: HubLifetimeShape;
   readonly projectExists: (id: string) => boolean;
-  readonly secrets: SecretBox;
   /** The connections the delegate type a session runs as lists. */
   readonly typeConnections: (row: InstanceRow) => readonly string[];
 }
@@ -233,7 +220,7 @@ const whereOf = (one: {
 
 /** What a row lets go of when it moves: its secret, discovery and any sign-in. */
 const LET_GO = {
-  sealed: null,
+  secret: null,
   discovery: null,
   signInState: null,
   signInRedirect: null,
@@ -304,7 +291,7 @@ const refusedSignIn = (error: unknown): boolean =>
 const NO_SECRET = "the hub holds no key for it";
 
 export const createConnections = (deps: ConnectionsDeps) => {
-  const { db, secrets } = deps;
+  const { db } = deps;
   /** Each connection's live client, by row id; a connect shared by concurrent calls. */
   const clients = new Map<string, Promise<Client>>();
   /** Each connection's tools as it last listed them, by row id. */
@@ -314,41 +301,27 @@ export const createConnections = (deps: ConnectionsDeps) => {
     db.byName(name) ?? problem(`There is no connection ${name}.`);
 
   /**
-   * A row's secret, opened. One the hub's key cannot open (the key file was
-   * replaced) holds nothing the hub can use: it reads as no secret, so the
-   * connection asks for its key or sign-in again rather than every listing
-   * failing.
+   * A row's secret, as its sealed column opened it. One the hub's key cannot
+   * open reads as none (db/schema.ts `sealedJson`), so the connection asks
+   * for its key or sign-in again rather than every listing failing.
    */
-  const opened = (r: ConnectionRow): Sealed => {
-    if (!r.sealed) {
-      return {};
-    }
-    try {
-      return JSON.parse(secrets.open(r.sealed)) as Sealed;
-    } catch {
-      console.warn(
-        `[connections] ${r.name}: its sealed secret does not open with the hub's key; it needs its key or sign-in again`
-      );
-      return {};
-    }
-  };
+  const opened = (r: ConnectionRow): ConnectionSecret => r.secret ?? {};
 
-  /** Changes a row's sealed secret, read fresh: an OAuth step and a refresh may interleave. */
-  const reseal = (id: string, change: (sealed: Sealed) => Sealed) => {
+  /** Changes a row's secret, read fresh: an OAuth step and a refresh may interleave. */
+  const reseal = (
+    id: string,
+    change: (secret: ConnectionSecret) => ConnectionSecret
+  ) => {
     const fresh = db.byId(id);
     if (!fresh) {
       return;
     }
-    const next = change(opened(fresh));
     const kept = Object.fromEntries(
-      Object.entries(next).filter(([, value]) => value !== undefined)
-    );
-    db.update(id, {
-      sealed:
-        Object.keys(kept).length > 0
-          ? secrets.seal(JSON.stringify(kept))
-          : null,
-    });
+      Object.entries(change(opened(fresh))).filter(
+        ([, value]) => value !== undefined
+      )
+    ) as ConnectionSecret;
+    db.update(id, { secret: Object.keys(kept).length > 0 ? kept : null });
   };
 
   /** Every secret string a row holds: what is cut out of anything a session is answered. */

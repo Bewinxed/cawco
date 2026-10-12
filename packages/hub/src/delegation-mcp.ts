@@ -15,7 +15,7 @@ import {
   type CallToolResult,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { adminTools, isAdminWrite, shownToPerson } from "./admin-tools";
+import { adminTools, answeredWithoutAsking, isAdminWrite } from "./admin-tools";
 import type { Caw } from "./caw";
 import type { Connections } from "./connections";
 import type { Fleet, SendDelivery } from "./delegation-actions";
@@ -379,10 +379,14 @@ export function createDelegationMcp(options: {
     if (!entry) {
       throw new Error(`Unknown tool ${name}`);
     }
+    // A write that changes nothing (a connection's key, which only the
+    // owner's CLI sets) is answered at once, asking nobody.
+    const answered = answeredWithoutAsking(name, input);
+    if (answered !== undefined) {
+      return { content: [{ type: "text", text: answered }] };
+    }
     if (isAdminWrite(name)) {
-      // The ask is kept and shown everywhere; a secret in it is shown by its
-      // length only, and runs from this call's memory once approved.
-      await options.askPerson(actor, name, shownToPerson(name, input));
+      await options.askPerson(actor, name, input);
     }
     return (await entry.handler(input)) as CallToolResult;
   };

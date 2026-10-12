@@ -16,6 +16,7 @@ import {
 } from "@cawco/core";
 import { hubCredentialSocket } from "@cawco/core/paths";
 import { protocolRange, runtimeCommit } from "@cawco/core/runtime";
+import { ConnectionKeyError } from "./connections";
 import { discoverHub, findExistingHub, type Hub } from "./discover";
 import {
   isServiceAction,
@@ -54,6 +55,10 @@ Usage
                                           call one, under the same role checks as MCP
                                           (session: --session or CAWCO_INSTANCE_ID;
                                           credential: CAWCO_SESSION_CREDENTIAL)
+  cawco connections set-key <name> [--hub <url>]
+                                          give a connection its key: typed unseen, or
+                                          piped (pbpaste | cawco connections set-key x)
+                                          straight to the hub, never through a session
   cawco git-credential <get|store|erase>  git's credential helper for the hub's git
                                           remote, as this session; set up for every
                                           session, not run by hand
@@ -521,6 +526,27 @@ const gitCredential = async (args: Args): Promise<number> => {
   return 0;
 };
 
+/** `cawco connections set-key <name>`: a connection's key, from this terminal to the hub. */
+const runConnections = async (args: Args): Promise<number> => {
+  if (args.action !== "set-key") {
+    throw new UsageError("connections needs set-key <name>");
+  }
+  const found = await resolve(args);
+  if (!found) {
+    console.error(NO_HUB);
+    return 1;
+  }
+  const { setConnectionKey } = await import("./connections");
+  const { lines, signedIn } = await setConnectionKey(
+    found.httpUrl,
+    args.rest[0]
+  );
+  for (const line of lines) {
+    console.log(line);
+  }
+  return signedIn ? 0 : 1;
+};
+
 /** `cawco tools` and `cawco tool <name> [json]`: the session's MCP tools, under its role. */
 const runTool = async (args: Args): Promise<number> => {
   // Inside a workspace's boundary the tool door is the way in: no hub is reachable.
@@ -632,6 +658,8 @@ const run = async (argv: string[]): Promise<number> => {
       return runTool(args);
     case "git-credential":
       return gitCredential(args);
+    case "connections":
+      return runConnections(args);
     case "service":
       return runService(args);
     default:
@@ -644,7 +672,11 @@ const code = await run(Bun.argv.slice(2)).catch((error: unknown) => {
     console.error(`cawco: ${error.message}\n\nRun \`cawco --help\`.`);
     return 2;
   }
-  if (error instanceof ServiceError || error instanceof ToolError) {
+  if (
+    error instanceof ServiceError ||
+    error instanceof ToolError ||
+    error instanceof ConnectionKeyError
+  ) {
     console.error(`cawco: ${error.message}`);
     return 1;
   }

@@ -436,7 +436,6 @@ import {
 import { envelopeFault, type RegistryShape, refusalFrame } from "./registry";
 import { createRoutines, routineRoutes } from "./routines";
 import { RuleEngine } from "./rules";
-import { makeSecretBox } from "./secret-box";
 import { createSessionIdentities } from "./session-identity";
 import { createSessionLifecycle } from "./session-lifecycle";
 import { resolveSkill } from "./skills";
@@ -13790,7 +13789,6 @@ export const createServer = (
   // calls for the sessions its delegate types and projects grant them to.
   const connections = createConnections({
     db: db.connections,
-    secrets: makeSecretBox(),
     lifetime,
     hubOrigin: hubHttpUrl,
     projectExists: (id) => Boolean(db.project(id)),

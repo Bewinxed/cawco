@@ -12,6 +12,7 @@ import type {
   FleetConfig,
   FleetHook,
   FleetMarketplace,
+  FleetMcpConfig,
   FleetMcpServer,
   FleetPlugin,
   FleetScope,
@@ -151,6 +152,7 @@ import {
   workspaceCreates,
   workspaces,
 } from "./schema";
+import { sealAtRest } from "./seal-at-rest";
 import { type TurnUsageDb, turnUsageDb } from "./turn-usage";
 
 /** Ids looked up per statement (bound twice), well under SQLite's variable limit. */
@@ -221,7 +223,11 @@ export type ProjectRow = typeof projects.$inferSelect & { places: PlaceRow[] };
 /** One task file as a project's task index holds it (tasks.ts). */
 export type TaskIndexRow = typeof projectTasks.$inferSelect;
 /** A device the iOS app registered for pushes, by its Cawrier pairing. */
-export type PushDeviceRow = typeof pushDevices.$inferSelect;
+/** A device the hub can push to: its sealed pairing secret and key opened. */
+export type PushDeviceRow = Omit<
+  typeof pushDevices.$inferSelect,
+  "secret" | "key"
+> & { key: string; secret: string };
 export type ProjectOfferRow = typeof projectOffers.$inferSelect;
 export type SessionPlanRow = typeof sessionPlans.$inferSelect;
 /** Where a preview's choices are kept (choices.ts). */
@@ -628,9 +634,11 @@ export interface DbShape {
   readonly getMcpOauth: (
     name: string
   ) => typeof fleetMcpOauth.$inferSelect | undefined;
-  readonly getMcpServer: (
-    name: string
-  ) => typeof mcpServers.$inferSelect | undefined;
+  readonly getMcpServer: (name: string) =>
+    | (Omit<typeof mcpServers.$inferSelect, "config"> & {
+        config: FleetMcpConfig;
+      })
+    | undefined;
   /** The stored OpenRouter key and when it was connected, or undefined while not connected. */
   readonly getOpenRouterConnection: () =>
     | { apiKey: string; connectedAt: Date; suggestWhileTyping: boolean }
@@ -2148,6 +2156,16 @@ const make = async (path: string): Promise<DbShape> => {
     rmSync(migrating, { force: true });
   }
   db.$client.run("PRAGMA foreign_keys = ON");
+  // Secrets kept as plain text before they were sealed are sealed now, before
+  // anything reads them (seal-at-rest.ts).
+  const sealed = sealAtRest(db.$client);
+  console.info(
+    Object.keys(sealed).length > 0
+      ? `[seal-at-rest] sealed in place: ${Object.entries(sealed)
+          .map(([column, count]) => `${column} ${count}`)
+          .join(", ")}`
+      : "[seal-at-rest] every secret is sealed already"
+  );
 
   // THE BOARD'S CHANGE LOG: the id of every `instances` row written since the
   // board last read it, on this connection, which is the only one that writes
@@ -3159,8 +3177,15 @@ const make = async (path: string): Promise<DbShape> => {
         .where(eq(sessionIdentities.instanceId, instanceId))
         .run();
     },
-    getMcpServer: (name) =>
-      db.select().from(mcpServers).where(eq(mcpServers.name, name)).get(),
+    getMcpServer: (name) => {
+      const row = db
+        .select()
+        .from(mcpServers)
+        .where(eq(mcpServers.name, name))
+        .get();
+      // A config the hub's key does not open is no server until it is saved again.
+      return row?.config ? { ...row, config: row.config } : undefined;
+    },
     getMcpOauth: (name) =>
       db.select().from(fleetMcpOauth).where(eq(fleetMcpOauth.name, name)).get(),
     putMcpOauth: (row) => {
@@ -3180,13 +3205,14 @@ const make = async (path: string): Promise<DbShape> => {
     },
     takeMcpAuthorization: (state) =>
       db.transaction((tx) => {
+        // A sign-in under way is sealed, so its state is found by opening
+        // each one: a fleet holds a handful.
         const row = tx
           .select()
           .from(fleetMcpOauth)
-          .where(
-            sql`json_extract(${fleetMcpOauth.pending}, '$.state') = ${state}`
-          )
-          .get();
+          .where(isNotNull(fleetMcpOauth.pending))
+          .all()
+          .find((one) => one.pending?.state === state);
         if (!row?.pending || row.pending.expiresAt <= Date.now()) {
           return;
         }
@@ -4349,6 +4375,10 @@ const make = async (path: string): Promise<DbShape> => {
           .select()
           .from(mcpServers)
           .all()
+          // A config the hub's key does not open is no server until it is saved again.
+          .flatMap((row) =>
+            row.config ? [{ ...row, config: row.config }] : []
+          )
           .map(({ name, config, enabled, authMode, authError, projectId }) => {
             const signedIn =
               authMode === "direct" ||
@@ -7081,7 +7111,8 @@ const make = async (path: string): Promise<DbShape> => {
         .from(openrouterConnection)
         .where(eq(openrouterConnection.id, OPENROUTER_CONNECTION_ID))
         .get();
-      return row
+      // A key the hub's key does not open reads as not connected: connect again.
+      return row?.apiKey
         ? {
             apiKey: row.apiKey,
             connectedAt: row.connectedAt,
@@ -7149,11 +7180,20 @@ const make = async (path: string): Promise<DbShape> => {
         .run();
     },
     push: {
+      // A device whose pairing secret or key does not open is none until the
+      // app registers again, which it does on every launch.
       devices: () =>
-        db.select().from(pushDevices).orderBy(pushDevices.createdAt).all(),
+        db
+          .select()
+          .from(pushDevices)
+          .orderBy(pushDevices.createdAt)
+          .all()
+          .flatMap(({ secret, key, ...device }) =>
+            secret && key ? [{ ...device, secret, key }] : []
+          ),
       putDevice: ({ quiet, ...device }) => {
         const now = new Date();
-        return db
+        const row = db
           .insert(pushDevices)
           .values({
             ...device,
@@ -7171,6 +7211,8 @@ const make = async (path: string): Promise<DbShape> => {
           })
           .returning()
           .get();
+        // The secret and key just written, as given: what the row seals.
+        return { ...row, secret: device.secret, key: device.key };
       },
       dropDevice: (pairingId) =>
         db
