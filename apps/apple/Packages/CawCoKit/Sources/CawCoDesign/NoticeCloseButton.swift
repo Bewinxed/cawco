@@ -4,9 +4,13 @@ import UIKit
 /// 24pt ghost round a 12pt close glyph in muted ink, always shown. Under a
 /// pointer it takes `surface-hover` and `ink-strong`; a press dips it to
 /// `pressScale`. It stands in its row's first line's trailing cell, its box
-/// hung past the trailing edge by `inkInset` so its stroke ends on that edge,
-/// and its 44pt touch area (`Size.cBtnHLg`) moves back inboard by the same
-/// amount, so it never reaches past the row's own `space3`.
+/// hung past the trailing edge by `inkInset` so its stroke ends on that edge.
+/// Its touch area is a 44pt square (`Size.cBtnHLg`, Apple HIG Buttons: "a
+/// hit region of at least 44x44 pt") centred on the glyph, so a finger
+/// 10pt off the glyph on any side still lands on it (owner: "the x is too
+/// small to click"). The area is not layout: it reaches past the row's own
+/// `space3` into the list's margin, and the row and its group answer for it
+/// there (CawPanel `NoticeRow.closeHit`).
 public final class NoticeCloseButton: UIButton {
     /// Its box's side.
     public static let side = 24.0
@@ -68,12 +72,10 @@ public final class NoticeCloseButton: UIButton {
         tintColor = hovering ? Palette.inkStrong : Palette.inkMuted
     }
 
-    /// The 44pt target, centred where the box stood before it hung: moved
-    /// back inboard by `inkInset` (NoticeRow.svelte, `.x::after` under a coarse pointer).
+    /// The 44pt target, centred on the glyph (the box's centre).
     public var hitBox: CGRect {
         let grow = (Self.hitSide - Self.side) / 2
-        let inboard = effectiveUserInterfaceLayoutDirection == .rightToLeft ? Self.inkInset : -Self.inkInset
-        return bounds.insetBy(dx: -grow, dy: -grow).offsetBy(dx: inboard, dy: 0)
+        return bounds.insetBy(dx: -grow, dy: -grow)
     }
 
     override public func point(inside point: CGPoint, with _: UIEvent?) -> Bool {

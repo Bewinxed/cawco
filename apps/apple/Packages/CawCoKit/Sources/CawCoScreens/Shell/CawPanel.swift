@@ -28,9 +28,16 @@ import UIKit
 /// glass runs on down to it through a neck at its own width, which exists
 /// only while it hangs (`GlassCapsule.neck`). While it hangs the glass takes its
 /// material and edge (`GlassCapsule.setJoined`) and the lower half of his
-/// rim fades out (`NeedsCawButton.setJoined`). It grows out of the glass
-/// over `durPop` and folds back over `durExit` on `easeOut`; with less
-/// motion it fades.
+/// rim fades out (`NeedsCawButton.setJoined`). It slides down out of the
+/// glass over `durPop` and back up into it over `durExit` on `easeOut`; with
+/// less motion it fades.
+///
+/// On a finger it is pulled down out of the glass the way a tab's options
+/// are pulled off their tab (`pulled`, the `HangPull` rule): from Caw it
+/// follows the finger 1:1, and let go it settles open or back into the glass
+/// on the house spring at the finger's speed. Pushed up, from Caw or from
+/// its body once its list has nothing further to show, it goes back in the
+/// same way. A notice is swiped off it sideways (`NoticeRow`).
 final class CawPanel: UIView, UIGestureRecognizerDelegate {
     /// Kept from a wide screen's edges, pt.
     static let edge: CGFloat = 8
@@ -59,7 +66,11 @@ final class CawPanel: UIView, UIGestureRecognizerDelegate {
     private weak var glass: GlassCapsule?
     private weak var head: NeedsCawButton?
     private let card = HangCard()
-    private let scroll = UIScrollView()
+    private let scroll = PanelScroll()
+    /// The light dismissal's tap, on the shell's view (`dismissal`).
+    private var dismissTap: UITapGestureRecognizer?
+    /// A push up on the open panel's body, once its list shows its end.
+    private let push = UIPanGestureRecognizer()
     private let list = UIStackView()
     /// The house edge fade where the list runs past what the panel holds
     /// (CawPanel.svelte `kit-edge-fade-block`), at its full 40pt on every
@@ -104,6 +115,12 @@ final class CawPanel: UIView, UIGestureRecognizerDelegate {
         scroll.addSubview(list)
         scroll.contentInsetAdjustmentBehavior = .never
         fade = EdgeFade(scroll, length: 40)
+        push.addTarget(self, action: #selector(pushed(_:)))
+        push.maximumNumberOfTouches = 1
+        push.delegate = self
+        card.addGestureRecognizer(push)
+        // The list scrolls only once a push up has been ruled out.
+        scroll.panGestureRecognizer.require(toFail: push)
     }
 
     @available(*, unavailable)
@@ -180,7 +197,8 @@ final class CawPanel: UIView, UIGestureRecognizerDelegate {
         if needs.isEmpty, notices.isEmpty {
             list.addArrangedSubview(Self.empty(quiet))
         }
-        Self.log.notice("panel rows: \(needs.count) needs, \(notices.count) notices, open \(self.open)")
+        let entries = notices.reduce(0) { $0 + $1.members.count }
+        Self.log.notice("panel rows: \(needs.count) needs, \(notices.count) notices, \(entries) entries, open \(self.open)")
         if open {
             place(animated: true)
             // Its rows changed under VoiceOver and every reader of the tree: they are read again.
@@ -262,8 +280,8 @@ final class CawPanel: UIView, UIGestureRecognizerDelegate {
     /// rows, up to what the screen leaves under the glass or `tallest`, its
     /// list scrolling past that. The neck is the glass's span along its top
     /// edge, flared on the leading side by the glass's `flare`.
-    private func place(animated: Bool = false) {
-        guard let host = superview, let glass, glass.window != nil else { return }
+    private func place(animated: Bool = false, then done: @escaping () -> Void = {}) {
+        guard let host = superview, let glass, glass.window != nil else { return done() }
         #if DEBUG
         ProbeCounts.panelPlaces += 1
         #endif
@@ -293,9 +311,13 @@ final class CawPanel: UIView, UIGestureRecognizerDelegate {
             self.scroll.contentSize = self.list.frame.size
         }
         if animated, !UIAccessibility.isReduceMotionEnabled {
-            Motion.easeOut.animator(Motion.durMorph) { apply(); self.layoutIfNeeded() }.startAnimation()
+            let move = Motion.easeOut.animator(Motion.durMorph) { apply(); self.layoutIfNeeded() }
+            move.addCompletion { _ in done() }
+            move.startAnimation()
         } else {
             apply()
+            layoutIfNeeded()
+            done()
         }
     }
 
@@ -332,8 +354,16 @@ final class CawPanel: UIView, UIGestureRecognizerDelegate {
 
     // MARK: Open and close
 
-    /// Grows out of `glass`, the glass `head` stands on.
+    /// Comes down out of `glass`, the glass `head` stands on.
     func show(from head: NeedsCawButton, glass: GlassCapsule) {
+        hang(from: head, glass: glass)
+        card.grow()
+        UIAccessibility.post(notification: .layoutChanged, argument: list.arrangedSubviews.first)
+    }
+
+    /// Placed under `glass`, open and joined to it, its card wherever its
+    /// slide stands: the tap's growth or the finger's pull takes it from there.
+    private func hang(from head: NeedsCawButton, glass: GlassCapsule) {
         if let previous = self.glass, previous !== glass { previous.setJoined(false) }
         if let previous = self.head, previous !== head { previous.setJoined(false) }
         self.head = head
@@ -364,8 +394,6 @@ final class CawPanel: UIView, UIGestureRecognizerDelegate {
         setOpen(true)
         glass.setJoined(true)
         head.setJoined(true)
-        card.grow()
-        UIAccessibility.post(notification: .layoutChanged, argument: list.arrangedSubviews.first)
     }
 
     /// Draws again every mark under `view` that paints only while drawn (`RedrawsOnReveal`).
@@ -378,19 +406,122 @@ final class CawPanel: UIView, UIGestureRecognizerDelegate {
 
     func close() {
         guard open else { return }
+        letGo()
+        card.fold { [weak self] in self?.hideShut() }
+        UIAccessibility.post(notification: .layoutChanged, argument: head)
+    }
+
+    /// Closed: Caw and his glass part from it on the way back in.
+    private func letGo() {
         setOpen(false)
         glass?.setJoined(false)
         head?.setJoined(false)
-        card.fold { [weak self] in
-            guard let self, !open else { return }
-            isHidden = true
+    }
+
+    /// Gone back into the glass: hidden, unless it has opened since.
+    private func hideShut() {
+        guard !open else { return }
+        isHidden = true
+    }
+
+    // MARK: Pulled by a finger
+
+    /// How far out of the glass the card stood when the finger took it.
+    private var pullFrom = 0.0
+
+    /// A finger on Caw (`NeedsCawButton.onPull`): down pulls the panel out of
+    /// his glass under it, up pushes the open panel back in.
+    func pulled(_ pan: UIPanGestureRecognizer, from head: NeedsCawButton, glass: GlassCapsule) {
+        track(pan, head: head, glass: glass)
+    }
+
+    /// A push up on the open panel's body.
+    @objc private func pushed(_ pan: UIPanGestureRecognizer) {
+        track(pan, head: nil, glass: nil)
+    }
+
+    /// The finger's pull, the card's top edge `dy` from where it took it:
+    /// 1:1 along the slide, let go on `HangPull`'s rule (TabOptionsSheet's
+    /// `pull` and `release`). With less motion nothing slides: past
+    /// `HangPull.opens` down it fades open, up it fades shut.
+    private func track(_ pan: UIPanGestureRecognizer, head: NeedsCawButton?, glass: GlassCapsule?) {
+        let dy = pan.translation(in: superview).y
+        let still = UIAccessibility.isReduceMotionEnabled
+        switch pan.state {
+        case .began:
+            pullFrom = card.revealed
+            if !open, !still, let head, let glass {
+                hang(from: head, glass: glass)
+            }
+            pull(dy, head: head, glass: glass)
+        case .changed:
+            pull(dy, head: head, glass: glass)
+        case .ended:
+            release(dy, velocity: pan.velocity(in: superview).y)
+        case .cancelled, .failed:
+            // Back where the finger found it.
+            release(0, velocity: 0)
+        default:
+            break
         }
-        UIAccessibility.post(notification: .layoutChanged, argument: head)
+    }
+
+    private func pull(_ dy: Double, head: NeedsCawButton?, glass: GlassCapsule?) {
+        if UIAccessibility.isReduceMotionEnabled {
+            if !open, dy >= HangPull.opens, let head, let glass {
+                show(from: head, glass: glass)
+            } else if open, dy <= -HangPull.opens {
+                close()
+            }
+            return
+        }
+        let height = bounds.height
+        guard height > 0 else { return }
+        card.reveal(pullFrom + dy / height)
+        #if DEBUG
+        // A simulator probe's 1:1 read: the finger's travel against the card's drawn foot.
+        let line = String(format: "panel pull: finger %.1f foot %.1f from %.1f height %.1f", dy, card.revealed * height, pullFrom * height, height)
+        Self.log.notice("\(line, privacy: .public)")
+        #endif
+    }
+
+    private func release(_ dy: Double, velocity: Double) {
+        guard !UIAccessibility.isReduceMotionEnabled else { return }
+        let height = bounds.height
+        let travel = min(height, max(0, pullFrom * height + dy))
+        #if DEBUG
+        let line = String(format: "panel release: travel %.1f velocity %.0f height %.1f opens %@", travel, velocity, height,
+                          HangPull.opens(travel: travel, velocity: velocity, height: height) ? "yes" : "no")
+        Self.log.notice("\(line, privacy: .public)")
+        #endif
+        if HangPull.opens(travel: travel, velocity: velocity, height: height) {
+            card.settle(open: true, velocity: velocity)
+            if pullFrom < 0.5 {
+                UIAccessibility.post(notification: .layoutChanged, argument: list.arrangedSubviews.first)
+            }
+        } else {
+            if open { letGo() }
+            card.settle(open: false, velocity: velocity) { [weak self] in self?.hideShut() }
+            UIAccessibility.post(notification: .layoutChanged, argument: head)
+        }
+    }
+
+    // MARK: A notice swiped off
+
+    /// A notice row (or a group, from its head) slid off sideways: the list
+    /// closes over it with the panel's height, then it is dismissed the way
+    /// its ✕ dismisses it. The rows are made again on the hub's next word,
+    /// so one the hub keeps comes back.
+    fileprivate func swept(_ row: UIView, dismiss: @escaping @MainActor () -> Void) {
+        row.isHidden = true
+        drawn = ""
+        place(animated: true, then: dismiss)
     }
 
     private func setOpen(_ next: Bool) {
         guard next != open else { return }
         open = next
+        Self.log.notice("panel open: \(next)")
         onOpenChange(next)
     }
 
@@ -412,11 +543,22 @@ final class CawPanel: UIView, UIGestureRecognizerDelegate {
         tap.delaysTouchesEnded = false
         tap.delegate = self
         host.addGestureRecognizer(tap)
+        dismissTap = tap
     }
 
     @objc private func tappedOutside() { close() }
 
-    func gestureRecognizer(_: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+    /// A push up on the body begins only on the open panel, heading mostly
+    /// up, with its list showing its end: until then the finger scrolls it.
+    override func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
+        guard gesture === push else { return super.gestureRecognizerShouldBegin(gesture) }
+        let v = push.velocity(in: self)
+        let end = scroll.contentSize.height - scroll.bounds.height
+        return open && v.y < 0 && abs(v.y) > abs(v.x) && scroll.contentOffset.y >= end - 1
+    }
+
+    func gestureRecognizer(_ gesture: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        guard gesture === dismissTap else { return true }
         guard open else { return false }
         if point(inside: touch.location(in: self), with: nil) { return false }
         // Caw's own press toggles the panel itself.
@@ -428,8 +570,22 @@ final class CawPanel: UIView, UIGestureRecognizerDelegate {
         return true
     }
 
-    func gestureRecognizer(_: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith _: UIGestureRecognizer) -> Bool {
-        true
+    /// The light dismissal's tap is recognised alongside everything; the push takes the finger alone.
+    func gestureRecognizer(_ gesture: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith _: UIGestureRecognizer) -> Bool {
+        gesture === dismissTap
+    }
+}
+
+/// The panel's list: it leaves a mostly sideways drag alone, which is a
+/// notice being swiped off (`NoticeRow`), as a tab strip leaves a pull down
+/// to its tab (PaneTabsView's `StripScroll`).
+private final class PanelScroll: UIScrollView {
+    override func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
+        if gesture === panGestureRecognizer {
+            let v = panGestureRecognizer.velocity(in: self)
+            if abs(v.x) > abs(v.y) { return false }
+        }
+        return super.gestureRecognizerShouldBegin(gesture)
     }
 }
 
@@ -657,10 +813,28 @@ private final class NeedRow: UIControl {
 /// that cell is the ✕'s: every line under the first runs to the trailing
 /// edge, and the first line keeps the ✕'s room (`firstLine`). `nested`: an
 /// entry of a group, the same columns with `space1` above and below in place
-/// of `space3`, its first line in body type. The ✕ is the one way a notice
-/// leaves; the row answers for its 44pt target too.
-private final class NoticeRow: UIView {
+/// of `space3`, its first line in body type. The row answers for the ✕'s
+/// 44pt target too.
+///
+/// It leaves by its ✕, or swiped off sideways (owner: "the typical slide
+/// left right to dismiss"): a mostly sideways drag carries it 1:1 under the
+/// finger; let go past `sweep` of its width, carried along its speed, or
+/// flicked (`HangPull.flick`), it slides off that way on the house spring at
+/// the finger's speed, the list closes over it and it is dismissed as its ✕
+/// dismisses it; short of that it springs back. A group's head carries the
+/// whole group (`carries`). With less motion it fades out where it stands.
+/// VoiceOver has the same as a "Dismiss" action on each of its words.
+private final class NoticeRow: UIView, UIGestureRecognizerDelegate {
     private let close: NoticeCloseButton
+    private let dismiss: @MainActor () -> Void
+    /// What a swipe on the row carries off: the row, or from a group's head its group.
+    weak var carries: UIView?
+    private let swipe = UIPanGestureRecognizer()
+    private var slide: UIViewPropertyAnimator?
+    /// Where the row stood across when the finger took it.
+    private var swipeFrom = 0.0
+    /// The share of its width a swipe's release, carried along its speed, must pass.
+    static let sweep = 0.4
 
     /// The lead's side (NoticeRow's `lead`, AccountTile at 28).
     static let lead = 28.0
@@ -670,6 +844,7 @@ private final class NoticeRow: UIView {
 
     init(lead: UIView, column: UIView, nested: Bool, dismissLabel: String, reading: [Any], dismiss: @escaping @MainActor () -> Void) {
         close = NoticeCloseButton(label: dismissLabel, action: dismiss)
+        self.dismiss = dismiss
         super.init(frame: .zero)
         lead.translatesAutoresizingMaskIntoConstraints = false
         lead.isAccessibilityElement = false
@@ -696,9 +871,23 @@ private final class NoticeRow: UIView {
             close.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -(Space.space3 - NoticeCloseButton.inkInset)),
             close.centerYAnchor.constraint(equalTo: topAnchor, constant: pad + first.lineHeight / 2),
         ])
-        // The words, the act and the ✕ each read on their own; the lead is a picture.
+        // The words, the act and the ✕ each read on their own; the lead is a
+        // picture. Each of the words keeps the swipe's dismissal as an action.
         accessibilityElements = reading + [close]
         accessibilityIdentifier = nested ? "caw-notice-entry" : "caw-notice"
+        let gone = UIAccessibilityCustomAction(name: "Dismiss") { _ in
+            dismiss()
+            return true
+        }
+        for case let element as NSObject in reading where !(element is UIControl) {
+            element.accessibilityCustomActions = (element.accessibilityCustomActions ?? []) + [gone]
+        }
+        swipe.addTarget(self, action: #selector(swiped(_:)))
+        swipe.maximumNumberOfTouches = 1
+        // Its own delegate: a view's `gestureRecognizerShouldBegin` is asked of
+        // the view the touch landed on (a label in the row), not of the row.
+        swipe.delegate = self
+        addGestureRecognizer(swipe)
     }
 
     @available(*, unavailable)
@@ -795,16 +984,109 @@ private final class NoticeRow: UIView {
         }
     }
 
+    /// The ✕, when `point` (in the row's space) falls in its 44pt target.
+    func closeHit(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        guard isUserInteractionEnabled, !isHidden, close.point(inside: convert(point, to: close), with: event) else { return nil }
+        return close
+    }
+
     /// The ✕'s 44pt target, where it reaches past the row.
     override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
-        super.point(inside: point, with: event) || close.point(inside: convert(point, to: close), with: event)
+        super.point(inside: point, with: event) || closeHit(point, with: event) != nil
     }
 
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-        if isUserInteractionEnabled, !isHidden, close.point(inside: convert(point, to: close), with: event) {
-            return close
+        closeHit(point, with: event) ?? super.hitTest(point, with: event)
+    }
+
+    // MARK: Swiped off
+
+    /// A swipe begins only heading mostly sideways: up and down is the list's
+    /// scroll and the panel's push.
+    override func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
+        guard gesture === swipe else { return super.gestureRecognizerShouldBegin(gesture) }
+        let v = swipe.velocity(in: self)
+        return abs(v.x) > abs(v.y)
+    }
+
+    @objc private func swiped(_ pan: UIPanGestureRecognizer) {
+        let moving = carries ?? self
+        let dx = pan.translation(in: moving.superview).x
+        switch pan.state {
+        case .began:
+            slide?.stopAnimation(true)
+            slide = nil
+            swipeFrom = moving.transform.tx
+            moving.transform = CGAffineTransform(translationX: swipeFrom + dx, y: 0)
+        case .changed:
+            moving.transform = CGAffineTransform(translationX: swipeFrom + dx, y: 0)
+            #if DEBUG
+            let line = String(format: "notice swipe: finger %.1f row %.1f width %.1f", dx, moving.transform.tx, moving.bounds.width)
+            CawPanel.log.notice("\(line, privacy: .public)")
+            #endif
+        case .ended:
+            let v = pan.velocity(in: moving.superview).x
+            let x = moving.transform.tx
+            let carried = x + v * HangPull.project
+            let flicked = abs(v) >= HangPull.flick && (x == 0 || (v > 0) == (x > 0))
+            #if DEBUG
+            let line = String(format: "notice release: x %.1f velocity %.0f width %.1f gone %@", x, v, moving.bounds.width,
+                              abs(carried) >= moving.bounds.width * Self.sweep || flicked ? "yes" : "no")
+            CawPanel.log.notice("\(line, privacy: .public)")
+            #endif
+            if abs(carried) >= moving.bounds.width * Self.sweep || flicked {
+                sweep(moving, toward: flicked ? (v > 0 ? 1 : -1) : (carried > 0 ? 1 : -1), velocity: v)
+            } else {
+                settle(moving, to: 0, velocity: v)
+            }
+        case .cancelled, .failed:
+            settle(moving, to: 0, velocity: 0)
+        default:
+            break
         }
-        return super.hitTest(point, with: event)
+    }
+
+    /// Off the panel `toward` (1 trailing, -1 leading), then dismissed; with less motion it fades where it stands.
+    private func sweep(_ moving: UIView, toward side: Double, velocity: Double) {
+        swipe.isEnabled = false
+        let off = { [weak self, weak moving] in
+            guard let self, let moving else { return }
+            var at = moving.superview
+            while let view = at, !(view is CawPanel) { at = view.superview }
+            if let panel = at as? CawPanel {
+                panel.swept(moving, dismiss: dismiss)
+            } else {
+                dismiss()
+            }
+        }
+        if UIAccessibility.isReduceMotionEnabled {
+            let fade = Motion.easeOut.animator(Motion.durFade) {
+                moving.transform = .identity
+                moving.alpha = 0
+            }
+            fade.addCompletion { _ in off() }
+            fade.startAnimation()
+            return
+        }
+        // Clear of the panel's edge, past what the row's own margin leaves.
+        settle(moving, to: side * (moving.bounds.width + Space.space6), velocity: velocity, done: off)
+    }
+
+    /// Across to `x` on the house spring, leaving at the finger's `velocity`.
+    private func settle(_ moving: UIView, to x: Double, velocity: Double, done: @escaping () -> Void = {}) {
+        let distance = x - moving.transform.tx
+        let spring = UIViewPropertyAnimator(
+            duration: Motion.durSettle,
+            timingParameters: HouseSpring.timing(velocity: abs(distance) >= 0.5 ? velocity / distance : 0)
+        )
+        spring.addAnimations { moving.transform = CGAffineTransform(translationX: x, y: 0) }
+        spring.addCompletion { [weak self, weak spring] position in
+            guard let self, let spring, slide === spring else { return }
+            slide = nil
+            if position == .end { done() }
+        }
+        slide = spring
+        spring.startAnimation()
     }
 }
 
@@ -827,6 +1109,8 @@ private final class NoticeGroup: UIView {
     private var toggle: UIButton?
     private var open: Bool
     private let folded: Int
+    /// Its head and entries, whose ✕s' targets reach past its box.
+    private var rows: [NoticeRow] = []
 
     init(_ notice: Notice, open: Bool, dismiss: @escaping @MainActor () -> Void, acknowledge: @escaping @MainActor ([String]) -> Void) {
         let todo = notice.members.filter { $0.todo != .everywhere }
@@ -844,13 +1128,21 @@ private final class NoticeGroup: UIView {
             stack.topAnchor.constraint(equalTo: topAnchor),
             stack.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
-        stack.addArrangedSubview(Self.head(notice, dismiss: dismiss))
+        // A swipe on the head carries the whole group off, as its ✕ acknowledges them all.
+        let head = Self.head(notice, dismiss: dismiss)
+        head.carries = self
+        rows.append(head)
+        stack.addArrangedSubview(head)
         // The entries, `space2` under the last (`.entries`).
         let entries = UIStackView()
         entries.axis = .vertical
         entries.isLayoutMarginsRelativeArrangement = true
         entries.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: 0, bottom: Space.space2, trailing: 0)
-        for member in todo { entries.addArrangedSubview(Self.entry(member, acknowledge: acknowledge)) }
+        for member in todo {
+            let row = Self.entry(member, acknowledge: acknowledge)
+            rows.append(row)
+            entries.addArrangedSubview(row)
+        }
         if !done.isEmpty {
             let button = KitButton.make(Self.toggleWords(open: open, count: done.count), glyph: open ? .chevronUp : .chevronDown,
                                         variant: .ghost, height: .xs) { [weak self] in
@@ -874,7 +1166,11 @@ private final class NoticeGroup: UIView {
             entries.addArrangedSubview(more)
             fold.axis = .vertical
             fold.clipsToBounds = true
-            for member in done { fold.addArrangedSubview(Self.entry(member, acknowledge: acknowledge)) }
+            for member in done {
+                let row = Self.entry(member, acknowledge: acknowledge)
+                rows.append(row)
+                fold.addArrangedSubview(row)
+            }
             fold.isHidden = !open
             fold.alpha = open ? 1 : 0
             entries.addArrangedSubview(fold)
@@ -885,6 +1181,25 @@ private final class NoticeGroup: UIView {
     @available(*, unavailable)
     required init?(coder _: NSCoder) {
         fatalError("NoticeGroup is built in code")
+    }
+
+    /// The ✕ whose target `point` falls in, the last row's first (the one
+    /// drawn over its neighbours). A row's ✕ reaches past the group's own box
+    /// on its trailing side, which no hit test inside the box would see.
+    private func closeHit(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        for row in rows.reversed() where row.window != nil && !row.isHidden && row.superview?.isHidden == false {
+            if let close = row.closeHit(convert(point, to: row), with: event) { return close }
+        }
+        return nil
+    }
+
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        super.point(inside: point, with: event) || closeHit(point, with: event) != nil
+    }
+
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        guard isUserInteractionEnabled, !isHidden, alpha > 0.01 else { return nil }
+        return closeHit(point, with: event) ?? super.hitTest(point, with: event)
     }
 
     /// The head: label type in strong ink (with a pass group's count in the

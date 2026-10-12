@@ -1,4 +1,4 @@
-import Foundation
+import UIKit
 
 /// The spring the house settles a hand-driven surface on (`durSettle`, no
 /// bounce: critically damped at that response), stepped by hand each frame
@@ -28,5 +28,13 @@ public struct HouseSpring: Sendable {
             left -= h
         }
         return abs(x) < 0.5 && abs(v) < 20
+    }
+
+    /// The same spring for UIKit's animators (a `HangCard`'s settle under a
+    /// finger), leaving at `velocity`: the share of the way left it covers
+    /// each second, the finger's speed over the distance to go.
+    @MainActor
+    public static func timing(velocity: Double) -> UISpringTimingParameters {
+        UISpringTimingParameters(mass: 1, stiffness: stiffness, damping: damping, initialVelocity: CGVector(dx: velocity, dy: velocity))
     }
 }

@@ -151,6 +151,10 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
                 // It hangs from the glass he stands on: his own tab on a phone, the bar's group on a wide screen.
                 if cawPanel.open { cawPanel.close() } else { cawPanel.show(from: head, glass: cluster.glass) }
             }
+            cluster.onCawPull = { [weak self, weak cluster] head, pan in
+                guard let self, let cluster else { return }
+                cawPanel.pulled(pan, from: head, glass: cluster.glass)
+            }
         }
         cawPanel.onChoose = { [weak self] item in self?.openWaiting(item) }
         cawPanel.onAnswer = { [weak self] item, ask, answer in

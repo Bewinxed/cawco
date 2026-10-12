@@ -29,9 +29,9 @@ import UIKit
 /// same on iOS 18.
 final class TabOptionsSheet: UIView {
     /// How far a finger pulls before the options stay out, pt.
-    static let opens = 24.0
-    /// How far a release is carried along its speed, s (as the Caw drawer's).
-    static let project = 0.099
+    static let opens = HangPull.opens
+    /// How far a release is carried along its speed, s (as Caw's panel's: `HangPull`).
+    static let project = HangPull.project
     static let resist = 0.35
     static let resistMax = 0.2
 

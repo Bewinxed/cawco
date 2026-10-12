@@ -423,6 +423,8 @@ final class TopBarCluster: UIView {
     var onJump: (UIView) -> Void = { _ in }
     /// Caw's head pressed: his panel opens or closes.
     var onCaw: (NeedsCawButton) -> Void = { _ in }
+    /// A finger pulling on Caw's head: his panel follows it (`CawPanel.pulled`).
+    var onCawPull: (NeedsCawButton, UIPanGestureRecognizer) -> Void = { _, _ in }
     /// The cluster's width changed: the crumb beside it is measured again.
     var onResize: () -> Void = {}
 
@@ -499,6 +501,10 @@ final class TopBarCluster: UIView {
             head.onTap = { [weak self, weak head] in
                 guard let self, let head else { return }
                 onCaw(head)
+            }
+            head.onPull = { [weak self, weak head] pan in
+                guard let self, let head else { return }
+                onCawPull(head, pan)
             }
         }
         groupRow.axis = .horizontal
