@@ -601,8 +601,22 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
             scroll.contentOffset.x = -scroll.contentInset.left
             reveal(active, animated: false)
         }
+        // The chosen tab's own width changed (its title arrived after the
+        // strip first showed it): revealed at its old width, a fresh launch
+        // left the chosen tab standing past the strip's end, and its details
+        // card hung from a tab not on screen. Shown again where it now fits,
+        // unless a finger or a switch has the strip; a tab already in view
+        // moves nothing (`reveal`).
+        let chosenWidth = active.flatMap { views[$0]?.frame.width } ?? 0
+        if abs(chosenWidth - revealedTabWidth) > 0.5 {
+            revealedTabWidth = chosenWidth
+            if passage == nil, !scroll.isTracking, !scroll.isDecelerating { reveal(active, animated: false) }
+        }
         edges()
     }
+
+    /// The chosen tab's width when the strip last revealed it.
+    private var revealedTabWidth = 0.0
 
     /// The strip's width when the chosen tab was last revealed for it.
     private var revealedWidth = 0.0
@@ -718,10 +732,18 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
             // How far each side stands in from the tab's own edge, 0 to 1:
             // the whole overlap at the neighbour's edge.
             let cut = TabSides(leading: index > 0 ? 1 - q[index - 1] : 0, trailing: index < q.count ? q[index] : 0)
-            // The phone's row runs a side under its neighbour in full; the
-            // desk's card stops at the neighbour's edge.
-            let inset = TabSides(leading: barRow && under.leading ? 0 : cut.leading * Self.overlap,
-                                 trailing: barRow && under.trailing ? 0 : cut.trailing * Self.overlap)
+            // The phone's row runs a side under its neighbour in full, its
+            // square shoulder meeting the front's round one at the top
+            // (bf08800e); the desk's card stops at the neighbour's edge. On a
+            // switch the front side stands in from its own edge to the seam
+            // (`cut`), so the side under it reaches under by as much again
+            // (`1 - cut` is the front's share of that seam): it stands to the
+            // seam as it does at rest, its corner never out of the front's
+            // arc. Left at its own edge, half way through a switch its square
+            // corner stood 4pt inside the front's edge, where the front's
+            // shoulder is still 3pt under the top, and showed.
+            let inset = TabSides(leading: barRow && under.leading ? -(1 - cut.leading) * Self.overlap : cut.leading * Self.overlap,
+                                 trailing: barRow && under.trailing ? -(1 - cut.trailing) * Self.overlap : cut.trailing * Self.overlap)
             // A side in front leans its ink toward the neighbour's as far as it
             // stands in; one under its neighbour is not drawn, and keeps its own.
             let lean = TabSides(leading: under.leading ? 0 : cut.leading, trailing: under.trailing ? 0 : cut.trailing)
@@ -1144,6 +1166,17 @@ extension PaneTabsView {
             }
             let detail = runs.map { String(format: "%.2f:%d:%02x%02x%02x", $0.start, $0.length, Int($0.peak[0] * 255), Int($0.peak[1] * 255), Int($0.peak[2] * 255)) }.joined(separator: ",")
             Self.probeLog.notice("tabs seam \(name, privacy: .public) \(left.prefix(8), privacy: .public)|\(right.prefix(8), privacy: .public) front=\((leftFront ? left : right).prefix(8), privacy: .public) strength=\(String(format: "%.3f", strength), privacy: .public) strokes=\(runs.count) runs=\(detail.isEmpty ? "-" : detail, privacy: .public)")
+            // The phone's row: the tucked side's square shoulder against the
+            // front's round one. How far inside the front card's edge its
+            // corner stands, and so how far down its side shows before it
+            // runs under the front card (the front's arc there; nothing past
+            // the arc's depth). At rest it meets that arc at the top.
+            guard barRow else { continue }
+            let (front, behind, frontView) = leftFront ? (ra, rb, a) : (rb, ra, b)
+            let r = CGFloat(frontView.radius)
+            let inside = leftFront ? front.card.maxX - behind.card.minX : behind.card.maxX - front.card.minX
+            let shows: CGFloat = inside >= r ? 0 : (inside <= 0 ? r : r - (r * r - (r - inside) * (r - inside)).squareRoot())
+            Self.probeLog.notice("tabs corner \(name, privacy: .public) \(left.prefix(8), privacy: .public)|\(right.prefix(8), privacy: .public) front=\((leftFront ? left : right).prefix(8), privacy: .public) inside=\(String(format: "%.2f", inside), privacy: .public) radius=\(String(format: "%.1f", r), privacy: .public) shows=\(String(format: "%.2f", shows), privacy: .public)")
         }
     }
 }

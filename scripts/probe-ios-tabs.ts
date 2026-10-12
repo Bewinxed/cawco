@@ -484,6 +484,14 @@ const RIM =
   /tabs rim (\S+) (\S+) tone=(\S+) pick=(\S+) strength=(\S+) px=(-?\d+) mid=(\S+) taper=(\S+) length=(\S+) shoulder=(\S+)/;
 const SEAM =
   /tabs seam (\S+) (\S+) front=(\S+) strength=(\S+) strokes=(\d+) runs=(\S+)/;
+/**
+ * The phone's row: a tucked side's square shoulder against the front's round
+ * one, how far down its side shows before it runs under the front card.
+ */
+const CORNER =
+  /tabs corner (\S+) (\S+) front=(\S+) inside=(\S+) radius=(\S+) shows=(\S+)/;
+/** At rest the tucked corner meets the front's arc within a point of the top. */
+const CORNER_SHOWS = 1.5;
 /** A held stop at rest: before the switch moves anything, and once it has landed. */
 const REST_STOP = /-(t0|t100)$/;
 
@@ -601,6 +609,27 @@ function judgeRims(run: string, log: string) {
           .join("; ")
       : `${seams.length} seams: ${seams.filter((s) => s.strokes === 1).length} with one stroke, ${seams.filter((s) => s.strokes === 0).length} with a rimless front tab and none`
   );
+  // Only the phone's row tucks a square shoulder (PaneTabsView `probeRims`).
+  const corners = log.split("\n").flatMap((line) => {
+    const m = CORNER.exec(line);
+    return m ? [{ stop: m[1], pair: m[2], inside: +m[4], shows: +m[6] }] : [];
+  });
+  if (corners.length > 0) {
+    const shown = corners.filter((c) => c.shows > CORNER_SHOWS);
+    const worst = corners.reduce((a, c) => (c.shows > a.shows ? c : a));
+    check(
+      `${run} a tucked corner never shows past the front's shoulder`,
+      shown.length === 0,
+      shown.length > 0
+        ? shown
+            .map(
+              (c) =>
+                `${c.stop} ${c.pair}: ${c.shows}pt shows, ${c.inside}pt inside`
+            )
+            .join("; ")
+        : `${corners.length} corners, the most showing ${worst.shows}pt (${worst.stop})`
+    );
+  }
   for (const held of ["step-held", "jump-held"]) {
     const before = rims.filter((r) => r.stop === `${held}-f49`);
     const after = rims.filter((r) => r.stop === `${held}-f51`);
