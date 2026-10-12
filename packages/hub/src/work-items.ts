@@ -121,6 +121,59 @@ export const titleProblem = (title: string): string | undefined => {
 export const LEAF_DELEGATE_REFUSAL =
   "This session is a leaf delegate — it was spawned with can_delegate=false and may not delegate or start sessions. Do the work yourself, or handoff to your parent session.";
 
+/**
+ * Who an item is started for: the session that delegated it, or, for a
+ * routine's run, the routine ({@link routineParent}). What starting an item
+ * reads of its parent and no more.
+ */
+export type Parent = Pick<
+  InstanceRow,
+  | "canDelegate"
+  | "cwd"
+  | "harness"
+  | "id"
+  | "launchDir"
+  | "machineId"
+  | "model"
+  | "projectId"
+  | "sessionId"
+  | "title"
+>;
+
+/** What a routine's runs name as their parent: `routine:<id>`, which no session's row has. */
+const ROUTINE_PARENT = "routine:";
+
+/** The parent id a routine's runs carry, on their item and their session's row. */
+export const routineParentId = (routineId: string): string =>
+  `${ROUTINE_PARENT}${routineId}`;
+
+/** Whether a parent id is a routine's: its runs report to no session (routines.ts reads their end). */
+export const isRoutineParent = (id: string | null | undefined): boolean =>
+  !!id?.startsWith(ROUTINE_PARENT);
+
+/**
+ * A routine as its run's parent: its project, and the machine and checkout
+ * the run's workspace is cut from, under the routine's name.
+ */
+export const routineParent = (routine: {
+  cwd: string;
+  id: string;
+  machineId: string;
+  name: string;
+  projectId: string | null;
+}): Parent => ({
+  id: routineParentId(routine.id),
+  projectId: routine.projectId,
+  machineId: routine.machineId,
+  cwd: routine.cwd,
+  title: routine.name,
+  launchDir: "unknown",
+  harness: "routine",
+  model: null,
+  sessionId: null,
+  canDelegate: true,
+});
+
 /** The states that take messages; every other one is finished work. */
 const LIVE: ReadonlySet<WorkItemRow["state"]> = new Set([
   "starting",
@@ -588,7 +641,7 @@ const refOf = (workspace: WorkspaceRow): WorkspaceRef => ({
 const spawnOf = (
   instanceId: string,
   title: string,
-  parent: InstanceRow,
+  parent: Parent,
   workspace: WorkspaceRow,
   settings: Settings
 ): SpawnPayload => ({
@@ -601,7 +654,7 @@ const spawnOf = (
 const sessionOf = (
   instanceId: string,
   title: string,
-  parent: InstanceRow,
+  parent: Parent,
   { account, canDelegate, forkOf, harness, model, skills, type }: Settings
 ): Omit<SpawnPayload, "cwd"> => ({
   instanceId,
@@ -655,7 +708,7 @@ const forkLine = (workspace: WorkspaceRow): string =>
 const messageOf = (
   instanceId: string,
   machineId: string,
-  parent: InstanceRow,
+  parent: Parent,
   content: string
 ): Envelope<SendPayload> => ({
   verb: "send",
@@ -1200,7 +1253,9 @@ export const createWorkItems = ({
 
   /** The item's project's lead, when it has one that is not the item's own session. */
   const leadFor = (item: WorkItemRow): InstanceRow | undefined =>
-    projectLead(item.projectId, item.instanceId);
+    isRoutineParent(item.parentInstanceId)
+      ? undefined
+      : projectLead(item.projectId, item.instanceId);
 
   /**
    * An item as its parent's delegate tray reads it, and its lead's: the lead
@@ -1209,9 +1264,10 @@ export const createWorkItems = ({
   const summaryOf = (item: WorkItemRow): WorkItemSummary => ({
     id: item.id,
     parentInstanceId: item.parentInstanceId,
-    leadInstanceId:
-      projectLead(item.projectId, item.instanceId, item.parentInstanceId)?.id ??
-      null,
+    leadInstanceId: isRoutineParent(item.parentInstanceId)
+      ? null
+      : (projectLead(item.projectId, item.instanceId, item.parentInstanceId)
+          ?.id ?? null),
     instanceId: item.instanceId,
     title: item.title,
     state: item.state,
@@ -1271,6 +1327,11 @@ export const createWorkItems = ({
    * Without a lead, the parent alone, as before.
    */
   const reportees = (row: InstanceRow): InstanceRow[] => {
+    // A routine's run reports to nobody: its routine reads how it ended, and
+    // a run that answers NO_REPLY must wake no model, the lead's included.
+    if (isRoutineParent(row.parentInstanceId)) {
+      return [];
+    }
     const [parent] = row.parentInstanceId
       ? db.getInstancesByIds([row.parentInstanceId])
       : [];
@@ -1305,7 +1366,7 @@ export const createWorkItems = ({
   /** The repository a request would work in: the workspace it names, else its machine and folder. */
   const repoOfRequest = (
     request: WorkItemRequest,
-    parent: InstanceRow,
+    parent: Parent,
     projectId: string | null
   ): RepoRef => {
     const named = request.workspace ?? request.reuse;
@@ -1353,7 +1414,7 @@ export const createWorkItems = ({
    */
   const claimOwns = (
     request: WorkItemRequest,
-    parent: InstanceRow,
+    parent: Parent,
     projectId: string | null
   ): (() => void) => {
     const owns = request.owns ?? [];
@@ -1858,10 +1919,7 @@ export const createWorkItems = ({
   };
 
   /** A new workspace's machine; a remote one needs its own repository and cannot fork. */
-  const targetMachine = (
-    request: WorkItemRequest,
-    parent: InstanceRow
-  ): string => {
+  const targetMachine = (request: WorkItemRequest, parent: Parent): string => {
     const machineId = request.machineId ?? parent.machineId;
     if (machineId !== parent.machineId) {
       if (request.fork) {
@@ -1880,10 +1938,7 @@ export const createWorkItems = ({
     return machineId;
   };
 
-  const settingsOf = (
-    request: WorkItemRequest,
-    parent: InstanceRow
-  ): Settings => {
+  const settingsOf = (request: WorkItemRequest, parent: Parent): Settings => {
     const { type, harness, model } = resolveSpawnType(
       types(parent.projectId),
       request
@@ -1909,7 +1964,7 @@ export const createWorkItems = ({
    */
   const forkOf = (
     request: WorkItemRequest,
-    parent: InstanceRow
+    parent: Parent
   ): Pick<Settings, "forkOf" | "harness" | "model"> => {
     if (!parent.sessionId) {
       throw new WorkItemRefusal(
@@ -1947,7 +2002,7 @@ export const createWorkItems = ({
     workspace: WorkspaceRow,
     previous: WorkItemRow,
     session: InstanceRow,
-    parent: InstanceRow,
+    parent: Parent,
     request: WorkItemRequest
   ): WorkItemStart => {
     const item = db.createWorkItem({
@@ -2012,7 +2067,7 @@ export const createWorkItems = ({
   const followUp = (
     needle: string,
     request: WorkItemRequest,
-    parent: InstanceRow
+    parent: Parent
   ): WorkItemStart | WorkspaceRow => {
     if (
       request.type ||
@@ -2150,9 +2205,11 @@ export const createWorkItems = ({
    * and the project it works for; refused when any of it cannot stand.
    */
   const admitted = (
-    asked: WorkItemRequest
+    asked: WorkItemRequest,
+    /** The parent when it is no session (a routine's): read off the hub otherwise. */
+    given?: Parent
   ): {
-    parent: InstanceRow;
+    parent: Parent;
     projectId: string | null;
     request: WorkItemRequest;
   } => {
@@ -2163,7 +2220,9 @@ export const createWorkItems = ({
         ? [...new Set(asked.owns.map(globOf))]
         : undefined,
     };
-    const [parent] = db.getInstancesByIds([request.parentInstanceId]);
+    const [parent] = given
+      ? [given]
+      : db.getInstancesByIds([request.parentInstanceId]);
     if (!parent) {
       throw new WorkItemRefusal(
         404,
@@ -2183,7 +2242,7 @@ export const createWorkItems = ({
     if (capped) {
       throw new WorkItemRefusal(409, capped);
     }
-    const projectId = request.task?.projectId ?? parent.projectId;
+    const projectId = request.task?.projectId ?? parent.projectId ?? null;
     if (request.outputs && !projectId) {
       throw new WorkItemRefusal(
         400,
@@ -2198,8 +2257,11 @@ export const createWorkItems = ({
    * item owns files it owns too; the files it owns are held from that check
    * until its item is filed, so two starts never both pass it.
    */
-  const start = async (asked: WorkItemRequest): Promise<WorkItemStart> => {
-    const { request, parent, projectId } = admitted(asked);
+  const start = async (
+    asked: WorkItemRequest,
+    given?: Parent
+  ): Promise<WorkItemStart> => {
+    const { request, parent, projectId } = admitted(asked, given);
     const release = claimOwns(request, parent, projectId);
     try {
       return await startAdmitted(request, parent, projectId);
@@ -2210,7 +2272,7 @@ export const createWorkItems = ({
 
   const startAdmitted = async (
     request: WorkItemRequest,
-    parent: InstanceRow,
+    parent: Parent,
     projectId: string | null
   ): Promise<WorkItemStart> => {
     if (request.reuse) {
@@ -2282,7 +2344,7 @@ export const createWorkItems = ({
    * Where an item lands and what it hands in, and the project it works for
    * (its task's, else its parent's), as its row keeps them.
    */
-  const placing = (request: WorkItemRequest, parent: InstanceRow) => {
+  const placing = (request: WorkItemRequest, parent: Parent) => {
     const projectId = request.task?.projectId ?? parent.projectId;
     const project = projectId ? db.project(projectId) : undefined;
     return {
@@ -2326,7 +2388,7 @@ export const createWorkItems = ({
   const spawnIn = (
     workspace: WorkspaceRow,
     settings: Settings,
-    parent: InstanceRow,
+    parent: Parent,
     request: WorkItemRequest,
     ahead?: { instanceId: string; placement: ItemPlacement }
   ): WorkItemStart => {
@@ -3165,6 +3227,7 @@ export const createWorkItems = ({
     const ended = finish(db.workItem(item.id) ?? item, {
       ...(failure ? { state: "failed", error: failure } : { state: "done" }),
       result: body,
+      summary: submission.summary,
       digest: `${submission.summary.trim()}\n${landing.line}${collected.line}`,
       ...(landing.kind === "done" && landing.prUrl
         ? { prUrl: landing.prUrl }
@@ -3243,7 +3306,25 @@ export const createWorkItems = ({
   };
 
   return {
-    start,
+    start: (asked: WorkItemRequest) => start(asked),
+
+    /**
+     * A routine's run (routines.ts): a fresh session in a new workspace cut
+     * from `parent.cwd` on `parent.machineId`, owned by the routine
+     * ({@link routineParent}). It reports to no session, the project's lead
+     * included: the routine reads how it ended from {@link WorkItemDeps.itemEnded}.
+     */
+    startForRoutine: (
+      request: Omit<
+        WorkItemRequest,
+        "parentInstanceId" | "workspace" | "fork" | "reuse"
+      >,
+      parent: Parent
+    ): Promise<WorkItemStart> =>
+      start({ ...request, parentInstanceId: parent.id }, parent),
+
+    /** What an item's session has spent since the item began (its budget's dollars). */
+    spentBy: (item: WorkItemRow): number => usedBy(item).usd,
 
     /**
      * `delegate`: {@link start}, or, while a live item owns files this one

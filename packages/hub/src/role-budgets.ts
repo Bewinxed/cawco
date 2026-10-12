@@ -15,18 +15,21 @@ import {
 import { createCaw } from "./caw";
 import { createDelegationMcp } from "./delegation-mcp";
 import { makeLifetime } from "./lifetime";
+import { createRoutines } from "./routines";
 import type { Tasks } from "./tasks";
 
 /**
  * Tokens a role's listed tool definitions may take: each is its size as
  * measured at slice 9 (worker 16,592; delegate 4,019; lead 8,077; overseer
  * 2,382; web-facing 2,960) plus about 15%. A role that outgrows it splits a
- * tool or trims a description before it ships.
+ * tool or trims a description before it ships. The lead's grew at P3: it
+ * runs its project's routines (§5.5), five `routine_*` tools of about 870
+ * tokens, on top of the 9,295 it had reached.
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   worker: 19_000,
   delegate: 4600,
-  lead: 9300,
+  lead: 10_500,
   overseer: 2800,
   "web-facing": 3400,
 };
@@ -111,6 +114,20 @@ export const measureRoles = (): RoleSize[] => {
         spawn: () => Promise.resolve(),
         task: () => Promise.reject(new Error("measuring")),
         views: {} as never,
+      }).tools(actor),
+    routineTools: (actor) =>
+      createRoutines({
+        anyOnline: () => false,
+        caw: {} as never,
+        db: {} as never,
+        hubCheckout: () => Promise.reject(new Error("measuring")),
+        lifetime,
+        online: () => false,
+        pauses: () => undefined,
+        push: {} as never,
+        quiets: () => false,
+        types: () => [],
+        workItems: {} as never,
       }).tools(actor),
   });
   try {

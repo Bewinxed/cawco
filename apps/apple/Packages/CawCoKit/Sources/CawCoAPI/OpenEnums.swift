@@ -3320,6 +3320,135 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/RoutineRunState`.
+    public enum RoutineRunState: OpenEnum {
+        case ended
+        case running
+        case skipped
+        case starting
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "ended": self = .ended
+            case "running": self = .running
+            case "skipped": self = .skipped
+            case "starting": self = .starting
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .ended: "ended"
+            case .running: "running"
+            case .skipped: "skipped"
+            case .starting: "starting"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.ended, .running, .skipped, .starting]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/RoutineRunViewOutcome`.
+    public enum RoutineRunViewOutcome: OpenEnum {
+        case cancelled
+        case delivered
+        case failed
+        case sent
+        case silent
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "cancelled": self = .cancelled
+            case "delivered": self = .delivered
+            case "failed": self = .failed
+            case "sent": self = .sent
+            case "silent": self = .silent
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .cancelled: "cancelled"
+            case .delivered: "delivered"
+            case .failed: "failed"
+            case .sent: "sent"
+            case .silent: "silent"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.cancelled, .delivered, .failed, .sent, .silent]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/RoutineTarget`.
+    public enum RoutineTarget: OpenEnum {
+        case delegate
+        case lead
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "delegate": self = .delegate
+            case "lead": self = .lead
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .delegate: "delegate"
+            case .lead: "lead"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.delegate, .lead]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/RowPropsJustify`.
     public enum RowPropsJustify: OpenEnum {
         case center

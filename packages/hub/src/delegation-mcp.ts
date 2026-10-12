@@ -29,11 +29,13 @@ import {
 } from "./project-offers";
 import { admitToolCall } from "./restart-holds";
 import { allows, CAW_TOOLS, refusal, roleOf } from "./roles";
+import { ROUTINE_TOOLS, type Routines } from "./routines";
 import { TASK_TOOLS, type TaskToolContext, taskTools } from "./task-tools";
 import type { Tasks } from "./tasks";
 
 type ToolFactory = typeof handoffTools;
 type CawTool = ReturnType<Caw["tools"]>[number];
+type RoutineTool = ReturnType<Routines["tools"]>[number];
 
 /** Tools that run for minutes, and what their progress heartbeat says meanwhile. */
 const LONG_CALLS: Record<string, string> = {
@@ -158,6 +160,8 @@ export function createDelegationMcp(options: {
   ) => Promise<DelegateNode[]>;
   /** Caw's own tools (threads, views), for a project's lead (caw.ts). */
   cawTools?: (actor: InstanceRow | undefined) => CawTool[];
+  /** The routine tools (routines.ts), for the roles that run a project. */
+  routineTools?: (actor: InstanceRow | undefined) => RoutineTool[];
   /**
    * Parks an admin write as the person's ask and waits: resolves when they
    * approve it, rejects with the refusal when they deny it (admin-asks.ts).
@@ -256,6 +260,7 @@ export function createDelegationMcp(options: {
       ...(options.tasks ? taskTools(undefined) : []),
       ...(options.projectFromSession ? [projectFromSessionTool()] : []),
       ...(options.cawTools ? options.cawTools(undefined) : []),
+      ...(options.routineTools ? options.routineTools(undefined) : []),
     ];
     if (!actor) {
       return all;
@@ -511,6 +516,15 @@ export function createDelegationMcp(options: {
     }
     if (CAWS.has(name) && options.cawTools) {
       return await cawCall(actor, name, input);
+    }
+    if (ROUTINE_TOOLS.has(name) && options.routineTools) {
+      const entry = options
+        .routineTools(actor)
+        .find((tool) => tool.name === name);
+      if (!entry) {
+        throw new Error(`Unknown tool ${name}`);
+      }
+      return (await entry.handler(input)) as CallToolResult;
     }
     return undefined;
   };

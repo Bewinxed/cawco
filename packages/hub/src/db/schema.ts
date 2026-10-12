@@ -1072,6 +1072,12 @@ export const workItems = sqliteTable(
      * last turn, in its own words).
      */
     result: text("result"),
+    /**
+     * Its session's own words for what it did: the `summary` of the
+     * `finish_item` whose checks passed. A routine's run reads its output
+     * contract here (routines.ts). Null until then.
+     */
+    summary: text("summary"),
     /** Why it failed. */
     error: text("error"),
     createdAt: timestamp("created_at")
@@ -2427,6 +2433,112 @@ export const threadMessages = sqliteTable(
     createdAt: timestamp("created_at").notNull(),
   },
   (table) => [index("thread_messages_thread").on(table.threadId)]
+);
+
+/** Who a routine's run goes to: a fresh delegate of its type, or the project's lead. */
+export type RoutineTarget = "delegate" | "lead";
+
+/**
+ * A routine (Projects spec §5.5, routines.ts): a prompt the hub runs on a
+ * cron schedule in a time zone. `next_slot` is the schedule's whole state:
+ * a tick fires the newest slot at or before now once `next_slot` is due, and
+ * moves it past now in the same transaction, so missed slots collapse into
+ * one.
+ */
+export const routines = sqliteTable(
+  "routines",
+  {
+    id: text("id").primaryKey(),
+    /** Its project; null for a routine of the fleet, run in the hub's own checkout. */
+    projectId: text("project_id").references(() => projects.id, {
+      onDelete: "cascade",
+    }),
+    name: text("name").notNull(),
+    /** Five fields, or six with seconds first (Effect's `Cron.parse`). */
+    cron: text("cron").notNull(),
+    /** An IANA zone the schedule reads in, like Europe/London. */
+    timeZone: text("time_zone").notNull(),
+    target: text("target").$type<RoutineTarget>().notNull(),
+    prompt: text("prompt").notNull(),
+    /** The delegate type a `delegate` run starts; null: the fleet's default. */
+    delegateType: text("delegate_type"),
+    /** Where a `delegate` run's commits go: `none` unless the routine says. */
+    lands: text("lands").$type<LandsMode>().notNull().default("none"),
+    /** What each run's work item may spend. */
+    budget: text("budget", { mode: "json" }).$type<WorkBudget>(),
+    /** Dollars its runs may spend in a day of its time zone; null: no cap. */
+    dailyCapUsd: real("daily_cap_usd"),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+    /** Why it is off, when the hub turned it off (it expired). */
+    disabledReason: text("disabled_reason"),
+    /** `owner`, or the id of the session that made it. */
+    createdBy: text("created_by").notNull(),
+    /** Kept past its expiry: set by the owner, or an agent on the owner's word. */
+    keep: integer("keep", { mode: "boolean" }).notNull().default(false),
+    /** When an agent's routine turns itself off unless kept; null for the owner's. */
+    expiresAt: timestamp("expires_at"),
+    /** The newest scheduled slot it fired (its time). */
+    lastSlot: timestamp("last_slot"),
+    /** The next scheduled slot. */
+    nextSlot: timestamp("next_slot").notNull(),
+    /** The project thread its notices and its lead messages go to, once it has one. */
+    threadId: text("thread_id"),
+    createdAt: timestamp("created_at").notNull(),
+  },
+  (table) => [index("routines_project").on(table.projectId)]
+);
+
+/** Where a routine's run is: being started, running, ended, or skipped (nothing started). */
+export type RoutineRunState = "starting" | "running" | "ended" | "skipped";
+
+/**
+ * How a run ended: `silent` (its delegate said `NO_REPLY`), `delivered`
+ * (its words became a notice), `failed` (`AUTOMATION_FAILED`, or the item
+ * failed), `sent` (a lead routine's message reached Caw), `cancelled`
+ * (someone stopped it).
+ */
+export type RoutineOutcome =
+  | "silent"
+  | "delivered"
+  | "failed"
+  | "sent"
+  | "cancelled";
+
+/**
+ * One run of a routine at one slot: a scheduled slot's time (ISO), `test:<created
+ * at>` for the run a new routine makes at once, or `now:<when>` for a run
+ * asked for by hand. Unique on (routine, slot, attempt): the insert is the
+ * fire, so a slot fires once, and its one retry (attempt 2) once.
+ */
+export const routineRuns = sqliteTable(
+  "routine_runs",
+  {
+    id: text("id").primaryKey(),
+    routineId: text("routine_id")
+      .notNull()
+      .references(() => routines.id, { onDelete: "cascade" }),
+    slot: text("slot").notNull(),
+    attempt: integer("attempt").notNull().default(1),
+    state: text("state").$type<RoutineRunState>().notNull(),
+    workItemId: text("work_item_id"),
+    outcome: text("outcome").$type<RoutineOutcome>(),
+    /** What its delegate said, when it said more than the contract's words. */
+    output: text("output"),
+    /** Why it was skipped or failed, as a sentence. */
+    reason: text("reason"),
+    /** What its work item's session spent, booked when it ended. */
+    usd: real("usd"),
+    startedAt: timestamp("started_at").notNull(),
+    endedAt: timestamp("ended_at"),
+  },
+  (table) => [
+    uniqueIndex("routine_runs_slot").on(
+      table.routineId,
+      table.slot,
+      table.attempt
+    ),
+    index("routine_runs_item").on(table.workItemId),
+  ]
 );
 
 /**

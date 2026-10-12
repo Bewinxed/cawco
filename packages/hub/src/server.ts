@@ -433,6 +433,7 @@ import {
   sessionBurn,
 } from "./rebalance";
 import { envelopeFault, type RegistryShape, refusalFrame } from "./registry";
+import { createRoutines, routineRoutes } from "./routines";
 import { RuleEngine } from "./rules";
 import { createSessionIdentities } from "./session-identity";
 import { createSessionLifecycle } from "./session-lifecycle";
@@ -13324,6 +13325,7 @@ export const createServer = (
         dispatcher.itemEnded(item);
         push.itemEnded(item);
         caw.itemEnded(item);
+        routines.itemEnded(item);
       }),
     command: runOnMachine,
     inTurn: (row) => row.status === "running" && !!pulses.get(row.id)?.busy,
@@ -13739,9 +13741,41 @@ export const createServer = (
       };
     },
   });
+  // Routines (routines.ts): prompts the hub runs on a schedule, once per slot.
+  const routines = createRoutines({
+    caw,
+    db,
+    lifetime,
+    anyOnline: () => onlineMachines().length > 0,
+    online: (machineId) => Boolean(registry.agent(machineId)),
+    pauses: (projectId) => caps.pauses(projectId),
+    quiets: (projectId) => caps.quiets(projectId),
+    push,
+    types: (projectId) => projectTypes.typesFor(projectId),
+    workItems,
+    hubCheckout: async () => {
+      const machineId = await ownMachineId;
+      if (!registry.agent(machineId)) {
+        return "the hub's machine runs no agent that is online";
+      }
+      const found = await runOnMachine(
+        machineId,
+        import.meta.dir,
+        "git rev-parse --show-toplevel",
+        15_000
+      );
+      const cwd = found.stdout.trim();
+      return found.exitCode === 0 && cwd
+        ? { machineId, cwd }
+        : `the hub does not run from a git checkout (${(found.stderr || found.stdout).trim() || `exit ${found.exitCode}`})`;
+    },
+  });
   if (resumeWorkflows) {
     // The dispatcher's safety net: a slow look at every dispatching project.
     dispatcher.watch();
+    // Runs a stopped hub left live settle, then the catch-up: each routine's
+    // newest missed slot, once.
+    routines.start();
     // Off the boot path: projects that share a repository are folded into
     // its oldest (project-merge.ts), then a folder edited while the hub was
     // down is re-read once.
@@ -13764,6 +13798,7 @@ export const createServer = (
     writePlan: (actor, written) => plans.write(actor, written),
     delegationTree: (actor, include) => delegationTree.read(actor, include),
     cawTools: (actor) => caw.tools(actor),
+    routineTools: (actor) => routines.tools(actor),
     askPerson: (actor, name, input) => adminAsks.ask(actor, name, input),
     sendToUser: telegram
       ? (actor, message, attachments) =>
@@ -15352,6 +15387,7 @@ export const createServer = (
       .use(planRoutes(plans))
       .use(dispatchRoutes(dispatcher))
       .use(cawRoutes(caw))
+      .use(routineRoutes(routines))
       .use(caps.routes())
       .use(viewRoutes(views))
       .use(noticesSeen.routes)

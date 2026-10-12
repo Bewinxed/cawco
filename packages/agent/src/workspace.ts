@@ -160,6 +160,30 @@ const hubBase = async (git: Git, repo: string): Promise<string> => {
   return branch;
 };
 
+/** Each repository's {@link hubBase} in flight: the last of its queue. */
+const basing = new Map<string, Promise<unknown>>();
+
+/**
+ * {@link hubBase}, one at a time per repository. Workspaces cut at once from
+ * a project the hub has no default branch for yet (a routine's runs, a
+ * group of delegates) would each push its branch as the hub's first, and
+ * every push after the first is refused ("reference already exists"); queued,
+ * the later ones find the branch the first pushed.
+ */
+const hubBaseOnce = (git: Git, repo: string): Promise<string> => {
+  const mine = (basing.get(repo) ?? Promise.resolve())
+    .catch(() => undefined)
+    .then(() => hubBase(git, repo));
+  basing.set(repo, mine);
+  const forget = () => {
+    if (basing.get(repo) === mine) {
+      basing.delete(repo);
+    }
+  };
+  mine.then(forget, forget);
+  return mine;
+};
+
 /**
  * {@link CONTROL_WORKSPACE_CREATE}: a shared clone on `ws/<id8>` from the
  * remote's default branch as it stands now, and its boundary. A boundary that
@@ -222,7 +246,7 @@ export const createWorkspace = async (
     useHubCredentialHelper(repoRoot);
   }
   const authed = hub ? gitUntil(deadline, hubGitEnv()) : plain;
-  const known = hub ? await hubBase(authed, repoRoot) : undefined;
+  const known = hub ? await hubBaseOnce(authed, repoRoot) : undefined;
   const id = String(workspaceId);
   const id8 = id.slice(0, 8);
   const path = expandHome(`~/.worktrees/${basename(repoRoot)}-${id8}`);

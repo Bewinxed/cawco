@@ -15,7 +15,7 @@
  *   fleet settings go to its parent through handoff.
  * - **lead**: a project's Caw. Board tools only: tasks and to-dos, threads,
  *   drafting views, its project's folder on the hub and decision pages in it,
- *   delegating and steering the project's work, the person's phone. It has
+ *   its routines, delegating and steering the project's work, the person's phone. It has
  *   no edit or shell tools in its harness either (caw.ts).
  * - **overseer**: fleet-watch triage: read the fleet, stop or interrupt, tell
  *   a session or you, and the fleet's hooks (a write asks you first).
@@ -66,6 +66,18 @@ export const CAW_TOOLS = [
   "page_choices",
 ] as const;
 
+/**
+ * A project's routines (routines.ts): made, changed and run by the roles that
+ * run a project, a session you started and the project's Caw.
+ */
+const ROUTINE = [
+  "routine_create",
+  "routine_list",
+  "routine_update",
+  "routine_delete",
+  "routine_run_now",
+] as const;
+
 /** The session tools a delegate keeps from the worker's set. */
 const DELEGATE_SESSION = [
   "create_workflow",
@@ -106,6 +118,7 @@ const TOOLS: Record<Exclude<SessionRole, "worker">, ReadonlySet<string>> = {
     ...TASK_READ,
     ...TASK_WRITE,
     ...CAW_TOOLS,
+    ...ROUTINE,
     "delegate",
     "delegate_list",
     "list_delegate_types",

@@ -84,6 +84,9 @@ typeOverrides:
     RepoInfoVisibility: OpenEnums.RepoInfoVisibility
     ReposResultError: OpenEnums.ReposResultError
     RestartHoldReason: OpenEnums.RestartHoldReason
+    RoutineRunState: OpenEnums.RoutineRunState
+    RoutineRunViewOutcome: OpenEnums.RoutineRunViewOutcome
+    RoutineTarget: OpenEnums.RoutineTarget
     RowPropsJustify: OpenEnums.RowPropsJustify
     RuleAction: OpenEnums.RuleAction
     RuleMatchKind: OpenEnums.RuleMatchKind

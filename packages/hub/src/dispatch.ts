@@ -197,7 +197,10 @@ const WORD = /\s+/;
  * committed, which landing needs (its outputs aside, which need not be); for
  * one that lands none, that its outputs are written.
  */
-const defaultCheck = (lands: LandsMode, outputs: string[]): WorkItemCheck => {
+export const defaultCheck = (
+  lands: LandsMode,
+  outputs: string[]
+): WorkItemCheck => {
   if (lands !== "none") {
     return {
       name: "Work is committed",

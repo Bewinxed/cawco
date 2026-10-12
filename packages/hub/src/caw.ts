@@ -852,6 +852,35 @@ export const createCaw = ({
     view,
 
     /**
+     * A routine's note (routines.ts) in the routine's own thread: `threadId`
+     * while it is still one of the project's, else a new thread that opens
+     * with the note. Wakes no model, Caw on or off. Answers the thread.
+     */
+    notice(
+      projectId: string,
+      threadId: string | null,
+      note: { body?: string; title: string }
+    ): string {
+      projectOf(projectId);
+      const thread = threadId ? db.thread(threadId) : undefined;
+      if (thread && thread.projectId === projectId) {
+        return noteIn(projectId, thread.id, note);
+      }
+      const made = db.createThread({
+        id: crypto.randomUUID(),
+        projectId,
+        title: titleFrom(note.title),
+        first: {
+          author: "event",
+          body: note.body?.trim() ?? "",
+          noteTitle: note.title,
+        },
+      });
+      said(made.thread, made.message);
+      return made.thread.id;
+    },
+
+    /**
      * What the project has spent: today and this month in the hub's zone,
      * its Caw's share, each task's attempts and each thread's wakes.
      */

@@ -143,6 +143,20 @@ export type PushData =
       taskId: string;
       workItemId: string;
     }
+  | {
+      /**
+       * A routine's run (routines.ts): failed twice and needs you, or, for a
+       * routine in no project (no thread to note it in), delivered. The app
+       * opens the board for a kind it does not know.
+       */
+      kind: "routine";
+      /** Its run's session, while the hub holds it; Reply writes to it. */
+      instanceId: string | null;
+      machineId: string | null;
+      projectId: string | null;
+      routineId: string;
+      runId: string;
+    }
   | { kind: "test" };
 
 /** One option of a question answered from the push: its action is `ANSWER_<id>`, `id` its index among the question's options. */
@@ -938,6 +952,56 @@ export const createPush = ({
           );
         });
       detach(alerted, "attempt push");
+    },
+
+    /**
+     * A routine's run you should hear of (routines.ts): `failed`, its retry
+     * failed too and it needs you; else a routine in no project delivered
+     * words, which go sealed. Named by the routine's name, which its maker
+     * gave it, so it goes sealed too; the visible title is "Routine".
+     */
+    routine(run: {
+      failed: boolean;
+      instanceId: string | null;
+      name: string;
+      output: string | null;
+      projectId: string | null;
+      routineId: string;
+      runId: string;
+    }): void {
+      const [row] = run.instanceId
+        ? db.getInstancesByIds([run.instanceId])
+        : [];
+      const project = projectName(run.projectId);
+      const body = run.failed ? NEEDS_YOU : "Delivered";
+      moment(
+        {
+          shown: alertOf("Routine", project, body),
+          sealed: alertOf(
+            run.name,
+            project,
+            run.failed ? NEEDS_YOU : firstLine(run.output ?? "") || body
+          ),
+          category: row
+            ? PUSH_CATEGORIES.attempt
+            : PUSH_CATEGORIES.taskOpenOnly,
+          collapseId: `routine-${run.routineId}`,
+          threadId: run.projectId ?? `routine-${run.routineId}`,
+          data: {
+            kind: "routine",
+            instanceId: row?.id ?? null,
+            machineId: row?.machineId ?? null,
+            projectId: run.projectId,
+            routineId: run.routineId,
+            runId: run.runId,
+          },
+        },
+        row?.id ?? null,
+        () => true
+      );
+      console.log(
+        `[push] routine ${run.routineId} run ${run.runId}: ${run.failed ? "needs you" : "delivered"}`
+      );
     },
 
     /** A test: a push to the devices given, quiet ones too. */

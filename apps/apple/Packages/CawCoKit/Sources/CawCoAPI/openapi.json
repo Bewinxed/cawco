@@ -5290,6 +5290,536 @@
         }
       }
     },
+    "/api/routines": {
+      "get": {
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiRoutines",
+        "responses": {
+          "200": {
+            "description": "getApiRoutines 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiRoutines200"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiRoutines 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "projectId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "cron": {
+                    "type": "string"
+                  },
+                  "timeZone": {
+                    "type": "string"
+                  },
+                  "target": {
+                    "type": "string",
+                    "enum": [
+                      "delegate",
+                      "lead"
+                    ]
+                  },
+                  "prompt": {
+                    "type": "string"
+                  },
+                  "delegateType": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "lands": {
+                    "type": "string",
+                    "enum": [
+                      "main",
+                      "branch",
+                      "pr",
+                      "none"
+                    ]
+                  },
+                  "budget": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "usd": {
+                        "type": "number"
+                      },
+                      "turns": {
+                        "type": "integer"
+                      },
+                      "minutes": {
+                        "type": "integer"
+                      }
+                    }
+                  },
+                  "dailyCapUsd": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "keep": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "projectId",
+                  "name",
+                  "cron",
+                  "timeZone",
+                  "target",
+                  "prompt"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiRoutines",
+        "responses": {
+          "200": {
+            "description": "postApiRoutines 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoutineView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiRoutines 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiRoutines 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiRoutines 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiRoutines 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiRoutines 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/routines/{id}": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiRoutinesById",
+        "responses": {
+          "200": {
+            "description": "getApiRoutinesById 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoutineView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiRoutinesById 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "getApiRoutinesById 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiRoutinesById 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "getApiRoutinesById 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "cron": {
+                    "type": "string"
+                  },
+                  "timeZone": {
+                    "type": "string"
+                  },
+                  "prompt": {
+                    "type": "string"
+                  },
+                  "delegateType": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "lands": {
+                    "type": "string",
+                    "enum": [
+                      "main",
+                      "branch",
+                      "pr",
+                      "none"
+                    ]
+                  },
+                  "budget": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "usd": {
+                        "type": "number"
+                      },
+                      "turns": {
+                        "type": "integer"
+                      },
+                      "minutes": {
+                        "type": "integer"
+                      }
+                    }
+                  },
+                  "dailyCapUsd": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "keep": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "patchApiRoutinesById",
+        "responses": {
+          "200": {
+            "description": "patchApiRoutinesById 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoutineView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "patchApiRoutinesById 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "patchApiRoutinesById 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "patchApiRoutinesById 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "patchApiRoutinesById 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "patchApiRoutinesById 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "deleteApiRoutinesById",
+        "responses": {
+          "200": {
+            "description": "deleteApiRoutinesById 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deleteApiRoutinesById200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "deleteApiRoutinesById 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "deleteApiRoutinesById 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "deleteApiRoutinesById 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "deleteApiRoutinesById 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/routines/{id}/run": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiRoutinesByIdRun",
+        "responses": {
+          "200": {
+            "description": "postApiRoutinesByIdRun 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoutineRunView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiRoutinesByIdRun 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiRoutinesByIdRun 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiRoutinesByIdRun 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiRoutinesByIdRun 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/spend-settings": {
       "get": {
         "operationId": "getApiSpendSettings",
@@ -14944,6 +15474,23 @@
           "$ref": "#/components/schemas/ThreadSummary"
         }
       },
+      "getApiRoutines200": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/RoutineView"
+        }
+      },
+      "deleteApiRoutinesById200": {
+        "type": "object",
+        "properties": {
+          "deleted": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "deleted"
+        ]
+      },
       "getApiSpendSettings200": {
         "type": "object",
         "properties": {
@@ -15526,15 +16073,15 @@
                   "type": "string",
                   "format": "date-time"
                 },
+                "startedAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
                 "failure": {
                   "type": [
                     "null",
                     "string"
                   ]
-                },
-                "startedAt": {
-                  "type": "string",
-                  "format": "date-time"
                 },
                 "stepId": {
                   "type": "string"
@@ -15575,6 +16122,13 @@
             "type": "string",
             "format": "date-time"
           },
+          "workspace": {
+            "type": "string"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
           "parentRunId": {
             "type": [
               "null",
@@ -15599,9 +16153,6 @@
           "workflowId": {
             "type": "string"
           },
-          "workspace": {
-            "type": "string"
-          },
           "supervisorInstanceId": {
             "type": [
               "null",
@@ -15613,10 +16164,6 @@
               "null",
               "string"
             ]
-          },
-          "startedAt": {
-            "type": "string",
-            "format": "date-time"
           },
           "rerunOfRunId": {
             "type": [
@@ -15726,6 +16273,13 @@
                 "type": "string",
                 "format": "date-time"
               },
+              "workspace": {
+                "type": "string"
+              },
+              "startedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
               "parentRunId": {
                 "type": [
                   "null",
@@ -15750,9 +16304,6 @@
               "workflowId": {
                 "type": "string"
               },
-              "workspace": {
-                "type": "string"
-              },
               "supervisorInstanceId": {
                 "type": [
                   "null",
@@ -15764,10 +16315,6 @@
                   "null",
                   "string"
                 ]
-              },
-              "startedAt": {
-                "type": "string",
-                "format": "date-time"
               },
               "rerunOfRunId": {
                 "type": [
@@ -22751,6 +23298,205 @@
           "thread"
         ]
       },
+      "RoutineView": {
+        "description": "A routine, as the routes and tools answer it (times in ms), with its newest runs.",
+        "type": "object",
+        "properties": {
+          "budget": {
+            "$ref": "#/components/schemas/WorkBudget"
+          },
+          "createdAt": {
+            "type": "number"
+          },
+          "createdBy": {
+            "type": "string"
+          },
+          "cron": {
+            "type": "string"
+          },
+          "dailyCapUsd": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "delegateType": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "disabledReason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "expiresAt": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "keep": {
+            "type": "boolean"
+          },
+          "lands": {
+            "$ref": "#/components/schemas/LandsMode"
+          },
+          "lastSlot": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "nextSlot": {
+            "type": "number"
+          },
+          "projectId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "runs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RoutineRunView"
+            }
+          },
+          "target": {
+            "$ref": "#/components/schemas/RoutineTarget"
+          },
+          "threadId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "timeZone": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "createdAt",
+          "createdBy",
+          "cron",
+          "dailyCapUsd",
+          "delegateType",
+          "disabledReason",
+          "enabled",
+          "expiresAt",
+          "id",
+          "keep",
+          "lands",
+          "lastSlot",
+          "name",
+          "nextSlot",
+          "projectId",
+          "prompt",
+          "runs",
+          "target",
+          "threadId",
+          "timeZone"
+        ]
+      },
+      "RoutineRunView": {
+        "description": "One run, as the routes and tools answer it (times in ms).",
+        "type": "object",
+        "properties": {
+          "attempt": {
+            "type": "number"
+          },
+          "endedAt": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/RoutineRunViewOutcome"
+          },
+          "output": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "slot": {
+            "type": "string"
+          },
+          "startedAt": {
+            "type": "number"
+          },
+          "state": {
+            "$ref": "#/components/schemas/RoutineRunState"
+          },
+          "usd": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "workItemId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "attempt",
+          "endedAt",
+          "id",
+          "output",
+          "reason",
+          "slot",
+          "startedAt",
+          "state",
+          "usd",
+          "workItemId"
+        ]
+      },
+      "RoutineRunState": {
+        "description": "Where a routine's run is: being started, running, ended, or skipped (nothing started).",
+        "type": "string",
+        "enum": [
+          "ended",
+          "running",
+          "skipped",
+          "starting"
+        ]
+      },
+      "RoutineTarget": {
+        "description": "Who a routine's run goes to: a fresh delegate of its type, or the project's lead.",
+        "type": "string",
+        "enum": [
+          "delegate",
+          "lead"
+        ]
+      },
       "ProjectView": {
         "description": "A view as `GET /api/projects/:id/views` lists it: kept (`views/<name>.json`) or a draft (`views/drafts/<name>.json`).",
         "type": "object",
@@ -25055,6 +25801,13 @@
                 "type": "string",
                 "format": "date-time"
               },
+              "workspace": {
+                "type": "string"
+              },
+              "startedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
               "parentRunId": {
                 "type": [
                   "null",
@@ -25079,9 +25832,6 @@
               "workflowId": {
                 "type": "string"
               },
-              "workspace": {
-                "type": "string"
-              },
               "supervisorInstanceId": {
                 "type": [
                   "null",
@@ -25093,10 +25843,6 @@
                   "null",
                   "string"
                 ]
-              },
-              "startedAt": {
-                "type": "string",
-                "format": "date-time"
               },
               "rerunOfRunId": {
                 "type": [
@@ -35669,6 +36415,16 @@
         "enum": [
           "gh-missing",
           "gh-unauthenticated"
+        ]
+      },
+      "RoutineRunViewOutcome": {
+        "type": "string",
+        "enum": [
+          "cancelled",
+          "delivered",
+          "failed",
+          "sent",
+          "silent"
         ]
       },
       "RowPropsJustify": {

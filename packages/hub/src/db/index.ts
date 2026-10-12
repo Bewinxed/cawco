@@ -80,6 +80,7 @@ import { HubLifetime } from "../lifetime";
 import { workflowSkill } from "../workflows/skills";
 import { type AccountsDb, accountsDb } from "./accounts";
 import { type AtLimitDb, atLimitDb } from "./at-limit";
+import { type RoutinesDb, routinesDb } from "./routines";
 import {
   accountSignins,
   agents,
@@ -1443,6 +1444,8 @@ export interface DbShape {
     held: string[],
     complete: boolean
   ) => void;
+  /** Routines and their runs (routines.ts). */
+  readonly routines: RoutinesDb;
   /** Where a rule stands with a session; absent means it has never fired there. */
   readonly ruleStateFor: (
     ruleId: string,
@@ -1776,6 +1779,7 @@ export interface DbShape {
         WorkItemRow,
         | "state"
         | "result"
+        | "summary"
         | "error"
         | "endedAt"
         | "dismissedAt"
@@ -6735,6 +6739,7 @@ const make = async (path: string): Promise<DbShape> => {
     accounts: accountsDb(db),
     turnUsage: turnUsageDb(db),
     atLimit: atLimitDb(db),
+    routines: routinesDb(db),
     usageSpend: ({ harness, todayStart, weekStart }) => {
       const since = (start: number) =>
         sql<number>`coalesce(sum(case when ${usageBuckets.start} >= ${start} then ${usageBuckets.costUsd} else 0 end), 0)`;
