@@ -1,3 +1,4 @@
+import OSLog
 import UIKit
 
 /// The kit's toasts (ui/sonner on svelte-sonner, as the root layout sets
@@ -41,6 +42,10 @@ public enum Toast {
         }()
         layer.add(message, description: description, kind: kind, action: action, sticky: sticky)
         UIAccessibility.post(notification: .announcement, argument: message)
+        #if DEBUG
+        // Every toast, for a simulator pass to count (probe-ios-catchup.ts).
+        Logger(subsystem: "dev.cawco.app", category: "Transcript").notice("toast shown: \(message, privacy: .public). \(description ?? "", privacy: .public)")
+        #endif
     }
 
     private static var layers: [ObjectIdentifier: ToastWindow] = [:]

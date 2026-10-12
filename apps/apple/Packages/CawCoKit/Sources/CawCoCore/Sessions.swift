@@ -169,6 +169,18 @@ public final class SessionsStore {
         hub.ledger.sync(watched)
     }
 
+    /// The app is active again, maybe back from Settings with Local Network
+    /// access allowed: a read that privacy refused is read now, the backoff
+    /// skipped. There is no status to ask (Local Network Privacy FAQ-9); the
+    /// read is the asking.
+    func becameActive() {
+        for id in watched {
+            guard let transcript = transcripts[id], !transcript.loading,
+                  (transcript.fault ?? transcript.behind)?.reason == .localNetwork else { continue }
+            read(id, because: .active)
+        }
+    }
+
     /// The hub's word on its machines changed, with `machineId` online in it:
     /// every transcript whose last read found that machine offline is read now.
     /// A transcript the backoff is already reading again waits for it.
@@ -250,6 +262,8 @@ public final class SessionsStore {
         case machineOnline
         /// The last read failed while the hub answered: read again on `readAgain`.
         case backoff
+        /// The app is active again after Local Network privacy refused the last read.
+        case active
 
         /// The hub asked for it: the rows drawn are behind what it holds, a
         /// catch-up the dock says. Every other read catches up quietly.
@@ -297,10 +311,10 @@ public final class SessionsStore {
             guard let self else { return }
             do {
                 #if DEBUG
-                // The simulator cannot enforce Local Network privacy: a read the
-                // hub asked for fails as a refused path does, with -1009 for the
-                // hub's address (`LocalNetwork.denied` injects the path's word).
-                if cause.catchesUp, ProcessInfo.processInfo.arguments.contains("--hub-local-network-denied"), let address = hub.address {
+                // The simulator cannot enforce Local Network privacy: every read
+                // fails as a refused path fails it, with -1009 for the hub's
+                // address (`LocalNetwork.denied` injects the path's word).
+                if LocalNetwork.debugDenied, let address = hub.address {
                     throw URLError(.notConnectedToInternet, userInfo: [NSURLErrorFailingURLErrorKey: address])
                 }
                 #endif

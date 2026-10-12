@@ -1,15 +1,19 @@
 import CawCoCore
 import CawCoDesign
+import OSLog
 import UIKit
 
 /// The line every other line on the home is believed by
 /// (home/StatusLine.svelte): is the hub there. Live and read is the quiet
 /// default: the home draws no line then. A dead hub says so with its retry
 /// clock and Reconnect: a quiet fleet and an unreachable hub never read the
-/// same. Each change of phase cross-fades.
+/// same. Local Network privacy refusing the hub is said here and only here,
+/// with Open Settings, the one action that changes it: coming back from
+/// Settings reconnects by itself (`HubConnection.becameActive`), so there is
+/// no Reconnect beside it. Each change of phase cross-fades.
 final class StatusLineView: UIView {
     enum Phase: Equatable {
-        case unreachable, connecting, reading, connected
+        case refused, unreachable, connecting, reading, connected
     }
 
     private let glyph = GlyphView(.warning, size: Size.iconSm, tint: Palette.statusFailInk)
@@ -50,12 +54,16 @@ final class StatusLineView: UIView {
         fatalError("StatusLineView is built in code")
     }
 
-    func configure(hub: HubConnection, ready: Bool) {
+    /// `localNetworkDenied`: the screen's own word that Local Network privacy
+    /// refuses this app (a first run's search), beside the hub socket's.
+    func configure(hub: HubConnection, ready: Bool, localNetworkDenied: Bool = false) {
         self.hub = hub
-        let next: Phase = switch hub.state {
-        case .unreachable: .unreachable
-        case .connecting: .connecting
-        case .connected: ready ? .connected : .reading
+        let next: Phase = if hub.localNetworkDenied || localNetworkDenied { .refused } else {
+            switch hub.state {
+            case .unreachable: .unreachable
+            case .connecting: .connecting
+            case .connected: ready ? .connected : .reading
+            }
         }
         let changed = phase != nil && phase != next
         phase = next
@@ -81,20 +89,15 @@ final class StatusLineView: UIView {
         guard let hub, let phase else {
             return
         }
-        let down = phase == .unreachable
+        let down = phase == .unreachable || phase == .refused
         glyph.isHidden = !down
         reconnect.isHidden = !down
-        reconnect.isEnabled = hub.socket != .connecting
+        reconnect.isEnabled = phase == .refused || hub.socket != .connecting
         words.ink = down ? Palette.statusFailInk : Palette.inkMuted
         switch phase {
-        case .unreachable where hub.localNetworkDenied:
-            // Not the hub away: this app is not let onto its network. The fix is the toast's, once.
-            words.text = "Not allowed on the local network"
-            if !hub.localNetworkToasted {
-                hub.localNetworkToasted = true
-                Toast.show("The hub can't be reached", description: "CawCo isn't allowed on the local network the hub is on. \(LocalNetwork.fix); it reconnects by itself once it's allowed.",
-                           kind: .error, in: self)
-            }
+        case .refused:
+            // Not the hub away: this app is not let onto its network. Open Settings is the fix.
+            words.text = "CawCo isn't allowed on the local network"
         case .unreachable:
             if hub.socket == .connecting {
                 words.text = "Hub unreachable, retrying now"
@@ -110,8 +113,21 @@ final class StatusLineView: UIView {
             // Live and read is the quiet default: the home draws no line then.
             words.text = nil
         }
-        KitButton.setTitle(hub.socket == .connecting ? "Connecting…" : "Reconnect", of: reconnect, variant: .outline, height: .xs)
+        let action = phase == .refused ? "Open Settings" : hub.socket == .connecting ? "Connecting…" : "Reconnect"
+        KitButton.setTitle(action, of: reconnect, variant: .outline, height: .xs)
+        #if DEBUG
+        // What the line says, for a simulator pass to read (probe-ios-catchup.ts `--local-network`).
+        let said = "\(words.text ?? "")|\(down ? action : "")"
+        if said != lastSaid {
+            lastSaid = said
+            Logger(subsystem: "dev.cawco.app", category: "Transcript").notice("status line: \(said, privacy: .public)")
+        }
+        #endif
     }
+
+    #if DEBUG
+    private var lastSaid = ""
+    #endif
 
     override func willMove(toWindow newWindow: UIWindow?) {
         super.willMove(toWindow: newWindow)

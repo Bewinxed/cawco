@@ -1,6 +1,10 @@
 import Foundation
 import Network
+#if DEBUG
+import notify
+#endif
 import Synchronization
+import UIKit
 
 /// Whether Local Network privacy is what stopped a request to the hub.
 ///
@@ -25,9 +29,7 @@ public enum LocalNetwork {
     /// is ready (allowed), waiting (its path says why), or `settle` passes.
     public static func denied(_ url: URL) async -> Bool {
         #if DEBUG
-        // The simulator cannot enforce Local Network privacy (HubDiscovery's
-        // `--discovery-policy-denied`): the path's word is injected.
-        if ProcessInfo.processInfo.arguments.contains("--hub-local-network-denied") { return true }
+        if debugDenied { return true }
         #endif
         guard let host = url.host(), let port = NWEndpoint.Port(rawValue: UInt16(url.port ?? (url.scheme == "https" ? 443 : 80))) else {
             return false
@@ -71,12 +73,38 @@ public enum LocalNetwork {
         error.code == .notConnectedToInternet || error.code == .cannotConnectToHost
     }
 
-    /// Where the reader turns it on, for this platform's Settings.
-    public static var fix: String {
+    /// The switch itself. On the Mac, System Settings › Privacy & Security ›
+    /// Local Network: its pane is the Privacy & Security extension's
+    /// `privacy-localnetwork` (that extension's Info.plist on macOS 27), and
+    /// its anchor `Privacy_LocalNetwork` was found to "open the pane" on Tahoe
+    /// (discourse.vidvox.net/t/tahoe-ndi-and-local-network-permissions-lost-
+    /// on-restart/8938). On iPhone, this app's own page in Settings, where
+    /// its Local Network switch is: there is no URL for the list itself.
+    @MainActor public static var settingsURL: URL {
         #if targetEnvironment(macCatalyst)
-        "Turn on CawCo in System Settings › Privacy & Security › Local Network"
+        URL(string: "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_LocalNetwork")!
         #else
-        "Turn on CawCo in Settings › Privacy & Security › Local Network"
+        URL(string: UIApplication.openSettingsURLString)!
         #endif
     }
+
+    #if DEBUG
+    /// The simulator cannot enforce Local Network privacy (HubDiscovery's
+    /// `--discovery-policy-denied` says the same of the search): launched
+    /// with `--hub-local-network-denied`, the hub socket and every read fail
+    /// as a refused path fails them, and the path's word is refused, until a
+    /// pass posts `dev.cawco.debug.local-network-allowed` (notifyutil), which
+    /// is access allowed in Settings (`allowOnDebugSignal`).
+    private static let debugState = Mutex(ProcessInfo.processInfo.arguments.contains("--hub-local-network-denied"))
+
+    static var debugDenied: Bool { debugState.withLock { $0 } }
+
+    /// Hears the pass's "allowed": registered once, at launch.
+    public static func allowOnDebugSignal() {
+        var token: Int32 = 0
+        notify_register_dispatch("dev.cawco.debug.local-network-allowed", &token, .main) { _ in
+            debugState.withLock { $0 = false }
+        }
+    }
+    #endif
 }

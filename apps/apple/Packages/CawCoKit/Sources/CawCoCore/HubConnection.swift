@@ -56,11 +56,9 @@ public final class HubConnection {
     private var outage = false
     /// The socket's last attempt failed because this app is not allowed on
     /// the local network the hub is on (`LocalNetwork.denied`), not because
-    /// the hub is away. Cleared when the socket opens.
+    /// the hub is away. Cleared when the socket opens. The status line says
+    /// it, with Open Settings (StatusLineView); nothing else does.
     public private(set) var localNetworkDenied = false
-    /// The reader was told of `localNetworkDenied` by a toast, until the
-    /// socket opens: every screen that shows the status line says it once.
-    @ObservationIgnored public var localNetworkToasted = false
 
     /// Connected means the socket is open and the board was read again on it:
     /// a socket that just opened still holds the board as it was before the
@@ -260,6 +258,21 @@ public final class HubConnection {
         start()
     }
 
+    /// The app is active again: a phone's scene in front, a Mac's window
+    /// active (back from System Settings, which never sends the app to the
+    /// background). Local Network access has no status to read (Local
+    /// Network Privacy FAQ-9), so the socket and the reads it refused are
+    /// tried again at once, the backoff skipped: a person who allowed it in
+    /// Settings comes back to a connecting app, not a retry clock.
+    public func becameActive() {
+        guard address != nil, !suspended else { return }
+        if socket == .closed {
+            log.info("app active: reconnecting now\(self.localNetworkDenied ? ", Local Network access was refused" : "", privacy: .public)")
+            reconnectNow()
+        }
+        sessions.becameActive()
+    }
+
     /// Reconnects now instead of waiting out the backoff.
     public func reconnectNow() {
         guard socket == .closed else {
@@ -326,6 +339,10 @@ public final class HubConnection {
             let hubSocket = HubSocket(hub: address)
             live = hubSocket
             do {
+                #if DEBUG
+                // The simulator cannot enforce Local Network privacy: the socket fails as a refused path fails it.
+                if LocalNetwork.debugDenied { throw URLError(.notConnectedToInternet, userInfo: [NSURLErrorFailingURLErrorKey: address]) }
+                #endif
                 for try await event in hubSocket.events {
                     switch event {
                     case .opened:
@@ -364,10 +381,10 @@ public final class HubConnection {
 
     private func opened() {
         socket = .connected
+        log.info("hub socket open")
         retryAt = nil
         attempts = 0
         localNetworkDenied = false
-        localNetworkToasted = false
         outageTimer?.cancel()
         outageTimer = nil
         outage = false

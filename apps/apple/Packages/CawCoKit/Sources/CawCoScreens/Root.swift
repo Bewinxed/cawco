@@ -2,12 +2,17 @@ public import UIKit
 public import CawCoCore
 import CawCoDesign
 import CawCoMascot
+#if DEBUG
+import notify
+#endif
 import OSLog
 
-/// One window's interface: Connect until a hub is known and read, then the
-/// board. The first read of the fleet is a real wait, so Caw stands in for
-/// it once it outlasts the grace; from then on a drop keeps the board,
-/// greyed, under its status line, as the web does.
+/// One window's interface: Connect until a hub is kept, then the board. The
+/// first read of the fleet is a real wait, so Caw stands in for it once it
+/// outlasts the grace, while the hub is being reached; a hub that does not
+/// answer, or that Local Network privacy refuses, is said by the board's
+/// status line, and from then on a drop keeps the board, greyed, under that
+/// line, as the web does.
 public final class RootViewController: ObservedViewController {
     private let hub = HubConnection()
     private lazy var home = HomeModel(hub: hub)
@@ -19,6 +24,10 @@ public final class RootViewController: ObservedViewController {
     private var readFrom: URL?
     private var shown: UIViewController?
     private var shownKey = ""
+    #if DEBUG
+    /// What the shell last said it shows (`refreshContent`, `show`).
+    private var shellSaid = ""
+    #endif
 
     /// A window, put back as its scene left it when `activity` is the scene's
     /// saved one (or a new window's conversation); the shell lands there once
@@ -81,7 +90,23 @@ public final class RootViewController: ObservedViewController {
             center.addObserver(forName: UIScene.willEnterForegroundNotification, object: scene, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.hub.enterForeground() }
             },
+            // Active again, a Mac's window back from System Settings included:
+            // what Local Network privacy refused is tried again at once.
+            center.addObserver(forName: UIScene.didActivateNotification, object: scene, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.hub.becameActive() }
+            },
         ]
+        #if DEBUG
+        // A Mac window back from System Settings is activated without leaving
+        // the foreground; the simulator cannot do that alone. A pass posts
+        // `dev.cawco.debug.became-active` (notifyutil) and this scene hears
+        // the activation by itself.
+        var token: Int32 = 0
+        notify_register_dispatch("dev.cawco.debug.became-active", &token, .main) { [weak scene] _ in
+            MainActor.assumeIsolated { NotificationCenter.default.post(name: UIScene.didActivateNotification, object: scene) }
+        }
+        LocalNetwork.allowOnDebugSignal()
+        #endif
     }
 
     /// The socket closes, and the screens redraw before this returns: iOS
@@ -112,17 +137,26 @@ public final class RootViewController: ObservedViewController {
             readFrom = address
         }
         let read = readFrom == address
-        if !read, hub.state == .unreachable {
-            show(key: "reconnecting") { ConnectViewController(hub: hub, mode: .reconnecting) }
-            return
-        }
         // A hub this app cannot read is said once, in place of a wait that would never end.
         if !read, let incompatible = hub.incompatible {
             show(key: "mismatch:\(incompatible.hubVersion ?? "")") { HubMismatchController(hub: hub, incompatible: incompatible) }
             return
         }
+        // A kept hub that does not answer, or that Local Network privacy keeps
+        // this app from, leaves the shell where it is: the board, with what it
+        // holds, says so in its status line (and Open Settings for the
+        // refusal), never the setup screen and never a wait that hides that
+        // line. Setup is for a hub not yet kept; another address is the hub
+        // sheet's (`ConnectViewController` `.change`).
         waiting.content = board
-        waiting.waiting = !read
+        waiting.waiting = !read && hub.state != .unreachable && !hub.localNetworkDenied
+        #if DEBUG
+        let said = "board, \(waiting.waiting ? "waiting" : "drawn")"
+        if said != shellSaid {
+            shellSaid = said
+            Logger(subsystem: "dev.cawco.app", category: "Transcript").notice("shell shows \(said, privacy: .public)")
+        }
+        #endif
         show(key: "board") { waiting }
         // After the first full read, `/api/pending` included: an ask's
         // session opens with its card in view, never an empty pane.
@@ -260,6 +294,13 @@ public final class RootViewController: ObservedViewController {
             return
         }
         shownKey = key
+        #if DEBUG
+        // Which screen a window stands on, for a simulator pass to read.
+        if key != "board" {
+            shellSaid = key
+            Logger(subsystem: "dev.cawco.app", category: "Transcript").notice("shell shows \(key, privacy: .public)")
+        }
+        #endif
         let next = make()
         let previous = shown
         addChild(next)

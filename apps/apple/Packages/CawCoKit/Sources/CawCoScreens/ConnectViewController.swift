@@ -5,15 +5,13 @@ import OSLog
 import UIKit
 
 /// The hub's address, entered once and kept, the hubs found on this network,
-/// and the connection's state. Caw stands in at first run and while a kept
-/// hub cannot be reached. Plain on purpose: onboarding brings the first-run
-/// design.
+/// and the connection's state. Caw stands in at first run. A kept hub that
+/// cannot be reached is the board's status line to say, never this screen.
+/// Plain on purpose: onboarding brings the first-run design.
 final class ConnectViewController: ObservedViewController, UITextFieldDelegate {
     enum Mode {
         /// No hub yet.
         case firstRun
-        /// A hub is kept but has not answered on this launch.
-        case reconnecting
         /// The operator is pointing the app at another hub.
         case change
     }
@@ -31,7 +29,6 @@ final class ConnectViewController: ObservedViewController, UITextFieldDelegate {
     private let status = StatusLineView()
     private let found = UIStackView()
     private let foundHead = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
-    private let networkAccess = UIStackView()
     private let searching = UIStackView()
     private let noWifi = KitLabel(TypeScale.typeBody, ink: Palette.inkMuted, lines: 0)
     private var connectButton: UIButton!
@@ -88,7 +85,7 @@ final class ConnectViewController: ObservedViewController, UITextFieldDelegate {
 
         if mode != .change {
             // First run: no hub yet, so nothing is going on and he sleeps.
-            let caw = CawView(status: mode == .firstRun ? .sleeping : .reconnecting)
+            let caw = CawView(status: .sleeping)
             self.caw = caw
             let box = UIView()
             box.addSubview(caw)
@@ -103,7 +100,7 @@ final class ConnectViewController: ObservedViewController, UITextFieldDelegate {
         }
 
         let title = KitLabel(TypeScale.typeTitle, ink: Palette.inkStrong, lines: 0)
-        title.text = mode == .reconnecting ? "Your hub" : "Connect to your hub"
+        title.text = "Connect to your hub"
         title.accessibilityTraits = .header
         body.text = Self.hint(false)
 
@@ -163,19 +160,11 @@ final class ConnectViewController: ObservedViewController, UITextFieldDelegate {
         noWifi.isHidden = true
         column.addArrangedSubview(noWifi)
 
-        let networkProblem = KitLabel(TypeScale.typeBody, ink: Palette.statusFailInk, lines: 0)
-        networkProblem.text = "Local Network access is off. Allow it in Settings to find your hub."
-        networkAccess.axis = .vertical
-        networkAccess.spacing = Space.space2
-        networkAccess.addArrangedSubview(networkProblem)
-        networkAccess.addArrangedSubview(KitButton.make("Open Settings", variant: .outline, height: .lg, stretch: true) {
-            UIApplication.shared.open(URL(string: UIApplication.openSettingsURLString)!)
-        })
-        networkAccess.isHidden = true
-        column.addArrangedSubview(networkAccess)
-        NotificationCenter.default.addObserver(self, selector: #selector(sceneWillEnterForeground(_:)), name: UIScene.willEnterForegroundNotification, object: nil)
+        // Back from Settings (a phone's scene in front again, a Mac's window
+        // active again): a search Local Network privacy refused runs again.
+        NotificationCenter.default.addObserver(self, selector: #selector(sceneDidActivate(_:)), name: UIScene.didActivateNotification, object: nil)
 
-        connectButton = KitButton.make(mode == .reconnecting ? "Connect to this address" : "Connect", variant: .action, height: .lg, stretch: true) { [weak self] in
+        connectButton = KitButton.make("Connect", variant: .action, height: .lg, stretch: true) { [weak self] in
             self?.connect()
         }
         column.addArrangedSubview(connectButton)
@@ -401,10 +390,10 @@ final class ConnectViewController: ObservedViewController, UITextFieldDelegate {
 
     override func refreshContent() {
         refreshNotifications()
-        // A hub that was never entered has no state to say.
-        status.isHidden = hub.address == nil
-        status.configure(hub: hub, ready: false)
-        networkAccess.isHidden = !discovery.localNetworkDenied
+        // A hub that was never entered has no state to say, but the search
+        // Local Network privacy refuses is said there too: one line, one Open Settings.
+        status.isHidden = hub.address == nil && !discovery.localNetworkDenied
+        status.configure(hub: hub, ready: false, localNetworkDenied: discovery.localNetworkDenied)
         let noLocalPath = discovery.localNetworkAvailable == false
         noWifi.isHidden = !noLocalPath
         body.text = Self.hint(noLocalPath)
@@ -429,7 +418,7 @@ final class ConnectViewController: ObservedViewController, UITextFieldDelegate {
         }
     }
 
-    @objc private func sceneWillEnterForeground(_ note: Notification) {
+    @objc private func sceneDidActivate(_ note: Notification) {
         guard let scene = note.object as? UIWindowScene, scene === viewIfLoaded?.window?.windowScene,
               discovery.localNetworkDenied else { return }
         discovery.stop()

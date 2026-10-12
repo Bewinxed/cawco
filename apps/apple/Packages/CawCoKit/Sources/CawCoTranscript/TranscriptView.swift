@@ -1877,9 +1877,13 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         latestButton.addAction(UIAction { [weak self] _ in self?.jump() }, for: .touchUpInside)
         catchUp.isUserInteractionEnabled = false
         compacting.isUserInteractionEnabled = false
-        behind.onRetry = { [weak self] in
+        behind.onAction = { [weak self] title in
             guard let self, let id = transcript?.id else { return }
-            hub?.sessions.read(id, because: .retry)
+            if title == Self.openSettings {
+                UIApplication.shared.open(LocalNetwork.settingsURL)
+            } else {
+                hub?.sessions.read(id, because: .retry)
+            }
         }
         let atFoot = behind.bottomAnchor.constraint(equalTo: safeAreaLayoutGuide.bottomAnchor, constant: -Space.space4)
         behindAtFoot = atFoot
@@ -1901,6 +1905,8 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     /// (Behind.svelte). Offline, what happened and what happens next: the
     /// rest comes in once the machine is back. Failed, "Not caught up" beside
     /// Try again; why is the toast's to say (`toastBehind`), never the line's.
+    /// Refused by Local Network privacy, "Not caught up" beside Open Settings,
+    /// and no toast: the status line is where that is said.
     static func notCaughtUp(_ fault: ReadFault, name: (String) -> String) -> String {
         if fault.reason == .offline, let machine = fault.machineId {
             return "Not caught up: \(Naming.unbroken(name(machine))) is offline. The rest comes in once it's back."
@@ -1908,23 +1914,33 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         return "Not caught up"
     }
 
+    /// The dock's action for a fault: none while a machine is away (it comes back by itself).
+    static func dockAction(_ fault: ReadFault) -> String? {
+        switch fault.reason {
+        case .offline: nil
+        case .localNetwork: openSettings
+        case .failed: "Try again"
+        }
+    }
+
+    static let openSettings = "Open Settings"
+
     /// The error formula for a transcript that could not be caught up, as a
     /// toast (client.svelte.ts `toastBehind`): what happened (its name isn't
     /// caught up), why (the read's one sentence), how to fix it and what
     /// happens next. Once per distinct fault: the transcript remembers the
     /// one it told of (`toasted`) until a read lands, so panes side by side,
-    /// and the backoff's every read again, say nothing more.
+    /// and the backoff's every read again, say nothing more. A Local Network
+    /// refusal is never toasted: the status line says it, once, with its switch.
     private func toastBehind(_ transcript: SessionTranscript, _ fault: ReadFault) {
-        guard transcript.toasted != fault else { return }
+        guard fault.reason != .localNetwork, transcript.toasted != fault else { return }
         transcript.toasted = fault
         let row = hub?.fleet.rows.first { $0.id == transcript.id }
         let name = Naming.sessionTitle(title: row?.title, cwd: row?.cwd, id: transcript.id)
         let title = "\(name) isn't caught up"
-        let description = switch fault.reason {
-        case .offline: "\(fault.message). The rest comes in once it's back."
-        case .localNetwork: "\(fault.message). \(LocalNetwork.fix), then Try again; until then it's read again in 2 seconds, then less often, up to once a minute."
-        case .failed: "\(fault.message). Try again reads it now; otherwise it's read again in 2 seconds, then less often, up to once a minute."
-        }
+        let description = fault.reason == .offline
+            ? "\(fault.message). The rest comes in once it's back."
+            : "\(fault.message). Try again reads it now; otherwise it's read again in 2 seconds, then less often, up to once a minute."
         Self.dockLog.notice("toast: \(title, privacy: .public). \(description, privacy: .public) \(transcript.id.prefix(8), privacy: .public)")
         Toast.show(title, description: description, kind: .error, in: self)
     }
@@ -1938,7 +1954,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         latestButton.show(latestShown)
         // Over rows drawn only: with none, the pane says why in their place.
         if rowsDrawn, let transcript, let fault = transcript.behind {
-            behind.say(Self.notCaughtUp(fault) { [hub] in hub?.fleet.machineName($0) ?? $0 }, retrying: fault.reason != .offline)
+            behind.say(Self.notCaughtUp(fault) { [hub] in hub?.fleet.machineName($0) ?? $0 }, action: Self.dockAction(fault))
             behind.show(true)
             toastBehind(transcript, fault)
         } else {
@@ -2139,16 +2155,18 @@ final class DockPill: UIControl {
 
 /// The dock's line while a transcript cannot be caught up (Behind.svelte):
 /// what happened and what happens next, in the type the strip before the
-/// first row says why a page could not be read in (meta, muted), and Try
-/// again beside it when the read failed while the hub answered. It wraps
-/// rather than cuts: a phone gives it two lines, balanced as the web's.
+/// first row says why a page could not be read in (meta, muted), and its one
+/// action beside it: Try again when the read failed while the hub answered,
+/// Open Settings when Local Network privacy refused it. It wraps rather than
+/// cuts: a phone gives it two lines, balanced as the web's.
 final class DockNote: UIView {
     private let label = UILabel()
-    private var retry: UIButton?
+    private var button: UIButton?
     private var shown = false
     private var said = ""
-    /// What Try again does: read the transcript again.
-    var onRetry: () -> Void = {}
+    private var actionTitle: String?
+    /// What its action does, by the title it stands under.
+    var onAction: (String) -> Void = { _ in }
 
     init() {
         super.init(frame: .zero)
@@ -2156,10 +2174,13 @@ final class DockNote: UIView {
         label.numberOfLines = 0
         label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         label.adjustsFontForContentSizeCategory = false
-        let button = KitButton.make("Try again", variant: .ghost, height: .sm) { [weak self] in self?.onRetry() }
+        let button = KitButton.make("Try again", variant: .ghost, height: .sm) { [weak self] in
+            guard let self, let actionTitle else { return }
+            onAction(actionTitle)
+        }
         button.setContentCompressionResistancePriority(.required, for: .horizontal)
         button.setContentHuggingPriority(.required, for: .horizontal)
-        retry = button
+        self.button = button
         let row = railLine([label, button], spacing: Space.space2)
         pin(row, insets: UIEdgeInsets(top: Space.space2, left: Space.space3, bottom: Space.space2, right: Space.space3))
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (note: DockNote, _: UITraitCollection) in note.paint() }
@@ -2173,9 +2194,13 @@ final class DockNote: UIView {
         layer.borderColor = Palette.borderHairline.resolvedColor(with: traitCollection).cgColor
     }
 
-    /// Its words, and whether Try again stands beside them; set again only when they change.
-    func say(_ words: String, retrying: Bool) {
-        retry?.isHidden = !retrying
+    /// Its words, and the action beside them (none: nothing to do but wait); set again only when they change.
+    func say(_ words: String, action: String?) {
+        if action != actionTitle {
+            actionTitle = action
+            button?.isHidden = action == nil
+            if let action, let button { KitButton.setTitle(action, of: button, variant: .ghost, height: .sm) }
+        }
         guard said != words else { return }
         said = words
         let text = NSMutableAttributedString(attributedString: Styled.string(words, TypeScale.typeMeta, color: Palette.inkMuted, lineBreak: .byWordWrapping))

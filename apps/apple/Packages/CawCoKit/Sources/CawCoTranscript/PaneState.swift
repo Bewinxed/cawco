@@ -81,11 +81,12 @@ final class PaneState: UIView {
             // The fault's message is one sentence without its stop (`ReadFault`).
             let said = switch fault.reason {
             case .offline: "\(fault.message). Try again once it is back online."
-            case .localNetwork: "\(fault.message). \(LocalNetwork.fix), then Try again."
+            case .localNetwork: "\(fault.message). Allow it in Settings, and it's read as soon as you're back."
             case .failed: "Reading it failed: \(fault.message). Try again; if it fails the same way, the hub's log has the cause."
             }
             lineText = NSAttributedString(string: said, attributes: body)
-            actionTitle = "Try again"
+            // The one action that changes a Local Network refusal opens its switch.
+            actionTitle = fault.reason == .localNetwork ? "Open Settings" : "Try again"
         case let .missing(id):
             mark.glyph = .alert
             titleText = "This session isn't reachable from here"
@@ -106,9 +107,13 @@ final class PaneState: UIView {
         setTitle()
         line.attributedText = lineText
         guard !actionTitle.isEmpty else { action = nil; return }
-        let retrying = actionTitle == "Try again"
+        let title = actionTitle
         let button = KitButton.make(actionTitle, variant: .outline) { [weak self] in
-            if retrying { self?.onRetry() } else { self?.onReturn() }
+            switch title {
+            case "Try again": self?.onRetry()
+            case "Open Settings": UIApplication.shared.open(LocalNetwork.settingsURL)
+            default: self?.onReturn()
+            }
         }
         column.addArrangedSubview(button)
         column.setCustomSpacing(Space.space2 * 2, after: line)

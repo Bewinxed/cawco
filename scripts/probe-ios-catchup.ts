@@ -139,10 +139,12 @@ if (!app) {
 // started. `--fail`: then a `stream.reset` is put on the socket while the
 // hub's read answers 500 with a long body for the next 40s: the dock says
 // "Not caught up" beside Try again, exactly one toast says why, and the
-// reads that follow keep to the backoff. `--fail --local-network`: the
-// reset's read is refused as Local Network privacy refuses it, and the toast
-// names the local network and where in Settings to allow it.
+// reads that follow keep to the backoff. `--local-network` instead: the app
+// launches with Local Network privacy refusing the hub, stays on the board
+// with its status line alone saying so beside Open Settings, toasts nothing,
+// and reconnects at once when activated with access allowed.
 const LIVE = option("--live");
+const BACK_LINES = /app active|status line|shell shows|hub socket open/;
 const TRAILING_SLASH = /\/$/;
 /** A log line up to what it says: its stamp, process and category. */
 const LIVE_LOG_HEAD = /^.*\] /;
@@ -153,6 +155,8 @@ const HUB_ASKED = /because (streamReset|transcriptReset|backlogBroken)/;
 const APPLIED = / applied/;
 const SHOWN_FAILING = / because |toast:|transcript read for|catch-up /;
 const TOAST_HEAD = /^.*toast: /;
+/** The local-network pass is through: the rest of the live pass is not run. */
+const LOCAL_DONE = "local network pass done";
 if (LIVE) {
   const hub = (option("--hub") ?? "http://100.125.210.78:3456").replace(
     TRAILING_SLASH,
@@ -324,13 +328,84 @@ xcrun simctl install ${device} "${app}"`);
         );
       }
     })().catch(() => undefined);
-    // `--local-network`: the read the reset asks for fails as Local Network
-    // privacy makes it (-1009, the path refused), injected in DEBUG
-    // (`--hub-local-network-denied`): the simulator does not enforce it.
-    const localNetwork = args.includes("--local-network");
+    // `--local-network`: the app launches with Local Network privacy refusing
+    // the hub, as the owner's Mac had it. The simulator does not enforce it:
+    // launched with `--hub-local-network-denied` (`LocalNetwork.debugDenied`),
+    // the socket and every read fail with -1009 and the path says refused.
+    // The shell stays on the board, its status line alone says it with Open
+    // Settings, and nothing toasts. `dev.cawco.debug.local-network-allowed`
+    // (access allowed) is posted and the app activated as a Mac window back
+    // from System Settings is
+    // (`dev.cawco.debug.became-active`): it reconnects at once.
+    if (args.includes("--local-network")) {
+      const refusedFrom = lines.length;
+      await sh(
+        `xcrun simctl launch --terminate-running-process ${device} dev.cawco.app -paywall-env sandbox -cawco-hub-url http://127.0.0.1:${live.port} --hub-local-network-denied >/dev/null`
+      );
+      await pause(20_000);
+      const refused = [...new Set(lines.slice(refusedFrom))];
+      const shell = refused.filter((l) => l.includes("shell shows"));
+      const status = refused.filter((l) => l.includes("status line:"));
+      const toasts = refused.filter((l) => l.includes("toast shown:"));
+      for (const line of [...shell, ...status, ...toasts]) {
+        console.log(`  ${line.slice(0, 200)}`);
+      }
+      check(
+        "local network: the shell stays on the board, never the setup screen",
+        shell.length > 0 && shell.every((l) => l.includes("shell shows board")),
+        shell.map((l) => l.replace(LIVE_LOG_HEAD, "")).join(" | ") ||
+          "no shell line"
+      );
+      check(
+        "local network: the status line alone says it, with Open Settings",
+        status
+          .at(-1)
+          ?.endsWith(
+            "status line: CawCo isn't allowed on the local network|Open Settings"
+          ) === true,
+        status.at(-1) ?? "no status line"
+      );
+      check(
+        "local network: nothing toasts",
+        toasts.length === 0,
+        `${toasts.length} toast(s)`
+      );
+      // Allowed in Settings, then back: the window is active again.
+      await sh(
+        `xcrun simctl spawn ${device} notifyutil -p dev.cawco.debug.local-network-allowed`
+      );
+      await pause(500);
+      const backFrom = lines.length;
+      const backAt = (Date.now() - started) / 1000;
+      await sh(
+        `xcrun simctl spawn ${device} notifyutil -p dev.cawco.debug.became-active`
+      );
+      const reconnected = await until(
+        "the hub socket opens",
+        () =>
+          Promise.resolve(
+            lines.slice(backFrom).find((l) => l.includes("hub socket open"))
+          ),
+        Boolean,
+        20_000
+      ).catch(() => undefined);
+      const back = [...new Set(lines.slice(backFrom))];
+      for (const line of back.filter((l) => BACK_LINES.test(l))) {
+        console.log(`  ${line.slice(0, 200)}`);
+      }
+      check(
+        "local network: back from Settings, it reconnects at once",
+        back.some((l) => l.includes("app active: reconnecting now")) &&
+          reconnected !== undefined,
+        reconnected
+          ? `socket open ${(Number(reconnected.slice(1, reconnected.indexOf("s "))) - backAt).toFixed(1)}s after the activation`
+          : "the socket never opened"
+      );
+      throw new Error(LOCAL_DONE);
+    }
     const open = () =>
       sh(
-        `xcrun simctl launch --terminate-running-process ${device} dev.cawco.app -paywall-env sandbox -cawco-hub-url http://127.0.0.1:${live.port} -open-session ${full}${localNetwork ? " --hub-local-network-denied" : ""} >/dev/null`
+        `xcrun simctl launch --terminate-running-process ${device} dev.cawco.app -paywall-env sandbox -cawco-hub-url http://127.0.0.1:${live.port} -open-session ${full} >/dev/null`
       );
     await open();
     await pause(30_000);
@@ -368,7 +443,7 @@ xcrun simctl install ${device} "${app}"`);
     if (args.includes("--fail")) {
       const failFrom = lines.length;
       const notesAt = notes.length;
-      failUntil = localNetwork ? 0 : Date.now() + 40_000;
+      failUntil = Date.now() + 40_000;
       // The hub's word that its ring cannot replay: the app reads the history again.
       for (const ws of sockets) {
         ws.send(
@@ -442,22 +517,13 @@ xcrun simctl install ${device} "${app}"`);
         "live failing read: exactly one toast says why, in one sentence pair, nothing raw",
         toasts.length === 1 &&
           !toasts[0].includes("    at ") &&
-          toasts[0].length < 400 &&
-          (!localNetwork ||
-            (toasts[0].includes("isn't allowed on the local network") &&
-              toasts[0].includes(
-                "Settings › Privacy & Security › Local Network"
-              ))),
+          toasts[0].length < 400,
         toasts.map((t) => t.replace(TOAST_HEAD, "")).join(" | ") || "no toast"
       );
-      // Local network: only the reset's read is refused; the backoff's lands.
-      const failedCount = localNetwork
-        ? after.filter((l) => l.includes("transcript read for")).length
-        : failedReads.length;
       check(
         "live failing read: the reads that failed kept to the backoff (2s, 4s, 8s, 16s, …)",
-        localNetwork ? failedCount === 1 : failedCount >= 2 && failedCount <= 6,
-        `${failedCount} failed read(s)`
+        failedReads.length >= 2 && failedReads.length <= 6,
+        `${failedReads.length} failed read(s) in 40s`
       );
       const gone = after.some((l) => l.includes(`page adopted for ${full}`));
       check(
@@ -467,11 +533,14 @@ xcrun simctl install ${device} "${app}"`);
       );
     }
   } catch (error) {
-    check(
-      "live",
-      false,
-      error instanceof Error ? error.message : String(error)
-    );
+    // The local-network pass ends here when it is through.
+    if (!(error instanceof Error && error.message === LOCAL_DONE)) {
+      check(
+        "live",
+        false,
+        error instanceof Error ? error.message : String(error)
+      );
+    }
   } finally {
     stream?.kill();
     await writeFile(
