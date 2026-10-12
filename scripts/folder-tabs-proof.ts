@@ -33,6 +33,10 @@
  *    off, read down each free foot from its tip (the taper), per tab, and
  *    the pixels an unchosen idle tab's rim changes (none).
  *
+ * The same switch is then read again every 5% of it and either side of
+ * the handover, its two tabs' sheets against their flared feet
+ * (`feetAgainstSheets`), and printed as each side's series.
+ *
  * Contrast is WCAG's, from the screenshot's own pixels. Every frame is also
  * written as <tag>-switch-<width>-<theme>-<pct>pct.png (the strip plus 24px
  * each side), and the 1440 rest as <tag>-rest-session-<theme>.png; the
@@ -435,12 +439,72 @@ const proofRule = (page: Page, rule: string) =>
  */
 const KEEP_CLOCK = ".rim{transition-property:transform,opacity!important}";
 const GLOW_OFF = `${KEEP_CLOCK}.rim{filter:none!important}`;
+/**
+ * The rule a foot is read whole under: every rim and side at full strength,
+ * the glow off. The rim's opacity leaves its transitioned properties, so
+ * setting it starts nothing (no transition runs on it while a switch does),
+ * and its transform, the lean, keeps its own.
+ */
+const RIMS_WHOLE =
+  ".rim{transition-property:transform!important;filter:none!important;opacity:1!important}.rim-side{opacity:1!important}";
+/**
+ * Draws the feet `sel` in `root` whole for a capture where a transition of
+ * their own runs their opacity (a timing that hands the feet over apart
+ * from the sheet), which a rule cannot outrank: each one seeked to the end
+ * of it where its foot is whole, where it stood kept. `null` puts every one
+ * back. A foot with no transition of its own is set whole by a rule.
+ */
+const seekWhole = (page: Page, root: string, sel: string | null) =>
+  page.evaluate(
+    ({ host, feet }) => {
+      const w = window as unknown as { proofSeeked?: [Animation, number][] };
+      for (const [run, at] of w.proofSeeked ?? []) {
+        run.currentTime = at;
+      }
+      w.proofSeeked = [];
+      if (!feet) {
+        return;
+      }
+      const runs = [...document.querySelectorAll(`${host} ${feet}`)]
+        .flatMap((el) => el.getAnimations())
+        .filter(
+          (run): run is CSSTransition =>
+            run instanceof CSSTransition &&
+            run.transitionProperty === "opacity" &&
+            run.effect instanceof KeyframeEffect
+        );
+      for (const run of runs) {
+        const effect = run.effect as KeyframeEffect;
+        const keys = effect.getKeyframes();
+        const from = Number(keys[0]?.opacity ?? 0);
+        const to = Number(keys.at(-1)?.opacity ?? 0);
+        w.proofSeeked.push([run, Number(run.currentTime)]);
+        run.currentTime =
+          to >= from ? Number(effect.getComputedTiming().endTime) : 0;
+      }
+    },
+    { host: root, feet: sel }
+  );
+/**
+ * Back from a whole reading: the feet's own transitions where they stood,
+ * and every rim's own strength with no transition to it.
+ */
+async function backFromWhole(page: Page, root: string) {
+  await seekWhole(page, root, null);
+  await proofRule(page, ".rim{transition-property:transform!important}");
+  await page.evaluate((host) => {
+    for (const rim of document.querySelectorAll(`${host} .rim`)) {
+      getComputedStyle(rim).getPropertyValue("opacity");
+    }
+  }, root);
+}
 
 /**
  * Each rim's ink, from whole-viewport captures (as the screen draws it):
  *
- *  - the taper: with the glow off, the rims shown against the rims hidden,
- *    the changed ink read down each free foot (a side not under its
+ *  - the taper: with the glow off, the rims shown (a plain foot's path off
+ *    the plain feet alone and whole, the flared hidden) against the rims
+ *    hidden, the changed ink read down each free foot (a side not under its
  *    neighbour's card, in the track's unfaded view) from its tip: on a
  *    plain foot row by row up the outline, on a flared foot across the
  *    stroke at each step round its quarter turn and then row by row up the
@@ -458,6 +522,21 @@ const GLOW_OFF = `${KEEP_CLOCK}.rim{filter:none!important}`;
 async function rimInk(page: Page, strip: Strip, drawn: number[]) {
   await proofRule(page, GLOW_OFF);
   const lit = await page.screenshot({ animations: "allow" });
+  // The plain feet alone and whole, the flared ones hidden: a plain foot's
+  // path is read off its own ink, at its full strength. Low on it the
+  // flared foot's quarter turn lies nearly flat across the path's rows, and
+  // while the two cross-fade on the sheet's clock its ink there was read as
+  // the plain stroke's (at 390, 25% of a switch, flared 0.87 and plain
+  // 0.13: "plain falls at 12.25px"); and a plain foot drawn at a few
+  // percent (0.13 of a rim at 0.47) reads as whole numbers in the 20s,
+  // where one unit of rounding is a tenth of it.
+  await seekWhole(page, strip.root, ".rim-plain");
+  await proofRule(
+    page,
+    `${RIMS_WHOLE}.rim-flared{visibility:hidden!important}.rim-plain{opacity:1!important}`
+  );
+  const plainLit = await page.screenshot({ animations: "allow" });
+  await backFromWhole(page, strip.root);
   // Every piece of every rim: a foot sets its own visibility.
   await proofRule(page, `${GLOW_OFF}.rim,.rim *{visibility:hidden!important}`);
   const unlit = await page.screenshot({ animations: "allow" });
@@ -530,7 +609,7 @@ async function rimInk(page: Page, strip: Strip, drawn: number[]) {
           w: c.width,
         };
       };
-      const [a, b, c, d, even, odd] = await Promise.all(srcs.map(read));
+      const [a, b, c, d, even, odd, plainA] = await Promise.all(srcs.map(read));
       const scale = a.w / innerWidth;
       /** The ink one capture has over another at device px (x, y): 0 to 765. */
       const diff = (
@@ -547,19 +626,24 @@ async function rimInk(page: Page, strip: Strip, drawn: number[]) {
         );
       };
       const ink = (x: number, y: number) => diff(a, b, x, y);
-      /** The ink at css px (x, y), read between device pixels' centres. */
-      const inkAt = (x: number, y: number) => {
+      interface Shot {
+        data: Uint8ClampedArray;
+        w: number;
+      }
+      /** The ink capture `shot` has at css px (x, y), read between device pixels' centres. */
+      const inkAt = (shot: Shot, x: number, y: number) => {
         const fx = x * scale - 0.5;
         const fy = y * scale - 0.5;
         const ix = Math.floor(fx);
         const iy = Math.floor(fy);
         const u = fx - ix;
         const v = fy - iy;
+        const cover = (px: number, py: number) => diff(shot, b, px, py);
         return (
-          ink(ix, iy) * (1 - u) * (1 - v) +
-          ink(ix + 1, iy) * u * (1 - v) +
-          ink(ix, iy + 1) * (1 - u) * v +
-          ink(ix + 1, iy + 1) * u * v
+          cover(ix, iy) * (1 - u) * (1 - v) +
+          cover(ix + 1, iy) * u * (1 - v) +
+          cover(ix, iy + 1) * (1 - u) * v +
+          cover(ix + 1, iy + 1) * u * v
         );
       };
       /** The step along a cross-section, css px. */
@@ -583,20 +667,20 @@ async function rimInk(page: Page, strip: Strip, drawn: number[]) {
         x0: number;
       }
       /** The ink across a straight stroke at css height h above the shelf, and 1.5px either side: its integral along the cross-section (css px × ink). */
-      const row = (f: Foot, h: number) => {
+      const row = (shot: Shot, f: Foot, h: number) => {
         const y = f.bottom - h * f.lean;
         let sum = 0;
         for (let k = -1.5; k <= f.t + 1.5; k += DS) {
-          sum += inkAt(f.x0 + f.dir * k, y) * DS;
+          sum += inkAt(shot, f.x0 + f.dir * k, y) * DS;
         }
         return Math.round(sum);
       };
       const step = 1 / scale;
-      /** Up the outline from the tip, a device px at a time. */
+      /** Up the outline from the tip, a device px at a time, off the plain feet alone. */
       const plainPath = (f: Foot) => {
         const out: { s: number; ink: number }[] = [];
         for (let h = step / 2; h <= f.top; h += step) {
-          out.push({ s: r2(h), ink: row(f, h) });
+          out.push({ s: r2(h), ink: row(plainA, f, h) });
         }
         return out;
       };
@@ -624,6 +708,7 @@ async function rimInk(page: Page, strip: Strip, drawn: number[]) {
           for (let r = f.F - 1.5; r <= f.F + f.t + 1.5; r += DS) {
             sum +=
               inkAt(
+                a,
                 cx + f.dir * r * Math.sin(phi),
                 f.bottom - (f.F - r * Math.cos(phi)) * f.lean
               ) * DS;
@@ -639,7 +724,7 @@ async function rimInk(page: Page, strip: Strip, drawn: number[]) {
           out.push({ s: r2(s), ink: Math.round(sum / ARC_SUBSTEPS) });
         }
         for (let h = f.F + step / 2; h <= f.top; h += step) {
-          out.push({ s: r2(f.A + h - f.F), ink: row(f, h) });
+          out.push({ s: r2(f.A + h - f.F), ink: row(a, f, h) });
         }
         return out;
       };
@@ -887,10 +972,233 @@ async function rimInk(page: Page, strip: Strip, drawn: number[]) {
         url(idleOff),
         url(evenAlone),
         url(oddAlone),
+        url(plainLit),
       ],
       root: strip.root,
       tabSel: strip.tab,
       idle: idleTabs,
+    }
+  );
+}
+
+/** Where the feet are read against the sheets: every 5% of the switch, and either side of the handover. */
+const FOOT_PCTS = [...Array.from({ length: 21 }, (_, k) => k * 5), 49, 51].sort(
+  (a, b) => a - b
+);
+
+/**
+ * The two tabs a switch moves (`switching`), each one's sheet against its
+ * flared feet, in one frame. The sheet: its computed opacity (TabItem's
+ * `::after`, the body and its flared foot as one shape). Each flared foot:
+ * its ink from whole-viewport captures, the rims shown against the rims
+ * hidden, with only the flared sides drawn (top and plain feet hidden), the
+ * rim's and the side's own strength set whole and the glow off, so what is
+ * read is the foot's share of the switch alone; one tab's rims and its
+ * neighbours' never in one capture (the even tabs', then the odd). That
+ * ink over the same foot's drawn whole in the same frame (its opacity set
+ * whole, `seekWhole`): the same lean, the same layer, the same pixels under it,
+ * so only how much of it is drawn is read. Read in the box the foot's
+ * quarter turn stands in (its tip on the shelf one flare out, up to a px
+ * over the flare as the lean draws it), each device px's change over the
+ * change its ink would make there drawn whole (the side's own ink,
+ * `--tone` leaned at a gliding seam, against what lies under it). Against
+ * a whole foot read in another frame instead, at another lean, the
+ * stroke's resampled ink moved ±0.05 with the lean's angle alone.
+ */
+async function feetAgainstSheets(
+  page: Page,
+  strip: Strip,
+  switching: number[]
+) {
+  const BASE_RULE = `${RIMS_WHOLE}.rim-top,.rim-plain{visibility:hidden!important}`;
+  await page.evaluate(
+    ({ root, tab }) => {
+      for (const [i, el] of document
+        .querySelectorAll<HTMLElement>(`${root} ${tab}`)
+        .entries()) {
+        el.setAttribute("data-proof-parity", i % 2 === 0 ? "even" : "odd");
+      }
+    },
+    { root: strip.root, tab: strip.tab }
+  );
+  await proofRule(page, `${BASE_RULE}.rim,.rim *{visibility:hidden!important}`);
+  const bare = await page.screenshot({ animations: "allow" });
+  const shown = async (hidden: "even" | "odd", whole: boolean) => {
+    const sel = `[data-proof-parity="${hidden}"] .rim`;
+    await proofRule(
+      page,
+      `${BASE_RULE}${whole ? ".rim-flared{opacity:1!important}" : ""}${sel},${sel} *{visibility:hidden!important}`
+    );
+    return page.screenshot({ animations: "allow" });
+  };
+  const even = await shown("odd", false);
+  const odd = await shown("even", false);
+  await seekWhole(page, strip.root, ".rim-flared");
+  const evenWhole = await shown("odd", true);
+  const oddWhole = await shown("even", true);
+  // The feet and the rims' own strength back with no transition to them,
+  // then the rule goes.
+  await backFromWhole(page, strip.root);
+  await page.evaluate(() => {
+    for (const el of document.querySelectorAll("[data-proof-parity]")) {
+      el.removeAttribute("data-proof-parity");
+    }
+  });
+  await proofRule(page, "");
+  const url = (b: Buffer) => `data:image/png;base64,${b.toString("base64")}`;
+  return page.evaluate(
+    async ({ srcs, root, tabSel, which }) => {
+      const read = async (src: string) => {
+        const img = new Image();
+        img.src = src;
+        await img.decode();
+        const c = document.createElement("canvas");
+        c.width = img.naturalWidth;
+        c.height = img.naturalHeight;
+        const ctx = c.getContext("2d") as CanvasRenderingContext2D;
+        ctx.drawImage(img, 0, 0);
+        return {
+          data: ctx.getImageData(0, 0, c.width, c.height).data,
+          w: c.width,
+        };
+      };
+      const [bareShot, evenShot, oddShot, evenWholeShot, oddWholeShot] =
+        await Promise.all(srcs.map(read));
+      const scale = bareShot.w / innerWidth;
+      /** A computed colour as the canvas draws it, sRGB 0 to 255. */
+      const swatch = document.createElement("canvas");
+      swatch.width = 1;
+      swatch.height = 1;
+      const sw = swatch.getContext("2d", {
+        willReadFrequently: true,
+      }) as CanvasRenderingContext2D;
+      const rgbOf = (colour: string) => {
+        sw.clearRect(0, 0, 1, 1);
+        sw.fillStyle = "#000";
+        sw.fillStyle = colour;
+        sw.fillRect(0, 0, 1, 1);
+        const d = sw.getImageData(0, 0, 1, 1).data;
+        return [d[0], d[1], d[2]];
+      };
+      /**
+       * The ink `shot` has over the bare capture in css box x0..x1, y0..y1,
+       * each device px's change over the change `tone` drawn whole would
+       * make there. The first device row counts by the share of it inside
+       * the box, where the box cuts the run.
+       */
+      const inkIn = (
+        shot: { data: Uint8ClampedArray; w: number },
+        tone: number[],
+        x0: number,
+        x1: number,
+        y0: number,
+        y1: number
+      ) => {
+        const b = bareShot.data;
+        const lit = shot.data;
+        const top = y0 * scale;
+        const ya = Math.floor(top);
+        const yb = Math.ceil(y1 * scale);
+        const xa = Math.floor(x0 * scale);
+        const xb = Math.ceil(x1 * scale);
+        let sum = 0;
+        for (let y = ya; y < yb; y += 1) {
+          const share = y === ya ? ya + 1 - top : 1;
+          for (let x = xa; x < xb; x += 1) {
+            const k = (y * shot.w + x) * 4;
+            let d = 0;
+            let whole = 0;
+            for (let c = 0; c < 3; c += 1) {
+              d += Math.abs(lit[k + c] - b[k + c]);
+              whole += Math.abs(tone[c] - b[k + c]);
+            }
+            sum += (share * d) / Math.max(whole, 45);
+          }
+        }
+        return sum;
+      };
+      const r3 = (n: number) => Math.round(n * 1000) / 1000;
+      const track = document.querySelector(
+        `${root} .ff-tabs-list`
+      ) as HTMLElement;
+      const tr = track.getBoundingClientRect();
+      const ts = getComputedStyle(track);
+      const fadeStart =
+        Number.parseFloat(ts.getPropertyValue("--fade-start")) || 0;
+      const fadeEnd = Number.parseFloat(ts.getPropertyValue("--fade-end")) || 0;
+      const els = [
+        ...document.querySelectorAll<HTMLElement>(`${root} ${tabSel}`),
+      ];
+      const laid = (el: HTMLElement) => {
+        let at = el;
+        while (at.parentElement && at.parentElement !== track) {
+          at = at.parentElement;
+        }
+        return at;
+      };
+      return which.map((i) => {
+        const el = els[i];
+        const ff = el.querySelector(".ff-tab") as HTMLElement;
+        const rim = el.querySelector(".rim") as HTMLElement;
+        const rs = getComputedStyle(rim);
+        const F = Number.parseFloat(rs.getPropertyValue("--F"));
+        const t = Number.parseFloat(rs.getPropertyValue("--tn"));
+        const lean = new DOMMatrix(rs.transform === "none" ? "" : rs.transform)
+          .m22;
+        const box = el.getBoundingClientRect();
+        const [shot, wholeShot] =
+          i % 2 === 0 ? [evenShot, evenWholeShot] : [oddShot, oddWholeShot];
+        const sides = (["start", "end"] as const).map((side) => {
+          const sideEl = rim.querySelector(
+            `.rim-side[data-side="${side}"]`
+          ) as HTMLElement;
+          const flared = sideEl.querySelector(".rim-flared") as HTMLElement;
+          const plain = sideEl.querySelector(".rim-plain") as HTMLElement;
+          const sr = sideEl.getBoundingClientRect();
+          const dir = side === "start" ? 1 : -1;
+          const x0 = side === "start" ? sr.left + F : sr.right - F;
+          const under =
+            getComputedStyle(laid(el))
+              .getPropertyValue(`--under-${side}`)
+              .trim() === "1";
+          const reach = F + 2;
+          const inView =
+            x0 - reach > tr.left + fadeStart * 1.5 + 2 &&
+            x0 + reach < tr.right - fadeEnd - 2;
+          const xs = [x0 - dir * (F + 2), x0 + dir * (t + 2)];
+          const tone = rgbOf(getComputedStyle(flared).backgroundColor);
+          // From a px over the flare as the lean draws it, to the shelf.
+          const foot = (from: typeof shot) =>
+            inkIn(
+              from,
+              tone,
+              Math.min(...xs),
+              Math.max(...xs),
+              box.bottom - F * lean - 1,
+              box.bottom + 1
+            );
+          return {
+            side,
+            under,
+            inView,
+            flaredOp: r3(Number(getComputedStyle(flared).opacity)),
+            plainOp: r3(Number(getComputedStyle(plain).opacity)),
+            ink: foot(shot),
+            whole: foot(wholeShot),
+          };
+        });
+        return {
+          i,
+          sheet: r3(Number(getComputedStyle(ff, "::after").opacity)),
+          sides,
+        };
+      });
+    },
+    {
+      srcs: [url(bare), url(even), url(odd), url(evenWhole), url(oddWhole)],
+      root: strip.root,
+      tabSel: strip.tab,
+      which: switching,
     }
   );
 }
@@ -1567,6 +1875,20 @@ for (const view of VIEWS) {
           jump[pct] = frame.numbers.tabs;
         }
       }
+      // The same switch again, its two tabs' flared feet against their
+      // sheets, every 5% of it and either side of the handover.
+      const feet: Record<string, FeetFrame> = {};
+      if (strip.rim) {
+        await open(page, theme, 1, "working");
+        await page.evaluate((id) => window.__ft.choose(id), next);
+        await frames(page);
+        await seek(page, strip, 0);
+        for (const pct of FOOT_PCTS) {
+          await seek(page, strip, pct / 100);
+          await frames(page);
+          feet[pct] = await feetAgainstSheets(page, strip, [from, from + 1]);
+        }
+      }
       // The session strip at its start (the first tab chosen, nothing
       // scrolled); the home's with Finished chosen.
       await open(page, theme, 0, "finished");
@@ -1589,6 +1911,7 @@ for (const view of VIEWS) {
         },
         switch: { from: chosen, to: next, paused, frames: switchFrames },
         jump: { from, past: from + 1, to: from + 2, frames: jump },
+        feet: { frames: feet },
       };
     }
     await context.close();
@@ -1606,6 +1929,74 @@ type Numbers = Awaited<ReturnType<typeof measure>>["numbers"] & {
   sheet?: Awaited<ReturnType<typeof sheetEdges>>;
   sides?: Awaited<ReturnType<typeof sidesDrawn>>;
 };
+type FeetFrame = Awaited<ReturnType<typeof feetAgainstSheets>>;
+/** How far a foot's ink may stand off its sheet's opacity in any frame. */
+const FOOT_TOLERANCE = 0.03;
+/**
+ * Each switching tab's side across the switch: its sheet's opacity, and its
+ * flared foot's ink as a share of that foot drawn whole in the same frame
+ * (`whole`, its least over the frames read); null where the side stands
+ * under its neighbour's card (it draws no foot) or out of view.
+ */
+function feetSeries(read: Record<string, FeetFrame>) {
+  const pcts = Object.keys(read)
+    .map(Number)
+    .sort((a, b) => a - b);
+  const r3 = (n: number) => Math.round(n * 1000) / 1000;
+  return (read[pcts[0]] ?? []).flatMap((tab, k) =>
+    (["start", "end"] as const).map((side) => {
+      const at = (p: number) => {
+        const t = read[p][k];
+        const s = t.sides.find(
+          (x) => x.side === side
+        ) as FeetFrame[number]["sides"][number];
+        return { sheet: t.sheet, s, free: !s.under && s.inView && s.whole > 1 };
+      };
+      const wholes = pcts.flatMap((p) => (at(p).free ? [at(p).s.whole] : []));
+      return {
+        tab: tab.i,
+        side,
+        whole: r3(wholes.length > 0 ? Math.min(...wholes) : 0),
+        points: pcts.map((p) => {
+          const { sheet, s, free } = at(p);
+          return {
+            pct: p,
+            sheet,
+            flaredOp: s.flaredOp,
+            foot: free ? r3(s.ink / s.whole) : null,
+          };
+        }),
+      };
+    })
+  );
+}
+/**
+ * Each switching tab's flared feet sit on its sheet's curve: in every
+ * frame read, each foot in front and in view has its ink within
+ * `FOOT_TOLERANCE` of its sheet's opacity, and each tab has a foot read.
+ */
+function feetFaults(read: Record<string, FeetFrame>): string[] {
+  const rows = feetSeries(read);
+  if (rows.length === 0) {
+    return ["no frames"];
+  }
+  const out: string[] = [];
+  for (const tab of new Set(rows.map((r) => r.tab))) {
+    if (!rows.some((r) => r.tab === tab && r.whole > 0)) {
+      out.push(`tab ${tab} no foot read`);
+    }
+  }
+  for (const r of rows) {
+    for (const p of r.points) {
+      if (p.foot !== null && Math.abs(p.foot - p.sheet) > FOOT_TOLERANCE) {
+        out.push(
+          `${r.tab}${r.side[0]} ${p.pct}%: foot ${p.foot} sheet ${p.sheet}`
+        );
+      }
+    }
+  }
+  return out;
+}
 const line = (label: string, n: Numbers) => {
   const seams = n.edges
     .map((e) =>
@@ -1703,6 +2094,20 @@ for (const [key, value] of Object.entries(report)) {
       console.log(`    tab ${i} top(sides;top vs shelf) ${rows.join(" ")}`);
     }
   }
+  // The switch's two tabs, each side: its sheet against its flared foot's
+  // ink, and the foot's computed opacity, frame by frame.
+  const { feet } = value as { feet?: { frames: Record<string, FeetFrame> } };
+  if (feet && Object.keys(feet.frames).length > 0) {
+    console.log(
+      "  feet: pct:sheet/foot ink (flared opacity); - under its neighbour or out of view"
+    );
+    for (const r of feetSeries(feet.frames)) {
+      const points = r.points
+        .map((p) => `${p.pct}%:${p.sheet}/${p.foot ?? "-"}(${p.flaredOp})`)
+        .join(" ");
+      console.log(`    tab ${r.tab} ${r.side} (whole ${r.whole}) ${points}`);
+    }
+  }
 }
 
 /**
@@ -1736,6 +2141,10 @@ for (const [key, value] of Object.entries(report)) {
  *    outgoing and the incoming tab's top rim strength never dips below the
  *    lower of its two rest strengths (before and after) and moves one way
  *    only: only a gliding seam's side leans, never the whole rim;
+ *  - feet: on the switch, read every 5% of it and either side of the
+ *    handover, each of its two tabs' flared feet in front and in view has
+ *    its ink (as a share of that foot drawn whole) within 0.03 of its
+ *    sheet's opacity: body and feet are one shape on one clock;
  *  - sheet edge (a strip with no rim): every seam's edge, where the two
  *    fills differ, shows within 1px of where the glide puts it, and across
  *    the switch it moves one way only, never back (no jump, no flicker);
@@ -1756,6 +2165,7 @@ const RULES = [
   "taper",
   "handover",
   "jump",
+  "feet",
   "sheet edge",
   "fades",
   "titles",
@@ -1770,6 +2180,7 @@ const RIM_RULES: readonly Rule[] = [
   "taper",
   "handover",
   "jump",
+  "feet",
 ];
 interface Jump {
   frames: Record<string, Numbers["tabs"]>;
@@ -1917,7 +2328,7 @@ type InkTab = Ink["tabs"][number];
  * fall back by more than a tenth of the whole (a device px's rounding),
  * and be 80% whole a px past where the taper ends (`full`): the taper's
  * length, or the shoulder's height where that is shorter. That last only
- * when its foot is drawn `alone`: while the feet hand over, both drawn,
+ * when its foot is drawn `alone`: while the feet cross-fade, both drawn,
  * the other foot's ink lies across this one's path near the run, so its
  * whole is not this foot's. Drawn alone, it also eases out from the tip:
  * 90% whole within the first 40% of the taper's length (`taper`, the
@@ -2052,9 +2463,10 @@ const faults = (n: Numbers, at: string): Record<Rule, string[]> => ({
   fades: n.clear.flatMap((c) =>
     c.clear || c.yields ? [] : [`${c.i} ${c.inFade.start}/${c.inFade.end}`]
   ),
-  // Across frames: the table's own (`handover`, `jump`).
+  // Across frames: the table's own (`handover`, `jump`, `feet`).
   handover: [],
   jump: [],
+  feet: [],
   titles: n.tabs.flatMap((t) =>
     t.labelCut ? [`${t.i} ${t.labelScroll}>${t.labelClient}`] : []
   ),
@@ -2070,6 +2482,7 @@ for (const [key, value] of Object.entries(report)) {
     restFirst: Numbers;
     switch: { frames: Record<string, Numbers> };
     jump: Jump;
+    feet: { frames: Record<string, FeetFrame> };
   };
   const measured = [
     ["rest", v.rest],
@@ -2141,6 +2554,7 @@ for (const [key, value] of Object.entries(report)) {
       ...(rule === "sheet edge" ? glide : []),
       ...(rule === "handover" ? handover : []),
       ...(rule === "jump" ? jumpFaults(v.jump) : []),
+      ...(rule === "feet" ? feetFaults(v.feet.frames) : []),
     ];
     // The 3:1 cell names the chosen tab's top and, as numbers, its sides,
     // in each resting frame.

@@ -2015,14 +2015,19 @@
     --rim-subtle: var(--tab-rim-mix-subtle);
     --rim-chosen: var(--tab-rim-mix-chosen);
     --rim-idle: var(--tab-rim-mix-idle);
+    /* How much of its chosen sheet shows now: the sheet's own opacity on
+       every frame, read off the sheet's fade by the track (TabsList
+       `--depth`, 0 chosen to 1 receded; how chosen it is drawn until the
+       track has measured it). The rim's strength and its feet follow it,
+       so body, feet and rim are one shape on one clock. */
+    --sheet-now: calc(1 - var(--depth, calc(1 - var(--pick))));
     /* Its strength now, and its neighbours': from how chosen each stands
-       on the switch's clock (TabsList `--depth`, `--depth-prev`,
-       `--depth-next`; how chosen it is drawn until the track has measured
-       it). */
+       on the switch's clock (`--sheet-now`, `--depth-prev`,
+       `--depth-next`). */
     --rim-mix: calc(
       var(--rim-rest) +
       (var(--rim-full) - var(--rim-rest)) *
-      (1 - var(--depth, calc(1 - var(--pick))))
+      var(--sheet-now)
     );
     --rim-mix-prev: calc(
       var(--rest-prev) +
@@ -2262,20 +2267,25 @@
   /* The side on its plain foot (a receded tab's) and on its flared foot
      (the chosen tab's), each one shape from shoulder to tip (so no seam
      where the run meets its foot) with its own fade, measured along its
-     own stroke from its tip. They hand over at half way, where the tab's
-     rank does (TabsList): the tab leaving the choice trades its flared
-     side for its plain one while it is in front, the tab taking it its
-     plain side for its flared one once it is. Their strengths always sum
-     to one and they add as light (`plus-lighter`), so where the two run
-     on the same pixels (the run, and its fading stretch above a foot) the
-     stroke holds its strength through the handover.
+     own stroke from its tip. They cross-fade on the sheet's own curve,
+     frame by frame: the flared side shows exactly as much as the tab's
+     sheet does (`--sheet-now`), whose foot it outlines, and the plain side
+     the rest, so the curve at the foot never runs ahead of the body or
+     behind it (owner: the tab animation "animates the tabs body then the
+     curve on the sides separately"). Their strengths always sum to one and
+     they add as light (`plus-lighter`), so where the two run on the same
+     pixels (the run, and its fading stretch above a foot) the stroke holds
+     its strength through the switch.
 
-     A side under its neighbour's card draws no foot (`--u`, flipped with
-     the rank at the seam's handover, where the two sides stand on the same
-     pixels): its tip folds up to the run's foot. The card covers it at
-     rest, and on a switch the card's foot row, a compositor layer's edge,
-     is half clear and showed it as a stub on the shelf. Its shoulder and
-     run stay, so the corner where the two tops meet is one line.
+     A foot never shows from under a neighbour: the rank does that, not a
+     timing. A side under its neighbour's card draws no foot (`--u`,
+     flipped with the rank at the seam's handover, at equal depth, where
+     the two sides stand on the same pixels): its tip folds up to the run's
+     foot, as the sheet's own foot there lies under the front card. The
+     card covers it at rest, and on a switch the card's foot row, a
+     compositor layer's edge, is half clear and showed it as a stub on the
+     shelf. Its shoulder and run stay, so the corner where the two tops
+     meet is one line.
 
      The plain side: down the outline to the shelf, narrowing to a point
      there up to where the taper's ink is 90% whole (`--tn90`), or the
@@ -2284,7 +2294,7 @@
      control at the tip's height), so the stroke widens fast off the point
      and slows into its full width. */
   .rim-plain {
-    opacity: clamp(0, 2 - 2 * var(--pick), 1);
+    opacity: calc(1 - var(--sheet-now));
     clip-path: shape(
       from calc(var(--F) + var(--s) + var(--radius)) 0,
       arc to calc(var(--F) + var(--s)) var(--radius) of var(--radius) ccw,
@@ -2321,7 +2331,7 @@
      to the shelf's line, narrowing from where the taper's ink is 90%
      whole (`--th`) to a point where it meets it. */
   .rim-flared {
-    opacity: clamp(0, 2 * var(--pick) - 1, 1);
+    opacity: var(--sheet-now);
     mix-blend-mode: plus-lighter;
     clip-path: shape(
       from calc(var(--F) + var(--s) + var(--radius)) 0,
@@ -2402,17 +2412,9 @@
       0 0;
     mask-repeat: no-repeat;
   }
+  /* The feet ease nothing of their own: they are the sheet's, frame by
+     frame (`--sheet-now`). */
   @media (prefers-reduced-motion: no-preference) {
-    /* The feet hand over in the clock's two halves: the tab leaving the
-       choice trades its flared side for a plain one over the first, the
-       tab taking it its plain side for the flared one over the second. */
-    .rim-plain,
-    .rim-flared {
-      transition: opacity calc(var(--choose-dur) / 2) var(--choose-ease);
-    }
-    .tab[data-chosen] :is(.rim-plain, .rim-flared) {
-      transition-delay: calc(var(--choose-dur) / 2);
-    }
     /* A pointer's lift runs at the control tier (TabItem). */
     @media (hover: hover) and (pointer: fine) {
       .tab:not([data-chosen]):hover .rim {
@@ -2423,7 +2425,7 @@
   }
   /* Under a swipe the rim is where its fraction puts it, frame by frame:
      no transition lags the finger. */
-  :global([data-ride]) :is(.rim, .rim-plain, .rim-flared) {
+  :global([data-ride]) .rim {
     transition: none;
   }
 
