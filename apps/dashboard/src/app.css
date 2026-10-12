@@ -1228,8 +1228,11 @@
       scale: none;
       transition: none;
     }
+    /* Shut: up past its own height by the reach of its shadow under it
+       (`--hang-reach`, the hung shadow's), so none of it is left under the
+       cut. */
     .kit-pop.kit-hang:not([data-shown]) {
-      translate: 0 -100%;
+      translate: 0 calc(-100% - var(--hang-reach, 0px));
     }
     /* Its own layer for as long as it is mounted: WebKit gave the card one
        for its slide alone and took it away when the slide ended, and that

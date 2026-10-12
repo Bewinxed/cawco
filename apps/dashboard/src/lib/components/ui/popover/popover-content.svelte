@@ -2,7 +2,7 @@
   import { Popover as PopoverPrimitive } from "bits-ui";
   import type { ComponentProps } from "svelte";
   import { numberOf } from "#lib/cawco/motion/curves.svelte.js";
-  import { morph } from "#lib/cawco/motion/morph.svelte.js";
+  import { type Morph, morph } from "#lib/cawco/motion/morph.svelte.js";
   import { cn, type WithoutChildrenOrChild } from "#lib/utils.js";
   import { browser } from "$app/env";
   import PopoverPortal from "./popover-portal.svelte";
@@ -14,9 +14,12 @@
     align = "center",
     collisionPadding,
     portalProps,
+    morphs,
     ...restProps
   }: PopoverPrimitive.ContentProps & {
     portalProps?: WithoutChildrenOrChild<ComponentProps<typeof PopoverPortal>>;
+    /** How it tweens to a new size (motion/morph): across too, or held still. */
+    morphs?: Morph;
   } = $props();
 
   // Never flush with the screen's edge: it keeps the pages' gutter from it,
@@ -28,7 +31,8 @@
 
   // A popover whose content changes (a list arrives, an error appears)
   // tweens to its new height instead of jumping.
-  const resize = morph();
+  // svelte-ignore state_referenced_locally: how it morphs is set once, by its site
+  const resize = morph(morphs);
   $effect(() => {
     if (ref) {
       return resize(ref);

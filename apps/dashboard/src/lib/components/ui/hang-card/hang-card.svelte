@@ -42,6 +42,7 @@
     sameNeck,
     setNeck,
   } from "#lib/cawco/motion/hang.js";
+  import type { Morph } from "#lib/cawco/motion/morph.svelte.js";
   import type ContextMenuContent from "#lib/components/ui/context-menu/context-menu-content.svelte";
   import PopoverContent from "#lib/components/ui/popover/popover-content.svelte";
   import { cn } from "#lib/utils.js";
@@ -71,6 +72,8 @@
     folded?: () => boolean;
     /** It is opened only to be placed ahead of its first real open: nothing plays. */
     quiet?: () => boolean;
+    /** How the popover's box tweens to a new size (motion/morph): the popover's own `as` only. */
+    morphs?: Morph;
     children: Snippet;
   };
 

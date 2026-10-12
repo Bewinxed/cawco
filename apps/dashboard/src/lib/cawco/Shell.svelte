@@ -45,10 +45,9 @@
   import { cawco, hubSocketUrl, reconnectNow } from "./client.svelte";
   import { continuing } from "./continue.svelte";
   import ForgetProjectDialog from "./ForgetProjectDialog.svelte";
+  import GlassCard from "./GlassCard.svelte";
   import { deviceRatio } from "./home/device-ratio.svelte";
   import { sessionName } from "./home/home-state.svelte";
-  import JumpPalette from "./JumpPalette.svelte";
-  import { machinesPopover } from "./join/join.svelte";
   import MachinesButton from "./MachinesButton.svelte";
   import { hangShadow } from "./motion/hung-shadow";
   import NeedsCaw from "./NeedsCaw.svelte";
@@ -90,7 +89,6 @@
 
   // Seeded once from the server's reading; dragging owns it after that.
   let railWidth = $state(untrack(() => clamp(initialRailWidth)));
-  let jumpOpen = $state(false);
   let railOpen = $state(false);
   let assistantOpen = $state(false);
 
@@ -285,7 +283,7 @@
     }
     if (key === "k") {
       event.preventDefault();
-      jumpOpen = !jumpOpen;
+      barGlass.toggle("jump");
       return;
     }
     if (key === "j") {
@@ -688,9 +686,9 @@
   /* The home's Check machines opens the machines where a phone keeps them:
      the sidebar. */
   $effect(() => {
-    if (!railed && machinesPopover.open) {
+    if (!railed && barGlass.open === "machines") {
       untrack(() => {
-        machinesPopover.open = false;
+        barGlass.open = null;
         railOpen = true;
       });
     }
@@ -888,7 +886,7 @@
       <Sheet.Content
         class="rail-sheet w-[284px] p-0 min-[900px]:hidden"
         onCloseAutoFocus={(event) => {
-          if (jumpOpen) {
+          if (barGlass.open === "jump") {
             event.preventDefault();
           }
         }}
@@ -907,7 +905,7 @@
             }}
             onsearch={() => {
               railOpen = false;
-              jumpOpen = true;
+              barGlass.open = "jump";
             }}
             sheet
           />
@@ -997,13 +995,13 @@
                 )}
                   <button
                     {...tip}
-                    aria-expanded={jumpOpen}
+                    aria-expanded={barGlass.open === "jump"}
                     aria-haspopup="dialog"
                     aria-label="Jump to session"
                     class="bar-item jump touch-hit press-tint"
                     data-share="jump"
                     onclick={() => {
-                      jumpOpen = !jumpOpen;
+                      barGlass.toggle("jump");
                     }}
                     type="button"
                   >
@@ -1110,7 +1108,8 @@
     </div>
   </div>
 
-  <JumpPalette bind:open={jumpOpen} />
+  <!-- The glass's one card: Caw's panel, the machines or Jump (bar-glass). -->
+  <GlassCard />
   <!-- One dialog for every destructive confirm in the app (see confirm.svelte.ts). -->
   <ConfirmDialog />
   <!-- One Forget project dialog for every opener (forget.svelte.ts). -->

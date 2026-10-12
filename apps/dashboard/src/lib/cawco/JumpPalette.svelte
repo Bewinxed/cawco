@@ -1,17 +1,27 @@
+<script lang="ts" module>
+  import type { AuthorToken } from "./jump-search.svelte";
+
+  /**
+   * What was typed, and who it is scoped to: kept while the palette is
+   * shut or the glass's card shows another, so it opens on them again.
+   */
+  const kept = $state<{ query: string; scope: AuthorToken | null }>({
+    query: "",
+    scope: null,
+  });
+</script>
+
 <script lang="ts">
   /**
-   * The Jump palette: a HangCard on the bar's glass, hanging from its foot
-   * flush with its trailing flank as Caw's panel does, and coming down out
-   * of it; opening it closes the glass's other card (bar-glass). The search
-   * glass opens and closes it, ⌘K does too (Shell): opened from the keyboard
-   * it stands open at once and leaves at once, with no slide. On a phone the
-   * sidebar's search field opens it from the glass Caw stands on. Non-modal,
-   * as the glass's other cards: a press elsewhere closes it and lands, and
-   * Escape closes it and gives the focus back to what had it.
+   * The Jump palette's contents, in the glass's one card (GlassCard): it
+   * comes down out of the glass, or the card hanging there changes to it in
+   * place. The search glass opens and closes it, ⌘K does too (Shell):
+   * opened from the keyboard it stands open at once and leaves at once, and
+   * the card changes to it at once. On a phone the sidebar's search field
+   * opens it from the glass Caw stands on. Its field takes the focus as it
+   * comes in; choosing a row closes the card (`onclose`).
    */
   import { Command as CommandPrimitive } from "bits-ui";
-  import { untrack } from "svelte";
-  import { MediaQuery } from "svelte/reactivity";
   import { scale } from "svelte/transition";
   import {
     crossOut,
@@ -22,12 +32,8 @@
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Command from "#lib/components/ui/command/index.js";
-  import { HangCard } from "#lib/components/ui/hang-card/index.js";
   import { Kbd } from "#lib/components/ui/kbd/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
-  import * as Popover from "#lib/components/ui/popover/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
-  import { DRAWER_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import {
     IconAgent,
     IconChat,
@@ -41,12 +47,6 @@
   import { formatDistanceToNow } from "#lib/utils/time.js";
   import { goto } from "$app/navigation";
   import { ACTIVITY_LABEL } from "./activity";
-  import {
-    barGlass,
-    glassElement,
-    glassPlacement,
-    oneAtATime,
-  } from "./bar-glass.svelte";
   import { cawco } from "./client.svelte";
   import CawFace from "./home/CawFace.svelte";
   import { instanceTitle } from "./home/home-state.svelte";
@@ -54,7 +54,6 @@
   import { buildJumpIndex, filterJumpIndex, type JumpKind } from "./jump-index";
   import {
     AUTHORS,
-    type AuthorToken,
     applyAuthor,
     authorFragment,
     JumpTranscriptSearch,
@@ -65,8 +64,7 @@
   import { checkoutOf } from "./projects";
   import { isThreadTab } from "./thread-tabs";
 
-  let { open = $bindable(false) }: { open?: boolean } = $props();
-  let query = $state("");
+  let { onclose }: { onclose: () => void } = $props();
 
   const index = $derived.by(() =>
     buildJumpIndex({
@@ -106,11 +104,13 @@
       })),
     })
   );
-  const grouped = $derived(filterJumpIndex(index, query));
+  const grouped = $derived(filterJumpIndex(index, kept.query));
   const search = new JumpTranscriptSearch();
   $effect(() => {
-    search.update(open ? query : "", scope ? scoped?.role : undefined);
+    search.update(kept.query, kept.scope ? scoped?.role : undefined);
   });
+  // Gone from the card: no search left waiting to run.
+  $effect(() => () => search.update(""));
   const hostOf = $derived(
     new Map(cawco.machines.map((m) => [m.machineId, m.hostname]))
   );
@@ -145,7 +145,7 @@
   const SKELETONS = [0, 1, 2];
 
   /** The `@…` the reader is part-way through typing, if any. */
-  const fragment = $derived(authorFragment(query));
+  const fragment = $derived(authorFragment(kept.query));
   /** The authors that `@…` could still become. */
   const authorChoices = $derived(
     fragment === null ? [] : AUTHORS.filter((a) => a.token.startsWith(fragment))
@@ -153,18 +153,17 @@
   const AUTHOR_MARK = { me: IconUser, agent: IconAgent } as const;
 
   /**
-   * Who the search is scoped to. Held as state rather than left in the query
-   * text: a scope is a thing you can see and dismiss, and an `<input>` cannot
-   * render one inside its own value.
+   * Who the search is scoped to (`kept.scope`). Held as state rather than
+   * left in the query text: a scope is a thing you can see and dismiss, and
+   * an `<input>` cannot render one inside its own value.
    */
-  let scope = $state<AuthorToken | null>(null);
-  const scoped = $derived(AUTHORS.find((a) => a.token === scope));
+  const scoped = $derived(AUTHORS.find((a) => a.token === kept.scope));
   let input = $state<HTMLInputElement | null>(null);
 
   /** Settle the token into a chip and leave the caret ready for the terms. */
   function chooseAuthor(token: AuthorToken) {
-    scope = token;
-    query = stripFragment(query);
+    kept.scope = token;
+    kept.query = stripFragment(kept.query);
     input?.focus();
   }
 
@@ -173,70 +172,30 @@
    * so the two ways of naming a scope end in one state rather than two.
    */
   $effect(() => {
-    const parsed = parseQuery(query);
+    const parsed = parseQuery(kept.query);
     if (!parsed.role) {
       return;
     }
-    scope = AUTHORS.find((a) => a.role === parsed.role)?.token ?? null;
-    query = parsed.text;
+    kept.scope = AUTHORS.find((a) => a.role === parsed.role)?.token ?? null;
+    kept.query = parsed.text;
   });
 
   /** Backspace at the start of an empty-ish query takes the chip off. */
   function onSearchKey(event: KeyboardEvent) {
-    if (event.key !== "Backspace" || !scope) {
+    if (event.key !== "Backspace" || !kept.scope) {
       return;
     }
     const el = event.target as HTMLInputElement;
     if (el.selectionStart === 0 && el.selectionEnd === 0) {
       event.preventDefault();
-      scope = null;
+      kept.scope = null;
     }
   }
 
   async function jump(href: string) {
-    open = false;
+    onclose();
     await goto(href);
   }
-
-  /* ── Where it hangs ─────────────────────────────────────────────── */
-  const phoneQuery = new MediaQuery(DRAWER_QUERY);
-  const glass = $derived(open ? glassElement() : null);
-  const placement = $derived(glassPlacement(glass, phoneQuery.current));
-  /** What had the focus before it opened, which has it back once it closes. */
-  let returnTo: HTMLElement | null = null;
-  /** The last thing that could open it was a pointer press, not a key. */
-  let byPointer = false;
-  /**
-   * ⌘K opened it: it stands open at once and leaves at once, with no slide
-   * (summoned many times a day from the keyboard, it is never kept
-   * waiting); a press on the search glass brings it down out of the glass.
-   */
-  let openedByKey = false;
-  $effect.pre(() => {
-    if (open) {
-      untrack(() => {
-        returnTo =
-          document.activeElement instanceof HTMLElement
-            ? document.activeElement
-            : null;
-        openedByKey = !byPointer;
-      });
-    }
-  });
-  /**
-   * It is closing on a press outside it, or on another card of the glass
-   * opening: the focus stays where that put it.
-   */
-  let closedOutside = false;
-  oneAtATime(
-    "jump",
-    () => open,
-    () => {
-      closedOutside = true;
-      open = false;
-    },
-    () => openedByKey
-  );
 
   /* ── The list ────────────────────────────────────────────────────────
      Groups and rows that arrive, leave or change rank as the query changes
@@ -251,260 +210,199 @@
   });
 </script>
 
-<svelte:window
-  onkeydowncapture={() => {
-    byPointer = false;
-  }}
-  onpointerdowncapture={() => {
-    byPointer = true;
-  }}
-/>
-
-<Popover.Root bind:open>
-  <HangCard
-    align="end"
-    anchor={glass}
-    aria-label="Jump to"
-    class="jump-pop gap-0"
-    collisionPadding={placement.collisionPadding}
-    customAnchor={glass}
-    folded={() => openedByKey}
-    glass
-    held={() => openedByKey}
-    onCloseAutoFocus={(event) => {
-      event.preventDefault();
-      if (!closedOutside && returnTo?.isConnected) {
-        returnTo.focus({ preventScroll: true });
-      }
-      closedOutside = false;
-    }}
-    onInteractOutside={(event) => {
-      // The search glass is its toggle: its own press closes it.
-      if (
-        event.target instanceof Element &&
-        event.target.closest(".bar-item.jump")
-      ) {
-        event.preventDefault();
-        return;
-      }
-      closedOutside = true;
-    }}
-    onOpenAutoFocus={(event) => {
-      event.preventDefault();
-      input?.focus({ preventScroll: true });
-    }}
-    side="bottom"
-    sideOffset={placement.sideOffset}
-    trapFocus={false}
-    bind:joined={
-      () => barGlass.shown.includes("jump"),
-      (shown) => barGlass.show("jump", shown)
-    }
-  >
-    <Command.Root class="text-body" loop shouldFilter={false}>
-      <!-- One frame, the hanging card's: the search line, the results and
+<Command.Root class="text-body" loop shouldFilter={false}>
+  <!-- One frame, the hanging card's: the search line, the results and
            the hints stand on its surface, parted by hairlines. -->
-      <div class="jump-well">
-        <!-- The search line is built here rather than taken from Command.Input:
+  <div class="jump-well">
+    <!-- The search line is built here rather than taken from Command.Input:
          its input group owns the field's padding and puts the addon in flow,
          which leaves no place to put a chip except on top of the text. Icon,
          chip and field are flex siblings, so nothing overlaps and nothing
          needs measuring. -->
-        <div class="jump-search field-underline">
-          <IconSearch class="jump-search-icon" height={16} width={16} />
-          {#if scoped}
-            {@const ScopedMark = AUTHOR_MARK[scoped.token]}
-            <span class="jump-chip" transition:scale={chipMotion}>
-              <ScopedMark class="jump-chip-mark" height={12} width={12} />
-              {scoped.label}
-              <button
-                aria-label="Clear author filter"
-                class="jump-chip-off"
-                onclick={() => {
-                  scope = null;
-                  input?.focus();
-                }}
-                type="button"
-              >
-                ×
-              </button>
-            </span>
-          {/if}
-          <CommandPrimitive.Input
-            class="jump-field"
-            onkeydown={onSearchKey}
-            placeholder={scope
-              ? "Search these messages…"
-              : "Jump to a project, thread, machine, or session…"}
-            bind:ref={input}
-            bind:value={query}
-          />
-        </div>
+    <div class="jump-search field-underline">
+      <IconSearch class="jump-search-icon" height={16} width={16} />
+      {#if scoped}
+        {@const ScopedMark = AUTHOR_MARK[scoped.token]}
+        <span class="jump-chip" transition:scale={chipMotion}>
+          <ScopedMark class="jump-chip-mark" height={12} width={12} />
+          {scoped.label}
+          <button
+            aria-label="Clear author filter"
+            class="jump-chip-off"
+            onclick={() => {
+              kept.scope = null;
+              input?.focus();
+            }}
+            type="button"
+          >
+            ×
+          </button>
+        </span>
+      {/if}
+      <CommandPrimitive.Input
+        class="jump-field"
+        onkeydown={onSearchKey}
+        placeholder={kept.scope
+          ? "Search these messages…"
+          : "Jump to a project, thread, machine, or session…"}
+        bind:ref={input}
+        bind:value={kept.query}
+      />
+    </div>
 
-        <Command.List class="jump-list" bind:ref={list}>
-          {#if !(search.pending || fragment !== null)}
-            <Command.Empty data-flip>Nothing matches that.</Command.Empty>
-          {/if}
+    <Command.List class="jump-list" bind:ref={list}>
+      {#if !(search.pending || fragment !== null)}
+        <Command.Empty data-flip>Nothing matches that.</Command.Empty>
+      {/if}
 
-          <!-- Typing `@` asks who wrote the line, so the list answers that question
+      <!-- Typing `@` asks who wrote the line, so the list answers that question
            and nothing else until it is settled. -->
-          {#if fragment !== null}
-            <Command.Group data-flip heading="Search messages from">
-              {#each authorChoices as author (author.token)}
-                {@const AuthorMark = AUTHOR_MARK[author.token]}
-                {@const trail = `@${author.token} · ${author.detail}`}
-                <div data-flip>
-                  <Command.Item
-                    onSelect={() => chooseAuthor(author.token)}
-                    value={`author:${author.token}`}
-                  >
-                    <span class="jump-text">
-                      <AuthorMark class="jump-mark" height={16} width={16} />
-                      <span class="jump-name">{author.label}</span>
-                      <span class="jump-trail">{trail}</span>
-                    </span>
-                  </Command.Item>
-                </div>
-              {/each}
-            </Command.Group>
-          {/if}
-
-          {#each fragment === null ? grouped : [] as group (group.name)}
-            <Command.Group data-flip heading={group.name}>
-              {#each group.rows as entry (entry.id)}
-                {@const EntryMark = MARK[entry.kind]}
-                <div data-flip>
-                  <Command.Item
-                    onSelect={() => jump(entry.href)}
-                    value={entry.id}
-                  >
-                    <span class="jump-text">
-                      {#if entry.kind === "thread"}
-                        <span class="jump-mark">
-                          <CawFace
-                            size={16}
-                            status={(entry.conversation &&
-                              cawco.threadOf(entry.conversation)?.status) ||
-                              "ready"}
-                          />
-                        </span>
-                      {:else if EntryMark}
-                        <EntryMark class="jump-mark" height={16} width={16} />
-                      {/if}
-                      <JumpMatch
-                        class="jump-name"
-                        ranges={entry.labelRanges}
-                        text={entry.label}
-                      />
-                      <JumpMatch
-                        class="jump-trail"
-                        ranges={entry.detailRanges}
-                        text={entry.detail}
-                      />
-                    </span>
-                  </Command.Item>
-                </div>
-              {/each}
-            </Command.Group>
+      {#if fragment !== null}
+        <Command.Group data-flip heading="Search messages from">
+          {#each authorChoices as author (author.token)}
+            {@const AuthorMark = AUTHOR_MARK[author.token]}
+            {@const trail = `@${author.token} · ${author.detail}`}
+            <div data-flip>
+              <Command.Item
+                onSelect={() => chooseAuthor(author.token)}
+                value={`author:${author.token}`}
+              >
+                <span class="jump-text">
+                  <AuthorMark class="jump-mark" height={16} width={16} />
+                  <span class="jump-name">{author.label}</span>
+                  <span class="jump-trail">{trail}</span>
+                </span>
+              </Command.Item>
+            </div>
           {/each}
+        </Command.Group>
+      {/if}
 
-          {#if search.pending || search.hits.length > 0}
-            <Command.Group
-              class="jump-hits"
-              data-flip
-              heading={scoped
-                ? `Transcripts · from ${scoped.label}`
-                : "Transcripts"}
-            >
-              {#if search.pending && search.hits.length === 0}
-                <!-- The shape of what is coming: rows drawn as the hit rows are,
+      {#each fragment === null ? grouped : [] as group (group.name)}
+        <Command.Group data-flip heading={group.name}>
+          {#each group.rows as entry (entry.id)}
+            {@const EntryMark = MARK[entry.kind]}
+            <div data-flip>
+              <Command.Item onSelect={() => jump(entry.href)} value={entry.id}>
+                <span class="jump-text">
+                  {#if entry.kind === "thread"}
+                    <span class="jump-mark">
+                      <CawFace
+                        size={16}
+                        status={(entry.conversation &&
+                          cawco.threadOf(entry.conversation)?.status) ||
+                          "ready"}
+                      />
+                    </span>
+                  {:else if EntryMark}
+                    <EntryMark class="jump-mark" height={16} width={16} />
+                  {/if}
+                  <JumpMatch
+                    class="jump-name"
+                    ranges={entry.labelRanges}
+                    text={entry.label}
+                  />
+                  <JumpMatch
+                    class="jump-trail"
+                    ranges={entry.detailRanges}
+                    text={entry.detail}
+                  />
+                </span>
+              </Command.Item>
+            </div>
+          {/each}
+        </Command.Group>
+      {/each}
+
+      {#if search.pending || search.hits.length > 0}
+        <Command.Group
+          class="jump-hits"
+          data-flip
+          heading={scoped
+            ? `Transcripts · from ${scoped.label}`
+            : "Transcripts"}
+        >
+          {#if search.pending && search.hits.length === 0}
+            <!-- The shape of what is coming: rows drawn as the hit rows are,
                  at their height, so the hits take their place without moving
                  anything. They fade where they stand as the hits arrive. -->
-                <div aria-hidden="true" class="jump-skeletons" out:crossOut>
-                  {#each SKELETONS as row (row)}
-                    <div class="kit-item jump-hit jump-skeleton">
-                      <span class="jump-hit-head">
-                        <Skeleton class="jump-skeleton-mark" />
-                        <Skeleton
-                          class="jump-skeleton-bar"
-                          style="width: {38 - row * 6}%"
-                        />
-                      </span>
-                      <span class="jump-snippet">
-                        <Skeleton
-                          class="jump-skeleton-bar"
-                          style="width: {74 - row * 9}%"
-                        />
-                      </span>
-                    </div>
-                  {/each}
-                </div>
-                <span class="sr-only" role="status">Searching transcripts</span>
-              {/if}
-              {#each search.hits as hit (hit.docId)}
-                <div data-flip>
-                  <Command.Item
-                    class="jump-hit"
-                    onSelect={() =>
-                      jump(
-                        conversationHref(
-                          hit.instanceId ?? hit.sessionId,
-                          cawco.instanceIndex
-                        )
-                      )}
-                    value={`hit:${hit.docId}`}
-                  >
-                    <!-- Which conversation this line came out of. Without it a list of
-                   snippets is a list of strangers. -->
-                    <span class="jump-hit-head">
-                      <span class="jump-text">
-                        <IconDocument
-                          class="jump-mark"
-                          height={16}
-                          width={16}
-                        />
-                        <span class="jump-name">
-                          {index.sessionTitles.get(hit.sessionId) ??
-                            (hit.cwd
-                              ? leaf(hit.cwd)
-                              : hit.sessionId.slice(0, 8))}
-                        </span>
-                        <span class="jump-trail">
-                          {hostOf.get(hit.machineId) ?? hit.machineId}
-                          · {hit.role}
-                        </span>
-                      </span>
-                    </span>
-                    <!-- And the line itself, with the terms that matched marked. -->
-                    <span class="jump-snippet" title={plain(hit.snippet)}>
-                      {#each segments(hit.snippet) as part, i (i)}
-                        {#if i % 2 === 1}
-                          <mark>{part}</mark>
-                        {:else}
-                          {part}
-                        {/if}
-                      {/each}
-                    </span>
-                  </Command.Item>
+            <div aria-hidden="true" class="jump-skeletons" out:crossOut>
+              {#each SKELETONS as row (row)}
+                <div class="kit-item jump-hit jump-skeleton">
+                  <span class="jump-hit-head">
+                    <Skeleton class="jump-skeleton-mark" />
+                    <Skeleton
+                      class="jump-skeleton-bar"
+                      style="width: {38 - row * 6}%"
+                    />
+                  </span>
+                  <span class="jump-snippet">
+                    <Skeleton
+                      class="jump-skeleton-bar"
+                      style="width: {74 - row * 9}%"
+                    />
+                  </span>
                 </div>
               {/each}
-            </Command.Group>
+            </div>
+            <span class="sr-only" role="status">Searching transcripts</span>
           {/if}
-        </Command.List>
+          {#each search.hits as hit (hit.docId)}
+            <div data-flip>
+              <Command.Item
+                class="jump-hit"
+                onSelect={() =>
+                  jump(
+                    conversationHref(
+                      hit.instanceId ?? hit.sessionId,
+                      cawco.instanceIndex
+                    )
+                  )}
+                value={`hit:${hit.docId}`}
+              >
+                <!-- Which conversation this line came out of. Without it a list of
+                   snippets is a list of strangers. -->
+                <span class="jump-hit-head">
+                  <span class="jump-text">
+                    <IconDocument class="jump-mark" height={16} width={16} />
+                    <span class="jump-name">
+                      {index.sessionTitles.get(hit.sessionId) ??
+                        (hit.cwd ? leaf(hit.cwd) : hit.sessionId.slice(0, 8))}
+                    </span>
+                    <span class="jump-trail">
+                      {hostOf.get(hit.machineId) ?? hit.machineId}
+                      · {hit.role}
+                    </span>
+                  </span>
+                </span>
+                <!-- And the line itself, with the terms that matched marked. -->
+                <span class="jump-snippet" title={plain(hit.snippet)}>
+                  {#each segments(hit.snippet) as part, i (i)}
+                    {#if i % 2 === 1}
+                      <mark>{part}</mark>
+                    {:else}
+                      {part}
+                    {/if}
+                  {/each}
+                </span>
+              </Command.Item>
+            </div>
+          {/each}
+        </Command.Group>
+      {/if}
+    </Command.List>
 
-        <div class="jump-footer">
-          <span><Kbd>↑↓</Kbd> navigate</span>
-          <span><Kbd>↵</Kbd> open</span>
-          <span><Kbd>esc</Kbd> close</span>
-        </div>
-      </div>
-    </Command.Root>
-  </HangCard>
-</Popover.Root>
+    <div class="jump-footer">
+      <span><Kbd>↑↓</Kbd> navigate</span>
+      <span><Kbd>↵</Kbd> open</span>
+      <span><Kbd>esc</Kbd> close</span>
+    </div>
+  </div>
+</Command.Root>
 
 <style>
-  /* The card hangs from the glass; the well is bounded so the footer is
-     never pushed under the fold. */
+  /* The glass's card showing it (GlassCard); the well is bounded so the
+     footer is never pushed under the fold. */
   :global(.kit-pop.jump-pop) {
     width: min(42rem, calc(100vw - 24px));
     max-height: 82vh;

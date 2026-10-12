@@ -49,10 +49,11 @@
  * getAnimations()). With reduced motion nothing here runs and the kit's fade
  * does.
  *
- * A card bits-ui keeps mounted while shut (`forceMount`: Caw's panel) is
- * placed the first time it opens and stays placed; every open after that
- * grows at once, and every close leaves it up behind the cut, where the
- * fold's last frame holds it.
+ * A card bits-ui keeps mounted while shut (`forceMount`: the glass's one
+ * card, GlassCard) is placed the first time it opens and stays placed; every
+ * open after that grows at once, and every close ends with it at rest up
+ * behind the cut, past its own height by its shadow's reach under it, so
+ * nothing it drew is left below the cut (`kit-hang` without `data-shown`).
  */
 import { untrack } from "svelte";
 import type { Attachment } from "svelte/attachments";
@@ -62,6 +63,8 @@ import { dur, ease, motionOk } from "./curves.svelte";
 const TRANSLATE_X = /translate(?:3d)?\(\s*(-?[\d.]+)px/;
 /** The event a card fires once it stands open. */
 export const GROWN = "grown";
+/** The event a card fires once it is shut and at rest up behind the cut. */
+export const FOLDED = "folded";
 
 /**
  * The anchor's span in the card's own coordinates, px, and the flared foot
@@ -182,8 +185,20 @@ function slideMotion(node: HTMLElement, options: Hang) {
   let run: Animation | null = null;
   let placed = false;
   const OPEN = "0px 0px";
-  /** Up behind the cut by the card's whole height, its own fractional size. */
-  const shut = () => `0px ${-node.getBoundingClientRect().height}px`;
+  /**
+   * Up behind the cut by the card's whole height and the reach of its shadow
+   * under it (`--hang-reach`, the hung shadow's, motion/hung-shadow), so
+   * nothing it draws is left under the cut: shut up by its height alone, the
+   * shadow under its foot stayed on the page below the glass. A percentage
+   * of its own box, so a size tween in flight (motion/morph) is followed to
+   * the end.
+   */
+  const shut = () =>
+    `0px calc(-100% - ${
+      Number.parseFloat(
+        getComputedStyle(node).getPropertyValue("--hang-reach")
+      ) || 0
+    }px)`;
   /** Where the card is drawn now, mid-animation or at rest. */
   const drawn = (fallback: string) =>
     run ? getComputedStyle(node).translate : fallback;
@@ -197,6 +212,16 @@ function slideMotion(node: HTMLElement, options: Hang) {
     run = next;
     return next;
   };
+  /**
+   * Shut and at rest: the card's own rules hold it up behind the cut
+   * (`kit-hang` without `data-shown`), its run let go.
+   */
+  const rest = () => {
+    run?.cancel();
+    run = null;
+    delete node.dataset.shown;
+    node.dispatchEvent(new Event(FOLDED));
+  };
   const grow = () => {
     if (!placed || options.quiet?.()) {
       return;
@@ -206,6 +231,8 @@ function slideMotion(node: HTMLElement, options: Hang) {
     // What waits on the card standing open (SessionDetails asks for its
     // context reading then) hears `grown`.
     if (!motionOk.current || options.held?.()) {
+      run?.cancel();
+      run = null;
       node.dispatchEvent(new Event(GROWN));
       return;
     }
@@ -226,10 +253,24 @@ function slideMotion(node: HTMLElement, options: Hang) {
       return;
     }
     options.onshown?.(false);
-    if (options.folded?.() || !motionOk.current || !placed) {
+    // Nothing to fold: shut by a finger, with less motion, or never drawn out.
+    if (
+      options.folded?.() ||
+      !motionOk.current ||
+      !placed ||
+      node.dataset.shown === undefined
+    ) {
+      rest();
       return;
     }
-    play(drawn(OPEN), shut(), dur("--dur-exit"));
+    const folding = play(drawn(OPEN), shut(), dur("--dur-exit"));
+    folding.finished
+      .then(() => {
+        if (run === folding) {
+          rest();
+        }
+      })
+      .catch(() => undefined);
   };
   let frame = 0;
   // Every open once the card is placed: a card caught mid-close, and a card

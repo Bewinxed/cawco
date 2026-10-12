@@ -131,18 +131,6 @@ export const addMachine = {
   },
 };
 
-const popover = $state({ open: false });
-
-/** The top bar's Machines popover, opened from its button or from the home's "Check machines". */
-export const machinesPopover = {
-  get open(): boolean {
-    return popover.open;
-  },
-  set open(value: boolean) {
-    popover.open = value;
-  },
-};
-
 const ssh = $state<{
   job: SshJoinJob | null;
   request: SshJoinRequest | null;

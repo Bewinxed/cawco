@@ -1,3 +1,25 @@
+<script lang="ts" module>
+  import { home } from "./home/home-state.svelte";
+
+  /**
+   * What he says with nothing to count: "All caught up" only once the fleet
+   * is read over a live hub (PRODUCT.md: an empty answer is only given when
+   * it is known); before that, what he is waiting on, in StatusLine's words.
+   */
+  export function cawQuiet(): string {
+    switch (home.status) {
+      case "connected":
+        return "All caught up";
+      case "reading":
+        return "Reading the fleet";
+      case "connecting":
+        return "Connecting…";
+      default:
+        return "Hub unreachable";
+    }
+  }
+</script>
+
 <script lang="ts">
   /**
    * Caw's head in the top bar: the way into what needs the operator (the
@@ -31,48 +53,36 @@
    * on and the clip's Rive is gone. Every drawing keeps two device pixels
    * inside his glass circle (assets/mascot/scripts/head_circle.py).
    *
-   * A tap on him opens his panel: a HangCard on the glass he stands on,
-   * hanging from it as one shape with it (the session card's own
-   * component): its top edge is the
-   * glass's foot, its trailing side runs straight on down from the glass's
-   * trailing flank, and the glass flares out at its bottom-left into the
-   * panel's top edge (Shell `.join`). It grows out of the glass and folds
-   * back into it. While it hangs, the glass takes the panel's surface and
-   * edge, and the arcs on the lower half of his rim, where the glass now
-   * runs on into the panel, fade out (the glass's `data-joined`, bar-glass,
-   * as they do under the machines and the Jump palette, the glass's other
-   * cards; one of the three stands open at a time). It is non-modal: no
-   * scrim, no focus trap, nothing of the page made inert, so the transcript
-   * scrolls, the composer takes keys and the rail's rows open while it
-   * stands. A click anywhere else closes it and still lands where it was
-   * aimed; Escape closes it and focus comes back to him. Inside (CawPanel),
-   * Needs you, longest wait first, then the Notices; choosing a row closes
-   * it and opens what the row is.
+   * A tap on him opens his panel (CawPanel) in the glass's one card
+   * (GlassCard), hanging from the glass he stands on as one shape with it:
+   * its top edge is the glass's foot, its trailing side runs straight on
+   * down from the glass's trailing flank, and the glass flares out at its
+   * bottom-left into the panel's top edge (Shell `.join`). While it hangs,
+   * the glass takes the panel's surface and edge, and the arcs on the lower
+   * half of his rim, where the glass now runs on into the panel, fade out
+   * (the glass's `data-joined`, bar-glass), as they do under the machines
+   * and the Jump palette, which the same card shows; a tap on him while one
+   * of those hangs changes the card to his panel in place. Inside, Needs
+   * you, longest wait first, then the Notices; choosing a row closes it and
+   * opens what the row is.
    */
   import { mergeProps } from "bits-ui";
   import { untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
-  import { HangCard } from "#lib/components/ui/hang-card/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
-  import * as Popover from "#lib/components/ui/popover/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { DRAWER_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import { browser } from "$app/env";
   import { page } from "$app/state";
-  import { barGlass, glassPlacement, oneAtATime } from "./bar-glass.svelte";
+  import { barGlass } from "./bar-glass.svelte";
   import { type CawFile, type CawHead, stageCaw } from "./home/Caw.svelte";
   import CawFace from "./home/CawFace.svelte";
-  import CawPanel from "./home/CawPanel.svelte";
-  import { liveFeed } from "./home/caw-feed.svelte";
   import { cawNotices } from "./home/caw-notices.svelte";
   import {
     CAW_HEAD_CENTRE,
     CAW_STILL_BLEED,
     cawStill,
   } from "./home/caw-still.svelte";
-  import { home } from "./home/home-state.svelte";
   import { dur, easeOut, motionOk } from "./motion/curves.svelte";
-  import { GROWN } from "./motion/hang";
 
   /**
    * The phone bar, where his glass is his own (Shell). The server has the
@@ -92,23 +102,7 @@
   const needs = $derived(home.needs);
   const count = $derived(needs.length);
   const noticeCount = $derived(cawNotices.count);
-  /**
-   * What he says with nothing to count: "All caught up" only once the fleet
-   * is read over a live hub (PRODUCT.md: an empty answer is only given when
-   * it is known); before that, what he is waiting on, in StatusLine's words.
-   */
-  const quiet = $derived.by(() => {
-    switch (home.status) {
-      case "connected":
-        return "All caught up";
-      case "reading":
-        return "Reading the fleet";
-      case "connecting":
-        return "Connecting…";
-      default:
-        return "Hub unreachable";
-    }
-  });
+  const quiet = $derived(cawQuiet());
   /** "· 2 notices" after what he says, while any notice stands. */
   const noticeWords = $derived(
     noticeCount > 0
@@ -547,111 +541,34 @@
     window.addEventListener("pointercancel", lift);
   }
 
-  /* ── The panel ─────────────────────────────────────────────────────── */
-  let capsule = $state<HTMLButtonElement | null>(null);
-  let content = $state<HTMLElement | null>(null);
-  let open = $state(false);
+  /* ── His panel ─────────────────────────────────────────────────────── */
   /** The open asked for by the press now drawing its own frame, if any. */
   let opening = 0;
   /**
-   * Opened once, unseen, just after the page has loaded, and shut again as
-   * soon as bits-ui has placed it: a popover's first open (its first
-   * placement, its layers' first run) cost a first press 30–45 ms frames
-   * that every later one was spared. While it lasts the panel stays shut up
-   * behind the cut and inert, `hang` plays nothing (`quiet`), the glass does
-   * not join it, and focus stays where it is.
+   * His panel, in the glass's card (GlassCard), opened or shut. A close is
+   * at once. An open waits for the press's frame (his squash, his smile's
+   * first frame) to be drawn and then comes in a task of its own: opening
+   * the card (its focus scope, `inert` lifted, the contents it changes to)
+   * was work enough to hold that frame back, and it is the frame the
+   * operator is waiting on.
    */
-  let warming = $state(false);
-  let warmed = false;
-  /**
-   * The popover's own open and close. A close is at once. An open waits for
-   * the press's frame (his squash, his smile's first frame) to be drawn and
-   * then comes in a task of its own: opening the popover (its layers, its
-   * focus scope, its placement, `inert` lifted) was work enough to hold
-   * that frame back, and it is the frame the operator is waiting on.
-   */
-  function setOpen(next: boolean) {
+  function choose() {
     cancelAnimationFrame(opening);
     opening = 0;
-    if (!next) {
-      open = false;
+    if (barGlass.open === "caw") {
+      barGlass.open = null;
       return;
     }
     opening = requestAnimationFrame(() => {
       setTimeout(() => {
         if (opening !== 0) {
           opening = 0;
-          open = true;
+          barGlass.open = "caw";
         }
       });
     });
   }
-  /**
-   * The last thing that could open the panel was a pointer press, not a
-   * key (MachinesButton's rule): focus goes in without the ring.
-   */
-  let byPointer = false;
-  /**
-   * The panel is closing on a press outside it, or on another card of the
-   * glass opening: the focus stays where that put it.
-   */
-  let closedOutside = false;
-  /**
-   * The glass he stands on, the panel's anchor: the bar's group
-   * (`data-bar-group`), which on a phone holds him alone. The panel hangs
-   * right-aligned under it, flush with its trailing flank (square there,
-   * the glass's trailing side running straight on down), and the glass's
-   * leading foot flares out into the panel's top edge by its `--flare`
-   * (HangCard measures it).
-   */
-  const glass = $derived(
-    capsule?.closest<HTMLElement>("[data-bar-group]") ?? null
-  );
-  /**
-   * Where it hangs (bar-glass): on a phone through his neck to the tab
-   * row's floor, so it covers no tab while his glass stands clear of the
-   * floor. The same open or shut: a side offset that changed on every open
-   * placed the panel again in the press's own frame.
-   */
-  const placement = $derived(glassPlacement(glass, phone));
-  // The unseen first open, after the page's first frame.
-  $effect(() => {
-    if (warmed || !content || !glass) {
-      return;
-    }
-    warmed = true;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const frame = requestAnimationFrame(() => {
-      timer = setTimeout(() => {
-        if (!open) {
-          warming = true;
-          open = true;
-        }
-      });
-    });
-    return () => {
-      cancelAnimationFrame(frame);
-      clearTimeout(timer);
-    };
-  });
-  oneAtATime(
-    "caw",
-    () => open && !warming,
-    () => {
-      closedOutside = true;
-      setOpen(false);
-    }
-  );
 </script>
-
-<svelte:window
-  onkeydowncapture={() => {
-    byPointer = false;
-  }}
-  onpointerdowncapture={() => {
-    byPointer = true;
-  }}
-/>
 
 <!-- What waits, on his rim: an arc each, a second lap on top in its own ink
      past ARCS, closed whole past two laps; the wide bar's circle and the
@@ -707,143 +624,43 @@
   </svg>
 {/snippet}
 
-<Popover.Root bind:open={() => open, setOpen}>
-  <Tip label={tipText}>
-    {#snippet children(
-      tip
-    )}
-      <Popover.Trigger>
-        {#snippet child({
-          props,
-        })}
-          <button
-            {...mergeProps(props, tip, {
-              onpointerdown: press,
-              onpointerenter: pointerOn,
-              onpointerleave: pointerOff,
-            })}
-            aria-label={label}
-            class="capsule bar-item touch-hit press-tint"
-            data-needs-caw
-            type="button"
-            bind:this={capsule}
-          >
-            <span class="mug" class:pressed={pressed}>
-              <span
-                class="face"
-                data-caw-phase={phase}
-                style:--bleed="{CAW_STILL_BLEED}px"
-                style:--dx={0.5 - CAW_HEAD_CENTRE.x}
-                style:--dy={0.5 - CAW_HEAD_CENTRE.y}
-                style:--side="{head}px"
-                class:covered={covering}
-              >
-                <CawFace size={head} status={face} />
-                <canvas aria-hidden="true" bind:this={clipCanvas}></canvas>
-              </span>
-            </span>
-            {@render rim(false)}
-            {@render rim(true)}
-          </button>
-        {/snippet}
-      </Popover.Trigger>
-    {/snippet}
-  </Tip>
-  <!-- Non-modal: no scrim, no trap; an outside press closes it and still
-       lands (bits-ui's `interactOutsideBehavior` "close" prevents nothing).
-       It hangs from his glass, flush with its trailing flank: on a phone
-       that is the screen's edge, so nothing holds it off that side.
-       Mounted from the start and kept (`forceMount`), up behind the cut and
-       inert while shut: mounting it on the press, and placing it, held the
-       press's own frame 80–90 ms in WebKit (the owner: "the pressing on caw
-       is very laggy when it opens"), so a press only opens it. -->
-
-  <HangCard
-    align="end"
-    anchor={glass}
-    aria-label="Needs you"
-    class="caw-pop gap-0"
-    collisionPadding={placement.collisionPadding}
-    customAnchor={glass}
-    forceMount
-    glass
-    inert={!open || warming}
-    onCloseAutoFocus={(event) => {
-      if (warming) {
-        event.preventDefault();
-        return;
-      }
-      // Closed by a press elsewhere: the focus stays where that press put
-      // it (the composer, a rail row). Escape and his own press bring it
-      // back to him, as the popover does by itself.
-      if (closedOutside) {
-        event.preventDefault();
-        closedOutside = false;
-      }
-    }}
-    onInteractOutside={() => {
-      closedOutside = true;
-    }}
-    onneck={() => {
-      if (warming && open) {
-        // Placed: shut again, still quiet until the shut has been seen.
-        setOpen(false);
-        requestAnimationFrame(() => {
-          warming = false;
-        });
-      }
-    }}
-    onOpenAutoFocus={(event) => {
-      if (warming) {
-        event.preventDefault();
-        return;
-      }
-      // Opened by a press, focus goes into the list as it does from a key,
-      // but without the ring: a script's focus would draw it after a press.
-      // It goes once the panel stands open (`grown`), and in a task after
-      // the frame it landed in: taken in the press's own task, the style and
-      // layout it forced held back the open's first frame, and taken in the
-      // landing's, its last.
-      if (byPointer) {
-        event.preventDefault();
-        const panel = content;
-        panel?.addEventListener(
-          GROWN,
-          () => {
-            setTimeout(() => {
-              if (open) {
-                panel
-                  .querySelector<HTMLElement>("a.cover, button, .empty")
-                  ?.focus({
-                    focusVisible: false,
-                    preventScroll: true,
-                  } as FocusOptions);
-              }
-            });
-          },
-          { once: true }
-        );
-      }
-    }}
-    quiet={() => warming}
-    side="bottom"
-    sideOffset={placement.sideOffset}
-    trapFocus={false}
-    bind:joined={
-      () => barGlass.shown.includes("caw"),
-      (shown) => barGlass.show("caw", shown)
-    }
-    bind:ref={content}
-  >
-    <CawPanel
-      feed={liveFeed}
-      onchoose={() => {
-        setOpen(false);
-      }}
-      {quiet}
-    />
-  </HangCard>
-</Popover.Root>
+<Tip label={tipText}>
+  {#snippet children(
+    tip
+  )}
+    <button
+      {...mergeProps(tip, {
+        onclick: choose,
+        onpointerdown: press,
+        onpointerenter: pointerOn,
+        onpointerleave: pointerOff,
+      })}
+      aria-expanded={barGlass.open === "caw"}
+      aria-haspopup="dialog"
+      aria-label={label}
+      class="capsule bar-item touch-hit press-tint"
+      data-needs-caw
+      type="button"
+    >
+      <span class="mug" class:pressed={pressed}>
+        <span
+          class="face"
+          data-caw-phase={phase}
+          style:--bleed="{CAW_STILL_BLEED}px"
+          style:--dx={0.5 - CAW_HEAD_CENTRE.x}
+          style:--dy={0.5 - CAW_HEAD_CENTRE.y}
+          style:--side="{head}px"
+          class:covered={covering}
+        >
+          <CawFace size={head} status={face} />
+          <canvas aria-hidden="true" bind:this={clipCanvas}></canvas>
+        </span>
+      </span>
+      {@render rim(false)}
+      {@render rim(true)}
+    </button>
+  {/snippet}
+</Tip>
 
 <style>
   /* An item of the bar's group (Shell's `.bar-item` recipe draws its box,

@@ -366,8 +366,10 @@
         sideOffset={placement.sideOffset}
         trapFocus={false}
         bind:joined={
-          () => barGlass.shown.includes("caw"),
-          (shown) => barGlass.show("caw", shown)
+          () => barGlass.joined,
+          (joined) => {
+    barGlass.joined = joined;
+  }
         }
       >
         <CawPanel {feed} onchoose={() => undefined} quiet="All caught up" />

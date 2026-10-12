@@ -1,36 +1,32 @@
 /**
  * The cards that hang from the top bar's glass (Shell `[data-bar-group]`):
- * Caw's panel, the machines and the Jump palette, each a HangCard on the
- * glass. One stands open at a time: opening one closes the one standing,
- * which folds back into the glass as the next comes down, each on its own
- * interruptible clock. While any stands drawn out of the glass, the glass
- * draws its join into it (Shell `.join`) and Caw's lower arcs give way to
- * the seam (NeedsCaw). A card opened from the keyboard stands open at once
- * and leaves at once (HangCard `held`, `folded`), and the glass's join and
- * Caw's arcs change with it, at once (`instant`).
+ * Caw's panel, the machines and the Jump palette, shown one at a time in the
+ * glass's one card (GlassCard). Opening one while another hangs swaps what
+ * the card shows in place: the card stays hung, its contents cross-fade and
+ * its box tweens to the new size (motion/morph). While the card stands drawn
+ * out of the glass, the glass draws its join into it (Shell `.join`) and
+ * Caw's lower arcs give way to the seam (NeedsCaw). Jump opened from the
+ * keyboard stands open at once and leaves at once (HangCard `held`,
+ * `folded`), a swap into it is at once too, and the glass's join and Caw's
+ * arcs change with it, at once (`instant`).
  */
-import { untrack } from "svelte";
 
 export type GlassCard = "caw" | "machines" | "jump";
 
 class BarGlass {
-  /** The card opened last; the others close. */
+  /** The card asked for: what the glass's card shows, or null for shut. */
   open = $state<GlassCard | null>(null);
-  /** The cards drawn out of the glass now. */
-  shown = $state<GlassCard[]>([]);
+  /** The glass's card stands drawn out of the glass: the glass draws its join. */
+  joined = $state(false);
   /**
-   * The card opened last was opened from the keyboard: the join and Caw's
-   * arcs come and go with it at once. Kept until the next card opens, so
-   * its close is as instant as its open.
+   * The card standing was opened, or swapped to, from the keyboard (Jump by
+   * ⌘K): it and the glass's join and Caw's arcs come and go at once. Kept
+   * until the next card opens, so its close is as instant as its open.
    */
   instant = $state(false);
-  /** The glass draws its join: a card stands drawn out of it. */
-  get joined(): boolean {
-    return this.shown.length > 0;
-  }
-  show(card: GlassCard, shown: boolean): void {
-    const rest = this.shown.filter((one) => one !== card);
-    this.shown = shown ? [...rest, card] : rest;
+  /** Opens `card`, or shuts it when it is the one standing. */
+  toggle(card: GlassCard): void {
+    this.open = this.open === card ? null : card;
   }
 }
 
@@ -39,39 +35,6 @@ export const barGlass = new BarGlass();
 /** The bar's glass, once the bar has drawn it. */
 export const glassElement = (): HTMLElement | null =>
   document.querySelector<HTMLElement>("[data-bar-group]");
-
-/**
- * One card open at a time, from a card's init: its open claims the glass,
- * and another's claim closes it through `close` (which keeps the focus
- * where the new card puts it). `byKey` says, as it opens, whether the
- * keyboard opened it.
- */
-export function oneAtATime(
-  card: GlassCard,
-  isOpen: () => boolean,
-  close: () => void,
-  byKey: () => boolean = () => false
-): void {
-  let was = false;
-  $effect(() => {
-    const now = isOpen();
-    untrack(() => {
-      if (now && !was) {
-        barGlass.open = card;
-        barGlass.instant = byKey();
-      } else if (!now && was && barGlass.open === card) {
-        barGlass.open = null;
-      }
-    });
-    was = now;
-  });
-  $effect(() => {
-    const owner = barGlass.open;
-    if (owner !== null && owner !== card && untrack(isOpen)) {
-      untrack(close);
-    }
-  });
-}
 
 /**
  * Where a card on the glass stands. On a phone the glass is Caw's tab tucked

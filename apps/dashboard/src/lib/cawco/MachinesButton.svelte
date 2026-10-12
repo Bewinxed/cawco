@@ -13,53 +13,19 @@
    * and the number of machines. The number is said once. Machines in
    * trouble (down, behind the hub, a stuck sync) tint the glyph in the
    * status hue, fail when any is down and attention otherwise; which ones
-   * and what is wrong are words in the tooltip, the label and the popover
-   * (DESIGN.md, The Glyph, Word, Hue Rule). The popover is the machines'
-   * list (MachinesList), a HangCard on the bar's glass: it hangs from the
-   * glass's foot flush with its trailing flank, as Caw's panel does, and
-   * comes down out of it; opening it closes the glass's other card
-   * (bar-glass). The home's Check machines opens it too (join
-   * `machinesPopover`). A phone has no room for it in the bar: the machines
-   * are in its sidebar.
+   * and what is wrong are words in the tooltip, the label and the card
+   * (DESIGN.md, The Glyph, Word, Hue Rule). A press shows the machines'
+   * list (MachinesList) in the glass's one card (GlassCard): it comes down
+   * out of the glass, or the card hanging there changes to it in place. The
+   * home's Check machines opens it too (bar-glass `open`). A phone has no
+   * room for it in the bar: the machines are in its sidebar.
    */
   import { machineLabel } from "@cawco/core";
   import { mergeProps } from "bits-ui";
-  import { HangCard } from "#lib/components/ui/hang-card/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
-  import * as Popover from "#lib/components/ui/popover/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { IconServer } from "#lib/icons.js";
-  import { barGlass, glassPlacement, oneAtATime } from "./bar-glass.svelte";
+  import { barGlass } from "./bar-glass.svelte";
   import { home } from "./home/home-state.svelte";
-  import { machinesPopover } from "./join/join.svelte";
-  import MachinesList from "./MachinesList.svelte";
-
-  let content = $state<HTMLElement | null>(null);
-  let button = $state<HTMLButtonElement | null>(null);
-  /** The glass it hangs from: the bar's group its button is an item of. */
-  const glass = $derived(
-    button?.closest<HTMLElement>("[data-bar-group]") ?? null
-  );
-  const placement = $derived(glassPlacement(glass, false));
-  /**
-   * The last thing that could open the popover was a pointer press, not a
-   * key: its own button, or the home's Check machines.
-   */
-  let byPointer = false;
-  /**
-   * The popover is closing on a press outside it, or on another card of
-   * the glass opening: the focus stays where that put it. Non-modal (no
-   * trap), so a click on the composer or a rail row lands.
-   */
-  let closedOutside = false;
-  oneAtATime(
-    "machines",
-    () => machinesPopover.open,
-    () => {
-      closedOutside = true;
-      machinesPopover.open = false;
-    }
-  );
 
   const count = $derived(cawco.machines.length);
   /** The glyph's hue: fail when a machine is down, attention when one is in trouble. */
@@ -101,91 +67,24 @@
   });
 </script>
 
-<svelte:window
-  onkeydowncapture={() => {
-    byPointer = false;
-  }}
-  onpointerdowncapture={() => {
-    byPointer = true;
-  }}
-/>
-
-<Popover.Root
-  bind:open={
-    () => machinesPopover.open,
-    (value) => {
-    machinesPopover.open = value;
-  }
-  }
->
-  <Tip label={tip}>
-    {#snippet children(
-      tipProps
-    )}
-      <Popover.Trigger>
-        {#snippet child({
-          props,
-        })}
-          <button
-            {...mergeProps(props, tipProps)}
-            aria-label={label}
-            class="bar-item machines touch-hit press-tint"
-            data-tone={tone}
-            type="button"
-            bind:this={button}
-          >
-            <IconServer aria-hidden="true" class="bar-symbol" />
-            <span class="num">{count}</span>
-          </button>
-        {/snippet}
-      </Popover.Trigger>
-    {/snippet}
-  </Tip>
-  <HangCard
-    align="end"
-    anchor={glass}
-    aria-label="Machines"
-    class="machines-pop w-[min(20rem,calc(100vw-16px))] gap-0"
-    collisionPadding={placement.collisionPadding}
-    customAnchor={glass}
-    glass
-    onCloseAutoFocus={(event) => {
-      // Closed by a press elsewhere: the focus stays where that press put
-      // it. Escape and its own button bring it back here.
-      if (closedOutside) {
-        event.preventDefault();
-        closedOutside = false;
-      }
-    }}
-    onInteractOutside={() => {
-      closedOutside = true;
-    }}
-    onOpenAutoFocus={(event) => {
-      // Opened by a press, focus goes into the list as it does from a key,
-      // but without the ring: a script's focus would draw it after a press.
-      if (byPointer) {
-        event.preventDefault();
-        content
-          ?.querySelector<HTMLElement>(".row")
-          ?.focus({ focusVisible: false } as FocusOptions);
-      }
-    }}
-    side="bottom"
-    sideOffset={placement.sideOffset}
-    trapFocus={false}
-    bind:joined={
-      () => barGlass.shown.includes("machines"),
-      (shown) => barGlass.show("machines", shown)
-    }
-    bind:ref={content}
-  >
-    <MachinesList
-      onleave={() => {
-        machinesPopover.open = false;
-      }}
-    />
-  </HangCard>
-</Popover.Root>
+<Tip label={tip}>
+  {#snippet children(
+    tipProps
+  )}
+    <button
+      {...mergeProps(tipProps, { onclick: () => barGlass.toggle("machines") })}
+      aria-expanded={barGlass.open === "machines"}
+      aria-haspopup="dialog"
+      aria-label={label}
+      class="bar-item machines touch-hit press-tint"
+      data-tone={tone}
+      type="button"
+    >
+      <IconServer aria-hidden="true" class="bar-symbol" />
+      <span class="num">{count}</span>
+    </button>
+  {/snippet}
+</Tip>
 
 <style>
   /* The number reads beside its glyph, --space-2 apart; the group's next

@@ -15,9 +15,9 @@
    * that row, and Caw from where he stands into the thread's seat.
    */
   import { tick } from "svelte";
+  import { barGlass } from "#lib/cawco/bar-glass.svelte.js";
   import { cawco, createProject } from "#lib/cawco/client.svelte.js";
   import Caw from "#lib/cawco/home/Caw.svelte";
-  import { machinesPopover } from "#lib/cawco/join/join.svelte.js";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import CawField from "#lib/cawco/project/CawField.svelte";
   import {
@@ -173,7 +173,7 @@
             template: "code",
             label: "Check machines",
             onclick: () => {
-              machinesPopover.open = true;
+              barGlass.open = "machines";
             },
           }
         : undefined}

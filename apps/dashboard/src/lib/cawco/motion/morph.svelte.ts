@@ -20,6 +20,11 @@
  * this one) was then resized at a depth the delivery had already passed,
  * and the browser reported a ResizeObserver loop.
  *
+ * What a child placed out of the flow by its own style does (contents
+ * fading out as others come in, lifted out where they stood) is no change
+ * to the natural size: its going, and anything inside it, starts no tween
+ * and retargets none in flight.
+ *
  * The one ResizeObserver here watches the container itself and only reads:
  * the size it was laid out at, the size a tween starts from. A size change
  * nothing in the content made (the column narrows and text rewraps, an
@@ -165,15 +170,18 @@ function measure() {
   });
 }
 
-export function morph({
-  width = false,
-  ms,
-  rows = false,
-}: {
-  width?: boolean;
+export interface Morph {
   ms?: number;
   rows?: boolean;
-} = {}) {
+  /**
+   * Read as a tween would start: true while the change should land at once
+   * (a keyboard-initiated swap, a card shut out of sight), with no tween.
+   */
+  still?: () => boolean;
+  width?: boolean;
+}
+
+export function morph({ width = false, ms, rows = false, still }: Morph = {}) {
   return (node: HTMLElement) => {
     /**
      * The size it was last laid out at, from the ResizeObserver: unknown
@@ -257,9 +265,15 @@ export function morph({
       natural: () => {
         const { clock, value } = atFoldsEnd(node, () => ({
           size: sizeNow(),
+          // In the flow only: one placed out of it (a surface laid under the
+          // contents, contents leaving as others come in) is not squashed by
+          // the box, and held at a size it was not given it no longer
+          // follows the box.
           children: [...node.children]
             .filter(
-              (child): child is HTMLElement => child instanceof HTMLElement
+              (child): child is HTMLElement =>
+                child instanceof HTMLElement &&
+                getComputedStyle(child).position !== "absolute"
             )
             .map((child) => ({
               child,
@@ -280,6 +294,7 @@ export function morph({
           (width && Math.abs(to.w - from.w) > 0.5);
         if (
           !(moved && motionOk.current) ||
+          still?.() ||
           from.h === 0 ||
           to.h === 0 ||
           foldsInside()
@@ -334,7 +349,32 @@ export function morph({
     });
     laidOut.observe(node, { box: "border-box" });
 
-    const content = new MutationObserver(() => {
+    /**
+     * In, or is, a child its own style placed out of the flow (contents
+     * leaving as others come in, GlassCard): nothing there sizes the box.
+     */
+    const outOfFlow = (start: Node | null): boolean => {
+      for (let at = start; at && at !== node; at = at.parentNode) {
+        if (at instanceof HTMLElement && at.style.position === "absolute") {
+          return true;
+        }
+      }
+      return false;
+    };
+    const blank = (one: Node) =>
+      one.nodeType === Node.COMMENT_NODE ||
+      (one.nodeType === Node.TEXT_NODE && !one.textContent?.trim());
+    /** A change that can move the box's natural size. */
+    const sizes = (record: MutationRecord) =>
+      !outOfFlow(record.target) &&
+      (record.type !== "childList" ||
+        ![...record.addedNodes, ...record.removedNodes].every(
+          (one) => blank(one) || outOfFlow(one)
+        ));
+    const content = new MutationObserver((records) => {
+      if (!records.some(sizes)) {
+        return;
+      }
       if (changed.size === 0) {
         queueMicrotask(measure);
       }

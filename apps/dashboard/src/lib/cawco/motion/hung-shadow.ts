@@ -190,7 +190,11 @@ export async function hangShadow(
   sheet ??= document.head.appendChild(document.createElement("style"));
   // On the card itself: its border is 0 wide, so the picture takes no room;
   // it is drawn its own widths wide and out past the box by its outset.
+  // How far it reaches under the card (`--hang-reach`) is how far past its
+  // own height the card goes up behind the cut when it is shut (motion/hang),
+  // so none of its shadow is left under the cut.
   sheet.textContent = `${selector} {
+  --hang-reach: ${outBottom}px;
   border-style: solid;
   border-image: url("${url}") ${px(top)} ${px(right)} ${px(bottom)} ${px(left)} / ${top}px ${right}px ${bottom}px ${left}px / 0 ${outRight}px ${outBottom}px ${outLeft}px stretch;
 }`;

@@ -17,8 +17,9 @@
    */
   import { Button } from "#lib/components/ui/button/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
+  import { barGlass } from "./bar-glass.svelte";
   import Caw from "./home/Caw.svelte";
-  import { addMachine, JOIN_WAYS, machinesPopover } from "./join/join.svelte";
+  import { addMachine, JOIN_WAYS } from "./join/join.svelte";
   import { crossIn, crossOut } from "./motion/curves.svelte";
   import { ListSwap } from "./motion/list-swap.svelte";
   import CardFace from "./project/CardFace.svelte";
@@ -98,7 +99,7 @@
           <Button
             aria-haspopup="dialog"
             onclick={() => {
-              machinesPopover.open = true;
+              barGlass.open = "machines";
             }}
           >
             Check machines

@@ -30,6 +30,7 @@
   } from "#lib/components/ui/alert/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { browser } from "$app/env";
+  import { barGlass } from "./bar-glass.svelte";
   import {
     type BlockedRequest,
     blankSession,
@@ -47,7 +48,6 @@
   } from "./client.svelte";
   import Caw, { CAW_HEADROOM, LEDGE_LINE } from "./home/Caw.svelte";
   import CawFace from "./home/CawFace.svelte";
-  import { machinesPopover } from "./join/join.svelte";
   import { planProgress, planShows } from "./plan/PlanPane.svelte";
   import PlanRing from "./plan/PlanRing.svelte";
   import FolderFiles from "./project/FolderFiles.svelte";
@@ -686,7 +686,7 @@
               <Button
                 label="Check machines"
                 onclick={() => {
-                  machinesPopover.open = true;
+                  barGlass.open = "machines";
                 }}
                 size="sm"
                 variant="outline"
