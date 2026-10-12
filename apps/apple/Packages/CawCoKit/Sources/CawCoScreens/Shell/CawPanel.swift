@@ -67,10 +67,6 @@ final class CawPanel: UIView, UIGestureRecognizerDelegate {
     private weak var head: NeedsCawButton?
     private let card = HangCard()
     private let scroll = PanelScroll()
-    /// The light dismissal's tap, on the shell's view (`dismissal`).
-    private var dismissTap: UITapGestureRecognizer?
-    /// A push up on the open panel's body, once its list shows its end.
-    private let push = UIPanGestureRecognizer()
     private let list = UIStackView()
     /// The house edge fade where the list runs past what the panel holds
     /// (CawPanel.svelte `kit-edge-fade-block`), at its full 40pt on every
@@ -115,9 +111,14 @@ final class CawPanel: UIView, UIGestureRecognizerDelegate {
         scroll.addSubview(list)
         scroll.contentInsetAdjustmentBehavior = .never
         fade = EdgeFade(scroll, length: 40)
-        push.addTarget(self, action: #selector(pushed(_:)))
+        // A push up on the body begins only on the open panel, heading mostly
+        // up, with its list showing its end: until then the finger scrolls it.
+        let push = GatedPan(target: self, action: #selector(pushed(_:))) { [weak self] pan in
+            guard let self else { return false }
+            let end = scroll.contentSize.height - scroll.bounds.height
+            return open && pan.heading(.up) && scroll.contentOffset.y >= end - 1
+        }
         push.maximumNumberOfTouches = 1
-        push.delegate = self
         card.addGestureRecognizer(push)
         // The list scrolls only once a push up has been ruled out.
         scroll.panGestureRecognizer.require(toFail: push)
@@ -543,22 +544,11 @@ final class CawPanel: UIView, UIGestureRecognizerDelegate {
         tap.delaysTouchesEnded = false
         tap.delegate = self
         host.addGestureRecognizer(tap)
-        dismissTap = tap
     }
 
     @objc private func tappedOutside() { close() }
 
-    /// A push up on the body begins only on the open panel, heading mostly
-    /// up, with its list showing its end: until then the finger scrolls it.
-    override func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
-        guard gesture === push else { return super.gestureRecognizerShouldBegin(gesture) }
-        let v = push.velocity(in: self)
-        let end = scroll.contentSize.height - scroll.bounds.height
-        return open && v.y < 0 && abs(v.y) > abs(v.x) && scroll.contentOffset.y >= end - 1
-    }
-
-    func gestureRecognizer(_ gesture: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
-        guard gesture === dismissTap else { return true }
+    func gestureRecognizer(_: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
         guard open else { return false }
         if point(inside: touch.location(in: self), with: nil) { return false }
         // Caw's own press toggles the panel itself.
@@ -570,9 +560,8 @@ final class CawPanel: UIView, UIGestureRecognizerDelegate {
         return true
     }
 
-    /// The light dismissal's tap is recognised alongside everything; the push takes the finger alone.
-    func gestureRecognizer(_ gesture: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith _: UIGestureRecognizer) -> Bool {
-        gesture === dismissTap
+    func gestureRecognizer(_: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith _: UIGestureRecognizer) -> Bool {
+        true
     }
 }
 
@@ -824,12 +813,14 @@ private final class NeedRow: UIControl {
 /// dismisses it; short of that it springs back. A group's head carries the
 /// whole group (`carries`). With less motion it fades out where it stands.
 /// VoiceOver has the same as a "Dismiss" action on each of its words.
-private final class NoticeRow: UIView, UIGestureRecognizerDelegate {
+private final class NoticeRow: UIView {
     private let close: NoticeCloseButton
     private let dismiss: @MainActor () -> Void
     /// What a swipe on the row carries off: the row, or from a group's head its group.
     weak var carries: UIView?
-    private let swipe = UIPanGestureRecognizer()
+    /// The swipe begins only heading mostly sideways, on the row or any of its
+    /// words: up and down is the list's scroll and the panel's push.
+    private let swipe = GatedPan(target: nil, action: nil) { $0.heading(.across) }
     private var slide: UIViewPropertyAnimator?
     /// Where the row stood across when the finger took it.
     private var swipeFrom = 0.0
@@ -884,9 +875,6 @@ private final class NoticeRow: UIView, UIGestureRecognizerDelegate {
         }
         swipe.addTarget(self, action: #selector(swiped(_:)))
         swipe.maximumNumberOfTouches = 1
-        // Its own delegate: a view's `gestureRecognizerShouldBegin` is asked of
-        // the view the touch landed on (a label in the row), not of the row.
-        swipe.delegate = self
         addGestureRecognizer(swipe)
     }
 
@@ -1000,14 +988,6 @@ private final class NoticeRow: UIView, UIGestureRecognizerDelegate {
     }
 
     // MARK: Swiped off
-
-    /// A swipe begins only heading mostly sideways: up and down is the list's
-    /// scroll and the panel's push.
-    override func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
-        guard gesture === swipe else { return super.gestureRecognizerShouldBegin(gesture) }
-        let v = swipe.velocity(in: self)
-        return abs(v.x) > abs(v.y)
-    }
 
     @objc private func swiped(_ pan: UIPanGestureRecognizer) {
         let moving = carries ?? self

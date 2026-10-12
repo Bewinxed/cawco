@@ -19,7 +19,7 @@ import UIKit
 /// closes his panel (`CawPanel`), which the shell owns; a finger pulling down
 /// off him draws it out of his glass under the finger, and pulling up takes
 /// it back (`onPull`).
-final class NeedsCawButton: UIControl, UIGestureRecognizerDelegate {
+final class NeedsCawButton: UIControl {
     /// His head's side in the wide bar's group, pt.
     static let head = 22.0
     /// His side in the wide bar's group: the group's height.
@@ -61,7 +61,6 @@ final class NeedsCawButton: UIControl, UIGestureRecognizerDelegate {
     /// begins only heading mostly that way; a tap is still `onTap`, and his
     /// press lets go as the pull takes the touch.
     var onPull: (UIPanGestureRecognizer) -> Void = { _ in }
-    private let pull = UIPanGestureRecognizer()
     /// His panel stands open (`configure`): a pull on him heads up, not down.
     private var panelOpen = false
 
@@ -174,27 +173,20 @@ final class NeedsCawButton: UIControl, UIGestureRecognizerDelegate {
         addTarget(self, action: #selector(tapped), for: .touchUpInside)
         addInteraction(UIPointerInteraction(delegate: self))
         addGestureRecognizer(UIHoverGestureRecognizer(target: self, action: #selector(hovered(_:))))
-        // A finger's pull, as on a tab (PaneTabsView `pulled`); a Mac's pointer clicks him.
+        // A finger's pull, as on a tab (PaneTabsView `pulled`): down off him
+        // while his panel is shut, up while it stands open, mostly that way
+        // rather than sideways, on him or his face alike. A Mac's pointer clicks him.
         if UIDevice.current.userInterfaceIdiom != .mac {
-            pull.addTarget(self, action: #selector(pulled(_:)))
+            let pull = GatedPan(target: self, action: #selector(pulled(_:))) { [weak self] pan in
+                guard let self else { return false }
+                return pan.heading(panelOpen ? .up : .down)
+            }
             pull.maximumNumberOfTouches = 1
-            // Its own delegate: a view's `gestureRecognizerShouldBegin` is asked
-            // of the view the touch landed on (his face, on a wide bar), not of him.
-            pull.delegate = self
             addGestureRecognizer(pull)
         }
     }
 
     @objc private func pulled(_ pan: UIPanGestureRecognizer) { onPull(pan) }
-
-    /// Down off him while his panel is shut, up while it stands open, and
-    /// mostly that way rather than sideways (PaneTabsView's `PullGate`).
-    override func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
-        guard gesture === pull else { return super.gestureRecognizerShouldBegin(gesture) }
-        let v = pull.velocity(in: self)
-        guard abs(v.y) > abs(v.x) else { return false }
-        return panelOpen ? v.y < 0 : v.y > 0
-    }
 
     @available(*, unavailable)
     required init?(coder _: NSCoder) {

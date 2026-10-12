@@ -177,6 +177,21 @@ async function panelLog(
 }
 const numbers = (line: string, pattern: RegExp) =>
   (pattern.exec(line)?.slice(1) ?? []).map(Number);
+/**
+ * Waits, up to 3s, until the app's log since `since` holds a line starting
+ * `prefix` (a gesture's release, written after every one of its moves): the
+ * log reaches `log show` a moment after the app writes it.
+ */
+async function logged(udid: string, since: number, prefix: string) {
+  for (let k = 0; k < 6; k += 1) {
+    // biome-ignore lint/performance/noAwaitInLoops: each read waits for the log to catch up
+    const lines = await panelLog(udid, since);
+    if (lines.some((l) => l.text.startsWith(prefix))) {
+      return;
+    }
+    await pause(500);
+  }
+}
 /** Whether the panel stands open now: the app's last word on it since `since`. */
 async function openNow(
   udid: string,
@@ -199,11 +214,18 @@ async function entriesNow(
   udid: string,
   since: number
 ): Promise<number | undefined> {
-  const rows = (await panelLog(udid, since)).filter((l) =>
-    l.text.startsWith("panel rows: ")
-  );
-  const n = numbers(rows.at(-1)?.text ?? "", ENTRIES);
-  return n[0];
+  // The log reaches `log show` a moment after the app writes it.
+  for (let k = 0; k < 6; k += 1) {
+    // biome-ignore lint/performance/noAwaitInLoops: each read waits for the log to catch up
+    const rows = (await panelLog(udid, since)).filter((l) =>
+      l.text.startsWith("panel rows: ")
+    );
+    const [n] = numbers(rows.at(-1)?.text ?? "", ENTRIES);
+    if (n !== undefined) {
+      return n;
+    }
+    await pause(500);
+  }
 }
 
 /** A screenshot's pixels (a BMP read without a decoder). */
@@ -451,6 +473,7 @@ async function pullChecks(
   const shotEnd = Date.now();
   await going;
   await pause(900);
+  await logged(udid, since, "panel release");
   const slow = await pulls(udid, since);
   const samples = three(slow);
   // The finger's travel while the capture was being taken: the drawn foot must lie in it.
@@ -613,6 +636,7 @@ async function rowChecks(
   await pixels(udid, width, `${kind}-swipe-mid-light`);
   await swiping;
   await pause(900);
+  await logged(udid, since, "notice release");
   const rowLog = await panelLog(udid, since);
   const rowSamples = three(
     rowLog

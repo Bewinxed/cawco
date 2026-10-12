@@ -1,4 +1,5 @@
 import CawCoDesign
+import OSLog
 import UIKit
 
 /// A tab's options pulled down off the tab by a finger (PaneTabs.svelte
@@ -33,6 +34,9 @@ final class TabOptionsSheet: UIView {
     /// How far a release is carried along its speed, s (as Caw's panel's: `HangPull`).
     static let project = HangPull.project
     static let resist = 0.35
+    #if DEBUG
+    private static let log = Logger(subsystem: "dev.cawco.app", category: "TabOptions")
+    #endif
     static let resistMax = 0.2
 
     /// The options have gone, by an option, a tap outside, or a pull let go short.
@@ -107,7 +111,12 @@ final class TabOptionsSheet: UIView {
             addSubview(head)
         }
         addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(tapped(_:))))
-        addGestureRecognizer(UIPanGestureRecognizer(target: self, action: #selector(swiped(_:))))
+        // The swipe up takes the options once they are open and the finger
+        // heads mostly up, an option's button under it or not (`GatedPan`).
+        addGestureRecognizer(GatedPan(target: self, action: #selector(swiped(_:))) { [weak self] pan in
+            guard let self else { return false }
+            return !UIAccessibility.isReduceMotionEnabled && progress >= 0.99 && pan.heading(.up)
+        })
         registerForTraitChanges([UITraitUserInterfaceStyle.self, UITraitAccessibilityContrast.self]) { (sheet: TabOptionsSheet, _: UITraitCollection) in
             // A tab closed under the options keeps the surface it was last drawn in.
             if let tab = sheet.tabView { sheet.tabSurface = tab.surface }
@@ -370,6 +379,14 @@ final class TabOptionsSheet: UIView {
     /// finger; let go, they fold away or settle open on where it was heading.
     @objc private func swiped(_ pan: UIPanGestureRecognizer) {
         let dy = pan.translation(in: self).y
+        #if DEBUG
+        if pan.state == .began {
+            // A simulator probe's read of which drags the swipe up takes.
+            let v = pan.velocity(in: self)
+            let line = String(format: "tab options swipe began: dy %.1f velocity %.0f, %.0f", dy, v.x, v.y)
+            Self.log.notice("\(line, privacy: .public)")
+        }
+        #endif
         switch pan.state {
         case .began, .changed:
             stopSettle()
@@ -382,14 +399,6 @@ final class TabOptionsSheet: UIView {
         default:
             break
         }
-    }
-
-    /// The swipe up only takes the options once they are open and the
-    /// finger heads mostly up.
-    override func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
-        guard let pan = gesture as? UIPanGestureRecognizer, pan.view === self else { return super.gestureRecognizerShouldBegin(gesture) }
-        let v = pan.velocity(in: self)
-        return !UIAccessibility.isReduceMotionEnabled && progress >= 0.99 && v.y < 0 && abs(v.y) > abs(v.x)
     }
 
     /// Folds back into the tab, then gone; with less motion it fades out.
@@ -459,6 +468,9 @@ final class TabOptionsSheet: UIView {
     private func finish() {
         guard !gone else { return }
         gone = true
+        #if DEBUG
+        Self.log.notice("tab options gone")
+        #endif
         stopSettle()
         removeFromSuperview()
         onGone()

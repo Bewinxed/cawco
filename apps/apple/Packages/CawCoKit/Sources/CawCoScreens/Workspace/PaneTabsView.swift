@@ -299,10 +299,9 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
         view.phoneRow = barRow
         view.actions = { [weak self] in self?.actions(id) ?? [] }
         // A finger's pull down off the tab: its options, under the finger.
+        // Only mostly downward (|dy| > |dx|); sideways is the strip's.
         if traitCollection.userInterfaceIdiom != .mac {
-            let pull = UIPanGestureRecognizer(target: self, action: #selector(pulled(_:)))
-            pull.delegate = PullGate.shared
-            view.addGestureRecognizer(pull)
+            view.addGestureRecognizer(GatedPan(target: self, action: #selector(pulled(_:))) { $0.heading(.down) })
         }
         view.onSelect = { [weak self] in self?.onSelect(id) }
         view.onClose = { [weak self] in self?.onClose(id) }
@@ -848,16 +847,6 @@ private final class StripScroll: UIScrollView {
     }
 }
 
-/// A tab's pull begins only mostly downward (|dy| > |dx|); sideways is the strip's.
-private final class PullGate: NSObject, UIGestureRecognizerDelegate {
-    @MainActor static let shared = PullGate()
-
-    func gestureRecognizerShouldBegin(_ gesture: UIGestureRecognizer) -> Bool {
-        guard let pan = gesture as? UIPanGestureRecognizer else { return true }
-        let v = pan.velocity(in: pan.view)
-        return v.y > 0 && v.y > abs(v.x)
-    }
-}
 
 /// Every tab's drag goes through one delegate; the item comes from the tab.
 private final class TabDragDelegate: NSObject, UIDragInteractionDelegate {
