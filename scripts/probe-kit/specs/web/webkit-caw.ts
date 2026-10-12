@@ -10,11 +10,13 @@
  *
  *  - the panel opens on every tap;
  *  - no interval in any open is over 25ms (a 60Hz frame and a half: a
- *    dropped frame), the press's own frame included.
+ *    dropped frame), the press's own frame included. The longest four are
+ *    named with what the page's own code did inside each (`attribute`):
+ *    WebKit through Playwright has no performance trace.
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { tell, watch, watched } from "../../frames";
+import { attribute, ourWork, tell, watch, watched } from "../../frames";
 import { open, type Spec } from "../../kit";
 
 const RUNS = 20;
@@ -102,7 +104,7 @@ const spec: Spec = {
     const page = await kit.page("phone", {
       engine: "webkit",
       scale: 3,
-      init: [watch, noButtonFocus],
+      init: [watch, attribute, noButtonFocus],
     });
     await open(page, await fleet.dashboard(), "[data-needs-caw]", 90_000);
     await page.waitForFunction(
@@ -122,10 +124,12 @@ const spec: Spec = {
     // Fonts, the first snapshot, his face drawn ahead.
     await page.waitForTimeout(3000);
     const opened: boolean[] = [];
-    const runs: { max: number; long: string[] }[] = [];
+    /** Each open's frame intervals, with what our own code did inside each. */
+    const runs: { at: number; ms: number; ours: number; heaviest: string }[][] =
+      [];
     for (let n = 0; n < RUNS; n += 1) {
       // biome-ignore lint/performance/noAwaitInLoops: one open at a time, each from rest
-      await tell(page, { rafs: [], tap: -1, cadence: true });
+      await tell(page, { rafs: [], calls: [], tap: -1, cadence: true });
       // Frames drawn before the tap too, so the one it lands in is measured.
       await page.waitForTimeout(150);
       await page.touchscreen.tap(at.x, at.y);
@@ -134,10 +138,16 @@ const spec: Spec = {
       await tell(page, { cadence: false });
       const before = seen.rafs.findLastIndex((t) => t <= seen.tap);
       const frames = seen.rafs.slice(Math.max(0, before));
-      const intervals = frames.slice(1).map((t, k) => ({
-        at: (frames[k] as number) - seen.tap,
-        ms: t - (frames[k] as number),
-      }));
+      const intervals = frames.slice(1).map((t, k) => {
+        const from = frames[k] as number;
+        const work = ourWork(seen.calls, from, t);
+        return {
+          at: from - seen.tap,
+          ms: t - from,
+          ours: work.ms,
+          heaviest: work.heaviest,
+        };
+      });
       opened.push(
         await page.evaluate(
           () =>
@@ -148,31 +158,29 @@ const spec: Spec = {
       await page.touchscreen.tap(at.x, at.y);
       // The close's own smile in and out land before the next open.
       await page.waitForTimeout(REST_MS);
-      const long = intervals.filter((one) => one.ms > DROPPED_MS);
-      runs.push({
-        max: Math.max(0, ...intervals.map((one) => one.ms)),
-        long: long.map(
-          (one) => `${one.ms.toFixed(0)}ms at +${one.at.toFixed(0)}`
-        ),
-      });
+      runs.push(intervals);
     }
     kit.check(
       `the panel opens on every tap (${RUNS})`,
       opened.every(Boolean),
       `${opened.filter(Boolean).length} of ${RUNS} opened`
     );
-    const worst = Math.max(...runs.map((one) => one.max));
+    // The longest intervals, each with what our code did inside it, so a
+    // dropped frame says whose it was.
+    const longest = runs
+      .flatMap((intervals, n) => intervals.map((one) => ({ ...one, n })))
+      .sort((a, b) => b.ms - a.ms)
+      .slice(0, 4);
+    const worst = longest[0]?.ms ?? 0;
     kit.check(
       `no interval over ${DROPPED_MS}ms in any of ${RUNS} opens`,
       worst <= DROPPED_MS,
-      `worst ${worst.toFixed(1)}ms${
-        runs.some((one) => one.long.length)
-          ? `; ${runs
-              .flatMap((one, n) => one.long.map((l) => `run ${n}: ${l}`))
-              .slice(0, 6)
-              .join(", ")}`
-          : ""
-      }`
+      `longest: ${longest
+        .map(
+          (one) =>
+            `${one.ms.toFixed(0)}ms at +${one.at.toFixed(0)} in open ${one.n} (our code ${one.ours.toFixed(0)}ms${one.ours > 0 ? `, ${one.heaviest}` : ""})`
+        )
+        .join("; ")}`
     );
   },
 };

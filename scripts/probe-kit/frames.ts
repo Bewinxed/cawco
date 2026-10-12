@@ -14,6 +14,13 @@
  *  - while `cadence` is on, every requestAnimationFrame's timestamp and the
  *    first pointerdown after it was turned on.
  *
+ * `attribute` (installed after `watch`, for an engine with no performance
+ * trace of its own: WebKit through Playwright has none) keeps, while
+ * `cadence` is on, every callback of the page's own a millisecond or more
+ * (frame callbacks, timers, microtasks, event listeners, observers): what
+ * its code did inside a frame (`ourWork`). An async function resumed after
+ * an `await` is no callback and is not seen.
+ *
  * The readers below turn those series into the probes' checks.
  */
 import type { Page } from "playwright-core";
@@ -24,6 +31,8 @@ export const SCROLLER = '[aria-label="Session transcript"]';
 export interface Watched {
   anchor: string | null;
   cadence: boolean;
+  /** The page's own callbacks while `cadence` is on (`attribute`): name, start, ms. */
+  calls: [string, number, number][];
   errors: string[];
   frames: number;
   gap: { at: number; px: number; top: number; where: string };
@@ -42,6 +51,7 @@ export function watch(): void {
   const w = window as unknown as { __kit: Watched };
   const kit: Watched = {
     anchor: null,
+    calls: [],
     cadence: false,
     errors: [],
     frames: 0,
@@ -181,6 +191,98 @@ export function watch(): void {
     requestAnimationFrame(loop);
   };
   requestAnimationFrame(loop);
+}
+
+/** The page's own callbacks, timed while `cadence` is on: an init script after `watch` (see the file's head). */
+export function attribute(): void {
+  const kit = (window as unknown as { __kit: Watched }).__kit;
+  const named = (kind: string, fn: unknown) =>
+    `${kind} ${(typeof fn === "function" && fn.name) || String(fn).replace(/\s+/g, " ").slice(0, 60)}`;
+  const timed = <A extends unknown[], R>(kind: string, fn: (...a: A) => R) =>
+    function (this: unknown, ...a: A): R {
+      const start = performance.now();
+      try {
+        return fn.apply(this, a);
+      } finally {
+        const ms = performance.now() - start;
+        if (kit.cadence && ms >= 1) {
+          kit.calls.push([named(kind, fn), start, ms]);
+        }
+      }
+    };
+  const raf = window.requestAnimationFrame.bind(window);
+  window.requestAnimationFrame = (cb) => raf(timed("frame", cb));
+  const timeout = window.setTimeout.bind(window);
+  window.setTimeout = ((cb: TimerHandler, ms?: number, ...rest: unknown[]) =>
+    timeout(
+      typeof cb === "function"
+        ? timed("timer", cb as (...a: unknown[]) => unknown)
+        : cb,
+      ms,
+      ...rest
+    )) as typeof window.setTimeout;
+  const micro = window.queueMicrotask.bind(window);
+  window.queueMicrotask = (cb) => micro(timed("microtask", cb));
+  const wrapped = new WeakMap<object, EventListener>();
+  const add = EventTarget.prototype.addEventListener;
+  const remove = EventTarget.prototype.removeEventListener;
+  EventTarget.prototype.addEventListener = function (type, listener, options) {
+    if (typeof listener !== "function") {
+      return add.call(this, type, listener, options);
+    }
+    let one = wrapped.get(listener);
+    if (!one) {
+      one = timed(`event ${type}`, listener) as EventListener;
+      wrapped.set(listener, one);
+    }
+    return add.call(this, type, one, options);
+  };
+  EventTarget.prototype.removeEventListener = function (
+    type,
+    listener,
+    options
+  ) {
+    const one =
+      typeof listener === "function" ? wrapped.get(listener) : undefined;
+    return remove.call(this, type, one ?? listener, options);
+  };
+  for (const name of [
+    "MutationObserver",
+    "ResizeObserver",
+    "IntersectionObserver",
+  ] as const) {
+    const Real = window[name] as unknown as new (
+      cb: (...a: unknown[]) => void,
+      o?: unknown
+    ) => object;
+    (window as unknown as Record<string, unknown>)[name] = class extends Real {
+      constructor(cb: (...a: unknown[]) => void, o?: unknown) {
+        super(timed(name, cb), o);
+      }
+    };
+  }
+}
+
+/**
+ * What the page's own code did between `from` and `to` (its clock, ms):
+ * the time its callbacks ran there, and the heaviest of them.
+ */
+export function ourWork(
+  calls: [string, number, number][],
+  from: number,
+  to: number
+): { ms: number; heaviest: string } {
+  const inside = calls.filter(([, start, d]) => start < to && start + d > from);
+  const ms = inside.reduce(
+    (sum, [, start, d]) =>
+      sum + Math.min(to, start + d) - Math.max(from, start),
+    0
+  );
+  const [top] = [...inside].sort((a, b) => b[2] - a[2]);
+  return {
+    ms,
+    heaviest: top ? `${top[0].slice(0, 60)} ${top[2].toFixed(0)}ms` : "none",
+  };
 }
 
 /** What the watcher holds now. */
