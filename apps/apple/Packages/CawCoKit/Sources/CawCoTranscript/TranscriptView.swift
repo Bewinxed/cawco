@@ -40,8 +40,12 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     private let paneState = PaneState()
 
     private let collection: UICollectionView
-    /// The rows going out of focus under the tab strip at the list's top edge (HeadFade.svelte).
-    private let headFade: HeadFade
+    /// The rows fading out toward the tab strip at the list's top edge, over
+    /// `Size.cHeadFade` once rows are scrolled under it: an alpha mask on the
+    /// list, nothing painted over the rows. The web blurs them (HeadFade.svelte);
+    /// a tint-free variable blur on iOS is private API, and a stack of UIKit
+    /// materials brightened the rows with each layer's tint.
+    private let headFade: EdgeFade
     private var dataSource: UICollectionViewDiffableDataSource<Int, String>!
     private let env = RowEnv()
     /// Every row's view, kept laid out for its item (RowStore).
@@ -112,7 +116,9 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     private var arriving: [String: Double] = [:]
     private var gliding = false
     private var farFromLatest = false
-    private var pendingPosition: TranscriptPosition?
+    private var pendingPosition: TranscriptPosition? {
+        didSet { holdAnchor() }
+    }
     private var link: CADisplayLink?
     private var proxy: DisplayTarget?
     private var watchedDelegates = Set<String>()
@@ -235,7 +241,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         }
         self.layout = layout
         collection = UICollectionView(frame: .zero, collectionViewLayout: layout)
-        headFade = HeadFade(collection)
+        headFade = EdgeFade(collection, length: Size.cHeadFade, edges: .top)
         super.init(frame: frame)
         Self.warm()
         // The session pane's ground (SessionPane.svelte `.pane`): the recess, not the page.
@@ -248,18 +254,11 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         collection.accessibilityLabel = "Session transcript"
         collection.translatesAutoresizingMaskIntoConstraints = false
         addSubview(collection)
-        // Over the rows, under the docks (placeDock) and the pane's state: only rows pass under it.
-        addSubview(headFade)
         NSLayoutConstraint.activate([
             collection.leadingAnchor.constraint(equalTo: safeAreaLayoutGuide.leadingAnchor),
             collection.trailingAnchor.constraint(equalTo: safeAreaLayoutGuide.trailingAnchor),
             collection.topAnchor.constraint(equalTo: topAnchor),
             collection.bottomAnchor.constraint(equalTo: bottomAnchor),
-            // The list's visible top edge: its adjusted inset is the safe area's.
-            headFade.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor),
-            headFade.leadingAnchor.constraint(equalTo: leadingAnchor),
-            headFade.trailingAnchor.constraint(equalTo: trailingAnchor),
-            headFade.heightAnchor.constraint(equalToConstant: HeadFade.height),
         ])
         makeDataSource()
         wireEnv()
@@ -657,6 +656,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         if transcript.facts != self.transcript?.facts { facts = nil }
         self.transcript = transcript
         env.sessionId = transcript.id
+        for pill in [latestButton, catchUp, compacting] { pill.owner = String(transcript.id.prefix(8)) }
         joinTray()
         env.machineId = transcript.location?.machineId
         var agent = env.agentName
@@ -748,7 +748,45 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     /// which of them read the fleet (`fleetPrint`). A landed answer's live key
     /// and a reasoning block folding shut are put on them here, between
     /// generations (`build`).
-    private var settled: (stamp: String, items: [Item], rail: Bool, fleet: [Int])?
+    private var settled: (stamp: String, items: [Item], rail: Bool, fleet: [Int])? {
+        didSet { holdAnchor() }
+    }
+
+    /// Whether the generation applied holds the row the place to restore
+    /// stands at: nil with no place to restore. Read again only when that
+    /// generation or the place changes, never off a build: what a build
+    /// draws (a first screen, an empty list while the place is read back to)
+    /// is decided by it, and must not decide it back.
+    private var anchorHeld: Bool?
+
+    private func holdAnchor() {
+        let anchor = pendingPosition.flatMap { $0.following ? nil : $0.anchor }
+        anchorHeld = anchor.map { id in
+            (settled?.items.contains { $0.id == id } ?? false) || queued.contains { $0.id == id }
+        }
+    }
+
+    /// The place to restore is at a row the list does not hold, with history
+    /// left to read (Transcript.svelte "THE READER'S PLACE IS READ BACK TO"):
+    /// nothing is drawn, and the pages before the rows held are read whatever
+    /// the distance, until a generation that holds it is applied. A page that
+    /// cannot be read ends it: the list is drawn with what it holds, the
+    /// failure at its top. So does the conversation's start, once applied
+    /// without the row. A read still landing, or one landed and not yet
+    /// applied, keeps it: the history it brings may hold the row.
+    private var restoring: Bool {
+        guard anchorHeld == false, let transcript, transcript.olderFault == nil else { return false }
+        return transcript.cursor != nil || transcript.loading || historyBehind
+    }
+
+    /// A read of history (a page, newest or older) has landed that the
+    /// generation applied was not prepared from. It moves with reads alone:
+    /// what the live stream brings is not history, and a busy session's
+    /// every block would otherwise flip it.
+    private var historyBehind: Bool {
+        guard let transcript else { return false }
+        return prepared?.history != transcript.historyRevision
+    }
 
     private func factsValue(_ key: String) -> Any? {
         if let facts { return facts[key] }
@@ -865,11 +903,6 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             Item(id: Self.olderId, top: 0, kind: .retry("\(fault.reason == .offline ? "This machine is offline" : "The turns before these couldn't be read"): \(fault.message)"),
                  print: "failed\(fault.message)")
         }
-        // The reader's place is at a row older than the rows held, with history
-        // left to read: nothing is drawn until a page holds it.
-        let sought = pendingPosition.flatMap { $0.following ? nil : $0.anchor }
-        seeking = sought.map { anchor in !out.contains { $0.id == anchor } } ?? false
-            && rowCount > 0 && transcript.cursor != nil && transcript.olderFault == nil && !transcript.loading
         older = transcript.cursor == nil ? "" : fault?.print ?? "loading"
         if out.isEmpty {
             // Empty is what is drawn: with a page before it, the transcript is still loading.
@@ -895,11 +928,6 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     /// it), loading, or why a page failed. Part of what the list's settled
     /// rows were built from (`settledStamp`).
     private var older = ""
-    /// The place to restore is at a row older than the rows held, and the
-    /// pages before them are being read until one holds it (Transcript.svelte
-    /// "THE READER'S PLACE IS READ BACK TO"). A page that cannot be read ends
-    /// the search: the list is drawn with what it holds, the failure at its top.
-    private var seeking = false
 
     /// What the list's settled rows are built from: the prepared generation, and the strip before them.
     private var settledStamp: String? { settled.map { "\($0.stamp)|\(older)" } }
@@ -1345,7 +1373,11 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
                 folding = nil
                 animate(row, open: false)
             }
-            if !landed, fed == nil || rowCount == 0, transcript?.loading == false, prepared != nil { landed = true }
+            // Landed once the generation drawn was prepared from the history
+            // read: the one prepared before the first page landed is empty,
+            // and drawing it is not landing. (A history read moves only with
+            // a page, never with what the live stream brings.)
+            if !landed, fed == nil || rowCount == 0, transcript?.loading == false, prepared != nil, !historyBehind { landed = true }
             guard follow else { return }
             if grew {
                 // The rows above make room on the place's clock rather than jumping.
@@ -1383,7 +1415,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         // No rows yet (a page not read, an empty session): the notice stands alone.
         guard rowCount > 0 else { return all }
         // The place to restore is in a page not read yet: nothing is built until one holds it.
-        guard !seeking else { return [] }
+        guard !restoring else { return [] }
         let view = visibleBox.height
         let pivot = pendingPosition.flatMap { $0.following ? nil : $0.anchor }.flatMap { all.firstIndex(of: $0) }
         let reach = pivot.map { all.count - $0 } ?? all.count
@@ -1722,7 +1754,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     /// than its view is inside that distance by definition, so it fills, a
     /// page at a time, until it can scroll or the conversation's start is in
     /// hand; an empty newest page with a page before it reads that page.
-    /// While the place to restore is in a page not read yet (`seeking`), the
+    /// While the place to restore is in a page not read yet (`restoring`), the
     /// pages are read back to it whatever the distance.
     ///
     /// Never for a pane nobody is looking at, not while a page is on its way
@@ -1734,7 +1766,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         guard let transcript, let sessions = hub?.sessions, transcript.cursor != nil, !transcript.loading,
               !transcript.loadingOlder, transcript.olderFault == nil,
               transcript.blockRevision == revision, current, !dirty, inView else { return }
-        if !seeking {
+        if !restoring {
             guard landed, fed == nil || rowCount == 0 else { return }
             // From the first row of the conversation: the strip before it is not a row.
             let strip = dataSource.indexPath(for: Self.olderId).flatMap { collection.layoutAttributesForItem(at: $0)?.frame.maxY } ?? 0
@@ -1830,9 +1862,28 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     private func updateDock() {
         let rowsDrawn = rowCount > 0
         latestButton.show(landed && farFromLatest && rowsDrawn)
-        catchUp.show((transcript?.loading == true || seeking) && rowsDrawn)
+        // A catch-up is one stretch from its start to its end, each a fact
+        // that moves with reads alone. It starts over rows already drawn, when
+        // the newest page is read again (a reset, a resync) or the place to
+        // restore is not held; it ends once nothing is being read, the place
+        // is held or given up, and the generation drawn was prepared from the
+        // last read. Read off the moment instead, a read again over a
+        // restored place showed it while the page was out, hid it as the page
+        // landed (the generation drawn still held the place), showed it again
+        // once the new one was applied without the older pages, and hid it
+        // once they were read back.
+        let loading = transcript?.loading == true
+        if !catchingUp, rowsDrawn, loading || restoring {
+            catchingUp = true
+        } else if catchingUp, !loading, !restoring, !historyBehind {
+            catchingUp = false
+        }
+        catchUp.show(catchingUp)
         compacting.show(isCompacting)
     }
+
+    /// The pill's stretch (`updateDock`): from a catch-up's start to its end.
+    private var catchingUp = false
 
     /// The session's own word: `compacting` (read as the items are built).
     private var isCompacting = false
@@ -1909,8 +1960,12 @@ extension TranscriptView: RevealDriver {
 /// and top (the compacting pill): raised, hairline, --shadow-overlay; they
 /// rise in over --dur-panel and out over --dur-exit.
 final class DockPill: UIControl {
+    /// Each pill's coming and going, for a simulator pass to count (probe-ios-catchup.ts).
+    private static let log = Logger(subsystem: "dev.cawco.app", category: "Transcript")
     private let beat = Dot(Size.txBeatLg, color: Palette.statusLiveInk)
     private var shown = false
+    /// The session whose transcript it floats over, for the log: panes side by side each have their own.
+    var owner = ""
 
     init(glyph: Glyph?, title: String, pill: Bool = false) {
         super.init(frame: .zero)
@@ -1954,6 +2009,7 @@ final class DockPill: UIControl {
     func show(_ visible: Bool) {
         guard visible != shown else { return }
         shown = visible
+        Self.log.debug("dock \(self.accessibilityLabel ?? "", privacy: .public) \(visible ? "shown" : "hidden", privacy: .public) \(self.owner, privacy: .public)")
         if visible { isHidden = false; beat.beat() }
         let rise = UIAccessibility.isReduceMotionEnabled ? .identity : CGAffineTransform(translationX: 0, y: Motion.popRise)
         if visible { transform = rise; alpha = 0 }
