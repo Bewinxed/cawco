@@ -72,10 +72,24 @@ enum MacWindow {
             }
             return
         }
-        // Movable for this one drag only: AppKit refuses to move an unmovable window.
+        // Movable for this one drag only. The call hands the drag to the
+        // window server and "returns right away, and a mouse-up event may not
+        // get sent" (AppKit, NSWindow `performDrag(with:)`), while "-setMovable
+        // with a flag of NO will disable server-side dragging" (NSWindow.h):
+        // made unmovable again at once, the window never moved (a real HID drag
+        // on the bar left its frame unchanged). It stays movable until the
+        // button is up.
         window.setValue(true, forKey: "movable")
         window.perform(NSSelectorFromString("performWindowDragWithEvent:"), with: event)
-        window.setValue(false, forKey: "movable")
+        Task { @MainActor in
+            while buttonDown { try? await Task.sleep(for: .milliseconds(50)) }
+            window.setValue(false, forKey: "movable")
+        }
+    }
+
+    /// The left mouse button is held (NSEvent `pressedMouseButtons`, bit 0).
+    private static var buttonDown: Bool {
+        ((object("NSEvent", "pressedMouseButtons") as? NSNumber)?.intValue ?? 0) & 1 != 0
     }
 }
 
