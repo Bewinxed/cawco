@@ -632,7 +632,7 @@ export function foldMessages(
   subagents: Record<string, SubagentState>
 ): Row[] {
   return withoutEndedWaits(
-    foldRange(messages, subagents, 0, { ...NO_VOICE }, NO_SAID).rows
+    foldRange(messages, subagents, 0, { ...NO_VOICE }, NO_SAID, NO_SEAMS).rows
   );
 }
 
@@ -695,14 +695,21 @@ function ownRow(
  * later fold splice on at a row boundary, and no renderer needs it. `voices`
  * is where the speakers stood before `from`, and is advanced past these rows.
  * `said` is the answers this view streamed, by message key, each with the
- * live row's key it keeps.
+ * live row's key it keeps. `seams` are the messages an older page was put in
+ * front of (SessionState `seams`): a run of calls ends before one, so the
+ * page's calls are rows of their own and the rows held stay as they were.
+ * virtua keeps the reader's place across a page only for rows added in front
+ * (its `shift`, which takes a change of length): a page's calls folded into
+ * the first row held would grow that row under the reader by the page's
+ * whole height.
  */
 function foldRange(
   messages: Message[],
   subagents: Record<string, SubagentState>,
   from: number,
   voices: Voices,
-  said: ReadonlyMap<string, string>
+  said: ReadonlyMap<string, string>,
+  seams: ReadonlySet<string>
 ): { rows: Row[]; starts: number[] } {
   const rows: Row[] = [];
   const starts: number[] = [];
@@ -749,7 +756,8 @@ function foldRange(
         !isQuestionMsg(messages[i]) &&
         !isDelegateMsg(messages[i]) &&
         !isRunMsg(messages[i]) &&
-        !branchOf(messages[i], subagents)
+        !branchOf(messages[i], subagents) &&
+        !(i > start && seams.has(messages[i].id))
       ) {
         run.push(messages[i]);
         i += 1;
@@ -822,6 +830,8 @@ export interface LiveMemo {
 const NO_LIVE: LiveMemo = { gen: 0, on: false, answer: "", reasoning: "" };
 
 const NO_SAID: ReadonlyMap<string, string> = new Map();
+
+const NO_SEAMS: ReadonlySet<string> = new Set();
 
 /**
  * What the last fold was folded from, so the next one can tell whether it is
@@ -1346,13 +1356,14 @@ export function buildRowsFrom(
   memo: FoldMemo | null
 ): Fold {
   const messages = drawnOf(session);
+  const seams = new Set(session.seams);
   const branches = Object.keys(session.subagents).length;
   const cut = memo ? cutFor(messages, memo, branches) : -1;
   const appended = memo !== null && cut >= 0;
   const folded =
     memo && appended
-      ? foldOnto(messages, session.subagents, memo, cut)
-      : foldAll(messages, session.subagents, memo?.said ?? NO_SAID);
+      ? foldOnto(messages, session.subagents, memo, cut, seams)
+      : foldAll(messages, session.subagents, memo?.said ?? NO_SAID, seams);
   const { starts, voices } = folded;
   const { rows, told, ...toldSaid } = tell(
     session,
@@ -1459,10 +1470,11 @@ interface Settled {
 function foldAll(
   messages: Message[],
   subagents: Record<string, SubagentState>,
-  said: ReadonlyMap<string, string>
+  said: ReadonlyMap<string, string>,
+  seams: ReadonlySet<string>
 ): Settled {
   const voices = { ...NO_VOICE };
-  return { ...foldRange(messages, subagents, 0, voices, said), voices };
+  return { ...foldRange(messages, subagents, 0, voices, said, seams), voices };
 }
 
 /** The memo's rows, with only the turn at the cut and what follows it folded again. */
@@ -1470,7 +1482,8 @@ function foldOnto(
   messages: Message[],
   subagents: Record<string, SubagentState>,
   memo: FoldMemo,
-  cut: number
+  cut: number,
+  seams: ReadonlySet<string>
 ): Settled {
   // Nothing new: the settled rows are the last fold's, untouched.
   if (messages.length === memo.count) {
@@ -1489,7 +1502,7 @@ function foldOnto(
   // their grouping stands; the refolded turn picks up where they leave off.
   const kept = memo.rows.slice(0, keep);
   const voices = voicesAfter(kept);
-  const tail = foldRange(messages, subagents, cut, voices, memo.said);
+  const tail = foldRange(messages, subagents, cut, voices, memo.said, seams);
   return {
     rows: kept.concat(tail.rows),
     starts: memo.starts.slice(0, keep).concat(tail.starts),

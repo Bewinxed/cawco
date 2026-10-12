@@ -4,7 +4,7 @@
  * its tail grows and settles, and while the reader pages up to the start and
  * jumps back to the latest row.
  *
- *   bun scripts/probe-virtua-tail.ts [--rows <n>] [--turns <n>] [--no-scroll] [--dashboard <dir>] [--label <name>] [--keep]
+ *   bun scripts/probe-virtua-tail.ts [--rows <n>] [--turns <n>] [--burst <n>] [--no-scroll] [--serve <stop file>] [--dashboard <dir>] [--label <name>] [--keep]
  *
  * Run from the repo root after `bunx vite build` in the dashboard it serves
  * (`--dashboard`, default this checkout's apps/dashboard). It:
@@ -22,6 +22,11 @@
  *  4. sends `--turns` messages (default 4) at the tail; each answer is three
  *     tool calls and a streamed reply, so the tail grows by the sent row and
  *     the live rows, and shrinks as they settle into the turn's rows.
+ *
+ * With `--burst <n>`, before that walk: `n` wheels up from the tail inside
+ * 300ms while older pages land, the row first in view followed on every
+ * painted frame: every frame moves it by whole wheels, never back, and the
+ * burst by all of them.
  *
  * Checks: no `NaN` style and no page error at any point; no blank stretch
  * over 4px; wheels move rows by the wheel's distance within 2px; the jump to
@@ -43,8 +48,15 @@ const option = (name: string): string | undefined => {
 };
 const keep = args.includes("--keep");
 const scroll = !args.includes("--no-scroll");
+/** `--serve <stop file>`: seed, then hold the fleet up until the file exists. */
+const serve = option("--serve");
 const ROWS = Number(option("--rows") ?? 820);
 const TURNS = Number(option("--turns") ?? 4);
+/**
+ * `--burst <n>`: from the tail, `n` wheels up inside 300ms before the walk to
+ * the first row, with the anchor row followed on every painted frame.
+ */
+const BURST = Number(option("--burst") ?? 0);
 const LABEL = option("--label") ?? "run";
 const WHEEL = 600;
 const root = resolve(import.meta.dir, "..");
@@ -147,10 +159,16 @@ const walk = async (id: string) => {
 
 /**
  * Installed before the page's own scripts: every element style with `NaN`
- * in it, every error the page raises, and, each frame, the widest blank
- * stretch of the view between the list's drawn items.
+ * in it, every error the page raises, and, each frame as it was painted, the
+ * widest blank stretch of the view between the list's drawn items and where
+ * the anchor row (`anchor`, its text) stands in the view. A frame is read
+ * after its paint (a task behind the frame's `requestAnimationFrame`): read
+ * inside that callback, it is the layout before the frame's ResizeObserver
+ * delivery, where virtua writes its scroll corrections.
  */
 interface Probe {
+  anchor: string | null;
+  anchorYs: [number, number | null][];
   errors: string[];
   frames: number;
   gap: { px: number; at: number; top: number };
@@ -161,6 +179,8 @@ interface Probe {
 const WATCH = () => {
   const w = window as unknown as { __probe: Probe };
   const probe: Probe = {
+    anchor: null,
+    anchorYs: [],
     errors: [],
     nan: [],
     gap: { px: 0, at: 0, top: 0 },
@@ -230,10 +250,32 @@ const WATCH = () => {
           top: scroller.scrollTop,
         };
       }
+      if (probe.anchor) {
+        probe.anchorYs.push([
+          performance.now(),
+          anchorY(scroller, probe.anchor, view.top),
+        ]);
+      }
     }
-    requestAnimationFrame(frame);
+    requestAnimationFrame(painted);
   };
-  requestAnimationFrame(frame);
+  /** Where the first leaf holding `text` stands below `top`, or null when none is drawn. */
+  function anchorY(
+    scroller: HTMLElement,
+    text: string,
+    top: number
+  ): number | null {
+    for (const node of scroller.querySelectorAll("*")) {
+      if (node.children.length === 0 && node.textContent?.includes(text)) {
+        return node.getBoundingClientRect().top - top;
+      }
+    }
+    return null;
+  }
+  const channel = new MessageChannel();
+  channel.port1.onmessage = frame;
+  const painted = () => channel.port2.postMessage(0);
+  requestAnimationFrame(painted);
 };
 
 const watched = (page: Page): Promise<Probe> =>
@@ -326,6 +368,20 @@ try {
     40 * 60_000
   );
   console.log(`  seeded: ${seeded.rows} rows in ${seeded.pages} hub pages`);
+  if (serve) {
+    // The fleet stays up for a dashboard served by hand, until the stop
+    // file appears.
+    console.log(
+      `  serving: session ${sessionId}; CAWCO_DEV_HUB_URL=${fleet.base} CAWCO_PREVIEW_PORT=${fleet.env.CAWCO_PREVIEW_PORT}; touch ${serve} to stop`
+    );
+    await until(
+      "the stop file",
+      () => Bun.file(serve).exists(),
+      Boolean,
+      12 * 60 * 60_000
+    );
+    throw new Error("served, stopped by hand");
+  }
 
   // ── 2. The built dashboard, against the scratch hub ────────────────────
   const port = Number(new URL(fleet.base).port) + 7;
@@ -404,6 +460,81 @@ try {
       throw new Error("no transcript scroller on the page");
     }
     await page.mouse.move(area.x + area.width / 2, area.y + area.height / 2);
+    if (BURST > 0) {
+      const anchor = (await firstRow(page))?.first?.row ?? null;
+      await page.evaluate((row) => {
+        const probe = (window as unknown as { __probe: Probe }).__probe;
+        probe.anchor = row;
+        probe.anchorYs = [];
+      }, anchor);
+      // Sent straight to the browser on a timer, none waiting for the one
+      // before it to be handled: Playwright's own wheel waits for each, which
+      // spaces them by whatever a frame costs.
+      const input = await context.newCDPSession(page);
+      const started = performance.now();
+      let sent = 0;
+      await Promise.all(
+        Array.from(
+          { length: BURST },
+          (_, wheel) =>
+            new Promise<void>((done, fail) => {
+              setTimeout(
+                () => {
+                  sent = performance.now();
+                  input
+                    .send("Input.dispatchMouseEvent", {
+                      type: "mouseWheel",
+                      x: area.x + area.width / 2,
+                      y: area.y + area.height / 2,
+                      deltaX: 0,
+                      deltaY: -WHEEL,
+                    })
+                    .then(() => done(), fail);
+                },
+                (wheel * 300) / BURST
+              );
+            })
+        )
+      );
+      const took = sent - started;
+      await pause(4000);
+      const ys = await page.evaluate(() => {
+        const probe = (window as unknown as { __probe: Probe }).__probe;
+        probe.anchor = null;
+        return probe.anchorYs;
+      });
+      const seen = ys.filter(([, y]) => y !== null) as [number, number][];
+      await writeFile(join(out, "burst.json"), JSON.stringify(ys));
+      // Wheels that land while a page is being drawn are applied together in
+      // the next frame, so a frame can move the row by several. What it can
+      // never do is move it by anything but whole wheels, or back: a page put
+      // in front without its height taken up moves the row by the page.
+      const off: string[] = [];
+      let widest = 0;
+      let wheelsIn = 0;
+      for (let i = 0; i < seen.length; i += 1) {
+        const moved = seen[i][1] - seen[0][1];
+        const whole = Math.round(moved / WHEEL);
+        const step = i > 0 ? seen[i][1] - seen[i - 1][1] : 0;
+        widest = Math.max(widest, Math.abs(step));
+        if (
+          Math.abs(moved - whole * WHEEL) > 2 ||
+          whole < wheelsIn ||
+          whole > BURST
+        ) {
+          off.push(`frame ${i}: moved ${moved.toFixed(1)}`);
+        }
+        wheelsIn = Math.max(wheelsIn, whole);
+      }
+      const ended = (seen.at(-1)?.[1] ?? 0) - (seen[0]?.[1] ?? 0);
+      check(
+        `${BURST} wheels in ${took.toFixed(0)}ms: ${anchor} moves by whole wheels on every painted frame, never back, ${BURST} in all`,
+        off.length === 0 &&
+          seen.length > 1 &&
+          Math.abs(ended - BURST * WHEEL) <= 2,
+        `${seen.length} painted frames with it drawn (${ys.length - seen.length} without), widest step ${widest.toFixed(1)}px (${(widest / WHEEL).toFixed(2)} wheels), moved ${ended.toFixed(1)}px${off.length ? `; off: ${off.slice(0, 5).join(", ")}` : ""}`
+      );
+    }
     const misses: string[] = [];
     let wheels = 0;
     let measured = 0;
