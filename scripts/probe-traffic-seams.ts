@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
 /**
- * Page seam probe on the traffic bench (/motion/traffic): older pages put in
- * front of a held transcript never change the first row held, and the
- * reader's row moves by whole wheels, to the pixel, while they land.
+ * Page landing probe on the traffic bench (/motion/traffic): whatever older
+ * page lands in front of a held transcript, the transcript then draws what a
+ * reload draws, and the reader's row moves only by the wheels.
  *
  *   bun scripts/probe-traffic-seams.ts <dashboard base url>
  *
@@ -15,19 +15,24 @@
  * up from the tail. Each time the view nears the first rows held, the page
  * puts the next older page in front exactly as the store does (client.svelte
  * `prependTranscriptPage`, `place`): a new message list, the older messages
- * first, and the block that stood first added to `seams`.
+ * first.
  *
- *  - Page A ends on the compaction's boundary: its summary is held, so a fold
- *    across the seam would make the held row `c:<boundary>`.
+ *  - Page A ends on the compaction's boundary, whose summary is held: the two
+ *    are one row, `c:<boundary>`, with the summary as its brief.
  *  - Page A opens on a `continued` line's opening (`continuation`), and page
- *    B ends on that line: a fold across the seam would take the opening into
- *    the line's row.
+ *    B ends on that line: the two are one row, `am:<line>`, the opening its
+ *    brief.
  *  - Pages C and D are long and plain, for more of the walk up.
  *
- * Checks: after each page, the row that was first held is still drawn under
- * its own key; the anchor (a row kept mounted at the tail) moves on every
- * painted frame by a whole number of wheels within 2px, never back; no page
- * error and no window error.
+ * At each page landing, after two screens further up, and after the two
+ * screens back down, the rows drawn are the rows a reload draws: in order, a
+ * run of the bench's fresh fold of the same messages (`__traffic.fold`, a
+ * fold with no memory, which is what a transcript mounted now folds), each
+ * divider with its brief where the fold has one.
+ *
+ * Checks: those comparisons; the anchor (a row kept mounted at the tail)
+ * moved on every painted frame by a whole number of wheels within 2px, and
+ * in all by the wheels up less the wheels down; no page or window error.
  */
 import { chromium } from "playwright-core";
 
@@ -172,22 +177,18 @@ await page.evaluate(() => {
   ];
   // Newest first: the order the pages are read in.
   const pages = [A, B, C, D];
-  const firstKey = (m: {
-    id: string;
-    type: string;
-    metadata?: Record<string, unknown>;
-  }) => (m.type === "ui.system_note" ? `c:${m.id}` : m.id);
   const w = window as unknown as {
     __traffic: {
       load: (blocks: unknown[]) => void;
       patch: (next: Record<string, unknown>) => void;
+      fold: () => { key: string; kind: string; brief: boolean | null }[];
     };
-    __seams: { page: number; key: string; drawn: boolean | null }[];
+    __landed: number;
     __land: () => void;
+    __compare: () => string | null;
   };
   let messages = held;
-  let seams: string[] = [];
-  w.__seams = [];
+  w.__landed = 0;
   w.__traffic.load(held);
   // The next older page in front, as the store does it, when the view is
   // within a screen of the first rows held.
@@ -205,26 +206,77 @@ await page.evaluate(() => {
     if (above >= scroller.clientHeight) {
       return;
     }
-    const older = pages.shift() as typeof held;
-    const [first] = messages;
-    const seam = {
-      page: 4 - pages.length,
-      key: firstKey(first),
-      drawn: null as boolean | null,
-    };
-    w.__seams.push(seam);
-    seams = [...seams, first.id];
-    messages = [...older, ...messages];
-    w.__traffic.patch({ messages, seams });
-    // Two frames on, the row that stood first is still there under its key.
-    requestAnimationFrame(() =>
-      requestAnimationFrame(() => {
-        seam.drawn =
-          document.querySelector(`[data-row="${CSS.escape(seam.key)}"]`) !==
-          null;
-      })
-    );
+    messages = [...(pages.shift() as typeof held), ...messages];
+    w.__traffic.patch({ messages });
+    w.__landed += 1;
   };
+  // The rows drawn against a fresh fold: null when they are a run of it, in
+  // order, each divider with its brief where the fold has one; else what
+  // differs.
+  w.__compare = () => {
+    const container = document.querySelector<HTMLElement>(
+      ".listing > :first-child"
+    );
+    if (!container) {
+      return "no list";
+    }
+    const view = document
+      .querySelector<HTMLElement>('[aria-label="Session transcript"]')
+      ?.getBoundingClientRect();
+    const drawn = [...container.children]
+      .map((item) => ({
+        rect: item.getBoundingClientRect(),
+        node: item.querySelector<HTMLElement>("[data-row]"),
+      }))
+      .filter(({ node }) => node?.dataset.row)
+      .sort((x, y) => x.rect.top - y.rect.top);
+    const fold = w.__traffic.fold();
+    const index = new Map(fold.map((row, i) => [row.key, i]));
+    // Every row drawn is a row of the fold, in its order: the list also
+    // keeps its last rows mounted, wherever the view is.
+    let last = -1;
+    for (const { node } of drawn) {
+      const key = (node as HTMLElement).dataset.row as string;
+      const i = index.get(key);
+      if (i === undefined) {
+        return `${key} is drawn and is not in the fold`;
+      }
+      if (i <= last) {
+        return `${key} is drawn out of the fold's order`;
+      }
+      last = i;
+      const row = fold[i];
+      const offered = offers(row.kind, node as HTMLElement);
+      if (offered !== null && offered !== row.brief) {
+        return `${row.key} offers a brief: ${offered}, the fold: ${row.brief}`;
+      }
+    }
+    // The rows in view are one run of the fold, none missing between them.
+    const inView = drawn
+      .filter(
+        ({ rect }) => view && rect.bottom > view.top && rect.top < view.bottom
+      )
+      .map(
+        ({ node }) =>
+          index.get((node as HTMLElement).dataset.row as string) as number
+      );
+    for (let i = 1; i < inView.length; i += 1) {
+      if (inView[i] !== inView[i - 1] + 1) {
+        return `in view, ${fold[inView[i - 1]].key} is followed by ${fold[inView[i]].key}, the fold has ${fold[inView[i - 1] + 1]?.key} between`;
+      }
+    }
+    return null;
+  };
+  /** Whether a divider drawn offers its brief; null for any other row. */
+  function offers(kind: string, node: HTMLElement): boolean | null {
+    if (kind === "compaction") {
+      return !node.querySelector("button.divider")?.hasAttribute("disabled");
+    }
+    if (kind === "account") {
+      return node.querySelector(".chev") !== null;
+    }
+    return null;
+  }
   w.__land = land;
 });
 await page.waitForFunction(
@@ -259,58 +311,88 @@ if (!area) {
   throw new Error("no transcript scroller on the bench");
 }
 await page.mouse.move(area.x + area.width / 2, area.y + area.height / 2);
-let wheels = 0;
-for (; wheels < 200; wheels += 1) {
-  // biome-ignore lint/performance/noAwaitInLoops: each wheel starts where the last one left the list
-  const state = await page.evaluate(() => {
-    const scroller = document.querySelector<HTMLElement>(
-      '[aria-label="Session transcript"]'
-    );
-    const w = window as unknown as { __seams: unknown[] };
-    return { top: scroller?.scrollTop ?? 0, landed: w.__seams.length };
-  });
+/** The rows drawn against the fresh fold, as a check. */
+const compare = async (label: string) => {
+  await page.waitForTimeout(600);
+  const differs = await page.evaluate(() =>
+    (window as unknown as { __compare: () => string | null }).__compare()
+  );
+  check(
+    `${label}: the rows drawn are the rows a reload draws`,
+    differs === null,
+    differs ?? "same rows, same keys, same briefs"
+  );
+};
+const landedNow = () =>
+  page.evaluate(() => (window as unknown as { __landed: number }).__landed);
+const topNow = () =>
+  page.evaluate(
+    () =>
+      document.querySelector<HTMLElement>('[aria-label="Session transcript"]')
+        ?.scrollTop ?? 0
+  );
+const screen = await page.evaluate(
+  () =>
+    document.querySelector<HTMLElement>('[aria-label="Session transcript"]')
+      ?.clientHeight ?? 0
+);
+const twoScreens = Math.ceil((2 * screen) / WHEEL);
+/** Wheels by `count`, up when negative; the net wheels up are kept in `net`. */
+let net = 0;
+const wheelBy = async (count: number) => {
+  for (let i = 0; i < Math.abs(count); i += 1) {
+    // biome-ignore lint/performance/noAwaitInLoops: each wheel starts where the last one left the list
+    await page.mouse.wheel(0, count < 0 ? -WHEEL : WHEEL);
+    await page.waitForTimeout(200);
+  }
+  net -= count;
+};
+let checked = 0;
+for (let step = 0; step < 200; step += 1) {
+  // biome-ignore lint/performance/noAwaitInLoops: each step starts where the last one left the list
+  const landed = await landedNow();
+  if (landed > checked) {
+    checked = landed;
+    const name = `page ${"ABCD"[landed - 1]}`;
+    await compare(`${name} landed`);
+    await wheelBy(-twoScreens);
+    await compare(`${name}, two screens further up`);
+    await wheelBy(twoScreens);
+    await compare(`${name}, and back down`);
+    checked = Math.max(checked, await landedNow());
+    continue;
+  }
   // Stop a wheel short of the top, once every page is in: a wheel the top
   // clamps moves by less than a wheel.
-  if (state.landed === 4 && state.top < WHEEL * 2) {
+  if (landed === 4 && (await topNow()) < WHEEL * 2) {
     break;
   }
-  await page.mouse.wheel(0, -WHEEL);
-  await page.waitForTimeout(200);
+  await wheelBy(-1);
 }
 await page.waitForTimeout(1500);
 const result = await page.evaluate(() => {
   const w = window as unknown as {
     __ys: [number, number | null][];
-    __seams: { page: number; key: string; drawn: boolean | null }[];
+    __landed: number;
     __errors: string[];
   };
-  return { ys: w.__ys, seams: w.__seams, errors: w.__errors };
+  return { ys: w.__ys, landed: w.__landed, errors: w.__errors };
 });
 await browser.close();
 
-for (const seam of result.seams) {
-  check(
-    `page ${"ABCD"[seam.page - 1]} in front: the row first held is still drawn as ${seam.key}`,
-    seam.drawn === true,
-    seam.drawn === null ? "never read" : String(seam.drawn)
-  );
-}
 const seen = result.ys.filter(([, y]) => y !== null) as [number, number][];
 const off: string[] = [];
-let most = 0;
 for (let i = 0; i < seen.length; i += 1) {
   const moved = seen[i][1] - seen[0][1];
-  const whole = Math.round(moved / WHEEL);
-  if (Math.abs(moved - whole * WHEEL) > 2 || whole < most) {
+  if (Math.abs(moved - Math.round(moved / WHEEL) * WHEEL) > 2) {
     off.push(`frame ${i}: ${moved.toFixed(1)}px`);
   }
-  most = Math.max(most, whole);
 }
 const total = (seen.at(-1)?.[1] ?? 0) - (seen[0]?.[1] ?? 0);
 check(
-  `${wheels} wheels up through ${result.seams.length} pages: the anchor moves by whole wheels on every painted frame`,
-  off.length === 0 && seen.length > 1 && Math.abs(total - wheels * WHEEL) <= 2,
-  `${seen.length} painted frames (${result.ys.length - seen.length} without it), moved ${total.toFixed(1)}px of ${wheels * WHEEL}${off.length ? `; off: ${off.slice(0, 6).join(", ")}` : ""}`
+  `${net} wheels up in all through ${result.landed} pages: the anchor moves by whole wheels on every painted frame`,
+  off.length === 0 && seen.length > 1 && Math.abs(total - net * WHEEL) <= 2,
+  `${seen.length} painted frames (${result.ys.length - seen.length} without it), moved ${total.toFixed(1)}px of ${net * WHEEL}${off.length ? `; off: ${off.slice(0, 6).join(", ")}` : ""}`
 );
 const errors = [...result.errors, ...pageErrors];
 check(

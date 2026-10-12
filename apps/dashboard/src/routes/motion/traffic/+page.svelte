@@ -26,6 +26,7 @@
    */
   import { COMPACT_SUMMARY_KIND } from "@cawco/core";
   import { blankSession, type SessionState } from "#lib/cawco/client.svelte.js";
+  import { buildRowsFrom } from "#lib/cawco/transcript/rows.js";
   import Transcript from "#lib/cawco/transcript/Transcript.svelte";
   import type { Message } from "#lib/cawco/types.js";
 
@@ -270,6 +271,16 @@
         generation += 1;
       },
       landed: () => landed,
+      /**
+       * The rows a transcript mounted now draws for these messages — what a
+       * reload draws — by key, with whether each divider has a brief.
+       */
+      fold: () =>
+        buildRowsFrom(session, null).rows.map((row) => ({
+          key: row.key,
+          kind: row.kind,
+          brief: "brief" in row ? row.brief !== null : null,
+        })),
       rows: () => session.messages.length,
       patch: (next: Partial<SessionState>) => Object.assign(session, next),
       user: (content: string) => {

@@ -408,41 +408,23 @@ export type Receipt = { fold: true } | { fold: false; anchor: string } | null;
  * note names no run). A run supervised here without a call is told by a
  * block at its first notice, and its later notices fold into that. Read
  * over the whole transcript, so a fold that restarts at a cut still knows
- * every run started before it — within its stretch between `seams`: a notice
- * is told by what stood with it when it was read, and a page put in front
- * never folds away a notice already drawn.
+ * every run started before it.
  */
-function receiptsOf(
-  messages: Message[],
-  seams: ReadonlySet<string>
-): (m: Message, i: number) => Receipt {
+function receiptsOf(messages: Message[]): (m: Message, i: number) => Receipt {
   const byCall = new Set<string>();
   const names = new Set<string>();
   const first = new Map<string, number>();
-  // Which stretch between seams each message stands in; runs and names are
-  // known by stretch.
-  const stretches: number[] = [];
-  let stretch = 0;
   messages.forEach((m, i) => {
-    if (i > 0 && seams.has(m.id)) {
-      stretch += 1;
-    }
-    stretches.push(stretch);
-  });
-  const within = (i: number, value: string): string =>
-    `${stretches[i]}:${value}`;
-  messages.forEach((m, i) => {
-    const run = noticeRunOf(m);
-    const notice = run ? within(i, run) : null;
+    const notice = noticeRunOf(m);
     if (notice && !first.has(notice)) {
       first.set(notice, i);
     }
     if (!isRunMsg(m)) {
       return;
     }
-    const started = startedRunOf(m);
-    if (started) {
-      byCall.add(within(i, started));
+    const run = startedRunOf(m);
+    if (run) {
+      byCall.add(run);
     }
     const input = m.metadata?.toolInput;
     const name =
@@ -450,7 +432,7 @@ function receiptsOf(
         ? input.name
         : undefined;
     if (typeof name === "string") {
-      names.add(within(i, name.toLowerCase()));
+      names.add(name.toLowerCase());
     }
   });
   if (first.size === 0 && names.size === 0) {
@@ -462,12 +444,11 @@ function receiptsOf(
     }
     const run = noticeRunOf(m);
     if (!run) {
-      return names.has(within(i, (m.metadata?.peerName ?? "").toLowerCase()))
+      return names.has((m.metadata?.peerName ?? "").toLowerCase())
         ? { fold: true }
         : null;
     }
-    const known = within(i, run);
-    if (byCall.has(known) || first.get(known) !== i) {
+    if (byCall.has(run) || first.get(run) !== i) {
       return { fold: true };
     }
     return { fold: false, anchor: run };
@@ -518,23 +499,16 @@ export function newestCompaction(messages: Message[]): number {
  * The compaction that begins at `messages[i]`, and how many messages it is:
  * a boundary with the summary right after it, a boundary whose summary has
  * not arrived, or a summary read back without its boundary. `null` for any
- * other message. A summary past a seam is its own row: the boundary came on
- * a page put in front of it.
+ * other message.
  */
 function compactionAt(
   messages: Message[],
   i: number,
-  said: ReadonlyMap<string, string>,
-  seams: ReadonlySet<string>
+  said: ReadonlyMap<string, string>
 ): { row: Row; span: number } | null {
   const m = messages[i];
   const boundary = isCompactBoundary(m) ? m : null;
-  const after = messages[i + 1];
-  const joins = after !== undefined && !seams.has(after.id);
-  let summary: Message | undefined = m;
-  if (boundary) {
-    summary = joins ? after : undefined;
-  }
+  const summary = boundary ? messages[i + 1] : m;
   const brief = isCompactSummary(summary) ? summary : null;
   const first = boundary ?? brief;
   if (!first) {
@@ -565,24 +539,16 @@ function compactionAt(
 /**
  * A `continued` line and the message its fresh conversation opened on, as
  * one row: the opening is the line's brief, never a turn of its own. Null
- * at anything else, at a line whose opening has not arrived yet, and at one
- * whose opening stands past a seam (the line came on a page put in front of
- * it, and the opening is already drawn as its own row).
+ * at anything else, and at a line whose opening has not arrived yet.
  */
 function continuedAt(
   messages: Message[],
-  i: number,
-  seams: ReadonlySet<string>
+  i: number
 ): { row: Extract<Row, { kind: "account" }>; span: number } | null {
   const m = messages[i];
   const move = m.type === "system.account_move" && m.metadata?.accountMove;
   const next = messages[i + 1];
-  if (
-    move &&
-    move.kind === "continued" &&
-    next?.metadata?.continuation &&
-    !seams.has(next.id)
-  ) {
+  if (move && move.kind === "continued" && next?.metadata?.continuation) {
     return {
       row: {
         kind: "account",
@@ -666,8 +632,7 @@ export function foldMessages(
   subagents: Record<string, SubagentState>
 ): Row[] {
   return withoutEndedWaits(
-    foldRange(messages, subagents, 0, { ...NO_VOICE }, NO_SAID, DRAWN_WHOLE)
-      .rows
+    foldRange(messages, subagents, 0, { ...NO_VOICE }, NO_SAID, WHOLE_RUNS).rows
   );
 }
 
@@ -730,14 +695,8 @@ function ownRow(
  * later fold splice on at a row boundary, and no renderer needs it. `voices`
  * is where the speakers stood before `from`, and is advanced past these rows.
  * `said` is the answers this view streamed, by message key, each with the
- * live row's key it keeps. `shape` says how many calls of a run a row holds,
- * and its `seams` are the messages an older page was put in front of
- * (SessionState `seams`): no row reaches across one — a compaction's boundary
- * and summary, a `continued` line and its opening, a workflow notice and its
- * run — so a page lands as rows of its own in front of the rows held, and
- * those stay as they were. virtua keeps the reader's place across a page only
- * for rows added in front (its `shift`, which takes a change of length): a
- * page folded into the first row held changed that row under the reader.
+ * live row's key it keeps. `callsPerRow` is how many calls of a run one row
+ * holds.
  */
 function foldRange(
   messages: Message[],
@@ -745,12 +704,11 @@ function foldRange(
   from: number,
   voices: Voices,
   said: ReadonlyMap<string, string>,
-  shape: FoldShape
+  callsPerRow: number
 ): { rows: Row[]; starts: number[] } {
-  const { seams } = shape;
   const rows: Row[] = [];
   const starts: number[] = [];
-  const receiptAt = receiptsOf(messages, seams);
+  const receiptAt = receiptsOf(messages);
 
   let i = from;
   while (i < messages.length) {
@@ -763,14 +721,14 @@ function foldRange(
     }
     starts.push(i);
 
-    const compaction = compactionAt(messages, i, said, seams);
+    const compaction = compactionAt(messages, i, said);
     if (compaction) {
       rows.push(compaction.row);
       i += compaction.span;
       continue;
     }
 
-    const continued = continuedAt(messages, i, seams);
+    const continued = continuedAt(messages, i);
     if (continued) {
       rows.push(continued.row);
       i += continued.span;
@@ -789,7 +747,7 @@ function foldRange(
       const start = i;
       while (
         i < messages.length &&
-        run.length < shape.callsPerRow &&
+        run.length < callsPerRow &&
         isToolMsg(messages[i]) &&
         !isQuestionMsg(messages[i]) &&
         !isDelegateMsg(messages[i]) &&
@@ -869,29 +827,21 @@ const NO_LIVE: LiveMemo = { gen: 0, on: false, answer: "", reasoning: "" };
 const NO_SAID: ReadonlyMap<string, string> = new Map();
 
 /**
- * How a fold draws: the seams it never folds across (SessionState `seams`),
- * and how many calls of a run one row holds.
- */
-interface FoldShape {
-  callsPerRow: number;
-  seams: ReadonlySet<string>;
-}
-
-/**
  * A surface that draws every row it is given (a subagent's peek, a
- * delegate's report): a run of calls is one row, and there are no pages.
+ * delegate's report): a run of calls is one row.
  */
-const DRAWN_WHOLE: FoldShape = {
-  callsPerRow: Number.POSITIVE_INFINITY,
-  seams: new Set(),
-};
+const WHOLE_RUNS = Number.POSITIVE_INFINITY;
 
 /**
  * The transcript's list mounts only the rows in view and sizes the rest at
  * one estimate (Transcript `ROW_ESTIMATE`, about one call's line), so each
  * call of a run is a row of its own there: a row is then about as tall as
  * the list takes it for, and what is mounted is what is in view. The rail
- * draws the calls as one run (Transcript `continued`).
+ * draws the calls as one run (Transcript `continued`). It also makes an
+ * older page of calls rows of their own in front of the rows held: what a
+ * page joins onto the first row held (a compaction's summary, a `continued`
+ * line's opening, a workflow notice) takes that row's place under a key of
+ * its own, which the list takes as rows changed in front (its `shift`).
  */
 const LISTED_CALLS_PER_ROW = 1;
 
@@ -1418,14 +1368,13 @@ export function buildRowsFrom(
   memo: FoldMemo | null
 ): Fold {
   const messages = drawnOf(session);
-  const seams = new Set(session.seams);
   const branches = Object.keys(session.subagents).length;
   const cut = memo ? cutFor(messages, memo, branches) : -1;
   const appended = memo !== null && cut >= 0;
   const folded =
     memo && appended
-      ? foldOnto(messages, session.subagents, memo, cut, seams)
-      : foldAll(messages, session.subagents, memo?.said ?? NO_SAID, seams);
+      ? foldOnto(messages, session.subagents, memo, cut)
+      : foldAll(messages, session.subagents, memo?.said ?? NO_SAID);
   const { starts, voices } = folded;
   const { rows, told, ...toldSaid } = tell(
     session,
@@ -1532,15 +1481,11 @@ interface Settled {
 function foldAll(
   messages: Message[],
   subagents: Record<string, SubagentState>,
-  said: ReadonlyMap<string, string>,
-  seams: ReadonlySet<string>
+  said: ReadonlyMap<string, string>
 ): Settled {
   const voices = { ...NO_VOICE };
   return {
-    ...foldRange(messages, subagents, 0, voices, said, {
-      seams,
-      callsPerRow: LISTED_CALLS_PER_ROW,
-    }),
+    ...foldRange(messages, subagents, 0, voices, said, LISTED_CALLS_PER_ROW),
     voices,
   };
 }
@@ -1550,8 +1495,7 @@ function foldOnto(
   messages: Message[],
   subagents: Record<string, SubagentState>,
   memo: FoldMemo,
-  cut: number,
-  seams: ReadonlySet<string>
+  cut: number
 ): Settled {
   // Nothing new: the settled rows are the last fold's, untouched.
   if (messages.length === memo.count) {
@@ -1570,10 +1514,14 @@ function foldOnto(
   // their grouping stands; the refolded turn picks up where they leave off.
   const kept = memo.rows.slice(0, keep);
   const voices = voicesAfter(kept);
-  const tail = foldRange(messages, subagents, cut, voices, memo.said, {
-    seams,
-    callsPerRow: LISTED_CALLS_PER_ROW,
-  });
+  const tail = foldRange(
+    messages,
+    subagents,
+    cut,
+    voices,
+    memo.said,
+    LISTED_CALLS_PER_ROW
+  );
   return {
     rows: kept.concat(tail.rows),
     starts: memo.starts.slice(0, keep).concat(tail.starts),
@@ -1812,7 +1760,7 @@ function tailRows(
   // HAS happened. Keyed by the message itself: once read, the same key is its
   // row in the conversation, where it was read.
   const { messages } = session;
-  const receiptAt = receiptsOf(messages, new Set(session.seams));
+  const receiptAt = receiptsOf(messages);
   const waiting: Row[] = [];
   for (let i = queuedFrom(messages); i < messages.length; i += 1) {
     // A run's receipt waiting to be read is already told by its block.

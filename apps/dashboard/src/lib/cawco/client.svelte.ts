@@ -567,12 +567,6 @@ export interface SessionState {
    * the work — `requesting` while it waits on the model.
    */
   sdkStatus: NeutralStatus;
-  /**
-   * The blocks that stood first when an older page was put in front of them,
-   * by id. A row of the transcript never folds across one (rows.ts
-   * `foldRange`): a page lands as rows of its own in front of the rows held.
-   */
-  seams: string[];
   /** The SDK session behind this view, once one is known. */
   sessionId: string | null;
   /** Partial assistant text, between `stream_event`s and the final message. */
@@ -1033,7 +1027,6 @@ export function blankSession(instanceId: string): SessionState {
     blocks: [],
     queued: [],
     cursor: null,
-    seams: [],
     records: {},
     local: [],
     notes: [],
@@ -1623,14 +1616,12 @@ function prependTranscriptPage(
 ): void {
   seesCompaction(page);
   const known = new Set(target.blocks.map((block) => block.id));
-  const older = page.blocks
-    .filter((block) => !known.has(block.id))
-    .map((block) => take(target, block, "blocks"));
-  const [held] = target.blocks;
-  if (held && older.length > 0) {
-    target.seams = [...target.seams, held.id];
-  }
-  target.blocks = [...older, ...target.blocks];
+  target.blocks = [
+    ...page.blocks
+      .filter((block) => !known.has(block.id))
+      .map((block) => take(target, block, "blocks")),
+    ...target.blocks,
+  ];
   target.cursor = page.cursor;
   for (const branch of page.branches) {
     target.subagents[branch.toolUseId] ??= pageBranch(branch, "");

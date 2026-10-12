@@ -13,8 +13,8 @@
  *
  * It loads a held conversation that opens on a run of 30 calls, lands at the
  * tail, then puts a page of `--calls` calls (default 250, every one with a
- * body to open) in front of it, as the store does: a new message list and a
- * seam at the first block held. Every long task (PerformanceObserver
+ * body to open) in front of it, as the store does: a new message list, the
+ * older messages first. Every long task (PerformanceObserver
  * `longtask`) from the page's write until it has settled is read, and the
  * row at the top of the view is read after each paint. `--shot` keeps a
  * screenshot of the top of the long run, for comparing how it is drawn.
@@ -150,11 +150,7 @@ await page.evaluate((calls) => {
     __land: () => void;
   };
   w.__traffic.load(held);
-  w.__land = () =>
-    w.__traffic.patch({
-      messages: [...older, ...held],
-      seams: [held[0].id],
-    });
+  w.__land = () => w.__traffic.patch({ messages: [...older, ...held] });
 }, CALLS);
 await page.waitForFunction(
   () =>
