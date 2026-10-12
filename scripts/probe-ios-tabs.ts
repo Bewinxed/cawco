@@ -4,7 +4,11 @@
  * fluid-tabs do, one cross-fade in place on one clock (`durSettle`, 400ms,
  * on `easeCrossfade`): the old sheet fades out over its own card as the new
  * one fades in over its own, every rim's strength follows the clock, nothing
- * slides, wipes or masks a sheet, and the front tab changes at half way.
+ * slides, wipes or masks a sheet, and the front tab changes at half way;
+ * where two tabs meet, the gliding side's ink leans toward its neighbour's,
+ * so the seam's colour never changes at the handover; and a finger that
+ * takes the pages while a tap's switch runs carries the strip on from where
+ * it was drawn, with no jump.
  *
  *   bun scripts/probe-ios-tabs.ts [--built] [--keep]
  *
@@ -13,14 +17,21 @@
  *
  *  1. compiles the app (build-both.sh ios --compile-only), unless --built;
  *  2. stands up a scratch fleet (scratch-fleet.ts) with four Claude Code
- *     sessions, each kept working (a slow mock turn) so its rim wears the
- *     live ink, whose strength the choice moves (an idle rim's does not);
+ *     sessions: three kept working (a slow mock turn) so their rims wear the
+ *     live ink, whose strength the choice moves (an idle rim's does not),
+ *     and the third parked on a permission ask, its rim the attention ink;
  *  3. on an iPhone 16 Pro and an iPad Pro 11-inch (M4), iOS 18.5, light and
  *     dark, launches the app with `-open-session a,b,c,d -tabs-probe`: the
  *     strip taps a step to a neighbour and a jump past one on the real
  *     clock, logging every frame, then the same two on a stepped clock that
- *     holds 0/25/50/75/100% and captures the window and the strip at each
- *     (PaneTabsView `-tabs-probe`);
+ *     holds the clock's quarters and f = 0.45/0.5/0.55, capturing the window
+ *     and the strip at each (PaneTabsView `-tabs-probe`); the held step is
+ *     the working fourth tab to the attention third, whose seam's ink is
+ *     read at f = 0.45/0.5/0.55. Then, on three working tabs in a row, a
+ *     real tap on the second (axe tap, at the point the app logs) and
+ *     straight after it a finger's drag on the pages toward the third (axe
+ *     drag), which takes the pages while the tap's switch runs: retried
+ *     until it takes the tap's own switch between 0.1 and 0.9 of the way;
  *  4. checks every logged frame and copies the captures and the log to
  *     $TMPDIR/ios-tabs/ (or ./.probe/ios-tabs).
  *
@@ -85,15 +96,28 @@ if (!args.includes("--built")) {
   check("compile", /^BUILT iOS 18\.5$/m.test(text), "BUILT iOS 18.5");
 }
 
-// ── The fleet: four sessions, each mid-turn for the whole run ────────────
+// ── The fleet: three sessions mid-turn for the whole run, one asking ─────
 const WORK = "tabs-probe-work";
-const respond = (request: Seen) =>
-  request.tools && request.last.includes(WORK)
-    ? {
-        everyMs: 2000,
-        words: Array.from({ length: 900 }, (_, n) => `word${n} `),
-      }
-    : { everyMs: 10, words: ["Done."] };
+const ASK = "tabs-probe-ask";
+const respond = (request: Seen) => {
+  if (request.tools && request.last.includes(WORK)) {
+    return {
+      everyMs: 2000,
+      words: Array.from({ length: 900 }, (_, n) => `word${n} `),
+    };
+  }
+  if (request.tools && request.last.includes(ASK)) {
+    return {
+      everyMs: 5,
+      words: [],
+      tool: {
+        name: "Bash",
+        input: { command: `touch ${ASK}.txt`, description: "Make a file" },
+      },
+    };
+  }
+  return { everyMs: 10, words: ["Done."] };
+};
 const fleet = await scratchFleet({ name: "probe-ios-tabs", respond });
 const sims: string[] = [];
 
@@ -102,12 +126,15 @@ interface Tab {
   fill: string;
   id: string;
   keys: string;
+  lead: string;
   moved: number;
   pick: number;
   rim: number;
   sheet: number;
   sheetShown: number;
   tabTransform: string;
+  top: string;
+  trail: string;
 }
 interface Sample {
   f: number;
@@ -116,19 +143,20 @@ interface Sample {
   scroll: number;
   t: number | "landed";
   tabs: Tab[];
+  toward: string;
 }
 
 const LINE =
-  /tabs (\S+) t=(\S+) f=(\S+) front=(\S+) seams=\S* scroll=(\S+) \|\| (.*)$/;
+  /tabs (\S+) t=(\S+) f=(\S+) front=(\S+) toward=(\S+) seams=\S* scroll=(\S+) \|\| (.*)$/;
 const TAB =
-  /^(\S+) pick=(\S+) recede=\S+ sheet=(\S+)\/(\S+) tint=\S+ rim=(\S+) glow=\S+ chevron=(\S+) sheetMoved=(\d) tabTransform=(.+?) keys=(\S+) sheetX=\S+ card=\S+ fill=(\S+)/;
+  /^(\S+) pick=(\S+) sheet=(\S+)\/(\S+) tint=\S+ rim=(\S+) chev=(\S+) moved=(\d) tx=(.+?) keys=(\S+) fill=(\S+) under=\S+ top=(\S+) lead=(\S+) trail=(\S+)/;
 function parse(log: string): Sample[] {
   return log.split("\n").flatMap((line) => {
     const m = LINE.exec(line);
     if (!m) {
       return [];
     }
-    const tabs = m[6].split(" | ").flatMap((part) => {
+    const tabs = m[7].split(" | ").flatMap((part) => {
       const t = TAB.exec(part.trim());
       return t
         ? [
@@ -143,6 +171,9 @@ function parse(log: string): Sample[] {
               tabTransform: t[8],
               keys: t[9],
               fill: t[10],
+              top: t[11],
+              lead: t[12],
+              trail: t[13],
             },
           ]
         : [];
@@ -153,7 +184,8 @@ function parse(log: string): Sample[] {
         t: m[2] === "landed" ? "landed" : +m[2],
         f: +m[3],
         front: m[4],
-        scroll: +m[5],
+        toward: m[5],
+        scroll: +m[6],
         tabs,
       },
     ];
@@ -276,6 +308,128 @@ function judge(
   );
 }
 
+/** An ink as the probe logs it: extended-sRGB components, unclamped. */
+const rgb = (ink: string) => ink.split(",").map(Number);
+
+/**
+ * The seam between the two tabs a held step trades, at f = 0.45, 0.5, 0.55:
+ * the ink of the side the front tab draws there (the leaving tab's up to
+ * half way, the coming tab's past it), as a share of the way from the
+ * leaving tab's own ink to the coming tab's (0 its own, 1 the other's). The
+ * side's ink leans as far as the seam has glided, so the share is f either
+ * side of the handover: half way, whichever tab draws the seam draws it in
+ * the same ink, and the colour moves on evenly through the handover rather
+ * than changing there. (The tab behind keeps its own ink on a side its
+ * neighbour's card covers, as the web's does.)
+ */
+function judgeSeam(run: string, samples: Sample[], from: string, to: string) {
+  const name = `${run} seam ink`;
+  const at = (s: Sample) => s.tabs.findIndex((t) => from.startsWith(t.id));
+  const near = samples.filter(
+    (s) => typeof s.t === "number" && [0.45, 0.5, 0.55].includes(s.f)
+  );
+  if (near.length !== 3) {
+    check(name, false, `${near.length} of the f=0.45/0.5/0.55 stops logged`);
+    return;
+  }
+  const readings = near.map((s) => {
+    const fromAt = at(s);
+    const toAt = s.tabs.findIndex((t) => to.startsWith(t.id));
+    const [left, right] =
+      fromAt < toAt
+        ? [s.tabs[fromAt], s.tabs[toAt]]
+        : [s.tabs[toAt], s.tabs[fromAt]];
+    const own = rgb(s.tabs[fromAt].top);
+    const other = rgb(s.tabs[toAt].top);
+    const drawer = s.front === left.id ? left : right;
+    const ink = s.front === left.id ? left.trail : right.lead;
+    const seam = rgb(ink);
+    const span = other.map((v, k) => v - own[k]);
+    const length = span.reduce((sum, v) => sum + v * v, 0);
+    const share =
+      seam.reduce((sum, v, k) => sum + (v - own[k]) * span[k], 0) / length;
+    return { f: s.f, share, drawer: drawer.id, ink, length };
+  });
+  const leans = readings.every((r) => Math.abs(r.share - r.f) <= 0.02);
+  check(
+    name,
+    leans && readings.every((r) => r.length > 1e-4),
+    `${from.slice(0, 8)} ${near[0].tabs[at(near[0])].top} → ${to.slice(0, 8)} ${near[0].tabs.find((t) => to.startsWith(t.id))?.top}: ${readings
+      .map(
+        (r) =>
+          `f=${r.f.toFixed(2)} drawn by ${r.drawer} in ${r.ink}, share ${r.share.toFixed(3)}`
+      )
+      .join("; ")}`
+  );
+}
+
+/**
+ * A tap's switch, then the swipe that took the pages from it: no frame
+ * across the takeover moves any sheet, rim or the strip further than the
+ * largest step of the frames either side of it.
+ */
+/** Whether the swipe took the tap's own switch part-way, 0.1 to 0.9 of it. */
+function tookMidway(samples: Sample[]): boolean {
+  const frames = samples.filter((s) => s.t !== "landed");
+  const at = frames.findIndex((s) => s.label.endsWith("-ride"));
+  if (at < 1) {
+    return false;
+  }
+  const tapped = frames[0].toward;
+  const took = frames[at - 1].f;
+  return (
+    frames.slice(0, at).every((s) => s.toward === tapped) &&
+    took > 0.1 &&
+    took < 0.9
+  );
+}
+
+function judgeTakeover(run: string, samples: Sample[]) {
+  const name = `${run} takeover`;
+  const frames = samples.filter((s) => s.t !== "landed");
+  const at = frames.findIndex((s) => s.label.endsWith("-ride"));
+  if (at < 1) {
+    check(
+      name,
+      false,
+      `the finger took no switch under way (${at === 0 ? "no tap frames first" : "no swipe frames"})`
+    );
+    return;
+  }
+  // The switch it took is the tap's own, under way: every frame before it
+  // heading for the tapped tab, the strip part-way there.
+  const tapped = frames[0].toward;
+  const took = frames[at - 1].f;
+  check(
+    `${name} mid-switch`,
+    tookMidway(frames),
+    `the tap toward ${tapped} ran ${at} frames to f=${took.toFixed(3)} (its tabs' sheets ${frames[at - 1].tabs.map((t) => t.sheet.toFixed(2)).join(" ")}) when the finger took the pages; the swipe headed ${[...new Set(frames.slice(at).map((s) => s.toward))].join(" → ")}`
+  );
+  const series: [string, (s: Sample) => number[]][] = [
+    ["sheets", (s) => s.tabs.map((t) => t.sheet)],
+    ["rims", (s) => s.tabs.map((t) => t.rim)],
+    ["scroll", (s) => [s.scroll]],
+  ];
+  for (const [what, read] of series) {
+    const steps = frames
+      .slice(1)
+      .map((s, i) =>
+        Math.max(...read(s).map((v, k) => Math.abs(v - read(frames[i])[k])))
+      );
+    const takeover = steps[at - 1];
+    const around = [
+      ...steps.slice(Math.max(0, at - 5), at - 1),
+      ...steps.slice(at, at + 4),
+    ];
+    const normal = Math.max(...around);
+    check(
+      `${name} ${what} continuous`,
+      takeover <= normal + 1e-3,
+      `step at the takeover ${takeover.toFixed(3)}; frames either side ${around.map((v) => v.toFixed(3)).join(" ")}`
+    );
+  }
+}
+
 try {
   fleet.launch("sessiond");
   await fleet.sessiondUp();
@@ -292,8 +446,22 @@ try {
     "Review the folder tabs",
     "Ship the iOS build to TestFlight",
   ];
+  // The third asks (its rim the attention ink); the rest work (the live ink).
   const ids = await Promise.all(
-    titles.map(async (title) => {
+    titles.map(async (title, at) => {
+      if (at === 2) {
+        const id = await fleet.spawn("claude", title, fleet.workdir, {
+          permissionMode: "default",
+        });
+        await fleet.send(id, `${ASK}: make a file.`);
+        await until(
+          `${id} asking`,
+          async () => JSON.stringify(await fleet.api<unknown>("/api/pending")),
+          (text) => text.includes(id),
+          180_000
+        );
+        return id;
+      }
       const id = await fleet.spawn("claude", title);
       await fleet.send(id, `${WORK}: keep going.`);
       await until(
@@ -310,9 +478,24 @@ try {
   );
   const { port } = new URL(fleet.base);
 
-  for (const [kind, type] of [
-    ["phone", "com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro"],
-    ["pad", "com.apple.CoreSimulator.SimDeviceType.iPad-Pro-11-inch-M4-8GB"],
+  // Each screen in points, portrait, and how long the takeover's swipe
+  // takes: a second on both, as the pages follow a scripted swipe only part
+  // of the way into it, later the longer it is.
+  for (const [kind, type, width, height, drag] of [
+    [
+      "phone",
+      "com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro",
+      402,
+      874,
+      1.0,
+    ],
+    [
+      "pad",
+      "com.apple.CoreSimulator.SimDeviceType.iPad-Pro-11-inch-M4-8GB",
+      834,
+      1210,
+      1.0,
+    ],
   ] as const) {
     // biome-ignore lint/performance/noAwaitInLoops: one simulator at a time, its runs in order
     const created = await sh(
@@ -327,24 +510,97 @@ try {
       const run = `${kind} ${style}`;
       // biome-ignore lint/performance/noAwaitInLoops: one appearance at a time on the one app
       await sh(`xcrun simctl ui ${udid} appearance ${style}`);
+      // The probe's lines as they are logged: the log store drops older
+      // ones under this many, so they are streamed to a file instead.
+      const streamed = join(out, `${kind}-${style}.stream`);
+      const stream = Bun.spawn(
+        [
+          "xcrun",
+          "simctl",
+          "spawn",
+          udid,
+          "log",
+          "stream",
+          "--style",
+          "compact",
+          "--level",
+          "default",
+          "--predicate",
+          'subsystem == "dev.cawco.app" AND category == "TabsProbe"',
+        ],
+        { stdout: Bun.file(streamed), stderr: "ignore" }
+      );
+      await Bun.sleep(1500);
       const launched = await sh(
         `xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-env sandbox -cawco-hub-url http://127.0.0.1:${port} -open-session ${ids.join(",")} -tabs-probe`
       );
-      // This launch's lines only: an earlier run's are in the same log.
+      // This launch's lines only.
       const pid = /dev\.cawco\.app: (\d+)/.exec(launched)?.[1];
       if (!pid) {
+        stream.kill();
         throw new Error(`no pid in the launch's answer: ${launched}`);
       }
-      const read = () =>
-        sh(
-          `xcrun simctl spawn ${udid} log show --last 5m --style compact --predicate 'processID == ${pid} AND subsystem == "dev.cawco.app" AND category == "TabsProbe"'`
-        );
-      const log = await until(
+      const read = async () =>
+        (await Bun.file(streamed).text())
+          .split("\n")
+          .filter((line) => line.includes(`CawCo[${pid}:`))
+          .join("\n");
+      await until(
         `${run}: the probe's switches`,
         read,
-        (text) => text.includes("tabs probe done"),
+        (text) => text.includes("tabs probe armed takeover attempt=1 "),
         240_000
-      ).catch(async () => read());
+      ).catch(() => undefined);
+      // A tap on the armed tab, at the point the app gives, and straight
+      // after it a finger down on the pages, dragged toward the third tab;
+      // when it took no switch under way (the tap had landed first), the
+      // app arms another attempt.
+      const y = Math.round(height * 0.55);
+      let log = "";
+      let takeover: Sample[] = [];
+      for (let attempt = 1; attempt <= 5; attempt += 1) {
+        // biome-ignore lint/performance/noAwaitInLoops: one finger at a time
+        const armed = await until(
+          `${run}: takeover ${attempt} armed`,
+          read,
+          (text) => text.includes(`armed takeover attempt=${attempt} `),
+          30_000
+        ).catch(async () => read());
+        const tap = new RegExp(
+          `armed takeover attempt=${attempt} .* tap=(\\d+),(\\d+)`
+        ).exec(armed);
+        if (!tap) {
+          break;
+        }
+        await sh(
+          // One HID session (axe batch): the tap, then the finger down on the
+          // pages after a wait that differs by attempt. Even so the pages
+          // follow a scripted finger only some 450ms after the tap, past a
+          // 400ms switch: the app runs a takeover's tap on a clock 6× as
+          // long (PaneTabsView `-tabs-probe`), which the takeover's
+          // continuity does not depend on. A step that fails is an attempt
+          // that took nothing, and the next is tried.
+          `/opt/homebrew/bin/axe batch --udid ${udid} --continue-on-error --step "tap -x ${tap[1]} -y ${tap[2]}" --step "sleep ${[0.1, 0.03, 0.18, 0.0, 0.25][attempt - 1]}" --step "swipe --start-x ${Math.round(width * 0.88)} --start-y ${y} --end-x ${Math.round(width * 0.12)} --end-y ${y} --duration ${drag}" || true`
+        );
+        log = await until(
+          `${run}: takeover ${attempt} landing`,
+          read,
+          (text) => text.includes(`takeover landed attempt=${attempt} `),
+          30_000
+        ).catch(async () => read());
+        takeover = parse(log).filter((s) =>
+          s.label.startsWith(`takeover${attempt}`)
+        );
+        const ride = takeover.findIndex((s) => s.label.endsWith("-ride"));
+        const took = ride > 0 ? takeover[ride - 1].f : 0;
+        if (tookMidway(takeover)) {
+          break;
+        }
+        console.log(
+          `  ${run}: takeover ${attempt} took the pages at f=${took.toFixed(3)} of the tap; trying again`
+        );
+      }
+      stream.kill();
       await writeFile(join(out, `${kind}-${style}.log`), log);
       const container = (
         await sh(`xcrun simctl get_app_container ${udid} dev.cawco.app data`)
@@ -373,8 +629,18 @@ try {
       }
       const held = samples
         .filter((s) => s.label.endsWith("held") && s.t !== "landed")
-        .map((s) => `${s.label}@${s.t}`);
-      check(`${run} quarters captured`, held.length === 10, held.join(" "));
+        .map((s) => `${s.label}@${s.f}`);
+      check(`${run} stops captured`, held.length === 14, held.join(" "));
+      const step = begins.find((b) => b[1] === "step-held");
+      if (step) {
+        judgeSeam(
+          run,
+          samples.filter((s) => s.label === "step-held"),
+          step[2],
+          step[3]
+        );
+      }
+      judgeTakeover(run, takeover);
     }
   }
 } catch (error) {
