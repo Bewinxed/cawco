@@ -1353,31 +1353,38 @@
   let spare = $state(0);
   /** The room past the end for what rises past the composer (the markup). */
   let parkedRoom = $state<HTMLElement>();
+  /** The room under the list that clears the composer (the markup). */
+  let foot = $state<HTMLElement>();
   /**
    * Puts `spare` on the scroll range as it stands, and the padding on the
    * page; says whether it moved. The pin calls it before it reads the height,
    * so a list that grew is whole in the frame it grew.
    *
-   * The range is the content less the box. The padding under the list is in
-   * both and drops out, so what is left is virtua's viewport (the box's
-   * content height, `getViewportSize`) against what stands above the foot's
-   * padding: the strip before the list, the list as virtua sizes it
-   * (`getScrollSize`: from its store, exact, where the height it writes to
-   * its container's style reads back in Chromium cut to six significant
-   * digits, 2129.05 for 2129.046875), and the parked room. None of them is
-   * read off the layout: this runs in whatever task virtua's write landed in.
+   * The range is the content less the box: virtua's viewport (the box's
+   * content height, `getViewportSize`) against what stands in it: the strip
+   * before the list, the list as virtua sizes it (`getScrollSize`: from its
+   * store, exact, where the height it writes to its container's style reads
+   * back in Chromium cut to six significant digits, 2129.05 for 2129.046875),
+   * the parked room and the foot. None of them is read off the layout: this
+   * runs in whatever task virtua's write landed in, and the two rooms are
+   * their computed styles.
    */
   function keepWhole(): boolean {
     const height = list?.getScrollSize() ?? 0;
     const viewport = list?.getViewportSize() ?? 0;
-    if (!(viewport > 0 && height > viewport && parkedRoom)) {
+    if (!(viewport > 0 && parkedRoom && foot)) {
+      return false;
+    }
+    const clear = Number.parseFloat(getComputedStyle(foot).blockSize) || 0;
+    if (height + clear <= viewport) {
       return false;
     }
     const parked =
       Number.parseFloat(
         getComputedStyle(parkedRoom).getPropertyValue("--parked-room")
       ) || 0;
-    const over = (((viewport - olderRoom - height - parked) % 1) + 1) % 1;
+    const over =
+      (((viewport - olderRoom - height - parked - clear) % 1) + 1) % 1;
     const next = over < 0.001 || over > 0.999 ? 0 : over;
     if (Math.abs(next - spare) <= 0.001) {
       return false;
@@ -2715,8 +2722,8 @@
   class="tr tx-columns"
   {onscroll}
   role="log"
-  bind:clientHeight={viewHeight}
   bind:this={scroller}
+  bind:clientHeight={viewHeight}
 >
   <!-- Empty is what is drawn: a conversation whose one row is folding away
        as its retry comes in is not empty for the frame between the two, and
@@ -2770,10 +2777,10 @@
     {@attach wholeHeight}
   >
     <Virtualizer
+      bufferSize={viewHeight}
       {cache}
       data={renderedRows}
       getKey={(r) => r.key}
-      bufferSize={viewHeight}
       itemSize={ROW_ESTIMATE}
       {keepMounted}
       {onresize}
@@ -2875,6 +2882,7 @@
        view holds still as a card parks, and the reader can scroll on to the
        last row, clear above it. -->
   <div aria-hidden="true" class="parked-room" bind:this={parkedRoom}></div>
+  <div aria-hidden="true" class="foot" bind:this={foot}></div>
   <!-- Floating above the composer column, at zero height in the flow, so
        nothing here coming or going moves a row: the catch-up, from the switch
        until it has appended, and — scrolled away from the tail — the way back. -->
@@ -2938,17 +2946,9 @@
        inline start --space-7 (25), inline end --space-6 (21). */
     padding-block-start: 0;
     padding-inline: var(--space-7) var(--space-6);
-    /* The foot clears the composer's standing box: the pill at one line, the
-       delegate tray's row and the suggestion row on it. Parked prompt cards
-       and a grown draft stand over the transcript's foot and move nothing.
-       `--composer-clearance` is that box plus its offsets, set by the pane
-       in CSS from the composer's own tokens (app.css `--c-composer-*`), so
-       it is the same whether the pane is on screen or not; the old fixed
-       reserve is the floor. */
-    padding-block-end: max(
-      calc(var(--space-8) * 3),
-      var(--composer-clearance, 0px)
-    );
+    padding-block-end: 0;
+    /* The foot's height (`.foot`), which what floats over it stands on. */
+    --foot-room: max(calc(var(--space-8) * 3), var(--composer-clearance, 0px));
     min-block-size: 0;
     position: relative;
     /* Its scroll drives the pane's head blur (HeadFade), which the pane
@@ -3000,16 +3000,30 @@
     block-size: var(--parked-room, 0px);
     pointer-events: none;
   }
+  /* The foot clears the composer's standing box: the pill at one line, the
+     delegate tray's row and the suggestion row on it. Parked prompt cards
+     and a grown draft stand over the transcript's foot and move nothing.
+     `--composer-clearance` is that box plus its offsets, set by the pane in
+     CSS from the composer's own tokens (app.css `--c-composer-*`), so it is
+     the same whether the pane is on screen or not; the old fixed reserve is
+     the floor. A box in the flow rather than the scroller's padding: virtua
+     takes the scroller's content box for its view, and rows the reader sees
+     around the composer are in that band. */
+  .foot {
+    block-size: var(--foot-room);
+    pointer-events: none;
+  }
   .dock {
     position: sticky;
     /* Over the pane's foot fade (FootFade), which only the rows pass under. */
     z-index: 2;
-    inset-block-end: var(
-      --latest-inset,
-      calc(
-        max(calc(var(--space-8) * 3), var(--composer-clearance, 0px)) -
-        var(--space-4) +
-        var(--parked-room, 0px)
+    /* Measured from the scroller's own foot, under the foot room: a sticky
+       box keeps off a scroller's padding, and the room is a box in the flow. */
+    inset-block-end: calc(
+      var(--foot-room) +
+      var(
+        --latest-inset,
+        calc(var(--foot-room) - var(--space-4) + var(--parked-room, 0px))
       )
     );
     block-size: 0;

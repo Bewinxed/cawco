@@ -24,7 +24,7 @@
  *     the live rows, and shrinks as they settle into the turn's rows.
  *
  * With `--burst <n>`, before that walk: `n` wheels up from the tail inside
- * 300ms while older pages land, the row first in view followed on every
+ * 300ms while older pages land, the newest call in view followed on every
  * painted frame: every frame moves it by whole wheels, never back, and the
  * burst by all of them.
  *
@@ -171,7 +171,9 @@ interface Probe {
   anchorYs: [number, number | null][];
   errors: string[];
   frames: number;
-  gap: { px: number; at: number; top: number };
+  gap: { px: number; at: number; top: number; where: string };
+  /** Every painted frame with a blank stretch, the first 40: when, how wide, scrollTop, where. */
+  gaps: [number, number, number, string][];
   nan: string[];
   sampling: boolean;
   tops: number[];
@@ -179,11 +181,12 @@ interface Probe {
 const WATCH = () => {
   const w = window as unknown as { __probe: Probe };
   const probe: Probe = {
+    gaps: [],
     anchor: null,
     anchorYs: [],
     errors: [],
     nan: [],
-    gap: { px: 0, at: 0, top: 0 },
+    gap: { px: 0, at: 0, top: 0, where: "" },
     frames: 0,
     tops: [],
     sampling: false,
@@ -224,30 +227,16 @@ const WATCH = () => {
         probe.tops.push(scroller.scrollTop);
       }
       const view = scroller.getBoundingClientRect();
-      const list = container.getBoundingClientRect();
-      const from = Math.max(view.top, list.top);
-      const to = Math.min(view.bottom, list.bottom);
-      const spans = [...container.children]
-        .map((item) => item.getBoundingClientRect())
-        .filter(
-          (rect) => rect.height > 0 && rect.bottom > from && rect.top < to
-        )
-        .map((rect) => [rect.top, rect.bottom] as const)
-        .sort((a, b) => a[0] - b[0]);
-      let reach = from;
-      let widest = 0;
-      for (const [top, bottom] of spans) {
-        widest = Math.max(widest, top - reach);
-        reach = Math.max(reach, bottom);
-      }
-      if (to > from) {
-        widest = Math.max(widest, to - reach);
+      const { widest, where } = blank(container, view);
+      if (widest > 4 && probe.gaps.length < 40) {
+        probe.gaps.push([performance.now(), widest, scroller.scrollTop, where]);
       }
       if (widest > probe.gap.px) {
         probe.gap = {
           px: widest,
           at: performance.now(),
           top: scroller.scrollTop,
+          where,
         };
       }
       if (probe.anchor) {
@@ -259,6 +248,43 @@ const WATCH = () => {
     }
     requestAnimationFrame(painted);
   };
+  /** The widest stretch of `view` the list's drawn items leave blank, and where. */
+  function blank(
+    container: HTMLElement,
+    view: DOMRect
+  ): { widest: number; where: string } {
+    const list = container.getBoundingClientRect();
+    const from = Math.max(view.top, list.top);
+    const to = Math.min(view.bottom, list.bottom);
+    const spans = [...container.children]
+      .map((item) => ({
+        rect: item.getBoundingClientRect(),
+        row: item.querySelector<HTMLElement>("[data-row]")?.dataset.row ?? "?",
+      }))
+      .filter(
+        ({ rect }) => rect.height > 0 && rect.bottom > from && rect.top < to
+      )
+      .sort((a, b) => a.rect.top - b.rect.top);
+    let reach = from;
+    let above = "the view's top";
+    let widest = 0;
+    let where = "";
+    for (const { rect, row } of spans) {
+      if (rect.top - reach > widest) {
+        widest = rect.top - reach;
+        where = `between ${above} and ${row}`;
+      }
+      if (rect.bottom > reach) {
+        reach = rect.bottom;
+        above = row;
+      }
+    }
+    if (to > from && to - reach > widest) {
+      widest = to - reach;
+      where = `between ${above} and the view's bottom (${spans.length} rows drawn, list ends ${(list.bottom - view.top).toFixed(0)}px down)`;
+    }
+    return { widest, where };
+  }
   /** Where the first leaf holding `text` stands below `top`, or null when none is drawn. */
   function anchorY(
     scroller: HTMLElement,
@@ -461,7 +487,13 @@ try {
     }
     await page.mouse.move(area.x + area.width / 2, area.y + area.height / 2);
     if (BURST > 0) {
-      const anchor = (await firstRow(page))?.first?.row ?? null;
+      // The newest call in view: the list keeps its last rows mounted
+      // wherever the view goes (Transcript `TAIL_MOUNTED`), so it is drawn,
+      // and read, on every frame of the burst.
+      const anchor =
+        (await firstRow(page))?.rows
+          .filter((row) => row.startsWith("row-"))
+          .at(-1) ?? null;
       await page.evaluate((row) => {
         const probe = (window as unknown as { __probe: Probe }).__probe;
         probe.anchor = row;
@@ -583,17 +615,33 @@ try {
       `${measured} wheels measured, ${misses.length} off: ${misses.slice(0, 8).join("; ")}`
     );
     const upGap = (await watched(page)).gap;
+    const reads = await page.evaluate(() =>
+      performance
+        .getEntriesByType("resource")
+        .filter((entry) => entry.name.includes("/transcript"))
+        .map((entry) => [
+          Math.round((entry as PerformanceResourceTiming).responseEnd),
+          new URL(entry.name).searchParams.has("before") ? "older" : "newest",
+        ])
+    );
+    console.log(`  transcript reads (ms, kind): ${JSON.stringify(reads)}`);
+    const { gaps } = await watched(page);
+    for (const [at, px, top, where] of gaps) {
+      console.log(
+        `  blank at ${at.toFixed(0)}ms: ${px.toFixed(1)}px, scrollTop ${top}, ${where}`
+      );
+    }
     check(
       "no blank stretch in view while paging up",
       upGap.px <= 4,
-      `widest ${upGap.px.toFixed(1)}px at scrollTop ${upGap.top}`
+      `widest ${upGap.px.toFixed(1)}px at scrollTop ${upGap.top}${upGap.where ? `, ${upGap.where}` : ""}`
     );
 
     await page.evaluate(() => {
       const probe = (window as unknown as { __probe: Probe }).__probe;
       probe.tops = [];
       probe.sampling = true;
-      probe.gap = { px: 0, at: 0, top: 0 };
+      probe.gap = { px: 0, at: 0, top: 0, where: "" };
     });
     await page.getByRole("button", { name: "Jump to latest" }).click();
     await pause(4000);
