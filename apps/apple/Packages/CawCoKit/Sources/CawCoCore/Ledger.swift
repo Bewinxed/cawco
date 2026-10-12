@@ -92,7 +92,7 @@ public final class Ledger {
     // null differ in the transcript's partial tail/facts updates.
     @ObservationIgnored private var frameBytes: [Double: Data] = [:]
     /// Re-reads a session's history through the path that already exists.
-    @ObservationIgnored var rereadHistory: (String) -> Void = { _ in }
+    @ObservationIgnored var rereadHistory: (String, SessionsStore.ReadCause) -> Void = { _, _ in }
     /// Heard exactly once for every command that reaches `failed`.
     @ObservationIgnored var noteFailure: (Command) -> Void = { _ in }
 
@@ -116,6 +116,7 @@ public final class Ledger {
         var cursor = cursors[sessionId] ?? Cursor()
         let afterSeq = cursor.seen ? cursor.lastSeq : nil
         let message = Components.Schemas.StreamSubscribe(afterSeq: afterSeq, sessionId: sessionId, _type: .stream_subscribe)
+        log.info("stream: subscribe \(sessionId.prefix(8), privacy: .public) after \(afterSeq ?? -1)")
         guard dispatch(message) == nil else {
             cursors[sessionId] = cursor
             return
@@ -200,20 +201,27 @@ public final class Ledger {
 
     private func apply(_ event: Components.Schemas.SessionStreamEvent) {
         var cursor = cursors[event.sessionId] ?? Cursor()
-        guard !cursor.reading else { return }
+        let session = event.sessionId.prefix(8)
+        guard !cursor.reading else {
+            log.debug("stream: \(session, privacy: .public) seq \(event.seq) dropped while reading")
+            return
+        }
         // No origin yet: the hub's first word is the origin.
         if !cursor.seen {
             cursor.lastSeq = event.seq - 1
         }
         if event.seq <= cursor.lastSeq {
+            log.debug("stream: \(session, privacy: .public) seq \(event.seq) duplicate, at \(cursor.lastSeq)")
             cursors[event.sessionId] = cursor
             return
         }
         if event.seq > cursor.lastSeq + 1 {
+            log.info("stream: \(session, privacy: .public) seq \(event.seq) past a hole, at \(cursor.lastSeq)")
             cursors[event.sessionId] = cursor
             resync(event.sessionId)
             return
         }
+        log.debug("stream: \(session, privacy: .public) seq \(event.seq) applied")
         applyEvent(event, to: &cursor)
         cursors[event.sessionId] = cursor
     }
@@ -233,6 +241,7 @@ public final class Ledger {
             return
         }
         let message = Components.Schemas.StreamSubscribe(afterSeq: cursor.lastSeq, sessionId: sessionId, _type: .stream_subscribe)
+        log.info("stream: resync \(sessionId.prefix(8), privacy: .public) after \(cursor.lastSeq)")
         guard dispatch(message) == nil else {
             return
         }
@@ -243,6 +252,7 @@ public final class Ledger {
 
     private func apply(_ backlog: Components.Schemas.StreamBacklog) {
         var cursor = cursors[backlog.sessionId] ?? Cursor()
+        log.info("stream: backlog for \(backlog.sessionId.prefix(8), privacy: .public): \(backlog.events.count) events from \(backlog.events.first?.seq ?? -1), at \(cursor.lastSeq)\(cursor.reading ? ", dropped while reading" : "", privacy: .public)")
         guard !cursor.reading else { return }
         cursor.subscribed = true
         guard let first = backlog.events.first else {
@@ -280,7 +290,7 @@ public final class Ledger {
             cursor.resyncFailures = 0
             cursor.reading = true
             cursors[backlog.sessionId] = cursor
-            rereadHistory(backlog.sessionId)
+            rereadHistory(backlog.sessionId, .backlogBroken)
             return
         }
         cursors[backlog.sessionId] = cursor
@@ -295,7 +305,8 @@ public final class Ledger {
         cursor.resyncFailures = 0
         cursor.warned = false
         cursors[reset.sessionId] = cursor
-        rereadHistory(reset.sessionId)
+        log.info("stream: reset for \(reset.sessionId.prefix(8), privacy: .public), next seq \(reset.nextSeq)")
+        rereadHistory(reset.sessionId, .streamReset)
     }
 
     // MARK: Commands

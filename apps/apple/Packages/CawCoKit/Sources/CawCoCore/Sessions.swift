@@ -27,8 +27,17 @@ public final class SessionTranscript {
     /// Bumped by every newest page adopted (client.svelte.ts `reads`): an
     /// older page that lands after one belongs to the transcript it replaced.
     @ObservationIgnored var reads = 0
-    /// Why the read failed, when it did (client.svelte.ts `readFault`).
+    /// Why the read failed, when it did and nothing was held (client.svelte.ts
+    /// `readFault`): the pane says so in place of the transcript.
     public internal(set) var fault: ReadFault?
+    /// Why a read again over the rows held failed: the rows stay where the
+    /// reader has them, and the read is made again on the next event that can
+    /// answer it (the machine back online, the socket back, the reader's retry).
+    public internal(set) var behind: ReadFault?
+    /// The hub read the stored transcript again (a transcript `reset`): the
+    /// rows held may say something else now, so the next read reads again
+    /// every page back to the first row held. Cleared when a read lands.
+    @ObservationIgnored var historyChanged = false
     /// The hub answered 404: nothing it or any machine holds goes by this id.
     /// An answer, not a fault: retrying would ask the same question.
     public internal(set) var missing = false
@@ -95,7 +104,7 @@ public final class SessionsStore {
         let transcript = SessionTranscript(id)
         transcripts[id] = transcript
         log.info("watching \(id, privacy: .public): \(self.watches.count) sessions watched")
-        read(id)
+        read(id, because: .open)
         return transcript
     }
 
@@ -119,8 +128,18 @@ public final class SessionsStore {
     }
 
     func reconnected() {
-        for id in watched where transcripts[id]?.fault != nil { read(id) }
+        for id in watched where transcripts[id]?.fault != nil || transcripts[id]?.behind != nil { read(id, because: .reconnect) }
         hub.ledger.sync(watched)
+    }
+
+    /// The hub's word on its machines changed, with `machineId` online in it:
+    /// every transcript whose last read found that machine offline is read now.
+    func machineOnline(_ machineId: String) {
+        for id in watched {
+            guard let transcript = transcripts[id], !transcript.loading,
+                  let fault = transcript.fault ?? transcript.behind, fault.reason == .offline, fault.machineId == machineId else { continue }
+            read(id, because: .machineOnline)
+        }
     }
 
     /// Peek and delegate readers share the same counted transcript watches as
@@ -134,9 +153,49 @@ public final class SessionsStore {
         if let id, !id.hasPrefix("run:") { _ = open(id) }
     }
 
-    public func read(_ id: String) {
+    /// Why the newest page is read: each caller of `read` names itself.
+    public enum ReadCause: String, Sendable {
+        /// The session was opened: nothing is held yet.
+        case open
+        /// The hub read the stored transcript again (a transcript `reset` event).
+        case transcriptReset
+        /// The hub's ring could not replay the gap (`stream.reset`).
+        case streamReset
+        /// The replay came back broken `Ledger.maxResyncAttempts` times.
+        case backlogBroken
+        /// The reader asked again after a failed read.
+        case retry
+        /// The socket came back while the last read had failed.
+        case reconnect
+        /// A moved session started, and its first read found nothing.
+        case moveStarted
+        /// The machine the last read found offline is online again.
+        case machineOnline
+    }
+
+    /// Reads the newest page, and makes it what the transcript holds.
+    ///
+    /// A READ AGAIN KEEPS WHAT THE READER HAS LOADED. Over rows already held
+    /// (a reset, a resync, a retry, the socket or the machine back), the
+    /// newest page is joined to them where they meet: the rows held before
+    /// it stay as they are, the page replaces the rest. When the page does
+    /// not reach back to the rows held (more arrived than a page holds), the
+    /// pages before it are read until one does. When the hub read the stored
+    /// transcript again (`historyChanged`), the rows held may read otherwise
+    /// now, and every page back to the first row held is read again in their
+    /// place. Either way the rows the reader stands among keep their ids, so
+    /// the view keeps its place by them. Nothing held, the page is the
+    /// transcript (an open).
+    ///
+    /// A read that fails over rows held leaves them (`behind`); with nothing
+    /// held, the pane says why (`fault`). Either is read again on the next
+    /// event that can answer it: the machine online again (`machineOnline`),
+    /// the socket back (`reconnected`), or the reader's retry.
+    public func read(_ id: String, because cause: ReadCause) {
         guard let transcript = transcripts[id], let client = hub.client else { return }
+        log.info("read \(id.prefix(8), privacy: .public) because \(cause.rawValue, privacy: .public)")
         readers[id]?.cancel()
+        if cause == .transcriptReset { transcript.historyChanged = true }
         transcript.loading = true
         transcript.fault = nil
         transcript.missing = false
@@ -157,36 +216,125 @@ public final class SessionsStore {
                 case let .away(machine): throw Fault(offline(machine))
                 }
                 guard !Task.isCancelled else { return }
+                // The pages back to the rows held, when the newest does not reach them.
+                var read = page.blocks
+                var branches = page.branches
+                var cursor = page.cursor
+                var pages = 1
+                var older: ReadFault?
+                var whole: Joined
+                while true {
+                    let held = hubRows(transcript)
+                    if let joined = Self.join(held: held, heldCursor: transcript.cursor, read: read, readCursor: cursor,
+                                              historyChanged: transcript.historyChanged) {
+                        whole = joined
+                        break
+                    }
+                    // Short of the rows held, with nothing before: the read is the whole conversation.
+                    guard let before = cursor else {
+                        whole = Joined(blocks: read, cursor: nil, kept: 0)
+                        break
+                    }
+                    let answer: PageAnswer
+                    do { answer = try await Self.page(client, id: id, before: before) } catch {
+                        guard !Task.isCancelled else { return }
+                        older = (error as? Fault)?.fault ?? ReadFault(reason: .failed, machineId: nil, message: error.localizedDescription)
+                        whole = Joined(blocks: read, cursor: cursor, kept: 0)
+                        break
+                    }
+                    guard !Task.isCancelled else { return }
+                    switch answer {
+                    case let .read(previous):
+                        let have = Set(read.map(\.id))
+                        read.insert(contentsOf: previous.blocks.filter { !have.contains($0.id) }, at: 0)
+                        let listed = Set(branches.map(\.value1.toolUseId))
+                        branches.insert(contentsOf: previous.branches.filter { !listed.contains($0.value1.toolUseId) }, at: 0)
+                        cursor = previous.cursor
+                        pages += 1
+                        continue
+                    case .missing:
+                        older = ReadFault(reason: .failed, machineId: nil, message: "The hub no longer holds the page before these.")
+                    case let .away(machine):
+                        older = offline(machine)
+                    }
+                    // The rows held before the page that could not be read cannot be joined: the
+                    // read stands alone, and the strip before its first row says why.
+                    whole = Joined(blocks: read, cursor: cursor, kept: 0)
+                    break
+                }
+                // The branches of the rows kept stay; the read's replace theirs.
+                if whole.kept > 0 {
+                    let listed = Set(branches.map(\.value1.toolUseId))
+                    branches = transcript.branches.filter { !listed.contains($0.value1.toolUseId) } + branches
+                }
                 // What this client was told about its own actions stays under what the hub holds.
-                transcript.blocks = page.blocks + (notes[id] ?? [])
-                transcript.branches = page.branches
+                transcript.blocks = whole.blocks + (notes[id] ?? [])
+                transcript.branches = branches
                 transcript.queued = page.queued ?? []
                 transcript.tail = page.tail
                 transcript.facts = page.facts
                 transcript.location = page._where
                 hub.tasks.refresh(id)
-                transcript.cursor = page.cursor
+                transcript.cursor = whole.cursor
                 // A new newest page is a new read: an older page still on its
-                // way belongs to the transcript this one replaced, and so does
-                // what was said of one. Nothing older is read here: the view
-                // asks for it a page at a time, as its reader nears the first
-                // rows it holds (`readOlderPage`).
+                // way was asked of the transcript as it stood before, and so
+                // was what was said of one. The view asks for older pages
+                // itself, a page at a time, as its reader nears the first rows
+                // held (`readOlderPage`).
                 transcript.reads += 1
-                transcript.olderFault = nil
+                transcript.olderFault = older
+                transcript.historyChanged = false
+                transcript.behind = nil
                 transcript.blockRevision += 1
                 transcript.historyRevision += 1
                 transcript.loading = false
                 // The history page and its seq are one atomic view of the hub.
                 // Resume after it, including events that arrived during the read.
                 if let seq = page.seq { hub.ledger.adoptPage(id, seq: seq) }
-                log.info("page adopted for \(id, privacy: .public): \(page.blocks.count) blocks at seq \(page.seq ?? -1), older \(page.cursor ?? "none", privacy: .public)")
+                log.info("page adopted for \(id, privacy: .public): \(page.blocks.count) blocks at seq \(page.seq ?? -1), \(pages) page(s) read, \(whole.kept) held rows kept, \(whole.blocks.count) rows, older \(whole.cursor ?? "none", privacy: .public)")
             } catch {
                 guard !Task.isCancelled else { return }
                 transcript.loading = false
-                transcript.fault = (error as? Fault)?.fault ?? ReadFault(reason: .failed, machineId: nil, message: error.localizedDescription)
-                log.error("transcript read: \(transcript.fault?.message ?? "", privacy: .public)")
+                let fault = (error as? Fault)?.fault ?? ReadFault(reason: .failed, machineId: nil, message: error.localizedDescription)
+                if hubRows(transcript).isEmpty { transcript.fault = fault } else { transcript.behind = fault }
+                log.error("transcript read for \(id.prefix(8), privacy: .public) (\(transcript.fault == nil ? "rows kept" : "nothing held", privacy: .public)): \(fault.message, privacy: .public)")
             }
         }
+    }
+
+    /// The rows a transcript holds that the hub built: its own error lines left out (`notes`).
+    private func hubRows(_ transcript: SessionTranscript) -> [Components.Schemas.TranscriptBlock] {
+        guard let mine = notes[transcript.id], !mine.isEmpty else { return transcript.blocks }
+        let ids = Set(mine.map(\.id))
+        return transcript.blocks.filter { !ids.contains($0.id) }
+    }
+
+    /// The rows held and the pages read, as one transcript: its rows, the
+    /// cursor before them, and how many of the rows held were kept as they were.
+    struct Joined {
+        let blocks: [Components.Schemas.TranscriptBlock]
+        let cursor: String?
+        let kept: Int
+    }
+
+    /// The pages read (`read`, oldest first, older pages before `readCursor`)
+    /// joined to the rows held, once they reach them; nil while they fall
+    /// short and the pages before must be read too. The hub's row ids are
+    /// its stored entries' own, the same on every read, so rows meet by id.
+    ///
+    /// - Nothing held: the read is the transcript.
+    /// - The read holds the first row held: it covers every row held, and
+    ///   replaces them (a row the hub no longer has goes with them).
+    /// - The history changed: the read must reach the first row held, so
+    ///   every row held is read again; until then, nil.
+    /// - The read's first row is held: the rows held before it stay, the
+    ///   read replaces the rest, and the cursor before them is the one held.
+    static func join(held: [Components.Schemas.TranscriptBlock], heldCursor: String?, read: [Components.Schemas.TranscriptBlock],
+                     readCursor: String?, historyChanged: Bool) -> Joined? {
+        guard let first = held.first else { return Joined(blocks: read, cursor: readCursor, kept: 0) }
+        if read.contains(where: { $0.id == first.id }) { return Joined(blocks: read, cursor: readCursor, kept: 0) }
+        guard !historyChanged, let start = read.first, let at = held.firstIndex(where: { $0.id == start.id }) else { return nil }
+        return Joined(blocks: Array(held[..<at]) + read, cursor: heldCursor, kept: at)
     }
 
     private struct Fault: Error, Sendable { let fault: ReadFault; init(_ fault: ReadFault) { self.fault = fault } }
@@ -292,6 +440,7 @@ public final class SessionsStore {
             guard let frame = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                   frame["kind"] as? String == "transcript",
                   let events = frame["events"] as? [[String: Any]] else { return }
+            log.debug("events for \(id.prefix(8), privacy: .public): \(events.map { $0["type"] as? String ?? "?" }.joined(separator: ","), privacy: .public)")
             for event in events {
                 switch event["type"] as? String {
                 case "block.append", "block.insert", "block.update":
@@ -333,7 +482,7 @@ public final class SessionsStore {
                         let pageBranch: Components.Schemas.TranscriptPageBranch = try decode(complete)
                         if let at { transcript.branches[at] = pageBranch } else { transcript.branches.append(pageBranch) }
                     }
-                case "reset": read(id); return
+                case "reset": read(id, because: .transcriptReset); return
                 default: break
                 }
             }

@@ -262,7 +262,7 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         let prestart = move.stage != .started
         if !prestart, !readAfterStart, hub.fleet.byId[sessionId] != nil {
             readAfterStart = true
-            hub.sessions.read(sessionId)
+            hub.sessions.read(sessionId, because: .moveStarted)
         }
         guard prestart || transcript.blocks.isEmpty else {
             removeMoveWait()

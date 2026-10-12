@@ -267,7 +267,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         pin(paneState)
         paneState.onRetry = { [weak self] in
             guard let self, let id = transcript?.id else { return }
-            hub?.sessions.read(id)
+            hub?.sessions.read(id, because: .retry)
         }
         paneState.onReturn = { [weak self] in self?.onReturnToFleet() }
         // Only the type size: the words are set in faces at it. Light and dark
@@ -1776,14 +1776,36 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         sessions.readOlderPage(transcript.id)
     }
 
+    /// The reader's place, kept by a row of history under the id that row has
+    /// on every read: the first settled row in view, or, with only the tail in
+    /// view, the last settled row. Never a row of the tail (the live row, the
+    /// call in flight: gone once they land), and never a live row's key, which
+    /// is this view's own (`keys`, counted from the view's first live row): a
+    /// place saved under one was never found again after a relaunch, and the
+    /// view read the whole history back looking for it.
     public var restorationPosition: TranscriptPosition {
         if let pendingPosition { return pendingPosition }
-        guard !following, let index = collection.indexPathsForVisibleItems.sorted().first(where: { dataSource.itemIdentifier(for: $0) != Self.olderId }),
-              let id = dataSource.itemIdentifier(for: index),
-              let frame = collection.layoutAttributesForItem(at: index)?.frame else {
-            return TranscriptPosition(following: following, anchor: nil, offset: 0)
+        guard !following else { return TranscriptPosition(following: true, anchor: nil, offset: 0) }
+        let shown = collection.indexPathsForVisibleItems.filter { $0.section == 0 }.sorted()
+        let settledRows = dataSource.snapshot().numberOfSections > 0 ? dataSource.snapshot().numberOfItems(inSection: 0) : 0
+        let candidates = shown.isEmpty ? (settledRows > 0 ? [IndexPath(item: settledRows - 1, section: 0)] : []) : shown
+        for index in candidates {
+            guard let id = dataSource.itemIdentifier(for: index), let anchor = lasting(id),
+                  let frame = collection.layoutAttributesForItem(at: index)?.frame else { continue }
+            return TranscriptPosition(following: false, anchor: anchor, offset: collection.contentOffset.y - frame.minY)
         }
-        return TranscriptPosition(following: false, anchor: id, offset: collection.contentOffset.y - frame.minY)
+        return TranscriptPosition(following: false, anchor: nil, offset: 0)
+    }
+
+    /// A settled row's id as every read of the transcript builds it: a landed
+    /// answer's rows, drawn under the live row's key (`rekey`), go back to
+    /// their block's id. Nil for the strip before the first row.
+    private func lasting(_ id: String) -> String? {
+        guard id != Self.olderId else { return nil }
+        for (block, key) in keys where id == key || id.hasPrefix("\(key):") {
+            return block + id.dropFirst(key.count)
+        }
+        return id
     }
 
     public func restorePosition(_ position: TranscriptPosition) {
@@ -1875,8 +1897,10 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         let loading = transcript?.loading == true
         if !catchingUp, rowsDrawn, loading || restoring {
             catchingUp = true
+            Self.restoring.notice("catch-up begins for \(self.env.sessionId.prefix(8), privacy: .public): loading \(loading), restoring \(self.restoring), held \(String(describing: self.anchorHeld), privacy: .public)")
         } else if catchingUp, !loading, !restoring, !historyBehind {
             catchingUp = false
+            Self.restoring.notice("catch-up ends for \(self.env.sessionId.prefix(8), privacy: .public)")
         }
         catchUp.show(catchingUp)
         compacting.show(isCompacting)

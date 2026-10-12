@@ -18,7 +18,10 @@
  *  3. puts a counting proxy between the app and the hub: every read of the
  *     long session's transcript, newest or older, with when it was asked;
  *  4. on an iOS 18.5 iPhone simulator of its own, opens the long session,
- *     drags up until three older pages have been read, sends the app home
+ *     drags up until three older pages have been read; restarts the hub
+ *     twice with the reader there and no restored place (the second time
+ *     with the agent away, so the read finds the machine offline): the rows
+ *     stay, the place holds, no older page is read again; sends the app home
  *     (its scene saves the place) and relaunches it: the restored place is
  *     in a page the new read does not hold, so the pages before it are read
  *     back to it while the pill says "Catching up…";
@@ -382,6 +385,8 @@ const launch = (id?: string) =>
   );
 /** The pill's transitions in the app's log from line `from` on: when (ms of the log's clock) and which way. */
 const DOCK = /^(\S+ \S+).*dock (.+) (shown|hidden) (\S+)/;
+/** A log line's stamp, process and category, up to what it says. */
+const LOG_PREFIX = /^.*\] /;
 /** Panes side by side each float their own pill: only the long session's (its id's first 8) counts. */
 const transitions = (title: string, from = 0) =>
   // The log stream can hand a line over twice: each line once.
@@ -394,8 +399,12 @@ const transitions = (title: string, from = 0) =>
       { at: Date.parse(m[1].replace(" ", "T")), shown: m[3] === "shown", line },
     ];
   });
-/** Checks one load's transitions: at most one show and one hide, never more than two in a second. */
-const counted = (label: string, moves: ReturnType<typeof transitions>) => {
+/** Checks one load's transitions: at most `reads` shows and hides (one per read), never more than two in a second. */
+const counted = (
+  label: string,
+  moves: ReturnType<typeof transitions>,
+  reads = 1
+) => {
   for (const move of moves) {
     console.log(`  ${move.line.trim()}`);
   }
@@ -410,8 +419,8 @@ const counted = (label: string, moves: ReturnType<typeof transitions>) => {
     );
   }
   check(
-    `${label}: the pill shows at most once and hides at most once`,
-    shown <= 1 && hidden <= 1,
+    `${label}: the pill shows and hides at most once per read (${reads})`,
+    shown <= reads && hidden <= reads,
     `${shown} show(s), ${hidden} hide(s) of "${PILL}"`
   );
   check(
@@ -502,6 +511,117 @@ xcrun simctl install ${udid} "${app}"`);
   console.log(
     `  scrolled up: ${olderBefore} older page(s) read; first row in view row-${at.first?.row}`
   );
+
+  // A reset over the rows the reader scrolled up to, with no restored place:
+  // the hub restarts with the app's socket held off, and the app's resume
+  // meets a stream that starts again empty (`stream.reset`). The newest page
+  // read again is joined to the rows held: they stay, the place does not
+  // move, and no older page is read again. With the agent away, the read
+  // finds the machine offline: the rows still stay, and the read is made
+  // again once the hub says the machine is online.
+  const resetOver = async (label: string, agentAway: boolean) => {
+    // The session speaks first, so the app's place in its stream is past
+    // what a restarted hub's empty ring starts at: its resume is then a
+    // reset, not an empty backlog.
+    const spoken = (await walk(sessionId)).rows;
+    await fleet.send(sessionId, "One more line.");
+    await until(
+      `${label}: the session spoke`,
+      () => walk(sessionId),
+      (held) => held.rows > spoken && !held.busy,
+      120_000
+    );
+    await pause(3000);
+    const before = await placed();
+    const from = logLines.length;
+    const readsBefore = wire.reads.length;
+    wire.holding = true;
+    if (agentAway) {
+      await fleet.stop("agent");
+    }
+    await fleet.stop("hub");
+    fleet.launch("hub");
+    await fleet.hubUp();
+    if (!agentAway) {
+      await fleet.agentUp();
+    }
+    wire.holding = false;
+    const newest = () =>
+      wire.reads.slice(readsBefore).filter((read) => !read.older).length;
+    await until(
+      `${label}: the newest page read again`,
+      () => Promise.resolve(newest()),
+      (count) => count >= 1,
+      60_000
+    ).catch(() => 0);
+    let reads = 1;
+    if (agentAway) {
+      await until(
+        `${label}: the read found the machine offline`,
+        () =>
+          Promise.resolve(
+            logLines.slice(from).some((line) => line.includes("rows kept"))
+          ),
+        Boolean,
+        30_000
+      ).catch(() => false);
+      await pause(3000);
+      const away = await placed();
+      check(
+        `${label}: the rows stay while the machine is offline`,
+        away.first?.row === before.first?.row &&
+          Math.abs((away.first?.y ?? 0) - (before.first?.y ?? 0)) < 2,
+        `row-${before.first?.row} at y ${before.first?.y}, then row-${away.first?.row} at y ${away.first?.y}`
+      );
+      fleet.launch("agent");
+      await fleet.agentUp();
+      const again = await until(
+        `${label}: read again once the machine is online`,
+        () =>
+          Promise.resolve(
+            logLines
+              .slice(from)
+              .some((line) => line.includes("because machineOnline"))
+          ),
+        Boolean,
+        60_000
+      ).catch(() => false);
+      check(
+        `${label}: read again once the hub says the machine is online`,
+        again,
+        again ? "read because machineOnline" : "no read followed the machine"
+      );
+      reads = 2;
+    }
+    await pause(6000);
+    const after = await placed();
+    const older = wire.reads.slice(readsBefore).filter((read) => read.older);
+    console.log(
+      `  ${label}: ${newest()} newest and ${older.length} older read(s); ${logLines
+        .slice(from)
+        .filter(
+          (line) => line.includes("page adopted") || line.includes(" because ")
+        )
+        .map((line) => line.replace(LOG_PREFIX, ""))
+        .join(" | ")}`
+    );
+    check(
+      `${label}: the rows stay and the place holds`,
+      after.first?.row === before.first?.row &&
+        Math.abs((after.first?.y ?? 0) - (before.first?.y ?? 0)) < 2 &&
+        after.rows.join() === before.rows.join(),
+      `before row-${before.first?.row} at y ${before.first?.y} (${before.rows.length} rows), after row-${after.first?.row} at y ${after.first?.y} (${after.rows.length} rows)`
+    );
+    check(
+      `${label}: no older page is read again`,
+      older.length === 0,
+      `${older.length} older page read(s)`
+    );
+    counted(label, transitions(PILL, from), reads);
+    at = after;
+  };
+  await resetOver("a reset over rows scrolled up to", false);
+  await resetOver("a reset over rows, the machine offline", true);
   await sh(`${AXE} button home --udid ${udid}`);
   await pause(3000);
   const saved = logLines.filter((line) => line.includes("place saved for"));

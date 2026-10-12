@@ -163,7 +163,7 @@ public final class HubConnection {
         workflowRuns = WorkflowRunsStore(hub: self)
         workflows = WorkflowsStore(hub: self)
         ledger.applyFrame = { [weak self] id, data in self?.sessions.apply(id, data: data) }
-        ledger.rereadHistory = { [weak self] id in self?.sessions.read(id) }
+        ledger.rereadHistory = { [weak self] id, cause in self?.sessions.read(id, because: cause) }
         hubNewer = HubNewer.met
         hubNewerWatch = NotificationCenter.default.addObserver(forName: HubNewer.noticed, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.hubNewer = true }
@@ -736,6 +736,10 @@ public final class HubConnection {
         guard next != fleet.machines else { return }
         let wasOnline = Set(fleet.machines.filter { $0.status == "online" }.map(\.machineId))
         fleet.machines = next
+        // A transcript whose read found its machine offline is read again once
+        // the hub says it is online: across a hub restart the app may never
+        // have seen it go, so it is every online machine, not a change of one.
+        for machine in next where machine.status == "online" { sessions.machineOnline(machine.machineId) }
         guard fleet.fleetRead else {
             return
         }
