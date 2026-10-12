@@ -39,6 +39,7 @@ import {
   FolderRefusal,
   folderHistory,
   folderPathsInHistory,
+  HISTORY_LIMIT,
   hasProjectFolder,
   listFolder,
   readFolderFile,
@@ -811,6 +812,26 @@ const stagesView = (
 
 /** Why the hub cannot put a task in `stage`: only that the project has no such stage. */
 /**
+ * The subject of a commit the hub's own task-making code writes: a task
+ * filed (`task tsk-3: create “…” in idea (by you)`), tasks merged from
+ * another project (`tasks tsk-4, tsk-5: Old's tasks, merged in (by …)`), a
+ * duplicate project's folder folded in (project-merge.ts, `Old's files,
+ * merged in: …`), and a written-in task adopted at its start ({@link
+ * adoptStart}). Caw's folder_write cannot set a commit's subject; the folder
+ * editor's message is yours.
+ */
+const HUB_MADE =
+  /^task tsk-\d+: (?:create|adopt) |^tasks [^:]+: .*, merged in \(by |'s files, merged in: /;
+
+/** The mover a plain create by a folder commit's author would be checked as. */
+const moverOf = (author: string): Mover => {
+  if (author === "Caw") {
+    return "lead";
+  }
+  return author === YOU.name ? "you" : "session";
+};
+
+/**
  * Why the hub's own code may not put a task in `stage`: it is not a stage,
  * or its `by: action` says only an approved action moves a task there (the
  * hub's dispatcher is not one).
@@ -974,7 +995,15 @@ export const createTasks = (store: TaskStore) => {
   // another `stage:` (Caw's folder_write, the folder editor, a push to the
   // folder) never moves the task: the index keeps its stage, the file gets
   // that stage back with a note naming who edited it, and the move is never
-  // made. A file the index has never seen is a new task, not an edit.
+  // made.
+  //
+  // A file the index has never seen is a new task. One the hub made (its
+  // folder history holds the hub's own task-making commit: tasks.create, a
+  // merge, an adoption) stands as written, so a rebuilt or merged index
+  // leaves every task where it is. One written straight into the folder
+  // starts where a plain create could start it: a stage startProblem
+  // refuses (`by: action`, one that is not a stage, none) is adopted at the
+  // first stage, with a note naming who wrote it.
 
   /** The indexed row, when `content` says another stage than it holds. */
   const strayStage = (
@@ -1033,27 +1062,106 @@ export const createTasks = (store: TaskStore) => {
     return restored;
   };
 
-  /** Restores queued, by project and path: one edit is restored once however often it is read. */
-  const restoring = new Set<string>();
-
   /**
-   * A read outside the project's turn found a stray stage: the restore is
-   * queued in the turn (a change under way finishes first), and the index
-   * keeps its row meanwhile, so nothing reads the written stage as the task's.
+   * A new task file the hub never made, whose stage a plain create by its
+   * writer could not start a task in: who wrote it, the stage it says, and
+   * the first stage it starts in instead. Nothing when the hub made it, it
+   * may stand, or the project's stages do not read (nothing to judge by).
    */
-  const queueRestore = (projectId: string, path: string, number: number) => {
-    const key = `${projectId}\0${path}`;
-    if (restoring.has(key)) {
+  const strayStart = async (
+    projectId: string,
+    path: string,
+    content: string,
+    stages: Stages | undefined
+  ): Promise<{ start: string; who: string; written: string } | undefined> => {
+    if (!stages) {
       return;
     }
-    restoring.add(key);
+    const history = await folderHistory(projectId, path, HISTORY_LIMIT).catch(
+      () => undefined
+    );
+    if (
+      !history?.commits.length ||
+      history.commits.some((commit) => HUB_MADE.test(commit.message))
+    ) {
+      return;
+    }
+    const who = history.commits.at(-1)?.author || "someone";
+    const written = new TaskDoc(path, content).read().fields.stage ?? "";
+    if (written && !startProblem(stages, written, moverOf(who))) {
+      return;
+    }
+    return {
+      who,
+      written: written || "(none)",
+      start: firstStage(stages).name,
+    };
+  };
+
+  /**
+   * A new file adopted at the stage tasks start in, with a note on the task
+   * naming who wrote it straight into its stage, as one commit by the hub
+   * (its subject one {@link HUB_MADE} reads); then indexed. Inside the turn.
+   */
+  const adoptStart = async (
+    projectId: string,
+    path: string,
+    number: number,
+    content: string,
+    stray: { start: string; who: string; written: string }
+  ): Promise<void> => {
+    const { start, who, written } = stray;
+    const doc = new TaskDoc(path, content);
+    const at = new Date().toISOString().slice(0, 16).replace("T", " ");
+    doc.setField("stage", start);
+    doc.addNote(
+      `${at} UTC: ${who} wrote this task straight into stage ${written}; tasks start in ${start}.`
+    );
+    const adopted = doc.toString();
+    stands(projectId);
+    await writeFolderFile(projectId, path, adopted, {
+      author: { name: "hub" },
+      message: `task ${taskId(number)}: adopt at ${start}, written by ${who} into stage ${written} (by hub: tasks start in ${start})`,
+    });
+    store.put([indexRow(projectId, path, number, adopted, hashOf(adopted))]);
+    console.info(
+      `[tasks] ${projectId} ${taskId(number)}: ${who} wrote it straight into stage ${written}; it starts in ${start}`
+    );
+    emit({ kind: "changed", projectId, id: taskId(number) });
+  };
+
+  /** Files queued to settle, by project and path: one write is settled once however often it is read. */
+  const settling = new Set<string>();
+
+  /**
+   * A read outside the project's turn found a file to settle (a stray stage
+   * on a known task, or a new task in a stage it may not start in): it is
+   * settled in the turn (a change under way finishes first), judged again
+   * there; the index does not take the written stage meanwhile.
+   */
+  const queueSettle = (projectId: string, path: string, number: number) => {
+    const key = `${projectId}\0${path}`;
+    if (settling.has(key)) {
+      return;
+    }
+    settling.add(key);
     detach(
       inTurn(projectId, async () => {
         try {
           const { content } = await readFolderFile(projectId, path);
           const row = store.index(projectId).find((each) => each.path === path);
+          const start = row
+            ? undefined
+            : await strayStart(
+                projectId,
+                path,
+                content,
+                await currentStages(projectId)
+              );
           if (strayStage(row, path, content) && row) {
             await restoreStage(projectId, path, number, content, row);
+          } else if (start) {
+            await adoptStart(projectId, path, number, content, start);
           } else if (row?.hash !== hashOf(content)) {
             stands(projectId);
             store.put([
@@ -1061,10 +1169,10 @@ export const createTasks = (store: TaskStore) => {
             ]);
           }
         } finally {
-          restoring.delete(key);
+          settling.delete(key);
         }
       }),
-      `task ${path} stage restore`
+      `task ${path} settle`
     );
   };
 
@@ -1107,6 +1215,12 @@ export const createTasks = (store: TaskStore) => {
         files.push({ path: entry.path, number });
       }
     }
+    // Read once, for every new file's start: a rebuilt index reads them all.
+    let stages: Promise<Stages | undefined> | undefined;
+    const stagesNow = () => {
+      stages ??= currentStages(projectId);
+      return stages;
+    };
     const read = await Promise.all(
       files.map(async ({ path, number }) => {
         try {
@@ -1116,8 +1230,11 @@ export const createTasks = (store: TaskStore) => {
           if (row?.hash === hash) {
             return;
           }
-          if (strayStage(row, path, content)) {
-            queueRestore(projectId, path, number);
+          const unsettled = row
+            ? strayStage(row, path, content)
+            : await strayStart(projectId, path, content, await stagesNow());
+          if (unsettled) {
+            queueSettle(projectId, path, number);
             return;
           }
           return indexRow(projectId, path, number, content, hash);
@@ -1498,7 +1615,7 @@ export const createTasks = (store: TaskStore) => {
       const stray = strayStage(row, path, content);
       if (stray) {
         // Shown at the stage it is in; the file gets it back in its turn.
-        queueRestore(projectId, path, number);
+        queueSettle(projectId, path, number);
       } else if (row?.hash !== hash) {
         stands(projectId);
         store.put([indexRow(projectId, path, number, content, hash)]);

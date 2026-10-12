@@ -29,6 +29,10 @@
  *    `stage: posted` (a `by: action` stage) and once with an ordinary
  *    stage: neither moves the task; the file gets its stage back with a
  *    note naming Caw.
+ * 9. Caw writes a new task file straight into `posted`: it starts in the
+ *    first stage, with a note naming Caw. Then the hub's whole task index is
+ *    rebuilt from the folder: every task the hub made keeps its stage (the
+ *    one an approved action moved to posted included), its file untouched.
  *
  * Run from the repo root:
  *   bun scripts/probe-actions.ts [--keep]
@@ -676,6 +680,96 @@ try {
         `folder_write said ${said.slice(0, 120)}; read ${shown.stage}, then ${now.stage}; note: ${restored.split("\n").find((line) => line.includes("task moves"))}`
       );
     }
+  });
+
+  // ── 9: a task written straight into the folder starts where tasks start ──
+  await section("9: a new task file starts where a create could", async () => {
+    const fileAt = async (path: string) =>
+      (
+        await ok<{ content: string }>(
+          "GET",
+          `/api/projects/${projectId}/folder/file?path=${encodeURIComponent(path)}`
+        )
+      ).content;
+    const pathOf = async (id: string) =>
+      (
+        await ok<{ entries: { path: string }[] }>(
+          "GET",
+          `/api/projects/${projectId}/folder?path=tasks`
+        )
+      ).entries.find((one) => one.path.startsWith(`tasks/${id}-`))?.path ?? "";
+    const WRITTEN = "tasks/tsk-90-written-in.md";
+    const said = await toolCall(
+      "mcp__cawco__folder_write",
+      {
+        path: WRITTEN,
+        content:
+          "---\nstage: posted\n---\n# Written in\n\nA post Caw wrote straight into the folder.\n",
+      },
+      (text) => ok("POST", `/api/projects/${projectId}/threads`, { body: text })
+    );
+    // A read of the project's tasks finds the file; it is adopted in the turn.
+    const adopted = await until(
+      "the written-in task adopted",
+      async () => {
+        await send("GET", `/api/projects/${projectId}/tasks/tsk-90`);
+        return await fileAt(WRITTEN);
+      },
+      (text) =>
+        text.includes("stage: idea") &&
+        text.includes(
+          "Caw wrote this task straight into stage posted; tasks start in idea."
+        ),
+      60_000
+    );
+    const shown = await fleet.api<{ stage: string }>(
+      `/api/projects/${projectId}/tasks/tsk-90`
+    );
+    check(
+      "9: Caw's folder_write of a new task in posted lands in the first stage, with the note",
+      shown.stage === "idea",
+      `folder_write said ${said.slice(0, 100)}; stage ${shown.stage}; note: ${adopted.split("\n").find((line) => line.includes("straight into"))}`
+    );
+
+    // The whole index rebuilt from the folder: every task the hub made keeps
+    // its stage, even one an approved action moved to posted.
+    const posted = await pathOf(task.id);
+    const before = await fileAt(posted);
+    await fleet.stop("hub");
+    fleet.write("DELETE FROM project_tasks WHERE project_id = ?", projectId);
+    fleet.launch("hub");
+    await fleet.hubUp();
+    const stages = await until(
+      "the rebuilt index",
+      async () =>
+        await Promise.all(
+          [task.id, "tsk-2", "tsk-3", "tsk-90"].map(
+            async (id) =>
+              (
+                await fleet.api<{ stage: string }>(
+                  `/api/projects/${projectId}/tasks/${id}`
+                )
+              ).stage
+          )
+        ),
+      (all) => all.every(Boolean),
+      60_000
+    );
+    // Long enough for any settle a rebuild queued to have run.
+    await Bun.sleep(5000);
+    const after = await fileAt(posted);
+    const rows = fleet.query<{ id: string; stage: string }>(
+      "SELECT id, stage FROM project_tasks WHERE project_id = ? ORDER BY number",
+      projectId
+    );
+    check(
+      "9: after a full index rebuild, hub-made tasks keep their stages and their files are untouched",
+      JSON.stringify(stages) ===
+        JSON.stringify(["posted", "scheduled", "scheduled", "idea"]) &&
+        after === before &&
+        !after.includes("straight into"),
+      `stages ${stages.join(", ")}; index ${rows.map((row) => `${row.id} ${row.stage}`).join(", ")}; ${task.id}'s file ${after === before ? "unchanged" : "changed"}`
+    );
   });
 
   check(
