@@ -974,11 +974,17 @@
       var(--surface-hover),
       color-mix(in oklch, var(--surface-fill) 50%, transparent)
     );
-  }
-  /* An unchosen tab draws no card of its own: on the light rail its card was
-     the darker shape, and read as the chosen one. */
-  :global(.work-tabs[data-slot="tabs"] .ff-tabs-list .ff-tab::before) {
-    background: none;
+    /* An unchosen tab's card is the rail's own surface (Home .home, the
+       rail's column and the phone's page, both surface-recess), so at rest
+       it shows no shape: in surface-recess-deep, on the light rail, it was
+       the darker shape and read as the chosen one. It is still a card, and
+       opaque: on a switch the front tab's covers the sheet of the one
+       behind, so the edge is the front's alone where it glides. With no
+       card the two half-faded sheets stacked over the overlap, and the
+       stack's far end, the tab behind's own edge, showed as a second edge
+       mid-switch (1.19:1 by night, where the sheet stands furthest off the
+       rail). */
+    --tab-fill: var(--surface-recess);
   }
   /* A label to its count (the kit's --gap + 4px), closer on a narrow rail. */
   :global(.work-tabs[data-slot="tabs"] .ff-tabs-list .ff-tab) {

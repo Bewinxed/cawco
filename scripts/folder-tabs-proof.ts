@@ -10,6 +10,9 @@
  *   CAWCO_DEV_HUB_URL=http://127.0.0.1:9 bunx vite dev --port 5199   (apps/dashboard)
  *   bun scripts/folder-tabs-proof.ts [--url http://localhost:5199] [--out $TMPDIR] [--tag final] [--width 1.5]
  *
+ * Chromium is `CHROMIUM_BIN`, or Playwright's chromium-1243 on obelisk;
+ * its rendering is pinned (`FONTS_CONF`, `--disable-gpu`, below).
+ *
  * `--width` measures at that rim stroke (the bench's Thickness, `?width=`).
  *
  * For each width and theme it measures the strip at rest, then chooses the
@@ -55,6 +58,17 @@ const WIDTH = flag("--width", "");
 const EXE =
   process.env.CHROMIUM_BIN ??
   "/home/bewinxed/.cache/ms-playwright/chromium-1243/chrome-linux64/chrome";
+/**
+ * The rendering is pinned, so one machine's settings never move a cell.
+ * On Linux, the text's hinting: Chromium takes it from fontconfig, and a
+ * shell reads the user's own config (full hinting: every title advances in
+ * whole px) where a sandbox reads only the system's (slight: fractional),
+ * so the same strip measured 3px wider a tab in one than in the other.
+ * `folder-tabs-proof.fonts.conf` is the system's config with full hinting
+ * on, as the owner's desktop draws it. Everywhere, compositing in software
+ * (`--disable-gpu`): a host with a GPU and one without draw the same frame.
+ */
+const FONTS_CONF = join(import.meta.dir, "folder-tabs-proof.fonts.conf");
 const PCTS = [0, 25, 49, 50, 51, 75, 100];
 const VIEWS = [
   { w: 1440, h: 900, touch: false },
@@ -436,7 +450,10 @@ const GLOW_OFF = `${KEEP_CLOCK}.rim{filter:none!important}`;
  *    hidden against shown, glow on; `drawn` are the tabs drawn chosen,
  *    which are left out;
  *  - each tab's own rim pixels (`own`): its rim hidden against shown, glow
- *    off, inside its box.
+ *    off, inside its box;
+ *  - where two tops meet (`corners`): each of the two rims alone (the even
+ *    tabs' rims shown without the odd ones', then the odd without the
+ *    even) against all hidden, glow off.
  */
 async function rimInk(page: Page, strip: Strip, drawn: number[]) {
   await proofRule(page, GLOW_OFF);
@@ -444,6 +461,33 @@ async function rimInk(page: Page, strip: Strip, drawn: number[]) {
   // Every piece of every rim: a foot sets its own visibility.
   await proofRule(page, `${GLOW_OFF}.rim,.rim *{visibility:hidden!important}`);
   const unlit = await page.screenshot({ animations: "allow" });
+  // Each rim's own ink, two neighbours never in one capture: the rims of
+  // the even tabs alone, then of the odd ones alone (`corners`).
+  await page.evaluate(
+    ({ root, tab }) => {
+      for (const [i, el] of document
+        .querySelectorAll<HTMLElement>(`${root} ${tab}`)
+        .entries()) {
+        el.setAttribute("data-proof-parity", i % 2 === 0 ? "even" : "odd");
+      }
+    },
+    { root: strip.root, tab: strip.tab }
+  );
+  const alone = async (hidden: "even" | "odd") => {
+    const sel = `[data-proof-parity="${hidden}"] .rim`;
+    await proofRule(
+      page,
+      `${GLOW_OFF}${sel},${sel} *{visibility:hidden!important}`
+    );
+    return page.screenshot({ animations: "allow" });
+  };
+  const evenAlone = await alone("odd");
+  const oddAlone = await alone("even");
+  await page.evaluate(() => {
+    for (const el of document.querySelectorAll("[data-proof-parity]")) {
+      el.removeAttribute("data-proof-parity");
+    }
+  });
   // The glow back, still out of the transitioned properties so its return
   // starts no transition of its own; then the rule goes.
   await proofRule(page, KEEP_CLOCK);
@@ -486,7 +530,7 @@ async function rimInk(page: Page, strip: Strip, drawn: number[]) {
           w: c.width,
         };
       };
-      const [a, b, c, d] = await Promise.all(srcs.map(read));
+      const [a, b, c, d, even, odd] = await Promise.all(srcs.map(read));
       const scale = a.w / innerWidth;
       /** The ink one capture has over another at device px (x, y): 0 to 765. */
       const diff = (
@@ -556,16 +600,26 @@ async function rimInk(page: Page, strip: Strip, drawn: number[]) {
         }
         return out;
       };
+      /** Cross-sections averaged over each device px of the flare's arc. */
+      const ARC_SUBSTEPS = 8;
       /**
        * Round the flare's quarter turn from the tip about its centre (one
        * flare out from the outline, one above the shelf), across the
-       * stroke along each radius and 1.5px either side; then up the run.
+       * stroke along each radius and 1.5px either side, each step the mean
+       * of its cross-sections over the device px of arc it stands for
+       * (`ARC_SUBSTEPS` evenly across it, on the stroke's middle radius);
+       * then up the run. One radius alone crosses the pixel grid at a
+       * different phase at every step round the turn, and under the Mac's
+       * antialiasing its integral swung ±8% from one step to the next
+       * (398, 328, 408, 350 against a whole of 427): the "never falls back"
+       * rule read the grid, not the stroke. Averaged over the pixel it
+       * stands for, every step reads the stroke at every phase alike.
        */
       const flaredPath = (f: Foot) => {
         const out: { s: number; ink: number }[] = [];
         const cx = f.x0 - f.dir * f.F;
-        for (let s = step / 2; s <= f.A; s += step) {
-          const phi = s / f.R;
+        /** The integral across the stroke along the radius at angle phi. */
+        const across = (phi: number) => {
           let sum = 0;
           for (let r = f.F - 1.5; r <= f.F + f.t + 1.5; r += DS) {
             sum +=
@@ -574,7 +628,15 @@ async function rimInk(page: Page, strip: Strip, drawn: number[]) {
                 f.bottom - (f.F - r * Math.cos(phi)) * f.lean
               ) * DS;
           }
-          out.push({ s: r2(s), ink: Math.round(sum) });
+          return sum;
+        };
+        for (let s = step / 2; s <= f.A; s += step) {
+          let sum = 0;
+          for (let k = 0; k < ARC_SUBSTEPS; k += 1) {
+            const at = s - step / 2 + ((k + 0.5) * step) / ARC_SUBSTEPS;
+            sum += across(at / f.R);
+          }
+          out.push({ s: r2(s), ink: Math.round(sum / ARC_SUBSTEPS) });
         }
         for (let h = f.F + step / 2; h <= f.top; h += step) {
           out.push({ s: r2(f.A + h - f.F), ink: row(f, h) });
@@ -733,16 +795,26 @@ async function rimInk(page: Page, strip: Strip, drawn: number[]) {
         return sizes;
       };
       /**
-       * Where two tabs' tops meet: the rims' own ink (shown against
-       * hidden, glow off) in a box round the seam's top (5px before it and
-       * 3px past it, from 4px over the higher top to 2px under its
-       * shoulder), as connected pieces, a pixel counting as ink at a third
-       * of the box's strongest. The front tab's shoulder and the top of
-       * the one behind meeting it are one piece; a stub or a notch is two;
-       * where neither wears a rim there is none. Read off the rims' own ink,
-       * not the screen's contrast against the fills: a 1px stroke's
-       * half-covered pixel over one card can match another's fill and
-       * drop out of a contrast reading, splitting one line in two.
+       * Where two tabs' tops meet: the rims' own ink (shown alone against
+       * all hidden, glow off) in a box round the seam's top (5px before it
+       * and 3px past it, from 4px over the higher top to 2px under its
+       * shoulder), as connected pieces. Each of the two rims is read from a
+       * capture of it without its neighbour, and a pixel is ink where
+       * either rim's reaches a third of that rim's own strongest in the box
+       * (none where its strongest is under 60 of 765: no rim). The front
+       * tab's shoulder and the top of the one behind meeting it are one
+       * piece; a stub or a notch, where the ink falls to nothing between
+       * them, is two; where neither wears a rim there is none. Read off the
+       * rims' own ink, not the screen's contrast against the fills: a 1px
+       * stroke's half-covered pixel over one card can match another's fill
+       * and drop out of a contrast reading, splitting one line in two. And
+       * each rim against its own strength, not the box's: an unchosen
+       * tab's top at its subtle strength, spread over two device rows by
+       * its lean, peaks under a third of the chosen rim's beside it, and
+       * the pixel where it meets that rim's side, a step fainter as the two
+       * strokes' antialiasing crosses, dropped out under the chosen rim's
+       * third and parted the line in two with its ink never under 75% of
+       * the line's own.
        */
       const trackRadius = num("--radius");
       const corners = els.slice(0, -1).flatMap((el, i) => {
@@ -758,16 +830,27 @@ async function rimInk(page: Page, strip: Strip, drawn: number[]) {
         const y0 = Math.round((top - 4) * scale);
         const w = Math.round((hi + 3) * scale) - x0 + 1;
         const h = Math.round((top + trackRadius + 2) * scale) - y0 + 1;
-        const vs = new Float64Array(w * h);
-        for (let y = 0; y < h; y += 1) {
-          for (let x = 0; x < w; x += 1) {
-            vs[y * w + x] = ink(x0 + x, y0 + y);
+        /** One tab's rim alone in the box, and the floor its ink is read at. */
+        const rimAlone = (k: number) => {
+          const shown = k % 2 === 0 ? even : odd;
+          const vs = new Float64Array(w * h);
+          for (let y = 0; y < h; y += 1) {
+            for (let x = 0; x < w; x += 1) {
+              vs[y * w + x] = diff(shown, b, x0 + x, y0 + y);
+            }
           }
-        }
-        const peak = Math.max(...vs);
-        const floor = peak < 60 ? Number.POSITIVE_INFINITY : peak / 3;
+          const peak = Math.max(...vs);
+          return {
+            vs,
+            floor: peak < 60 ? Number.POSITIVE_INFINITY : peak / 3,
+          };
+        };
+        const l = rimAlone(i);
+        const r = rimAlone(i + 1);
         const pieces = piecesOf(
-          Uint8Array.from(vs, (v) => (v >= floor ? 1 : 0)),
+          Uint8Array.from(l.vs, (v, k) =>
+            v >= l.floor || r.vs[k] >= r.floor ? 1 : 0
+          ),
           w,
           h
         )
@@ -797,7 +880,14 @@ async function rimInk(page: Page, strip: Strip, drawn: number[]) {
       return { tabs, idle, idlePx, subtle, corners };
     },
     {
-      srcs: [url(lit), url(unlit), url(whole), url(idleOff)],
+      srcs: [
+        url(lit),
+        url(unlit),
+        url(whole),
+        url(idleOff),
+        url(evenAlone),
+        url(oddAlone),
+      ],
       root: strip.root,
       tabSel: strip.tab,
       idle: idleTabs,
@@ -1268,11 +1358,23 @@ async function measure(page: Page, strip: Strip, region: Box, keep: number[]) {
       });
 
       /**
-       * Each tab drawn chosen (`kept`): whether it stands wholly inside
-       * the track and clear of both edges' fades as drawn (each fade cut
-       * short at its cap, TabsList; the phone's start fade runs 1.5 of
-       * its length).
+       * Each tab drawn chosen (`kept`: the one a switch leaves, then the
+       * one it chooses): whether it stands wholly inside the track and
+       * clear of both edges' fades as drawn (each fade cut short at its
+       * cap, TabsList; the phone's start fade runs 1.5 of its length).
+       * While a switch runs both are drawn chosen and the fades stand
+       * aside for both, so the clear view is the whole track; where the
+       * two together are wider than that, both cannot stand whole, and
+       * the tab the switch leaves may lie under the fade, cut at the
+       * track's edge (`yields`), while the one it chooses stands whole
+       * (DESIGN.md, Folder tabs, "Edges of a scrolling strip": "where
+       * they do not ... the new tab is the one shown whole"). Otherwise
+       * both stand clear.
        */
+      const span =
+        Math.max(...kept.map((k) => tabs[k].right)) -
+        Math.min(...kept.map((k) => tabs[k].left));
+      const tight = kept.length > 1 && span > tr.right - tr.left + 0.5;
       const phone = innerWidth <= 899;
       const capOf = (name: string) => {
         const v = Number.parseFloat(track.style.getPropertyValue(name));
@@ -1283,7 +1385,7 @@ async function measure(page: Page, strip: Strip, region: Box, keep: number[]) {
         capOf("--fade-cap-start")
       );
       const fadeOut = Math.min(fadeEnd, capOf("--fade-cap-end"));
-      const clear = kept.map((k) => {
+      const clear = kept.map((k, nth) => {
         const t = tabs[k];
         return {
           i: k,
@@ -1291,6 +1393,9 @@ async function measure(page: Page, strip: Strip, region: Box, keep: number[]) {
           clear:
             t.left >= tr.left + fadeIn - 0.5 &&
             t.right <= tr.right - fadeOut + 0.5,
+          // The tab a switch leaves, where the two do not fit together.
+          yields: tight && nth === 0,
+          span: r2(span),
           inFade: {
             start: r2(Math.max(0, tr.left + fadeIn - t.left)),
             end: r2(Math.max(0, t.right - (tr.right - fadeOut))),
@@ -1327,7 +1432,11 @@ async function measure(page: Page, strip: Strip, region: Box, keep: number[]) {
 const browser = await chromium.launch({
   executablePath: EXE,
   headless: true,
-  args: ["--no-sandbox"],
+  args: ["--no-sandbox", "--disable-gpu"],
+  env:
+    process.platform === "linux"
+      ? { ...process.env, FONTCONFIG_FILE: FONTS_CONF }
+      : process.env,
 });
 /**
  * The bench in `theme` with tab `at` of the session strip and `work` of the
@@ -1523,7 +1632,7 @@ const line = (label: string, n: Numbers) => {
   const clear = n.clear
     .map(
       (c) =>
-        `${c.i}:${c.clear ? "clear" : `FADED ${c.inFade.start}/${c.inFade.end}`}${c.labelWhole ? "" : " LABEL-CUT"}`
+        `${c.i}:${c.clear ? "clear" : `${c.yields ? `yields (the two span ${c.span})` : "FADED"} ${c.inFade.start}/${c.inFade.end}`}${c.labelWhole ? "" : " LABEL-CUT"}`
     )
     .join(" ");
   // Each seam: the pixels its left tab's end side and its right tab's
@@ -1603,8 +1712,9 @@ for (const [key, value] of Object.entries(report)) {
  *    crosses exactly one stroke, no wider than one, in every row down its
  *    side, and exactly one of its two sides draws it, the front tab's; one
  *    whose front tab wears none crosses none, and neither side draws;
- *  - corner: where two tops meet, the rims' own ink is one connected
- *    piece, or none (no stub, no notch);
+ *  - corner: where two tops meet, the rims' own ink, each rim read
+ *    against its own strength, is one connected piece, or none (no stub,
+ *    no notch);
  *  - 3:1: at rest, the chosen tab's rim holds 3:1: its top against the
  *    shelf, and each side it stands in front of against the fills either
  *    side, at the side's mid-height (the cell's `sides`); an unchosen tab's
@@ -1629,7 +1739,10 @@ for (const [key, value] of Object.entries(report)) {
  *  - sheet edge (a strip with no rim): every seam's edge, where the two
  *    fills differ, shows within 1px of where the glide puts it, and across
  *    the switch it moves one way only, never back (no jump, no flicker);
- *  - fades: every tab drawn chosen stands clear of both edge fades;
+ *  - fades: every tab drawn chosen stands clear of both edge fades, but
+ *    the one a switch leaves where it and the one it chooses are wider
+ *    together than the track: that one may lie under the fade, the new
+ *    one whole (DESIGN.md, Folder tabs, Edges of a scrolling strip);
  *  - titles: no tab's title is cut.
  * The first three are a rim's rules: n/a on a strip with none; the sheet
  * edge is n/a on one with a rim, whose seam is its stroke.
@@ -1937,7 +2050,7 @@ const faults = (n: Numbers, at: string): Record<Rule, string[]> => ({
       : []
   ),
   fades: n.clear.flatMap((c) =>
-    c.clear ? [] : [`${c.i} ${c.inFade.start}/${c.inFade.end}`]
+    c.clear || c.yields ? [] : [`${c.i} ${c.inFade.start}/${c.inFade.end}`]
   ),
   // Across frames: the table's own (`handover`, `jump`).
   handover: [],
