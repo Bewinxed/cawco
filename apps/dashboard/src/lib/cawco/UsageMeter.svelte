@@ -55,8 +55,8 @@
     plain,
     type RingAccount,
     shownNames,
+    stopFigure,
     stopOf,
-    stopText,
     weekLeft,
   } from "./usage/rings";
   import SessionsChip from "./usage/SessionsChip.svelte";
@@ -428,6 +428,8 @@
       : time;
   });
   const goWeek = $derived(openCode ? weekLeft(openCode) : null);
+  /** Claude's figure in the strip and the head: the stop, or when it's back. */
+  const stop = $derived(claude ? stopFigure(claude, now, nameOf) : null);
 
   /** The strip read out: what its one control is called. */
   const triggerLabel = $derived.by(() => {
@@ -435,9 +437,9 @@
       return `${gap?.short ?? empty}. Show every limit.`;
     }
     const said: string[] = [];
-    if (claude) {
+    if (claude && stop) {
       said.push(
-        `Claude · ${stopText(claude, now)} until no account can start a session · ${plain(caption(claude, now, nameOf))}`
+        `Claude · ${stop.said} · ${plain(caption(claude, now, nameOf))}`
       );
     }
     if (openCode) {
@@ -506,12 +508,19 @@
                 >
               {/if}
             </span>
+            <!-- Nothing can carry you now: when an account is back, after
+                 the refresh mark, as Go's cell beside it says its own. -->
+            {#if stop?.back}
+              <span aria-hidden="true" class="strip-glyph" data-strip-back
+                ><IconRefresh /></span
+              >
+            {/if}
             <span
               class="digits"
               data-strip-digits
               class:muted={claude.stale !== null}
               ><span class="mono-figure"
-                ><Figure text={stopText(claude, now)} /></span
+                ><Figure text={stop?.figure ?? ""} /></span
               ></span
             >
           </span>
@@ -748,23 +757,26 @@
             <span aria-hidden="true" class="mark"><ClaudeIcon /></span>
             Claude
           </h3>
-          <!-- The answer first: how long until nothing can carry you, said
-               whole on a rest or a tap. -->
-          <Tip label="Until no account can start a session" side="bottom" tap>
+          <!-- The answer first: how long until nothing can carry you, or,
+               when nothing can now, after the refresh mark, when an
+               account is back; said whole on a rest or a tap. -->
+          <Tip label={stop?.tip ?? ""} side="bottom" tap>
             {#snippet children(
               props
             )}
               <span
                 {...props}
-                aria-label="{stopText(
-                  claude,
-                  now
-                )} until no account can start a session"
+                aria-label={stop?.said}
                 class="kpi num"
                 data-stop-kpi
                 role="img"
                 class:muted={claude.stale !== null}
-                ><Figure text={stopText(claude, now)} /></span
+                >{#if stop?.back}
+                  <span aria-hidden="true" class="kpi-glyph" data-stop-back
+                    ><IconRefresh /></span
+                  >
+                {/if}
+                <Figure text={stop?.figure ?? ""} /></span
               >
             {/snippet}
           </Tip>
@@ -1124,6 +1136,20 @@
   }
   .kpi.muted {
     color: var(--ink-muted);
+  }
+  /* Nothing can carry you now: the refresh mark before when an account is
+     back, as the Usage page's lead draws it: Solar duotone, at the figure's
+     cap height, muted. */
+  .kpi-glyph {
+    display: inline-grid;
+    margin-inline-end: 0.25em;
+    vertical-align: -0.1em;
+    color: var(--ink-muted);
+
+    & :global(svg) {
+      inline-size: 0.8em;
+      block-size: 0.8em;
+    }
   }
   /* The house edge fade at its full length on every width, as Caw's panel
      has it: the phone's short one reads as no fade at all. */

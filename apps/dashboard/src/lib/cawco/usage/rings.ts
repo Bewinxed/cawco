@@ -589,11 +589,67 @@ export const plain = (parts: Part[]): string =>
 const guess = (stale: boolean, time: string): string =>
   stale ? `~${time}` : time;
 
-/** The strip's and the page's figure: how long until nothing can carry you. */
-export const stopText = (c: ClaudeRings, now: number): string =>
-  c.stopAt === null || c.stopAt - now >= HORIZON_MS
-    ? "5h+"
-    : guess(c.stale !== null, fmt(c.stopAt - now));
+/** The strip's, the popover head's and the page's figure, and its words. */
+export interface StopFigure {
+  /** Nothing can carry you now: the figure is when an account is back. */
+  back: boolean;
+  figure: string;
+  /** What it is of, beside it on the page. */
+  of: string;
+  /** Read out whole. */
+  said: string;
+  /** Its tooltip. */
+  tip: string;
+}
+
+/**
+ * The strip's, the popover head's and the page's figure: how long until
+ * nothing can carry you ("1h 20m", "5h+", "~1h 20m" when a reading in the
+ * chain is out of date). When nothing can carry you now it says, as an
+ * at-limit cell does (`back`: after the refresh mark), how long until an
+ * account is back ("2h 00m"; "5h+" when none is inside the five hours),
+ * and its tip says it in words, each account by `nameOf`.
+ */
+export function stopFigure(
+  c: ClaudeRings,
+  now: number,
+  nameOf: (r: RingAccount) => string = (r) => r.name
+): StopFigure {
+  if (c.carry === null) {
+    if (c.back && c.backAt !== null && c.backAt - now < HORIZON_MS) {
+      const name = nameOf(c.back);
+      const figure = fmt(c.backAt - now);
+      const tip = `Nothing can start a session until ${name} is back in ${figure}`;
+      return {
+        back: true,
+        figure,
+        of: `until ${name} is back`,
+        said: tip,
+        tip,
+      };
+    }
+    const tip = "Nothing can start a session in the next 5 hours";
+    return {
+      back: true,
+      figure: "5h+",
+      of: "until an account is back",
+      said: tip,
+      tip,
+    };
+  }
+  const figure =
+    c.stopAt === null || c.stopAt - now >= HORIZON_MS
+      ? "5h+"
+      : guess(c.stale !== null, fmt(c.stopAt - now));
+  const of = "until no account can start a session";
+  return {
+    back: false,
+    figure,
+    of,
+    said: `${figure} ${of}`,
+    tip: "Until no account can start a session",
+  };
+}
 
 /**
  * The strip's caption: who is next, else when you're back, each account by
@@ -655,6 +711,13 @@ export function stopFor(
   return stop !== null && stop.at - now < HORIZON_MS ? stop : null;
 }
 
+/**
+ * An account whose stop is read as if it took over now (`stopFor`'s idle):
+ * one running no session that does not carry you.
+ */
+export const isIdle = (r: RingAccount, c: ClaudeRings | null): boolean =>
+  c !== null && r.sessions.length === 0 && r.id !== c.carry?.id;
+
 /** When an account stops (`stopFor`), as a moment. */
 export const stopOf = (
   r: RingAccount,
@@ -712,14 +775,12 @@ export function dialTip(
   now: number
 ): string {
   const time = cellTime(r, c, now);
-  /** At the fleet's pace as if it took over now (`stopFor`'s idle). */
-  const idle = c !== null && r.sessions.length === 0 && r.id !== c.carry?.id;
   let pace = "";
   if (time.kind === "stop") {
     if (time.figure === "5h+") {
       pace = " · lasts past the next 5 hours";
     } else {
-      pace = ` · runs out in ${time.figure}${idle ? " if it takes over now" : ""}`;
+      pace = ` · runs out in ${time.figure}${isIdle(r, c) ? " if it takes over now" : ""}`;
     }
   }
   /** The line the pace goes on: the limit it stops on, else the one that binds. */
@@ -1022,10 +1083,11 @@ export function tileFigure(
   // The same stop the popover's cell says, naming the limit it runs out on.
   const stop = stopFor(r, c, now);
   const figure = stop === null ? "5h+" : fmt(stop.at - now);
-  const label =
-    stop === null
-      ? "lasts past the next 5 hours"
-      : `until its ${stop.limit} limit runs out`;
+  // An idle account's stop is as if it took over now, as its dial's tip says.
+  let label = "lasts past the next 5 hours";
+  if (stop !== null) {
+    label = `until its ${stop.limit} limit runs out${isIdle(r, c) ? " if it takes over now" : ""}`;
+  }
   return {
     back: false,
     figure,

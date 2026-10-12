@@ -37,8 +37,8 @@ import {
   plain,
   type RingAccount,
   shownNames,
+  stopFigure,
   stopOf,
-  stopText,
   weekLeft,
 } from "../apps/dashboard/src/lib/cawco/usage/rings";
 import {
@@ -296,9 +296,10 @@ function web(now: number) {
     const start =
       ring?.state === "limit" ? Math.max(from, ring.backAt ?? end) : from;
     if (ring && start < to) {
-      const ahead = (ms: number) => (ms < 60_000 ? "now" : `+${fmt(ms)}`);
+      // Relay.svelte's `ahead` and `bandTip`.
+      const ahead = (ms: number) => (fmt(ms) === "0m" ? "now" : `+${fmt(ms)}`);
       bands.push(
-        `${nameOf(ring)} · ${ahead(start - now)} to ${ahead(to - now)}`
+        `${nameOf(ring)} carries you from ${ahead(start - now)} to ${ahead(to - now)}`
       );
     }
     at = to;
@@ -306,7 +307,7 @@ function web(now: number) {
   return {
     stage: stageName,
     now,
-    stopText: stopText(claude, now),
+    stop: stopFigure(claude, now, nameOf),
     caption: plain(caption(claude, now, nameOf)),
     stopInside: claude.stopAt !== null && claude.stopAt - now < 5 * 3_600_000,
     groups,

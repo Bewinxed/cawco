@@ -363,10 +363,37 @@ public enum Rings {
         stale ? "~\(time)" : time
     }
 
-    /// The strip's and the page's figure: how long until nothing can carry you (`stopText`).
-    public static func stopText(_ c: Claude, now: Double) -> String {
-        guard let stopAt = c.stopAt, stopAt - now < horizonMs else { return "5h+" }
-        return guess(c.stale != nil, fmt(stopAt - now))
+    /// The strip's, the sheet head's and the page's figure, and its words (`StopFigure`).
+    public struct StopFigure: Sendable, Hashable {
+        /// Nothing can carry you now: the figure is when an account is back.
+        public let back: Bool
+        public let figure: String
+        /// What it is of, beside it on the page.
+        public let of: String
+        /// Read out whole.
+        public let said: String
+        /// Its tooltip.
+        public let tip: String
+    }
+
+    /// `stopFigure`: how long until nothing can carry you ("1h 20m", "5h+",
+    /// "~1h 20m"); when nothing can carry you now, as an at-limit cell says
+    /// it (`back`: after the refresh mark), how long until an account is back
+    /// ("2h 00m"; "5h+" when none is inside the five hours), its tip in words.
+    public static func stopFigure(_ c: Claude, now: Double, nameOf: (Account) -> String = { $0.name }) -> StopFigure {
+        if c.carry == nil {
+            if let back = c.back, let backAt = c.backAt, backAt - now < horizonMs {
+                let name = nameOf(back)
+                let figure = fmt(backAt - now)
+                let tip = "Nothing can start a session until \(name) is back in \(figure)"
+                return StopFigure(back: true, figure: figure, of: "until \(name) is back", said: tip, tip: tip)
+            }
+            let tip = "Nothing can start a session in the next 5 hours"
+            return StopFigure(back: true, figure: "5h+", of: "until an account is back", said: tip, tip: tip)
+        }
+        let figure = if let stopAt = c.stopAt, stopAt - now < horizonMs { guess(c.stale != nil, fmt(stopAt - now)) } else { "5h+" }
+        let of = "until no account can start a session"
+        return StopFigure(back: false, figure: figure, of: of, said: "\(figure) \(of)", tip: "Until no account can start a session")
     }
 
     /// The strip's caption: who is next, else when you're back (`caption`).
@@ -403,6 +430,13 @@ public enum Rings {
         return stop
     }
 
+    /// An account whose stop is read as if it took over now (`isIdle`): one
+    /// running no session that does not carry you.
+    public static func isIdle(_ r: Account, _ c: Claude?) -> Bool {
+        guard let c else { return false }
+        return r.sessions.isEmpty && r.id != c.carry?.id
+    }
+
     /// When an account stops (`stopOf`).
     public static func stopOf(_ r: Account, _ c: Claude?, now: Double) -> Double? {
         stopFor(r, c, now: now)?.at
@@ -437,11 +471,9 @@ public enum Rings {
     /// 5 hours"; how long it carries you is its band's to say.
     public static func dialTip(_ r: Account, _ c: Claude?, now: Double) -> String {
         let time = cellTime(r, c, now: now)
-        // At the fleet's pace as if it took over now (`stopFor`'s idle).
-        let idle = c != nil && r.sessions.isEmpty && r.id != c?.carry?.id
         var pace = ""
         if case let .stop(figure, _) = time {
-            pace = figure == "5h+" ? " · lasts past the next 5 hours" : " · runs out in \(figure)\(idle ? " if it takes over now" : "")"
+            pace = figure == "5h+" ? " · lasts past the next 5 hours" : " · runs out in \(figure)\(isIdle(r, c) ? " if it takes over now" : "")"
         }
         let stopsOnWeek = (stopFor(r, c, now: now)?.limit ?? r.bindName) != "5-hour"
         let spent = r.backAt == nil ? "used up" : "used up · back in \(until(r.backAt, now))"
@@ -638,7 +670,8 @@ public enum Rings {
             return TileFigure(back: false, figure: "5h+", label: "never a backup")
         }
         let stop = stopFor(r, c, now: now)
-        let label = stop.map { "until its \($0.limit) limit runs out" } ?? "lasts past the next 5 hours"
+        // An idle account's stop is as if it took over now, as its dial's tip says.
+        let label = stop.map { "until its \($0.limit) limit runs out\(isIdle(r, c) ? " if it takes over now" : "")" } ?? "lasts past the next 5 hours"
         return TileFigure(back: false, figure: stop.map { fmt($0.at - now) } ?? "5h+",
                           label: r.state == .stale ? "last known · \(label)" : label)
     }

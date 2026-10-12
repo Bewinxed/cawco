@@ -32,7 +32,7 @@
     openCodeSentence,
     type Part,
     type RingAccount,
-    stopText,
+    stopFigure,
     type TileFigure,
     tileFigure,
     tileSentence,
@@ -78,10 +78,11 @@
   const lead = $derived.by(
     (): { back: boolean; figure: string; of: string; say: Part[] } | null => {
       if (claude) {
+        const stop = stopFigure(claude, now);
         return {
-          back: false,
-          figure: stopText(claude, now),
-          of: "until no account can start a session",
+          back: stop.back,
+          figure: stop.figure,
+          of: stop.of,
           say: leadSentence(claude, now),
         };
       }

@@ -126,6 +126,9 @@ private final class StripFace: UIView {
     private let claudeMark = usageMark("Claude")
     private var rings: [RingsView] = []
     private let more = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
+    /// Nothing can carry you now: the refresh mark before when an account is back (`data-strip-back`).
+    private let backGlyph = GlyphView(.refresh, size: 12, tint: Palette.inkMuted)
+    private var claudeBack = false
     private let digits = usageFigure(TypeScale.typeLabel, ink: Palette.inkStrong, weight: .medium)
     private let caption = KitLabel(TypeScale.typeMeta.with(leading: 15.0 / 12), ink: Palette.inkMuted)
     private let goMark = usageMark("opencode")
@@ -145,7 +148,7 @@ private final class StripFace: UIView {
         clipsToBounds = true
         caption.lineBreakMode = .byTruncatingTail
         more.textAlignment = .center
-        for part in [noline, claudeMark, more, digits, caption, goMark, goRing, goGlyph, goDigits, goWeekMark, goWeek] as [UIView] {
+        for part in [noline, claudeMark, more, backGlyph, digits, caption, goMark, goRing, goGlyph, goDigits, goWeekMark, goWeek] as [UIView] {
             part.translatesAutoresizingMaskIntoConstraints = true
             addSubview(part)
         }
@@ -176,14 +179,18 @@ private final class StripFace: UIView {
         for (ring, account) in zip(rings, accounts) {
             ring.configure(account, animated: true)
         }
+        claudeBack = false
         if let claude = view.claude {
-            digits.text = Rings.stopText(claude, now: view.now)
+            let stop = Rings.stopFigure(claude, now: view.now, nameOf: view.nameOf)
+            claudeBack = stop.back
+            digits.text = stop.figure
             digits.ink = claude.stale != nil ? Palette.inkMuted : Palette.inkStrong
             captionParts = Rings.caption(claude, now: view.now, nameOf: view.nameOf)
         }
         for part in [claudeMark, digits, caption] as [UIView] {
             part.isHidden = view.claude == nil
         }
+        backGlyph.isHidden = !claudeBack
         let go = view.openCode
         for part in [goMark, goRing, goDigits] as [UIView] {
             part.isHidden = go == nil
@@ -223,7 +230,7 @@ private final class StripFace: UIView {
         guard view.claude != nil || view.openCode != nil else { return "\(gap?.short ?? empty). Show every limit." }
         var said: [String] = []
         if let claude = view.claude {
-            said.append("Claude · \(Rings.stopText(claude, now: view.now)) until no account can start a session · "
+            said.append("Claude · \(Rings.stopFigure(claude, now: view.now, nameOf: view.nameOf).said) · "
                 + Rings.plain(Rings.caption(claude, now: view.now, nameOf: view.nameOf)))
         }
         if let go = view.openCode {
@@ -252,7 +259,9 @@ private final class StripFace: UIView {
         var goShown = view.openCode != nil
         if let claude = view.claude {
             let n = Double(claude.accounts.count)
+            // The refresh mark and its gap stand before the digits when nothing carries you now.
             let digitsWidth = digits.intrinsicContentSize.width
+            let backWidth = claudeBack ? 12.0 + 6 : 0
             // The web's flex row: Claude's cell asks for its first line with one
             // ring's room (the rings stand absolutely, a ring's width their
             // least) or its caption, whichever is wider; where that, the gap
@@ -262,12 +271,12 @@ private final class StripFace: UIView {
             // The caption's own width on one line, whatever room it was last laid in.
             let captionWidth = (caption.attributedText?.boundingRect(with: CGSize(width: 10000, height: 100), options: [.usesLineFragmentOrigin],
                                                                      context: nil).width ?? 0).rounded(.up)
-            let asks = max(14 + 6 + 16 + 6 + digitsWidth, captionWidth)
+            let asks = max(14 + 6 + 16 + 6 + backWidth + digitsWidth, captionWidth)
             goShown = goShown && asks + gap + goWidth <= width
             usageProbe?.notice("strip wrap asks \(asks, privacy: .public) caption \(captionWidth, privacy: .public) gap \(self.gap, privacy: .public) go \(goWidth, privacy: .public) width \(width, privacy: .public) goShown \(goShown, privacy: .public)")
             claudeWidth = goShown ? width - gap - goWidth : width
             claudeMark.frame = CGRect(x: 0, y: (line - 14) / 2, width: 14, height: 14)
-            let room = max(16, min(n * Self.slot - 4, claudeWidth - 14 - 6 - 6 - digitsWidth))
+            let room = max(16, min(n * Self.slot - 4, claudeWidth - 14 - 6 - 6 - backWidth - digitsWidth))
             let fit = max(1, Int(((room + 4) / Self.slot).rounded(.down)))
             let shownCount = claude.accounts.count > fit ? fit - 1 : claude.accounts.count
             let extra = claude.accounts.count - shownCount
@@ -283,7 +292,8 @@ private final class StripFace: UIView {
             more.isHidden = extra == 0
             more.text = "+\(extra)"
             more.frame = CGRect(x: marksX + slotAt(shownCount), y: 0, width: max(16, more.intrinsicContentSize.width), height: 16)
-            digits.frame = CGRect(x: marksX + room + 6, y: 0, width: digitsWidth, height: line)
+            backGlyph.frame = CGRect(x: marksX + room + 6, y: 2, width: 12, height: 12)
+            digits.frame = CGRect(x: marksX + room + 6 + backWidth, y: 0, width: digitsWidth, height: line)
             caption.frame = CGRect(x: 0, y: capTop, width: claudeWidth, height: capHeight)
             usageProbe?.notice("strip marks \(shownCount, privacy: .public) more \(extra, privacy: .public) width \(width, privacy: .public) digits \(self.digits.text ?? "", privacy: .public) caption \(self.caption.text ?? "", privacy: .public)")
         } else {
@@ -325,6 +335,10 @@ final class UsageSheetController: ObservedViewController {
     private let head = UIView()
     private let provider = UIStackView()
     private let kpi = KitLabel(TypeScale.typeKpi, ink: Palette.inkStat)
+    /// The KPI, after the refresh mark when nothing can carry you now (`data-stop-back`).
+    private let kpiRow = UIStackView()
+    /// The KPI's tip (`stopFigure`'s).
+    private var kpiTip = ""
     private let relay = RelayView()
     private let wall = UsageWallView()
     private let below = UIStackView()
@@ -393,7 +407,9 @@ final class UsageSheetController: ObservedViewController {
         kpi.accessibilityTraits = .image
         kpi.accessibilityIdentifier = "usage-kpi"
         kpi.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(kpiTapped)))
-        let line = UIStackView(arrangedSubviews: [provider, UIView(), kpi])
+        kpiRow.addArrangedSubview(kpi)
+        kpiRow.alignment = .center
+        let line = UIStackView(arrangedSubviews: [provider, UIView(), kpiRow])
         line.alignment = .center
         line.spacing = Space.space2
         let headColumn = UIStackView(arrangedSubviews: [line, relay])
@@ -524,12 +540,22 @@ final class UsageSheetController: ObservedViewController {
         head.isHidden = usage.claude == nil
         if let claude = usage.claude {
             kpi.role = TypeScale.typeKpi.with(points: TypeScale.typeKpi.points(viewport: Double(view.window?.bounds.width ?? view.bounds.width)))
-            kpi.text = Rings.stopText(claude, now: now)
+            let stop = Rings.stopFigure(claude, now: now, nameOf: usage.nameOf)
+            kpi.text = stop.figure
             kpi.ink = claude.stale != nil ? Palette.inkMuted : Palette.inkStat
-            kpi.accessibilityLabel = "\(Rings.stopText(claude, now: now)) until no account can start a session"
+            kpi.accessibilityLabel = stop.said
+            kpiTip = stop.tip
+            // The refresh mark at 0.8 of the figure's size, a quarter of it before the figure (`.kpi-glyph`).
+            for glyph in kpiRow.arrangedSubviews where glyph is GlyphView {
+                glyph.removeFromSuperview()
+            }
+            if stop.back {
+                kpiRow.insertArrangedSubview(GlyphView(.refresh, size: (kpi.font.pointSize * 0.8).rounded(), tint: Palette.inkMuted), at: 0)
+            }
+            kpiRow.spacing = (kpi.font.pointSize * 0.25).rounded()
             let segments = Rings.segments(usage.spans, accounts: claude.accounts, now: now)
             relay.configure(segments, stopKey: Rings.stopKey(segments, stopAt: claude.stopAt, now: now), names: usage.nameOf)
-            usageProbe?.notice("now \(Int(now), privacy: .public) kpi \(Rings.stopText(claude, now: now), privacy: .public) bands \(segments.compactMap { seg in seg.ring.map { Rings.bandTip(seg, name: usage.nameOf($0)) } }.joined(separator: " | "), privacy: .public)")
+            usageProbe?.notice("now \(Int(now), privacy: .public) kpi \(stop.figure, privacy: .public) back \(stop.back, privacy: .public) bands \(segments.compactMap { seg in seg.ring.map { Rings.bandTip(seg, name: usage.nameOf($0)) } }.joined(separator: " | "), privacy: .public)")
             usageProbe?.notice("relay \(segments.map { "\($0.ring?.id ?? "blank"):\(Int($0.ms / 60000))" }.joined(separator: ","), privacy: .public) stop \(Rings.stopKey(segments, stopAt: claude.stopAt, now: now) ?? "none", privacy: .public)")
         }
         wall.configure(usage, rankedAt: rankedAt ?? now, lit: lit)
@@ -603,7 +629,7 @@ final class UsageSheetController: ObservedViewController {
     }
 
     @objc private func kpiTapped() {
-        UsageTipController.show("Until no account can start a session", from: kpi, side: .bottom, in: self)
+        UsageTipController.show(kpiTip, from: kpi, side: .bottom, in: self)
     }
 
     /// A band names its account and its span above the bar, and lights its cell while open.

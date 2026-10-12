@@ -127,8 +127,8 @@ final class UsageLimitsCard: UsageCard {
     private func lead(_ view: UsageRings) -> UIView? {
         let figure: (back: Bool, figure: String, of: String, say: [Rings.Part], muted: Bool)
         if let claude = view.claude {
-            figure = (false, Rings.stopText(claude, now: view.now), "until no account can start a session", Rings.leadSentence(claude, now: view.now),
-                      claude.stale != nil)
+            let stop = Rings.stopFigure(claude, now: view.now)
+            figure = (stop.back, stop.figure, stop.of, Rings.leadSentence(claude, now: view.now), claude.stale != nil)
         } else if let go = view.openCode {
             let tile = Rings.openCodeFigure(go, now: view.now)
             figure = (tile.back, tile.figure, tile.back ? "until it’s back" : tile.label, Rings.openCodeSentence(go, now: view.now), false)
