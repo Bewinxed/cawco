@@ -1918,7 +1918,9 @@
     --px: 12px;
     --text: var(--text-label);
     --item: 32px;
-    --sheet: var(--surface-recess);
+    /* The chosen tab's sheet: the transcript's head dissolves into the same
+       token (HeadFade), so the two are one fill at the shelf's line. */
+    --sheet: var(--tab-sheet);
     --tab-hover: light-dark(var(--surface-recess), var(--surface-hover));
     /* The status rim's stroke (`.rim`, `tab-rim-width`, a plain px number
        for the rim's arithmetic): a gliding seam stops with it on the

@@ -119,6 +119,8 @@ public enum Palette {
     public static let surfaceWell = Palette.named("surface-well")
     /// The bar folder tabs stand on, a step below recess-deep.
     public static let surfaceShelf = Palette.named("surface-shelf")
+    /// The chosen session tab's sheet, the page it opens continued up into the strip (PaneTabs `--sheet`): the transcript's own surface, on every status (a status is the rim's, never the sheet's). The transcript's head dissolves into it under the strip (HeadFade), so the band's top edge and the tab's foot are one fill.
+    public static let tabSheet = Palette.named("tab-sheet")
     /// An unchosen folder tab on the phone's row, one tab from the chosen one. Each tab further recedes a step toward the shelf, to three.
     public static let tabRecede1 = Palette.named("tab-recede-1")
     /// An unchosen folder tab on the phone's row, two tabs from the chosen one.
@@ -283,6 +285,8 @@ public enum Palette {
     /// The transcript rail: one flat 2px line down a run of tool rows. An image, not a colour: rows paint it as a sized background layer (2px wide), and a colour would fill the whole row. Head and continuing rows paint the same, so no seam shows between them.
     public static let rail = Gradient(stops: [Ink(light: P3(0.3988, 0.3803, 0.3532, 0.4000), dark: P3(0.7298, 0.7141, 0.6870, 0.4000)), Ink(light: P3(0.3988, 0.3803, 0.3532, 0.4000), dark: P3(0.7298, 0.7141, 0.6870, 0.4000))])
     public static let railBody = Palette.named("rail-body")
+    /// The transcript head's colour ramp, a mask over c-head-fade: how much of the chosen tab's sheet (tab-sheet) stands over the rows, inOutCubic(x) at each tenth of the band from its foot (x = 0, the gradient's end) to the strip's edge (x = 1, its start), the curve the head blur's slices are bounded on, so the blur and the colour arrive together. Flat at both ends: no line where the band starts on the rows, and none where it meets the tab's foot, where it is the sheet whole.
+    public static let headTintRamp = Gradient(stops: [Ink(light: P3(0.0000, 0.0000, 0.0000, 1.0000), dark: P3(0.0000, 0.0000, 0.0000, 1.0000)), Ink(light: P3(0.0000, 0.0000, 0.0000, 0.9960), dark: P3(0.0000, 0.0000, 0.0000, 0.9960)), Ink(light: P3(0.0000, 0.0000, 0.0000, 0.9680), dark: P3(0.0000, 0.0000, 0.0000, 0.9680)), Ink(light: P3(0.0000, 0.0000, 0.0000, 0.8920), dark: P3(0.0000, 0.0000, 0.0000, 0.8920)), Ink(light: P3(0.0000, 0.0000, 0.0000, 0.7440), dark: P3(0.0000, 0.0000, 0.0000, 0.7440)), Ink(light: P3(0.0000, 0.0000, 0.0000, 0.5000), dark: P3(0.0000, 0.0000, 0.0000, 0.5000)), Ink(light: P3(0.0000, 0.0000, 0.0000, 0.2560), dark: P3(0.0000, 0.0000, 0.0000, 0.2560)), Ink(light: P3(0.0000, 0.0000, 0.0000, 0.1080), dark: P3(0.0000, 0.0000, 0.0000, 0.1080)), Ink(light: P3(0.0000, 0.0000, 0.0000, 0.0320), dark: P3(0.0000, 0.0000, 0.0000, 0.0320)), Ink(light: P3(0.0000, 0.0000, 0.0000, 0.0040), dark: P3(0.0000, 0.0000, 0.0000, 0.0040)), Ink(light: P3(0.0000, 0.0000, 0.0000, 0.0000), dark: P3(0.0000, 0.0000, 0.0000, 0.0000))])
     /// Chrome materials: structural translucency, never decoration.
     public static let materialPanel = Palette.named("material-panel")
     /// What a dialog's backdrop paints: the page itself, translucent.
@@ -508,9 +512,9 @@ public enum Size {
     public static let cTabLead: Double = 12
     /// A session tab row: its list's 4px pad over 32px tabs (PaneTabs).
     public static let cTabRowH: Double = 36
-    /// A transcript's head blur, on every width: rows scrolled up under the tab strip go out of focus over this length at the transcript's top edge (c-head-fade-blur at the edge, sharp at its end), so they never meet the tab's rim edge-on. It comes in over the first c-head-fade of scroll; scrolled to the very top there is none and the first row is sharp (the web's transcript head). On iOS the same band fades the rows out toward the edge with an alpha mask instead (EdgeFade in CawCoKit): a tint-free variable blur there is private API, and nothing is painted over the rows.
+    /// A transcript's head, on every width: rows scrolled up under the tab strip go out of focus over this length at the transcript's top edge (c-head-fade-blur at the edge, sharp at its end) and dissolve into the chosen tab's sheet (tab-sheet, on head-tint-ramp), so at the edge they have become the tab's fill and the transcript and its tab read as one sheet. It comes in over the first c-head-fade of scroll; scrolled to the very top there is none and the first row is sharp (the web's transcript head). On iOS the same band fades the rows out toward the edge with an alpha mask instead (EdgeFade in CawCoKit): a tint-free variable blur there is private API.
     public static let cHeadFade: Double = 24
-    /// The head blur's radius at the transcript's top edge, its strongest layer. The layers under it halve (2, 1, 0.5px) toward the band's end, their slices bounded at inOutCubic positions (the web's transcript head; iOS fades the band instead, c-head-fade). A blur, never a colour. The recall wheel's rows go out of focus up to this radius as they rise through its far edge's band, a row and the room above it (RecallWheel).
+    /// The head blur's radius at the transcript's top edge, its strongest layer. The layers under it halve (2, 1, 0.5px) toward the band's end, their slices bounded at inOutCubic positions (the web's transcript head; iOS fades the band instead, c-head-fade). The colour over it is head-tint-ramp's. The recall wheel's rows go out of focus up to this radius as they rise through its far edge's band, a row and the room above it (RecallWheel).
     public static let cHeadFadeBlur: Double = 4
     /// A pick taken off the recall wheel: the row on the line gives way to the field's own text in place, blurring out by this much as it fades, so the words it shares with the field read as one and only the rest dissolves (transitions.dev, text swap soft).
     public static let cRecallCrossBlur: Double = 2

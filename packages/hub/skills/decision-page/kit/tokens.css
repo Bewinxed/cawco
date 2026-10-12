@@ -144,6 +144,8 @@
     --surface-well: light-dark(var(--surface-recess), var(--neutral-1));
     /* The bar folder tabs stand on, a step below recess-deep. */
     --surface-shelf: light-dark(var(--neutral-5), oklch(15.6% 0.004 70));
+    /* The chosen session tab's sheet, the page it opens continued up into the strip (PaneTabs `--sheet`): the transcript's own surface, on every status (a status is the rim's, never the sheet's). The transcript's head dissolves into it under the strip (HeadFade), so the band's top edge and the tab's foot are one fill. */
+    --tab-sheet: var(--surface-recess);
     /* An unchosen folder tab on the phone's row, one tab from the chosen one. Each tab further recedes a step toward the shelf, to three. */
     --tab-recede-1: var(--surface-recess-deep);
     /* An unchosen folder tab on the phone's row, two tabs from the chosen one. */
@@ -411,6 +413,20 @@
       oklch(from var(--neutral-11) l c h / 0.4)
     );
     --rail-body: var(--rail);
+    /* The transcript head's colour ramp, a mask over c-head-fade: how much of the chosen tab's sheet (tab-sheet) stands over the rows, inOutCubic(x) at each tenth of the band from its foot (x = 0, the gradient's end) to the strip's edge (x = 1, its start), the curve the head blur's slices are bounded on, so the blur and the colour arrive together. Flat at both ends: no line where the band starts on the rows, and none where it meets the tab's foot, where it is the sheet whole. */
+    --head-tint-ramp: linear-gradient(
+      rgb(0 0 0 / 1),
+      rgb(0 0 0 / 0.996),
+      rgb(0 0 0 / 0.968),
+      rgb(0 0 0 / 0.892),
+      rgb(0 0 0 / 0.744),
+      rgb(0 0 0 / 0.5),
+      rgb(0 0 0 / 0.256),
+      rgb(0 0 0 / 0.108),
+      rgb(0 0 0 / 0.032),
+      rgb(0 0 0 / 0.004),
+      rgb(0 0 0 / 0)
+    );
     /* Chrome materials: structural translucency, never decoration. */
     --material-panel: oklch(from var(--surface-raised) l c h / 0.72);
     /* What a dialog's backdrop paints: the page itself, translucent. */
@@ -657,9 +673,9 @@
     --c-tab-lead: 12px;
     /* A session tab row: its list's 4px pad over 32px tabs (PaneTabs). */
     --c-tab-row-h: 36px;
-    /* A transcript's head blur, on every width: rows scrolled up under the tab strip go out of focus over this length at the transcript's top edge (c-head-fade-blur at the edge, sharp at its end), so they never meet the tab's rim edge-on. It comes in over the first c-head-fade of scroll; scrolled to the very top there is none and the first row is sharp (the web's transcript head). On iOS the same band fades the rows out toward the edge with an alpha mask instead (EdgeFade in CawCoKit): a tint-free variable blur there is private API, and nothing is painted over the rows. */
+    /* A transcript's head, on every width: rows scrolled up under the tab strip go out of focus over this length at the transcript's top edge (c-head-fade-blur at the edge, sharp at its end) and dissolve into the chosen tab's sheet (tab-sheet, on head-tint-ramp), so at the edge they have become the tab's fill and the transcript and its tab read as one sheet. It comes in over the first c-head-fade of scroll; scrolled to the very top there is none and the first row is sharp (the web's transcript head). On iOS the same band fades the rows out toward the edge with an alpha mask instead (EdgeFade in CawCoKit): a tint-free variable blur there is private API. */
     --c-head-fade: 24px;
-    /* The head blur's radius at the transcript's top edge, its strongest layer. The layers under it halve (2, 1, 0.5px) toward the band's end, their slices bounded at inOutCubic positions (the web's transcript head; iOS fades the band instead, c-head-fade). A blur, never a colour. The recall wheel's rows go out of focus up to this radius as they rise through its far edge's band, a row and the room above it (RecallWheel). */
+    /* The head blur's radius at the transcript's top edge, its strongest layer. The layers under it halve (2, 1, 0.5px) toward the band's end, their slices bounded at inOutCubic positions (the web's transcript head; iOS fades the band instead, c-head-fade). The colour over it is head-tint-ramp's. The recall wheel's rows go out of focus up to this radius as they rise through its far edge's band, a row and the room above it (RecallWheel). */
     --c-head-fade-blur: 4px;
     /* A pick taken off the recall wheel: the row on the line gives way to the field's own text in place, blurring out by this much as it fades, so the words it shares with the field read as one and only the rest dissolves (transitions.dev, text swap soft). */
     --c-recall-cross-blur: 2px;
