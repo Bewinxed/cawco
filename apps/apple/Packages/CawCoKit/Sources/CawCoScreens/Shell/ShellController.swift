@@ -311,7 +311,31 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         railEdge.delegate = railEdgeGate
         view.addGestureRecognizer(railEdge)
         NotificationCenter.default.addObserver(self, selector: #selector(sceneActivated(_:)), name: UIScene.didActivateNotification, object: nil)
+        #if targetEnvironment(macCatalyst)
+        view.addGestureRecognizer(WindowDragGesture { [weak self] touch in
+            guard let self else { return false }
+            return movesWindow(touch.view, at: touch.location(in: view))
+        })
+        #endif
     }
+
+    #if targetEnvironment(macCatalyst)
+    /// Whether a press that landed on `hit`, at `point` in the shell's
+    /// points, moves the window (MacWindow): on the bar's empty space, which
+    /// the system draws from the page column's top, 10pt over its own frame,
+    /// down to the bar's floor; or on the rail's top, over its header, where
+    /// the traffic lights stand. Never on a tab, a control or a row.
+    func movesWindow(_ hit: UIView?, at point: CGPoint) -> Bool {
+        guard let hit else { return false }
+        if let railView = rail.viewIfLoaded, hit.isDescendant(of: railView) {
+            return railView.convert(point, from: view).y < railView.safeAreaInsets.top && WindowDragGesture.nothingTakes(hit, under: railView)
+        }
+        if let page = mainNav.viewIfLoaded, hit.isDescendant(of: page) {
+            return page.convert(point, from: view).y < mainNav.navigationBar.frame.maxY && WindowDragGesture.nothingTakes(hit, under: page)
+        }
+        return false
+    }
+    #endif
 
     // MARK: Edge swipe
 
@@ -396,6 +420,9 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     /// The fleet may have been read before the shell was on screen: it lands now.
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+        #if targetEnvironment(macCatalyst)
+        if let scene = view.window?.windowScene { MacWindow.takeOverMoves(of: scene) }
+        #endif
         applyLanding()
         #if DEBUG
         openProbeForm()
@@ -448,10 +475,18 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
 
     /// A Mac pass's `-mac-probe <dir>`: once the fleet is read, at a 1400pt
     /// and then a 1000pt wide window, it renders the window into `dir`
-    /// (board, Caw's panel, the Machines popover) and prints, per width:
-    /// the bar's behavioural style and the titlebar, whether the board takes
-    /// clicks, each bar tab's hit-test at its centre, a rail hit-test, and
-    /// the panel's and the popover's frames against their anchors.
+    /// (board, Caw's panel, the Machines popover) and prints, per width: the
+    /// bar as drawn (from the window's top), its height against the web's,
+    /// its controls' centre line against its own; the traffic lights' frame
+    /// against the rail, its header and the bar's first control; each bar
+    /// tab's hit-test at its centre and a rail hit-test; at points on the
+    /// bar's empty space, on a tab and a control in the old titlebar strip
+    /// and on the rail's top, the UIKit view a press lands on, whether the
+    /// shell moves the window from there (`movesWindow`), and whether AppKit
+    /// still moves it by itself (a press queued on NSApplication, which
+    /// reaches the window and not UIKit); then the panel's and the popover's
+    /// frames against their anchors. Last, a 640pt window: whether the rail
+    /// still stands beside the page.
     private lazy var macProbeDir: URL? = {
         let arguments = ProcessInfo.processInfo.arguments
         guard let at = arguments.firstIndex(of: "-mac-probe"), arguments.indices.contains(at + 1) else { return nil }
@@ -480,15 +515,27 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             func tabs(in view: UIView) -> [TabView] {
                 (view as? TabView).map { [$0] } ?? view.subviews.flatMap { tabs(in: $0) }
             }
-            try? await Task.sleep(for: .seconds(4))
+            let appKit = MacProbeAppKit(window: window)
+            // Each line reaches the log as it is printed, even if the run is stopped.
+            setvbuf(stdout, nil, _IOLBF, 0)
+            try? await Task.sleep(for: .seconds(2))
+            say("windows \(appKit.windows)")
             for width in [1400.0, 1000.0] {
                 let frame = scene.effectiveGeometry.systemFrame
                 scene.requestGeometryUpdate(.Mac(systemFrame: CGRect(x: frame.minX, y: frame.minY, width: width, height: 820)))
-                try? await Task.sleep(for: .seconds(2))
+                try? await Task.sleep(for: .seconds(1))
                 let name = "w\(Int(width))"
                 let bar = mainNav.navigationBar
+                let barBox = bar.convert(bar.bounds, to: window)
                 let titlebar = scene.titlebar
-                say("\(name) window \(box(window.bounds)) safe \(window.safeAreaInsets) bar style pad \(bar.behavioralStyle == .pad) bar \(box(bar.convert(bar.bounds, to: window)))")
+                say("\(name) window \(box(window.bounds)) safe \(window.safeAreaInsets) shell safe \(view.safeAreaInsets) page safe \(mainNav.view.safeAreaInsets) bar style pad \(bar.behavioralStyle == .pad)")
+                // What the window shows of the bar: its background, which the system lays from the column's top.
+                let backdrop = bar.subviews.first { NSStringFromClass(type(of: $0)).contains("BarBackground") }
+                let seen = backdrop.map { $0.convert($0.bounds, to: window) } ?? barBox
+                say("\(name) bar \(box(barBox)) drawn \(box(seen)) drawn from window top \(abs(seen.minY) < 0.5) drawn height \(seen.height) web \(Size.cTopBarH)")
+                say("\(name) layout page \(box(mainNav.view.convert(mainNav.view.bounds, to: window))) page additional top \(mainNav.additionalSafeAreaInsets.top) bar parts \(bar.subviews.map { "\(type(of: $0)) \(box($0.frame))" }) bar interactions \(bar.interactions.map { "\(type(of: $0))" })")
+                let glassBox = mainCluster.glass.convert(mainCluster.glass.bounds, to: window)
+                say("\(name) drawn bar centre \(seen.midY) cluster glass centre \(glassBox.midY) centred \(abs(glassBox.midY - seen.midY) < 0.5) tabs' floor \(tabs(in: bar).first.map { $0.convert($0.bounds, to: window).maxY } ?? -1) bar floor \(seen.maxY)")
                 say("\(name) titlebar title hidden \(titlebar?.titleVisibility == .hidden) toolbar \(titlebar?.toolbar == nil ? "none" : "present") railToggle on screen \(railToggle.window != nil)")
                 say("\(name) board takes clicks \(view.isUserInteractionEnabled) alpha \(view.alpha) pro board open \(Pro.shared.boardOpen) access \(String(describing: Pro.shared.access))")
                 snap("\(name)-board")
@@ -496,9 +543,43 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
                 while let at = holder, !(at is UIScrollView) { holder = at.superview }
                 let strip = holder as? UIScrollView
                 let shown = strip.map { $0.convert($0.bounds, to: window) } ?? window.bounds
+                let railBox = rail.view.convert(rail.view.bounds, to: window)
+                let lights = appKit.lights
+                // The bar's first control: the strip when it hosts tabs, else the crumb.
+                let first = strip != nil ? shown : mainCrumb.convert(mainCrumb.bounds, to: window)
+                say("\(name) traffic lights \(lights.map(box) ?? "not found") rail \(box(railBox)) rail safe top \(rail.view.safeAreaInsets.top) bar's first control \(box(first))")
+                if let lights {
+                    say("\(name) lights over the rail \(railBox.contains(lights)) clear of the rail's header \(lights.maxY <= railBox.minY + rail.view.safeAreaInsets.top) clear of the bar's first control \(!lights.intersects(first))")
+                }
+                if #available(macCatalyst 26.0, *) {
+                    say("\(name) corner-adapted safe area: window \(window.edgeInsets(for: .safeArea(cornerAdaptation: .horizontal))) bar \(bar.edgeInsets(for: .safeArea(cornerAdaptation: .horizontal)))")
+                }
                 if let strip {
                     let edge = mainCluster.convert(CGPoint(x: mainCluster.leadingEdge, y: 0), to: window).x
                     say("\(name) strip \(box(shown)) offset \(strip.contentOffset.x) content \(strip.contentSize.width), cluster's first control at \(edge)")
+                }
+                // Presses: where each lands, whether the shell moves the window from there, whether AppKit still does by itself.
+                var presses: [(String, CGPoint)] = [
+                    ("bar's top, over its frame", CGPoint(x: shown.midX, y: 4)),
+                    ("bar above the tabs", CGPoint(x: shown.midX, y: barBox.minY + 4)),
+                    ("bar above the glass", CGPoint(x: glassBox.midX, y: 4)),
+                    ("search, on the glass", CGPoint(x: glassBox.minX + 20, y: glassBox.midY)),
+                    ("rail's top", CGPoint(x: railBox.midX, y: 16)),
+                    ("rail's header", CGPoint(x: railBox.midX, y: rail.view.safeAreaInsets.top + 16)),
+                ]
+                if let strip {
+                    presses.append(("strip past the last tab", CGPoint(x: min(shown.maxX - 4, shown.minX + strip.contentSize.width - strip.contentOffset.x + 24), y: barBox.midY)))
+                }
+                if let chosen = tabs(in: bar).first(where: { $0.id == currentId && $0.window != nil }).map({ $0.convert($0.bounds, to: window).intersection(shown) }), !chosen.isNull {
+                    presses += [("chosen tab's top", CGPoint(x: chosen.midX, y: chosen.minY + 3)), ("chosen tab's middle", CGPoint(x: chosen.midX, y: chosen.midY))]
+                }
+                for (label, point) in presses {
+                    let hit = window.hitTest(point, with: nil)
+                    let onTab = hit.map { landed in tabs(in: bar).contains { landed.isDescendant(of: $0) } } ?? false
+                    let onControl = hit.map { landed in sequence(first: landed, next: \.superview).contains { $0 is UIControl } } ?? false
+                    let shellMoves = movesWindow(hit, at: view.convert(point, from: window))
+                    let appKitMoves = await appKit.press(at: point)
+                    say("\(name) press on the \(label) \(point): lands on \(hit.map { "\(type(of: $0))" } ?? "nil"), a tab \(onTab), a control \(onControl); the shell moves the window \(shellMoves); AppKit moves it by itself \(appKitMoves) (AppKit view \(appKit.hitView(at: point)))")
                 }
                 for tab in tabs(in: bar) where tab.window != nil && !tab.isHidden {
                     let frame = tab.convert(tab.bounds, to: window)
@@ -515,16 +596,16 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
                 let railHit = window.hitTest(railPoint, with: nil)
                 say("\(name) rail \(box(rail.view.convert(rail.view.bounds, to: window))) hit at \(railPoint) lands in rail \(railHit?.isDescendant(of: rail.view) == true) (\(railHit.map { "\(type(of: $0))" } ?? "nil"))")
                 cawPanel.show(from: mainCluster.caw, glass: mainCluster.glass)
-                try? await Task.sleep(for: .seconds(1))
+                try? await Task.sleep(for: .seconds(0.8))
                 let glass = mainCluster.glass.convert(mainCluster.glass.bounds, to: window)
                 let panel = cawPanel.convert(cawPanel.bounds, to: window)
                 say("\(name) caw glass \(box(glass)) panel \(box(panel)) panel top on glass foot \(abs(panel.minY - glass.maxY) < 1) trailing flush \(abs(panel.maxX - glass.maxX) < 1)")
                 snap("\(name)-caw-panel")
                 cawPanel.close()
-                try? await Task.sleep(for: .seconds(1))
+                try? await Task.sleep(for: .seconds(0.6))
                 let item = mainCluster.machinesItem
                 openMachines(from: item)
-                try? await Task.sleep(for: .seconds(1.5))
+                try? await Task.sleep(for: .seconds(1))
                 let anchor = item.convert(item.bounds, to: window)
                 if let card = presentedViewController?.view {
                     let popover = card.convert(card.bounds, to: window)
@@ -534,8 +615,15 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
                 }
                 snap("\(name)-machines")
                 dismiss(animated: false)
-                try? await Task.sleep(for: .seconds(1))
+                try? await Task.sleep(for: .seconds(0.6))
             }
+            let frame = scene.effectiveGeometry.systemFrame
+            scene.requestGeometryUpdate(.Mac(systemFrame: CGRect(x: frame.minX, y: frame.minY, width: 640, height: 820)))
+            try? await Task.sleep(for: .seconds(1))
+            let lights = appKit.lights
+            let bar = mainNav.navigationBar
+            say("w640 window \(box(window.bounds)) display mode \(displayMode.rawValue) collapsed \(isCollapsed) compact \(compact) rail \(box(rail.view.convert(rail.view.bounds, to: window))) on screen \(rail.view.window != nil) bar \(box(bar.convert(bar.bounds, to: window))) lights \(lights.map(box) ?? "not found")")
+            snap("w640-board")
             say("done")
         }
         #endif
@@ -569,6 +657,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         #if DEBUG
         ProbeCounts.shellLayouts += 1
         #endif
+        standBarOnWindowTop()
         barTabs.relayout()
         placeGrip()
         // The split view lays its columns over what else is in its view on
@@ -576,6 +665,25 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         // stays over all of them, under him wherever he now stands.
         view.bringSubviewToFront(cawPanel)
         cawPanel.follow()
+    }
+
+    /// A Mac window has no title and no toolbar (SceneDelegate `open`), yet
+    /// its titlebar still insets the top of the safe area (32pt): the bar
+    /// stood under an empty band of its own shelf colour. The page's column
+    /// takes that inset back, so its bar is the window's top edge, drawn from
+    /// y 0, as the web's desktop bar is the page's (Shell.svelte
+    /// `header.top`). The system bar sets itself 10pt down from there and
+    /// draws its background up over them, its controls centred on the whole
+    /// (a safe area cannot go below 0, so no inset lifts it further). The
+    /// rail keeps the inset: the window's traffic lights stand over its top,
+    /// and its header starts under them. The window moves from the bar's
+    /// empty space and the rail's top (`movesWindow`, MacWindow).
+    private func standBarOnWindowTop() {
+        #if targetEnvironment(macCatalyst)
+        // What the column inherits, its own adjustment taken out of what it has.
+        let inherited = mainNav.view.safeAreaInsets.top - mainNav.additionalSafeAreaInsets.top
+        if abs(mainNav.additionalSafeAreaInsets.top + inherited) > 0.25 { mainNav.additionalSafeAreaInsets.top = -inherited }
+        #endif
     }
 
     static func clamp(_ width: Double) -> Double { min(railMax, max(railMin, width.rounded())) }
@@ -841,6 +949,9 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     /// The window came to the front (SessionSurface.svelte's `visibilitychange`).
     @objc private func sceneActivated(_ note: Notification) {
         guard let scene = note.object as? UIScene, scene === view.window?.windowScene else { return }
+        #if targetEnvironment(macCatalyst)
+        if let scene = scene as? UIWindowScene { MacWindow.takeOverMoves(of: scene) }
+        #endif
         lookAtFront()
     }
 
@@ -1557,6 +1668,115 @@ final class FleetDetailController: ObservedViewController {
         fade.startAnimation()
     }
 }
+
+#if DEBUG && targetEnvironment(macCatalyst)
+/// The Mac pass's view of the window from AppKit's side (ShellController
+/// `runMacProbe`), reached through the Catalyst process's own NSApplication:
+/// the NSWindows and whether they move themselves, the traffic lights'
+/// frame, the view a click is sent to, and whether a press makes AppKit move
+/// the window by itself; the owner's pointer is never moved. Points are the
+/// UIKit window's (an app optimised for Mac draws 1:1).
+@MainActor
+private final class MacProbeAppKit {
+    private weak var window: UIWindow?
+
+    init(window: UIWindow) {
+        self.window = window
+    }
+
+    private static func object(_ name: String, _ key: String) -> NSObject? {
+        (NSClassFromString(name) as? NSObject.Type)?.value(forKey: key) as? NSObject
+    }
+
+    /// This UIWindow's NSWindow: the visible one whose content is its size.
+    private var nsWindow: NSObject? {
+        guard let window, let windows = Self.object("NSApplication", "sharedApplication")?.value(forKey: "windows") as? [NSObject] else { return nil }
+        return windows.first { candidate in
+            guard (candidate.value(forKey: "isVisible") as? Bool) == true,
+                  let size = ((candidate.value(forKey: "contentView") as? NSObject)?.value(forKey: "frame") as? NSValue)?.cgRectValue.size else { return false }
+            return abs(size.width - window.bounds.width) < 1 && abs(size.height - window.bounds.height) < 1
+        }
+    }
+
+    /// Every NSWindow, its class and whether it moves itself.
+    var windows: String {
+        let all = Self.object("NSApplication", "sharedApplication")?.value(forKey: "windows") as? [NSObject] ?? []
+        return all.map { "\(type(of: $0)) movable \($0.value(forKey: "isMovable") as? Bool ?? true)" }.joined(separator: ", ")
+    }
+
+    /// The window's frame view, which every click is hit-tested from.
+    private var frameView: NSObject? {
+        (nsWindow?.value(forKey: "contentView") as? NSObject)?.value(forKey: "superview") as? NSObject
+    }
+
+    private var height: Double? { ((frameView?.value(forKey: "frame") as? NSValue)?.cgRectValue.height).map(Double.init) }
+
+    /// Close, minimise and zoom, as one box in the window's points.
+    var lights: CGRect? {
+        guard let nsWindow else { return nil }
+        let pick = NSSelectorFromString("standardWindowButton:")
+        typealias Button = @convention(c) (NSObject, Selector, Int) -> Unmanaged<NSObject>?
+        let button = unsafeBitCast(nsWindow.method(for: pick), to: Button.self)
+        let boxes = (0 ... 2).compactMap { button(nsWindow, pick, $0)?.takeUnretainedValue() }.compactMap(inWindow)
+        guard let first = boxes.first else { return nil }
+        return boxes.dropFirst().reduce(first) { $0.union($1) }
+    }
+
+    private func inWindow(_ view: NSObject) -> CGRect? {
+        guard let bounds = (view.value(forKey: "bounds") as? NSValue)?.cgRectValue, let height else { return nil }
+        let convert = NSSelectorFromString("convertRect:toView:")
+        typealias Convert = @convention(c) (NSObject, Selector, CGRect, NSObject?) -> CGRect
+        let base = unsafeBitCast(view.method(for: convert), to: Convert.self)(view, convert, bounds, nil)
+        return CGRect(x: base.minX, y: height - base.maxY, width: base.width, height: base.height)
+    }
+
+    /// The NSView AppKit sends a click at `point` to, and whether a press there may move the window.
+    func hitView(at point: CGPoint) -> String {
+        guard let frameView, let height else { return "no window" }
+        let test = NSSelectorFromString("hitTest:")
+        typealias Hit = @convention(c) (NSObject, Selector, CGPoint) -> Unmanaged<NSObject>?
+        guard let hit = unsafeBitCast(frameView.method(for: test), to: Hit.self)(frameView, test, CGPoint(x: point.x, y: height - point.y))?.takeUnretainedValue() else {
+            return "nil"
+        }
+        return "\(type(of: hit)) mouseDownCanMoveWindow \(hit.value(forKey: "mouseDownCanMoveWindow") as? Bool ?? false)"
+    }
+
+    /// Times NSWindow was asked to move with the mouse while `press` ran.
+    private nonisolated(unsafe) static var drags = 0
+
+    /// A left press at `point` and its release, queued on NSApplication
+    /// (`postEvent:atStart:`); true when AppKit asked the window to move on
+    /// its own. Such events reach the NSWindow and never UIKit (a press so
+    /// queued on a tab did not choose it), so this reads AppKit's part alone.
+    func press(at point: CGPoint) async -> Bool {
+        guard let nsWindow, let height, let app = Self.object("NSApplication", "sharedApplication"),
+              let eventClass = NSClassFromString("NSEvent"), let windowClass = NSClassFromString("NSWindow"),
+              let number = nsWindow.value(forKey: "windowNumber") as? Int else { return false }
+        let make = NSSelectorFromString("mouseEventWithType:location:modifierFlags:timestamp:windowNumber:context:eventNumber:clickCount:pressure:")
+        guard let maker = class_getClassMethod(eventClass, make),
+              let drag = class_getInstanceMethod(windowClass, NSSelectorFromString("performWindowDragWithEvent:")) else { return false }
+        typealias Make = @convention(c) (AnyClass, Selector, UInt, CGPoint, UInt, Double, Int, NSObject?, Int, Int, Float) -> Unmanaged<NSObject>?
+        let event = unsafeBitCast(method_getImplementation(maker), to: Make.self)
+        let original = method_getImplementation(drag)
+        let record: @convention(block) (NSObject, NSObject) -> Void = { _, _ in MacProbeAppKit.drags += 1 }
+        method_setImplementation(drag, imp_implementationWithBlock(record))
+        defer { method_setImplementation(drag, original) }
+        Self.drags = 0
+        let post = NSSelectorFromString("postEvent:atStart:")
+        typealias Post = @convention(c) (NSObject, Selector, NSObject, Bool) -> Void
+        let enqueue = unsafeBitCast(app.method(for: post), to: Post.self)
+        // NSEventTypeLeftMouseDown 1, LeftMouseUp 2; window base points.
+        let base = CGPoint(x: point.x, y: height - point.y)
+        for type: UInt in [1, 2] {
+            if let made = event(eventClass, make, type, base, 0, ProcessInfo.processInfo.systemUptime, number, nil, 0, 1, type == 1 ? 1 : 0)?.takeUnretainedValue() {
+                enqueue(app, post, made, false)
+            }
+        }
+        try? await Task.sleep(for: .milliseconds(250))
+        return Self.drags > 0
+    }
+}
+#endif
 
 extension UIResponder {
     private nonisolated(unsafe) static weak var found: UIResponder?
