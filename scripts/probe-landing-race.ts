@@ -56,6 +56,7 @@ const delegateCommand = (tag: string) =>
     `git add delegate-${tag}.txt`,
     `git -c user.name=Delegate -c user.email=d@probe.test commit -qm 'Delegate commit ${tag}'`,
     ...(tag === "c" ? [`git remote set-url origin ${REFUSING_URL}`] : []),
+    'echo "status: [$(git status --porcelain | tr "\\n" " ")]"',
     `echo DONE-COMMIT-${tag}`,
   ].join(" && ");
 
@@ -86,6 +87,11 @@ const respond = (request: Seen): Reply => {
   }
   steps[tag] ??= {};
   const step = steps[tag];
+  // What the delegate's last tool answered (its Bash output, finish_item's
+  // answer), as the request that follows carries it.
+  console.log(
+    `${new Date(request.at).toISOString()} delegate ${tag} (finish_item ${request.toolNames.includes(FINISH) ? "offered" : "not offered"}): ${request.last.slice(-600).replaceAll("\n", " ⏎ ")}`
+  );
   const tool = (name: string, input: object): Reply => ({
     everyMs: 5,
     words: [],
