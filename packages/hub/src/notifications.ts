@@ -16,7 +16,9 @@
  *
  * **Clears.** A notification is over when its ask settles, its session is
  * looked at (`/api/seen` `look`), or a device acted on, opened or dismissed
- * it (`POST /api/notifications/dismiss`). Only what was shown is cleared, so
+ * it (`POST /api/notifications/dismiss`; a dismissal that names when the
+ * device delivered an id leaves it standing if the hub sent it again since).
+ * Only what was shown is cleared, so
  * looking at a session no notification named sends nothing anywhere. Each
  * clear is written down (`notification_cleared`, kept three days) and goes
  * out at once on the socket (`notificationsCleared`); the outlets that showed
@@ -47,6 +49,11 @@ const CARRIED_IDS = 50;
 /** How long sends and clears are kept. */
 const KEPT_MS = 3 * 24 * 60 * 60_000;
 const PRUNE_MS = 60 * 60_000;
+/**
+ * How far a device's clock may run behind the hub's: a dismissal's
+ * `deliveredAt` is the device's time, `sent_at` the hub's.
+ */
+const DEVICE_SKEW_MS = 120_000;
 
 /** A collapse id fits APNs' 64 bytes: long ids go as their hash. */
 const collapseOf = (prefix: string, id: string): string =>
@@ -253,6 +260,49 @@ export const createNotifications = ({
 
     clear,
 
+    /**
+     * A device let go of these itself, so they are over however they were
+     * shown; answers the ids newly cleared. A device can report late (a
+     * "Clear All" found by absence at its next sweep), and a collapse id is
+     * reused on a re-push: an id with `deliveredAt` (epoch ms on the
+     * device's clock) that the hub has sent again since that delivery is a
+     * newer notification the device never saw, and stays.
+     */
+    dismiss(
+      collapseIds: readonly string[],
+      via: DismissVia,
+      deliveredAt: Readonly<Record<string, number>> = {}
+    ): string[] {
+      const delivered = new Map(Object.entries(deliveredAt));
+      const sent = db.notifications.sentAt(
+        collapseIds.filter((id) => delivered.has(id))
+      );
+      const resent = collapseIds.filter((id) => {
+        const at = delivered.get(id);
+        const sentAt = sent.get(id)?.getTime();
+        return (
+          at !== undefined &&
+          sentAt !== undefined &&
+          sentAt > at + DEVICE_SKEW_MS
+        );
+      });
+      if (resent.length > 0) {
+        console.log(
+          `[notify] dismiss (${via}) kept ${resent
+            .map(
+              (id) =>
+                `${id} (sent ${sent.get(id)?.toISOString()}, delivered there ${new Date(delivered.get(id) ?? 0).toISOString()})`
+            )
+            .join(", ")}: sent again since that device had it`
+        );
+      }
+      return clear(
+        collapseIds.filter((id) => !resent.includes(id)),
+        via,
+        true
+      );
+    },
+
     /** The cleared ids every visible push carries: the last day's, newest first, at most {@link CARRIED_IDS}. */
     carried(): string[] {
       return db.notifications
@@ -308,12 +358,16 @@ export const notificationRoutes = (db: DbShape, notifications: Notifications) =>
             t.Literal("action"),
             t.Literal("dismiss"),
           ]),
+          deliveredAt: t.Optional(
+            t.Record(
+              t.String({ minLength: 1, maxLength: 64 }),
+              t.Number({ minimum: 0 })
+            )
+          ),
         }),
       },
       ({ body }) => {
-        // A device let go of these itself, so they are over however they
-        // were shown.
-        notifications.clear(body.collapseIds, body.via, true);
+        notifications.dismiss(body.collapseIds, body.via, body.deliveredAt);
         return { ok: true };
       }
     )

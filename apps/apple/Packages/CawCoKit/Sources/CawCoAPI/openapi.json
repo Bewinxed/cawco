@@ -3384,6 +3384,15 @@
                       "action",
                       "dismiss"
                     ]
+                  },
+                  "deliveredAt": {
+                    "type": "object",
+                    "patternProperties": {
+                      "^.*$": {
+                        "minimum": 0,
+                        "type": "number"
+                      }
+                    }
                   }
                 },
                 "required": [

@@ -953,6 +953,8 @@ export interface DbShape {
   readonly notifications: {
     /** Shown under this collapse id: outstanding again, and no longer cleared. */
     readonly sent: (collapseId: string, at: Date) => void;
+    /** When each of these ids was last sent, for those still outstanding. */
+    readonly sentAt: (collapseIds: string[]) => Map<string, Date>;
     /**
      * Clears the ids that were sent and are still outstanding; `any` clears
      * an id however it was shown (a device's own dismiss). Answers the ids
@@ -7200,6 +7202,17 @@ const make = async (path: string): Promise<DbShape> => {
             .run();
         });
       },
+      sentAt: (collapseIds) =>
+        new Map(
+          collapseIds.length === 0
+            ? []
+            : db
+                .select()
+                .from(notificationSent)
+                .where(inArray(notificationSent.collapseId, collapseIds))
+                .all()
+                .map((row) => [row.collapseId, row.sentAt])
+        ),
       clear: (collapseIds, at, any) =>
         db.transaction((tx) => {
           const ids = [...new Set(collapseIds)];

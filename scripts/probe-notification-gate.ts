@@ -26,7 +26,11 @@
  *      second socket, one background push with the whole set, the next
  *      visible push carrying the id, a second clear coalesced;
  *  (d) Telegram: the ask's message deleted on the clear;
- *  (e) an iOS client that stops beating: held until it expires.
+ *  (e) an iOS client that stops beating: held until it expires;
+ *  (f) a late dismissal (`deliveredAt`): one delivered before the id's latest
+ *      send leaves it standing (the pending ask, and the turn id re-pushed by
+ *      the next turn), one delivered after clears it, and one without
+ *      `deliveredAt` clears as given.
  *
  * Captures go to $TMPDIR/notification-gate/ (or .probe/ outside a workspace).
  */
@@ -546,6 +550,83 @@ try {
     "(e) sent once the client went 60s without a beat",
     silent >= 60_000 && silent < 72_000,
     `${silent}ms after its only beat; visible push cleared=${JSON.stringify(expired.body.payload.cawco?.cleared)}`
+  );
+
+  // ── (f) A late dismissal never clears a newer send under its id ──────
+  const sentAt = (collapseId: string) =>
+    fleet.query<{ sent_at: number }>(
+      "SELECT sent_at FROM notification_sent WHERE collapse_id = ?",
+      collapseId
+    )[0]?.sent_at;
+  const framed = (collapseId: string, since: number) =>
+    frames.some(
+      (one) => one.at >= since && one.collapseIds.includes(collapseId)
+    );
+  /** Dismisses one id as a device would and answers whether it cleared within 4 s. */
+  const dismissed = async (
+    collapseId: string,
+    deliveredAt: number | undefined
+  ): Promise<boolean> => {
+    const since = Date.now();
+    await fleet.api("/api/notifications/dismiss", {
+      collapseIds: [collapseId],
+      via: "dismiss",
+      ...(deliveredAt === undefined
+        ? {}
+        : { deliveredAt: { [collapseId]: deliveredAt } }),
+    });
+    await pause(4000);
+    return framed(collapseId, since);
+  };
+  const ask2Sent = sentAt(ask2Id);
+  const ask2Stale = await dismissed(ask2Id, expired.at - 5 * 60_000);
+  check(
+    "(f) a deliveredAt older than the latest send leaves it standing",
+    !ask2Stale && sentAt(ask2Id) === ask2Sent && ask2Sent !== undefined,
+    `${ask2Id} deliveredAt=sent-5min: frame=${ask2Stale}, sent_at ${ask2Sent} → ${sentAt(ask2Id)}`
+  );
+  const ask2Plain = await dismissed(ask2Id, undefined);
+  check(
+    "(f) no deliveredAt clears it",
+    ask2Plain && sentAt(ask2Id) === undefined,
+    `${ask2Id} frame=${ask2Plain}, sent_at now ${sentAt(ask2Id)}`
+  );
+
+  // The real case: the turn id was cleared in (c); the next turn re-sends it.
+  const turnsBefore = pushesFor(turnId).length;
+  await fleet.control(session, "resolvePermission", [
+    ask2,
+    {
+      behavior: "allow",
+      updatedInput: {
+        command: "touch gate-probe.txt",
+        description: "Make a file",
+      },
+    },
+  ]);
+  const resent = await until(
+    "the next turn's push under the same id",
+    () => pushesFor(turnId)[turnsBefore],
+    Boolean,
+    120_000
+  );
+  const turnSent = sentAt(turnId);
+  // This device had the first turn's push; past the 120 s skew margin, the
+  // earlier of that delivery and three minutes before the re-send.
+  const turnStale = await dismissed(
+    turnId,
+    Math.min(turnPush.at, resent.at - 180_000)
+  );
+  check(
+    "(f) a late dismissal of the earlier turn keeps the re-pushed one",
+    !turnStale && sentAt(turnId) === turnSent && turnSent !== undefined,
+    `${turnId} first delivered ${turnPush.at}, re-sent ${turnSent} (push ${resent.at}): frame=${turnStale}, sent_at → ${sentAt(turnId)}`
+  );
+  const turnFresh = await dismissed(turnId, Date.now());
+  check(
+    "(f) a deliveredAt after the send clears it",
+    turnFresh && sentAt(turnId) === undefined,
+    `${turnId} frame=${turnFresh}, sent_at now ${sentAt(turnId)}`
   );
 
   await writeFile(

@@ -129,7 +129,7 @@ public enum NotificationClearing {
     public static func reconcile(hubCleared: Set<String>, arriving: String?, on queue: DispatchQueue) async -> [String] {
         let shown = await delivered(on: queue)
         let showing = Set(shown.map(\.id))
-        let gone = Record.update { record -> [String] in
+        let gone = Record.update { record -> [String: Double] in
             let gone = record.gone(showing: showing, except: hubCleared.union(arriving.map { [$0] } ?? []))
             // The hub already knows these: nothing to report.
             record.forget(hubCleared.subtracting(showing))
@@ -137,10 +137,13 @@ public enum NotificationClearing {
             return gone
         }
         guard !gone.isEmpty else { return [] }
-        log.notice("reconcile: \(gone.joined(separator: ","), privacy: .public) cleared here without this device removing them")
-        guard await tellHub(gone, via: .dismiss) else { return [] }
-        Record.update { $0.forget(Set(gone)) }
-        return gone
+        let ids = gone.keys.sorted()
+        log.notice("reconcile: \(ids.joined(separator: ","), privacy: .public) cleared here without this device removing them")
+        // Found late, so each goes with its delivery time: the hub keeps an
+        // id it has sent again since, a newer notification under it.
+        guard await tellHub(ids, deliveredAt: gone, via: .dismiss) else { return [] }
+        Record.update { $0.forget(Set(ids)) }
+        return ids
     }
 
     // MARK: Telling the hub
@@ -153,15 +156,18 @@ public enum NotificationClearing {
     public static func report(_ ids: [String], via: Via) async -> Bool {
         guard !ids.isEmpty else { return true }
         let held = Record.update { $0.take(ids) }
-        guard await tellHub(ids, via: via) else {
+        guard await tellHub(ids, deliveredAt: held, via: via) else {
             Record.update { $0.delivered(held) }
             return false
         }
         return true
     }
 
-    /// `POST /api/notifications/dismiss`; true when the hub took it.
-    private static func tellHub(_ ids: [String], via: Via) async -> Bool {
+    /// `POST /api/notifications/dismiss`, with `deliveredAt`: when this
+    /// device delivered each id it has a record of (ms epoch, its own clock),
+    /// so the hub can tell a newer notification under the same id from the
+    /// one dismissed. True when the hub took it.
+    private static func tellHub(_ ids: [String], deliveredAt: [String: Double], via: Via) async -> Bool {
         guard let hub else {
             log.error("dismiss \(ids.joined(separator: ","), privacy: .public) via \(via.rawValue, privacy: .public): no hub kept")
             return false
@@ -169,12 +175,16 @@ public enum NotificationClearing {
         struct Dismissal: Encodable {
             let collapseIds: [String]
             let via: String
+            let deliveredAt: [String: Int64]?
         }
+        let delivered = deliveredAt.filter { ids.contains($0.key) }.mapValues { Int64($0) }
         var request = URLRequest(url: hub.appending(path: "api/notifications/dismiss"))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = 8
-        request.httpBody = try? JSONEncoder().encode(Dismissal(collapseIds: ids, via: via.rawValue))
+        request.httpBody = try? JSONEncoder().encode(Dismissal(
+            collapseIds: ids, via: via.rawValue, deliveredAt: delivered.isEmpty ? nil : delivered
+        ))
         do {
             let (_, response) = try await URLSession.shared.data(for: request)
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
@@ -277,11 +287,12 @@ struct Record: Codable {
         return held
     }
 
-    /// Recorded, no longer showing, not removed here since it was delivered, not in `except`.
-    func gone(showing: Set<String>, except: Set<String>) -> [String] {
+    /// Recorded, no longer showing, not removed here since it was delivered,
+    /// not in `except`: each with when it was delivered.
+    func gone(showing: Set<String>, except: Set<String>) -> [String: Double] {
         shown.filter { id, at in
             !showing.contains(id) && !except.contains(id) && (removedHere[id].map { $0 < at } ?? true)
-        }.keys.sorted()
+        }
     }
 
     private mutating func prune() {

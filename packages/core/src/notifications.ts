@@ -37,6 +37,13 @@ export type DismissVia = "open" | "action" | "dismiss";
 /** `POST /api/notifications/dismiss`: a device acted on, opened or individually dismissed these. */
 export interface NotificationsDismiss {
   readonly collapseIds: readonly string[];
+  /**
+   * When this device delivered each id, epoch ms on its own clock. The hub
+   * keeps an id it has sent again since (more than 120 s after, for clock
+   * drift): that newer notification is not the one dismissed. Ids without
+   * one (a live open, action or swipe of an unrecorded id) clear as given.
+   */
+  readonly deliveredAt?: Readonly<Record<string, number>>;
   readonly via: DismissVia;
 }
 
