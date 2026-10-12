@@ -64,8 +64,20 @@ From the repository on obelisk:
 bash apps/apple/scripts/testflight.sh --notes notes.md   # clean origin/main archive, upload and internal distribution
 bash apps/apple/scripts/testflight.sh --status           # IN_BETA_GROUP <version> (<build>) or exit 1 with what is missing
 bash apps/apple/scripts/testflight.sh --set-notes <build> notes.md  # replace a shipped build's What to Test
+bash apps/apple/scripts/testflight.sh --mac --notes notes.md  # the same for the Mac Catalyst build
 bash apps/apple/scripts/build-both.sh both --compile-only
 ```
+
+`--mac` goes first and applies to every command (`--status`, `--attach`,
+`--set-notes`): the Mac Catalyst build ships on the same App Store record, a
+universal purchase, as its own TestFlight train (`MAC_OS`). It archives
+`generic/platform=macOS,variant=Mac Catalyst` and exports with `CawCo Mac
+Catalyst App Store 20261009` and `CawCo NotificationService Mac Catalyst App
+Store 20261009`, and its package is signed by the `3rd Party Mac Developer
+Installer` identity (a Mac Installer Distribution certificate in
+`anbar-ci.keychain-db`). Each platform keeps its archive, DerivedData and logs
+in `~/build/cawco-testflight/<ios|mac>`. `testflight.py [--mac] --dry-run`
+prints the archive command and export options without a key or App Store Connect.
 
 The upload owns `~/build/cawco-testflight` on the Mac and waits for other
 tracks' quiet windows. Build numbers come from App Store Connect: `yyyymmdd`,

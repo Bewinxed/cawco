@@ -14,13 +14,39 @@ import urllib.parse
 
 HOME = pathlib.Path.home()
 ROOT = HOME / "build/cawco-testflight"
-PROFILE = "CawCo App Store 20261007"
-EXTENSION_PROFILE = "CawCo NotificationService App Store 20261009"
 TEAM = "FN5LJSPX2R"
 
-# Signing keys and App Store Connect credentials never reach a CawCo workspace.
-if os.environ.get("CAWCO_WORKSPACE"):
-    sys.exit("Signed builds, device builds and TestFlight run from the orchestrator's shell, not a CawCo workspace: hand the commit to your parent.")
+# One App Store record (6819139448, a universal purchase) ships both: the
+# iPhone/iPad build and, with --mac, the Mac Catalyst build. Each has its own
+# archive destination, App Store profiles and TestFlight build train
+# (`preReleaseVersion.platform`). The Mac's App Store package is signed by the
+# "3rd Party Mac Developer Installer" identity (a Mac Installer Distribution
+# certificate in anbar-ci).
+PLATFORMS = {
+    "ios": {
+        "asc": "IOS",
+        "destination": "generic/platform=iOS",
+        "profiles": {"dev.cawco.app": "CawCo App Store 20261007", "dev.cawco.app.NotificationService": "CawCo NotificationService App Store 20261009"},
+        "installer": None,
+    },
+    "mac": {
+        "asc": "MAC_OS",
+        "destination": "generic/platform=macOS,variant=Mac Catalyst",
+        "profiles": {"dev.cawco.app": "CawCo Mac Catalyst App Store 20261009", "dev.cawco.app.NotificationService": "CawCo NotificationService Mac Catalyst App Store 20261009"},
+        "installer": "3rd Party Mac Developer Installer",
+    },
+}
+
+
+def archive_command(platform, number, derived, archive):
+    return ["xcodebuild", "-project", "CawCo.xcodeproj", "-scheme", "CawCo", "-configuration", "Release", "-destination", PLATFORMS[platform]["destination"], "-skipPackagePluginValidation", "-derivedDataPath", str(derived), "-archivePath", str(archive), f"CURRENT_PROJECT_VERSION={number}", "clean", "archive"]
+
+
+def export_options(platform):
+    options = {"method": "app-store-connect", "destination": "upload", "teamID": TEAM, "uploadSymbols": True, "signingStyle": "manual", "signingCertificate": "Apple Distribution", "manageAppVersionAndBuildNumber": False, "provisioningProfiles": PLATFORMS[platform]["profiles"]}
+    if PLATFORMS[platform]["installer"]:
+        options["installerSigningCertificate"] = PLATFORMS[platform]["installer"]
+    return options
 
 
 def api(method, path, body=None):
@@ -51,8 +77,11 @@ def relationship(kind, identifier):
     return {"data": {"type": kind, "id": identifier}}
 
 
-def builds(app):
-    return listed(f"/v1/builds?filter[app]={app}&sort=-uploadedDate&limit=200")
+def builds(app, platform=None):
+    """The app's builds, newest first: one platform's train, or every platform's
+    (build numbers are picked against all of them, so a number names one build)."""
+    train = f"&filter[preReleaseVersion.platform]={PLATFORMS[platform]['asc']}" if platform else ""
+    return listed(f"/v1/builds?filter[app]={app}{train}&sort=-uploadedDate&limit=200")
 
 
 def group(app):
@@ -99,10 +128,10 @@ def set_whats_new(build, notes):
     print(f"WHATS_NEW {build['attributes']['version']} {row['id']} {row['attributes']['locale']}\n{row['attributes']['whatsNew']}")
 
 
-def status(app):
-    available = builds(app)
+def status(app, platform):
+    available = builds(app, platform)
     if not available:
-        raise RuntimeError("MISSING build")
+        raise RuntimeError(f"MISSING {PLATFORMS[platform]['asc']} build")
     latest = available[0]
     state = latest["attributes"]["processingState"]
     if state != "VALID":
@@ -114,15 +143,15 @@ def status(app):
     if not any(b["id"] == latest["id"] for b in members):
         raise RuntimeError("MISSING newest build in internal beta group")
     version = api("GET", f"/v1/builds/{latest['id']}/preReleaseVersion")["data"]["attributes"]["version"]
-    print(f"IN_BETA_GROUP {version} ({latest['attributes']['version']})")
+    print(f"IN_BETA_GROUP {PLATFORMS[platform]['asc']} {version} ({latest['attributes']['version']})")
 
 
-def await_build(app, number):
+def await_build(app, number, platform):
     """Wait for an uploaded build to finish processing, so an interrupted run can
     pick up where it stopped instead of burning another build number."""
     deadline = time.monotonic() + 1800
     while time.monotonic() < deadline:
-        build = next((b for b in builds(app) if b["attributes"]["version"] == number), None)
+        build = next((b for b in builds(app, platform) if b["attributes"]["version"] == number), None)
         state = build["attributes"]["processingState"] if build else "NOT_YET_VISIBLE"
         print(f"PROCESSING {number} {state}", flush=True)
         if state == "VALID":
@@ -133,7 +162,7 @@ def await_build(app, number):
     raise RuntimeError(f"Build {number} not VALID after 30 minutes")
 
 
-def finish(app, build, notes):
+def finish(app, build, notes, platform):
     """Everything ship() does once a build is VALID: tester, notes, beta group."""
     internal = group(app)
     if internal is None:
@@ -146,7 +175,7 @@ def finish(app, build, notes):
     set_whats_new(build, notes)
     api("POST", f"/v1/betaGroups/{internal['id']}/relationships/builds", {"data": [{"type": "builds", "id": build["id"]}]})
     print(f"APP_ID {app} GROUP_ID {internal['id']} BUILD_ID {build['id']}")
-    status(app)
+    status(app, platform)
 
 
 def signed(command, log):
@@ -164,19 +193,27 @@ def signed(command, log):
             print(line)
 
 
-def ship(app, mode, notes):
+def next_number(used):
+    """Today's build number: `yyyymmdd`, then `.2`, `.3`, past every number the app has used."""
+    today = datetime.date.today().strftime("%Y%m%d")
+    suffixes = [1 if v == today else int(v.split(".")[1]) for v in used if v == today or (v.startswith(today + ".") and v.split(".")[1].isdigit())]
+    return today if not suffixes else f"{today}.{max(suffixes) + 1}"
+
+
+def ship(app, mode, notes, platform):
     """mode is "archive" (archive only), "upload-archive" (upload the kept archive) or "full"."""
     ROOT.mkdir(parents=True, exist_ok=True)
     lock = ROOT / ".upload-lock"
     lock.mkdir()  # Concurrent uploads must not reuse the same build number or archive.
     try:
-        today = datetime.date.today().strftime("%Y%m%d")
         used = [b["attributes"]["version"] for b in builds(app)] if app else []
-        suffixes = [1 if v == today else int(v.split(".")[1]) for v in used if v == today or (v.startswith(today + ".") and v.split(".")[1].isdigit())]
-        number = today if not suffixes else f"{today}.{max(suffixes) + 1}"
+        number = next_number(used)
         source = ROOT / "source/apps/apple"
-        archive = ROOT / "CawCo.xcarchive"
-        derived = ROOT / "DerivedData"
+        # Each platform keeps its own archive, DerivedData, export and logs.
+        work = ROOT / platform
+        work.mkdir(exist_ok=True)
+        archive = work / "CawCo.xcarchive"
+        derived = work / "DerivedData"
         existing = mode == "upload-archive"
         if existing:
             number = plistlib.loads((archive / "Info.plist").read_bytes())["ApplicationProperties"]["CFBundleVersion"]
@@ -185,12 +222,12 @@ def ship(app, mode, notes):
         else:
             os.chdir(source)
             subprocess.run(["/opt/homebrew/bin/xcodegen", "generate", "--quiet"], check=True)
-            for path in [archive, derived, ROOT / "export"]:
+            for path in [archive, derived, work / "export"]:
                 if path.exists():
                     shutil.rmtree(path)
-        print(f"BUILD_NUMBER {number}", flush=True)
+        print(f"BUILD_NUMBER {PLATFORMS[platform]['asc']} {number}", flush=True)
         if not existing:
-            signed(["xcodebuild", "-project", "CawCo.xcodeproj", "-scheme", "CawCo", "-configuration", "Release", "-destination", "generic/platform=iOS", "-skipPackagePluginValidation", "-derivedDataPath", str(derived), "-archivePath", str(archive), f"CURRENT_PROJECT_VERSION={number}", "clean", "archive"], ROOT / "archive.log")
+            signed(archive_command(platform, number, derived, archive), work / "archive.log")
             archived_number = plistlib.loads((archive / "Info.plist").read_bytes())["ApplicationProperties"]["CFBundleVersion"]
             if archived_number != number:
                 raise RuntimeError(f"Archive build number {archived_number} does not match requested {number}")
@@ -202,8 +239,8 @@ def ship(app, mode, notes):
             shutil.copytree(archive / "dSYMs", kept)
         if mode == "archive":
             return
-        options = ROOT / "ExportOptions.plist"
-        options.write_bytes(plistlib.dumps({"method": "app-store-connect", "destination": "upload", "teamID": TEAM, "uploadSymbols": True, "signingStyle": "manual", "signingCertificate": "Apple Distribution", "manageAppVersionAndBuildNumber": False, "provisioningProfiles": {"dev.cawco.app": PROFILE, "dev.cawco.app.NotificationService": EXTENSION_PROFILE}}))
+        options = work / "ExportOptions.plist"
+        options.write_bytes(plistlib.dumps(export_options(platform)))
         identifiers = {}
         for line in (HOME / ".appstoreconnect/anbar.env").read_text().splitlines():
             if "=" in line:
@@ -211,24 +248,37 @@ def ship(app, mode, notes):
                 identifiers[key.strip()] = value.strip().strip("\"'")
         key_id = next(v for k, v in identifiers.items() if k.endswith("KEY_ID"))
         issuer = next(v for k, v in identifiers.items() if k.endswith("ISSUER_ID"))
-        signed(["xcodebuild", "-exportArchive", "-archivePath", str(archive), "-exportOptionsPlist", str(options), "-exportPath", str(ROOT / "export"), "-authenticationKeyPath", str(HOME / f".appstoreconnect/private_keys/AuthKey_{key_id}.p8"), "-authenticationKeyID", key_id, "-authenticationKeyIssuerID", issuer], ROOT / "upload.log")
-        build = await_build(app, number)
-        finish(app, build, notes)
+        signed(["xcodebuild", "-exportArchive", "-archivePath", str(archive), "-exportOptionsPlist", str(options), "-exportPath", str(work / "export"), "-authenticationKeyPath", str(HOME / f".appstoreconnect/private_keys/AuthKey_{key_id}.p8"), "-authenticationKeyID", key_id, "-authenticationKeyIssuerID", issuer], work / "upload.log")
+        build = await_build(app, number, platform)
+        finish(app, build, notes, platform)
     finally:
         lock.rmdir()
 
 
-USAGE = "usage: testflight.py --notes <file> [--upload-archive] | --archive | --status | --attach <build> --notes <file> | --set-notes <build> <file>"
+USAGE = "usage: testflight.py [--mac] --notes <file> [--upload-archive] | --archive | --status | --attach <build> --notes <file> | --set-notes <build> <file> | --dry-run"
 
 
 def options(args):
-    """Splits `--notes <file>` off the arguments; the rest name the command."""
+    """Splits `--mac` and `--notes <file>` off the arguments; the rest name the command."""
+    platform = "mac" if "--mac" in args else "ios"
+    args = [a for a in args if a != "--mac"]
     if "--notes" not in args:
-        return args, None
+        return args, None, platform
     at = args.index("--notes")
     if at + 1 >= len(args):
         raise RuntimeError(USAGE)
-    return args[:at] + args[at + 2:], read_notes(args[at + 1])
+    return args[:at] + args[at + 2:], read_notes(args[at + 1]), platform
+
+
+def dry_run(platform):
+    """What a run on this platform would archive, export and look up, without
+    a key, a keychain or App Store Connect: the build number is today's first."""
+    number = next_number([])
+    work = ROOT / platform
+    print(f"BUILD_NUMBER {PLATFORMS[platform]['asc']} {number} (before App Store Connect's used numbers)")
+    print("ARCHIVE " + " ".join(archive_command(platform, number, work / "DerivedData", work / "CawCo.xcarchive")))
+    print("EXPORT_OPTIONS\n" + plistlib.dumps(export_options(platform)).decode())
+    print(f"BUILDS /v1/builds?filter[app]=<app>&filter[preReleaseVersion.platform]={PLATFORMS[platform]['asc']}&sort=-uploadedDate&limit=200")
 
 
 def needs(notes):
@@ -238,7 +288,13 @@ def needs(notes):
 
 
 try:
-    command, notes = options(sys.argv[1:])
+    command, notes, platform = options(sys.argv[1:])
+    if command == ["--dry-run"]:
+        dry_run(platform)
+        sys.exit(0)
+    # Signing keys and App Store Connect credentials never reach a CawCo workspace.
+    if os.environ.get("CAWCO_WORKSPACE"):
+        sys.exit("Signed builds, device builds and TestFlight run from the orchestrator's shell, not a CawCo workspace: hand the commit to your parent.")
     # Every upload carries its own notes: refuse before touching App Store Connect.
     if command in [[], ["--upload-archive"]] or command[:1] == ["--attach"]:
         needs(notes)
@@ -247,20 +303,20 @@ try:
         raise RuntimeError("MISSING CawCo app record (create CawCo, cawco-ios, en-US in App Store Connect)")
     app = apps[0]["id"] if apps else None
     if command == ["--status"]:
-        status(app)
+        status(app, platform)
     elif len(command) == 2 and command[0] == "--attach":
-        finish(app, await_build(app, command[1]), needs(notes))
+        finish(app, await_build(app, command[1], platform), needs(notes), platform)
     elif len(command) == 3 and command[0] == "--set-notes":
-        build = next((b for b in builds(app) if b["attributes"]["version"] == command[1]), None)
+        build = next((b for b in builds(app, platform) if b["attributes"]["version"] == command[1]), None)
         if build is None:
-            raise RuntimeError(f"MISSING build {command[1]}")
+            raise RuntimeError(f"MISSING {PLATFORMS[platform]['asc']} build {command[1]}")
         set_whats_new(build, read_notes(command[2]))
     elif command == []:
-        ship(app, "full", needs(notes))
+        ship(app, "full", needs(notes), platform)
     elif command == ["--upload-archive"]:
-        ship(app, "upload-archive", needs(notes))
+        ship(app, "upload-archive", needs(notes), platform)
     elif command == ["--archive"]:
-        ship(app, "archive", None)
+        ship(app, "archive", None, platform)
     else:
         raise RuntimeError(USAGE)
 except (RuntimeError, OSError, subprocess.CalledProcessError, StopIteration) as error:

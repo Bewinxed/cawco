@@ -108,6 +108,9 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         CFBundleShortVersionString: $(MARKETING_VERSION)
         ITSAppUsesNonExemptEncryption: false
+        # The Mac build's upload refuses an Info.plist without it (ITMS-90242:
+        # "The Info.plist must contain a LSApplicationCategoryType key").
+        LSApplicationCategoryType: public.app-category.developer-tools
         NSUserActivityTypes: [dev.cawco.session, dev.cawco.scene]
         # The hub's background push (`content-available`) carries the ids
         # cleared on another device; the app delegate removes them.

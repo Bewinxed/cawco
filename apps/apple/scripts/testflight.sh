@@ -10,7 +10,13 @@ if [[ -n ${CAWCO_WORKSPACE:-} ]]; then
 fi
 cd "$(git rev-parse --show-toplevel)"
 SSH=(ssh -F "$HOME/.ssh/config" -o BatchMode=yes mac)
-USAGE='usage: testflight.sh --notes <file> | --status | --attach <build> --notes <file> | --set-notes <build> <file>'
+USAGE='usage: testflight.sh [--mac] --notes <file> | --status | --attach <build> --notes <file> | --set-notes <build> <file>'
+# --mac: the Mac Catalyst build on the same App Store record, its own TestFlight train.
+PLATFORM=()
+if [[ ${1:-} == --mac ]]; then
+  PLATFORM=(--mac)
+  shift
+fi
 # Copies a notes file to the Mac for this run; the copy is removed when it ends.
 REMOTE_NOTES=
 send_notes() {
@@ -20,7 +26,7 @@ send_notes() {
 }
 case ${1:-} in
   --status)
-    "${SSH[@]}" '/usr/bin/python3 - --status' < apps/apple/scripts/testflight.py
+    "${SSH[@]}" '/usr/bin/python3 - --status' "${PLATFORM[@]}" < apps/apple/scripts/testflight.py
     exit ;;
   --notes)
     [[ $# -eq 2 ]] || { echo "$USAGE" >&2; exit 2; }
@@ -28,12 +34,12 @@ case ${1:-} in
   --attach)
     [[ $# -eq 4 && $3 == --notes ]] || { echo "$USAGE" >&2; exit 2; }
     send_notes "$4"
-    "${SSH[@]}" '/usr/bin/python3 - --attach' "$2" --notes "$REMOTE_NOTES" < apps/apple/scripts/testflight.py
+    "${SSH[@]}" '/usr/bin/python3 - --attach' "$2" --notes "$REMOTE_NOTES" "${PLATFORM[@]}" < apps/apple/scripts/testflight.py
     exit ;;
   --set-notes)
     [[ $# -eq 3 ]] || { echo "$USAGE" >&2; exit 2; }
     send_notes "$3"
-    "${SSH[@]}" '/usr/bin/python3 - --set-notes' "$2" "$REMOTE_NOTES" < apps/apple/scripts/testflight.py
+    "${SSH[@]}" '/usr/bin/python3 - --set-notes' "$2" "$REMOTE_NOTES" "${PLATFORM[@]}" < apps/apple/scripts/testflight.py
     exit ;;
   *) echo "TestFlight builds need end-user notes: --notes <file>" >&2; echo "$USAGE" >&2; exit 2 ;;
 esac
@@ -50,5 +56,5 @@ done
 "${SSH[@]}" 'rm -rf ~/build/cawco-testflight/source; mkdir -p ~/build/cawco-testflight/source'
 git archive origin/main | "${SSH[@]}" 'tar -xf - -C ~/build/cawco-testflight/source'
 REV=$(git rev-parse origin/main)
-echo "ARCHIVING origin/main $REV"
-"${SSH[@]}" '/usr/bin/python3 - --notes' "$REMOTE_NOTES" < apps/apple/scripts/testflight.py
+echo "ARCHIVING origin/main $REV ${PLATFORM[*]:-ios}"
+"${SSH[@]}" '/usr/bin/python3 - --notes' "$REMOTE_NOTES" "${PLATFORM[@]}" < apps/apple/scripts/testflight.py
