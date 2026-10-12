@@ -11,9 +11,9 @@
  *
  * One landing at a time per repository and branch: fetch, rebase onto it
  * (a conflict is undone and goes back to the delegate), run the checks again
- * when the branch had moved, push, and try once more when someone pushed in
- * between. Nothing ahead of the branch counts as landed, so running this
- * again after a hub restart is safe.
+ * when the branch had moved, push, and, while someone keeps pushing in
+ * between, the same again, three tries in all. Nothing ahead of the branch
+ * counts as landed, so running this again after a hub restart is safe.
  *
  * A work item that lands `branch` or `pr` goes to a branch of its own
  * instead ({@link pushBranch}): HEAD as it is, replacing only what the hub
@@ -23,6 +23,22 @@
 import type { CommandResult } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
 
+/**
+ * Why git turned a landing down: the step it was on, the end of what git
+ * said, and `cause` when the words name it. `auth` is the remote refusing the
+ * login (no credential reached git, or a bad one); `race` is a push that was
+ * still behind the branch after every try, someone else pushing between the
+ * hub's fetch and its push each time.
+ */
+export interface Refusal {
+  cause?: "auth" | "race";
+  detail: string;
+  kind: "refused";
+  step: "read" | "fetch" | "push" | "pull request";
+  /** The pushes made, for a `race`. */
+  tries?: number;
+}
+
 /** What a landing came to. `F` is how the caller describes failing checks. */
 export type LandingOutcome<F> =
   | { kind: "landed"; sha: string; rebased: boolean }
@@ -31,13 +47,20 @@ export type LandingOutcome<F> =
   | { kind: "dirty"; files: string }
   | { kind: "conflict"; files: string }
   | { kind: "recheck-failed"; failing: F }
-  | { kind: "refused"; detail: string };
+  | Refusal;
 
 export interface LandingDeps<F> {
   /** Serialises landings that share a key. */
   queue: LandingQueue;
   /** The item's checks again, after a rebase moved HEAD: undefined when all pass. */
   recheck: () => Promise<F | undefined>;
+  /**
+   * The name every machine's clone of the repository shares (the item's
+   * project), keying the queue: clones can spell their remote differently (a
+   * renamed GitHub repository answers to its old name too), and their
+   * landings on one branch must still take turns. Unset, the remote's URL.
+   */
+  repo?: string;
   /** Runs a shell command in the workspace's checkout. */
   run: (cmd: string, timeoutMs: number) => Promise<CommandResult>;
   /**
@@ -81,9 +104,28 @@ const NETWORK_MS = 300_000;
 const LOCAL_MS = 60_000;
 /** Pushes that lost a race, as git words them. */
 const LOST_RACE = /non-fast-forward|\[rejected\]|fetch first|stale info/;
+/**
+ * A remote that refused the login, as git and GitHub word it: no credential
+ * reached git (it then asks a terminal that is not there), or one it turned
+ * down.
+ */
+const NOT_AUTHORISED =
+  /could not read (Username|Password)|terminal prompts disabled|Authentication failed|No anonymous write access|Invalid username or password|Permission denied \(publickey|Permission to \S+ denied|Write access to repository not granted|returned error: 40[13]/i;
 const CONFLICT_MARK = "cawco-conflict";
-/** Tries when someone else pushes between our fetch and our push. */
-const ATTEMPTS = 2;
+/**
+ * Tries when someone else pushes between our fetch and our push. Each try
+ * after the first rebases onto the newer branch and runs the checks again,
+ * so the window is the checks' length: a busy branch can win it twice.
+ */
+const ATTEMPTS = 3;
+
+/** A command git refused at `step`, its words and, when they name it, the cause. */
+const refusal = (step: Refusal["step"], result: CommandResult): Refusal => {
+  const detail = detailOf(result);
+  return NOT_AUTHORISED.test(`${result.stderr}\n${result.stdout}`)
+    ? { kind: "refused", step, detail, cause: "auth" }
+    : { kind: "refused", step, detail };
+};
 
 /** One shell word, whatever the branch is called. */
 export const quote = (word: string): string =>
@@ -114,7 +156,7 @@ export async function land<F>(
   if (start.kind !== "ready") {
     return start;
   }
-  return await deps.queue(`${start.remote}#${base}`, () =>
+  return await deps.queue(`${deps.repo ?? start.remote}#${base}`, () =>
     attempt(base, deps, 1)
   );
 }
@@ -129,11 +171,11 @@ async function attempt<F>(
   const target = quote(`origin/${base}`);
   const fetched = await run(`git fetch origin ${quote(base)}`, NETWORK_MS);
   if (fetched.exitCode !== 0) {
-    return { kind: "refused", detail: detailOf(fetched) };
+    return refusal("fetch", fetched);
   }
   const ahead = await run(`git rev-list --count ${target}..HEAD`, LOCAL_MS);
   if (ahead.exitCode !== 0) {
-    return { kind: "refused", detail: detailOf(ahead) };
+    return refusal("read", ahead);
   }
   if (Number(ahead.stdout.trim()) === 0) {
     return { kind: "nothing" };
@@ -168,10 +210,19 @@ async function attempt<F>(
   if (pushed.exitCode === 0) {
     return { kind: "landed", sha: after, rebased };
   }
-  if (n < ATTEMPTS && LOST_RACE.test(`${pushed.stderr}\n${pushed.stdout}`)) {
-    return await attempt(base, deps, n + 1);
+  const said = `${pushed.stderr}\n${pushed.stdout}`;
+  if (!(LOST_RACE.test(said) && !NOT_AUTHORISED.test(said))) {
+    return refusal("push", pushed);
   }
-  return { kind: "refused", detail: detailOf(pushed) };
+  return n < ATTEMPTS
+    ? await attempt(base, deps, n + 1)
+    : {
+        kind: "refused",
+        step: "push",
+        detail: detailOf(pushed),
+        cause: "race",
+        tries: n,
+      };
 }
 
 /** What pushing a workspace's HEAD to a branch of its own came to. */
@@ -180,7 +231,7 @@ export type BranchOutcome =
   | { kind: "nothing" }
   | { kind: "no-remote" }
   | { kind: "dirty"; files: string }
-  | { kind: "refused"; detail: string };
+  | Refusal;
 
 /** The workspace's HEAD and its remote, as both landings start: only commits go anywhere. */
 async function ready(
@@ -192,7 +243,7 @@ async function ready(
 > {
   const status = await run(statusCommand(skip), LOCAL_MS);
   if (status.exitCode !== 0) {
-    return { kind: "refused", detail: detailOf(status) };
+    return refusal("read", status);
   }
   if (status.stdout.trim()) {
     return { kind: "dirty", files: status.stdout.trim() };
@@ -214,32 +265,35 @@ async function ready(
 export async function pushBranch(
   base: string,
   branch: string,
-  deps: Pick<LandingDeps<unknown>, "queue" | "run" | "skip">
+  deps: Pick<LandingDeps<unknown>, "queue" | "repo" | "run" | "skip">
 ): Promise<BranchOutcome> {
   const { run } = deps;
   const start = await ready(run, deps.skip);
   if (start.kind !== "ready") {
     return start;
   }
-  return await deps.queue(`${start.remote}#${branch}`, async () => {
-    const fetched = await run(`git fetch origin ${quote(base)}`, NETWORK_MS);
-    if (fetched.exitCode !== 0) {
-      return { kind: "refused", detail: detailOf(fetched) };
+  return await deps.queue(
+    `${deps.repo ?? start.remote}#${branch}`,
+    async () => {
+      const fetched = await run(`git fetch origin ${quote(base)}`, NETWORK_MS);
+      if (fetched.exitCode !== 0) {
+        return refusal("fetch", fetched);
+      }
+      const ahead = await run(
+        `git rev-list --count ${quote(`origin/${base}`)}..HEAD`,
+        LOCAL_MS
+      );
+      if (ahead.exitCode !== 0) {
+        return refusal("read", ahead);
+      }
+      if (Number(ahead.stdout.trim()) === 0) {
+        return { kind: "nothing" };
+      }
+      const sha = (await run("git rev-parse HEAD", LOCAL_MS)).stdout.trim();
+      const refused = await leasedPush(run, `refs/heads/${branch}`, 1);
+      return refused ?? { kind: "pushed", sha };
     }
-    const ahead = await run(
-      `git rev-list --count ${quote(`origin/${base}`)}..HEAD`,
-      LOCAL_MS
-    );
-    if (ahead.exitCode !== 0) {
-      return { kind: "refused", detail: detailOf(ahead) };
-    }
-    if (Number(ahead.stdout.trim()) === 0) {
-      return { kind: "nothing" };
-    }
-    const sha = (await run("git rev-parse HEAD", LOCAL_MS)).stdout.trim();
-    const refused = await leasedPush(run, `refs/heads/${branch}`, 1);
-    return refused ?? { kind: "pushed", sha };
-  });
+  );
 }
 
 /** Whitespace between `git ls-remote`'s sha and its ref. */
@@ -255,10 +309,10 @@ async function leasedPush(
   run: LandingDeps<unknown>["run"],
   ref: string,
   n: number
-): Promise<Extract<BranchOutcome, { kind: "refused" }> | undefined> {
+): Promise<Refusal | undefined> {
   const there = await run(`git ls-remote origin ${quote(ref)}`, NETWORK_MS);
   if (there.exitCode !== 0) {
-    return { kind: "refused", detail: detailOf(there) };
+    return refusal("fetch", there);
   }
   const held = there.stdout.trim().split(SPACE)[0] ?? "";
   const pushed = await run(
@@ -268,16 +322,25 @@ async function leasedPush(
   if (pushed.exitCode === 0) {
     return;
   }
-  if (n < ATTEMPTS && LOST_RACE.test(`${pushed.stderr}\n${pushed.stdout}`)) {
-    return await leasedPush(run, ref, n + 1);
+  const said = `${pushed.stderr}\n${pushed.stdout}`;
+  if (!(LOST_RACE.test(said) && !NOT_AUTHORISED.test(said))) {
+    return refusal("push", pushed);
   }
-  return { kind: "refused", detail: detailOf(pushed) };
+  return n < ATTEMPTS
+    ? await leasedPush(run, ref, n + 1)
+    : {
+        kind: "refused",
+        step: "push",
+        detail: detailOf(pushed),
+        cause: "race",
+        tries: n,
+      };
 }
 
 /** What asking GitHub for a pull request came to. */
 export type PullRequestOutcome =
   | { kind: "opened" | "open"; url: string }
-  | { kind: "refused"; detail: string };
+  | Refusal;
 
 const PR_URL = /https?:\/\/\S+\/pull\/\d+/;
 
@@ -309,5 +372,5 @@ export async function openPullRequest(
   if (created.exitCode === 0 && url) {
     return { kind: "opened", url };
   }
-  return { kind: "refused", detail: detailOf(created) };
+  return refusal("pull request", created);
 }

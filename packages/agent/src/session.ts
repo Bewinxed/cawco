@@ -2492,7 +2492,9 @@ export class SessionSupervisor {
         this.#forgetPulse(instanceId);
         this.#gone(instanceId, processGeneration, {
           signal,
-          error: error instanceof Error ? error.message : String(error),
+          error:
+            (error instanceof Error && error.message) ||
+            `${String(error)}: its process was killed by ${signal}`,
         });
       },
       refused: (error) => this.#fail(instanceId, error, processGeneration),
@@ -3127,7 +3129,8 @@ export class SessionSupervisor {
       );
       return;
     }
-    const said = error instanceof Error ? error.message : String(error);
+    // An Error with no message still names its kind: String() gives "TypeError".
+    const said = (error instanceof Error && error.message) || String(error);
     const title = this.#titles.get(instanceId);
     const message = said.includes(`${SESSIOND_PROCESS_LIMIT}:`)
       ? processLimitSentence(

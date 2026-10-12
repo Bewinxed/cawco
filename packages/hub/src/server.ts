@@ -21105,10 +21105,14 @@ export const createServer = (
                   // words — "(no text)" once stood in for a 403 that was
                   // sitting right in the result frame.
                   const { errors } = neutral as { errors?: string[] };
-                  const harnessError = errors?.length
-                    ? errors.join("\n")
-                    : undefined;
+                  const harnessError =
+                    errors
+                      ?.map((each) => each.trim())
+                      .filter(Boolean)
+                      .join("\n") || undefined;
                   const failed = !!neutral.is_error;
+                  // A failed turn's words, blank ones skipped: a result frame
+                  // can carry `result: ""`, and that is no reason.
                   const turn = {
                     text:
                       text ||
@@ -21117,9 +21121,9 @@ export const createServer = (
                     ...(failed
                       ? {
                           error:
-                            harnessError ??
-                            neutral.result ??
-                            `Harness error (${neutral.subtype}).`,
+                            harnessError ||
+                            neutral.result?.trim() ||
+                            `The harness ended the turn as failed (${neutral.subtype}) and gave no words for it.`,
                         }
                       : {}),
                   };
@@ -21229,7 +21233,8 @@ export const createServer = (
                 processFailed(
                   message.machineId,
                   message.instanceId,
-                  peek(message.payload, "message") ?? "the session failed"
+                  peek(message.payload, "message")?.trim() ||
+                    `The session's process on ${machineName(message.machineId)} failed, and its agent sent no words for why.`
                 );
               }
               // A session's message to the owner, pushed without an ask: straight

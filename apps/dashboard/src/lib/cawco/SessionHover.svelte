@@ -318,7 +318,13 @@
       }
     }
     if (tone === "failed") {
-      const why = cawco.instanceIndex.byId.get(id)?.lastError;
+      // A delegate whose work item failed fails for the item's reason; its
+      // session's own error is only the process's.
+      const item = cawco.workItemFor(id);
+      const why =
+        item?.state === "failed"
+          ? item.firstLines.error
+          : cawco.instanceIndex.byId.get(id)?.lastError;
       return {
         key: "fail",
         kind: "fail",

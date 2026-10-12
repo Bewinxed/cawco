@@ -85,6 +85,7 @@ import {
   openPullRequest,
   pushBranch,
   quote,
+  type Refusal,
 } from "./landing";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import {
@@ -976,12 +977,78 @@ type Landed =
 const dirtyText = (files: string, where: string): string =>
   `The checks passed, but the workspace has changes that are not committed, new files included. The checks ran on them and the hub lands only commits, so landing now could leave ${where} without them. Commit them, delete them, or add them to .gitignore, then call finish_item again.${fenced(files)}`;
 
+/**
+ * A refused landing's line, its first sentence what failed: the step git was
+ * on, from which machine, and the cause when git's words name one (the remote
+ * refusing the login; a branch that moved before every push). Then git's
+ * words, and where the commits are.
+ */
+const refusedLine = (
+  refusal: Refusal,
+  landing: { head: "Not landed" | "Not pushed"; target: string },
+  workspace: WorkspaceRow,
+  machine: string
+): string => {
+  const { head, target } = landing;
+  const step: Record<Refusal["step"], string> = {
+    fetch: `the fetch of origin/${workspace.base}`,
+    push: `the push to ${target}`,
+    read: "reading the workspace's git",
+    "pull request": "opening the pull request",
+  };
+  let said = `${step[refusal.step]} on ${machine} failed`;
+  if (refusal.cause === "auth") {
+    said = `${step[refusal.step]} from ${machine} wasn't authorised by origin`;
+  } else if (refusal.cause === "race") {
+    said = `${target} moved on origin before each of the hub's ${refusal.tries} pushes, so every one was turned down as behind it`;
+  } else if (refusal.step === "push") {
+    said = `${step.push} was refused`;
+  }
+  return `${head}: ${said}.${fenced(refusal.detail)}\nThe commits are on branch ${workspace.branch} in workspace ${workspace.id}.`;
+};
+
+/**
+ * Why a checked item that passed its checks fails, when it does: the
+ * landing's line (its first sentence the step that failed), or, once it
+ * landed, the line on the outputs that did not arrive.
+ */
+const failureOf = (
+  landing: Exclude<Landed, { kind: "retry" }>,
+  collected: { ok: boolean; line: string }
+): string | undefined => {
+  if (landing.kind !== "done") {
+    return landing.line;
+  }
+  return collected.ok ? undefined : collected.line.trim();
+};
+
+/**
+ * A checked item's report to its parent: what it said it did, its checks,
+ * how it landed and its outputs, then `tail` (commits, diffstat, findings).
+ * A failure leads it, so the parent reads why before what.
+ */
+const checkedReport = (
+  said: { lines: string; summary: string },
+  landing: Exclude<Landed, { kind: "retry" }>,
+  collected: { ok: boolean; line: string },
+  tail: string
+): string => {
+  const failure = failureOf(landing, collected);
+  const head = `${said.summary}\n\nChecks:\n${said.lines}`;
+  if (!failure) {
+    return `${head}\n\n${landing.line}${collected.line}${tail}`;
+  }
+  const landed = landing.kind === "done" ? `\n\n${landing.line}` : "";
+  return `${failure}\n\n${head}${landed}${tail}`;
+};
+
 /** A push to an item's own branch that did not happen, as its landing. */
 const unpushed = (
   pushed: Exclude<BranchOutcome, { kind: "pushed" }>,
   workspace: WorkspaceRow,
   branch: string,
-  lands: LandsMode
+  lands: LandsMode,
+  machine: string
 ): Landed => {
   switch (pushed.kind) {
     case "dirty":
@@ -999,7 +1066,12 @@ const unpushed = (
     default:
       return {
         kind: "refused",
-        line: `Not pushed: the push to branch ${branch} was refused.${fenced(pushed.detail)}\nThe commits are on branch ${workspace.branch} in workspace ${workspace.id}.`,
+        line: refusedLine(
+          pushed,
+          { head: "Not pushed", target: `branch ${branch}` },
+          workspace,
+          machine
+        ),
       };
   }
 };
@@ -2309,10 +2381,12 @@ export const createWorkItems = ({
         )
       );
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      // An Error with no message still names its kind: String() gives "TypeError".
+      const message =
+        (error instanceof Error && error.message) || String(error);
       update(item.id, {
         state: "failed",
-        error: message,
+        error: `Its session did not start: ${message}`,
         endedAt: new Date(),
       });
       throw error;
@@ -2375,7 +2449,7 @@ export const createWorkItems = ({
       : finish(
           item,
           failed
-            ? { state: "failed", error: turn.text }
+            ? { state: "failed", error: turn.error, result: turn.text }
             : { state: "done", result: turn.text }
         );
     return { body: `${turn.text}${reportLine(ended)}`, failed };
@@ -2789,6 +2863,7 @@ export const createWorkItems = ({
       },
       queue: landings,
       skip: item.outputs ?? [],
+      ...(item.projectId ? { repo: item.projectId } : {}),
     });
     switch (outcome.kind) {
       case "landed":
@@ -2824,7 +2899,12 @@ export const createWorkItems = ({
       default:
         return {
           kind: "refused",
-          line: `Not landed: the push to ${base} was refused.${fenced(outcome.detail)}\nThe commits are on branch ${workspace.branch} in workspace ${workspace.id}.`,
+          line: refusedLine(
+            outcome,
+            { head: "Not landed", target: base },
+            workspace,
+            machineName(workspace.machineId)
+          ),
         };
     }
   };
@@ -2843,7 +2923,7 @@ export const createWorkItems = ({
     if (ended.state === "done" && ended.group && !ended.groupReportedAt) {
       return `; your parent hears of it with the rest of group “${ended.group}”`;
     }
-    report(row, `${body}${reportLine(ended)}`, false);
+    report(row, `${body}${reportLine(ended)}`, ended.state === "failed");
     return "";
   };
 
@@ -2882,9 +2962,16 @@ export const createWorkItems = ({
       run: runIn(workspace),
       queue: landings,
       skip: item.outputs ?? [],
+      ...(item.projectId ? { repo: item.projectId } : {}),
     });
     if (pushed.kind !== "pushed") {
-      return unpushed(pushed, workspace, branch, item.lands);
+      return unpushed(
+        pushed,
+        workspace,
+        branch,
+        item.lands,
+        machineName(workspace.machineId)
+      );
     }
     const at = `${branch} at ${pushed.sha.slice(0, 9)}`;
     return item.lands === "pr"
@@ -2913,9 +3000,13 @@ export const createWorkItems = ({
       runIn(workspace)
     );
     if (pr.kind === "refused") {
+      const why =
+        pr.cause === "auth"
+          ? `gh on ${machineName(workspace.machineId)} wasn't authorised to open the pull request`
+          : "the pull request was not opened";
       return {
         kind: "refused",
-        line: `Pushed to branch ${at}, but the pull request was not opened. gh said:${fenced(pr.detail)}\nOpen it by hand from ${branch} into ${base}, or start the task again once gh can.`,
+        line: `Pushed to branch ${at}, but ${why}. gh said:${fenced(pr.detail)}\nOpen it by hand from ${branch} into ${base}, or start the task again once gh can.`,
       };
     }
     return {
@@ -3064,10 +3155,15 @@ export const createWorkItems = ({
       landing.kind === "done"
         ? await collectOutputs(workspace, item)
         : { ok: true, line: "" };
-    const body = `${submission.summary}\n\nChecks:\n${lines}\n\n${landing.line}${collected.line}${await changesSince(workspace, item)}${findingsBlock(submission.findings)}`;
-    const landed = landing.kind === "done" && collected.ok;
+    const failure = failureOf(landing, collected);
+    const body = checkedReport(
+      { summary: submission.summary, lines },
+      landing,
+      collected,
+      `${await changesSince(workspace, item)}${findingsBlock(submission.findings)}`
+    );
     const ended = finish(db.workItem(item.id) ?? item, {
-      state: landed ? "done" : "failed",
+      ...(failure ? { state: "failed", error: failure } : { state: "done" }),
       result: body,
       digest: `${submission.summary.trim()}\n${landing.line}${collected.line}`,
       ...(landing.kind === "done" && landing.prUrl
