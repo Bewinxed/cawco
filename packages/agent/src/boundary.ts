@@ -85,6 +85,7 @@ import {
 } from "@cawco/core/keepers";
 import {
   AGENT_SOCKET_ENV,
+  darwinUserDirs,
   scratchSocketProblem,
   sessionIdentityDir,
   workspaceAccountsFile,
@@ -1649,6 +1650,10 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
           dirname(workspacesDir()),
           dirname(sessiondPath()),
           LAUNCHD_SOCKETS,
+          // The per-user temp and cache dirs: a workspace writes them for
+          // Apple's build tools, and every host app keeps its sockets there
+          // (VS Code's git askpass, browsers' singletons, srt's proxies).
+          ...(await darwinUserDirs()),
         ].map((path) => realpath(path).catch(() => path))
       ),
     });

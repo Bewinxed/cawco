@@ -233,8 +233,12 @@ short=$(printf %s "$id" | cut -c1-3)
 other_tmp=$(dirname "$tmp")/check$short
 other_clone=$(dirname "$clone")/check-clone-$short
 home_daemon=$HOME/.mac-check-$short
-mkdir -p "$other_tmp" "$other_clone" "$home_daemon"
-for place in "another workspace's scratch dir:$other_tmp/other.sock" "this workspace's state dir:$state/host.sock" "another workspace's clone:$other_clone/dev.sock" "a host daemon's dir under home:$home_daemon/daemon.sock"; do
+# The per-user temp and cache dirs, where host apps keep their sockets
+# (VS Code's git askpass, browsers' singletons): a workspace writes both.
+user_tmp=$(getconf DARWIN_USER_TEMP_DIR)mac-check-$short
+user_cache=$(getconf DARWIN_USER_CACHE_DIR)mac-check-$short
+mkdir -p "$other_tmp" "$other_clone" "$home_daemon" "$user_tmp" "$user_cache"
+for place in "another workspace's scratch dir:$other_tmp/other.sock" "this workspace's state dir:$state/host.sock" "another workspace's clone:$other_clone/dev.sock" "a host daemon's dir under home:$home_daemon/daemon.sock" "the per-user temp dir (T):$user_tmp/host.sock" "the per-user cache dir (C):$user_cache/host.sock"; do
   label="connect a socket in ${place%%:*}" sock=${place#*:}
   rm -f "$sock"
   /usr/bin/python3 -c 'import socket, sys, time
@@ -249,7 +253,7 @@ s = socket.socket(socket.AF_UNIX); s.bind(sys.argv[1]); s.listen(1); time.sleep(
   kill "$listener" 2>/dev/null; wait "$listener" 2>/dev/null
   rm -f "$sock"
 done
-rm -rf "$other_tmp" "$other_clone" "$home_daemon"
+rm -rf "$other_tmp" "$other_clone" "$home_daemon" "$user_tmp" "$user_cache"
 r "kill -0 $$ 2>/dev/null" && row "signal a process outside" OPEN || row "signal a process outside" BLOCKED
 r '/bin/launchctl print gui/$(id -u) >/dev/null 2>&1' && row "launchctl" OPEN || row "launchctl" BLOCKED
 source_hooks=$(cd "$source_repo" && git rev-parse --path-format=absolute --git-path hooks)
@@ -336,6 +340,13 @@ if [ -n "$xcode_dir" ]; then
       FAIL*) xcodebuild_diagnosis "$before" ;;
     esac
   fi
+fi
+# A simulator the workspace makes, boots, screenshots and deletes.
+sim_type=$(xcrun simctl list devicetypes 2>/dev/null | grep -m1 -oE 'com\.apple\.CoreSimulator\.SimDeviceType\.iPhone-[A-Za-z0-9-]+')
+if [ -z "$sim_type" ]; then
+  works "simctl boot and screenshot" "FAIL (no iPhone device type on this Mac)"
+else
+  checked "simctl boot and screenshot ($sim_type)" r "set -o pipefail; udid=\$(xcrun simctl create 'mac-check-$short' '$sim_type') || exit 1; trap 'xcrun simctl shutdown \$udid >/dev/null 2>&1; xcrun simctl delete \$udid >/dev/null 2>&1' EXIT; xcrun simctl boot \$udid && xcrun simctl bootstatus \$udid >/dev/null && xcrun simctl io \$udid screenshot \"\$TMPDIR/sim-check.png\" >/dev/null 2>&1 && test -s \"\$TMPDIR/sim-check.png\" && echo \"screenshot \$(wc -c < \"\$TMPDIR/sim-check.png\") bytes\""
 fi
 # A tool's own socket in each of the workspace's writable roots: bound, then
 # connected to, inside.

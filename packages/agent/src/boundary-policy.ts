@@ -143,9 +143,10 @@ export interface SeatbeltPlace {
   /** The tool door's and the git door's sockets, the unix sockets under CawCo's dirs a command connects to. */
   readonly doors: readonly string[];
   /**
-   * Where a host's key agents and CawCo's own sockets are (CawCo's state,
-   * sessiond's dir, launchd's ssh-agent): no command connects to a socket
-   * under one.
+   * Where a host's key agents, apps and CawCo's own sockets are (CawCo's
+   * state, sessiond's dir, launchd's ssh-agent, Apple's per-user temp and
+   * cache dirs): no command connects to a socket under one, even one a
+   * workspace writes.
    */
   readonly hostSockets: readonly string[];
 }
@@ -171,7 +172,10 @@ export interface SeatbeltPlace {
  * `$XDG_CACHE_HOME`). So a daemon's socket under home stays out of reach
  * (Colima's `~/.colima/default/docker.sock`, a key agent's), and so do the
  * agent's and sessiond's, every other workspace's clone, scratch dir and
- * doors. The cache is every workspace's, as on Linux: a socket one binds
+ * doors, and every host app's in the per-user temp and cache dirs (VS Code's
+ * git askpass, a browser's singleton): Apple's build tools write those dirs
+ * but bind no socket there, and Chromium binds its singleton in `$TMPDIR`,
+ * the scratch dir. The cache is every workspace's, as on Linux: a socket one binds
  * there another reaches, as it already reaches every file the other writes
  * there. Allows come after denies, as srt writes its `allowUnixSockets`
  * (`(allow network-outbound (remote unix-socket (subpath …)))`,
@@ -190,10 +194,13 @@ export const seatbeltProfile = (
   );
   const socketDenies = [...new Set([...place.hostSockets, ...policy.denyRead])];
   // The workspace's own writable roots a socket deny covers: its clone, its
-  // scratch dir and the workspaces' cache, all under home. A root no deny
-  // covers (Apple's per-user temp dir) needs no rule of its own.
-  const ownSockets = policy.allowWrite.filter((root) =>
-    socketDenies.some((denied) => within(root, denied))
+  // scratch dir and the workspaces' cache, all under home. Never a root that
+  // is or holds a host socket dir: Apple's per-user temp and cache dirs are
+  // writable here and the host's too.
+  const ownSockets = policy.allowWrite.filter(
+    (root) =>
+      socketDenies.some((denied) => within(root, denied)) &&
+      !place.hostSockets.some((host) => within(host, root))
   );
   const lookups = new Set<string>();
   for (const path of policy.allowRead) {
