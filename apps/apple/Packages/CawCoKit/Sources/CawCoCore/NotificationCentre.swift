@@ -21,7 +21,8 @@ public import UserNotifications
 /// an add lands before it. Every function here queues its call before it
 /// returns or suspends; a caller waits only for an answer it needs.
 public enum NotificationCentre {
-    private static let queue = DispatchQueue(label: "dev.cawco.notification-centre", qos: .utility)
+    /// Also the queue CawCoPush `NotificationClearing` calls the centre from, in this app.
+    static let queue = DispatchQueue(label: "dev.cawco.notification-centre", qos: .utility)
 
     /// A local notification, as plain values; the centre's objects are made on the queue.
     public struct LocalNote: Sendable {
@@ -65,6 +66,8 @@ public enum NotificationCentre {
         public let thread: String
         public let category: String
         public let fields: [String: String]
+        /// Its `cawco.cleared`: the ids the hub said were cleared when it sent it.
+        public let cleared: [String]
 
         init(_ notification: UNNotification) {
             let content = notification.request.content
@@ -75,6 +78,7 @@ public enum NotificationCentre {
             thread = content.threadIdentifier
             category = content.categoryIdentifier
             fields = PushNote.fields(content.userInfo)
+            cleared = NotificationClearing.cleared(content.userInfo)
         }
     }
 
@@ -91,10 +95,6 @@ public enum NotificationCentre {
 
     public static func removePending(_ identifiers: [String]) {
         queue.async { UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: identifiers) }
-    }
-
-    public static func removeDelivered(_ identifiers: [String]) {
-        queue.async { UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: identifiers) }
     }
 
     public static func setBadge(_ count: Int) {
@@ -124,6 +124,15 @@ public enum NotificationCentre {
         queue.async {
             UNUserNotificationCenter.current().add(note.request, withCompletionHandler: answered)
         }
+    }
+
+    /// Takes delivered notifications down, the one way this app does
+    /// (CawCoPush `NotificationClearing.remove`): marked removed by this
+    /// device, removed, and waited for until the centre shows them gone.
+    /// `layer` names who asked, for the log. True once none shows.
+    @discardableResult
+    public static func remove(_ identifiers: [String], because layer: String) async -> Bool {
+        await NotificationClearing.remove(identifiers, because: layer, on: queue)
     }
 
     /// iOS's word on this app's notifications.

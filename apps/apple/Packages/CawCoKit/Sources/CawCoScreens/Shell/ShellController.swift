@@ -724,11 +724,14 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             guard let row = hub.fleet.byId[id] else { return false }
             return home.endedUnseen(row) && !picked.contains(id)
         }
-        guard isViewLoaded, view.window?.windowScene?.activationState == .foregroundActive else { return }
+        guard isViewLoaded, let scene = view.window?.windowScene else { return }
         let shown = compact
             ? compactNav.topViewController === workspaceController
             : destination == .fleet && detail.shown === workspaceController
-        guard shown, !unseen.isEmpty else { return }
+        // The focused group's conversation is the one this window has in
+        // front; `Presence` decides whether the window itself is in front.
+        Presence.shared.front(shown ? workspace.activeSessionId : nil, in: scene)
+        guard scene.activationState == .foregroundActive, shown, !unseen.isEmpty else { return }
         home.look(unseen)
     }
 

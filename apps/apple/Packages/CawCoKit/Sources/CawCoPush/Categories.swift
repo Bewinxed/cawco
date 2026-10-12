@@ -69,7 +69,7 @@ public enum PushCategory {
             identifier: PushAction.reply, title: "Reply", options: [.authenticationRequired],
             textInputButtonTitle: "Send", textInputPlaceholder: "Message")
         func category(_ id: String, _ actions: [UNNotificationAction]) -> UNNotificationCategory {
-            UNNotificationCategory(identifier: id, actions: actions, intentIdentifiers: [])
+            UNNotificationCategory(identifier: id, actions: actions, intentIdentifiers: [], options: dismissable)
         }
         return [
             category(permission, [approve, deny, denyWith, open]),
@@ -96,8 +96,13 @@ public enum PushCategory {
         let other: UNNotificationAction = UNTextInputNotificationAction(
             identifier: PushAction.answerOther, title: "Other…", options: [.authenticationRequired],
             textInputButtonTitle: "Send", textInputPlaceholder: "Your answer")
-        return UNNotificationCategory(identifier: id, actions: picks + [other], intentIdentifiers: [])
+        return UNNotificationCategory(identifier: id, actions: picks + [other], intentIdentifiers: [], options: dismissable)
     }
+
+    /// Every CawCo category: a single swipe-away reaches the app as
+    /// `UNNotificationDismissActionIdentifier`, which it tells the hub
+    /// (NotificationClearing `.dismiss`). Apple reports no "Clear All".
+    private static let dismissable: UNNotificationCategoryOptions = [.customDismissAction]
 
     /// Registers the fixed categories, the question categories already
     /// registered (only those a delivered push still names, when `pruning`),

@@ -97,7 +97,6 @@ targets:
     entitlements:
       path: CawCo/CawCo.entitlements
       properties:
-        # Alerts only: no `remote-notification` background mode, no silent pushes.
         aps-environment: $(APS_ENVIRONMENT)
         # The pairing and its push key, shared with NotificationService (CawCoPush).
         # Every profile of the team allows `FN5LJSPX2R.*`.
@@ -110,6 +109,9 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         ITSAppUsesNonExemptEncryption: false
         NSUserActivityTypes: [dev.cawco.session, dev.cawco.scene]
+        # The hub's background push (`content-available`) carries the ids
+        # cleared on another device; the app delegate removes them.
+        UIBackgroundModes: [remote-notification]
         UILaunchScreen: {}
         # Scene life cycle (required from the 27 SDKs): every window is a
         # scene, and SceneDelegate builds each one's interface.
@@ -205,3 +207,13 @@ targets:
         NSExtension:
           NSExtensionPointIdentifier: com.apple.usernotifications.service
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).NotificationService
+        # The extension tells the hub what was cleared here
+        # (`/api/notifications/dismiss`): the app's own reach to it.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+          NSExceptionDomains:
+            ts.net:
+              NSIncludesSubdomains: true
+              NSExceptionAllowsInsecureHTTPLoads: true
+            "100.64.0.0/10":
+              NSExceptionAllowsInsecureHTTPLoads: true

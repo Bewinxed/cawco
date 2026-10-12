@@ -1,4 +1,5 @@
 #if DEBUG
+import CawCoPush
 import Foundation
 import OSLog
 import UIKit
@@ -22,7 +23,18 @@ import UserNotifications
 ///   the notification centre's delegate calls with a response, then lists.
 ///   A simulator can't press a notification's action from a script, and
 ///   `UNNotificationResponse` has no public initializer, so the probe makes the
-///   `PushNote` the delegate would from the notification and the action.
+///   `PushNote` the delegate would from the notification and the action, and
+///   hands it to the delegate's own handling (`NotificationSync.respond`);
+///   `com.apple.UNNotificationDefaultActionIdentifier` is a tap and
+///   `com.apple.UNNotificationDismissActionIdentifier` a single swipe-away.
+/// - `-push-probe-arrive <notification id>`: the extension's clearing step
+///   (CawCoPush `NotificationClearing.arriving`) on that delivered push.
+/// - `-push-probe-hold-sweep`: this launch doesn't sweep, so `-push-probe-arrive`
+///   is the only reconcile (`NotificationSync.sweep`).
+/// - `-push-probe-background <id,id…>`: the hub's background push clearing
+///   those ids, handed to the app delegate 8 s after launch.
+/// - `-push-probe-clear-all`: every delivered notification removed behind
+///   the app's back, as the person's "Clear All" leaves it.
 ///
 /// Everything it logs is public, under category `PushProbe`.
 @MainActor
@@ -40,6 +52,17 @@ public enum PushProbe {
         if let at = args.firstIndex(of: "-push-probe-open"), args.count > at + 1 {
             let id = args[at + 1]
             Task { await open(id) }
+        }
+        if let at = args.firstIndex(of: "-push-probe-background"), args.count > at + 1 {
+            let ids = args[at + 1].split(separator: ",").map(String.init)
+            Task { await background(ids) }
+        }
+        if args.contains("-push-probe-clear-all") {
+            Task { await clearAll() }
+        }
+        if let at = args.firstIndex(of: "-push-probe-arrive"), args.count > at + 1 {
+            let id = args[at + 1]
+            Task { await arrive(id) }
         }
         if let at = args.firstIndex(of: "-push-probe-act"), args.count > at + 2 {
             let id = args[at + 1]
@@ -157,6 +180,53 @@ public enum PushProbe {
         await list("listed")
     }
 
+    /// The hub's background push, handed to the app delegate's own
+    /// `didReceiveRemoteNotification` 8 s after launch (time to send the app
+    /// to the background), with a background task held meanwhile. A
+    /// simulator never calls that method for a `simctl push`: it calls
+    /// `performFetchWithCompletionHandler` instead, without the payload
+    /// (developer.apple.com/forums/thread/652649, Apple: "the wrong delegate
+    /// is being called").
+    private static func background(_ ids: [String]) async {
+        let app = UIApplication.shared
+        let held = app.beginBackgroundTask(withName: "push-probe-background") {}
+        try? await Task.sleep(for: .seconds(8))
+        log.notice("probe background push, app \(app.applicationState == .background ? "in the background" : "not in the background", privacy: .public): cawco.cleared \(ids.joined(separator: ","), privacy: .public)")
+        let userInfo: [AnyHashable: Any] = ["aps": ["content-available": 1], "cawco": ["cleared": ids]]
+        await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
+            app.delegate?.application?(app, didReceiveRemoteNotification: userInfo) { result in
+                log.notice("probe background push: completion handler called (\(result.rawValue))")
+                done.resume()
+            }
+        }
+        await list("after background push")
+        app.endBackgroundTask(held)
+    }
+
+    /// The person's "Clear All", as the app sees it: every delivered
+    /// notification gone without this device's removal (nothing is marked
+    /// removed here), straight on the centre, then the list.
+    private static func clearAll() async {
+        let ids = await NotificationCentre.delivered().map(\.identifier)
+        NotificationCentre.queue.async { UNUserNotificationCenter.current().removeAllDeliveredNotifications() }
+        log.notice("probe cleared all, behind the app's back: \(ids.joined(separator: ","), privacy: .public)")
+        try? await Task.sleep(for: .seconds(1))
+        await list("after clear all")
+    }
+
+    /// The extension's clearing step (`NotificationClearing.arriving`) on a
+    /// delivered push, for a simulator that never runs the extension.
+    private static func arrive(_ id: String) async {
+        guard let found = await NotificationCentre.delivered().first(where: { $0.identifier == id }) else {
+            log.notice("probe arrive \(id, privacy: .public): not delivered")
+            return
+        }
+        let cleared = found.cleared
+        log.notice("probe arrive \(id, privacy: .public): cawco.cleared \(cleared.joined(separator: ","), privacy: .public)")
+        await NotificationClearing.arriving(id, cleared: cleared, on: NotificationCentre.queue)
+        await list("after arrive")
+    }
+
     private static func act(_ id: String, action: String, text: String?) async {
         guard let found = await NotificationCentre.delivered().first(where: { $0.identifier == id }) else {
             log.notice("probe act \(id, privacy: .public): not delivered")
@@ -164,8 +234,13 @@ public enum PushProbe {
         }
         let note = PushNote(id: found.identifier, delivered: found.date, title: found.title, thread: found.thread,
                             category: found.category, action: action, text: text, fields: found.fields)
-        let handled = await PushActions.perform(note)
-        log.notice("probe acted \(id, privacy: .public) \(action, privacy: .public): handled \(handled)")
+        // The delegate's own handling; a tap or swipe takes the notification
+        // down as iOS does before it calls the delegate.
+        if action == UNNotificationDismissActionIdentifier || action == UNNotificationDefaultActionIdentifier {
+            NotificationCentre.queue.async { UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [id]) }
+        }
+        await NotificationSync.respond(note) { log.notice("probe act \(id, privacy: .public): opens \(String(describing: note.route), privacy: .public)") }
+        log.notice("probe acted \(id, privacy: .public) \(action, privacy: .public)")
         // A notice posted in the push's place lands through `willPresent` first.
         try? await Task.sleep(for: .seconds(2))
         await list("after")

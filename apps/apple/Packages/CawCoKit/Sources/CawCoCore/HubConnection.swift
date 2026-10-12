@@ -1,4 +1,5 @@
 public import CawCoAPI
+import CawCoPush
 public import Foundation
 import Observation
 import OpenAPIRuntime
@@ -239,6 +240,8 @@ public final class HubConnection {
         }
         self.address = address
         UserDefaults.standard.set(address.absoluteString, forKey: Self.addressKey)
+        // The extension tells this hub what the person cleared.
+        NotificationClearing.keepHub(address)
         resetFleet()
         attempts = 0
         start()
@@ -849,6 +852,8 @@ public final class HubConnection {
                     break
                 }
                 apply(frame)
+            case let .notificationsCleared(ids):
+                NotificationSync.socketCleared(ids)
             case .other:
                 break
             }

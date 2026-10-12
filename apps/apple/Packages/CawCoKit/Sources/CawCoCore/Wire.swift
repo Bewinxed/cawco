@@ -108,7 +108,14 @@ extension Components.Schemas.InstanceRow {
 enum Inbound {
     case stream(Data)
     case frame(Frame)
+    /// `{ type: "notificationsCleared", collapseIds }`: notifications cleared
+    /// on another device, which this one removes (`NotificationSync`).
+    case notificationsCleared([String])
     case other
+
+    private struct Cleared: Decodable {
+        let collapseIds: [String]
+    }
 
     /// What every message is routed on: the protocol's discriminators.
     private struct Route: Decodable {
@@ -157,6 +164,9 @@ enum Inbound {
         let route = try decoder.decode(Route.self, from: data)
         if let type = route.type, streamTypes.contains(type) {
             return .stream(data)
+        }
+        if route.type == "notificationsCleared" {
+            return .notificationsCleared(try decoder.decode(Cleared.self, from: data).collapseIds)
         }
         guard route.verb == "frames" else {
             return .other

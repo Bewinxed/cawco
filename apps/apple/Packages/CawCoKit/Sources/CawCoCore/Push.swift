@@ -431,8 +431,7 @@ public final class PushRegistry {
             return note.identifier
         }
         if !gone.isEmpty {
-            NotificationCentre.removeDelivered(gone)
-            log.notice("removed \(gone.count) delivered asks that are over")
+            await NotificationCentre.remove(gone, because: "asks over")
         }
     }
 
@@ -682,39 +681,53 @@ public enum PushActions {
     static let window: Duration = .seconds(20)
     private static let log = Logger(subsystem: "dev.cawco.app", category: "Push")
 
-    /// Runs the action `note` names. False when it names none of these (a
-    /// tap, Open, a dismissal): the caller routes those.
-    public static func perform(_ note: PushNote) async -> Bool {
+    /// What `perform` came to.
+    public enum Performed: Sendable {
+        /// The note names none of these actions (a tap, Open, a dismissal): the caller routes those.
+        case notAnAction
+        /// The hub applied it (a reply: accepted it).
+        case sent
+        /// It didn't go; a notice in the push's place says why.
+        case notSent
+    }
+
+    /// Runs the action `note` names.
+    public static func perform(_ note: PushNote) async -> Performed {
+        let sent: Bool
         switch note.action {
         case PushAction.approve:
-            await approve(note)
+            sent = await approve(note)
         case PushAction.deny:
-            await deny(note, message: nil)
+            sent = await deny(note, message: nil)
         case PushAction.denyWith:
-            await deny(note, message: note.text ?? "")
+            sent = await deny(note, message: note.text ?? "")
         case PushAction.answerOther:
-            await answer(note, .words(note.text ?? ""))
+            sent = await answer(note, .words(note.text ?? ""))
         case PushAction.reply:
-            await reply(note)
+            sent = await reply(note)
         default:
-            guard let option = PushAction.option(note.action) else { return false }
-            await answer(note, .option(option))
+            guard let option = PushAction.option(note.action) else { return .notAnAction }
+            sent = await answer(note, .option(option))
         }
-        return true
+        return sent ? .sent : .notSent
     }
 
     // MARK: Approve
 
-    private static func approve(_ note: PushNote) async {
-        guard note.kind == "ask", let requestId = note.requestId else { return }
+    private static func approve(_ note: PushNote) async -> Bool {
+        guard note.kind == "ask", let requestId = note.requestId else { return false }
         let deadline = ContinuousClock.now + window
-        guard let found = await parked(note, deadline: deadline, failed: { await notApproved(note) }) else { return }
+        guard let found = await parked(note, deadline: deadline, failed: { await notApproved(note) }) else { return false }
         let (connection, match, ask) = found
         defer { connection.disconnect() }
         connection.needs.answer(ask, machineId: match.machineId, .allow)
         let stage = await settled(connection.needs.answers["\(ask.instanceId):\(ask.requestId)"], on: connection, deadline: deadline)
         log.notice("approve \(requestId, privacy: .public): \(stage?.rawValue ?? "unanswered", privacy: .public)")
-        if stage != .applied { await notApproved(note) }
+        guard stage == .applied else {
+            await notApproved(note)
+            return false
+        }
+        return true
     }
 
     private static func notApproved(_ note: PushNote) async {
@@ -725,23 +738,25 @@ public enum PushActions {
 
     /// The request the push named, denied: with the card's own words, or with
     /// `message`, the operator's (empty is refused, not sent as a bare Deny).
-    private static func deny(_ note: PushNote, message: String?) async {
-        guard note.kind == "ask", let requestId = note.requestId else { return }
+    private static func deny(_ note: PushNote, message: String?) async -> Bool {
+        guard note.kind == "ask", let requestId = note.requestId else { return false }
         let words = message?.trimmingCharacters(in: .whitespacesAndNewlines)
         if let words, words.isEmpty {
             await notDenied(note, "Nothing was written.")
-            return
+            return false
         }
         let deadline = ContinuousClock.now + window
-        guard let found = await parked(note, deadline: deadline, failed: { await notDenied(note, "The hub couldn't be reached.") }) else { return }
+        guard let found = await parked(note, deadline: deadline, failed: { await notDenied(note, "The hub couldn't be reached.") }) else { return false }
         let (connection, match, ask) = found
         defer { connection.disconnect() }
         connection.needs.answer(ask, machineId: match.machineId, .deny, message: words)
         let stage = await settled(connection.needs.answers["\(ask.instanceId):\(ask.requestId)"], on: connection, deadline: deadline)
         log.notice("deny \(requestId, privacy: .public): \(stage?.rawValue ?? "unanswered", privacy: .public)")
-        if stage != .applied {
+        guard stage == .applied else {
             await notDenied(note, connection.needs.answerSent(for: ask)?.reason)
+            return false
         }
+        return true
     }
 
     private static func notDenied(_ note: PushNote, _ reason: String?) async {
@@ -759,26 +774,26 @@ public enum PushActions {
 
     /// The parked question's answer, read off the hub's own copy of the ask:
     /// an option by its index there, so the label sent is the hub's.
-    private static func answer(_ note: PushNote, _ pick: Pick) async {
-        guard note.kind == "ask", let requestId = note.requestId else { return }
+    private static func answer(_ note: PushNote, _ pick: Pick) async -> Bool {
+        guard note.kind == "ask", let requestId = note.requestId else { return false }
         if case let .words(words) = pick, words.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             await notAnswered(note, "Nothing was written.")
-            return
+            return false
         }
         let deadline = ContinuousClock.now + window
-        guard let found = await parked(note, deadline: deadline, failed: { await notAnswered(note, nil) }) else { return }
+        guard let found = await parked(note, deadline: deadline, failed: { await notAnswered(note, nil) }) else { return false }
         let (connection, match, ask) = found
         defer { connection.disconnect() }
         guard ask.questions.count == 1, let question = ask.questions.first else {
             await notAnswered(note, "This question has more than one part.")
-            return
+            return false
         }
         let label: String
         switch pick {
         case let .option(id):
             guard let index = Int(id), question.options.indices.contains(index) else {
                 await notAnswered(note, "That option is no longer offered.")
-                return
+                return false
             }
             label = question.options[index].label
         case let .words(words):
@@ -786,13 +801,15 @@ public enum PushActions {
         }
         guard connection.needs.answerQuestion(ask, machineId: match.machineId, answers: [question.question: [label]]) else {
             await notAnswered(note, nil)
-            return
+            return false
         }
         let stage = await settled(connection.needs.answers["\(ask.instanceId):\(ask.requestId)"], on: connection, deadline: deadline)
         log.notice("answer \(requestId, privacy: .public): \(stage?.rawValue ?? "unanswered", privacy: .public)")
-        if stage != .applied {
+        guard stage == .applied else {
             await notAnswered(note, connection.needs.answerSent(for: ask)?.reason)
+            return false
         }
+        return true
     }
 
     private static func notAnswered(_ note: PushNote, _ reason: String?) async {
@@ -802,20 +819,20 @@ public enum PushActions {
     // MARK: Reply
 
     /// The operator's words to the push's session, as the composer sends them.
-    private static func reply(_ note: PushNote) async {
+    private static func reply(_ note: PushNote) async -> Bool {
         let words = (note.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let instanceId = note.instanceId, !instanceId.isEmpty else { return }
+        guard let instanceId = note.instanceId, !instanceId.isEmpty else { return false }
         guard !words.isEmpty else {
             await notSent(note, words, "Nothing was written.")
-            return
+            return false
         }
         guard let machineId = note.machineId, !machineId.isEmpty else {
             await notSent(note, words, "That session is no longer on the hub.")
-            return
+            return false
         }
         guard HubConnection.keptAddress != nil else {
             await notSent(note, words, "No hub is kept on this device.")
-            return
+            return false
         }
         let deadline = ContinuousClock.now + window
         let connection = HubConnection()
@@ -823,15 +840,16 @@ public enum PushActions {
         guard await until(deadline, { connection.socket == .connected }) else {
             log.error("reply to \(instanceId, privacy: .public): the hub socket did not open")
             await notSent(note, words, "The hub couldn't be reached.")
-            return
+            return false
         }
         let commandId = connection.sessions.steer(sessionId: instanceId, machineId: machineId, text: words)
         let stage = await settled(commandId, on: connection, deadline: deadline)
         log.notice("reply to \(instanceId, privacy: .public): command \(commandId, privacy: .public) \(stage?.rawValue ?? "unanswered", privacy: .public)")
         guard stage == .accepted || stage == .applied else {
             await notSent(note, words, connection.ledger.commands[commandId]?.reason ?? "The hub never acknowledged it.")
-            return
+            return false
         }
+        return true
     }
 
     /// In the push's place, with its own category, so Reply is there to try again.

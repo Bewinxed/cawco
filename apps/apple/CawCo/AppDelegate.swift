@@ -36,8 +36,23 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         #else
         PushRegistry.shared.launch(environment: .production)
         #endif
+        NotificationSync.launch()
         NotificationCenter.default.addObserver(self, selector: #selector(becameActive), name: UIApplication.didBecomeActiveNotification, object: nil)
+        #if targetEnvironment(macCatalyst)
+        // The Mac app stays open for days: each window made key sweeps too.
+        NotificationCenter.default.addObserver(self, selector: #selector(windowBecameKey), name: UIWindow.didBecomeKeyNotification, object: nil)
+        #endif
         return true
+    }
+
+    /// The hub's background push (`content-available`): its `cawco.cleared`
+    /// removed and confirmed gone, the record reconciled, then the handler.
+    func application(_: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+                     fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
+        Task {
+            await NotificationSync.background(userInfo)
+            completionHandler(.newData)
+        }
     }
 
     func application(_: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
@@ -48,8 +63,16 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         PushRegistry.shared.failedToRegister(error)
     }
 
+    /// Launch and every return to the front: the asks that are over, then the sweep.
     @objc private func becameActive() {
-        Task { await PushRegistry.shared.becameActive() }
+        Task {
+            await PushRegistry.shared.becameActive()
+            await NotificationSync.sweep("in front")
+        }
+    }
+
+    @objc private func windowBecameKey() {
+        Task { await NotificationSync.sweep("window key") }
     }
 
     @objc private func sceneWillConnect(_ note: Notification) {
@@ -184,10 +207,7 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
         let note = PushNote(response)
         nonisolated(unsafe) let done = completionHandler
         Task { @MainActor in
-            let handled = await PushActions.perform(note)
-            if !handled, note.action == UNNotificationDefaultActionIdentifier || note.action == PushCategories.open {
-                PushTaps.deliver(note, to: nil)
-            }
+            await NotificationSync.respond(note) { PushTaps.deliver(note, to: nil) }
             done()
         }
     }
