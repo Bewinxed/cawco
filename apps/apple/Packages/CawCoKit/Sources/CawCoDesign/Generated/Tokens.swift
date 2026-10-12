@@ -731,10 +731,10 @@ public enum Motion {
     public static let durPop: TimeInterval = 0.26
     /// In seconds.
     public static let durPanel: TimeInterval = 0.28
-    /// The composer growing up out of its history button: into the recall wheel, or by the one row that says a queued message is being edited.
+    /// The composer growing up out of its pill: into the recall wheel, or by the one row that says a queued message is being edited.
     /// In seconds.
     public static let durGrow: TimeInterval = 0.32
-    /// The grown composer folding back into its history button, shorter than its growth.
+    /// The grown composer folding back into its pill, shorter than its growth.
     /// In seconds.
     public static let durGrowExit: TimeInterval = 0.22
     /// A queued message's words flying between its bubble and the composer field, either way, two copies crossfading on the drawer curve.

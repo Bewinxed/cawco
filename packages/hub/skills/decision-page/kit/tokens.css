@@ -874,9 +874,9 @@
     --dur-wait-grace: 1000ms;
     --dur-pop: 260ms;
     --dur-panel: 280ms;
-    /* The composer growing up out of its history button: into the recall wheel, or by the one row that says a queued message is being edited. */
+    /* The composer growing up out of its pill: into the recall wheel, or by the one row that says a queued message is being edited. */
     --dur-grow: 320ms;
-    /* The grown composer folding back into its history button, shorter than its growth. */
+    /* The grown composer folding back into its pill, shorter than its growth. */
     --dur-grow-exit: 220ms;
     /* A queued message's words flying between its bubble and the composer field, either way, two copies crossfading on the drawer curve. */
     --dur-lift: 340ms;

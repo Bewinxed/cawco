@@ -82,12 +82,7 @@
   import * as Command from "#lib/components/ui/command/index.js";
   import { Kbd } from "#lib/components/ui/kbd/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
-  import {
-    IconChevronUp,
-    IconHistory,
-    IconSend,
-    IconStop,
-  } from "#lib/icons.js";
+  import { IconChevronUp, IconSend, IconStop } from "#lib/icons.js";
   import {
     cawco,
     readOlderPage,
@@ -244,8 +239,8 @@
      */
     delegatesOf?: string;
     /**
-     * The conversation whose sent messages the composer recalls (↑, the
-     * history button, a held press on a touch screen), and whose queued
+     * The conversation whose sent messages the composer recalls (↑, or a
+     * held press on a touch screen), and whose queued
      * message it lifts out of the transcript to edit. Absent on surfaces
      * with no session behind them.
      */
@@ -1344,7 +1339,6 @@
   /** The box the pill stands in, which the grown shape and its rows share. */
   let shell = $state<HTMLElement>();
   let pill = $state<HTMLFormElement>();
-  let historyButton = $state<HTMLButtonElement>();
   const recalled = $derived(recallOf ? cawco.session(recallOf) : null);
 
   /**
@@ -1595,7 +1589,7 @@
 
   function openRecall(keys: boolean): void {
     if (
-      !(recallOf && field && shell && pill && historyButton && ctrls) ||
+      !(recallOf && field && shell && pill && ctrls) ||
       recall ||
       draft.lifted ||
       askOpen
@@ -1603,7 +1597,7 @@
       return;
     }
     // Every size first, before anything is written: one layout per open.
-    const measured = measureShape(shell, pill, historyButton, field);
+    const measured = measureShape(shell, pill, field);
     const deck = foldDeck(ctrls, shell.getBoundingClientRect().left);
     deckIn(deck.places, deck.start, deck.deck);
     recall = {
@@ -1614,7 +1608,7 @@
     };
     wheeling = true;
     dismissed = true;
-    // Keys reach the wheel from the field, also when the button opened it.
+    // Keys reach the wheel from the field.
     if (keys) {
       field.focus();
     }
@@ -1715,21 +1709,6 @@
     }
     if (send) {
       submit();
-    }
-  }
-
-  /**
-   * The history button: the wheel, or keep a queued edit. While the wheel
-   * is up it is folded into the deck, which takes no press.
-   */
-  function onhistory(): void {
-    if (swallowClick || askOpen) {
-      return;
-    }
-    if (draft.lifted) {
-      returnEdit();
-    } else {
-      openRecall(true);
     }
   }
 
@@ -1838,10 +1817,8 @@
     ) {
       return;
     }
-    // Its own controls answer a press themselves; the history button is
-    // the wheel's, so a hold on it is a hold.
-    const control = (event.target as Element).closest("button, a, input");
-    if (control && control !== historyButton) {
+    // Its own controls answer a press themselves.
+    if ((event.target as Element).closest("button, a, input")) {
       return;
     }
     const press = {
@@ -1978,7 +1955,7 @@
   /*
    * Your queued message, edited in the composer. Its words lift out of their
    * bubble into the field (lift.svelte.ts) while the composer grows one row
-   * out of its history button to say so; Enter puts the edit in its place,
+   * out of its pill to say so; Enter puts the edit in its place,
    * Esc (or Keep it, on a touch screen) gives the words back as they were.
    * What the field held steps aside meanwhile and comes back after. The
    * edit belongs to its conversation's draft: a switch away leaves it
@@ -2020,8 +1997,8 @@
       return;
     }
     // Both ends first, then the change: one layout.
-    if (shell && pill && historyButton) {
-      liftSizes = measureShape(shell, pill, historyButton, field);
+    if (shell && pill) {
+      liftSizes = measureShape(shell, pill, field);
     }
     const words = bubbleWords(message.id);
     const from = words ? bubbleBox(words) : null;
@@ -2193,9 +2170,9 @@
     });
   });
 
-  /** Grows the editing row out of the history button. */
+  /** Grows the editing row out of the pill. */
   function growEdit(): void {
-    if (!(shell && pill && historyButton && field)) {
+    if (!(shell && pill && field)) {
       return;
     }
     if (editShape) {
@@ -2207,8 +2184,7 @@
     }
     // Measured by the lift before it wrote; a draft lifted elsewhere (a
     // conversation switched to) is measured here.
-    const { size } =
-      liftSizes ?? measureShape(shell, pill, historyButton, field);
+    const { size } = liftSizes ?? measureShape(shell, pill, field);
     liftSizes = null;
     const { row } = size;
     const shape = new GrownShape(shell, size, row);
@@ -2251,7 +2227,7 @@
 
   $effect(() => {
     const lifting = !!draft.lifted;
-    if (!(shell && pill && historyButton)) {
+    if (!(shell && pill)) {
       return;
     }
     untrack(() => (lifting ? growEdit() : foldEdit()));
@@ -2293,7 +2269,7 @@
 
   /*
    * A parked ask (a permission, a question) is the composer itself while it
-   * waits. The composer grows up out of its history button into the ask's
+   * waits. The composer grows up out of its pill into the ask's
    * card: the shape the recall wheel and a queued edit grow (grown.ts), its
    * sides straight and its top solid, since an ask has no rows leaning back
    * and no oldest row fading out. What stands over the pill (the delegate
@@ -2421,7 +2397,7 @@
       return;
     }
     // Every size first, before anything is written: one layout per growth.
-    const { size } = measureShape(shell, pill, historyButton ?? field, field);
+    const { size } = measureShape(shell, pill, field);
     const max = askRoom();
     // What else grows out of the pill puts itself away: the ask has it.
     if (recall) {
@@ -2885,7 +2861,7 @@
       <!-- With the keyboard down a touch screen's pill is a control to hold
          (the wheel comes up under it); the field being typed in keeps its
          touches. -->
-      <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: the press handlers read a touch held on the pill for the recall wheel; everything it leads to is also a key (↑) and a button (history) -->
+      <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: the press handlers read a touch held on the pill for the recall wheel; everything it leads to is also a key (↑, the field's aria-keyshortcuts) -->
       <form
         aria-label={FIELD_LABEL}
         class="cin field-shell"
@@ -2968,7 +2944,9 @@
             aria-activedescendant={recall ? recallActive : activeDescendant}
             aria-autocomplete="list"
             aria-controls={recall ? recallId : "composer-menu"}
+            aria-describedby={recallOf ? `${recallId}-way` : undefined}
             aria-expanded={menuOpen || !!recall}
+            aria-keyshortcuts={recallOf ? "ArrowUp" : undefined}
             aria-label={FIELD_LABEL}
             onblur={() => {
               dismissed = true;
@@ -3044,6 +3022,13 @@
               >+{lines - 1} {lines === 2 ? "line" : "lines"}</span
             >
           {/if}
+          {#if recallOf}
+            <!-- The way to what you sent here, read with the field: ↑ brings
+               it up (a held press, on a touch screen). -->
+            <span class="sr-only" id="{recallId}-way"
+              >Press Up to show what you sent</span
+            >
+          {/if}
         </label>
 
         <!-- While the wheel is up its buttons fold into a deck at the pill's
@@ -3052,23 +3037,6 @@
         <div class="ctrls" inert={!!recall} bind:this={ctrls}>
           {@render leading?.()}
           <AttachButton {draft} />
-          {#if recallOf}
-            <!-- What you sent here: the wheel grows up out of this button,
-               and folds back into it. -->
-            <button
-              aria-controls={recall ? recallId : undefined}
-              aria-expanded={!!recall}
-              aria-label={draft.lifted
-                ? "Keep your queued message as it was"
-                : "Show what you sent here"}
-              class="history-btn touch-hit"
-              onclick={onhistory}
-              type="button"
-              bind:this={historyButton}
-            >
-              <IconHistory />
-            </button>
-          {/if}
           <!-- Pending from the press until the hub takes the message: the glyph
            slot turns to the kit spinner and presses are swallowed. -->
           <button
@@ -3619,7 +3587,6 @@
     }
   }
   /* Attach (AttachButton) takes the same box. */
-  .history-btn,
   .stop {
     width: var(--cin-ctl);
     height: var(--cin-ctl);
@@ -3639,30 +3606,10 @@
         transform var(--dur-control) var(--ease-out);
     }
   }
-  .history-btn :global(svg) {
-    width: 16px;
-    height: 16px;
-  }
-  /* What you sent: a quiet ghost beside Attach, lit while the wheel is up. */
-  .history-btn {
-    border: 0;
-    background: transparent;
-    color: var(--ink-muted);
-
-    &[aria-expanded="true"] {
-      background: var(--surface-hover);
-      color: var(--ink-strong);
-    }
-  }
   /* In the recall wheel's deck every button behind Send is a card: its
      face, its edge at the outline button's 3:1 (the control edge, 1.37:1,
      is lost at a 4px peek) and a little shadow, so each one's edge reads
      behind the one in front. */
-  .ctrls[inert] .history-btn {
-    border: 1px solid var(--border-button-outline);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-xs);
-  }
   .ctrls[inert] :global(:is(.att-btn, .ap-trigger)) {
     box-shadow: var(--shadow-xs);
   }
@@ -3671,10 +3618,6 @@
     border-color: var(--border-button-outline);
   }
   @media (hover: hover) and (pointer: fine) {
-    .history-btn:hover {
-      background: var(--surface-hover);
-      color: var(--ink-strong);
-    }
     /* Every primary action's hover (DESIGN.md, Primary button). */
     .stop:not(:disabled):hover {
       background-color: var(--action-hover);
@@ -3718,7 +3661,6 @@
     }
   }
   @media (prefers-reduced-motion: no-preference) {
-    .history-btn:active,
     .stop:active:not(:disabled) {
       transform: scale(var(--press-scale));
     }

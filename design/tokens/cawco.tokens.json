@@ -2931,12 +2931,12 @@
     "dur-grow": {
       "$type": "duration",
       "$value": "320ms",
-      "$description": "The composer growing up out of its history button: into the recall wheel, or by the one row that says a queued message is being edited."
+      "$description": "The composer growing up out of its pill: into the recall wheel, or by the one row that says a queued message is being edited."
     },
     "dur-grow-exit": {
       "$type": "duration",
       "$value": "220ms",
-      "$description": "The grown composer folding back into its history button, shorter than its growth."
+      "$description": "The grown composer folding back into its pill, shorter than its growth."
     },
     "dur-lift": {
       "$type": "duration",

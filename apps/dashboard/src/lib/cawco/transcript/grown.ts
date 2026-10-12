@@ -1,25 +1,24 @@
 /**
- * The composer grown upward out of its history button: the shape the recall
- * wheel rolls in, and the one row that says a queued message is being
- * edited. It is drawn behind the pill, absolutely, so the transcript above
- * never moves, and while it stands the pill's own surface steps aside: the
- * grown shape is the composer.
+ * The composer grown upward out of its pill: the shape the recall wheel
+ * rolls in, and the one row that says a queued message is being edited. It
+ * is drawn behind the pill, absolutely, so the transcript above never moves,
+ * and while it stands the pill's own surface steps aside: the grown shape is
+ * the composer.
  *
- * It grows as one piece: the whole pill rises at full width, its top corners
- * rounding all the way, the side with the history button a little ahead, so
- * the top leans toward the button and levels out as it rises; then its
- * shoulders curve in. What stands in it (the wheel's rows, the editing row)
- * is clipped to it, so it comes up out of the button with the shape and
- * folds back into it. The wheel's rows run between its sides at their height
- * (`inset`), so they follow the shoulders' curve.
+ * It grows as one piece: the whole pill rises at full width from its top
+ * edge, evenly across it, its top corners rounding all the way; then its
+ * shoulders curve in, by at most `taperRows` rows' worth however tall it
+ * stands. What stands in it (the wheel's rows, the editing row) is clipped
+ * to it, so it comes up out of the pill with the shape and folds back into
+ * it. The wheel's rows stand inside its sides at their height (`inset`).
  *
  * Its edge is the pill's border (`--border-control`), and stays the border
  * while the field has keyboard focus: the grown composer draws no ring.
  *
- * The band at its top, a row and the room over it (`edge`), is where what
- * stands in it goes out of sight: the wheel's rows blur and fade there
- * (RecallWheel). The wheel's shape is solid to its edge (`fade: false`), so
- * nothing behind it shows through; the queued edit's row fades its top.
+ * The room over its top row is where a wheel row rolling past it goes out of
+ * sight (RecallWheel). The wheel's shape is solid to its edge (`fade:
+ * false`), so nothing behind it shows through; the queued edit's row fades
+ * its top.
  *
  * Its drop comes in once it stands still, and is drawn once: a copy of the
  * outline under it with the shadow fixed. Folding, the copy shrinks with the
@@ -47,8 +46,6 @@ const DROP_STEPS = 12;
 export interface ShapeSize {
   /** The pill's height: the shape's foot. */
   base: number;
-  /** Where the history button's middle is, from the shell's inline start. */
-  bx: number;
   /** The room left over the top row, grown, for its fade. */
   headroom: number;
   /** The pill's corner radius. */
@@ -111,6 +108,8 @@ export class GrownShape {
   readonly #edge: SVGStopElement;
   readonly #clips = new Map<HTMLElement, () => ClipBox>();
   readonly #taper: boolean;
+  /** The most rows of height the shoulders curve in for. */
+  readonly #taperRows: number;
   readonly #fade: boolean;
   /** The sides' inset by height, grown, and the reach it was worked out for. */
   #sides: { ext: number; at: number[]; inset: number[] } | null = null;
@@ -123,11 +122,16 @@ export class GrownShape {
     host: HTMLElement,
     size: ShapeSize,
     ext: number,
-    { taper = true, fade = true }: { taper?: boolean; fade?: boolean } = {}
+    {
+      taper = true,
+      taperRows = Number.POSITIVE_INFINITY,
+      fade = true,
+    }: { taper?: boolean; taperRows?: number; fade?: boolean } = {}
   ) {
     this.#size = size;
     this.ext = ext;
     this.#taper = taper;
+    this.#taperRows = taperRows;
     this.#fade = fade;
     const clear = fade ? "stop-opacity: 0" : "";
     made += 1;
@@ -206,7 +210,8 @@ export class GrownShape {
       return 0;
     }
     const { row, w, headroom } = this.#size;
-    return (TAPER * (Math.max(0, (ext - headroom) / row) + 0.5) * w) / 2;
+    const rows = Math.min(this.#taperRows, Math.max(0, (ext - headroom) / row));
+    return (TAPER * (rows + 0.5) * w) / 2;
   }
 
   /**
@@ -218,11 +223,6 @@ export class GrownShape {
    */
   settleAfter(still: Promise<void>): void {
     this.#after = still;
-  }
-
-  /** The band at the top where what stands in it goes out of sight: a row and the room over it. */
-  get edge(): number {
-    return this.#size.row + this.#size.headroom;
   }
 
   /**
@@ -297,16 +297,13 @@ export class GrownShape {
    * point in another box; the shape's own box has its foot on the shell's.
    */
   outline(p: number, map: Map2 = (x, y) => `${x} ${y}`) {
-    const { w, base, bx, r } = this.#size;
+    const { w, base, r } = this.#size;
     const { ext } = this;
-    const near = easeDrawer(p * 1.25);
-    const far = easeDrawer(p * 1.25 - 0.15);
-    const [hR, hL] =
-      bx >= w / 2 ? [ext * near, ext * far] : [ext * far, ext * near];
-    const up = Math.max(hR, hL);
+    // Up from the pill's top evenly across it: the top stays level.
+    const up = ext * easeDrawer(p * 1.25);
     const height = base + up;
-    const tR = up - hR;
-    const tL = up - hL;
+    const tR = 0;
+    const tL = 0;
     const pw = easeDrawer(clamp01((p - 0.25) / 0.75));
     const k = this.taper() * pw;
     const L = k;
@@ -555,28 +552,32 @@ export interface LineBox {
   width: number;
 }
 
+/** Where the shell stands in the window: its foot (viewport px) and the window's height. */
+export interface ViewBox {
+  bottom: number;
+  height: number;
+}
+
 /**
- * The sizes a grown shape stands on, read in one pass: the shell, its pill,
- * the history button it grows out of, the field's one-line height (one
- * wheel row) and its last line. The room over the top row is a step of the
+ * The sizes a grown shape stands on, read in one pass: the shell and where
+ * it stands in the window, its pill, the field's one-line height (one wheel
+ * row) and its last line. The room over the top row is a step of the
  * spacing ladder. Read before anything is written, so growing costs the page
  * one layout, in the frame it is drawn.
  */
 export function measureShape(
   shell: HTMLElement,
   pill: HTMLElement,
-  button: HTMLElement,
   field: HTMLElement
-): { size: ShapeSize; line: LineBox } {
+): { size: ShapeSize; line: LineBox; view: ViewBox } {
   const box = shell.getBoundingClientRect();
-  const at = button.getBoundingClientRect();
   const text = field.getBoundingClientRect();
   const style = getComputedStyle(shell);
   return {
+    view: { bottom: box.bottom, height: window.innerHeight },
     size: {
       w: box.width,
       base: pill.offsetHeight,
-      bx: at.left + at.width / 2 - box.left,
       r: Number.parseFloat(getComputedStyle(pill).borderTopLeftRadius) || 0,
       headroom: Number.parseFloat(style.getPropertyValue("--space-2")),
       row: Number.parseFloat(style.getPropertyValue("--c-composer-field")),

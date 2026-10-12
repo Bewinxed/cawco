@@ -1,19 +1,23 @@
 <script lang="ts">
   /**
    * The composer's recall: what the reader sent in this conversation rolls
-   * down into the field as ghost text, on a wheel grown up out of the
-   * history button (grown.ts). The row on the field's line is the pick, its
-   * words and time in the selected ink; the reader's own draft is the first
-   * row, the newest message the next, and older ones stand above, each
-   * leaning back and a little fainter than the one below it, as many as the
-   * shape holds, up to its top. Through the band at its top (a row and the
-   * room over it, grown.ts `edge`) a row goes out of focus and out of sight
-   * as it rises, each row on its own, so none is ever cut by the edge; below
-   * the band every row holds 4.5:1. Each row runs between the shape's sides
-   * at its height, less the pill's padding, so the rows follow its
-   * shoulders as they roll; on the field's line it stops short of the
-   * pill's buttons, folded into a deck at the trailing end while it is up
-   * (Composer), at every frame of the deck's slide (`deck`).
+   * down into the field as ghost text, on a wheel grown up out of the pill
+   * (grown.ts). The row on the field's line is the pick, its words and time
+   * in the selected ink; the reader's own draft is the first row, the newest
+   * message the next, and older ones stand above, as many as fit under a
+   * line half the window's height up on a compact window and 40% up on a
+   * wider one, never fewer than five (three on a compact one). Their depth
+   * is spread over however many show: each row up leans further back,
+   * narrows, softens and fades a touch, evenly, the topmost ending where the
+   * fifth row stood before (the third on a compact window): 30° back, 11%
+   * narrower, 1.5px soft, at 94%. Every row that stands in the shape is
+   * whole and holds 4.5:1; only a row rolling up past the top row goes out
+   * of focus and out of sight, through the room over it. Each row stands
+   * inside the shape's sides at its height, less the pill's padding; on the
+   * field's line it stops short of the pill's buttons, folded into a deck
+   * at the trailing end while it is up (Composer), at every frame of the
+   * deck's slide (`deck`). Only the rows in the shape, and one past each end
+   * of it, are mounted.
    *
    * The draft is the field's own text, not a copy: rolling up, the field's
    * words leave downward as every row leaves the line, and rolling back to
@@ -43,7 +47,12 @@
   import { IconSearch } from "#lib/icons.js";
   import { formatAgeShort } from "#lib/utils/time.js";
   import { felt } from "../feel.svelte";
-  import { GrownShape, type LineBox, type ShapeSize } from "./grown";
+  import {
+    GrownShape,
+    type LineBox,
+    type ShapeSize,
+    type ViewBox,
+  } from "./grown";
   import { marked, oneLine, type Part, type Sent, SentIndex } from "./recall";
 
   let {
@@ -71,7 +80,7 @@
      * The composer's sizes and its field, read by the composer before it
      * wrote anything for the wheel (grown.ts `measureShape`).
      */
-    measured: { size: ShapeSize; line: LineBox };
+    measured: { size: ShapeSize; line: LineBox; view: ViewBox };
     /**
      * Where the deck of the pill's buttons starts this frame (from the
      * shell's inline start), and whether it has stopped sliding.
@@ -105,16 +114,30 @@
   } = $props();
 
   /**
-   * How many rows the shape reaches above the pill: five where the window
-   * has the room (the phone breakpoint, 640px, both ways), three on a phone
-   * or in a short window. Read once, as it opens. A taller draft stands the
-   * shape that much higher, and the rows fill it all.
+   * A compact window (DESIGN.md: narrower than 640px, or a coarse pointer
+   * narrower than the drawer's line): a phone.
    */
-  const ROOMY = "(width >= 640px) and (height >= 640px)";
+  const COMPACT =
+    "(max-width: 639px), (pointer: coarse) and (max-width: 899px)";
+  /** How far up the window the shape's top reaches, as a share of its height. */
+  const REACH = { compact: 0.5, wide: 0.4 } as const;
+  /**
+   * The rows the depth ends at, and the fewest that stand above the line:
+   * five, three on a compact window (as many as stood there before).
+   */
+  const DEPTH_ROWS = { compact: 3, wide: 5 } as const;
+  /**
+   * How many rows stand above the line, read once as it opens: as many as
+   * fit under the reach, never fewer than `depthRows`. A taller draft stands
+   * the shape that much higher, and the rows fill the rest.
+   */
   let above = 3;
-  /** How far each row up leans back (deg), up to the fifth row's lean. */
+  let depthRows: number = DEPTH_ROWS.compact;
+  /** Each depth row's share of the top row's depth: lean (deg), narrowing, softness (px), fading. */
   const LEAN = 6;
-  const LEAN_ROWS = 5;
+  const NARROW = 0.022;
+  const SOFT = 0.3;
+  const FAINT = 0.015;
   /** The rows' perspective (px), from the line's foot at the shape's middle. */
   const DEPTH = 900;
   /** The tab track's glide: critically damped at a 0.3s response. */
@@ -171,6 +194,17 @@
       ? own
       : [...own, { key: "none", kind: "none" }];
   });
+  /**
+   * The rows mounted, by place: those the shape holds where the roll
+   * stands, and two past each end of it, so a roll never draws a row that
+   * is not there yet. Moved as the roll crosses a row (`draw`).
+   */
+  let span = $state({ from: 0, to: 0 });
+  const mounted = $derived(
+    rows
+      .slice(span.from, span.to + 1)
+      .map((entry, i) => ({ entry, k: span.from + i }))
+  );
   /** How many rows can be picked: the line never rests on "none". */
   const pickable = $derived(rows.filter((each) => each.kind !== "none").length);
   const last = () => Math.max(0, pickable - 1);
@@ -202,8 +236,12 @@
   /** Sizes, read once as it opens. */
   let row = $state(0);
   let box = $state({ bottom: 0, width: 0, height: 0 });
-  /** The band at the shape's top that rows go out of sight through. */
-  let edge = 0;
+  /**
+   * The room over the top row a row rolling past it goes out of sight
+   * through: the shape's headroom and the pill's sill. A row standing in
+   * the shape is never in it.
+   */
+  let band = 1;
   /** The blur a row has as it leaves the band's top (px). */
   let haze = 0;
   /** A row's room above and below its words (px). */
@@ -242,44 +280,48 @@
   }
 
   /**
-   * A row `up` rows above the line, a touch fainter by how far up it
-   * stands, never below 4.5:1 for its age's muted ink: the lean carries the
-   * depth, and only the far band takes a row out of sight.
+   * How deep a row `up` rows above the line stands: 0 on the line, 1 at
+   * the top row the shape holds and past it, evenly between.
    */
-  const ghost = (up: number) => 1 - 0.015 * Math.min(up, LEAN_ROWS - 1);
+  const depthOf = (up: number) => Math.min(1, Math.max(0, up) / above);
   /**
-   * How strongly a row shows: at full strength on the line, fainter row by
-   * row as it stands `up` rows above it, and gone as it leaves `off` rows
-   * below it.
+   * How strongly a row shows: at full strength on the line, a touch fainter
+   * by its depth (never below 4.5:1 for its age's muted ink: the top row at
+   * what the fifth stood at before, 94%), and gone as it leaves `off` rows
+   * below the line.
    */
   function presence(up: number, off: number): number {
     if (off < 0) {
       return Math.max(0, 1 + off * 1.6);
     }
-    return Math.max(0, up < 1 ? 1 + (ghost(1) - 1) * up : ghost(up));
+    return 1 - FAINT * Math.min(depthRows, 4) * depthOf(up);
   }
 
   /**
    * How far over the line's foot the top of a row whose foot stands `y` px
-   * over it is drawn, leaning back `lean` degrees: its top leans away, and
-   * the perspective draws it lower.
+   * over it is drawn, leaning back `lean` degrees and narrowed to `s` about
+   * its foot: its top leans away, and the perspective draws it lower.
    */
-  function topOf(y: number, lean: number): number {
+  function topOf(y: number, lean: number, s: number): number {
     const th = (lean * Math.PI) / 180;
-    return ((y + row * Math.cos(th)) * DEPTH) / (DEPTH + row * Math.sin(th));
+    const tall = row * s;
+    return ((y + tall * Math.cos(th)) * DEPTH) / (DEPTH + tall * Math.sin(th));
   }
 
   /**
    * The inline insets of a row whose foot stands `y` px over the line's
-   * foot and whose top is drawn `top` px over it: the shape's sides at the
-   * row's middle as it is drawn, less the pill's padding. On the field's
-   * line it stops a step short of the buttons' deck, where the deck is this
-   * frame, and of a search's chip.
+   * foot, whose top is drawn `top` px over it and which is narrowed to `s`
+   * about its middle: inside the shape's sides at the row's middle as it is
+   * drawn, less the pill's padding. On the field's line it stops a step
+   * short of the buttons' deck, where the deck is this frame, and of a
+   * search's chip.
    */
-  function edges(y: number, top: number): [number, number] {
+  function edges(y: number, top: number, s: number): [number, number] {
     const { line, size } = measured;
     const pad = line.left;
-    const side = (shape?.inset(line.bottom + (y + top) / 2) ?? 0) + pad;
+    const half = size.w / 2;
+    const inset = shape?.inset(line.bottom + (y + top) / 2) ?? 0;
+    const side = Math.max(pad, half - (half - inset - pad) / s);
     // While its words stand beside the deck (the deck is a row tall, on the
     // line) a row stops short of it whole; its words clear of the deck's
     // top, it widens to the shape's side as its foot reaches it.
@@ -310,18 +352,24 @@
     }
     node.style.visibility = "visible";
     const up = Math.max(0, y / row);
-    const lean = Math.min(up, LEAN_ROWS) * LEAN;
-    node.style.transform = `translateY(${-y}px) rotateX(${lean}deg)`;
-    const top = topOf(y, lean);
-    const [start, end] = edges(y, top);
+    const depth = depthOf(up) * depthRows;
+    const lean = depth * LEAN;
+    const s = 1 - depth * NARROW;
+    node.style.translate = `0 ${(-y).toFixed(2)}px`;
+    node.style.rotate = `x ${lean.toFixed(3)}deg`;
+    node.style.scale = s.toFixed(4);
+    const top = topOf(y, lean, s);
+    const [start, end] = edges(y, top, s);
     node.style.left = `${start}px`;
     node.style.right = `${end}px`;
-    // Through the band at the shape's top a row leaves by its top: clear and
-    // whole with it a band below the edge, gone as it reaches the edge, so
-    // the edge never cuts a row that can be seen.
-    const clear = Math.min(1, Math.max(0, (box.height - top) / edge));
+    // A row rolling up past the top row leaves through the room over it,
+    // by its top: whole while it stands in the shape, gone as it reaches the
+    // edge, so the edge never cuts a row that can be seen.
+    const clear = Math.min(1, Math.max(0, (box.height - top) / band));
     node.style.opacity = String(presence(up, off) * clear);
-    const blur = clear < 1 ? `blur(${(haze * (1 - clear)).toFixed(2)}px)` : "";
+    const softness = depth * SOFT + haze * (1 - clear);
+    // Blurred only where it is soft at all: the line's row draws no filter.
+    const blur = softness > 0.005 ? `blur(${softness.toFixed(2)}px)` : "";
     if (node.style.filter !== blur) {
       node.style.filter = blur;
     }
@@ -359,11 +407,15 @@
   /** Places every row where the roll and the deck have it. Writes only. */
   function placeRows(): void {
     deckEdge = deck().at;
-    const nodes = ghosts?.children ?? [];
-    for (let k = 0; k < nodes.length; k += 1) {
-      place(nodes[k] as HTMLElement, k);
+    for (const node of ghosts?.children ?? []) {
+      const el = node as HTMLElement;
+      place(el, Number(el.dataset.k));
     }
   }
+
+  /** The row standing at place `k`, if it is mounted. */
+  const rowAt = (k: number) =>
+    ghosts?.querySelector<HTMLElement>(`[data-k="${k}"]`) ?? undefined;
 
   /**
    * While the deck slides (folding in as it opens, fanning out as it folds),
@@ -382,6 +434,12 @@
 
   /** Places every row and the draft, and keeps the pick. Writes only. */
   function draw(): void {
+    // The rows the shape holds where the roll stands, and two past each end.
+    const from = Math.max(0, Math.floor(pos) - 2);
+    const to = Math.ceil(pos) + above + 2;
+    if (from !== span.from || to !== span.to) {
+      span = { from, to };
+    }
     placeAll();
     if (closing) {
       return;
@@ -486,7 +544,7 @@
     }
     closing = true;
     settled = null;
-    const line = ghosts?.children[Math.round(pos)] as HTMLElement | undefined;
+    const line = rowAt(Math.round(pos));
     let base = shape?.base;
     let home = Promise.resolve();
     if (text === undefined) {
@@ -531,7 +589,7 @@
       }
       base = await fitted;
     }
-    // It folds back into the button it came out of, the rows inside it,
+    // It folds back into the pill it came out of, the rows inside it,
     // fading as they go, its foot on the pill as the field fits.
     if (ghosts && motionOk.current) {
       ghosts.animate([{ opacity: 1 }, { opacity: 0 }], {
@@ -723,24 +781,35 @@
     }
   }
 
-  // Rows that come or go (a search, an older page) are placed in the frame
-  // they are drawn.
+  // Rows that come or go (a search, an older page, the roll crossing into
+  // rows not mounted yet) are placed in the frame they are drawn.
   $effect(() => {
-    // biome-ignore lint/complexity/noVoid: read-only dependency — a new list of rows is drawn where the roll stands
-    void rows;
+    // biome-ignore lint/complexity/noVoid: read-only dependency — the rows mounted are drawn where the roll stands
+    void mounted;
     if (row > 0) {
       untrack(draw);
     }
   });
 
   onMount(() => {
-    const { size, line } = measured;
+    const { size, line, view } = measured;
     ({ row, headroom } = size);
     sill = Math.max(0, size.base - line.bottom - line.height);
-    above = matchMedia(ROOMY).matches ? 5 : 3;
-    // Solid to its edge: nothing behind it shows through.
-    shape = new GrownShape(shell, size, extFor(), { fade: false });
-    ({ edge } = shape);
+    band = Math.max(1, headroom + sill);
+    const compact = matchMedia(COMPACT).matches;
+    depthRows = compact ? DEPTH_ROWS.compact : DEPTH_ROWS.wide;
+    // As many rows over the line as stand under the reach: the shape's top
+    // at that share of the window's height up from its foot.
+    const reach = view.height * (1 - (compact ? REACH.compact : REACH.wide));
+    const room = view.bottom - reach - size.base - headroom - sill;
+    above = Math.max(depthRows, Math.floor(room / row));
+    span = { from: 0, to: above + 3 };
+    // Solid to its edge: nothing behind it shows through. Its shoulders
+    // curve in as far as the depth's top row narrows, however tall it is.
+    shape = new GrownShape(shell, size, extFor(), {
+      fade: false,
+      taperRows: depthRows,
+    });
     haze = Number.parseFloat(
       getComputedStyle(shell).getPropertyValue("--c-head-fade-blur")
     );
@@ -822,7 +891,7 @@
   style:perspective="{DEPTH}px"
   style:width="{box.width}px"
 >
-  {#each rows as entry, k (entry.key)}
+  {#each mounted as { entry, k } (entry.key)}
     <!-- The keys are the field's (↑ ↓ Enter); a click is the pointer's way
          to the same pick. -->
     <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -830,6 +899,7 @@
     <div
       aria-selected={k === pick}
       class="ghost"
+      data-k={k}
       id="{id}-{k}"
       onclick={() => pickRow(k)}
       role="option"
@@ -911,7 +981,7 @@
     line-height: var(--leading-ui);
     color: var(--ink-strong);
     transform-origin: 50% 100%;
-    will-change: transform, opacity;
+    will-change: translate, rotate, scale, opacity;
     /* Drawn where the roll puts it, once it has a place. */
     visibility: hidden;
     cursor: pointer;
