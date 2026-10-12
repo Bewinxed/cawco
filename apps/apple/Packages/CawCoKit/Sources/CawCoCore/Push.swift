@@ -289,6 +289,13 @@ public final class PushRegistry {
 
     private func enrolOnce() async {
         guard !removed, let token, let proof = Pro.shared.enrolmentProof else {
+            // Cawrier seats a device only on a purchase or a TestFlight
+            // install, so a development build stops here, before the hub
+            // ever hears of it: said once per attempt, so it can be told
+            // apart from a device that never asked.
+            if !removed, token != nil {
+                log.notice("not enrolled: no purchase and no TestFlight install to enrol on (testFlight \(String(describing: Pro.shared.testFlight), privacy: .public), access \(String(describing: Pro.shared.access), privacy: .public))")
+            }
             relay = .idle
             return
         }
