@@ -25861,7 +25861,7 @@
             "type": "string"
           },
           "checkedAt": {
-            "description": "When you put an unknown one away, having checked the service.",
+            "description": "When you put a failed or unknown one away.",
             "type": [
               "null",
               "number"
@@ -37929,7 +37929,7 @@
         ]
       },
       "ActionsFrame": {
-        "description": "Hub-originated: every approved action waiting on you, whole, on each\nchange: those proposed, and those whose outcome is unknown until you check.",
+        "description": "Hub-originated: every approved action waiting on you, whole, on each\nchange: those proposed, and those that failed or whose outcome is unknown,\nuntil you put them away.",
         "type": "object",
         "properties": {
           "actions": {
