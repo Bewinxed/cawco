@@ -3,7 +3,8 @@ import UIKit
 
 /// The kit's toasts (ui/sonner on svelte-sonner, as the root layout sets
 /// it: expanded, top-centre under the top bar up to 640pt, bottom-right on
-/// a desk). Each is the floating surface (`--surface-raised` in the control
+/// a desk, standing on the composer and the transcript's dock when they
+/// show: `Toast.stand(on:)`). Each is the floating surface (`--surface-raised` in the control
 /// border, `--radius-lg`, the overlay shadow), 16pt in, a 16pt glyph for
 /// its kind 6pt before the message in body type. They paint above
 /// everything, a dialog included, in a window of their own that takes no
@@ -49,6 +50,24 @@ public enum Toast {
     }
 
     private static var layers: [ObjectIdentifier: ToastWindow] = [:]
+
+    /// What stands at the window's foot (a composer, the transcript's dock:
+    /// its pills and its "Not caught up" line). On a desk the toasts stand on
+    /// the highest one showing, a `space3` step above it, never over it
+    /// (DESIGN.md, "Toast": "standing on the tallest composer when one
+    /// shows"; +layout.svelte `composerLift`). Held weakly: a view that goes
+    /// is no floor.
+    static let floors = NSHashTable<UIView>.weakObjects()
+
+    /// `view` is a floor for the toasts from now on.
+    public static func stand(on view: UIView) {
+        floors.add(view)
+    }
+
+    /// A floor showed, went or moved: the toasts standing restand on it.
+    public static func floorsMoved() {
+        for layer in layers.values { layer.restandOnFloors() }
+    }
 }
 
 /// The toasts' layer: a window above the app's that lets every tap through but those on a toast.
@@ -93,6 +112,14 @@ private final class ToastWindow: UIWindow {
         let size = toast.systemLayoutSizeFitting(CGSize(width: width, height: 0), withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel)
         toast.bounds = CGRect(origin: .zero, size: CGSize(width: width, height: size.height))
         let rest = place(toast, at: 0)
+        #if DEBUG
+        // Where it rests against the highest floor showing, for a simulator pass to read.
+        let line = String(format: "toast stands: x %.1f y %.1f w %.1f h %.1f foot %.1f floor top %@ clear %@", rest.x - toast.bounds.width / 2,
+                          rest.y - toast.bounds.height / 2, toast.bounds.width, toast.bounds.height, rest.y + toast.bounds.height / 2,
+                          floorTop.map { String(format: "%.1f", $0) } ?? "none",
+                          floorTop.map { rest.y + toast.bounds.height / 2 <= $0 - Space.space3 + 0.5 ? "true" : "false" } ?? "n/a")
+        Logger(subsystem: "dev.cawco.app", category: "Transcript").notice("\(line, privacy: .public)")
+        #endif
         let still = UIAccessibility.isReduceMotionEnabled
         toast.center = still ? rest : CGPoint(x: rest.x, y: rest.y + (narrow ? -Motion.popRise : Motion.popRise))
         toast.alpha = 0
@@ -109,15 +136,37 @@ private final class ToastWindow: UIWindow {
         }
     }
 
-    /// Where the toast at `index` (0 nearest its edge) rests.
+    /// Where the toast at `index` (0 nearest its edge) rests. On a desk, the
+    /// corner's foot is 24pt over the safe area's, or a `space3` step over
+    /// the highest floor showing (`Toast.floors`), whichever is higher.
     private func place(_ toast: ToastView, at index: Int) -> CGPoint {
         let before = toasts.prefix(index).reduce(0) { $0 + $1.bounds.height + Self.gap }
         let half = toast.bounds.height / 2
         if narrow {
             return CGPoint(x: bounds.midX, y: safeAreaInsets.top + Size.cTopBarH + Space.space2 + before + half)
         }
+        let foot = min(bounds.maxY - safeAreaInsets.bottom - 24, floorTop.map { $0 - Space.space3 } ?? .greatestFiniteMagnitude)
         return CGPoint(x: bounds.maxX - safeAreaInsets.right - 24 - toast.bounds.width / 2,
-                       y: bounds.maxY - safeAreaInsets.bottom - 24 - before - half)
+                       y: foot - before - half)
+    }
+
+    /// The top of the highest floor showing in this window's scene, in this
+    /// window's points: a view on screen, nothing over it hidden, drawn.
+    private var floorTop: CGFloat? {
+        var top: CGFloat?
+        for view in Toast.floors.allObjects {
+            guard let window = view.window, window.windowScene === windowScene, view.alpha > 0.01,
+                  !sequence(first: view, next: \.superview).contains(where: \.isHidden) else { continue }
+            let frame = view.convert(view.bounds, to: coordinateSpace)
+            top = min(top ?? frame.minY, frame.minY)
+        }
+        return top
+    }
+
+    /// The floors moved: every toast standing restands.
+    func restandOnFloors() {
+        guard !toasts.isEmpty, !narrow else { return }
+        restack()
     }
 
     private func restack(except arriving: ToastView? = nil) {

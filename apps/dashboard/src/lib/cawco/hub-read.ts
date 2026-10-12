@@ -62,13 +62,21 @@ const FIRST_SENTENCE = /^.*?[.!?](?=\s|$)/;
 const NOT_PROSE = /^[<{[]/;
 
 /**
+ * A thrown error's label ("Error:", "TypeError:"): the runtime's name for the
+ * throw, not a word of the reason (WORDS.md, "Error formula": a technical code
+ * is never the what-happened).
+ */
+const ERROR_LABEL = /^[A-Za-z]*(?:[Ee]rror|[Ee]xception):\s*/;
+
+/**
  * Why a read was refused, as one sentence a person reads, without its
  * closing stop: the hub's own words when their first line is a short
- * sentence of prose, else what its status says ("The hub answered 502").
- * Never more than one sentence, never a body as it came.
+ * sentence of prose, its thrown error's label taken off, else what its
+ * status says ("The hub answered 502"). Never more than one sentence, never
+ * a body as it came.
  */
 export function failureReason({ detail, status }: HubFailure): string {
-  const line = detail.split("\n", 1)[0].trim();
+  const line = detail.split("\n", 1)[0].trim().replace(ERROR_LABEL, "");
   const sentence = (line.match(FIRST_SENTENCE)?.[0] ?? line).replace(
     FINAL_STOP,
     ""

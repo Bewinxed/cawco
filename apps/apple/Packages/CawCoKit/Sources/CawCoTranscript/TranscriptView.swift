@@ -1874,6 +1874,8 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             pill.isHidden = true
             addSubview(pill)
         }
+        // What stands at the list's foot is a floor for the desk's toasts; the compacting pill stands at its top.
+        for floor in [latestButton, catchUp, behind] as [UIView] { Toast.stand(on: floor) }
         latestButton.addAction(UIAction { [weak self] _ in self?.jump() }, for: .touchUpInside)
         catchUp.isUserInteractionEnabled = false
         compacting.isUserInteractionEnabled = false
@@ -2087,6 +2089,8 @@ extension TranscriptView: RevealDriver {
     }
     animator.addCompletion { _ in if !shown() { view.isHidden = true } }
     animator.startAnimation()
+    // A toast on a desk stands on the dock, never over it (`Toast.stand(on:)`).
+    Toast.floorsMoved()
 }
 
 /// The dock's raised surface (Latest.svelte, CatchUp.svelte, Behind.svelte):

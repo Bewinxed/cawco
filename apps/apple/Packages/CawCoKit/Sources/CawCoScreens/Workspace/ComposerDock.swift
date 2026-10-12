@@ -91,6 +91,8 @@ final class ComposerDock {
             leading, trailing, bottom,
         ])
         composer.onHeight = { [weak host] in host?.setNeedsLayout() }
+        // The desk's toasts stand on the composer, never on its Send (DESIGN.md, "Toast").
+        Toast.stand(on: composer)
         show(false)
     }
 
@@ -120,6 +122,7 @@ final class ComposerDock {
         guard abs(reach - inset) > 0.5 else { return }
         inset = reach
         onInset(reach)
+        Toast.floorsMoved()
     }
 
     /// Duo: the composer stands clear of the fold, displaced, never hidden.

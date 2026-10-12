@@ -76,9 +76,14 @@ public enum Wire {
     /// status says ("The hub answered 502"). Never more than one sentence,
     /// never a body as it came: a stack, a dump or a page of markup is not a
     /// reason. Longer than 160 characters, two lines of a toast, it is not one.
+    /// A thrown error's label ("Error:", "TypeError:") is the runtime's name
+    /// for the throw, not a word of the reason: it is taken off, so the
+    /// sentence says what happened (WORDS.md, "Error formula": "A technical
+    /// code alone is banned … the plain-language what-happened").
     static func reason(_ data: Data, status: Int) -> String {
         let line = (words(data) ?? "").split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? ""
         var sentence = line.trimmingCharacters(in: .whitespaces)
+            .replacing(/^[A-Za-z]*(?:[Ee]rror|[Ee]xception):\s*/, with: "", maxReplacements: 1)
         if let end = sentence.firstMatch(of: /[.!?](?=\s|$)/) { sentence = String(sentence[..<end.range.upperBound]) }
         if sentence.hasSuffix(".") { sentence.removeLast() }
         guard !sentence.isEmpty, sentence.count <= 160, let first = sentence.first, !"<{[".contains(first) else {
