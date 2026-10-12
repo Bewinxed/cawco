@@ -108,6 +108,8 @@ const textOf = (content: unknown): string => {
 };
 
 const encoder = new TextEncoder();
+/** The agent's log lines about accounts and sign-ins, for a failed wait to show. */
+const ACCOUNT_LINE = /account|sign|auth|login|credential/i;
 /** An SSE stream of `events`, one every `everyMs`, cancelled when the client goes. */
 const sseStream = (events: string[], everyMs: number) => {
   let timer: ReturnType<typeof setInterval> | undefined;
@@ -733,17 +735,61 @@ export async function scratchFleet(options: {
       ACCOUNT,
       Date.now()
     );
-  const accountSignedIn = () =>
-    until(
-      "the probe's Claude account signed in",
-      () =>
-        query<{ state: string }>(
-          "SELECT state FROM account_signins WHERE account_id = ?",
-          ACCOUNT
-        )[0],
-      (row) => row?.state === "signed-in",
-      120_000
-    );
+  /**
+   * The probe's own Claude account (its fake login in this fleet's HOME,
+   * never one of the host's) reported signed in by the scratch agent. When
+   * it is not within the wait, the failure says what there was to see: the
+   * account it waited for, every sign-in row the hub holds, what Claude Code
+   * itself answers for that account's dir (`claude auth status --json`, the
+   * agent's own question, accounts.ts `authStatusIn`), and the agent's lines
+   * about accounts.
+   */
+  const accountSignedIn = async () => {
+    try {
+      return await until(
+        "the probe's Claude account signed in",
+        () =>
+          query<{ state: string }>(
+            "SELECT state FROM account_signins WHERE account_id = ?",
+            ACCOUNT
+          )[0],
+        (row) => row?.state === "signed-in",
+        120_000
+      );
+    } catch (error) {
+      const rows = query<{
+        account_id: string;
+        machine_id: string;
+        state: string;
+        checked_at: number;
+      }>(
+        "SELECT account_id, machine_id, state, checked_at FROM account_signins"
+      );
+      const { resolveClaudeExecutable } = await import(
+        "../packages/agent/src/auth"
+      );
+      const executable = resolveClaudeExecutable();
+      const status = executable
+        ? await Bun.$`${executable} auth status --json`
+            .env({ ...env, CLAUDE_CONFIG_DIR: accountDir })
+            .nothrow()
+            .quiet()
+        : undefined;
+      const agentLines = (await logs("agent"))
+        .split("\n")
+        .filter((line) => ACCOUNT_LINE.test(line))
+        .slice(-15);
+      throw new Error(
+        [
+          `${error instanceof Error ? error.message : String(error)}: waited for account ${ACCOUNT} (its dir ${accountDir}) on machine ${MACHINE}.`,
+          `Sign-in rows the hub holds: ${rows.length > 0 ? rows.map((row) => `${row.account_id} on ${row.machine_id}: ${row.state} (checked ${new Date(row.checked_at).toISOString()})`).join("; ") : "none"}.`,
+          `Claude Code (${executable ?? "no executable found"}) says for that dir: exit ${status?.exitCode ?? "-"}, ${status ? status.stdout.toString().trim() || status.stderr.toString().trim() || "(nothing)" : "(not run)"}.`,
+          `The agent's account lines:\n${agentLines.join("\n") || "(none)"}`,
+        ].join("\n"),
+        { cause: error }
+      );
+    }
+  };
   const instance = (id: string) =>
     query<InstanceSnapshot>(
       "SELECT status, last_error, turn_open_at, spawned_at, updated_at FROM instances WHERE id = ?",
