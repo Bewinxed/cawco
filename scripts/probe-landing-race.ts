@@ -5,10 +5,12 @@
  *
  * One project whose origin is the hub's own remote, branch `main`. Each item's
  * delegate (the mock drives its tools) commits a file and calls finish_item.
- * Its one check pushes someone else's commit to origin's `main` on each of its
- * first `n` runs: the checks run once before the landing and again after each
+ * On each of its first `n` runs its one check has the probe, outside the
+ * boundary, push someone else's commit to the hub's repository's `main`, and
+ * waits for it: the checks run once before the landing and again after each
  * rebase, so `main` moves between the hub's rebase and its push on every try
- * that `n` covers.
+ * that `n` covers. On a failure it prints what the services logged of
+ * workspaces, boundaries and items.
  *
  * a. n = 3: the first two pushes lose, the third lands. The item is done, its
  *    commit on `main` over all three of the others'.
@@ -21,7 +23,7 @@
  * Run from the repo root after `bunx vite build` in apps/dashboard:
  *   bun scripts/probe-landing-race.ts [--keep]
  */
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { chromium } from "playwright-core";
 import {
@@ -61,15 +63,17 @@ const delegateCommand = (tag: string) =>
   ].join(" && ");
 
 /**
- * The check: on each of its first `n` runs, someone else's commit pushed to
- * origin's main from this clone (its HEAD untouched), then the run's number.
+ * The check: on each of its first `n` runs it asks for main to move (a
+ * `probe-want-<run>` file in its git dir) and waits for the probe, outside
+ * the boundary, to push someone else's commit to the hub's repository and
+ * answer with `probe-moved-<run>`. Then the run's number.
  */
 const racingCheck = (n: number) =>
   [
-    'f="$(git rev-parse --git-dir)/probe-runs"',
-    'run=$(( $(cat "$f" 2>/dev/null || echo 0) + 1 ))',
-    'echo "$run" > "$f"',
-    `if [ "$run" -le ${n} ]; then git fetch -q origin main && c=$(GIT_AUTHOR_NAME=Other GIT_AUTHOR_EMAIL=o@probe.test GIT_COMMITTER_NAME=Other GIT_COMMITTER_EMAIL=o@probe.test git commit-tree -p origin/main -m "Someone else's push $run" "origin/main^{tree}") && git push -q origin "$c:refs/heads/main"; fi`,
+    'g="$(git rev-parse --absolute-git-dir)"',
+    'run=$(( $(cat "$g/probe-runs" 2>/dev/null || echo 0) + 1 ))',
+    'echo "$run" > "$g/probe-runs"',
+    `if [ "$run" -le ${n} ]; then touch "$g/probe-want-$run"; i=0; until [ -e "$g/probe-moved-$run" ]; do i=$((i + 1)); if [ "$i" -gt 600 ]; then echo "main was not moved for run $run"; exit 1; fi; sleep 0.1; done; fi`,
     'echo "check run $run"',
   ].join("; ");
 
@@ -140,6 +144,8 @@ const sh = async (cwd: string, command: string): Promise<string> => {
   }
   return out;
 };
+/** The hub's repository of the project, once it is made. */
+let bare = "";
 let failed = false;
 const check = (name: string, ok: boolean, detail: string) => {
   failed ||= !ok;
@@ -161,6 +167,47 @@ const firstLine = (text: string | null) =>
     .split("\n")
     .map((line) => line.trim())
     .find(Boolean) ?? "";
+
+/** The log lines a failure prints: workspaces, boundaries, items, landings. */
+const LOGGED = /boundary|workspace|work-items|landing|cut off|\[git\]/i;
+
+/**
+ * Someone else, outside the boundary: each run item `id`'s check asked to
+ * move main for (and `moved` has not seen) gets a commit pushed to the hub's
+ * repository, then the answer the check waits for.
+ */
+const moveAsked = async (
+  id: string,
+  tag: string,
+  moved: Set<string>
+): Promise<void> => {
+  const row = itemOf(id);
+  const path = row
+    ? fleet.query<{ path: string }>(
+        "SELECT path FROM workspaces WHERE id = ?",
+        row.workspace_id
+      )[0]?.path
+    : undefined;
+  if (!path) {
+    return;
+  }
+  const gitDir = join(path, ".git");
+  const names = await readdir(gitDir).catch(() => [] as string[]);
+  const wants = names.filter(
+    (name) => name.startsWith("probe-want-") && !moved.has(name)
+  );
+  for (const want of wants) {
+    moved.add(want);
+    const run = want.slice("probe-want-".length);
+    // biome-ignore lint/performance/noAwaitInLoops: one push at a time, in the order asked
+    await sh(
+      fleet.sandbox,
+      `[ -d other ] || git clone -q ${bare} other; cd other && git pull -q --ff-only origin main && git commit -q --allow-empty -m "Someone else's push ${run}" && git push -q origin HEAD:main`
+    );
+    await writeFile(join(gitDir, `probe-moved-${run}`), "");
+    console.log(`  moved main for ${tag}'s check run ${run}`);
+  }
+};
 
 /** The parent delegates `tag` with a check that moves main on its first `n` runs; the item once ended, and its parent. */
 const delegate = async (
@@ -187,15 +234,26 @@ const delegate = async (
   console.log(
     `delegate ${tag}: item ${started.workItemId}, session ${started.instanceId}`
   );
-  const item = await until(
-    `work item ${tag} ended`,
-    () => itemOf(started.workItemId),
-    (row) =>
-      row !== undefined && ["done", "failed", "cancelled"].includes(row.state),
-    300_000
-  );
-  console.log(`item ${tag}: ${item.state}; error: ${item.error ?? "(null)"}`);
-  return { item, parent };
+  const moved = new Set<string>();
+  let moving = Promise.resolve();
+  const mover = setInterval(() => {
+    moving = moving.then(() => moveAsked(started.workItemId, tag, moved));
+  }, 100);
+  try {
+    const item = await until(
+      `work item ${tag} ended`,
+      () => itemOf(started.workItemId),
+      (row) =>
+        row !== undefined &&
+        ["done", "failed", "cancelled"].includes(row.state),
+      300_000
+    );
+    console.log(`item ${tag}: ${item.state}; error: ${item.error ?? "(null)"}`);
+    return { item, parent };
+  } finally {
+    clearInterval(mover);
+    await moving;
+  }
 };
 
 let dashboard: ReturnType<typeof Bun.spawn> | undefined;
@@ -225,7 +283,7 @@ try {
     machineId: MACHINE,
     cwd: src,
   });
-  const bare = join(fleet.sandbox, "hub", "git", `${project.id}.git`);
+  bare = join(fleet.sandbox, "hub", "git", `${project.id}.git`);
 
   // ── a: main moves on the first three runs ───────────────────────────────
   const a = await delegate(src, project.id, "a", 3);
@@ -349,6 +407,22 @@ try {
     `work items: ${JSON.stringify(fleet.query("SELECT id, state, error, substr(result, 1, 300) AS result FROM work_items"), null, 1)}`
   );
 } finally {
+  if (failed) {
+    // What the services said of workspaces, boundaries and items.
+    const logs = (await readdir(fleet.sandbox))
+      .filter((name) => name.endsWith(".log") || name.endsWith(".err"))
+      .sort();
+    const texts = await Promise.all(
+      logs.map((name) => Bun.file(join(fleet.sandbox, name)).text())
+    );
+    for (const [index, name] of logs.entries()) {
+      const lines = (texts[index] ?? "")
+        .split("\n")
+        .filter((line) => LOGGED.test(line))
+        .slice(-40);
+      console.log(`── ${name}\n${lines.join("\n").slice(0, 8000)}`);
+    }
+  }
   await browser?.close();
   dashboard?.kill();
   refusing.stop(true);
