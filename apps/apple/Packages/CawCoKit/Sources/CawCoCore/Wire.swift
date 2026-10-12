@@ -69,6 +69,24 @@ public enum Wire {
         return text.isEmpty ? nil : text
     }
 
+    /// Why the hub refused, as one sentence a person reads, without its
+    /// closing stop (hub-read.ts `failureReason`): the refusal's own words
+    /// (`words`: a JSON error's `detail`, `error` or `title`, else the text)
+    /// when their first line is a short sentence of prose, else what the
+    /// status says ("The hub answered 502"). Never more than one sentence,
+    /// never a body as it came: a stack, a dump or a page of markup is not a
+    /// reason. Longer than 160 characters, two lines of a toast, it is not one.
+    static func reason(_ data: Data, status: Int) -> String {
+        let line = (words(data) ?? "").split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false).first.map(String.init) ?? ""
+        var sentence = line.trimmingCharacters(in: .whitespaces)
+        if let end = sentence.firstMatch(of: /[.!?](?=\s|$)/) { sentence = String(sentence[..<end.range.upperBound]) }
+        if sentence.hasSuffix(".") { sentence.removeLast() }
+        guard !sentence.isEmpty, sentence.count <= 160, let first = sentence.first, !"<{[".contains(first) else {
+            return "The hub answered \(status)"
+        }
+        return first.uppercased() + sentence.dropFirst()
+    }
+
     /// The words of an answer the generated client did not expect, when it has a body.
     public static func words(_ body: HTTPBody?) async -> String? {
         guard let body, let data = try? await Data(collecting: body, upTo: 64_000) else { return nil }

@@ -679,7 +679,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         // that could not be read, and whether any is left (the strip before
         // the first row, and when the next page is asked for), and a read
         // again that could not catch the rows up (the dock's `behind`).
-        _ = (transcript.loadingOlder, transcript.olderFault, transcript.cursor, transcript.behind)
+        _ = (transcript.loadingOlder, transcript.olderFault, transcript.cursor, transcript.behind, transcript.catchingUp)
         let tail = transcript.tail
         let next = tail?.streaming ?? ""
         if next != received {
@@ -1898,30 +1898,47 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     }
 
     /// What the dock says of a read again that could not catch the rows up
-    /// (Behind.svelte), as WORDS.md's error formula has it: what happened,
-    /// then what happens next. Offline, the rest comes in once the machine is
-    /// back; failed, Try again stands beside the reason, the read's own
-    /// sentence as a clause (a plain capitalised first word lowered, a name
-    /// left as it is).
+    /// (Behind.svelte). Offline, what happened and what happens next: the
+    /// rest comes in once the machine is back. Failed, "Not caught up" beside
+    /// Try again; why is the toast's to say (`toastBehind`), never the line's.
     static func notCaughtUp(_ fault: ReadFault, name: (String) -> String) -> String {
         if fault.reason == .offline, let machine = fault.machineId {
             return "Not caught up: \(Naming.unbroken(name(machine))) is offline. The rest comes in once it's back."
         }
-        var said = fault.message.trimmingCharacters(in: .whitespacesAndNewlines)
-        if said.hasSuffix(".") { said.removeLast() }
-        let first = said.split(separator: " ").first.map(String.init) ?? ""
-        if first.wholeMatch(of: /[A-Z][a-z]*/) != nil { said = said.prefix(1).lowercased() + said.dropFirst() }
-        return "Not caught up: \(said)."
+        return "Not caught up"
     }
+
+    /// The error formula for a transcript that could not be caught up, as a
+    /// toast (client.svelte.ts `toastBehind`): what happened (its name isn't
+    /// caught up), why (the read's one sentence), how to fix it and what
+    /// happens next. Once per distinct fault: the transcript remembers the
+    /// one it told of (`toasted`) until a read lands, so panes side by side,
+    /// and the backoff's every read again, say nothing more.
+    private func toastBehind(_ transcript: SessionTranscript, _ fault: ReadFault) {
+        guard transcript.toasted != fault else { return }
+        transcript.toasted = fault
+        let row = hub?.fleet.rows.first { $0.id == transcript.id }
+        let name = Naming.sessionTitle(title: row?.title, cwd: row?.cwd, id: transcript.id)
+        let title = "\(name) isn't caught up"
+        let description = fault.reason == .offline
+            ? "\(fault.message). The rest comes in once it's back."
+            : "\(fault.message). Try again reads it now; otherwise it's read again in 2 seconds, then less often, up to once a minute."
+        Self.dockLog.notice("toast: \(title, privacy: .public). \(description, privacy: .public) \(transcript.id.prefix(8), privacy: .public)")
+        Toast.show(title, description: description, kind: .error, in: self)
+    }
+
+    /// The dock's own word on what it told the reader, for a simulator pass to read (probe-ios-catchup.ts).
+    private static let dockLog = Logger(subsystem: "dev.cawco.app", category: "Transcript")
 
     private func updateDock() {
         let rowsDrawn = rowCount > 0
         let latestShown = landed && farFromLatest && rowsDrawn
         latestButton.show(latestShown)
         // Over rows drawn only: with none, the pane says why in their place.
-        if rowsDrawn, let fault = transcript?.behind {
+        if rowsDrawn, let transcript, let fault = transcript.behind {
             behind.say(Self.notCaughtUp(fault) { [hub] in hub?.fleet.machineName($0) ?? $0 }, retrying: fault.reason == .failed)
             behind.show(true)
+            toastBehind(transcript, fault)
         } else {
             behind.show(false)
         }
@@ -1934,22 +1951,31 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             }
         }
         // A catch-up is one stretch from its start to its end, each a fact
-        // that moves with reads alone. It starts over rows already drawn, when
-        // the newest page is read again (a reset, a resync) or the place to
-        // restore is not held; it ends once nothing is being read, the place
-        // is held or given up, and the generation drawn was prepared from the
-        // last read. Read off the moment instead, a read again over a
-        // restored place showed it while the page was out, hid it as the page
-        // landed (the generation drawn still held the place), showed it again
-        // once the new one was applied without the older pages, and hid it
-        // once they were read back.
-        let loading = transcript?.loading == true
-        if !catchingUp, rowsDrawn, loading || restoring {
+        // that moves with reads alone. It starts over rows already drawn when
+        // the hub asked for the history again (a reset, a resync: the store's
+        // `catchingUp`) or the place to restore is not held; it ends once
+        // that read is over, the place is held or given up, and the generation
+        // drawn was prepared from the last read. A read for any other reason
+        // (the socket or the machine back, the backoff, a retry) is not one:
+        // it catches up quietly. Read off the moment instead, a read again
+        // over a restored place showed it while the page was out, hid it as
+        // the page landed, showed it again once the new one was applied
+        // without the older pages, and hid it once they were read back.
+        let asked = transcript?.catchingUp == true
+        if !catchingUp, rowsDrawn, asked || restoring {
             catchingUp = true
-            Self.restoring.notice("catch-up begins for \(self.env.sessionId.prefix(8), privacy: .public): loading \(loading), restoring \(self.restoring), held \(String(describing: self.anchorHeld), privacy: .public)")
-        } else if catchingUp, !loading, !restoring, !historyBehind {
+            Self.restoring.notice("catch-up begins for \(self.env.sessionId.prefix(8), privacy: .public): hub asked \(asked), restoring \(self.restoring), held \(String(describing: self.anchorHeld), privacy: .public), cursor \(self.transcript?.cursor != nil), loading \(self.transcript?.loading == true)")
+        } else if catchingUp, !asked, !restoring, !historyBehind {
             catchingUp = false
             Self.restoring.notice("catch-up ends for \(self.env.sessionId.prefix(8), privacy: .public)")
+            // Ended without the place's row (the start reached, or a page that
+            // could not be read): the place is given up, so a later read for
+            // another reason (the backoff, the socket back) is not a restore
+            // again and catches up quietly.
+            if anchorHeld == false {
+                Self.restoring.notice("place given up for \(self.env.sessionId.prefix(8), privacy: .public): its row is not in the transcript")
+                pendingPosition = nil
+            }
         }
         catchUp.show(catchingUp)
         compacting.show(isCompacting)

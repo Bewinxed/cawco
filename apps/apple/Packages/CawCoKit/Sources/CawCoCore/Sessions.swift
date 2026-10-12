@@ -32,8 +32,19 @@ public final class SessionTranscript {
     public internal(set) var fault: ReadFault?
     /// Why a read again over the rows held failed: the rows stay where the
     /// reader has them, and the read is made again on the next event that can
-    /// answer it (the machine back online, the socket back, the reader's retry).
+    /// answer it (the machine back online, the socket back, the backoff after
+    /// a read the hub failed, the reader's retry).
     public internal(set) var behind: ReadFault?
+    /// A read the hub asked for is out (a transcript `reset`, a
+    /// `stream.reset`, a replay broken past repair): the rows drawn are
+    /// behind what the hub holds, and the dock says "Catching up…". A read
+    /// for any other reason (the socket or the machine back, the backoff, a
+    /// retry) catches up quietly. Set as such a read starts, cleared as the
+    /// read that ends it lands or fails.
+    public internal(set) var catchingUp = false
+    /// The fault the reader was last told of by a toast, until a read
+    /// lands: the same fault again says nothing (TranscriptView `updateDock`).
+    @ObservationIgnored public var toasted: ReadFault?
     /// The hub read the stored transcript again (a transcript `reset`): the
     /// rows held may say something else now, so the next read reads again
     /// every page back to the first row held. Cleared when a read lands.
@@ -50,12 +61,27 @@ public final class SessionTranscript {
 }
 
 /// A transcript read that failed (client.svelte.ts `pageFault`): the machine
-/// holding it is offline (a 503 naming it), or the read failed.
+/// holding it is offline (a 503 naming it), or the read failed. `message` is
+/// one sentence of why, without its closing stop (`Wire.reason`), never a
+/// body as the hub sent it.
 public struct ReadFault: Sendable, Equatable {
     public enum Reason: Sendable { case offline, failed }
     public let reason: Reason
     public let machineId: String?
     public let message: String
+
+    /// A read that failed while the hub answered, or never reached it.
+    static func failed(_ message: String) -> ReadFault { ReadFault(reason: .failed, machineId: nil, message: message) }
+
+    /// Why a read that never reached an answer failed, in one sentence: what
+    /// the failure means, not the generated client's description of it,
+    /// which carries the request, the response and the body whole.
+    static func thrown(_ error: any Error) -> ReadFault {
+        let cause = (error as? ClientError)?.underlyingError ?? error
+        if cause is DecodingError { return failed("The hub's answer couldn't be read") }
+        if let url = cause as? URLError, url.code == .timedOut { return failed("The hub didn't answer in time") }
+        return failed("The hub couldn't be reached")
+    }
 }
 
 /// The hub builds the blocks. This store only adopts its page and applies its
@@ -113,6 +139,7 @@ public final class SessionsStore {
         if count > 1 { watches[id] = count - 1; return }
         watches[id] = nil
         readers.removeValue(forKey: id)?.cancel()
+        failedReads.removeValue(forKey: id)?.timer?.cancel()
         transcripts[id] = nil
         hub.ledger.sync(watched)
         log.info("stopped watching \(id, privacy: .public): \(self.watches.count) sessions watched")
@@ -121,6 +148,8 @@ public final class SessionsStore {
     func reset() {
         readers.values.forEach { $0.cancel() }
         readers = [:]
+        failedReads.values.forEach { $0.timer?.cancel() }
+        failedReads = [:]
         transcripts = [:]
         watches = [:]
         peeked = nil
@@ -134,22 +163,51 @@ public final class SessionsStore {
 
     /// The hub's word on its machines changed, with `machineId` online in it:
     /// every transcript whose last read found that machine offline is read now.
+    /// A transcript the backoff is already reading again waits for it.
     func machineOnline(_ machineId: String) {
-        for id in watched {
+        for id in watched where failedReads[id]?.timer == nil {
             guard let transcript = transcripts[id], !transcript.loading,
                   let fault = transcript.fault ?? transcript.behind, fault.reason == .offline, fault.machineId == machineId else { continue }
             read(id, because: .machineOnline)
         }
     }
 
-    /// The hub sent `id`'s events: a transcript whose last read failed while
-    /// the hub answered (a 5xx, a timeout) is read again now, unless a read
-    /// is already out (client.svelte.ts `readStale`). One whose machine was
-    /// offline waits for `machineOnline`.
-    func heard(_ id: String) {
-        guard let transcript = transcripts[id], !transcript.loading,
-              (transcript.behind ?? transcript.fault)?.reason == .failed else { return }
-        read(id, because: .frame)
+    /// How long after a failed read, the hub answering, the transcript is
+    /// read again (client.svelte.ts `READ_AGAIN_MS`): the nth failure in a
+    /// row waits the nth delay, every one past the last waits the last, and
+    /// a read that lands starts it over. Our choice: a blip is caught up
+    /// within seconds, a hub that keeps failing is asked once a minute.
+    static let readAgain: [Duration] = [.seconds(2), .seconds(4), .seconds(8), .seconds(16), .seconds(32), .seconds(60)]
+    /// The failed reads in a row, by session, and the read again each waits for.
+    @ObservationIgnored private var failedReads: [String: (count: Int, timer: Task<Void, Never>?)] = [:]
+
+    /// A read failed: over rows held they stay (`behind`), else the pane says
+    /// why (`fault`). One the hub failed is read again on `readAgain`; one
+    /// that found the machine offline waits for `machineOnline`, unless the
+    /// hub already lists that machine online: then the machine list has
+    /// nothing more to say, and its every change would read again at once,
+    /// so it is read again on `readAgain` too.
+    private func readFailed(_ transcript: SessionTranscript, _ fault: ReadFault) {
+        transcript.loading = false
+        transcript.catchingUp = false
+        if hubRows(transcript).isEmpty { transcript.fault = fault } else { transcript.behind = fault }
+        let listedOnline = fault.reason == .offline
+            && hub.fleet.machines.contains { $0.machineId == fault.machineId && $0.status == "online" }
+        guard fault.reason == .failed || listedOnline else { return }
+        let id = transcript.id
+        var failed = failedReads[id] ?? (count: 0, timer: nil)
+        failed.timer?.cancel()
+        let wait = Self.readAgain[min(failed.count, Self.readAgain.count - 1)]
+        failed.count += 1
+        log.notice("read \(id.prefix(8), privacy: .public) again in \(String(describing: wait), privacy: .public) (failure \(failed.count))")
+        failed.timer = Task { [weak self] in
+            try? await Task.sleep(for: wait)
+            guard !Task.isCancelled, let self else { return }
+            failedReads[id]?.timer = nil
+            guard let held = transcripts[id], !held.loading, (held.behind ?? held.fault) != nil else { return }
+            read(id, because: .backoff)
+        }
+        failedReads[id] = failed
     }
 
     /// Peek and delegate readers share the same counted transcript watches as
@@ -181,8 +239,12 @@ public final class SessionsStore {
         case moveStarted
         /// The machine the last read found offline is online again.
         case machineOnline
-        /// The hub sent the session's events while its last read had failed.
-        case frame
+        /// The last read failed while the hub answered: read again on `readAgain`.
+        case backoff
+
+        /// The hub asked for it: the rows drawn are behind what it holds, a
+        /// catch-up the dock says. Every other read catches up quietly.
+        var catchesUp: Bool { self == .transcriptReset || self == .streamReset || self == .backlogBroken }
     }
 
     /// Reads the newest page, and makes it what the transcript holds.
@@ -202,12 +264,20 @@ public final class SessionsStore {
     /// A read that fails over rows held leaves them (`behind`); with nothing
     /// held, the pane says why (`fault`). Either is read again on the next
     /// event that can answer it: the machine online again (`machineOnline`),
-    /// the socket back (`reconnected`), or the reader's retry.
+    /// the socket back (`reconnected`), the backoff after a read the hub
+    /// failed (`readAgain`), or the reader's retry.
+    ///
+    /// Only a read the hub asked for is a catch-up the dock says
+    /// (`catchingUp`); the rest catch up quietly.
     public func read(_ id: String, because cause: ReadCause) {
         guard let transcript = transcripts[id], let client = hub.client else { return }
         log.info("read \(id.prefix(8), privacy: .public) because \(cause.rawValue, privacy: .public)")
         readers[id]?.cancel()
+        failedReads[id]?.timer?.cancel()
+        failedReads[id]?.timer = nil
         if cause == .transcriptReset { transcript.historyChanged = true }
+        // A read that replaces one the hub asked for still answers the hub.
+        if cause.catchesUp { transcript.catchingUp = true }
         transcript.loading = true
         transcript.fault = nil
         transcript.missing = false
@@ -223,6 +293,7 @@ public final class SessionsStore {
                 case .missing:
                     guard !Task.isCancelled else { return }
                     transcript.loading = false
+                    transcript.catchingUp = false
                     transcript.missing = true
                     return
                 case let .away(machine): throw Fault(offline(machine))
@@ -250,7 +321,7 @@ public final class SessionsStore {
                     let answer: PageAnswer
                     do { answer = try await Self.page(client, id: id, before: before) } catch {
                         guard !Task.isCancelled else { return }
-                        older = (error as? Fault)?.fault ?? ReadFault(reason: .failed, machineId: nil, message: error.localizedDescription)
+                        older = (error as? Fault)?.fault ?? .thrown(error)
                         whole = Joined(blocks: read, cursor: cursor, kept: 0)
                         break
                     }
@@ -265,7 +336,7 @@ public final class SessionsStore {
                         pages += 1
                         continue
                     case .missing:
-                        older = ReadFault(reason: .failed, machineId: nil, message: "The hub no longer holds the page before these.")
+                        older = .failed("The hub no longer holds the page before these")
                     case let .away(machine):
                         older = offline(machine)
                     }
@@ -297,19 +368,23 @@ public final class SessionsStore {
                 transcript.olderFault = older
                 transcript.historyChanged = false
                 transcript.behind = nil
+                transcript.toasted = nil
+                failedReads[id]?.timer?.cancel()
+                failedReads[id] = nil
                 transcript.blockRevision += 1
                 transcript.historyRevision += 1
                 transcript.loading = false
+                transcript.catchingUp = false
                 // The history page and its seq are one atomic view of the hub.
                 // Resume after it, including events that arrived during the read.
                 if let seq = page.seq { hub.ledger.adoptPage(id, seq: seq) }
                 log.info("page adopted for \(id, privacy: .public): \(page.blocks.count) blocks at seq \(page.seq ?? -1), \(pages) page(s) read, \(whole.kept) held rows kept, \(whole.blocks.count) rows, older \(whole.cursor ?? "none", privacy: .public)")
             } catch {
                 guard !Task.isCancelled else { return }
-                transcript.loading = false
-                let fault = (error as? Fault)?.fault ?? ReadFault(reason: .failed, machineId: nil, message: error.localizedDescription)
-                if hubRows(transcript).isEmpty { transcript.fault = fault } else { transcript.behind = fault }
-                log.error("transcript read for \(id.prefix(8), privacy: .public) (\(transcript.fault == nil ? "rows kept" : "nothing held", privacy: .public)): \(fault.message, privacy: .public)")
+                let fault = (error as? Fault)?.fault ?? .thrown(error)
+                // The error as it came, for the log only: the reader is told `fault.message`.
+                log.error("transcript read for \(id.prefix(8), privacy: .public) (\(self.hubRows(transcript).isEmpty ? "nothing held" : "rows kept", privacy: .public)): \(fault.message, privacy: .public); \(String(describing: error).prefix(500), privacy: .public)")
+                readFailed(transcript, fault)
             }
         }
     }
@@ -378,23 +453,25 @@ public final class SessionsStore {
             if statusCode == 503, let away = payload.headerFields.first(where: { $0.name.canonicalName == "x-cawco-machine" })?.value {
                 return .away(away)
             }
-            let detail = await Wire.words(payload.body)
-            throw Fault(ReadFault(reason: .failed, machineId: nil, message: detail ?? "The hub answered \(statusCode)"))
-        case let .conflict(answer): throw Fault(try await failed(answer.body.plainText))
-        case let .internalServerError(answer): throw Fault(try await failed(answer.body.plainText))
-        case let .gatewayTimeout(answer): throw Fault(try await failed(answer.body.plainText))
-        case .unprocessableContent: throw Fault(ReadFault(reason: .failed, machineId: nil, message: "The hub refused the read"))
+            throw Fault(await refused(payload.body, status: statusCode))
+        case let .conflict(answer): throw Fault(await refused(try? answer.body.plainText, status: 409))
+        case let .internalServerError(answer): throw Fault(await refused(try? answer.body.plainText, status: 500))
+        case let .gatewayTimeout(answer): throw Fault(await refused(try? answer.body.plainText, status: 504))
+        case .unprocessableContent: throw Fault(.failed("The hub refused the read"))
         }
     }
 
-    private nonisolated static func failed(_ body: HTTPBody) async throws -> ReadFault {
-        ReadFault(reason: .failed, machineId: nil, message: try await String(collecting: body, upTo: 64_000))
+    /// A refusal as one sentence of why (`Wire.reason`): the hub's words when
+    /// they are one, its status when they are not or could not be read.
+    private nonisolated static func refused(_ body: HTTPBody?, status: Int) async -> ReadFault {
+        let data = if let body { try? await Data(collecting: body, upTo: 1_000_000) } else { Data?.none }
+        return .failed(Wire.reason(data ?? Data(), status: status))
     }
 
     /// A 503 naming a machine is the hub saying that machine is not connected.
     private func offline(_ machine: String) -> ReadFault {
         let host = hub.fleet.machines.first { $0.machineId == machine }?.hostname ?? machine
-        return ReadFault(reason: .offline, machineId: machine, message: "\(host) is offline — its stored transcript can't be read right now.")
+        return ReadFault(reason: .offline, machineId: machine, message: "\(host) is offline, so its stored transcript can't be read right now")
     }
 
     /// The one page older than what a transcript holds, put in front of it
@@ -435,11 +512,11 @@ public final class SessionsStore {
                 log.info("older page read for \(id, privacy: .public): \(page.blocks.count) blocks, older \(page.cursor ?? "none", privacy: .public)")
                 return
             case .success(.missing):
-                transcript.olderFault = ReadFault(reason: .failed, machineId: nil, message: "The hub no longer holds the page before these.")
+                transcript.olderFault = .failed("The hub no longer holds the page before these")
             case let .success(.away(machine)):
                 transcript.olderFault = offline(machine)
             case let .failure(error):
-                transcript.olderFault = (error as? Fault)?.fault ?? ReadFault(reason: .failed, machineId: nil, message: error.localizedDescription)
+                transcript.olderFault = (error as? Fault)?.fault ?? .thrown(error)
             }
             log.error("older page for \(id, privacy: .public) failed: \(transcript.olderFault?.message ?? "", privacy: .public)")
         }
@@ -499,8 +576,9 @@ public final class SessionsStore {
                 }
             }
         } catch {
-            transcript.fault = ReadFault(reason: .failed, machineId: nil, message: error.localizedDescription)
-            log.error("transcript event unreadable: \(error.localizedDescription, privacy: .public)")
+            // The rows may now miss what the event said: read again, on the backoff.
+            log.error("transcript event unreadable: \(String(describing: error).prefix(500), privacy: .public)")
+            readFailed(transcript, .failed("An update from the hub couldn't be read"))
         }
     }
 

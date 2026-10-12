@@ -24,15 +24,16 @@
  *  4. restarts the hub three times with the reader there, the browser's
  *     socket held off until the hub is up: its resume meets a stream that
  *     starts again empty (`stream.reset`), and the newest page is read
- *     again. The second time the hub's read answers 500 (once, and once more
- *     for Try again); the third time the agent is away, so the read finds
- *     the machine offline.
+ *     again. The second time the hub's reads answer 500 with a long stack
+ *     from the reset's read through Try again's; the third
+ *     time the agent is away, so the read finds the machine offline.
  *
  * Checks: the started session answers; the rows in view
  * and the first row's place hold within 2px across each read again, and no
  * older page is read again. With the read failed, the pane says "Not caught
- * up: <reason>." beside a Try again that reads again, and the line goes once
- * the session's next frame reads it. With the agent away, the rows hold
+ * up" beside a Try again that reads again, exactly one toast says why in the
+ * stack's first line (the console's `[cawco] toast:`), the reads again keep
+ * to the backoff, and the line goes once one lands. With the agent away, the rows hold
  * while the pane says "Not caught up: <machine> is offline. The rest comes
  * in once it's back." on one line at 1440 and at most two at 390 (the name
  * whole), the card's well says the same over its rows, and both lines go
@@ -58,10 +59,13 @@ const root = resolve(import.meta.dir, "..");
 const dashboardDir = resolve(
   option("--dashboard") ?? join(root, "apps", "dashboard")
 );
-const BEHIND = "Not caught up: ";
+const BEHIND = "Not caught up";
 const OFFLINE_NEXT = "is offline. The rest comes in once it's back.";
-/** What the hub says when a stored transcript could not be read (server.ts, a failed history read). */
-const FAILED = "the transcript could not be read";
+/** A failed history read whose body is a long stack, as a machine's error can be: the reader is told its first line. */
+const FAILED = `Error: the transcript could not be read\n${"    at readHistory (/opt/cawco/agent.js:1:1)\n".repeat(400)}`;
+const FAILED_REASON = "Error: the transcript could not be read";
+/** The page's own word on its reads and its toasts (client.svelte.ts `readNewestPage`, `toastBehind`). */
+const CAWCO_LOG = /^\[cawco\] (read|toast:) /;
 /**
  * What the second session calls for the card with a well: a session of its
  * own, drawn as a delegate's card is (rows.ts `isDelegateMsg`, `start`). No
@@ -172,9 +176,9 @@ interface Read {
   older: boolean;
   status?: number;
 }
-/** `holding`: the pages' sockets are refused; `failing`: the long session's next newest reads answer 500. */
-const wire: { failing: number; holding: boolean; reads: Read[] } = {
-  failing: 0,
+/** `holding`: the pages' sockets are refused; until `failUntil` (ms epoch), the long session's newest reads answer 500. */
+const wire: { failUntil: number; holding: boolean; reads: Read[] } = {
+  failUntil: 0,
   holding: false,
   reads: [],
 };
@@ -371,7 +375,7 @@ try {
   const opened = async (id: string, heard: string[]) => {
     const page = await context.newPage();
     page.on("console", (message) => {
-      if (message.text().startsWith("[cawco] read ")) {
+      if (CAWCO_LOG.test(message.text())) {
         heard.push(message.text());
       }
     });
@@ -402,8 +406,7 @@ try {
   // The hub's read failing, as its route answers a failed history read.
   await page.route(`**${transcriptPath()}`, (route) => {
     const url = new URL(route.request().url());
-    if (wire.failing > 0 && !url.searchParams.has("before")) {
-      wire.failing -= 1;
+    if (Date.now() < wire.failUntil && !url.searchParams.has("before")) {
       return route.fulfill({
         status: 500,
         contentType: "text/plain",
@@ -548,7 +551,8 @@ try {
     const before = await place(page);
     const from = wire.reads.length;
     const logsFrom = logs.length;
-    wire.failing = 1;
+    // Failing from the reset's read on, through Try again's, until let go below.
+    wire.failUntil = Date.now() + 600_000;
     await restart(false);
     await until(
       "5xx: the read failed",
@@ -561,14 +565,13 @@ try {
     await page.screenshot({ path: join(out, "5xx.png") });
     held("5xx: the rows stay and the place holds", before, failed);
     check(
-      "5xx: the pane says why, with Try again",
-      failed.strip?.text === `${BEHIND}${FAILED}.` && failed.strip.retry,
+      "5xx: the pane says it is not caught up, with Try again",
+      failed.strip?.text === BEHIND && failed.strip.retry,
       failed.strip
         ? `"${failed.strip.text}"${failed.strip.retry ? " [Try again]" : " (no Try again)"}, ${failed.strip.lines} line(s)`
         : "no line in the pane"
     );
     // Try again reads again: the hub fails it once more, and the line stays.
-    wire.failing = 1;
     const retriedFrom = wire.reads.length;
     await page
       .locator(".behind button", { hasText: "Try again" })
@@ -594,28 +597,31 @@ try {
         .map((read) => read.status)
         .join(",")}); line ${still.strip ? "still there" : "gone"}`
     );
-    // The session's next frame reads it again, and this time the hub answers.
+    // The backoff reads it again by itself; once the hub answers, it lands.
+    wire.failUntil = 0;
     await fleet.send(sessionId, "One more line.");
-    const caught = await until(
-      "5xx: read again on the session's next frame",
-      () =>
-        Promise.resolve(
-          logs.slice(logsFrom).some((line) => line.includes("because frame"))
-        ),
-      Boolean,
-      60_000
-    ).catch(() => false);
-    check(
-      "5xx: read again on the session's next frame",
-      caught,
-      caught ? "read because frame" : "no read followed the session's frames"
-    );
     const gone = await until(
       "5xx: the line goes",
       () => place(page),
       (now) => now.strip === null,
-      30_000
+      90_000
     ).catch(() => undefined);
+    const window = logs.slice(logsFrom);
+    const backoff = window.filter((line) => line.includes("because backoff"));
+    const failedReads = newestSince(from).filter((read) => read.status === 500);
+    check(
+      "5xx: read again on the backoff (2s, 4s, 8s, 16s, …), not on every frame",
+      backoff.length >= 1 && failedReads.length <= 7,
+      `${failedReads.length} failed read(s), ${backoff.length} read(s) because backoff`
+    );
+    const toasts = window.filter((line) => line.startsWith("[cawco] toast: "));
+    check(
+      "5xx: exactly one toast says why, in one sentence, nothing raw",
+      toasts.length === 1 &&
+        toasts[0].includes(`${FAILED_REASON}. Try again reads it now`) &&
+        !toasts[0].includes("    at "),
+      toasts.join(" | ") || "no toast"
+    );
     check(
       "5xx: the line goes once the read lands",
       gone !== undefined,

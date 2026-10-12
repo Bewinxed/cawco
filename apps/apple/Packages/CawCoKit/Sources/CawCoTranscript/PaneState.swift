@@ -78,8 +78,9 @@ final class PaneState: UIView {
             mark.glyph = fault.reason == .offline ? .laptop : .alert
             titleText = fault.reason == .offline ? "This machine is offline" : "This transcript couldn't be read"
             // SessionPane `faultLine`: what went wrong, then what to do about it.
-            let said = fault.reason == .offline ? "\(fault.message) Try again once it is back online."
-                : "Reading it failed: \(fault.message.hasSuffix(".") ? String(fault.message.dropLast()) : fault.message). Try again; if it fails the same way, the hub's log has the cause."
+            // The fault's message is one sentence without its stop (`ReadFault`).
+            let said = fault.reason == .offline ? "\(fault.message). Try again once it is back online."
+                : "Reading it failed: \(fault.message). Try again; if it fails the same way, the hub's log has the cause."
             lineText = NSAttributedString(string: said, attributes: body)
             actionTitle = "Try again"
         case let .missing(id):

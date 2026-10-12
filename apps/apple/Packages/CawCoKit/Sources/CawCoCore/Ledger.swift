@@ -93,9 +93,6 @@ public final class Ledger {
     @ObservationIgnored private var frameBytes: [Double: Data] = [:]
     /// Re-reads a session's history through the path that already exists.
     @ObservationIgnored var rereadHistory: (String, SessionsStore.ReadCause) -> Void = { _, _ in }
-    /// The hub sent a session's events (a delta, or a backlog with any),
-    /// heard before anything is applied or dropped (stream.ts `heard`).
-    @ObservationIgnored var heard: (String) -> Void = { _ in }
     /// Heard exactly once for every command that reaches `failed`.
     @ObservationIgnored var noteFailure: (Command) -> Void = { _ in }
 
@@ -203,7 +200,6 @@ public final class Ledger {
     }
 
     private func apply(_ event: Components.Schemas.SessionStreamEvent) {
-        heard(event.sessionId)
         var cursor = cursors[event.sessionId] ?? Cursor()
         let session = event.sessionId.prefix(8)
         guard !cursor.reading else {
@@ -255,7 +251,6 @@ public final class Ledger {
     }
 
     private func apply(_ backlog: Components.Schemas.StreamBacklog) {
-        if !backlog.events.isEmpty { heard(backlog.sessionId) }
         var cursor = cursors[backlog.sessionId] ?? Cursor()
         log.info("stream: backlog for \(backlog.sessionId.prefix(8), privacy: .public): \(backlog.events.count) events from \(backlog.events.first?.seq ?? -1), at \(cursor.lastSeq)\(cursor.reading ? ", dropped while reading" : "", privacy: .public)")
         guard !cursor.reading else { return }

@@ -113,12 +113,13 @@ import { browser } from "$app/env";
 import { goto } from "$app/navigation";
 import type { Activity } from "./activity";
 import { activityOf, runningSubagents } from "./activity";
-import { hubFailure } from "./hub-read";
+import { failureReason, type HubFailure, hubFailure } from "./hub-read";
 import { newId } from "./id";
 import {
   conversationHref,
   indexInstances,
   instanceForSession,
+  resolveSessionTitle,
   transcriptUrl,
 } from "./links";
 import { notices } from "./notices.svelte";
@@ -426,8 +427,8 @@ export interface SessionState {
   /**
    * Why the last read again over the rows held failed. The rows stay where
    * the reader has them, and the read is made again on the next event that
-   * can answer it: the machine online again, the socket back, the session's
-   * next events (a read that failed while the hub answered), a retry.
+   * can answer it: the machine online again, the socket back, the backoff
+   * after a read the hub failed (`READ_AGAIN_MS`), a retry.
    */
   behind: ReadFault | null;
   /**
@@ -934,6 +935,18 @@ const opening = new Map<string, string>();
  * otherwise leaves a request hanging, and the pane waiting on it, forever.
  */
 const TRANSCRIPT_READ_LIMIT_MS = 15_000;
+
+/** What a read past {@link TRANSCRIPT_READ_LIMIT_MS} says of itself. */
+const READ_LIMIT_SENTENCE = `The hub didn't answer within ${TRANSCRIPT_READ_LIMIT_MS / 1000} seconds`;
+
+/**
+ * How long after a failed read, the hub answering, the transcript is read
+ * again: the nth failure in a row waits the nth delay, and every one past
+ * the last waits the last. A success starts it over. Our choice: a blip is
+ * caught up within seconds, a hub that keeps failing is asked about once a
+ * minute.
+ */
+const READ_AGAIN_MS = [2000, 4000, 8000, 16_000, 32_000, 60_000];
 
 /**
  * The newest-page read in flight per view: a second ask joins it. `cancel`
@@ -2434,7 +2447,8 @@ function adoptMachines(incoming: Machine[]): void {
 
 /**
  * `machineId` is online: every transcript the dashboard follows whose last
- * read found that machine offline is read now, unless a read is already out.
+ * read found that machine offline is read now, unless a read is already out
+ * or the backoff is already reading it again ({@link readAgainLater}).
  */
 function readBehind(machineId: string): void {
   for (const id of subscriptionIds()) {
@@ -2443,26 +2457,13 @@ function readBehind(machineId: string): void {
     if (
       held &&
       !held.loading &&
+      failedReads.get(id)?.timer === undefined &&
       fault?.reason === "offline" &&
       fault.machineId === machineId
     ) {
       // biome-ignore lint/complexity/noVoid: fire-and-forget — the read adopts the page and resumes the stream when it lands
       void readTranscript(id, "machineOnline");
     }
-  }
-}
-
-/**
- * The hub sent `sessionId`'s events: a transcript whose last read failed
- * while the hub answered (a 5xx, a timeout) is read again now, unless a read
- * is already out. One whose machine was offline waits for {@link readBehind}.
- */
-function readStale(sessionId: string): void {
-  const held = state.sessions[sessionId];
-  const fault = held?.behind ?? held?.readFault;
-  if (held && !held.loading && fault?.reason === "failed") {
-    // biome-ignore lint/complexity/noVoid: fire-and-forget — the read adopts the page and resumes the stream when it lands
-    void readTranscript(sessionId, "frame");
   }
 }
 
@@ -3055,7 +3056,6 @@ const streamHost: StreamHost = {
     target.lastActivityAt = new Date();
   },
   follows: (sessionId) => subscriptionIds().includes(sessionId),
-  heard: (sessionId) => readStale(sessionId),
   // The newest page again, which resumes the stream from the `seq` it carries.
   rereadHistory: (sessionId, cause) => {
     // biome-ignore lint/complexity/noVoid: fire-and-forget — the read adopts the page and resumes the stream when it lands
@@ -5794,28 +5794,45 @@ export type ServerTail =
     };
 
 /**
- * Why a transcript read failed, said the way the pane says it. `away` is the
- * machine a 503 named: that is the hub saying the machine is not connected —
- * a state of the fleet, not a fault in the read, and a different sentence.
+ * Why a transcript read failed, said the way the pane says it: one sentence
+ * of why ({@link failureReason}), never the hub's body as it came. `away` is
+ * the machine a 503 named: that is the hub saying the machine is not
+ * connected, a state of the fleet, not a fault in the read, and a different
+ * sentence.
  */
-export function readFaultOf(detail: string, away: string | null): ReadFault {
+export function readFaultOf(
+  failure: HubFailure,
+  away: string | null
+): ReadFault {
   if (away) {
     const machine = state.machines.find((row) => row.machineId === away);
     return {
       reason: "offline",
       machineId: away,
-      message: `${machine?.hostname || away} is offline — its stored transcript can't be read right now.`,
+      message: `${machine?.hostname || away} is offline, so its stored transcript can't be read right now`,
     };
   }
-  return { reason: "failed", message: detail };
+  return { reason: "failed", message: failureReason(failure) };
+}
+
+/**
+ * Why a read that never reached an answer failed, in one sentence: the
+ * read's own limit says itself; anything else the network threw is said by
+ * what it means, not by the browser's words for it.
+ */
+function thrownReason(error: unknown): string {
+  if (error instanceof Error && error.message === READ_LIMIT_SENTENCE) {
+    return READ_LIMIT_SENTENCE;
+  }
+  return "The hub couldn't be reached";
 }
 
 /** Why a page read ended with nothing, said the way the pane says it. */
 async function pageFault(response: Response): Promise<TranscriptOutcome> {
-  const { detail } = await hubFailure(response);
+  const failure = await hubFailure(response);
   const away =
     response.status === 503 ? response.headers.get("x-cawco-machine") : null;
-  return { ok: false, status: response.status, ...readFaultOf(detail, away) };
+  return { ok: false, status: response.status, ...readFaultOf(failure, away) };
 }
 
 /** Why the newest page is read: each caller of {@link readTranscript} names itself. */
@@ -5834,8 +5851,8 @@ export type ReadCause =
   | "reconnect"
   /** The machine the last read found offline is online again. */
   | "machineOnline"
-  /** The hub sent the session's events while its last read had failed. */
-  | "frame";
+  /** The last read failed while the hub answered: read again on {@link READ_AGAIN_MS}. */
+  | "backoff";
 
 /**
  * A session's transcript, read once: the newest page the hub built, then its
@@ -5900,9 +5917,7 @@ async function requestPage<T>(
   cancel?.addEventListener("abort", stop, { once: true });
   // WebKit rejects an aborted fetch with its own "Fetch is aborted", whatever
   // reason the abort carried, so the limit's sentence is thrown from here.
-  const late = new Error(
-    `The hub did not answer within ${TRANSCRIPT_READ_LIMIT_MS / 1000} seconds`
-  );
+  const late = new Error(READ_LIMIT_SENTENCE);
   let timedOut = false;
   const limit = () =>
     setTimeout(() => {
@@ -6045,15 +6060,95 @@ async function readBackToHeld(
 
 /**
  * Why a read failed, where the view says it: over rows held, they stay where
- * the reader has them and the view is behind ({@link SessionState.behind});
- * with nothing held, the pane says why in their place.
+ * the reader has them and the view is behind ({@link SessionState.behind}),
+ * the dock saying "Not caught up" and a toast saying why, once for each
+ * fault ({@link toastBehind}); with nothing held, the pane says why in their
+ * place. A read the hub failed is read again on {@link READ_AGAIN_MS}; one
+ * that found the machine offline waits for it ({@link readBehind}), unless
+ * the hub already lists that machine online: then the machine list has
+ * nothing more to say, and its every change would read again at once, so it
+ * is read again on the backoff too.
  */
 function readFailed(target: SessionState, fault: ReadFault): void {
   if (target.blocks.length > 0) {
     target.behind = fault;
+    toastBehind(target.instanceId, fault);
   } else {
     target.readFault = fault;
   }
+  const listedOnline =
+    fault.reason === "offline" &&
+    state.machines.some(
+      (machine) =>
+        machine.machineId === fault.machineId && machine.status === "online"
+    );
+  if (fault.reason === "failed" || listedOnline) {
+    readAgainLater(target.instanceId);
+  }
+}
+
+/** The failed reads in a row, by view, and the read again each waits for. */
+const failedReads = new Map<
+  string,
+  { count: number; timer: ReturnType<typeof setTimeout> | undefined }
+>();
+
+/** Schedules the read again after the latest failure, on {@link READ_AGAIN_MS}. */
+function readAgainLater(viewId: string): void {
+  const failed = failedReads.get(viewId) ?? { count: 0, timer: undefined };
+  clearTimeout(failed.timer);
+  const wait = READ_AGAIN_MS[Math.min(failed.count, READ_AGAIN_MS.length - 1)];
+  failed.count += 1;
+  failed.timer = setTimeout(() => {
+    failed.timer = undefined;
+    const held = state.sessions[viewId];
+    if (
+      held &&
+      !held.loading &&
+      (held.behind ?? held.readFault) &&
+      subscriptionIds().includes(viewId)
+    ) {
+      // biome-ignore lint/complexity/noVoid: fire-and-forget — the read adopts the page and resumes the stream when it lands
+      void readTranscript(viewId, "backoff");
+    }
+  }, wait);
+  failedReads.set(viewId, failed);
+}
+
+/** A read landed: the next failure waits the first delay again, and its fault toasts again. */
+function readLanded(viewId: string): void {
+  clearTimeout(failedReads.get(viewId)?.timer);
+  failedReads.delete(viewId);
+  toasted.delete(viewId);
+}
+
+/** The fault each view last toasted, until a read lands: the same one again says nothing. */
+const toasted = new Map<string, string>();
+
+/**
+ * The error formula for a transcript that could not be caught up, as a
+ * toast: what happened (its name isn't caught up), why (the read's one
+ * sentence), how to fix it and what happens next. Once per distinct fault.
+ */
+function toastBehind(viewId: string, fault: ReadFault): void {
+  const key = `${fault.reason}|${fault.reason === "offline" ? fault.machineId : ""}|${fault.message}`;
+  if (toasted.get(viewId) === key) {
+    return;
+  }
+  toasted.set(viewId, key);
+  const row = instanceIndex.byId.get(viewId);
+  const name = resolveSessionTitle({
+    title: row?.title,
+    cwd: row?.cwd,
+    id: viewId,
+  });
+  const title = `${name} isn't caught up`;
+  const description =
+    fault.reason === "offline"
+      ? `${fault.message}. The rest comes in once it's back.`
+      : `${fault.message}. Try again reads it now; otherwise it's read again in 2 seconds, then less often, up to once a minute.`;
+  console.info(`[cawco] toast: ${title}. ${description} ${viewId.slice(0, 8)}`);
+  toast.error(title, { id: `behind:${viewId}`, description });
 }
 
 /**
@@ -6070,8 +6165,9 @@ function readFailed(target: SessionState, fault: ReadFault): void {
  * A read that fails leaves the stream waiting for the next one (its cursor
  * stays `reading`), and that read is made on the next event that can answer
  * it: the machine online again ({@link readBehind}), the socket back
- * ({@link hubReached}), the session's next events after a read the hub
- * failed ({@link readStale}), or the reader's retry.
+ * ({@link hubReached}), the backoff after a read the hub failed
+ * ({@link readAgainLater}), or the reader's retry. None of these is a
+ * catch-up: the pane's "Catching up…" follows the pane, never a read.
  *
  * `cancel` fires when a fresh read took this one's place: whatever this one
  * would have said is dropped, and it answers `skipped`.
@@ -6129,6 +6225,7 @@ async function readNewestPage(
     target.readFault = null;
     target.behind = null;
     target.historyChanged = false;
+    readLanded(viewId);
     adoptTranscriptPage(
       target,
       {
@@ -6149,7 +6246,7 @@ async function readNewestPage(
     if (cancel.aborted) {
       return { ok: true, skipped: true };
     }
-    const message = error instanceof Error ? error.message : String(error);
+    const message = thrownReason(error);
     readFailed(target, { reason: "failed", message });
     return { ok: false, reason: "failed", message };
   } finally {
@@ -6174,9 +6271,8 @@ async function olderPage(
         if (response.ok) {
           return (await response.json()) as TranscriptPage;
         }
-        const { detail } = await hubFailure(response);
         return readFaultOf(
-          detail,
+          await hubFailure(response),
           response.status === 503
             ? response.headers.get("x-cawco-machine")
             : null
@@ -6185,10 +6281,7 @@ async function olderPage(
       cancel
     );
   } catch (error) {
-    return {
-      reason: "failed",
-      message: error instanceof Error ? error.message : String(error),
-    };
+    return { reason: "failed", message: thrownReason(error) };
   }
 }
 

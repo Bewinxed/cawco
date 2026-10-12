@@ -331,9 +331,7 @@
   const served = $derived(tail && !tail.ok && !readAnswered ? tail : null);
   const servedMissing = $derived(served?.status === 404);
   const servedFault = $derived(
-    served && !servedMissing
-      ? readFaultOf(served.detail, served.machineId)
-      : null
+    served && !servedMissing ? readFaultOf(served, served.machineId) : null
   );
 
   /**
@@ -512,8 +510,8 @@
   /** What a read failure says: what went wrong, then what to do about it. */
   const faultLine = $derived(
     fault?.reason === "offline"
-      ? `${fault.message} Try again once it is back online.`
-      : `Reading it failed: ${fault?.message.replace(/\.$/, "")}. Try again; if it fails the same way, the hub's log has the cause.`
+      ? `${fault.message}. Try again once it is back online.`
+      : `Reading it failed: ${fault?.message}. Try again; if it fails the same way, the hub's log has the cause.`
   );
 
   /** Try again: forget what was said about the last read, then read. */

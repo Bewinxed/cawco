@@ -34,9 +34,10 @@
  * Checks: the pill shows at most once and hides at most once for the load,
  * and never changes more than twice in any second; the reads are the newest
  * page once and each older page once. With the hub failing the read (the
- * proxy answers 500), the dock says "Not caught up: <reason>." beside Try
- * again, which reads again, and the line goes once the session's next frame
- * reads it. With the agent away, the dock says "Not caught up: <machine> is
+ * proxy answers 500 with a long stack), the dock says "Not caught up" beside
+ * Try again, which reads again, exactly one toast says why in the stack's
+ * first line (the app's `toast:` log), the reads again keep to the backoff,
+ * and the line goes once one lands. With the agent away, the dock says "Not caught up: <machine> is
  * offline. The rest comes in once it's back." in at most two lines over the
  * rows held, and the line goes once the agent is back and the read lands. The head's ink is measured by
  * scripts/probe-ios-headfade.ts from the captures this writes.
@@ -62,11 +63,12 @@ const root = resolve(import.meta.dir, "..");
 const home = process.env.HOME ?? "";
 const AXE = "/opt/homebrew/bin/axe";
 const PILL = "Catching up…";
-/** The dock's line while a read again found the machine offline (DockPill `note`). */
-const BEHIND = "Not caught up: ";
+/** The dock's line while a read again could not catch the rows up (DockNote): all of it when the read failed. */
+const BEHIND = "Not caught up";
 const OFFLINE_NEXT = "is offline. The rest comes in once it's back.";
-/** What the hub says when a stored transcript could not be read (server.ts, a failed history read). */
-const FAILED = "the transcript could not be read";
+/** A failed history read whose body is a long stack, as a machine's error can be: the reader is told its first line. */
+const FAILED = `Error: the transcript could not be read\n${"    at readHistory (/opt/cawco/agent.js:1:1)\n".repeat(400)}`;
+const FAILED_REASON = "Error: the transcript could not be read";
 /** The note's line height: --text-meta (12pt) at its leading (1.35). */
 const META_LINE = 12 * 1.35;
 const out = join(
@@ -123,6 +125,352 @@ if (!app) {
   ).trim();
   const name = top === join(home, "cockpit") ? "main" : top.split("/").at(-1);
   app = `${join(process.env.XDG_CACHE_HOME ?? join(home, "Library", "Caches"), "cawco-apple")}/${name}/DerivedData/Build/Products/Debug-iphonesimulator/CawCo.app`;
+}
+
+// ── Live: one session on a running hub, its pill counted ─────────────────
+//
+//   bun scripts/probe-ios-catchup.ts --live <sessionId> [--hub <url>] [--seconds 120] [--fail]
+//
+// Opens the session on the hub through a logging proxy, sends the app home
+// and relaunches it (its scene restores the place), then watches for
+// `--seconds`: every catch-up the pill begins is listed with the reads and
+// stream frames around it, and every transcript read with its status and
+// body size. Passes with no catch-up but those a hub reset or resync
+// started. `--fail`: then a `stream.reset` is put on the socket while the
+// hub's read answers 500 with a long body for the next 40s: the dock says
+// "Not caught up" beside Try again, exactly one toast says why, and the
+// reads that follow keep to the backoff.
+const LIVE = option("--live");
+const TRAILING_SLASH = /\/$/;
+/** A log line up to what it says: its stamp, process and category. */
+const LIVE_LOG_HEAD = /^.*\] /;
+const SHOWN =
+  / because |catch-up |stream: (reset|resync|backlog)|transcript read for|page adopted|toast/;
+const BECAUSE = / because /;
+const HUB_ASKED = /because (streamReset|transcriptReset|backlogBroken)/;
+const APPLIED = / applied/;
+const SHOWN_FAILING = / because |toast:|transcript read for|catch-up /;
+const TOAST_HEAD = /^.*toast: /;
+if (LIVE) {
+  const hub = (option("--hub") ?? "http://100.125.210.78:3456").replace(
+    TRAILING_SLASH,
+    ""
+  );
+  const seconds = Number(option("--seconds") ?? 120);
+  const short = LIVE.slice(0, 8);
+  const full = (
+    (await (await fetch(`${hub}/api/instances`)).json()) as { id: string }[]
+  ).find((row) => row.id.startsWith(LIVE))?.id;
+  if (!full) {
+    console.log(`FAIL live: no session ${LIVE} on ${hub}`);
+    process.exit(1);
+  }
+  const started = Date.now();
+  const stamp = () => `+${((Date.now() - started) / 1000).toFixed(1)}s`;
+  const notes: string[] = [];
+  let failUntil = 0;
+  const sockets = new Set<
+    import("bun").ServerWebSocket<{
+      path: string;
+      upstream?: WebSocket;
+      queue: (string | Uint8Array)[];
+    }>
+  >();
+  const live = Bun.serve<{
+    path: string;
+    upstream?: WebSocket;
+    queue: (string | Uint8Array)[];
+  }>({
+    hostname: "127.0.0.1",
+    port: 0,
+    idleTimeout: 0,
+    async fetch(request, server) {
+      const url = new URL(request.url);
+      if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
+        return server.upgrade(request, {
+          data: { path: `${url.pathname}${url.search}`, queue: [] },
+        })
+          ? undefined
+          : new Response("upgrade failed", { status: 400 });
+      }
+      const read =
+        request.method === "GET" && url.pathname.endsWith("/transcript");
+      if (read && !url.searchParams.has("before") && Date.now() < failUntil) {
+        // A failed read whose body is a long stack, as a machine's error can
+        // be, taking as long as a read over the tailnet does: an answer in a
+        // millisecond lands before the pane draws a frame of its read.
+        await pause(400);
+        const body = `Error: readHistory failed\n${"    at readHistory (/opt/cawco/agent.js:1:1)\n".repeat(400)}`;
+        notes.push(
+          `${stamp()} read ${url.pathname.split("/")[3]?.slice(0, 8)} newest -> 500, ${body.length} bytes (forced)`
+        );
+        return new Response(body, {
+          status: 500,
+          headers: { "content-type": "text/plain" },
+        });
+      }
+      const headers = new Headers(request.headers);
+      headers.delete("host");
+      const answer = await fetch(`${hub}${url.pathname}${url.search}`, {
+        method: request.method,
+        headers,
+        body:
+          request.method === "GET" || request.method === "HEAD"
+            ? undefined
+            : await request.arrayBuffer(),
+        redirect: "manual",
+      });
+      const bytes = await answer.arrayBuffer();
+      if (read) {
+        notes.push(
+          `${stamp()} read ${url.pathname.split("/")[3]?.slice(0, 8)} ${url.searchParams.has("before") ? "older" : "newest"} -> ${answer.status}, ${bytes.byteLength} bytes`
+        );
+      }
+      const reply = new Headers(answer.headers);
+      for (const name of [
+        "content-encoding",
+        "content-length",
+        "transfer-encoding",
+      ]) {
+        reply.delete(name);
+      }
+      return new Response(bytes, { status: answer.status, headers: reply });
+    },
+    websocket: {
+      open(ws) {
+        sockets.add(ws);
+        notes.push(`${stamp()} socket open`);
+        const upstream = new WebSocket(
+          `${hub.replace("http", "ws")}${ws.data.path}`
+        );
+        upstream.binaryType = "arraybuffer";
+        ws.data.upstream = upstream;
+        upstream.onopen = () => {
+          for (const message of ws.data.queue.splice(0)) {
+            upstream.send(message);
+          }
+        };
+        upstream.onmessage = (event) => {
+          const text =
+            typeof event.data === "string"
+              ? event.data
+              : new TextDecoder().decode(event.data as ArrayBuffer);
+          // The hub's own word that the history must be read again: a stream reset, or a transcript reset event.
+          if (
+            text.includes(full) &&
+            (text.includes('"stream.reset"') || text.includes('"type":"reset"'))
+          ) {
+            notes.push(
+              `${stamp()} hub frame: ${text.includes('"stream.reset"') ? "stream.reset" : "transcript reset"} for ${short}`
+            );
+          }
+          ws.send(event.data as string | ArrayBuffer);
+        };
+        upstream.onclose = () => ws.close();
+        upstream.onerror = () => ws.close();
+      },
+      message(ws, message) {
+        const { upstream } = ws.data;
+        if (upstream?.readyState === WebSocket.OPEN) {
+          upstream.send(message);
+        } else {
+          ws.data.queue.push(message);
+        }
+      },
+      close(ws) {
+        sockets.delete(ws);
+        notes.push(`${stamp()} socket closed`);
+        ws.data.upstream?.close();
+      },
+    },
+  });
+  let device = "";
+  let stream: Subprocess | undefined;
+  const lines: string[] = [];
+  try {
+    device = (
+      await sh(`TYPE=$(xcrun simctl list devicetypes -j | python3 -c '
+import json, sys
+names = {d["name"]: d["identifier"] for d in json.load(sys.stdin)["devicetypes"]}
+print(names["iPhone 16 Pro"])
+')
+xcrun simctl create "CawCo probe live" "$TYPE" com.apple.CoreSimulator.SimRuntime.iOS-18-5`)
+    ).trim();
+    await sh(`xcrun simctl boot ${device}
+xcrun simctl bootstatus ${device} -b >/dev/null
+xcrun simctl install ${device} "${app}"`);
+    const child = Bun.spawn(
+      [
+        "bash",
+        "-c",
+        `exec xcrun simctl spawn ${device} log stream --level debug --style compact --predicate 'subsystem == "dev.cawco.app" AND (category == "Transcript" OR category == "Restore" OR category == "Ledger" OR category == "Hub")'`,
+      ],
+      { stdout: "pipe", stderr: "ignore" }
+    );
+    stream = child;
+    (async () => {
+      const decoder = new TextDecoder();
+      let rest = "";
+      for await (const chunk of child.stdout) {
+        rest += decoder.decode(chunk, { stream: true });
+        const split = rest.split("\n");
+        rest = split.pop() ?? "";
+        lines.push(
+          ...split.map(
+            (line) => `${stamp()} ${line.replace(LIVE_LOG_HEAD, "")}`
+          )
+        );
+      }
+    })().catch(() => undefined);
+    const open = () =>
+      sh(
+        `xcrun simctl launch --terminate-running-process ${device} dev.cawco.app -paywall-env sandbox -cawco-hub-url http://127.0.0.1:${live.port} -open-session ${full} >/dev/null`
+      );
+    await open();
+    await pause(30_000);
+    // Home, then back: the scene saves the place and the relaunch restores it.
+    await sh(`${AXE} button home --udid ${device}`);
+    await pause(3000);
+    await sh(`xcrun simctl terminate ${device} dev.cawco.app`);
+    await pause(1500);
+    const from = lines.length;
+    const notesFrom = notes.length;
+    await open();
+    await pause(seconds * 1000);
+    const window = [...new Set(lines.slice(from))];
+    const begins = window.filter((line) =>
+      line.includes(`catch-up begins for ${short}`)
+    );
+    const asked = notes
+      .slice(notesFrom)
+      .filter((note) => note.includes("hub frame:"));
+    for (const line of window.filter((l) => SHOWN.test(l))) {
+      console.log(`  ${line.slice(0, 260)}`);
+    }
+    for (const note of notes.slice(notesFrom)) {
+      console.log(`  proxy ${note}`);
+    }
+    const reads = window.filter(
+      (line) => BECAUSE.test(line) && line.includes(`read ${short}`)
+    );
+    const hubAsked = reads.filter((line) => HUB_ASKED.test(line)).length;
+    check(
+      `live ${short}: ${seconds}s on a streaming session, after a restore`,
+      begins.length <= hubAsked,
+      `${begins.length} catch-up(s) began; ${hubAsked} read(s) the hub asked for (${asked.length} reset frame(s) seen), ${reads.length} read(s) in all`
+    );
+    if (args.includes("--fail")) {
+      const failFrom = lines.length;
+      const notesAt = notes.length;
+      failUntil = Date.now() + 40_000;
+      // The hub's word that its ring cannot replay: the app reads the history again.
+      for (const ws of sockets) {
+        ws.send(
+          JSON.stringify({ type: "stream.reset", sessionId: full, nextSeq: 1 })
+        );
+      }
+      const note = await until(
+        "the not-caught-up line",
+        async () => {
+          const nodes = JSON.parse(
+            await sh(`${AXE} describe-ui --udid ${device}`)
+          );
+          const labels: string[] = [];
+          const walk = (at: unknown) => {
+            if (Array.isArray(at)) {
+              at.forEach(walk);
+            } else if (at && typeof at === "object") {
+              const o = at as Record<string, unknown>;
+              if (typeof o.AXLabel === "string") {
+                labels.push(o.AXLabel);
+              }
+              walk(o.children);
+            }
+          };
+          walk(nodes);
+          return labels;
+        },
+        (labels) => labels.some((label) => label.startsWith(BEHIND)),
+        20_000
+      ).catch(() => [] as string[]);
+      // Until the read lands: the backoff's next read once the hub answers, at most its last wait past the failing.
+      await until(
+        "a read lands once the hub answers",
+        () =>
+          Promise.resolve(
+            lines
+              .slice(failFrom)
+              .some((l) => l.includes(`page adopted for ${full}`))
+          ),
+        Boolean,
+        110_000
+      ).catch(() => false);
+      const after = [...new Set(lines.slice(failFrom))];
+      const toasts = after.filter((line) => line.includes("toast:"));
+      const failBegins = after.filter((l) =>
+        l.includes(`catch-up begins for ${short}`)
+      ).length;
+      check(
+        "live failing read: one catch-up, the one the reset started",
+        failBegins <= 1,
+        `${failBegins} catch-up(s) began, ${after.filter((l) => BECAUSE.test(l) && l.includes(`read ${short}`)).length} read(s), ${after.filter((l) => APPLIED.test(l)).length} event(s) applied`
+      );
+      const failedReads = notes
+        .slice(notesAt)
+        .filter((n) => n.includes("(forced)"));
+      for (const shown of after.filter((l) => SHOWN_FAILING.test(l))) {
+        console.log(`  ${shown.slice(0, 260)}`);
+      }
+      for (const n of notes.slice(notesAt)) {
+        console.log(`  proxy ${n}`);
+      }
+      const said = note.find((label) => label.startsWith(BEHIND));
+      check(
+        "live failing read: the dock says it is not caught up, with Try again",
+        said === BEHIND && note.includes("Try again"),
+        said
+          ? `"${said}"${note.includes("Try again") ? " [Try again]" : ""}`
+          : "no line in the pane"
+      );
+      check(
+        "live failing read: exactly one toast says why, in one sentence pair, nothing raw",
+        toasts.length === 1 &&
+          !toasts[0].includes("    at ") &&
+          toasts[0].length < 400,
+        toasts.map((t) => t.replace(TOAST_HEAD, "")).join(" | ") || "no toast"
+      );
+      check(
+        "live failing read: the reads that failed kept to the backoff (2s, 4s, 8s, 16s, …)",
+        failedReads.length >= 2 && failedReads.length <= 6,
+        `${failedReads.length} failed read(s) in 40s`
+      );
+      const gone = after.some((l) => l.includes(`page adopted for ${full}`));
+      check(
+        "live failing read: once the hub answers, the read lands",
+        gone,
+        gone ? "page adopted" : "no page adopted"
+      );
+    }
+  } catch (error) {
+    check(
+      "live",
+      false,
+      error instanceof Error ? error.message : String(error)
+    );
+  } finally {
+    stream?.kill();
+    await writeFile(
+      join(out, "live-log.txt"),
+      [...lines, ...notes.map((n) => `proxy ${n}`)].join("\n")
+    );
+    if (device) {
+      await sh(`xcrun simctl shutdown ${device} >/dev/null 2>&1 || true
+xcrun simctl delete ${device}`).catch(() => undefined);
+    }
+    live.stop(true);
+  }
+  console.log(failures === 0 ? "ALL PASS" : `${failures} FAILED`);
+  process.exit(failures === 0 ? 0 : 1);
 }
 
 // ── 2. The scratch fleet, its sessions seeded ────────────────────────────
@@ -183,11 +531,11 @@ interface Read {
   before: string | null;
   older: boolean;
 }
-/** `holding`: the app's socket is refused, so it reconnects only once let through; `failing`: the next newest reads answer 500. */
-const wire: { failing: number; holding: boolean; reads: Read[] } = {
+/** `holding`: the app's socket is refused, so it reconnects only once let through; until `failUntil` (ms epoch), newest reads answer 500. */
+const wire: { failUntil: number; holding: boolean; reads: Read[] } = {
   reads: [],
   holding: false,
-  failing: 0,
+  failUntil: 0,
 };
 let sessionId = "";
 interface Link {
@@ -219,8 +567,7 @@ const proxy = Bun.serve<Link>({
       const before = url.searchParams.get("before");
       wire.reads.push({ at: Date.now(), before, older: before !== null });
       // The hub's read failing, as its route answers a failed history read.
-      if (before === null && wire.failing > 0) {
-        wire.failing -= 1;
+      if (before === null && Date.now() < wire.failUntil) {
         return new Response(FAILED, {
           status: 500,
           headers: { "content-type": "text/plain" },
@@ -626,17 +973,15 @@ xcrun simctl install ${udid} "${app}"`);
     const nodes = await tree();
     const strip = nodes.find((n) => n.label?.startsWith(BEHIND))?.label;
     const retry = nodes.find((n) => n.label === "Try again")?.frame;
-    await shot("failing-note");
     check(
-      `${label}: the pane says why, with Try again`,
-      strip === `${BEHIND}${FAILED}.` && retry !== undefined,
+      `${label}: the pane says it is not caught up, with Try again`,
+      strip === BEHIND && retry !== undefined,
       strip
         ? `"${strip}"${retry ? " [Try again]" : " (no Try again)"}`
         : "no line in the pane"
     );
     // Try again reads again: the hub fails it once more, and the line stays.
     const pressed = wire.reads.length;
-    wire.failing = 1;
     if (retry) {
       await sh(
         `${AXE} tap -x ${Math.round(retry.x + retry.width / 2)} -y ${Math.round(retry.y + retry.height / 2)} --udid ${udid}`
@@ -655,22 +1000,37 @@ xcrun simctl install ${udid} "${app}"`);
       retried && wire.reads.length > pressed && still,
       `${retried ? "read because retry" : "no retry read"}, ${wire.reads.length - pressed} read(s) after the tap, line ${still ? "still there" : "gone"}`
     );
-    // The session's next frame reads it again, and this time the hub answers.
-    wire.failing = 0;
+    // The backoff reads it again by itself, and this time the hub answers.
+    wire.failUntil = 0;
     await fleet.send(sessionId, "One more line.");
-    const framed = await waitLogged(
-      `${label}: read again on the session's next frame`,
+    const backoff = await waitLogged(
+      `${label}: read again on the backoff`,
       since,
-      "because frame",
-      60_000
-    );
-    check(
-      `${label}: read again on the session's next frame`,
-      framed,
-      framed ? "read because frame" : "no read followed the session's frames"
+      "because backoff",
+      70_000
     );
     await lineGoes(label);
-    return 3;
+    const window = [...new Set(logLines.slice(since))];
+    const failed = window.filter(
+      (line) =>
+        line.includes("transcript read for") && line.includes("rows kept")
+    ).length;
+    check(
+      `${label}: read again on the backoff, not on every frame`,
+      backoff && failed <= 6,
+      `${backoff ? "read because backoff" : "no backoff read"}, ${failed} failed read(s)`
+    );
+    const toasts = window.filter((line) => line.includes("toast: "));
+    check(
+      `${label}: exactly one toast says why, in one sentence, nothing raw`,
+      toasts.length === 1 &&
+        toasts[0].includes(`${FAILED_REASON}. Try again reads it now`) &&
+        !toasts[0].includes("    at "),
+      toasts.map((line) => line.replace(LOG_PREFIX, "")).join(" | ") ||
+        "no toast"
+    );
+    // One catch-up: the reset's. Try again and the backoff catch up quietly.
+    return 1;
   };
   const resetOver = async (
     label: string,
@@ -693,7 +1053,8 @@ xcrun simctl install ${udid} "${app}"`);
     const from = logLines.length;
     const readsBefore = wire.reads.length;
     wire.holding = true;
-    wire.failing = mode === "failing" ? 1 : 0;
+    // Failing from the reset's read on, until the failing case lets the backoff land.
+    wire.failUntil = mode === "failing" ? Date.now() + 600_000 : 0;
     if (agentAway) {
       await fleet.stop("agent");
     }

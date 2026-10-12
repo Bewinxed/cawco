@@ -1,10 +1,11 @@
 <!--
   A transcript that cannot be caught up says so in one line over the rows the
   reader holds (client.svelte.ts `SessionState.behind`), and goes when the
-  read lands. What happened, then what happens next (WORDS.md, the error
-  formula): its machine is offline, and the rest comes in once the hub says
-  it is back (`readBehind`); or the read failed, and Try again reads it now,
-  as the session's next frame does by itself (`readStale`).
+  read lands. Its machine is offline, and the rest comes in once the hub
+  says it is back (`readBehind`); or the read failed: "Not caught up" beside
+  Try again, which reads it now, as the backoff does by itself
+  (`readAgainLater`). Why it failed is the toast's to say, once per fault
+  (`toastBehind`): the line never carries the hub's words.
 
   `floating`: it stands in the dock over the foot of a pane's list (see
   `Transcript`), on the surface "Catching up…" and "Jump to latest" share, at
@@ -39,24 +40,6 @@
     );
     return row ? machineLabel(row.hostname) : fault.machineId;
   });
-
-  /**
-   * The read's own sentence as a clause after "Not caught up:", its closing
-   * stop dropped. A first word that is a plain capitalised word ("The hub
-   * did not answer…") is lowered; a name ("Omars-MacBook-Pro") is left.
-   */
-  const reason = $derived.by(() => {
-    const said = fault.message.trim().replace(FINAL_STOP, "");
-    const [first = ""] = said.split(" ");
-    return PLAIN_WORD.test(first)
-      ? `${said[0].toLowerCase()}${said.slice(1)}`
-      : said;
-  });
-</script>
-
-<script lang="ts" module>
-  const FINAL_STOP = /\.$/;
-  const PLAIN_WORD = /^[A-Z][a-z]*$/;
 </script>
 
 <!-- Comes and goes as "Catching up…" does, which shares its dock. -->
@@ -72,7 +55,7 @@
       comes in once it's back.
     </p>
   {:else}
-    <p>Not caught up: {reason}.</p>
+    <p>Not caught up</p>
     <Button onclick={onretry} size="sm" variant="ghost">Try again</Button>
   {/if}
 </div>
